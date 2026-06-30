@@ -323,6 +323,56 @@ class OwnershipDeriverMixedSpendTest(unittest.TestCase):
         self.assertAlmostEqual(holdings.get("Hot", 0.0), 0.5, places=6)
         self.assertAlmostEqual(holdings.get("Cold", 0.0), 0.0, places=6)
 
+    def test_whole_row_payout_not_hijacked_by_same_txid_inbound(self):
+        # #2: a reviewed WHOLE-row taxable direct payout whose out tx shares a
+        # txid with another owned wallet's recorded inbound (a batched tx) must
+        # book its declared disposal — detect_intra_transfers must NOT pair the
+        # payout's proceeds row with the sibling inbound into a non-taxable MOVE
+        # (which would silently drop the 20000 proceeds).
+        index = OwnedIndex()
+        index.add_script(SCRIPT_A, _match("A", "Cold"))
+        index.add_script(SCRIPT_B, _match("B", "Hot"))
+        rows = [
+            _row("A", "inbound", BTC, external_id="acqA"),
+            _row("A", "outbound", 50 * BTC // 100, external_id="payout-tx"),
+            _row("B", "inbound", 50 * BTC // 100, external_id="payout-tx"),
+        ]
+        direct_payouts = [
+            {
+                "id": "direct-payout-hijack",
+                "out_transaction_id": "A-outbound-payout-tx",
+                "kind": "direct-swap-payout",
+                "policy": "taxable",
+                "payout_asset": "BTC",
+                "payout_amount": 50 * BTC // 100,
+                "payout_occurred_at": NOW,
+                "payout_fiat_value": 20000,
+                "payout_external_id": "provider-payout",
+                "counterparty": "external-recipient",
+                "notes": "direct payout",
+                "swap_fee_msat": 0,
+                "swap_fee_kind": "combined",
+                "created_at": NOW,
+                "out_amount": 50 * BTC // 100,  # whole row
+            }
+        ]
+        state = build_tax_engine(PROFILE).build_ledger_state(
+            TaxEngineLedgerInputs(
+                rows=rows,
+                wallet_refs_by_id=WALLET_REFS,
+                manual_pair_records=[],
+                direct_payout_records=direct_payouts,
+                owned_index=index,
+            )
+        )
+        entry_types = [e["entry_type"] for e in state.entries]
+        # The payout disposal is booked, not hijacked into a MOVE.
+        self.assertNotIn("transfer_out", entry_types)
+        disposals = [e for e in state.entries if e["entry_type"] == "disposal"]
+        self.assertEqual(len(disposals), 1)
+        self.assertAlmostEqual(float(disposals[0]["quantity"]), -0.5, places=6)
+        self.assertAlmostEqual(float(disposals[0]["proceeds"]), 20000, places=2)
+
 
 class OwnershipDeriverAmbiguityTest(unittest.TestCase):
     """Ambiguous destination must not inflate holdings.

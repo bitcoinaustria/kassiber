@@ -10,6 +10,7 @@ from ..transfers import normalize_group_txid
 from . import pricing
 from .austrian import infer_outbound_regimes, infer_regime_from_timestamp, resolve_pool_id
 from .loans import LOCK_SUPPRESS_ROLES, RELEASE_SUPPRESS_ROLES
+from .ownership_transfers import detect_conflicting_spend_ids
 from .privacy_hops import privacy_hop_evidence_from_row
 from .transfer_matching import (
     DEFAULT_FEE_PCT_MAX,
@@ -737,6 +738,24 @@ def _owned_fanout_row_ids(
         wallets = {row["wallet_id"] for row in group}
         if outs and ins and (len(outs) > 1 or len(ins) > 1) and len(wallets) >= 2:
             fanout_ids.update(row["id"] for row in group)
+            continue
+        # A clamped amount=0 outbound (its net outflow fell below the miner fee —
+        # a coinjoin/payjoin where a foreign input funds the spend) sharing a txid
+        # with a positive inbound in a DIFFERENT owned wallet is an unresolved
+        # cross-wallet movement. Every positive-amount filter (detect_intra, the
+        # derivers, the fan-out branch above) skips the clamped source, so without
+        # this guard the destination books a phantom standalone acquisition with
+        # no disposal and no quarantine. Surface it for review instead.
+        zero_outs = [
+            row
+            for row in group
+            if _row_get(row, "direction") == "outbound" and (row["amount"] or 0) <= 0
+        ]
+        if ins and zero_outs:
+            in_wallets = {row["wallet_id"] for row in ins}
+            zero_out_wallets = {row["wallet_id"] for row in zero_outs}
+            if in_wallets - zero_out_wallets:
+                fanout_ids.update(row["id"] for row in group)
     return fanout_ids
 
 
@@ -821,8 +840,29 @@ def normalize_tax_asset_inputs(
     handled_pairs: set[tuple[str, str]] = set()
     blocked_transfer_group_reasons: dict[str, str] = {}
     fanout_row_ids = _owned_fanout_row_ids(rows, pair_by_row, samourai_internal_row_ids)
+    # Transactions that conflict over a shared input outpoint (RBF replacement /
+    # reorg / double-spend) cannot both be on-chain; without this each would be
+    # booked as an independent carrying MOVE, inflating the destination. The loser
+    # txid's legs are quarantined for review (the winner, if a single confirmed
+    # txid exists, is left to book normally).
+    conflict_row_ids = detect_conflicting_spend_ids(rows)
 
     for row in rows:
+        if row["id"] in conflict_row_ids:
+            quarantines.append(
+                build_tax_quarantine(
+                    profile,
+                    row,
+                    "conflicting_spend",
+                    {
+                        "wallet": wallet_refs_by_id[row["wallet_id"]]["label"],
+                        "asset": asset,
+                        "direction": _row_get(row, "direction"),
+                        "external_id": str(_row_get(row, "external_id") or ""),
+                    },
+                )
+            )
+            continue
         if row["id"] in samourai_internal_row_ids:
             for transfer in samourai_transfer_by_out_id.get(row["id"], []):
                 transfers.append(transfer)

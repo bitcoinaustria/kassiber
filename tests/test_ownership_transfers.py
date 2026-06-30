@@ -18,6 +18,7 @@ from kassiber.core.ownership_transfers import (
     derive_multi_source_consolidations,
     derive_ownership_transfers,
     derive_recorded_fanout_transfers,
+    detect_conflicting_spend_ids,
     graph_partial_payment_out_ids,
 )
 
@@ -1121,6 +1122,53 @@ class MultiSourceConsolidationDeriverTests(unittest.TestCase):
             already={"a-out"},
         )
         self.assertEqual(result.derived_pairs, [])
+
+
+class ConflictingSpendTests(unittest.TestCase):
+    """Shared-prevout (RBF / reorg / double-spend) conflict detection."""
+
+    def _conflict_rows(self, win_confirmed, lose_confirmed):
+        # Two self-transfer outbounds spending the SAME prevout (prev-0:0 via the
+        # _outbound helper), distinct txids, each with its own destination inbound.
+        win = _outbound(row_id="win-out", wallet_id="A", amount_sats=50_000_000,
+                        fee_sats=1000, txid="a" * 64, input_scripts=[SCRIPT["A"]],
+                        outputs=[(SCRIPT["B"], 50_000_000)])
+        win["confirmed_at"] = win_confirmed
+        win_in = _inbound(row_id="win-in", wallet_id="B", amount_sats=50_000_000, txid="a" * 64)
+        lose = _outbound(row_id="lose-out", wallet_id="A", amount_sats=50_000_000,
+                         fee_sats=2000, txid="b" * 64, input_scripts=[SCRIPT["A"]],
+                         outputs=[(SCRIPT["B"], 50_000_000)])
+        lose["confirmed_at"] = lose_confirmed
+        lose_in = _inbound(row_id="lose-in", wallet_id="B", amount_sats=50_000_000, txid="b" * 64)
+        return [win, win_in, lose, lose_in]
+
+    def test_confirmed_winner_kept_unconfirmed_loser_quarantined(self):
+        rows = self._conflict_rows("2026-03-14T18:00:00Z", None)
+        self.assertEqual(detect_conflicting_spend_ids(rows), {"lose-out", "lose-in"})
+
+    def test_both_unconfirmed_quarantines_all(self):
+        rows = self._conflict_rows(None, None)
+        self.assertEqual(
+            detect_conflicting_spend_ids(rows),
+            {"win-out", "win-in", "lose-out", "lose-in"},
+        )
+
+    def test_no_shared_prevout_no_conflict(self):
+        # Distinct prev outpoints (different input scripts -> different prev txids
+        # in the helper) -> no conflict.
+        a = _outbound(row_id="a", wallet_id="A", amount_sats=1_000_000, fee_sats=10,
+                      txid="c" * 64, input_scripts=[SCRIPT["A"]], outputs=[(SCRIPT["B"], 1_000_000)])
+        b = _outbound(row_id="b", wallet_id="A", amount_sats=2_000_000, fee_sats=10,
+                      txid="d" * 64, input_scripts=[SCRIPT["A"], SCRIPT["B"]],
+                      outputs=[(SCRIPT["B"], 2_000_000)])
+        # 'a' has input prev-0:0; 'b' has prev-0:0 AND prev-1:1 -> they DO share
+        # prev-0:0, so this is actually a conflict. Use genuinely disjoint inputs:
+        b2 = dict(b)
+        import json as _json
+        graph = _json.loads(b2["raw_json"])
+        graph["vin"] = [{"txid": "other", "vout": 5, "prevout": {"scriptpubkey": SCRIPT["A"]}}]
+        b2["raw_json"] = _json.dumps(graph)
+        self.assertEqual(detect_conflicting_spend_ids([a, b2]), set())
 
 
 class GraphPartialPaymentTests(unittest.TestCase):

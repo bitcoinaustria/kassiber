@@ -725,6 +725,44 @@ class DedupeQuarantinesTest(unittest.TestCase):
         self.assertEqual([q["transaction_id"] for q in out], ["tx-b", "tx-a"])
 
 
+class ClampedZeroSelfSendTest(unittest.TestCase):
+    profile = {"id": "profile-1", "workspace_id": "workspace-1"}
+    refs = {
+        "wallet-a": {"id": "wallet-a", "label": "Wallet A"},
+        "wallet-b": {"id": "wallet-b", "label": "Wallet B"},
+    }
+
+    def test_clamped_zero_outbound_with_cross_wallet_inbound_quarantines(self):
+        # #9: a coinjoin/payjoin self-send where wallet A's net outflow fell below
+        # the miner fee gets its outbound amount clamped to 0; wallet B receives a
+        # positive inbound under the same txid. Every positive-amount filter skips
+        # A, so without the guard B books a phantom standalone acquisition. The
+        # group must instead be quarantined for review.
+        a_out = _row("a-cj-out", "wallet-a", "outbound", 0, external_id="cj-tx")
+        b_in = _row("b-cj-in", "wallet-b", "inbound", 50_000_000_000,
+                    external_id="cj-tx", fiat_value=30_000)
+        inputs = normalize_tax_asset_inputs(
+            self.profile, "BTC", [a_out, b_in], self.refs, [],
+        )
+        self.assertTrue(
+            any(q["reason"] == "owned_fanout_unresolved" for q in inputs.quarantines)
+        )
+        # B's inbound is NOT booked as a standalone acquisition.
+        self.assertNotIn("b-cj-in", [e.transaction_id for e in inputs.events])
+
+    def test_single_wallet_fee_consolidation_not_quarantined(self):
+        # A clamped amount=0 outbound with NO cross-wallet inbound (an ordinary
+        # within-wallet fee/consolidation) must NOT be quarantined by the guard.
+        a_out = _row("a-fee", "wallet-a", "outbound", 0, fee=2000, external_id="fee-tx")
+        inputs = normalize_tax_asset_inputs(
+            self.profile, "BTC", [a_out], self.refs, [],
+        )
+        self.assertEqual(
+            [q for q in inputs.quarantines if q["reason"] == "owned_fanout_unresolved"],
+            [],
+        )
+
+
 class AustrianSelfTransferRegimeTest(unittest.TestCase):
     AT_PROFILE = {"id": "p", "workspace_id": "ws", "tax_country": "at"}
     REFS = {

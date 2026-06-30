@@ -1735,7 +1735,9 @@ def _direct_payout_synthetic_rows(
     """
 
     if not direct_payout_records:
-        return list(rows), [], [], [], set()
+        # Sort the common (no-payout) path the same way the payout path does
+        # below, so engine row order never depends on the caller pre-sorting.
+        return sorted(rows, key=_transaction_row_sort_key), [], [], [], set()
 
     tax_country = _profile_str(profile, "tax_country").lower()
     rows_by_id = {str(row["id"]): row for row in rows}
@@ -2122,6 +2124,7 @@ class GenericRP2TaxEngine:
             # _direct_payout_synthetic_rows. Partial payouts leave a reduced
             # real source row in rows_for_engine for the remainder, and that
             # row must still be eligible for ownership-derived self-transfers.
+            direct_payout_claimed_ids: set[str] = set()
             for record in inputs.direct_payout_records:
                 out_id = str(record["out_transaction_id"])
                 out_row = input_rows_by_id.get(out_id)
@@ -2131,7 +2134,22 @@ class GenericRP2TaxEngine:
                 full_out_amount = int(_row_get(out_row, "amount") or 0)
                 if reviewed_out_amount >= full_out_amount:
                     already_paired_ids.add(out_id)
+                    direct_payout_claimed_ids.add(out_id)
             already_paired_ids |= {str(rid) for rid in blocked_payout_row_ids}
+            # A reviewed whole-row direct payout is a taxable disposal whose
+            # proceeds row keeps the real tx's external_id + outbound direction.
+            # If another owned wallet recorded an inbound under the same txid,
+            # detect_intra_transfers pairs them and would book the disposal as a
+            # non-taxable MOVE — silently dropping the declared proceeds. Adding
+            # the out id to already_paired_ids only stops the deriver; the auto
+            # pair must also be pruned so apply_manual_pairs cannot revive it.
+            if direct_payout_claimed_ids:
+                auto_pairs = [
+                    pair
+                    for pair in auto_pairs
+                    if str(pair["out"]["id"]) not in direct_payout_claimed_ids
+                    and str(pair["in"]["id"]) not in direct_payout_claimed_ids
+                ]
             # Multi-source consolidation deriver (N owned wallets -> 1, graph
             # readable): the one case detect_intra and the single-source deriver
             # both decline because per-wallet sync double-counts the fee. It

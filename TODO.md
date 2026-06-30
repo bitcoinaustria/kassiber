@@ -985,57 +985,63 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
     reconciliation, and the deriver folds the change into the external bucket and
     books the residual (`~341-349`) as a real disposal — silent over-taxation +
     holdings loss, strictly worse than the deriver-off `transfer_fee_implausible`
-    quarantine. A deriver-only guard cannot distinguish un-indexed change from a
-    real external payment, and quarantining large residuals would regress
-    legitimate large partial payments. DECISION NEEDED: change-address index
-    completeness (deep-derive the change branch) vs. a `change_unverified`
-    quarantine state. This is the only round-2 P1 still open.
-  - [ ] **Whole-row direct-swap-payout disposal lost to a same-txid auto-pair
+    quarantine. ASSESSED + deferred deliberately (the only round-2 P1 left open):
+    a deriver-only guard cannot distinguish un-indexed change from a real external
+    payment (the graph residual is identical either way), and quarantining large
+    residuals would regress legitimate large partial payments (`test_mixed_spend_books_move_and_residual_without_phantom_fee`).
+    `build_owned_index` already deep-derives the change branch to a ceiling, so this
+    is an index-completeness EDGE (change past the ceiling, address-list wallets
+    that cannot derive change, an un-enumerated multi-script change type), not a
+    common-path bug. A source-coverage discriminator is imperfect (a descriptor
+    wallet's change past the ceiling is still un-indexed despite source="derived").
+    DECISION NEEDED (maintainer): change-address index completeness vs. a
+    `change_unverified` quarantine state for owned-source spends with an
+    unexplained residual. Not rushed — a wrong guard regresses real payments.
+  - [x] **Whole-row direct-swap-payout disposal lost to a same-txid auto-pair
     hijack (P2, round-2 deep audit).** A reviewed whole-row taxable direct payout
-    whose out tx shares a txid with another owned wallet's recorded inbound is
+    whose out tx shares a txid with another owned wallet's recorded inbound was
     auto-paired by `detect_intra_transfers` (computed before the direct-payout
     claim set is built) and booked as a non-taxable MOVE — the declared disposal +
-    proceeds vanish silently, no quarantine. The partial-payout path is safe
-    (separate surviving SELL row). Fix: prune `auto_pairs` of any pair touching a
-    whole-row direct-payout-claimed id (or compute `detect_intra_transfers` after
-    the claim set is built) in `rp2.py`. Smallest clean fix of the batch.
-  - [ ] **Clamped amount=0 self-send invisible → phantom acquisition (P2, round-2
+    proceeds vanished silently, no quarantine. Fixed in `rp2.py`: `auto_pairs` is
+    pruned of any pair touching a whole-row direct-payout-claimed id before
+    `apply_manual_pairs`, so the disposal books. Test:
+    `test_rp2_ownership_transfers...test_whole_row_payout_not_hijacked_by_same_txid_inbound`.
+  - [x] **Clamped amount=0 self-send invisible → phantom acquisition (P2, round-2
     deep audit).** A coinjoin/payjoin-shaped self-send where an owned wallet's net
-    outflow is below the whole-tx fee gets its outbound `amount` clamped to 0
-    (kind=`fee`) at sync, while the raw graph still carries an owned destination
-    output. Every self-transfer/fan-out pass filters on `amount > 0`
-    (`ownership_transfers.py:152`, `transfers.py`, `tax_events.py` fan-out guard),
-    so no pass pairs, derives, or quarantines the source — the destination inbound
-    books as a standalone acquisition (over-count, no disposal, no quarantine).
-    Fix: a clamped `amount=0` outbound whose graph contains an owned destination
-    output must stay eligible for pairing/derivation (or at minimum quarantine).
-  - [ ] **Conflicting (shared-prevout / RBF) self-transfers both booked as MOVEs
+    outflow fell below the whole-tx fee gets its outbound `amount` clamped to 0,
+    while a positive inbound lands in another owned wallet under the same txid.
+    Every positive-amount filter skipped the clamped source, so the destination
+    booked a phantom standalone acquisition. Fixed in `tax_events._owned_fanout_row_ids`:
+    a clamped amount=0 outbound sharing a txid with a positive inbound in a
+    DIFFERENT owned wallet is quarantined (`owned_fanout_unresolved`) for review;
+    single-wallet fee/consolidations (no cross-wallet inbound) are untouched.
+    Tests: `test_tax_events.ClampedZeroSelfSendTest`.
+  - [x] **Conflicting (shared-prevout / RBF) self-transfers both booked as MOVEs
     (P2, round-2 deep audit).** Two self-transfer outbounds spending the SAME
     prevout (RBF bump / reorg replacement) carry distinct txids, so no pass
-    reconciles them: `detect_intra_transfers` keys on
-    `normalize_group_txid(external_id)` and the ownership deriver processes each
-    independently, booking BOTH as carrying MOVEs → destination inflated, source
-    over-debited, no quarantine (when the source holds enough basis for both).
-    Distinct from the RBF *dropped-import* phantom-disposal P3 above (opposite
-    shape). Fix: the shared-prevout RBF/conflict-dedup + reorg-guard pass already
-    on the roadmap — reconcile rows sharing a prevout / consult confirmation state
-    before deriving.
-  - [ ] **Same-timestamp competing-disposal gate: stale comment + unsorted common
-    path (P3, latent, round-2 deep audit).** `_gate_order_key`'s comment claims
-    the stream index is the id tiebreak, and `_direct_payout_synthetic_rows`'
-    common-path early-return skips the `_transaction_row_sort_key` sort; the booked
-    disposal is masked-stable only because the production caller pre-sorts via SQL
-    `ORDER BY occurred_at, created_at, id`. No user-visible non-determinism today.
-    Cheap hardening: sort the early-return unconditionally + fix the comment.
-  - [ ] **Cross-chain script-collision guard defeated by blank chain/network (P3,
-    verify reachability, round-2 deep audit).** `_norm_chain_network('', '')`
-    defaults to `('bitcoin', 'main')`, so a blank-metadata reused-key Liquid match
-    would pass the bitcoin/main chain filter and book a real disposal as a
-    non-taxable MOVE. The normalization is genuinely sketchy, but the address-list
-    create/edit paths force-normalize chain and the inventory column is NOT NULL,
-    so it is likely not reachable as a live mis-booking. Action: confirm no
-    production path persists a blank-chain `OwnedMatch`; if confirmed, treat as
-    defensive hardening (do not default blank → bitcoin/main).
+    reconciled them and BOTH booked as carrying MOVEs → destination inflated.
+    Fixed via `ownership_transfers.detect_conflicting_spend_ids` + a quarantine in
+    `tax_events.normalize_tax_asset_inputs`: rows whose txids share an input
+    outpoint are reconciled from the stored graph — a lone confirmed txid wins and
+    its replacements' legs are quarantined `conflicting_spend`; if none or several
+    are confirmed, the whole conflict is quarantined. Quarantine-only, never books.
+    Tests: `test_ownership_transfers.ConflictingSpendTests`. (The broader RBF
+    *dropped-import* phantom-disposal P3 above — opposite shape — remains separate.)
+  - [x] **Direct-payout common path returned engine rows unsorted (P3, latent,
+    round-2 deep audit).** `_direct_payout_synthetic_rows`' no-payout early-return
+    returned rows in caller order, skipping the `_transaction_row_sort_key` sort the
+    payout path applies — masked in production only because the caller pre-sorts via
+    SQL. Fixed: the early-return now sorts unconditionally. (The gate-ordering /
+    same-timestamp determinism part of this finding was already addressed by the
+    F5 same-timestamp fix, which removed the old `_gate_order_key`.)
+  - [x] **Cross-chain script-collision guard defeated by blank chain/network (P3,
+    round-2 deep audit).** `_norm_chain_network('', '')` defaulted to
+    `('bitcoin', 'main')`, so a blank-metadata reused-key Liquid match could pass
+    the bitcoin/main chain filter and book a cross-chain disposal as a non-taxable
+    MOVE. Fixed defensively: a genuinely blank chain AND network now stays distinct
+    (`('', '')`) — it no longer collides with a real bitcoin/main wallet but still
+    compares equal to another genuinely-blank side. (Likely unreachable in
+    production given chain force-normalization on add/edit; hardened regardless.)
 - [x] Austrian E 1kv PDF export no longer uses the Latin-1 text writer:
   `reports export-austrian-e1kv-pdf` / `reports export-austrian` now render a
   ReportLab-backed Steuerbericht with cover, summary/detail sections,

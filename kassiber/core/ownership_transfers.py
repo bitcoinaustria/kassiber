@@ -834,6 +834,62 @@ def graph_partial_payment_out_ids(
     return flagged
 
 
+def detect_conflicting_spend_ids(rows: Sequence[Mapping[str, Any]]) -> set[str]:
+    """Row ids of transactions that conflict over a shared input outpoint.
+
+    Two transactions spending the SAME prevout (an RBF replacement, a reorg
+    replacement, or a double-spend) can never both confirm on-chain, yet nothing
+    else reconciles them: ``detect_intra_transfers`` and the derivers key on txid,
+    so each conflicting self-transfer is booked independently as a carrying MOVE —
+    inflating the destination and over-debiting the source. Detect the conflict
+    from the stored graph's input outpoints. When exactly ONE conflicting txid is
+    confirmed it is the on-chain winner and the others are losers; otherwise (none
+    or several confirmed) every conflicting txid is returned so the whole conflict
+    surfaces for review rather than being mis-booked. Returns ALL rows (out and in
+    legs) of every loser txid, identified by normalized ``external_id``.
+
+    This is the self-transfer-scoped slice of the broader RBF/reorg canonicalization
+    pass; it is purely a quarantine signal and never books anything.
+    """
+    txid_confirmed: dict[str, bool] = {}
+    outpoint_txids: dict[str, set[str]] = {}
+    for row in rows:
+        if _get(row, "direction") != "outbound":
+            continue
+        parsed = _parse_onchain_tx(_get(row, "raw_json"))
+        if parsed is None:
+            continue
+        txid = normalize_group_txid(
+            str(parsed.get("txid") or _get(row, "external_id") or "")
+        )
+        if not txid:
+            continue
+        txid_confirmed[txid] = txid_confirmed.get(txid, False) or bool(
+            _get(row, "confirmed_at")
+        )
+        for entry in parsed["inputs"]:
+            outpoint = entry.get("outpoint")
+            if outpoint:
+                outpoint_txids.setdefault(outpoint, set()).add(txid)
+
+    loser_txids: set[str] = set()
+    for txids in outpoint_txids.values():
+        if len(txids) < 2:
+            continue  # one transaction owns this outpoint — no conflict
+        confirmed = {txid for txid in txids if txid_confirmed.get(txid)}
+        if len(confirmed) == 1:
+            loser_txids |= txids - confirmed  # the unconfirmed replacements lose
+        else:
+            loser_txids |= txids  # ambiguous — surface the whole conflict
+    if not loser_txids:
+        return set()
+    return {
+        str(_get(row, "id"))
+        for row in rows
+        if normalize_group_txid(str(_get(row, "external_id") or "")) in loser_txids
+    }
+
+
 # -- internals --------------------------------------------------------------
 
 
@@ -937,7 +993,16 @@ def _norm_chain_network(chain: Any, network: Any) -> tuple[str, str]:
     cross-chain, so both sides are normalized here. Unsupported values fall back
     to a lowercased raw tuple (still consistent for identical spellings) instead
     of raising.
+
+    A genuinely blank chain AND network is "unknown", NOT Bitcoin mainnet:
+    ``normalize_chain("")`` defaults empty to bitcoin, so without this guard a
+    blank-metadata match would canonicalize to ``("bitcoin", "main")`` and pass
+    the cross-chain filter against a real bitcoin/main source — booking a real
+    cross-chain disposal as a non-taxable MOVE. Keep blank distinct; it still
+    compares equal to another genuinely-blank side.
     """
+    if not str(chain or "").strip() and not str(network or "").strip():
+        return ("", "")
     try:
         canonical_chain = normalize_chain(chain)
         return (canonical_chain, normalize_network(canonical_chain, network))
