@@ -132,6 +132,9 @@ export type TransactionGraphPayload = {
 type GraphRow = TransactionGraphNode & { side: "input" | "output" | "fee" };
 
 const MAX_COMPACT_ROWS = 24;
+// The expanded dialog shows far more strands, but still caps so a fan-out
+// transaction cannot render thousands of paths. Matches the backend node cap.
+const MAX_EXPANDED_ROWS = 250;
 
 export function compactGraphRows(
   nodes: TransactionGraphNode[],
@@ -199,6 +202,13 @@ export function nodeTooltipTitle(node: TransactionGraphNode) {
   if (node.outpoint && title === node.outpoint) return formatShortTxid(node.outpoint);
   if (title.length > 48) return formatShortTxid(title);
   return title;
+}
+
+function nodeDisplayTitle(node: TransactionGraphNode, t: TFunction<"transactions">) {
+  if (node.overflow) {
+    return t("graph.overflowMore", { count: node.overflowCount ?? 0 });
+  }
+  return nodeTooltipTitle(node);
 }
 
 function roleLabel(role: string | undefined, t: TFunction<"transactions">) {
@@ -455,6 +465,7 @@ function GraphStrand({
   markerPath,
   testId,
   active,
+  hideSensitive,
   onHover,
   onLeave,
 }: {
@@ -463,11 +474,14 @@ function GraphStrand({
   markerPath: string;
   testId?: string;
   active?: boolean;
+  hideSensitive: boolean;
   onHover: (node: DrawableGraphRow) => void;
   onLeave: () => void;
 }) {
   const { t } = useTranslation("transactions");
-  const reference = copyReference(node);
+  // In hidden-sensitive mode the diagram is screenshot-safe; never let a stray
+  // click or keypress copy the real outpoint/address/txid to the clipboard.
+  const reference = hideSensitive ? null : copyReference(node);
   const ariaLabel = reference
     ? copyAriaLabel(node.side, t)
     : t("graph.legAria", { role: roleLabel(node.role, t) });
@@ -596,7 +610,13 @@ function routeCounterparty(route: TransactionSwapRoute) {
 }
 
 function pairedRouteKind(route: TransactionSwapRoute): "swap" | "coinjoin" | "transfer" | "pair" {
-  const explicit = String(route.routeKind || route.kind || "").toLowerCase();
+  // Prefer the daemon-computed routeKind; the heuristic below only covers
+  // payloads that predate it (older snapshots, mocks).
+  const server = String(route.routeKind || "").toLowerCase();
+  if (server === "swap" || server === "coinjoin" || server === "transfer" || server === "pair") {
+    return server;
+  }
+  const explicit = String(route.kind || "").toLowerCase();
   if (explicit.includes("coinjoin") || explicit.includes("whirlpool")) return "coinjoin";
   if (
     explicit.includes("swap") ||
@@ -611,13 +631,15 @@ function pairedRouteKind(route: TransactionSwapRoute): "swap" | "coinjoin" | "tr
 
 function swapRouteOutLooksLikeConsolidation(route: TransactionSwapRoute) {
   if (pairedRouteKind(route) !== "swap") return false;
+  // Trust the per-leg role the daemon (or the client fallback route) assigns;
+  // only re-derive it for payloads that predate per-leg roles.
   if (route.out.role === "consolidation") return true;
+  if (route.out.role === "spend") return false;
   const text = `${route.out.kind || ""} ${route.out.description || ""}`.toLowerCase();
   if (text.includes("consolidat")) return true;
-  const kind = String(route.kind || "").toLowerCase();
   const outNetwork = String(route.out.network || route.out.asset || "").toLowerCase();
   const inNetwork = String(route.in.network || route.in.asset || "").toLowerCase();
-  return kind.includes("swap") && outNetwork.includes("liquid") && outNetwork !== inNetwork;
+  return outNetwork.includes("liquid") && outNetwork !== inNetwork;
 }
 
 function SwapRouteLeg({
@@ -818,12 +840,16 @@ export function TransactionFlowDiagram({
   const shellRef = useRef<HTMLDivElement | null>(null);
   const [hoverDetail, setHoverDetail] = useState<GraphHoverDetail | null>(null);
   const [measuredCanvasWidth, setMeasuredCanvasWidth] = useState<number | null>(null);
-  const inputRows = expanded
-    ? graph.inputs.map((node) => ({ ...node, side: "input" as const }))
-    : compactGraphRows(graph.inputs, "input");
-  const outputRowsBase = expanded
-    ? graph.outputs.map((node) => ({ ...node, side: "output" as const }))
-    : compactGraphRows(graph.outputs, "output");
+  const inputRows = compactGraphRows(
+    graph.inputs,
+    "input",
+    expanded ? MAX_EXPANDED_ROWS : MAX_COMPACT_ROWS,
+  );
+  const outputRowsBase = compactGraphRows(
+    graph.outputs,
+    "output",
+    expanded ? MAX_EXPANDED_ROWS : MAX_COMPACT_ROWS,
+  );
   const outputRows: GraphRow[] = outputRowsBase;
   const feeRow: GraphRow | null = graph.fee ? { ...graph.fee, side: "fee" } : null;
   const destinationRows = feeRow ? [feeRow, ...outputRows] : outputRows;
@@ -988,6 +1014,7 @@ export function TransactionFlowDiagram({
               markerPath={markerPathFor(node)}
               testId="transaction-input-strand"
               active={hoverDetail?.node.id === node.id && hoverDetail.node.side === node.side}
+              hideSensitive={hideSensitive}
               onHover={showHoverDetail}
               onLeave={() => setHoverDetail(null)}
             />
@@ -1000,6 +1027,7 @@ export function TransactionFlowDiagram({
               markerPath={markerPathFor(node)}
               testId={node.side === "fee" ? "transaction-fee-strand" : "transaction-output-strand"}
               active={hoverDetail?.node.id === node.id && hoverDetail.node.side === node.side}
+              hideSensitive={hideSensitive}
               onHover={showHoverDetail}
               onLeave={() => setHoverDetail(null)}
             />
@@ -1022,7 +1050,7 @@ export function TransactionFlowDiagram({
           <div className="grid min-w-0 gap-1">
             <div className="truncate font-medium">
               {sensitiveGraphText(
-                nodeTooltipTitle(hoverDetail.node),
+                nodeDisplayTitle(hoverDetail.node, t),
                 hideSensitive,
                 t("graph.hidden"),
               )}

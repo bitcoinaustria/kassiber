@@ -604,6 +604,7 @@
     "pairRouteMiddle": "Geprüftes Paar",
     "pairRoutePair": "Manueller Link",
     "hidden": "Verborgen",
+    "overflowMore": "+{{count}} weitere",
     "confidentialAmount": "Vertraulicher Betrag",
     "hiddenReferences": "Graph-Referenzen verborgen",
     "availableReferences": "Graph-Referenzen sind über jeden Strang verfügbar",

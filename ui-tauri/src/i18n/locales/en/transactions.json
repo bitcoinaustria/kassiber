@@ -585,6 +585,7 @@
     "pairRouteMiddle": "Reviewed pair",
     "pairRoutePair": "Manual link",
     "hidden": "Hidden",
+    "overflowMore": "+{{count}} more",
     "confidentialAmount": "Confidential amount",
     "hiddenReferences": "Hidden graph references",
     "availableReferences": "Graph references are available from each strand",

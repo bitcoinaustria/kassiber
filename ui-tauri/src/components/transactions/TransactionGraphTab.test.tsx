@@ -95,6 +95,44 @@ describe("TransactionFlowDiagram", () => {
     expect(html).toContain('aria-label="Copy output reference"');
   });
 
+  it("disables strand copy controls when sensitive values are hidden", () => {
+    const html = renderToStaticMarkup(
+      <TooltipProvider>
+        <TransactionFlowDiagram graph={graph} hideSensitive />
+      </TooltipProvider>,
+    );
+
+    // The diagram is screenshot-safe: no clipboard affordance survives.
+    expect(html).not.toContain('aria-label="Copy');
+    expect(html).not.toContain('role="button"');
+  });
+
+  it("caps the expanded diagram strand count for fan-out transactions", () => {
+    const fanout: TransactionGraphPayload = {
+      ...graph,
+      transaction: { ...graph.transaction, outputCount: 300 },
+      outputs: Array.from({ length: 300 }, (_, index) => ({
+        id: `out-${index}`,
+        outpoint: `${index.toString(16).padStart(64, "0")}:${index}`,
+        valueSats: 1_000,
+        valueBtc: 0.00001,
+        role: "external_recipient",
+        ownership: "external",
+      })),
+    };
+    const html = renderToStaticMarkup(
+      <TooltipProvider>
+        <TransactionFlowDiagram graph={fanout} hideSensitive={false} expanded />
+      </TooltipProvider>,
+    );
+
+    const outputStrands = [
+      ...html.matchAll(/data-testid="transaction-output-strand"/g),
+    ];
+    // 300 outputs collapse to MAX_EXPANDED_ROWS (249 visible + 1 overflow).
+    expect(outputStrands).toHaveLength(250);
+  });
+
   it("does not reserve a bordered hover dock inside the drawing area", () => {
     const html = renderToStaticMarkup(
       <TooltipProvider>
