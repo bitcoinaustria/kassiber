@@ -372,7 +372,7 @@ function makeBowtiePath(
   centerX: number,
   midWidth: number,
 ) {
-  const start = edgePadding + node.thickness / 2;
+  const start = edgePadding;
   const end = centerX - midWidth * 0.9 + 1;
   const maxOffset = Math.max(0, end - start - 44);
   const offset = Math.min(node.offset, maxOffset);

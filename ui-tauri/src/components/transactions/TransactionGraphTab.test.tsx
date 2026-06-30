@@ -195,6 +195,41 @@ describe("TransactionFlowDiagram", () => {
     expect(new Set(visiblePaths.map((match) => match[1])).size).toBe(visiblePaths.length);
   });
 
+  it("keeps different-value output endpoints aligned on one rail", () => {
+    const variedOutputGraph: TransactionGraphPayload = {
+      ...graph,
+      inputs: graph.inputs.slice(0, 1),
+      fee: null,
+      outputs: [
+        {
+          ...graph.outputs[0],
+          id: "large-out",
+          valueSats: 1_900_000,
+          valueBtc: 0.019,
+        },
+        {
+          ...graph.outputs[0],
+          id: "small-out",
+          outpoint:
+            "bbcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789:1",
+          valueSats: 100_000,
+          valueBtc: 0.001,
+        },
+      ],
+    };
+    const html = renderToStaticMarkup(
+      <TooltipProvider>
+        <TransactionFlowDiagram graph={variedOutputGraph} hideSensitive={false} />
+      </TooltipProvider>,
+    );
+
+    const outputPaths = [
+      ...html.matchAll(/<path d="M ([0-9.]+) [^"]+" data-testid="transaction-output-strand"/g),
+    ];
+    expect(outputPaths).toHaveLength(2);
+    expect(new Set(outputPaths.map((match) => match[1]))).toEqual(new Set(["896"]));
+  });
+
   it("omits missing value placeholders and unknown fee stats", () => {
     const tx = graph.transaction;
     if (!tx) throw new Error("test graph transaction missing");
