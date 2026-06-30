@@ -975,6 +975,79 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
     while the report still quarantines it. Fix: make the deterministic
     self-transfer suppression always use the defaults so the flag only widens
     heuristic candidate generation.
+  - [ ] **Self-transfer change on an un-indexed script booked as a phantom
+    external disposal (P1, round-2 deep audit).** A pure self-transfer A→B whose
+    change returns to a source script the `OwnedIndex` does not contain (change
+    branch past the derive ceiling, an un-indexed address-list change address, or
+    an un-indexed multi-script-xpub change type) is mis-booked: the recorded
+    outbound `amount` includes the un-indexed change, `_parse_onchain_tx`
+    (`ownership_transfers.py`) discards prevout values so there is no input/output
+    reconciliation, and the deriver folds the change into the external bucket and
+    books the residual (`~341-349`) as a real disposal — silent over-taxation +
+    holdings loss, strictly worse than the deriver-off `transfer_fee_implausible`
+    quarantine. ASSESSED + deferred deliberately (the only round-2 P1 left open):
+    a deriver-only guard cannot distinguish un-indexed change from a real external
+    payment (the graph residual is identical either way), and quarantining large
+    residuals would regress legitimate large partial payments (`test_mixed_spend_books_move_and_residual_without_phantom_fee`).
+    `build_owned_index` already deep-derives the change branch to a ceiling, so this
+    is an index-completeness EDGE (change past the ceiling, address-list wallets
+    that cannot derive change, an un-enumerated multi-script change type), not a
+    common-path bug. A source-coverage discriminator is imperfect (a descriptor
+    wallet's change past the ceiling is still un-indexed despite source="derived").
+    DECISION NEEDED (maintainer): change-address index completeness vs. a
+    `change_unverified` quarantine state for owned-source spends with an
+    unexplained residual. Not rushed — a wrong guard regresses real payments.
+  - [x] **Whole-row direct-swap-payout disposal lost to a same-txid auto-pair
+    hijack (P2, round-2 deep audit).** A reviewed whole-row taxable direct payout
+    whose out tx shares a txid with another owned wallet's recorded inbound was
+    auto-paired by `detect_intra_transfers` (computed before the direct-payout
+    claim set is built) and booked as a non-taxable MOVE — the declared disposal +
+    proceeds vanished silently, no quarantine. Fixed in `rp2.py`: `auto_pairs` is
+    pruned of any pair touching a whole-row direct-payout-claimed id before
+    `apply_manual_pairs`, so the disposal books. Test:
+    `test_rp2_ownership_transfers...test_whole_row_payout_not_hijacked_by_same_txid_inbound`.
+  - [x] **Clamped amount=0 self-send invisible → phantom acquisition (P2, round-2
+    deep audit).** A coinjoin/payjoin-shaped self-send where an owned wallet's net
+    outflow fell below the whole-tx fee gets its outbound `amount` clamped to 0,
+    while a positive inbound lands in another owned wallet under the same txid.
+    Every positive-amount filter skipped the clamped source, so the destination
+    booked a phantom standalone acquisition. Fixed in `tax_events._owned_fanout_row_ids`:
+    a clamped amount=0 outbound sharing a txid with a positive inbound in a
+    DIFFERENT owned wallet is quarantined (`owned_fanout_unresolved`) for review;
+    single-wallet fee/consolidations (no cross-wallet inbound) are untouched.
+    Tests: `test_tax_events.ClampedZeroSelfSendTest`.
+  - [x] **Conflicting (shared-prevout / RBF) self-transfers both booked as MOVEs
+    (P2, round-2 deep audit).** Two self-transfer outbounds spending the SAME
+    prevout (RBF bump / reorg replacement) carry distinct txids, so no pass
+    reconciled them and BOTH booked as carrying MOVEs → destination inflated.
+    Fixed via `ownership_transfers.detect_conflicting_spend_ids` + a quarantine in
+    `tax_events.normalize_tax_asset_inputs`: rows whose txids share an input
+    outpoint are reconciled from the stored graph — a lone confirmed txid wins and
+    its replacements' legs are quarantined `conflicting_spend`; if none or several
+    are confirmed, the whole conflict is quarantined. Quarantine-only, never books.
+    Tests: `test_ownership_transfers.ConflictingSpendTests`. (The broader RBF
+    *dropped-import* phantom-disposal P3 above — opposite shape — remains separate.)
+  - [x] **Direct-payout common path returned engine rows unsorted (P3, latent,
+    round-2 deep audit).** `_direct_payout_synthetic_rows`' no-payout early-return
+    returned rows in caller order, skipping the `_transaction_row_sort_key` sort the
+    payout path applies — masked in production only because the caller pre-sorts via
+    SQL. Fixed: the early-return now sorts unconditionally. (The gate-ordering /
+    same-timestamp determinism part of this finding was already addressed by the
+    F5 same-timestamp fix, which removed the old `_gate_order_key`.)
+  - [ ] **Cross-chain script-collision guard defeated by blank chain/network (P3,
+    round-2 deep audit).** `_norm_chain_network('', '')` defaults to
+    `('bitcoin', 'main')`, so a blank-metadata reused-key Liquid match could pass
+    the bitcoin/main chain filter and book a cross-chain disposal as a non-taxable
+    MOVE. A comparison-time fix (treat blank as a distinct "unknown") was tried but
+    REVERTED — Codex review flagged that legacy address-list / inventory matches
+    legitimately store blank chain metadata and ARE bitcoin/main, so a real
+    bitcoin/main source paying one of them would then fail the same-chain filter
+    and have its owned output mis-booked as an external disposal. The correct fix
+    is to normalize blank Bitcoin address metadata to bitcoin/main when the index
+    is BUILT (`build_owned_index` / address-list + inventory seeding), so genuine
+    cross-chain blanks (if any are reachable) stay distinguishable from
+    legacy-mainnet blanks. Likely unreachable today (chain force-normalization on
+    wallet add/edit), hence P3 / deferred.
 - [x] Austrian E 1kv PDF export no longer uses the Latin-1 text writer:
   `reports export-austrian-e1kv-pdf` / `reports export-austrian` now render a
   ReportLab-backed Steuerbericht with cover, summary/detail sections,

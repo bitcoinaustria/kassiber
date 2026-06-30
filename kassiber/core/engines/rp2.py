@@ -21,6 +21,8 @@ from ..ownership_transfers import (
     derive_multi_source_consolidations,
     derive_ownership_transfers,
     derive_recorded_fanout_transfers,
+    detect_conflicting_spend_ids,
+    graph_multi_owned_destination_out_ids,
     graph_partial_payment_out_ids,
 )
 from ..austrian import (
@@ -1434,6 +1436,12 @@ def _prepare_assets(
     prepared_by_asset: list[tuple[NormalizedTaxAssetInputs, _RP2PreparedInput]] = []
     excluded = excluded_row_ids or set()
     for asset, asset_rows in rows_by_asset.items():
+        # Detect shared-prevout conflicts against the FULL asset row set, not the
+        # post-exclusion active_rows: the Austrian second pass excludes more rows,
+        # and if a confirmed conflict winner were dropped there the conflict would
+        # vanish and the unconfirmed loser would book. Computing over asset_rows
+        # keeps the loser identified (and quarantined) across both passes.
+        conflict_row_ids = detect_conflicting_spend_ids(asset_rows)
         active_rows = [row for row in asset_rows if str(row["id"]) not in excluded]
         normalized_inputs = normalize_tax_asset_inputs(
             profile,
@@ -1443,6 +1451,7 @@ def _prepare_assets(
             pairs_by_asset.get(asset, []),
             at_swap_link_by_row_id=at_swap_link_by_row_id,
             loan_leg_by_transaction_id=loan_leg_by_transaction_id,
+            conflict_row_ids=conflict_row_ids,
         )
         prepared = _prepare_rp2_asset_input(profile, normalized_inputs, configuration)
         prepared_by_asset.append((normalized_inputs, prepared))
@@ -1735,7 +1744,9 @@ def _direct_payout_synthetic_rows(
     """
 
     if not direct_payout_records:
-        return list(rows), [], [], [], set()
+        # Sort the common (no-payout) path the same way the payout path does
+        # below, so engine row order never depends on the caller pre-sorting.
+        return sorted(rows, key=_transaction_row_sort_key), [], [], [], set()
 
     tax_country = _profile_str(profile, "tax_country").lower()
     rows_by_id = {str(row["id"]): row for row in rows}
@@ -2090,6 +2101,9 @@ class GenericRP2TaxEngine:
             withheld_partial_payment_ids = graph_partial_payment_out_ids(
                 auto_pairs, inputs.owned_index
             )
+            withheld_multi_owned_destination_ids = graph_multi_owned_destination_out_ids(
+                auto_pairs, inputs.owned_index
+            )
             # Keep the withheld pairs so a partial payment the ownership deriver
             # cannot actually re-derive (an ambiguous / blocked source) can be
             # ROLLED BACK to its original self-transfer pair below. Withholding
@@ -2122,6 +2136,9 @@ class GenericRP2TaxEngine:
             # _direct_payout_synthetic_rows. Partial payouts leave a reduced
             # real source row in rows_for_engine for the remainder, and that
             # row must still be eligible for ownership-derived self-transfers.
+            blocked_payout_id_set = {str(rid) for rid in blocked_payout_row_ids}
+            direct_payout_claimed_ids: set[str] = set()
+            direct_payout_suppressed_in_ids: set[str] = set()
             for record in inputs.direct_payout_records:
                 out_id = str(record["out_transaction_id"])
                 out_row = input_rows_by_id.get(out_id)
@@ -2131,7 +2148,57 @@ class GenericRP2TaxEngine:
                 full_out_amount = int(_row_get(out_row, "amount") or 0)
                 if reviewed_out_amount >= full_out_amount:
                     already_paired_ids.add(out_id)
-            already_paired_ids |= {str(rid) for rid in blocked_payout_row_ids}
+                    # Only a SUCCESSFULLY-claimed whole-row payout (exact full
+                    # amount, not rejected as out_amount-invalid) gets a proceeds
+                    # disposal row. Pruning the self-transfer pair for a rejected
+                    # payout (out_amount > source) would drop the transfer with no
+                    # disposal to replace it, leaving the destination as a phantom
+                    # acquisition — so exclude blocked / over-amount payouts here.
+                    if (
+                        reviewed_out_amount == full_out_amount
+                        and out_id not in blocked_payout_id_set
+                    ):
+                        direct_payout_claimed_ids.add(out_id)
+            already_paired_ids |= blocked_payout_id_set
+            # A reviewed whole-row direct payout is a taxable disposal whose
+            # proceeds row keeps the real tx's external_id + outbound direction.
+            # If another owned wallet recorded an inbound under the same txid,
+            # detect_intra_transfers pairs them and would book the disposal as a
+            # non-taxable MOVE — silently dropping the declared proceeds. Adding
+            # the out id to already_paired_ids only stops the deriver; the auto
+            # pair must also be pruned so apply_manual_pairs cannot revive it.
+            if direct_payout_claimed_ids:
+                kept_auto_pairs = []
+                for pair in auto_pairs:
+                    out_id = str(pair["out"]["id"])
+                    in_id = str(pair["in"]["id"])
+                    if (
+                        out_id in direct_payout_claimed_ids
+                        or in_id in direct_payout_claimed_ids
+                    ):
+                        if out_id in direct_payout_claimed_ids:
+                            direct_payout_suppressed_in_ids.add(in_id)
+                        if in_id in direct_payout_claimed_ids:
+                            direct_payout_suppressed_in_ids.add(out_id)
+                        continue
+                    kept_auto_pairs.append(pair)
+                auto_pairs = kept_auto_pairs
+                # When the payout's out row has a readable graph that also pays an
+                # owned wallet, graph_partial_payment_out_ids already moved its
+                # pair into the withheld set BEFORE this prune. Drop it from there
+                # too, or the restore-withheld path below re-adds it and the
+                # reviewed payout still books as a non-taxable MOVE.
+                for claimed in direct_payout_claimed_ids:
+                    withheld = withheld_pairs_by_out_id.pop(claimed, None)
+                    if withheld is not None:
+                        direct_payout_suppressed_in_ids.add(str(withheld["in"]["id"]))
+            if direct_payout_suppressed_in_ids:
+                already_paired_ids |= direct_payout_suppressed_in_ids
+                rows_for_engine = [
+                    row
+                    for row in rows_for_engine
+                    if str(row["id"]) not in direct_payout_suppressed_in_ids
+                ]
             # Multi-source consolidation deriver (N owned wallets -> 1, graph
             # readable): the one case detect_intra and the single-source deriver
             # both decline because per-wallet sync double-counts the fee. It
@@ -2177,15 +2244,26 @@ class GenericRP2TaxEngine:
             # transfer_fee_implausible quarantine for a large one) instead of
             # orphaning the legs into a phantom disposal + phantom acquisition.
             restored_withheld_out_ids: set[str] = set()
+            blocked_source_ids = {
+                str(_row_get(blocked.get("row") or {}, "id"))
+                for blocked in ownership_result.blocked_sources
+                if blocked.get("row") is not None
+            }
+            multi_owned_withheld_blocks: set[str] = set()
             if withheld_pairs_by_out_id:
                 handled_withheld = ownership_result.dropped_out_ids | {
                     str(out_id) for out_id in ownership_result.out_row_overrides
                 }
-                restored_withheld_out_ids = {
-                    out_id
-                    for out_id in withheld_pairs_by_out_id
-                    if out_id not in handled_withheld
-                }
+                for out_id in withheld_pairs_by_out_id:
+                    if out_id in handled_withheld:
+                        continue
+                    if (
+                        out_id in blocked_source_ids
+                        and out_id in withheld_multi_owned_destination_ids
+                    ):
+                        multi_owned_withheld_blocks.add(out_id)
+                        continue
+                    restored_withheld_out_ids.add(out_id)
             # A blocked source is a proven self-transfer the deriver could not
             # safely split. Surface it for review, but NEVER drop it from booking:
             # a blocked source posts a normal disposal — the same conservative
@@ -2215,6 +2293,7 @@ class GenericRP2TaxEngine:
                     row = blocked.get("row")
                     if row is None:
                         continue
+                    row_id = str(_row_get(row, "id"))
                     source_wallet_id = str(_row_get(row, "wallet_id"))
                     group_key = (
                         str(_row_get(row, "external_id")),
@@ -2227,8 +2306,8 @@ class GenericRP2TaxEngine:
                     # A restored withheld pair is re-paired as a self-transfer
                     # below, so its source must not also be quarantined here.
                     if (
-                        not fanout_holds
-                        and str(_row_get(row, "id")) not in restored_withheld_out_ids
+                        (not fanout_holds or row_id in multi_owned_withheld_blocks)
+                        and row_id not in restored_withheld_out_ids
                     ):
                         surfaced_blocks.append(blocked)
                 if surfaced_blocks:

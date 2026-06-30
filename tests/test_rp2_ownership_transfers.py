@@ -323,6 +323,181 @@ class OwnershipDeriverMixedSpendTest(unittest.TestCase):
         self.assertAlmostEqual(holdings.get("Hot", 0.0), 0.5, places=6)
         self.assertAlmostEqual(holdings.get("Cold", 0.0), 0.0, places=6)
 
+    def test_whole_row_payout_not_hijacked_by_same_txid_inbound(self):
+        # #2: a reviewed WHOLE-row taxable direct payout whose out tx shares a
+        # txid with another owned wallet's recorded inbound (a batched tx) must
+        # book its declared disposal — detect_intra_transfers must NOT pair the
+        # payout's proceeds row with the sibling inbound into a non-taxable MOVE
+        # (which would silently drop the 20000 proceeds).
+        index = OwnedIndex()
+        index.add_script(SCRIPT_A, _match("A", "Cold"))
+        index.add_script(SCRIPT_B, _match("B", "Hot"))
+        rows = [
+            _row("A", "inbound", BTC, external_id="acqA"),
+            _row("A", "outbound", 50 * BTC // 100, external_id="payout-tx"),
+            _row("B", "inbound", 50 * BTC // 100, external_id="payout-tx"),
+        ]
+        direct_payouts = [
+            {
+                "id": "direct-payout-hijack",
+                "out_transaction_id": "A-outbound-payout-tx",
+                "kind": "direct-swap-payout",
+                "policy": "taxable",
+                "payout_asset": "BTC",
+                "payout_amount": 50 * BTC // 100,
+                "payout_occurred_at": NOW,
+                "payout_fiat_value": 20000,
+                "payout_external_id": "provider-payout",
+                "counterparty": "external-recipient",
+                "notes": "direct payout",
+                "swap_fee_msat": 0,
+                "swap_fee_kind": "combined",
+                "created_at": NOW,
+                "out_amount": 50 * BTC // 100,  # whole row
+            }
+        ]
+        state = build_tax_engine(PROFILE).build_ledger_state(
+            TaxEngineLedgerInputs(
+                rows=rows,
+                wallet_refs_by_id=WALLET_REFS,
+                manual_pair_records=[],
+                direct_payout_records=direct_payouts,
+                owned_index=index,
+            )
+        )
+        entry_types = [e["entry_type"] for e in state.entries]
+        # The payout disposal is booked, not hijacked into a MOVE.
+        self.assertNotIn("transfer_out", entry_types)
+        self.assertFalse(
+            any(
+                e["entry_type"] == "acquisition" and e["wallet_id"] == "B"
+                for e in state.entries
+            )
+        )
+        disposals = [e for e in state.entries if e["entry_type"] == "disposal"]
+        self.assertEqual(len(disposals), 1)
+        self.assertAlmostEqual(float(disposals[0]["quantity"]), -0.5, places=6)
+        self.assertAlmostEqual(float(disposals[0]["proceeds"]), 20000, places=2)
+
+    def test_invalid_payout_does_not_prune_self_transfer_pair(self):
+        # Codex review: a direct payout whose out_amount EXCEEDS the source amount
+        # is rejected (direct_payout_out_amount_invalid, no proceeds row). It must
+        # NOT be treated as a claimed payout — pruning the same-txid self-transfer
+        # pair for a rejected payout drops the transfer with no disposal to replace
+        # it, leaving the destination a phantom acquisition. The pair is preserved.
+        index = OwnedIndex()
+        index.add_script(SCRIPT_A, _match("A", "Cold"))
+        index.add_script(SCRIPT_B, _match("B", "Hot"))
+        rows = [
+            _row("A", "inbound", BTC, external_id="acqA"),
+            _row("A", "outbound", 50 * BTC // 100, external_id="inv-tx"),
+            _row("B", "inbound", 50 * BTC // 100, external_id="inv-tx"),
+        ]
+        direct_payouts = [
+            {
+                "id": "payout-invalid",
+                "out_transaction_id": "A-outbound-inv-tx",
+                "kind": "direct-swap-payout",
+                "policy": "taxable",
+                "payout_asset": "BTC",
+                "payout_amount": 60 * BTC // 100,
+                "payout_occurred_at": NOW,
+                "payout_fiat_value": 24000,
+                "payout_external_id": "provider-payout",
+                "counterparty": "external-recipient",
+                "notes": "direct payout",
+                "swap_fee_msat": 0,
+                "swap_fee_kind": "combined",
+                "created_at": NOW,
+                "out_amount": 60 * BTC // 100,  # > source amount -> invalid/blocked
+            }
+        ]
+        state = build_tax_engine(PROFILE).build_ledger_state(
+            TaxEngineLedgerInputs(
+                rows=rows,
+                wallet_refs_by_id=WALLET_REFS,
+                manual_pair_records=[],
+                direct_payout_records=direct_payouts,
+                owned_index=index,
+            )
+        )
+        reasons = [q["reason"] for q in state.quarantines]
+        self.assertIn("direct_payout_out_amount_invalid", reasons)
+        entry_types = [e["entry_type"] for e in state.entries]
+        # The self-transfer pair survived (booked as a MOVE); Hot is NOT a phantom
+        # standalone acquisition.
+        self.assertIn("transfer_in", entry_types)
+        self.assertFalse(
+            any(e["entry_type"] == "acquisition" and e["wallet_id"] == "B" for e in state.entries)
+        )
+
+    def test_whole_row_payout_with_readable_graph_not_restored_as_move(self):
+        # Codex review #1: the payout out row has a READABLE graph that also pays
+        # an owned sibling wallet + an external residual, so
+        # graph_partial_payment_out_ids WITHHOLDS its auto-pair before the payout
+        # prune runs. The payout-claimed id must also be dropped from the withheld
+        # set, or the restore-withheld path re-adds it and books the reviewed
+        # payout as a non-taxable MOVE (dropping the declared proceeds).
+        index = OwnedIndex()
+        index.add_script(SCRIPT_A, _match("A", "Cold"))
+        index.add_script(SCRIPT_B, _match("B", "Hot"))
+        spend = json.dumps(
+            {
+                "txid": "pp2",
+                "vin": [{"txid": "pv", "vout": 0, "prevout": {"scriptpubkey": SCRIPT_A}}],
+                "vout": [
+                    {"n": 0, "scriptpubkey": SCRIPT_B, "value": 30_000_000},  # owned sibling
+                    {"n": 1, "scriptpubkey": SCRIPT_EXT, "value": 20_000_000},  # external
+                ],
+            }
+        )
+        rows = [
+            _row("A", "inbound", BTC, external_id="acqA"),
+            _row("A", "outbound", 50 * BTC // 100, external_id="pp2", raw_json=spend),
+            _row("B", "inbound", 30 * BTC // 100, external_id="pp2"),
+        ]
+        direct_payouts = [
+            {
+                "id": "direct-payout-graph",
+                "out_transaction_id": "A-outbound-pp2",
+                "kind": "direct-swap-payout",
+                "policy": "taxable",
+                "payout_asset": "BTC",
+                "payout_amount": 50 * BTC // 100,
+                "payout_occurred_at": NOW,
+                "payout_fiat_value": 20000,
+                "payout_external_id": "provider-payout",
+                "counterparty": "external-recipient",
+                "notes": "direct payout",
+                "swap_fee_msat": 0,
+                "swap_fee_kind": "combined",
+                "created_at": NOW,
+                "out_amount": 50 * BTC // 100,  # whole row
+            }
+        ]
+        state = build_tax_engine(PROFILE).build_ledger_state(
+            TaxEngineLedgerInputs(
+                rows=rows,
+                wallet_refs_by_id=WALLET_REFS,
+                manual_pair_records=[],
+                direct_payout_records=direct_payouts,
+                owned_index=index,
+            )
+        )
+        entry_types = [e["entry_type"] for e in state.entries]
+        self.assertNotIn("transfer_out", entry_types)  # not hijacked into a MOVE
+        self.assertFalse(
+            any(
+                e["entry_type"] == "acquisition" and e["wallet_id"] == "B"
+                for e in state.entries
+            )
+        )
+        disposals = [e for e in state.entries if e["entry_type"] == "disposal"]
+        self.assertTrue(disposals)
+        self.assertAlmostEqual(
+            float(disposals[0]["proceeds"]), 20000, places=2
+        )
+
 
 class OwnershipDeriverAmbiguityTest(unittest.TestCase):
     """Ambiguous destination must not inflate holdings.
@@ -625,6 +800,63 @@ class OwnershipDeriverAmbiguityTest(unittest.TestCase):
         self.assertEqual(
             sorted(on_reasons), ["ownership_transfer_source_ambiguous"] * 2
         )
+
+    def test_off_group_fanout_destination_does_not_restore_partial_pair(self):
+        # Codex sidecar review: graph proves A paid B AND C, but only B shares
+        # A's external_id and C was imported under a provider id. The A->B pair is
+        # withheld so the deriver can decompose 1->N; when C's off-group inbound
+        # makes that derivation ambiguous, restoring only A->B would quarantine
+        # A/B as an implausible-fee transfer and still book C as an acquisition,
+        # inflating holdings to 1.3 BTC. Leave the source on the conservative
+        # disposal path, book the recorded receipts, and surface the review flag.
+        index = OwnedIndex()
+        index.add_script(SCRIPT_A, _match("A", "Cold"))
+        index.add_script(SCRIPT_B, _match("B", "Hot"))
+        index.add_script(SCRIPT_C, _match("C", "Savings"))
+        fan = json.dumps(
+            {
+                "txid": "fanout-tx",
+                "vin": [{"txid": "pa", "vout": 0, "prevout": {"scriptpubkey": SCRIPT_A}}],
+                "vout": [
+                    {"n": 0, "scriptpubkey": SCRIPT_B, "value": 50_000_000},
+                    {"n": 1, "scriptpubkey": SCRIPT_C, "value": 30_000_000},
+                ],
+            }
+        )
+        rows = [
+            _row("A", "inbound", BTC, external_id="acqA"),
+            _row(
+                "A",
+                "outbound",
+                80_000_000_000,
+                external_id="fanout-tx",
+                raw_json=fan,
+            ),
+            _row("B", "inbound", 50_000_000_000, external_id="fanout-tx"),
+            _row("C", "inbound", 30_000_000_000, external_id="exchange-deposit-77"),
+        ]
+        state = build_tax_engine(PROFILE).build_ledger_state(
+            TaxEngineLedgerInputs(
+                rows=rows,
+                wallet_refs_by_id=WALLET_REFS,
+                manual_pair_records=[],
+                owned_index=index,
+            )
+        )
+        reasons = [q["reason"] for q in state.quarantines]
+        self.assertIn("ownership_transfer_destination_ambiguous", reasons)
+        self.assertNotIn("transfer_fee_implausible", reasons)
+        self.assertNotIn(
+            "transfer_in", [entry["entry_type"] for entry in state.entries]
+        )
+        holdings = {
+            label: round(float(totals["quantity"]), 5)
+            for (_, label, _, _), totals in state.wallet_holdings.items()
+        }
+        self.assertAlmostEqual(sum(holdings.values()), 1.0, places=6)
+        self.assertAlmostEqual(holdings.get("Cold", 0.0), 0.2, places=6)
+        self.assertAlmostEqual(holdings.get("Hot", 0.0), 0.5, places=6)
+        self.assertAlmostEqual(holdings.get("Savings", 0.0), 0.3, places=6)
 
 
 class OwnershipDeriverHandlerTest(unittest.TestCase):
