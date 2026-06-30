@@ -139,6 +139,7 @@ describe("daemon mutation invalidation scope", () => {
       expect.arrayContaining([
         "ui.journals.events.list",
         "ui.transactions.extremes",
+        "ui.transactions.graph",
         "ui.transactions.list",
         "ui.transactions.resolve",
       ]),
@@ -153,6 +154,7 @@ describe("daemon mutation invalidation scope", () => {
           "ui.journals.events.list",
           "ui.rates.coverage",
           "ui.reports.lightning_profitability",
+          "ui.transactions.graph",
           "ui.transactions.resolve",
         ]),
       );

@@ -7,6 +7,7 @@ import {
   Info,
   Maximize2,
 } from "lucide-react";
+import type { TFunction } from "i18next";
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -168,14 +169,18 @@ export function compactGraphRows(
   ];
 }
 
-export function sensitiveGraphText(value: string | null | undefined, hidden: boolean) {
+export function sensitiveGraphText(
+  value: string | null | undefined,
+  hidden: boolean,
+  hiddenLabel = "Hidden",
+) {
   if (!value) return "";
-  return hidden ? "Hidden" : value;
+  return hidden ? hiddenLabel : value;
 }
 
-function formatNodeAmount(node: TransactionGraphNode, hidden: boolean) {
-  if (hidden) return "Hidden";
-  if (node.valueState === "confidential") return "Confidential amount";
+function formatNodeAmount(node: TransactionGraphNode, hidden: boolean, t: TFunction<"transactions">) {
+  if (hidden) return t("graph.hidden");
+  if (node.valueState === "confidential") return t("graph.confidentialAmount");
   if (typeof node.valueBtc === "number") {
     return formatBtc(node.valueBtc);
   }
@@ -197,32 +202,34 @@ export function nodeTooltipTitle(node: TransactionGraphNode) {
   return title;
 }
 
-function roleLabel(role?: string) {
+function roleLabel(role: string | undefined, t: TFunction<"transactions">) {
   const labels: Record<string, string> = {
-    input: "Input",
-    output: "Output",
-    change: "Change",
-    external_recipient: "External recipient",
-    incoming_payment: "Incoming payment",
-    owned_destination: "Owned destination",
-    op_return: "OP_RETURN / non-address",
-    fee: "Fee",
-    overflow: "More",
-    ambiguous_owned_output: "Ambiguous owned output",
+    input: t("graph.roles.input"),
+    output: t("graph.roles.output"),
+    change: t("graph.roles.change"),
+    external_recipient: t("graph.roles.externalRecipient"),
+    incoming_payment: t("graph.roles.incomingPayment"),
+    owned_destination: t("graph.roles.ownedDestination"),
+    op_return: t("graph.roles.opReturn"),
+    fee: t("graph.roles.fee"),
+    overflow: t("graph.roles.overflow"),
+    ambiguous_owned_output: t("graph.roles.ambiguousOwnedOutput"),
   };
-  return labels[role ?? ""] ?? (role ? role.replace(/_/g, " ") : "Leg");
+  return labels[role ?? ""] ?? (role ? role.replace(/_/g, " ") : t("graph.roles.leg"));
 }
 
-function ownershipBoundaryLabel(node: TransactionGraphNode) {
-  if (node.role === "fee" || node.ownership === "network_fee") return "Network fee";
+function ownershipBoundaryLabel(node: TransactionGraphNode, t: TFunction<"transactions">) {
+  if (node.role === "fee" || node.ownership === "network_fee") return t("graph.ownership.networkFee");
   if (node.ownership === "owned") {
-    return node.role === "change" ? "Internal change output" : "Internal wallet leg";
+    return node.role === "change"
+      ? t("graph.ownership.internalChange")
+      : t("graph.ownership.internalWallet");
   }
-  if (node.ownership === "external") return "External wallet leg";
-  if (node.ownership === "ambiguous") return "Ambiguous wallet ownership";
-  if (node.ownership === "unspendable") return "Unspendable output";
-  if (node.ownership === "overflow") return "Aggregated legs";
-  return "Ownership unknown";
+  if (node.ownership === "external") return t("graph.ownership.externalWallet");
+  if (node.ownership === "ambiguous") return t("graph.ownership.ambiguousWallet");
+  if (node.ownership === "unspendable") return t("graph.ownership.unspendable");
+  if (node.ownership === "overflow") return t("graph.ownership.aggregated");
+  return t("graph.ownership.unknown");
 }
 
 type DrawableGraphRow = GraphRow & {
@@ -250,6 +257,15 @@ function visualSatsForNode(node: TransactionGraphNode, fallbackSats: number) {
     return Math.max(0, node.valueSats);
   }
   return Math.max(1, fallbackSats);
+}
+
+function redactRowsForGeometry(rows: GraphRow[]): GraphRow[] {
+  return rows.map((node) => ({
+    ...node,
+    valueSats: null,
+    valueBtc: null,
+    valueState: node.valueState === "confidential" ? "confidential" : "missing",
+  }));
 }
 
 function clamp(value: number, min: number, max: number) {
@@ -397,10 +413,10 @@ function copyReference(node: GraphRow) {
   return node.outpoint || node.address || node.txid || null;
 }
 
-function copyAriaLabel(side: GraphRow["side"]) {
-  if (side === "input") return "Copy input outpoint";
-  if (side === "fee") return "Copy fee reference";
-  return "Copy output reference";
+function copyAriaLabel(side: GraphRow["side"], t: TFunction<"transactions">) {
+  if (side === "input") return t("graph.copyInput");
+  if (side === "fee") return t("graph.copyFee");
+  return t("graph.copyOutput");
 }
 
 function GraphStrand({
@@ -420,10 +436,11 @@ function GraphStrand({
   onHover: (node: DrawableGraphRow) => void;
   onLeave: () => void;
 }) {
+  const { t } = useTranslation("transactions");
   const reference = copyReference(node);
   const ariaLabel = reference
-    ? copyAriaLabel(node.side)
-    : `${roleLabel(node.role)} graph leg`;
+    ? copyAriaLabel(node.side, t)
+    : t("graph.legAria", { role: roleLabel(node.role, t) });
   const handleCopy = () => {
     if (reference) copyText(reference);
   };
@@ -521,8 +538,9 @@ function formatRouteAmount(
   amountBtc: number | null | undefined,
   asset: string | null | undefined,
   hidden: boolean,
+  hiddenLabel = "Hidden",
 ) {
-  if (hidden) return "Hidden";
+  if (hidden) return hiddenLabel;
   if (typeof amountBtc !== "number") return "";
   const assetText = asset ? ` ${asset}` : "";
   return `${formatBtc(amountBtc)}${assetText}`;
@@ -568,9 +586,11 @@ function SwapRouteLeg({
   unknownLabel: string;
   hideSensitive: boolean;
 }) {
-  const amount = formatRouteAmount(leg.amountBtc, leg.asset, hideSensitive);
-  const wallet = sensitiveGraphText(leg.wallet?.label, hideSensitive);
-  const reference = sensitiveGraphText(formatShortTxid(legReference(leg)), hideSensitive);
+  const { t } = useTranslation("transactions");
+  const hiddenLabel = t("graph.hidden");
+  const amount = formatRouteAmount(leg.amountBtc, leg.asset, hideSensitive, hiddenLabel);
+  const wallet = sensitiveGraphText(leg.wallet?.label, hideSensitive, hiddenLabel);
+  const reference = sensitiveGraphText(formatShortTxid(legReference(leg)), hideSensitive, hiddenLabel);
   return (
     <div
       className={cn(
@@ -626,8 +646,9 @@ function SwapRouteStrip({
 }) {
   const { t } = useTranslation("transactions");
   if (!route) return null;
-  const counterparty = sensitiveGraphText(routeCounterparty(route), hideSensitive);
-  const fee = formatRouteAmount(route.swapFeeBtc, route.out.asset, hideSensitive);
+  const hiddenLabel = t("graph.hidden");
+  const counterparty = sensitiveGraphText(routeCounterparty(route), hideSensitive, hiddenLabel);
+  const fee = formatRouteAmount(route.swapFeeBtc, route.out.asset, hideSensitive, hiddenLabel);
   const routeLabel = `${route.out.asset || t("graph.swapRouteAsset")} -> ${
     route.in.asset || t("graph.swapRouteAsset")
   }`;
@@ -703,6 +724,7 @@ export function TransactionFlowDiagram({
   hideSensitive: boolean;
   expanded?: boolean;
 }) {
+  const { t } = useTranslation("transactions");
   const preferredCanvasWidth = expanded ? 1120 : 960;
   const shellRef = useRef<HTMLDivElement | null>(null);
   const [hoverDetail, setHoverDetail] = useState<GraphHoverDetail | null>(null);
@@ -716,6 +738,10 @@ export function TransactionFlowDiagram({
   const outputRows: GraphRow[] = outputRowsBase;
   const feeRow: GraphRow | null = graph.fee ? { ...graph.fee, side: "fee" } : null;
   const destinationRows = feeRow ? [feeRow, ...outputRows] : outputRows;
+  const layoutInputRows = hideSensitive ? redactRowsForGeometry(inputRows) : inputRows;
+  const layoutDestinationRows = hideSensitive
+    ? redactRowsForGeometry(destinationRows)
+    : destinationRows;
   const rowCount = Math.max(inputRows.length, destinationRows.length, 2);
   const height = Math.max(280, rowCount * 58 + 90);
   const viewportHeight = expanded
@@ -739,11 +765,11 @@ export function TransactionFlowDiagram({
   const centerX = canvasWidth / 2;
   const edgePadding = expanded ? 84 : 64;
   const curveWidth = centerX - edgePadding - 12;
-  const inputKnownTotal = inputRows.reduce(
+  const inputKnownTotal = layoutInputRows.reduce(
     (sum, node) => sum + positiveKnownSats(node),
     0,
   );
-  const outputKnownTotal = destinationRows.reduce(
+  const outputKnownTotal = layoutDestinationRows.reduce(
     (sum, node) => sum + positiveKnownSats(node),
     0,
   );
@@ -751,7 +777,7 @@ export function TransactionFlowDiagram({
   const fallbackSats = Math.max(1, visualTotal / rowCount);
   const combinedWeight = Math.min(expanded ? 96 : 82, Math.max(26, Math.floor((canvasWidth - 2 * edgePadding) / 9)));
   const inputDrawRows = buildDrawableRows(
-    inputRows,
+    layoutInputRows,
     visualTotal,
     height,
     combinedWeight,
@@ -759,7 +785,7 @@ export function TransactionFlowDiagram({
     fallbackSats,
   );
   const outputDrawRows = buildDrawableRows(
-    destinationRows,
+    layoutDestinationRows,
     visualTotal,
     height,
     combinedWeight,
@@ -796,8 +822,8 @@ export function TransactionFlowDiagram({
     >
       <span className={cn("sr-only", hideSensitive && "sensitive")}>
         {hideSensitive
-          ? "Hidden graph references"
-          : "Graph references are available from each strand"}
+          ? t("graph.hiddenReferences")
+          : t("graph.availableReferences")}
       </span>
       <div className="h-full overflow-auto">
         <div
@@ -812,7 +838,7 @@ export function TransactionFlowDiagram({
             height={height}
             viewBox={`0 0 ${canvasWidth} ${height}`}
             role="img"
-            aria-label="Transaction flow diagram"
+            aria-label={t("graph.diagramAria")}
           >
             <defs>
               <linearGradient id="transaction-flow-input-gradient" x1="0%" y1="0%" x2="100%" y2="0%">
@@ -906,17 +932,23 @@ export function TransactionFlowDiagram({
         >
           <div className="grid min-w-0 gap-1">
             <div className="truncate font-medium">
-              {sensitiveGraphText(nodeTooltipTitle(hoverDetail.node), hideSensitive)}
+              {sensitiveGraphText(
+                nodeTooltipTitle(hoverDetail.node),
+                hideSensitive,
+                t("graph.hidden"),
+              )}
             </div>
             <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-white/70">
-              {formatNodeAmount(hoverDetail.node, hideSensitive) ? (
-                <span>{formatNodeAmount(hoverDetail.node, hideSensitive)}</span>
+              {formatNodeAmount(hoverDetail.node, hideSensitive, t) ? (
+                <span>{formatNodeAmount(hoverDetail.node, hideSensitive, t)}</span>
               ) : null}
-              <span>{roleLabel(hoverDetail.node.role)}</span>
-              <span>{ownershipBoundaryLabel(hoverDetail.node)}</span>
+              <span>{roleLabel(hoverDetail.node.role, t)}</span>
+              <span>{ownershipBoundaryLabel(hoverDetail.node, t)}</span>
               {copyReference(hoverDetail.node) ? (
                 <span className={cn("truncate font-mono", hideSensitive && "sensitive")}>
-                  {hideSensitive ? "Hidden" : formatShortTxid(copyReference(hoverDetail.node) ?? "")}
+                  {hideSensitive
+                    ? t("graph.hidden")
+                    : formatShortTxid(copyReference(hoverDetail.node) ?? "")}
                 </span>
               ) : null}
             </div>

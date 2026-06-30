@@ -587,7 +587,39 @@
     "swapRouteFee": "Gebühr {{fee}}",
     "swapRouteSelected": "Ausgewählt",
     "swapRouteAsset": "Asset",
-    "swapRouteUnknownLeg": "Wallet"
+    "swapRouteUnknownLeg": "Wallet",
+    "hidden": "Verborgen",
+    "confidentialAmount": "Vertraulicher Betrag",
+    "hiddenReferences": "Graph-Referenzen verborgen",
+    "availableReferences": "Graph-Referenzen sind über jeden Strang verfügbar",
+    "diagramAria": "Transaktionsflussdiagramm",
+    "copyInput": "Input-Outpoint kopieren",
+    "copyOutput": "Output-Referenz kopieren",
+    "copyFee": "Gebührenreferenz kopieren",
+    "legAria": "{{role}}-Graph-Strang",
+    "roles": {
+      "input": "Input",
+      "output": "Output",
+      "change": "Wechselgeld",
+      "externalRecipient": "Externer Empfänger",
+      "incomingPayment": "Eingehende Zahlung",
+      "ownedDestination": "Eigene Ziel-Wallet",
+      "opReturn": "OP_RETURN / keine Adresse",
+      "fee": "Gebühr",
+      "overflow": "Weitere",
+      "ambiguousOwnedOutput": "Mehrdeutig eigener Output",
+      "leg": "Strang"
+    },
+    "ownership": {
+      "networkFee": "Netzwerkgebühr",
+      "internalChange": "Interner Wechselgeld-Output",
+      "internalWallet": "Interner Wallet-Strang",
+      "externalWallet": "Externer Wallet-Strang",
+      "ambiguousWallet": "Mehrdeutige Wallet-Zugehörigkeit",
+      "unspendable": "Nicht ausgebbarer Output",
+      "aggregated": "Zusammengefasste Stränge",
+      "unknown": "Zugehörigkeit unbekannt"
+    }
   },
   "commercial": {
     "title": "Kommerzielle Herkunft",

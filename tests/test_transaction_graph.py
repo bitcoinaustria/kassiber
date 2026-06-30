@@ -1,5 +1,4 @@
 import json
-import sqlite3
 import tempfile
 import unittest
 from pathlib import Path
@@ -147,9 +146,12 @@ class TransactionGraphTest(unittest.TestCase):
             ),
         )
 
-    def _graph(self, transaction):
+    def _graph(self, transaction, *, allow_public_lookup=False):
         self.conn.commit()
-        return build_transaction_graph_snapshot(self.conn, {"transaction": transaction})
+        return build_transaction_graph_snapshot(
+            self.conn,
+            {"transaction": transaction, "allowPublicLookup": allow_public_lookup},
+        )
 
     def test_esplora_full_graph_returns_curated_model(self):
         self._utxo("wallet-a", ADDR_A, "prevfull", 0, amount=60_000_000)
@@ -340,7 +342,7 @@ class TransactionGraphTest(unittest.TestCase):
             "kassiber.core.transaction_graph.fetch_esplora_transaction",
             return_value=fetched,
         ) as fetch:
-            payload = self._graph("prevout-enriched-row")
+            payload = self._graph("prevout-enriched-row", allow_public_lookup=True)
 
         fetch.assert_called_once_with("https://mempool.example/api", txid, timeout=5)
         self.assertEqual(payload["supportLevel"], "full")
@@ -393,7 +395,7 @@ class TransactionGraphTest(unittest.TestCase):
             "kassiber.core.transaction_graph.fetch_esplora_transaction",
             return_value=fetched,
         ) as fetch:
-            payload = self._graph("bull-row")
+            payload = self._graph("bull-row", allow_public_lookup=True)
 
         fetch.assert_called_once_with("https://mempool.example/api", txid, timeout=5)
         self.assertEqual(payload["supportLevel"], "full")
@@ -462,7 +464,7 @@ class TransactionGraphTest(unittest.TestCase):
             "kassiber.core.transaction_graph.fetch_esplora_transaction",
             return_value=fetched,
         ) as fetch:
-            payload = self._graph("liquid-reference-row")
+            payload = self._graph("liquid-reference-row", allow_public_lookup=True)
 
         fetch.assert_called_once_with("https://liquid.network/api", txid, timeout=5)
         self.assertEqual(payload["supportLevel"], "partial")
@@ -478,6 +480,94 @@ class TransactionGraphTest(unittest.TestCase):
         serialized = json.dumps(payload)
         self.assertNotIn("valuecommitment", serialized)
         self.assertNotIn("assetcommitment", serialized)
+
+    def test_public_lookup_is_not_automatic_for_graphless_rows(self):
+        txid = "12" * 32
+        create_db_backend(
+            self.conn,
+            "graph-mempool",
+            "mempool",
+            "https://mempool.example/api",
+            chain="bitcoin",
+            network="main",
+            timeout=5,
+            commit=False,
+        )
+        self._tx("no-lookup-row", "wallet-a", "outbound", 800_000_000, txid, "{}")
+
+        with patch("kassiber.core.transaction_graph.fetch_esplora_transaction") as fetch:
+            payload = self._graph("no-lookup-row")
+
+        fetch.assert_not_called()
+        self.assertEqual(payload["supportLevel"], "graphless")
+        self.assertEqual(payload["unsupportedReason"], "graphless_import")
+
+    def test_public_lookup_warning_does_not_leak_backend_url(self):
+        txid = "13" * 32
+        secret_url = "https://token.example/api?token=super-secret"
+        create_db_backend(
+            self.conn,
+            "graph-mempool",
+            "mempool",
+            secret_url,
+            chain="bitcoin",
+            network="main",
+            timeout=5,
+            commit=False,
+        )
+        self._tx("lookup-failure-row", "wallet-a", "outbound", 800_000_000, txid, "{}")
+
+        with patch(
+            "kassiber.core.transaction_graph.fetch_esplora_transaction",
+            side_effect=RuntimeError(f"boom from {secret_url}"),
+        ):
+            payload = self._graph("lookup-failure-row", allow_public_lookup=True)
+
+        serialized = json.dumps(payload)
+        self.assertIn("bitcoin_reference_lookup_failed", serialized)
+        self.assertNotIn(secret_url, serialized)
+        self.assertNotIn("super-secret", serialized)
+
+    def test_bitcoin_lookup_uses_wallet_network_backend(self):
+        txid = "14" * 32
+        self.conn.execute(
+            "UPDATE wallets SET config_json = ? WHERE id = ?",
+            (json.dumps({"chain": "bitcoin", "network": "testnet"}), "wallet-a"),
+        )
+        create_db_backend(
+            self.conn,
+            "main-mempool",
+            "mempool",
+            "https://mainnet.example/api",
+            chain="bitcoin",
+            network="main",
+            timeout=5,
+            commit=False,
+        )
+        create_db_backend(
+            self.conn,
+            "testnet-mempool",
+            "mempool",
+            "https://testnet.example/api",
+            chain="bitcoin",
+            network="testnet",
+            timeout=5,
+            commit=False,
+        )
+        fetched = {
+            "txid": txid,
+            "vin": [{"txid": "15" * 32, "vout": 0, "prevout": {"scriptpubkey": SCRIPT_A, "value": 9}}],
+            "vout": [{"n": 0, "scriptpubkey": SCRIPT_B, "value": 8}],
+        }
+        self._tx("testnet-row", "wallet-a", "outbound", 8_000, txid, "{}")
+
+        with patch(
+            "kassiber.core.transaction_graph.fetch_esplora_transaction",
+            return_value=fetched,
+        ) as fetch:
+            self._graph("testnet-row", allow_public_lookup=True)
+
+        fetch.assert_called_once_with("https://testnet.example/api", txid, timeout=5)
 
     def test_multi_source_consolidation_annotation(self):
         self._utxo("wallet-a", ADDR_A, "prev-a", 0, amount=51_000_000)
@@ -548,6 +638,87 @@ class TransactionGraphTest(unittest.TestCase):
         self.assertEqual(payload["supportLevel"], "graphless")
         codes = {annotation["code"] for annotation in payload["annotations"]}
         self.assertIn("recorded_fanout", codes)
+
+    def test_recorded_one_to_one_transfer_is_annotated(self):
+        txid = "abcd" + "2" * 60
+        self._tx("one-out", "wallet-a", "outbound", 50_000_000_000, txid, "{}")
+        self._tx("one-in", "wallet-b", "inbound", 50_000_000_000, txid.upper(), "{}")
+
+        payload = self._graph("one-out")
+
+        self.assertEqual(payload["supportLevel"], "graphless")
+        codes = {annotation["code"] for annotation in payload["annotations"]}
+        self.assertIn("recorded_self_transfer", codes)
+        self.assertIn(
+            f"recorded-self-transfer:{txid.lower()}",
+            payload["accounting"]["transferGroupIds"],
+        )
+
+    def test_excluded_rows_are_ignored_for_graph_semantics(self):
+        txid = "cdef" + "3" * 60
+        self._tx("excluded-fan-out", "wallet-a", "outbound", 80_000_000_000, txid, "{}")
+        self._tx("excluded-fan-in-b", "wallet-b", "inbound", 50_000_000_000, txid, "{}")
+        self._tx("excluded-fan-in-c", "wallet-c", "inbound", 30_000_000_000, txid, "{}")
+        self.conn.execute(
+            "UPDATE transactions SET excluded = 1 WHERE id = ?",
+            ("excluded-fan-in-c",),
+        )
+
+        payload = self._graph("excluded-fan-out")
+
+        codes = {annotation["code"] for annotation in payload["annotations"]}
+        self.assertIn("recorded_self_transfer", codes)
+        self.assertNotIn("recorded_fanout", codes)
+
+    def test_manual_pair_ids_suppress_graph_derivation(self):
+        self._utxo("wallet-a", ADDR_A, "manual-prev", 0, amount=51_000_000)
+        self._utxo("wallet-b", ADDR_B, "manual-scan", 0, amount=50_000_000)
+        raw = {
+            "txid": "manual-pair",
+            "vin": [{"txid": "manual-prev", "vout": 0, "prevout": {"scriptpubkey": SCRIPT_A, "value": 51_000_000}}],
+            "vout": [{"n": 0, "scriptpubkey": SCRIPT_B, "value": 50_000_000}],
+        }
+        self._tx("manual-out", "wallet-a", "outbound", 50_000_000_000, "manual-pair", raw, fee_msat=1_000_000_000)
+        self._tx("manual-in", "wallet-b", "inbound", 50_000_000_000, "manual-pair", "{}")
+        self.conn.execute(
+            """
+            INSERT INTO transaction_pairs(
+                id, workspace_id, profile_id, out_transaction_id, in_transaction_id,
+                kind, policy, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "manual-pair-1",
+                "ws-1",
+                "profile-1",
+                "manual-out",
+                "manual-in",
+                "manual",
+                "carrying-value",
+                NOW,
+            ),
+        )
+
+        payload = self._graph("manual-out")
+
+        codes = {annotation["code"] for annotation in payload["annotations"]}
+        self.assertNotIn("ownership_derived", codes)
+        self.assertNotIn("recorded_self_transfer", codes)
+
+    def test_ambiguous_owned_output_is_not_labeled_change(self):
+        self._utxo("wallet-a", ADDR_A, "ambig-prev", 0, amount=1_000_000)
+        self._utxo("wallet-a", ADDR_B, "ambig-output", 0, amount=900_000)
+        self._utxo("wallet-b", ADDR_B, "ambig-output", 0, amount=900_000)
+        raw = {
+            "txid": "ambig-output",
+            "vin": [{"txid": "ambig-prev", "vout": 0, "prevout": {"scriptpubkey": SCRIPT_A, "value": 1_000_000}}],
+            "vout": [{"n": 0, "scriptpubkey": SCRIPT_B, "scriptpubkey_address": ADDR_B, "value": 900_000}],
+        }
+        self._tx("ambig-change-row", "wallet-a", "outbound", 900_000_000, "ambig-output", raw)
+
+        payload = self._graph("ambig-change-row")
+
+        self.assertEqual(payload["outputs"][0]["role"], "ambiguous_owned_output")
 
     def test_reviewed_swap_pair_route_is_curated(self):
         raw = {

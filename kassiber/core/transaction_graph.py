@@ -16,6 +16,7 @@ from typing import Any, Mapping, Sequence
 from ..backends import preferred_mempool_api_backend
 from ..errors import AppError
 from ..msat import msat_to_btc
+from ..transfers import detect_intra_transfers, normalize_group_txid
 from . import ownership as core_ownership
 from .ownership_transfers import (
     _parse_onchain_tx,
@@ -39,7 +40,9 @@ def build_transaction_graph_snapshot(
     raw_args = args or {}
     if not isinstance(raw_args, dict):
         raw_args = {}
-    unknown = sorted(set(raw_args) - {"transaction"})
+    unknown = sorted(
+        set(raw_args) - {"transaction", "allowPublicLookup", "allow_public_lookup"}
+    )
     if unknown:
         raise AppError(
             "ui.transactions.graph received unsupported fields",
@@ -68,11 +71,25 @@ def build_transaction_graph_snapshot(
     wallet_refs_by_id = _wallet_refs_by_id(conn, profile_id)
     owned_index, index_warnings = _build_owned_index(conn, profile_id, profile_rows)
     raw = _json_obj(_row_get(row, "raw_json"))
-    graph = _parse_graph(row, _enrich_graph_raw(conn, row, raw, runtime_config))
+    allow_public_lookup = bool(
+        raw_args.get("allowPublicLookup") or raw_args.get("allow_public_lookup")
+    )
+    graph = _parse_graph(
+        row,
+        _enrich_graph_raw(
+            conn,
+            row,
+            raw,
+            runtime_config,
+            allow_public_lookup=allow_public_lookup,
+        ),
+    )
+    manual_pair_records = _active_pair_records(conn, profile_id)
     semantics = _preview_ownership_semantics(
         profile_rows,
         owned_index,
         wallet_refs_by_id,
+        manual_pair_records,
     )
     _annotate_graph(graph, row, owned_index, semantics)
     warnings = list(graph.pop("_warnings", []))
@@ -186,6 +203,7 @@ def _load_profile_transaction_rows(
         JOIN wallets w ON w.id = t.wallet_id
         LEFT JOIN accounts a ON a.id = w.account_id
         WHERE t.profile_id = ?
+          AND COALESCE(t.excluded, 0) = 0
         ORDER BY t.occurred_at, t.created_at, t.id
         """,
         (profile_id,),
@@ -224,12 +242,6 @@ def _build_owned_index(
     profile_id: str,
     rows: Sequence[Mapping[str, Any]],
 ) -> tuple[Any | None, list[str]]:
-    # Match the journal handler: descriptor derivation is only worth doing when
-    # some on-chain row carries a graph shape. Graphless recorded fan-out hints
-    # do not need the ownership index.
-    has_graph = any((str(_row_get(row, "raw_json") or "")).find('"vout"') != -1 for row in rows)
-    if not has_graph:
-        return None, []
     wallets = core_ownership.load_profile_wallets(conn, profile_id)
     return core_ownership.build_owned_index(conn, profile_id, wallets)
 
@@ -393,7 +405,11 @@ def _enrich_graph_raw(
     row: Mapping[str, Any],
     raw: Mapping[str, Any],
     runtime_config: Mapping[str, Any] | None,
+    *,
+    allow_public_lookup: bool = False,
 ) -> Mapping[str, Any]:
+    if not allow_public_lookup:
+        return raw
     if _looks_liquid_or_confidential(row, raw):
         return _enrich_liquid_reference_graph_raw(conn, row, raw)
     return _enrich_bitcoin_graph_raw(conn, row, raw, runtime_config)
@@ -410,7 +426,7 @@ def _enrich_bitcoin_graph_raw(
     txid = _string_or_none(raw.get("txid")) or _txid_from_row(row)
     if not _looks_like_txid(txid):
         return raw
-    backend = _graph_lookup_backend(conn, runtime_config)
+    backend = _graph_lookup_backend(conn, row, runtime_config)
     if backend is None:
         return _with_graph_lookup_warning(
             raw,
@@ -423,17 +439,17 @@ def _enrich_bitcoin_graph_raw(
             str(txid),
             timeout=_graph_lookup_timeout(backend),
         )
-    except Exception as exc:
+    except Exception:
         return _with_graph_lookup_warning(
             raw,
             "bitcoin_reference_lookup_failed",
-            f"Could not fetch public Bitcoin transaction references from {backend['url']}: {exc}",
+            "Could not fetch public Bitcoin transaction references from the selected explorer backend.",
         )
     if not isinstance(fetched, Mapping):
         return _with_graph_lookup_warning(
             raw,
             "bitcoin_reference_lookup_invalid",
-            f"Bitcoin reference lookup from {backend['url']} returned an invalid response.",
+            "The selected Bitcoin explorer backend returned an invalid transaction response.",
         )
     fetched_txid = _string_or_none(fetched.get("txid"))
     if fetched_txid and fetched_txid.lower() != str(txid).lower():
@@ -483,7 +499,7 @@ def _enrich_liquid_reference_graph_raw(
     txid = _string_or_none(raw.get("txid")) or _txid_from_row(row)
     if not _looks_like_txid(txid):
         return raw
-    backend = _liquid_graph_lookup_backend(conn)
+    backend = _liquid_graph_lookup_backend(conn, row)
     if backend is None:
         return raw
     try:
@@ -492,17 +508,17 @@ def _enrich_liquid_reference_graph_raw(
             str(txid),
             timeout=_graph_lookup_timeout(backend),
         )
-    except Exception as exc:
+    except Exception:
         return _with_graph_lookup_warning(
             raw,
             "liquid_reference_lookup_failed",
-            f"Could not fetch public Liquid transaction references from {backend['url']}: {exc}",
+            "Could not fetch public Liquid transaction references from the selected explorer backend.",
         )
     if not isinstance(fetched, Mapping):
         return _with_graph_lookup_warning(
             raw,
             "liquid_reference_lookup_invalid",
-            f"Liquid reference lookup from {backend['url']} returned an invalid response.",
+            "The selected Liquid explorer backend returned an invalid transaction response.",
         )
     fetched_txid = _string_or_none(fetched.get("txid"))
     if fetched_txid and fetched_txid.lower() != str(txid).lower():
@@ -556,9 +572,13 @@ def _can_lookup_public_bitcoin_prevouts(row: Mapping[str, Any], raw: Mapping[str
 
 def _graph_lookup_backend(
     conn: sqlite3.Connection,
+    row: Mapping[str, Any],
     runtime_config: Mapping[str, Any] | None,
 ) -> dict[str, Any] | None:
-    candidate = preferred_mempool_api_backend(conn, "bitcoin", "main")
+    chain, network = _row_chain_network(row)
+    if chain != "bitcoin":
+        return None
+    candidate = preferred_mempool_api_backend(conn, chain, network)
     if candidate is not None:
         return {
             "name": candidate.get("name"),
@@ -573,15 +593,28 @@ def _graph_lookup_backend(
     if not isinstance(backend, Mapping):
         return None
     kind = str(backend.get("kind") or "").lower()
-    chain = str(backend.get("chain") or "bitcoin").lower()
+    backend_chain = str(backend.get("chain") or "bitcoin").lower()
+    backend_network = str(backend.get("network") or network).lower()
     url = _string_or_none(backend.get("url"))
-    if kind not in {"esplora", "mempool"} or chain not in {"", "bitcoin"} or not url:
+    if (
+        kind not in {"esplora", "mempool"}
+        or backend_chain not in {"", chain}
+        or not url
+    ):
+        return None
+    if backend_network and backend_network != network:
         return None
     return {"name": backend_name, "url": url, "timeout": _int_or_none(backend.get("timeout"))}
 
 
-def _liquid_graph_lookup_backend(conn: sqlite3.Connection) -> dict[str, Any] | None:
-    candidate = preferred_mempool_api_backend(conn, "liquid", "liquidv1")
+def _liquid_graph_lookup_backend(
+    conn: sqlite3.Connection,
+    row: Mapping[str, Any],
+) -> dict[str, Any] | None:
+    chain, network = _row_chain_network(row, default_chain="liquid", default_network="liquidv1")
+    if chain != "liquid":
+        return None
+    candidate = preferred_mempool_api_backend(conn, chain, network)
     if candidate is not None:
         return {
             "name": candidate.get("name"),
@@ -595,18 +628,28 @@ def _preview_ownership_semantics(
     rows: Sequence[Mapping[str, Any]],
     owned_index: Any | None,
     wallet_refs_by_id: Mapping[str, Mapping[str, Any]],
+    manual_pair_records: Sequence[Mapping[str, Any]] = (),
 ) -> dict[str, Any]:
     by_row: dict[str, list[dict[str, Any]]] = defaultdict(list)
     linked_pairs: dict[str, list[dict[str, Any]]] = defaultdict(list)
-    touched: set[str] = set()
     working_rows: list[Mapping[str, Any]] = list(rows)
+    manual_pair_ids = _manual_pair_ids(manual_pair_records)
+    detected_pairs, _detected_ids = detect_intra_transfers(working_rows)
+    surviving_detected_pairs = [
+        pair
+        for pair in detected_pairs
+        if str(_row_get(pair.get("out"), "id")) not in manual_pair_ids
+        and str(_row_get(pair.get("in"), "id")) not in manual_pair_ids
+    ]
+    touched: set[str] = set(manual_pair_ids)
+    _record_detected_pairs(by_row, linked_pairs, touched, surviving_detected_pairs)
 
     if owned_index is not None:
         consolidation = derive_multi_source_consolidations(
             working_rows,
             index=owned_index,
             wallet_refs_by_id=wallet_refs_by_id,
-            already_paired_ids=set(),
+            already_paired_ids=set(touched),
         )
         _record_result(by_row, linked_pairs, touched, consolidation, "multi_source_consolidation")
         drop_ids = consolidation.dropped_out_ids | consolidation.dropped_in_ids
@@ -650,6 +693,61 @@ def _preview_ownership_semantics(
         "linked_pairs": dict(linked_pairs),
         "touched": touched,
     }
+
+
+def _active_pair_records(conn: sqlite3.Connection, profile_id: str) -> list[sqlite3.Row]:
+    return conn.execute(
+        """
+        SELECT *
+        FROM transaction_pairs
+        WHERE profile_id = ?
+          AND deleted_at IS NULL
+        """,
+        (profile_id,),
+    ).fetchall()
+
+
+def _manual_pair_ids(manual_pair_records: Sequence[Mapping[str, Any]]) -> set[str]:
+    ids: set[str] = set()
+    for record in manual_pair_records:
+        out_id = _row_get(record, "out_transaction_id")
+        in_id = _row_get(record, "in_transaction_id")
+        if out_id:
+            ids.add(str(out_id))
+        if in_id:
+            ids.add(str(in_id))
+    return ids
+
+
+def _record_detected_pairs(
+    by_row: dict[str, list[dict[str, Any]]],
+    linked_pairs: dict[str, list[dict[str, Any]]],
+    touched: set[str],
+    pairs: Sequence[Mapping[str, Any]],
+) -> None:
+    for pair in pairs:
+        out_row = pair.get("out")
+        in_row = pair.get("in")
+        out_id = str(_row_get(out_row, "id") or "")
+        in_id = str(_row_get(in_row, "id") or "")
+        if not out_id or not in_id:
+            continue
+        external_id = _row_get(out_row, "external_id") or _row_get(in_row, "external_id") or ""
+        group_key = normalize_group_txid(str(external_id)) if external_id else out_id
+        annotation = {
+            "code": "recorded_self_transfer",
+            "label": _semantic_label("recorded_self_transfer"),
+            "severity": "info",
+            "groupId": f"recorded-self-transfer:{group_key}",
+            "outTransactionId": out_id,
+            "inTransactionId": in_id,
+            "amountMsat": int(_row_get(out_row, "amount") or 0),
+            "amountBtc": _msat_to_btc(int(_row_get(out_row, "amount") or 0)),
+        }
+        for row_id in {out_id, in_id}:
+            by_row[row_id].append(dict(annotation))
+            linked_pairs[row_id].append(dict(annotation))
+            touched.add(row_id)
 
 
 def _record_result(
@@ -757,12 +855,12 @@ def _annotate_graph(
             node["annotations"].append(_node_annotation("external_recipient", "External recipient"))
             continue
         _apply_match_annotation(node, matches, "owned_output", "external_recipient")
-        if owner_ids & contributor_ids:
-            node["role"] = "change"
-            node["annotations"].append(_node_annotation("change", "Change back to an owned source wallet"))
-        elif len(owner_ids) > 1:
+        if len(owner_ids) > 1:
             node["role"] = "ambiguous_owned_output"
             node["annotations"].append(_node_annotation("ambiguous_owned_output", "Owned by multiple wallets"))
+        elif owner_ids & contributor_ids:
+            node["role"] = "change"
+            node["annotations"].append(_node_annotation("change", "Change back to an owned source wallet"))
         elif _row_is_inbound(row) and source_wallet_id in owner_ids:
             node["role"] = "incoming_payment"
             node["annotations"].append(_node_annotation("incoming_payment", "Incoming payment to this wallet"))
@@ -1320,6 +1418,30 @@ def _looks_liquid_or_confidential(row: Mapping[str, Any], raw: Mapping[str, Any]
     return any(token in raw_text for token in ("confidential", "valuecommitment", "assetcommitment"))
 
 
+def _row_chain_network(
+    row: Mapping[str, Any],
+    *,
+    default_chain: str = "bitcoin",
+    default_network: str = "main",
+) -> tuple[str, str]:
+    config = _json_obj(_row_get(row, "wallet_config_json"))
+    chain = str(config.get("chain") or default_chain).lower()
+    network = str(config.get("network") or default_network).lower()
+    asset = str(_row_get(row, "asset") or "").upper()
+    wallet_kind = str(_row_get(row, "wallet_kind") or "").lower()
+    if "liquid" in wallet_kind or asset in {"LBTC", "L-BTC", "LIQUID-BTC"}:
+        chain = "liquid"
+        if network in {"", "main", "mainnet"}:
+            network = "liquidv1"
+    elif chain in {"", "btc"}:
+        chain = "bitcoin"
+    if chain == "bitcoin" and network in {"", "mainnet"}:
+        network = "main"
+    if chain == "liquid" and network in {"", "main", "mainnet"}:
+        network = "liquidv1"
+    return chain, network
+
+
 def _json_obj(value: Any) -> dict[str, Any]:
     if isinstance(value, Mapping):
         return dict(value)
@@ -1401,6 +1523,7 @@ def _node_annotation(code: str, label: str, group_id: Any = None) -> dict[str, A
 def _semantic_label(source: str) -> str:
     labels = {
         "ownership_derived": "Ownership-derived transfer",
+        "recorded_self_transfer": "Recorded self-transfer",
         "recorded_fanout": "Recorded fan-out transfer",
         "multi_source_consolidation": "Multi-wallet consolidation",
     }

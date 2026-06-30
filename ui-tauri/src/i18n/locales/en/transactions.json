@@ -568,7 +568,39 @@
     "swapRouteFee": "Fee {{fee}}",
     "swapRouteSelected": "Selected",
     "swapRouteAsset": "Asset",
-    "swapRouteUnknownLeg": "Wallet"
+    "swapRouteUnknownLeg": "Wallet",
+    "hidden": "Hidden",
+    "confidentialAmount": "Confidential amount",
+    "hiddenReferences": "Hidden graph references",
+    "availableReferences": "Graph references are available from each strand",
+    "diagramAria": "Transaction flow diagram",
+    "copyInput": "Copy input outpoint",
+    "copyOutput": "Copy output reference",
+    "copyFee": "Copy fee reference",
+    "legAria": "{{role}} graph leg",
+    "roles": {
+      "input": "Input",
+      "output": "Output",
+      "change": "Change",
+      "externalRecipient": "External recipient",
+      "incomingPayment": "Incoming payment",
+      "ownedDestination": "Owned destination",
+      "opReturn": "OP_RETURN / non-address",
+      "fee": "Fee",
+      "overflow": "More",
+      "ambiguousOwnedOutput": "Ambiguous owned output",
+      "leg": "Leg"
+    },
+    "ownership": {
+      "networkFee": "Network fee",
+      "internalChange": "Internal change output",
+      "internalWallet": "Internal wallet leg",
+      "externalWallet": "External wallet leg",
+      "ambiguousWallet": "Ambiguous wallet ownership",
+      "unspendable": "Unspendable output",
+      "aggregated": "Aggregated legs",
+      "unknown": "Ownership unknown"
+    }
   },
   "commercial": {
     "title": "Commercial provenance",

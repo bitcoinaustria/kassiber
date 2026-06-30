@@ -243,6 +243,43 @@ describe("TransactionFlowDiagram", () => {
     expect(new Set(outputPaths.map((match) => match[1]))).toEqual(new Set(["896"]));
   });
 
+  it("flattens graph geometry when sensitive values are hidden", () => {
+    const variedOutputGraph: TransactionGraphPayload = {
+      ...graph,
+      inputs: graph.inputs.slice(0, 1),
+      fee: null,
+      outputs: [
+        {
+          ...graph.outputs[0],
+          id: "large-hidden-out",
+          valueSats: 1_900_000,
+          valueBtc: 0.019,
+        },
+        {
+          ...graph.outputs[0],
+          id: "small-hidden-out",
+          outpoint:
+            "bbcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789:1",
+          valueSats: 100_000,
+          valueBtc: 0.001,
+        },
+      ],
+    };
+    const html = renderToStaticMarkup(
+      <TooltipProvider>
+        <TransactionFlowDiagram graph={variedOutputGraph} hideSensitive />
+      </TooltipProvider>,
+    );
+
+    const outputStrokeWidths = [
+      ...html.matchAll(
+        /data-testid="transaction-output-strand"[^>]*stroke-width="([^"]+)"/g,
+      ),
+    ].map((match) => match[1]);
+    expect(outputStrokeWidths).toHaveLength(2);
+    expect(new Set(outputStrokeWidths).size).toBe(1);
+  });
+
   it("omits missing value placeholders and unknown fee stats", () => {
     const tx = graph.transaction;
     if (!tx) throw new Error("test graph transaction missing");
