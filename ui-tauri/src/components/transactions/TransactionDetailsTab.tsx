@@ -262,17 +262,26 @@ export function TransactionDetailsTab({ ctx }: { ctx: TransactionDetailTabContex
       : typeof activeGraphData?.fee?.valueSats === "number"
         ? activeGraphData.fee.valueSats / SATS_PER_BTC
         : 0;
+  const hiddenGraphValue = t("graph.hidden");
   const technicalRows = graphTx
     ? [
         [t("details.inputCount"), graphTx.inputCount ?? activeGraphData.inputs.length],
         [t("details.outputCount"), graphTx.outputCount ?? activeGraphData.outputs.length],
         [
           t("details.networkFee"),
-          graphNetworkFeeBtc ? formatBtcAmount(graphNetworkFeeBtc) : t("details.unknown"),
+          graphNetworkFeeBtc
+            ? hideSensitive
+              ? hiddenGraphValue
+              : formatBtcAmount(graphNetworkFeeBtc)
+            : t("details.unknown"),
         ],
         [
           t("details.feeRate"),
-          graphTx.feeRateSatVb ? `${graphTx.feeRateSatVb} sat/vB` : t("details.unknown"),
+          graphTx.feeRateSatVb
+            ? hideSensitive
+              ? hiddenGraphValue
+              : `${graphTx.feeRateSatVb} sat/vB`
+            : t("details.unknown"),
         ],
         [t("details.version"), graphTx.version ?? t("details.unknown")],
         [t("details.locktime"), graphTx.locktime ?? t("details.unknown")],

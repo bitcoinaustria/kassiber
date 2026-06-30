@@ -19,6 +19,7 @@ from ..msat import msat_to_btc
 from ..transfers import detect_intra_transfers, normalize_group_txid
 from . import ownership as core_ownership
 from .ownership_transfers import (
+    _norm_chain_network,
     _parse_onchain_tx,
     derive_multi_source_consolidations,
     derive_ownership_transfers,
@@ -971,9 +972,12 @@ def _annotate_graph(
     if owned_index is None:
         return
     source_wallet_id = str(_row_get(row, "wallet_id") or "")
+    row_chain_network = _norm_chain_network(*_row_chain_network(row))
     input_owner_ids: set[str] = set()
     for node in graph["inputs"]:
-        matches = _input_matches(node, owned_index)
+        matches = _filter_matches_to_chain_network(
+            _input_matches(node, owned_index), row_chain_network
+        )
         _apply_match_annotation(node, matches, "owned_input", "external_input")
         input_owner_ids.update(str(match.wallet_id) for match in matches)
 
@@ -989,7 +993,9 @@ def _annotate_graph(
             node["role"] = "op_return"
             node["annotations"].append(_node_annotation("op_return", "OP_RETURN / non-address output"))
             continue
-        matches = owned_index.lookup_script(script)
+        matches = _filter_matches_to_chain_network(
+            owned_index.lookup_script(script), row_chain_network
+        )
         owner_ids = {str(match.wallet_id) for match in matches}
         if not matches:
             node["ownership"] = "external"
@@ -1028,6 +1034,17 @@ def _input_matches(node: Mapping[str, Any], owned_index: Any) -> list[Any]:
         if match is not None:
             return [match]
     return owned_index.lookup_script(node.get("_script"))
+
+
+def _filter_matches_to_chain_network(
+    matches: Sequence[Any], chain_network: tuple[str, str]
+) -> list[Any]:
+    return [
+        match
+        for match in matches
+        if _norm_chain_network(getattr(match, "chain", None), getattr(match, "network", None))
+        == chain_network
+    ]
 
 
 def _row_is_outbound(row: Mapping[str, Any]) -> bool:

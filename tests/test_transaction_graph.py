@@ -4,9 +4,9 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+import kassiber.core.transaction_graph as tg
 from kassiber.backends import create_db_backend
 from kassiber.core.sync_backends import address_to_scriptpubkey
-from kassiber.core.transaction_graph import build_transaction_graph_snapshot
 from kassiber.db import open_db, set_setting
 
 
@@ -69,7 +69,17 @@ class TransactionGraphTest(unittest.TestCase):
         set_setting(conn, "context_profile", "profile-1")
         conn.commit()
 
-    def _utxo(self, wallet_id, address, txid, vout, amount=50_000_000):
+    def _utxo(
+        self,
+        wallet_id,
+        address,
+        txid,
+        vout,
+        amount=50_000_000,
+        *,
+        chain="bitcoin",
+        network="main",
+    ):
         self.conn.execute(
             """
             INSERT INTO wallet_utxos(
@@ -83,8 +93,8 @@ class TransactionGraphTest(unittest.TestCase):
                 "ws-1",
                 "profile-1",
                 wallet_id,
-                "bitcoin",
-                "main",
+                chain,
+                network,
                 "BTC",
                 amount * 1000,
                 txid,
@@ -148,7 +158,7 @@ class TransactionGraphTest(unittest.TestCase):
 
     def _graph(self, transaction, *, allow_public_lookup=False):
         self.conn.commit()
-        return build_transaction_graph_snapshot(
+        return tg.build_transaction_graph_snapshot(
             self.conn,
             {"transaction": transaction, "allowPublicLookup": allow_public_lookup},
         )
@@ -746,6 +756,52 @@ class TransactionGraphTest(unittest.TestCase):
 
         self.assertEqual(payload["outputs"][0]["role"], "ambiguous_owned_output")
 
+    def test_graph_ownership_matches_are_filtered_by_network(self):
+        self.conn.execute(
+            "UPDATE wallets SET config_json = ? WHERE id = ?",
+            (json.dumps({"chain": "bitcoin", "network": "testnet"}), "wallet-b"),
+        )
+        self._utxo("wallet-a", ADDR_A, "net-prev", 0, amount=1_000_000)
+        self._utxo(
+            "wallet-b",
+            ADDR_B,
+            "testnet-owned-output",
+            0,
+            amount=900_000,
+            network="testnet",
+        )
+        raw = {
+            "txid": "network-filter-tx",
+            "vin": [
+                {
+                    "txid": "net-prev",
+                    "vout": 0,
+                    "prevout": {"scriptpubkey": SCRIPT_A, "value": 1_000_000},
+                }
+            ],
+            "vout": [
+                {
+                    "n": 0,
+                    "scriptpubkey": SCRIPT_B,
+                    "scriptpubkey_address": ADDR_B,
+                    "value": 900_000,
+                }
+            ],
+        }
+        self._tx(
+            "network-filter-row",
+            "wallet-a",
+            "outbound",
+            900_000_000,
+            "network-filter-tx",
+            raw,
+        )
+
+        payload = self._graph("network-filter-row")
+
+        self.assertEqual(payload["outputs"][0]["ownership"], "external")
+        self.assertEqual(payload["outputs"][0]["role"], "external_recipient")
+
     def test_reviewed_swap_pair_route_is_curated(self):
         raw = {
             "txid": "liquid-swap-out",
@@ -995,8 +1051,6 @@ class TransactionGraphTest(unittest.TestCase):
         self.assertEqual(payload["outputs"][0]["valueBtc"], 1.0)
 
     def test_profile_semantics_cache_reuses_bundle_until_version_bumps(self):
-        import kassiber.core.transaction_graph as tg
-
         self._tx("cache-row", "wallet-a", "outbound", 1_000_000_000, "cache-tx", "{}")
         self.conn.commit()
         cache: dict = {}
@@ -1025,8 +1079,6 @@ class TransactionGraphTest(unittest.TestCase):
             self.assertEqual(spy.call_count, 2)
 
     def test_profile_semantics_recompute_every_call_without_cache(self):
-        import kassiber.core.transaction_graph as tg
-
         self._tx("nocache-row", "wallet-a", "outbound", 1_000_000_000, "nocache-tx", "{}")
         self.conn.commit()
 
@@ -1040,8 +1092,6 @@ class TransactionGraphTest(unittest.TestCase):
     def test_profile_semantics_cache_invalidates_on_owned_set_change(self):
         # Adding a wallet or observing a UTXO changes the owned index but does not
         # bump journal_input_version; the cache key must still notice the change.
-        import kassiber.core.transaction_graph as tg
-
         self._tx("ownedset-row", "wallet-a", "outbound", 1_000_000_000, "ownedset-tx", "{}")
         self.conn.commit()
         cache: dict = {}
@@ -1077,8 +1127,6 @@ class TransactionGraphTest(unittest.TestCase):
     def test_profile_semantics_cache_invalidates_on_inventory_reattribution(self):
         # An inventory re-sync can rewrite an existing outpoint's address/derivation
         # in place (UPSERT), restamping last_seen_at without changing the row count.
-        import kassiber.core.transaction_graph as tg
-
         self._tx("reattr-row", "wallet-a", "outbound", 1_000_000_000, "reattr-tx", "{}")
         self._utxo("wallet-a", ADDR_A, "reattr-utxo", 0)
         self.conn.commit()
