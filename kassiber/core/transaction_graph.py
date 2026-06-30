@@ -55,7 +55,7 @@ def build_transaction_graph_snapshot(
     args: dict[str, Any] | None = None,
     runtime_config: Mapping[str, Any] | None = None,
     *,
-    semantics_cache: dict[str, tuple[int, _ProfileSemantics]] | None = None,
+    semantics_cache: dict[str, tuple[tuple[Any, ...], _ProfileSemantics]] | None = None,
 ) -> dict[str, Any]:
     raw_args = args or {}
     if not isinstance(raw_args, dict):
@@ -263,26 +263,29 @@ def _load_profile_semantics(
     conn: sqlite3.Connection,
     profile_id: str,
     *,
-    cache: dict[str, tuple[int, _ProfileSemantics]] | None,
+    cache: dict[str, tuple[tuple[Any, ...], _ProfileSemantics]] | None,
 ) -> _ProfileSemantics:
     """Return the profile-scoped graph bundle, reusing a cached copy when fresh.
 
-    The bundle is invalidated by ``journal_input_version`` — the same counter the
-    journal pipeline bumps whenever an input that could change ownership, pairing,
-    or transfer derivation is touched (imports, metadata edits, wallet/account
-    changes, manual pairs). Passing ``cache=None`` (the default for one-shot CLI
-    and tests) recomputes every call, preserving the previous behaviour.
+    The cache key captures everything the bundle depends on:
+    ``journal_input_version`` (bumped by imports, metadata edits, wallet config
+    edits, account changes and manual pairs), plus the wallet and output-inventory
+    row counts. The owned index is derived from the wallet set and ``wallet_utxos``
+    seeding, and adding a wallet or observing UTXOs does not always bump the
+    journal version — so folding those counts in keeps the cache correct without
+    forcing a journal reprocess on the high-frequency sync path. ``cache=None``
+    (one-shot CLI and tests) recomputes every call, preserving prior behaviour.
     """
-    version = _profile_journal_version(conn, profile_id)
+    signature = _profile_semantics_signature(conn, profile_id)
     if cache is not None:
         cached = cache.get(profile_id)
-        if cached is not None and cached[0] == version:
+        if cached is not None and cached[0] == signature:
             return cached[1]
     bundle = _compute_profile_semantics(conn, profile_id)
     if cache is not None:
-        # Keep at most the latest version per profile so the cache stays O(active
-        # profiles); a version bump simply replaces the stale entry.
-        cache[profile_id] = (version, bundle)
+        # Keep at most the latest signature per profile so the cache stays
+        # O(active profiles); any change simply replaces the stale entry.
+        cache[profile_id] = (signature, bundle)
     return bundle
 
 
@@ -307,14 +310,35 @@ def _compute_profile_semantics(
     )
 
 
-def _profile_journal_version(conn: sqlite3.Connection, profile_id: str) -> int:
+def _profile_semantics_signature(
+    conn: sqlite3.Connection, profile_id: str
+) -> tuple[Any, ...]:
+    # A no-FROM SELECT always returns exactly one row. The wallet_utxos COUNT and
+    # MAX(last_seen_at) are read in a single scan: the count catches added/removed
+    # outpoints, while MAX(last_seen_at) catches in-place re-attribution — the
+    # inventory UPSERT restamps last_seen_at on every observed row, including
+    # address/derivation rewrites that leave the row count unchanged but do change
+    # the owned set the cached index is seeded from.
     row = conn.execute(
-        "SELECT journal_input_version FROM profiles WHERE id = ?",
-        (profile_id,),
+        """
+        SELECT
+            (SELECT journal_input_version FROM profiles WHERE id = :pid) AS version,
+            (SELECT COUNT(*) FROM wallets WHERE profile_id = :pid) AS wallets,
+            u.cnt AS utxos,
+            u.seen AS utxo_seen
+        FROM (
+            SELECT COUNT(*) AS cnt, MAX(last_seen_at) AS seen
+            FROM wallet_utxos WHERE profile_id = :pid
+        ) AS u
+        """,
+        {"pid": profile_id},
     ).fetchone()
-    if row is None:
-        return 0
-    return int(_row_get(row, "journal_input_version") or 0)
+    return (
+        int(_row_get(row, "version") or 0),
+        int(_row_get(row, "wallets") or 0),
+        int(_row_get(row, "utxos") or 0),
+        _row_get(row, "utxo_seen"),
+    )
 
 
 def _public_nodes_capped(nodes: Sequence[Mapping[str, Any]], side: str) -> list[dict[str, Any]]:
@@ -332,7 +356,10 @@ def _public_nodes_capped(nodes: Sequence[Mapping[str, Any]], side: str) -> list[
     visible = public[:keep]
     hidden = public[keep:]
     known = [node["valueSats"] for node in hidden if isinstance(node.get("valueSats"), int)]
-    total = sum(known) if known else None
+    # Only advertise a concrete total when every hidden leg has a known amount;
+    # a partial sum (some confidential/missing-prevout legs) must not masquerade
+    # as the full aggregate.
+    total = sum(known) if known and len(known) == len(hidden) else None
     overflow: dict[str, Any] = {
         "id": f"{side}-overflow",
         "role": "overflow",

@@ -1037,6 +1037,93 @@ class TransactionGraphTest(unittest.TestCase):
             tg.build_transaction_graph_snapshot(self.conn, {"transaction": "nocache-row"})
             self.assertEqual(spy.call_count, 2)
 
+    def test_profile_semantics_cache_invalidates_on_owned_set_change(self):
+        # Adding a wallet or observing a UTXO changes the owned index but does not
+        # bump journal_input_version; the cache key must still notice the change.
+        import kassiber.core.transaction_graph as tg
+
+        self._tx("ownedset-row", "wallet-a", "outbound", 1_000_000_000, "ownedset-tx", "{}")
+        self.conn.commit()
+        cache: dict = {}
+
+        with patch.object(
+            tg, "_compute_profile_semantics", wraps=tg._compute_profile_semantics
+        ) as spy:
+            tg.build_transaction_graph_snapshot(
+                self.conn, {"transaction": "ownedset-row"}, semantics_cache=cache
+            )
+            self.assertEqual(spy.call_count, 1)
+
+            self.conn.execute(
+                """
+                INSERT INTO wallets(id, workspace_id, profile_id, account_id, label, kind, config_json, created_at)
+                VALUES(?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                ("wallet-new", "ws-1", "profile-1", "acct-1", "New", "custom", "{}", NOW),
+            )
+            self.conn.commit()
+            tg.build_transaction_graph_snapshot(
+                self.conn, {"transaction": "ownedset-row"}, semantics_cache=cache
+            )
+            self.assertEqual(spy.call_count, 2)
+
+            self._utxo("wallet-a", ADDR_A, "newutxo", 0)
+            self.conn.commit()
+            tg.build_transaction_graph_snapshot(
+                self.conn, {"transaction": "ownedset-row"}, semantics_cache=cache
+            )
+            self.assertEqual(spy.call_count, 3)
+
+    def test_profile_semantics_cache_invalidates_on_inventory_reattribution(self):
+        # An inventory re-sync can rewrite an existing outpoint's address/derivation
+        # in place (UPSERT), restamping last_seen_at without changing the row count.
+        import kassiber.core.transaction_graph as tg
+
+        self._tx("reattr-row", "wallet-a", "outbound", 1_000_000_000, "reattr-tx", "{}")
+        self._utxo("wallet-a", ADDR_A, "reattr-utxo", 0)
+        self.conn.commit()
+        cache: dict = {}
+
+        with patch.object(
+            tg, "_compute_profile_semantics", wraps=tg._compute_profile_semantics
+        ) as spy:
+            tg.build_transaction_graph_snapshot(
+                self.conn, {"transaction": "reattr-row"}, semantics_cache=cache
+            )
+            self.assertEqual(spy.call_count, 1)
+
+            self.conn.execute(
+                "UPDATE wallet_utxos SET last_seen_at = ?, address = ? WHERE txid = ?",
+                ("2026-02-02T00:00:00Z", ADDR_B, "reattr-utxo"),
+            )
+            self.conn.commit()
+            tg.build_transaction_graph_snapshot(
+                self.conn, {"transaction": "reattr-row"}, semantics_cache=cache
+            )
+            self.assertEqual(spy.call_count, 2)
+
+    def test_capped_overflow_with_missing_values_stays_amountless(self):
+        vout = [{"n": index, "scriptpubkey": SCRIPT_C, "value": 1_000} for index in range(259)]
+        vout.append({"n": 259, "scriptpubkey": SCRIPT_C})  # no value -> missing leg
+        raw = {
+            "txid": "fanout-missing-tx",
+            "vin": [
+                {"txid": "ef" * 32, "vout": 0, "prevout": {"scriptpubkey": SCRIPT_A, "value": 100_000_000}}
+            ],
+            "vout": vout,
+        }
+        self._tx("fanout-missing-row", "wallet-a", "outbound", 1_000_000_000, "fanout-missing-tx", raw)
+
+        payload = self._graph("fanout-missing-row")
+
+        self.assertEqual(len(payload["outputs"]), 250)
+        overflow = payload["outputs"][-1]
+        self.assertTrue(overflow["overflow"])
+        self.assertEqual(overflow["overflowCount"], 11)
+        # A partial sum must not masquerade as the full aggregate.
+        self.assertNotIn("valueSats", overflow)
+        self.assertNotIn("valueBtc", overflow)
+
 
 if __name__ == "__main__":
     unittest.main()

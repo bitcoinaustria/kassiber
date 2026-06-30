@@ -71,6 +71,35 @@ describe("TransactionFlowDiagram", () => {
     expect(rows[3].valueSats).toBe(1_500_000);
   });
 
+  it("leaves the overflow node amountless when a hidden leg has no value", () => {
+    const nodes = [
+      { id: "n-0", valueSats: 1_000 },
+      { id: "n-1", valueSats: 1_000 },
+      { id: "n-2", valueSats: 1_000 },
+      { id: "n-missing" },
+    ];
+    const rows = compactGraphRows(nodes, "output", 3);
+
+    expect(rows).toHaveLength(3);
+    const overflow = rows[2];
+    expect(overflow.overflow).toBe(true);
+    expect(overflow.valueSats).toBeNull();
+  });
+
+  it("counts the legs a nested overflow node represents", () => {
+    const nodes = [
+      { id: "a", valueSats: 1 },
+      { id: "b", valueSats: 1 },
+      { id: "server-overflow", overflow: true, overflowCount: 50, valueSats: 50 },
+    ];
+    const rows = compactGraphRows(nodes, "output", 2);
+
+    const overflow = rows[rows.length - 1];
+    // visible [a]; hidden [b, server-overflow] -> 1 + 50 legs.
+    expect(overflow.overflowCount).toBe(51);
+    expect(overflow.valueSats).toBe(51);
+  });
+
   it("renders hidden-sensitive labels without leaking addresses or outpoints", () => {
     const html = renderToStaticMarkup(
       <TooltipProvider>

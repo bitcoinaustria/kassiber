@@ -236,9 +236,10 @@ _REQUEST_LOGGER = logging.getLogger("kassiber.daemon.request")
 # Profile-scoped graph semantics are expensive to derive (they walk the whole
 # profile). The graph endpoint is read repeatedly — once for the focused tx and
 # again for each eagerly-prefetched swap leg — so we memoise the bundle per
-# profile, keyed by journal_input_version, for the life of the daemon process.
-# Access is serialized on the request thread (single shared sqlite connection).
-_GRAPH_SEMANTICS_CACHE: dict[str, tuple[int, Any]] = {}
+# profile, keyed by a (journal_input_version, wallet count, utxo count) signature,
+# for the life of the daemon process. Access is serialized on the request thread
+# (single shared sqlite connection).
+_GRAPH_SEMANTICS_CACHE: dict[str, tuple[tuple[Any, ...], Any]] = {}
 
 SUPPORTED_KINDS = (
     "status",

@@ -145,26 +145,31 @@ export function compactGraphRows(
   if (rows.length <= maxRows) return rows;
   const visible = rows.slice(0, Math.max(1, maxRows - 1));
   const hidden = rows.slice(visible.length);
-  const totalSats = hidden.reduce(
-    (sum, node) => sum + (typeof node.valueSats === "number" ? node.valueSats : 0),
-    0,
-  );
+  // A hidden node may itself be a server-side overflow node, so count the legs
+  // it represents rather than the strand.
+  const hiddenCount = hidden.reduce((sum, node) => sum + (node.overflowCount ?? 1), 0);
+  // Only advertise a concrete value when every hidden leg has a known amount;
+  // otherwise leave it amountless so a partial sum isn't shown as a total.
+  const allKnown = hidden.every((node) => typeof node.valueSats === "number");
+  const totalSats = allKnown
+    ? hidden.reduce((sum, node) => sum + (node.valueSats ?? 0), 0)
+    : null;
   return [
     ...visible,
     {
       id: `${side}-overflow`,
       side,
-      label: `+${hidden.length} more`,
+      label: `+${hiddenCount} more`,
       role: "overflow",
       ownership: "overflow",
       overflow: true,
-      overflowCount: hidden.length,
-      valueSats: totalSats || null,
-      valueBtc: totalSats ? totalSats / 100_000_000 : null,
+      overflowCount: hiddenCount,
+      valueSats: totalSats,
+      valueBtc: totalSats != null ? totalSats / 100_000_000 : null,
       annotations: [
         {
           code: "overflow",
-          label: `${hidden.length} compacted ${side} rows`,
+          label: `${hiddenCount} compacted ${side} rows`,
         },
       ],
     },
