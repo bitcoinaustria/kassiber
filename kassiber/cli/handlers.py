@@ -46,6 +46,7 @@ from ..core import pricing
 from ..core import rates as core_rates
 from ..core import reports as core_reports
 from ..core import saved_views as core_saved_views
+from ..core import source_overlap as core_source_overlap
 from ..core import swap_rules as core_swap_rules
 from ..core import sync as core_sync
 from ..core import sync_backends as core_sync_backends
@@ -342,14 +343,13 @@ def _journals_current_for_profile(conn, profile):
     )
 
 
-TRANSFER_PAIR_KINDS = (
-    "manual",
-    "coinjoin",
+BITCOIN_LAYER_TRANSITION_PAIR_KINDS = (
     "peg-in",
     "peg-out",
     "submarine-swap",
     "swap-refund",
 )
+TRANSFER_PAIR_KINDS = ("manual", "coinjoin", *BITCOIN_LAYER_TRANSITION_PAIR_KINDS)
 TRANSFER_PAIR_POLICIES = ("carrying-value", "taxable")
 DIRECT_SWAP_PAYOUT_KINDS = ("direct-swap-payout",)
 
@@ -852,6 +852,7 @@ def _candidate_to_dict(candidate):
         "swap_fee_kind": candidate.swap_fee_kind,
         "default_kind": candidate.default_kind,
         "default_policy": candidate.default_policy,
+        "candidate_type": _candidate_review_type(candidate),
         "conflict_set_id": candidate.conflict_set_id,
         "conflict_size": candidate.conflict_size,
     }
@@ -924,6 +925,17 @@ def _candidate_same_asset(candidate):
     return str(candidate.out_asset or "").upper() == str(candidate.in_asset or "").upper()
 
 
+def _candidate_transfer_like(candidate):
+    return (
+        _candidate_same_asset(candidate)
+        or candidate.default_kind in BITCOIN_LAYER_TRANSITION_PAIR_KINDS
+    )
+
+
+def _candidate_review_type(candidate):
+    return "transfer" if _candidate_transfer_like(candidate) else "swap"
+
+
 def _filter_transfer_candidates(
     candidates,
     *,
@@ -939,11 +951,10 @@ def _filter_transfer_candidates(
                 f"Invalid candidate_type '{candidate_type}', expected 'transfer' or 'swap'",
                 code="validation",
             )
-        same_asset = candidate_type == "transfer"
         candidates = [
             c
             for c in candidates
-            if _candidate_same_asset(c) == same_asset
+            if _candidate_review_type(c) == candidate_type
         ]
     if confidence:
         candidates = [c for c in candidates if c.confidence == confidence]
@@ -1012,8 +1023,9 @@ def suggest_transfer_candidates(
     Honours optional filters used by the review queue: ``confidence``
     pins to exact / strong; ``asset_pair`` matches the legacy asset-only
     ``OUT-IN`` shape (e.g. ``"LBTC-BTC"``); ``route_pair`` matches the
-    rail-aware route shape (e.g. ``"LNBTC-BTC"``); ``method`` pins to
-    ``payment_hash`` or ``heuristic``.
+    rail-aware route shape (e.g. ``"LNBTC-BTC"``); ``candidate_type`` splits
+    carrying-value Bitcoin movements from other cross-asset swaps; and ``method``
+    pins to ``payment_hash`` or ``heuristic``.
     """
     _, profile = resolve_scope(conn, workspace_ref, profile_ref)
     rows = _load_matcher_rows(conn, profile["id"])
@@ -2202,12 +2214,9 @@ def sync_wallet(
             )
         ]
         hooks = _wallet_sync_hooks(commit=False)
-        # Run the network-only fetch for backend-synced wallets concurrently
-        # before the serial write loop. DB writes and the per-wallet savepoint
-        # isolation below are unchanged — only the fetch is parallelized, and the
-        # per-host limiter keeps total concurrency against any one host within a
-        # single wallet's existing budget. AppErrors are captured per wallet and
-        # re-raised under that wallet's savepoint, preserving rollback isolation.
+        # Run discovery concurrently, apply the DB-backed overlap preflight on
+        # this thread, then run backend fetches concurrently before the serial
+        # write loop. Per-wallet savepoint isolation below is unchanged.
         backend_wallets = [
             wallet
             for wallet in wallets
@@ -2220,6 +2229,14 @@ def sync_wallet(
             hooks,
             checkpoints=freshness_checkpoints,
             force_full=force_full,
+            source_overlap_preflight=(
+                lambda wallet, sync_state: core_source_overlap.raise_for_sync_source_overlap(
+                    conn,
+                    profile,
+                    wallet,
+                    sync_state,
+                )
+            ),
         )
         results = []
         for idx, wallet in enumerate(wallets):

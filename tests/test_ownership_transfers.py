@@ -937,6 +937,26 @@ class MultiSourceConsolidationDeriverTests(unittest.TestCase):
         )
         self.assertEqual(result.derived_pairs, [])
 
+    def test_sender_without_owned_input_declined(self):
+        # A stale/imported B outbound row sharing A's graph must not let the
+        # deriver synthesize a non-taxable MOVE from B when no input is owned by B.
+        a_out = _outbound(
+            row_id="a-out", wallet_id="A", amount_sats=50_000_000, fee_sats=0,
+            txid="consol", input_scripts=[SCRIPT["A"]],
+            outputs=[(SCRIPT["C"], 80_000_000)],
+        )
+        b_out = _outbound(
+            row_id="b-out", wallet_id="B", amount_sats=30_000_000, fee_sats=0,
+            txid="consol", input_scripts=[SCRIPT["A"]],
+            outputs=[(SCRIPT["C"], 80_000_000)],
+        )
+        result = self._run(
+            [a_out, b_out],
+            {SCRIPT["A"]: ("A", "A"), SCRIPT["B"]: ("B", "B"), SCRIPT["C"]: ("C", "C")},
+            _refs("A", "B", "C"),
+        )
+        self.assertEqual(result.derived_pairs, [])
+
     def test_different_id_destination_receipt_declined(self):
         # C recorded its receipt under its own provider id (value == the
         # consolidated total). It cannot be matched to this spend without

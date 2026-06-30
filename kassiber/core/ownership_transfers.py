@@ -623,6 +623,11 @@ def derive_multi_source_consolidations(
         dest_wallet_id, out_c_sats = next(iter(dest_value.items()))
         out_c_msat = out_c_sats * SATS_TO_MSAT
 
+        input_owner_ids = set().union(
+            *(_input_owner_ids(index, entry) for entry in parsed["inputs"])
+        )
+        if not sender_wallets <= input_owner_ids:
+            continue  # every claimed sender must actually fund at least one input
         if not _inputs_owned_by(parsed["inputs"], index, sender_wallets):
             continue  # a foreign input makes the recorded amounts unreliable
 

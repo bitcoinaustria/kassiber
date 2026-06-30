@@ -16,7 +16,7 @@
     "outgoing": "Ausgehend",
     "transfer": "Interne Übertragung",
     "swap": "Swap",
-    "layerTransition": "Layer-Übergang"
+    "layerTransition": "Bitcoin-Swap"
   },
   "detailHeader": {
     "confirmationsTitle": "{{count}} on-chain-Bestätigungen",
@@ -49,7 +49,7 @@
     "outgoing": "Senden",
     "transfer": "Interne Übertragung",
     "swap": "Swap",
-    "layerTransition": "Layer-Übergang"
+    "layerTransition": "Bitcoin-Swap"
   },
   "classification": {
     "unlabeled": "Ohne Label",
@@ -120,7 +120,7 @@
       "short": "Eigene Wallet-Übertragung"
     },
     "neuSwap": {
-      "label": "§27b Tausch zum Buchwert / Layer-Übergang",
+      "label": "§27b Bitcoin-Swap zum Buchwert",
       "short": "Neu Tausch"
     },
     "altSpekulation": {
@@ -178,6 +178,8 @@
     "3months": "3 Monate",
     "30days": "30 Tage",
     "5years": "5 Jahre",
+    "10years": "10 Jahre",
+    "15years": "15 Jahre",
     "all": "Gesamt"
   },
   "chartMetric": {
@@ -193,13 +195,6 @@
     "outgoing": "Ausgehend",
     "transfers": "Übertragungen",
     "swaps": "Swaps"
-  },
-  "dateFilter": {
-    "all": "Alle",
-    "today": "Heute",
-    "yesterday": "Gestern",
-    "last7days": "Letzte 7 Tage",
-    "last30days": "Letzte 30 Tage"
   },
   "quickFilter": {
     "externalFlow": "Externer Fluss",
@@ -290,6 +285,7 @@
       "missingExplorerLink": "Fehlender Explorer-Link",
       "missingPrice": "Fehlender Preis",
       "failedImport": "Fehlgeschlagener Import",
+      "pairingCandidates": "Paarungskandidaten",
       "swapCandidates": "Swap-Kandidaten",
       "none": "Keine Datenqualitätsprobleme"
     }
@@ -307,9 +303,18 @@
       "network": "Netzwerk",
       "status": "Status"
     },
+    "sort": {
+      "dateInactive": "Nach Transaktionsdatum sortieren",
+      "dateDescending": "Nach Transaktionsdatum sortiert, neueste zuerst",
+      "dateAscending": "Nach Transaktionsdatum sortiert, älteste zuerst",
+      "amountInactive": "Nach Betrag sortieren",
+      "amountDescending": "Nach Betrag sortiert, absteigend",
+      "amountAscending": "Nach Betrag sortiert, aufsteigend"
+    },
     "filter": {
-      "dateAria": "Nach Datum filtern",
-      "datePlaceholder": "Datum",
+      "menuAria": "Transaktionsfilter öffnen",
+      "menuTrigger": "Filter",
+      "menuLabel": "Transaktionsfilter",
       "statusAria": "Nach Status filtern",
       "statusTrigger": "Status",
       "statusLabel": "Nach Status filtern",
@@ -325,7 +330,10 @@
       "walletAria": "Nach Wallet oder Quelle filtern",
       "walletTrigger": "Wallet",
       "walletLabel": "Nach Wallet / Quelle filtern",
-      "allWallets": "Alle Wallets"
+      "allWallets": "Alle Wallets",
+      "feesTrigger": "Gebühren",
+      "feesLabel": "Nach Gebühren filtern",
+      "allFees": "Alle Gebühren"
     },
     "chip": {
       "clearChart": "Diagrammfilter {{label}} entfernen",
@@ -333,7 +341,6 @@
       "clearQuick": "Filter {{label}} entfernen",
       "clearBreakdown": "Filter {{label}} entfernen",
       "clearStatus": "Filter {{label}} entfernen",
-      "clearDate": "Filter {{label}} entfernen",
       "clearFlow": "Filter {{label}} entfernen",
       "clearPayment": "Filter {{label}} entfernen",
       "clearWithFees": "Filter „Mit Gebühren“ entfernen"
@@ -367,16 +374,15 @@
         "unmark": "Sicherheitsmarkierung entfernen"
       }
     },
-    "pagination": {
-      "rowsPerPage": "Zeilen pro Seite:",
-      "refreshing": "Wird aktualisiert…",
-      "rangeOf": "von {{total}}",
+    "virtual": {
+      "refreshing": "Transaktionen werden aktualisiert…",
+      "complete": "{{count}} Transaktionen werden angezeigt",
+      "loaded": "{{count}} geladene Transaktionen werden angezeigt",
+      "moreHint": "Weitere Transaktionen werden beim Scrollen automatisch geladen.",
+      "loadingMore": "Weitere Transaktionen werden geladen…",
       "loadMore": "Mehr laden",
-      "loading": "Wird geladen…",
-      "firstPage": "Zur ersten Seite",
-      "previousPage": "Zur vorherigen Seite",
-      "nextPage": "Zur nächsten Seite",
-      "lastPage": "Zur letzten Seite"
+      "moreAvailable": "Weitere Transaktionen verfügbar",
+      "scrollRegion": "Scrollbare Transaktionstabelle"
     }
   },
   "notification": {

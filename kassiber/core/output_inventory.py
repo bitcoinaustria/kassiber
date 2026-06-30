@@ -124,6 +124,20 @@ def _normalize_bool(value: Any) -> bool | None:
     return None
 
 
+def _normalize_script_pubkey(value: Any) -> str | None:
+    text = str_or_none(value)
+    if text is None:
+        return None
+    normalized = text.lower()
+    if len(normalized) % 2 != 0:
+        return None
+    try:
+        bytes.fromhex(normalized)
+    except ValueError:
+        return None
+    return normalized
+
+
 def _normalize_observed_output(
     output: Mapping[str, Any],
     *,
@@ -185,6 +199,7 @@ def _normalize_observed_output(
         "block_height": block_height,
         "block_time": str_or_none(output.get("block_time")),
         "address": str_or_none(output.get("address")),
+        "script_pubkey": _normalize_script_pubkey(output.get("script_pubkey")),
         "address_label": str_or_none(output.get("address_label")),
         "branch_label": str_or_none(output.get("branch_label")),
         "branch_index": branch_index,
@@ -333,14 +348,14 @@ def update_wallet_output_inventory(
             id, workspace_id, profile_id, wallet_id, backend_name, backend_kind,
             chain, network, asset, amount, txid, vout, outpoint,
             confirmation_status, confirmations, block_height, block_time,
-            address, address_label, branch_label, branch_index, address_index,
+            address, script_pubkey, address_label, branch_label, branch_index, address_index,
             anonymity_score, spent_by, excluded_from_coinjoin, key_state,
             anon_history_json, first_seen_at, last_seen_at, spent_at, raw_json
         ) VALUES(
             ?, ?, ?, ?, ?, ?,
             ?, ?, ?, ?, ?, ?, ?,
             ?, ?, ?, ?,
-            ?, ?, ?, ?, ?,
+            ?, ?, ?, ?, ?, ?,
             ?, ?, ?, ?, ?,
             ?, ?, ?, ?
         )
@@ -357,6 +372,7 @@ def update_wallet_output_inventory(
             block_height = excluded.block_height,
             block_time = excluded.block_time,
             address = excluded.address,
+            script_pubkey = excluded.script_pubkey,
             address_label = excluded.address_label,
             branch_label = excluded.branch_label,
             branch_index = excluded.branch_index,
@@ -390,6 +406,7 @@ def update_wallet_output_inventory(
                 row["block_height"],
                 row["block_time"],
                 row["address"],
+                row["script_pubkey"],
                 row["address_label"],
                 row["branch_label"],
                 row["branch_index"],

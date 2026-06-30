@@ -514,6 +514,43 @@ class NormalizeTaxAssetInputsTest(unittest.TestCase):
         self.assertEqual(blocked_detail["transfer_group_id"], "grouped-transfer")
         self.assertEqual(blocked_detail["blocked_by_reason"], "pricing_review_required")
 
+    def test_blocked_synthetic_group_contaminates_by_journal_transaction_id(self):
+        refs = {
+            "wallet-a": {"id": "wallet-a", "label": "Wallet A"},
+            "wallet-b": {"id": "wallet-b", "label": "Wallet B"},
+        }
+        profile = {**self.profile, "require_coarse_review": True}
+        out_row = _row(
+            "multi-consol:tx:out:wallet-a",
+            "wallet-a",
+            "outbound",
+            50_000_000_000,
+            fee=100_000_000,
+            fiat_rate=65_000,
+            external_id="multi-consol:tx:out:wallet-a",
+        )
+        out_row["journal_transaction_id"] = "real-out-a"
+        out_row["pricing_quality"] = "coarse_fallback"
+        in_row = _row(
+            "multi-consol:tx:in:wallet-a",
+            "wallet-b",
+            "inbound",
+            50_000_000_000,
+            external_id="multi-consol:tx:in:wallet-a",
+        )
+        in_row["journal_transaction_id"] = "real-in-b"
+
+        inputs = normalize_tax_asset_inputs(
+            profile,
+            "BTC",
+            [out_row, in_row],
+            refs,
+            [{"out": out_row, "in": in_row, "group_id": "grouped-transfer"}],
+        )
+
+        self.assertEqual(inputs.transfers, [])
+        self.assertEqual(inputs.earliest_lot_contamination_at, out_row["occurred_at"])
+
     def test_unsupported_direction_quarantines(self):
         inputs = normalize_tax_asset_inputs(
             self.profile,
@@ -721,6 +758,25 @@ class AustrianSelfTransferRegimeTest(unittest.TestCase):
         # unambiguously neu — deterministically, not an id artifact.
         self.assertEqual(self._move_fee_regime("aaa-neu"), "neu")
         self.assertEqual(self._move_fee_regime("zzz-neu"), "neu")
+
+    def test_self_transfer_fee_honors_regime_override(self):
+        alt = _row("alt", "wallet-a", "inbound", 30_000_000_000,
+                   occurred_at="2020-06-01T00:00:00Z", fiat_rate=10_000)
+        neu = _row("neu", "wallet-a", "inbound", 40_000_000_000,
+                   occurred_at="2025-02-01T00:00:00Z", fiat_rate=60_000)
+        out_row = _row("move-out", "wallet-a", "outbound", 50_000_000_000,
+                       occurred_at="2025-02-01T00:00:00Z", fee=100_000_000,
+                       fiat_rate=60_000, external_id="mv")
+        out_row["at_regime_override"] = "alt"
+        in_row = _row("mv-in", "wallet-b", "inbound", 50_000_000_000,
+                      occurred_at="2025-02-01T00:00:00Z", external_id="mv")
+        inputs = normalize_tax_asset_inputs(
+            self.AT_PROFILE, "BTC", [alt, neu, out_row, in_row], self.REFS,
+            [{"out": out_row, "in": in_row}],
+        )
+
+        self.assertEqual(len(inputs.transfers), 1)
+        self.assertEqual(inputs.transfers[0].at_regime, "alt")
 
     def test_samourai_internal_transfer_fee_carries_regime(self):
         # #5: a Whirlpool tx0 (samourai child rows) under AT with mixed Alt/Neu

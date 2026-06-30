@@ -485,8 +485,11 @@ itself also refuses any live provider call (returning `live_refresh: false`,
 off never reaches Coinbase Exchange, CoinGecko, or mempool — only the offline
 bundled seed runs. Background jobs skip the manual 30-day warm-cache fallback
 when no transaction minute is missing, so hourly price refresh stays
-provider-light. Kraken CSV remains an offline archive/import path because it
-needs a local file or bundled archive.
+provider-light. The bundled offline Kraken daily seed already includes the
+Coin Metrics + ECB-derived pre-Kraken backfill, so cached daily BTC-EUR/BTC-USD
+coverage starts at `2011-01-01` without adding another live provider. Kraken
+CSV remains an offline archive/import path because it needs a local file or
+bundled archive.
 
 Source states are `fresh`, `queued`, `syncing`, `paused`, `rate_limited`,
 `partially_stale`, `failed`, and `blocking_reports`. Report reads are blocked

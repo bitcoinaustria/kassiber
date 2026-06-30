@@ -4,11 +4,17 @@ import i18n from "@/i18n";
 
 import {
   attachmentRecordToItem,
+  availablePeriodKeysForRecords,
+  buildFlowChartRows,
+  buildSwapCandidates,
+  buildTransferCandidates,
   bucketTransactionDate,
+  candidateReferenceReviewType,
   dashboardRecordsFromTxs,
   flowChartSelectionLabel,
   isAttachmentListQueryKeyForTransaction,
   matchesFlowChartSelection,
+  readTransactionScopeParams,
   removeAttachmentRecord,
   replaceAttachmentRecord,
   readTransactionDetailParams,
@@ -45,6 +51,51 @@ function transaction(
 }
 
 describe("transaction dashboard chart selection", () => {
+  it("preserves wallet detail deep-link scope parameters", () => {
+    vi.stubGlobal("window", {
+      location: {
+        search:
+          "?wallet=Satoshi-Liquid%20-%3E%20Satoshi-Onchain-Multi&quick=missing_price",
+      },
+    });
+
+    try {
+      expect(readTransactionScopeParams()).toEqual({
+        wallet: "Satoshi-Liquid -> Satoshi-Onchain-Multi",
+        quick: "missing_price",
+      });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("hides long-range period tabs for young transaction histories", () => {
+    expect(
+      availablePeriodKeysForRecords([
+        transaction({ id: "newer", date: "2100-01-01T12:00:00Z" }),
+        transaction({ id: "older", date: "2099-08-01T12:00:00Z" }),
+      ]),
+    ).toEqual(["30days", "3months", "ytd", "1year", "all"]);
+  });
+
+  it("reveals longer period tabs as transaction history gets older", () => {
+    expect(
+      availablePeriodKeysForRecords([
+        transaction({ id: "newer", date: "2100-01-01T12:00:00Z" }),
+        transaction({ id: "older", date: "2084-01-01T12:00:00Z" }),
+      ]),
+    ).toEqual([
+      "30days",
+      "3months",
+      "ytd",
+      "1year",
+      "5years",
+      "10years",
+      "15years",
+      "all",
+    ]);
+  });
+
   it("does not substitute demo rows for an empty live transaction list", () => {
     expect(dashboardRecordsFromTxs([])).toEqual([]);
   });
@@ -152,6 +203,49 @@ describe("transaction dashboard chart selection", () => {
         (txn) => txn.flow as TransactionFlow,
       ),
     ).toBe(false);
+  });
+
+  it("treats BTC to Liquid BTC candidates as carrying-value Bitcoin swaps", () => {
+    const out = transaction({
+      id: "tx-out",
+      direction: "Send",
+      flow: "outgoing",
+      asset: "BTC",
+      amountBtc: 0.1,
+      amount: 6000,
+    });
+    const input = transaction({
+      id: "tx-in",
+      direction: "Receive",
+      flow: "incoming",
+      asset: "LBTC",
+      amountBtc: 0.0999,
+      amount: 5994,
+    });
+    const candidate = {
+      out_id: "tx-out",
+      in_id: "tx-in",
+      out_asset: "BTC",
+      in_asset: "LBTC",
+      default_kind: "peg-in",
+      candidate_type: "transfer" as const,
+    };
+
+    expect(candidateReferenceReviewType(candidate)).toBe("transfer");
+    expect(buildSwapCandidates([out, input], [candidate])).toEqual([]);
+    expect(buildTransferCandidates([out, input], [candidate])).toHaveLength(1);
+
+    const rows = buildFlowChartRows(
+      [out, input],
+      "1year",
+      "btc",
+      new Map<string, TransactionFlow>([
+        ["tx-out", "layer-transition"],
+        ["tx-in", "layer-transition"],
+      ]),
+      "count",
+    );
+    expect(rows.find((row) => row.transfers === 2)?.swaps).toBe(0);
   });
 });
 

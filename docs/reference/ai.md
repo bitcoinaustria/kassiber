@@ -459,18 +459,32 @@ surfaces:
   reads the active profile's AI maintenance settings
 - `ui_workspace_health` maps to daemon kind `ui.workspace.health`
 - `ui_next_actions` maps to daemon kind `ui.next_actions`
+- `ui_source_funds_sources_list` maps to daemon kind
+  `ui.source_funds.sources.list`; attachment labels may be shown, but raw
+  evidence URLs and stored attachment paths are redacted
+- `ui_source_funds_links_list` maps to daemon kind
+  `ui.source_funds.links.list`; pass `target_transaction` to inspect the
+  reviewed/suggested provenance attached to one transaction without exposing
+  raw evidence URLs or stored attachment paths
+- `ui_source_funds_preview` maps to daemon kind `ui.source_funds.preview`; it
+  returns a read-only path graph plus export gates for missing history,
+  heuristic allocations, privacy-hop ambiguity, missing pricing, and other
+  blockers before any PDF/export decision
 - `ui_transfers_suggest` maps to daemon kind `ui.transfers.suggest`; it returns
-  same-asset transfer candidates and cross-asset swap/peg candidates with
-  confidence, method, computed fee, and conflict-cluster context without writing
-  review decisions. Pass `candidate_type=transfer` or `candidate_type=swap` to
-  keep those queues separate.
+  wallet-transfer candidates, Bitcoin swap/peg candidates, and other cross-asset
+  swap candidates with confidence, method, computed fee, and conflict-cluster
+  context without writing review decisions. Pass `candidate_type=transfer` for
+  carrying-value Bitcoin movements (including Boltz/submarine swaps) or
+  `candidate_type=swap` for other cross-asset swaps. Bitcoin swap review still
+  requires ownership intent: if the swap route paid or received from an external
+  counterparty, it should remain an ordinary payment or receipt.
 - `ui_transfers_review_context` maps to daemon kind
-  `ui.transfers.review_context`; it returns a bounded deterministic swap-review
+  `ui.transfers.review_context`; it returns a bounded deterministic pair-review
   packet with candidate leg summaries, confidence reasons, fee assessment,
   conflict status, metadata clues, current journal impact if left unpaired,
-  suggested next action, active pairs, rules, and saved swap-candidate views.
-  Pass `candidate_type=transfer` or `candidate_type=swap` when the review packet
-  should follow the split queues.
+  suggested next action, active pairs, rules, and saved candidate views. Pass
+  `candidate_type=transfer` or `candidate_type=swap` when the review packet
+  should follow one split queue; without a candidate type it includes both.
 - `ui_transfers_list` maps to daemon kind `ui.transfers.list`; it returns active
   reviewed transfer/swap pairs
 - `ui_transfers_rules_list` maps to daemon kind `ui.transfers.rules.list`; it
@@ -508,7 +522,16 @@ covers review-queue actions exposed to chat: `ui_transfers_pair`,
 `ui_saved_views_create`, and `ui_saved_views_delete`. `ui_transfers_pair`
 supports a generic `coinjoin` kind for user-reviewed same-asset ownership hops;
 the AI may propose it, but the write still requires explicit user consent.
-Stale journals may also be
+Source-funds evidence writes are also consent-gated:
+`ui_source_funds_sources_create`,
+`ui_source_funds_links_create`, `ui_source_funds_links_review`,
+`ui_source_funds_suggest`, and `ui_source_funds_links_bulk_review`. These tools
+create/review provenance evidence only; they do not mutate tax/journal
+`transaction_pairs` and they support non-CoinJoin link types such as
+self-transfer, exchange transfer, trade, swap, peg-in/peg-out, Lightning hops,
+manual source, and missing-history edges. CoinJoin/PayJoin links should stay
+explicit about privacy-hop ambiguity unless the user has reviewed stronger
+evidence. Stale journals may also be
 refreshed automatically before read/report tools as local maintenance. Wallet
 sync before report reads is disabled by default; it runs automatically only
 after `ui_maintenance_configure` enables that active-profile setting, or when

@@ -37,7 +37,6 @@ XBTUSD_CSV = """1714521600,65000.00,65010.00,64990.00,65005.50,0.5000,10
 XBTUSD_DAILY_CSV = """1714521600,65000.00,65100.00,64900.00,65050.00,1.5000,20
 """
 
-
 class _MemoryResourceFile:
     def __init__(self, name, content):
         self.name = name
@@ -533,21 +532,21 @@ class KrakenCsvRatesTest(unittest.TestCase):
         self.assertEqual(len(payload["data"]), 2)
         summaries = {summary["pair"]: summary for summary in payload["data"]}
         self.assertEqual(sorted(summaries), ["BTC-EUR", "BTC-USD"])
-        self.assertEqual(summaries["BTC-EUR"]["samples"], 4581)
+        self.assertEqual(summaries["BTC-EUR"]["samples"], 5565)
         self.assertEqual(summaries["BTC-EUR"]["granularity"], "daily")
         self.assertEqual(
             summaries["BTC-EUR"]["first_timestamp"],
-            "2013-09-11T00:00:00Z",
+            "2011-01-01T00:00:00Z",
         )
         self.assertEqual(
             summaries["BTC-EUR"]["last_timestamp"],
             "2026-04-01T00:00:00Z",
         )
-        self.assertEqual(summaries["BTC-USD"]["samples"], 4548)
+        self.assertEqual(summaries["BTC-USD"]["samples"], 5558)
         self.assertEqual(summaries["BTC-USD"]["granularity"], "daily")
         self.assertEqual(
             summaries["BTC-USD"]["first_timestamp"],
-            "2013-10-07T00:00:00Z",
+            "2011-01-01T00:00:00Z",
         )
         self.assertEqual(
             summaries["BTC-USD"]["last_timestamp"],
@@ -577,14 +576,14 @@ class KrakenCsvRatesTest(unittest.TestCase):
             [
                 (
                     "BTC-EUR",
-                    4581,
-                    "2013-09-11T00:00:00Z",
+                    5565,
+                    "2011-01-01T00:00:00Z",
                     "2026-04-01T00:00:00Z",
                 ),
                 (
                     "BTC-USD",
-                    4548,
-                    "2013-10-07T00:00:00Z",
+                    5558,
+                    "2011-01-01T00:00:00Z",
                     "2026-04-01T00:00:00Z",
                 ),
             ],
@@ -603,10 +602,10 @@ class KrakenCsvRatesTest(unittest.TestCase):
         self.assertEqual(payload["source"], "kraken-csv")
         self.assertEqual(payload["operation"], "full")
         self.assertEqual(payload["totals"]["pairs"], 2)
-        self.assertEqual(payload["totals"]["samples"], 9129)
+        self.assertEqual(payload["totals"]["samples"], 11123)
         summaries = {row["pair"]: row for row in payload["summary"]}
-        self.assertEqual(summaries["BTC-EUR"]["samples"], 4581)
-        self.assertEqual(summaries["BTC-USD"]["samples"], 4548)
+        self.assertEqual(summaries["BTC-EUR"]["samples"], 5565)
+        self.assertEqual(summaries["BTC-USD"]["samples"], 5558)
         self.assertEqual(summaries["BTC-EUR"]["granularity"], "daily")
         self.assertEqual(summaries["BTC-USD"]["granularity"], "daily")
 
@@ -621,8 +620,8 @@ class KrakenCsvRatesTest(unittest.TestCase):
         second_summaries = {row["pair"]: row for row in second}
         self.assertFalse(first_summaries["BTC-EUR"]["already_seeded"])
         self.assertFalse(first_summaries["BTC-USD"]["already_seeded"])
-        self.assertEqual(first_summaries["BTC-EUR"]["samples"], 4581)
-        self.assertEqual(first_summaries["BTC-USD"]["samples"], 4548)
+        self.assertEqual(first_summaries["BTC-EUR"]["samples"], 5565)
+        self.assertEqual(first_summaries["BTC-USD"]["samples"], 5558)
         self.assertTrue(second_summaries["BTC-EUR"]["already_seeded"])
         self.assertTrue(second_summaries["BTC-USD"]["already_seeded"])
         self.assertEqual(second_summaries["BTC-EUR"]["samples"], 0)
@@ -639,7 +638,7 @@ class KrakenCsvRatesTest(unittest.TestCase):
         ).fetchall()
         self.assertEqual(
             [(row["pair"], row["count"]) for row in rows],
-            [("BTC-EUR", 4581), ("BTC-USD", 4548)],
+            [("BTC-EUR", 5565), ("BTC-USD", 5558)],
         )
 
     def test_bundled_kraken_import_supports_non_filesystem_resources(self):

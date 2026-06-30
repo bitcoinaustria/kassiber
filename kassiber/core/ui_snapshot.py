@@ -25,6 +25,7 @@ from . import output_inventory as core_output_inventory
 from . import ownership as core_ownership
 from . import rates as core_rates
 from . import sync_backends as core_sync_backends
+from . import source_overlap as core_source_overlap
 from . import reports as report_builders
 from .samourai import samourai_metadata_from_wallet_config
 from . import transaction_history
@@ -4540,6 +4541,32 @@ def build_report_blockers_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
                     "title": "No transactions",
                     "detail": "Refresh sources or import transactions before reports can be useful.",
                     "daemon_kind": "ui.wallets.sync",
+                }
+            )
+        overlap = core_source_overlap.detect_profile_source_overlaps(
+            conn,
+            health["profile"]["id"],
+        )
+        if overlap["overlaps"]:
+            repair_preview = core_source_overlap.duplicate_transaction_preview(
+                conn,
+                health["profile"]["id"],
+                overlap["overlaps"],
+            )
+            blockers.append(
+                {
+                    "id": "source_overlap",
+                    "severity": "blocking",
+                    "title": "Overlapping wallet sources",
+                    "detail": (
+                        f"{overlap['overlap_count']} concrete watched script(s) are "
+                        "owned by multiple active sources. Reports can double-count "
+                        "history until one source is reviewed, trimmed, deprecated, "
+                        "or duplicate rows are excluded."
+                    ),
+                    "daemon_kind": "ui.wallets.list",
+                    "overlap": overlap,
+                    "repair_preview": repair_preview,
                 }
             )
         if journals["needs_processing"]:

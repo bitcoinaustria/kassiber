@@ -38,7 +38,7 @@ from typing import Any, Callable, Iterable, Mapping, Sequence
 
 from ..errors import AppError
 from ..wallet_descriptors import derive_descriptor_targets
-from .sync_backends import address_to_scriptpubkey
+from .address_scripts import address_to_scriptpubkey
 from .wallets import (
     has_descriptor_sync_material,
     load_wallet_descriptor_plan_from_config,

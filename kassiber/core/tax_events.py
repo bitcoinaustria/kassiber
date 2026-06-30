@@ -1063,6 +1063,14 @@ def normalize_tax_asset_inputs(
                 or out_row["kind"]
                 or f"Transfer {from_wallet['label']} -> {to_wallet['label']}"
             )
+            at_regime = None
+            if is_at:
+                regime_override = _row_get(out_row, "at_regime_override")
+                at_regime = (
+                    regime_override
+                    if regime_override in ("alt", "neu")
+                    else outbound_regimes.get(str(out_row["id"]))
+                )
             transfers.append(
                 NormalizedTaxTransfer(
                     asset=asset,
@@ -1082,7 +1090,7 @@ def normalize_tax_asset_inputs(
                     out_row=out_row,
                     in_row=in_row,
                     at_pool=resolve_pool_id(from_wallet["id"]) if is_at else None,
-                    at_regime=outbound_regimes.get(str(out_row["id"])) if is_at else None,
+                    at_regime=at_regime,
                     group_id=group_id,
                     group_block_rows=_pair_group_block_rows(pair),
                     pairing_source=(
@@ -1261,11 +1269,16 @@ def normalize_tax_asset_inputs(
     # individual reasons, so a newly-added quarantine reason can't silently slip
     # past the basis-provenance guard.
     quarantined_ids = {str(q["transaction_id"]) for q in quarantines}
+    contamination_rows = list(rows)
+    for pair in intra_pairs:
+        contamination_rows.extend(_pair_group_block_rows(pair))
     contamination_times = [
-        row["occurred_at"]
-        for row in rows
-        if str(row["id"]) in quarantined_ids
+        str(_row_get(row, "occurred_at"))
+        for row in contamination_rows
+        if str(_row_get(row, "journal_transaction_id") or _row_get(row, "id"))
+        in quarantined_ids
         and _row_get(row, "direction") in ("inbound", "outbound")
+        and _row_get(row, "occurred_at")
     ]
 
     return NormalizedTaxAssetInputs(
