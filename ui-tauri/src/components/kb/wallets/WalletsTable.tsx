@@ -34,7 +34,7 @@ interface WalletsTableProps {
   totalBtc: number;
 }
 
-type SortKey = "label" | "kind" | "last" | "balance";
+type SortKey = "label" | "kind" | "transactions" | "last" | "balance";
 type SortDir = "asc" | "desc";
 
 const collator = new Intl.Collator(undefined, {
@@ -46,6 +46,7 @@ const collator = new Intl.Collator(undefined, {
 const defaultSortDir: Record<SortKey, SortDir> = {
   label: "asc",
   kind: "asc",
+  transactions: "desc",
   last: "desc",
   balance: "desc",
 };
@@ -66,6 +67,8 @@ function compareBy(a: Connection, b: Connection, key: SortKey): number {
         collator.compare(connectionTypeLabel(a), connectionTypeLabel(b)) ||
         collator.compare(a.label, b.label)
       );
+    case "transactions":
+      return (a.transactionCount ?? 0) - (b.transactionCount ?? 0);
     case "last": {
       const ma = syncMillis(a);
       const mb = syncMillis(b);
@@ -128,6 +131,15 @@ export function WalletsTable({
                 className="w-[100px]"
               />
               <SortableHead
+                label="Transactions"
+                sortKey="transactions"
+                activeKey={sortKey}
+                dir={sortDir}
+                onSort={onSort}
+                align="right"
+                className="w-[120px] text-right"
+              />
+              <SortableHead
                 label="Last sync"
                 sortKey="last"
                 activeKey={sortKey}
@@ -153,7 +165,7 @@ export function WalletsTable({
             {sortedConnections.length === 0 ? (
               <TableRow>
                 <TableCell
-                  colSpan={5}
+                  colSpan={6}
                   className="h-24 text-center text-sm text-muted-foreground"
                 >
                   No wallets or sources match your filters.
@@ -302,6 +314,11 @@ function WalletRow({
         <Badge variant="outline" className="rounded-md whitespace-nowrap">
           {connectionTypeLabel(connection)}
         </Badge>
+      </TableCell>
+      <TableCell className="text-right">
+        <span className="text-sm font-medium tabular-nums">
+          {(connection.transactionCount ?? 0).toLocaleString()}
+        </span>
       </TableCell>
       <TableCell>
         <div className="flex flex-col gap-1 text-sm whitespace-nowrap">
