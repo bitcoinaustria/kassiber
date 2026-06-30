@@ -460,12 +460,9 @@ function GraphStrand({
         d={path}
         data-testid={testId}
         aria-hidden="true"
-        className={cn(
-          "pointer-events-none fill-none transition-opacity",
-          active ? "opacity-100" : "opacity-90",
-        )}
+        className="pointer-events-none fill-none opacity-100 transition-opacity"
         stroke={strandStroke(node, active)}
-        strokeWidth={node.thickness}
+        strokeWidth={active ? node.thickness + 1.5 : node.thickness + 1}
         strokeLinecap="butt"
       />
     </>
@@ -488,7 +485,7 @@ function GraphStrandHoverHighlight({
       aria-hidden="true"
       className="pointer-events-none fill-none opacity-100"
       stroke={strandStroke(node, true)}
-      strokeWidth={node.thickness + 3}
+      strokeWidth={node.thickness + 4}
       strokeLinecap="butt"
       filter="url(#transaction-flow-hover-glow)"
     />
