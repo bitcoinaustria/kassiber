@@ -131,7 +131,7 @@ export type TransactionGraphPayload = {
 
 type GraphRow = TransactionGraphNode & { side: "input" | "output" | "fee" };
 
-const MAX_COMPACT_ROWS = 5;
+const MAX_COMPACT_ROWS = 24;
 
 export function compactGraphRows(
   nodes: TransactionGraphNode[],
@@ -790,9 +790,7 @@ export function TransactionFlowDiagram({
   return (
     <div
       ref={shellRef}
-      className={cn(
-        "overflow-hidden rounded-md border bg-background",
-      )}
+      className="relative overflow-hidden bg-transparent"
       style={{ height: viewportHeight }}
       data-testid="transaction-flow-diagram"
     >
@@ -801,7 +799,7 @@ export function TransactionFlowDiagram({
           ? "Hidden graph references"
           : "Graph references are available from each strand"}
       </span>
-      <div className="h-[calc(100%-64px)] overflow-auto">
+      <div className="h-full overflow-auto">
         <div
           className="relative"
           data-testid="transaction-flow-canvas"
@@ -901,12 +899,12 @@ export function TransactionFlowDiagram({
         </svg>
         </div>
       </div>
-      <div
-        data-testid="transaction-graph-hover-detail"
-        className="h-16 border-t border-white/10 bg-[#101114] px-3 py-2 text-xs text-white"
-      >
-        {hoverDetail ? (
-          <div className="grid h-full min-w-0 content-center gap-1">
+      {hoverDetail ? (
+        <div
+          data-testid="transaction-graph-hover-detail"
+          className="pointer-events-none absolute bottom-2 left-3 max-w-[min(520px,calc(100%-1.5rem))] rounded-md border border-white/10 bg-[#101114]/95 px-3 py-2 text-xs text-white shadow-lg"
+        >
+          <div className="grid min-w-0 gap-1">
             <div className="truncate font-medium">
               {sensitiveGraphText(nodeTooltipTitle(hoverDetail.node), hideSensitive)}
             </div>
@@ -923,8 +921,8 @@ export function TransactionFlowDiagram({
               ) : null}
             </div>
           </div>
-        ) : null}
-      </div>
+        </div>
+      ) : null}
     </div>
   );
 }

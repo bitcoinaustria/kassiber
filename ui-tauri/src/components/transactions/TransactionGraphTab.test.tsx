@@ -95,17 +95,30 @@ describe("TransactionFlowDiagram", () => {
     expect(html).toContain('aria-label="Copy output reference"');
   });
 
-  it("renders hover details in a stable dock outside the drawing area", () => {
+  it("does not reserve a bordered hover dock inside the drawing area", () => {
     const html = renderToStaticMarkup(
       <TooltipProvider>
         <TransactionFlowDiagram graph={graph} hideSensitive={false} />
       </TooltipProvider>,
     );
 
-    expect(html).toContain('data-testid="transaction-graph-hover-detail"');
-    expect(html).toContain("h-16 border-t");
-    expect(html).not.toContain("left:");
-    expect(html).not.toContain("top:");
+    expect(html).not.toContain('data-testid="transaction-graph-hover-detail"');
+    expect(html).not.toContain("h-16 border-t");
+    expect(html).toContain("h-full overflow-auto");
+  });
+
+  it("keeps ordinary multi-input transactions expanded before overflow compaction", () => {
+    const rows = compactGraphRows(
+      Array.from({ length: 14 }, (_, index) => ({
+        ...graph.inputs[0],
+        id: `many-in-${index}`,
+        valueSats: 10_000,
+      })),
+      "input",
+    );
+
+    expect(rows).toHaveLength(14);
+    expect(rows.some((row) => row.overflow)).toBe(false);
   });
 
   it("keeps tooltips compact and avoids missing-source implementation text", () => {
