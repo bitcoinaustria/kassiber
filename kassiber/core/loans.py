@@ -1,4 +1,4 @@
-"""Collateral marks: tag a transaction as Bitcoin-backed-loan collateral.
+"""Loan marks: tag a transaction as Bitcoin-backed-loan collateral or principal.
 
 A *collateral lock* (an outbound posting BTC as loan collateral) is not a
 disposal — the borrower still owns the coins, just encumbered. The matching
@@ -7,8 +7,15 @@ not an acquisition: the coins re-enter the pool they never really left, so a
 lock/release round-trip nets to zero and preserves the original basis and
 acquisition date (Alt/Neu by date, not a hold period).
 
+A *principal received* leg (inbound borrowed BTC) is not income or an
+acquisition of owned coins. A *principal repaid* leg (outbound returned BTC) is
+not a disposal of owned coins. These principal roles model the loan liability
+principal only; interest, liquidation, and platform-specific accounting remain
+outside this minimal per-transaction mark.
+
 Deliberately minimal. A mark is one row in ``loan_legs`` linking a journal
-transaction to a role — there is no facility record, and no custody,
+transaction to a role. Related marks can share a lightweight ``loan_id`` for UI
+and audit readability, but there is no facility record, and no custody,
 rehypothecation, interest, or liquidation modelling. If collateral is
 liquidated and never returns, the user removes the lock mark and the outbound
 reverts to the normal disposal it always was (surfaced by ``open_collateral_locks``
@@ -31,25 +38,33 @@ from ..time_utils import now_iso
 # the tax engine checks, so keep them stable.
 COLLATERAL_LOCK = "collateral_lock"
 COLLATERAL_RELEASE = "collateral_release"
-COLLATERAL_ROLES = (COLLATERAL_LOCK, COLLATERAL_RELEASE)
+PRINCIPAL_RECEIVED = "loan_principal_received"
+PRINCIPAL_REPAID = "loan_principal_repaid"
+COLLATERAL_ROLES = (
+    COLLATERAL_LOCK,
+    COLLATERAL_RELEASE,
+    PRINCIPAL_RECEIVED,
+    PRINCIPAL_REPAID,
+)
 
-# Outbound leg whose coins stay owned (encumbered): suppress the disposal.
-LOCK_SUPPRESS_ROLES = frozenset({COLLATERAL_LOCK})
-# Inbound leg whose coins return to the pool they never left: suppress the
-# acquisition so a lock/release round-trip nets to nothing.
-RELEASE_SUPPRESS_ROLES = frozenset({COLLATERAL_RELEASE})
+# Outbound legs that are loan non-events: suppress disposal booking.
+LOCK_SUPPRESS_ROLES = frozenset({COLLATERAL_LOCK, PRINCIPAL_REPAID})
+# Inbound legs that are loan non-events: suppress acquisition/income booking.
+RELEASE_SUPPRESS_ROLES = frozenset({COLLATERAL_RELEASE, PRINCIPAL_RECEIVED})
 
 # Human labels for the CLI / GUI / reconcile hints.
 ROLE_LABELS = {
-    COLLATERAL_LOCK: "loan collateral (out)",
-    COLLATERAL_RELEASE: "collateral returned (in)",
+    COLLATERAL_LOCK: "BTC collateral posted for fiat loan (out)",
+    COLLATERAL_RELEASE: "BTC collateral returned (in)",
+    PRINCIPAL_RECEIVED: "BTC loan principal received (in)",
+    PRINCIPAL_REPAID: "BTC loan principal repaid (out)",
 }
 
 
 def _require_role(role: str) -> None:
     if role not in COLLATERAL_ROLES:
         raise AppError(
-            f"Invalid collateral role '{role}'. Allowed: {', '.join(COLLATERAL_ROLES)}",
+            f"Invalid loan role '{role}'. Allowed: {', '.join(COLLATERAL_ROLES)}",
             code="validation",
             details={"field": "role", "value": role},
         )
@@ -63,10 +78,11 @@ def mark_collateral(
     *,
     role: str,
     note: Optional[str] = None,
+    loan_id: Optional[str] = None,
     commit: bool = True,
 ) -> dict[str, Any]:
-    """Mark a transaction as a collateral lock or release. One active mark per
-    transaction — re-marking replaces the existing role."""
+    """Mark a transaction as a loan role. One active mark per transaction —
+    re-marking replaces the existing role."""
     _require_role(role)
     tx = conn.execute(
         "SELECT id FROM transactions WHERE id = ? AND profile_id = ?",
@@ -78,6 +94,13 @@ def mark_collateral(
             code="not_found",
             details={"transaction_id": transaction_id},
         )
+    existing = conn.execute(
+        "SELECT loan_id FROM loan_legs WHERE profile_id = ? AND transaction_id = ? AND deleted_at IS NULL",
+        (profile_id, transaction_id),
+    ).fetchone()
+    effective_loan_id = (loan_id or "").strip() or (
+        str(existing["loan_id"]) if existing is not None and existing["loan_id"] else None
+    )
     # Re-mark: retire any existing active mark for this transaction first so the
     # one-active-mark-per-transaction unique index is never violated.
     conn.execute(
@@ -87,10 +110,10 @@ def mark_collateral(
     leg_id = str(uuid.uuid4())
     conn.execute(
         """
-        INSERT INTO loan_legs(id, workspace_id, profile_id, transaction_id, role, note, deleted_at, created_at)
-        VALUES(?, ?, ?, ?, ?, ?, NULL, ?)
+        INSERT INTO loan_legs(id, workspace_id, profile_id, transaction_id, loan_id, role, note, deleted_at, created_at)
+        VALUES(?, ?, ?, ?, ?, ?, ?, NULL, ?)
         """,
-        (leg_id, workspace_id, profile_id, transaction_id, role, note, now_iso()),
+        (leg_id, workspace_id, profile_id, transaction_id, effective_loan_id, role, note, now_iso()),
     )
     if commit:
         conn.commit()
@@ -101,15 +124,15 @@ def mark_collateral(
 def unmark_collateral(
     conn, profile_id: str, transaction_id: str, *, commit: bool = True
 ) -> dict[str, Any]:
-    """Remove the collateral mark from a transaction. The transaction reverts to
-    its normal tax classification — a removed lock books as the disposal it is."""
+    """Remove the loan mark from a transaction. The transaction reverts to its
+    normal tax classification."""
     row = conn.execute(
         "SELECT id FROM loan_legs WHERE profile_id = ? AND transaction_id = ? AND deleted_at IS NULL",
         (profile_id, transaction_id),
     ).fetchone()
     if row is None:
         raise AppError(
-            f"No collateral mark on transaction '{transaction_id}'",
+            f"No loan mark on transaction '{transaction_id}'",
             code="not_found",
             details={"transaction_id": transaction_id},
         )
@@ -122,9 +145,62 @@ def unmark_collateral(
     return {"unmarked": transaction_id}
 
 
+def link_loan_marks(
+    conn,
+    profile_id: str,
+    transaction_ids: list[str],
+    *,
+    loan_id: Optional[str] = None,
+    commit: bool = True,
+) -> dict[str, Any]:
+    """Assign the same lightweight loan id to two or more active loan marks."""
+    unique_ids = list(dict.fromkeys(transaction_ids))
+    if len(unique_ids) < 2:
+        raise AppError(
+            "At least two marked loan transactions are required to link a loan",
+            code="validation",
+            details={"transaction_ids": unique_ids},
+        )
+    placeholders = ", ".join("?" for _ in unique_ids)
+    rows = conn.execute(
+        f"""
+        SELECT transaction_id, loan_id
+        FROM loan_legs
+        WHERE profile_id = ?
+          AND deleted_at IS NULL
+          AND transaction_id IN ({placeholders})
+        """,
+        (profile_id, *unique_ids),
+    ).fetchall()
+    found = {str(row["transaction_id"]) for row in rows}
+    missing = [transaction_id for transaction_id in unique_ids if transaction_id not in found]
+    if missing:
+        raise AppError(
+            "All linked loan transactions must already have a loan mark",
+            code="not_found",
+            details={"transaction_ids": unique_ids, "missing": missing},
+        )
+    chosen_loan_id = (loan_id or "").strip() or next(
+        (str(row["loan_id"]) for row in rows if row["loan_id"]), str(uuid.uuid4())
+    )
+    conn.execute(
+        f"""
+        UPDATE loan_legs
+        SET loan_id = ?
+        WHERE profile_id = ?
+          AND deleted_at IS NULL
+          AND transaction_id IN ({placeholders})
+        """,
+        (chosen_loan_id, profile_id, *unique_ids),
+    )
+    if commit:
+        conn.commit()
+    return {"loan_id": chosen_loan_id, "transaction_ids": unique_ids}
+
+
 def load_collateral_role_map(conn, profile_id: str) -> dict[str, str]:
-    """``{transaction_id: role}`` for active collateral marks — consumed by the
-    tax pipeline to classify the matching journal transaction by its role."""
+    """``{transaction_id: role}`` for active loan marks — consumed by the tax
+    pipeline to classify the matching journal transaction by its role."""
     rows = conn.execute(
         "SELECT transaction_id, role FROM loan_legs WHERE profile_id = ? AND deleted_at IS NULL",
         (profile_id,),
@@ -133,10 +209,10 @@ def load_collateral_role_map(conn, profile_id: str) -> dict[str, str]:
 
 
 def list_collateral_marks(conn, profile_id: str) -> list[dict[str, Any]]:
-    """All active collateral marks joined to their transaction, newest first."""
+    """All active loan marks joined to their transaction, newest first."""
     rows = conn.execute(
         """
-        SELECT ll.transaction_id, ll.role, ll.note, ll.created_at,
+        SELECT ll.transaction_id, ll.loan_id, ll.role, ll.note, ll.created_at,
                t.direction, t.asset, t.amount, t.occurred_at, t.description
         FROM loan_legs ll
         JOIN transactions t ON t.id = ll.transaction_id

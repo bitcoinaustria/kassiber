@@ -2618,10 +2618,10 @@ def _capital_gains_available_years(
 ) -> list[int]:
     reportable_filter = (
         "((je.entry_type = 'disposal' AND COALESCE(je.at_category, '') != 'neu_swap') "
-        "OR je.at_kennzahl IS NOT NULL)"
+        "OR (je.entry_type NOT IN ('fee', 'transfer_fee') AND je.at_kennzahl IS NOT NULL))"
         if primary_only
-        else "(je.entry_type IN ('disposal', 'income', 'fee', 'transfer_fee') "
-        "OR je.at_kennzahl IS NOT NULL)"
+        else "(je.entry_type IN ('disposal', 'income') "
+        "OR (je.entry_type NOT IN ('fee', 'transfer_fee') AND je.at_kennzahl IS NOT NULL))"
     )
     rows = conn.execute(
         f"""
@@ -3223,8 +3223,8 @@ def build_journal_events_list_snapshot(
           AND COALESCE(t.taxability_override, 1) != 0
           AND (
             (je.entry_type = 'disposal' AND COALESCE(je.at_category, '') != 'neu_swap')
-            OR je.entry_type IN ('income', 'fee', 'transfer_fee')
-            OR je.at_kennzahl IS NOT NULL
+            OR je.entry_type = 'income'
+            OR (je.entry_type NOT IN ('fee', 'transfer_fee') AND je.at_kennzahl IS NOT NULL)
           )
         """,
         params,

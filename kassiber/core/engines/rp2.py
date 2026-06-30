@@ -1254,6 +1254,14 @@ def _append_rp2_journal_entries(entries, computed_data, wallet_refs_by_label, pr
         proceeds = event["proceeds"]
         cost_basis = event["cost_basis"]
         gain_loss = event["gain_loss"]
+        is_fee_entry = event["entry_type"] in {"fee", "transfer_fee"}
+        if is_fee_entry:
+            # Fees reduce the owned BTC balance and its attached basis, but they
+            # are not capital-gains disposals in Kassiber's reporting model.
+            proceeds = cost_basis
+            gain_loss = Decimal("0")
+            event["at_category"] = None
+            event["at_kennzahl"] = None
         quantity = event["quantity"] if event["entry_type"] == "income" else -event["quantity"]
         entry = {
             "id": str(uuid.uuid4()),
@@ -1394,12 +1402,15 @@ def _build_tax_summary_rows(computed_data):
             row.is_long_term_capital_gains,
         ),
     ):
+        transaction_type = str(getattr(yearly.transaction_type, "value", yearly.transaction_type)).lower()
+        if transaction_type in {"fee", "move"}:
+            continue
         quantity = dec(yearly.crypto_amount)
         rows.append(
             {
                 "year": int(yearly.year),
                 "asset": yearly.asset,
-                "transaction_type": str(getattr(yearly.transaction_type, "value", yearly.transaction_type)).lower(),
+                "transaction_type": transaction_type,
                 "capital_gains_type": "long" if yearly.is_long_term_capital_gains else "short",
                 "quantity": float(quantity),
                 "quantity_msat": btc_to_msat(quantity),
@@ -2298,7 +2309,7 @@ class GenericRP2TaxEngine:
             pairs_by_asset = defaultdict(list)
             for pair in all_pairs:
                 pairs_by_asset[pair["out"]["asset"]].append(pair)
-            # Active collateral marks classify their journal transaction by role:
+            # Active loan marks classify their journal transaction by role:
             # a collateral lock (outbound) and release (inbound) are non-events
             # that keep the coins in the owned global pool (encumbered, NOT a
             # separate balance-bearing account). Row-index access works for both

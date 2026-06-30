@@ -623,7 +623,7 @@ def report_capital_gains(conn, workspace_ref, profile_ref, hooks: ReportHooks, t
     hooks.require_processed_journals(conn, profile)
     where = [
         "je.profile_id = ?",
-        "je.entry_type IN ('disposal', 'fee', 'transfer_fee', 'income')",
+        "je.entry_type IN ('disposal', 'income')",
         "COALESCE(t.taxability_override, 1) != 0",
         "COALESCE(je.at_category, '') != 'neu_swap'",
     ]
@@ -2695,6 +2695,7 @@ def _austrian_e1kv_rows(conn, profile, tax_year):
         "je.profile_id = ?",
         "je.at_category IS NOT NULL",
         "je.at_category != 'neu_swap'",
+        "je.entry_type NOT IN ('fee', 'transfer_fee')",
         "COALESCE(t.taxability_override, 1) != 0",
     ]
     params: list[Any] = [profile["id"]]

@@ -353,6 +353,7 @@
       "excluded": "Excluded",
       "taxable": "Taxable",
       "notTaxable": "Not taxable",
+      "loanNonEvent": "Loan non-event",
       "openExplorerTitle": "Open {{txid}} on {{explorer}}",
       "actionsAria": "Open actions for {{txid}}",
       "viewDetails": "View Details",
@@ -361,11 +362,21 @@
       "exclude": "Exclude Transaction",
       "voidConfirm": "Void this transaction? This cannot be undone.",
       "collateral": {
-        "collateralBadge": "Collateral",
-        "returnedBadge": "Returned",
-        "markCollateral": "Mark as loan collateral",
-        "markReturned": "Mark as collateral returned",
-        "unmark": "Remove collateral mark"
+        "collateralBadge": "BTC collateral posted",
+        "returnedBadge": "BTC collateral returned",
+        "principalReceivedBadge": "BTC loan received",
+        "principalRepaidBadge": "BTC loan repaid",
+        "collateralAccounting": "BTC collateral posted for fiat loan",
+        "returnedAccounting": "BTC collateral returned",
+        "principalReceivedAccounting": "BTC loan principal received",
+        "principalRepaidAccounting": "BTC loan principal repaid",
+        "markCollateral": "Mark as BTC collateral posted for fiat loan",
+        "markReturned": "Mark as BTC collateral returned",
+        "markPrincipalReceived": "Mark as BTC loan principal received",
+        "markPrincipalRepaid": "Mark as BTC loan principal repaid",
+        "changePrincipalReceived": "Change to BTC loan principal received",
+        "changePrincipalRepaid": "Change to BTC loan principal repaid",
+        "unmark": "Remove loan mark"
       }
     },
     "pagination": {
@@ -407,6 +418,26 @@
     "pairRemoved": {
       "title": "Pair removed",
       "body": "This movement is no longer linked to the other leg."
+    },
+    "loanMarked": {
+      "title": "Loan mark saved",
+      "body": "Reprocess journals to apply this loan treatment to reports."
+    },
+    "loanUnmarked": {
+      "title": "Loan mark removed",
+      "body": "Reprocess journals to restore the normal tax treatment."
+    },
+    "loanLinked": {
+      "title": "Loan legs linked",
+      "body": "These marked loan transactions now share one loan id."
+    },
+    "loanLinkFailed": {
+      "title": "Could not link loan legs",
+      "body": "Kassiber could not link those loan marks."
+    },
+    "loanMarkFailed": {
+      "title": "Could not update loan mark",
+      "body": "Kassiber could not save the loan mark."
     },
     "evidenceReused": {
       "title": "Evidence reused",
@@ -646,6 +677,14 @@
     "unknown": "Unknown",
     "noPairedMovement": "No paired movement",
     "noPairedMovementBody": "When this tx is the other leg of a transfer, swap, or peg-in/out, the matched leg shows up here. You can also create a manual pair from the swap candidate queue.",
+    "loanLegs": "Loan legs",
+    "loanId": "Loan {{id}}",
+    "loanThisLeg": "This leg",
+    "loanLinked": "Linked",
+    "loanLinkCandidates": "Marked loan legs",
+    "loanLink": "Link",
+    "loanLinking": "Linking...",
+    "noLoanLinks": "No linked loan leg.",
     "journalEntries": "Journal entries",
     "noJournalEntries": "No journal entries for this row yet. Process journals after metadata or pricing changes."
   },

@@ -76,6 +76,7 @@ from .cli.handlers import (
     delete_transfer_rule,
     dismiss_transfer_candidate,
     invalidate_journals,
+    loans_link,
     loans_mark,
     loans_unmark,
     import_into_profile,
@@ -260,6 +261,7 @@ SUPPORTED_KINDS = (
     "ui.wallets.identify",
     "ui.wallets.identify_onchain",
     "ui.loans.list",
+    "ui.loans.link",
     "ui.loans.mark",
     "ui.loans.unmark",
     "ui.backends.list",
@@ -7080,8 +7082,34 @@ def _handle_loans_mark(ctx: DaemonContext, request: dict[str, Any]) -> dict[str,
         None,
         None,
         _required_str_arg(args, "txid", "transaction id"),
-        mark_as=_required_str_arg(args, "as", "mark target (collateral|returned)"),
+        mark_as=_required_str_arg(
+            args,
+            "as",
+            "mark target (collateral|returned|principal-received|principal-repaid)",
+        ),
         note=args.get("note"),
+        loan_id=_optional_str_arg(args, "loan_id"),
+    )
+
+
+def _handle_loans_link(ctx: DaemonContext, request: dict[str, Any]) -> dict[str, Any]:
+    if ctx.conn is None:
+        raise AppError("database is not open", code="unavailable", retryable=True)
+    args = _coerce_args_dict(request.get("request_id"), request.get("args"))
+    raw_txids = args.get("txids")
+    if not isinstance(raw_txids, list) or not all(isinstance(txid, str) for txid in raw_txids):
+        raise AppError(
+            "txids must be a list of transaction ids",
+            code="validation",
+            details={"field": "txids"},
+            retryable=False,
+        )
+    return loans_link(
+        ctx.conn,
+        None,
+        None,
+        raw_txids,
+        loan_id=_optional_str_arg(args, "loan_id"),
     )
 
 
@@ -8353,6 +8381,13 @@ def handle_request(
     if kind == "ui.loans.list":
         return (
             _with_request_id(build_envelope("ui.loans.list", _loans_snapshot(ctx)), request_id),
+            False,
+        )
+    if kind == "ui.loans.link":
+        return (
+            _with_request_id(
+                build_envelope("ui.loans.link", _handle_loans_link(ctx, request)), request_id
+            ),
             False,
         )
     if kind == "ui.loans.mark":

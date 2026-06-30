@@ -132,6 +132,7 @@ const ALLOWED_BRIDGE_KINDS = new Set([
   "ui.review.badges",
   "ui.wallets.utxos",
   "ui.loans.list",
+  "ui.loans.link",
   "ui.loans.mark",
   "ui.loans.unmark",
   "ui.wallets.create",

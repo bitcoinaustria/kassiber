@@ -216,7 +216,9 @@ def derive_ownership_transfers(
             continue
         if not by_dest:
             continue  # ordinary outbound payment — leave on the disposal path
-        if not _inputs_are_single_source(parsed["inputs"], index, source_wallet_id):
+        if not _inputs_are_single_source_or_recorded_source(
+            parsed["inputs"], index, source_wallet_id, row
+        ):
             _block_source(
                 result,
                 row,
@@ -804,7 +806,9 @@ def graph_partial_payment_out_ids(
         if parsed is None:
             continue
         source_wallet_id = str(_get(out_row, "wallet_id"))
-        if not _inputs_are_single_source(parsed["inputs"], index, source_wallet_id):
+        if not _inputs_are_single_source_or_recorded_source(
+            parsed["inputs"], index, source_wallet_id, out_row
+        ):
             continue
         chain_network = _source_chain_network(
             parsed["inputs"], index, source_wallet_id
@@ -872,6 +876,40 @@ def _inputs_are_single_source(
         if not owners or source_wallet_id not in owners:
             return False
     return True
+
+
+def _inputs_are_single_source_or_recorded_source(
+    inputs: Sequence[Mapping[str, Any]],
+    index: Any,
+    source_wallet_id: str,
+    row: Mapping[str, Any],
+) -> bool:
+    """Accept a single-input outbound row when historical input ownership is absent.
+
+    ``record_from_bitcoin_esplora_tx`` can only create a positive outbound row
+    for a wallet when tracked source value left that wallet. If the spend has
+    exactly one input, the source wallet necessarily funded that input even when
+    the ownership index cannot resolve the old spent outpoint (for example,
+    because the wallet was first inventoried after that output was already
+    spent). Keep multi-input spends on the strict index-only path.
+    """
+    if _inputs_are_single_source(inputs, index, source_wallet_id):
+        return True
+    if (
+        len(inputs) != 1
+        or _get(row, "direction") != "outbound"
+        or int(_get(row, "amount") or 0) <= 0
+        or str(_get(row, "wallet_id")) != source_wallet_id
+    ):
+        return False
+    outpoint = inputs[0].get("outpoint")
+    if not outpoint:
+        return False
+    prev_txid = str(outpoint).split(":", 1)[0].lower()
+    return any(
+        str(wallet_id) == source_wallet_id
+        for wallet_id, _wallet_label in index.txid_wallets.get(prev_txid, set())
+    )
 
 
 def _input_owner_ids(index: Any, entry: Mapping[str, Any]) -> set[str]:

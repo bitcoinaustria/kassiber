@@ -99,6 +99,8 @@ import {
   transactionStatusLabels,
   transactionStatusStyles,
   type CommercialContextData,
+  type LoanMark,
+  type LoanMarkTarget,
   type Transaction,
   type TransactionEditDraft,
   type TransactionFlow,
@@ -133,18 +135,45 @@ import {
   type TableQuickFilter,
 } from "./model";
 
-// Subset of the `ui.loans.list` envelope the table consumes — the marked
-// transactions and the role labels for the badge. The role strings come from
-// the daemon (`collateral_lock` = outbound posted as collateral, not a
-// disposal; `collateral_release` = collateral returned, not an acquisition).
-type CollateralMark = {
-  transaction_id: string;
-  role: string;
+type LoansList = {
+  marks: LoanMark[];
 };
 
-type LoansList = {
-  marks: CollateralMark[];
-};
+function loanRoleBadgeLabelKey(role: string): string {
+  if (role === "collateral_release") {
+    return "table.row.collateral.returnedBadge";
+  }
+  if (role === "loan_principal_received") {
+    return "table.row.collateral.principalReceivedBadge";
+  }
+  if (role === "loan_principal_repaid") {
+    return "table.row.collateral.principalRepaidBadge";
+  }
+  return "table.row.collateral.collateralBadge";
+}
+
+function loanRoleAccountingLabelKey(role: string): string {
+  if (role === "collateral_release") {
+    return "table.row.collateral.returnedAccounting";
+  }
+  if (role === "loan_principal_received") {
+    return "table.row.collateral.principalReceivedAccounting";
+  }
+  if (role === "loan_principal_repaid") {
+    return "table.row.collateral.principalRepaidAccounting";
+  }
+  return "table.row.collateral.collateralAccounting";
+}
+
+function loanRoleBadgeClassName(role: string): string {
+  if (role === "loan_principal_received" || role === "loan_principal_repaid") {
+    return "border-sky-500/40 text-sky-700 dark:text-sky-400";
+  }
+  if (role === "collateral_release") {
+    return "border-emerald-500/40 text-emerald-700 dark:text-emerald-400";
+  }
+  return "border-amber-500/40 text-amber-700 dark:text-amber-400";
+}
 
 const TransactionsTable = ({
   records,
@@ -231,21 +260,29 @@ const TransactionsTable = ({
     useDaemonMutation<AttachmentOpenData>("ui.attachments.open");
   const unpairTransfer = useDaemonMutation("ui.transfers.unpair");
   const revertHistory = useDaemonMutation("ui.transactions.history.revert");
-  // Per-transaction collateral mark (replaces the old facility "Loans" screen).
+  // Per-transaction loan marks (replaces the old facility "Loans" screen).
   // `ui.loans.list` returns the marked transactions; `mark`/`unmark` flip a tx
-  // between a normal disposal/acquisition and a collateral lock/return. Both
-  // mutations fall through to the default broad daemon-query invalidation, so
-  // the transactions list and this loans query both refresh after a change.
+  // between normal tax treatment and a loan non-event role. Mutations fall
+  // through to the default broad daemon-query invalidation, so the transactions
+  // list and this loans query both refresh after a change.
   const loansQuery = useDaemon<LoansList>("ui.loans.list");
   const markCollateral = useDaemonMutation("ui.loans.mark");
   const unmarkCollateral = useDaemonMutation("ui.loans.unmark");
-  const collateralRoleByTransaction = React.useMemo(() => {
-    const map = new Map<string, string>();
+  const linkLoanMarks = useDaemonMutation("ui.loans.link");
+  const loanMarkByTransaction = React.useMemo(() => {
+    const map = new Map<string, LoanMark>();
     for (const mark of loansQuery.data?.data?.marks ?? []) {
-      map.set(mark.transaction_id, mark.role);
+      map.set(mark.transaction_id, mark);
     }
     return map;
   }, [loansQuery.data?.data?.marks]);
+  const collateralRoleByTransaction = React.useMemo(() => {
+    const map = new Map<string, string>();
+    for (const [transactionId, mark] of loanMarkByTransaction) {
+      map.set(transactionId, mark.role);
+    }
+    return map;
+  }, [loanMarkByTransaction]);
   const { runJournalProcessing, isProcessingJournals } =
     useJournalProcessingAction({
       notifyStart: true,
@@ -546,16 +583,76 @@ const TransactionsTable = ({
   );
 
   const markTransactionCollateral = React.useCallback(
-    async (txn: Transaction, as: "collateral" | "returned") => {
-      await markCollateral.mutateAsync({ txid: txn.id, as });
+    async (txn: Transaction, as: LoanMarkTarget) => {
+      try {
+        await markCollateral.mutateAsync({ txid: txn.id, as });
+        useUiStore.getState().addNotification({
+          title: t("notification.loanMarked.title"),
+          body: t("notification.loanMarked.body"),
+          tone: "success",
+          dedupeKey: `loan-mark-${txn.id}`,
+        });
+      } catch (error) {
+        useUiStore.getState().addNotification({
+          title: t("notification.loanMarkFailed.title"),
+          body:
+            error instanceof Error
+              ? error.message
+              : t("notification.loanMarkFailed.body"),
+          tone: "error",
+          dedupeKey: `loan-mark-failed-${txn.id}`,
+        });
+      }
     },
-    [markCollateral],
+    [markCollateral, t],
   );
   const unmarkTransactionCollateral = React.useCallback(
     async (txn: Transaction) => {
-      await unmarkCollateral.mutateAsync({ txid: txn.id });
+      try {
+        await unmarkCollateral.mutateAsync({ txid: txn.id });
+        useUiStore.getState().addNotification({
+          title: t("notification.loanUnmarked.title"),
+          body: t("notification.loanUnmarked.body"),
+          tone: "success",
+          dedupeKey: `loan-unmark-${txn.id}`,
+        });
+      } catch (error) {
+        useUiStore.getState().addNotification({
+          title: t("notification.loanMarkFailed.title"),
+          body:
+            error instanceof Error
+              ? error.message
+              : t("notification.loanMarkFailed.body"),
+          tone: "error",
+          dedupeKey: `loan-unmark-failed-${txn.id}`,
+        });
+      }
     },
-    [unmarkCollateral],
+    [unmarkCollateral, t],
+  );
+  const linkTransactionLoan = React.useCallback(
+    async (txn: Transaction, targetTransactionId: string) => {
+      try {
+        await linkLoanMarks.mutateAsync({ txids: [txn.id, targetTransactionId] });
+        useUiStore.getState().addNotification({
+          title: t("notification.loanLinked.title"),
+          body: t("notification.loanLinked.body"),
+          tone: "success",
+          dedupeKey: `loan-link-${txn.id}-${targetTransactionId}`,
+        });
+      } catch (error) {
+        useUiStore.getState().addNotification({
+          title: t("notification.loanLinkFailed.title"),
+          body:
+            error instanceof Error
+              ? error.message
+              : t("notification.loanLinkFailed.body"),
+          tone: "error",
+          dedupeKey: `loan-link-failed-${txn.id}-${targetTransactionId}`,
+        });
+      }
+    },
+    [linkLoanMarks, t],
   );
 
   const hasActiveFilters =
@@ -858,6 +955,26 @@ const TransactionsTable = ({
   const goToPage = (page: number) => {
     setCurrentPage(Math.max(1, Math.min(page, totalPages)));
   };
+
+  const allLoanMarks = loansQuery.data?.data?.marks ?? [];
+  const detailLoanMark = detailTransaction
+    ? loanMarkByTransaction.get(detailTransaction.id) ?? null
+    : null;
+  const detailLinkedLoanMarks =
+    detailLoanMark?.loan_id
+      ? allLoanMarks.filter(
+          (mark) =>
+            mark.loan_id === detailLoanMark.loan_id &&
+            mark.transaction_id !== detailLoanMark.transaction_id,
+        )
+      : [];
+  const detailLoanLinkCandidates = detailLoanMark
+    ? allLoanMarks.filter(
+        (mark) =>
+          mark.transaction_id !== detailLoanMark.transaction_id &&
+          (!detailLoanMark.loan_id || mark.loan_id !== detailLoanMark.loan_id),
+      )
+    : [];
 
   return (
     <>
@@ -1387,12 +1504,15 @@ const TransactionsTable = ({
                             {collateralRole ? (
                               <Badge
                                 variant="outline"
-                                className="gap-1 rounded-md border-amber-500/40 text-amber-700 dark:text-amber-400"
+                                className={cn(
+                                  "gap-1 rounded-md",
+                                  loanRoleBadgeClassName(collateralRole),
+                                )}
                               >
                                 <Coins className="size-3" aria-hidden="true" />
-                                {collateralRole === "collateral_release"
-                                  ? t("table.row.collateral.returnedBadge")
-                                  : t("table.row.collateral.collateralBadge")}
+                                {(t as (key: string) => string)(
+                                  loanRoleBadgeLabelKey(collateralRole),
+                                )}
                               </Badge>
                             ) : null}
                           </div>
@@ -1484,10 +1604,14 @@ const TransactionsTable = ({
                         )}
                       </div>
                       <p className="mt-1 truncate text-[10px] text-muted-foreground sm:text-xs">
-                        {/* loose translator */}
-                        {(t as (key: string) => string)(
-                          rowTaxClassification.shortLabel,
-                        )}
+                        {collateralRole
+                          ? (t as (key: string) => string)(
+                              loanRoleAccountingLabelKey(collateralRole),
+                            )
+                          : // loose translator
+                            (t as (key: string) => string)(
+                              rowTaxClassification.shortLabel,
+                            )}
                       </p>
                     </TableCell>
                     <TableCell className="hidden lg:table-cell">
@@ -1560,7 +1684,9 @@ const TransactionsTable = ({
                         )}
                       </span>
                       <p className="mt-1 hidden text-[10px] text-muted-foreground sm:block sm:text-xs">
-                        {draft.excluded
+                        {collateralRole
+                          ? t("table.row.loanNonEvent")
+                          : draft.excluded
                           ? t("table.row.excluded")
                           : draft.taxable
                             ? t("table.row.taxable")
@@ -1605,6 +1731,44 @@ const TransactionsTable = ({
                           {collateralRole ? (
                             <>
                               <DropdownMenuSeparator />
+                              {flow === "outgoing" &&
+                              collateralRole !== "loan_principal_repaid" ? (
+                                <DropdownMenuItem
+                                  onSelect={() => {
+                                    void markTransactionCollateral(
+                                      txn,
+                                      "principal-repaid",
+                                    );
+                                  }}
+                                >
+                                  <Coins
+                                    className="mr-2 size-4"
+                                    aria-hidden="true"
+                                  />
+                                  {t(
+                                    "table.row.collateral.changePrincipalRepaid",
+                                  )}
+                                </DropdownMenuItem>
+                              ) : null}
+                              {flow === "incoming" &&
+                              collateralRole !== "loan_principal_received" ? (
+                                <DropdownMenuItem
+                                  onSelect={() => {
+                                    void markTransactionCollateral(
+                                      txn,
+                                      "principal-received",
+                                    );
+                                  }}
+                                >
+                                  <Coins
+                                    className="mr-2 size-4"
+                                    aria-hidden="true"
+                                  />
+                                  {t(
+                                    "table.row.collateral.changePrincipalReceived",
+                                  )}
+                                </DropdownMenuItem>
+                              ) : null}
                               <DropdownMenuItem
                                 onSelect={() => {
                                   void unmarkTransactionCollateral(txn);
@@ -1624,6 +1788,20 @@ const TransactionsTable = ({
                                 onSelect={() => {
                                   void markTransactionCollateral(
                                     txn,
+                                    "principal-repaid",
+                                  );
+                                }}
+                              >
+                                <Coins
+                                  className="mr-2 size-4"
+                                  aria-hidden="true"
+                                />
+                                {t("table.row.collateral.markPrincipalRepaid")}
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                onSelect={() => {
+                                  void markTransactionCollateral(
+                                    txn,
                                     "collateral",
                                   );
                                 }}
@@ -1638,6 +1816,20 @@ const TransactionsTable = ({
                           ) : flow === "incoming" ? (
                             <>
                               <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                onSelect={() => {
+                                  void markTransactionCollateral(
+                                    txn,
+                                    "principal-received",
+                                  );
+                                }}
+                              >
+                                <Coins
+                                  className="mr-2 size-4"
+                                  aria-hidden="true"
+                                />
+                                {t("table.row.collateral.markPrincipalReceived")}
+                              </DropdownMenuItem>
                               <DropdownMenuItem
                                 onSelect={() => {
                                   void markTransactionCollateral(txn, "returned");
@@ -1821,6 +2013,19 @@ const TransactionsTable = ({
         onRevertHistory={revertHistoryTarget}
         onProcessJournals={runJournalProcessing}
         isProcessingJournals={isProcessingJournals}
+        loanRole={
+          detailTransaction
+            ? collateralRoleByTransaction.get(detailTransaction.id) ?? null
+            : null
+        }
+        loanMark={detailLoanMark}
+        linkedLoanMarks={detailLinkedLoanMarks}
+        loanLinkCandidates={detailLoanLinkCandidates}
+        isLoanMarking={markCollateral.isPending || unmarkCollateral.isPending}
+        isLoanLinking={linkLoanMarks.isPending}
+        onMarkLoan={markTransactionCollateral}
+        onUnmarkLoan={unmarkTransactionCollateral}
+        onLinkLoan={linkTransactionLoan}
         onAddAttachmentFiles={async (paths) => {
           if (!detailTransaction) return;
           const added: AttachmentRecord[] = [];

@@ -469,18 +469,18 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_direct_swap_payouts_active_out
 CREATE INDEX IF NOT EXISTS idx_direct_swap_payouts_profile_active
     ON direct_swap_payouts(profile_id) WHERE deleted_at IS NULL;
 
--- A collateral mark on a single transaction. Posting an outbound as loan
--- collateral (role `collateral_lock`) is not a disposal, and the matching
--- inbound when it returns (`collateral_release`) is not an acquisition — the
--- coins never left the owned pool, so a lock/release round-trip nets to zero.
+-- A loan mark on a single transaction. Collateral lock/release roles suppress
+-- the outbound/inbound collateral events because the coins never left the owned
+-- pool. Principal received/repaid roles suppress borrowed-principal movements
+-- because they are liability principal, not acquisition/disposal of owned lots.
 -- The tax engine reads (transaction_id, role) to suppress those events.
--- Removing the mark reverts the transaction to its normal classification, so a
--- liquidated lock that never returns becomes the disposal it really was.
+-- Removing the mark reverts the transaction to its normal classification.
 CREATE TABLE IF NOT EXISTS loan_legs (
     id TEXT PRIMARY KEY,
     workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
     profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
     transaction_id TEXT NOT NULL REFERENCES transactions(id) ON DELETE CASCADE,
+    loan_id TEXT,
     role TEXT NOT NULL,
     note TEXT,
     deleted_at TEXT,
@@ -1375,6 +1375,7 @@ def ensure_schema_compat(conn):
     ensure_column(conn, "wallet_utxos", "excluded_from_coinjoin", "INTEGER")
     ensure_column(conn, "wallet_utxos", "key_state", "TEXT")
     ensure_column(conn, "wallet_utxos", "anon_history_json", "TEXT NOT NULL DEFAULT '[]'")
+    ensure_column(conn, "loan_legs", "loan_id", "TEXT")
     _ensure_ai_provider_secret_refs_schema(conn)
     _drop_legacy_source_funds_recipients_unique(conn)
     _migrate_msat_columns(conn)

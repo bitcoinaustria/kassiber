@@ -158,6 +158,54 @@ class OwnershipDeriverTests(unittest.TestCase):
         self.assertIn(synth_in, result.synthetic_rows)
         self.assertEqual(result.dropped_out_ids, {"a-out"})
 
+    def test_single_input_source_falls_back_to_recorded_outbound_wallet(self):
+        # A historic spend may have been synced as an outbound row before the
+        # durable UTXO inventory ever saw the spent input. The row still proves
+        # the one-input source wallet; the destination output proves B.
+        out = _outbound(
+            row_id="a-out", wallet_id="A", amount_sats=50_000_000, fee_sats=1000,
+            txid="simple", input_scripts=[SCRIPT["A"]],
+            outputs=[(SCRIPT["B"], 50_000_000)],
+        )
+        index = _index({SCRIPT["B"]: ("B", "B")})
+        index.note_txid("prev-0", "A", "A")
+        result = derive_ownership_transfers(
+            [out],
+            index=index,
+            wallet_refs_by_id=_refs("A", "B"),
+            already_paired_ids=set(),
+        )
+        self.assertEqual(len(result.derived_pairs), 1)
+        pair = result.derived_pairs[0]
+        self.assertEqual(pair["source"], "ownership_derived")
+        self.assertEqual(pair["out"]["wallet_id"], "A")
+        self.assertEqual(pair["in"]["wallet_id"], "B")
+        self.assertEqual(result.dropped_out_ids, {"a-out"})
+
+    def test_partial_payment_detection_uses_single_input_recorded_source(self):
+        out = _outbound(
+            row_id="a-out", wallet_id="A", amount_sats=70_000_000, fee_sats=1000,
+            txid="partial", input_scripts=[SCRIPT["A"]],
+            outputs=[(SCRIPT["B"], 50_000_000), (SCRIPT["EXT"], 20_000_000)],
+        )
+        index = _index({SCRIPT["B"]: ("B", "B")})
+        index.note_txid("prev-0", "A", "A")
+        flagged = graph_partial_payment_out_ids(
+            [
+                {
+                    "out": out,
+                    "in": _inbound(
+                        row_id="b-in",
+                        wallet_id="B",
+                        amount_sats=50_000_000,
+                        txid="partial",
+                    ),
+                }
+            ],
+            index,
+        )
+        self.assertEqual(flagged, {"a-out"})
+
     def test_sync_gap_without_ref_declines(self):
         # No ref for the destination wallet -> cannot book the MOVE target; the
         # whole tx is left to existing handling rather than guessed.
