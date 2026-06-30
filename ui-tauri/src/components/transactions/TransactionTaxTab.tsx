@@ -12,7 +12,6 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { TabsContent } from "@/components/ui/tabs";
-import { MISSING_FIAT_LABEL } from "@/lib/currency";
 
 import { DirtyDot, InfoHint, LedgerRow } from "./TransactionDetailSheetParts";
 import {
@@ -23,11 +22,14 @@ import {
   currencyFormatter,
 } from "./model";
 import type { TransactionDetailTabContext } from "./TransactionDetailTabContext";
+import {
+  summarizeTransactionTaxEffect,
+  type TaxTranslationKey,
+} from "./TransactionTaxModel";
 
 export function TransactionTaxTab({ ctx }: { ctx: TransactionDetailTabContext }) {
   const { t } = useTranslation(["transactions"]);
   const {
-    transaction,
     localDraft,
     dirty,
     dirtyExcluded,
@@ -36,7 +38,20 @@ export function TransactionTaxTab({ ctx }: { ctx: TransactionDetailTabContext })
     taxNarrative,
     hideSensitive,
     updateDraft,
+    journalEvents,
   } = ctx;
+  const taxEffect = summarizeTransactionTaxEffect(journalEvents, flow);
+  const taxEffectValue = (
+    value: number | null,
+    fallbackKey?: TaxTranslationKey,
+  ) => {
+    if (value === null) return t(fallbackKey ?? "tax.journalPending");
+    return (
+      <span className={blurClass(hideSensitive)}>
+        {currencyFormatter.format(value)}
+      </span>
+    );
+  };
   return (
     <>
                   {/* Tax — owns Austrian classification, taxable, excluded; ends with gain/loss */}
@@ -165,32 +180,34 @@ export function TransactionTaxTab({ ctx }: { ctx: TransactionDetailTabContext })
                         {t("tax.projectedEffect")}
                       </div>
                       <LedgerRow
-                        label={t("tax.costBasis")}
-                        value={
-                          transaction.amount === null
-                            ? MISSING_FIAT_LABEL
-                            : currencyFormatter.format(transaction.amount)
-                        }
+                        label={t(taxEffect.costBasisLabelKey)}
+                        value={taxEffectValue(
+                          taxEffect.costBasisEur,
+                          taxEffect.costBasisFallbackKey,
+                        )}
                         align="right"
                         hint={t("tax.costBasisHint")}
                       />
                       <LedgerRow
-                        label={t("tax.proceeds")}
-                        value={
-                          flow !== "outgoing"
-                            ? currencyFormatter.format(0)
-                            : transaction.amount === null
-                              ? MISSING_FIAT_LABEL
-                              : currencyFormatter.format(transaction.amount)
-                        }
+                        label={t(taxEffect.proceedsLabelKey)}
+                        value={taxEffectValue(
+                          taxEffect.proceedsEur,
+                          taxEffect.proceedsFallbackKey,
+                        )}
                         align="right"
                         hint={t("tax.proceedsHint")}
                       />
                       <LedgerRow
-                        label={t("tax.gainLoss")}
-                        value={t("tax.gainLossPending")}
+                        label={t(taxEffect.gainLossLabelKey)}
+                        value={taxEffectValue(
+                          taxEffect.gainLossEur,
+                          taxEffect.gainLossFallbackKey,
+                        )}
                         align="right"
-                        muted
+                        muted={
+                          taxEffect.state !== "disposal" &&
+                          taxEffect.state !== "income"
+                        }
                         hint={t("tax.gainLossHint")}
                       />
                       {localDraft.pricingSourceKind === "manual_override" ? (
