@@ -463,6 +463,9 @@ type MockConnection = {
   kind?: string;
   syncMode?: string;
   syncSource?: string;
+  chain?: string;
+  network?: string;
+  paymentMethodId?: string;
   gap?: number;
   /** balance in BTC (float) — present on overview-snapshot connection rows. */
   balance?: number;
@@ -2176,6 +2179,9 @@ export const mockDaemon: DaemonTransport = {
         kind: "custom",
         syncMode: "btcpay",
         syncSource: "btcpay",
+        paymentMethodId,
+        chain: paymentMethodId.includes("LBTC") ? "liquid" : "bitcoin",
+        network: paymentMethodId.includes("LBTC") ? "liquidv1" : "main",
       }));
       overview.connections = [...overview.connections, ...connections];
       return {
@@ -2258,6 +2264,8 @@ export const mockDaemon: DaemonTransport = {
         kind: "bullbitcoin",
         syncMode: "file_import",
         syncSource: "bullbitcoin_wallet_csv",
+        chain: network === "liquid" ? "liquid" : "bitcoin",
+        network: network === "liquid" ? "liquidv1" : network,
       }));
       overview.connections = [...overview.connections, ...connections];
       return {

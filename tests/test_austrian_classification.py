@@ -118,7 +118,46 @@ class InferOutboundRegimesTest(unittest.TestCase):
             _row("sell-from-b", "wallet-b", "outbound", 30_000_000, occurred_at="2025-06-01T00:00:00Z"),
         ]
         intra_pairs = [{"out": rows[2], "in": rows[3]}]
-        self.assertEqual(infer_outbound_regimes(rows, intra_pairs), {"sell-from-b": REGIME_NEU})
+        # The self-transfer's out row now also carries a regime: its taxable
+        # miner-fee disposal must be tagged (Neu here — post-cutoff move drawing
+        # the Neu pool) or rp2's moving-average aborts the asset on an ambiguous
+        # disposal. The moved Neu inventory still funds the later sell-from-b.
+        self.assertEqual(
+            infer_outbound_regimes(rows, intra_pairs),
+            {"xfer-out": REGIME_NEU, "sell-from-b": REGIME_NEU},
+        )
+
+    def test_self_transfer_fee_is_fee_first_when_neu_covers_fee_only(self):
+        # A post-cutoff MOVE from a mixed Alt/Neu wallet uses the preferred Neu
+        # slice for the taxable miner fee first. Only the remaining Neu quantity
+        # carries to the destination; otherwise a later sale from the destination
+        # would see Neu inventory that was already consumed by the fee.
+        rows = [
+            _row("buy-alt", "wallet-a", "inbound", 100_000_000, occurred_at="2020-06-01T00:00:00Z"),
+            _row("buy-neu", "wallet-a", "inbound", 10_000_000, occurred_at="2024-06-01T00:00:00Z"),
+            _row(
+                "xfer-out",
+                "wallet-a",
+                "outbound",
+                100_000_000,
+                fee=5_000_000,
+                occurred_at="2025-01-01T00:00:00Z",
+                external_id="xfer-1",
+            ),
+            _row("xfer-in", "wallet-b", "inbound", 100_000_000, occurred_at="2025-01-01T00:00:00Z", external_id="xfer-1"),
+            _row("sell-neu-remainder", "wallet-b", "outbound", 7_000_000, occurred_at="2025-06-01T00:00:00Z"),
+            _row("sell-after-neu-fee", "wallet-b", "outbound", 1_000_000, occurred_at="2025-06-02T00:00:00Z"),
+        ]
+        intra_pairs = [{"out": rows[2], "in": rows[3]}]
+
+        self.assertEqual(
+            infer_outbound_regimes(rows, intra_pairs),
+            {
+                "xfer-out": REGIME_NEU,
+                "sell-neu-remainder": REGIME_NEU,
+                "sell-after-neu-fee": REGIME_ALT,
+            },
+        )
 
 
 class AustrianKennzahlMappingTest(unittest.TestCase):

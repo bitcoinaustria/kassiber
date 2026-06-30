@@ -400,8 +400,12 @@ Responses use the normal machine envelope plus the same `request_id`.
 consumers must change how they parse daemon envelopes.
 
 ```json
-{"kind":"status","schema_version":1,"data":{},"request_id":"status-1"}
+{"kind":"status","schema_version":1,"data":{"database_encrypted":true},"request_id":"status-1"}
 ```
+
+`status.data.database_encrypted` reflects the live database file, so desktop
+views should prefer it over persisted UI identity when deciding whether a
+local-auth action needs a passphrase or a plaintext acknowledgement.
 
 Errors use the standard error envelope shape and also echo `request_id` when
 the request supplied one. Malformed JSON and non-object requests cannot carry
@@ -481,8 +485,11 @@ itself also refuses any live provider call (returning `live_refresh: false`,
 off never reaches Coinbase Exchange, CoinGecko, or mempool — only the offline
 bundled seed runs. Background jobs skip the manual 30-day warm-cache fallback
 when no transaction minute is missing, so hourly price refresh stays
-provider-light. Kraken CSV remains an offline archive/import path because it
-needs a local file or bundled archive.
+provider-light. The bundled offline Kraken daily seed already includes the
+Coin Metrics + ECB-derived pre-Kraken backfill, so cached daily BTC-EUR/BTC-USD
+coverage starts at `2011-01-01` without adding another live provider. Kraken
+CSV remains an offline archive/import path because it needs a local file or
+bundled archive.
 
 Source states are `fresh`, `queued`, `syncing`, `paused`, `rate_limited`,
 `partially_stale`, `failed`, and `blocking_reports`. Report reads are blocked
@@ -577,12 +584,12 @@ through the normal runtime path: it accepts the global `--db-passphrase-fd
 attached. The Tauri supervisor will eventually hand the passphrase via fd
 inheritance (tracked in `TODO.md`).
 
-## Reveal kinds (`auth_required` round-trip)
+## Reveal kinds (local-auth round-trip)
 
 `wallets.reveal_descriptor` and `backends.reveal_token` return raw secret
-material — descriptor bodies, blinding keys, BTCPay/RPC tokens. Even when
-the daemon already has the database open with the user's passphrase, the
-first reveal request returns:
+material — descriptor bodies, blinding keys, BTCPay/RPC tokens. For an
+encrypted database, even when the daemon already has the database open with
+the user's passphrase, the first reveal request returns:
 
 ```json
 {"kind":"auth_required","schema_version":1,"data":{"scope":"reveal_token","label":"Re-enter database passphrase to reveal backend 'btcpay'"},"request_id":"reveal-1"}
@@ -595,6 +602,17 @@ structured `local_auth_denied` error envelope. This is a UX gate, not
 cryptographic separation — once the daemon is running with an unlocked DB it
 can read every credential. The auth round-trip exists so a compromised UI
 process cannot silently siphon secrets without surfacing a re-prompt.
+Plaintext databases have no database passphrase to re-check, so reveal clients
+must send `args.auth_response = {"plaintext_reveal_ack": "COPY LOCAL SECRET"}`
+after the user types that exact acknowledgement.
+The desktop wallet detail screen allowlists only `wallets.reveal_descriptor`
+from this owner-reveal surface. It uses the passphrase round-trip for encrypted
+books or the plaintext acknowledgement for unencrypted books, then copies the
+stored descriptor material as one clipboard payload. When the wallet stores
+separate receive and change descriptors, both raw descriptor strings are
+included on separate lines; when the wallet stores a combined multipath
+descriptor, that single string is copied unchanged. The webview still cannot
+invoke arbitrary backend-token or raw-config reveals.
 
 The supervisor and any client must redact `passphrase_secret`, `token`,
 `descriptor`, `change_descriptor`, `blinding_key`, `auth_header`, `password`,

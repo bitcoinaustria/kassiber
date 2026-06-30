@@ -106,17 +106,27 @@ def _move_transfer_availability(
     neu_available_msat_by_key: dict[str, int],
     out_row: Mapping[str, Any],
     in_row: Mapping[str, Any],
-) -> None:
+) -> Literal["alt", "neu"]:
+    """Move regime availability for a self-transfer and return the regime the
+    disposed network fee is drawn from.
+
+    The MOVE itself is non-taxable, but its miner fee IS a disposal, so under the
+    Austrian moving-average method it must be tagged with a regime — otherwise
+    rp2 raises ``Ambiguous Austrian disposal`` when the wallet holds both Alt and
+    Neu lots and aborts the whole asset. The fee is the first slice of ``sent``,
+    so it comes from the move's preferred regime (Neu when available, Alt when
+    only Alt remains).
+    """
     from_key = _availability_key(_row_value(out_row, "wallet_id"))
     to_key = _availability_key(_row_value(in_row, "wallet_id"))
     sent_msat = int(_row_value(out_row, "amount") or 0) + int(
         _row_value(out_row, "fee") or 0
     )
     received_msat = int(_row_value(in_row, "amount") or 0)
-    if sent_msat <= 0 or received_msat <= 0:
-        return
 
     preferred_regime = infer_regime_from_timestamp(str(out_row["occurred_at"]))
+    if sent_msat <= 0 or received_msat <= 0:
+        return preferred_regime
     if (
         preferred_regime == REGIME_NEU
         and alt_available_msat_by_key.get(from_key, 0) > 0
@@ -143,6 +153,19 @@ def _move_transfer_availability(
         if remaining_sent <= 0:
             break
 
+    fee_msat = max(0, sent_msat - received_msat)
+    fee_by_regime: dict[str, int] = {REGIME_ALT: 0, REGIME_NEU: 0}
+    remaining_fee = fee_msat
+    for regime in regime_order:
+        fee_slice = min(moved[regime], remaining_fee)
+        if fee_slice <= 0:
+            continue
+        moved[regime] -= fee_slice
+        fee_by_regime[regime] += fee_slice
+        remaining_fee -= fee_slice
+        if remaining_fee <= 0:
+            break
+
     remaining_received = received_msat
     for regime in regime_order:
         carried = min(moved[regime], remaining_received)
@@ -157,6 +180,17 @@ def _move_transfer_availability(
         remaining_received -= carried
         if remaining_received <= 0:
             break
+
+    # The fee is the first taxable slice of `sent`; only the remaining moved
+    # quantity is carried to the destination. Fall back to the first moved regime
+    # (or the timestamp regime) for zero-fee / out-of-scope inventory cases.
+    for regime in regime_order:
+        if fee_by_regime[regime] > 0:
+            return regime
+    for regime in regime_order:
+        if moved[regime] > 0:
+            return regime
+    return preferred_regime
 
 
 def infer_outbound_regimes(
@@ -192,15 +226,28 @@ def infer_outbound_regimes(
         if transfer_pair is not None:
             out_row = transfer_pair["out"]
             in_row = transfer_pair["in"]
+            # Process the move at its OUT leg's position, not whichever leg is
+            # seen first. The IN leg is an inbound and sorts ahead of
+            # same-timestamp acquisitions (and the move's own out leg); triggering
+            # there would deplete the pool before those acquisitions land,
+            # flipping the move's fee regime (and any later disposal) on a
+            # transaction-id tiebreak. Skip the IN leg; the OUT leg, sorted after
+            # same-timestamp acquisitions, drives the move.
+            if str(row["id"]) != str(out_row["id"]):
+                continue
             pair_key = (str(out_row["id"]), str(in_row["id"]))
             if pair_key not in handled_transfer_keys:
                 handled_transfer_keys.add(pair_key)
-                _move_transfer_availability(
+                fee_regime = _move_transfer_availability(
                     alt_available_msat_by_key,
                     neu_available_msat_by_key,
                     out_row,
                     in_row,
                 )
+                # Tag the self-transfer's out row so its taxable miner-fee
+                # disposal carries a regime; without it rp2's AT moving-average
+                # aborts the whole asset on "Ambiguous Austrian disposal".
+                regimes_by_row_id[str(out_row["id"])] = fee_regime
             continue
 
         direction = str(_row_value(row, "direction") or "").strip().lower()

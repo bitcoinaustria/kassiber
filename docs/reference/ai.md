@@ -471,17 +471,20 @@ surfaces:
   heuristic allocations, privacy-hop ambiguity, missing pricing, and other
   blockers before any PDF/export decision
 - `ui_transfers_suggest` maps to daemon kind `ui.transfers.suggest`; it returns
-  same-asset transfer candidates and cross-asset swap/peg candidates with
-  confidence, method, computed fee, and conflict-cluster context without writing
-  review decisions. Pass `candidate_type=transfer` or `candidate_type=swap` to
-  keep those queues separate.
+  wallet-transfer candidates, Bitcoin swap/peg candidates, and other cross-asset
+  swap candidates with confidence, method, computed fee, and conflict-cluster
+  context without writing review decisions. Pass `candidate_type=transfer` for
+  carrying-value Bitcoin movements (including Boltz/submarine swaps) or
+  `candidate_type=swap` for other cross-asset swaps. Bitcoin swap review still
+  requires ownership intent: if the swap route paid or received from an external
+  counterparty, it should remain an ordinary payment or receipt.
 - `ui_transfers_review_context` maps to daemon kind
-  `ui.transfers.review_context`; it returns a bounded deterministic swap-review
+  `ui.transfers.review_context`; it returns a bounded deterministic pair-review
   packet with candidate leg summaries, confidence reasons, fee assessment,
   conflict status, metadata clues, current journal impact if left unpaired,
-  suggested next action, active pairs, rules, and saved swap-candidate views.
-  Pass `candidate_type=transfer` or `candidate_type=swap` when the review packet
-  should follow the split queues.
+  suggested next action, active pairs, rules, and saved candidate views. Pass
+  `candidate_type=transfer` or `candidate_type=swap` when the review packet
+  should follow one split queue; without a candidate type it includes both.
 - `ui_transfers_list` maps to daemon kind `ui.transfers.list`; it returns active
   reviewed transfer/swap pairs
 - `ui_transfers_rules_list` maps to daemon kind `ui.transfers.rules.list`; it

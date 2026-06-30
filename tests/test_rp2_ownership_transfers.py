@@ -468,14 +468,14 @@ class OwnershipDeriverAmbiguityTest(unittest.TestCase):
         }
         self.assertAlmostEqual(holdings.get("Cold", 0.0), 0.2, places=6)
 
-    def test_consolidation_with_recorded_destination_does_not_inflate(self):
-        # A+B -> C, all owned, C's inbound recorded under the spend's txid. The
-        # per-wallet amounts are unreliable (the fee is double-counted across the
-        # contributing wallets) so the deriver declines (source_ambiguous). The
-        # whole same-txid group is a recorded consolidation, so the existing
-        # owned-fanout guard holds back EVERY leg. The old block-and-remove path
-        # dropped only the source outbounds, leaving C's acquisition booked and
-        # doubling the profile total to 1.6 — it must stay 0.8.
+    def test_consolidation_with_recorded_destination_books_moves(self):
+        # A+B -> C, all owned, C's inbound recorded under the spend's txid. Each
+        # contributing wallet syncs the spend independently and stamps the whole
+        # fee onto its own row, so the per-wallet amounts cannot just be summed.
+        # The multi-source consolidation deriver reads the single fee once and
+        # the destination total from the graph, books one carrying MOVE per
+        # contributor, and drops C's recorded receipt (replaced by the synthetic
+        # in-legs). No quarantine, no disposal, and the profile total stays 0.8.
         index = OwnedIndex()
         index.add_script(SCRIPT_A, _match("A", "Cold"))
         index.add_script(SCRIPT_B, _match("B", "Hot"))
@@ -510,14 +510,20 @@ class OwnershipDeriverAmbiguityTest(unittest.TestCase):
             for (_, label, _, _), totals in state.wallet_holdings.items()
         }
         self.assertAlmostEqual(sum(holdings.values()), 0.8, places=6)
-        self.assertAlmostEqual(holdings.get("Savings", 0.0), 0.0, places=6)
+        self.assertAlmostEqual(holdings.get("Cold", 0.0), 0.0, places=6)
+        self.assertAlmostEqual(holdings.get("Hot", 0.0), 0.0, places=6)
+        self.assertAlmostEqual(holdings.get("Savings", 0.0), 0.8, places=6)
         entry_types = [entry["entry_type"] for entry in state.entries]
         self.assertNotIn("disposal", entry_types)
-        self.assertNotIn("transfer_in", entry_types)
-        self.assertEqual(
-            sorted(q["reason"] for q in state.quarantines),
-            ["owned_fanout_unresolved"] * 3,
-        )
+        self.assertIn("transfer_out", entry_types)
+        self.assertIn("transfer_in", entry_types)
+        transfer_in_transaction_ids = {
+            entry["transaction_id"]
+            for entry in state.entries
+            if entry["entry_type"] == "transfer_in"
+        }
+        self.assertEqual(transfer_in_transaction_ids, {"C-inbound-consol"})
+        self.assertEqual(state.quarantines, [])
 
     def test_fanout_amount_mismatch_with_recorded_inbounds_does_not_inflate(self):
         # 1->N spend whose parsed owned outputs (0.5 + 0.3) exceed the recorded
@@ -863,6 +869,379 @@ class RecordedFanoutEngineTest(unittest.TestCase):
         entry_types = [e["entry_type"] for e in state.entries]
         self.assertNotIn("transfer_in", entry_types)
         self.assertTrue(state.quarantines)  # flagged for review, nothing mis-booked
+
+
+class MultiSourceConsolidationEngineTest(unittest.TestCase):
+    """Through the real engine: a cross-wallet consolidation books carrying MOVEs."""
+
+    def _run(self, rows):
+        index = OwnedIndex()
+        index.add_script(SCRIPT_A, _match("A", "Cold"))
+        index.add_script(SCRIPT_B, _match("B", "Hot"))
+        index.add_script(SCRIPT_C, _match("C", "Savings"))
+        return build_tax_engine(PROFILE).build_ledger_state(
+            TaxEngineLedgerInputs(
+                rows=rows,
+                wallet_refs_by_id=WALLET_REFS,
+                manual_pair_records=[],
+                owned_index=index,
+            )
+        )
+
+    def test_consolidation_with_fee_books_fee_once(self):
+        # in_A=0.5, in_B=0.3, whole-tx fee=0.001 stamped on BOTH rows. The
+        # recorded amounts are net of the fee (0.499 / 0.299) and the graph
+        # destination is 0.799. If the fee were double-counted the pool would
+        # end at 0.798; booked once it is 0.799.
+        consol = json.dumps(
+            {
+                "txid": "consol-fee",
+                "vin": [
+                    {"txid": "pa", "vout": 0, "prevout": {"scriptpubkey": SCRIPT_A}},
+                    {"txid": "pb", "vout": 0, "prevout": {"scriptpubkey": SCRIPT_B}},
+                ],
+                "vout": [{"n": 0, "scriptpubkey": SCRIPT_C, "value": 79_900_000}],
+            }
+        )
+        rows = [
+            _row("A", "inbound", 50_000_000_000, external_id="acqA"),
+            _row("B", "inbound", 30_000_000_000, external_id="acqB"),
+            _row("A", "outbound", 49_900_000_000, external_id="consol-fee",
+                 raw_json=consol, fee=100_000_000),
+            _row("B", "outbound", 29_900_000_000, external_id="consol-fee",
+                 raw_json=consol, fee=100_000_000),
+            _row("C", "inbound", 79_900_000_000, external_id="consol-fee"),
+        ]
+        state = self._run(rows)
+        self.assertEqual(state.quarantines, [])
+        entry_types = [e["entry_type"] for e in state.entries]
+        self.assertIn("transfer_out", entry_types)
+        self.assertIn("transfer_in", entry_types)
+        self.assertNotIn("disposal", entry_types)
+        # Exactly one fee leg disposes the miner fee.
+        self.assertEqual(entry_types.count("transfer_fee"), 1)
+        holdings = {
+            label: round(float(totals["quantity"]), 6)
+            for (_, label, _, _), totals in state.wallet_holdings.items()
+        }
+        self.assertAlmostEqual(holdings.get("Cold", 0.0), 0.0, places=6)
+        self.assertAlmostEqual(holdings.get("Hot", 0.0), 0.0, places=6)
+        self.assertAlmostEqual(holdings.get("Savings", 0.0), 0.799, places=6)
+        self.assertAlmostEqual(sum(holdings.values()), 0.799, places=6)
+
+    def test_consolidation_with_sync_gapped_destination_books_moves(self):
+        # Same consolidation but the destination never synced an inbound. The
+        # graph still proves C owns the output, so the legs are synthesized.
+        consol = json.dumps(
+            {
+                "txid": "consol-gap",
+                "vin": [
+                    {"txid": "pa", "vout": 0, "prevout": {"scriptpubkey": SCRIPT_A}},
+                    {"txid": "pb", "vout": 0, "prevout": {"scriptpubkey": SCRIPT_B}},
+                ],
+                "vout": [{"n": 0, "scriptpubkey": SCRIPT_C, "value": 80_000_000}],
+            }
+        )
+        rows = [
+            _row("A", "inbound", 50_000_000_000, external_id="acqA"),
+            _row("B", "inbound", 30_000_000_000, external_id="acqB"),
+            _row("A", "outbound", 50_000_000_000, external_id="consol-gap", raw_json=consol),
+            _row("B", "outbound", 30_000_000_000, external_id="consol-gap", raw_json=consol),
+        ]
+        state = self._run(rows)
+        self.assertEqual(state.quarantines, [])
+        entry_types = [e["entry_type"] for e in state.entries]
+        self.assertIn("transfer_in", entry_types)
+        self.assertNotIn("disposal", entry_types)
+        holdings = {
+            label: round(float(totals["quantity"]), 6)
+            for (_, label, _, _), totals in state.wallet_holdings.items()
+        }
+        self.assertAlmostEqual(holdings.get("Savings", 0.0), 0.8, places=6)
+        self.assertAlmostEqual(sum(holdings.values()), 0.8, places=6)
+
+    def test_off_group_nonexact_receipt_does_not_double_count(self):
+        # A+B -> C consolidation (graph dest 0.8) where C recorded its receipt
+        # off-group at a slightly different amount (0.79999). The deriver must
+        # decline (the receipt is near the spend time), so C is credited once via
+        # its real receipt — NOT 0.8 (synthetic legs) PLUS 0.79999 (~1.6 total).
+        consol = json.dumps(
+            {
+                "txid": "f4consol",
+                "vin": [{"txid": "pa", "vout": 0, "prevout": {"scriptpubkey": SCRIPT_A}},
+                        {"txid": "pb", "vout": 0, "prevout": {"scriptpubkey": SCRIPT_B}}],
+                "vout": [{"n": 0, "scriptpubkey": SCRIPT_C, "value": 80_000_000}],
+            }
+        )
+        rows = [
+            _row("A", "inbound", 50_000_000_000, external_id="acqA"),
+            _row("B", "inbound", 30_000_000_000, external_id="acqB"),
+            _row("A", "outbound", 50_000_000_000, external_id="f4consol", raw_json=consol),
+            _row("B", "outbound", 30_000_000_000, external_id="f4consol", raw_json=consol),
+            _row("C", "inbound", 79_999_000_000, external_id="exchange-deposit-9"),
+        ]
+        state = self._run(rows)
+        holdings = {
+            label: round(float(totals["quantity"]), 6)
+            for (_, label, _, _), totals in state.wallet_holdings.items()
+        }
+        self.assertAlmostEqual(holdings.get("Savings", 0.0), 0.79999, places=6)
+        self.assertAlmostEqual(sum(holdings.values()), 0.79999, places=6)
+
+    def test_grouped_consolidation_gate_quarantines_atomically(self):
+        # A+B -> C is derived as a grouped consolidation. If B lacks enough lots,
+        # the gate must not book A's sibling MOVE and drop C's recorded receipt;
+        # the entire derived group is deferred for review.
+        consol = json.dumps(
+            {
+                "txid": "consol-partial-lots",
+                "vin": [
+                    {"txid": "pa", "vout": 0, "prevout": {"scriptpubkey": SCRIPT_A}},
+                    {"txid": "pb", "vout": 0, "prevout": {"scriptpubkey": SCRIPT_B}},
+                ],
+                "vout": [{"n": 0, "scriptpubkey": SCRIPT_C, "value": 80_000_000}],
+            }
+        )
+        rows = [
+            _row("A", "inbound", 50_000_000_000, external_id="acqA"),
+            _row("B", "inbound", 10_000_000_000, external_id="acqB"),
+            _row(
+                "A",
+                "outbound",
+                50_000_000_000,
+                external_id="consol-partial-lots",
+                raw_json=consol,
+            ),
+            _row(
+                "B",
+                "outbound",
+                30_000_000_000,
+                external_id="consol-partial-lots",
+                raw_json=consol,
+            ),
+            _row("C", "inbound", 80_000_000_000, external_id="consol-partial-lots"),
+        ]
+
+        state = self._run(rows)
+
+        entry_types = [entry["entry_type"] for entry in state.entries]
+        self.assertNotIn("transfer_out", entry_types)
+        self.assertNotIn("transfer_in", entry_types)
+        reasons = {q["reason"] for q in state.quarantines}
+        self.assertIn("insufficient_lots", reasons)
+        self.assertIn("derived_transfer_group_blocked", reasons)
+        reasons_by_id = {q["transaction_id"]: q["reason"] for q in state.quarantines}
+        self.assertEqual(
+            reasons_by_id["C-inbound-consol-partial-lots"],
+            "derived_transfer_group_blocked",
+        )
+        holdings = {
+            label: round(float(totals["quantity"]), 6)
+            for (_, label, _, _), totals in state.wallet_holdings.items()
+        }
+        self.assertAlmostEqual(holdings.get("Savings", 0.0), 0.0, places=6)
+
+
+class SameTimestampTransferOrderingEngineTest(unittest.TestCase):
+    def test_same_timestamp_transfer_chain_books_funding_move_first(self):
+        # Input order intentionally places Hot's spend before the Cold->Hot
+        # funding MOVE. Old same-timestamp tiebreaking followed that stream order
+        # and quarantined the Hot spend as insufficient_lots. The gate now orders
+        # same-time transfers by wallet dependency.
+        rows = [
+            _row("A", "inbound", BTC, external_id="acq"),
+            _row("B", "outbound", 60_000_000_000, external_id="hot-to-savings"),
+            _row("A", "outbound", 60_000_000_000, external_id="cold-to-hot"),
+            _row("B", "inbound", 60_000_000_000, external_id="cold-to-hot"),
+            _row("C", "inbound", 60_000_000_000, external_id="hot-to-savings"),
+        ]
+
+        state = build_tax_engine(PROFILE).build_ledger_state(
+            TaxEngineLedgerInputs(
+                rows=rows,
+                wallet_refs_by_id=WALLET_REFS,
+                manual_pair_records=[],
+                owned_index=None,
+            )
+        )
+
+        self.assertEqual(state.quarantines, [])
+        entry_types = [entry["entry_type"] for entry in state.entries]
+        self.assertEqual(entry_types.count("transfer_out"), 2)
+        self.assertEqual(entry_types.count("transfer_in"), 2)
+        holdings = {
+            label: round(float(totals["quantity"]), 6)
+            for (_, label, _, _), totals in state.wallet_holdings.items()
+        }
+        self.assertAlmostEqual(holdings.get("Cold", 0.0), 0.4, places=6)
+        self.assertAlmostEqual(holdings.get("Hot", 0.0), 0.0, places=6)
+        self.assertAlmostEqual(holdings.get("Savings", 0.0), 0.6, places=6)
+
+
+class PartialPaymentWithholdingEngineTest(unittest.TestCase):
+    """Fix: a same-txid 1-out/1-in pair that ALSO pays a (small) external party.
+
+    detect_intra_transfers would pair the owned leg and silently fold the
+    external payment into the implied MOVE fee (sub-ceiling, so not even
+    quarantined). Withholding the pair lets the graph deriver book the owned
+    MOVE and keep the external residual as a real taxable disposal.
+    """
+
+    def test_external_residual_is_taxed_not_absorbed_as_fee(self):
+        index = OwnedIndex()
+        index.add_script(SCRIPT_A, _match("A", "Cold"))
+        index.add_script(SCRIPT_B, _match("B", "Hot"))
+        # A spends 0.5 to B (own) + 0.002 to an external recipient + 0.0001 fee.
+        # The external leg (0.002) is under the swap-fee ceiling for a 0.502
+        # outbound, so without the withhold it is absorbed as a MOVE fee.
+        spend = json.dumps(
+            {
+                "txid": "partial-pp",
+                "vin": [{"txid": "prevtx", "vout": 0, "prevout": {"scriptpubkey": SCRIPT_A}}],
+                "vout": [
+                    {"n": 0, "scriptpubkey": SCRIPT_B, "value": 50_000_000},  # owned 0.5
+                    {"n": 1, "scriptpubkey": SCRIPT_EXT, "value": 200_000},  # external 0.002
+                ],
+            }
+        )
+        rows = [
+            _row("A", "inbound", 50_210_000_000, external_id="acq"),
+            _row("A", "outbound", 50_200_000_000, external_id="partial-pp",
+                 raw_json=spend, fee=10_000_000),
+            # B recorded its receipt under the SAME txid, so detect_intra pairs it.
+            _row("B", "inbound", 50_000_000_000, external_id="partial-pp"),
+        ]
+        state = build_tax_engine(PROFILE).build_ledger_state(
+            TaxEngineLedgerInputs(
+                rows=rows,
+                wallet_refs_by_id=WALLET_REFS,
+                manual_pair_records=[],
+                owned_index=index,
+            )
+        )
+        self.assertEqual(state.quarantines, [])
+        entry_types = [e["entry_type"] for e in state.entries]
+        self.assertIn("transfer_out", entry_types)
+        self.assertIn("transfer_in", entry_types)
+        # The external payment is now a real disposal, not folded into the fee.
+        self.assertIn("disposal", entry_types)
+        disposed = sum(
+            abs(float(e["quantity"]))
+            for e in state.entries
+            if e["entry_type"] == "disposal"
+        )
+        self.assertAlmostEqual(disposed, 0.002, places=6)
+        holdings = {
+            label: round(float(totals["quantity"]), 6)
+            for (_, label, _, _), totals in state.wallet_holdings.items()
+        }
+        self.assertAlmostEqual(holdings.get("Hot", 0.0), 0.5, places=6)
+        # 0.5021 acquired - 0.5 moved - 0.002 sold - 0.0001 fee == 0.
+        self.assertAlmostEqual(holdings.get("Cold", 0.0), 0.0, places=6)
+
+    def test_withhold_rolls_back_when_owned_output_is_ambiguous(self):
+        # The owned output is paid to a script owned by TWO of the user's wallets
+        # (shared descriptor / reused address), so the ownership deriver cannot
+        # route the leg and DECLINES. The withhold must roll the pair back to its
+        # original self-transfer instead of orphaning it into a full disposal +
+        # phantom acquisition (which carried no quarantine). Falling back here
+        # absorbs the small external leg as fee (the documented sub-ceiling P2),
+        # but never destroys basis or invents a disposal.
+        index = OwnedIndex()
+        index.add_script(SCRIPT_A, _match("A", "Cold"))
+        shared = "0014" + "dd" * 20
+        index.add_script(shared, _match("B", "Hot"))
+        index.add_script(shared, _match("C", "Savings"))  # ambiguous: two owners
+        spend = json.dumps(
+            {
+                "txid": "ambig-pp",
+                "vin": [{"txid": "pv", "vout": 0, "prevout": {"scriptpubkey": SCRIPT_A}}],
+                "vout": [
+                    {"n": 0, "scriptpubkey": shared, "value": 50_000_000},  # owned, ambiguous
+                    {"n": 1, "scriptpubkey": SCRIPT_EXT, "value": 200_000},  # external 0.002
+                ],
+            }
+        )
+        rows = [
+            _row("A", "inbound", 50_210_000_000, external_id="acq"),
+            _row("A", "outbound", 50_200_000_000, external_id="ambig-pp",
+                 raw_json=spend, fee=10_000_000),
+            _row("B", "inbound", 50_000_000_000, external_id="ambig-pp"),
+        ]
+        state = build_tax_engine(PROFILE).build_ledger_state(
+            TaxEngineLedgerInputs(rows=rows, wallet_refs_by_id=WALLET_REFS,
+                                  manual_pair_records=[], owned_index=index)
+        )
+        entry_types = [e["entry_type"] for e in state.entries]
+        # The self-transfer MOVE is booked (rolled back), NOT a phantom acquisition.
+        self.assertIn("transfer_in", entry_types)
+        self.assertIn("transfer_out", entry_types)
+        # No phantom acquisition at the destination: only A's real funding acq.
+        self.assertEqual(entry_types.count("acquisition"), 1)
+        holdings = {
+            label: round(float(totals["quantity"]), 6)
+            for (_, label, _, _), totals in state.wallet_holdings.items()
+        }
+        # Hot got 0.5 of CARRIED basis (a MOVE), not a fresh 0.5 acquisition; the
+        # source is not over-disposed.
+        self.assertAlmostEqual(holdings.get("Hot", 0.0), 0.5, places=6)
+        self.assertAlmostEqual(holdings.get("Cold", 0.0), 0.0, places=6)
+        # No silent phantom: total holdings == acquired - fee-absorbed outflow.
+        self.assertLessEqual(sum(holdings.values()), 0.5021)
+
+
+class AustrianSelfTransferEngineTest(unittest.TestCase):
+    """AT MOVE-fee disposal must carry a regime or rp2 aborts the whole asset."""
+
+    AT_PROFILE = {
+        "id": "profile-1", "workspace_id": "ws-1", "label": "AT",
+        "fiat_currency": "EUR", "tax_country": "at", "tax_long_term_days": 365,
+        "gains_algorithm": "moving_average_at",
+    }
+
+    def _at_row(self, wid, direction, amount_msat, occurred_at, ext, fee=0, rate=40000.0):
+        ref = WALLET_REFS[wid]
+        return {
+            "id": f"{wid}-{direction}-{ext}", "workspace_id": "ws-1", "profile_id": "profile-1",
+            "wallet_id": wid, "wallet_label": ref["label"],
+            "wallet_account_id": ref["wallet_account_id"], "account_code": ref["account_code"],
+            "account_label": ref["account_label"], "external_id": ext,
+            "occurred_at": occurred_at, "created_at": occurred_at, "direction": direction,
+            "asset": "BTC", "amount": amount_msat, "fee": fee, "fiat_currency": "EUR",
+            "fiat_rate": rate, "fiat_rate_exact": str(int(rate)), "fiat_value": None,
+            "kind": "withdrawal" if direction == "outbound" else "deposit",
+            "description": f"{wid} {direction}", "note": None, "raw_json": "{}", "excluded": 0,
+        }
+
+    def test_mixed_alt_neu_self_transfer_fee_does_not_abort_report(self):
+        # A long-term Austrian holder with one Altvermoegen lot (pre-2021-03-01)
+        # and one Neuvermoegen lot (post) does an ordinary self-transfer with a
+        # miner fee. The fee is a taxable disposal; without a regime tag rp2's
+        # moving-average raises "Ambiguous Austrian disposal" and the WHOLE BTC
+        # report aborts. It must book cleanly instead.
+        rows = [
+            self._at_row("A", "inbound", 30_000_000_000, "2020-06-01T00:00:00Z", "altacq", rate=10000.0),
+            self._at_row("A", "inbound", 40_000_000_000, "2024-06-01T00:00:00Z", "neuacq", rate=60000.0),
+            self._at_row("A", "outbound", 50_000_000_000, "2025-02-01T00:00:00Z", "selfmove",
+                         fee=100_000_000, rate=60000.0),
+            self._at_row("B", "inbound", 50_000_000_000, "2025-02-01T00:00:00Z", "selfmove", rate=60000.0),
+        ]
+        # Must not raise AppError("Ambiguous Austrian disposal").
+        state = build_tax_engine(self.AT_PROFILE).build_ledger_state(
+            TaxEngineLedgerInputs(rows=rows, wallet_refs_by_id=WALLET_REFS,
+                                  manual_pair_records=[], owned_index=None)
+        )
+        entry_types = [e["entry_type"] for e in state.entries]
+        self.assertIn("transfer_out", entry_types)
+        self.assertIn("transfer_in", entry_types)
+        self.assertIn("transfer_fee", entry_types)
+        holdings = {
+            label: round(float(totals["quantity"]), 6)
+            for (_, label, _, _), totals in state.wallet_holdings.items()
+        }
+        # 0.7 held, 0.5 moved to Hot, 0.001 fee left the pool.
+        self.assertAlmostEqual(holdings.get("Cold", 0.0), 0.199, places=6)
+        self.assertAlmostEqual(holdings.get("Hot", 0.0), 0.5, places=6)
 
 
 if __name__ == "__main__":

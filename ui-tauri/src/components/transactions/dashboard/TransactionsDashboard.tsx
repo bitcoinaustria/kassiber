@@ -27,6 +27,7 @@ import {
 import { TransactionsTable } from "./TransactionsTable";
 import { PeriodTabs, TransactionWorkbench } from "./TransactionWorkbench";
 import {
+  availablePeriodKeysForRecords,
   buildSwapCandidates,
   dashboardRecordsFromTxs,
   initialPeriodFromUrl,
@@ -220,6 +221,10 @@ const TransactionsDashboard = ({
     () => sortTransactionsByDateDesc(records),
     [records],
   );
+  const availablePeriods = React.useMemo(
+    () => availablePeriodKeysForRecords(records),
+    [records],
+  );
   const periodRecords = React.useMemo(
     () =>
       period === "all"
@@ -282,6 +287,14 @@ const TransactionsDashboard = ({
     setBreakdownSelection(null);
     setResetTableFiltersToken((token) => token + 1);
   }, []);
+  React.useEffect(() => {
+    if (availablePeriods.includes(period)) return;
+    handlePeriodChange(
+      availablePeriods.includes("1year")
+        ? "1year"
+        : availablePeriods[availablePeriods.length - 1] ?? "all",
+    );
+  }, [availablePeriods, handlePeriodChange, period]);
   const resetTableFilters = React.useCallback(() => {
     setResetTableFiltersToken((token) => token + 1);
   }, []);
@@ -320,8 +333,15 @@ const TransactionsDashboard = ({
       className={cn(screenShellClassName, "relative", className)}
       aria-busy={showRefreshSkeleton}
     >
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <PeriodTabs activePeriod={period} onPeriodChange={handlePeriodChange} />
+      <div
+        id="transactions-period-nav"
+        className="-mx-3 flex flex-col gap-3 bg-background px-3 py-2 shadow-[0_12px_18px_-18px_hsl(var(--foreground)/0.55)] sm:-mx-4 sm:flex-row sm:items-center sm:justify-between sm:px-4 md:-mx-5 md:px-5 sticky top-2 z-30 before:pointer-events-none before:absolute before:inset-x-0 before:-top-2 before:h-2 before:bg-background before:content-[''] after:pointer-events-none after:absolute after:inset-x-0 after:-bottom-2 after:h-2 after:bg-background after:content-[''] sm:top-[0.6875rem] sm:before:-top-[0.6875rem] sm:before:h-[0.6875rem] sm:after:-bottom-[0.6875rem] sm:after:h-[0.6875rem] md:top-[0.8125rem] md:before:-top-[0.8125rem] md:before:h-[0.8125rem] md:after:-bottom-[0.8125rem] md:after:h-[0.8125rem]"
+      >
+        <PeriodTabs
+          activePeriod={period}
+          onPeriodChange={handlePeriodChange}
+          periodOptions={availablePeriods}
+        />
         <div className="flex flex-wrap items-center gap-2 sm:gap-3">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>

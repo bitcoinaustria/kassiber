@@ -482,6 +482,7 @@ def _resolve_report_depth(max_depth: Any, default: int = 8) -> int:
 AI_TOOL_CONSENT_TIMEOUT_SECONDS = 300.0
 PLAINTEXT_DELETE_ACK = "DELETE LOCAL DATA"
 PLAINTEXT_CHANGE_ACK = "CHANGE LOCAL DATA"
+PLAINTEXT_REVEAL_ACK = "COPY LOCAL SECRET"
 MIN_DATABASE_PASSPHRASE_CHARS = 12
 AUTH_FAILURES_BEFORE_BACKOFF = 3
 AUTH_BACKOFF_BASE_SECONDS = 5.0
@@ -1810,8 +1811,8 @@ def _ui_source_funds_payload_from_conn(
             from_allocation_amount=args.get("from_allocation_amount"),
             allocation_policy=str(args.get("allocation_policy") or "explicit"),
             explanation=args.get("explanation") if isinstance(args.get("explanation"), str) else None,
-            uses_chain_observation=bool(args.get("uses_chain_observation")),
-            chain_data_confirmed=bool(args.get("chain_data_confirmed", False)),
+            uses_chain_observation=_optional_bool_arg(args, "uses_chain_observation", False),
+            chain_data_confirmed=_optional_bool_arg(args, "chain_data_confirmed", False),
             attachment_ids=[str(item) for item in attachment_ids],
         )
 
@@ -1875,7 +1876,7 @@ def _ui_source_funds_payload_from_conn(
             None,
             hooks,
             target_transaction_ref=target.strip() if isinstance(target, str) and target.strip() else None,
-            include_broad_hints=bool(args.get("include_broad_hints")),
+            include_broad_hints=_optional_bool_arg(args, "include_broad_hints", False),
             max_suggestions=int(args.get("max_suggestions") or core_source_funds.SUGGESTION_WRITE_CAP),
         )
 
@@ -4937,6 +4938,7 @@ def _require_sensitive_local_auth(
     label: str,
     plaintext_ack_key: str,
     plaintext_ack_value: str,
+    plaintext_ack_hint: str | None = None,
 ) -> tuple[dict[str, Any], bool] | None:
     auth = args.get("auth_response")
     if _database_file_is_encrypted(ctx):
@@ -4972,7 +4974,10 @@ def _require_sensitive_local_auth(
         raise AppError(
             f"{scope} requires plaintext acknowledgement",
             code="validation",
-            hint=f"Ask the user to type {plaintext_ack_value!r} before changing plaintext local data.",
+            hint=(
+                plaintext_ack_hint
+                or f"Ask the user to type {plaintext_ack_value!r} before changing plaintext local data."
+            ),
         )
     return None
 
@@ -7751,6 +7756,16 @@ def _update_wallet_payload(
         value = _optional_str_arg(args, key)
         if value is not None:
             config_updates[key] = value
+    deprecated = args.get("deprecated")
+    if deprecated is not None:
+        if not isinstance(deprecated, bool):
+            raise AppError(
+                "deprecated must be a boolean",
+                code="validation",
+                details={"type": type(deprecated).__name__},
+                retryable=False,
+            )
+        config_updates["deprecated"] = deprecated
     if "source_format" in config_updates and config_updates["source_format"] not in _UI_WALLET_SOURCE_FORMATS:
         raise AppError(
             f"Unsupported source format '{config_updates['source_format']}'",
@@ -10194,13 +10209,12 @@ def _handle_reveal_request(
     scope: str,
     target_kind: str,
 ) -> tuple[dict[str, Any], bool]:
-    """Reveal a sensitive field after a passphrase round-trip.
+    """Reveal a sensitive field after an explicit local-auth round-trip.
 
-    Per the V4.1 plan, the daemon does not return secrets without an
-    explicit `auth_response` from the client carrying the SQLCipher
-    passphrase. We verify by opening a throw-away SQLCipher connection
-    against the on-disk database; a wrong passphrase produces
-    `local_auth_denied`.
+    Encrypted databases require an `auth_response` carrying the SQLCipher
+    passphrase. Plaintext databases have no passphrase to re-check, so callers
+    must send the typed plaintext reveal acknowledgement instead. Both paths
+    are UX gates; the unlocked daemon can already read the local database.
     """
 
     args = request.get("args") or {}
@@ -10216,36 +10230,20 @@ def _handle_reveal_request(
             False,
         )
 
-    auth = args.get("auth_response")
-    if not isinstance(auth, dict) or "passphrase_secret" not in auth:
-        return (
-            _with_request_id(
-                build_envelope(
-                    "auth_required",
-                    {
-                        "scope": scope,
-                        "label": f"Re-enter database passphrase to reveal {target_kind} {target!r}",
-                    },
-                ),
-                request_id,
-            ),
-            False,
-        )
-
-    passphrase = auth.get("passphrase_secret")
-    if not isinstance(passphrase, str) or not passphrase:
-        return (
-            _error_envelope(
-                "local_auth_denied",
-                "auth_response did not include a passphrase",
-                request_id=request_id,
-                retryable=True,
-            ),
-            False,
-        )
-
     try:
-        verified = _verify_passphrase_with_backoff(ctx, scope, passphrase)
+        auth_result = _require_sensitive_local_auth(
+            ctx,
+            args=args,
+            request_id=request_id,
+            scope=scope,
+            label=f"Re-enter database passphrase to reveal {target_kind} {target!r}",
+            plaintext_ack_key="plaintext_reveal_ack",
+            plaintext_ack_value=PLAINTEXT_REVEAL_ACK,
+            plaintext_ack_hint=(
+                f"Ask the user to type {PLAINTEXT_REVEAL_ACK!r} before "
+                "revealing plaintext local secrets."
+            ),
+        )
     except AppError as exc:
         return (
             _error_envelope(
@@ -10258,16 +10256,8 @@ def _handle_reveal_request(
             ),
             False,
         )
-    if not verified:
-        return (
-            _error_envelope(
-                "local_auth_denied",
-                "passphrase verification failed",
-                request_id=request_id,
-                retryable=True,
-            ),
-            False,
-        )
+    if auth_result is not None:
+        return auth_result
 
     if scope == "reveal_token":
         payload = core_accounts.reveal_backend_secrets(ctx.conn, ctx.runtime_config, target)

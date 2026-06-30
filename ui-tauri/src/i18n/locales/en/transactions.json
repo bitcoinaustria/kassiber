@@ -16,7 +16,7 @@
     "outgoing": "Outgoing",
     "transfer": "Internal transfer",
     "swap": "Swap",
-    "layerTransition": "Layer transition"
+    "layerTransition": "Bitcoin swap"
   },
   "detailHeader": {
     "confirmationsTitle": "{{count}} on-chain confirmations",
@@ -49,7 +49,7 @@
     "outgoing": "Send",
     "transfer": "Internal transfer",
     "swap": "Swap",
-    "layerTransition": "Layer transition"
+    "layerTransition": "Bitcoin swap"
   },
   "classification": {
     "unlabeled": "Unlabeled",
@@ -120,7 +120,7 @@
       "short": "Own-wallet transfer"
     },
     "neuSwap": {
-      "label": "§27b carrying-value swap / layer transition",
+      "label": "§27b carrying-value Bitcoin swap",
       "short": "Neu swap"
     },
     "altSpekulation": {
@@ -178,6 +178,8 @@
     "3months": "3 Months",
     "30days": "30 Days",
     "5years": "5 Years",
+    "10years": "10 Years",
+    "15years": "15 Years",
     "all": "All"
   },
   "chartMetric": {
@@ -193,13 +195,6 @@
     "outgoing": "Outgoing",
     "transfers": "Transfers",
     "swaps": "Swaps"
-  },
-  "dateFilter": {
-    "all": "All",
-    "today": "Today",
-    "yesterday": "Yesterday",
-    "last7days": "Last 7 days",
-    "last30days": "Last 30 days"
   },
   "quickFilter": {
     "externalFlow": "External flow",
@@ -290,6 +285,7 @@
       "missingExplorerLink": "Missing explorer link",
       "missingPrice": "Missing price",
       "failedImport": "Failed import",
+      "pairingCandidates": "Pairing candidates",
       "swapCandidates": "Swap candidates",
       "none": "No data quality issues"
     }
@@ -307,9 +303,15 @@
       "network": "Network",
       "status": "Status"
     },
+    "sort": {
+      "dateInactive": "Sort by transaction date",
+      "dateDescending": "Sorted by transaction date, newest first",
+      "dateAscending": "Sorted by transaction date, oldest first",
+      "amountInactive": "Sort by amount",
+      "amountDescending": "Sorted by amount, high to low",
+      "amountAscending": "Sorted by amount, low to high"
+    },
     "filter": {
-      "dateAria": "Filter by date",
-      "datePlaceholder": "Date",
       "statusAria": "Filter by status",
       "statusTrigger": "Status",
       "statusLabel": "Filter by Status",
@@ -333,7 +335,6 @@
       "clearQuick": "Clear {{label}} filter",
       "clearBreakdown": "Clear {{label}} filter",
       "clearStatus": "Clear {{label}} filter",
-      "clearDate": "Clear {{label}} filter",
       "clearFlow": "Clear {{label}} filter",
       "clearPayment": "Clear {{label}} filter",
       "clearWithFees": "Clear with fees filter"
@@ -367,16 +368,15 @@
         "unmark": "Remove collateral mark"
       }
     },
-    "pagination": {
-      "rowsPerPage": "Rows per page:",
-      "refreshing": "Refreshing",
-      "rangeOf": "of {{total}}",
+    "virtual": {
+      "refreshing": "Refreshing transactions",
+      "complete": "Showing {{count}} transactions",
+      "loaded": "Showing {{count}} loaded transactions",
+      "moreHint": "More transactions load automatically as you scroll.",
+      "loadingMore": "Loading more transactions…",
       "loadMore": "Load more",
-      "loading": "Loading",
-      "firstPage": "Go to first page",
-      "previousPage": "Go to previous page",
-      "nextPage": "Go to next page",
-      "lastPage": "Go to last page"
+      "moreAvailable": "More transactions available",
+      "scrollRegion": "Scrollable transaction table"
     }
   },
   "notification": {

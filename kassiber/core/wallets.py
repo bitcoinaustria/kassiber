@@ -8,7 +8,7 @@ from pathlib import Path
 
 from ..errors import AppError
 from ..time_utils import now_iso
-from ..util import normalize_chain_value, normalize_network_value, str_or_none
+from ..util import normalize_chain_value, normalize_network_value, parse_bool, str_or_none
 from ..wallet_descriptors import (
     DEFAULT_DESCRIPTOR_GAP_LIMIT,
     MAX_DESCRIPTOR_GAP_LIMIT,
@@ -54,6 +54,7 @@ BTCPAY_PROVENANCE_CONFIG_KEY = "btcpay_provenance"
 BULLBITCOIN_WALLET_NETWORK_CONFIG_KEY = "bullbitcoin_wallet_network"
 BULLBITCOIN_WALLET_EXPORTS_CONFIG_KEY = "bullbitcoin_wallet_exports"
 BULLBITCOIN_WALLET_NETWORKS = ("bitcoin", "liquid", "lightning")
+WALLET_DEPRECATED_CONFIG_KEY = "deprecated"
 WALLET_SAFE_CONFIG_FIELDS = (
     "addresses",
     "backend",
@@ -73,6 +74,7 @@ WALLET_SAFE_CONFIG_FIELDS = (
     "wasabi_metadata",
     "samourai",
     "script_types",
+    WALLET_DEPRECATED_CONFIG_KEY,
 )
 # The xpub is as sensitive as the descriptor it expands into (it reveals every
 # address), so it is redacted; its presence still tells the UI the wallet is
@@ -160,6 +162,12 @@ def has_descriptor_sync_material(config):
     if str_or_none(config.get("descriptor")):
         return True
     return bool(str_or_none(config.get("xpub")) and config.get("script_types"))
+
+
+def wallet_is_deprecated(config):
+    if not isinstance(config, dict):
+        return False
+    return parse_bool(config.get(WALLET_DEPRECATED_CONFIG_KEY), default=False)
 
 
 def _reset_onchain_freshness_checkpoint(conn, profile_id: str, wallet_id: str) -> None:
@@ -484,6 +492,8 @@ def create_wallet(conn, workspace_ref, profile_ref, label, kind, account_ref=Non
 
 def _validated_wallet_config(normalized_kind, config):
     config = dict(config or {})
+    if WALLET_DEPRECATED_CONFIG_KEY in config:
+        config[WALLET_DEPRECATED_CONFIG_KEY] = wallet_is_deprecated(config)
     has_live_material = bool(config.get("descriptor") or config.get("xpub"))
     descriptor_plan = load_wallet_descriptor_plan_from_config(config) if has_live_material else None
     chain, network = wallet_live_chain_config(config)
@@ -537,6 +547,12 @@ def _validated_wallet_config(normalized_kind, config):
     if btcpay_config:
         config.update(btcpay_config)
     return config
+
+
+def _sync_material_config_json(config):
+    sync_config = dict(config or {})
+    sync_config.pop(WALLET_DEPRECATED_CONFIG_KEY, None)
+    return json.dumps(sync_config, sort_keys=True)
 
 
 def _wallet_descriptor_state(config):
@@ -595,6 +611,7 @@ def list_wallets(conn, workspace_ref, profile_ref):
                 "gap_limit": config.get("gap_limit", DEFAULT_DESCRIPTOR_GAP_LIMIT if descriptor_state else ""),
                 "source_format": config.get("source_format", ""),
                 "source_file": config.get("source_file", ""),
+                "deprecated": wallet_is_deprecated(config),
                 "created_at": row["created_at"],
             }
         )
@@ -724,6 +741,7 @@ def wallet_row_to_dict(row):
         "policy_asset": config.get("policy_asset"),
         "source_file": config.get("source_file", ""),
         "source_format": config.get("source_format", ""),
+        "deprecated": wallet_is_deprecated(config),
         "config": safe_config,
         "created_at": row["created_at"],
     }
@@ -733,6 +751,15 @@ def get_wallet_details(conn, workspace_ref, profile_ref, wallet_ref):
     _, profile = resolve_scope(conn, workspace_ref, profile_ref)
     wallet = resolve_wallet(conn, profile["id"], wallet_ref)
     return wallet_row_to_dict(wallet)
+
+
+def wallet_descriptor_material(config):
+    """Return the pasteable stored descriptor material for a wallet config."""
+    descriptor = str_or_none(config.get("descriptor"))
+    change_descriptor = str_or_none(config.get("change_descriptor"))
+    return "\n".join(
+        value for value in (descriptor, change_descriptor) if value
+    )
 
 
 def reveal_wallet_secrets(conn, workspace_ref, profile_ref, wallet_ref):
@@ -750,6 +777,7 @@ def reveal_wallet_secrets(conn, workspace_ref, profile_ref, wallet_ref):
         "id": wallet["id"],
         "label": wallet["label"],
         "kind": wallet["kind"],
+        "wallet_material": wallet_descriptor_material(config),
         "descriptor": config.get("descriptor"),
         "change_descriptor": config.get("change_descriptor"),
         "blinding_key": config.get("blinding_key"),
@@ -786,7 +814,7 @@ def update_wallet(conn, workspace_ref, profile_ref, wallet_ref, updates):
 
     # Preserve legacy Austrian provenance metadata until a deliberate migration removes it.
     config = json.loads(wallet["config_json"] or "{}")
-    original_config_json = json.dumps(config, sort_keys=True)
+    original_sync_material_json = _sync_material_config_json(config)
     for field in clear_fields:
         if field not in config:
             raise AppError(
@@ -803,7 +831,9 @@ def update_wallet(conn, workspace_ref, profile_ref, wallet_ref, updates):
 
     config = _validated_wallet_config(wallet["kind"], config)
     config_json = json.dumps(config, sort_keys=True)
-    config_changed = config_json != original_config_json
+    sync_material_changed = (
+        _sync_material_config_json(config) != original_sync_material_json
+    )
 
     try:
         conn.execute(
@@ -820,7 +850,7 @@ def update_wallet(conn, workspace_ref, profile_ref, wallet_ref, updates):
             code="conflict",
             hint="Choose a different wallet label.",
         ) from exc
-    if config_changed:
+    if sync_material_changed:
         core_output_inventory.clear_wallet_output_inventory(
             conn,
             wallet["id"],
@@ -868,6 +898,7 @@ __all__ = [
     "list_wallets",
     "load_wallet_descriptor_plan_from_config",
     "normalize_addresses",
+    "wallet_is_deprecated",
     "normalize_btcpay_payment_method_id",
     "normalize_btcpay_store_id",
     "normalize_wallet_kind",
@@ -876,6 +907,7 @@ __all__ = [
     "update_wallet",
     "wallet_btcpay_provenance_config",
     "wallet_btcpay_sync_config",
+    "wallet_descriptor_material",
     "wallet_live_chain_config",
     "wallet_policy_asset_id",
     "wallet_row_to_dict",

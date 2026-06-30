@@ -13,8 +13,9 @@ import bitcoinIcon from "@/assets/integrations/bitcoin.svg";
 import bitpandaIcon from "@/assets/integrations/bitpanda.svg";
 import bitboxIcon from "@/assets/integrations/bitbox.svg";
 import bluewalletIcon from "@/assets/integrations/bluewallet.png";
+import blockstreamGreenIcon from "@/assets/integrations/blockstream-green.svg";
 import btcpayIcon from "@/assets/integrations/btcpay.svg";
-import bullBitcoinIcon from "@/assets/integrations/bullbitcoin.jpg";
+import bullBitcoinIcon from "@/assets/integrations/bullbitcoin-mark.png";
 import coldcardIcon from "@/assets/integrations/coldcard.svg";
 import coinfinityIcon from "@/assets/integrations/coinfinity-mark.svg";
 import coinbaseIcon from "@/assets/integrations/coinbase.svg";
@@ -105,7 +106,9 @@ export const sourceIcon = (
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40"><rect width="40" height="40" rx="10" fill="${background}"/><text x="20" y="24" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="10" font-weight="700" fill="${foreground}">${label}</text></svg>`,
   )}`;
 
-const lightLogoFrame = "bg-white shadow-sm shadow-zinc-950/5 dark:bg-white dark:shadow-black/30";
+const lightLogoFrame =
+  "bg-muted/60 shadow-sm shadow-zinc-950/5 dark:bg-muted/55 dark:shadow-black/20";
+const hardwareWalletIconClassName = "size-9 brightness-0 dark:invert";
 
 export const CONNECTION_CATEGORIES: ConnectionCategoryItem[] = [
   { id: "wallets", label: "Wallets", icon: Wallet },
@@ -126,7 +129,7 @@ export const CONNECTION_SOURCES: ConnectionSource[] = [
     description: "Single-sig descriptor, xpub-family, or wallet export import.",
     category: "wallets",
     image: bitcoinIcon,
-    imageClassName: "size-7",
+    imageClassName: "size-9",
     status: "ready",
     pathLabel: "Watch-only wallet",
     formatLabel: "descriptor/xpub-family",
@@ -145,7 +148,7 @@ export const CONNECTION_SOURCES: ConnectionSource[] = [
     description: "Multisig or descriptor wallet discovery.",
     category: "wallets",
     image: bitcoinIcon,
-    imageClassName: "size-7",
+    imageClassName: "size-9",
     status: "ready",
     pathLabel: "Watch-only wallet",
     formatLabel: "output descriptor",
@@ -184,7 +187,7 @@ export const CONNECTION_SOURCES: ConnectionSource[] = [
     description: "Liquid watch-only wallet or Elements descriptor.",
     category: "wallets",
     image: liquidIcon,
-    imageClassName: "size-8",
+    imageClassName: "size-10",
     status: "ready",
     pathLabel: "Watch-only wallet",
     formatLabel: "Liquid descriptor",
@@ -246,7 +249,7 @@ export const CONNECTION_SOURCES: ConnectionSource[] = [
     description: "Your own full node over JSON-RPC. Address-based sync only; no transaction links.",
     category: "nodes",
     image: bitcoinIcon,
-    imageClassName: "size-7",
+    imageClassName: "size-9",
     status: "ready",
     pathLabel: "Node backend",
     formatLabel: "bitcoinrpc",
@@ -327,7 +330,8 @@ export const CONNECTION_SOURCES: ConnectionSource[] = [
     title: "Blockstream Green",
     description: "Bitcoin and Liquid wallet export.",
     category: "wallets",
-    image: sourceIcon("GR", "#00b45a", "#052e16"),
+    image: blockstreamGreenIcon,
+    imageClassName: "size-9",
     status: "planned",
     pathLabel: "Wallet export",
     formatLabel: "descriptor/xpub",
@@ -365,7 +369,7 @@ export const CONNECTION_SOURCES: ConnectionSource[] = [
     category: "wallets",
     image: bitboxIcon,
     imageFrameClassName: lightLogoFrame,
-    imageClassName: "size-9",
+    imageClassName: hardwareWalletIconClassName,
     status: "planned",
     pathLabel: "Wallet export",
     details: ["Use the Descriptor connection for exported descriptors today"],
@@ -377,7 +381,7 @@ export const CONNECTION_SOURCES: ConnectionSource[] = [
     category: "wallets",
     image: trezorIcon,
     imageFrameClassName: lightLogoFrame,
-    imageClassName: "size-9",
+    imageClassName: hardwareWalletIconClassName,
     status: "planned",
     pathLabel: "Wallet export",
     details: ["Use the Descriptor connection for exported descriptors today"],
@@ -389,7 +393,7 @@ export const CONNECTION_SOURCES: ConnectionSource[] = [
     category: "wallets",
     image: coldcardIcon,
     imageFrameClassName: lightLogoFrame,
-    imageClassName: "size-9",
+    imageClassName: hardwareWalletIconClassName,
     status: "planned",
     pathLabel: "Wallet export",
     formatLabel: "skeleton/descriptor",
@@ -402,7 +406,7 @@ export const CONNECTION_SOURCES: ConnectionSource[] = [
     category: "wallets",
     image: ledgerIcon,
     imageFrameClassName: lightLogoFrame,
-    imageClassName: "size-9",
+    imageClassName: hardwareWalletIconClassName,
     status: "planned",
     pathLabel: "Wallet export",
     details: ["Use generic CSV until a dedicated Ledger Live parser lands"],
@@ -414,7 +418,7 @@ export const CONNECTION_SOURCES: ConnectionSource[] = [
     category: "wallets",
     image: foundationPassportIcon,
     imageFrameClassName: lightLogoFrame,
-    imageClassName: "size-9",
+    imageClassName: hardwareWalletIconClassName,
     status: "planned",
     pathLabel: "Wallet export",
     details: ["Use the Descriptor connection for exported descriptors today"],
@@ -490,7 +494,7 @@ export const CONNECTION_SOURCES: ConnectionSource[] = [
     description: "Unified wallet transaction CSV import.",
     category: "wallets",
     image: bullBitcoinIcon,
-    imageClassName: "size-9 rounded-md",
+    imageClassName: "size-9",
     status: "ready",
     pathLabel: "Wallet CSV import",
     formatLabel: "bullbitcoin_wallet_csv",
@@ -546,7 +550,7 @@ export const CONNECTION_SOURCES: ConnectionSource[] = [
     description: "Order CSV import for exact buy/sell execution pricing.",
     category: "exchanges",
     image: bullBitcoinIcon,
-    imageClassName: "size-9 rounded-md",
+    imageClassName: "size-9",
     status: "ready",
     pathLabel: "CSV import",
     formatLabel: "bullbitcoin_csv",

@@ -40,12 +40,18 @@ export interface Connection {
   last: string;
   lastSyncAt?: string | null;
   lastTransactionAt?: string | null;
+  asset?: string | null;
+  chain?: string | null;
+  network?: string | null;
+  policyAsset?: string | null;
+  paymentMethodId?: string | null;
   /** balance in BTC (float) */
   balance: number;
   status: ConnectionStatus;
   syncMode?: string;
   syncSource?: string;
   sourceFormat?: string;
+  deprecated?: boolean;
   transactionCount?: number;
   addresses?: number;
   gap?: number;
@@ -319,6 +325,9 @@ export const MOCK_OVERVIEW: OverviewSnapshot = {
       kind: "xpub",
       label: "Cold Storage",
       last: "2m ago",
+      lastSyncAt: "2026-06-26T11:58:03Z",
+      chain: "bitcoin",
+      network: "main",
       balance: 1.24810472,
       status: "synced",
       addresses: 142,
@@ -329,6 +338,9 @@ export const MOCK_OVERVIEW: OverviewSnapshot = {
       kind: "descriptor",
       label: "Multisig 2/3 Vault",
       last: "2m ago",
+      lastSyncAt: "2026-06-26T11:57:57Z",
+      chain: "bitcoin",
+      network: "main",
       balance: 3.0814290,
       status: "synced",
       addresses: 86,
@@ -339,6 +351,7 @@ export const MOCK_OVERVIEW: OverviewSnapshot = {
       kind: "core-ln",
       label: "Home Node (CLN)",
       last: "18s ago",
+      lastSyncAt: "2026-06-26T11:59:42Z",
       balance: 0.04821309,
       status: "synced",
       channels: 12,
@@ -610,6 +623,7 @@ export const MOCK_OVERVIEW: OverviewSnapshot = {
       kind: "nwc",
       label: "Alby Hub",
       last: "1h ago",
+      lastSyncAt: "2026-06-26T11:00:00Z",
       balance: 0.00213500,
       status: "idle",
     },
@@ -618,6 +632,7 @@ export const MOCK_OVERVIEW: OverviewSnapshot = {
       kind: "cashu",
       label: "minibits.cash",
       last: "3h ago",
+      lastSyncAt: "2026-06-26T09:00:00Z",
       balance: 0.00019823,
       status: "synced",
     },
@@ -626,6 +641,7 @@ export const MOCK_OVERVIEW: OverviewSnapshot = {
       kind: "lnd",
       label: "Routing Node (LND)",
       last: "44s ago",
+      lastSyncAt: "2026-06-26T11:59:16Z",
       balance: 0.02914872,
       status: "syncing",
       channels: 7,

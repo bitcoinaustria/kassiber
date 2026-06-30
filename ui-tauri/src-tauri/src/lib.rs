@@ -267,6 +267,7 @@ const ALLOWED_DAEMON_KINDS: &[&str] = &[
     "ui.freshness.cancel",
     "ui.freshness.pause",
     "ui.freshness.resume",
+    "wallets.reveal_descriptor",
     "daemon.lock",
     "daemon.unlock",
     "ai.providers.list",

@@ -401,7 +401,7 @@ def _execute_ai_tool_on_conn(executor, call, runtime, conn):
     task = runtime.main_thread_tasks.get(timeout=1)
     try:
         payload = task.callback(conn)
-    except BaseException as exc:
+    except Exception as exc:
         task.response.put((False, exc))
     else:
         task.response.put((True, payload))
@@ -941,6 +941,7 @@ class DaemonSmokeTest(unittest.TestCase):
             self.assertEqual(status["kind"], "status")
             self.assertEqual(status["schema_version"], 1)
             self.assertEqual(status["data"]["auth"]["mode"], "local")
+            self.assertFalse(status["data"]["database_encrypted"])
             self.assertEqual(status["data"]["data_root"], str(data_root))
 
             _write_payload(proc, {"request_id": "shutdown-1", "kind": "daemon.shutdown"})
@@ -2923,6 +2924,28 @@ class DaemonSmokeTest(unittest.TestCase):
                 _write_payload(
                     proc,
                     {
+                        "request_id": "reveal-descriptor-plaintext",
+                        "kind": "wallets.reveal_descriptor",
+                        "args": {
+                            "wallet": "Descriptor UI",
+                            "auth_response": {
+                                "plaintext_reveal_ack": "COPY LOCAL SECRET",
+                            },
+                        },
+                    },
+                )
+                descriptor_revealed = _read_payload_timeout(proc)
+                self.assertEqual(
+                    descriptor_revealed["kind"], "wallets.reveal_descriptor"
+                )
+                self.assertEqual(
+                    descriptor_revealed["data"]["wallet_material"],
+                    receive_descriptor,
+                )
+
+                _write_payload(
+                    proc,
+                    {
                         "request_id": "update-descriptor-gap-too-large",
                         "kind": "ui.wallets.update",
                         "args": {
@@ -4476,6 +4499,42 @@ class DaemonSmokeTest(unittest.TestCase):
                 self.assertFalse(bad_result["ok"])
                 self.assertEqual(bad_result["reason"], "validation")
                 self.assertIn("exactly one", bad_result["message"])
+
+                bad_bool_result = _execute_ai_tool_on_conn(
+                    _execute_mutating_ai_tool,
+                    ParsedAiToolCall(
+                        call_id="call_bad_bool",
+                        name="ui.source_funds.links.create",
+                        arguments={
+                            "from_source": source_result["envelope"]["data"]["id"],
+                            "to_transaction": "seed-inbound-1",
+                            "link_type": "manual_source",
+                            "allocation_amount": "0.10000000",
+                            "allocation_policy": "explicit",
+                            "explanation": "Invalid because boolean args must be real booleans.",
+                            "uses_chain_observation": "false",
+                        },
+                    ),
+                    runtime,
+                    conn,
+                )
+                self.assertFalse(bad_bool_result["ok"])
+                self.assertEqual(bad_bool_result["reason"], "validation")
+                self.assertIn("uses_chain_observation", bad_bool_result["message"])
+
+                bad_suggest_bool_result = _execute_ai_tool_on_conn(
+                    _execute_mutating_ai_tool,
+                    ParsedAiToolCall(
+                        call_id="call_bad_suggest_bool",
+                        name="ui.source_funds.suggest",
+                        arguments={"include_broad_hints": "false"},
+                    ),
+                    runtime,
+                    conn,
+                )
+                self.assertFalse(bad_suggest_bool_result["ok"])
+                self.assertEqual(bad_suggest_bool_result["reason"], "validation")
+                self.assertIn("include_broad_hints", bad_suggest_bool_result["message"])
             finally:
                 conn.close()
 
@@ -4927,9 +4986,11 @@ class DaemonSmokeTest(unittest.TestCase):
             _write_payload(proc, {"request_id": "wallets-1", "kind": "ui.wallets.list"})
             wallets = _read_payload_timeout(proc)
             self.assertEqual(wallets["kind"], "ui.wallets.list")
-            self.assertEqual(wallets["data"]["wallets"][0]["label"], "Cold")
+            wallet = wallets["data"]["wallets"][0]
+            self.assertEqual(wallet["label"], "Cold")
+            self.assertIs(wallet["descriptor"], False)
+            self.assertIs(wallet["change_descriptor"], False)
             wallet_payload = json.dumps(wallets["data"])
-            self.assertNotIn("descriptor", wallet_payload)
             self.assertNotIn("config_json", wallet_payload)
 
             _write_payload(proc, {"request_id": "backends-1", "kind": "ui.backends.list"})
@@ -6527,6 +6588,12 @@ class DaemonSmokeTest(unittest.TestCase):
                 wallets_by_label["DescriptorLive"]["backend"]["source"],
                 "explicit",
             )
+            self.assertTrue(wallets_by_label["DescriptorLive"]["descriptor"])
+            self.assertFalse(
+                wallets_by_label["DescriptorLive"]["change_descriptor"]
+            )
+            self.assertFalse(wallets_by_label["FileOnly"]["descriptor"])
+            self.assertFalse(wallets_by_label["FileOnly"]["change_descriptor"])
             self.assertEqual(
                 wallets_by_label["DefaultAddress"]["backend"]["source"],
                 "default",

@@ -538,7 +538,7 @@ function SourceArtwork({
   return (
     <span
       className={cn(
-        "flex shrink-0 items-center justify-center rounded-lg border bg-background p-1.5",
+        "flex shrink-0 items-center justify-center rounded-lg border border-border/70 bg-muted/60 p-1 shadow-sm shadow-zinc-950/5 dark:border-border/80 dark:bg-muted/55 dark:shadow-black/20",
         className ?? "size-12",
         source.imageFrameClassName,
       )}
@@ -3409,11 +3409,9 @@ export function AddConnectionDialog({
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Badge variant={selected.status === "ready" ? "secondary" : "outline"}>
-            {selected.status === "ready"
-              ? t("add.available")
-              : t("add.plannedLabel")}
-          </Badge>
+          {selected.status === "planned" ? (
+            <Badge variant="outline">{t("add.plannedLabel")}</Badge>
+          ) : null}
           {selected.docsHref ? (
             <a
               className="rounded-md border px-2 py-0.5 text-xs text-muted-foreground hover:text-foreground"
@@ -3695,13 +3693,9 @@ export function AddConnectionDialog({
                 <span className="min-w-0 flex-1 space-y-1">
                   <span className="flex flex-wrap items-center gap-2">
                     <span className="font-medium">{source.title}</span>
-                    <Badge
-                      variant={source.status === "ready" ? "secondary" : "outline"}
-                    >
-                      {source.status === "ready"
-                        ? t("add.ready")
-                        : t("add.plannedLabel")}
-                    </Badge>
+                    {source.status === "planned" ? (
+                      <Badge variant="outline">{t("add.plannedLabel")}</Badge>
+                    ) : null}
                   </span>
                   <span className="block text-sm text-muted-foreground">
                     {source.description}
