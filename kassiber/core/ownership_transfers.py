@@ -672,12 +672,21 @@ def derive_multi_source_consolidations(
         # deposit (booking phantom disposals), and missed a same-amount receipt
         # recorded outside the window (double-count). An unrelated deposit of a
         # different magnitude — at any time — must not look like this receipt.
+        # Compare against the PARSED graph txid, not the group key: senders may be
+        # grouped by an imported provider id (`_txid_key`) while the destination
+        # recorded its receipt under the real on-chain txid, so keying on
+        # `_txid_key` would treat the real receipt as a "different" tx and
+        # double-count it. Skip receipts already handled elsewhere
+        # (`already_paired_ids`) — an unrelated, separately-paired same-amount
+        # deposit must not false-decline this consolidation.
+        graph_txid = normalize_group_txid(str(parsed.get("txid") or _txid_key))
         has_external_receipt = any(
             _get(r, "direction") == "inbound"
             and str(_get(r, "wallet_id")) == dest_wallet_id
             and str(_get(r, "asset") or "").upper() == asset_key
             and str(_get(r, "id")) not in group_ids
-            and not _is_provably_different_onchain_tx(_get(r, "external_id"), _txid_key)
+            and str(_get(r, "id")) not in already_paired_ids
+            and not _is_provably_different_onchain_tx(_get(r, "external_id"), graph_txid)
             and _amounts_compatible(int(_get(r, "amount") or 0), out_c_msat)
             for r in rows
         )
@@ -814,6 +823,7 @@ def graph_partial_payment_out_ids(
             parsed["inputs"], index, source_wallet_id
         )
         owned_to_others_sats = 0
+        owned_dest_wallets: set[str] = set()
         for output in parsed["outputs"]:
             matches = index.lookup_script(output["script"])
             if chain_network is not None:
@@ -824,12 +834,21 @@ def graph_partial_payment_out_ids(
                 ]
             if not matches:
                 continue  # external recipient / OP_RETURN
-            if source_wallet_id in {str(match.wallet_id) for match in matches}:
+            owner_ids = {str(match.wallet_id) for match in matches}
+            if source_wallet_id in owner_ids:
                 continue  # change back to self
             owned_to_others_sats += int(output["value_sats"])
+            owned_dest_wallets |= owner_ids
         owned_to_others_msat = owned_to_others_sats * SATS_TO_MSAT
         amount_msat = int(_get(out_row, "amount") or 0)
-        if owned_to_others_msat > 0 and amount_msat > owned_to_others_msat:
+        # Withhold so the ownership deriver re-derives this spend when EITHER it
+        # also paid a non-owned recipient (external residual) OR it fanned out to
+        # two or more owned wallets. In the fan-out case detect_intra_transfers
+        # pairs only the single destination that recorded a same-txid inbound,
+        # leaving the other owned legs to be absorbed as a (taxable) MOVE fee —
+        # so the deriver must decompose the full 1->N fan-out instead.
+        external_residual = owned_to_others_msat > 0 and amount_msat > owned_to_others_msat
+        if external_residual or len(owned_dest_wallets) >= 2:
             flagged.add(str(_get(out_row, "id")))
     return flagged
 
@@ -874,7 +893,12 @@ def detect_conflicting_spend_ids(rows: Sequence[Mapping[str, Any]]) -> set[str]:
         txid_confirmed[txid] = txid_confirmed.get(txid, False) or bool(
             _get(row, "confirmed_at")
         )
-        if parsed is not None and _get(row, "direction") == "outbound":
+        if parsed is not None:
+            # Collect input outpoints from ANY leg carrying the graph, not just
+            # outbound rows: a conflict whose loser was synced only as a
+            # destination INBOUND still has the full vin in its raw_json. Keying
+            # only off outbound rows would miss it and let the loser inbound book
+            # as a phantom acquisition.
             for entry in parsed["inputs"]:
                 outpoint = entry.get("outpoint")
                 if outpoint:
@@ -1182,8 +1206,12 @@ def _is_provably_different_onchain_tx(external_id: Any, txid: str) -> bool:
     Such a row provably belongs to a *different* on-chain transaction, so it is a
     separate receipt — never this self-transfer's destination leg.
     """
-    text = str(external_id or "")
-    return _looks_like_txid(text) and text.lower() != str(txid or "").lower()
+    # Strip before comparing: _looks_like_txid strips internally, so a
+    # whitespace-wrapped " <txid> " would otherwise validate as a txid yet compare
+    # unequal to the bare txid and be misclassified as a DIFFERENT transaction
+    # (synthesizing a duplicate transfer-in / double-counting the destination).
+    text = str(external_id or "").strip()
+    return _looks_like_txid(text) and text.lower() != str(txid or "").strip().lower()
 
 
 def _amounts_compatible(a_msat: int, b_msat: int) -> bool:

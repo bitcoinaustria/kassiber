@@ -716,46 +716,58 @@ def _owned_fanout_row_ids(
     for group in groups.values():
         if len(group) < 2:
             continue
-        if any(
-            row["id"] in samourai_internal_row_ids or row["id"] in pair_by_row
+        handled = {
+            row["id"]
             for row in group
-        ):
-            continue
-        outs = [
-            row
-            for row in group
-            if _row_get(row, "direction") == "outbound" and (row["amount"] or 0) > 0
-        ]
-        # Symmetric with the outbound filter and with detect_intra_transfers: a
-        # non-positive inbound is never a real receiving leg, so it must not
-        # inflate the inbound count and flip a clean self-transfer into a
-        # spurious owned_fanout_unresolved quarantine.
-        ins = [
-            row
-            for row in group
-            if _row_get(row, "direction") == "inbound" and (row["amount"] or 0) > 0
-        ]
-        wallets = {row["wallet_id"] for row in group}
-        if outs and ins and (len(outs) > 1 or len(ins) > 1) and len(wallets) >= 2:
-            fanout_ids.update(row["id"] for row in group)
-            continue
+            if row["id"] in samourai_internal_row_ids or row["id"] in pair_by_row
+        }
+        # Fan-out / consolidation: only when NO leg is already handled by a pair or
+        # the Samourai splitter (those decompose the whole group elsewhere). A
+        # non-positive inbound is never a real receiving leg (symmetric with the
+        # outbound filter and detect_intra_transfers), so it must not inflate the
+        # inbound count and flip a clean self-transfer into a spurious quarantine.
+        if not handled:
+            outs = [
+                row
+                for row in group
+                if _row_get(row, "direction") == "outbound" and (row["amount"] or 0) > 0
+            ]
+            ins = [
+                row
+                for row in group
+                if _row_get(row, "direction") == "inbound" and (row["amount"] or 0) > 0
+            ]
+            wallets = {row["wallet_id"] for row in group}
+            if outs and ins and (len(outs) > 1 or len(ins) > 1) and len(wallets) >= 2:
+                fanout_ids.update(row["id"] for row in group)
+                continue
         # A clamped amount=0 outbound (its net outflow fell below the miner fee —
         # a coinjoin/payjoin where a foreign input funds the spend) sharing a txid
         # with a positive inbound in a DIFFERENT owned wallet is an unresolved
-        # cross-wallet movement. Every positive-amount filter (detect_intra, the
-        # derivers, the fan-out branch above) skips the clamped source, so without
-        # this guard the destination books a phantom standalone acquisition with
-        # no disposal and no quarantine. Surface it for review instead.
+        # cross-wallet movement; every positive-amount filter skips the clamped
+        # source, so without this its destination books a phantom standalone
+        # acquisition. Run this on the UNPAIRED subset so it still fires when the
+        # same txid also carries a normal self-transfer pair (which books as a
+        # MOVE) — only the clamped source + its cross-wallet receipt are flagged.
+        unpaired = [row for row in group if row["id"] not in handled]
         zero_outs = [
             row
-            for row in group
+            for row in unpaired
             if _row_get(row, "direction") == "outbound" and (row["amount"] or 0) <= 0
         ]
-        if ins and zero_outs:
-            in_wallets = {row["wallet_id"] for row in ins}
+        unpaired_ins = [
+            row
+            for row in unpaired
+            if _row_get(row, "direction") == "inbound" and (row["amount"] or 0) > 0
+        ]
+        if zero_outs and unpaired_ins:
             zero_out_wallets = {row["wallet_id"] for row in zero_outs}
-            if in_wallets - zero_out_wallets:
-                fanout_ids.update(row["id"] for row in group)
+            cross_ins = [
+                row for row in unpaired_ins if row["wallet_id"] not in zero_out_wallets
+            ]
+            if cross_ins:
+                fanout_ids.update(row["id"] for row in zero_outs)
+                fanout_ids.update(row["id"] for row in cross_ins)
     return fanout_ids
 
 
@@ -797,6 +809,17 @@ def normalize_tax_asset_inputs(
     # best-effort detection over the rows they pass.
     if conflict_row_ids is None:
         conflict_row_ids = detect_conflicting_spend_ids(rows)
+    # A pair touching a conflict loser is not booked (see pair_by_row below), so
+    # it must also be dropped from regime inference: otherwise infer_outbound_regimes
+    # treats the surviving partner as a transfer leg and skips it for Alt/Neu
+    # availability, while the booking-time filter later books that partner
+    # standalone — desyncing the pool and mis-tagging a later disposal.
+    non_conflict_pairs = [
+        pair
+        for pair in intra_pairs
+        if str(pair["out"]["id"]) not in conflict_row_ids
+        and str(pair["in"]["id"]) not in conflict_row_ids
+    ]
     regime_rows = [
         row
         for row in rows
@@ -820,7 +843,7 @@ def normalize_tax_asset_inputs(
                 str(_row_get(r, "id")),
             ),
         )
-    outbound_regimes = infer_outbound_regimes(regime_rows, intra_pairs) if is_at else {}
+    outbound_regimes = infer_outbound_regimes(regime_rows, non_conflict_pairs) if is_at else {}
     events: list[NormalizedTaxEvent] = []
     transfers: list[NormalizedTaxTransfer] = []
     ordered_items: list[tuple[str, str]] = []
@@ -843,18 +866,12 @@ def normalize_tax_asset_inputs(
 
     pair_by_row: dict[str, tuple[str, Mapping[str, Any]]] = {}
     pairs_by_transfer_group: dict[str, list[Mapping[str, Any]]] = {}
-    for pair in intra_pairs:
-        # A pair touching a shared-prevout conflict loser must not be booked: the
-        # loser leg is quarantined below, but a same-asset manual carrying-value
-        # pair can span different external_ids, so its NON-conflicting partner
-        # would otherwise reach role_pair and emit the transfer using the
-        # quarantined loser. Skip the whole pair; the partner falls through to its
-        # own standalone handling.
-        if (
-            str(pair["out"]["id"]) in conflict_row_ids
-            or str(pair["in"]["id"]) in conflict_row_ids
-        ):
-            continue
+    # non_conflict_pairs already drops any pair touching a conflict loser (computed
+    # above, alongside the regime-inference filter). Booking it would emit a
+    # transfer using the quarantined loser — a same-asset carrying-value pair can
+    # span different external_ids, so its non-conflicting partner would otherwise
+    # reach role_pair below. The partner instead falls through to standalone.
+    for pair in non_conflict_pairs:
         pair_by_row[pair["out"]["id"]] = ("out", pair)
         pair_by_row[pair["in"]["id"]] = ("in", pair)
         group_id = _pair_group_id(pair)

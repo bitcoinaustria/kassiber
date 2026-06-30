@@ -1123,6 +1123,47 @@ class MultiSourceConsolidationDeriverTests(unittest.TestCase):
         )
         self.assertEqual(result.derived_pairs, [])
 
+    def test_offgroup_receipt_under_real_txid_declines(self):
+        # Codex review (derivers #1): senders imported under a provider id while
+        # the destination recorded its receipt under the REAL on-chain txid. The
+        # off-group guard must compare against the PARSED graph txid, not the
+        # provider group id, or the real receipt is treated as a different tx and
+        # double-counted (synthetic legs + the surviving receipt).
+        real_txid = "ab" * 32
+        a = _outbound(row_id="a-out", wallet_id="A", amount_sats=50_000_000, fee_sats=0,
+                      txid=real_txid, input_scripts=[SCRIPT["A"], SCRIPT["B"]],
+                      outputs=[(SCRIPT["C"], 80_000_000)])
+        b = _outbound(row_id="b-out", wallet_id="B", amount_sats=30_000_000, fee_sats=0,
+                      txid=real_txid, input_scripts=[SCRIPT["A"], SCRIPT["B"]],
+                      outputs=[(SCRIPT["C"], 80_000_000)])
+        a["external_id"] = "provider-consol"
+        b["external_id"] = "provider-consol"
+        c = _inbound(row_id="c-real", wallet_id="C", amount_sats=80_000_000, txid=real_txid)
+        result = self._run(
+            [a, b, c],
+            {SCRIPT["A"]: ("A", "A"), SCRIPT["B"]: ("B", "B"), SCRIPT["C"]: ("C", "C")},
+            _refs("A", "B", "C"),
+        )
+        self.assertEqual(result.derived_pairs, [])
+
+    def test_already_paired_offgroup_deposit_does_not_false_decline(self):
+        # Codex review (derivers #2): C is sync-gapped for the consolidation but
+        # has an unrelated same-amount inbound already handled elsewhere
+        # (already_paired_ids). It must NOT block the consolidation (false decline
+        # -> phantom disposals).
+        rows = self._consol_rows(
+            a_sats=50_000_000, b_sats=30_000_000, c_sats=80_000_000, fee_sats=0,
+            record_dest=False,
+        )
+        rows.append(_inbound(row_id="c-other", wallet_id="C", amount_sats=80_000_000, txid="exch-x"))
+        result = self._run(
+            rows,
+            {SCRIPT["A"]: ("A", "A"), SCRIPT["B"]: ("B", "B"), SCRIPT["C"]: ("C", "C")},
+            _refs("A", "B", "C"),
+            already={"c-other"},
+        )
+        self.assertEqual(len(result.derived_pairs), 2)
+
 
 class ConflictingSpendTests(unittest.TestCase):
     """Shared-prevout (RBF / reorg / double-spend) conflict detection."""
@@ -1195,6 +1236,28 @@ class ConflictingSpendTests(unittest.TestCase):
         self.assertIn("cross-split:bbb:out", ids)
         self.assertNotIn("win-out", ids)
 
+    def test_inbound_only_loser_detected_via_graph(self):
+        # Codex review (conflict #2): the loser was synced ONLY as a destination
+        # inbound (no outbound row), but its raw_json carries the full vin. Input
+        # outpoints must be read from inbound rows too, or the loser inbound books
+        # as a phantom acquisition.
+        win = _outbound(row_id="win-out", wallet_id="A", amount_sats=50_000_000,
+                        fee_sats=1000, txid="a" * 64, input_scripts=[SCRIPT["A"]],
+                        outputs=[(SCRIPT["B"], 50_000_000)])
+        win["confirmed_at"] = "2026-03-14T18:00:00Z"
+        win_in = _inbound(row_id="win-in", wallet_id="B", amount_sats=50_000_000, txid="a" * 64)
+        lose_in = {
+            "id": "lose-in", "wallet_id": "B", "wallet_label": "Wallet B",
+            "direction": "inbound", "asset": "BTC", "amount": 50_000_000 * SATS, "fee": 0,
+            "external_id": "b" * 64, "confirmed_at": None,
+            "raw_json": json.dumps({
+                "txid": "b" * 64,
+                "vin": [{"txid": "prev-0", "vout": 0, "prevout": {"scriptpubkey": SCRIPT["A"]}}],
+                "vout": [{"n": 0, "scriptpubkey": SCRIPT["B"], "value": 50_000_000}],
+            }),
+        }
+        self.assertIn("lose-in", detect_conflicting_spend_ids([win, win_in, lose_in]))
+
     def test_no_shared_prevout_no_conflict(self):
         # Distinct prev outpoints (different input scripts -> different prev txids
         # in the helper) -> no conflict.
@@ -1218,6 +1281,23 @@ class GraphPartialPaymentTests(unittest.TestCase):
 
     def _pair(self, out_row, in_row):
         return {"out": out_row, "in": in_row}
+
+    def test_multi_owned_destination_flagged_for_decomposition(self):
+        # Codex review (conflict+payout #1): A pays TWO owned wallets (B + C);
+        # detect_intra paired only A->B (C not synced). The pair must be flagged so
+        # the ownership deriver decomposes the full 1->N fan-out, instead of the C
+        # leg being absorbed as a (taxable) MOVE fee.
+        out = _outbound(
+            row_id="a-out", wallet_id="A", amount_sats=52_000_000, fee_sats=1000,
+            txid="fan", input_scripts=[SCRIPT["A"]],
+            outputs=[(SCRIPT["B"], 50_000_000), (SCRIPT["C"], 2_000_000)],
+        )
+        b_in = _inbound(row_id="b-in", wallet_id="B", amount_sats=50_000_000, txid="fan")
+        flagged = graph_partial_payment_out_ids(
+            [self._pair(out, b_in)],
+            _index({SCRIPT["A"]: ("A", "A"), SCRIPT["B"]: ("B", "B"), SCRIPT["C"]: ("C", "C")}),
+        )
+        self.assertEqual(flagged, {"a-out"})
 
     def test_partial_payment_flagged(self):
         # A spends to C (own) + an external recipient; C also recorded the
