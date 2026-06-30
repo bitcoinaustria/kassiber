@@ -682,6 +682,8 @@
     "costBasisHint": "Lot basis from processed journal entries. Acquisition rows use the fair market value recorded at the time.",
     "proceeds": "Proceeds",
     "proceedsHint": "Disposal proceeds from processed journal entries.",
+    "incomeRecognized": "Income recognized",
+    "taxableIncome": "Taxable income",
     "gainLoss": "Gain / loss",
     "gainLossPending": "Pending journal run",
     "gainLossHint": "Realized gain/loss from RP2 after journals are processed.",

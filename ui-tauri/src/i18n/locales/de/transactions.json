@@ -701,6 +701,8 @@
     "costBasisHint": "Lot-Basis aus verarbeiteten Journaleinträgen. Anschaffungszeilen nutzen den zum Zeitpunkt erfassten fairen Marktwert.",
     "proceeds": "Veräußerungserlös",
     "proceedsHint": "Veräußerungserlös aus verarbeiteten Journaleinträgen.",
+    "incomeRecognized": "Erfasste Einnahme",
+    "taxableIncome": "Steuerpflichtige Einnahme",
     "gainLoss": "Realisierter Gewinn / Verlust",
     "gainLossPending": "Journallauf ausstehend",
     "gainLossHint": "Realisierter Gewinn/Verlust aus RP2 nach verarbeiteten Journalen.",

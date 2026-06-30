@@ -204,7 +204,10 @@ export function TransactionTaxTab({ ctx }: { ctx: TransactionDetailTabContext })
                           taxEffect.gainLossFallbackKey,
                         )}
                         align="right"
-                        muted={taxEffect.state !== "disposal"}
+                        muted={
+                          taxEffect.state !== "disposal" &&
+                          taxEffect.state !== "income"
+                        }
                         hint={t("tax.gainLossHint")}
                       />
                       {localDraft.pricingSourceKind === "manual_override" ? (

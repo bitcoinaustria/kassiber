@@ -3,7 +3,12 @@ import type { ParseKeys } from "i18next";
 import type { JournalEventItem } from "./TransactionDetailSheetParts";
 import type { TransactionFlow } from "./model";
 
-type TaxEffectState = "pending" | "acquisition" | "disposal" | "transfer";
+type TaxEffectState =
+  | "pending"
+  | "acquisition"
+  | "income"
+  | "disposal"
+  | "transfer";
 export type TaxTranslationKey = ParseKeys<["transactions"]>;
 
 type TransactionTaxEffect = {
@@ -19,7 +24,8 @@ type TransactionTaxEffect = {
   gainLossFallbackKey?: TaxTranslationKey;
 };
 
-const ACQUISITION_ENTRY_TYPES = new Set(["acquisition", "income"]);
+const ACQUISITION_ENTRY_TYPES = new Set(["acquisition"]);
+const INCOME_ENTRY_TYPES = new Set(["income"]);
 const DISPOSAL_ENTRY_TYPES = new Set([
   "disposal",
   "fee",
@@ -86,6 +92,24 @@ export function summarizeTransactionTaxEffect(
       costBasisLabelKey: "tax.costBasis",
       proceedsLabelKey: "tax.proceeds",
       gainLossLabelKey: "tax.gainLoss",
+    };
+  }
+
+  const incomeEvents = events.filter((event) =>
+    INCOME_ENTRY_TYPES.has(event.entryType),
+  );
+  if (incomeEvents.length) {
+    return {
+      state: "income",
+      costBasisEur: sumJournalValues(incomeEvents, ["costBasisEur"]),
+      proceedsEur: sumJournalValues(incomeEvents, [
+        "proceedsEur",
+        "fiatValueEur",
+      ]),
+      gainLossEur: sumJournalValues(incomeEvents, ["gainLossEur"]),
+      costBasisLabelKey: "tax.costBasis",
+      proceedsLabelKey: "tax.incomeRecognized",
+      gainLossLabelKey: "tax.taxableIncome",
     };
   }
 

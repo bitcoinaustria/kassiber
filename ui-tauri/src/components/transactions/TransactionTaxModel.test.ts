@@ -32,7 +32,7 @@ describe("summarizeTransactionTaxEffect", () => {
   it("uses acquisition fair market value as newly added basis", () => {
     expect(
       summarizeTransactionTaxEffect(
-        [journalEvent({ entryType: "income", fiatValueEur: 250 })],
+        [journalEvent({ entryType: "acquisition", fiatValueEur: 250 })],
         "incoming",
       ),
     ).toMatchObject({
@@ -43,6 +43,35 @@ describe("summarizeTransactionTaxEffect", () => {
       costBasisLabelKey: "tax.basisAdded",
       proceedsFallbackKey: "tax.noDisposal",
       gainLossFallbackKey: "tax.notRealized",
+    });
+  });
+
+  it("uses income rows as tax recognition, not acquisition basis", () => {
+    expect(
+      summarizeTransactionTaxEffect(
+        [
+          journalEvent({
+            entryType: "acquisition",
+            fiatValueEur: 250,
+          }),
+          journalEvent({
+            id: "journal-entry-income",
+            entryType: "income",
+            fiatValueEur: 250,
+            costBasisEur: 0,
+            proceedsEur: 250,
+            gainLossEur: 250,
+          }),
+        ],
+        "incoming",
+      ),
+    ).toMatchObject({
+      state: "income",
+      costBasisEur: 0,
+      proceedsEur: 250,
+      gainLossEur: 250,
+      proceedsLabelKey: "tax.incomeRecognized",
+      gainLossLabelKey: "tax.taxableIncome",
     });
   });
 
