@@ -127,6 +127,35 @@ function routeNetwork(asset?: string | null, wallet?: string | null) {
   return asset || undefined;
 }
 
+function normalizedReferenceSet(references: Array<string | null | undefined>) {
+  return new Set(
+    references
+      .map((reference) => reference?.trim().toLowerCase())
+      .filter((reference): reference is string => Boolean(reference)),
+  );
+}
+
+function swapRouteLegReference(
+  route: TransactionSwapRoute | null | undefined,
+  leg: TransactionSwapRouteLegKey,
+) {
+  const routeLeg = route?.[leg];
+  return routeLeg?.id || routeLeg?.txid || routeLeg?.externalId || null;
+}
+
+export function preloadableSwapLegGraphReference(
+  route: TransactionSwapRoute | null | undefined,
+  leg: TransactionSwapRouteLegKey,
+  currentReferences: Array<string | null | undefined>,
+) {
+  const reference = swapRouteLegReference(route, leg)?.trim();
+  if (!reference) return null;
+  if (normalizedReferenceSet(currentReferences).has(reference.toLowerCase())) {
+    return null;
+  }
+  return reference;
+}
+
 export function TransactionDetailsTab({ ctx }: { ctx: TransactionDetailTabContext }) {
   const { t } = useTranslation("transactions");
   const {
@@ -156,31 +185,76 @@ export function TransactionDetailsTab({ ctx }: { ctx: TransactionDetailTabContex
     setSelectedSwapLeg(null);
   }, [transaction.id, swapRoute?.id]);
   const activeSwapLeg = selectedSwapLeg ?? swapRoute?.currentLeg ?? null;
-  const selectedSwapTransactionRef = useMemo(() => {
-    if (!swapRoute || !activeSwapLeg || activeSwapLeg === swapRoute.currentLeg) {
-      return null;
-    }
-    const leg = swapRoute[activeSwapLeg];
-    return leg.id || leg.txid || leg.externalId || null;
-  }, [activeSwapLeg, swapRoute]);
-  const selectedSwapGraphQuery = useDaemon<TransactionGraphPayload>(
-    "ui.transactions.graph",
-    { transaction: selectedSwapTransactionRef ?? "" },
-    { enabled: Boolean(selectedSwapTransactionRef) },
+  const currentGraphReferences = useMemo(
+    () => [
+      transaction.id,
+      transaction.txnId,
+      transaction.explorerId,
+      displayGraphData?.transaction?.id,
+      displayGraphData?.transaction?.txid,
+      displayGraphData?.transaction?.externalId,
+    ],
+    [
+      displayGraphData?.transaction?.externalId,
+      displayGraphData?.transaction?.id,
+      displayGraphData?.transaction?.txid,
+      transaction.explorerId,
+      transaction.id,
+      transaction.txnId,
+    ],
   );
-  const selectedSwapGraphData = selectedSwapGraphQuery.data?.data;
-  const activeGraphData = selectedSwapTransactionRef
-    ? selectedSwapGraphData
-    : displayGraphData;
-  const graphPanelLoading = selectedSwapTransactionRef
-    ? selectedSwapGraphQuery.isLoading ||
-      (selectedSwapGraphQuery.isFetching && !selectedSwapGraphData)
-    : graphLoading;
-  const graphPanelError = selectedSwapTransactionRef
-    ? selectedSwapGraphQuery.error instanceof Error
-      ? selectedSwapGraphQuery.error.message
-      : null
-    : graphError;
+  const swapOutTransactionRef = useMemo(
+    () => preloadableSwapLegGraphReference(swapRoute, "out", currentGraphReferences),
+    [currentGraphReferences, swapRoute],
+  );
+  const swapInTransactionRef = useMemo(
+    () => preloadableSwapLegGraphReference(swapRoute, "in", currentGraphReferences),
+    [currentGraphReferences, swapRoute],
+  );
+  const swapOutGraphQuery = useDaemon<TransactionGraphPayload>(
+    "ui.transactions.graph",
+    { transaction: swapOutTransactionRef ?? "" },
+    { enabled: Boolean(swapOutTransactionRef) },
+  );
+  const swapInGraphQuery = useDaemon<TransactionGraphPayload>(
+    "ui.transactions.graph",
+    { transaction: swapInTransactionRef ?? "" },
+    { enabled: Boolean(swapInTransactionRef) },
+  );
+  const activeSwapGraphQuery =
+    activeSwapLeg === "out"
+      ? swapOutGraphQuery
+      : activeSwapLeg === "in"
+        ? swapInGraphQuery
+        : null;
+  const activeSwapGraphData =
+    activeSwapLeg === "out"
+      ? swapOutGraphQuery.data?.data
+      : activeSwapLeg === "in"
+        ? swapInGraphQuery.data?.data
+        : undefined;
+  const activeSwapTransactionRef =
+    activeSwapLeg === "out"
+      ? swapOutTransactionRef
+      : activeSwapLeg === "in"
+        ? swapInTransactionRef
+        : null;
+  const activeGraphData =
+    swapRoute && activeSwapLeg && activeSwapTransactionRef
+      ? activeSwapGraphData
+      : displayGraphData;
+  const graphPanelLoading =
+    swapRoute && activeSwapLeg && activeSwapTransactionRef
+      ? (activeSwapGraphQuery?.isLoading ||
+          (activeSwapGraphQuery?.isFetching && !activeSwapGraphData)) ??
+        false
+      : graphLoading;
+  const graphPanelError =
+    swapRoute && activeSwapLeg && activeSwapTransactionRef
+      ? activeSwapGraphQuery?.error instanceof Error
+        ? activeSwapGraphQuery.error.message
+        : null
+      : graphError;
   const graphTx = activeGraphData?.transaction;
   const graphNetworkFeeBtc =
     typeof activeGraphData?.fee?.valueBtc === "number"
