@@ -14,6 +14,7 @@ from typing import Any, Callable, Mapping, MutableMapping, Sequence
 from ..backends import redact_backend_text, redact_backend_url
 from ..errors import AppError
 from ..util import str_or_none
+from . import source_overlap
 from .wallets import (
     has_descriptor_sync_material,
     wallet_btcpay_provenance_config,
@@ -382,6 +383,8 @@ def sync_wallet_from_backend(
     kind = fetch.kind
     adapter_meta = dict(fetch.adapter_meta or {})
     observed_utxos = adapter_meta.pop("utxos", None)
+    if conn is not None:
+        source_overlap.raise_for_sync_source_overlap(conn, profile, wallet, sync_state)
     outcome = hooks.insert_records(
         conn,
         profile,
