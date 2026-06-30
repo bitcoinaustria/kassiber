@@ -432,6 +432,49 @@ describe("TransactionGraphPanel", () => {
     expect(html).toContain("Selected");
   });
 
+  it("renders paired swap legs as selectable toggles", () => {
+    const withRoute: TransactionGraphPayload = {
+      ...graph,
+      swapRoute: {
+        id: "pair-1",
+        kind: "swap",
+        policy: "carrying-value",
+        currentLeg: "out",
+        out: {
+          id: "swap-out",
+          txid: "8f95646aaf1364f3fbcd1046ed1752b7e27189f5c30ce0d6633b32bd9cbc019c",
+          asset: "LBTC",
+          network: "Liquid",
+          amountBtc: 0.12426275,
+          wallet: { id: "wallet-liquid", label: "Satoshi-Liquid", kind: "liquid" },
+        },
+        in: {
+          id: "swap-in",
+          txid: "afec51d0bc2dd514bc47406d11c8c750c12fa6382e845064b5e8bfb4f49779e",
+          asset: "BTC",
+          network: "Bitcoin",
+          amountBtc: 0.12413298,
+          wallet: { id: "wallet-btc", label: "Satoshi-Onchain-Multi", kind: "descriptor" },
+        },
+      },
+    };
+    const html = renderToStaticMarkup(
+      <TooltipProvider>
+        <TransactionGraphPanel
+          graph={withRoute}
+          hideSensitive={false}
+          selectedSwapLeg="in"
+          onSelectSwapLeg={() => undefined}
+        />
+      </TooltipProvider>,
+    );
+
+    expect(html).toContain("<button");
+    expect(html).toContain('aria-pressed="true"');
+    expect(html).toContain('aria-pressed="false"');
+    expect(html).toContain("Received leg");
+  });
+
   it("hides sensitive paired swap route values", () => {
     const withRoute: TransactionGraphPayload = {
       ...graph,

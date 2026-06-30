@@ -244,6 +244,8 @@ type GraphHoverDetail = {
   node: DrawableGraphRow;
 };
 
+export type TransactionSwapRouteLegKey = "out" | "in";
+
 function positiveKnownSats(node: TransactionGraphNode) {
   return typeof node.valueSats === "number" && node.valueSats > 0
     ? node.valueSats
@@ -548,6 +550,10 @@ function legReference(leg: TransactionSwapRouteLeg) {
   return leg.txid || leg.externalId || leg.id || "";
 }
 
+function legGraphReference(leg: TransactionSwapRouteLeg) {
+  return leg.id || leg.txid || leg.externalId || "";
+}
+
 function routeCounterparty(route: TransactionSwapRoute) {
   return (
     route.out.counterparty ||
@@ -573,6 +579,7 @@ function SwapRouteLeg({
   label,
   leg,
   active,
+  onSelect,
   selectedLabel,
   unknownLabel,
   hideSensitive,
@@ -580,6 +587,7 @@ function SwapRouteLeg({
   label: string;
   leg: TransactionSwapRouteLeg;
   active: boolean;
+  onSelect?: () => void;
   selectedLabel: string;
   unknownLabel: string;
   hideSensitive: boolean;
@@ -590,9 +598,13 @@ function SwapRouteLeg({
   const wallet = sensitiveGraphText(leg.wallet?.label, hideSensitive, hiddenLabel);
   const reference = sensitiveGraphText(formatShortTxid(legReference(leg)), hideSensitive, hiddenLabel);
   return (
-    <div
+    <button
+      type="button"
+      aria-pressed={active}
+      onClick={onSelect}
       className={cn(
-        "min-w-0 rounded-md border bg-background px-3 py-2",
+        "min-w-0 rounded-md border bg-background px-3 py-2 text-left transition-colors",
+        onSelect && "cursor-pointer hover:border-primary/40 hover:bg-primary/5",
         active && "border-primary/60 bg-primary/10",
       )}
     >
@@ -631,19 +643,26 @@ function SwapRouteLeg({
           {reference}
         </div>
       ) : null}
-    </div>
+    </button>
   );
 }
 
 function SwapRouteStrip({
   route,
   hideSensitive,
+  selectedLeg,
+  onSelectLeg,
 }: {
   route?: TransactionSwapRoute | null;
   hideSensitive: boolean;
+  selectedLeg?: TransactionSwapRouteLegKey | null;
+  onSelectLeg?: (leg: TransactionSwapRouteLegKey) => void;
 }) {
   const { t } = useTranslation("transactions");
   if (!route) return null;
+  const activeLeg = selectedLeg ?? route.currentLeg ?? "out";
+  const canSelectOut = Boolean(onSelectLeg && legGraphReference(route.out));
+  const canSelectIn = Boolean(onSelectLeg && legGraphReference(route.in));
   const hiddenLabel = t("graph.hidden");
   const counterparty = sensitiveGraphText(routeCounterparty(route), hideSensitive, hiddenLabel);
   const fee = formatRouteAmount(route.swapFeeBtc, route.out.asset, hideSensitive, hiddenLabel);
@@ -678,7 +697,8 @@ function SwapRouteStrip({
         <SwapRouteLeg
           label={outLabel}
           leg={route.out}
-          active={route.currentLeg === "out"}
+          active={activeLeg === "out"}
+          onSelect={canSelectOut ? () => onSelectLeg?.("out") : undefined}
           selectedLabel={t("graph.swapRouteSelected")}
           unknownLabel={t("graph.swapRouteUnknownLeg")}
           hideSensitive={hideSensitive}
@@ -703,7 +723,8 @@ function SwapRouteStrip({
         <SwapRouteLeg
           label={inLabel}
           leg={route.in}
-          active={route.currentLeg === "in"}
+          active={activeLeg === "in"}
+          onSelect={canSelectIn ? () => onSelectLeg?.("in") : undefined}
           selectedLabel={t("graph.swapRouteSelected")}
           unknownLabel={t("graph.swapRouteUnknownLeg")}
           hideSensitive={hideSensitive}
@@ -1045,11 +1066,15 @@ export function TransactionGraphPanel({
   loading,
   error,
   hideSensitive,
+  selectedSwapLeg,
+  onSelectSwapLeg,
 }: {
   graph?: TransactionGraphPayload;
   loading?: boolean;
   error?: string | null;
   hideSensitive: boolean;
+  selectedSwapLeg?: TransactionSwapRouteLegKey | null;
+  onSelectSwapLeg?: (leg: TransactionSwapRouteLegKey) => void;
 }) {
   const { t } = useTranslation("transactions");
   const showDiagram =
@@ -1084,7 +1109,12 @@ export function TransactionGraphPanel({
               </DialogContent>
             </Dialog>
           </div>
-          <SwapRouteStrip route={graph.swapRoute} hideSensitive={hideSensitive} />
+          <SwapRouteStrip
+            route={graph.swapRoute}
+            hideSensitive={hideSensitive}
+            selectedLeg={selectedSwapLeg}
+            onSelectLeg={onSelectSwapLeg}
+          />
           <AnnotationStrip annotations={graph.annotations} hideSensitive={hideSensitive} />
           <TransactionFlowDiagram graph={graph} hideSensitive={hideSensitive} />
           {alertWarnings.length ? (

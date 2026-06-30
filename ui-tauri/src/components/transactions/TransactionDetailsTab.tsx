@@ -1,3 +1,4 @@
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { CurrencyToggleText } from "@/components/kb/CurrencyToggleText";
@@ -5,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { TabsContent } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+import { useDaemon } from "@/daemon/client";
 import { cn } from "@/lib/utils";
 
 import {
@@ -27,6 +29,7 @@ import {
   TransactionGraphPanel,
   type TransactionGraphPayload,
   type TransactionSwapRoute,
+  type TransactionSwapRouteLegKey,
 } from "./TransactionGraphTab";
 
 function graphWithPairFallbackRoute(
@@ -131,17 +134,48 @@ export function TransactionDetailsTab({ ctx }: { ctx: TransactionDetailTabContex
     graphError,
   } = ctx;
   const displayGraphData = graphWithPairFallbackRoute(graphData, transaction);
-  const graphTx = displayGraphData?.transaction;
+  const swapRoute = displayGraphData?.swapRoute ?? null;
+  const [selectedSwapLeg, setSelectedSwapLeg] = useState<TransactionSwapRouteLegKey | null>(null);
+  useEffect(() => {
+    setSelectedSwapLeg(null);
+  }, [transaction.id, swapRoute?.id]);
+  const activeSwapLeg = selectedSwapLeg ?? swapRoute?.currentLeg ?? null;
+  const selectedSwapTransactionRef = useMemo(() => {
+    if (!swapRoute || !activeSwapLeg || activeSwapLeg === swapRoute.currentLeg) {
+      return null;
+    }
+    const leg = swapRoute[activeSwapLeg];
+    return leg.id || leg.txid || leg.externalId || null;
+  }, [activeSwapLeg, swapRoute]);
+  const selectedSwapGraphQuery = useDaemon<TransactionGraphPayload>(
+    "ui.transactions.graph",
+    { transaction: selectedSwapTransactionRef ?? "" },
+    { enabled: Boolean(selectedSwapTransactionRef) },
+  );
+  const selectedSwapGraphData = selectedSwapGraphQuery.data?.data;
+  const activeGraphData = selectedSwapTransactionRef
+    ? selectedSwapGraphData
+    : displayGraphData;
+  const graphPanelLoading = selectedSwapTransactionRef
+    ? selectedSwapGraphQuery.isLoading ||
+      (selectedSwapGraphQuery.isFetching && !selectedSwapGraphData)
+    : graphLoading;
+  const graphPanelError = selectedSwapTransactionRef
+    ? selectedSwapGraphQuery.error instanceof Error
+      ? selectedSwapGraphQuery.error.message
+      : null
+    : graphError;
+  const graphTx = activeGraphData?.transaction;
   const graphNetworkFeeBtc =
-    typeof displayGraphData?.fee?.valueBtc === "number"
-      ? displayGraphData.fee.valueBtc
-      : typeof displayGraphData?.fee?.valueSats === "number"
-        ? displayGraphData.fee.valueSats / SATS_PER_BTC
+    typeof activeGraphData?.fee?.valueBtc === "number"
+      ? activeGraphData.fee.valueBtc
+      : typeof activeGraphData?.fee?.valueSats === "number"
+        ? activeGraphData.fee.valueSats / SATS_PER_BTC
         : 0;
   const technicalRows = graphTx
     ? [
-        [t("details.inputCount"), graphTx.inputCount ?? displayGraphData.inputs.length],
-        [t("details.outputCount"), graphTx.outputCount ?? displayGraphData.outputs.length],
+        [t("details.inputCount"), graphTx.inputCount ?? activeGraphData.inputs.length],
+        [t("details.outputCount"), graphTx.outputCount ?? activeGraphData.outputs.length],
         [
           t("details.networkFee"),
           graphNetworkFeeBtc ? formatBtcAmount(graphNetworkFeeBtc) : t("details.unknown"),
@@ -321,10 +355,12 @@ export function TransactionDetailsTab({ ctx }: { ctx: TransactionDetailTabContex
                       </div>
                       <div className="p-3">
                         <TransactionGraphPanel
-                          graph={displayGraphData}
-                          loading={graphLoading}
-                          error={graphError}
+                          graph={activeGraphData}
+                          loading={graphPanelLoading}
+                          error={graphPanelError}
                           hideSensitive={hideSensitive}
+                          selectedSwapLeg={activeSwapLeg}
+                          onSelectSwapLeg={setSelectedSwapLeg}
                         />
                       </div>
                     </div>
