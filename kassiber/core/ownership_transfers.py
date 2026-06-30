@@ -853,6 +853,56 @@ def graph_partial_payment_out_ids(
     return flagged
 
 
+def graph_multi_owned_destination_out_ids(
+    pairs: Sequence[Mapping[str, Any]], index: Any
+) -> set[str]:
+    """Out-row ids whose graph pays two or more non-source owned wallets.
+
+    This is the subset of :func:`graph_partial_payment_out_ids` that is withheld
+    because a same-txid 1-out/1-in pair hides a larger 1->N owned fan-out. If
+    the ownership deriver later declines that fan-out, restoring only the
+    original 1->1 pair is unsafe: the extra owned destination can still book as a
+    standalone acquisition while the restored pair quarantines the source group,
+    inflating holdings. Single-owned-destination partial payments keep the old
+    restore path.
+    """
+    if index is None:
+        return set()
+    flagged: set[str] = set()
+    for pair in pairs:
+        out_row = pair.get("out") if hasattr(pair, "get") else pair["out"]
+        if out_row is None:
+            continue
+        parsed = _parse_onchain_tx(_get(out_row, "raw_json"))
+        if parsed is None:
+            continue
+        source_wallet_id = str(_get(out_row, "wallet_id"))
+        if not _inputs_are_single_source_or_recorded_source(
+            parsed["inputs"], index, source_wallet_id, out_row
+        ):
+            continue
+        chain_network = _source_chain_network(
+            parsed["inputs"], index, source_wallet_id
+        )
+        owned_dest_wallets: set[str] = set()
+        for output in parsed["outputs"]:
+            matches = index.lookup_script(output["script"])
+            if chain_network is not None:
+                matches = [
+                    match
+                    for match in matches
+                    if _norm_chain_network(match.chain, match.network) == chain_network
+                ]
+            owner_ids = {str(match.wallet_id) for match in matches}
+            if source_wallet_id in owner_ids:
+                continue
+            if len(owner_ids) == 1:
+                owned_dest_wallets |= owner_ids
+        if len(owned_dest_wallets) >= 2:
+            flagged.add(str(_get(out_row, "id")))
+    return flagged
+
+
 def detect_conflicting_spend_ids(rows: Sequence[Mapping[str, Any]]) -> set[str]:
     """Row ids of transactions that conflict over a shared input outpoint.
 
