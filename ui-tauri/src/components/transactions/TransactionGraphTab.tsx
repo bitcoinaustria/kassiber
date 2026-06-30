@@ -2,7 +2,6 @@ import {
   AlertTriangle,
   ArrowRight,
   ArrowRightLeft,
-  Expand,
   ExternalLink,
   Info,
   Maximize2,
@@ -16,7 +15,6 @@ import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
-  DialogHeader,
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
@@ -1081,12 +1079,7 @@ export function TransactionGraphPanel({
                 </Button>
               </DialogTrigger>
               <DialogContent className="w-[min(1180px,calc(100vw-2rem))] max-w-none sm:max-w-none">
-                <DialogHeader>
-                  <DialogTitle className="flex items-center gap-2">
-                    <Expand className="size-4" aria-hidden="true" />
-                    {t("graph.expandedTitle")}
-                  </DialogTitle>
-                </DialogHeader>
+                <DialogTitle className="sr-only">{t("graph.expandedTitle")}</DialogTitle>
                 <TransactionFlowDiagram graph={graph} hideSensitive={hideSensitive} expanded />
               </DialogContent>
             </Dialog>
