@@ -233,6 +233,13 @@ _AI_PROVIDER_SECRET_STORE_IDS = {
 }
 _REQUEST_LOGGER = logging.getLogger("kassiber.daemon.request")
 
+# Profile-scoped graph semantics are expensive to derive (they walk the whole
+# profile). The graph endpoint is read repeatedly — once for the focused tx and
+# again for each eagerly-prefetched swap leg — so we memoise the bundle per
+# profile, keyed by journal_input_version, for the life of the daemon process.
+# Access is serialized on the request thread (single shared sqlite connection).
+_GRAPH_SEMANTICS_CACHE: dict[str, tuple[int, Any]] = {}
+
 SUPPORTED_KINDS = (
     "status",
     "ui.logs.snapshot",
@@ -3317,6 +3324,7 @@ def _execute_read_only_ai_tool(call: ParsedAiToolCall, runtime: AiToolRuntime) -
                     conn,
                     call.arguments,
                     runtime.runtime_config,
+                    semantics_cache=_GRAPH_SEMANTICS_CACHE,
                 )
             elif entry.daemon_kind == "ui.transactions.search":
                 payload = build_transactions_search_snapshot(conn, call.arguments)
@@ -8418,6 +8426,7 @@ def handle_request(
                         ctx.conn,
                         request.get("args"),
                         ctx.runtime_config,
+                        semantics_cache=_GRAPH_SEMANTICS_CACHE,
                     ),
                 ),
                 request_id,

@@ -458,6 +458,16 @@ class TransactionGraphTest(unittest.TestCase):
                 },
             ],
         }
+        create_db_backend(
+            self.conn,
+            "graph-liquid",
+            "mempool",
+            "https://liquid.example/api",
+            chain="liquid",
+            network="liquidv1",
+            timeout=5,
+            commit=False,
+        )
         self._tx("liquid-reference-row", "wallet-a", "inbound", 25_022_000, txid, "{}", asset="LBTC")
 
         with patch(
@@ -466,7 +476,8 @@ class TransactionGraphTest(unittest.TestCase):
         ) as fetch:
             payload = self._graph("liquid-reference-row", allow_public_lookup=True)
 
-        fetch.assert_called_once_with("https://liquid.network/api", txid, timeout=5)
+        # Fetched only from the configured Liquid backend — never a hardcoded host.
+        fetch.assert_called_once_with("https://liquid.example/api", txid, timeout=5)
         self.assertEqual(payload["supportLevel"], "partial")
         self.assertEqual(payload["unsupportedReason"], "confidential_values_hidden")
         self.assertEqual(payload["transaction"]["inputCount"], 1)
@@ -480,6 +491,21 @@ class TransactionGraphTest(unittest.TestCase):
         serialized = json.dumps(payload)
         self.assertNotIn("valuecommitment", serialized)
         self.assertNotIn("assetcommitment", serialized)
+
+    def test_liquid_lookup_without_configured_backend_does_not_fetch(self):
+        # Symmetry with Bitcoin: with no configured Liquid explorer, the lookup is
+        # declined (no silent third-party fetch) and a warning is surfaced.
+        txid = "68" * 32
+        self._tx("liquid-no-backend", "wallet-a", "inbound", 11_000_000, txid, "{}", asset="LBTC")
+
+        with patch("kassiber.core.transaction_graph.fetch_esplora_transaction") as fetch:
+            payload = self._graph("liquid-no-backend", allow_public_lookup=True)
+
+        fetch.assert_not_called()
+        self.assertEqual(payload["supportLevel"], "graphless")
+        self.assertEqual(payload["unsupportedReason"], "liquid_reference_graph_not_local")
+        warning_codes = {warning["code"] for warning in payload["warnings"]}
+        self.assertIn("liquid_reference_lookup_unavailable", warning_codes)
 
     def test_public_lookup_is_not_automatic_for_graphless_rows(self):
         txid = "12" * 32
@@ -880,6 +906,136 @@ class TransactionGraphTest(unittest.TestCase):
         self.assertNotIn("super-secret-token", serialized)
         self.assertNotIn("backend_url", serialized)
         self.assertNotIn(SCRIPT_A, serialized)
+
+    def test_liquid_explicit_fee_output_is_classified_as_fee(self):
+        txid = "ab" * 32
+        raw = {
+            "txid": txid,
+            "version": 2,
+            "locktime": 0,
+            "vsize": 200,
+            "vin": [
+                {
+                    "txid": "cd" * 32,
+                    "vout": 0,
+                    "prevout": {
+                        "scriptpubkey": SCRIPT_A,
+                        "valuecommitment": "09" + "11" * 32,
+                        "assetcommitment": "0a" + "22" * 32,
+                    },
+                }
+            ],
+            "vout": [
+                {
+                    "n": 0,
+                    "scriptpubkey": SCRIPT_B,
+                    "valuecommitment": "09" + "33" * 32,
+                    "assetcommitment": "0a" + "44" * 32,
+                },
+                {"n": 1, "scriptpubkey": "", "scriptpubkey_type": "fee", "value": 250},
+            ],
+        }
+        self._tx("liquid-fee-row", "wallet-a", "outbound", 11_000_000, txid, raw, asset="LBTC")
+
+        payload = self._graph("liquid-fee-row")
+
+        # The unblinded fee output is the network fee, not a phantom OP_RETURN.
+        self.assertEqual(payload["supportLevel"], "partial")
+        self.assertEqual(payload["unsupportedReason"], "confidential_values_hidden")
+        self.assertEqual(payload["transaction"]["outputCount"], 1)
+        self.assertEqual([node["role"] for node in payload["outputs"]], ["external_recipient"])
+        self.assertNotIn("op_return", [node.get("role") for node in payload["outputs"]])
+        self.assertEqual(payload["fee"]["valueSats"], 250)
+        self.assertEqual(payload["fee"]["valueBtc"], 250 / 100_000_000)
+        # Fee + fee rate are recoverable even though every value-bearing leg is blinded.
+        self.assertEqual(payload["transaction"]["feeRateSatVb"], 1.25)
+
+    def test_large_fanout_outputs_are_capped_with_overflow_node(self):
+        fanout = 300
+        raw = {
+            "txid": "fanout-tx",
+            "version": 2,
+            "locktime": 0,
+            "vin": [
+                {"txid": "ef" * 32, "vout": 0, "prevout": {"scriptpubkey": SCRIPT_A, "value": 100_000_000}}
+            ],
+            "vout": [
+                {"n": index, "scriptpubkey": SCRIPT_C, "value": 1_000}
+                for index in range(fanout)
+            ],
+        }
+        self._tx("fanout-row", "wallet-a", "outbound", 1_000_000_000, "fanout-tx", raw)
+
+        payload = self._graph("fanout-row")
+
+        # The true count is preserved in metadata, but the payload is bounded.
+        self.assertEqual(payload["transaction"]["outputCount"], fanout)
+        self.assertEqual(len(payload["outputs"]), 250)
+        overflow = payload["outputs"][-1]
+        self.assertTrue(overflow["overflow"])
+        self.assertEqual(overflow["role"], "overflow")
+        hidden = fanout - (250 - 1)
+        self.assertEqual(overflow["overflowCount"], hidden)
+        self.assertEqual(overflow["valueSats"], hidden * 1_000)
+
+    def test_whole_number_btc_float_is_scaled_to_sats(self):
+        # Regression: a round BTC float (1.0) must not be read as 1 sat.
+        raw = {
+            "txid": "whole-btc-tx",
+            "vin": [
+                {"txid": "1a" * 32, "vout": 0, "prevout": {"scriptpubkey": SCRIPT_A, "value": 2.0}}
+            ],
+            "vout": [{"n": 0, "scriptpubkey": SCRIPT_B, "value": 1.0}],
+        }
+        self._tx("whole-btc-row", "wallet-a", "outbound", 100_000_000_000, "whole-btc-tx", raw)
+
+        payload = self._graph("whole-btc-row")
+
+        self.assertEqual(payload["outputs"][0]["valueSats"], 100_000_000)
+        self.assertEqual(payload["outputs"][0]["valueBtc"], 1.0)
+
+    def test_profile_semantics_cache_reuses_bundle_until_version_bumps(self):
+        import kassiber.core.transaction_graph as tg
+
+        self._tx("cache-row", "wallet-a", "outbound", 1_000_000_000, "cache-tx", "{}")
+        self.conn.commit()
+        cache: dict = {}
+
+        with patch.object(
+            tg, "_compute_profile_semantics", wraps=tg._compute_profile_semantics
+        ) as spy:
+            tg.build_transaction_graph_snapshot(
+                self.conn, {"transaction": "cache-row"}, semantics_cache=cache
+            )
+            tg.build_transaction_graph_snapshot(
+                self.conn, {"transaction": "cache-row"}, semantics_cache=cache
+            )
+            # Second call reuses the cached bundle for the unchanged profile.
+            self.assertEqual(spy.call_count, 1)
+
+            self.conn.execute(
+                "UPDATE profiles SET journal_input_version = journal_input_version + 1 WHERE id = ?",
+                ("profile-1",),
+            )
+            self.conn.commit()
+            tg.build_transaction_graph_snapshot(
+                self.conn, {"transaction": "cache-row"}, semantics_cache=cache
+            )
+            # A version bump invalidates the cache and forces a recompute.
+            self.assertEqual(spy.call_count, 2)
+
+    def test_profile_semantics_recompute_every_call_without_cache(self):
+        import kassiber.core.transaction_graph as tg
+
+        self._tx("nocache-row", "wallet-a", "outbound", 1_000_000_000, "nocache-tx", "{}")
+        self.conn.commit()
+
+        with patch.object(
+            tg, "_compute_profile_semantics", wraps=tg._compute_profile_semantics
+        ) as spy:
+            tg.build_transaction_graph_snapshot(self.conn, {"transaction": "nocache-row"})
+            tg.build_transaction_graph_snapshot(self.conn, {"transaction": "nocache-row"})
+            self.assertEqual(spy.call_count, 2)
 
 
 if __name__ == "__main__":

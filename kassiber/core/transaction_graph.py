@@ -11,7 +11,7 @@ from __future__ import annotations
 import json
 import sqlite3
 from collections import defaultdict
-from typing import Any, Mapping, Sequence
+from typing import Any, Mapping, NamedTuple, Sequence
 
 from ..backends import preferred_mempool_api_backend
 from ..errors import AppError
@@ -30,12 +30,32 @@ from .sync_backends import fetch_esplora_transaction
 
 GRAPH_LOOKUP_TIMEOUT_SECONDS = 5
 SATS_TO_MSAT = 1000
+# Upper bound on how many input/output strands a single graph payload carries
+# per side. Mirrors mempool.space's line limit so a fan-out transaction (large
+# CoinJoins, sweeping consolidations) cannot inflate the payload or the rendered
+# strand count without bound; the remainder collapses into one overflow node.
+MAX_GRAPH_NODES_PER_SIDE = 250
+
+
+class _ProfileSemantics(NamedTuple):
+    """Profile-scoped graph inputs that are independent of the focused tx.
+
+    These are expensive to derive (they walk the whole profile), so the daemon
+    caches one bundle per profile keyed by ``journal_input_version`` and reuses
+    it across the primary graph request and its eagerly-prefetched swap legs.
+    """
+
+    owned_index: Any | None
+    index_warnings: list[str]
+    semantics: dict[str, Any]
 
 
 def build_transaction_graph_snapshot(
     conn: sqlite3.Connection,
     args: dict[str, Any] | None = None,
     runtime_config: Mapping[str, Any] | None = None,
+    *,
+    semantics_cache: dict[str, tuple[int, _ProfileSemantics]] | None = None,
 ) -> dict[str, Any]:
     raw_args = args or {}
     if not isinstance(raw_args, dict):
@@ -67,9 +87,9 @@ def build_transaction_graph_snapshot(
     if row is None:
         return _empty_payload(transaction_ref, "not_found")
 
-    profile_rows = _load_profile_transaction_rows(conn, profile_id)
-    wallet_refs_by_id = _wallet_refs_by_id(conn, profile_id)
-    owned_index, index_warnings = _build_owned_index(conn, profile_id, profile_rows)
+    bundle = _load_profile_semantics(conn, profile_id, cache=semantics_cache)
+    owned_index = bundle.owned_index
+    semantics = bundle.semantics
     raw = _json_obj(_row_get(row, "raw_json"))
     allow_public_lookup = bool(
         raw_args.get("allowPublicLookup") or raw_args.get("allow_public_lookup")
@@ -84,18 +104,11 @@ def build_transaction_graph_snapshot(
             allow_public_lookup=allow_public_lookup,
         ),
     )
-    manual_pair_records = _active_pair_records(conn, profile_id)
-    semantics = _preview_ownership_semantics(
-        profile_rows,
-        owned_index,
-        wallet_refs_by_id,
-        manual_pair_records,
-    )
     _annotate_graph(graph, row, owned_index, semantics)
     warnings = list(graph.pop("_warnings", []))
     warnings.extend(
         {"code": "ownership_index", "level": "info", "message": str(message)}
-        for message in index_warnings
+        for message in bundle.index_warnings
     )
     warnings.extend(_warnings_for_row(row, semantics))
     warnings.extend(_journal_warnings(row))
@@ -108,8 +121,8 @@ def build_transaction_graph_snapshot(
         "supportLevel": graph["supportLevel"],
         "unsupportedReason": graph.get("unsupportedReason"),
         "warnings": _dedupe_warnings(warnings),
-        "inputs": [_public_node(node) for node in graph["inputs"]],
-        "outputs": [_public_node(node) for node in graph["outputs"]],
+        "inputs": _public_nodes_capped(graph["inputs"], "input"),
+        "outputs": _public_nodes_capped(graph["outputs"], "output"),
         "fee": graph.get("fee"),
         "annotations": semantics["by_row"].get(tx_id, []),
         "accounting": {
@@ -246,23 +259,107 @@ def _build_owned_index(
     return core_ownership.build_owned_index(conn, profile_id, wallets)
 
 
+def _load_profile_semantics(
+    conn: sqlite3.Connection,
+    profile_id: str,
+    *,
+    cache: dict[str, tuple[int, _ProfileSemantics]] | None,
+) -> _ProfileSemantics:
+    """Return the profile-scoped graph bundle, reusing a cached copy when fresh.
+
+    The bundle is invalidated by ``journal_input_version`` — the same counter the
+    journal pipeline bumps whenever an input that could change ownership, pairing,
+    or transfer derivation is touched (imports, metadata edits, wallet/account
+    changes, manual pairs). Passing ``cache=None`` (the default for one-shot CLI
+    and tests) recomputes every call, preserving the previous behaviour.
+    """
+    version = _profile_journal_version(conn, profile_id)
+    if cache is not None:
+        cached = cache.get(profile_id)
+        if cached is not None and cached[0] == version:
+            return cached[1]
+    bundle = _compute_profile_semantics(conn, profile_id)
+    if cache is not None:
+        # Keep at most the latest version per profile so the cache stays O(active
+        # profiles); a version bump simply replaces the stale entry.
+        cache[profile_id] = (version, bundle)
+    return bundle
+
+
+def _compute_profile_semantics(
+    conn: sqlite3.Connection,
+    profile_id: str,
+) -> _ProfileSemantics:
+    profile_rows = _load_profile_transaction_rows(conn, profile_id)
+    wallet_refs_by_id = _wallet_refs_by_id(conn, profile_id)
+    owned_index, index_warnings = _build_owned_index(conn, profile_id, profile_rows)
+    manual_pair_records = _active_pair_records(conn, profile_id)
+    semantics = _preview_ownership_semantics(
+        profile_rows,
+        owned_index,
+        wallet_refs_by_id,
+        manual_pair_records,
+    )
+    return _ProfileSemantics(
+        owned_index=owned_index,
+        index_warnings=list(index_warnings),
+        semantics=semantics,
+    )
+
+
+def _profile_journal_version(conn: sqlite3.Connection, profile_id: str) -> int:
+    row = conn.execute(
+        "SELECT journal_input_version FROM profiles WHERE id = ?",
+        (profile_id,),
+    ).fetchone()
+    if row is None:
+        return 0
+    return int(_row_get(row, "journal_input_version") or 0)
+
+
+def _public_nodes_capped(nodes: Sequence[Mapping[str, Any]], side: str) -> list[dict[str, Any]]:
+    """Project graph nodes to public payloads, collapsing any overflow.
+
+    A handful of transactions fan out to thousands of legs; rather than ship and
+    render every strand, keep the first ``MAX_GRAPH_NODES_PER_SIDE - 1`` and fold
+    the rest into a single aggregated overflow node (mirroring the client-side
+    compaction, so the UI renders it identically).
+    """
+    public = [_public_node(node) for node in nodes]
+    if len(public) <= MAX_GRAPH_NODES_PER_SIDE:
+        return public
+    keep = MAX_GRAPH_NODES_PER_SIDE - 1
+    visible = public[:keep]
+    hidden = public[keep:]
+    known = [node["valueSats"] for node in hidden if isinstance(node.get("valueSats"), int)]
+    total = sum(known) if known else None
+    overflow: dict[str, Any] = {
+        "id": f"{side}-overflow",
+        "role": "overflow",
+        "ownership": "overflow",
+        "overflow": True,
+        "overflowCount": len(hidden),
+        "label": f"+{len(hidden)} more",
+        "annotations": [
+            {"code": "overflow", "label": f"{len(hidden)} aggregated {side} legs"}
+        ],
+    }
+    if total is not None:
+        overflow["valueSats"] = total
+        overflow["valueBtc"] = _sats_to_btc(total)
+    return [*visible, overflow]
+
+
 def _parse_graph(row: Mapping[str, Any], raw: Mapping[str, Any] | None = None) -> dict[str, Any]:
     raw = dict(raw) if isinstance(raw, Mapping) else _json_obj(_row_get(row, "raw_json"))
     metadata = _transaction_metadata(raw)
     vin = raw.get("vin")
     vout = raw.get("vout")
     warnings: list[dict[str, str]] = []
-    confidential = _looks_liquid_or_confidential(row, raw) or any(
-        isinstance(out, dict) and (
-            out.get("valuecommitment") is not None
-            or out.get("assetcommitment") is not None
-            or out.get("surjectionproof") is not None
-        )
-        for out in (vout if isinstance(vout, list) else [])
-    )
+    confidential = _looks_liquid_or_confidential(row, raw)
     if not isinstance(vin, list) or not isinstance(vout, list):
         reason = "graphless_import"
-        if _looks_liquid_or_confidential(row, raw):
+        if confidential:
             reason = "liquid_reference_graph_not_local"
         graphless_warnings = [
             {
@@ -328,8 +425,18 @@ def _parse_graph(row: Mapping[str, Any], raw: Mapping[str, Any] | None = None) -
 
     outputs: list[dict[str, Any]] = []
     output_value_complete = True
+    liquid_fee_sats: int | None = None
     for index, entry in enumerate(vout):
         if not isinstance(entry, dict):
+            continue
+        if confidential and _is_liquid_fee_output(entry):
+            # Liquid encodes the network fee as a dedicated unblinded output. It
+            # is the fee, not an OP_RETURN/non-address output, and its amount is
+            # public even when every other leg is confidential — so route its
+            # value to the fee node and keep it out of the output strands.
+            fee_value = _value_sats_or_none(entry.get("value"))
+            if fee_value is not None and fee_value >= 0:
+                liquid_fee_sats = (liquid_fee_sats or 0) + fee_value
             continue
         value_hidden = confidential or _confidential_leg(entry)
         value_sats = None if value_hidden else _value_sats_or_none(entry.get("value"))
@@ -386,9 +493,9 @@ def _parse_graph(row: Mapping[str, Any], raw: Mapping[str, Any] | None = None) -
         "inputCount": len(inputs),
         "outputCount": len(outputs),
     }
-    fee = _fee_from_graph_or_row(row, inputs, outputs, metadata)
-    if fee and fee.get("valueSats") is not None and metadata.get("vsize"):
-        fee["rateSatVb"] = round(float(fee["valueSats"]) / float(metadata["vsize"]), 2)
+    fee = _fee_from_graph_or_row(
+        row, inputs, outputs, metadata, explicit_fee_sats=liquid_fee_sats
+    )
     return {
         "supportLevel": support,
         "unsupportedReason": reason,
@@ -501,7 +608,11 @@ def _enrich_liquid_reference_graph_raw(
         return raw
     backend = _liquid_graph_lookup_backend(conn, row)
     if backend is None:
-        return raw
+        return _with_graph_lookup_warning(
+            raw,
+            "liquid_reference_lookup_unavailable",
+            "No configured Liquid HTTP explorer backend is available to fetch public transaction references.",
+        )
     try:
         fetched = fetch_esplora_transaction(
             str(backend["url"]),
@@ -621,7 +732,11 @@ def _liquid_graph_lookup_backend(
             "url": candidate.get("api_base_url"),
             "timeout": candidate.get("timeout"),
         }
-    return {"name": "liquid.network", "url": "https://liquid.network/api", "timeout": 30}
+    # Symmetry with the Bitcoin path: never silently fetch from a hardcoded
+    # third-party explorer. Without a configured Liquid backend we decline the
+    # lookup; the caller surfaces a warning and the UI still offers an explicit,
+    # user-initiated "open in explorer" link.
+    return None
 
 
 def _preview_ownership_semantics(
@@ -1205,18 +1320,23 @@ def _fee_from_graph_or_row(
     inputs: Sequence[Mapping[str, Any]],
     outputs: Sequence[Mapping[str, Any]],
     metadata: Mapping[str, Any],
+    explicit_fee_sats: int | None = None,
 ) -> dict[str, Any] | None:
-    input_values = [node.get("valueSats") for node in inputs]
-    output_values = [node.get("valueSats") for node in outputs]
     value_sats = None
-    if input_values and all(isinstance(value, int) for value in input_values) and all(
-        isinstance(value, int) for value in output_values
-    ):
-        computed = sum(int(value) for value in input_values) - sum(
-            int(value) for value in output_values
-        )
-        if computed >= 0:
-            value_sats = computed
+    if explicit_fee_sats is not None and explicit_fee_sats >= 0:
+        # An unblinded on-chain fee output (Liquid) is authoritative.
+        value_sats = int(explicit_fee_sats)
+    if value_sats is None:
+        input_values = [node.get("valueSats") for node in inputs]
+        output_values = [node.get("valueSats") for node in outputs]
+        if input_values and all(isinstance(value, int) for value in input_values) and all(
+            isinstance(value, int) for value in output_values
+        ):
+            computed = sum(int(value) for value in input_values) - sum(
+                int(value) for value in output_values
+            )
+            if computed >= 0:
+                value_sats = computed
     if value_sats is None:
         fee_msat = int(_row_get(row, "fee") or 0)
         if fee_msat <= 0:
@@ -1268,6 +1388,26 @@ def _confidential_leg(entry: Mapping[str, Any]) -> bool:
         entry.get(key) is not None
         for key in ("valuecommitment", "assetcommitment", "surjectionproof", "rangeproof")
     )
+
+
+def _is_liquid_fee_output(entry: Mapping[str, Any]) -> bool:
+    """True when a Liquid vout is the dedicated unblinded network-fee output.
+
+    Liquid esplora tags it with ``scriptpubkey_type == "fee"``; otherwise it is
+    recognisable as an explicit-value output with no script and no address (an
+    OP_RETURN keeps its ``6a`` script, so it is excluded). Only called for
+    confidential/Liquid transactions, so Bitcoin outputs never reach here.
+    """
+    explicit_type = _string_or_none(entry.get("scriptpubkey_type") or entry.get("type"))
+    if explicit_type and explicit_type.lower() == "fee":
+        return True
+    if _confidential_leg(entry):
+        return False
+    if entry.get("scriptpubkey_address"):
+        return False
+    if _string_or_none(entry.get("scriptpubkey") or entry.get("script_hex")):
+        return False
+    return entry.get("value") is not None
 
 
 def _outpoint(entry: Mapping[str, Any]) -> str | None:
@@ -1433,8 +1573,26 @@ def _looks_liquid_or_confidential(row: Mapping[str, Any], raw: Mapping[str, Any]
     wallet_kind = str(_row_get(row, "wallet_kind") or "").lower()
     if "liquid" in wallet_kind:
         return True
-    raw_text = json.dumps(raw, sort_keys=True).lower()
-    return any(token in raw_text for token in ("confidential", "valuecommitment", "assetcommitment"))
+    # Inspect leg structure rather than serialising the whole transaction: this
+    # avoids the cost of dumping large Bitcoin transactions and the false
+    # positives a substring match would hit on memo/description text.
+    return _raw_has_confidential_legs(raw)
+
+
+def _raw_has_confidential_legs(raw: Mapping[str, Any]) -> bool:
+    for key in ("vin", "vout"):
+        legs = raw.get(key)
+        if not isinstance(legs, list):
+            continue
+        for leg in legs:
+            if not isinstance(leg, Mapping):
+                continue
+            if _confidential_leg(leg):
+                return True
+            prevout = leg.get("prevout")
+            if isinstance(prevout, Mapping) and _confidential_leg(prevout):
+                return True
+    return False
 
 
 def _row_chain_network(
@@ -1488,8 +1646,9 @@ def _value_sats_or_none(value: Any) -> int | None:
     if isinstance(value, int):
         return value
     if isinstance(value, float):
-        if value.is_integer():
-            return int(value)
+        # On-chain JSON encodes integer sats as ints; a float (e.g. 0.005 or a
+        # round 1.0) always denotes a decimal-BTC amount, so scale to sats. Note
+        # `1.0` is BTC, not 1 sat — never short-circuit whole-number floats.
         return int(round(value * 100_000_000))
     if isinstance(value, str):
         text = value.strip()
