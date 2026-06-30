@@ -139,7 +139,7 @@ describe("TransactionFlowDiagram", () => {
   it("caps the expanded diagram strand count for fan-out transactions", () => {
     const fanout: TransactionGraphPayload = {
       ...graph,
-      transaction: { ...graph.transaction, outputCount: 300 },
+      transaction: { ...graph.transaction!, outputCount: 300 },
       outputs: Array.from({ length: 300 }, (_, index) => ({
         id: `out-${index}`,
         outpoint: `${index.toString(16).padStart(64, "0")}:${index}`,
