@@ -148,7 +148,7 @@ describe("TransactionFlowDiagram", () => {
     expect(html).not.toContain("transaction-flow-middle-gradient");
     expect(html).not.toContain('data-testid="transaction-melt-trunk"');
     expect(html).toContain('data-testid="transaction-fee-strand"');
-    expect(html).toContain('data-testid="transaction-flow-middle-band"');
+    expect(html).not.toContain('data-testid="transaction-flow-middle-band"');
     expect(html).toContain('id="transaction-flow-input-gradient"');
     expect(html).toContain('id="transaction-flow-output-gradient"');
     expect(html).toContain('id="transaction-flow-fee-gradient"');

@@ -370,10 +370,9 @@ function makeBowtiePath(
   canvasWidth: number,
   edgePadding: number,
   centerX: number,
-  midWidth: number,
 ) {
   const start = edgePadding;
-  const end = centerX - midWidth * 0.9 + 1;
+  const end = centerX + 1;
   const maxOffset = Math.max(0, end - start - 44);
   const offset = Math.min(node.offset, maxOffset);
   const curveStart = Math.min(Math.max(start + 5, edgePadding + offset), end - 28);
@@ -740,11 +739,9 @@ export function TransactionFlowDiagram({
   }, []);
 
   const canvasWidth = measuredCanvasWidth ?? preferredCanvasWidth;
-  const centerY = height / 2;
   const centerX = canvasWidth / 2;
   const edgePadding = expanded ? 84 : 64;
-  const midWidth = Math.min(10, Math.ceil(canvasWidth / 100));
-  const curveWidth = centerX - edgePadding - midWidth - 12;
+  const curveWidth = centerX - edgePadding - 12;
   const inputKnownTotal = inputRows.reduce(
     (sum, node) => sum + positiveKnownSats(node),
     0,
@@ -781,7 +778,7 @@ export function TransactionFlowDiagram({
         )
       : undefined;
   const pathFor = (node: DrawableGraphRow) =>
-    makeBowtiePath(node, node.side === "input" ? "input" : "output", canvasWidth, edgePadding, centerX, midWidth);
+    makeBowtiePath(node, node.side === "input" ? "input" : "output", canvasWidth, edgePadding, centerX);
   const markerPathFor = (node: DrawableGraphRow) =>
     makeBowtiePath(
       { ...node, thickness: Math.max(18, node.thickness + 12) },
@@ -789,7 +786,6 @@ export function TransactionFlowDiagram({
       canvasWidth,
       edgePadding,
       centerX,
-      midWidth,
     );
   const showHoverDetail = (node: DrawableGraphRow) => {
     setHoverDetail({ node });
@@ -898,14 +894,6 @@ export function TransactionFlowDiagram({
               onLeave={() => setHoverDetail(null)}
             />
           ))}
-          <path
-            d={`M ${centerX - midWidth - 1} ${centerY + 0.25} L ${centerX + midWidth + 1} ${centerY + 0.25}`}
-            data-testid="transaction-flow-middle-band"
-            className="pointer-events-none fill-none opacity-95"
-            stroke="url(#transaction-flow-output-gradient)"
-            strokeWidth={combinedWeight + 1}
-            strokeLinecap="butt"
-          />
           {activeNode ? (
             <GraphStrandHoverHighlight
               node={activeNode}
