@@ -1067,6 +1067,7 @@ def _swap_route_for_row(
     route: dict[str, Any] = {
         "id": pair["pair_id"],
         "kind": pair["pair_kind"],
+        "routeKind": _paired_route_kind(pair),
         "policy": pair["pair_policy"],
         "pairSource": pair["pair_source"],
         "confidence": pair["confidence_at_pair"],
@@ -1087,6 +1088,24 @@ def _swap_route_for_row(
         "in": _swap_route_leg(pair, "in", _int_or_none(pair["in_amount_msat"])),
     }
     return {key: value for key, value in route.items() if value is not None}
+
+
+def _paired_route_kind(row: Mapping[str, Any]) -> str:
+    pair_kind = str(_row_get(row, "pair_kind") or "").strip().lower()
+    if pair_kind == "coinjoin" or "coinjoin" in pair_kind or "whirlpool" in pair_kind:
+        return "coinjoin"
+    out_asset = str(_row_get(row, "out_asset") or "").strip().upper()
+    in_asset = str(_row_get(row, "in_asset") or "").strip().upper()
+    if (
+        (out_asset and in_asset and out_asset != in_asset)
+        or pair_kind in {"peg-in", "peg-out", "submarine-swap", "swap-refund"}
+        or "swap" in pair_kind
+        or pair_kind.startswith("peg-")
+    ):
+        return "swap"
+    if str(_row_get(row, "pair_policy") or "").strip().lower() == "carrying-value":
+        return "transfer"
+    return "pair"
 
 
 def _swap_route_leg(

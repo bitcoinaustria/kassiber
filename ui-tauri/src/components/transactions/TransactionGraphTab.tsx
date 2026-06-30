@@ -82,6 +82,7 @@ export type TransactionSwapRouteLeg = {
 export type TransactionSwapRoute = {
   id?: string;
   kind?: string | null;
+  routeKind?: string | null;
   policy?: string | null;
   pairSource?: string | null;
   confidence?: string | null;
@@ -565,7 +566,22 @@ function routeCounterparty(route: TransactionSwapRoute) {
   );
 }
 
+function pairedRouteKind(route: TransactionSwapRoute): "swap" | "coinjoin" | "transfer" | "pair" {
+  const explicit = String(route.routeKind || route.kind || "").toLowerCase();
+  if (explicit.includes("coinjoin") || explicit.includes("whirlpool")) return "coinjoin";
+  if (
+    explicit.includes("swap") ||
+    explicit.startsWith("peg-") ||
+    route.out.asset?.toUpperCase() !== route.in.asset?.toUpperCase()
+  ) {
+    return "swap";
+  }
+  if (route.policy === "carrying-value") return "transfer";
+  return "pair";
+}
+
 function swapRouteOutLooksLikeConsolidation(route: TransactionSwapRoute) {
+  if (pairedRouteKind(route) !== "swap") return false;
   if (route.out.role === "consolidation") return true;
   const text = `${route.out.kind || ""} ${route.out.description || ""}`.toLowerCase();
   if (text.includes("consolidat")) return true;
@@ -666,9 +682,34 @@ function SwapRouteStrip({
   const hiddenLabel = t("graph.hidden");
   const counterparty = sensitiveGraphText(routeCounterparty(route), hideSensitive, hiddenLabel);
   const fee = formatRouteAmount(route.swapFeeBtc, route.out.asset, hideSensitive, hiddenLabel);
+  const kind = pairedRouteKind(route);
   const routeLabel = `${route.out.asset || t("graph.swapRouteAsset")} -> ${
     route.in.asset || t("graph.swapRouteAsset")
   }`;
+  const title =
+    kind === "coinjoin"
+      ? t("graph.coinjoinRouteTitle")
+      : kind === "transfer"
+        ? t("graph.transferRouteTitle")
+        : kind === "pair"
+          ? t("graph.pairRouteTitle")
+          : t("graph.swapRouteTitle");
+  const middleLabel =
+    kind === "coinjoin"
+      ? t("graph.coinjoinRouteMiddle")
+      : kind === "transfer"
+        ? t("graph.transferRouteMiddle")
+        : kind === "pair"
+          ? t("graph.pairRouteMiddle")
+          : t("graph.swapRouteMiddle");
+  const pairFallback =
+    kind === "coinjoin"
+      ? t("graph.coinjoinRoutePair")
+      : kind === "transfer"
+        ? t("graph.transferRoutePair")
+        : kind === "pair"
+          ? t("graph.pairRoutePair")
+          : t("graph.swapRoutePair");
   const outLabel =
     swapRouteOutLooksLikeConsolidation(route)
       ? t("graph.swapRouteConsolidation")
@@ -683,7 +724,7 @@ function SwapRouteStrip({
         <div className="flex min-w-0 items-center gap-2">
           <ArrowRightLeft className="size-4 shrink-0 text-sky-500" aria-hidden="true" />
           <div className="min-w-0">
-            <div className="text-sm font-medium">{t("graph.swapRouteTitle")}</div>
+            <div className="text-sm font-medium">{title}</div>
             <div className="truncate text-xs text-muted-foreground">{routeLabel}</div>
           </div>
         </div>
@@ -707,10 +748,10 @@ function SwapRouteStrip({
           <ArrowRight className="hidden size-4 shrink-0 text-muted-foreground md:block" aria-hidden="true" />
           <div className="min-w-0">
             <div className="text-[10px] font-medium uppercase text-muted-foreground">
-              {t("graph.swapRouteMiddle")}
+              {middleLabel}
             </div>
             <div className={cn("mt-1 text-sm font-medium leading-snug", hideSensitive && "sensitive")}>
-              {counterparty || t("graph.swapRoutePair")}
+              {counterparty || pairFallback}
             </div>
             {route.policy ? (
               <div className="mt-1 truncate text-[11px] text-muted-foreground">

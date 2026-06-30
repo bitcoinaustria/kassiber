@@ -543,7 +543,7 @@ def _collect_samourai_internal_transfers(
                         "to_wallet": to_wallet["label"],
                         "sent": float(sent),
                         "received": float(received),
-                        "protocol": "samourai_whirlpool",
+                        "protocol": "coinjoin",
                     },
                 )
             )
@@ -580,7 +580,7 @@ def _collect_samourai_internal_transfers(
                             spot_price_row,
                             spot_price_wallet_label,
                             asset,
-                            "samourai_privacy_transfer",
+                            "coinjoin_transfer",
                         ),
                     )
                 )
@@ -596,8 +596,8 @@ def _collect_samourai_internal_transfers(
                             "to_wallet": to_wallet["label"],
                             "asset": asset,
                             "direction": "transfer",
-                            "required_for": "samourai_privacy_fee",
-                            "protocol": "samourai_whirlpool",
+                            "required_for": "coinjoin_fee",
+                            "protocol": "coinjoin",
                         },
                     )
                 )
@@ -625,7 +625,7 @@ def _collect_samourai_internal_transfers(
                         first_out["note"]
                         or first_out["description"]
                         or first_out["kind"]
-                        or "Samourai Whirlpool privacy movement"
+                        or "Coinjoin privacy movement"
                     ),
                     external_id=_row_get(first_out, "external_id"),
                     out_row=first_out,
@@ -652,7 +652,7 @@ def _collect_samourai_internal_transfers(
                         first_out["note"]
                         or first_out["description"]
                         or first_out["kind"]
-                        or "Samourai Whirlpool privacy fee"
+                        or "Coinjoin privacy fee"
                     ),
                     raw_row=first_out,
                     at_pool=resolve_pool_id(from_wallet["id"]) if is_at else None,
@@ -678,7 +678,7 @@ def _collect_samourai_internal_transfers(
                     first_out["note"]
                     or first_out["description"]
                     or first_out["kind"]
-                    or "Samourai Whirlpool privacy movement"
+                    or "Coinjoin privacy movement"
                 ),
                 external_id=_row_get(first_out, "external_id"),
                 out_row=first_out,

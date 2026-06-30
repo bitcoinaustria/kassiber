@@ -318,6 +318,7 @@ export const MOCK_TRANSACTION_GRAPHS: Record<string, unknown> = {
     swapRoute: {
       id: "pair-demo-liquid-btc",
       kind: "swap",
+      routeKind: "swap",
       policy: "carrying-value",
       pairSource: "manual",
       currentLeg: "out",

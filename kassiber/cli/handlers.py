@@ -342,7 +342,14 @@ def _journals_current_for_profile(conn, profile):
     )
 
 
-TRANSFER_PAIR_KINDS = ("manual", "peg-in", "peg-out", "submarine-swap", "swap-refund")
+TRANSFER_PAIR_KINDS = (
+    "manual",
+    "coinjoin",
+    "peg-in",
+    "peg-out",
+    "submarine-swap",
+    "swap-refund",
+)
 TRANSFER_PAIR_POLICIES = ("carrying-value", "taxable")
 DIRECT_SWAP_PAYOUT_KINDS = ("direct-swap-payout",)
 

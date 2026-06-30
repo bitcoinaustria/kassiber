@@ -475,6 +475,47 @@ describe("TransactionGraphPanel", () => {
     expect(html).toContain("Received leg");
   });
 
+  it("renders reviewed Coinjoin routes without swap wording", () => {
+    const withRoute: TransactionGraphPayload = {
+      ...graph,
+      swapRoute: {
+        id: "pair-coinjoin",
+        kind: "coinjoin",
+        routeKind: "coinjoin",
+        policy: "carrying-value",
+        currentLeg: "out",
+        out: {
+          id: "coinjoin-out",
+          txid: "8f95646aaf1364f3fbcd1046ed1752b7e27189f5c30ce0d6633b32bd9cbc019c",
+          asset: "BTC",
+          network: "Bitcoin",
+          amountBtc: 0.1,
+          wallet: { id: "wallet-a", label: "Wallet A", kind: "descriptor" },
+        },
+        in: {
+          id: "coinjoin-in",
+          txid: "afec51d0bc2dd514bc47406d11c8c750c12fa6382e845064b5e8bfb4f49779e",
+          asset: "BTC",
+          network: "Bitcoin",
+          amountBtc: 0.0995,
+          wallet: { id: "wallet-c", label: "Wallet C", kind: "descriptor" },
+        },
+      },
+    };
+    const html = renderToStaticMarkup(
+      <TooltipProvider>
+        <TransactionGraphPanel graph={withRoute} hideSensitive={false} />
+      </TooltipProvider>,
+    );
+
+    expect(html).toContain("Coinjoin route");
+    expect(html).toContain("Coinjoin");
+    expect(html).toContain("Spent leg");
+    expect(html).toContain("Received leg");
+    expect(html).not.toContain("Paired swap route");
+    expect(html).not.toContain("Swap counterparty");
+  });
+
   it("hides sensitive paired swap route values", () => {
     const withRoute: TransactionGraphPayload = {
       ...graph,

@@ -9418,11 +9418,12 @@ class ReviewRegressionTest(unittest.TestCase):
         self.addCleanup(conn.close)
         create_transaction_pair(
             conn, "Main", "Default", "ln-out", "btc-in",
-            kind="manual", policy="carrying-value",
+            kind="coinjoin", policy="carrying-value",
         )
         pairs = list_transaction_pairs(conn, "Main", "Default")
         self.assertEqual(len(pairs), 1)
         entry = pairs[0]
+        self.assertEqual(entry["kind"], "coinjoin")
         # The paired view renders rail badges off wallet_kind and shows the
         # leg occurred-at timestamps — both must survive the list query.
         self.assertEqual(entry["out"]["wallet_kind"], "phoenix")

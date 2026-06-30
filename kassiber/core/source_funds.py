@@ -1495,12 +1495,12 @@ def suggest_links(
                     from_tx=out_tx,
                     to_tx=in_tx,
                     link_type="coinjoin",
-                    method="samourai_whirlpool",
+                    method="coinjoin",
                     confidence="unknown",
                     allocation_msat=int(in_tx["amount"]),
                     from_allocation_msat=int(out_tx["amount"]),
                     explanation=(
-                        "Samourai Whirlpool section transition in the same imported wallet group; "
+                        "Coinjoin section transition in the same imported wallet group; "
                         "review as a privacy boundary, not exact participant lineage."
                     ),
                 )

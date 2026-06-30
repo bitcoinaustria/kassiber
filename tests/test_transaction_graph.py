@@ -784,6 +784,7 @@ class TransactionGraphTest(unittest.TestCase):
 
         route = payload["swapRoute"]
         self.assertIsNotNone(route)
+        self.assertEqual(route["routeKind"], "swap")
         self.assertEqual(route["currentLeg"], "out")
         self.assertEqual(route["out"]["asset"], "LBTC")
         self.assertEqual(route["out"]["network"], "Liquid")
@@ -797,6 +798,68 @@ class TransactionGraphTest(unittest.TestCase):
         serialized = json.dumps(payload)
         self.assertNotIn("reviewed cross-chain swap", serialized)
         self.assertNotIn("raw_json", serialized)
+
+    def test_manual_coinjoin_pair_routes_as_coinjoin(self):
+        self._tx(
+            "coinjoin-out",
+            "wallet-a",
+            "outbound",
+            100_000_000_000,
+            "coinjoin-out-tx",
+            {
+                "txid": "coinjoin-out-tx",
+                "vin": [{"txid": "coinjoin-prev", "vout": 0, "prevout": {"value": 100_000_000}}],
+                "vout": [{"n": 0, "value": 99_900_000}],
+            },
+            fee_msat=100_000_000,
+            kind="withdrawal",
+            counterparty="Manual privacy wallet",
+        )
+        self._tx(
+            "coinjoin-in",
+            "wallet-b",
+            "inbound",
+            99_500_000_000,
+            "coinjoin-in-tx",
+            {"txid": "coinjoin-in-tx", "vin": [], "vout": [{"n": 0, "value": 99_500_000}]},
+            kind="deposit",
+            counterparty="Manual privacy wallet",
+        )
+        self.conn.execute(
+            """
+            INSERT INTO transaction_pairs(
+                id, workspace_id, profile_id, out_transaction_id, in_transaction_id,
+                kind, policy, notes, swap_fee_msat, swap_fee_kind, confidence_at_pair,
+                pair_source, out_amount, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "pair-coinjoin-1",
+                "ws-1",
+                "profile-1",
+                "coinjoin-out",
+                "coinjoin-in",
+                "coinjoin",
+                "carrying-value",
+                "reviewed generic Coinjoin hop",
+                None,
+                None,
+                "manual",
+                "manual",
+                None,
+                NOW,
+            ),
+        )
+
+        payload = self._graph("coinjoin-out")
+
+        route = payload["swapRoute"]
+        self.assertEqual(route["kind"], "coinjoin")
+        self.assertEqual(route["routeKind"], "coinjoin")
+        self.assertEqual(route["currentLeg"], "out")
+        self.assertEqual(route["out"]["asset"], "BTC")
+        self.assertEqual(route["in"]["asset"], "BTC")
+        self.assertNotIn("reviewed generic Coinjoin hop", json.dumps(payload))
 
     def test_payload_does_not_leak_secret_bearing_fields(self):
         self._utxo("wallet-a", ADDR_A, "prevsecret", 0, amount=2_000_000)

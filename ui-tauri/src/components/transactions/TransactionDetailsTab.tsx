@@ -50,6 +50,7 @@ function graphWithPairFallbackRoute(
   const route: TransactionSwapRoute = {
     id: pair.id,
     kind: pair.kind || pair.type,
+    routeKind: fallbackRouteKind(pair),
     policy: pair.policy,
     currentLeg,
     swapFeeBtc:
@@ -92,6 +93,7 @@ function graphWithPairFallbackRoute(
 }
 
 function fallbackSwapOutRole(pair: NonNullable<TransactionDetailTabContext["transaction"]["pair"]>) {
+  if (fallbackRouteKind(pair) !== "swap") return "spend" as const;
   const kind = String(pair.kind || pair.type || "").toLowerCase();
   const outNetwork = routeNetwork(pair.outAsset, pair.outWallet);
   const inNetwork = routeNetwork(pair.inAsset, pair.inWallet);
@@ -99,6 +101,20 @@ function fallbackSwapOutRole(pair: NonNullable<TransactionDetailTabContext["tran
     return "consolidation" as const;
   }
   return "spend" as const;
+}
+
+function fallbackRouteKind(pair: NonNullable<TransactionDetailTabContext["transaction"]["pair"]>) {
+  const kind = String(pair.kind || pair.type || "").toLowerCase();
+  if (kind.includes("coinjoin") || kind.includes("whirlpool")) return "coinjoin";
+  if (
+    kind.includes("swap") ||
+    kind.startsWith("peg-") ||
+    String(pair.outAsset || "").toUpperCase() !== String(pair.inAsset || "").toUpperCase()
+  ) {
+    return "swap";
+  }
+  if (pair.policy === "carrying-value") return "transfer";
+  return "pair";
 }
 
 function routeNetwork(asset?: string | null, wallet?: string | null) {
