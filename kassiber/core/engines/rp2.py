@@ -21,6 +21,7 @@ from ..ownership_transfers import (
     derive_multi_source_consolidations,
     derive_ownership_transfers,
     derive_recorded_fanout_transfers,
+    detect_conflicting_spend_ids,
     graph_partial_payment_out_ids,
 )
 from ..austrian import (
@@ -1434,6 +1435,12 @@ def _prepare_assets(
     prepared_by_asset: list[tuple[NormalizedTaxAssetInputs, _RP2PreparedInput]] = []
     excluded = excluded_row_ids or set()
     for asset, asset_rows in rows_by_asset.items():
+        # Detect shared-prevout conflicts against the FULL asset row set, not the
+        # post-exclusion active_rows: the Austrian second pass excludes more rows,
+        # and if a confirmed conflict winner were dropped there the conflict would
+        # vanish and the unconfirmed loser would book. Computing over asset_rows
+        # keeps the loser identified (and quarantined) across both passes.
+        conflict_row_ids = detect_conflicting_spend_ids(asset_rows)
         active_rows = [row for row in asset_rows if str(row["id"]) not in excluded]
         normalized_inputs = normalize_tax_asset_inputs(
             profile,
@@ -1443,6 +1450,7 @@ def _prepare_assets(
             pairs_by_asset.get(asset, []),
             at_swap_link_by_row_id=at_swap_link_by_row_id,
             loan_leg_by_transaction_id=loan_leg_by_transaction_id,
+            conflict_row_ids=conflict_row_ids,
         )
         prepared = _prepare_rp2_asset_input(profile, normalized_inputs, configuration)
         prepared_by_asset.append((normalized_inputs, prepared))
@@ -2124,6 +2132,7 @@ class GenericRP2TaxEngine:
             # _direct_payout_synthetic_rows. Partial payouts leave a reduced
             # real source row in rows_for_engine for the remainder, and that
             # row must still be eligible for ownership-derived self-transfers.
+            blocked_payout_id_set = {str(rid) for rid in blocked_payout_row_ids}
             direct_payout_claimed_ids: set[str] = set()
             for record in inputs.direct_payout_records:
                 out_id = str(record["out_transaction_id"])
@@ -2134,8 +2143,18 @@ class GenericRP2TaxEngine:
                 full_out_amount = int(_row_get(out_row, "amount") or 0)
                 if reviewed_out_amount >= full_out_amount:
                     already_paired_ids.add(out_id)
-                    direct_payout_claimed_ids.add(out_id)
-            already_paired_ids |= {str(rid) for rid in blocked_payout_row_ids}
+                    # Only a SUCCESSFULLY-claimed whole-row payout (exact full
+                    # amount, not rejected as out_amount-invalid) gets a proceeds
+                    # disposal row. Pruning the self-transfer pair for a rejected
+                    # payout (out_amount > source) would drop the transfer with no
+                    # disposal to replace it, leaving the destination as a phantom
+                    # acquisition — so exclude blocked / over-amount payouts here.
+                    if (
+                        reviewed_out_amount == full_out_amount
+                        and out_id not in blocked_payout_id_set
+                    ):
+                        direct_payout_claimed_ids.add(out_id)
+            already_paired_ids |= blocked_payout_id_set
             # A reviewed whole-row direct payout is a taxable disposal whose
             # proceeds row keeps the real tx's external_id + outbound direction.
             # If another owned wallet recorded an inbound under the same txid,

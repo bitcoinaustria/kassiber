@@ -768,6 +768,7 @@ def normalize_tax_asset_inputs(
     at_regime_by_row_id: Optional[Mapping[str, AtRegime]] = None,
     at_swap_link_by_row_id: Optional[Mapping[str, str]] = None,
     loan_leg_by_transaction_id: Optional[Mapping[str, str]] = None,
+    conflict_row_ids: Optional[set[str]] = None,
 ) -> NormalizedTaxAssetInputs:
     tax_country = ""
     if hasattr(profile, "keys") and "tax_country" in profile.keys():
@@ -786,12 +787,16 @@ def normalize_tax_asset_inputs(
         for tx_id, role in loan_leg_map.items()
         if role in LOCK_SUPPRESS_ROLES or role in RELEASE_SUPPRESS_ROLES
     }
-    # Detect shared-prevout conflicts (RBF / reorg / double-spend) up front so the
-    # loser legs are excluded from Austrian regime inference below: an unconfirmed
-    # loser sorted ahead of the confirmed winner would otherwise deplete the
-    # Alt/Neu availability pool and mis-tag the winner (or a later disposal) even
-    # though the loser is then quarantined.
-    conflict_row_ids = detect_conflicting_spend_ids(rows)
+    # Shared-prevout conflicts (RBF / reorg / double-spend) must be excluded from
+    # Austrian regime inference below: an unconfirmed loser sorted ahead of the
+    # confirmed winner would otherwise deplete the Alt/Neu availability pool and
+    # mis-tag the winner even though the loser is then quarantined. The caller
+    # passes a set computed against the FULL asset rows so it stays correct across
+    # the two-pass Austrian preparation (where exclusions could drop the confirmed
+    # winner from `rows` and hide the conflict); direct callers get a local
+    # best-effort detection over the rows they pass.
+    if conflict_row_ids is None:
+        conflict_row_ids = detect_conflicting_spend_ids(rows)
     regime_rows = [
         row
         for row in rows
@@ -839,6 +844,17 @@ def normalize_tax_asset_inputs(
     pair_by_row: dict[str, tuple[str, Mapping[str, Any]]] = {}
     pairs_by_transfer_group: dict[str, list[Mapping[str, Any]]] = {}
     for pair in intra_pairs:
+        # A pair touching a shared-prevout conflict loser must not be booked: the
+        # loser leg is quarantined below, but a same-asset manual carrying-value
+        # pair can span different external_ids, so its NON-conflicting partner
+        # would otherwise reach role_pair and emit the transfer using the
+        # quarantined loser. Skip the whole pair; the partner falls through to its
+        # own standalone handling.
+        if (
+            str(pair["out"]["id"]) in conflict_row_ids
+            or str(pair["in"]["id"]) in conflict_row_ids
+        ):
+            continue
         pair_by_row[pair["out"]["id"]] = ("out", pair)
         pair_by_row[pair["in"]["id"]] = ("in", pair)
         group_id = _pair_group_id(pair)

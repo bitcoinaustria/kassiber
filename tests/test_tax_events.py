@@ -763,6 +763,47 @@ class ClampedZeroSelfSendTest(unittest.TestCase):
         )
 
 
+class ConflictPairInteractionTest(unittest.TestCase):
+    profile = {"id": "profile-1", "workspace_id": "workspace-1"}
+    refs = {
+        "wallet-a": {"id": "wallet-a", "label": "Wallet A"},
+        "wallet-b": {"id": "wallet-b", "label": "Wallet B"},
+    }
+
+    def test_conflict_loser_in_manual_pair_does_not_book_transfer(self):
+        # Codex review: a same-asset manual pair whose OUT leg is a shared-prevout
+        # conflict loser must NOT book a transfer using the quarantined loser, even
+        # though the partner has a different txid (apply_manual_pairs allows that).
+        # The caller passes the conflict set (computed over the full asset rows);
+        # the loser is quarantined and the pair is suppressed.
+        out = _row("loser-out", "wallet-a", "outbound", 50_000_000_000, external_id="loser-tx")
+        partner = _row("partner-in", "wallet-b", "inbound", 50_000_000_000,
+                       external_id="other-tx", fiat_value=30_000)
+        inputs = normalize_tax_asset_inputs(
+            self.profile, "BTC", [out, partner], self.refs,
+            [{"out": out, "in": partner}],
+            conflict_row_ids={"loser-out"},
+        )
+        self.assertEqual(list(inputs.transfers), [])
+        self.assertTrue(
+            any(
+                q["reason"] == "conflicting_spend" and q["transaction_id"] == "loser-out"
+                for q in inputs.quarantines
+            )
+        )
+
+    def test_passed_conflict_set_overrides_local_detection(self):
+        # The conflict_row_ids the caller passes (full-asset-row detection, stable
+        # across the two-pass Austrian prep) is honored verbatim — not recomputed
+        # from the possibly-reduced rows handed to this call.
+        a = _row("a", "wallet-a", "outbound", 10_000_000_000, external_id="tx-a", fiat_value=6000)
+        inputs = normalize_tax_asset_inputs(
+            self.profile, "BTC", [a], self.refs, [], conflict_row_ids={"a"},
+        )
+        self.assertTrue(any(q["reason"] == "conflicting_spend" for q in inputs.quarantines))
+        self.assertEqual(list(inputs.events), [])  # the loser is not booked
+
+
 class AustrianSelfTransferRegimeTest(unittest.TestCase):
     AT_PROFILE = {"id": "p", "workspace_id": "ws", "tax_country": "at"}
     REFS = {

@@ -373,6 +373,58 @@ class OwnershipDeriverMixedSpendTest(unittest.TestCase):
         self.assertAlmostEqual(float(disposals[0]["quantity"]), -0.5, places=6)
         self.assertAlmostEqual(float(disposals[0]["proceeds"]), 20000, places=2)
 
+    def test_invalid_payout_does_not_prune_self_transfer_pair(self):
+        # Codex review: a direct payout whose out_amount EXCEEDS the source amount
+        # is rejected (direct_payout_out_amount_invalid, no proceeds row). It must
+        # NOT be treated as a claimed payout — pruning the same-txid self-transfer
+        # pair for a rejected payout drops the transfer with no disposal to replace
+        # it, leaving the destination a phantom acquisition. The pair is preserved.
+        index = OwnedIndex()
+        index.add_script(SCRIPT_A, _match("A", "Cold"))
+        index.add_script(SCRIPT_B, _match("B", "Hot"))
+        rows = [
+            _row("A", "inbound", BTC, external_id="acqA"),
+            _row("A", "outbound", 50 * BTC // 100, external_id="inv-tx"),
+            _row("B", "inbound", 50 * BTC // 100, external_id="inv-tx"),
+        ]
+        direct_payouts = [
+            {
+                "id": "payout-invalid",
+                "out_transaction_id": "A-outbound-inv-tx",
+                "kind": "direct-swap-payout",
+                "policy": "taxable",
+                "payout_asset": "BTC",
+                "payout_amount": 60 * BTC // 100,
+                "payout_occurred_at": NOW,
+                "payout_fiat_value": 24000,
+                "payout_external_id": "provider-payout",
+                "counterparty": "external-recipient",
+                "notes": "direct payout",
+                "swap_fee_msat": 0,
+                "swap_fee_kind": "combined",
+                "created_at": NOW,
+                "out_amount": 60 * BTC // 100,  # > source amount -> invalid/blocked
+            }
+        ]
+        state = build_tax_engine(PROFILE).build_ledger_state(
+            TaxEngineLedgerInputs(
+                rows=rows,
+                wallet_refs_by_id=WALLET_REFS,
+                manual_pair_records=[],
+                direct_payout_records=direct_payouts,
+                owned_index=index,
+            )
+        )
+        reasons = [q["reason"] for q in state.quarantines]
+        self.assertIn("direct_payout_out_amount_invalid", reasons)
+        entry_types = [e["entry_type"] for e in state.entries]
+        # The self-transfer pair survived (booked as a MOVE); Hot is NOT a phantom
+        # standalone acquisition.
+        self.assertIn("transfer_in", entry_types)
+        self.assertFalse(
+            any(e["entry_type"] == "acquisition" and e["wallet_id"] == "B" for e in state.entries)
+        )
+
     def test_whole_row_payout_with_readable_graph_not_restored_as_move(self):
         # Codex review #1: the payout out row has a READABLE graph that also pays
         # an owned sibling wallet + an external residual, so
