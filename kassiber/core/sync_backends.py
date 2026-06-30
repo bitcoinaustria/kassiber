@@ -1062,6 +1062,7 @@ def _target_output_metadata(target):
         label = f"{branch_label} #{address_index}"
     return {
         "address": target.get("address") or target.get("unconfidential_address") or "",
+        "script_pubkey": target.get("script_pubkey") or "",
         "address_label": label,
         "branch_label": branch_label,
         "branch_index": target.get("branch_index"),

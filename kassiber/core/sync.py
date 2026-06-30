@@ -67,6 +67,7 @@ UpdateOutputInventory = Callable[
     ],
     Mapping[str, Any],
 ]
+SourceOverlapPreflight = Callable[[WalletRow, "WalletSyncState"], None]
 
 
 @dataclass(frozen=True, slots=True)
@@ -109,6 +110,18 @@ class WalletBackendFetch:
     sync_state: "WalletSyncState | None"
     normalized_records: Sequence[BackendRecord]
     adapter_meta: Mapping[str, Any]
+    kind: str
+    started: float
+    force_full: bool
+    skip_outcome: Mapping[str, Any] | None = None
+
+
+@dataclass(frozen=True)
+class WalletBackendDiscovery:
+    """Resolved backend targets before any backend adapter side effects run."""
+
+    backend: Mapping[str, Any]
+    sync_state: "WalletSyncState | None"
     kind: str
     started: float
     force_full: bool
@@ -268,7 +281,7 @@ def normalize_backend_kind(kind: Any) -> str:
     return aliases.get(value, value)
 
 
-def fetch_wallet_backend(
+def discover_wallet_backend(
     runtime_config: RuntimeConfig,
     profile: ProfileRow,
     wallet: WalletRow,
@@ -276,13 +289,13 @@ def fetch_wallet_backend(
     checkpoint: Mapping[str, Any] | None = None,
     *,
     force_full: bool = False,
-) -> WalletBackendFetch:
-    """Run the network-only fetch phase for a backend-synced wallet.
+) -> WalletBackendDiscovery:
+    """Resolve backend targets for a wallet without running the backend adapter.
 
-    Touches no database connection — `resolve_backend` is an in-memory lookup,
-    and discovery plus the adapter are network/compute only — so this is safe to
-    run on a worker thread for cross-wallet parallel fetch. The DB write phase
-    stays in `sync_wallet_from_backend` on the owning connection's thread.
+    Discovery may contact the selected backend to bound descriptor targets, but
+    it must not mutate the backend or the local DB. The source-overlap preflight
+    runs against this result before adapter code such as Bitcoin Core address
+    import/rescan is allowed to execute.
     """
     del profile  # not needed to fetch; kept for call-shape symmetry with apply
     started = time.monotonic()
@@ -311,29 +324,20 @@ def fetch_wallet_backend(
                 "elapsed_ms": int((time.monotonic() - started) * 1000),
                 **({"force_full": True} if force_full else {}),
             }
-            return WalletBackendFetch(
+            return WalletBackendDiscovery(
                 backend=backend,
                 sync_state=None,
-                normalized_records=(),
-                adapter_meta={},
                 kind="",
                 started=started,
                 force_full=force_full,
                 skip_outcome=skip_outcome,
             )
         kind = normalize_backend_kind(backend["kind"])
-        adapter = hooks.backend_adapters.get(kind)
-        if adapter is None:
+        if hooks.backend_adapters.get(kind) is None:
             raise AppError(
                 f"Source refresh is not implemented for backend kind '{kind}'",
                 hint="Use an esplora, electrum, or bitcoinrpc backend for live refresh.",
             )
-        _emit_wallet_sync_progress(
-            wallet,
-            {"phase": "backend_fetch"},
-        )
-        phase = "backend_fetch"
-        normalized_records, adapter_meta = adapter(backend, wallet, sync_state)
     except AppError:
         raise
     except Exception as exc:
@@ -341,15 +345,94 @@ def fetch_wallet_backend(
     finally:
         if token is not None:
             sync_progress_emitter.reset(token)
-    return WalletBackendFetch(
+    return WalletBackendDiscovery(
         backend=backend,
         sync_state=sync_state,
-        normalized_records=normalized_records,
-        adapter_meta=dict(adapter_meta or {}),
         kind=kind,
         started=started,
         force_full=force_full,
     )
+
+
+def fetch_wallet_backend_from_discovery(
+    wallet: WalletRow,
+    hooks: WalletSyncHooks,
+    discovery: WalletBackendDiscovery,
+) -> WalletBackendFetch:
+    if discovery.skip_outcome is not None:
+        return WalletBackendFetch(
+            backend=discovery.backend,
+            sync_state=None,
+            normalized_records=(),
+            adapter_meta={},
+            kind=discovery.kind,
+            started=discovery.started,
+            force_full=discovery.force_full,
+            skip_outcome=discovery.skip_outcome,
+        )
+    sync_state = discovery.sync_state
+    if sync_state is None:
+        raise AppError("Wallet discovery did not return sync targets", code="sync_state_missing")
+    adapter = hooks.backend_adapters.get(discovery.kind)
+    if adapter is None:
+        raise AppError(
+            f"Source refresh is not implemented for backend kind '{discovery.kind}'",
+            hint="Use an esplora, electrum, or bitcoinrpc backend for live refresh.",
+        )
+    token = _wrap_sync_progress_for_wallet(wallet)
+    try:
+        _emit_wallet_sync_progress(wallet, {"phase": "backend_fetch"})
+        try:
+            normalized_records, adapter_meta = adapter(discovery.backend, wallet, sync_state)
+        except AppError:
+            raise
+        except Exception as exc:
+            raise _backend_sync_failure_error(
+                exc,
+                wallet,
+                discovery.backend,
+                "backend_fetch",
+            ) from exc
+    finally:
+        if token is not None:
+            sync_progress_emitter.reset(token)
+    return WalletBackendFetch(
+        backend=discovery.backend,
+        sync_state=sync_state,
+        normalized_records=normalized_records,
+        adapter_meta=dict(adapter_meta or {}),
+        kind=discovery.kind,
+        started=discovery.started,
+        force_full=discovery.force_full,
+    )
+
+
+def fetch_wallet_backend(
+    runtime_config: RuntimeConfig,
+    profile: ProfileRow,
+    wallet: WalletRow,
+    hooks: WalletSyncHooks,
+    checkpoint: Mapping[str, Any] | None = None,
+    *,
+    force_full: bool = False,
+    source_overlap_preflight: SourceOverlapPreflight | None = None,
+) -> WalletBackendFetch:
+    """Run discovery, optional overlap preflight, then backend fetch."""
+    discovery = discover_wallet_backend(
+        runtime_config,
+        profile,
+        wallet,
+        hooks,
+        checkpoint,
+        force_full=force_full,
+    )
+    if (
+        source_overlap_preflight is not None
+        and discovery.skip_outcome is None
+        and discovery.sync_state is not None
+    ):
+        source_overlap_preflight(wallet, discovery.sync_state)
+    return fetch_wallet_backend_from_discovery(wallet, hooks, discovery)
 
 
 def sync_wallet_from_backend(
@@ -367,8 +450,24 @@ def sync_wallet_from_backend(
     # parallel across wallets). When omitted, fetch inline as before. A captured
     # AppError is re-raised here so it surfaces under this wallet's own savepoint.
     if prefetched is None:
+        preflight = (
+            (lambda preflight_wallet, sync_state: source_overlap.raise_for_sync_source_overlap(
+                conn,
+                profile,
+                preflight_wallet,
+                sync_state,
+            ))
+            if conn is not None
+            else None
+        )
         prefetched = fetch_wallet_backend(
-            runtime_config, profile, wallet, hooks, checkpoint, force_full=force_full
+            runtime_config,
+            profile,
+            wallet,
+            hooks,
+            checkpoint,
+            force_full=force_full,
+            source_overlap_preflight=preflight,
         )
     if isinstance(prefetched, BaseException):
         raise prefetched
@@ -461,40 +560,79 @@ def prefetch_wallets_backend(
     *,
     force_full: bool = False,
     max_workers: int = WALLET_FETCH_FANOUT,
+    source_overlap_preflight: SourceOverlapPreflight | None = None,
 ) -> dict[str, "WalletBackendFetch | BaseException"]:
-    """Run the network-only fetch for several backend wallets concurrently.
+    """Run discovery/preflight/fetch for several backend wallets.
 
     Returns ``{wallet_id: WalletBackendFetch | AppError}``. Per-wallet AppErrors
     are captured (mirroring the serial path's per-wallet AppError isolation) and
     re-raised when applied under that wallet's savepoint; any non-AppError
-    propagates, as it would have on the serial path. Each fetch runs inside a
-    copy of this thread's context so the per-wallet progress emitter propagates
-    to the worker.
+    propagates, as it would have on the serial path. Discovery and fetch work run
+    in worker threads; the optional overlap preflight runs on the caller thread
+    between them so it can safely use the owning SQLite connection before
+    adapter-side effects such as Bitcoin Core address import.
     """
     wallets = list(wallets)
     if not wallets:
         return {}
 
-    def _fetch(wallet: WalletRow):
+    def _parallel_wallet_step(step):
+        if len(wallets) == 1 or max_workers <= 1:
+            return {str(wallet["id"]): step(wallet) for wallet in wallets}
+        results: dict[str, Any] = {}
+        with ThreadPoolExecutor(max_workers=min(max_workers, len(wallets))) as executor:
+            futures = {
+                str(wallet["id"]): executor.submit(contextvars.copy_context().run, step, wallet)
+                for wallet in wallets
+            }
+            for wallet_id, future in futures.items():
+                results[wallet_id] = future.result()
+        return results
+
+    def _discover(wallet: WalletRow):
         checkpoint = {} if force_full else (checkpoints or {}).get(str(wallet["id"]))
         try:
-            return fetch_wallet_backend(
-                runtime_config, profile, wallet, hooks, checkpoint, force_full=force_full
+            return discover_wallet_backend(
+                runtime_config,
+                profile,
+                wallet,
+                hooks,
+                checkpoint,
+                force_full=force_full,
             )
         except AppError as exc:
             return exc
 
-    if len(wallets) == 1 or max_workers <= 1:
-        return {str(wallet["id"]): _fetch(wallet) for wallet in wallets}
-    results: dict[str, Any] = {}
-    with ThreadPoolExecutor(max_workers=min(max_workers, len(wallets))) as executor:
-        futures = {
-            str(wallet["id"]): executor.submit(contextvars.copy_context().run, _fetch, wallet)
-            for wallet in wallets
-        }
-        for wallet_id, future in futures.items():
-            results[wallet_id] = future.result()
-    return results
+    discoveries = _parallel_wallet_step(_discover)
+    if source_overlap_preflight is not None:
+        for wallet in wallets:
+            wallet_id = str(wallet["id"])
+            discovery = discoveries.get(wallet_id)
+            if isinstance(discovery, BaseException):
+                continue
+            if (
+                discovery is None
+                or discovery.skip_outcome is not None
+                or discovery.sync_state is None
+            ):
+                continue
+            try:
+                source_overlap_preflight(wallet, discovery.sync_state)
+            except AppError as exc:
+                discoveries[wallet_id] = exc
+
+    def _fetch(wallet: WalletRow):
+        discovery = discoveries.get(str(wallet["id"]))
+        if isinstance(discovery, BaseException):
+            return discovery
+        if discovery is None:
+            return AppError("Wallet discovery result was not found", code="sync_state_missing")
+        try:
+            return fetch_wallet_backend_from_discovery(wallet, hooks, discovery)
+        except AppError as exc:
+            return exc
+
+    return _parallel_wallet_step(_fetch)
 
 
 def sync_wallets(

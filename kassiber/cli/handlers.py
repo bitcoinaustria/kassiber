@@ -46,6 +46,7 @@ from ..core import pricing
 from ..core import rates as core_rates
 from ..core import reports as core_reports
 from ..core import saved_views as core_saved_views
+from ..core import source_overlap as core_source_overlap
 from ..core import swap_rules as core_swap_rules
 from ..core import sync as core_sync
 from ..core import sync_backends as core_sync_backends
@@ -2213,12 +2214,9 @@ def sync_wallet(
             )
         ]
         hooks = _wallet_sync_hooks(commit=False)
-        # Run the network-only fetch for backend-synced wallets concurrently
-        # before the serial write loop. DB writes and the per-wallet savepoint
-        # isolation below are unchanged — only the fetch is parallelized, and the
-        # per-host limiter keeps total concurrency against any one host within a
-        # single wallet's existing budget. AppErrors are captured per wallet and
-        # re-raised under that wallet's savepoint, preserving rollback isolation.
+        # Run discovery concurrently, apply the DB-backed overlap preflight on
+        # this thread, then run backend fetches concurrently before the serial
+        # write loop. Per-wallet savepoint isolation below is unchanged.
         backend_wallets = [
             wallet
             for wallet in wallets
@@ -2231,6 +2229,14 @@ def sync_wallet(
             hooks,
             checkpoints=freshness_checkpoints,
             force_full=force_full,
+            source_overlap_preflight=(
+                lambda wallet, sync_state: core_source_overlap.raise_for_sync_source_overlap(
+                    conn,
+                    profile,
+                    wallet,
+                    sync_state,
+                )
+            ),
         )
         results = []
         for idx, wallet in enumerate(wallets):

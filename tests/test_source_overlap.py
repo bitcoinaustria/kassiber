@@ -4,6 +4,8 @@ import unittest
 from pathlib import Path
 from types import SimpleNamespace
 
+from embit import bip32, bip39
+
 from kassiber.core import source_overlap
 from kassiber.core.sync import WalletBackendFetch, WalletSyncHooks, WalletSyncState, sync_wallet_from_backend
 from kassiber.core.ui_snapshot import build_report_blockers_snapshot
@@ -12,16 +14,43 @@ from kassiber.db import open_db, set_setting
 from kassiber.errors import AppError
 from kassiber.fingerprints import make_transaction_fingerprint
 from kassiber.msat import btc_to_msat
+from kassiber.wallet_descriptors import derive_descriptor_targets, load_descriptor_plan
 
 
 ADDR_A = "bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu"
 ADDR_B = "bc1q8c6fshw2dlwun7ekn9qwf37cu2rn755upcp6el"
+_MNEMONIC = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
 
 
 def _script(address: str) -> str:
     from kassiber.core.address_scripts import address_to_scriptpubkey
 
     return address_to_scriptpubkey(address).hex()
+
+
+def _descriptor_config(gap_limit=2):
+    root = bip32.HDKey.from_seed(bip39.mnemonic_to_seed(_MNEMONIC))
+    path = "m/84h/0h/0h"
+    fingerprint = root.my_fingerprint.hex()
+    xpub = root.derive(path).to_public().to_base58()
+    origin = path[2:]
+    return {
+        "descriptor": f"wpkh([{fingerprint}/{origin}]{xpub}/0/*)",
+        "change_descriptor": f"wpkh([{fingerprint}/{origin}]{xpub}/1/*)",
+        "chain": "bitcoin",
+        "network": "main",
+        "gap_limit": gap_limit,
+    }
+
+
+def _descriptor_target(config, address_index=0):
+    plan = load_descriptor_plan(config)
+    return derive_descriptor_targets(
+        plan,
+        branch_index=0,
+        start=address_index,
+        end=address_index + 1,
+    )[0]
 
 
 def _seed_book(conn):
@@ -166,6 +195,39 @@ class SourceOverlapTests(unittest.TestCase):
             finally:
                 conn.close()
 
+    def test_chain_network_aliases_do_not_hide_overlap(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-source-overlap-") as tmp:
+            conn = open_db(Path(tmp) / "data")
+            try:
+                profile = _seed_book(conn)
+                _wallet(conn, "addr", "Address list", "address", {"addresses": [ADDR_A], "chain": "bitcoin", "network": "mainnet"})
+                descriptor = _wallet(conn, "desc", "Descriptor", "descriptor", {"chain": "bitcoin", "network": "main"})
+                target = {
+                    "address": ADDR_A,
+                    "script_pubkey": _script(ADDR_A),
+                    "chain": "bitcoin",
+                    "network": "main",
+                    "branch_label": "receive",
+                    "address_index": 0,
+                }
+                sync_state = WalletSyncState(
+                    chain="bitcoin",
+                    network="main",
+                    descriptor_plan=SimpleNamespace(gap_limit=20),
+                    policy_asset_id="",
+                    targets=[target],
+                    tracked_scripts={target["script_pubkey"]: target},
+                    history_cache={},
+                )
+                result = source_overlap.detect_profile_source_overlaps(
+                    conn,
+                    "pf",
+                    candidate_scripts=source_overlap.scripts_from_sync_state(profile, descriptor, sync_state),
+                )
+                self.assertEqual(result["overlap_count"], 1)
+            finally:
+                conn.close()
+
     def test_sync_blocks_resolved_descriptor_target_that_overlaps_address_wallet(self):
         with tempfile.TemporaryDirectory(prefix="kassiber-source-overlap-") as tmp:
             conn = open_db(Path(tmp) / "data")
@@ -213,6 +275,8 @@ class SourceOverlapTests(unittest.TestCase):
                 self.assertEqual(raised.exception.code, "source_overlap")
                 self.assertEqual(inserted, [])
                 self.assertNotIn(_script(ADDR_A), json.dumps(raised.exception.details))
+                self.assertNotIn("max_address_index", json.dumps(raised.exception.details))
+                self.assertNotIn('"branch"', json.dumps(raised.exception.details))
             finally:
                 conn.close()
 
@@ -298,6 +362,79 @@ class SourceOverlapTests(unittest.TestCase):
             finally:
                 conn.close()
 
+    def test_descriptor_config_targets_detect_overlap_without_utxo_evidence(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-source-overlap-") as tmp:
+            conn = open_db(Path(tmp) / "data")
+            try:
+                _seed_book(conn)
+                config = _descriptor_config(gap_limit=2)
+                target = _descriptor_target(config)
+                self.assertEqual(target.address, ADDR_A)
+                _wallet(conn, "desc", "Descriptor", "descriptor", config)
+                _wallet(conn, "addr", "Address list", "address", {"addresses": [ADDR_A], "chain": "bitcoin", "network": "mainnet"})
+                conn.commit()
+
+                result = source_overlap.detect_profile_source_overlaps(conn, "pf")
+
+                self.assertEqual(result["overlap_count"], 1)
+                overlap = result["overlaps"][0]
+                self.assertEqual(overlap["recommended_canonical_wallet_id"], "desc")
+                self.assertIn("descriptor_config", overlap["evidence"])
+                self.assertNotIn("max_address_index", json.dumps(overlap))
+                self.assertNotIn('"branch"', json.dumps(overlap))
+            finally:
+                conn.close()
+
+    def test_inventory_script_column_preserves_liquid_confidential_overlap(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-source-overlap-") as tmp:
+            conn = open_db(Path(tmp) / "data")
+            try:
+                profile = _seed_book(conn)
+                _wallet(conn, "old", "Old Liquid", "descriptor", {"chain": "liquid", "network": "liquidv1"})
+                new_wallet = _wallet(conn, "new", "New Liquid", "descriptor", {"chain": "liquid", "network": "liquidv1"})
+                _utxo(conn, "old", "lq1confidentialdisplayonly", txid="aa")
+                conn.execute(
+                    """
+                    UPDATE wallet_utxos
+                    SET chain = 'liquid',
+                        network = 'liquidv1',
+                        script_pubkey = ?,
+                        address = 'lq1confidentialdisplayonly'
+                    WHERE wallet_id = 'old'
+                    """,
+                    (_script(ADDR_A),),
+                )
+                target = {
+                    "address": "lq1anotherconfidentialdisplay",
+                    "script_pubkey": _script(ADDR_A),
+                    "chain": "liquid",
+                    "network": "liquidv1",
+                    "branch_label": "receive",
+                    "address_index": 0,
+                }
+                sync_state = WalletSyncState(
+                    chain="liquid",
+                    network="liquidv1",
+                    descriptor_plan=SimpleNamespace(gap_limit=20),
+                    policy_asset_id="",
+                    targets=[target],
+                    tracked_scripts={target["script_pubkey"]: target},
+                    history_cache={},
+                )
+                conn.commit()
+
+                result = source_overlap.detect_profile_source_overlaps(
+                    conn,
+                    "pf",
+                    candidate_scripts=source_overlap.scripts_from_sync_state(profile, new_wallet, sync_state),
+                )
+
+                self.assertEqual(result["overlap_count"], 1)
+                self.assertIn("inventory", result["overlaps"][0]["evidence"])
+                self.assertNotIn(_script(ADDR_A), json.dumps(result))
+            finally:
+                conn.close()
+
     def test_report_blocker_ignores_deprecated_overlap_until_it_has_active_transactions(self):
         with tempfile.TemporaryDirectory(prefix="kassiber-source-overlap-") as tmp:
             conn = open_db(Path(tmp) / "data")
@@ -316,6 +453,27 @@ class SourceOverlapTests(unittest.TestCase):
                 source_blocker = next(item for item in blockers["blockers"] if item["id"] == "source_overlap")
                 self.assertEqual(source_blocker["overlap"]["overlap_count"], 1)
                 self.assertNotIn(_script(ADDR_A), json.dumps(source_blocker))
+            finally:
+                conn.close()
+
+    def test_non_deprecated_source_is_recommended_over_deprecated_descriptor(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-source-overlap-") as tmp:
+            conn = open_db(Path(tmp) / "data")
+            try:
+                _seed_book(conn)
+                _wallet(conn, "old", "Old descriptor", "descriptor", {"chain": "bitcoin", "network": "mainnet", "deprecated": True})
+                _wallet(conn, "addr", "Active address list", "address", {"addresses": [ADDR_A], "chain": "bitcoin", "network": "mainnet"})
+                _utxo(conn, "old", ADDR_A, txid="aa")
+                _tx(conn, "tx-old", "old", "dd" * 32)
+                _tx(conn, "tx-addr", "addr", "dd" * 32)
+                conn.commit()
+
+                blockers = build_report_blockers_snapshot(conn)
+
+                source_blocker = next(item for item in blockers["blockers"] if item["id"] == "source_overlap")
+                overlap = source_blocker["overlap"]["overlaps"][0]
+                self.assertEqual(overlap["recommended_canonical_wallet_id"], "addr")
+                self.assertEqual(source_blocker["repair_preview"]["recommended_exclusions"], ["tx-old"])
             finally:
                 conn.close()
 

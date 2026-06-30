@@ -219,6 +219,7 @@ CREATE TABLE IF NOT EXISTS wallet_utxos (
     block_height INTEGER,
     block_time TEXT,
     address TEXT,
+    script_pubkey TEXT,
     address_label TEXT,
     branch_label TEXT,
     branch_index INTEGER,
@@ -1371,6 +1372,7 @@ def ensure_schema_compat(conn):
     _backfill_source_funds_target_external_id(conn)
     ensure_column(conn, "source_funds_recipients", "active", "INTEGER NOT NULL DEFAULT 1")
     ensure_column(conn, "wallet_utxos", "anonymity_score", "INTEGER")
+    ensure_column(conn, "wallet_utxos", "script_pubkey", "TEXT")
     ensure_column(conn, "wallet_utxos", "spent_by", "TEXT")
     ensure_column(conn, "wallet_utxos", "excluded_from_coinjoin", "INTEGER")
     ensure_column(conn, "wallet_utxos", "key_state", "TEXT")

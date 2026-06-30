@@ -13,11 +13,18 @@ from dataclasses import dataclass
 from typing import Any, Mapping, Sequence
 
 from ..errors import AppError
+from ..util import normalize_chain_value, normalize_network_value
+from ..wallet_descriptors import derive_descriptor_targets
+from . import freshness as core_freshness
 from .address_scripts import scriptpubkey_for_address_or_none
 from .wallets import (
+    has_descriptor_sync_material,
+    load_wallet_descriptor_plan_from_config,
     normalize_addresses,
     wallet_is_deprecated,
 )
+
+MAX_STORED_DESCRIPTOR_TARGETS_PER_BRANCH = 20_000
 
 
 @dataclass(frozen=True, slots=True)
@@ -32,6 +39,7 @@ class SourceScript:
     source: str
     deprecated: bool = False
     active_transaction_count: int = 0
+    branch_index: int | None = None
     branch_label: str | None = None
     address_index: int | None = None
 
@@ -53,6 +61,40 @@ def _wallet_config(wallet: Mapping[str, Any] | sqlite3.Row) -> dict[str, Any]:
     except (TypeError, ValueError, json.JSONDecodeError):
         return {}
     return loaded if isinstance(loaded, dict) else {}
+
+
+def _normalize_chain_network(chain: Any, network: Any) -> tuple[str, str]:
+    if chain in (None, "") or network in (None, ""):
+        return "", ""
+    try:
+        normalized_chain = normalize_chain_value(chain)
+        normalized_network = normalize_network_value(normalized_chain, network)
+    except AppError:
+        return str(chain or "").strip().lower(), str(network or "").strip().lower()
+    return normalized_chain, normalized_network
+
+
+def _normalized_script_pubkey(value: Any) -> str | None:
+    if value in (None, ""):
+        return None
+    text = str(value).strip().lower()
+    if len(text) % 2 != 0:
+        return None
+    try:
+        bytes.fromhex(text)
+    except ValueError:
+        return None
+    return text
+
+
+def _script_pubkey_from_raw_json(value: Any) -> str | None:
+    try:
+        raw = json.loads(value or "{}") if isinstance(value, str) else dict(value or {})
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return None
+    if not isinstance(raw, dict):
+        return None
+    return _normalized_script_pubkey(raw.get("script_pubkey"))
 
 
 def _wallet_label_lookup(conn: sqlite3.Connection, profile_id: str) -> dict[str, str]:
@@ -99,8 +141,7 @@ def _address_list_scripts(
     active_counts: Mapping[str, int],
 ) -> list[SourceScript]:
     wallet_id = str(_row_get(wallet, "id"))
-    chain = str(config.get("chain") or "")
-    network = str(config.get("network") or "")
+    chain, network = _normalize_chain_network(config.get("chain"), config.get("network"))
     if not chain or not network:
         return []
     scripts: list[SourceScript] = []
@@ -142,7 +183,9 @@ def _inventory_scripts(
     }
     rows = conn.execute(
         """
-        SELECT DISTINCT wallet_id, chain, network, address, branch_label, address_index
+        SELECT DISTINCT
+            wallet_id, chain, network, address, script_pubkey, branch_label,
+            branch_index, address_index, raw_json
         FROM wallet_utxos
         WHERE profile_id = ?
         """,
@@ -151,27 +194,176 @@ def _inventory_scripts(
     scripts: list[SourceScript] = []
     for row in rows:
         wallet_id = str(row["wallet_id"])
-        script_pubkey = scriptpubkey_for_address_or_none(row["address"])
+        script_pubkey = (
+            _normalized_script_pubkey(row["script_pubkey"])
+            or _script_pubkey_from_raw_json(row["raw_json"])
+            or scriptpubkey_for_address_or_none(row["address"])
+        )
         if not script_pubkey:
             continue
         wallet = wallet_rows.get(wallet_id, {})
         config = _wallet_config(wallet)
+        chain, network = _normalize_chain_network(row["chain"], row["network"])
         scripts.append(
             SourceScript(
                 profile_id=profile_id,
                 wallet_id=wallet_id,
                 wallet_label=labels.get(wallet_id, wallet_id),
                 wallet_kind=str(_row_get(wallet, "kind") or ""),
-                chain=str(row["chain"] or ""),
-                network=str(row["network"] or ""),
+                chain=chain,
+                network=network,
                 script_pubkey=script_pubkey,
                 source="inventory",
                 deprecated=wallet_is_deprecated(config),
                 active_transaction_count=int(active_counts.get(wallet_id, 0)),
+                branch_index=row["branch_index"],
                 branch_label=row["branch_label"],
                 address_index=row["address_index"],
             )
         )
+    return scripts
+
+
+def _highest_used_checkpoints(
+    conn: sqlite3.Connection,
+    profile_id: str,
+) -> dict[str, dict[int, int]]:
+    prefix = f"{core_freshness.SOURCE_ONCHAIN}:"
+    rows = conn.execute(
+        """
+        SELECT source_key, checkpoint_json
+        FROM freshness_source_states
+        WHERE profile_id = ?
+          AND source_key LIKE ?
+        """,
+        (profile_id, f"{prefix}%"),
+    ).fetchall()
+    output: dict[str, dict[int, int]] = {}
+    for row in rows:
+        wallet_id = str(row["source_key"])[len(prefix) :]
+        try:
+            checkpoint = json.loads(row["checkpoint_json"] or "{}")
+        except (TypeError, ValueError, json.JSONDecodeError):
+            continue
+        highest_used = checkpoint.get("highest_used") if isinstance(checkpoint, dict) else None
+        if not isinstance(highest_used, dict):
+            continue
+        branch_values: dict[int, int] = {}
+        for branch, value in highest_used.items():
+            try:
+                branch_values[int(branch)] = int(value)
+            except (TypeError, ValueError):
+                continue
+        if branch_values:
+            output[wallet_id] = branch_values
+    return output
+
+
+def _inventory_branch_maxes(
+    conn: sqlite3.Connection,
+    profile_id: str,
+) -> dict[str, dict[int, int]]:
+    rows = conn.execute(
+        """
+        SELECT wallet_id, branch_index, MAX(address_index) AS max_index
+        FROM wallet_utxos
+        WHERE profile_id = ?
+          AND branch_index IS NOT NULL
+          AND address_index IS NOT NULL
+        GROUP BY wallet_id, branch_index
+        """,
+        (profile_id,),
+    ).fetchall()
+    output: dict[str, dict[int, int]] = {}
+    for row in rows:
+        try:
+            branch = int(row["branch_index"])
+            max_index = int(row["max_index"])
+        except (TypeError, ValueError):
+            continue
+        output.setdefault(str(row["wallet_id"]), {})[branch] = max_index
+    return output
+
+
+def _candidate_branch_maxes(candidate_scripts: Sequence["SourceScript"]) -> dict[str, dict[int, int]]:
+    output: dict[str, dict[int, int]] = {}
+    for source in candidate_scripts:
+        if source.branch_index is None or source.address_index is None:
+            continue
+        output.setdefault(source.wallet_id, {})[int(source.branch_index)] = max(
+            output.get(source.wallet_id, {}).get(int(source.branch_index), -1),
+            int(source.address_index),
+        )
+    return output
+
+
+def _merged_branch_maxes(
+    *sources: Mapping[str, Mapping[int, int]],
+) -> dict[str, dict[int, int]]:
+    merged: dict[str, dict[int, int]] = {}
+    for source in sources:
+        for wallet_id, branch_values in source.items():
+            wallet_values = merged.setdefault(wallet_id, {})
+            for branch, value in branch_values.items():
+                wallet_values[int(branch)] = max(wallet_values.get(int(branch), -1), int(value))
+    return merged
+
+
+def _descriptor_config_scripts(
+    conn: sqlite3.Connection,
+    profile_id: str,
+    active_counts: Mapping[str, int],
+    candidate_scripts: Sequence["SourceScript"],
+) -> list[SourceScript]:
+    branch_maxes = _merged_branch_maxes(
+        _inventory_branch_maxes(conn, profile_id),
+        _highest_used_checkpoints(conn, profile_id),
+        _candidate_branch_maxes(candidate_scripts),
+    )
+    scripts: list[SourceScript] = []
+    for wallet in _wallets_for_profile(conn, profile_id):
+        config = _wallet_config(wallet)
+        if not has_descriptor_sync_material(config):
+            continue
+        try:
+            plan = load_wallet_descriptor_plan_from_config(config)
+        except (AppError, ValueError):
+            continue
+        if plan is None:
+            continue
+        wallet_id = str(_row_get(wallet, "id"))
+        deprecated = wallet_is_deprecated(config)
+        for branch in plan.branches:
+            known_max = branch_maxes.get(wallet_id, {}).get(branch.branch_index)
+            end = plan.gap_limit if known_max is None else known_max + plan.gap_limit + 1
+            end = max(0, min(int(end), MAX_STORED_DESCRIPTOR_TARGETS_PER_BRANCH))
+            try:
+                targets = derive_descriptor_targets(
+                    plan,
+                    branch_index=branch.branch_index,
+                    start=0,
+                    end=end,
+                )
+            except (AppError, ValueError):
+                continue
+            for target in targets:
+                scripts.append(
+                    SourceScript(
+                        profile_id=profile_id,
+                        wallet_id=wallet_id,
+                        wallet_label=str(_row_get(wallet, "label") or wallet_id),
+                        wallet_kind=str(_row_get(wallet, "kind") or ""),
+                        chain=plan.chain,
+                        network=plan.network,
+                        script_pubkey=target.script_pubkey.lower(),
+                        source="descriptor_config",
+                        deprecated=deprecated,
+                        active_transaction_count=int(active_counts.get(wallet_id, 0)),
+                        branch_index=target.branch_index,
+                        branch_label=target.branch_label,
+                        address_index=target.address_index,
+                    )
+                )
     return scripts
 
 
@@ -188,17 +380,22 @@ def scripts_from_sync_state(
         script_pubkey = str(target.get("script_pubkey") or "").strip().lower()
         if not script_pubkey:
             continue
+        chain, network = _normalize_chain_network(
+            getattr(sync_state, "chain", "") or target.get("chain"),
+            getattr(sync_state, "network", "") or target.get("network"),
+        )
         scripts.append(
             SourceScript(
                 profile_id=profile_id,
                 wallet_id=wallet_id,
                 wallet_label=str(_row_get(wallet, "label") or wallet_id),
                 wallet_kind=str(_row_get(wallet, "kind") or ""),
-                chain=str(getattr(sync_state, "chain", "") or target.get("chain") or ""),
-                network=str(getattr(sync_state, "network", "") or target.get("network") or ""),
+                chain=chain,
+                network=network,
                 script_pubkey=script_pubkey,
                 source="sync_target",
                 deprecated=wallet_is_deprecated(config),
+                branch_index=target.get("branch_index"),
                 branch_label=target.get("branch_label"),
                 address_index=target.get("address_index"),
             )
@@ -221,32 +418,21 @@ def _include_source(
     return source.active_transaction_count > 0
 
 
-def _descriptor_bounds(sources: Sequence[SourceScript]) -> list[dict[str, Any]]:
-    bounds: dict[tuple[str, str], dict[str, Any]] = {}
+def _checked_source_counts(sources: Sequence[SourceScript]) -> list[dict[str, Any]]:
+    counts: dict[str, dict[str, Any]] = {}
     for source in sources:
-        if source.source != "sync_target":
+        if source.source not in {"descriptor_config", "sync_target"}:
             continue
-        branch = str(source.branch_label or "")
-        key = (source.wallet_id, branch)
-        row = bounds.setdefault(
-            key,
+        row = counts.setdefault(
+            source.wallet_id,
             {
                 "wallet_id": source.wallet_id,
                 "wallet": source.wallet_label,
-                "branch": branch,
-                "max_address_index": None,
                 "target_count": 0,
             },
         )
         row["target_count"] += 1
-        if source.address_index is not None:
-            current = row["max_address_index"]
-            row["max_address_index"] = (
-                int(source.address_index)
-                if current is None
-                else max(int(current), int(source.address_index))
-            )
-    return list(bounds.values())
+    return sorted(counts.values(), key=lambda item: (item["wallet"], item["wallet_id"]))
 
 
 def _overlap_payload(
@@ -275,8 +461,9 @@ def _overlap_payload(
     recommended = sorted(
         wallets,
         key=lambda item: (
-            0 if item["kind"] in {"descriptor", "xpub"} else 1,
             1 if item["deprecated"] else 0,
+            0 if item["kind"] in {"descriptor", "xpub"} else 1,
+            0 if item["active_transaction_count"] else 1,
             item["label"],
         ),
     )[0]
@@ -312,9 +499,9 @@ def _overlap_payload(
         "recommended_canonical_wallet_id": recommended["id"],
         "recommended_canonical_wallet": recommended["label"],
         "recommendation_reason": (
-            "Prefer descriptor/xpub sources as the canonical source when the "
-            "overlap is otherwise equivalent; this is a recommendation, not an "
-            "automatic irreversible repair."
+            "Prefer active, non-deprecated descriptor/xpub sources as canonical "
+            "when the overlap is otherwise equivalent; this is a recommendation, "
+            "not an automatic irreversible repair."
         ),
         "evidence": sorted(evidence),
         "address_list_repair_preview": address_repairs,
@@ -322,11 +509,12 @@ def _overlap_payload(
             "scope": "finite_scripts_only",
             "descriptor_global_overlap_proven": False,
             "note": (
-                "Only resolved sync targets, address-list scripts, and existing "
+                "Only resolved sync targets, address-list scripts, stored "
+                "descriptor targets within the checked horizon, and existing "
                 "wallet_utxos evidence were compared. Address-list entries beyond "
                 "a descriptor's checked horizon are not proven overlapping."
             ),
-            "bounds": _descriptor_bounds(sources),
+            "target_counts": _checked_source_counts(sources),
         },
     }
 
@@ -348,6 +536,7 @@ def detect_profile_source_overlaps(
         sources.extend(_address_list_scripts(profile_id, wallet, config, active_counts))
     sources.extend(_inventory_scripts(conn, profile_id, active_counts))
     sources.extend(candidate_scripts)
+    sources.extend(_descriptor_config_scripts(conn, profile_id, active_counts, candidate_scripts))
     filtered = [
         source
         for source in sources
@@ -361,7 +550,10 @@ def detect_profile_source_overlaps(
     for source in filtered:
         if not source.chain or not source.network:
             continue
-        key = (source.profile_id, source.chain, source.network, source.script_pubkey)
+        chain, network = _normalize_chain_network(source.chain, source.network)
+        if not chain or not network:
+            continue
+        key = (source.profile_id, chain, network, source.script_pubkey)
         grouped.setdefault(key, []).append(source)
     overlaps = []
     for key, group in grouped.items():
