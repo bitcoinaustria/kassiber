@@ -1034,14 +1034,20 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
     SQL. Fixed: the early-return now sorts unconditionally. (The gate-ordering /
     same-timestamp determinism part of this finding was already addressed by the
     F5 same-timestamp fix, which removed the old `_gate_order_key`.)
-  - [x] **Cross-chain script-collision guard defeated by blank chain/network (P3,
-    round-2 deep audit).** `_norm_chain_network('', '')` defaulted to
+  - [ ] **Cross-chain script-collision guard defeated by blank chain/network (P3,
+    round-2 deep audit).** `_norm_chain_network('', '')` defaults to
     `('bitcoin', 'main')`, so a blank-metadata reused-key Liquid match could pass
     the bitcoin/main chain filter and book a cross-chain disposal as a non-taxable
-    MOVE. Fixed defensively: a genuinely blank chain AND network now stays distinct
-    (`('', '')`) — it no longer collides with a real bitcoin/main wallet but still
-    compares equal to another genuinely-blank side. (Likely unreachable in
-    production given chain force-normalization on add/edit; hardened regardless.)
+    MOVE. A comparison-time fix (treat blank as a distinct "unknown") was tried but
+    REVERTED — Codex review flagged that legacy address-list / inventory matches
+    legitimately store blank chain metadata and ARE bitcoin/main, so a real
+    bitcoin/main source paying one of them would then fail the same-chain filter
+    and have its owned output mis-booked as an external disposal. The correct fix
+    is to normalize blank Bitcoin address metadata to bitcoin/main when the index
+    is BUILT (`build_owned_index` / address-list + inventory seeding), so genuine
+    cross-chain blanks (if any are reachable) stay distinguishable from
+    legacy-mainnet blanks. Likely unreachable today (chain force-normalization on
+    wallet add/edit), hence P3 / deferred.
 - [x] Austrian E 1kv PDF export no longer uses the Latin-1 text writer:
   `reports export-austrian-e1kv-pdf` / `reports export-austrian` now render a
   ReportLab-backed Steuerbericht with cover, summary/detail sections,

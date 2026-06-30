@@ -786,11 +786,18 @@ def normalize_tax_asset_inputs(
         for tx_id, role in loan_leg_map.items()
         if role in LOCK_SUPPRESS_ROLES or role in RELEASE_SUPPRESS_ROLES
     }
-    regime_rows = (
-        [row for row in rows if str(row["id"]) not in suppressed_loan_ids]
-        if suppressed_loan_ids
-        else list(rows)
-    )
+    # Detect shared-prevout conflicts (RBF / reorg / double-spend) up front so the
+    # loser legs are excluded from Austrian regime inference below: an unconfirmed
+    # loser sorted ahead of the confirmed winner would otherwise deplete the
+    # Alt/Neu availability pool and mis-tag the winner (or a later disposal) even
+    # though the loser is then quarantined.
+    conflict_row_ids = detect_conflicting_spend_ids(rows)
+    regime_rows = [
+        row
+        for row in rows
+        if str(row["id"]) not in suppressed_loan_ids
+        and str(row["id"]) not in conflict_row_ids
+    ]
     # Austrian regime inference walks rows in order and depletes the Alt/Neu
     # pools positionally, so feed it a CHRONOLOGICAL, economically-meaningful
     # order — acquisitions before disposals at an equal timestamp — instead of
@@ -840,13 +847,10 @@ def normalize_tax_asset_inputs(
     handled_pairs: set[tuple[str, str]] = set()
     blocked_transfer_group_reasons: dict[str, str] = {}
     fanout_row_ids = _owned_fanout_row_ids(rows, pair_by_row, samourai_internal_row_ids)
-    # Transactions that conflict over a shared input outpoint (RBF replacement /
-    # reorg / double-spend) cannot both be on-chain; without this each would be
-    # booked as an independent carrying MOVE, inflating the destination. The loser
-    # txid's legs are quarantined for review (the winner, if a single confirmed
-    # txid exists, is left to book normally).
-    conflict_row_ids = detect_conflicting_spend_ids(rows)
-
+    # conflict_row_ids was computed up front (before regime inference). Shared-
+    # prevout conflicts (RBF / reorg / double-spend) cannot both be on-chain, so
+    # the loser txid's legs are quarantined for review here rather than each being
+    # booked as an independent carrying MOVE that inflates the destination.
     for row in rows:
         if row["id"] in conflict_row_ids:
             quarantines.append(

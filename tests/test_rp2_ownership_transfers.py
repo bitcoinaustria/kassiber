@@ -373,6 +373,67 @@ class OwnershipDeriverMixedSpendTest(unittest.TestCase):
         self.assertAlmostEqual(float(disposals[0]["quantity"]), -0.5, places=6)
         self.assertAlmostEqual(float(disposals[0]["proceeds"]), 20000, places=2)
 
+    def test_whole_row_payout_with_readable_graph_not_restored_as_move(self):
+        # Codex review #1: the payout out row has a READABLE graph that also pays
+        # an owned sibling wallet + an external residual, so
+        # graph_partial_payment_out_ids WITHHOLDS its auto-pair before the payout
+        # prune runs. The payout-claimed id must also be dropped from the withheld
+        # set, or the restore-withheld path re-adds it and books the reviewed
+        # payout as a non-taxable MOVE (dropping the declared proceeds).
+        index = OwnedIndex()
+        index.add_script(SCRIPT_A, _match("A", "Cold"))
+        index.add_script(SCRIPT_B, _match("B", "Hot"))
+        spend = json.dumps(
+            {
+                "txid": "pp2",
+                "vin": [{"txid": "pv", "vout": 0, "prevout": {"scriptpubkey": SCRIPT_A}}],
+                "vout": [
+                    {"n": 0, "scriptpubkey": SCRIPT_B, "value": 30_000_000},  # owned sibling
+                    {"n": 1, "scriptpubkey": SCRIPT_EXT, "value": 20_000_000},  # external
+                ],
+            }
+        )
+        rows = [
+            _row("A", "inbound", BTC, external_id="acqA"),
+            _row("A", "outbound", 50 * BTC // 100, external_id="pp2", raw_json=spend),
+            _row("B", "inbound", 30 * BTC // 100, external_id="pp2"),
+        ]
+        direct_payouts = [
+            {
+                "id": "direct-payout-graph",
+                "out_transaction_id": "A-outbound-pp2",
+                "kind": "direct-swap-payout",
+                "policy": "taxable",
+                "payout_asset": "BTC",
+                "payout_amount": 50 * BTC // 100,
+                "payout_occurred_at": NOW,
+                "payout_fiat_value": 20000,
+                "payout_external_id": "provider-payout",
+                "counterparty": "external-recipient",
+                "notes": "direct payout",
+                "swap_fee_msat": 0,
+                "swap_fee_kind": "combined",
+                "created_at": NOW,
+                "out_amount": 50 * BTC // 100,  # whole row
+            }
+        ]
+        state = build_tax_engine(PROFILE).build_ledger_state(
+            TaxEngineLedgerInputs(
+                rows=rows,
+                wallet_refs_by_id=WALLET_REFS,
+                manual_pair_records=[],
+                direct_payout_records=direct_payouts,
+                owned_index=index,
+            )
+        )
+        entry_types = [e["entry_type"] for e in state.entries]
+        self.assertNotIn("transfer_out", entry_types)  # not hijacked into a MOVE
+        disposals = [e for e in state.entries if e["entry_type"] == "disposal"]
+        self.assertTrue(disposals)
+        self.assertAlmostEqual(
+            float(disposals[0]["proceeds"]), 20000, places=2
+        )
+
 
 class OwnershipDeriverAmbiguityTest(unittest.TestCase):
     """Ambiguous destination must not inflate holdings.

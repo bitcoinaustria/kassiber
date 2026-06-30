@@ -2150,6 +2150,13 @@ class GenericRP2TaxEngine:
                     if str(pair["out"]["id"]) not in direct_payout_claimed_ids
                     and str(pair["in"]["id"]) not in direct_payout_claimed_ids
                 ]
+                # When the payout's out row has a readable graph that also pays an
+                # owned wallet, graph_partial_payment_out_ids already moved its
+                # pair into the withheld set BEFORE this prune. Drop it from there
+                # too, or the restore-withheld path below re-adds it and the
+                # reviewed payout still books as a non-taxable MOVE.
+                for claimed in direct_payout_claimed_ids:
+                    withheld_pairs_by_out_id.pop(claimed, None)
             # Multi-source consolidation deriver (N owned wallets -> 1, graph
             # readable): the one case detect_intra and the single-source deriver
             # both decline because per-wallet sync double-counts the fee. It

@@ -851,26 +851,34 @@ def detect_conflicting_spend_ids(rows: Sequence[Mapping[str, Any]]) -> set[str]:
     This is the self-transfer-scoped slice of the broader RBF/reorg canonicalization
     pass; it is purely a quarantine signal and never books anything.
     """
+    row_txid: dict[str, str] = {}
     txid_confirmed: dict[str, bool] = {}
     outpoint_txids: dict[str, set[str]] = {}
     for row in rows:
-        if _get(row, "direction") != "outbound":
-            continue
         parsed = _parse_onchain_tx(_get(row, "raw_json"))
-        if parsed is None:
-            continue
+        # A synthetic split / direct-payout leg keeps the REAL transaction in
+        # raw_json but renames external_id (e.g. "cross-split:..."), so prefer the
+        # parsed graph txid and fall back to external_id. Keying every leg this way
+        # ensures a losing transaction's synthetic legs are quarantined too — not
+        # just the rows whose external_id literally equals the txid.
         txid = normalize_group_txid(
-            str(parsed.get("txid") or _get(row, "external_id") or "")
+            str((parsed.get("txid") if parsed else None) or _get(row, "external_id") or "")
         )
         if not txid:
             continue
+        row_txid[str(_get(row, "id"))] = txid
+        # Confirmation can land on ANY leg of a transaction — when wallets sync at
+        # different times a destination inbound may be confirmed while the source's
+        # outbound row is still unconfirmed — so fold every row's state into the
+        # per-txid confirmation, not just outbound rows.
         txid_confirmed[txid] = txid_confirmed.get(txid, False) or bool(
             _get(row, "confirmed_at")
         )
-        for entry in parsed["inputs"]:
-            outpoint = entry.get("outpoint")
-            if outpoint:
-                outpoint_txids.setdefault(outpoint, set()).add(txid)
+        if parsed is not None and _get(row, "direction") == "outbound":
+            for entry in parsed["inputs"]:
+                outpoint = entry.get("outpoint")
+                if outpoint:
+                    outpoint_txids.setdefault(outpoint, set()).add(txid)
 
     loser_txids: set[str] = set()
     for txids in outpoint_txids.values():
@@ -881,13 +889,7 @@ def detect_conflicting_spend_ids(rows: Sequence[Mapping[str, Any]]) -> set[str]:
             loser_txids |= txids - confirmed  # the unconfirmed replacements lose
         else:
             loser_txids |= txids  # ambiguous — surface the whole conflict
-    if not loser_txids:
-        return set()
-    return {
-        str(_get(row, "id"))
-        for row in rows
-        if normalize_group_txid(str(_get(row, "external_id") or "")) in loser_txids
-    }
+    return {rid for rid, txid in row_txid.items() if txid in loser_txids}
 
 
 # -- internals --------------------------------------------------------------
@@ -994,15 +996,16 @@ def _norm_chain_network(chain: Any, network: Any) -> tuple[str, str]:
     to a lowercased raw tuple (still consistent for identical spellings) instead
     of raising.
 
-    A genuinely blank chain AND network is "unknown", NOT Bitcoin mainnet:
-    ``normalize_chain("")`` defaults empty to bitcoin, so without this guard a
-    blank-metadata match would canonicalize to ``("bitcoin", "main")`` and pass
-    the cross-chain filter against a real bitcoin/main source — booking a real
-    cross-chain disposal as a non-taxable MOVE. Keep blank distinct; it still
-    compares equal to another genuinely-blank side.
+    NOTE: a genuinely blank chain AND network normalizes to ``("bitcoin",
+    "main")`` here (``normalize_chain("")`` defaults empty to bitcoin). That is
+    intentional for legacy address-list / inventory matches that stored no chain
+    metadata — they are Bitcoin mainnet, and a bitcoin/main source paying one of
+    them must still pass the same-chain filter. Distinguishing a genuinely-unknown
+    cross-chain blank from a legacy-mainnet blank has to happen when the index is
+    BUILT (stamp bitcoin/main on legacy blanks), not at comparison time, or a real
+    same-chain self-transfer would be mis-booked as an external disposal. See the
+    deferred C2 item in TODO.md.
     """
-    if not str(chain or "").strip() and not str(network or "").strip():
-        return ("", "")
     try:
         canonical_chain = normalize_chain(chain)
         return (canonical_chain, normalize_network(canonical_chain, network))

@@ -1153,6 +1153,48 @@ class ConflictingSpendTests(unittest.TestCase):
             {"win-out", "win-in", "lose-out", "lose-in"},
         )
 
+    def test_confirmation_on_inbound_leg_keeps_winner(self):
+        # The winner's OUTBOUND row is still unconfirmed, but its destination
+        # inbound (synced earlier) is confirmed. Confirmation must be read from
+        # ALL legs, so the winner is kept and only the replacement is quarantined
+        # (not both).
+        win = _outbound(row_id="win-out", wallet_id="A", amount_sats=50_000_000,
+                        fee_sats=1000, txid="a" * 64, input_scripts=[SCRIPT["A"]],
+                        outputs=[(SCRIPT["B"], 50_000_000)])
+        win["confirmed_at"] = None
+        win_in = _inbound(row_id="win-in", wallet_id="B", amount_sats=50_000_000, txid="a" * 64)
+        win_in["confirmed_at"] = "2026-03-14T18:00:00Z"  # the confirmed leg
+        lose = _outbound(row_id="lose-out", wallet_id="A", amount_sats=50_000_000,
+                         fee_sats=2000, txid="b" * 64, input_scripts=[SCRIPT["A"]],
+                         outputs=[(SCRIPT["B"], 50_000_000)])
+        lose["confirmed_at"] = None
+        lose_in = _inbound(row_id="lose-in", wallet_id="B", amount_sats=50_000_000, txid="b" * 64)
+        self.assertEqual(
+            detect_conflicting_spend_ids([win, win_in, lose, lose_in]),
+            {"lose-out", "lose-in"},
+        )
+
+    def test_synthetic_loser_leg_quarantined_by_parsed_txid(self):
+        # A synthetic split leg keeps the real (losing) tx in raw_json but renames
+        # external_id; it must still be quarantined via its parsed txid, not left
+        # to book through the cross-asset/manual path.
+        win = _outbound(row_id="win-out", wallet_id="A", amount_sats=50_000_000,
+                        fee_sats=1000, txid="a" * 64, input_scripts=[SCRIPT["A"]],
+                        outputs=[(SCRIPT["B"], 50_000_000)])
+        win["confirmed_at"] = "2026-03-14T18:00:00Z"
+        lose = _outbound(row_id="lose-out", wallet_id="A", amount_sats=50_000_000,
+                         fee_sats=2000, txid="b" * 64, input_scripts=[SCRIPT["A"]],
+                         outputs=[(SCRIPT["B"], 50_000_000)])
+        lose["confirmed_at"] = None
+        # Synthetic split leg of the loser: external_id renamed, raw_json keeps txid "b".
+        split_leg = dict(lose)
+        split_leg["id"] = "cross-split:bbb:out"
+        split_leg["external_id"] = "cross-split:bbb:out"
+        ids = detect_conflicting_spend_ids([win, lose, split_leg])
+        self.assertIn("lose-out", ids)
+        self.assertIn("cross-split:bbb:out", ids)
+        self.assertNotIn("win-out", ids)
+
     def test_no_shared_prevout_no_conflict(self):
         # Distinct prev outpoints (different input scripts -> different prev txids
         # in the helper) -> no conflict.
