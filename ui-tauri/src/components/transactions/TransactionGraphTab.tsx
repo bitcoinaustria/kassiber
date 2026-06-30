@@ -253,7 +253,14 @@ function positiveKnownSats(node: TransactionGraphNode) {
     : 0;
 }
 
+function hasAmountlessGeometryValue(node: TransactionGraphNode) {
+  return typeof node.valueSats !== "number" || node.valueState === "confidential";
+}
+
 function visualSatsForNode(node: TransactionGraphNode, fallbackSats: number) {
+  if (hasAmountlessGeometryValue(node)) {
+    return Math.max(1, fallbackSats);
+  }
   if (typeof node.valueSats === "number") {
     return Math.max(0, node.valueSats);
   }
@@ -265,8 +272,9 @@ function visualKnownSatsForNode(
   fallbackSats: number,
   hasAmountlessNonFeeRows: boolean,
 ) {
-  if (typeof node.valueSats !== "number") return null;
-  const value = Math.max(0, node.valueSats);
+  const valueSats = node.valueSats;
+  if (typeof valueSats !== "number" || node.valueState === "confidential") return null;
+  const value = Math.max(0, valueSats);
   if (node.side === "fee" && hasAmountlessNonFeeRows && value > 0) {
     return Math.min(value, Math.max(1, fallbackSats));
   }
@@ -297,7 +305,7 @@ function buildDrawableRows(
   if (!rows.length) return [];
   const centerY = height / 2;
   const hasAmountlessNonFeeRows = rows.some(
-    (node) => node.side !== "fee" && typeof node.valueSats !== "number",
+    (node) => node.side !== "fee" && hasAmountlessGeometryValue(node),
   );
   const knownVisualValues = rows.map((node) =>
     visualKnownSatsForNode(node, fallbackSats, hasAmountlessNonFeeRows),
@@ -305,7 +313,7 @@ function buildDrawableRows(
   const visualValues = rows.map((node, index) =>
     knownVisualValues[index] ?? visualSatsForNode(node, fallbackSats),
   );
-  const unknownCount = rows.filter((node) => typeof node.valueSats !== "number").length;
+  const unknownCount = rows.filter(hasAmountlessGeometryValue).length;
   const knownTotal = knownVisualValues.reduce(
     (sum: number, value) => sum + (value ?? 0),
     0,
@@ -320,7 +328,10 @@ function buildDrawableRows(
     return (combinedWeight * value) / Math.max(1, totalSats);
   });
   const lines = rows.map((node, index) => {
-    const knownZero = typeof node.valueSats === "number" && node.valueSats <= 0;
+    const knownZero =
+      !hasAmountlessGeometryValue(node) &&
+      typeof node.valueSats === "number" &&
+      node.valueSats <= 0;
     const weight = weights[index] ?? 0;
     return {
       ...node,
@@ -332,7 +343,7 @@ function buildDrawableRows(
       weight,
       offset: 0,
       visualValueSats: visualValues[index] ?? 0,
-      estimatedVisualValue: typeof node.valueSats !== "number",
+      estimatedVisualValue: hasAmountlessGeometryValue(node),
     };
   });
   const visibleWeight = lines.reduce((sum, line) => sum + line.thickness, 0);

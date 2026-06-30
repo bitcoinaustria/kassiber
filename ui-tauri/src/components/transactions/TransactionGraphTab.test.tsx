@@ -233,8 +233,8 @@ describe("TransactionFlowDiagram", () => {
           id: "conf-out-0",
           outpoint:
             "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789:0",
-          valueSats: null,
-          valueBtc: null,
+          valueSats: 0,
+          valueBtc: 0,
           valueState: "confidential" as const,
           role: "change",
           ownership: "owned",
