@@ -16,6 +16,7 @@ import type {
 import { DEFAULT_OPEN_COST_SAT } from "@/lib/lightning";
 import { accountMatchesLabel } from "@/lib/connectionTransactions";
 import { MOCK_PROFILES } from "@/mocks/profiles";
+import { MOCK_TRANSACTION_GRAPHS } from "@/mocks/transactions";
 import type {
   ProfileGainsAlgorithm,
   ProfileTaxCountry,
@@ -4043,6 +4044,23 @@ export const mockDaemon: DaemonTransport = {
           data: { ...base, txs, nextCursor: null, hasMore: false } as T,
         };
       }
+    }
+
+    if (req.kind === "ui.transactions.graph") {
+      const args = (req.args ?? {}) as { transaction?: unknown };
+      const transactionId =
+        typeof args.transaction === "string" && args.transaction.trim()
+          ? args.transaction.trim()
+          : "tx19";
+      const graph =
+        MOCK_TRANSACTION_GRAPHS[transactionId] ??
+        MOCK_TRANSACTION_GRAPHS.tx19;
+      return {
+        kind: "ui.transactions.graph",
+        schema_version: 1,
+        request_id: req.request_id,
+        data: graph as T,
+      };
     }
 
     const fixture = fixtures[req.kind];

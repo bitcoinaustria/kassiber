@@ -149,6 +149,7 @@ const ALLOWED_DAEMON_KINDS: &[&str] = &[
     "ui.transactions.list",
     "ui.transactions.metadata.update",
     "ui.transactions.resolve",
+    "ui.transactions.graph",
     "ui.transactions.history",
     "ui.transactions.history.revert",
     "ui.activity.history",
@@ -2836,6 +2837,7 @@ mod tests {
         // rejects any unlisted kind (these were missing, causing kind_not_allowed).
         let required: &[&str] = &[
             "ui.transactions.resolve",
+            "ui.transactions.graph",
             "ui.transactions.history",
             "ui.transactions.history.revert",
         ];

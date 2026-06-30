@@ -1,0 +1,1431 @@
+"""Curated transaction-flow graph payloads for the desktop detail view.
+
+The builder intentionally reuses the ownership-transfer parser/derivers for
+classification hints, but returns a UI-specific model. It never exposes raw
+transaction JSON, script hex, wallet configuration, descriptors, xpubs, backend
+URLs, or credentials.
+"""
+
+from __future__ import annotations
+
+import json
+import sqlite3
+from collections import defaultdict
+from typing import Any, Mapping, Sequence
+
+from ..backends import preferred_mempool_api_backend
+from ..errors import AppError
+from ..msat import msat_to_btc
+from . import ownership as core_ownership
+from .ownership_transfers import (
+    _parse_onchain_tx,
+    derive_multi_source_consolidations,
+    derive_ownership_transfers,
+    derive_recorded_fanout_transfers,
+)
+from .repo import current_context_snapshot
+from .sync_backends import fetch_esplora_transaction
+
+
+GRAPH_LOOKUP_TIMEOUT_SECONDS = 5
+SATS_TO_MSAT = 1000
+
+
+def build_transaction_graph_snapshot(
+    conn: sqlite3.Connection,
+    args: dict[str, Any] | None = None,
+    runtime_config: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    raw_args = args or {}
+    if not isinstance(raw_args, dict):
+        raw_args = {}
+    unknown = sorted(set(raw_args) - {"transaction"})
+    if unknown:
+        raise AppError(
+            "ui.transactions.graph received unsupported fields",
+            code="validation",
+            details={"unknown": unknown},
+            retryable=False,
+        )
+    transaction_ref = str(raw_args.get("transaction") or "").strip()
+    if not transaction_ref:
+        raise AppError(
+            "ui.transactions.graph requires args.transaction",
+            code="validation",
+            retryable=False,
+        )
+
+    context = current_context_snapshot(conn)
+    profile_id = context["profile_id"]
+    if not profile_id:
+        return _empty_payload(transaction_ref, "no_active_profile")
+
+    row = _fetch_transaction(conn, profile_id, transaction_ref)
+    if row is None:
+        return _empty_payload(transaction_ref, "not_found")
+
+    profile_rows = _load_profile_transaction_rows(conn, profile_id)
+    wallet_refs_by_id = _wallet_refs_by_id(conn, profile_id)
+    owned_index, index_warnings = _build_owned_index(conn, profile_id, profile_rows)
+    raw = _json_obj(_row_get(row, "raw_json"))
+    graph = _parse_graph(row, _enrich_graph_raw(conn, row, raw, runtime_config))
+    semantics = _preview_ownership_semantics(
+        profile_rows,
+        owned_index,
+        wallet_refs_by_id,
+    )
+    _annotate_graph(graph, row, owned_index, semantics)
+    warnings = list(graph.pop("_warnings", []))
+    warnings.extend(
+        {"code": "ownership_index", "level": "info", "message": str(message)}
+        for message in index_warnings
+    )
+    warnings.extend(_warnings_for_row(row, semantics))
+    warnings.extend(_journal_warnings(row))
+
+    tx_meta = _transaction_meta(row, graph)
+    tx_id = str(row["id"])
+    swap_route = _swap_route_for_row(conn, profile_id, row)
+    return {
+        "transaction": tx_meta,
+        "supportLevel": graph["supportLevel"],
+        "unsupportedReason": graph.get("unsupportedReason"),
+        "warnings": _dedupe_warnings(warnings),
+        "inputs": [_public_node(node) for node in graph["inputs"]],
+        "outputs": [_public_node(node) for node in graph["outputs"]],
+        "fee": graph.get("fee"),
+        "annotations": semantics["by_row"].get(tx_id, []),
+        "accounting": {
+            "quarantine": _quarantine(row),
+            "linkedPairs": _linked_pairs_for_row(row, semantics),
+            "transferGroupIds": sorted(
+                {
+                    str(annotation.get("groupId"))
+                    for annotation in semantics["by_row"].get(tx_id, [])
+                    if annotation.get("groupId")
+                }
+            ),
+        },
+        "context": {
+            "workspace": context["workspace_label"] or None,
+            "profile": context["profile_label"] or None,
+        },
+        "swapRoute": swap_route,
+    }
+
+
+def _empty_payload(transaction_ref: str, reason: str) -> dict[str, Any]:
+    return {
+        "transaction": None,
+        "supportLevel": "graphless",
+        "unsupportedReason": reason,
+        "warnings": [
+            {
+                "code": reason,
+                "level": "warning",
+                "message": "Transaction graph is unavailable for the current profile.",
+            }
+        ],
+        "inputs": [],
+        "outputs": [],
+        "fee": None,
+        "annotations": [],
+        "accounting": {"quarantine": None, "linkedPairs": [], "transferGroupIds": []},
+        "context": {"workspace": None, "profile": None},
+        "swapRoute": None,
+        "query": transaction_ref,
+    }
+
+
+def _fetch_transaction(
+    conn: sqlite3.Connection,
+    profile_id: str,
+    transaction_ref: str,
+) -> sqlite3.Row | None:
+    return conn.execute(
+        """
+        SELECT
+            t.*,
+            w.label AS wallet_label,
+            w.kind AS wallet_kind,
+            w.config_json AS wallet_config_json,
+            w.account_id AS wallet_account_id,
+            COALESCE(a.code, 'treasury') AS account_code,
+            COALESCE(a.label, 'Treasury') AS account_label,
+            jq.reason AS quarantine_reason,
+            jq.detail_json AS quarantine_detail_json
+        FROM transactions t
+        JOIN wallets w ON w.id = t.wallet_id
+        LEFT JOIN accounts a ON a.id = w.account_id
+        LEFT JOIN journal_quarantines jq ON jq.transaction_id = t.id
+        WHERE t.profile_id = ?
+          AND (t.id = ? OR t.external_id = ?)
+        ORDER BY CASE WHEN t.id = ? THEN 0 ELSE 1 END,
+                 t.occurred_at DESC,
+                 t.created_at DESC,
+                 t.id DESC
+        LIMIT 1
+        """,
+        (profile_id, transaction_ref, transaction_ref, transaction_ref),
+    ).fetchone()
+
+
+def _load_profile_transaction_rows(
+    conn: sqlite3.Connection,
+    profile_id: str,
+) -> list[sqlite3.Row]:
+    return conn.execute(
+        """
+        SELECT
+            t.*,
+            w.label AS wallet_label,
+            w.account_id AS wallet_account_id,
+            COALESCE(a.code, 'treasury') AS account_code,
+            COALESCE(a.label, 'Treasury') AS account_label
+        FROM transactions t
+        JOIN wallets w ON w.id = t.wallet_id
+        LEFT JOIN accounts a ON a.id = w.account_id
+        WHERE t.profile_id = ?
+        ORDER BY t.occurred_at, t.created_at, t.id
+        """,
+        (profile_id,),
+    ).fetchall()
+
+
+def _wallet_refs_by_id(conn: sqlite3.Connection, profile_id: str) -> dict[str, dict[str, Any]]:
+    rows = conn.execute(
+        """
+        SELECT
+            w.id,
+            w.label,
+            w.account_id AS wallet_account_id,
+            COALESCE(a.code, 'treasury') AS account_code,
+            COALESCE(a.label, 'Treasury') AS account_label
+        FROM wallets w
+        LEFT JOIN accounts a ON a.id = w.account_id
+        WHERE w.profile_id = ?
+        """,
+        (profile_id,),
+    ).fetchall()
+    return {
+        str(row["id"]): {
+            "id": row["id"],
+            "label": row["label"],
+            "wallet_account_id": row["wallet_account_id"],
+            "account_code": row["account_code"],
+            "account_label": row["account_label"],
+        }
+        for row in rows
+    }
+
+
+def _build_owned_index(
+    conn: sqlite3.Connection,
+    profile_id: str,
+    rows: Sequence[Mapping[str, Any]],
+) -> tuple[Any | None, list[str]]:
+    # Match the journal handler: descriptor derivation is only worth doing when
+    # some on-chain row carries a graph shape. Graphless recorded fan-out hints
+    # do not need the ownership index.
+    has_graph = any((str(_row_get(row, "raw_json") or "")).find('"vout"') != -1 for row in rows)
+    if not has_graph:
+        return None, []
+    wallets = core_ownership.load_profile_wallets(conn, profile_id)
+    return core_ownership.build_owned_index(conn, profile_id, wallets)
+
+
+def _parse_graph(row: Mapping[str, Any], raw: Mapping[str, Any] | None = None) -> dict[str, Any]:
+    raw = dict(raw) if isinstance(raw, Mapping) else _json_obj(_row_get(row, "raw_json"))
+    metadata = _transaction_metadata(raw)
+    vin = raw.get("vin")
+    vout = raw.get("vout")
+    warnings: list[dict[str, str]] = []
+    confidential = _looks_liquid_or_confidential(row, raw) or any(
+        isinstance(out, dict) and (
+            out.get("valuecommitment") is not None
+            or out.get("assetcommitment") is not None
+            or out.get("surjectionproof") is not None
+        )
+        for out in (vout if isinstance(vout, list) else [])
+    )
+    if not isinstance(vin, list) or not isinstance(vout, list):
+        reason = "graphless_import"
+        if _looks_liquid_or_confidential(row, raw):
+            reason = "liquid_reference_graph_not_local"
+        graphless_warnings = [
+            {
+                "code": reason,
+                "level": "info",
+                "message": _graphless_message(reason),
+            }
+        ]
+        lookup_warning = raw.get("_graphLookupWarning")
+        if isinstance(lookup_warning, Mapping):
+            graphless_warnings.append(
+                {
+                    "code": str(lookup_warning.get("code") or "graph_lookup_failed"),
+                    "level": str(lookup_warning.get("level") or "warning"),
+                    "message": str(
+                        lookup_warning.get("message")
+                        or "Public transaction reference lookup failed."
+                    ),
+                }
+            )
+        return {
+            "supportLevel": "graphless",
+            "unsupportedReason": reason,
+            "metadata": {**metadata, "inputCount": 0, "outputCount": 0},
+            "inputs": [],
+            "outputs": [],
+            "fee": _fee_from_row(row, metadata),
+            "_warnings": graphless_warnings,
+        }
+
+    valued = _parse_onchain_tx(json.dumps(raw, sort_keys=True))
+    inputs: list[dict[str, Any]] = []
+    input_value_complete = True
+    for index, entry in enumerate(vin):
+        if not isinstance(entry, dict):
+            continue
+        prevout = entry.get("prevout") if isinstance(entry.get("prevout"), dict) else {}
+        outpoint = _outpoint(entry)
+        value_hidden = confidential or _confidential_leg(prevout)
+        value_sats = None if value_hidden else _value_sats_or_none(prevout.get("value"))
+        if value_sats is None:
+            input_value_complete = False
+        script = _script_from_prevout(prevout)
+        inputs.append(
+            {
+                "id": f"in-{index}",
+                "index": index,
+                "outpoint": outpoint,
+                "txid": str(entry.get("txid") or "") or None,
+                "vout": _int_or_none(entry.get("vout")),
+                "address": _string_or_none(prevout.get("scriptpubkey_address")),
+                "scriptType": _script_type(prevout, script),
+                "valueSats": value_sats,
+                "valueBtc": _sats_to_btc(value_sats),
+                "valueState": "confidential" if value_hidden else ("missing" if value_sats is None else "known"),
+                "label": outpoint or f"Input {index + 1}",
+                "ownership": "unknown",
+                "role": "input",
+                "annotations": [],
+                "_script": script,
+            }
+        )
+
+    outputs: list[dict[str, Any]] = []
+    output_value_complete = True
+    for index, entry in enumerate(vout):
+        if not isinstance(entry, dict):
+            continue
+        value_hidden = confidential or _confidential_leg(entry)
+        value_sats = None if value_hidden else _value_sats_or_none(entry.get("value"))
+        if value_sats is None:
+            output_value_complete = False
+        script = _string_or_none(entry.get("scriptpubkey") or entry.get("script_hex"))
+        n = _int_or_none(entry.get("n"))
+        if n is None:
+            n = index
+        outputs.append(
+            {
+                "id": f"out-{n}",
+                "index": n,
+                "outpoint": f"{str(raw.get('txid') or _row_get(row, 'external_id') or '').lower()}:{n}",
+                "address": _string_or_none(entry.get("scriptpubkey_address")),
+                "scriptType": _script_type(entry, script),
+                "valueSats": value_sats,
+                "valueBtc": _sats_to_btc(value_sats),
+                "valueState": "confidential" if value_hidden else ("missing" if value_sats is None else "known"),
+                "label": f"Output {n}",
+                "ownership": "unknown",
+                "role": "output",
+                "annotations": [],
+                "_script": script,
+            }
+        )
+
+    if valued is not None and input_value_complete and output_value_complete:
+        support = "full"
+        reason = None
+    else:
+        support = "partial"
+        if confidential:
+            reason = "confidential_values_hidden"
+        elif not input_value_complete and output_value_complete:
+            reason = "input_prevout_values_missing"
+        else:
+            reason = "partial_graph_values_missing"
+        warnings.append(
+            {
+                "code": reason,
+                "level": "info",
+                "message": (
+                    "Amounts are confidential on at least one Liquid input/output. "
+                    "Kassiber can show public references and ownership hints, but not value-sized dots or fee rate."
+                    if confidential
+                    else _partial_value_message(reason)
+                ),
+            }
+        )
+
+    metadata = {
+        **metadata,
+        "inputCount": len(inputs),
+        "outputCount": len(outputs),
+    }
+    fee = _fee_from_graph_or_row(row, inputs, outputs, metadata)
+    if fee and fee.get("valueSats") is not None and metadata.get("vsize"):
+        fee["rateSatVb"] = round(float(fee["valueSats"]) / float(metadata["vsize"]), 2)
+    return {
+        "supportLevel": support,
+        "unsupportedReason": reason,
+        "metadata": metadata,
+        "inputs": inputs,
+        "outputs": outputs,
+        "fee": fee,
+        "_warnings": warnings,
+    }
+
+
+def _enrich_graph_raw(
+    conn: sqlite3.Connection,
+    row: Mapping[str, Any],
+    raw: Mapping[str, Any],
+    runtime_config: Mapping[str, Any] | None,
+) -> Mapping[str, Any]:
+    if _looks_liquid_or_confidential(row, raw):
+        return _enrich_liquid_reference_graph_raw(conn, row, raw)
+    return _enrich_bitcoin_graph_raw(conn, row, raw, runtime_config)
+
+
+def _enrich_bitcoin_graph_raw(
+    conn: sqlite3.Connection,
+    row: Mapping[str, Any],
+    raw: Mapping[str, Any],
+    runtime_config: Mapping[str, Any] | None,
+) -> Mapping[str, Any]:
+    if not _can_lookup_public_bitcoin_graph(row, raw):
+        return raw
+    txid = _string_or_none(raw.get("txid")) or _txid_from_row(row)
+    if not _looks_like_txid(txid):
+        return raw
+    backend = _graph_lookup_backend(conn, runtime_config)
+    if backend is None:
+        return _with_graph_lookup_warning(
+            raw,
+            "bitcoin_reference_lookup_unavailable",
+            "No configured Bitcoin HTTP explorer backend is available to fetch public transaction references.",
+        )
+    try:
+        fetched = fetch_esplora_transaction(
+            str(backend["url"]),
+            str(txid),
+            timeout=_graph_lookup_timeout(backend),
+        )
+    except Exception as exc:
+        return _with_graph_lookup_warning(
+            raw,
+            "bitcoin_reference_lookup_failed",
+            f"Could not fetch public Bitcoin transaction references from {backend['url']}: {exc}",
+        )
+    if not isinstance(fetched, Mapping):
+        return _with_graph_lookup_warning(
+            raw,
+            "bitcoin_reference_lookup_invalid",
+            f"Bitcoin reference lookup from {backend['url']} returned an invalid response.",
+        )
+    fetched_txid = _string_or_none(fetched.get("txid"))
+    if fetched_txid and fetched_txid.lower() != str(txid).lower():
+        return _with_graph_lookup_warning(
+            raw,
+            "bitcoin_reference_lookup_mismatch",
+            "Bitcoin reference lookup returned a different transaction id.",
+        )
+    if not isinstance(fetched.get("vin"), list) or not isinstance(fetched.get("vout"), list):
+        return _with_graph_lookup_warning(
+            raw,
+            "bitcoin_reference_lookup_incomplete",
+            "Bitcoin reference lookup did not return public input/output references.",
+        )
+    return fetched
+
+
+def _with_graph_lookup_warning(
+    raw: Mapping[str, Any],
+    code: str,
+    message: str,
+) -> dict[str, Any]:
+    return {
+        **dict(raw),
+        "_graphLookupWarning": {
+            "code": code,
+            "level": "warning",
+            "message": message,
+        },
+    }
+
+
+def _graph_lookup_timeout(backend: Mapping[str, Any]) -> int:
+    configured = _int_or_none(backend.get("timeout"))
+    if configured is None or configured <= 0:
+        return GRAPH_LOOKUP_TIMEOUT_SECONDS
+    return min(configured, GRAPH_LOOKUP_TIMEOUT_SECONDS)
+
+
+def _enrich_liquid_reference_graph_raw(
+    conn: sqlite3.Connection,
+    row: Mapping[str, Any],
+    raw: Mapping[str, Any],
+) -> Mapping[str, Any]:
+    if isinstance(raw.get("vin"), list) and isinstance(raw.get("vout"), list):
+        return raw
+    txid = _string_or_none(raw.get("txid")) or _txid_from_row(row)
+    if not _looks_like_txid(txid):
+        return raw
+    backend = _liquid_graph_lookup_backend(conn)
+    if backend is None:
+        return raw
+    try:
+        fetched = fetch_esplora_transaction(
+            str(backend["url"]),
+            str(txid),
+            timeout=_graph_lookup_timeout(backend),
+        )
+    except Exception as exc:
+        return _with_graph_lookup_warning(
+            raw,
+            "liquid_reference_lookup_failed",
+            f"Could not fetch public Liquid transaction references from {backend['url']}: {exc}",
+        )
+    if not isinstance(fetched, Mapping):
+        return _with_graph_lookup_warning(
+            raw,
+            "liquid_reference_lookup_invalid",
+            f"Liquid reference lookup from {backend['url']} returned an invalid response.",
+        )
+    fetched_txid = _string_or_none(fetched.get("txid"))
+    if fetched_txid and fetched_txid.lower() != str(txid).lower():
+        return _with_graph_lookup_warning(
+            raw,
+            "liquid_reference_lookup_mismatch",
+            "Liquid reference lookup returned a different transaction id.",
+        )
+    if not isinstance(fetched.get("vin"), list) or not isinstance(fetched.get("vout"), list):
+        return _with_graph_lookup_warning(
+            raw,
+            "liquid_reference_lookup_incomplete",
+            "Liquid reference lookup did not return public input/output references.",
+        )
+    return fetched
+
+
+def _can_lookup_public_bitcoin_graph(row: Mapping[str, Any], raw: Mapping[str, Any]) -> bool:
+    if _looks_liquid_or_confidential(row, raw):
+        return False
+    asset = str(_row_get(row, "asset") or "").upper()
+    if asset and asset != "BTC":
+        return False
+    vin = raw.get("vin")
+    vout = raw.get("vout")
+    if isinstance(vin, list) and isinstance(vout, list):
+        return _can_lookup_public_bitcoin_prevouts(row, raw)
+    return True
+
+
+def _can_lookup_public_bitcoin_prevouts(row: Mapping[str, Any], raw: Mapping[str, Any]) -> bool:
+    vin = raw.get("vin")
+    vout = raw.get("vout")
+    if not isinstance(vin, list) or not isinstance(vout, list):
+        return False
+    if _looks_liquid_or_confidential(row, raw):
+        return False
+    asset = str(_row_get(row, "asset") or "").upper()
+    if asset and asset != "BTC":
+        return False
+    return any(
+        isinstance(entry, Mapping)
+        and not _confidential_leg(entry.get("prevout") if isinstance(entry.get("prevout"), Mapping) else {})
+        and _value_sats_or_none(
+            (entry.get("prevout") if isinstance(entry.get("prevout"), Mapping) else {}).get("value")
+        )
+        is None
+        for entry in vin
+    )
+
+
+def _graph_lookup_backend(
+    conn: sqlite3.Connection,
+    runtime_config: Mapping[str, Any] | None,
+) -> dict[str, Any] | None:
+    candidate = preferred_mempool_api_backend(conn, "bitcoin", "main")
+    if candidate is not None:
+        return {
+            "name": candidate.get("name"),
+            "url": candidate.get("api_base_url"),
+            "timeout": candidate.get("timeout"),
+        }
+    if not isinstance(runtime_config, Mapping):
+        return None
+    backend_name = str(runtime_config.get("default_backend") or "")
+    backends = runtime_config.get("backends") if isinstance(runtime_config.get("backends"), Mapping) else {}
+    backend = backends.get(backend_name) if isinstance(backends, Mapping) else None
+    if not isinstance(backend, Mapping):
+        return None
+    kind = str(backend.get("kind") or "").lower()
+    chain = str(backend.get("chain") or "bitcoin").lower()
+    url = _string_or_none(backend.get("url"))
+    if kind not in {"esplora", "mempool"} or chain not in {"", "bitcoin"} or not url:
+        return None
+    return {"name": backend_name, "url": url, "timeout": _int_or_none(backend.get("timeout"))}
+
+
+def _liquid_graph_lookup_backend(conn: sqlite3.Connection) -> dict[str, Any] | None:
+    candidate = preferred_mempool_api_backend(conn, "liquid", "liquidv1")
+    if candidate is not None:
+        return {
+            "name": candidate.get("name"),
+            "url": candidate.get("api_base_url"),
+            "timeout": candidate.get("timeout"),
+        }
+    return {"name": "liquid.network", "url": "https://liquid.network/api", "timeout": 30}
+
+
+def _preview_ownership_semantics(
+    rows: Sequence[Mapping[str, Any]],
+    owned_index: Any | None,
+    wallet_refs_by_id: Mapping[str, Mapping[str, Any]],
+) -> dict[str, Any]:
+    by_row: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    linked_pairs: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    touched: set[str] = set()
+    working_rows: list[Mapping[str, Any]] = list(rows)
+
+    if owned_index is not None:
+        consolidation = derive_multi_source_consolidations(
+            working_rows,
+            index=owned_index,
+            wallet_refs_by_id=wallet_refs_by_id,
+            already_paired_ids=set(),
+        )
+        _record_result(by_row, linked_pairs, touched, consolidation, "multi_source_consolidation")
+        drop_ids = consolidation.dropped_out_ids | consolidation.dropped_in_ids
+        if drop_ids:
+            working_rows = [row for row in working_rows if str(_row_get(row, "id")) not in drop_ids]
+            working_rows.extend(consolidation.synthetic_rows)
+            touched |= drop_ids
+
+        ownership = derive_ownership_transfers(
+            working_rows,
+            index=owned_index,
+            wallet_refs_by_id=wallet_refs_by_id,
+            already_paired_ids=set(touched),
+        )
+        _record_result(by_row, linked_pairs, touched, ownership, "ownership_derived")
+        if ownership.dropped_out_ids:
+            touched |= ownership.dropped_out_ids
+        if ownership.out_row_overrides:
+            touched |= set(ownership.out_row_overrides)
+        for blocked in ownership.blocked_sources:
+            row = blocked.get("row")
+            if row is None:
+                continue
+            row_id = str(_row_get(row, "id"))
+            by_row[row_id].append(
+                {
+                    "code": str(blocked.get("reason") or "ownership_transfer_blocked"),
+                    "label": _humanize_code(str(blocked.get("reason") or "ownership_transfer_blocked")),
+                    "severity": "warning",
+                    "detail": _safe_detail(blocked.get("detail")),
+                }
+            )
+
+    fanout = derive_recorded_fanout_transfers(
+        rows,
+        already_paired_ids=set(touched),
+    )
+    _record_result(by_row, linked_pairs, touched, fanout, "recorded_fanout")
+    return {
+        "by_row": dict(by_row),
+        "linked_pairs": dict(linked_pairs),
+        "touched": touched,
+    }
+
+
+def _record_result(
+    by_row: dict[str, list[dict[str, Any]]],
+    linked_pairs: dict[str, list[dict[str, Any]]],
+    touched: set[str],
+    result: Any,
+    fallback_source: str,
+) -> None:
+    for row_id in getattr(result, "dropped_out_ids", set()):
+        by_row[str(row_id)].append(
+            {
+                "code": "dropped_recorded_outbound",
+                "label": "Recorded outbound replaced by derived transfer legs",
+                "severity": "info",
+            }
+        )
+        touched.add(str(row_id))
+    for row_id in getattr(result, "dropped_in_ids", set()):
+        by_row[str(row_id)].append(
+            {
+                "code": "dropped_recorded_destination_receipt",
+                "label": "Recorded destination receipt replaced by consolidation legs",
+                "severity": "info",
+            }
+        )
+        touched.add(str(row_id))
+    for row_id, override in getattr(result, "out_row_overrides", {}).items():
+        by_row[str(row_id)].append(
+            {
+                "code": "partial_external_residual",
+                "label": "Owned transfer plus external residual",
+                "severity": "info",
+                "residualMsat": int(_row_get(override, "amount") or 0),
+                "residualBtc": _msat_to_btc(int(_row_get(override, "amount") or 0)),
+            }
+        )
+        touched.add(str(row_id))
+
+    for pair in getattr(result, "derived_pairs", []):
+        source = str(pair.get("source") or fallback_source)
+        group_id = pair.get("group_id")
+        out_row = pair.get("out")
+        in_row = pair.get("in")
+        out_id = str(_row_get(out_row, "journal_transaction_id") or _row_get(out_row, "id"))
+        in_id = str(_row_get(in_row, "journal_transaction_id") or _row_get(in_row, "id"))
+        annotation = {
+            "code": source,
+            "label": _semantic_label(source),
+            "severity": "info",
+            "groupId": group_id,
+            "outTransactionId": out_id,
+            "inTransactionId": in_id,
+            "amountMsat": int(_row_get(out_row, "amount") or 0),
+            "amountBtc": _msat_to_btc(int(_row_get(out_row, "amount") or 0)),
+        }
+        for row_id in {out_id, in_id}:
+            by_row[row_id].append({k: v for k, v in annotation.items() if v is not None})
+            linked_pairs[row_id].append({k: v for k, v in annotation.items() if v is not None})
+            touched.add(row_id)
+        for blocked_row in pair.get("group_block_rows") or ():
+            blocked_id = str(_row_get(blocked_row, "id"))
+            by_row[blocked_id].append(
+                {
+                    "code": "derived_transfer_group_blocked_row",
+                    "label": "Recorded row belongs to this derived transfer group",
+                    "severity": "info",
+                    "groupId": group_id,
+                }
+            )
+
+
+def _annotate_graph(
+    graph: dict[str, Any],
+    row: Mapping[str, Any],
+    owned_index: Any | None,
+    semantics: Mapping[str, Any],
+) -> None:
+    if owned_index is None:
+        return
+    source_wallet_id = str(_row_get(row, "wallet_id") or "")
+    input_owner_ids: set[str] = set()
+    for node in graph["inputs"]:
+        matches = _input_matches(node, owned_index)
+        _apply_match_annotation(node, matches, "owned_input", "external_input")
+        input_owner_ids.update(str(match.wallet_id) for match in matches)
+
+    contributor_ids = (
+        input_owner_ids
+        if input_owner_ids or not _row_is_outbound(row)
+        else {source_wallet_id}
+    )
+    for node in graph["outputs"]:
+        script = node.get("_script")
+        if _is_unspendable(script):
+            node["ownership"] = "unspendable"
+            node["role"] = "op_return"
+            node["annotations"].append(_node_annotation("op_return", "OP_RETURN / non-address output"))
+            continue
+        matches = owned_index.lookup_script(script)
+        owner_ids = {str(match.wallet_id) for match in matches}
+        if not matches:
+            node["ownership"] = "external"
+            node["role"] = "external_recipient"
+            node["annotations"].append(_node_annotation("external_recipient", "External recipient"))
+            continue
+        _apply_match_annotation(node, matches, "owned_output", "external_recipient")
+        if owner_ids & contributor_ids:
+            node["role"] = "change"
+            node["annotations"].append(_node_annotation("change", "Change back to an owned source wallet"))
+        elif len(owner_ids) > 1:
+            node["role"] = "ambiguous_owned_output"
+            node["annotations"].append(_node_annotation("ambiguous_owned_output", "Owned by multiple wallets"))
+        elif _row_is_inbound(row) and source_wallet_id in owner_ids:
+            node["role"] = "incoming_payment"
+            node["annotations"].append(_node_annotation("incoming_payment", "Incoming payment to this wallet"))
+        else:
+            node["role"] = "owned_destination"
+            node["annotations"].append(_node_annotation("owned_destination", "Owned destination wallet"))
+
+    row_id = str(_row_get(row, "id"))
+    row_annotations = semantics.get("by_row", {}).get(row_id, [])
+    group_ids = {annotation.get("groupId") for annotation in row_annotations if annotation.get("groupId")}
+    for node in graph["outputs"]:
+        if node.get("role") == "owned_destination":
+            for group_id in group_ids:
+                node["annotations"].append(
+                    _node_annotation("linked_transfer_group", "Linked transfer group", group_id)
+                )
+
+
+def _input_matches(node: Mapping[str, Any], owned_index: Any) -> list[Any]:
+    outpoint = node.get("outpoint")
+    if outpoint:
+        match = owned_index.by_outpoint.get(str(outpoint).lower())
+        if match is not None:
+            return [match]
+    return owned_index.lookup_script(node.get("_script"))
+
+
+def _row_is_outbound(row: Mapping[str, Any]) -> bool:
+    direction = str(_row_get(row, "direction") or "").lower()
+    return direction in {"outbound", "send", "sent", "withdrawal", "sell"}
+
+
+def _row_is_inbound(row: Mapping[str, Any]) -> bool:
+    direction = str(_row_get(row, "direction") or "").lower()
+    return direction in {"inbound", "receive", "received", "deposit", "income", "buy"}
+
+
+def _apply_match_annotation(
+    node: dict[str, Any],
+    matches: Sequence[Any],
+    owned_code: str,
+    fallback_code: str,
+) -> None:
+    if not matches:
+        node["ownership"] = "external" if fallback_code.startswith("external") else "unknown"
+        return
+    wallets = sorted({str(match.wallet_label) for match in matches})
+    wallet_ids = sorted({str(match.wallet_id) for match in matches})
+    node["ownership"] = "ambiguous" if len(wallet_ids) > 1 else "owned"
+    node["wallet"] = wallets[0] if len(wallets) == 1 else ", ".join(wallets)
+    node["walletId"] = wallet_ids[0] if len(wallet_ids) == 1 else None
+    node["annotations"].append(
+        _node_annotation(
+            "ambiguous_ownership" if len(wallet_ids) > 1 else owned_code,
+            "Owned by multiple wallets" if len(wallet_ids) > 1 else "Owned wallet",
+        )
+    )
+
+
+def _transaction_meta(row: Mapping[str, Any], graph: Mapping[str, Any]) -> dict[str, Any]:
+    amount_msat = int(_row_get(row, "amount") or 0)
+    fee_msat = int(_row_get(row, "fee") or 0)
+    external_id = _string_or_none(_row_get(row, "external_id"))
+    metadata = graph.get("metadata") or {}
+    return {
+        "id": str(_row_get(row, "id")),
+        "externalId": external_id,
+        "txid": _txid_from_row(row),
+        "occurredAt": _row_get(row, "occurred_at"),
+        "confirmedAt": _row_get(row, "confirmed_at"),
+        "direction": _row_get(row, "direction"),
+        "asset": _row_get(row, "asset"),
+        "amountMsat": amount_msat,
+        "amountBtc": _msat_to_btc(amount_msat),
+        "feeMsat": fee_msat,
+        "feeBtc": _msat_to_btc(fee_msat),
+        "wallet": {
+            "id": _row_get(row, "wallet_id"),
+            "label": _row_get(row, "wallet_label"),
+            "kind": _row_get(row, "wallet_kind"),
+        },
+        "inputCount": metadata.get("inputCount"),
+        "outputCount": metadata.get("outputCount"),
+        "version": metadata.get("version"),
+        "locktime": metadata.get("locktime"),
+        "size": metadata.get("size"),
+        "vsize": metadata.get("vsize"),
+        "weight": metadata.get("weight"),
+        "feeRateSatVb": (graph.get("fee") or {}).get("rateSatVb"),
+    }
+
+
+def _warnings_for_row(row: Mapping[str, Any], semantics: Mapping[str, Any]) -> list[dict[str, Any]]:
+    warnings: list[dict[str, Any]] = []
+    for annotation in semantics.get("by_row", {}).get(str(_row_get(row, "id")), []):
+        if annotation.get("severity") == "warning" or str(annotation.get("code", "")).endswith("ambiguous"):
+            warnings.append(
+                {
+                    "code": annotation.get("code"),
+                    "level": "warning",
+                    "message": annotation.get("label") or _humanize_code(annotation.get("code")),
+                }
+            )
+    return warnings
+
+
+def _journal_warnings(row: Mapping[str, Any]) -> list[dict[str, Any]]:
+    reason = _row_get(row, "quarantine_reason")
+    if not reason:
+        return []
+    return [
+        {
+            "code": str(reason),
+            "level": "warning",
+            "message": f"Journal blocker: {_humanize_code(str(reason))}",
+        }
+    ]
+
+
+def _quarantine(row: Mapping[str, Any]) -> dict[str, Any] | None:
+    reason = _row_get(row, "quarantine_reason")
+    if not reason:
+        return None
+    return {
+        "reason": reason,
+        "detail": _safe_detail(_json_obj(_row_get(row, "quarantine_detail_json"))),
+    }
+
+
+def _linked_pairs_for_row(row: Mapping[str, Any], semantics: Mapping[str, Any]) -> list[dict[str, Any]]:
+    return semantics.get("linked_pairs", {}).get(str(_row_get(row, "id")), [])
+
+
+def _swap_route_for_row(
+    conn: sqlite3.Connection,
+    profile_id: str,
+    row: Mapping[str, Any],
+) -> dict[str, Any] | None:
+    row_id = str(_row_get(row, "id") or "")
+    if not row_id:
+        return None
+    pair = conn.execute(
+        """
+        SELECT
+            p.id AS pair_id,
+            p.kind AS pair_kind,
+            p.policy AS pair_policy,
+            p.swap_fee_msat,
+            p.swap_fee_kind,
+            p.confidence_at_pair,
+            p.pair_source,
+            p.out_amount AS pair_out_amount_msat,
+            p.created_at AS pair_created_at,
+            out_t.id AS out_id,
+            out_t.external_id AS out_external_id,
+            out_t.direction AS out_direction,
+            out_t.asset AS out_asset,
+            out_t.amount AS out_full_amount_msat,
+            COALESCE(p.out_amount, out_t.amount) AS out_amount_msat,
+            out_t.fee AS out_fee_msat,
+            out_t.occurred_at AS out_occurred_at,
+            out_t.confirmed_at AS out_confirmed_at,
+            out_t.kind AS out_kind,
+            out_t.counterparty AS out_counterparty,
+            out_t.description AS out_description,
+            out_t.raw_json AS out_raw_json,
+            out_w.id AS out_wallet_id,
+            out_w.label AS out_wallet_label,
+            out_w.kind AS out_wallet_kind,
+            in_t.id AS in_id,
+            in_t.external_id AS in_external_id,
+            in_t.direction AS in_direction,
+            in_t.asset AS in_asset,
+            in_t.amount AS in_amount_msat,
+            in_t.fee AS in_fee_msat,
+            in_t.occurred_at AS in_occurred_at,
+            in_t.confirmed_at AS in_confirmed_at,
+            in_t.kind AS in_kind,
+            in_t.counterparty AS in_counterparty,
+            in_t.description AS in_description,
+            in_t.raw_json AS in_raw_json,
+            in_w.id AS in_wallet_id,
+            in_w.label AS in_wallet_label,
+            in_w.kind AS in_wallet_kind
+        FROM transaction_pairs p
+        JOIN transactions out_t ON out_t.id = p.out_transaction_id
+        JOIN transactions in_t ON in_t.id = p.in_transaction_id
+        JOIN wallets out_w ON out_w.id = out_t.wallet_id
+        JOIN wallets in_w ON in_w.id = in_t.wallet_id
+        WHERE p.profile_id = ?
+          AND p.deleted_at IS NULL
+          AND (p.out_transaction_id = ? OR p.in_transaction_id = ?)
+        ORDER BY p.created_at DESC, p.id DESC
+        LIMIT 1
+        """,
+        (profile_id, row_id, row_id),
+    ).fetchone()
+    if pair is None:
+        return None
+
+    fee_msat = _int_or_none(pair["swap_fee_msat"])
+    out_amount_msat = _int_or_none(pair["out_amount_msat"])
+    out_full_amount_msat = _int_or_none(pair["out_full_amount_msat"])
+    route: dict[str, Any] = {
+        "id": pair["pair_id"],
+        "kind": pair["pair_kind"],
+        "policy": pair["pair_policy"],
+        "pairSource": pair["pair_source"],
+        "confidence": pair["confidence_at_pair"],
+        "createdAt": pair["pair_created_at"],
+        "currentLeg": "out" if pair["out_id"] == row_id else "in",
+        "swapFeeMsat": fee_msat,
+        "swapFeeBtc": _msat_to_btc(fee_msat) if fee_msat is not None else None,
+        "swapFeeKind": pair["swap_fee_kind"],
+        "outAmountMsat": out_amount_msat,
+        "outAmountBtc": _msat_to_btc(out_amount_msat) if out_amount_msat is not None else None,
+        "outFullAmountMsat": out_full_amount_msat,
+        "outFullAmountBtc": (
+            _msat_to_btc(out_full_amount_msat)
+            if out_full_amount_msat is not None
+            else None
+        ),
+        "out": _swap_route_leg(pair, "out", out_amount_msat),
+        "in": _swap_route_leg(pair, "in", _int_or_none(pair["in_amount_msat"])),
+    }
+    return {key: value for key, value in route.items() if value is not None}
+
+
+def _swap_route_leg(
+    row: Mapping[str, Any],
+    prefix: str,
+    amount_msat: int | None,
+) -> dict[str, Any]:
+    fee_msat = _int_or_none(_row_get(row, f"{prefix}_fee_msat"))
+    asset = _string_or_none(_row_get(row, f"{prefix}_asset"))
+    external_id = _string_or_none(_row_get(row, f"{prefix}_external_id"))
+    leg = {
+        "id": _row_get(row, f"{prefix}_id"),
+        "externalId": external_id,
+        "txid": external_id.lower() if external_id and len(external_id) == 64 else external_id,
+        "direction": _row_get(row, f"{prefix}_direction"),
+        "asset": asset,
+        "network": _network_label_for_asset_kind(asset, _row_get(row, f"{prefix}_wallet_kind")),
+        "amountMsat": amount_msat,
+        "amountBtc": _msat_to_btc(amount_msat) if amount_msat is not None else None,
+        "feeMsat": fee_msat,
+        "feeBtc": _msat_to_btc(fee_msat) if fee_msat is not None else None,
+        "occurredAt": _row_get(row, f"{prefix}_occurred_at"),
+        "confirmedAt": _row_get(row, f"{prefix}_confirmed_at"),
+        "kind": _row_get(row, f"{prefix}_kind"),
+        "role": _swap_route_leg_role(row, prefix),
+        "counterparty": _string_or_none(_row_get(row, f"{prefix}_counterparty")),
+        "description": _string_or_none(_row_get(row, f"{prefix}_description")),
+        "wallet": {
+            "id": _row_get(row, f"{prefix}_wallet_id"),
+            "label": _row_get(row, f"{prefix}_wallet_label"),
+            "kind": _row_get(row, f"{prefix}_wallet_kind"),
+        },
+    }
+    return {key: value for key, value in leg.items() if value is not None}
+
+
+def _swap_route_leg_role(row: Mapping[str, Any], prefix: str) -> str | None:
+    if prefix == "out":
+        if _swap_route_leg_looks_like_consolidation(row, prefix):
+            return "consolidation"
+        return "spend"
+    if prefix == "in":
+        return "receive"
+    return None
+
+
+def _swap_route_leg_looks_like_consolidation(row: Mapping[str, Any], prefix: str) -> bool:
+    text = " ".join(
+        filter(
+            None,
+            (
+                _string_or_none(_row_get(row, f"{prefix}_kind")),
+                _string_or_none(_row_get(row, f"{prefix}_description")),
+            ),
+        )
+    ).lower()
+    if "consolidat" in text:
+        return True
+    raw = _json_obj(_row_get(row, f"{prefix}_raw_json"))
+    vin = raw.get("vin")
+    return isinstance(vin, list) and len(vin) > 1
+
+
+def _network_label_for_asset_kind(asset: Any, wallet_kind: Any) -> str | None:
+    kind_text = str(wallet_kind or "").lower()
+    asset_text = str(asset or "").upper()
+    if "liquid" in kind_text or asset_text in {"LBTC", "L-BTC", "LIQUID-BTC"}:
+        return "Liquid"
+    if asset_text == "BTC":
+        return "Bitcoin"
+    return asset_text or None
+
+
+def _safe_detail(detail: Any) -> dict[str, Any]:
+    if not isinstance(detail, Mapping):
+        return {}
+    safe: dict[str, Any] = {}
+    for key, value in detail.items():
+        key_text = str(key)
+        if any(token in key_text.lower() for token in ("descriptor", "xpub", "config", "token", "secret", "raw")):
+            continue
+        if isinstance(value, (str, int, float, bool)) or value is None:
+            safe[key_text] = value
+    return safe
+
+
+def _public_node(node: Mapping[str, Any]) -> dict[str, Any]:
+    return {
+        key: value
+        for key, value in node.items()
+        if not str(key).startswith("_") and value is not None
+    }
+
+
+def _fee_from_graph_or_row(
+    row: Mapping[str, Any],
+    inputs: Sequence[Mapping[str, Any]],
+    outputs: Sequence[Mapping[str, Any]],
+    metadata: Mapping[str, Any],
+) -> dict[str, Any] | None:
+    input_values = [node.get("valueSats") for node in inputs]
+    output_values = [node.get("valueSats") for node in outputs]
+    value_sats = None
+    if input_values and all(isinstance(value, int) for value in input_values) and all(
+        isinstance(value, int) for value in output_values
+    ):
+        computed = sum(int(value) for value in input_values) - sum(
+            int(value) for value in output_values
+        )
+        if computed >= 0:
+            value_sats = computed
+    if value_sats is None:
+        fee_msat = int(_row_get(row, "fee") or 0)
+        if fee_msat <= 0:
+            return None
+        value_sats = fee_msat // SATS_TO_MSAT
+    fee = {
+        "id": "fee",
+        "label": "Miner fee",
+        "role": "fee",
+        "ownership": "network_fee",
+        "valueSats": value_sats,
+        "valueBtc": _sats_to_btc(value_sats),
+        "annotations": [_node_annotation("miner_fee", "Network fee")],
+    }
+    vsize = metadata.get("vsize")
+    if value_sats is not None and vsize:
+        fee["rateSatVb"] = round(float(value_sats) / float(vsize), 2)
+    return fee
+
+
+def _fee_from_row(row: Mapping[str, Any], metadata: Mapping[str, Any]) -> dict[str, Any] | None:
+    return _fee_from_graph_or_row(row, [], [], metadata)
+
+
+def _graphless_message(reason: str) -> str:
+    if reason == "liquid_reference_graph_not_local":
+        return (
+            "Kassiber has only the imported Liquid row locally. "
+            "The public transaction references can be inspected in Liquid Network; confidential amounts may remain hidden."
+        )
+    return "This source record does not contain Bitcoin input/output references for a flow diagram."
+
+
+def _partial_value_message(reason: str) -> str:
+    if reason == "input_prevout_values_missing":
+        return (
+            "Bitcoin outputs in this transaction have values. Some input values are not stored locally "
+            "because an input amount comes from the spent previous output, not from the transaction input itself. "
+            "Kassiber can still draw the references and outputs; fee and fee rate need those prevout amounts."
+        )
+    return (
+        "Amounts are missing for one or more inputs/outputs in the source data. "
+        "Kassiber can still show references and ownership hints, but fee and fee rate may be incomplete."
+    )
+
+
+def _confidential_leg(entry: Mapping[str, Any]) -> bool:
+    return any(
+        entry.get(key) is not None
+        for key in ("valuecommitment", "assetcommitment", "surjectionproof", "rangeproof")
+    )
+
+
+def _outpoint(entry: Mapping[str, Any]) -> str | None:
+    if entry.get("txid") is None or entry.get("vout") is None:
+        return None
+    try:
+        return f"{str(entry.get('txid')).lower()}:{int(entry.get('vout'))}"
+    except (TypeError, ValueError):
+        return None
+
+
+def _script_from_prevout(prevout: Mapping[str, Any]) -> str | None:
+    return _string_or_none(prevout.get("scriptpubkey") or prevout.get("script_hex"))
+
+
+def _script_type(source: Mapping[str, Any], script: Any) -> str:
+    explicit = _string_or_none(source.get("scriptpubkey_type") or source.get("type"))
+    if explicit:
+        return explicit
+    script_text = str(script or "").lower()
+    if not script_text:
+        return "empty"
+    if script_text.startswith("6a"):
+        return "op_return"
+    if script_text.startswith("0014"):
+        return "p2wpkh"
+    if script_text.startswith("0020"):
+        return "p2wsh"
+    if script_text.startswith("5120"):
+        return "p2tr"
+    return "script"
+
+
+def _is_unspendable(script: Any) -> bool:
+    text = str(script or "").strip().lower()
+    return not text or text.startswith("6a")
+
+
+def _txid_from_row(row: Mapping[str, Any]) -> str | None:
+    raw = _json_obj(_row_get(row, "raw_json"))
+    txid = _string_or_none(raw.get("txid"))
+    if txid:
+        return txid.lower()
+    external_id = _string_or_none(_row_get(row, "external_id"))
+    if external_id and len(external_id) == 64:
+        return external_id.lower()
+    return external_id
+
+
+def _looks_like_txid(value: Any) -> bool:
+    text = str(value or "").strip()
+    return len(text) == 64 and all(char in "0123456789abcdefABCDEF" for char in text)
+
+
+def _transaction_metadata(raw: Mapping[str, Any]) -> dict[str, Any]:
+    metadata = {
+        "version": _int_or_none(raw.get("version")),
+        "locktime": _int_or_none(raw.get("locktime")),
+        "size": _int_or_none(raw.get("size")),
+        "vsize": _int_or_none(raw.get("vsize")),
+        "weight": _int_or_none(raw.get("weight")),
+    }
+    raw_hex = _string_or_none(raw.get("raw_hex") or raw.get("hex"))
+    if raw_hex:
+        for key, value in _size_metadata_from_raw_hex(raw_hex).items():
+            if metadata.get(key) is None:
+                metadata[key] = value
+    return metadata
+
+
+def _size_metadata_from_raw_hex(raw_hex: str) -> dict[str, int]:
+    try:
+        payload = bytes.fromhex(raw_hex)
+    except ValueError:
+        return {}
+    if len(payload) < 10:
+        return {}
+    size = len(payload)
+    has_witness = len(payload) > 5 and payload[4] == 0 and payload[5] != 0
+    if not has_witness:
+        return {"size": size, "vsize": size, "weight": size * 4}
+    witness_start = _raw_hex_witness_start(payload)
+    witness_end = _raw_hex_witness_end(payload, witness_start)
+    if witness_start is None or witness_end is None:
+        return {"size": size}
+    stripped_size = size - 2 - max(0, witness_end - witness_start)
+    weight = stripped_size * 3 + size
+    return {"size": size, "vsize": (weight + 3) // 4, "weight": weight}
+
+
+def _raw_hex_witness_start(payload: bytes) -> int | None:
+    try:
+        offset = 6
+        input_count, offset = _read_varint(payload, offset)
+        for _ in range(input_count):
+            offset += 36
+            script_len, offset = _read_varint(payload, offset)
+            offset += script_len + 4
+        output_count, offset = _read_varint(payload, offset)
+        for _ in range(output_count):
+            offset += 8
+            script_len, offset = _read_varint(payload, offset)
+            offset += script_len
+    except (IndexError, ValueError):
+        return None
+    return offset if 0 <= offset <= len(payload) else None
+
+
+def _raw_hex_witness_end(payload: bytes, offset: int | None) -> int | None:
+    if offset is None:
+        return None
+    try:
+        input_count, input_offset = _read_varint(payload, 6)
+        for _ in range(input_count):
+            input_offset += 36
+            script_len, input_offset = _read_varint(payload, input_offset)
+            input_offset += script_len + 4
+        output_count, input_offset = _read_varint(payload, input_offset)
+        for _ in range(output_count):
+            input_offset += 8
+            script_len, input_offset = _read_varint(payload, input_offset)
+            input_offset += script_len
+        if input_offset != offset:
+            return None
+        for _ in range(input_count):
+            item_count, offset = _read_varint(payload, offset)
+            for _ in range(item_count):
+                item_len, offset = _read_varint(payload, offset)
+                offset += item_len
+    except (IndexError, ValueError):
+        return None
+    locktime_end = offset + 4
+    return offset if locktime_end == len(payload) else None
+
+
+def _read_varint(payload: bytes, offset: int) -> tuple[int, int]:
+    if offset >= len(payload):
+        raise ValueError("offset out of range")
+    prefix = payload[offset]
+    offset += 1
+    if prefix < 0xFD:
+        return prefix, offset
+    if prefix == 0xFD:
+        end = offset + 2
+        if end > len(payload):
+            raise ValueError("truncated varint")
+        return int.from_bytes(payload[offset:end], "little"), end
+    if prefix == 0xFE:
+        end = offset + 4
+        if end > len(payload):
+            raise ValueError("truncated varint")
+        return int.from_bytes(payload[offset:end], "little"), end
+    end = offset + 8
+    if end > len(payload):
+        raise ValueError("truncated varint")
+    return int.from_bytes(payload[offset:end], "little"), end
+
+
+def _looks_liquid_or_confidential(row: Mapping[str, Any], raw: Mapping[str, Any]) -> bool:
+    asset = str(_row_get(row, "asset") or "").upper()
+    if asset in {"LBTC", "L-BTC", "LIQUID-BTC"}:
+        return True
+    wallet_kind = str(_row_get(row, "wallet_kind") or "").lower()
+    if "liquid" in wallet_kind:
+        return True
+    raw_text = json.dumps(raw, sort_keys=True).lower()
+    return any(token in raw_text for token in ("confidential", "valuecommitment", "assetcommitment"))
+
+
+def _json_obj(value: Any) -> dict[str, Any]:
+    if isinstance(value, Mapping):
+        return dict(value)
+    try:
+        parsed = json.loads(value or "{}")
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return {}
+    return dict(parsed) if isinstance(parsed, Mapping) else {}
+
+
+def _int_or_none(value: Any) -> int | None:
+    if value is None or value == "":
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _value_sats_or_none(value: Any) -> int | None:
+    if value is None or value == "":
+        return None
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        if value.is_integer():
+            return int(value)
+        return int(round(value * 100_000_000))
+    if isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return None
+        try:
+            if "." in text:
+                return int(round(float(text) * 100_000_000))
+            return int(text)
+        except ValueError:
+            return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _string_or_none(value: Any) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
+
+
+def _sats_to_btc(value_sats: Any) -> float | None:
+    if value_sats is None:
+        return None
+    return int(value_sats) / 100_000_000
+
+
+def _msat_to_btc(value_msat: int) -> float:
+    return float(msat_to_btc(int(value_msat)))
+
+
+def _row_get(row: Mapping[str, Any], key: str) -> Any:
+    try:
+        keys = row.keys()
+    except AttributeError:
+        return None
+    return row[key] if key in keys else None
+
+
+def _node_annotation(code: str, label: str, group_id: Any = None) -> dict[str, Any]:
+    item = {"code": code, "label": label}
+    if group_id is not None:
+        item["groupId"] = group_id
+    return item
+
+
+def _semantic_label(source: str) -> str:
+    labels = {
+        "ownership_derived": "Ownership-derived transfer",
+        "recorded_fanout": "Recorded fan-out transfer",
+        "multi_source_consolidation": "Multi-wallet consolidation",
+    }
+    return labels.get(source, _humanize_code(source))
+
+
+def _humanize_code(code: Any) -> str:
+    return str(code or "").replace("_", " ").replace("-", " ").strip().capitalize()
+
+
+def _dedupe_warnings(warnings: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    seen: set[tuple[str, str]] = set()
+    out: list[dict[str, Any]] = []
+    for warning in warnings:
+        code = str(warning.get("code") or "")
+        message = str(warning.get("message") or _humanize_code(code))
+        key = (code, message)
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(
+            {
+                "code": code,
+                "level": str(warning.get("level") or "info"),
+                "message": message,
+            }
+        )
+    return out

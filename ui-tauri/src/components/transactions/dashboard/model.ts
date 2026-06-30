@@ -1041,7 +1041,14 @@ type FeeFilter = "all" | "with-fees";
 const filterChipClassName =
   "inline-flex h-5 cursor-pointer items-center gap-1 rounded-md bg-gray-50 px-2 text-[10px] font-medium text-gray-600 ring-1 ring-inset ring-gray-500/10 sm:h-6 sm:text-xs dark:bg-gray-800/50 dark:text-gray-400 dark:ring-gray-400/20";
 
-const detailTabValues = ["details", "classify", "pricing", "tax", "ledger"] as const;
+const detailTabValues = [
+  "details",
+  "classify",
+  "pricing",
+  "tax",
+  "linked",
+  "ledger",
+] as const;
 
 function readTransactionDetailParams() {
   if (typeof window === "undefined") return { transactionId: null, tab: "details" };

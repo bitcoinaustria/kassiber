@@ -17,10 +17,96 @@ import { CommercialProvenancePanel } from "./TransactionDetailCommercialPanel";
 import {
   blurClass,
   currencyFormatter,
+  formatBtcAmount,
   formatFee,
   formatShortTxid,
+  SATS_PER_BTC,
 } from "./model";
 import type { TransactionDetailTabContext } from "./TransactionDetailTabContext";
+import {
+  TransactionGraphPanel,
+  type TransactionGraphPayload,
+  type TransactionSwapRoute,
+} from "./TransactionGraphTab";
+
+function graphWithPairFallbackRoute(
+  graphData: TransactionGraphPayload | undefined,
+  transaction: TransactionDetailTabContext["transaction"],
+): TransactionGraphPayload | undefined {
+  if (!graphData || graphData.swapRoute || !transaction.pair) return graphData;
+  const pair = transaction.pair;
+  const currentLeg =
+    transaction.wallet && pair.outWallet && transaction.wallet === pair.outWallet
+      ? "out"
+      : transaction.wallet && pair.inWallet && transaction.wallet === pair.inWallet
+        ? "in"
+        : transaction.direction === "Send"
+          ? "out"
+          : "in";
+  const currentReference = transaction.explorerId || transaction.txnId;
+  const route: TransactionSwapRoute = {
+    id: pair.id,
+    kind: pair.kind || pair.type,
+    policy: pair.policy,
+    currentLeg,
+    swapFeeBtc:
+      typeof pair.feeSat === "number"
+        ? Math.abs(pair.feeSat) / SATS_PER_BTC
+        : null,
+    swapFeeKind: pair.feeKind,
+    out: {
+      id: currentLeg === "out" ? transaction.id : undefined,
+      externalId: currentLeg === "out" ? currentReference : undefined,
+      txid: currentLeg === "out" ? currentReference : undefined,
+      direction: "outbound",
+      role: fallbackSwapOutRole(pair),
+      asset: pair.outAsset,
+      network: routeNetwork(pair.outAsset, pair.outWallet),
+      amountBtc:
+        typeof pair.outAmountSat === "number"
+          ? Math.abs(pair.outAmountSat) / SATS_PER_BTC
+          : null,
+      wallet: { label: pair.outWallet },
+      counterparty: transaction.counterparty,
+    },
+    in: {
+      id: currentLeg === "in" ? transaction.id : undefined,
+      externalId: currentLeg === "in" ? currentReference : undefined,
+      txid: currentLeg === "in" ? currentReference : undefined,
+      direction: "inbound",
+      role: "receive",
+      asset: pair.inAsset,
+      network: routeNetwork(pair.inAsset, pair.inWallet),
+      amountBtc:
+        typeof pair.inAmountSat === "number"
+          ? Math.abs(pair.inAmountSat) / SATS_PER_BTC
+          : null,
+      wallet: { label: pair.inWallet },
+      counterparty: transaction.counterparty,
+    },
+  };
+  return { ...graphData, swapRoute: route };
+}
+
+function fallbackSwapOutRole(pair: NonNullable<TransactionDetailTabContext["transaction"]["pair"]>) {
+  const kind = String(pair.kind || pair.type || "").toLowerCase();
+  const outNetwork = routeNetwork(pair.outAsset, pair.outWallet);
+  const inNetwork = routeNetwork(pair.inAsset, pair.inWallet);
+  if (kind.includes("swap") && outNetwork === "Liquid" && outNetwork !== inNetwork) {
+    return "consolidation" as const;
+  }
+  return "spend" as const;
+}
+
+function routeNetwork(asset?: string | null, wallet?: string | null) {
+  const assetText = String(asset || "").toUpperCase();
+  const walletText = String(wallet || "").toLowerCase();
+  if (assetText === "LBTC" || assetText === "L-BTC" || walletText.includes("liquid")) {
+    return "Liquid";
+  }
+  if (assetText === "BTC") return "Bitcoin";
+  return asset || undefined;
+}
 
 export function TransactionDetailsTab({ ctx }: { ctx: TransactionDetailTabContext }) {
   const { t } = useTranslation("transactions");
@@ -40,7 +126,37 @@ export function TransactionDetailsTab({ ctx }: { ctx: TransactionDetailTabContex
     updateDraft,
     tags,
     currency,
+    graphData,
+    graphLoading,
+    graphError,
   } = ctx;
+  const displayGraphData = graphWithPairFallbackRoute(graphData, transaction);
+  const graphTx = displayGraphData?.transaction;
+  const graphNetworkFeeBtc =
+    typeof displayGraphData?.fee?.valueBtc === "number"
+      ? displayGraphData.fee.valueBtc
+      : typeof displayGraphData?.fee?.valueSats === "number"
+        ? displayGraphData.fee.valueSats / SATS_PER_BTC
+        : 0;
+  const technicalRows = graphTx
+    ? [
+        [t("details.inputCount"), graphTx.inputCount ?? displayGraphData.inputs.length],
+        [t("details.outputCount"), graphTx.outputCount ?? displayGraphData.outputs.length],
+        [
+          t("details.networkFee"),
+          graphNetworkFeeBtc ? formatBtcAmount(graphNetworkFeeBtc) : t("details.unknown"),
+        ],
+        [
+          t("details.feeRate"),
+          graphTx.feeRateSatVb ? `${graphTx.feeRateSatVb} sat/vB` : t("details.unknown"),
+        ],
+        [t("details.version"), graphTx.version ?? t("details.unknown")],
+        [t("details.locktime"), graphTx.locktime ?? t("details.unknown")],
+        [t("details.size"), graphTx.size ? `${graphTx.size} B` : t("details.unknown")],
+        [t("details.vsize"), graphTx.vsize ? `${graphTx.vsize} vB` : t("details.unknown")],
+        [t("details.weight"), graphTx.weight ? `${graphTx.weight} WU` : t("details.unknown")],
+      ]
+    : [];
   return (
     <>
                   {/* Details — read-only source-of-record + book metadata */}
@@ -80,6 +196,14 @@ export function TransactionDetailsTab({ ctx }: { ctx: TransactionDetailTabContex
                             >
                               {formatFee(transaction, currency)}
                             </CurrencyToggleText>
+                          ) : graphNetworkFeeBtc ? (
+                            <CurrencyToggleText
+                              className={blurClass(hideSensitive)}
+                            >
+                              {t("details.senderPaidNetworkFee", {
+                                value: formatBtcAmount(graphNetworkFeeBtc),
+                              })}
+                            </CurrencyToggleText>
                           ) : (
                             t("details.feeNone")
                           )
@@ -88,11 +212,27 @@ export function TransactionDetailsTab({ ctx }: { ctx: TransactionDetailTabContex
                         hint={t("details.feeHint")}
                       />
                     </div>
-                    <CommercialProvenancePanel
-                      context={commercialContext}
-                      loading={commercialContextLoading}
-                      hidden={hideSensitive}
-                    />
+                    <div className="grid gap-2">
+                      <Label
+                        htmlFor="tx-detail-note"
+                        className="flex items-center gap-1.5"
+                      >
+                        {t("details.note")}
+                        <DirtyDot active={dirtyNote} />
+                      </Label>
+                      <Textarea
+                        id="tx-detail-note"
+                        value={localDraft.note}
+                        onChange={(event) =>
+                          updateDraft("note", event.target.value)
+                        }
+                        className={cn(
+                          "min-h-24 resize-none",
+                          blurClass(hideSensitive),
+                        )}
+                        placeholder={t("details.notePlaceholder")}
+                      />
+                    </div>
                     <div className="grid gap-3 lg:grid-cols-2">
                       <div className="overflow-hidden rounded-md border">
                         <div className="border-b bg-muted px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
@@ -175,27 +315,40 @@ export function TransactionDetailsTab({ ctx }: { ctx: TransactionDetailTabContex
                         />
                       </div>
                     </div>
-                    <div className="grid gap-2">
-                      <Label
-                        htmlFor="tx-detail-note"
-                        className="flex items-center gap-1.5"
-                      >
-                        {t("details.note")}
-                        <DirtyDot active={dirtyNote} />
-                      </Label>
-                      <Textarea
-                        id="tx-detail-note"
-                        value={localDraft.note}
-                        onChange={(event) =>
-                          updateDraft("note", event.target.value)
-                        }
-                        className={cn(
-                          "min-h-24 resize-none",
-                          blurClass(hideSensitive),
-                        )}
-                        placeholder={t("details.notePlaceholder")}
-                      />
+                    <div className="overflow-hidden rounded-md border">
+                      <div className="border-b bg-muted px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                        {t("graph.sectionTitle")}
+                      </div>
+                      <div className="p-3">
+                        <TransactionGraphPanel
+                          graph={displayGraphData}
+                          loading={graphLoading}
+                          error={graphError}
+                          hideSensitive={hideSensitive}
+                        />
+                      </div>
                     </div>
+                    {technicalRows.length ? (
+                      <div className="overflow-hidden rounded-md border">
+                        <div className="border-b bg-muted px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                          {t("details.technical")}
+                        </div>
+                        <div className="grid sm:grid-cols-2">
+                          {technicalRows.map(([label, value]) => (
+                            <LedgerRow
+                              key={String(label)}
+                              label={String(label)}
+                              value={value}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
+                    <CommercialProvenancePanel
+                      context={commercialContext}
+                      loading={commercialContextLoading}
+                      hidden={hideSensitive}
+                    />
                   </TabsContent>
 
 

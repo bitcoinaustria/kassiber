@@ -1,0 +1,652 @@
+import json
+import sqlite3
+import tempfile
+import unittest
+from pathlib import Path
+from unittest.mock import patch
+
+from kassiber.backends import create_db_backend
+from kassiber.core.sync_backends import address_to_scriptpubkey
+from kassiber.core.transaction_graph import build_transaction_graph_snapshot
+from kassiber.db import open_db, set_setting
+
+
+NOW = "2026-01-01T00:00:00Z"
+BTC = 100_000_000_000
+ADDR_A = "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4"
+ADDR_B = "bc1q0xcqpzrky6eff2g52qdye53xkk9jxkvrh6yhyw"
+ADDR_C = "bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu"
+SCRIPT_A = address_to_scriptpubkey(ADDR_A).hex()
+SCRIPT_B = address_to_scriptpubkey(ADDR_B).hex()
+SCRIPT_C = address_to_scriptpubkey(ADDR_C).hex()
+
+
+class TransactionGraphTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory(prefix="kassiber-transaction-graph-")
+        self.conn = open_db(Path(self.tmp.name) / "data")
+        self._seed()
+
+    def tearDown(self):
+        self.conn.close()
+        self.tmp.cleanup()
+
+    def _seed(self):
+        conn = self.conn
+        conn.execute(
+            "INSERT INTO workspaces(id, label, created_at) VALUES(?, ?, ?)",
+            ("ws-1", "Main", NOW),
+        )
+        conn.execute(
+            """
+            INSERT INTO profiles(
+                id, workspace_id, label, fiat_currency, tax_country,
+                tax_long_term_days, gains_algorithm, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            ("profile-1", "ws-1", "Default", "EUR", "generic", 365, "FIFO", NOW),
+        )
+        conn.execute(
+            """
+            INSERT INTO accounts(
+                id, workspace_id, profile_id, code, label, account_type, asset, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            ("acct-1", "ws-1", "profile-1", "treasury", "Treasury", "asset", "BTC", NOW),
+        )
+        for wallet_id, label in (
+            ("wallet-a", "Cold"),
+            ("wallet-b", "Hot"),
+            ("wallet-c", "Vault"),
+        ):
+            conn.execute(
+                """
+                INSERT INTO wallets(id, workspace_id, profile_id, account_id, label, kind, config_json, created_at)
+                VALUES(?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (wallet_id, "ws-1", "profile-1", "acct-1", label, "custom", "{}", NOW),
+            )
+        set_setting(conn, "context_workspace", "ws-1")
+        set_setting(conn, "context_profile", "profile-1")
+        conn.commit()
+
+    def _utxo(self, wallet_id, address, txid, vout, amount=50_000_000):
+        self.conn.execute(
+            """
+            INSERT INTO wallet_utxos(
+                id, workspace_id, profile_id, wallet_id, chain, network, asset,
+                amount, txid, vout, outpoint, confirmation_status, address,
+                branch_label, branch_index, address_index, first_seen_at, last_seen_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                f"utxo-{wallet_id}-{txid}-{vout}",
+                "ws-1",
+                "profile-1",
+                wallet_id,
+                "bitcoin",
+                "main",
+                "BTC",
+                amount * 1000,
+                txid,
+                vout,
+                f"{txid}:{vout}",
+                "confirmed",
+                address,
+                "receive",
+                0,
+                0,
+                NOW,
+                NOW,
+            ),
+        )
+
+    def _tx(
+        self,
+        tx_id,
+        wallet_id,
+        direction,
+        amount_msat,
+        external_id,
+        raw_json,
+        *,
+        fee_msat=0,
+        asset="BTC",
+        kind=None,
+        description=None,
+        counterparty=None,
+    ):
+        self.conn.execute(
+            """
+            INSERT INTO transactions(
+                id, workspace_id, profile_id, wallet_id, external_id, fingerprint,
+                occurred_at, direction, asset, amount, fee, fiat_currency,
+                fiat_rate, fiat_value, kind, description, counterparty, raw_json, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                tx_id,
+                "ws-1",
+                "profile-1",
+                wallet_id,
+                external_id,
+                f"fp-{tx_id}",
+                NOW,
+                direction,
+                asset,
+                amount_msat,
+                fee_msat,
+                "EUR",
+                40_000.0,
+                None,
+                kind or ("withdrawal" if direction == "outbound" else "deposit"),
+                description,
+                counterparty,
+                json.dumps(raw_json, sort_keys=True) if isinstance(raw_json, dict) else raw_json,
+                NOW,
+            ),
+        )
+
+    def _graph(self, transaction):
+        self.conn.commit()
+        return build_transaction_graph_snapshot(self.conn, {"transaction": transaction})
+
+    def test_esplora_full_graph_returns_curated_model(self):
+        self._utxo("wallet-a", ADDR_A, "prevfull", 0, amount=60_000_000)
+        self._utxo("wallet-b", ADDR_B, "scan-full-b", 0, amount=50_000_000)
+        raw = {
+            "txid": "full-tx",
+            "version": 2,
+            "locktime": 0,
+            "size": 300,
+            "vsize": 250,
+            "weight": 1000,
+            "vin": [
+                {
+                    "txid": "prevfull",
+                    "vout": 0,
+                    "prevout": {
+                        "scriptpubkey": SCRIPT_A,
+                        "scriptpubkey_type": "v0_p2wpkh",
+                        "scriptpubkey_address": ADDR_A,
+                        "value": 60_000_000,
+                    },
+                }
+            ],
+            "vout": [
+                {"n": 0, "scriptpubkey": SCRIPT_B, "scriptpubkey_address": ADDR_B, "value": 50_000_000},
+                {"n": 1, "scriptpubkey": "6a026b62", "scriptpubkey_type": "op_return", "value": 0},
+                {"n": 2, "scriptpubkey": "00141111111111111111111111111111111111111111", "value": 9_000_000},
+            ],
+        }
+        self._tx("full-out", "wallet-a", "outbound", 59_000_000_000, "full-tx", raw, fee_msat=1_000_000_000)
+
+        payload = self._graph("full-out")
+
+        self.assertEqual(payload["supportLevel"], "full")
+        self.assertEqual(payload["transaction"]["inputCount"], 1)
+        self.assertEqual(payload["transaction"]["outputCount"], 3)
+        self.assertEqual(payload["fee"]["valueSats"], 1_000_000)
+        self.assertEqual(payload["outputs"][0]["role"], "owned_destination")
+        self.assertEqual(payload["outputs"][1]["role"], "op_return")
+        serialized = json.dumps(payload)
+        self.assertNotIn(SCRIPT_A, serialized)
+        self.assertNotIn("raw_json", serialized)
+
+    def test_graphless_import_has_clear_state(self):
+        self._tx("csv-row", "wallet-a", "outbound", 100_000_000, "csv-1", "{}")
+
+        payload = self._graph("csv-row")
+
+        self.assertEqual(payload["supportLevel"], "graphless")
+        self.assertEqual(payload["unsupportedReason"], "graphless_import")
+        self.assertEqual(payload["inputs"], [])
+        self.assertEqual(payload["outputs"], [])
+
+    def test_decimal_btc_output_values_are_converted_to_sats(self):
+        raw = {
+            "txid": "decimal-tx",
+            "vin": [
+                {
+                    "txid": "prevdecimal",
+                    "vout": 0,
+                    "prevout": {"scriptpubkey": SCRIPT_A, "value": 1_000_000},
+                }
+            ],
+            "vout": [{"n": 0, "scriptpubkey": SCRIPT_B, "value": 0.005}],
+        }
+        self._tx("decimal-row", "wallet-a", "outbound", 500_000_000, "decimal-tx", raw)
+
+        payload = self._graph("decimal-row")
+
+        self.assertEqual(payload["outputs"][0]["valueSats"], 500_000)
+        self.assertEqual(payload["outputs"][0]["valueBtc"], 0.005)
+
+    def test_raw_hex_derives_public_size_metadata(self):
+        raw_hex = (
+            "01000000"
+            "01"
+            f"{'11' * 32}"
+            "00000000"
+            "00"
+            "ffffffff"
+            "01"
+            "40420f0000000000"
+            "00"
+            "00000000"
+        )
+        raw = {
+            "txid": "hex-size-tx",
+            "raw_hex": raw_hex,
+            "vin": [{"txid": "11" * 32, "vout": 0, "prevout": {"scriptpubkey": SCRIPT_A, "value": 1_000_000}}],
+            "vout": [{"n": 0, "scriptpubkey": "", "value": 1_000_000}],
+        }
+        self._tx("hex-size-row", "wallet-a", "outbound", 1_000_000_000, "hex-size-tx", raw)
+
+        payload = self._graph("hex-size-row")
+
+        self.assertEqual(payload["transaction"]["size"], 60)
+        self.assertEqual(payload["transaction"]["vsize"], 60)
+        self.assertEqual(payload["transaction"]["weight"], 240)
+
+    def test_bitcoin_missing_input_prevout_values_are_explained_precisely(self):
+        raw = {
+            "txid": "prevout-missing-tx",
+            "vin": [{"txid": "22" * 32, "vout": 0}],
+            "vout": [{"n": 0, "scriptpubkey": SCRIPT_B, "value": 500_000}],
+        }
+        self._tx(
+            "prevout-missing-row",
+            "wallet-a",
+            "inbound",
+            500_000_000,
+            "prevout-missing-tx",
+            raw,
+        )
+
+        payload = self._graph("prevout-missing-row")
+
+        self.assertEqual(payload["supportLevel"], "partial")
+        self.assertEqual(payload["unsupportedReason"], "input_prevout_values_missing")
+        self.assertEqual(payload["outputs"][0]["valueSats"], 500_000)
+        self.assertIn("spent previous output", payload["warnings"][0]["message"])
+
+    def test_inbound_owned_output_is_not_marked_change(self):
+        self._utxo("wallet-b", ADDR_B, "receive-tx", 0, amount=9_210)
+        raw = {
+            "txid": "receive-tx",
+            "vin": [
+                {
+                    "txid": "55" * 32,
+                    "vout": 0,
+                    "prevout": {
+                        "scriptpubkey": "0014" + "88" * 20,
+                        "value": 30_000,
+                    },
+                }
+            ],
+            "vout": [
+                {"n": 0, "scriptpubkey": SCRIPT_B, "scriptpubkey_address": ADDR_B, "value": 9_210},
+                {"n": 1, "scriptpubkey": "0014" + "99" * 20, "value": 18_654},
+            ],
+        }
+        self._tx("receive-row", "wallet-b", "inbound", 9_210_000, "receive-tx", raw)
+
+        payload = self._graph("receive-row")
+
+        self.assertEqual(payload["outputs"][0]["role"], "incoming_payment")
+        self.assertNotIn("change", {annotation["code"] for annotation in payload["outputs"][0]["annotations"]})
+        self.assertEqual(payload["outputs"][1]["role"], "external_recipient")
+
+    def test_bitcoin_missing_prevout_values_are_enriched_from_public_lookup(self):
+        txid = "33" * 32
+        raw = {
+            "txid": txid,
+            "vin": [{"txid": "44" * 32, "vout": 0}],
+            "vout": [{"n": 0, "scriptpubkey": SCRIPT_B, "value": 500_000}],
+        }
+        fetched = {
+            "txid": txid,
+            "version": 2,
+            "locktime": 0,
+            "vsize": 141,
+            "vin": [
+                {
+                    "txid": "44" * 32,
+                    "vout": 0,
+                    "prevout": {
+                        "scriptpubkey": SCRIPT_A,
+                        "scriptpubkey_type": "v0_p2wpkh",
+                        "scriptpubkey_address": ADDR_A,
+                        "value": 600_000,
+                    },
+                }
+            ],
+            "vout": [{"n": 0, "scriptpubkey": SCRIPT_B, "value": 500_000}],
+        }
+        create_db_backend(
+            self.conn,
+            "graph-mempool",
+            "mempool",
+            "https://mempool.example/api",
+            chain="bitcoin",
+            network="main",
+            timeout=5,
+            commit=False,
+        )
+        self._tx("prevout-enriched-row", "wallet-a", "inbound", 500_000_000, txid, raw)
+
+        with patch(
+            "kassiber.core.transaction_graph.fetch_esplora_transaction",
+            return_value=fetched,
+        ) as fetch:
+            payload = self._graph("prevout-enriched-row")
+
+        fetch.assert_called_once_with("https://mempool.example/api", txid, timeout=5)
+        self.assertEqual(payload["supportLevel"], "full")
+        self.assertIsNone(payload["unsupportedReason"])
+        self.assertEqual(payload["inputs"][0]["valueSats"], 600_000)
+        self.assertEqual(payload["fee"]["valueSats"], 100_000)
+        self.assertEqual(payload["fee"]["rateSatVb"], 709.22)
+        self.assertNotIn(
+            "input_prevout_values_missing",
+            {warning["code"] for warning in payload["warnings"]},
+        )
+
+    def test_bitcoin_graphless_txid_row_fetches_public_graph(self):
+        txid = "88" * 32
+        fetched = {
+            "txid": txid,
+            "version": 2,
+            "locktime": 0,
+            "vsize": 141,
+            "vin": [
+                {
+                    "txid": "99" * 32,
+                    "vout": 1,
+                    "prevout": {
+                        "scriptpubkey": SCRIPT_A,
+                        "scriptpubkey_type": "v0_p2wpkh",
+                        "scriptpubkey_address": ADDR_A,
+                        "value": 1_000_000,
+                    },
+                }
+            ],
+            "vout": [
+                {"n": 0, "scriptpubkey": "0014" + "11" * 20, "value": 800_000},
+                {"n": 1, "scriptpubkey": "0014" + "22" * 20, "value": 198_000},
+            ],
+        }
+        create_db_backend(
+            self.conn,
+            "graph-mempool",
+            "mempool",
+            "https://mempool.example/api",
+            chain="bitcoin",
+            network="main",
+            timeout=5,
+            commit=False,
+        )
+        self._tx("bull-row", "wallet-a", "outbound", 800_000_000, txid, "{}", fee_msat=2_000_000)
+
+        with patch(
+            "kassiber.core.transaction_graph.fetch_esplora_transaction",
+            return_value=fetched,
+        ) as fetch:
+            payload = self._graph("bull-row")
+
+        fetch.assert_called_once_with("https://mempool.example/api", txid, timeout=5)
+        self.assertEqual(payload["supportLevel"], "full")
+        self.assertIsNone(payload["unsupportedReason"])
+        self.assertEqual(payload["transaction"]["inputCount"], 1)
+        self.assertEqual(payload["transaction"]["outputCount"], 2)
+        self.assertEqual(payload["inputs"][0]["outpoint"], f"{'99' * 32}:1")
+        self.assertEqual(payload["inputs"][0]["valueSats"], 1_000_000)
+        self.assertEqual(payload["outputs"][0]["valueSats"], 800_000)
+        self.assertEqual(payload["fee"]["valueSats"], 2_000)
+        self.assertNotIn(
+            "graphless_import",
+            {warning["code"] for warning in payload["warnings"]},
+        )
+
+    def test_liquid_confidential_shape_is_reference_only(self):
+        raw = {
+            "txid": "liquid-tx",
+            "vin": [{"txid": "liquid-prev", "vout": 0, "prevout": {"scriptpubkey": SCRIPT_A}}],
+            "vout": [{"n": 0, "scriptpubkey": SCRIPT_B, "valuecommitment": "09" + "aa" * 32}],
+        }
+        self._tx("liquid-row", "wallet-a", "outbound", 1_000_000, "liquid-tx", raw, asset="LBTC")
+
+        payload = self._graph("liquid-row")
+
+        self.assertEqual(payload["supportLevel"], "partial")
+        self.assertEqual(payload["unsupportedReason"], "confidential_values_hidden")
+        self.assertEqual(payload["outputs"][0]["valueState"], "confidential")
+        self.assertNotIn("valueSats", payload["outputs"][0])
+
+    def test_liquid_graphless_row_fetches_amountless_reference_graph(self):
+        txid = "66" * 32
+        fetched = {
+            "txid": txid,
+            "version": 2,
+            "locktime": 0,
+            "vin": [
+                {
+                    "txid": "77" * 32,
+                    "vout": 0,
+                    "prevout": {
+                        "scriptpubkey": SCRIPT_A,
+                        "valuecommitment": "09" + "aa" * 32,
+                        "assetcommitment": "0a" + "bb" * 32,
+                    },
+                }
+            ],
+            "vout": [
+                {
+                    "n": 0,
+                    "scriptpubkey": SCRIPT_B,
+                    "valuecommitment": "09" + "cc" * 32,
+                    "assetcommitment": "0a" + "dd" * 32,
+                },
+                {
+                    "n": 1,
+                    "scriptpubkey": SCRIPT_C,
+                    "valuecommitment": "09" + "ee" * 32,
+                    "assetcommitment": "0a" + "ff" * 32,
+                },
+            ],
+        }
+        self._tx("liquid-reference-row", "wallet-a", "inbound", 25_022_000, txid, "{}", asset="LBTC")
+
+        with patch(
+            "kassiber.core.transaction_graph.fetch_esplora_transaction",
+            return_value=fetched,
+        ) as fetch:
+            payload = self._graph("liquid-reference-row")
+
+        fetch.assert_called_once_with("https://liquid.network/api", txid, timeout=5)
+        self.assertEqual(payload["supportLevel"], "partial")
+        self.assertEqual(payload["unsupportedReason"], "confidential_values_hidden")
+        self.assertEqual(payload["transaction"]["inputCount"], 1)
+        self.assertEqual(payload["transaction"]["outputCount"], 2)
+        self.assertEqual(payload["inputs"][0]["outpoint"], f"{'77' * 32}:0")
+        self.assertEqual(payload["inputs"][0]["valueState"], "confidential")
+        self.assertEqual(payload["outputs"][0]["outpoint"], f"{txid}:0")
+        self.assertEqual(payload["outputs"][0]["valueState"], "confidential")
+        self.assertNotIn("valueSats", payload["inputs"][0])
+        self.assertNotIn("valueSats", payload["outputs"][0])
+        serialized = json.dumps(payload)
+        self.assertNotIn("valuecommitment", serialized)
+        self.assertNotIn("assetcommitment", serialized)
+
+    def test_multi_source_consolidation_annotation(self):
+        self._utxo("wallet-a", ADDR_A, "prev-a", 0, amount=51_000_000)
+        self._utxo("wallet-b", ADDR_B, "prev-b", 0, amount=31_000_000)
+        self._utxo("wallet-c", ADDR_C, "scan-c", 0, amount=81_000_000)
+        raw = {
+            "txid": "consol",
+            "vin": [
+                {"txid": "prev-a", "vout": 0, "prevout": {"scriptpubkey": SCRIPT_A, "value": 51_000_000}},
+                {"txid": "prev-b", "vout": 0, "prevout": {"scriptpubkey": SCRIPT_B, "value": 31_000_000}},
+            ],
+            "vout": [{"n": 0, "scriptpubkey": SCRIPT_C, "scriptpubkey_address": ADDR_C, "value": 81_000_000}],
+        }
+        self._tx("a-out", "wallet-a", "outbound", 50_000_000_000, "consol", raw, fee_msat=1_000_000_000)
+        self._tx("b-out", "wallet-b", "outbound", 30_000_000_000, "consol", raw, fee_msat=1_000_000_000)
+        self._tx("c-in", "wallet-c", "inbound", 81_000_000_000, "consol", "{}")
+
+        payload = self._graph("a-out")
+
+        codes = {annotation["code"] for annotation in payload["annotations"]}
+        self.assertIn("multi_source_consolidation", codes)
+        self.assertIn("multi-consol:consol", payload["accounting"]["transferGroupIds"])
+
+    def test_partial_external_residual_annotation(self):
+        self._utxo("wallet-a", ADDR_A, "prev-partial", 0, amount=61_000_000)
+        self._utxo("wallet-b", ADDR_B, "scan-b", 0, amount=50_000_000)
+        raw = {
+            "txid": "partial",
+            "vin": [{"txid": "prev-partial", "vout": 0, "prevout": {"scriptpubkey": SCRIPT_A, "value": 61_000_000}}],
+            "vout": [
+                {"n": 0, "scriptpubkey": SCRIPT_B, "value": 50_000_000},
+                {"n": 1, "scriptpubkey": "00142222222222222222222222222222222222222222", "value": 10_000_000},
+            ],
+        }
+        self._tx("partial-out", "wallet-a", "outbound", 60_000_000_000, "partial", raw, fee_msat=1_000_000_000)
+
+        payload = self._graph("partial-out")
+
+        codes = {annotation["code"] for annotation in payload["annotations"]}
+        self.assertIn("ownership_derived", codes)
+        self.assertIn("partial_external_residual", codes)
+
+    def test_ambiguous_destination_receipt_warns(self):
+        self._utxo("wallet-a", ADDR_A, "prev-ambig", 0, amount=51_000_000)
+        self._utxo("wallet-b", ADDR_B, "scan-ambig", 0, amount=50_000_000)
+        raw = {
+            "txid": "ambig",
+            "vin": [{"txid": "prev-ambig", "vout": 0, "prevout": {"scriptpubkey": SCRIPT_A, "value": 51_000_000}}],
+            "vout": [{"n": 0, "scriptpubkey": SCRIPT_B, "value": 50_000_000}],
+        }
+        self._tx("ambig-out", "wallet-a", "outbound", 50_000_000_000, "ambig", raw, fee_msat=1_000_000_000)
+        self._tx("ambig-in-1", "wallet-b", "inbound", 50_000_000_000, "ambig", "{}")
+        self._tx("ambig-in-2", "wallet-b", "inbound", 50_000_000_000, "ambig", "{}")
+
+        payload = self._graph("ambig-out")
+
+        codes = {warning["code"] for warning in payload["warnings"]}
+        self.assertIn("ownership_transfer_destination_ambiguous", codes)
+
+    def test_mixed_case_recorded_fanout_is_annotated(self):
+        txid = "ABCDEF" + "1" * 58
+        self._tx("fan-out", "wallet-a", "outbound", 80_000_000_000, txid, "{}")
+        self._tx("fan-in-b", "wallet-b", "inbound", 50_000_000_000, txid.lower(), "{}")
+        self._tx("fan-in-c", "wallet-c", "inbound", 30_000_000_000, txid.upper(), "{}")
+
+        payload = self._graph("fan-out")
+
+        self.assertEqual(payload["supportLevel"], "graphless")
+        codes = {annotation["code"] for annotation in payload["annotations"]}
+        self.assertIn("recorded_fanout", codes)
+
+    def test_reviewed_swap_pair_route_is_curated(self):
+        raw = {
+            "txid": "liquid-swap-out",
+            "vin": [
+                {"txid": "liquid-prev-a", "vout": 0, "prevout": {"scriptpubkey": SCRIPT_A}},
+                {"txid": "liquid-prev-b", "vout": 1, "prevout": {"scriptpubkey": SCRIPT_A}},
+            ],
+            "vout": [{"n": 0, "scriptpubkey": SCRIPT_B, "valuecommitment": "09" + "aa" * 32}],
+        }
+        self._tx(
+            "swap-out",
+            "wallet-a",
+            "outbound",
+            124_262_750_000,
+            "liquid-swap-out",
+            raw,
+            fee_msat=129_770_000,
+            asset="LBTC",
+            kind="swap",
+            description="Liquid spend to swap address",
+            counterparty="Swap LBTC -> BTC",
+        )
+        self._tx(
+            "swap-in",
+            "wallet-b",
+            "inbound",
+            124_132_980_000,
+            "bitcoin-swap-receive",
+            "{}",
+            asset="BTC",
+            kind="swap",
+            description="Bitcoin receive from swap",
+            counterparty="Swap LBTC -> BTC",
+        )
+        self.conn.execute(
+            """
+            INSERT INTO transaction_pairs(
+                id, workspace_id, profile_id, out_transaction_id, in_transaction_id,
+                kind, policy, notes, swap_fee_msat, swap_fee_kind, confidence_at_pair,
+                pair_source, out_amount, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "pair-swap-1",
+                "ws-1",
+                "profile-1",
+                "swap-out",
+                "swap-in",
+                "swap",
+                "carrying-value",
+                "reviewed cross-chain swap",
+                129_770_000,
+                "network_or_provider_fee",
+                "manual",
+                "manual",
+                124_262_750_000,
+                NOW,
+            ),
+        )
+
+        payload = self._graph("swap-out")
+
+        route = payload["swapRoute"]
+        self.assertIsNotNone(route)
+        self.assertEqual(route["currentLeg"], "out")
+        self.assertEqual(route["out"]["asset"], "LBTC")
+        self.assertEqual(route["out"]["network"], "Liquid")
+        self.assertEqual(route["out"]["role"], "consolidation")
+        self.assertEqual(route["out"]["wallet"]["label"], "Cold")
+        self.assertEqual(route["in"]["asset"], "BTC")
+        self.assertEqual(route["in"]["network"], "Bitcoin")
+        self.assertEqual(route["in"]["role"], "receive")
+        self.assertEqual(route["in"]["wallet"]["label"], "Hot")
+        self.assertEqual(route["swapFeeMsat"], 129_770_000)
+        serialized = json.dumps(payload)
+        self.assertNotIn("reviewed cross-chain swap", serialized)
+        self.assertNotIn("raw_json", serialized)
+
+    def test_payload_does_not_leak_secret_bearing_fields(self):
+        self._utxo("wallet-a", ADDR_A, "prevsecret", 0, amount=2_000_000)
+        raw = {
+            "txid": "secret-tx",
+            "descriptor": "wpkh([fingerprint/84h]xpubSECRET/0/*)",
+            "backend_url": "https://secret.example",
+            "token": "super-secret-token",
+            "vin": [{"txid": "prevsecret", "vout": 0, "prevout": {"scriptpubkey": SCRIPT_A, "value": 2_000_000}}],
+            "vout": [{"n": 0, "scriptpubkey": "00143333333333333333333333333333333333333333", "value": 1_900_000}],
+        }
+        self._tx("secret-out", "wallet-a", "outbound", 1_900_000_000, "secret-tx", raw, fee_msat=100_000_000)
+
+        payload = self._graph("secret-out")
+
+        serialized = json.dumps(payload)
+        self.assertNotIn("xpubSECRET", serialized)
+        self.assertNotIn("super-secret-token", serialized)
+        self.assertNotIn("backend_url", serialized)
+        self.assertNotIn(SCRIPT_A, serialized)
+
+
+if __name__ == "__main__":
+    unittest.main()

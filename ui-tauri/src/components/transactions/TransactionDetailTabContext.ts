@@ -14,6 +14,7 @@ import type {
   DirtyMap,
   JournalEventItem,
 } from "./TransactionDetailSheetParts";
+import type { TransactionGraphPayload } from "./TransactionGraphTab";
 
 export type UpdateTransactionDraft = <K extends keyof TransactionEditDraft>(
   key: K,
@@ -77,4 +78,7 @@ export type TransactionDetailTabContext = {
   feeImpactEur: number | null;
   netImpactBtc: number;
   netImpactEur: number | null;
+  graphData?: TransactionGraphPayload;
+  graphLoading?: boolean;
+  graphError?: string | null;
 };

@@ -142,6 +142,7 @@ from .core.ui_snapshot import (
     build_workspace_health_snapshot,
     build_workspace_overview_snapshot,
 )
+from .core.transaction_graph import build_transaction_graph_snapshot
 from .core.sync_backends import (
     ElectrumClient,
     detect_active_script_types,
@@ -240,6 +241,7 @@ SUPPORTED_KINDS = (
     "ui.transactions.list",
     "ui.transactions.extremes",
     "ui.transactions.resolve",
+    "ui.transactions.graph",
     "ui.transactions.search",
     "ui.transactions.export_csv",
     "ui.transactions.export_xlsx",
@@ -3269,6 +3271,12 @@ def _execute_read_only_ai_tool(call: ParsedAiToolCall, runtime: AiToolRuntime) -
                 payload = build_transactions_extremes_snapshot(conn, call.arguments)
             elif entry.daemon_kind == "ui.transactions.resolve":
                 payload = build_transactions_resolve_snapshot(conn, call.arguments)
+            elif entry.daemon_kind == "ui.transactions.graph":
+                payload = build_transaction_graph_snapshot(
+                    conn,
+                    call.arguments,
+                    runtime.runtime_config,
+                )
             elif entry.daemon_kind == "ui.transactions.search":
                 payload = build_transactions_search_snapshot(conn, call.arguments)
             elif entry.daemon_kind == "ui.wallets.list":
@@ -8332,6 +8340,22 @@ def handle_request(
                 build_envelope(
                     "ui.transactions.resolve",
                     build_transactions_resolve_snapshot(ctx.conn, request.get("args")),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
+    if kind == "ui.transactions.graph":
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.transactions.graph",
+                    build_transaction_graph_snapshot(
+                        ctx.conn,
+                        request.get("args"),
+                        ctx.runtime_config,
+                    ),
                 ),
                 request_id,
             ),

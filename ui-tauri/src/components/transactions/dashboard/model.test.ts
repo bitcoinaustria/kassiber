@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import i18n from "@/i18n";
 
@@ -11,6 +11,7 @@ import {
   matchesFlowChartSelection,
   removeAttachmentRecord,
   replaceAttachmentRecord,
+  readTransactionDetailParams,
   toDashboardTransaction,
   upsertAttachmentRecords,
   type AttachmentRecord,
@@ -20,6 +21,10 @@ import type { Tx } from "@/mocks/seed";
 import type { Transaction, TransactionFlow } from "@/components/transactions";
 
 const t = i18n.getFixedT("en", "transactions");
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 function transaction(
   overrides: Partial<Transaction> = {},
@@ -296,5 +301,24 @@ describe("transaction attachment cache updates", () => {
     ];
 
     expect(removeAttachmentRecord(current, "url-1")).toEqual([current[0]]);
+  });
+});
+
+describe("transaction detail routing", () => {
+  it("falls back to details for the old graph deep-link tab", () => {
+    vi.stubGlobal("window", {
+      location: {
+        search: "?tx=tx-graph&tab=graph",
+        pathname: "/transactions",
+      },
+      history: {
+        replaceState: vi.fn(),
+      },
+    });
+
+    expect(readTransactionDetailParams()).toEqual({
+      transactionId: "tx-graph",
+      tab: "details",
+    });
   });
 });

@@ -10,7 +10,6 @@ import {
   Coins,
   Copy,
   Eye,
-  ExternalLink,
   Filter,
   Link2Off,
   MoreHorizontal,
@@ -1302,7 +1301,6 @@ const TransactionsTable = ({
                     : // loose translator
                       pricingCacheSummary(txn, t as (key: string) => string);
                 const StatusIcon = transactionStatusIcons[draft.reviewStatus];
-                const explorer = explorerForTransaction(txn, explorerSettings);
                 const flow = displayFlow(txn);
                 const collateralRole = collateralRoleByTransaction.get(txn.id);
                 const showPrimaryLabel = !isRedundantTransactionLabel(
@@ -1405,40 +1403,14 @@ const TransactionsTable = ({
                             <span aria-hidden="true">·</span>
                             <span>{txn.date}</span>
                             <span aria-hidden="true">·</span>
-                            {explorer ? (
-                              <button
-                                type="button"
-                                className={cn(
-                                  "inline-flex max-w-[20ch] items-center gap-1 truncate font-mono text-left underline-offset-4 hover:underline",
-                                  blurClass(hideSensitive),
-                                )}
-                                title={t("table.row.openExplorerTitle", {
-                                  txid: txn.txnId,
-                                  explorer: explorer.label,
-                                })}
-                                onClick={(event) => {
-                                  event.stopPropagation();
-                                  setExplorerTransaction(txn);
-                                }}
-                              >
-                                <span className="truncate">
-                                  {formatShortTxid(txn.txnId)}
-                                </span>
-                                <ExternalLink
-                                  className="size-3 shrink-0 text-muted-foreground"
-                                  aria-hidden="true"
-                                />
-                              </button>
-                            ) : (
-                              <span
-                                className={cn(
-                                  "truncate font-mono",
-                                  blurClass(hideSensitive),
-                                )}
-                              >
-                                {formatShortTxid(txn.txnId)}
-                              </span>
-                            )}
+                            <span
+                              className={cn(
+                                "truncate font-mono",
+                                blurClass(hideSensitive),
+                              )}
+                            >
+                              {formatShortTxid(txn.txnId)}
+                            </span>
                           </div>
                         </div>
                       </div>
