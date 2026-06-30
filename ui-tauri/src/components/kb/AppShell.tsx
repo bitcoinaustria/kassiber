@@ -82,7 +82,6 @@ import {
   SidebarGroupContent,
   SidebarGroupLabel,
   SidebarMenu,
-  SidebarMenuBadge,
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarMenuSub,
@@ -330,10 +329,9 @@ const ROUTE_META: Array<[string, RouteMeta]> = [
   [
     "/imports",
     {
-      title: "Imports",
+      titleKey: "routeMeta.imports.title",
       icon: WalletCards,
-      searchLabel: "Search imports",
-      searchPlaceholder: "Search wallets, file formats...",
+      searchKey: "routeMeta.imports",
     },
   ],
   [

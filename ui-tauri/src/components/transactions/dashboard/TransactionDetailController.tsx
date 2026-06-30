@@ -1,6 +1,7 @@
 import * as React from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
+import { useTranslation } from "react-i18next";
 
 import { useDaemon, useDaemonMutation } from "@/daemon/client";
 import {
@@ -82,6 +83,7 @@ export function TransactionDetailController({
   /** Called by "save & next" to advance to the next transaction. */
   onNavigate?: (txn: Transaction, tab: string) => void;
 }) {
+  const { t } = useTranslation("transactions");
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
@@ -182,8 +184,11 @@ export function TransactionDetailController({
     workingTransaction?.id,
   ]);
   const attachmentItems = React.useMemo(
-    () => detailAttachmentRecords.map(attachmentRecordToItem),
-    [detailAttachmentRecords],
+    () =>
+      detailAttachmentRecords.map((record) =>
+        attachmentRecordToItem(record, t as (key: string) => string),
+      ),
+    [detailAttachmentRecords, t],
   );
   React.useEffect(() => {
     setAttachmentListOverride(null);
@@ -255,10 +260,10 @@ export function TransactionDetailController({
   }, [evidenceSourceTransactions, reuseDialogOpen, reuseSourceTransactionId]);
   const reuseSourceAttachmentItems = React.useMemo(
     () =>
-      (reuseSourceAttachmentsQuery.data?.data?.attachments ?? []).map(
-        attachmentRecordToItem,
+      (reuseSourceAttachmentsQuery.data?.data?.attachments ?? []).map((record) =>
+        attachmentRecordToItem(record, t as (key: string) => string),
       ),
-    [reuseSourceAttachmentsQuery.data],
+    [reuseSourceAttachmentsQuery.data, t],
   );
 
   const journalEvents = journalEventsQuery.data?.data?.events ?? [];

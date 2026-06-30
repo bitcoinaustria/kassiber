@@ -113,7 +113,6 @@ export function ReportControlFields({
   );
 }
 
-
 export function TransactionTargetRow({
   row,
   active,
@@ -664,20 +663,29 @@ export function TransactionSelect({
   rows,
   value,
   onChange,
+  defaultLabel,
 }: {
   id: string;
   label: string;
   rows: TransactionRow[];
   value: string;
   onChange: (value: string) => void;
+  defaultLabel?: string;
 }) {
+  const defaultValue = "__source_funds_selected_target__";
   return (
     <Field label={label} htmlFor={id}>
-      <Select value={value || undefined} onValueChange={onChange}>
+      <Select
+        value={defaultLabel && !value ? defaultValue : value || undefined}
+        onValueChange={(next) => onChange(next === defaultValue ? "" : next)}
+      >
         <SelectTrigger id={id} className="h-10 w-full">
           <SelectValue placeholder="Select transaction" />
         </SelectTrigger>
         <SelectContent>
+          {defaultLabel ? (
+            <SelectItem value={defaultValue}>{defaultLabel}</SelectItem>
+          ) : null}
           {rows.map((row) => (
             <SelectItem key={txRef(row)} value={txRef(row)}>
               {txLabel(row)}
@@ -1387,4 +1395,3 @@ export function DisclosureList({ label, values }: { label: string; values: strin
     </section>
   );
 }
-

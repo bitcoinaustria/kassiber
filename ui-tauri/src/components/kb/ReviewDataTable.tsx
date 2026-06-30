@@ -32,7 +32,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Link } from "@tanstack/react-router";
 
 import { screenShellClassName } from "@/lib/screen-layout";
 import { cn } from "@/lib/utils";

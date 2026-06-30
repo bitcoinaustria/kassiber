@@ -309,6 +309,7 @@ const ALLOWED_DAEMON_KINDS: &[&str] = &[
     "ui.source_funds.assemble",
     "ui.source_funds.evidence.list",
     "ui.source_funds.export_pdf",
+    "ui.source_funds.export_bundle",
     "ui.source_funds.coverage",
     "ui.source_funds.recipients.list",
     "ui.source_funds.recipients.create",

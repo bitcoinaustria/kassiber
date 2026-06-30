@@ -363,7 +363,6 @@ export function TargetStage({ state }: { state: SourceFundsCaseState }) {
                   active={txRef(row) === state.selectedTarget}
                   onSelect={() => state.setTarget(txRef(row))}
                   onOpenDetails={() => {
-                    state.setTarget(txRef(row));
                     state.openTxDetailById(txRef(row));
                   }}
                 />
@@ -839,7 +838,8 @@ function AdvancedReviewEditor({ state }: { state: SourceFundsCaseState }) {
                 id="source-to"
                 label="Applies to"
                 rows={state.rows}
-                value={state.sourceForm.to_transaction || state.selectedTarget}
+                value={state.sourceForm.to_transaction}
+                defaultLabel="Use selected target"
                 onChange={(value) =>
                   state.setSourceForm((current) => ({
                     ...current,
@@ -916,9 +916,8 @@ function AdvancedReviewEditor({ state }: { state: SourceFundsCaseState }) {
                 id="manual-to"
                 label="To"
                 rows={state.rows}
-                value={
-                  state.manualLinkForm.to_transaction || state.selectedTarget
-                }
+                value={state.manualLinkForm.to_transaction}
+                defaultLabel="Use selected target"
                 onChange={(value) =>
                   state.setManualLinkForm((current) => ({
                     ...current,
@@ -1326,14 +1325,35 @@ export function ExportStage({ state }: { state: SourceFundsCaseState }) {
               manifest, reveal-mode scoped.
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-2 p-4 text-sm text-muted-foreground">
+          <CardContent className="space-y-3 p-4 text-sm text-muted-foreground">
             <p>
-              After saving a case here, build the bundle from{" "}
-              <span className="font-medium text-foreground">
-                Reports → Audit package
-              </span>{" "}
-              (scoped to this case), or via the CLI:
+              Save a frozen case and export the recipient handoff ZIP from the
+              same reviewed snapshot:
             </p>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={
+                !exportable ||
+                state.casesSave.isPending ||
+                state.exportBundle.isPending
+              }
+              onClick={() => {
+                void state.handleExportBundle();
+              }}
+            >
+              <FileDown className="mr-2 size-4" aria-hidden="true" />
+              {state.casesSave.isPending
+                ? "Saving case…"
+                : state.exportBundle.isPending
+                  ? "Building bundle…"
+                  : "Save case & export bundle"}
+            </Button>
+            {state.exportedBundle?.filename && (
+              <p className="text-xs text-muted-foreground">
+                Exported: {state.exportedBundle.filename}
+              </p>
+            )}
             <code className="block rounded-md border bg-muted/40 px-3 py-2 font-mono text-xs">
               kassiber reports export-source-funds-bundle --case{" "}
               {state.savedCase ? state.savedCase.id : "<case-id>"} --file

@@ -81,6 +81,11 @@
       "label": "Search ledger",
       "placeholder": "Search entries, wallets, assets..."
     },
+    "imports": {
+      "title": "Imports",
+      "label": "Search imports",
+      "placeholder": "Search wallets, file formats..."
+    },
     "logs": {
       "label": "Search logs",
       "placeholder": "Search daemon errors, logs..."

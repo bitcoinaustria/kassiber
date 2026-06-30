@@ -117,12 +117,17 @@ def build_owned_outpoint_index(
         txid = str(row["txid"] or "").strip().lower()
         if not txid:
             continue
-        index[(txid, int(row["vout"]))] = {
+        key = (txid, int(row["vout"]))
+        if key in index:
+            index[key]["ambiguous"] = True
+            continue
+        index[key] = {
             "wallet_id": row["wallet_id"],
             "amount_msat": int(row["amount"] or 0),
             "branch_label": str(row["branch_label"] or ""),
             "spent_by": str(row["spent_by"] or "").strip().lower(),
             "asset": normalize_asset_code(str(row["asset"] or "")),
+            "ambiguous": False,
         }
     return index
 
@@ -175,6 +180,8 @@ def derive_utxo_spend_pairs(
     owned_outputs_by_txid: dict[str, list[tuple[tuple[str, int], Mapping[str, Any]]]] = defaultdict(list)
     spenders_of_outpoint: dict[str, list[tuple[tuple[str, int], Mapping[str, Any]]]] = defaultdict(list)
     for outpoint, info in owned_index.items():
+        if info.get("ambiguous"):
+            continue
         owned_outputs_by_txid[outpoint[0]].append((outpoint, info))
         if info.get("spent_by"):
             spenders_of_outpoint[str(info["spent_by"])].append((outpoint, info))
@@ -229,6 +236,8 @@ def derive_utxo_spend_pairs(
         groups: dict[str, dict[str, Any]] = {}
         for outpoint in tx_inputs(external):
             info = owned_index.get(outpoint)
+            if info and info.get("ambiguous"):
+                continue
             if not info or str(info["wallet_id"]) != wallet_id:
                 continue
             if info["asset"] != asset:
@@ -342,6 +351,8 @@ def derive_utxo_spend_pairs(
         spending_wallets: set[str] = set()
         for outpoint in vin_outpoints:
             info = owned_index.get(outpoint)
+            if info and info.get("ambiguous"):
+                continue
             if info:
                 spending_wallets.add(str(info["wallet_id"]))
 

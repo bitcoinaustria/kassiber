@@ -805,6 +805,7 @@ class SourceFundsCliTest(unittest.TestCase):
             "Pre-disclosure for expected bank proceeds.",
             "--reveal-mode",
             "minimal",
+            "--mask-recipient",
             "--save-case",
         )["data"]
         self.assertTrue(reviewed["explain_gates"]["exportable"], reviewed["explain_gates"]["blockers"])
@@ -863,6 +864,9 @@ class SourceFundsCliTest(unittest.TestCase):
             self.assertIn("Source of Funds Overview", extracted)
             self.assertIn("Origin and Transaction Flow", extracted)
             self.assertIn("Simplified Flow Path", extracted)
+            self.assertIn("(recipient masked)", extracted)
+            self.assertNotIn("Example Exchange", extracted)
+            self.assertNotIn("Pre-disclosure for expected bank proceeds.", extracted)
             self.assertIn("CoinJoin/PayJoin traversal deferred", extracted)
             self.assertIn("Data Sources", extracted)
             self.assertIn("Transaction Details", extracted)
@@ -1338,6 +1342,31 @@ class SourceFundsCliTest(unittest.TestCase):
         self.assertTrue(report["explain_gates"]["exportable"], report["explain_gates"]["blockers"])
         self.assertEqual(len(report["flow_levels"]), 4)
 
+    def test_assemble_skips_ambiguous_owned_outpoints(self):
+        self._seed_utxo_chain()
+        with self._db() as conn:
+            self._insert_utxos(
+                conn,
+                [("Chain B", self.P_TXID, 0, 30_000_000_000)],
+            )
+            conn.commit()
+        target_id = self._tx_id("Chain B", self.T_TXID)
+        result = self.cli(
+            "source-funds",
+            "assemble",
+            "--workspace",
+            "Sof",
+            "--profile",
+            "Default",
+            "--target-transaction",
+            target_id,
+        )["data"]
+        self.assertEqual(result["methods"].get("utxo_spend", 0), 0)
+        links = self.cli(
+            "source-funds", "links", "list", "--workspace", "Sof", "--profile", "Default"
+        )["data"]
+        self.assertFalse(any(link["method"] == "utxo_spend" for link in links))
+
     def _insert_utxos(self, conn, rows):
         ids = {
             row["label"]: (row["id"], row["workspace_id"], row["profile_id"])
@@ -1581,6 +1610,45 @@ class SourceFundsCliTest(unittest.TestCase):
             "Default",
             "--target-transaction",
             target_id,
+        )["data"]
+        self.assertEqual(result["inserted"], 0)
+        self.assertEqual(result["auto_reviewed"], 0)
+
+    def test_assemble_does_not_auto_review_privacy_boundary_transaction_pair(self):
+        self._seed_utxo_chain()
+        out_leg = self._tx_id("Chain A", self.T_TXID)
+        in_leg = self._tx_id("Chain B", self.T_TXID)
+        with self._db() as conn:
+            conn.execute(
+                "UPDATE transactions SET privacy_boundary = 'coinjoin' WHERE external_id = ?",
+                (self.T_TXID,),
+            )
+            conn.commit()
+        self.cli(
+            "transfers",
+            "pair",
+            "--workspace",
+            "Sof",
+            "--profile",
+            "Default",
+            "--tx-out",
+            out_leg,
+            "--tx-in",
+            in_leg,
+            "--kind",
+            "manual",
+            "--policy",
+            "carrying-value",
+        )
+        result = self.cli(
+            "source-funds",
+            "assemble",
+            "--workspace",
+            "Sof",
+            "--profile",
+            "Default",
+            "--target-transaction",
+            in_leg,
         )["data"]
         self.assertEqual(result["inserted"], 0)
         self.assertEqual(result["auto_reviewed"], 0)
@@ -1891,12 +1959,8 @@ class SourceFundsCliTest(unittest.TestCase):
                     item["sha256"],
                 )
             url_items = [e for e in manifest["evidence"] if e.get("source") == "url"]
-            self.assertTrue(
-                any(
-                    "exchange.example" in (item.get("source_url") or "")
-                    for item in url_items
-                )
-            )
+            self.assertGreaterEqual(len(url_items), 1)
+            self.assertTrue(all("source_url" not in item for item in url_items))
 
         # labels_only mode: evidence files are withheld by reveal mode.
         preview_lo = self._source_funds_report(reveal_mode="labels_only", save_case=True)

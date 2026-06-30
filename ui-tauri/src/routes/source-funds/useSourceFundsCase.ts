@@ -332,10 +332,14 @@ export function useSourceFundsCase() {
     "ui.source_funds.cases.save",
   );
   const exportPdf = useDaemonMutation("ui.source_funds.export_pdf");
+  const exportBundle = useDaemonMutation("ui.source_funds.export_bundle");
 
   const report = preview.data?.data;
   const savedCase = casesSave.data?.data?.case ?? null;
   const exportedPdf = exportPdf.data?.data as { filename?: string } | undefined;
+  const exportedBundle = exportBundle.data?.data as
+    | { filename?: string }
+    | undefined;
 
   const handleExportPdf = async () => {
     if (!report?.explain_gates.exportable) return;
@@ -344,6 +348,15 @@ export function useSourceFundsCase() {
     const args = sourceFundsExportArgs(saved.data);
     if (!args) return;
     exportPdf.mutate(args);
+  };
+
+  const handleExportBundle = async () => {
+    if (!report?.explain_gates.exportable) return;
+    if (casesSave.isPending || exportBundle.isPending) return;
+    const saved = await casesSave.mutateAsync(previewArgs);
+    const args = sourceFundsExportArgs(saved.data);
+    if (!args) return;
+    exportBundle.mutate(args);
   };
 
   const links = useMemo(
@@ -787,9 +800,12 @@ export function useSourceFundsCase() {
     createSource,
     casesSave,
     exportPdf,
+    exportBundle,
     savedCase,
     exportedPdf,
+    exportedBundle,
     handleExportPdf,
+    handleExportBundle,
     runSuggestions,
     runAssembly,
     bulkReviewDeterministicLinks,

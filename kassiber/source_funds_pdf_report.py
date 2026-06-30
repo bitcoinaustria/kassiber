@@ -371,14 +371,24 @@ class _SourceFundsPdfBuilder:
         for index, title in enumerate(self._included_section_titles(), start=1):
             story.append(self.p(f"{index}. {title}", "body"))
         if purpose.get("type") == "planned_exchange_sale":
+            planned_destination = (
+                "(recipient masked)"
+                if self.mask_recipient
+                else purpose.get("planned_destination") or "(not specified)"
+            )
+            planned_note = (
+                "(recipient masked)"
+                if self.mask_recipient
+                else purpose.get("planned_note") or "(none)"
+            )
             story.extend(
                 [
                     self.spacer(5),
                     self.p("Planned Sale", "h2"),
                     self.kv_table(
                         [
-                            ("Destination", purpose.get("planned_destination") or "(not specified)"),
-                            ("Note", purpose.get("planned_note") or "(none)"),
+                            ("Destination", planned_destination),
+                            ("Note", planned_note),
                             ("Fiat-source note", purpose.get("fiat_purchase_note") or ""),
                         ]
                     ),

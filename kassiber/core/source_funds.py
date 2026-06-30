@@ -1190,6 +1190,8 @@ def _transaction_pair_still_deterministic(
 ) -> bool:
     if not from_tx:
         return False
+    if _raw_privacy_hop(from_tx) or _raw_privacy_hop(to_tx):
+        return False
     return bool(
         conn.execute(
             """
@@ -1835,6 +1837,8 @@ def suggest_links(
         out_tx = rows_by_id.get(pair["out_transaction_id"])
         in_tx = rows_by_id.get(pair["in_transaction_id"])
         if not out_tx or not in_tx:
+            continue
+        if _raw_privacy_hop(out_tx) or _raw_privacy_hop(in_tx):
             continue
         if not in_scope(out_tx, in_tx):
             continue
@@ -3681,15 +3685,17 @@ def export_bundle(
                 )
                 file_count += 1
             elif (info and info.get("url")) or item.get("source_url"):
-                evidence_manifest.append(
-                    {
-                        "label": label,
-                        "attachment_type": attachment_type,
-                        "source": "url",
-                        "source_url": (info.get("url") if info else None) or item.get("source_url") or "",
-                        "sha256": "",
-                    }
-                )
+                manifest_item = {
+                    "label": label,
+                    "attachment_type": attachment_type,
+                    "source": "url",
+                    "sha256": "",
+                }
+                if reveal_mode == "full":
+                    manifest_item["source_url"] = (
+                        (info.get("url") if info else None) or item.get("source_url") or ""
+                    )
+                evidence_manifest.append(manifest_item)
                 url_count += 1
             else:
                 withheld_count += 1
