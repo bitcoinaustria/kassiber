@@ -77,6 +77,24 @@ export function summarizeTransactionTaxEffect(
     };
   }
 
+  const transferEvents = events.filter((event) =>
+    TRANSFER_ENTRY_TYPES.has(event.entryType),
+  );
+  if (transferEvents.length || flow === "transfer") {
+    return {
+      state: "transfer",
+      costBasisEur: null,
+      proceedsEur: null,
+      gainLossEur: null,
+      costBasisLabelKey: "tax.basisTreatment",
+      proceedsLabelKey: "tax.proceeds",
+      gainLossLabelKey: "tax.gainLoss",
+      costBasisFallbackKey: "tax.basisCarriedForward",
+      proceedsFallbackKey: "tax.noDisposal",
+      gainLossFallbackKey: "tax.noRealization",
+    };
+  }
+
   const disposalEvents = events.filter((event) =>
     DISPOSAL_ENTRY_TYPES.has(event.entryType),
   );
@@ -110,24 +128,6 @@ export function summarizeTransactionTaxEffect(
       costBasisLabelKey: "tax.costBasis",
       proceedsLabelKey: "tax.incomeRecognized",
       gainLossLabelKey: "tax.taxableIncome",
-    };
-  }
-
-  const transferEvents = events.filter((event) =>
-    TRANSFER_ENTRY_TYPES.has(event.entryType),
-  );
-  if (transferEvents.length || flow === "transfer") {
-    return {
-      state: "transfer",
-      costBasisEur: null,
-      proceedsEur: null,
-      gainLossEur: null,
-      costBasisLabelKey: "tax.basisTreatment",
-      proceedsLabelKey: "tax.proceeds",
-      gainLossLabelKey: "tax.gainLoss",
-      costBasisFallbackKey: "tax.basisCarriedForward",
-      proceedsFallbackKey: "tax.noDisposal",
-      gainLossFallbackKey: "tax.noRealization",
     };
   }
 

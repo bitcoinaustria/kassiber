@@ -126,4 +126,38 @@ describe("summarizeTransactionTaxEffect", () => {
       gainLossFallbackKey: "tax.noRealization",
     });
   });
+
+  it("keeps transfer treatment when a transfer also has a fee row", () => {
+    expect(
+      summarizeTransactionTaxEffect(
+        [
+          journalEvent({
+            entryType: "transfer_out",
+            fiatValueEur: 0,
+            quantity: -0.101,
+          }),
+          journalEvent({
+            entryType: "transfer_in",
+            fiatValueEur: 0,
+            quantity: 0.1,
+          }),
+          journalEvent({
+            id: "journal-entry-fee",
+            entryType: "transfer_fee",
+            fiatValueEur: 65,
+            costBasisEur: 60,
+            proceedsEur: 65,
+            gainLossEur: 5,
+            quantity: -0.001,
+          }),
+        ],
+        "transfer",
+      ),
+    ).toMatchObject({
+      state: "transfer",
+      costBasisFallbackKey: "tax.basisCarriedForward",
+      proceedsFallbackKey: "tax.noDisposal",
+      gainLossFallbackKey: "tax.noRealization",
+    });
+  });
 });
