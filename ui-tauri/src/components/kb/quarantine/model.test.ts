@@ -6,8 +6,10 @@ import {
   quarantineItemToRow,
   quarantineMetrics,
   quarantineReasonFilterIds,
+  quarantineResolvePlan,
+  quarantineRows,
 } from "./model";
-import type { QuarantineItem } from "./types";
+import type { QuarantineItem, QuarantineSnapshot } from "./types";
 
 const t = i18n.getFixedT("en", "journals");
 
@@ -36,7 +38,7 @@ describe("quarantine row model", () => {
       id: "transactio...",
       date: "2026-05-01",
       account: "Cold",
-      event: "Missing Spot Price",
+      event: "Missing BTC price for outbound",
       source: "Journal quarantine · outbound",
       amount: "-1,000,000 sats BTC",
       basis: "Missing fiat price",
@@ -49,7 +51,7 @@ describe("quarantine row model", () => {
       metricFilterIds: ["missing-prices"],
       transactionAction: {
         transactionId: "transaction-with-a-long-id",
-        label: "Open pricing",
+        label: "Add price",
         tab: "pricing",
       },
     });
@@ -71,11 +73,12 @@ describe("quarantine row model", () => {
     expect(row.status).toBe("Blocked");
     expect(row.priority).toBe("High");
     expect(row.owner).toBe("Active book");
+    expect(row.event).toBe("Not enough BTC lots in Cold");
     expect(row.amount).toBe("250,000 sats BTC");
     expect(row.metricFilterIds).toEqual(["basis-or-pairs"]);
     expect(row.transactionAction).toMatchObject({
       transactionId: "transaction-with-a-long-id",
-      label: "Open tax review",
+      label: "Fix cost basis",
       tab: "tax",
     });
   });
@@ -85,21 +88,26 @@ describe("quarantine row model", () => {
       {
         ...baseItem,
         reason: "pricing_review_required",
+        detail: {
+          pricing_quality: "coarse_fallback",
+          pricing_granularity: "daily",
+          wallet: "Cold",
+        },
       },
       "AT profile",
       t,
     );
 
     expect(row).toMatchObject({
-      event: "Pricing Review Required",
+      event: "Coarse BTC price needs review (daily)",
       basis: "Coarse pricing — verify",
       status: "Needs review",
       priority: "Medium",
-      evidenceHint: "Priced from daily rates — fetch precise prices or confirm",
+      evidenceHint: "coarse_fallback / daily price on Cold",
       nextAction: "Fetch precise prices or confirm, then process journals",
       metricFilterIds: ["missing-prices"],
       transactionAction: {
-        label: "Open pricing",
+        label: "Add price",
         tab: "pricing",
       },
     });
@@ -110,17 +118,24 @@ describe("quarantine row model", () => {
       {
         ...baseItem,
         reason: "transfer_fee_implausible",
+        detail: {
+          from_wallet: "Cold",
+          to_wallet: "Hot",
+          implied_fee: 0.01952253,
+          fee_ceiling: 0.000025,
+        },
       },
       "AT profile",
       t,
     );
 
     expect(row).toMatchObject({
+      event: "Implausible transfer fee: Cold -> Hot",
       basis: "Split transfer / swap review",
-      evidenceHint: "Review the self-transfer and residual swap or payout leg",
+      evidenceHint: "Implied fee 1,952,253 sats exceeds review ceiling 2,500 sats",
       nextAction: "Review split transfer/swap, then process journals",
       transactionAction: {
-        label: "Open transaction",
+        label: "Review details",
         tab: "details",
       },
     });
@@ -137,7 +152,7 @@ describe("quarantine row model", () => {
     );
 
     expect(row).toMatchObject({
-      event: "Ownership Transfer Destination Ambiguous",
+      event: "Self-transfer needs pairing in Cold",
       basis: "Self-transfer between your wallets",
       status: "Needs review",
       priority: "Medium",
@@ -147,7 +162,7 @@ describe("quarantine row model", () => {
         "Pair it manually, or sync the destination wallet so its receipt is recorded, then process journals",
       metricFilterIds: ["basis-or-pairs"],
       transactionAction: {
-        label: "Open pairing",
+        label: "Review transfer",
         tab: "details",
       },
     });
@@ -222,6 +237,114 @@ describe("quarantine metrics", () => {
       ["Basis or pairs", 1],
       ["Other review", 0],
     ]);
+  });
+});
+
+describe("quarantine resolve plan", () => {
+  function snapshotWith(items: QuarantineItem[]): QuarantineSnapshot {
+    const byReason = new Map<string, number>();
+    for (const item of items) {
+      byReason.set(item.reason, (byReason.get(item.reason) ?? 0) + 1);
+    }
+    return {
+      summary: {
+        workspace: "Personal",
+        profile: "AT profile",
+        count: items.length,
+        limit: 100,
+        by_reason: Array.from(byReason, ([reason, count]) => ({ reason, count })),
+      },
+      items,
+    };
+  }
+
+  it("orders repair steps from sync safety through journal processing", () => {
+    const snapshot = snapshotWith([
+      { ...baseItem, transaction_id: "price-1", reason: "missing_spot_price" },
+      { ...baseItem, transaction_id: "basis-1", reason: "insufficient_lots" },
+      {
+        ...baseItem,
+        transaction_id: "transfer-1",
+        reason: "ownership_transfer_destination_ambiguous",
+      },
+      {
+        ...baseItem,
+        transaction_id: "sync-1",
+        reason: "ownership_transfer_amount_mismatch",
+      },
+      { ...baseItem, transaction_id: "other-1", reason: "unsupported_asset" },
+    ]);
+    const rows = quarantineRows(snapshot, t);
+
+    const plan = quarantineResolvePlan(snapshot, rows, t);
+
+    expect(plan.total).toBe(5);
+    expect(plan.blockedCount).toBe(2);
+    expect(plan.actionableCount).toBe(5);
+    expect(plan.steps.map((step) => step.id)).toEqual([
+      "sync-wallets",
+      "review-transfers",
+      "fix-basis",
+      "add-prices",
+      "review-other",
+      "process-journals",
+    ]);
+    expect(plan.summary).toBe(
+      "5 quarantined rows · 5 repair steps before journal processing",
+    );
+  });
+
+  it("attaches the first actionable row to each repair category", () => {
+    const snapshot = snapshotWith([
+      { ...baseItem, transaction_id: "price-1", reason: "missing_spot_price" },
+      {
+        ...baseItem,
+        transaction_id: "price-2",
+        reason: "pricing_review_required",
+      },
+      { ...baseItem, transaction_id: "basis-1", reason: "insufficient_lots" },
+    ]);
+    const rows = quarantineRows(snapshot, t);
+
+    const plan = quarantineResolvePlan(snapshot, rows, t);
+    const priceStep = plan.steps.find((step) => step.id === "add-prices");
+    const basisStep = plan.steps.find((step) => step.id === "fix-basis");
+    const processStep = plan.steps.find((step) => step.id === "process-journals");
+
+    expect(priceStep).toMatchObject({
+      count: 2,
+      title: "Add or confirm prices",
+      actionKind: "open-row",
+      actionLabel: "Add first price",
+      rowIds: ["price-1", "price-2"],
+      primaryAction: { transactionId: "price-1", tab: "pricing" },
+    });
+    expect(priceStep?.previewRows).toHaveLength(2);
+    expect(basisStep).toMatchObject({
+      count: 1,
+      tone: "alert",
+      primaryAction: { transactionId: "basis-1", tab: "tax" },
+    });
+    expect(processStep).toMatchObject({
+      count: 3,
+      actionKind: "process-journals",
+      actionLabel: "Process journals",
+    });
+    expect(processStep?.primaryAction).toBeUndefined();
+  });
+
+  it("returns an empty plan for a clear queue", () => {
+    const snapshot = snapshotWith([]);
+
+    const plan = quarantineResolvePlan(snapshot, [], t);
+
+    expect(plan).toMatchObject({
+      total: 0,
+      summary: "No quarantined rows need repair.",
+      steps: [],
+      actionableCount: 0,
+      blockedCount: 0,
+    });
   });
 });
 

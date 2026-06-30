@@ -4,6 +4,21 @@ import { fixtures } from "./fixtures";
 import { mockDaemon } from "./mock";
 import type { DaemonStreamRecord } from "./transport";
 
+describe("mock daemon transaction resolver", () => {
+  it("resolves quarantine fixture transactions for in-place review", async () => {
+    const resolved = await mockDaemon.invoke<{
+      transaction?: { id?: string; quarantineReason?: string | null } | null;
+    }>({
+      kind: "ui.transactions.resolve",
+      args: { query: "tx-missing-price" },
+    });
+
+    expect(resolved.error).toBeUndefined();
+    expect(resolved.data?.transaction?.id).toBe("tx-missing-price");
+    expect(resolved.data?.transaction?.quarantineReason).toBe("missing_price");
+  });
+});
+
 describe("mock daemon backend settings", () => {
   it("supports settings list and CRUD for demo mode", async () => {
     const list = await mockDaemon.invoke<{

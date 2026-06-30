@@ -124,6 +124,24 @@ describe("transaction dashboard chart selection", () => {
     expect(transaction.feeBtc).toBe(0.0004218);
   });
 
+  it("normalizes backend review-status variants before detail rendering", () => {
+    const tx: Tx = {
+      id: "tx-missing-price",
+      date: "2026-04-15 08:00",
+      type: "Income",
+      account: "Cold Storage",
+      counter: "Missing price",
+      amountSat: 410_000,
+      eur: null,
+      rate: null,
+      tag: "Review",
+      reviewStatus: "needs_review",
+      conf: 32,
+    };
+
+    expect(toDashboardTransaction(tx, 0).reviewStatus).toBe("review");
+  });
+
   it("labels and matches a whole bucket selection across flows", () => {
     const bucket = bucketTransactionDate(
       new Date("2026-04-15T12:00:00Z"),

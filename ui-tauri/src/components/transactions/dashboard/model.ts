@@ -213,7 +213,7 @@ function toDashboardTransaction(
     pricingFetchedAt: tx.pricingFetchedAt,
     pricingGranularity: tx.pricingGranularity,
     pricingMethod: tx.pricingMethod,
-    reviewStatus: tx.reviewStatus as Transaction["reviewStatus"],
+    reviewStatus: normalizeTransactionReviewStatus(tx.reviewStatus, status),
     taxable: tx.taxable,
     atRegime: tx.atRegime as Transaction["atRegime"],
     atCategory: tx.atCategory as Transaction["atCategory"],
@@ -239,6 +239,26 @@ function toDashboardTransaction(
     status: tag.toLowerCase().includes("review") ? "review" : status,
     confirmations: tx.conf,
   };
+}
+
+function normalizeTransactionReviewStatus(
+  raw: string | null | undefined,
+  fallback: TransactionStatus,
+): TransactionStatus {
+  const normalized = raw?.trim().toLowerCase().replaceAll("-", "_");
+  if (!normalized) return fallback;
+  if (normalized === "completed" || normalized === "complete") return "completed";
+  if (normalized === "pending") return "pending";
+  if (normalized === "failed" || normalized === "error") return "failed";
+  if (
+    normalized === "review" ||
+    normalized === "needs_review" ||
+    normalized === "blocked" ||
+    normalized === "quarantined"
+  ) {
+    return "review";
+  }
+  return fallback;
 }
 
 function dashboardRecordsFromTxs(txs: Tx[], t?: Translator) {

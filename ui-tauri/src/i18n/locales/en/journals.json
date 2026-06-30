@@ -143,10 +143,27 @@
     "impact": "Held from reports",
     "source": "Journal quarantine · {{direction}}",
     "ownerFallback": "Active book",
+    "detailFallback": {
+      "price": "price",
+      "wallet": "wallet"
+    },
+    "detail": {
+      "resolveError": "Could not open this transaction from the quarantine queue."
+    },
     "direction": {
       "inbound": "inbound",
       "outbound": "outbound",
       "fallback": "transaction"
+    },
+    "issue": {
+      "missingPrice": "Missing {{asset}} price for {{direction}}",
+      "pricingReview": "Coarse {{asset}} price needs review ({{granularity}})",
+      "implausibleFee": "Implausible transfer fee",
+      "implausibleFeeWithWallets": "Implausible transfer fee: {{from}} -> {{to}}",
+      "ownershipTransfer": "Self-transfer needs pairing in {{wallet}}",
+      "transferGroupBlocked": "Transfer group blocked by {{reason}}",
+      "insufficientLots": "Not enough {{asset}} lots in {{wallet}}",
+      "missingBasis": "Missing {{asset}} cost basis in {{wallet}}"
     },
     "basis": {
       "missingPrice": "Missing fiat price",
@@ -165,7 +182,13 @@
       "detail": "Review {{keys}}",
       "fallback": "Review evidence",
       "splitTransfer": "Review the self-transfer and residual swap or payout leg",
+      "splitTransferValues": "Implied fee {{impliedFee}} exceeds review ceiling {{ceiling}}",
       "coarsePricing": "Priced from daily rates — fetch precise prices or confirm",
+      "coarsePricingValues": "{{quality}} / {{granularity}} price on {{wallet}}",
+      "priceValues": "Needed for {{requiredFor}} · {{route}}",
+      "basisValues": "Needs {{required}}, available {{available}} in {{wallet}}",
+      "ownershipAmountMismatch": "Recorded {{rowAmount}}, but owned outputs sum to {{ownedOutputs}}",
+      "ownershipLeg": "Candidate owned leg: {{amount}}",
       "ownershipTransfer": "Proven from the on-chain transaction — an output paid another of your wallets, but the matching receipt couldn't be resolved automatically"
     },
     "nextAction": {
@@ -180,10 +203,56 @@
       "ownershipAmountMismatch": "The recorded amount disagrees with the on-chain transaction — re-sync the wallet, then process journals"
     },
     "action": {
-      "openTransaction": "Open transaction",
-      "openPricing": "Open pricing",
-      "openPairing": "Open pairing",
-      "openTaxReview": "Open tax review"
+      "openTransaction": "Review details",
+      "openPricing": "Add price",
+      "openPairing": "Review transfer",
+      "openTaxReview": "Fix cost basis"
+    },
+    "resolvePlan": {
+      "button": "Resolve plan",
+      "eyebrow": "Bulk resolve",
+      "title": "Quarantine resolve plan",
+      "description": "A safe sequence for clearing this queue without guessing tax treatment.",
+      "summary": "{{count}} quarantined rows · {{steps}} repair steps before journal processing",
+      "summaryClear": "No quarantined rows need repair.",
+      "blocked": "{{count}} blocked",
+      "actionable": "{{count}} actionable",
+      "affectedRows": "Affected rows",
+      "moreRows_one": "+{{count}} more row",
+      "moreRows_other": "+{{count}} more rows",
+      "empty": "The queue is clear.",
+      "step": {
+        "sync-wallets": {
+          "title": "Sync or check wallet records",
+          "detail": "Rows where the recorded amount disagrees with owned on-chain outputs should be synced or inspected before anything else.",
+          "action": "Review sync issue"
+        },
+        "review-transfers": {
+          "title": "Review transfer decisions",
+          "detail": "Transfer, self-transfer, and split-swap rows need a human pairing decision before journals can trust the movement.",
+          "action": "Review first transfer"
+        },
+        "fix-basis": {
+          "title": "Fix missing cost basis",
+          "detail": "These rows need acquisition lots or source context before tax reports can include their disposals.",
+          "action": "Fix first basis gap"
+        },
+        "add-prices": {
+          "title": "Add or confirm prices",
+          "detail": "Missing or coarse prices can be resolved in the pricing tab, then saved through the queue.",
+          "action": "Add first price"
+        },
+        "review-other": {
+          "title": "Review remaining blockers",
+          "detail": "These rows need a case-by-case check because they do not fit a safer bulk category.",
+          "action": "Review first row"
+        },
+        "process": {
+          "title": "Process journals",
+          "detail": "Run this after the repair steps. Anything still unsafe will stay quarantined.",
+          "action": "Process journals"
+        }
+      }
     }
   },
   "review": {
