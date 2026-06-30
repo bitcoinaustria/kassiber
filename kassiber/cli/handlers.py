@@ -3412,10 +3412,10 @@ def build_ledger_state(conn, profile):
             {"code": "ownership_index", "message": str(message)}
             for message in ownership_warnings or ()
         )
-    # Active collateral marks that classify a journal transaction by role: a
-    # collateral lock (outbound) and release (inbound) are non-events that keep
-    # the coins in the owned pool. Removing a mark reverts the transaction to its
-    # normal classification (a liquidated lock then books as the disposal it is).
+    # Active loan marks classify a journal transaction by role. Collateral
+    # lock/release and borrowed-principal receive/repay roles are non-events for
+    # the tax engine; removing a mark reverts the transaction to its normal
+    # classification (a liquidated lock then books as the disposal it is).
     loan_legs = conn.execute(
         "SELECT transaction_id, role FROM loan_legs WHERE profile_id = ? AND deleted_at IS NULL",
         (profile["id"],),
@@ -4534,10 +4534,12 @@ def cmd_context_set(conn, args):
 # --- Bitcoin-backed loans --------------------------------------------------
 
 
-# `--as` value -> stored collateral role.
+# `--as` value -> stored loan role.
 _MARK_AS_TO_ROLE = {
     "collateral": core_loans.COLLATERAL_LOCK,
     "returned": core_loans.COLLATERAL_RELEASE,
+    "principal-received": core_loans.PRINCIPAL_RECEIVED,
+    "principal-repaid": core_loans.PRINCIPAL_REPAID,
 }
 
 
@@ -4553,9 +4555,9 @@ def _resolve_loan_txid(conn, profile_id, txid):
     return row["id"]
 
 
-def loans_mark(conn, workspace_ref, profile_ref, txid, *, mark_as, note=None):
-    """Mark a transaction as loan collateral (an outbound, not a disposal) or as
-    collateral returned (an inbound, not an acquisition)."""
+def loans_mark(conn, workspace_ref, profile_ref, txid, *, mark_as, note=None, loan_id=None):
+    """Mark a transaction as a loan non-event: collateral lock/release or
+    principal received/repaid."""
     workspace, profile = resolve_scope(conn, workspace_ref, profile_ref)
     role = _MARK_AS_TO_ROLE.get(mark_as)
     if role is None:
@@ -4566,7 +4568,14 @@ def loans_mark(conn, workspace_ref, profile_ref, txid, *, mark_as, note=None):
         )
     resolved = _resolve_loan_txid(conn, profile["id"], txid)
     mark = core_loans.mark_collateral(
-        conn, workspace["id"], profile["id"], resolved, role=role, note=note, commit=False
+        conn,
+        workspace["id"],
+        profile["id"],
+        resolved,
+        role=role,
+        note=note,
+        loan_id=loan_id,
+        commit=False,
     )
     invalidate_journals(conn, profile["id"])
     conn.commit()
@@ -4574,8 +4583,8 @@ def loans_mark(conn, workspace_ref, profile_ref, txid, *, mark_as, note=None):
 
 
 def loans_unmark(conn, workspace_ref, profile_ref, txid):
-    """Remove a transaction's collateral mark — it reverts to its normal tax
-    classification (a liquidated lock then books as the disposal it is)."""
+    """Remove a transaction's loan mark — it reverts to its normal tax
+    classification."""
     _, profile = resolve_scope(conn, workspace_ref, profile_ref)
     resolved = _resolve_loan_txid(conn, profile["id"], txid)
     result = core_loans.unmark_collateral(conn, profile["id"], resolved, commit=False)
@@ -4584,9 +4593,19 @@ def loans_unmark(conn, workspace_ref, profile_ref, txid):
     return result
 
 
+def loans_link(conn, workspace_ref, profile_ref, txids, *, loan_id=None):
+    """Tie active loan marks together under one lightweight loan id."""
+    _, profile = resolve_scope(conn, workspace_ref, profile_ref)
+    resolved = [_resolve_loan_txid(conn, profile["id"], txid) for txid in txids]
+    result = core_loans.link_loan_marks(
+        conn, profile["id"], resolved, loan_id=loan_id, commit=False
+    )
+    conn.commit()
+    return result
+
+
 def loans_list(conn, workspace_ref, profile_ref):
-    """All collateral marks plus the open locks (a lock with no offsetting
-    release) — the reconcile hint to confirm repaid vs. liquidated."""
+    """All loan marks plus open collateral locks."""
     _, profile = resolve_scope(conn, workspace_ref, profile_ref)
     return {
         "marks": core_loans.list_collateral_marks(conn, profile["id"]),

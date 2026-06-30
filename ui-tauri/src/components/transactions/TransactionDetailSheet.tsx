@@ -1,6 +1,8 @@
 import type { ParseKeys } from "i18next";
 import {
   ArrowRight,
+  Coins,
+  Link2Off,
   RotateCcw,
   Save,
 } from "lucide-react";
@@ -44,6 +46,8 @@ import {
   transactionBtc,
   transactionFlow,
   transactionStatusLabels,
+  type LoanMarkTarget,
+  type LoanMark,
   type Transaction,
   type TransactionEditDraft,
   uniqueTags,
@@ -109,6 +113,15 @@ export function TransactionDetailSheet({
   onRevertHistory,
   onProcessJournals,
   isProcessingJournals,
+  loanRole,
+  loanMark,
+  linkedLoanMarks,
+  loanLinkCandidates,
+  isLoanMarking,
+  isLoanLinking,
+  onMarkLoan,
+  onUnmarkLoan,
+  onLinkLoan,
   onOpenChange,
   onOpenExplorer,
   onSave,
@@ -147,6 +160,15 @@ export function TransactionDetailSheet({
   onRevertHistory?: (target: HistoryRevertTarget) => void | Promise<void>;
   onProcessJournals?: () => void;
   isProcessingJournals?: boolean;
+  loanRole?: string | null;
+  loanMark?: LoanMark | null;
+  linkedLoanMarks?: LoanMark[];
+  loanLinkCandidates?: LoanMark[];
+  isLoanMarking?: boolean;
+  isLoanLinking?: boolean;
+  onMarkLoan?: (transaction: Transaction, as: LoanMarkTarget) => void | Promise<void>;
+  onUnmarkLoan?: (transaction: Transaction) => void | Promise<void>;
+  onLinkLoan?: (transaction: Transaction, targetTransactionId: string) => void | Promise<void>;
   onOpenChange: (open: boolean) => void;
   onOpenExplorer: (transaction: Transaction) => void;
   onSave: (
@@ -250,6 +272,8 @@ export function TransactionDetailSheet({
   if (!transaction || !localDraft) return null;
 
   const flow = transactionFlow(transaction);
+  const canMarkLoan = Boolean(onMarkLoan || onUnmarkLoan);
+  const loanActionDisabled = Boolean(isSaving || isLoanMarking);
   const explorer = explorerForTransaction(transaction, explorerSettings);
   const transactionDisplayId = transaction.explorerId ?? transaction.txnId;
   const showSourceExternalId = shouldShowSourceExternalId(transaction);
@@ -257,9 +281,14 @@ export function TransactionDetailSheet({
   const feeBtc = transaction.feeBtc ?? 0;
   const feeEur = transaction.feeEur ?? null;
   const impactDirection = balanceImpactDirection(transaction, flow);
-  const principalImpactBtc = impactDirection * amountBtc;
+  const isFeeOnly = transaction.sourceType === "Fee";
+  const principalImpactBtc = isFeeOnly ? 0 : impactDirection * amountBtc;
   const principalImpactEur =
-    transaction.amount === null ? null : impactDirection * transaction.amount;
+    transaction.amount === null
+      ? null
+      : isFeeOnly
+        ? 0
+        : impactDirection * transaction.amount;
   const feeImpactBtc = feeBtc ? -feeBtc : 0;
   const feeImpactEur = feeBtc ? (feeEur === null ? null : -feeEur) : 0;
   const netImpactBtc = principalImpactBtc + feeImpactBtc;
@@ -573,8 +602,13 @@ export function TransactionDetailSheet({
     taxClassification,
     valueAtTimeEur,
     pair,
+    loanMark,
+    linkedLoanMarks: linkedLoanMarks ?? [],
+    loanLinkCandidates: loanLinkCandidates ?? [],
     onUnpair,
     isUnpairing,
+    onLinkLoan,
+    isLoanLinking,
     journalEvents,
     balanceCurrency,
     setBalanceCurrency,
@@ -745,7 +779,111 @@ export function TransactionDetailSheet({
                 </span>
               ) : null}
             </div>
-            <div className="flex justify-end gap-2">
+            <div className="flex flex-wrap justify-end gap-2">
+              {canMarkLoan && loanRole && onUnmarkLoan ? (
+                <>
+                  {flow === "outgoing" &&
+                  loanRole !== "loan_principal_repaid" &&
+                  onMarkLoan ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="gap-1.5"
+                      disabled={loanActionDisabled}
+                      onClick={() => {
+                        void onMarkLoan(transaction, "principal-repaid");
+                      }}
+                    >
+                      <Coins className="size-4" aria-hidden="true" />
+                      {t("table.row.collateral.changePrincipalRepaid")}
+                    </Button>
+                  ) : null}
+                  {flow === "incoming" &&
+                  loanRole !== "loan_principal_received" &&
+                  onMarkLoan ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="gap-1.5"
+                      disabled={loanActionDisabled}
+                      onClick={() => {
+                        void onMarkLoan(transaction, "principal-received");
+                      }}
+                    >
+                      <Coins className="size-4" aria-hidden="true" />
+                      {t("table.row.collateral.changePrincipalReceived")}
+                    </Button>
+                  ) : null}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="gap-1.5"
+                    disabled={loanActionDisabled}
+                    onClick={() => {
+                      void onUnmarkLoan(transaction);
+                    }}
+                  >
+                    <Link2Off className="size-4" aria-hidden="true" />
+                    {t("table.row.collateral.unmark")}
+                  </Button>
+                </>
+              ) : null}
+              {canMarkLoan && !loanRole && flow === "incoming" && onMarkLoan ? (
+                <>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="gap-1.5"
+                    disabled={loanActionDisabled}
+                    onClick={() => {
+                      void onMarkLoan(transaction, "principal-received");
+                    }}
+                  >
+                    <Coins className="size-4" aria-hidden="true" />
+                    {t("table.row.collateral.markPrincipalReceived")}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className="gap-1.5"
+                    disabled={loanActionDisabled}
+                    onClick={() => {
+                      void onMarkLoan(transaction, "returned");
+                    }}
+                  >
+                    <Coins className="size-4" aria-hidden="true" />
+                    {t("table.row.collateral.markReturned")}
+                  </Button>
+                </>
+              ) : null}
+              {canMarkLoan && !loanRole && flow === "outgoing" && onMarkLoan ? (
+                <>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="gap-1.5"
+                    disabled={loanActionDisabled}
+                    onClick={() => {
+                      void onMarkLoan(transaction, "principal-repaid");
+                    }}
+                  >
+                    <Coins className="size-4" aria-hidden="true" />
+                    {t("table.row.collateral.markPrincipalRepaid")}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className="gap-1.5"
+                    disabled={loanActionDisabled}
+                    onClick={() => {
+                      void onMarkLoan(transaction, "collateral");
+                    }}
+                  >
+                    <Coins className="size-4" aria-hidden="true" />
+                    {t("table.row.collateral.markCollateral")}
+                  </Button>
+                </>
+              ) : null}
               <Button
                 type="button"
                 variant="outline"

@@ -112,18 +112,19 @@ Use `./scripts/quality-gate.sh` before calling work ready to push. It wraps the 
   Veräußerung, gleitender Durchschnittspreis, Wegzugsbesteuerung, Kennzahl,
   Beilage E 1kv, KESt…), Austrian month/“heuer”. Verified via typecheck, the
   en/de parity test, build, and live browser screenshots.
-- [x] **Bitcoin-backed loan collateral (per-transaction mark)** — mark an outbound
-  as *loan collateral* (not a disposal — coins stay owned, encumbered) and the
-  return as *collateral returned* (not an acquisition); a lock/release round-trip
-  nets to zero and keeps its original Altvermögen basis + acquisition date. The
-  mark suppresses the lock/release branches at
+- [x] **Bitcoin-backed loan marks (per-transaction non-events)** — mark BTC
+  collateral posted/returned for fiat loans and BTC principal received/repaid for
+  BTC-denominated loans. Collateral locks/releases preserve owned basis;
+  borrowed BTC principal is liability principal, not owned-coin
+  acquisition/disposal. The mark suppresses the relevant branches at
   [`tax_events.py`](kassiber/core/tax_events.py) / [`rp2.py`](kassiber/core/engines/rp2.py);
-  storage is one minimal `loan_legs` row (`transaction_id` + role). Deliberately
-  **not** a facility: no custody / rehypothecation / interest / liquidation
-  modelling. Liquidation is handled by **un-marking** (the outbound reverts to the
-  disposal it really was); `open_collateral_locks` surfaces locks that haven't
-  returned as a reconcile hint. UI is a Transactions row action + badge (no `/loans`
-  screen); CLI `loans mark|unmark|list`.
+  storage is one minimal `loan_legs` row (`transaction_id` + role + optional
+  `loan_id`). Deliberately **not** a facility: no custody / rehypothecation /
+  interest / liquidation modelling. Liquidation is handled by **un-marking**
+  (the outbound reverts to the disposal it really was); `open_collateral_locks`
+  surfaces locks that haven't returned as a reconcile hint. UI is a Transactions
+  row action + badge/detail linked-leg section (no `/loans` screen); CLI
+  `loans mark|link|unmark|list`.
   - [x] Resilience precursor: a carrying-value swap whose leg was blocked in
     phase 1 (e.g. `insufficient_lots` on a self-custody round-trip paired as a BTC↔L-BTC
     swap) is quarantined as a pair in `_select_at_cross_asset_swap_links` instead of

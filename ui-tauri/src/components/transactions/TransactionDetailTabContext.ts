@@ -6,6 +6,7 @@ import {
   austrianTaxClassificationFor,
   pricingPriceMoment,
   transactionFlow,
+  type LoanMark,
   type Transaction,
   type TransactionEditDraft,
 } from "./model";
@@ -65,8 +66,13 @@ export type TransactionDetailTabContext = {
   taxClassification: ReturnType<typeof austrianTaxClassificationFor>;
   valueAtTimeEur: number | null;
   pair: Transaction["pair"];
+  loanMark?: LoanMark | null;
+  linkedLoanMarks: LoanMark[];
+  loanLinkCandidates: LoanMark[];
   onUnpair?: (pairId: string) => void | Promise<void>;
   isUnpairing?: boolean;
+  onLinkLoan?: (transaction: Transaction, targetTransactionId: string) => void | Promise<void>;
+  isLoanLinking?: boolean;
   journalEvents: JournalEventItem[];
   balanceCurrency: Currency;
   setBalanceCurrency: React.Dispatch<React.SetStateAction<Currency>>;

@@ -39,6 +39,7 @@ const SOURCE_FUNDS_FIXTURE_EXPLORER_LINKS = [
 // subset still locked (no matching release).
 const COLLATERAL_MARK_FIXTURE = {
   transaction_id: "tx16",
+  loan_id: "mock-loan-1",
   role: "collateral_lock",
   note: "Posted as collateral with Firefish.",
   created_at: "2026-03-25T21:05:00Z",
@@ -53,16 +54,25 @@ export const fixtures: Record<string, unknown> = {
   "ui.loans.list": {
     marks: [COLLATERAL_MARK_FIXTURE],
     open_locks: [COLLATERAL_MARK_FIXTURE],
-    roles: ["collateral_lock", "collateral_release"],
+    roles: [
+      "collateral_lock",
+      "collateral_release",
+      "loan_principal_received",
+      "loan_principal_repaid",
+    ],
     role_labels: {
-      collateral_lock: "loan collateral (out)",
-      collateral_release: "collateral returned (in)",
+      collateral_lock: "BTC collateral posted for fiat loan (out)",
+      collateral_release: "BTC collateral returned (in)",
+      loan_principal_received: "BTC loan principal received (in)",
+      loan_principal_repaid: "BTC loan principal repaid (out)",
     },
   },
   "ui.loans.mark": {
     transaction_id: "tx16",
+    loan_id: "mock-loan-1",
     role: "collateral_lock",
   },
+  "ui.loans.link": { loan_id: "mock-loan-1", transaction_ids: ["tx16", "tx17"] },
   "ui.loans.unmark": { transaction_id: "tx16" },
   status: {
     version: "0.0.0-ui-scaffold",

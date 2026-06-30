@@ -2250,21 +2250,14 @@ class CliSmokeTest(unittest.TestCase):
         self.assertEqual(transfer_row["received_msat"], 50000000000)
         self.assertEqual(transfer_row["fee_msat"], 100000000)
 
-        # Only the 0.001 BTC network fee is realized as a taxable disposal.
+        # Network fees are recorded for holdings/audit, but they are not
+        # capital-gains disposals.
         payload = self._cli(
             "reports", "capital-gains",
             "--workspace", "Main",
             "--profile", "Transfer",
         )
-        rows = payload["data"]
-        self.assertEqual(len(rows), 1)
-        gain_row = rows[0]
-        self.assertEqual(gain_row["entry_type"], "transfer_fee")
-        self.assertEqual(gain_row["wallet"], "Cold")
-        self.assertAlmostEqual(float(gain_row["quantity"]), 0.001, places=8)
-        self.assertAlmostEqual(float(gain_row["proceeds"]), 65.0, places=4)
-        self.assertAlmostEqual(float(gain_row["cost_basis"]), 60.0, places=4)
-        self.assertAlmostEqual(float(gain_row["gain_loss"]), 5.0, places=4)
+        self.assertEqual(payload["data"], [])
 
         # Cost basis follows the moved coins to Hot, so both wallets show non-zero
         # holdings with positive average cost.
@@ -2313,13 +2306,7 @@ class CliSmokeTest(unittest.TestCase):
         self._assert_kind(payload, "reports.tax-summary")
         rows = payload["data"]
         detail_rows = [row for row in rows if row["row_type"] == "detail"]
-        self.assertEqual(len(detail_rows), 1)
-        self.assertEqual(detail_rows[0]["transaction_type"], "move")
-        self.assertEqual(detail_rows[0]["quantity_msat"], 100000000)
-        self.assertAlmostEqual(float(detail_rows[0]["gain_loss"]), 5.0, places=4)
-        grand_total = next(row for row in rows if row["row_type"] == "grand_total")
-        self.assertEqual(grand_total["quantity_msat"], 100000000)
-        self.assertAlmostEqual(float(grand_total["gain_loss"]), 5.0, places=4)
+        self.assertEqual(detail_rows, [])
 
     def test_13a_intra_transfer_fiat_value_spot_price(self):
         payload = self._cli(
@@ -2371,12 +2358,7 @@ class CliSmokeTest(unittest.TestCase):
         )
         self._assert_kind(payload, "reports.capital-gains")
         rows = payload["data"]
-        self.assertEqual(len(rows), 1)
-        gain_row = rows[0]
-        self.assertEqual(gain_row["entry_type"], "transfer_fee")
-        self.assertAlmostEqual(float(gain_row["proceeds"]), 65.0, places=4)
-        self.assertAlmostEqual(float(gain_row["cost_basis"]), 60.0, places=4)
-        self.assertAlmostEqual(float(gain_row["gain_loss"]), 5.0, places=4)
+        self.assertEqual(rows, [])
 
     def test_13c_fee_only_consolidation_is_reported_as_fee(self):
         payload = self._cli(
@@ -2428,9 +2410,9 @@ class CliSmokeTest(unittest.TestCase):
         fee_entry = next(e for e in entries if e["entry_type"] == "fee")
         self.assertEqual(fee_entry["wallet"], "Wallet")
         self.assertAlmostEqual(float(fee_entry["quantity"]), -0.001, places=8)
-        self.assertAlmostEqual(float(fee_entry["proceeds"]), 65.0, places=4)
+        self.assertAlmostEqual(float(fee_entry["proceeds"]), 60.0, places=4)
         self.assertAlmostEqual(float(fee_entry["cost_basis"]), 60.0, places=4)
-        self.assertAlmostEqual(float(fee_entry["gain_loss"]), 5.0, places=4)
+        self.assertAlmostEqual(float(fee_entry["gain_loss"]), 0.0, places=4)
 
         payload = self._cli(
             "reports", "summary",
@@ -2441,7 +2423,7 @@ class CliSmokeTest(unittest.TestCase):
         flow = payload["data"]["asset_flow"][0]
         self.assertEqual(flow["outbound_amount_msat"], 0)
         self.assertEqual(flow["fee_amount_msat"], 100000000)
-        self.assertEqual(payload["data"]["realized"]["gain_loss"], 5.0)
+        self.assertEqual(payload["data"]["realized"]["gain_loss"], 0)
 
         payload = self._cli(
             "reports", "tax-summary",
@@ -2450,10 +2432,7 @@ class CliSmokeTest(unittest.TestCase):
         )
         self._assert_kind(payload, "reports.tax-summary")
         detail_rows = [row for row in payload["data"] if row["row_type"] == "detail"]
-        self.assertEqual(len(detail_rows), 1)
-        self.assertEqual(detail_rows[0]["transaction_type"], "fee")
-        self.assertEqual(detail_rows[0]["quantity_msat"], 100000000)
-        self.assertAlmostEqual(float(detail_rows[0]["gain_loss"]), 5.0, places=4)
+        self.assertEqual(detail_rows, [])
 
     def test_13d_split_peg_implausible_fee_is_quarantined_not_taxed(self):
         # A spend that fans out to an owned wallet + a Liquid peg must NOT be
@@ -2938,9 +2917,7 @@ class CliSmokeTest(unittest.TestCase):
             "--profile", "RefundPair",
         )
         gains = payload["data"]
-        self.assertEqual(len(gains), 1)
-        self.assertEqual(gains[0]["entry_type"], "transfer_fee")
-        self.assertAlmostEqual(float(gains[0]["quantity"]), 0.0003, places=8)
+        self.assertEqual(gains, [])
 
     def test_14c_failed_swap_refund_suggested_by_funding_link(self):
         workspace = "RefundLinkWorkspace"
@@ -3012,9 +2989,7 @@ class CliSmokeTest(unittest.TestCase):
             "--profile", "RefundLink",
         )
         gains = payload["data"]
-        self.assertEqual(len(gains), 1)
-        self.assertEqual(gains[0]["entry_type"], "transfer_fee")
-        self.assertAlmostEqual(float(gains[0]["quantity"]), 0.0003, places=8)
+        self.assertEqual(gains, [])
 
     def test_15_cross_asset_pair_policies(self):
         payload = self._cli(
@@ -4869,6 +4844,63 @@ class AccountBucketBehaviorTest(unittest.TestCase):
             self.assertNotEqual(code, 0)
             self.assertEqual(payload.get("kind"), "error")
             self.assertEqual(payload["error"]["code"], "not_found")
+
+    def test_loans_principal_received_and_repaid_are_not_tax_events(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "state" / "kassiber"
+            root.mkdir(parents=True)
+            csv_path = Path(tmp) / "wallet.csv"
+            csv_path.write_text(
+                "date,txid,direction,asset,amount,fee,fiat_rate,description,kind\n"
+                "2026-01-01T10:00:00Z,principal-in,inbound,BTC,1.00000000,0,60000,Loan principal received,deposit\n"
+                "2026-02-01T10:00:00Z,principal-out,outbound,BTC,1.00000000,0,65000,Loan principal repaid,withdrawal\n",
+                encoding="utf-8",
+            )
+
+            def run(*args):
+                payload, code = _run(root, *args)
+                self.assertEqual(code, 0, f"{args} -> {json.dumps(payload)[:300]}")
+                return payload
+
+            run("init")
+            run("workspaces", "create", "Main")
+            run(
+                "profiles", "create", "--workspace", "Main",
+                "--fiat-currency", "USD", "--tax-country", "generic", "Default",
+            )
+            run(
+                "wallets", "create", "--workspace", "Main", "--profile", "Default",
+                "--label", "W1", "--kind", "custom",
+            )
+            run(
+                "wallets", "import-csv", "--workspace", "Main", "--profile", "Default",
+                "--wallet", "W1", "--file", str(csv_path),
+            )
+
+            mark_in = run(
+                "loans", "mark", "--workspace", "Main", "--profile", "Default",
+                "--txid", "principal-in", "--as", "principal-received",
+            )["data"]
+            mark_out = run(
+                "loans", "mark", "--workspace", "Main", "--profile", "Default",
+                "--txid", "principal-out", "--as", "principal-repaid",
+            )["data"]
+            self.assertEqual(mark_in["role"], "loan_principal_received")
+            self.assertEqual(mark_out["role"], "loan_principal_repaid")
+            linked = run(
+                "loans", "link", "--workspace", "Main", "--profile", "Default",
+                "--txid", "principal-in", "--txid", "principal-out", "--loan-id", "loan-test",
+            )["data"]
+            self.assertEqual(linked["loan_id"], "loan-test")
+            self.assertEqual(len(linked["transaction_ids"]), 2)
+            listing = run("loans", "list", "--workspace", "Main", "--profile", "Default")["data"]
+            self.assertEqual({mark["loan_id"] for mark in listing["marks"]}, {"loan-test"})
+
+            run("journals", "process", "--workspace", "Main", "--profile", "Default")
+            gains = run(
+                "reports", "capital-gains", "--workspace", "Main", "--profile", "Default",
+            )["data"]
+            self.assertEqual(gains, [])
 
 
 _GENERIC_LEDGER_CSV = """Type,Date,Received Amount,Received Asset,Sent Amount,Sent Asset,Fee Amount,Fee Asset,Fiat Value,Counterparty,Note,Tx-ID

@@ -58,10 +58,10 @@ class NormalizedTaxEvent:
     # tagging swap legs.
     at_swap_link: Optional[str] = None
     # Bitcoin-backed-loan leg role (kassiber.core.loans.LEG_ROLES) when this
-    # transaction is a leg of a loan. Drives engine classification: a
-    # collateral lock/release is suppressed (coins stay in the owned pool,
-    # encumbered), a liquidation/repay-sale falls through to the normal
-    # disposal path. None when the transaction is not a loan leg.
+    # transaction is a leg of a loan. Drives engine classification: marked
+    # collateral and borrowed-principal roles are suppressed; unmarked
+    # liquidation/repay-sale falls through to normal disposal. None when the
+    # transaction is not a loan leg.
     loan_leg_role: Optional[str] = None
 
 

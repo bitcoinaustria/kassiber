@@ -26,6 +26,25 @@ export type TransactionFlow =
   | "swap"
   | "layer-transition";
 
+export type LoanMarkTarget =
+  | "collateral"
+  | "returned"
+  | "principal-received"
+  | "principal-repaid";
+
+export type LoanMark = {
+  transaction_id: string;
+  loan_id?: string | null;
+  role: string;
+  note?: string | null;
+  created_at?: string | null;
+  direction?: string | null;
+  asset?: string | null;
+  amount?: number | null;
+  occurred_at?: string | null;
+  description?: string | null;
+};
+
 export type Transaction = {
   id: string;
   txnId: string;
@@ -632,7 +651,10 @@ export const mockNewTransactionMovementCandidates = [
 export function draftForTransaction(txn: Transaction): TransactionEditDraft {
   const flow = transactionFlow(txn);
   const initialTags = txn.tags ?? splitDraftTags(txn.tag || "");
-  const defaultTaxClassification = nextTaxClassificationForFlow(flow);
+  const defaultTaxClassification =
+    txn.sourceType === "Fee"
+      ? austrianTaxClassificationFor("outside", "none")
+      : nextTaxClassificationForFlow(flow);
   const persistedLabel = classificationOptions.find((option) =>
     initialTags.includes(option),
   );

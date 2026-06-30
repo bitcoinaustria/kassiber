@@ -241,6 +241,7 @@ const ALLOWED_DAEMON_KINDS: &[&str] = &[
     "ui.review.badges",
     "ui.wallets.utxos",
     "ui.loans.list",
+    "ui.loans.link",
     "ui.loans.mark",
     "ui.loans.unmark",
     "ui.wallets.create",
@@ -2787,7 +2788,12 @@ mod tests {
         // Pin the collateral-mark daemon surface so the Transactions-screen mark
         // actions come with an explicit allowlist update; otherwise packaged
         // desktop mode returns kind_not_allowed and the feature breaks silently.
-        let required: &[&str] = &["ui.loans.list", "ui.loans.mark", "ui.loans.unmark"];
+        let required: &[&str] = &[
+            "ui.loans.list",
+            "ui.loans.link",
+            "ui.loans.mark",
+            "ui.loans.unmark",
+        ];
         for kind in required {
             assert!(
                 ALLOWED_DAEMON_KINDS.contains(kind),

@@ -62,6 +62,7 @@ from .handlers import (
     clear_chat_sessions_cli,
     create_saved_view_cli,
     create_transaction_pair,
+    loans_link,
     loans_list,
     loans_mark,
     loans_unmark,
@@ -1451,11 +1452,11 @@ def build_parser() -> argparse.ArgumentParser:
     q_exclude.add_argument("--profile")
     q_exclude.add_argument("--transaction", required=True)
 
-    loans_p = sub.add_parser("loans", help="Mark transactions as Bitcoin-backed-loan collateral")
+    loans_p = sub.add_parser("loans", help="Mark transactions as Bitcoin-backed-loan legs")
     loans_sub = loans_p.add_subparsers(dest="loans_command", required=True)
 
     loans_mark_p = loans_sub.add_parser(
-        "mark", help="Mark a transaction as loan collateral (out) or collateral returned (in)"
+        "mark", help="Mark a transaction as a loan non-event"
     )
     loans_mark_p.add_argument("--workspace")
     loans_mark_p.add_argument("--profile")
@@ -1464,21 +1465,46 @@ def build_parser() -> argparse.ArgumentParser:
         "--as",
         dest="mark_as",
         required=True,
-        choices=["collateral", "returned"],
-        help="'collateral' = outbound posted as collateral (not a disposal); "
-        "'returned' = collateral coming back (not an acquisition)",
+        choices=["collateral", "returned", "principal-received", "principal-repaid"],
+        help="'collateral' = BTC posted as collateral for a fiat loan (not a disposal); "
+        "'returned' = BTC collateral coming back (not an acquisition); "
+        "'principal-received' = inbound borrowed BTC principal; "
+        "'principal-repaid' = outbound BTC principal repayment",
     )
     loans_mark_p.add_argument("--note", dest="note")
+    loans_mark_p.add_argument(
+        "--loan-id",
+        dest="loan_id",
+        help="Optional loan/group id shared by related loan legs",
+    )
 
     loans_unmark_p = loans_sub.add_parser(
-        "unmark", help="Remove a transaction's collateral mark (reverts to a normal disposal/acquisition)"
+        "unmark", help="Remove a transaction's loan mark (reverts to normal tax classification)"
     )
     loans_unmark_p.add_argument("--workspace")
     loans_unmark_p.add_argument("--profile")
     loans_unmark_p.add_argument("--txid", required=True, help="Transaction id or external_id to unmark")
 
+    loans_link_p = loans_sub.add_parser(
+        "link", help="Tie two or more marked loan legs together"
+    )
+    loans_link_p.add_argument("--workspace")
+    loans_link_p.add_argument("--profile")
+    loans_link_p.add_argument(
+        "--txid",
+        dest="txids",
+        action="append",
+        required=True,
+        help="Transaction id or external_id to link; pass at least twice",
+    )
+    loans_link_p.add_argument(
+        "--loan-id",
+        dest="loan_id",
+        help="Optional loan/group id; generated when omitted",
+    )
+
     loans_list_p = loans_sub.add_parser(
-        "list", help="List collateral marks and open locks (collateral that hasn't returned)"
+        "list", help="List loan marks and open collateral locks"
     )
     loans_list_p.add_argument("--workspace")
     loans_list_p.add_argument("--profile")
@@ -3344,10 +3370,22 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                     args.txid,
                     mark_as=args.mark_as,
                     note=args.note,
+                    loan_id=args.loan_id,
                 ),
             )
         if args.loans_command == "unmark":
             return emit(args, loans_unmark(conn, args.workspace, args.profile, args.txid))
+        if args.loans_command == "link":
+            return emit(
+                args,
+                loans_link(
+                    conn,
+                    args.workspace,
+                    args.profile,
+                    args.txids,
+                    loan_id=args.loan_id,
+                ),
+            )
         if args.loans_command == "list":
             return emit(args, loans_list(conn, args.workspace, args.profile))
 

@@ -359,6 +359,7 @@
       "excluded": "Ausgenommen",
       "taxable": "Steuerpflichtig",
       "notTaxable": "Nicht steuerpflichtig",
+      "loanNonEvent": "Darlehen ohne Steuerereignis",
       "openExplorerTitle": "{{txid}} im {{explorer}} öffnen",
       "actionsAria": "Aktionen für {{txid}} öffnen",
       "viewDetails": "Details anzeigen",
@@ -367,11 +368,21 @@
       "exclude": "Transaktion ausnehmen",
       "voidConfirm": "Diese Transaktion stornieren? Das kann nicht rückgängig gemacht werden.",
       "collateral": {
-        "collateralBadge": "Kreditsicherheit",
-        "returnedBadge": "Zurückgegeben",
-        "markCollateral": "Als Kreditsicherheit markieren",
-        "markReturned": "Als zurückgegebene Sicherheit markieren",
-        "unmark": "Sicherheitsmarkierung entfernen"
+        "collateralBadge": "BTC-Sicherheit gestellt",
+        "returnedBadge": "BTC-Sicherheit zurück",
+        "principalReceivedBadge": "BTC-Darlehen erhalten",
+        "principalRepaidBadge": "BTC-Darlehen getilgt",
+        "collateralAccounting": "BTC-Sicherheit für Fiat-Darlehen gestellt",
+        "returnedAccounting": "BTC-Sicherheit zurückgegeben",
+        "principalReceivedAccounting": "BTC-Darlehenskapital erhalten",
+        "principalRepaidAccounting": "BTC-Darlehenskapital getilgt",
+        "markCollateral": "Als BTC-Sicherheit für Fiat-Darlehen markieren",
+        "markReturned": "Als zurückgegebene BTC-Sicherheit markieren",
+        "markPrincipalReceived": "Als erhaltenes BTC-Darlehenskapital markieren",
+        "markPrincipalRepaid": "Als getilgtes BTC-Darlehenskapital markieren",
+        "changePrincipalReceived": "Zu erhaltenem BTC-Darlehenskapital ändern",
+        "changePrincipalRepaid": "Zu getilgtem BTC-Darlehenskapital ändern",
+        "unmark": "Darlehensmarkierung entfernen"
       }
     },
     "virtual": {
@@ -412,6 +423,26 @@
     "pairRemoved": {
       "title": "Paarung entfernt",
       "body": "Diese Bewegung ist nicht mehr mit dem anderen Leg verknüpft."
+    },
+    "loanMarked": {
+      "title": "Darlehensmarkierung gespeichert",
+      "body": "Verarbeite die Journale neu, damit diese Behandlung in Berichten gilt."
+    },
+    "loanUnmarked": {
+      "title": "Darlehensmarkierung entfernt",
+      "body": "Verarbeite die Journale neu, um die normale steuerliche Behandlung wiederherzustellen."
+    },
+    "loanLinked": {
+      "title": "Darlehenslegs verknüpft",
+      "body": "Diese markierten Darlehenstransaktionen teilen jetzt eine Darlehens-ID."
+    },
+    "loanLinkFailed": {
+      "title": "Darlehenslegs konnten nicht verknüpft werden",
+      "body": "Kassiber konnte diese Darlehensmarkierungen nicht verknüpfen."
+    },
+    "loanMarkFailed": {
+      "title": "Darlehensmarkierung konnte nicht gespeichert werden",
+      "body": "Kassiber konnte die Darlehensmarkierung nicht speichern."
     },
     "evidenceReused": {
       "title": "Beleg wiederverwendet",
@@ -670,6 +701,14 @@
     "unknown": "Unbekannt",
     "noPairedMovement": "Keine gepaarte Bewegung",
     "noPairedMovementBody": "Wenn diese Tx das andere Leg einer Übertragung, eines Swaps oder eines Peg-in/out ist, erscheint das passende Leg hier. Du kannst auch eine manuelle Paarung aus der Swap-Kandidaten-Warteschlange erstellen.",
+    "loanLegs": "Darlehenslegs",
+    "loanId": "Darlehen {{id}}",
+    "loanThisLeg": "Dieses Leg",
+    "loanLinked": "Verknüpft",
+    "loanLinkCandidates": "Markierte Darlehenslegs",
+    "loanLink": "Verknüpfen",
+    "loanLinking": "Wird verknüpft…",
+    "noLoanLinks": "Kein verknüpftes Darlehensleg.",
     "journalEntries": "Journaleinträge",
     "noJournalEntries": "Noch keine Journaleinträge für diese Zeile. Verarbeite die Journale nach Änderungen an Metadaten oder Bewertung."
   },
