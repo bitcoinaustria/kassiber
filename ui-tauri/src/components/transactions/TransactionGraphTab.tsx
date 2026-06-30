@@ -260,6 +260,19 @@ function visualSatsForNode(node: TransactionGraphNode, fallbackSats: number) {
   return Math.max(1, fallbackSats);
 }
 
+function visualKnownSatsForNode(
+  node: GraphRow,
+  fallbackSats: number,
+  hasAmountlessNonFeeRows: boolean,
+) {
+  if (typeof node.valueSats !== "number") return null;
+  const value = Math.max(0, node.valueSats);
+  if (node.side === "fee" && hasAmountlessNonFeeRows && value > 0) {
+    return Math.min(value, Math.max(1, fallbackSats));
+  }
+  return value;
+}
+
 function redactRowsForGeometry(rows: GraphRow[]): GraphRow[] {
   return rows.map((node) => ({
     ...node,
@@ -283,22 +296,27 @@ function buildDrawableRows(
 ): DrawableGraphRow[] {
   if (!rows.length) return [];
   const centerY = height / 2;
-  const visualValues = rows.map((node) => visualSatsForNode(node, fallbackSats));
+  const hasAmountlessNonFeeRows = rows.some(
+    (node) => node.side !== "fee" && typeof node.valueSats !== "number",
+  );
+  const knownVisualValues = rows.map((node) =>
+    visualKnownSatsForNode(node, fallbackSats, hasAmountlessNonFeeRows),
+  );
+  const visualValues = rows.map((node, index) =>
+    knownVisualValues[index] ?? visualSatsForNode(node, fallbackSats),
+  );
   const unknownCount = rows.filter((node) => typeof node.valueSats !== "number").length;
-  const knownTotal = rows.reduce(
-    (sum, node) => sum + (typeof node.valueSats === "number" ? Math.max(0, node.valueSats) : 0),
+  const knownTotal = knownVisualValues.reduce(
+    (sum: number, value) => sum + (value ?? 0),
     0,
   );
   const unknownShare =
     unknownCount > 0
       ? Math.max(1, (Math.max(totalSats, knownTotal) - knownTotal) / unknownCount)
       : 0;
-  const weights = rows.map((node, index) => {
+  const weights = rows.map((_node, index) => {
     if (!totalSats) return combinedWeight / rows.length;
-    const value =
-      typeof node.valueSats === "number"
-        ? Math.max(0, node.valueSats)
-        : unknownShare || visualValues[index];
+    const value = knownVisualValues[index] ?? (unknownShare || visualValues[index]);
     return (combinedWeight * value) / Math.max(1, totalSats);
   });
   const lines = rows.map((node, index) => {

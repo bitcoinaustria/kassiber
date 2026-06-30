@@ -208,6 +208,77 @@ describe("TransactionFlowDiagram", () => {
     expect(new Set(visiblePaths.map((match) => match[1])).size).toBe(visiblePaths.length);
   });
 
+  it("keeps known Liquid fees thinner than confidential output strands", () => {
+    const confidentialLiquidGraph: TransactionGraphPayload = {
+      ...graph,
+      transaction: {
+        ...graph.transaction,
+        id: "liquid-confidential",
+        inputCount: 72,
+        outputCount: 2,
+        feeRateSatVb: null,
+      },
+      supportLevel: "partial",
+      inputs: Array.from({ length: 8 }, (_, index) => ({
+        id: `conf-in-${index}`,
+        outpoint: `${index.toString(16).repeat(64)}:${index}`,
+        valueSats: null,
+        valueBtc: null,
+        valueState: "confidential" as const,
+        role: "input",
+        ownership: "owned",
+      })),
+      outputs: [
+        {
+          id: "conf-out-0",
+          outpoint:
+            "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789:0",
+          valueSats: null,
+          valueBtc: null,
+          valueState: "confidential" as const,
+          role: "change",
+          ownership: "owned",
+        },
+        {
+          id: "conf-out-1",
+          outpoint:
+            "bbcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789:1",
+          valueSats: null,
+          valueBtc: null,
+          valueState: "confidential" as const,
+          role: "external_recipient",
+          ownership: "external",
+        },
+      ],
+      fee: {
+        id: "fee",
+        label: "Fee",
+        valueSats: 51,
+        valueBtc: 0.00000051,
+        role: "fee",
+        ownership: "network_fee",
+      },
+    };
+    const html = renderToStaticMarkup(
+      <TooltipProvider>
+        <TransactionFlowDiagram graph={confidentialLiquidGraph} hideSensitive={false} />
+      </TooltipProvider>,
+    );
+
+    const feeWidth = Number(
+      html.match(/data-testid="transaction-fee-strand"[^>]*stroke-width="([^"]+)"/)?.[1],
+    );
+    const outputWidths = [
+      ...html.matchAll(
+        /data-testid="transaction-output-strand"[^>]*stroke-width="([^"]+)"/g,
+      ),
+    ].map((match) => Number(match[1]));
+
+    expect(outputWidths).toHaveLength(2);
+    expect(Number.isFinite(feeWidth)).toBe(true);
+    expect(feeWidth).toBeLessThan(Math.min(...outputWidths));
+  });
+
   it("keeps different-value output endpoints aligned on one rail", () => {
     const variedOutputGraph: TransactionGraphPayload = {
       ...graph,
