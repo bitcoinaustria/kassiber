@@ -1649,8 +1649,25 @@ function SidebarActions({
 }) {
   const { t } = useTranslation(["chrome", "nav"]);
   const dataMode = useUiStore((state) => state.dataMode);
+  const identity = useUiStore((state) => state.identity);
   const setDataMode = useUiStore((state) => state.setDataMode);
   const isRealData = dataMode === "real";
+  const isRegtestData =
+    isRealData &&
+    [
+      identity?.workspace,
+      identity?.profile,
+      identity?.name,
+      identity?.backendName,
+      identity?.importedProject?.stateRoot,
+      identity?.importedProject?.dataRoot,
+      identity?.importedProject?.database,
+    ].some((value) => value?.toLowerCase().includes("regtest"));
+  const dataModeLabel = isRegtestData
+    ? t("shell.dataMode.regtest")
+    : isRealData
+      ? t("shell.dataMode.real")
+      : t("shell.dataMode.preview");
   const supportActive = pathname === "/diagnostics";
 
   return (
@@ -1686,7 +1703,7 @@ function SidebarActions({
           <div className="flex min-h-8 w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0">
             <Server className="size-4 shrink-0" aria-hidden="true" />
             <span className="min-w-0 flex-1 truncate group-data-[collapsible=icon]:hidden">
-              {isRealData ? t("shell.dataMode.real") : t("shell.dataMode.mock")}
+              {dataModeLabel}
             </span>
             <Switch
               checked={isRealData}
