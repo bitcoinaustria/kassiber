@@ -30,6 +30,7 @@ export interface QuarantineResolveStep {
   actionLabel: string;
   actionKind: QuarantineResolveActionKind;
   primaryAction?: NonNullable<ReviewTableRow["transactionAction"]>;
+  primaryRowId?: string;
   rowIds: string[];
   previewRows: Array<{
     id: string;
@@ -84,9 +85,10 @@ export function quarantineRows(
   snapshot: QuarantineSnapshot,
   t: TFunction<"journals">,
 ): ReviewTableRow[] {
-  return snapshot.items.map((item) =>
+  const rows = snapshot.items.map((item) =>
     quarantineItemToRow(item, snapshot.summary.profile, t),
   );
+  return disambiguateDuplicateRowIds(rows);
 }
 
 export function quarantineMetrics(
@@ -249,7 +251,8 @@ function resolveStep(
   rows: ReviewTableRow[],
   t: TFunction<"journals">,
 ): QuarantineResolveStep {
-  const primaryAction = rows.find((row) => row.transactionAction)?.transactionAction;
+  const primaryRow = rows.find((row) => row.transactionAction);
+  const primaryAction = primaryRow?.transactionAction;
   return {
     id,
     count: rows.length,
@@ -259,6 +262,7 @@ function resolveStep(
     actionLabel: resolveStepActionLabel(id, t),
     actionKind: primaryAction ? "open-row" : "none",
     primaryAction,
+    primaryRowId: primaryRow?.id,
     rowIds: rows.map((row) => row.id),
     previewRows: rows.slice(0, 3).map((row) => ({
       id: row.id,
@@ -267,6 +271,20 @@ function resolveStep(
       amount: row.amount,
     })),
   };
+}
+
+function disambiguateDuplicateRowIds(rows: ReviewTableRow[]) {
+  const counts = new Map<string, number>();
+  for (const row of rows) {
+    counts.set(row.id, (counts.get(row.id) ?? 0) + 1);
+  }
+  const seen = new Map<string, number>();
+  return rows.map((row) => {
+    if ((counts.get(row.id) ?? 0) <= 1) return row;
+    const next = (seen.get(row.id) ?? 0) + 1;
+    seen.set(row.id, next);
+    return { ...row, id: `${row.id}:${next}` };
+  });
 }
 
 function resolveStepTone(

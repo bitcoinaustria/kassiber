@@ -318,12 +318,14 @@ describe("quarantine resolve plan", () => {
       actionLabel: "Add first price",
       rowIds: ["price-1", "price-2"],
       primaryAction: { transactionId: "price-1", tab: "pricing" },
+      primaryRowId: "price-1",
     });
     expect(priceStep?.previewRows).toHaveLength(2);
     expect(basisStep).toMatchObject({
       count: 1,
       tone: "alert",
       primaryAction: { transactionId: "basis-1", tab: "tax" },
+      primaryRowId: "basis-1",
     });
     expect(processStep).toMatchObject({
       count: 3,
@@ -358,8 +360,13 @@ describe("quarantine resolve plan", () => {
     const priceStep = plan.steps.find((step) => step.id === "add-prices");
     const basisStep = plan.steps.find((step) => step.id === "fix-basis");
 
+    expect(rows.map((row) => row.id)).toEqual(["shared-tx:1", "shared-tx:2"]);
     expect(priceStep?.count).toBe(1);
     expect(basisStep?.count).toBe(1);
+    expect(priceStep?.rowIds).toEqual(["shared-tx:1"]);
+    expect(basisStep?.rowIds).toEqual(["shared-tx:2"]);
+    expect(priceStep?.primaryRowId).toBe("shared-tx:1");
+    expect(basisStep?.primaryRowId).toBe("shared-tx:2");
     expect(priceStep?.primaryAction).toMatchObject({
       transactionId: "shared-tx",
       tab: "pricing",

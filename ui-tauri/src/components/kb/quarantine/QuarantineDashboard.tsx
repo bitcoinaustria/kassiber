@@ -1,4 +1,5 @@
 import * as React from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 
 import {
@@ -13,14 +14,33 @@ import {
   parseManualDecimal,
   type Transaction,
   type TransactionEditDraft,
+  type CommercialContextData,
 } from "@/components/transactions";
 import {
+  attachmentRecordToItem,
+  isAttachmentListQueryKeyForTransaction,
   readTransactionDetailParams,
+  removeAttachmentRecord,
+  replaceAttachmentRecord,
   toDashboardTransaction,
   updateTransactionDetailParams,
+  upsertAttachmentRecords,
+  type AttachmentOpenData,
+  type AttachmentRecord,
+  type AttachmentsListData,
+  type JournalEventsData,
 } from "@/components/transactions/dashboard/model";
 import { useDaemon, useDaemonMutation } from "@/daemon/client";
+import {
+  openAttachmentFile,
+  openExternalUrl,
+  type DaemonEnvelope,
+} from "@/daemon/transport";
 import { useCurrency } from "@/lib/currency";
+import type {
+  HistoryRevertTarget,
+  TransactionHistoryList,
+} from "@/lib/transactionHistory";
 import type { Tx } from "@/mocks/seed";
 import { useUiStore } from "@/store/ui";
 
@@ -49,6 +69,14 @@ interface OverviewSnapshot {
   priceEur?: number | null;
 }
 
+type TransactionDetailTarget = ReturnType<typeof readTransactionDetailParams> & {
+  rowId: string | null;
+};
+
+function readQuarantineDetailTarget(): TransactionDetailTarget {
+  return { ...readTransactionDetailParams(), rowId: null };
+}
+
 export function QuarantineDashboard({
   snapshot,
   isProcessingJournals,
@@ -59,8 +87,9 @@ export function QuarantineDashboard({
   const currency = useCurrency();
   const hideSensitive = useUiStore((s) => s.hideSensitive);
   const explorerSettings = useUiStore((s) => s.explorerSettings);
+  const queryClient = useQueryClient();
   const [detailTarget, setDetailTarget] = React.useState(
-    readTransactionDetailParams,
+    readQuarantineDetailTarget,
   );
   const [explorerTransaction, setExplorerTransaction] =
     React.useState<Transaction | null>(null);
@@ -69,11 +98,44 @@ export function QuarantineDashboard({
   >({});
   const [saveError, setSaveError] = React.useState<string | null>(null);
   const [resolvePlanOpen, setResolvePlanOpen] = React.useState(false);
+  const [attachmentListOverride, setAttachmentListOverride] = React.useState<{
+    transactionId: string;
+    attachments: AttachmentRecord[];
+  } | null>(null);
   const metadataUpdate = useDaemonMutation("ui.transactions.metadata.update");
+  const attachmentAdd = useDaemonMutation<AttachmentRecord>("ui.attachments.add");
+  const attachmentRename =
+    useDaemonMutation<AttachmentRecord>("ui.attachments.rename");
+  const attachmentRemove = useDaemonMutation<AttachmentRecord>(
+    "ui.attachments.remove",
+  );
+  const attachmentOpen =
+    useDaemonMutation<AttachmentOpenData>("ui.attachments.open");
+  const revertHistory = useDaemonMutation("ui.transactions.history.revert");
   const overviewQuery = useDaemon<OverviewSnapshot>("ui.overview.snapshot");
   const transactionQuery = useDaemon<TransactionResolveEnvelope>(
     "ui.transactions.resolve",
     { query: detailTarget.transactionId ?? "" },
+    { enabled: Boolean(detailTarget.transactionId) },
+  );
+  const attachmentsQuery = useDaemon<AttachmentsListData>(
+    "ui.attachments.list",
+    { transaction: detailTarget.transactionId ?? "" },
+    { enabled: Boolean(detailTarget.transactionId) },
+  );
+  const historyQuery = useDaemon<TransactionHistoryList>(
+    "ui.transactions.history",
+    { transaction: detailTarget.transactionId ?? "", limit: 25 },
+    { enabled: Boolean(detailTarget.transactionId) },
+  );
+  const journalEventsQuery = useDaemon<JournalEventsData>(
+    "ui.journals.events.list",
+    { transaction: detailTarget.transactionId ?? "", limit: 20 },
+    { enabled: Boolean(detailTarget.transactionId) },
+  );
+  const commercialContextQuery = useDaemon<CommercialContextData>(
+    "ui.transactions.commercial_context",
+    { transaction: detailTarget.transactionId ?? "" },
     { enabled: Boolean(detailTarget.transactionId) },
   );
   const rows = React.useMemo(() => quarantineRows(snapshot, t), [snapshot, t]);
@@ -103,37 +165,159 @@ export function QuarantineDashboard({
   const explorerTarget = explorerTransaction
     ? explorerForTransaction(explorerTransaction, explorerSettings)
     : null;
-  const selectedRowIndex = React.useMemo(
+  const detailAttachmentRecords = React.useMemo(() => {
+    if (
+      attachmentListOverride &&
+      attachmentListOverride.transactionId === detailTransaction?.id
+    ) {
+      return attachmentListOverride.attachments;
+    }
+    return attachmentsQuery.data?.data?.attachments ?? [];
+  }, [
+    attachmentListOverride,
+    attachmentsQuery.data?.data?.attachments,
+    detailTransaction?.id,
+  ]);
+  const attachmentItems = React.useMemo(
     () =>
-      detailTarget.transactionId
-        ? orderedRows.findIndex(
-            (row) =>
-              row.transactionAction?.transactionId === detailTarget.transactionId,
-          )
-        : -1,
-    [detailTarget.transactionId, orderedRows],
+      detailAttachmentRecords.map((record) =>
+        attachmentRecordToItem(
+          record,
+          tTransactions as (key: string) => string,
+        ),
+      ),
+    [detailAttachmentRecords, tTransactions],
   );
+  const journalEvents = journalEventsQuery.data?.data?.events ?? [];
+  const commercialContext = commercialContextQuery.data?.data;
+  const historyData = historyQuery.data?.data;
+  const selectedRowIndex = React.useMemo(() => {
+    if (!detailTarget.transactionId) return -1;
+    if (detailTarget.rowId) {
+      const rowIndex = orderedRows.findIndex((row) => row.id === detailTarget.rowId);
+      if (rowIndex >= 0) return rowIndex;
+    }
+    return orderedRows.findIndex(
+      (row) =>
+        row.transactionAction?.transactionId === detailTarget.transactionId &&
+        (row.transactionAction.tab ?? "details") === detailTarget.tab,
+    );
+  }, [
+    detailTarget.rowId,
+    detailTarget.tab,
+    detailTarget.transactionId,
+    orderedRows,
+  ]);
   const hasNext =
     selectedRowIndex >= 0 && selectedRowIndex < orderedRows.length - 1;
 
   const openDetail = React.useCallback(
     (
       action: NonNullable<ReviewTableRow["transactionAction"]>,
+      row?: ReviewTableRow,
     ) => {
       setSaveError(null);
       const tab = action.tab ?? "details";
-      setDetailTarget({ transactionId: action.transactionId, tab });
+      const matchingRow =
+        row ??
+        orderedRows.find(
+          (candidate) =>
+            candidate.transactionAction?.transactionId === action.transactionId &&
+            (candidate.transactionAction.tab ?? "details") === tab,
+        ) ??
+        orderedRows.find(
+          (candidate) =>
+            candidate.transactionAction?.transactionId === action.transactionId,
+        );
+      setDetailTarget({
+        transactionId: action.transactionId,
+        tab,
+        rowId: matchingRow?.id ?? null,
+      });
       updateTransactionDetailParams(action.transactionId, tab);
     },
-    [],
+    [orderedRows],
   );
 
   const closeDetail = React.useCallback(() => {
-    setDetailTarget({ transactionId: null, tab: "details" });
+    setDetailTarget({ transactionId: null, tab: "details", rowId: null });
     setExplorerTransaction(null);
     setSaveError(null);
     updateTransactionDetailParams(null);
   }, []);
+
+  React.useEffect(() => {
+    setAttachmentListOverride(null);
+  }, [detailTransaction?.id]);
+
+  const updateDetailAttachmentRecords = React.useCallback(
+    (updater: (attachments: AttachmentRecord[]) => AttachmentRecord[]) => {
+      if (!detailTransaction) return;
+      setAttachmentListOverride((current) => {
+        const currentAttachments =
+          current?.transactionId === detailTransaction.id
+            ? current.attachments
+            : attachmentsQuery.data?.data?.attachments ?? [];
+        return {
+          transactionId: detailTransaction.id,
+          attachments: updater(currentAttachments),
+        };
+      });
+    },
+    [attachmentsQuery.data?.data?.attachments, detailTransaction],
+  );
+
+  const updateAttachmentListQueryCache = React.useCallback(
+    (
+      transactionId: string,
+      updater: (attachments: AttachmentRecord[]) => AttachmentRecord[],
+    ) => {
+      queryClient.setQueriesData<DaemonEnvelope<AttachmentsListData>>(
+        {
+          queryKey: ["daemon"],
+          predicate: (query) =>
+            isAttachmentListQueryKeyForTransaction(
+              query.queryKey,
+              transactionId,
+            ),
+        },
+        (current) =>
+          current?.data
+            ? {
+                ...current,
+                data: {
+                  ...current.data,
+                  attachments: updater(current.data.attachments),
+                },
+              }
+            : current,
+      );
+    },
+    [queryClient],
+  );
+
+  const revertHistoryTarget = React.useCallback(
+    async (target: HistoryRevertTarget) => {
+      if (!detailTransaction) return;
+      await revertHistory.mutateAsync({
+        transaction: detailTransaction.id,
+        event: target.event.id,
+        ...(target.field ? { field: target.field.field } : {}),
+        reason: target.field
+          ? tTransactions("history.revertReasonField", {
+              label: target.field.label,
+            })
+          : tTransactions("history.revertReasonEvent"),
+      });
+      useUiStore.getState().addNotification({
+        title: tTransactions("notification.editReverted.title"),
+        body: tTransactions("notification.editReverted.body"),
+        tone: "success",
+        dedupeKey: `history-revert-${target.event.id}-${target.field?.field ?? "event"}`,
+      });
+    },
+    [detailTransaction, revertHistory, tTransactions],
+  );
 
   const getDraft = React.useCallback(
     (txn: Transaction) => drafts[txn.id] ?? draftForTransaction(txn),
@@ -210,7 +394,7 @@ export function QuarantineDashboard({
       await saveTransactionDraft(transactionId, draft);
       const next = orderedRows[selectedRowIndex + 1];
       if (next?.transactionAction) {
-        openDetail(next.transactionAction);
+        openDetail(next.transactionAction, next);
         return;
       }
       closeDetail();
@@ -226,10 +410,13 @@ export function QuarantineDashboard({
         return;
       }
       if (step.primaryAction) {
-        openDetail(step.primaryAction);
+        const primaryRow = step.primaryRowId
+          ? orderedRows.find((row) => row.id === step.primaryRowId)
+          : undefined;
+        openDetail(step.primaryAction, primaryRow);
       }
     },
-    [onProcessJournals, openDetail],
+    [onProcessJournals, openDetail, orderedRows],
   );
 
   return (
@@ -294,9 +481,134 @@ export function QuarantineDashboard({
             : null)
         }
         nowRate={overviewQuery.data?.data?.priceEur ?? null}
+        attachments={detailTransaction ? attachmentItems : undefined}
+        journalEvents={journalEvents}
+        commercialContext={commercialContext}
+        commercialContextLoading={commercialContextQuery.isLoading}
+        historyEvents={historyData?.events}
+        historyStale={historyData?.stale}
+        historyLoading={historyQuery.isLoading}
+        isRevertingHistory={revertHistory.isPending}
+        onRevertHistory={revertHistoryTarget}
         onProcessJournals={onProcessJournals}
         isProcessingJournals={isProcessingJournals}
         hasNext={hasNext}
+        onAddAttachmentFiles={async (paths) => {
+          if (!detailTransaction) return;
+          const added: AttachmentRecord[] = [];
+          for (const path of paths) {
+            const result = await attachmentAdd.mutateAsync({
+              transaction: detailTransaction.id,
+              file_path: path,
+            });
+            if (result.data) {
+              added.push(result.data);
+            }
+          }
+          if (added.length) {
+            updateDetailAttachmentRecords((attachments) =>
+              upsertAttachmentRecords(attachments, added),
+            );
+            updateAttachmentListQueryCache(
+              detailTransaction.id,
+              (attachments) => upsertAttachmentRecords(attachments, added),
+            );
+          }
+          useUiStore.getState().addNotification({
+            title: tTransactions("notification.filesAttached.title"),
+            body: tTransactions("notification.filesAttached.body", {
+              count: paths.length,
+            }),
+            tone: "success",
+            dedupeKey: `attachments-files-${detailTransaction.id}`,
+          });
+        }}
+        onAddAttachmentLinks={async (urls) => {
+          if (!detailTransaction) return;
+          const added: AttachmentRecord[] = [];
+          for (const url of urls) {
+            const result = await attachmentAdd.mutateAsync({
+              transaction: detailTransaction.id,
+              url,
+            });
+            if (result.data) {
+              added.push(result.data);
+            }
+          }
+          if (added.length) {
+            updateDetailAttachmentRecords((attachments) =>
+              upsertAttachmentRecords(attachments, added),
+            );
+            updateAttachmentListQueryCache(
+              detailTransaction.id,
+              (attachments) => upsertAttachmentRecords(attachments, added),
+            );
+          }
+          useUiStore.getState().addNotification({
+            title: tTransactions("notification.linksAttached.title"),
+            body: tTransactions("notification.linksAttached.body", {
+              count: urls.length,
+            }),
+            tone: "success",
+            dedupeKey: `attachments-links-${detailTransaction.id}`,
+          });
+        }}
+        onOpenAttachment={async (item) => {
+          const result = await attachmentOpen.mutateAsync({
+            attachment: item.id,
+          });
+          const data = result.data;
+          if (!data) return;
+          if (data.target_type === "url" && data.url) {
+            await openExternalUrl(data.url);
+            return;
+          }
+          if (data.target_type === "file" && data.path) {
+            await openAttachmentFile(data.path);
+          }
+        }}
+        onRenameAttachment={async (item, label) => {
+          if (!detailTransaction) return;
+          const result = await attachmentRename.mutateAsync({
+            attachment: item.id,
+            label,
+          });
+          const updated = result.data;
+          if (updated) {
+            updateDetailAttachmentRecords((attachments) =>
+              replaceAttachmentRecord(attachments, updated),
+            );
+            updateAttachmentListQueryCache(
+              detailTransaction.id,
+              (attachments) => replaceAttachmentRecord(attachments, updated),
+            );
+          }
+          useUiStore.getState().addNotification({
+            title: tTransactions("notification.linkTextUpdated.title"),
+            body: tTransactions("notification.linkTextUpdated.body"),
+            tone: "success",
+          });
+        }}
+        onRemoveAttachment={async (item) => {
+          if (!detailTransaction) return;
+          await attachmentRemove.mutateAsync({ attachment: item.id });
+          updateDetailAttachmentRecords((attachments) =>
+            removeAttachmentRecord(attachments, item.id),
+          );
+          updateAttachmentListQueryCache(
+            detailTransaction.id,
+            (attachments) => removeAttachmentRecord(attachments, item.id),
+          );
+          useUiStore.getState().addNotification({
+            title: tTransactions("notification.attachmentRemoved.title"),
+            body:
+              item.kind === "file"
+                ? tTransactions("notification.attachmentRemoved.fileBody")
+                : tTransactions("notification.attachmentRemoved.linkBody"),
+            tone: "success",
+            dedupeKey: `attachment-remove-${item.id}`,
+          });
+        }}
         onOpenChange={(open) => {
           if (!open) closeDetail();
         }}

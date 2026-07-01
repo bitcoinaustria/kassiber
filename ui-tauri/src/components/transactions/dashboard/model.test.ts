@@ -50,6 +50,22 @@ function transaction(
   };
 }
 
+function rawTx(overrides: Partial<Tx> = {}): Tx {
+  return {
+    id: "tx-1",
+    date: "2026-04-15 08:00",
+    type: "Income",
+    account: "Cold Storage",
+    counter: "Counterparty",
+    amountSat: 410_000,
+    eur: null,
+    rate: null,
+    tag: "Income",
+    conf: 32,
+    ...overrides,
+  };
+}
+
 describe("transaction dashboard chart selection", () => {
   it("preserves wallet detail deep-link scope parameters", () => {
     vi.stubGlobal("window", {
@@ -125,21 +141,46 @@ describe("transaction dashboard chart selection", () => {
   });
 
   it("normalizes backend review-status variants before detail rendering", () => {
-    const tx: Tx = {
+    const tx = rawTx({
       id: "tx-missing-price",
-      date: "2026-04-15 08:00",
-      type: "Income",
-      account: "Cold Storage",
       counter: "Missing price",
-      amountSat: 410_000,
-      eur: null,
-      rate: null,
       tag: "Review",
       reviewStatus: "needs_review",
-      conf: 32,
-    };
+    });
 
     expect(toDashboardTransaction(tx, 0).reviewStatus).toBe("review");
+  });
+
+  it.each([
+    ["review", "review"],
+    ["needs_review", "review"],
+    ["needs-review", "review"],
+    ["blocked", "review"],
+    ["quarantined", "review"],
+    ["completed", "completed"],
+    ["complete", "completed"],
+    ["pending", "pending"],
+    ["failed", "failed"],
+    ["error", "failed"],
+  ] as const)(
+    "normalizes backend review status %s as %s",
+    (rawStatus, expectedStatus) => {
+      expect(
+        toDashboardTransaction(rawTx({ reviewStatus: rawStatus }), 0).reviewStatus,
+      ).toBe(expectedStatus);
+    },
+  );
+
+  it("falls back to confirmation-derived status for blank or unknown review statuses", () => {
+    expect(
+      toDashboardTransaction(rawTx({ reviewStatus: "", conf: 0 }), 0).reviewStatus,
+    ).toBe("pending");
+    expect(
+      toDashboardTransaction(
+        rawTx({ reviewStatus: "waiting_for_oracle", conf: 12 }),
+        0,
+      ).reviewStatus,
+    ).toBe("completed");
   });
 
   it("labels and matches a whole bucket selection across flows", () => {
