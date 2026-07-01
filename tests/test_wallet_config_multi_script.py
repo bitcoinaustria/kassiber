@@ -99,6 +99,8 @@ class ParseWalletConfigMultiScriptTests(unittest.TestCase):
 
         self.assertEqual(config.get("descriptor"), f"wpkh({xpub}/0/*)")
         self.assertEqual(config.get("change_descriptor"), f"wpkh({xpub}/1/*)")
+        self.assertEqual(config.get("descriptor_source"), "bsms")
+        self.assertFalse(config.get("synthesize_change"))
 
     def test_script_type_without_material_is_rejected(self):
         with self.assertRaises(AppError) as ctx:

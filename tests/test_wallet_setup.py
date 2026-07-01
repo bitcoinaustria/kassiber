@@ -14,7 +14,11 @@ import unittest
 from embit import bip32
 
 from kassiber.errors import AppError
-from kassiber.wallet_setup import normalize_script_types, normalize_wallet_material
+from kassiber.wallet_setup import (
+    BSMS_DESCRIPTOR_SOURCE,
+    normalize_script_types,
+    normalize_wallet_material,
+)
 
 
 _SLIP132_MAINNET_VERSIONS = {
@@ -280,6 +284,8 @@ class NormalizeWalletMaterialOtherShapesTests(unittest.TestCase):
             result["change_descriptor"],
             template.replace("/**", "/1/*"),
         )
+        self.assertEqual(result["descriptor_source"], BSMS_DESCRIPTOR_SOURCE)
+        self.assertFalse(result["synthesize_change"])
 
     def test_bsms_descriptor_without_path_restrictions_is_accepted(self):
         descriptor = (
@@ -296,7 +302,11 @@ class NormalizeWalletMaterialOtherShapesTests(unittest.TestCase):
             ]
         )
 
-        self.assertEqual(normalize_wallet_material(material), {"descriptor": descriptor})
+        result = normalize_wallet_material(material)
+
+        self.assertEqual(result["descriptor"], descriptor)
+        self.assertEqual(result["descriptor_source"], BSMS_DESCRIPTOR_SOURCE)
+        self.assertFalse(result["synthesize_change"])
 
     def test_bsms_signer_key_record_is_rejected(self):
         material = "\n".join(

@@ -97,6 +97,18 @@ def _wsh_bsms_record() -> str:
     )
 
 
+def _wsh_bsms_single_restriction_record() -> str:
+    key_a, key_b = _multisig_template_keys("m/48h/0h/0h/2h")
+    return "\n".join(
+        [
+            "BSMS 1.0",
+            f"wsh(sortedmulti(2,{key_a},{key_b}))",
+            "/0/*",
+            "bc1qplaceholderfirstaddress",
+        ]
+    )
+
+
 def _nested_multisig(chain_index: int) -> str:
     key_a, key_b = _multisig_keys("m/48h/0h/0h/1h", chain_index)
     return f"sh(wsh(sortedmulti(2,{key_a},{key_b})))"
@@ -272,6 +284,34 @@ class ChangeBranchSynthesisTests(unittest.TestCase):
                     )
                 ],
             )
+
+    def test_bsms_single_restriction_does_not_synthesize_change_branch(self):
+        plan = load_descriptor_plan(
+            {
+                "descriptor": _wsh_bsms_single_restriction_record(),
+                "chain": "bitcoin",
+            }
+        )
+
+        self.assertEqual(
+            [(branch.branch_index, branch.branch_label) for branch in plan.branches],
+            [(0, "receive")],
+        )
+
+    def test_stored_bsms_source_does_not_synthesize_change_branch(self):
+        plan = load_descriptor_plan(
+            {
+                "descriptor": _wsh_multisig(0),
+                "descriptor_source": "bsms",
+                "synthesize_change": False,
+                "chain": "bitcoin",
+            }
+        )
+
+        self.assertEqual(
+            [(branch.branch_index, branch.branch_label) for branch in plan.branches],
+            [(0, "receive")],
+        )
 
     def test_nested_multisig_change_matches_explicit_change_descriptor(self):
         self._assert_change_matches_explicit(_nested_multisig, "bitcoin")

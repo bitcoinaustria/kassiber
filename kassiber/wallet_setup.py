@@ -26,6 +26,7 @@ _BSMS_VERSION = "BSMS 1.0"
 _BSMS_TEMPLATE_TOKEN = "/**"
 _BSMS_NO_PATH_RESTRICTIONS = "no path restrictions"
 _BSMS_PATH_RESTRICTION_RE = re.compile(r"^/(?:\d+/)*(\*|\d+)$")
+BSMS_DESCRIPTOR_SOURCE = "bsms"
 
 # Descriptor templates used to disambiguate a bare xpub/tpub once the caller
 # supplies the script type. {branch} is 0 for receive and 1 for change, matching
@@ -164,7 +165,7 @@ def _descriptors_from_json(payload: Any) -> dict[str, str] | None:
     return None
 
 
-def parse_bsms_descriptor_record(material: str) -> dict[str, str] | None:
+def parse_bsms_descriptor_record(material: str) -> dict[str, Any] | None:
     """Extract concrete receive/change descriptors from a plaintext BSMS record.
 
     BIP-129 descriptor records are four logical lines:
@@ -197,7 +198,11 @@ def parse_bsms_descriptor_record(material: str) -> dict[str, str] | None:
                 "BSMS descriptor template requires path restrictions",
                 code="validation",
             )
-        return {"descriptor": descriptor}
+        return {
+            "descriptor": descriptor,
+            "descriptor_source": BSMS_DESCRIPTOR_SOURCE,
+            "synthesize_change": False,
+        }
     restrictions = _parse_bsms_path_restrictions(restrictions_line)
     if _BSMS_TEMPLATE_TOKEN not in descriptor:
         raise AppError(
@@ -213,7 +218,11 @@ def parse_bsms_descriptor_record(material: str) -> dict[str, str] | None:
         descriptor.replace(_BSMS_TEMPLATE_TOKEN, restriction)
         for restriction in restrictions
     ]
-    result = {"descriptor": expanded[0]}
+    result: dict[str, Any] = {
+        "descriptor": expanded[0],
+        "descriptor_source": BSMS_DESCRIPTOR_SOURCE,
+        "synthesize_change": False,
+    }
     if len(expanded) > 1:
         result["change_descriptor"] = expanded[1]
     return result
@@ -379,6 +388,7 @@ def _checksum(payload: bytes) -> bytes:
 
 __all__ = [
     "BARE_XPUB_TEMPLATES",
+    "BSMS_DESCRIPTOR_SOURCE",
     "normalize_script_types",
     "normalize_wallet_material",
     "parse_bsms_descriptor_record",

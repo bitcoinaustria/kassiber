@@ -18,6 +18,7 @@ from ..wallet_descriptors import (
     normalize_asset_code,
 )
 from ..wallet_setup import (
+    BSMS_DESCRIPTOR_SOURCE,
     normalize_script_types,
     normalize_wallet_material,
     parse_bsms_descriptor_record,
@@ -78,6 +79,8 @@ WALLET_SAFE_CONFIG_FIELDS = (
     "altbestand",
     "wasabi_metadata",
     "samourai",
+    "descriptor_source",
+    "synthesize_change",
     "script_types",
     WALLET_DEPRECATED_CONFIG_KEY,
 )
@@ -396,6 +399,8 @@ def parse_wallet_config(args):
         bsms_descriptors = parse_bsms_descriptor_record(descriptor_text)
         if bsms_descriptors:
             descriptor_text = bsms_descriptors["descriptor"]
+            config["descriptor_source"] = BSMS_DESCRIPTOR_SOURCE
+            config["synthesize_change"] = False
             if not change_descriptor_text:
                 change_descriptor_text = bsms_descriptors.get("change_descriptor")
     if descriptor_text:

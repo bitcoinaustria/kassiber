@@ -6126,10 +6126,16 @@ def _apply_wallet_material_config(
         config["script_types"] = material_config["script_types"]
         config.pop("descriptor", None)
         config.pop("change_descriptor", None)
+        config.pop("descriptor_source", None)
+        config.pop("synthesize_change", None)
         return
     config.setdefault("descriptor", material_config["descriptor"])
     if "change_descriptor" in material_config:
         config.setdefault("change_descriptor", material_config["change_descriptor"])
+    if "descriptor_source" in material_config:
+        config["descriptor_source"] = material_config["descriptor_source"]
+    if "synthesize_change" in material_config:
+        config["synthesize_change"] = material_config["synthesize_change"]
 
 
 def _create_wallet_payload(
@@ -7612,6 +7618,10 @@ def _preview_descriptor_payload(args: dict[str, Any]) -> dict[str, Any]:
         else:
             descriptor_text = descriptor_text or material["descriptor"]
             change_descriptor_text = change_descriptor_text or material.get("change_descriptor")
+            if "descriptor_source" in material:
+                config["descriptor_source"] = material["descriptor_source"]
+            if "synthesize_change" in material:
+                config["synthesize_change"] = material["synthesize_change"]
     chain = _optional_str_arg(args, "chain") or "bitcoin"
     network = _optional_str_arg(args, "network")
     raw_count = args.get("count")
@@ -7835,12 +7845,16 @@ def _update_wallet_payload(
             # exclusive; clear any descriptor left over from a prior shape.
             config_updates["descriptor"] = None
             config_updates["change_descriptor"] = None
+            config_updates["descriptor_source"] = None
+            config_updates["synthesize_change"] = None
         else:
             config_updates["descriptor"] = material_config["descriptor"]
             if "change_descriptor" in material_config:
                 config_updates["change_descriptor"] = material_config["change_descriptor"]
             elif "change_descriptor" not in config_updates:
                 config_updates["change_descriptor"] = None
+            config_updates["descriptor_source"] = material_config.get("descriptor_source")
+            config_updates["synthesize_change"] = material_config.get("synthesize_change")
             # A freshly pasted descriptor supersedes any stored xpub set.
             config_updates["xpub"] = None
             config_updates["script_types"] = None
