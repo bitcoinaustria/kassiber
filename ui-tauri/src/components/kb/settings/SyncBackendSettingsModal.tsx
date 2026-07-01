@@ -1,6 +1,7 @@
 import * as React from "react";
 import {
   CheckCircle2,
+  ChevronRight,
   RefreshCw,
   Server,
   Trash2,
@@ -1363,10 +1364,18 @@ export function SyncBackendSettingsModal({
                   undefined
                 }
               >
-                <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2 text-sm font-medium">
-                  <span>{t("backendModal.advancedLabel")}</span>
-                  <span className="text-xs text-muted-foreground">
-                    {t("backendModal.advancedHint")}
+                <summary className="flex min-h-12 cursor-pointer list-none items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                  <ChevronRight
+                    className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-90"
+                    aria-hidden="true"
+                  />
+                  <span className="min-w-0 flex-1">
+                    <span className="block font-medium">
+                      {t("backendModal.advancedLabel")}
+                    </span>
+                    <span className="block text-xs text-muted-foreground">
+                      {t("backendModal.advancedHint")}
+                    </span>
                   </span>
                 </summary>
                 <section className="grid gap-3 border-t p-3 sm:grid-cols-2">
