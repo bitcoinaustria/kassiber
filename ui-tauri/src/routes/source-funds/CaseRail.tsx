@@ -12,7 +12,7 @@ import {
   txAmount,
   txWallet,
 } from "./model";
-import { CASE_STAGES, type CaseStage, type SourceFundsCaseState } from "./useSourceFundsCase";
+import { type CaseStage, type SourceFundsCaseState } from "./useSourceFundsCase";
 
 function stageStatusLine(
   stage: CaseStage,
@@ -85,7 +85,7 @@ export function CaseRail({ state }: { state: SourceFundsCaseState }) {
           </div>
         </div>
         <nav aria-label="Case stages" className="p-2">
-          {CASE_STAGES.map((entry, index) => {
+          {state.caseStages.map((entry, index) => {
             const active = state.stage === entry.id;
             const done = stageDone(entry.id, state);
             return (
@@ -100,7 +100,7 @@ export function CaseRail({ state }: { state: SourceFundsCaseState }) {
                 ].join(" ")}
               >
                 {/* timeline spine */}
-                {index < CASE_STAGES.length - 1 && (
+                {index < state.caseStages.length - 1 && (
                   <span
                     aria-hidden="true"
                     className="absolute left-[19px] top-[34px] h-[calc(100%-26px)] w-px bg-border"

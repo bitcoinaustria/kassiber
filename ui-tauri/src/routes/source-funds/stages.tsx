@@ -17,6 +17,7 @@ import {
   SlidersHorizontal,
   X,
 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -1239,12 +1240,13 @@ export function DiscloseStage({ state }: { state: SourceFundsCaseState }) {
 /* ------------------------------------------------------------------ */
 
 export function ExportStage({ state }: { state: SourceFundsCaseState }) {
+  const { t } = useTranslation("sourceFunds");
   const exportable = Boolean(state.report?.explain_gates.exportable);
   return (
     <div className="space-y-5">
       <StageHeader
-        title="Freeze and hand over"
-        lede="Export renders a saved immutable case snapshot — the report can be re-rendered byte-identically later, and live edits never change a handed-over dossier."
+        title={t("exportStage.title")}
+        lede={t("exportStage.lede")}
       />
 
       {!exportable && (

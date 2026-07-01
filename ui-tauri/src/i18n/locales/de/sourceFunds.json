@@ -11,6 +11,24 @@
       "export": "Export"
     }
   },
+  "caseStages": {
+    "target": {
+      "label": "Ziel",
+      "hint": "Was erklärt werden muss"
+    },
+    "trace": {
+      "label": "Nachverfolgen",
+      "hint": "Historie zusammenstellen"
+    },
+    "disclose": {
+      "label": "Offenlegen",
+      "hint": "Aus Empfängersicht"
+    },
+    "export": {
+      "label": "Export",
+      "hint": "Einfrieren und übergeben"
+    }
+  },
   "purpose": {
     "planned": {
       "title": "Geplanter Verkauf über Exchange",
@@ -128,6 +146,10 @@
     "savingCase": "Fall wird gespeichert…",
     "saveAndExport": "Speichern & PDF exportieren",
     "savedCase": "Gespeicherter Fall {{id}} ({{status}})"
+  },
+  "exportStage": {
+    "title": "Einfrieren und übergeben",
+    "lede": "Der Export rendert aus einem gespeicherten unveränderlichen Fall-Snapshot. Live-Änderungen verändern ein übergebenes Dossier nie; spätere Renderings verwenden dieselben geprüften Falldaten, auch wenn generierte Datei-Metadaten abweichen können."
   },
   "advancedReview": {
     "title": "Erweiterter Prüfeditor",

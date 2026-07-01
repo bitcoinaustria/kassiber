@@ -11,6 +11,24 @@
       "export": "Export"
     }
   },
+  "caseStages": {
+    "target": {
+      "label": "Target",
+      "hint": "What needs explaining"
+    },
+    "trace": {
+      "label": "Trace",
+      "hint": "Assemble the history"
+    },
+    "disclose": {
+      "label": "Disclose",
+      "hint": "Through their eyes"
+    },
+    "export": {
+      "label": "Export",
+      "hint": "Freeze and hand over"
+    }
+  },
   "purpose": {
     "planned": {
       "title": "Planned exchange sale",
@@ -128,6 +146,10 @@
     "savingCase": "Saving case…",
     "saveAndExport": "Save & Export PDF",
     "savedCase": "Saved case {{id}} ({{status}})"
+  },
+  "exportStage": {
+    "title": "Freeze and hand over",
+    "lede": "Export renders from a saved immutable case snapshot. Live edits never change a handed-over dossier, and later re-renders use the same reviewed case data even though generated file metadata may differ."
   },
   "advancedReview": {
     "title": "Advanced review editor",

@@ -3,6 +3,7 @@
 // stage components stay purely presentational.
 
 import { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 import { type Transaction } from "@/components/transactions";
 import { toDashboardTransaction } from "@/components/transactions/dashboard/model";
@@ -38,13 +39,18 @@ import {
 } from "./model";
 
 export const CASE_STAGES = [
-  { id: "target", label: "Target", hint: "What needs explaining" },
-  { id: "trace", label: "Trace", hint: "Assemble the history" },
-  { id: "disclose", label: "Disclose", hint: "Through their eyes" },
-  { id: "export", label: "Export", hint: "Freeze and hand over" },
+  { id: "target" },
+  { id: "trace" },
+  { id: "disclose" },
+  { id: "export" },
 ] as const;
 
 export type CaseStage = (typeof CASE_STAGES)[number]["id"];
+export type CaseStageEntry = {
+  id: CaseStage;
+  label: string;
+  hint: string;
+};
 
 function migrateStage(value: string | undefined): CaseStage {
   // Older persisted drafts carry the retired wizard step names.
@@ -58,6 +64,7 @@ function migrateStage(value: string | undefined): CaseStage {
 }
 
 export function useSourceFundsCase() {
+  const { t } = useTranslation("sourceFunds");
   const addNotification = useUiStore((state) => state.addNotification);
   const profileKey = useUiStore(
     (state) => state.identity?.profile ?? "default",
@@ -103,6 +110,15 @@ export function useSourceFundsCase() {
   );
   const [detailTransaction, setDetailTransaction] =
     useState<Transaction | null>(null);
+  const caseStages = useMemo<CaseStageEntry[]>(
+    () =>
+      CASE_STAGES.map((entry) => ({
+        id: entry.id,
+        label: t(`caseStages.${entry.id}.label`),
+        hint: t(`caseStages.${entry.id}.hint`),
+      })),
+    [t],
+  );
 
   // Target picker filters.
   const [targetSearch, setTargetSearch] = useState("");
@@ -707,6 +723,7 @@ export function useSourceFundsCase() {
     hideSensitive,
     explorerSettings,
     // stage
+    caseStages,
     stage,
     setStage,
     goToStage,
