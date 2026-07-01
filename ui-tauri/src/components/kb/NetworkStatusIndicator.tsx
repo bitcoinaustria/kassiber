@@ -139,7 +139,7 @@ function bitcoinRpcHealth(
 function connectionRowsFromBackends(
   savedBackends: Backend[],
 ): ConnectionHealthRow[] {
-  const rows = savedBackends
+  const rows = visibleConnectionBackends(savedBackends)
     .filter((backend) => backend.on && backend.url.trim())
     .map((backend) =>
       connectionRowFromBackend(backend, `backend:${backend.id}`, backend.id),
@@ -151,6 +151,24 @@ function connectionRowsFromBackends(
     seen.add(key);
     return true;
   });
+}
+
+function isRegtestBackend(backend: Backend) {
+  return String(backend.network ?? "").toLowerCase() === "regtest";
+}
+
+export function visibleConnectionBackends(savedBackends: Backend[]): Backend[] {
+  const activeRegtestBackend = savedBackends.some(
+    (backend) => backend.isDefault && isRegtestBackend(backend),
+  );
+  if (!activeRegtestBackend) return savedBackends;
+
+  return savedBackends.filter(
+    (backend) =>
+      isRegtestBackend(backend) ||
+      backend.isDefault ||
+      (backend.walletRefs?.length ?? 0) > 0,
+  );
 }
 
 function connectionRowFromBackend(

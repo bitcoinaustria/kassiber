@@ -996,6 +996,33 @@ def _create_kassiber_book(
             pass_fds=(username_fd.fileno(), password_fd.fileno()),
     )
     run_cli(data_root, "backends", "set-default", scenario["backend"]["name"])
+    configured_backends = run_cli(data_root, "backends", "list")["data"]
+    for backend in configured_backends:
+        name = str(backend.get("name") or "")
+        if not name or name == scenario["backend"]["name"]:
+            continue
+        source = str(backend.get("source") or "").lower()
+        network = str(backend.get("network") or "").lower()
+        if source == "database" and network != "regtest":
+            run_cli(data_root, "backends", "delete", name)
+    remaining_backends = run_cli(data_root, "backends", "list")["data"]
+    unexpected_backends = [
+        backend
+        for backend in remaining_backends
+        if str(backend.get("name") or "") != scenario["backend"]["name"]
+        or str(backend.get("network") or "").lower() != "regtest"
+    ]
+    if unexpected_backends:
+        rendered = [
+            {
+                "name": row.get("name"),
+                "kind": row.get("kind"),
+                "network": row.get("network"),
+                "source": row.get("source"),
+            }
+            for row in unexpected_backends
+        ]
+        raise RuntimeError(f"Regtest demo must not keep public/default backends: {rendered}")
     scope = _scope(scenario)
     existing_accounts = {
         account["code"]
