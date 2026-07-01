@@ -154,9 +154,17 @@ annotations, and reviewed paired-route context. Bitcoin transactions with
 stored valued vin/vout can render a proportional flow graph; records with only
 safe references render a reference/amountless graph; graphless imports return a
 typed empty state. Liquid confidential transactions may expose public
-references while keeping confidential amounts unsized or hidden. The payload
-never returns descriptors, xpubs, backend URLs/tokens, wallet config, raw
-files, raw JSON blobs, or other secret-bearing material.
+references while keeping confidential amounts unsized or hidden. When the user
+allows a configured public backend lookup, the daemon caches only the sanitized
+reference graph inside the local DB/SQLCipher boundary, keyed by schema version,
+chain, network, and txid, so reopening the same transaction does not refetch the
+same public tx/prevtx material. Kassiber deliberately does not persist raw
+serialized transactions for this graph cache: the graph endpoint needs only the
+normalized refs, prevout values/scripts, and size metadata required to rebuild a
+complete current-transaction graph, not witnesses, arbitrary script payloads, or
+backend response shape. The payload never returns descriptors, xpubs, backend
+URLs/tokens, wallet config, raw files, raw JSON blobs, or other secret-bearing
+material.
 
 `ui.wallets.utxos` accepts `{"wallet":"<wallet id or label>"}` and returns the
 active local UTXO inventory for one wallet. Rows include outpoint, txid, vout,
@@ -248,6 +256,21 @@ server-assisted scanner API. The file/path values are backend config, not
 normal safe output fields. Desktop forms may send replacement values, but
 `ui.backends.list` / `ui.backends.options` expose only the safe capability bit
 and presence-style metadata, never the saved scanner path itself.
+`ui.backends.detect_core` probes common local Bitcoin Core RPC endpoints with
+default cookie-file locations plus local `bitcoin.conf` RPC settings and
+returns candidate URL/network/auth-source metadata without cookie contents.
+When `bitcoin.conf` contains `rpcuser`/`rpcpassword`, the daemon may use those
+credentials internally to prove reachability, but the response does not include
+the username or password. Cookie-file candidates include a bounded
+`credential_ref` for immediate local probing; renderer-supplied cookiefile
+probes and desktop-created Bitcoin Core cookiefile backends are constrained to
+default `~/.bitcoin/**/.cookie` paths and loopback RPC URLs. Users who want to
+save basic auth still enter it explicitly. `ui.backends.bitcoinrpc.test` probes
+a saved or inline Core RPC backend with `getblockchaininfo`, `getnetworkinfo`,
+wallet RPC, and `getblockfilter`; it reports reachability, peer/sync state,
+pruning/IBD, wallet-RPC availability, and BIP158 filter-index availability.
+Both endpoints are desktop mutating kinds because they touch local RPC/cookie
+state and are not AI tools.
 
 `ui.wallets.create` is the desktop connection setup path for local/imported
 wallet sources. It accepts `label`, `kind`, and the same wallet config fields
@@ -390,9 +413,10 @@ BTCPay invoice JSON, rejected matches, payment hashes, destination addresses,
 full origin URLs, payment-method configuration, descriptors, xpubs, or API
 tokens.
 
-`ui.metadata.bip329.import` accepts `file` and optional `wallet`, then imports
-BIP329 JSONL labels into the active profile and bridges transaction labels to
-matching local transactions.
+`ui.metadata.bip329.import` accepts `file`, then imports BIP329 JSONL labels
+into the active profile. Labels are deduplicated by record type and reference;
+transaction labels are bridged to matching local transactions across the active
+profile.
 
 `ui.transactions.metadata.update` accepts
 `{"transaction":"...","note":"...","tags":["Reviewed"],"excluded":false}` for

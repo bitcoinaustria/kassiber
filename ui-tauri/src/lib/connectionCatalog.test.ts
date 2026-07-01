@@ -58,6 +58,13 @@ describe("connection catalog", () => {
     );
   });
 
+  it("describes Bitcoin Core as descriptor-capable", () => {
+    const core = CONNECTION_SOURCES.find((source) => source.id === "bitcoin-core");
+
+    expect(core?.description).toMatch(/descriptor/i);
+    expect(JSON.stringify(core)).not.toMatch(/address-based sync only|not implemented/i);
+  });
+
   it("keeps the Samourai Whirlpool setup watch-only in the catalog", () => {
     const samouraiSources = CONNECTION_SOURCES.filter(
       (source) => source.setupKind === "samourai",

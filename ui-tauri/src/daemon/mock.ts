@@ -51,6 +51,33 @@ interface MockChatSession {
   entries: { role: "user" | "assistant"; content: string }[];
 }
 
+function mockGraphlessTransactionGraph(transactionId: string) {
+  return {
+    transaction: {
+      id: transactionId,
+      txid: transactionId,
+      externalId: transactionId,
+      inputCount: 0,
+      outputCount: 0,
+    },
+    supportLevel: "graphless",
+    unsupportedReason: "graphless_import",
+    warnings: [
+      {
+        code: "graphless_import",
+        level: "info",
+        message:
+          "This source record does not contain a valued Bitcoin input/output graph.",
+      },
+    ],
+    inputs: [],
+    outputs: [],
+    fee: null,
+    annotations: [],
+    accounting: { quarantine: null, linkedPairs: [], transferGroupIds: [] },
+  };
+}
+
 // Mock chat history uses "encrypted database" semantics: the auto policy
 // persists, mirroring a real install after `secrets init`.
 let mockChatHistoryMode: "auto" | "on" | "off" = "auto";
@@ -3558,6 +3585,64 @@ export const mockDaemon: DaemonTransport = {
       };
     }
 
+    if (req.kind === "ui.backends.bitcoinrpc.test") {
+      const args = (req.args ?? {}) as { url?: unknown; backend?: unknown };
+      const url =
+        typeof args.url === "string"
+          ? args.url.trim()
+          : typeof args.backend === "string"
+            ? `saved:${args.backend}`
+            : "";
+      if (!url) {
+        return {
+          kind: "error",
+          schema_version: 1,
+          request_id: req.request_id,
+          error: {
+            code: "validation",
+            message: "Bitcoin Core test requires url or backend",
+            retryable: false,
+          },
+        };
+      }
+      return {
+        kind: "ui.backends.bitcoinrpc.test",
+        schema_version: 1,
+        request_id: req.request_id,
+        data: {
+          reachable: true,
+          chain: "main",
+          network: "main",
+          blocks: 850000,
+          headers: 850000,
+          peers: 8,
+          status: "synchronized",
+          pruned: false,
+          pruneheight: null,
+          version: 270000,
+          ibd: false,
+          wallet_rpc: {
+            available: true,
+            loaded_wallet_count: 1,
+          },
+          block_filters: {
+            available: true,
+            type: "basic",
+          },
+          warnings: [],
+        } as T,
+      };
+    }
+
+    if (req.kind === "ui.backends.detect_core") {
+      return {
+        kind: "ui.backends.detect_core",
+        schema_version: 1,
+        request_id: req.request_id,
+        data: { candidates: [] } as T,
+      };
+    }
+
     if (req.kind === "ui.backends.options") {
       return {
         kind: "ui.backends.options",
@@ -4126,7 +4211,7 @@ export const mockDaemon: DaemonTransport = {
           : "tx19";
       const graph =
         MOCK_TRANSACTION_GRAPHS[transactionId] ??
-        MOCK_TRANSACTION_GRAPHS.tx19;
+        mockGraphlessTransactionGraph(transactionId);
       return {
         kind: "ui.transactions.graph",
         schema_version: 1,

@@ -255,7 +255,11 @@
     },
     "unsupportedTitle": "Saved HTTP explorer endpoints are listed here but not actively probed from the shell. The health checker probes Electrum / Fulcrum backends and approved display-only HTTP checks.",
     "checkPassed": "Connection check passed.",
-    "checkFailed": "Connection check failed."
+    "checkFailed": "Connection check failed.",
+    "coreReachable": "Bitcoin Core reachable.",
+    "coreWalletRpcUnavailable": "Bitcoin Core wallet RPC is unavailable.",
+    "coreInitialBlockDownload": "Bitcoin Core is still in initial block download.",
+    "corePruned": "Bitcoin Core is reachable but pruned."
   },
   "bookSwitcher": {
     "title": "Switch books",

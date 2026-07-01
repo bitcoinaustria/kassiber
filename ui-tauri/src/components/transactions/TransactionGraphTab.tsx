@@ -2,7 +2,6 @@ import {
   AlertTriangle,
   ArrowRight,
   ArrowRightLeft,
-  ExternalLink,
   Info,
   Maximize2,
 } from "lucide-react";
@@ -127,6 +126,19 @@ export type TransactionGraphPayload = {
     transferGroupIds?: string[];
   };
   swapRoute?: TransactionSwapRoute | null;
+};
+
+export type TransactionGraphIssueTarget = "bitcoin" | "liquid";
+
+type TransactionGraphIssueLabelKey =
+  | "graph.addBitcoinBackend"
+  | "graph.reviewBitcoinBackend"
+  | "graph.addLiquidBackend"
+  | "graph.reviewLiquidBackend";
+
+type TransactionGraphIssueAction = {
+  target: TransactionGraphIssueTarget;
+  labelKey: TransactionGraphIssueLabelKey;
 };
 
 type GraphRow = TransactionGraphNode & { side: "input" | "output" | "fee" };
@@ -1085,10 +1097,12 @@ function GraphEmptyState({
   graph,
   loading,
   error,
+  onResolveIssue,
 }: {
   graph?: TransactionGraphPayload;
   loading?: boolean;
   error?: string | null;
+  onResolveIssue?: (target: TransactionGraphIssueTarget) => void;
 }) {
   const { t } = useTranslation("transactions");
   const reason = graph?.unsupportedReason;
@@ -1108,34 +1122,34 @@ function GraphEmptyState({
       : reason === "liquid_reference_graph_not_local"
         ? t("graph.liquidBody")
         : t("graph.graphlessBody");
-  const txid = graph?.transaction?.txid ?? graph?.transaction?.externalId;
-  const liquidExplorerHref =
-    reason === "liquid_reference_graph_not_local" && txid
-      ? `https://liquid.network/tx/${encodeURIComponent(txid)}`
-      : null;
   const alertWarnings = (graph?.warnings ?? []).filter(
     (warning) => warning.level === "warning" || warning.level === "error",
   );
+  const diagnosticAction = graphDiagnosticAction(graph);
   return (
     <div className="space-y-2">
       <div className="rounded-md border bg-muted/35 p-4">
-      <div className="flex items-start gap-3">
-        <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md bg-background text-muted-foreground">
-          {error ? <AlertTriangle className="size-4" /> : <Info className="size-4" />}
-        </span>
-        <div>
-          <div className="text-sm font-medium">{title}</div>
-          <div className="mt-1 text-sm text-muted-foreground">{body}</div>
-          {liquidExplorerHref ? (
-            <Button asChild variant="outline" size="sm" className="mt-3 gap-2">
-              <a href={liquidExplorerHref} target="_blank" rel="noreferrer">
-                <ExternalLink className="size-4" aria-hidden="true" />
-                {t("graph.openLiquidNetwork")}
-              </a>
-            </Button>
-          ) : null}
+        <div className="flex items-start gap-3">
+          <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md bg-background text-muted-foreground">
+            {error ? <AlertTriangle className="size-4" /> : <Info className="size-4" />}
+          </span>
+          <div>
+            <div className="text-sm font-medium">{title}</div>
+            <div className="mt-1 text-sm text-muted-foreground">{body}</div>
+            {diagnosticAction && onResolveIssue ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="mt-3 gap-2"
+                onClick={() => onResolveIssue(diagnosticAction.target)}
+              >
+                <ArrowRight className="size-4" aria-hidden="true" />
+                {t(diagnosticAction.labelKey)}
+              </Button>
+            ) : null}
+          </div>
         </div>
-      </div>
       </div>
       {alertWarnings.map((warning) => (
         <div
@@ -1148,6 +1162,36 @@ function GraphEmptyState({
       ))}
     </div>
   );
+}
+
+function graphDiagnosticAction(
+  graph?: TransactionGraphPayload,
+): TransactionGraphIssueAction | null {
+  if (!graph) return null;
+  const codes = new Set((graph.warnings ?? []).map((warning) => warning.code));
+  const hasLiquidLookupIssue =
+    graph.unsupportedReason === "liquid_reference_graph_not_local" ||
+    [...codes].some((code) => code.startsWith("liquid_reference_lookup_"));
+  if (hasLiquidLookupIssue) {
+    return {
+      target: "liquid",
+      labelKey: codes.has("liquid_reference_lookup_unavailable")
+        ? "graph.addLiquidBackend"
+        : "graph.reviewLiquidBackend",
+    };
+  }
+  const hasBitcoinLookupIssue = [...codes].some((code) =>
+    code.startsWith("bitcoin_reference_lookup_"),
+  );
+  if (hasBitcoinLookupIssue) {
+    return {
+      target: "bitcoin",
+      labelKey: codes.has("bitcoin_reference_lookup_unavailable")
+        ? "graph.addBitcoinBackend"
+        : "graph.reviewBitcoinBackend",
+    };
+  }
+  return null;
 }
 
 function graphSupportText(
@@ -1171,6 +1215,7 @@ export function TransactionGraphPanel({
   hideSensitive,
   selectedSwapLeg,
   onSelectSwapLeg,
+  onResolveIssue,
 }: {
   graph?: TransactionGraphPayload;
   loading?: boolean;
@@ -1178,6 +1223,7 @@ export function TransactionGraphPanel({
   hideSensitive: boolean;
   selectedSwapLeg?: TransactionSwapRouteLegKey | null;
   onSelectSwapLeg?: (leg: TransactionSwapRouteLegKey) => void;
+  onResolveIssue?: (target: TransactionGraphIssueTarget) => void;
 }) {
   const { t } = useTranslation("transactions");
   const showDiagram =
@@ -1187,6 +1233,7 @@ export function TransactionGraphPanel({
   const alertWarnings = (graph?.warnings ?? []).filter(
     (warning) => warning.level === "warning" || warning.level === "error",
   );
+  const diagnosticAction = graphDiagnosticAction(graph);
 
   return (
     <div className="space-y-4">
@@ -1231,11 +1278,28 @@ export function TransactionGraphPanel({
                   <span>{warning.message}</span>
                 </div>
               ))}
+              {diagnosticAction && onResolveIssue ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="gap-2"
+                  onClick={() => onResolveIssue(diagnosticAction.target)}
+                >
+                  <ArrowRight className="size-4" aria-hidden="true" />
+                  {t(diagnosticAction.labelKey)}
+                </Button>
+              ) : null}
             </div>
           ) : null}
         </>
       ) : (
-        <GraphEmptyState graph={graph} loading={loading} error={error} />
+        <GraphEmptyState
+          graph={graph}
+          loading={loading}
+          error={error}
+          onResolveIssue={onResolveIssue}
+        />
       )}
     </div>
   );

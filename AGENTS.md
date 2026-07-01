@@ -24,7 +24,7 @@
   - [kassiber/core/engines/__init__.py](kassiber/core/engines/__init__.py) — tax-engine interface/resolver. Both the generic RP2 path and the Austrian (§ 27b EStG) path route through `GenericRP2TaxEngine`; AT profiles surface rp2's `rp2.plugin.country.at.AT` plugin directly so accounting methods and engine semantics come from rp2, while Kassiber keeps Austrian disposal bucketing / Kennzahl mapping on its side.
   - [kassiber/core/tax_events.py](kassiber/core/tax_events.py) — in-memory normalization seam between raw transaction rows and tax-engine inputs, including early quarantine classification for under-specified tax semantics.
   - [kassiber/core/sync.py](kassiber/core/sync.py) — wallet sync orchestration above backend-specific transport details.
-  - [kassiber/core/sync_backends.py](kassiber/core/sync_backends.py) — descriptor target discovery plus `esplora`, `electrum`, and `bitcoinrpc` live-sync adapters.
+  - [kassiber/core/sync_backends.py](kassiber/core/sync_backends.py) — descriptor target discovery plus `esplora`, `electrum`, and `bitcoinrpc` live-sync adapters. Bitcoin Core descriptor discovery is read-only/local; ranged `importdescriptors` + Core's blocking rescan live inside `bitcoinrpc_sync_adapter`, with per-branch range ends and observed `highest_used` persisted in the freshness checkpoint.
   - [kassiber/core/output_inventory.py](kassiber/core/output_inventory.py) — durable watch-only coin/UTXO inventory model updated by chain-backed wallet sync; stores current/spent outpoints, amounts, confirmation state, receive/change metadata, and source freshness without exposing descriptors, xpubs, backend URLs/tokens, raw wallet config, or raw wallet files through UI/AI surfaces.
   - [kassiber/core/ownership.py](kassiber/core/ownership.py) — pure address/txid ownership reconciliation engine behind `wallets identify`, `ui.wallets.identify` (cache-only) and `ui.wallets.identify_onchain` (verify). Given pasted addresses/txids it matches them (by canonical scriptPubKey, with address-string fallback for Liquid confidential addresses) against the watch-only inventory, imported txids, and offline descriptor derivation (receive + change, floored at the synced index, capped by `--scan-to-index`), naming the owning wallet/branch/index and flagging externals; clearly-malformed inputs are flagged `invalid`. A smart CSV importer (`extract_candidates_from_csv`: delimiter sniffing, common `address`/`txid` header aliases, plus strict content-harvest of 64-hex/real-address cells) feeds the same pipeline from `--csv` (CLI) and a desktop "Import CSV" button that sends file content as `csv_text` — never exposed to the AI tool. txids get a per-leg payment/transfer/receipt classification — locally from `transactions.raw_json` (both esplora and Electrum decode shapes) and, for unseen txids, via the opt-in caller-injected fetcher (`fetch_transaction_legs` / `verify_session` in sync_backends; the empty-script Liquid fee output is not counted). The AI variant drops scriptPubKeys, derivation paths, address indices and branch labels.
   - [kassiber/core/reports.py](kassiber/core/reports.py) — extracted report builders, balance-history calculations, and PDF export assembly behind hookable journal/runtime dependencies. `reports tax-summary` rows include `row_type=swap_fees_year` / `swap_fees_total` summarising persisted `transaction_pairs.swap_fee_msat` and `direct_swap_payouts.swap_fee_msat`.
@@ -127,6 +127,7 @@ Kassiber is currently in **dev mode**: renaming commands, breaking flags, and re
   compact in-app skill routing document; deeper references stay allowlisted.
   Desktop onboarding and connection setup use explicit mutating daemon kinds
   `ui.onboarding.complete`, `ui.wallets.create`, `ui.connections.btcpay.create`,
+  `ui.backends.detect_core`, `ui.backends.bitcoinrpc.test`,
   `ui.connections.bullbitcoin_wallet.create`,
   `ui.wallets.import_samourai`,
   `ui.connections.btcpay.discover`,
@@ -144,6 +145,15 @@ Kassiber is currently in **dev mode**: renaming commands, breaking flags, and re
   `ui.profiles.reset_data` for confirmed per-book testing resets and
   `ui.rates.kraken_csv.import` for local Kraken CSV/ZIP history backfills and
   `ui.reports.export_audit_package` for DB-backed auditor handoff packages.
+  `ui.backends.detect_core` and `ui.backends.bitcoinrpc.test` contact local
+  RPC endpoints / cookie files for desktop setup and health checks; detection
+  also parses local `bitcoin.conf` so the daemon can prove reachability without
+  returning raw `rpcuser`/`rpcpassword`. Cookie-file candidates may return a
+  bounded local `credential_ref`, but renderer-supplied cookiefile probes and
+  desktop-created Core cookiefile backends must stay constrained to default
+  `~/.bitcoin/**/.cookie` paths and loopback RPC URLs. The probe reports peer/sync
+  state, pruning/IBD, wallet-RPC support, and BIP158 filter-index availability.
+  These are mutating desktop kinds and must not be exposed to the AI tool surface.
   Do not model the Connections dialog as a
   command-template picker. Connection setup should select from configured
   chain/indexer backends via `ui.backends.options`; BTCPay setup can create a
@@ -185,7 +195,7 @@ Kassiber is currently in **dev mode**: renaming commands, breaking flags, and re
   `pnpm --dir ui-tauri run dev:bridge` serves the React app at
   `http://127.0.0.1:5173`, forwards invokes through `/__kassiber__/daemon`,
   and streams `ai.chat` as NDJSON from `/__kassiber__/daemon/stream`.
-- Live sync kinds implemented: `esplora`, `electrum`, `bitcoinrpc`. BTCPay Greenfield confirmed on-chain wallet history sync is available through wallet config and `wallets sync-btcpay`.
+- Live sync kinds implemented: `esplora`, `electrum`, `bitcoinrpc`. Bitcoin Core RPC supports Bitcoin descriptor/xpub/address sync; descriptor/xpub import is adapter-side mutation, not discovery. BTCPay Greenfield confirmed on-chain wallet history sync is available through wallet config and `wallets sync-btcpay`.
 - BIP329 records are stored in SQLite and transaction labels are bridged into Kassiber tags.
 - BTCPay CSV/JSON imports become transactions, with comments mapped to notes and labels mapped to tags. Wallet-configured BTCPay sync and `wallets sync-btcpay` reuse that same normalization for confirmed Greenfield wallet history.
 - Transaction attachments are stored in a managed `attachments/` state sibling; file attachments are copied locally and URL attachments remain literal strings with no fetching or indexing.
@@ -462,7 +472,6 @@ uv run python -m kassiber ai providers create --help
 - No `custom` wallet kind CSV mapping DSL yet.
 - No account adjustments yet.
 - No per-profile Tor proxy configuration yet.
-- No descriptor/xpub-native live sync through `bitcoinrpc` yet.
 - No self-hosted Liquid `elements_rpc` backend yet.
 - No BTCPay invoice/payment provenance ingest yet beyond confirmed on-chain wallet history plus comment/label carry-through from wallet-configured BTCPay sync.
 - LND (`kind="lnd"`) and Core Lightning (`coreln`) are implemented as read-only node snapshot adapters behind the shared scaffold (`kassiber/core/lightning/lnd.py` and `kassiber/core/lightning/cln.py`); NWC (`nwc`) is declared but does not sync yet.

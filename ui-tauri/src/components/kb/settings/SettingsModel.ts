@@ -72,6 +72,7 @@ export interface BackendSettingsRow {
   has_auth_header?: boolean;
   has_token?: boolean;
   has_certificate?: boolean;
+  has_cookiefile?: boolean;
   has_username?: boolean;
   has_password?: boolean;
   has_commando_peer_id?: boolean;

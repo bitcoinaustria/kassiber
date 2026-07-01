@@ -1037,12 +1037,16 @@ Behavior:
 
 ## BIP329
 
-Kassiber stores imported BIP329 records in SQLite and bridges transaction labels into Kassiber tags when the referenced transaction is already present locally.
+Kassiber stores imported BIP329 records once per active profile, deduplicated by
+record type and reference. Re-importing the same reference updates the stored
+label metadata instead of creating a second wallet-scoped copy, and transaction
+labels are bridged into Kassiber tags for matching local transactions across the
+profile.
 
 ```bash
-python3 -m kassiber metadata bip329 import --wallet donations --file /path/to/labels.jsonl
-python3 -m kassiber metadata bip329 list --wallet donations
-python3 -m kassiber metadata bip329 export --wallet donations --file /path/to/export.jsonl
+python3 -m kassiber metadata bip329 import --file /path/to/labels.jsonl
+python3 -m kassiber metadata bip329 list
+python3 -m kassiber metadata bip329 export --file /path/to/export.jsonl
 ```
 
 ## Metadata and attachments after import

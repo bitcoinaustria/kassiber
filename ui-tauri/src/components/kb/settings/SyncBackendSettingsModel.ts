@@ -13,12 +13,27 @@ export function backendTypeIdForConnectionSetup(
   intent: DeferredConnectionSetup | null,
 ): SyncBackendTypeId | undefined {
   const kind = normalizedBackendKind(intent?.backendKind);
-  if (kind === "silentpayment") return "bitcoin";
+  const sourceId = intent?.sourceId?.trim().toLowerCase();
+  if (kind === "liquid" || kind === "liquidesplora" || sourceId === "liquid") {
+    return "liquid";
+  }
+  if (
+    kind === "bitcoin" ||
+    kind === "esplora" ||
+    kind === "electrum" ||
+    sourceId === "bitcoin" ||
+    sourceId === "esplora" ||
+    sourceId === "electrum"
+  ) {
+    return "bitcoin";
+  }
+  if (kind === "silentpayment" || sourceId === "silent-payment") {
+    return "bitcoin";
+  }
   if (kind === "coreln") return "coreln";
   if (kind === "lnd") return "lnd";
-  if (intent?.sourceId === "silent-payment") return "bitcoin";
-  if (intent?.sourceId === "core-ln") return "coreln";
-  if (intent?.sourceId === "lnd") return "lnd";
+  if (sourceId === "core-ln") return "coreln";
+  if (sourceId === "lnd") return "lnd";
   return undefined;
 }
 

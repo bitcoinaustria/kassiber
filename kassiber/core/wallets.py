@@ -8,6 +8,7 @@ from pathlib import Path
 
 from ..errors import AppError
 from ..time_utils import now_iso
+from ..time_utils import parse_timestamp
 from ..util import normalize_chain_value, normalize_network_value, parse_bool, str_or_none
 from ..wallet_descriptors import (
     DEFAULT_DESCRIPTOR_GAP_LIMIT,
@@ -472,6 +473,8 @@ def parse_wallet_config(args):
                 f"Descriptor gap limit must be {MAX_DESCRIPTOR_GAP_LIMIT} or lower"
             )
         config["gap_limit"] = args.gap_limit
+    if getattr(args, "birthday", None) is not None:
+        config["birthday"] = args.birthday
     if getattr(args, "policy_asset", None):
         config["policy_asset"] = normalize_asset_code(args.policy_asset)
     if getattr(args, "source_file", None):
@@ -546,6 +549,12 @@ def _validated_wallet_config(normalized_kind, config):
     config = dict(config or {})
     if "addresses" in config:
         config["addresses"] = normalize_addresses(config.get("addresses"))
+    if "birthday" in config:
+        birthday = str_or_none(config.get("birthday"))
+        if birthday is None:
+            config.pop("birthday", None)
+        else:
+            config["birthday"] = parse_timestamp(birthday)
     if WALLET_DEPRECATED_CONFIG_KEY in config:
         config[WALLET_DEPRECATED_CONFIG_KEY] = wallet_is_deprecated(config)
     if normalized_kind == silent_payments.WALLET_KIND:

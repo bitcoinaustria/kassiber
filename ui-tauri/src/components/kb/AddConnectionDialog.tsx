@@ -84,6 +84,14 @@ interface AddConnectionDialogProps {
 interface SetupFormState {
   label: string;
   backend: string;
+  birthday: string;
+  coreRpcUrl: string;
+  coreRpcAuthMode: "cookiefile" | "basic";
+  coreRpcCookiefile: string;
+  coreRpcUsername: string;
+  coreRpcPassword: string;
+  coreRpcCredentialRef: string;
+  coreRpcNetwork: string;
   btcpayInstanceMode: "saved" | "new";
   btcpaySetupMode: "wallet_sources" | "existing_wallets";
   bullWalletSetupMode: "wallet_sources" | "existing_wallets";
@@ -184,9 +192,70 @@ interface BackendOptionsData {
   }>;
 }
 
+interface CoreDetectionCandidate {
+  url: string;
+  chain?: string | null;
+  network?: string | null;
+  auth_source?: string | null;
+  credential_source?: string | null;
+  credential_ref?: string | null;
+  cookiefile?: string | null;
+  blocks?: number | null;
+  headers?: number | null;
+  peers?: number | null;
+  status?: string | null;
+  pruned?: boolean | null;
+  ibd?: boolean | null;
+  wallet_rpc?: CoreCapabilityPayload | null;
+  block_filters?: CoreCapabilityPayload | null;
+  warnings?: string[];
+}
+
+interface CoreDetectData {
+  candidates: CoreDetectionCandidate[];
+}
+
+interface CoreCapabilityPayload {
+  available?: boolean;
+  error?: {
+    message?: string;
+    hint?: string;
+  };
+}
+
+interface CoreProbeData {
+  reachable: boolean;
+  chain?: string | null;
+  network?: string | null;
+  blocks?: number | null;
+  headers?: number | null;
+  peers?: number | null;
+  status?: string | null;
+  pruned?: boolean | null;
+  pruneheight?: number | null;
+  version?: number | null;
+  ibd?: boolean | null;
+  wallet_rpc?: CoreCapabilityPayload | null;
+  block_filters?: CoreCapabilityPayload | null;
+  warnings?: string[];
+  error?: {
+    message?: string;
+    hint?: string;
+  };
+}
+
 function backendOptionLabel(backend: BackendOption): string {
   const label = backend.display_name?.trim() || backend.name;
   return label === backend.name ? label : `${label} (${backend.name})`;
+}
+
+function backendNameFromLabel(label: string) {
+  const slug = label
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9._-]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return slug || "bitcoin-core";
 }
 
 interface BtcpayDiscoveryData {
@@ -265,12 +334,18 @@ interface SamouraiImportResult {
 }
 
 type DialogStep = "source" | "setup";
-const DESCRIPTOR_BACKEND_KINDS = new Set(["esplora", "electrum"]);
+const DESCRIPTOR_BACKEND_KINDS = new Set(["esplora", "electrum", "bitcoinrpc"]);
 const ADDRESS_BACKEND_KINDS = new Set([
   "esplora",
   "electrum",
   "bitcoinrpc",
 ]);
+const CORE_DEFAULT_RPC_URLS: Record<string, string> = {
+  main: "http://127.0.0.1:8332",
+  test: "http://127.0.0.1:18332",
+  signet: "http://127.0.0.1:38332",
+  regtest: "http://127.0.0.1:18443",
+};
 const DEFAULT_BTCPAY_PAYMENT_METHOD_ID = "BTC-CHAIN";
 const MAX_DESCRIPTOR_GAP_LIMIT = 5000;
 type BullBitcoinWalletNetwork = "bitcoin" | "liquid" | "lightning";
@@ -448,6 +523,14 @@ const formDefaultsFor = (
   return {
     label: defaultLabel,
     backend: "",
+    birthday: "",
+    coreRpcUrl: CORE_DEFAULT_RPC_URLS.main,
+    coreRpcAuthMode: "cookiefile",
+    coreRpcCookiefile: "",
+    coreRpcUsername: "",
+    coreRpcPassword: "",
+    coreRpcCredentialRef: "",
+    coreRpcNetwork: source.network ?? "main",
     btcpayInstanceMode: "new",
     btcpaySetupMode: "wallet_sources",
     bullWalletSetupMode: "wallet_sources",
@@ -527,6 +610,91 @@ function renderSetupHelper(helper: React.ReactNode) {
   return <div className="text-xs text-muted-foreground">{helper}</div>;
 }
 
+function coreNodeStatusKey(status?: string | null) {
+  switch (status) {
+    case "synchronized":
+    case "synchronizing":
+    case "connecting":
+    case "unresponsive":
+      return status;
+    default:
+      return "unknown";
+  }
+}
+
+function coreCandidateAuthLabel(
+  candidate: CoreDetectionCandidate,
+  t: TFunction<readonly ["connections", "common"]>,
+) {
+  if (
+    candidate.auth_source === "basic" &&
+    candidate.credential_source === "bitcoin.conf"
+  ) {
+    return t("connections:add.core.authBasicBitcoinConf");
+  }
+  if (candidate.auth_source === "basic") {
+    return t("connections:add.core.authBasic");
+  }
+  if (candidate.credential_source === "bitcoin.conf") {
+    return t("connections:add.core.authCookiefileBitcoinConf");
+  }
+  if (candidate.auth_source === "cookiefile") {
+    return t("connections:add.core.authCookiefile");
+  }
+  return t("connections:add.core.credentialUnknown");
+}
+
+function applyCoreCandidateToForm(
+  current: SetupFormState,
+  candidate: CoreDetectionCandidate,
+): SetupFormState {
+  const authMode =
+    candidate.auth_source === "basic"
+      ? "basic"
+      : candidate.auth_source === "cookiefile"
+        ? "cookiefile"
+        : current.coreRpcAuthMode;
+  return {
+    ...current,
+    coreRpcUrl: candidate.url || current.coreRpcUrl,
+    coreRpcNetwork: candidate.network || current.coreRpcNetwork,
+    coreRpcAuthMode: authMode,
+    coreRpcCookiefile: candidate.cookiefile || current.coreRpcCookiefile,
+    coreRpcUsername:
+      candidate.auth_source === "basic" ? "" : current.coreRpcUsername,
+    coreRpcPassword:
+      candidate.auth_source === "basic" ? "" : current.coreRpcPassword,
+    coreRpcCredentialRef: candidate.credential_ref || "",
+  };
+}
+
+function coreReadinessMessages(
+  payload: CoreDetectionCandidate | CoreProbeData,
+  t: TFunction<readonly ["connections", "common"]>,
+) {
+  const messages: string[] = [];
+  if (payload.pruned) {
+    messages.push(t("connections:add.core.prunedWarning"));
+  }
+  if (payload.ibd) {
+    messages.push(t("connections:add.core.initialBlockDownloadWarning"));
+  }
+  if (payload.wallet_rpc?.available === false) {
+    messages.push(
+      payload.wallet_rpc.error?.hint ??
+        payload.wallet_rpc.error?.message ??
+        t("connections:add.core.walletRpcUnavailable"),
+    );
+  }
+  if (payload.block_filters?.available === false) {
+    messages.push(
+      payload.block_filters.error?.hint ??
+        t("connections:add.core.blockFiltersUnavailable"),
+    );
+  }
+  return messages;
+}
+
 function InlineCode({ children }: { children?: React.ReactNode }) {
   return (
     <code className="rounded bg-muted px-1 py-0.5 font-mono text-[11px] text-foreground">
@@ -590,6 +758,9 @@ export function AddConnectionDialog({
   const walletsList = useDaemon<WalletListData>("ui.wallets.list");
   const createWallet =
     useDaemonMutation<{ wallet: { label: string } }>("ui.wallets.create");
+  const createBackend = useDaemonMutation<{ name: string }>(
+    "ui.backends.create",
+  );
   const importFile =
     useDaemonMutation<ImportFileResult>("ui.wallets.import_file");
   const ledgerTemplate = useDaemonMutation<{
@@ -643,6 +814,10 @@ export function AddConnectionDialog({
     payment_method_id: string;
     ok: boolean;
   }>("ui.connections.btcpay.test");
+  const detectCore = useDaemonMutation<CoreDetectData>("ui.backends.detect_core");
+  const testCore = useDaemonMutation<CoreProbeData>(
+    "ui.backends.bitcoinrpc.test",
+  );
   const [syncProgress, setSyncProgress] = React.useState<{
     wallet: string;
     processed: number;
@@ -713,6 +888,13 @@ export function AddConnectionDialog({
   >(null);
   const [btcpayDiscovery, setBtcpayDiscovery] =
     React.useState<BtcpayDiscoveryData | null>(null);
+  const [coreDetection, setCoreDetection] =
+    React.useState<CoreDetectData | null>(null);
+  const [coreTestStatus, setCoreTestStatus] = React.useState<
+    | ({ ok: true } & CoreProbeData)
+    | { ok: false; message: string; hint?: string | null }
+    | null
+  >(null);
   const [copiedAddress, setCopiedAddress] = React.useState<string | null>(null);
   const copyAddress = React.useCallback(async (address: string) => {
     try {
@@ -778,6 +960,9 @@ export function AddConnectionDialog({
       : setupKind === "silent-payment"
         ? silentPaymentBackendOptions
         : descriptorBackendOptions;
+  const selectedBackend = selectedBackendOptions.find(
+    (backend) => backend.name === form.backend,
+  );
   const defaultBackendName =
     selectedBackendOptions.find((backend) => backend.is_default)?.name ??
     selectedBackendOptions[0]?.name ??
@@ -864,9 +1049,12 @@ export function AddConnectionDialog({
     createWallet.isPending ||
     importFile.isPending ||
     importSamourai.isPending ||
+    createBackend.isPending ||
     createBtcpay.isPending ||
     createBullBitcoinWallet.isPending ||
     discoverBtcpay.isPending ||
+    detectCore.isPending ||
+    testCore.isPending ||
     importBip329.isPending ||
     syncWallet.isPending;
   const requiresBackend =
@@ -876,7 +1064,7 @@ export function AddConnectionDialog({
     setupKind === "address-list";
   const missingBackend = requiresBackend && selectedBackendOptions.length === 0;
   const submitLabel =
-    setupKind === "backend-settings"
+    setupKind === "backend-settings" && selected.id !== "bitcoin-core"
       ? t("add.submit.openBackendSettings")
       : syncWallet.isPending
         ? t("add.submit.refreshing")
@@ -916,6 +1104,8 @@ export function AddConnectionDialog({
     setPreviewError(null);
     setBtcpayTestStatus(null);
     setBtcpayDiscovery(null);
+    setCoreDetection(null);
+    setCoreTestStatus(null);
     setSyncProgress(null);
     setPurgedKeys(null);
   }, [selected, t]);
@@ -1098,6 +1288,62 @@ export function AddConnectionDialog({
     };
   };
 
+  const coreRpcConfig = () => {
+    const config: Record<string, string> = {
+      display_name: form.label.trim(),
+    };
+    if (form.coreRpcAuthMode === "cookiefile") {
+      config.cookiefile = form.coreRpcCookiefile.trim();
+    } else {
+      config.username = form.coreRpcUsername.trim();
+      config.password = form.coreRpcPassword;
+    }
+    return config;
+  };
+
+  const updateCoreForm = <K extends keyof SetupFormState>(
+    key: K,
+    value: SetupFormState[K],
+  ) => {
+    setForm((current) => ({
+      ...current,
+      [key]: value,
+      coreRpcCredentialRef: "",
+    }));
+    setCoreTestStatus(null);
+    setFieldErrors((current) => {
+      if (!(key in current)) return current;
+      const next = { ...current };
+      delete next[key];
+      return next;
+    });
+  };
+
+  const coreRpcBackendArgs = () => {
+    const args: Record<string, unknown> = {
+      name: backendNameFromLabel(form.label),
+      kind: "bitcoinrpc",
+      url: form.coreRpcUrl.trim(),
+      chain: "bitcoin",
+      network: form.coreRpcNetwork || "main",
+      config: coreRpcConfig(),
+    };
+    if (form.coreRpcCredentialRef) {
+      args.credential_ref = form.coreRpcCredentialRef;
+    }
+    return args;
+  };
+
+  const coreRpcProbeArgs = () =>
+    form.coreRpcCredentialRef
+      ? { credential_ref: form.coreRpcCredentialRef, timeout: 10 }
+      : {
+          url: form.coreRpcUrl.trim(),
+          network: form.coreRpcNetwork || "main",
+          config: coreRpcConfig(),
+          timeout: 10,
+        };
+
   const validateSetupForm = (): Partial<Record<keyof SetupFormState, string>> => {
     const errors: Partial<Record<keyof SetupFormState, string>> = {};
     if (
@@ -1107,7 +1353,8 @@ export function AddConnectionDialog({
       setupKind === "file-wallet" ||
       setupKind === "samourai" ||
       setupKind === "btcpay" ||
-      setupKind === "bullbitcoin-wallet"
+      setupKind === "bullbitcoin-wallet" ||
+      (setupKind === "backend-settings" && selected.id === "bitcoin-core")
     ) {
       if (!form.label.trim()) {
         errors.label = t("add.validation.labelRequired");
@@ -1142,6 +1389,29 @@ export function AddConnectionDialog({
       }
       if (descriptorBackendOptions.length > 0 && !form.backend.trim()) {
         errors.backend = t("add.validation.chooseBackend");
+      }
+      if (form.birthday && Number.isNaN(Date.parse(form.birthday))) {
+        errors.birthday = t("add.validation.birthdayInvalid");
+      }
+    }
+    if (setupKind === "backend-settings" && selected.id === "bitcoin-core") {
+      if (!form.coreRpcUrl.trim()) {
+        errors.coreRpcUrl = t("add.core.errorUrl");
+      }
+      if (
+        form.coreRpcAuthMode === "cookiefile" &&
+        !form.coreRpcCookiefile.trim() &&
+        !form.coreRpcCredentialRef
+      ) {
+        errors.coreRpcCookiefile = t("add.core.errorCookiefile");
+      }
+      if (form.coreRpcAuthMode === "basic" && !form.coreRpcCredentialRef) {
+        if (!form.coreRpcUsername.trim()) {
+          errors.coreRpcUsername = t("add.core.errorUsername");
+        }
+        if (!form.coreRpcPassword.trim()) {
+          errors.coreRpcPassword = t("add.core.errorPassword");
+        }
       }
     }
     if (setupKind === "silent-payment") {
@@ -1331,11 +1601,32 @@ export function AddConnectionDialog({
     if (Object.keys(errors).length > 0) return;
     const label = form.label.trim();
     try {
-      if (setupKind === "backend-settings") {
+      if (setupKind === "backend-settings" && selected.id === "bitcoin-core") {
+        const backendArgs = coreRpcBackendArgs();
+        const testEnvelope = await testCore.mutateAsync(coreRpcProbeArgs());
+        const probe = testEnvelope.data;
+        if (!probe?.reachable) {
+          throw new Error(
+            probe?.error?.message ?? t("add.core.testFailed"),
+          );
+        }
+        if (probe.wallet_rpc?.available === false) {
+          throw new Error(
+            probe.wallet_rpc.error?.hint ??
+              probe.wallet_rpc.error?.message ??
+              t("add.core.walletRpcUnavailable"),
+          );
+        }
+        await createBackend.mutateAsync(backendArgs);
+        addNotification({
+          title: t("add.added.title"),
+          body: t("add.core.addedBody", { label }),
+          tone: "success",
+        });
+      } else if (setupKind === "backend-settings") {
         openBackendSettings();
         return;
-      }
-      if (setupKind === "descriptor") {
+      } else if (setupKind === "descriptor") {
         const gapLimit = Number.parseInt(form.gapLimit, 10);
         const isBareXpub =
           detectWalletMaterial(form.walletMaterial).kind === "bare-xpub";
@@ -1365,6 +1656,7 @@ export function AddConnectionDialog({
           wallet_material: form.walletMaterial.trim(),
           script_types: scriptTypes,
           gap_limit: Number.isFinite(gapLimit) ? gapLimit : undefined,
+          birthday: form.birthday || undefined,
         });
         if (form.syncAfterCreate) {
           startSyncNotice(
@@ -1746,7 +2038,6 @@ export function AddConnectionDialog({
       } else if (setupKind === "bip329") {
         const envelope = await importBip329.mutateAsync({
           file: form.bip329File.trim(),
-          wallet: form.bip329Wallet.trim() || undefined,
         });
         addNotification({
           title: t("add.bip329.labelsImportedTitle"),
@@ -2192,6 +2483,23 @@ export function AddConnectionDialog({
               max={MAX_DESCRIPTOR_GAP_LIMIT}
               value={form.gapLimit}
               onChange={(event) => updateForm("gapLimit", event.target.value)}
+            />
+          </SetupField>
+          <SetupField
+            id="connection-birthday"
+            label={t("add.descriptor.birthday")}
+            error={fieldErrors.birthday}
+            helper={
+              selectedBackend?.kind === "bitcoinrpc"
+                ? t("add.descriptor.birthdayHelperCore")
+                : t("add.descriptor.birthdayHelper")
+            }
+          >
+            <Input
+              id="connection-birthday"
+              type="date"
+              value={form.birthday}
+              onChange={(event) => updateForm("birthday", event.target.value)}
             />
           </SetupField>
           <div className="flex items-center gap-2">
@@ -3603,17 +3911,304 @@ export function AddConnectionDialog({
               ) : null}
             </div>
           </SetupField>
+        </>
+      );
+    }
+
+    if (setupKind === "backend-settings" && selected.id === "bitcoin-core") {
+      const candidates = coreDetection?.candidates ?? [];
+      return (
+        <>
+          {renderConnectionLabelField()}
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={detectCore.isPending}
+              onClick={async () => {
+                setCoreTestStatus(null);
+                try {
+                  const envelope = await detectCore.mutateAsync({});
+                  const data = envelope.data ?? { candidates: [] };
+                  setCoreDetection(data);
+                  const first = data.candidates[0];
+                  if (first) {
+                    setForm((current) =>
+                      applyCoreCandidateToForm(current, first),
+                    );
+                  }
+                } catch (error) {
+                  setCoreDetection({ candidates: [] });
+                  setCoreTestStatus({
+                    ok: false,
+                    message:
+                      error instanceof Error
+                        ? error.message
+                        : t("add.core.detectFailed"),
+                  });
+                }
+              }}
+            >
+              {detectCore.isPending ? (
+                <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+              ) : null}
+              {t("add.core.detect")}
+            </Button>
+            {coreDetection && candidates.length === 0 ? (
+              <span className="text-xs text-muted-foreground">
+                {t("add.core.noneDetected")}
+              </span>
+            ) : null}
+          </div>
+          {candidates.length > 0 ? (
+            <div className="space-y-2 rounded-md border border-border/70 p-3">
+              <p className="text-xs font-medium text-muted-foreground">
+                {t("add.core.detectedNodes")}
+              </p>
+              <div className="grid gap-2">
+                {candidates.map((candidate) => {
+                  const candidateKey = [
+                    candidate.url,
+                    candidate.network ?? "",
+                    candidate.auth_source ?? "",
+                    candidate.credential_source ?? "",
+                    candidate.cookiefile ?? candidate.credential_ref ?? "",
+                  ].join("|");
+                  const readinessMessages = coreReadinessMessages(candidate, t);
+                  return (
+                    <Button
+                      key={candidateKey}
+                      type="button"
+                      variant="outline"
+                      className="h-auto justify-start text-left"
+                      onClick={() => {
+                        setForm((current) =>
+                          applyCoreCandidateToForm(current, candidate),
+                        );
+                        setCoreTestStatus(null);
+                      }}
+                    >
+                      <span className="min-w-0">
+                        <span className="block truncate">
+                          {candidate.network || "main"} · {candidate.url}
+                        </span>
+                        <span className="block truncate text-[11px] font-normal text-muted-foreground">
+                          {t("add.core.candidateMeta", {
+                            status: t(
+                              `add.core.status.${coreNodeStatusKey(candidate.status)}`,
+                            ),
+                            blocks: candidate.blocks ?? "n/a",
+                            headers: candidate.headers ?? "n/a",
+                            peers: candidate.peers ?? "n/a",
+                            auth: coreCandidateAuthLabel(candidate, t),
+                          })}
+                        </span>
+                        {readinessMessages.length > 0 ? (
+                          <span className="block whitespace-normal text-[11px] font-normal text-amber-700 dark:text-amber-300">
+                            {readinessMessages.join(" ")}
+                          </span>
+                        ) : null}
+                      </span>
+                    </Button>
+                  );
+                })}
+              </div>
+            </div>
+          ) : null}
+          <div className="grid gap-3 md:grid-cols-[minmax(0,1.4fr)_minmax(0,0.7fr)]">
+            <SetupField
+              id="connection-core-url"
+              label={t("add.core.url")}
+              error={fieldErrors.coreRpcUrl}
+            >
+              <Input
+                id="connection-core-url"
+                value={form.coreRpcUrl}
+                onChange={(event) => {
+                  updateCoreForm("coreRpcUrl", event.target.value);
+                }}
+              />
+            </SetupField>
+            <SetupField
+              id="connection-core-network"
+              label={t("add.core.network")}
+            >
+              <select
+                id="connection-core-network"
+                className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                value={form.coreRpcNetwork}
+                onChange={(event) => {
+                  const network = event.target.value;
+                  setForm((current) => ({
+                    ...current,
+                    coreRpcNetwork: network,
+                    coreRpcUrl: Object.values(CORE_DEFAULT_RPC_URLS).includes(
+                      current.coreRpcUrl.trim(),
+                    )
+                      ? CORE_DEFAULT_RPC_URLS[network]
+                      : current.coreRpcUrl,
+                    coreRpcCredentialRef: "",
+                  }));
+                  setCoreTestStatus(null);
+                }}
+              >
+                <option value="main">{t("add.core.networkMain")}</option>
+                <option value="test">{t("add.core.networkTest")}</option>
+                <option value="signet">{t("add.core.networkSignet")}</option>
+                <option value="regtest">{t("add.core.networkRegtest")}</option>
+              </select>
+            </SetupField>
+          </div>
           <SetupField
-            id="connection-bip329-wallet"
-            label={t("add.bip329.targetWalletLabel")}
-            helper={t("add.bip329.targetWalletHelper")}
+            id="connection-core-auth"
+            label={t("add.core.authMode")}
           >
-            <Input
-              id="connection-bip329-wallet"
-              value={form.bip329Wallet}
-              onChange={(event) => updateForm("bip329Wallet", event.target.value)}
-            />
+            <select
+              id="connection-core-auth"
+              className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+              value={form.coreRpcAuthMode}
+              onChange={(event) => {
+                updateCoreForm(
+                  "coreRpcAuthMode",
+                  event.target.value === "basic" ? "basic" : "cookiefile",
+                );
+              }}
+            >
+              <option value="cookiefile">{t("add.core.authCookiefile")}</option>
+              <option value="basic">{t("add.core.authBasic")}</option>
+            </select>
           </SetupField>
+          {form.coreRpcAuthMode === "cookiefile" ? (
+            <SetupField
+              id="connection-core-cookiefile"
+              label={t("add.core.cookiefile")}
+              error={fieldErrors.coreRpcCookiefile}
+            >
+              <Input
+                id="connection-core-cookiefile"
+                value={form.coreRpcCookiefile}
+                onChange={(event) => {
+                  updateCoreForm("coreRpcCookiefile", event.target.value);
+                }}
+              />
+            </SetupField>
+          ) : (
+            <div className="grid gap-3 md:grid-cols-2">
+              <SetupField
+                id="connection-core-username"
+                label={t("add.core.username")}
+                error={fieldErrors.coreRpcUsername}
+              >
+                <Input
+                  id="connection-core-username"
+                  value={form.coreRpcUsername}
+                  onChange={(event) => {
+                    updateCoreForm("coreRpcUsername", event.target.value);
+                  }}
+                />
+              </SetupField>
+              <SetupField
+                id="connection-core-password"
+                label={t("add.core.password")}
+                error={fieldErrors.coreRpcPassword}
+              >
+                <Input
+                  id="connection-core-password"
+                  type="password"
+                  value={form.coreRpcPassword}
+                  onChange={(event) => {
+                    updateCoreForm("coreRpcPassword", event.target.value);
+                  }}
+                />
+              </SetupField>
+            </div>
+          )}
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={testCore.isPending || !form.coreRpcUrl.trim()}
+              onClick={async () => {
+                setCoreTestStatus(null);
+                try {
+                  const envelope = await testCore.mutateAsync(coreRpcProbeArgs());
+                  const payload = envelope.data;
+                  setCoreTestStatus(
+                    payload?.reachable
+                      ? {
+                          ok: true,
+                          ...payload,
+                        }
+                      : {
+                          ok: false,
+                          message:
+                            payload?.error?.message ??
+                            t("add.core.testFailed"),
+                          hint: payload?.error?.hint,
+                        },
+                  );
+                } catch (error) {
+                  setCoreTestStatus({
+                    ok: false,
+                    message:
+                      error instanceof Error
+                        ? error.message
+                        : t("add.core.testFailed"),
+                  });
+                }
+              }}
+            >
+              {testCore.isPending ? (
+                <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+              ) : null}
+              {t("add.core.test")}
+            </Button>
+            {coreTestStatus?.ok ? (
+              <div className="space-y-1 text-xs">
+                <p className="text-emerald-700 dark:text-emerald-300">
+                  {t("add.core.testOkDetailed", {
+                    network: coreTestStatus.network || form.coreRpcNetwork,
+                    status: t(
+                      `add.core.status.${coreNodeStatusKey(coreTestStatus.status)}`,
+                    ),
+                    blocks: coreTestStatus.blocks ?? "n/a",
+                    headers: coreTestStatus.headers ?? "n/a",
+                    peers: coreTestStatus.peers ?? "n/a",
+                  })}
+                </p>
+                {coreTestStatus.pruned ? (
+                  <p className="text-amber-700 dark:text-amber-300">
+                    {t("add.core.prunedWarning")}
+                  </p>
+                ) : null}
+                {coreTestStatus.ibd ? (
+                  <p className="text-amber-700 dark:text-amber-300">
+                    {t("add.core.initialBlockDownloadWarning")}
+                  </p>
+                ) : null}
+                {coreTestStatus.wallet_rpc?.available === false ? (
+                  <p className="text-destructive">
+                    {coreTestStatus.wallet_rpc.error?.hint ??
+                      coreTestStatus.wallet_rpc.error?.message ??
+                      t("add.core.walletRpcUnavailable")}
+                  </p>
+                ) : null}
+                {coreTestStatus.block_filters?.available === false ? (
+                  <p className="text-muted-foreground">
+                    {coreTestStatus.block_filters.error?.hint ??
+                      t("add.core.blockFiltersUnavailable")}
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
+            {coreTestStatus && !coreTestStatus.ok ? (
+              <span className="text-xs text-destructive">
+                {coreTestStatus.hint ?? coreTestStatus.message}
+              </span>
+            ) : null}
+          </div>
         </>
       );
     }
