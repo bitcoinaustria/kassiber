@@ -77,6 +77,65 @@ type BackendProbeEnvelope = {
   status?: number;
 };
 
+type BitcoinRpcProbeEnvelope = {
+  reachable: boolean;
+  chain?: string | null;
+  network?: string | null;
+  blocks?: number | null;
+  headers?: number | null;
+  peers?: number | null;
+  status?: string | null;
+  pruned?: boolean | null;
+  ibd?: boolean | null;
+  wallet_rpc?: {
+    available?: boolean;
+    error?: {
+      message?: string;
+      hint?: string;
+    };
+  } | null;
+  block_filters?: {
+    available?: boolean;
+    error?: {
+      message?: string;
+      hint?: string;
+    };
+  } | null;
+  warnings?: string[];
+  error?: {
+    message?: string;
+    hint?: string;
+  };
+};
+
+function bitcoinRpcHealth(
+  payload: BitcoinRpcProbeEnvelope | undefined,
+  t: TFunction<"chrome">,
+) {
+  if (!payload?.reachable) {
+    return {
+      ok: false,
+      message: payload?.error?.message ?? t("network.checkFailed"),
+    };
+  }
+  if (payload.wallet_rpc?.available === false) {
+    return {
+      ok: false,
+      message:
+        payload.wallet_rpc.error?.hint ??
+        payload.wallet_rpc.error?.message ??
+        t("network.coreWalletRpcUnavailable"),
+    };
+  }
+  if (payload.ibd) {
+    return { ok: true, message: t("network.coreInitialBlockDownload") };
+  }
+  if (payload.pruned) {
+    return { ok: true, message: t("network.corePruned") };
+  }
+  return { ok: true, message: t("network.coreReachable") };
+}
+
 function connectionRowsFromBackends(
   savedBackends: Backend[],
 ): ConnectionHealthRow[] {
@@ -292,6 +351,9 @@ export function NetworkStatusIndicator({
   const testHttp = useDaemonMutation<BackendProbeEnvelope>(
     "ui.backends.http.test",
   );
+  const testBitcoinRpc = useDaemonMutation<BitcoinRpcProbeEnvelope>(
+    "ui.backends.bitcoinrpc.test",
+  );
   const savedBackends = React.useMemo(
     () =>
       (backendSettingsQuery.data?.data?.backends ?? []).map(
@@ -376,20 +438,34 @@ export function NetworkStatusIndicator({
                     proxy: row.proxy,
                     timeout: 5,
                   })
+                : row.probeKind === "bitcoinrpc"
+                  ? await testBitcoinRpc.mutateAsync({
+                      backend: row.backendId,
+                      url: row.backendId ? undefined : row.rawUrl,
+                      timeout: 5,
+                    })
                 : await testHttp.mutateAsync({
                     url: row.rawUrl,
                     proxy: row.proxy,
                     timeout: 5,
                   });
             const payload = envelope.data;
+            const coreHealth =
+              row.probeKind === "bitcoinrpc"
+                ? bitcoinRpcHealth(payload as BitcoinRpcProbeEnvelope | undefined, t)
+                : undefined;
+            const ok =
+              coreHealth?.ok ??
+              Boolean((payload as BackendProbeEnvelope | undefined)?.ok);
             return [
               row.id,
               {
                 fingerprint: row.fingerprint,
-                status: payload?.ok ? "healthy" : "unhealthy",
+                status: ok ? "healthy" : "unhealthy",
                 message:
-                  payload?.logs?.at(-1) ??
-                  (payload?.ok
+                  coreHealth?.message ??
+                  (payload as BackendProbeEnvelope | undefined)?.logs?.at(-1) ??
+                  (ok
                     ? t("network.checkPassed")
                     : t("network.checkFailed")),
                 checkedAt: now,
@@ -420,7 +496,14 @@ export function NetworkStatusIndicator({
       return next;
     });
     setChecking(false);
-  }, [canCheckConnections, checkableRows, t, testElectrum, testHttp]);
+  }, [
+    canCheckConnections,
+    checkableRows,
+    t,
+    testBitcoinRpc,
+    testElectrum,
+    testHttp,
+  ]);
 
   React.useEffect(() => {
     if (!shouldRunImmediateCheck) return;

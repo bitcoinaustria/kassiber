@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   backendPayload,
+  backendTrust,
   backendRowToSettingsBackend,
   marketRateBackends,
   type Backend,
@@ -146,6 +147,30 @@ describe("backend settings model", () => {
     });
 
     expect(backendTypeIdForSettingsBackend(backend)).toBe("liquid");
+  });
+
+  it("only treats proxy settings as shielding for transports that use them", () => {
+    const electrum = backendRowToSettingsBackend({
+      name: "fulcrum",
+      kind: "electrum",
+      chain: "bitcoin",
+      network: "main",
+      url: "ssl://fulcrum.example:50002",
+      has_url: true,
+      tor_proxy: "127.0.0.1:9050",
+    });
+    const lnd = backendRowToSettingsBackend({
+      name: "lnd",
+      kind: "lnd",
+      chain: "lightning",
+      network: "main",
+      url: "https://lnd.example",
+      has_url: true,
+      tor_proxy: "127.0.0.1:9050",
+    });
+
+    expect(backendTrust(electrum).posture).toBe("shielded");
+    expect(backendTrust(lnd).posture).toBe("remote");
   });
 
   it("shows the local mempool backend as the active market-price endpoint", () => {
