@@ -18,7 +18,7 @@ export const NETWORK_LAYER_META: Record<
 > = {
   bitcoin: {
     blurb:
-      "Explorer API (Esplora / mempool.space-type HTTP REST), Electrum / Fulcrum (Electrum protocol over TCP/SSL), or Bitcoin Core RPC endpoints that serve on-chain history to your watch-only wallets.",
+      "Explorer API (Esplora / mempool.space-type HTTP REST), Electrum / Fulcrum (Electrum protocol over TCP/SSL), or Bitcoin Core RPC endpoints that serve on-chain history to your watch-only wallets. Silent Payments requires a backend or local scanner you deliberately mark as BIP352 capable.",
     empty:
       "No Bitcoin backends yet. Add one so on-chain wallets can refresh their balances.",
     addLabel: "Add Bitcoin backend",
@@ -186,6 +186,11 @@ export function BackendLayerCard({
         {explorerBaseUrl ? (
           <span className="inline-flex items-center rounded-md border border-sky-500/25 bg-sky-500/10 px-2 py-0.5 text-xs font-medium text-sky-700 dark:text-sky-300">
             Links: {explorerHostLabel(explorerBaseUrl)}
+          </span>
+        ) : null}
+        {backend.silentPayments ? (
+          <span className="inline-flex items-center rounded-md border border-violet-500/25 bg-violet-500/10 px-2 py-0.5 text-xs font-medium text-violet-700 dark:text-violet-300">
+            Silent Payments
           </span>
         ) : null}
         {!backend.isDefault ? (
