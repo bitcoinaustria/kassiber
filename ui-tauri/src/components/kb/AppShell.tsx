@@ -93,7 +93,7 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { bookIdentityKey, useUiStore } from "@/store/ui";
+import { bookIdentityKey, isDaemonDataMode, useUiStore } from "@/store/ui";
 import type { AppNotification, ThemePreference } from "@/store/ui";
 import { BOOK_REFRESH_PROGRESS_ID } from "@/lib/syncProgress";
 import {
@@ -129,6 +129,7 @@ import {
 } from "@/store/sessionLock";
 import type { OverviewSnapshot } from "@/mocks/seed";
 import type { ProfilesSnapshot } from "@/mocks/profiles";
+import type { BackendSettingsData } from "@/components/kb/settings/SettingsModel";
 import { AssistantSessionProvider } from "@/components/ai/AssistantSessionProvider";
 import type { AssistantReturnPath } from "@/components/ai/assistantSession";
 import kLedgerMarkUrl from "@/assets/k-ledger-mark-transparent.svg";
@@ -138,6 +139,11 @@ import {
   startDaemonLogBridge,
   stopDaemonLogBridge,
 } from "@/lib/daemonLogBridge";
+import {
+  dataModeForActiveBackend,
+  dataModeFromSourceSwitch,
+  dataModeLabelKey,
+} from "@/components/kb/dataMode";
 import { isTypingTarget } from "@/lib/keymap";
 import { FirstSyncCard } from "./FirstSyncCard";
 import { AssistantDock } from "./AssistantDock";
@@ -1030,7 +1036,7 @@ export function AppShell() {
   // workspace; if not, drop the stale identity and bounce back to onboarding
   // instead of stranding the user on /overview with no data.
   React.useEffect(() => {
-    if (dataMode !== "real") return;
+    if (!isDaemonDataMode(dataMode)) return;
     if (!daemonEnabled) return;
     if (identity?.importedProject) return;
     if (!identity) return;
@@ -1197,7 +1203,7 @@ export function AppShell() {
   }, [appLockPolicy.lockOnWindowClose, encryptedWorkspace, lockApp]);
 
   React.useEffect(() => {
-    const bridgeable = daemonEnabled && dataMode === "real";
+    const bridgeable = daemonEnabled && isDaemonDataMode(dataMode);
     if (!bridgeable) return;
     startDaemonLogBridge({ isEnabled: () => bridgeable });
     return () => stopDaemonLogBridge();
@@ -1649,25 +1655,38 @@ function SidebarActions({
 }) {
   const { t } = useTranslation(["chrome", "nav"]);
   const dataMode = useUiStore((state) => state.dataMode);
-  const identity = useUiStore((state) => state.identity);
   const setDataMode = useUiStore((state) => state.setDataMode);
-  const isRealData = dataMode === "real";
-  const isRegtestData =
-    isRealData &&
-    [
-      identity?.workspace,
-      identity?.profile,
-      identity?.name,
-      identity?.backendName,
-      identity?.importedProject?.stateRoot,
-      identity?.importedProject?.dataRoot,
-      identity?.importedProject?.database,
-    ].some((value) => value?.toLowerCase().includes("regtest"));
-  const dataModeLabel = isRegtestData
-    ? t("shell.dataMode.regtest")
-    : isRealData
-      ? t("shell.dataMode.real")
-      : t("shell.dataMode.preview");
+  const backendSettingsQuery = useDaemon<BackendSettingsData>(
+    "ui.backends.settings.list",
+    undefined,
+    {
+      staleTime: 15_000,
+      refetchOnWindowFocus: false,
+    },
+  );
+  const defaultBackendName =
+    backendSettingsQuery.data?.data?.summary.default_backend ?? null;
+  const defaultBackend =
+    backendSettingsQuery.data?.data?.backends.find(
+      (backend) => backend.name === defaultBackendName || backend.is_default,
+    ) ?? null;
+  const activeRegtestBackend =
+    String(defaultBackend?.network ?? "").toLowerCase() === "regtest";
+  const normalizedDataMode = dataModeForActiveBackend(
+    dataMode,
+    activeRegtestBackend,
+  );
+  const isLiveData = normalizedDataMode === "real";
+
+  React.useEffect(() => {
+    if (normalizedDataMode !== dataMode) {
+      setDataMode(normalizedDataMode);
+    }
+  }, [dataMode, normalizedDataMode, setDataMode]);
+
+  const dataModeLabel = t(
+    `shell.dataMode.${dataModeLabelKey(normalizedDataMode)}`,
+  );
   const supportActive = pathname === "/diagnostics";
 
   return (
@@ -1706,10 +1725,10 @@ function SidebarActions({
               {dataModeLabel}
             </span>
             <Switch
-              checked={isRealData}
+              checked={isLiveData}
               aria-label={t("shell.dataMode.toggle")}
               onCheckedChange={(checked) =>
-                setDataMode(checked ? "real" : "mock")
+                setDataMode(dataModeFromSourceSwitch(checked, activeRegtestBackend))
               }
               className="group-data-[collapsible=icon]:hidden"
             />

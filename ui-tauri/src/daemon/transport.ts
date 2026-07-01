@@ -11,7 +11,7 @@
  */
 
 import { mockDaemon, mockStream } from "./mock";
-import { useUiStore, type DataMode } from "@/store/ui";
+import { isDaemonDataMode, useUiStore, type DataMode } from "@/store/ui";
 import {
   emitAppLog,
   type AppLogField,
@@ -886,7 +886,7 @@ const bridgeDaemon: DaemonTransport = {
 };
 
 export function getTransport(dataMode?: DataMode): DaemonTransport {
-  if ((dataMode ?? useUiStore.getState().dataMode) === "mock") {
+  if (!isDaemonDataMode(dataMode ?? useUiStore.getState().dataMode)) {
     return withDaemonLogging(
       { invoke: mockDaemon.invoke, stream: mockStream },
       "daemon:mock",

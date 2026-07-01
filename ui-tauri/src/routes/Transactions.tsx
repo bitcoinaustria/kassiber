@@ -16,7 +16,7 @@ import {
   type TransactionsList,
 } from "@/mocks/transactions";
 import { MOCK_OVERVIEW } from "@/mocks/seed";
-import { useUiStore } from "@/store/ui";
+import { isDaemonDataMode, useUiStore } from "@/store/ui";
 
 interface SuggestEnvelope {
   candidates: SwapCandidateReference[];
@@ -37,6 +37,7 @@ const TRANSACTIONS_HISTORY_BOUNDS_LIMIT = 1;
 export function Transactions() {
   const { t } = useTranslation("transactions");
   const dataMode = useUiStore((state) => state.dataMode);
+  const daemonBacked = isDaemonDataMode(dataMode);
   const routeSearch = useRouterState({ select: (state) => state.location.search });
   const detailParams = React.useMemo(() => {
     void routeSearch;
@@ -171,18 +172,18 @@ export function Transactions() {
   const transactions: TransactionsList =
     hasLiveTransactions && workbenchData
       ? workbenchData
-      : dataMode === "real"
+      : daemonBacked
         ? { ...MOCK_TRANSACTIONS, txs: [], nextCursor: null, hasMore: false }
         : MOCK_TRANSACTIONS;
   const tableTransactions: TransactionsList =
     liveTransactions ??
     (hasLiveTableTransactions ? firstPage?.data : null) ??
-    (dataMode === "real"
+    (daemonBacked
       ? { ...MOCK_TRANSACTIONS, txs: [], nextCursor: null, hasMore: false }
       : transactions);
   const hasMoreTransactions = Boolean(hasNextTransactionsPage);
   const shouldShowLiveSkeleton =
-    dataMode === "real" &&
+    daemonBacked &&
     workbenchQuery.isLoading &&
     !hasLiveTransactions;
 
@@ -190,7 +191,7 @@ export function Transactions() {
     return <ScreenSkeleton titleWidth="w-44" />;
   }
 
-  if (dataMode === "real" && !hasLiveTransactions) {
+  if (daemonBacked && !hasLiveTransactions) {
     return (
       <ScreenNotice
         title={t("route.unavailable.title")}
@@ -210,7 +211,7 @@ export function Transactions() {
       ? (overview.data?.data?.priceEur ?? null)
       : hasLiveTransactions
         ? null
-        : dataMode === "real"
+        : daemonBacked
           ? null
           : MOCK_OVERVIEW.priceEur;
   const hasLiveSwapSuggestions =

@@ -16,6 +16,13 @@ describe("app lock decisions", () => {
         daemonAuthRequired: false,
       }),
     ).toBe(true);
+    expect(
+      shouldUseDaemonUnlock({
+        dataMode: "regtest",
+        hasIdentity: true,
+        daemonAuthRequired: false,
+      }),
+    ).toBe(true);
   });
 
   it("keeps mock sessions out of daemon unlock unless auth is explicitly required", () => {

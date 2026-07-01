@@ -4,7 +4,7 @@ import { OverviewDashboard } from "@/components/overview-dashboard/OverviewDashb
 import { ScreenNotice, ScreenSkeleton } from "@/components/kb/ScreenSkeleton";
 import { useDaemon } from "@/daemon/client";
 import { MOCK_OVERVIEW, type OverviewSnapshot } from "@/mocks/seed";
-import { useUiStore } from "@/store/ui";
+import { isDaemonDataMode, useUiStore } from "@/store/ui";
 
 export function Overview() {
   const { t } = useTranslation("overview");
@@ -13,15 +13,16 @@ export function Overview() {
     useDaemon<OverviewSnapshot>("ui.overview.snapshot");
   const hasLiveOverview =
     data?.kind === "ui.overview.snapshot" && Boolean(data.data);
-  const shouldUseMockOverview = dataMode !== "real" && !hasLiveOverview;
+  const daemonBacked = isDaemonDataMode(dataMode);
+  const shouldUseMockOverview = !daemonBacked && !hasLiveOverview;
   const shouldShowLiveSkeleton =
-    dataMode === "real" && (isLoading || isFetching) && !hasLiveOverview;
+    daemonBacked && (isLoading || isFetching) && !hasLiveOverview;
 
   if (shouldShowLiveSkeleton) {
     return <ScreenSkeleton titleWidth="w-32" />;
   }
 
-  if (dataMode === "real" && !hasLiveOverview) {
+  if (daemonBacked && !hasLiveOverview) {
     return (
       <ScreenNotice
         title={t("screen.unavailableTitle")}

@@ -1,4 +1,4 @@
-import type { DataMode } from "@/store/ui";
+import { isDaemonDataMode, type DataMode } from "@/store/ui";
 
 export function shouldUseDaemonUnlock({
   dataMode,
@@ -9,7 +9,7 @@ export function shouldUseDaemonUnlock({
   hasIdentity: boolean;
   daemonAuthRequired: boolean;
 }) {
-  return (dataMode === "real" && hasIdentity) || daemonAuthRequired;
+  return (isDaemonDataMode(dataMode) && hasIdentity) || daemonAuthRequired;
 }
 
 export function shouldLockEncryptedWorkspaceOnLaunch({

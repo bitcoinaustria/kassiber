@@ -11,7 +11,7 @@ import {
 // a one-place change; the store type follows it.
 type Lang = LanguageCode;
 type Currency = "btc" | "eur";
-export type DataMode = "mock" | "real";
+export type DataMode = "mock" | "real" | "regtest";
 export type ThemePreference = "system" | "light" | "dark";
 export type NotificationTone = "info" | "success" | "warning" | "error";
 
@@ -19,6 +19,10 @@ export const DEFAULT_APP_SCALE = 0.9;
 export const MIN_APP_SCALE = 0.8;
 export const MAX_APP_SCALE = 1.2;
 export const APP_SCALE_STEP = 0.05;
+
+export function isDaemonDataMode(dataMode: DataMode) {
+  return dataMode === "real" || dataMode === "regtest";
+}
 
 export interface NotificationProgress {
   value?: number;
