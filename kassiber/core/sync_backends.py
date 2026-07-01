@@ -28,9 +28,11 @@ from ..msat import SATS_PER_BTC, dec
 from ..redaction import redact_operational_text
 from ..retry import retry_after_seconds_from_http_error
 from ..time_utils import UNKNOWN_OCCURRED_AT, parse_iso_datetime_or_none, timestamp_to_iso
+from ..time_utils import iso_to_unix
 from ..util import normalize_chain_value, normalize_network_value, parse_bool, parse_int
 from ..wallet_descriptors import (
     SCRIPT_TYPE_BRANCH_BASE,
+    branch_descriptor,
     branch_limits,
     decode_liquid_transaction,
     derive_descriptor_target,
@@ -523,8 +525,6 @@ def validate_backend_for_wallet(backend, chain, network, has_descriptor=False):
             )
     if chain == "liquid" and kind not in {"esplora", "electrum"}:
         raise AppError("Liquid live refresh currently requires an Esplora-compatible or Electrum backend")
-    if has_descriptor and kind == "bitcoinrpc":
-        raise AppError("Descriptor-backed refresh is not implemented for bitcoinrpc yet; use Esplora or Electrum")
     if chain != "bitcoin" and kind == "bitcoinrpc":
         raise AppError(f"Backend kind '{kind}' does not support {chain} wallets")
     return kind
@@ -793,6 +793,14 @@ def discover_descriptor_targets(backend, plan, kind, checkpoint=None):
                 ),
                 "history_cache": history_cache,
             }
+    if kind == "bitcoinrpc":
+        return {
+            "targets": scan_descriptor_targets(
+                plan,
+                highest_used=checkpoint.get("highest_used"),
+            ),
+            "history_cache": {},
+        }
     raise AppError(f"Descriptor-backed sync is not implemented for backend kind '{kind}'")
 
 
@@ -1847,7 +1855,7 @@ def bitcoinrpc_url(backend, wallet_name=None):
     return backend["url"]
 
 
-def bitcoinrpc_call(backend, method, params=None, wallet_name=None):
+def bitcoinrpc_call(backend, method, params=None, wallet_name=None, timeout=None):
     payload = {
         "jsonrpc": "1.0",
         "id": f"{APP_NAME}-{method}",
@@ -1858,7 +1866,7 @@ def bitcoinrpc_call(backend, method, params=None, wallet_name=None):
         bitcoinrpc_url(backend, wallet_name=wallet_name),
         payload,
         headers=bitcoinrpc_auth_headers(backend),
-        timeout=backend_timeout(backend),
+        timeout=backend_timeout(backend) if timeout is None else timeout,
     )
     if response.get("error"):
         error = response["error"]
@@ -1867,6 +1875,10 @@ def bitcoinrpc_call(backend, method, params=None, wallet_name=None):
             f" ({error.get('code', 'unknown')}): {error.get('message', error)}"
         )
     return response.get("result")
+
+
+def bitcoinrpc_import_timeout(backend):
+    return max(backend_timeout(backend), 600)
 
 
 def bitcoinrpc_wallet_name(backend, wallet):
@@ -1917,7 +1929,13 @@ def bitcoinrpc_import_addresses(backend, wallet_name, wallet, addresses):
     if not missing_addresses:
         return 0
     try:
-        results = bitcoinrpc_call(backend, "importdescriptors", [descriptors], wallet_name=wallet_name)
+        results = bitcoinrpc_call(
+            backend,
+            "importdescriptors",
+            [descriptors],
+            wallet_name=wallet_name,
+            timeout=bitcoinrpc_import_timeout(backend),
+        )
         failures = [result for result in results if not result.get("success")]
         if failures:
             raise AppError(f"descriptor import failed: {failures[0]}")
@@ -1932,11 +1950,81 @@ def bitcoinrpc_import_addresses(backend, wallet_name, wallet, addresses):
             for address in missing_addresses
         ]
         options = {"rescan": True}
-        results = bitcoinrpc_call(backend, "importmulti", [requests, options], wallet_name=wallet_name)
+        results = bitcoinrpc_call(
+            backend,
+            "importmulti",
+            [requests, options],
+            wallet_name=wallet_name,
+            timeout=bitcoinrpc_import_timeout(backend),
+        )
         failures = [result for result in results if not result.get("success")]
         if failures:
             raise AppError(f"address import failed: {failures[0]}")
     return len(missing_addresses)
+
+
+def _int_mapping(value):
+    if not isinstance(value, dict):
+        return {}
+    output = {}
+    for key, raw in value.items():
+        try:
+            parsed = int(raw)
+        except (TypeError, ValueError):
+            continue
+        if parsed >= 0:
+            output[str(key)] = parsed
+    return output
+
+
+def _bitcoinrpc_descriptor_end(plan, branch, highest_used):
+    descriptor = branch_descriptor(branch)
+    if not getattr(descriptor, "is_wildcard", False):
+        return 0
+    known_highest = _highest_used_branch_index(highest_used, branch.branch_index)
+    if known_highest is None:
+        return max(0, plan.gap_limit - 1)
+    return max(0, known_highest + plan.gap_limit)
+
+
+def bitcoinrpc_ranged_descriptor(backend, branch, end, birthday_ts):
+    raw_descriptor = branch_descriptor(branch).to_string()
+    descriptor = bitcoinrpc_call(backend, "getdescriptorinfo", [raw_descriptor])
+    return {
+        "desc": descriptor["descriptor"],
+        "timestamp": birthday_ts,
+        "range": [0, int(end)],
+        "internal": branch.branch_index % 2 == 1,
+        "active": False,
+    }
+
+
+def bitcoinrpc_import_ranged_descriptors(backend, wallet_name, plan, checkpoint, birthday_ts):
+    checkpoint = checkpoint if isinstance(checkpoint, dict) else {}
+    highest_used = checkpoint.get("highest_used")
+    previous_ends = _int_mapping(checkpoint.get("bitcoinrpc_descriptor_range_ends"))
+    next_ends = dict(previous_ends)
+    descriptors = []
+    for branch in plan.branches:
+        branch_key = str(branch.branch_index)
+        end = _bitcoinrpc_descriptor_end(plan, branch, highest_used)
+        next_ends[branch_key] = max(int(next_ends.get(branch_key, -1)), end)
+        if end <= int(previous_ends.get(branch_key, -1)):
+            continue
+        descriptors.append(bitcoinrpc_ranged_descriptor(backend, branch, end, birthday_ts))
+    if not descriptors:
+        return 0, next_ends
+    results = bitcoinrpc_call(
+        backend,
+        "importdescriptors",
+        [descriptors],
+        wallet_name=wallet_name,
+        timeout=bitcoinrpc_import_timeout(backend),
+    )
+    failures = [result for result in results if not result.get("success")]
+    if failures:
+        raise AppError(f"ranged descriptor import failed: {failures[0]}")
+    return len(descriptors), next_ends
 
 
 def _bitcoinrpc_checkpoint_block(checkpoint):
@@ -2169,8 +2257,19 @@ def bitcoinrpc_utxos_for_wallet_name(backend, wallet_name, addresses, sync_state
 def bitcoinrpc_sync_adapter(backend, wallet, sync_state: WalletSyncState):
     addresses = [target["address"] for target in sync_state.targets if target.get("address")]
     wallet_name = bitcoinrpc_ensure_watchonly_wallet(backend, wallet)
-    imported_count = bitcoinrpc_import_addresses(backend, wallet_name, wallet, addresses)
     checkpoint = _checkpoint_mapping(sync_state)
+    descriptor_range_ends = None
+    if sync_state.descriptor_plan is not None:
+        config = json.loads(_mapping_get(wallet, "config_json", "{}") or "{}")
+        imported_count, descriptor_range_ends = bitcoinrpc_import_ranged_descriptors(
+            backend,
+            wallet_name,
+            sync_state.descriptor_plan,
+            checkpoint,
+            iso_to_unix(config.get("birthday")),
+        )
+    else:
+        imported_count = bitcoinrpc_import_addresses(backend, wallet_name, wallet, addresses)
     records, meta = bitcoinrpc_records_for_wallet(
         backend,
         wallet,
@@ -2179,21 +2278,29 @@ def bitcoinrpc_sync_adapter(backend, wallet, sync_state: WalletSyncState):
         imported_count=imported_count,
         checkpoint=checkpoint,
     )
-    if meta.get("bitcoinrpc_last_block"):
-        next_checkpoint = dict(checkpoint)
-        next_checkpoint.update(
-            {
-                "backend": _backend_identity(backend, sync_state),
-                "bitcoinrpc_last_block": meta["bitcoinrpc_last_block"],
-            }
-        )
-        meta["freshness_checkpoint"] = next_checkpoint
-    meta["utxos"] = bitcoinrpc_utxos_for_wallet_name(
+    utxos = bitcoinrpc_utxos_for_wallet_name(
         backend,
         wallet_name,
         addresses,
         sync_state,
     )
+    meta["utxos"] = utxos
+    if sync_state.descriptor_plan is not None:
+        highest_used = dict(checkpoint.get("highest_used") or {})
+        for utxo in utxos:
+            highest_used = _merge_highest_used(highest_used, utxo, True)
+        meta["imported_descriptors"] = imported_count
+    if meta.get("bitcoinrpc_last_block") or descriptor_range_ends is not None:
+        next_checkpoint = dict(checkpoint)
+        next_checkpoint["backend"] = _backend_identity(backend, sync_state)
+        if meta.get("bitcoinrpc_last_block"):
+            next_checkpoint["bitcoinrpc_last_block"] = meta["bitcoinrpc_last_block"]
+        if descriptor_range_ends is not None:
+            next_checkpoint["bitcoinrpc_descriptor_range_ends"] = dict(
+                sorted(descriptor_range_ends.items())
+            )
+            next_checkpoint["highest_used"] = dict(sorted(highest_used.items()))
+        meta["freshness_checkpoint"] = next_checkpoint
     return records, meta
 
 

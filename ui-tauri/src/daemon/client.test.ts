@@ -168,6 +168,12 @@ describe("daemon mutation invalidation scope", () => {
     expect(
       invalidatedDaemonQueryKindsForMutation("ui.backends.http.test"),
     ).toEqual([]);
+    expect(
+      invalidatedDaemonQueryKindsForMutation("ui.backends.bitcoinrpc.test"),
+    ).toEqual([]);
+    expect(
+      invalidatedDaemonQueryKindsForMutation("ui.backends.detect_core"),
+    ).toEqual([]);
   });
 
   it("refreshes backend default reads after changing the default backend", () => {

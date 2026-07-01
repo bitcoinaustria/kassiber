@@ -1,7 +1,7 @@
 import type { Net } from "@/components/kb/settings/SettingsModel";
 import type { NetworkStatus } from "./networkStatus";
 
-export type ConnectionProbeKind = "electrum" | "http" | "unsupported";
+export type ConnectionProbeKind = "bitcoinrpc" | "electrum" | "http" | "unsupported";
 export type ConnectionHealthStatus =
   | "unknown"
   | "checking"
@@ -75,6 +75,12 @@ export function connectionProbeKind(connection: ConnectionHealthInput): Connecti
   const allowDisplayHttpProbe = connection.allowDisplayHttpProbe !== false;
   if (kind === "electrum" || url.startsWith("ssl://") || url.startsWith("tcp://")) {
     return "electrum";
+  }
+  if (
+    kind === "bitcoinrpc" &&
+    (url.startsWith("http://") || url.startsWith("https://"))
+  ) {
+    return "bitcoinrpc";
   }
   if (
     allowDisplayHttpProbe &&

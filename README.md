@@ -64,9 +64,9 @@ carries a working Austrian (§ 27b EStG) plugin with E 1kv exports.
 
 ## Highlights
 
-- **Direct Bitcoin sync** — Esplora, Electrum, Bitcoin Core RPC, BTCPay
-  Greenfield, Liquid Electrum, plus watch-only UTXO inventory for
-  chain-backed wallet sources.
+- **Direct Bitcoin sync** — Esplora, Electrum, Bitcoin Core RPC
+  descriptor/xpub/address refresh, BTCPay Greenfield, Liquid Electrum,
+  plus watch-only UTXO inventory for chain-backed wallet sources.
 - **Imports** — BTCPay CSV/JSON, Phoenix, River, Bull Bitcoin, Coinfinity,
   21bitcoin, Pocket Bitcoin, Strike, Samourai/Whirlpool public descriptor/xpub,
   generic CSV/JSON, a fill-in Excel/CSV ledger template for manual entry,
@@ -150,6 +150,11 @@ python3 -m kassiber wallets sync --wallet donations
 python3 -m kassiber journals process
 python3 -m kassiber reports summary
 ```
+
+When syncing descriptor or xpub wallets through your own Bitcoin Core node,
+add a Core RPC backend (`--cookiefile` or `--username` / `--password`) and
+optionally set `--birthday YYYY-MM-DD` on the wallet to bound Core's
+watch-only descriptor rescan.
 
 To reconcile old flows, `kassiber wallets identify` (or the desktop **Reconcile**
 screen) checks whether pasted addresses / transaction ids belong to any of your

@@ -64,6 +64,13 @@ Use `./scripts/quality-gate.sh` before calling work ready to push. It wraps the 
   the redacted `ui.wallets.utxos` daemon surface, and renders a desktop
   wallet-detail UTXOs table with loading, empty, unsupported, stale, refresh,
   sorting, explorer-link, and Liquid-unblind-blocker states.
+- [x] Ship "your own node, end to end" for Bitcoin Core RPC:
+  descriptor/xpub-native sync imports ranged watch-only descriptors inside the
+  bitcoinrpc adapter (discovery stays read-only), persists per-branch imported
+  range ends plus observed `highest_used`, supports wallet `birthday` dates for
+  bounded rescans, adds desktop local-Core detection and health probes
+  (`ui.backends.detect_core`, `ui.backends.bitcoinrpc.test`), and wires the
+  bilingual Add Connection flow for Core setup.
 - [x] Add the shared privacy-import substrate for future wallet importers:
   typed transaction-level privacy-boundary markers, generic privacy-hop tax
   quarantine, source-funds opaque-boundary warnings, and typed desktop

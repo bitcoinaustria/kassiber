@@ -895,6 +895,10 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     wallets_create.add_argument("--gap-limit", type=int)
+    wallets_create.add_argument(
+        "--birthday",
+        help="Optional wallet birthday date/timestamp used to bound Bitcoin Core descriptor rescans.",
+    )
     wallets_create.add_argument("--policy-asset")
     wallets_create.add_argument("--store-id")
     wallets_create.add_argument("--payment-method-id")
@@ -920,6 +924,10 @@ def build_parser() -> argparse.ArgumentParser:
     wallets_update.add_argument("--chain", choices=["bitcoin", "liquid"])
     wallets_update.add_argument("--network")
     wallets_update.add_argument("--gap-limit", type=int)
+    wallets_update.add_argument(
+        "--birthday",
+        help="Optional wallet birthday date/timestamp used to bound Bitcoin Core descriptor rescans.",
+    )
     wallets_update.add_argument("--policy-asset")
     wallets_update.add_argument("--store-id")
     wallets_update.add_argument("--payment-method-id")
@@ -2430,6 +2438,8 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                         code="validation",
                     )
                 config_updates["gap_limit"] = args.gap_limit
+            if args.birthday is not None:
+                config_updates["birthday"] = args.birthday
             if args.policy_asset:
                 config_updates["policy_asset"] = normalize_asset_code(args.policy_asset)
             has_btcpay_flag = False

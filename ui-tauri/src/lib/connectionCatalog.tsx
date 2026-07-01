@@ -246,7 +246,7 @@ export const CONNECTION_SOURCES: ConnectionSource[] = [
   {
     id: "bitcoin-core",
     title: "Bitcoin Core",
-    description: "Your own full node over JSON-RPC. Address-based sync only; no transaction links.",
+    description: "Your own full node over JSON-RPC for descriptor, xpub, and address sync.",
     category: "nodes",
     image: bitcoinIcon,
     imageClassName: "size-9",
@@ -255,8 +255,8 @@ export const CONNECTION_SOURCES: ConnectionSource[] = [
     formatLabel: "bitcoinrpc",
     setupKind: "backend-settings",
     details: [
-      "Configured in Settings as a Bitcoin Core RPC backend",
-      "Descriptor-backed RPC scanning is not implemented yet",
+      "Detects a local node when the default cookie is available",
+      "Imports watch-only descriptors into a Kassiber Core wallet",
     ],
   },
   {

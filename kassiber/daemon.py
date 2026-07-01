@@ -146,6 +146,7 @@ from .core.ui_snapshot import (
 from .core.transaction_graph import build_transaction_graph_snapshot
 from .core.sync_backends import (
     ElectrumClient,
+    bitcoinrpc_call,
     detect_active_script_types,
 )
 from .backends import (
@@ -175,6 +176,7 @@ from .log_ring import (
     sanitize_exception,
 )
 from .redaction import redact_operational_value, redact_secret_text, redact_secret_value
+from .time_utils import iso_to_unix, timestamp_to_iso
 from .util import str_or_none
 from .daemon_swap_review import (
     SWAP_REVIEW_DEFAULT_LIMIT,
@@ -282,6 +284,8 @@ SUPPORTED_KINDS = (
     "ui.backends.update",
     "ui.backends.delete",
     "ui.backends.set_default",
+    "ui.backends.bitcoinrpc.test",
+    "ui.backends.detect_core",
     "ui.backends.electrum.test",
     "ui.backends.http.test",
     "ui.reports.capital_gains",
@@ -6139,7 +6143,7 @@ def _create_wallet_payload(
     label = _required_str_arg(args, "label", "Connection label")
     kind = _required_str_arg(args, "kind", "Connection type")
     config: dict[str, Any] = {}
-    for key in ("backend", "chain", "network", "policy_asset", "store_id", "payment_method_id"):
+    for key in ("backend", "chain", "network", "policy_asset", "store_id", "payment_method_id", "birthday"):
         value = _optional_str_arg(args, key)
         if value is not None:
             config[key] = value
@@ -7594,6 +7598,217 @@ def _test_http_backend_payload(args: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+_CORE_LOCAL_CANDIDATES = (
+    ("main", "http://127.0.0.1:8332", (".cookie",)),
+    ("test", "http://127.0.0.1:18332", ("testnet3", ".cookie")),
+    ("regtest", "http://127.0.0.1:18443", ("regtest", ".cookie")),
+    ("signet", "http://127.0.0.1:38332", ("signet", ".cookie")),
+)
+
+
+def _inline_bitcoinrpc_backend(args: dict[str, Any]) -> dict[str, Any]:
+    url = _required_str_arg(args, "url", "Bitcoin Core RPC URL")
+    timeout = args.get("timeout")
+    if not isinstance(timeout, int) or timeout <= 0:
+        timeout = 10
+    config = dict(_backend_config_arg(args) or {})
+    for key in (
+        "cookiefile",
+        "cookie_file",
+        "username",
+        "password",
+        "rpcuser",
+        "rpc_user",
+        "rpcpassword",
+        "rpc_password",
+    ):
+        value = _optional_str_arg(args, key)
+        if value is not None:
+            config[key] = value
+    backend = {
+        "name": _optional_str_arg(args, "name") or "candidate",
+        "kind": "bitcoinrpc",
+        "chain": "bitcoin",
+        "network": _optional_str_arg(args, "network") or "",
+        "url": url,
+        "timeout": timeout,
+    }
+    backend.update(config)
+    return backend
+
+
+def _bitcoinrpc_backend_for_probe(
+    ctx: "DaemonContext",
+    args: dict[str, Any],
+) -> dict[str, Any]:
+    backend_ref = _optional_str_arg(args, "backend")
+    if backend_ref is None:
+        return _inline_bitcoinrpc_backend(args)
+    backend = dict(resolve_backend(ctx.runtime_config, backend_ref))
+    if str(backend.get("kind") or "").strip().lower() != "bitcoinrpc":
+        raise AppError(
+            f"Backend '{backend_ref}' is not a Bitcoin Core RPC backend",
+            code="validation",
+            hint="Choose a backend whose kind is bitcoinrpc.",
+            retryable=False,
+        )
+    return backend
+
+
+def _bitcoinrpc_birthday_height(
+    backend: dict[str, Any],
+    birthday_ts: int,
+    tip_height: int,
+) -> int:
+    if birthday_ts <= 0:
+        return 0
+    low = 0
+    high = max(0, int(tip_height))
+    while low < high:
+        mid = (low + high) // 2
+        block_hash = bitcoinrpc_call(backend, "getblockhash", [mid])
+        header = bitcoinrpc_call(backend, "getblockheader", [block_hash])
+        if int(header.get("time") or 0) >= birthday_ts:
+            high = mid
+        else:
+            low = mid + 1
+    return low
+
+
+def _raise_if_pruned_below_birthday(
+    backend: dict[str, Any],
+    blockchain_info: dict[str, Any],
+    birthday_ts: int,
+) -> None:
+    if birthday_ts <= 0 or not blockchain_info.get("pruned"):
+        return
+    pruneheight = blockchain_info.get("pruneheight")
+    if pruneheight in (None, ""):
+        return
+    try:
+        normalized_pruneheight = int(pruneheight)
+        tip_height = int(blockchain_info.get("blocks") or 0)
+    except (TypeError, ValueError):
+        return
+    birthday_height = _bitcoinrpc_birthday_height(backend, birthday_ts, tip_height)
+    if normalized_pruneheight > birthday_height:
+        raise AppError(
+            "Bitcoin Core has pruned blocks below this wallet birthday",
+            code="bitcoinrpc_pruned_below_birthday",
+            hint=(
+                "Use an unpruned node, a node whose prune horizon still covers "
+                "the wallet birthday, or choose a newer wallet birthday."
+            ),
+            details={
+                "birthday": timestamp_to_iso(birthday_ts),
+                "birthday_height": birthday_height,
+                "pruneheight": normalized_pruneheight,
+            },
+            retryable=False,
+        )
+
+
+def _bitcoinrpc_probe_payload(
+    backend: dict[str, Any],
+    *,
+    birthday_ts: int = 0,
+) -> dict[str, Any]:
+    blockchain_info = bitcoinrpc_call(backend, "getblockchaininfo")
+    if not isinstance(blockchain_info, dict):
+        raise AppError(
+            "Bitcoin Core getblockchaininfo returned an unexpected payload",
+            code="bitcoinrpc_unexpected_response",
+            retryable=True,
+        )
+    network_info = bitcoinrpc_call(backend, "getnetworkinfo")
+    if not isinstance(network_info, dict):
+        raise AppError(
+            "Bitcoin Core getnetworkinfo returned an unexpected payload",
+            code="bitcoinrpc_unexpected_response",
+            retryable=True,
+        )
+    _raise_if_pruned_below_birthday(backend, blockchain_info, birthday_ts)
+    core_chain = str(blockchain_info.get("chain") or "").strip()
+    return {
+        "reachable": True,
+        "chain": core_chain,
+        "network": core_chain,
+        "blocks": blockchain_info.get("blocks"),
+        "headers": blockchain_info.get("headers"),
+        "pruned": bool(blockchain_info.get("pruned")),
+        "pruneheight": blockchain_info.get("pruneheight"),
+        "version": network_info.get("version"),
+        "ibd": bool(blockchain_info.get("initialblockdownload")),
+    }
+
+
+def _test_bitcoinrpc_backend_payload(
+    ctx: "DaemonContext",
+    args: dict[str, Any],
+) -> dict[str, Any]:
+    backend = _bitcoinrpc_backend_for_probe(ctx, args)
+    birthday_ts = iso_to_unix(_optional_str_arg(args, "birthday"))
+    try:
+        return _bitcoinrpc_probe_payload(backend, birthday_ts=birthday_ts)
+    except AppError as exc:
+        if exc.code == "bitcoinrpc_pruned_below_birthday":
+            raise
+        return {
+            "reachable": False,
+            "chain": None,
+            "network": None,
+            "blocks": None,
+            "headers": None,
+            "pruned": None,
+            "pruneheight": None,
+            "version": None,
+            "ibd": None,
+            "error": {
+                "code": exc.code,
+                "message": str(exc),
+                "hint": exc.hint,
+                "retryable": exc.retryable,
+            },
+        }
+
+
+def _detect_core_payload(args: dict[str, Any] | None = None) -> dict[str, Any]:
+    del args
+    bitcoin_dir = Path.home() / ".bitcoin"
+    candidates: list[dict[str, Any]] = []
+    for expected_network, url, cookie_parts in _CORE_LOCAL_CANDIDATES:
+        cookiefile = bitcoin_dir.joinpath(*cookie_parts)
+        if not cookiefile.exists():
+            continue
+        backend = {
+            "name": f"local-core-{expected_network}",
+            "kind": "bitcoinrpc",
+            "chain": "bitcoin",
+            "network": expected_network,
+            "url": url,
+            "cookiefile": str(cookiefile),
+            "timeout": 2,
+        }
+        try:
+            probe = _bitcoinrpc_probe_payload(backend)
+        except Exception:
+            continue
+        candidates.append(
+            {
+                "url": url,
+                "chain": probe.get("chain"),
+                "network": probe.get("network") or expected_network,
+                "auth_source": "cookiefile",
+                "cookiefile": str(cookiefile),
+                "blocks": probe.get("blocks"),
+                "headers": probe.get("headers"),
+                "pruned": probe.get("pruned"),
+                "ibd": probe.get("ibd"),
+            }
+        )
+    return {"candidates": candidates}
+
+
 def _preview_descriptor_payload(args: dict[str, Any]) -> dict[str, Any]:
     descriptor_text = _optional_str_arg(args, "descriptor")
     change_descriptor_text = _optional_str_arg(args, "change_descriptor")
@@ -7784,6 +7999,7 @@ _UI_WALLET_UPDATE_CONFIG_FIELDS = (
     "policy_asset",
     "descriptor",
     "change_descriptor",
+    "birthday",
     "store_id",
     "payment_method_id",
     "source_format",
@@ -8717,6 +8933,35 @@ def handle_request(
                     "ui.backends.set_default",
                     _set_default_backend_payload(
                         ctx,
+                        _coerce_args_dict(request_id, request.get("args")),
+                    ),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
+    if kind == "ui.backends.bitcoinrpc.test":
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.backends.bitcoinrpc.test",
+                    _test_bitcoinrpc_backend_payload(
+                        ctx,
+                        _coerce_args_dict(request_id, request.get("args")),
+                    ),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
+    if kind == "ui.backends.detect_core":
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.backends.detect_core",
+                    _detect_core_payload(
                         _coerce_args_dict(request_id, request.get("args")),
                     ),
                 ),

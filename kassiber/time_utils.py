@@ -59,6 +59,18 @@ def parse_timestamp(value):
     return dt.replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
+def iso_to_unix(value):
+    """Convert an optional ISO/RFC3339 timestamp to Unix seconds.
+
+    Empty values mean "from genesis" for Core rescans and return ``0``.
+    """
+    if value in (None, ""):
+        return 0
+    parsed = parse_timestamp(value)
+    raw = parsed[:-1] + "+00:00" if parsed.endswith("Z") else parsed
+    return int(datetime.fromisoformat(raw).timestamp())
+
+
 def timestamp_to_iso(value, default=UNKNOWN_OCCURRED_AT):
     """Convert a unix-epoch integer (or integer-like) to RFC3339 UTC.
 

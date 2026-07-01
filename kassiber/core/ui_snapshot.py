@@ -3575,13 +3575,6 @@ def _wallet_utxo_support(
             "message": f"UTXO inventory is not implemented for {backend_kind or 'this backend'} sources yet.",
         }
     chain = str(config.get("chain") or "bitcoin").strip().lower() or "bitcoin"
-    if has_descriptor and backend_kind == "bitcoinrpc":
-        return {
-            "supported": False,
-            "status": "unsupported_source",
-            "reason": "bitcoinrpc_descriptor",
-            "message": "Bitcoin Core UTXO inventory is available for address-backed wallets only.",
-        }
     if chain == "liquid":
         if not has_descriptor:
             return {

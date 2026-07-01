@@ -241,6 +241,12 @@ require `DELETE LOCAL DATA`.
 `ui.backends.options` returns safe backend setup choices for desktop forms. It
 lists configured backend names, kinds, chain/network metadata, presence flags,
 and default state, but does not expose exact endpoint URLs or tokens.
+`ui.backends.detect_core` probes common local Bitcoin Core RPC endpoints with
+default cookie-file locations and returns candidate URL/network/auth-source
+metadata without cookie contents. `ui.backends.bitcoinrpc.test` probes a saved
+or inline Core RPC backend with `getblockchaininfo` / `getnetworkinfo`; both are
+desktop mutating kinds because they touch local RPC/cookie state and are not AI
+tools.
 
 `ui.wallets.create` is the desktop connection setup path for local/imported
 wallet sources. It accepts `label`, `kind`, and the same wallet config fields

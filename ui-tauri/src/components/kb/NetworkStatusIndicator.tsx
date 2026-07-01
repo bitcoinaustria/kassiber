@@ -75,6 +75,19 @@ type BackendProbeEnvelope = {
   status?: number;
 };
 
+type BitcoinRpcProbeEnvelope = {
+  reachable: boolean;
+  chain?: string | null;
+  network?: string | null;
+  blocks?: number | null;
+  headers?: number | null;
+  pruned?: boolean | null;
+  ibd?: boolean | null;
+  error?: {
+    message?: string;
+  };
+};
+
 function connectionRowsFromBackends(
   savedBackends: Backend[],
 ): ConnectionHealthRow[] {
@@ -254,6 +267,9 @@ export function NetworkStatusIndicator({
   const testHttp = useDaemonMutation<BackendProbeEnvelope>(
     "ui.backends.http.test",
   );
+  const testBitcoinRpc = useDaemonMutation<BitcoinRpcProbeEnvelope>(
+    "ui.backends.bitcoinrpc.test",
+  );
   const savedBackends = React.useMemo(
     () =>
       (backendSettingsQuery.data?.data?.backends ?? []).map(
@@ -338,19 +354,34 @@ export function NetworkStatusIndicator({
                     proxy: row.proxy,
                     timeout: 5,
                   })
+                : row.probeKind === "bitcoinrpc"
+                  ? await testBitcoinRpc.mutateAsync({
+                      backend: row.backendId,
+                      url: row.backendId ? undefined : row.rawUrl,
+                      timeout: 5,
+                    })
                 : await testHttp.mutateAsync({
                     url: row.rawUrl,
                     timeout: 5,
                   });
             const payload = envelope.data;
+            const ok =
+              row.probeKind === "bitcoinrpc"
+                ? Boolean((payload as BitcoinRpcProbeEnvelope | undefined)?.reachable)
+                : Boolean((payload as BackendProbeEnvelope | undefined)?.ok);
+            const coreError =
+              row.probeKind === "bitcoinrpc"
+                ? (payload as BitcoinRpcProbeEnvelope | undefined)?.error?.message
+                : undefined;
             return [
               row.id,
               {
                 fingerprint: row.fingerprint,
-                status: payload?.ok ? "healthy" : "unhealthy",
+                status: ok ? "healthy" : "unhealthy",
                 message:
-                  payload?.logs?.at(-1) ??
-                  (payload?.ok
+                  (payload as BackendProbeEnvelope | undefined)?.logs?.at(-1) ??
+                  coreError ??
+                  (ok
                     ? t("network.checkPassed")
                     : t("network.checkFailed")),
                 checkedAt: now,
@@ -381,7 +412,14 @@ export function NetworkStatusIndicator({
       return next;
     });
     setChecking(false);
-  }, [canCheckConnections, checkableRows, t, testElectrum, testHttp]);
+  }, [
+    canCheckConnections,
+    checkableRows,
+    t,
+    testBitcoinRpc,
+    testElectrum,
+    testHttp,
+  ]);
 
   React.useEffect(() => {
     if (!shouldRunImmediateCheck) return;

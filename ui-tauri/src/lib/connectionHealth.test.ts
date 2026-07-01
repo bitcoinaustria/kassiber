@@ -85,7 +85,7 @@ describe("connection health model", () => {
         kind: "bitcoinrpc",
         net: "BTC",
       }),
-    ).toBe("unsupported");
+    ).toBe("bitcoinrpc");
     expect(
       connectionProbeKind({
         id: "lnd",

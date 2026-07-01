@@ -3545,6 +3545,53 @@ export const mockDaemon: DaemonTransport = {
       };
     }
 
+    if (req.kind === "ui.backends.bitcoinrpc.test") {
+      const args = (req.args ?? {}) as { url?: unknown; backend?: unknown };
+      const url =
+        typeof args.url === "string"
+          ? args.url.trim()
+          : typeof args.backend === "string"
+            ? `saved:${args.backend}`
+            : "";
+      if (!url) {
+        return {
+          kind: "error",
+          schema_version: 1,
+          request_id: req.request_id,
+          error: {
+            code: "validation",
+            message: "Bitcoin Core test requires url or backend",
+            retryable: false,
+          },
+        };
+      }
+      return {
+        kind: "ui.backends.bitcoinrpc.test",
+        schema_version: 1,
+        request_id: req.request_id,
+        data: {
+          reachable: true,
+          chain: "main",
+          network: "main",
+          blocks: 850000,
+          headers: 850000,
+          pruned: false,
+          pruneheight: null,
+          version: 270000,
+          ibd: false,
+        } as T,
+      };
+    }
+
+    if (req.kind === "ui.backends.detect_core") {
+      return {
+        kind: "ui.backends.detect_core",
+        schema_version: 1,
+        request_id: req.request_id,
+        data: { candidates: [] } as T,
+      };
+    }
+
     if (req.kind === "ui.backends.options") {
       return {
         kind: "ui.backends.options",
