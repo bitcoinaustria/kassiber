@@ -576,6 +576,55 @@ export function TransactionDetailSheet({
   const normalizedQuarantineReason = quarantineReason
     ? quarantineReason.replace(/_/g, " ")
     : null;
+  const reviewBanner = showReviewBanner
+    ? (() => {
+        if (hasJournalQuarantine) {
+          return {
+            title: isBasisQuarantine
+              ? t("tax.basisBlockerTitle")
+              : t("sheet.banner.journalQuarantine"),
+            reason: isBasisQuarantine
+              ? t("tax.basisBlockerBody", {
+                  asset: transaction.asset ?? "asset",
+                })
+              : t("sheet.banner.journalBlocker", {
+                  reason: normalizedQuarantineReason,
+                }),
+            primaryActionLabel: isSyncQuarantine
+              ? t("sheet.banner.viewDetails")
+              : isBasisQuarantine
+                ? t("sheet.banner.viewBasisContext")
+                : isTransferQuarantine
+                  ? t("sheet.banner.viewLinked")
+                  : t("sheet.banner.viewPricing"),
+          };
+        }
+        if (transaction.amount === null) {
+          return {
+            title: t("sheet.banner.missingFiatPrice"),
+            reason: t("sheet.banner.noFiatRecorded", {
+              date: transaction.date,
+            }),
+            hint: t("sheet.banner.readinessHint"),
+            primaryActionLabel: t("sheet.banner.openPricing"),
+          };
+        }
+        if (localDraft.pricingSourceKind === null) {
+          return {
+            title: t("sheet.banner.noPricingSource"),
+            reason: t("sheet.banner.noPersistedSource"),
+            hint: t("sheet.banner.readinessHint"),
+            primaryActionLabel: t("sheet.banner.openPricing"),
+          };
+        }
+        return {
+          title: t("sheet.banner.pricingFlagged"),
+          reason: t("sheet.banner.missingOrUnderReview"),
+          hint: t("sheet.banner.readinessHint"),
+          primaryActionLabel: t("sheet.banner.openPricing"),
+        };
+      })()
+    : null;
 
   const taxNarrative = (() => {
     const action =
@@ -713,52 +762,12 @@ export function TransactionDetailSheet({
           <div className="min-h-0 flex-1 overflow-y-auto">
             <div className="grid gap-4 p-4 sm:p-6 xl:grid-cols-[minmax(0,1fr)_320px]">
               <div className="min-w-0 space-y-4">
-                {showReviewBanner ? (
+                {reviewBanner ? (
                   <QuarantineBanner
-                    title={
-                      hasJournalQuarantine
-                        ? isBasisQuarantine
-                          ? t("tax.basisBlockerTitle")
-                          : t("sheet.banner.journalQuarantine")
-                        : transaction.amount === null
-                        ? t("sheet.banner.missingFiatPrice")
-                        : localDraft.pricingSourceKind === null
-                          ? t("sheet.banner.noPricingSource")
-                          : t("sheet.banner.pricingFlagged")
-                    }
-                    reason={
-                      hasJournalQuarantine
-                        ? isBasisQuarantine
-                          ? t("tax.basisBlockerBody", {
-                              asset: transaction.asset ?? "asset",
-                            })
-                          : t("sheet.banner.journalBlocker", {
-                              reason: normalizedQuarantineReason,
-                            })
-                        : transaction.amount === null
-                          ? t("sheet.banner.noFiatRecorded", {
-                              date: transaction.date,
-                            })
-                          : localDraft.pricingSourceKind === null
-                            ? t("sheet.banner.noPersistedSource")
-                            : t("sheet.banner.missingOrUnderReview")
-                    }
-                    hint={
-                      hasJournalQuarantine
-                        ? undefined
-                        : t("sheet.banner.readinessHint")
-                    }
-                    primaryActionLabel={
-                      hasJournalQuarantine
-                        ? isSyncQuarantine
-                          ? t("sheet.banner.viewDetails")
-                          : isBasisQuarantine
-                            ? t("sheet.banner.viewBasisContext")
-                            : isTransferQuarantine
-                              ? t("sheet.banner.viewLinked")
-                              : t("sheet.banner.viewPricing")
-                        : t("sheet.banner.openPricing")
-                    }
+                    title={reviewBanner.title}
+                    reason={reviewBanner.reason}
+                    hint={reviewBanner.hint}
+                    primaryActionLabel={reviewBanner.primaryActionLabel}
                     onPrimaryAction={
                       hasJournalQuarantine && activeTab === quarantineTargetTab
                         ? undefined
