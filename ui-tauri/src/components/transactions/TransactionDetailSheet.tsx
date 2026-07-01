@@ -79,6 +79,7 @@ import {
   TransactionLinkedTab,
   TransactionPricingTab,
   TransactionTaxTab,
+  transactionGraphLookupArgs,
   type TransactionGraphPayload,
   type TransactionDetailTabContext,
 } from "./TransactionDetailSheetTabs";
@@ -196,7 +197,7 @@ export function TransactionDetailSheet({
   const manualPriceRef = React.useRef<HTMLInputElement | null>(null);
   const graphQuery = useDaemon<TransactionGraphPayload>(
     "ui.transactions.graph",
-    { transaction: transaction?.id ?? "" },
+    transactionGraphLookupArgs(transaction?.id),
     { enabled: Boolean(transaction) },
   );
   React.useEffect(() => {

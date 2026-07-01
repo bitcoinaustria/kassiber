@@ -6,7 +6,10 @@ import {
   marketRateBackends,
   type Backend,
 } from "./SettingsModel";
-import { backendTypeIdForSettingsBackend } from "./SyncBackendSettingsModel";
+import {
+  backendTypeIdForConnectionSetup,
+  backendTypeIdForSettingsBackend,
+} from "./SyncBackendSettingsModel";
 
 describe("backend settings model", () => {
   it("keeps the stable backend id separate from the editable display name", () => {
@@ -96,6 +99,23 @@ describe("backend settings model", () => {
     });
 
     expect(backendTypeIdForSettingsBackend(backend)).toBe("liquid");
+  });
+
+  it("opens graph backend diagnostics in the matching network setup path", () => {
+    expect(
+      backendTypeIdForConnectionSetup({
+        sourceId: "liquid",
+        reason: "Transaction graph needs a Liquid backend",
+        backendKind: "liquid",
+      }),
+    ).toBe("liquid");
+    expect(
+      backendTypeIdForConnectionSetup({
+        sourceId: "bitcoin",
+        reason: "Transaction graph needs a Bitcoin backend",
+        backendKind: "bitcoin",
+      }),
+    ).toBe("bitcoin");
   });
 
   it("lets the built-in liquid backend recover from an accidental bitcoin chain", () => {

@@ -89,8 +89,14 @@ Transaction detail includes a Transaction flow panel on the Details tab. The
 panel uses `ui.transactions.graph` to draw a local, read-only flow view: valued
 Bitcoin vin/vout become proportional input/output strands with a distinct fee
 leg, reference-only or confidential records can show amountless public
-references, and unsupported imports get an explicit empty state instead of a
-guessed graph. The view is explanatory, not a source of new accounting truth;
+references, and imports without local graph data ask the daemon to fetch public
+references through the configured matching backend before falling back to an
+explicit empty state. Confidential Liquid legs use generic-width strands when
+amounts are hidden. Lookup diagnostics distinguish missing backends from
+failing or incomplete backend responses; the panel can open the matching
+Bitcoin or Liquid Settings section and preselect the add-backend modal, where
+users can choose a preset endpoint or enter their own. The view is explanatory,
+not a source of new accounting truth;
 ownership tags such as owned wallet, external recipient, change, transfer,
 swap, Coinjoin, blocker, or quarantine come from the same transaction graph and
 manual-pair semantics used by the journal pipeline. Hidden-sensitive mode keeps
