@@ -1011,12 +1011,14 @@ class KrakenCsvRatesTest(unittest.TestCase):
         def fake_getresponse(_connection):
             return responses.pop(0)
 
+        from kassiber import proxy as proxy_helpers
+
         with patch.object(
-            core_rates.http.client.HTTPConnection,
+            proxy_helpers.http.client.HTTPConnection,
             "request",
             fake_request,
         ), patch.object(
-            core_rates.http.client.HTTPConnection,
+            proxy_helpers.http.client.HTTPConnection,
             "getresponse",
             fake_getresponse,
         ):

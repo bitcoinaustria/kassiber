@@ -8,6 +8,7 @@ any fetch happens.
 
 import types
 import unittest
+from unittest.mock import patch
 
 from kassiber.core import sync_backends
 from kassiber.errors import AppError
@@ -85,6 +86,25 @@ class FetchTransactionLegsGuardTests(unittest.TestCase):
         backend = {"name": "mempool", "kind": "esplora", "url": "https://x"}
         with sync_backends.verify_session(backend) as fetcher:
             self.assertTrue(callable(fetcher))
+
+    def test_esplora_fetch_uses_backend_proxy(self):
+        backend = {
+            "name": "mempool",
+            "kind": "esplora",
+            "url": "https://x",
+            "tor_proxy": "socks5h://127.0.0.1:9050",
+        }
+        with patch(
+            "kassiber.core.sync_backends.fetch_esplora_transaction",
+            return_value={"vin": [], "vout": []},
+        ) as fetch:
+            sync_backends.fetch_transaction_legs(backend, "ab" * 32, chain="bitcoin")
+        fetch.assert_called_once_with(
+            "https://x",
+            "ab" * 32,
+            timeout=30,
+            proxy_url="socks5h://127.0.0.1:9050",
+        )
 
 
 if __name__ == "__main__":

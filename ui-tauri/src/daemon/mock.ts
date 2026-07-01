@@ -531,6 +531,17 @@ let mockBackendSettingsRows: MockBackendSettingsRow[] = [
     has_url: true,
     display_name: "Blockstream Liquid Electrum",
   },
+  {
+    name: "fulcrum-onion-long",
+    kind: "electrum",
+    chain: "bitcoin",
+    network: "main",
+    url: "tcp://abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcd.onion:50001",
+    source: "mock",
+    has_url: true,
+    display_name: "Very Long Onion Fulcrum",
+    tor_proxy: "127.0.0.1:9050",
+  },
 ];
 
 const mockBackendSettingsPayload = () => ({
@@ -3512,8 +3523,9 @@ export const mockDaemon: DaemonTransport = {
     }
 
     if (req.kind === "ui.backends.http.test") {
-      const args = (req.args ?? {}) as { url?: unknown };
+      const args = (req.args ?? {}) as { url?: unknown; proxy?: unknown };
       const url = typeof args.url === "string" ? args.url.trim() : "";
+      const proxy = typeof args.proxy === "string" ? args.proxy.trim() : "";
       if (!url) {
         return {
           kind: "error",
@@ -3537,6 +3549,7 @@ export const mockDaemon: DaemonTransport = {
           logs: [
             `Preview mode: simulated HTTP test for ${url}`,
             "No network request was made.",
+            proxy ? `Proxy: ${proxy}.` : "Proxy: disabled.",
             "Simulated response: HTTP 200 OK",
             "Simulated content-type: application/json",
             "Simulated body: 256 bytes sampled",

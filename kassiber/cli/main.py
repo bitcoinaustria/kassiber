@@ -695,7 +695,13 @@ def build_parser() -> argparse.ArgumentParser:
     add_secret_stdin_options(backends_create, "token")
     backends_create.add_argument("--batch-size", type=int)
     backends_create.add_argument("--timeout", type=int)
-    backends_create.add_argument("--tor-proxy")
+    backends_create.add_argument(
+        "--tor-proxy",
+        help=(
+            "Proxy for this backend only; accepts HOST:PORT, "
+            "socks5h://HOST:PORT, socks5h://USER:PASS@HOST:PORT, or http(s)://."
+        ),
+    )
     backends_create.add_argument("--insecure")
     backends_create.add_argument(
         "--certificate",
@@ -738,7 +744,13 @@ def build_parser() -> argparse.ArgumentParser:
     add_secret_stdin_options(backends_update, "token")
     backends_update.add_argument("--batch-size", type=int)
     backends_update.add_argument("--timeout", type=int)
-    backends_update.add_argument("--tor-proxy")
+    backends_update.add_argument(
+        "--tor-proxy",
+        help=(
+            "Proxy for this backend only; accepts HOST:PORT, "
+            "socks5h://HOST:PORT, socks5h://USER:PASS@HOST:PORT, or http(s)://."
+        ),
+    )
     backends_update.add_argument("--insecure")
     backends_update.add_argument(
         "--certificate",

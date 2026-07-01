@@ -334,7 +334,7 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
           ? form.backendCertificate.trim()
           : undefined,
       backendProxy:
-        form.backendKind === "electrum" && backendProxy
+        form.backendSetupMode === "custom" && backendProxy
           ? {
               host: form.backendProxyHost.trim(),
               port: form.backendProxyPort.trim(),

@@ -21,10 +21,8 @@ from kassiber.core.sync import (
 )
 from kassiber.core.sync_backends import (
     ElectrumClient,
-    _connect_via_socks5,
+    _connect_backend_socket,
     _emit_backend_progress,
-    _read_exact,
-    _socks5_address,
     bitcoinrpc_sync_adapter,
     discover_descriptor_targets,
     electrum_sync_adapter,
@@ -36,6 +34,7 @@ from kassiber.core.sync_backends import (
     scriptpubkey_scripthash,
 )
 from kassiber.errors import AppError
+from kassiber.proxy import _connect_via_socks5, _read_exact, _socks5_address
 from kassiber.time_utils import timestamp_to_iso
 from kassiber.wallet_descriptors import DescriptorBranch, DescriptorPlan, DerivedTarget
 
@@ -384,8 +383,16 @@ class SyncBackendsTest(unittest.TestCase):
         }
         fetch_calls = []
 
-        def fake_fetch(base_url, script_pubkey_hex, max_pages=None, timeout=30):
-            fetch_calls.append((base_url, script_pubkey_hex, max_pages, timeout))
+        def fake_fetch(
+            base_url,
+            script_pubkey_hex,
+            max_pages=None,
+            timeout=30,
+            proxy_url=None,
+        ):
+            fetch_calls.append(
+                (base_url, script_pubkey_hex, max_pages, timeout, proxy_url)
+            )
             return [tx]
 
         with patch(
@@ -557,6 +564,7 @@ class SyncBackendsTest(unittest.TestCase):
             "https://esplora.example",
             target["script_pubkey"],
             timeout=30,
+            proxy_url=None,
         )
 
     def test_electrum_sync_adapter_returns_record_shape(self):
@@ -1193,10 +1201,7 @@ class Socks5HelpersTest(unittest.TestCase):
                 b"\x05\x00\x00\x01\x00\x00\x00\x00\x00\x00",
             ],
         )
-        with patch(
-            "kassiber.core.sync_backends.socket.create_connection",
-            return_value=fake,
-        ):
+        with patch("kassiber.proxy.socket.create_connection", return_value=fake):
             sock = _connect_via_socks5(
                 "socks5://127.0.0.1:9050",
                 "node.example",
@@ -1215,13 +1220,31 @@ class Socks5HelpersTest(unittest.TestCase):
         )
         self.assertIn(expected_request, sent)
 
-    def test_connect_via_socks5_rejects_authenticated_proxy(self):
+    def test_connect_via_socks5_authenticates_with_userpass(self):
+        fake = _FakeSocket(
+            [
+                b"\x05\x02",  # proxy selects username/password
+                b"\x01\x00",  # RFC 1929 auth success
+                b"\x05\x00\x00\x01\x00\x00\x00\x00\x00\x00",
+            ],
+        )
+        with patch("kassiber.proxy.socket.create_connection", return_value=fake):
+            sock = _connect_via_socks5(
+                "socks5h://alice:p%40ss@127.0.0.1:9050",
+                "node.example",
+                50002,
+                timeout=5,
+            )
+        self.assertIs(sock, fake)
+        self.assertFalse(fake.closed)
+        sent = bytes(fake.sent)
+        self.assertTrue(sent.startswith(b"\x05\x02\x00\x02"))
+        self.assertIn(b"\x01\x05alice\x04p@ss", sent)
+
+    def test_connect_via_socks5_rejects_auth_required_without_credentials(self):
         fake = _FakeSocket([b"\x05\x02"])  # proxy requires user/pass
-        with patch(
-            "kassiber.core.sync_backends.socket.create_connection",
-            return_value=fake,
-        ):
-            with self.assertRaisesRegex(AppError, "0x02"):
+        with patch("kassiber.proxy.socket.create_connection", return_value=fake):
+            with self.assertRaisesRegex(AppError, "username/password"):
                 _connect_via_socks5(
                     "socks5://127.0.0.1:9050",
                     "node.example",
@@ -1234,10 +1257,7 @@ class Socks5HelpersTest(unittest.TestCase):
         # A SOCKS4 / HTTP proxy will not start its reply with 0x05; the helper
         # should call that out instead of reporting an auth-method mismatch.
         fake = _FakeSocket([b"\x04\x5a"])
-        with patch(
-            "kassiber.core.sync_backends.socket.create_connection",
-            return_value=fake,
-        ):
+        with patch("kassiber.proxy.socket.create_connection", return_value=fake):
             with self.assertRaisesRegex(AppError, "unexpected greeting"):
                 _connect_via_socks5(
                     "socks5://127.0.0.1:9050",
@@ -1254,10 +1274,7 @@ class Socks5HelpersTest(unittest.TestCase):
                 b"\x05\x05\x00\x01\x00\x00\x00\x00\x00\x00",  # status=5 (connection refused)
             ],
         )
-        with patch(
-            "kassiber.core.sync_backends.socket.create_connection",
-            return_value=fake,
-        ):
+        with patch("kassiber.proxy.socket.create_connection", return_value=fake):
             with self.assertRaises(AppError):
                 _connect_via_socks5(
                     "socks5://127.0.0.1:9050",
@@ -1266,6 +1283,16 @@ class Socks5HelpersTest(unittest.TestCase):
                     timeout=5,
                 )
         self.assertTrue(fake.closed)
+
+    def test_connect_backend_socket_rejects_onion_without_proxy(self):
+        with patch("kassiber.core.sync_backends.socket.create_connection") as direct:
+            with self.assertRaisesRegex(AppError, "Tor/SOCKS proxy"):
+                _connect_backend_socket(
+                    {"timeout": 5},
+                    "abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcd.onion",
+                    50001,
+                )
+        direct.assert_not_called()
 
 
 class _FakeHttpResponse:
@@ -1320,6 +1347,19 @@ class HttpRetryAndLimiterTest(unittest.TestCase):
         self.assertEqual(result, {"ok": True})
         # Retry-After header is honored verbatim for the backoff delays.
         self.assertEqual(sleeps, [2.0, 1.0])
+
+    def test_http_get_json_passes_proxy_to_shared_opener(self):
+        with patch(
+            "kassiber.core.sync_backends.urlopen_with_proxy",
+            return_value=_FakeHttpResponse('{"ok": true}'),
+        ) as opener:
+            result = sb.http_get_json(
+                "https://esplora.example/x",
+                proxy_url="127.0.0.1:9050",
+            )
+        self.assertEqual(result, {"ok": True})
+        self.assertEqual(opener.call_args.kwargs["proxy_url"], "127.0.0.1:9050")
+        self.assertEqual(opener.call_args.kwargs["source_label"], "backend")
 
     def test_http_get_text_retries_on_503_then_succeeds(self):
         sleeps = []
@@ -1474,7 +1514,8 @@ class EsploraUtxoParallelTest(unittest.TestCase):
             history_cache={},
         )
 
-        def fake_utxos(base_url, script_pubkey_hex, timeout=30):
+        def fake_utxos(base_url, script_pubkey_hex, timeout=30, proxy_url=None):
+            del base_url, timeout, proxy_url
             # Encode the target's position in the UTXO value so the output order
             # is verifiable independent of which worker finishes first.
             index = next(i for i, t in enumerate(targets) if t["script_pubkey"] == script_pubkey_hex)

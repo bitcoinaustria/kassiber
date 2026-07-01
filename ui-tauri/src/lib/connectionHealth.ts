@@ -69,6 +69,17 @@ export function endpointWithPort(raw: string): string {
   }
 }
 
+export function abbreviateEndpointMiddle(endpoint: string, maxLength = 44): string {
+  const value = endpoint.trim();
+  if (value.length <= maxLength) return value;
+  if (maxLength < 9) return value.slice(0, maxLength);
+  const separator = "…";
+  const visible = maxLength - separator.length;
+  const prefixLength = Math.ceil(visible * 0.58);
+  const suffixLength = Math.floor(visible * 0.42);
+  return `${value.slice(0, prefixLength)}${separator}${value.slice(-suffixLength)}`;
+}
+
 export function connectionProbeKind(connection: ConnectionHealthInput): ConnectionProbeKind {
   const kind = (connection.kind ?? "").toLowerCase();
   const url = connection.url.trim().toLowerCase();

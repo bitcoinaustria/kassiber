@@ -39,8 +39,9 @@ Mitigations, in order of effect:
    stays on-box).
 2. Run your own Esplora / Electrs / Fulcrum and use it as an `esplora`
    or `electrum` backend.
-3. Torify the process (`torsocks python3 -m kassiber ...`) or route
-   through a VPN. Kassiber has no built-in SOCKS support yet.
+3. Deliberately set `--tor-proxy` / `tor_proxy` on each supported backend you
+   want routed, including `.onion` Esplora/Electrum/Fulcrum backends, or torify
+   the whole process (`torsocks python3 -m kassiber ...`) / route through a VPN.
 4. Prefer `address`-kind wallets over `descriptor`-kind wallets when
    you only care about a fixed set of addresses.
 5. Skip `rates sync` and use `rates set` for manual rate upserts.
@@ -59,7 +60,7 @@ configurable.
 | `wallets sync` against a user-configured Esplora backend | your configured URL | Esplora over HTTP(S) | same categories as `mempool` above |
 | `wallets sync` against a user-configured Electrum backend | your configured `ssl://` or `tcp://` URL | Electrum JSON-RPC over raw TCP/TLS | IP, queried scripthashes, query timing |
 | `wallets sync` against a `bitcoinrpc` backend | your configured URL | HTTP(S) POST with Basic auth | nothing leaves your machine if the node is local |
-| `rates sync` (only) | `https://api.coingecko.com/api/v3/coins/bitcoin/market_chart` | unauthenticated HTTPS GET | IP, User-Agent, which fiat pair and window |
+| `rates sync` (only) | configured provider (`mempool` backend, Coinbase Exchange, or CoinGecko) | unauthenticated HTTP(S) GET | IP, User-Agent, which fiat pair and window |
 | `ai models`, `chat`, `ai.test_connection` against a configured remote/TEE provider | your configured provider URL or CLI provider | OpenAI-compatible HTTP(S) or the configured local CLI's own transport | prompt/tool context, model request metadata, IP/provider account context according to that provider |
 | consented mutating AI tools inside `chat` or the desktop Assistant (`ui.wallets.sync`, `ui.rates.rebuild`, `ui.maintenance.run`) | the backends/rate sources of the rows above | as in those rows | as in those rows — tool consent is also network consent for that row |
 
@@ -67,6 +68,19 @@ Nothing else makes network calls. `rates set`, `rates latest`,
 `rates range`, `rates pairs`, journal processing, metadata CRUD, and all
 reports are fully offline unless the user explicitly invokes an AI provider
 that itself contacts a remote service.
+
+Backend `tor_proxy` values are a deliberate per-backend routing choice. They
+are honored by Electrum sockets, Esplora / Explorer-API HTTP reads (Bitcoin and
+Liquid), BTCPay Greenfield HTTP sync, Bitcoin Core RPC HTTP calls, and
+mempool-rate fetches that use a configured mempool backend. Partial routing is
+supported: configuring a proxy on one backend does not route any other backend,
+AI provider, or standalone rate provider. Proxy values may be `HOST:PORT`,
+`socks5://...`, `socks5h://...`, `socks5h://USER:PASS@HOST:PORT`, or
+`http(s)://...`; encode special characters in usernames/passwords. Standalone
+Coinbase/CoinGecko providers do not yet have a per-provider proxy setting. The
+desktop setup forms detect `.onion` backend hosts and prefill the standard local
+Tor SOCKS proxy (`127.0.0.1:9050`) for that backend only; Kassiber does not
+start or bundle Tor, so the user still needs an existing Tor service.
 
 ## Local storage
 
@@ -213,10 +227,11 @@ fails.
   wallets in one session ties them to the same IP + timing +
   `User-Agent` at the backend. Per-wallet sync calls are not per-wallet
   privacy.
-- **`tor_proxy` is scaffolded but not wired.** `backends create
-  --tor-proxy` accepts a value and stores it, but HTTP and Electrum
-  traffic currently ignores it. For now, torify the whole process
-  externally.
+- **Proxy scope is per backend.** `backends create --tor-proxy` protects
+  supported backend-backed transports, but it is not a bundled Tor daemon and
+  it is not a global proxy for every future network integration. Use an
+  existing Tor/SOCKS service you control, or torify the whole process for
+  surfaces without a per-provider proxy setting.
 - **No SPV / header verification.** Backends are trusted for transaction
   history, confirmations, and fees. A malicious backend can fabricate or
   hide transactions.

@@ -168,6 +168,7 @@ from .db import (
 )
 from .envelope import build_envelope, build_error_envelope, json_ready
 from .errors import AppError
+from .proxy import onion_proxy_failure_hints, urlopen_with_proxy
 from .log_ring import (
     current_request_id,
     get_log_ring,
@@ -7535,6 +7536,7 @@ def _test_electrum_backend_payload(args: dict[str, Any]) -> dict[str, Any]:
                     logs.append(f"Server banner: {banner}")
     except Exception as exc:
         logs.append(f"Connection failed: {exc}")
+        logs.extend(onion_proxy_failure_hints(url, proxy, exc))
         return {
             "ok": False,
             "url": url,
@@ -7551,6 +7553,7 @@ def _test_electrum_backend_payload(args: dict[str, Any]) -> dict[str, Any]:
 
 def _test_http_backend_payload(args: dict[str, Any]) -> dict[str, Any]:
     url = _required_str_arg(args, "url", "HTTP backend URL")
+    proxy = _optional_str_arg(args, "proxy")
     timeout = args.get("timeout")
     if not isinstance(timeout, int) or timeout <= 0:
         timeout = 10
@@ -7564,6 +7567,10 @@ def _test_http_backend_payload(args: dict[str, Any]) -> dict[str, Any]:
         f"$ curl -fsS -L --max-time {timeout} -H 'Accept: application/json' {url}",
         f"> GET {url}",
     ]
+    if proxy:
+        logs.append(f"Proxy: {proxy}.")
+    else:
+        logs.append("Proxy: disabled.")
     request = urlrequest.Request(
         url,
         headers={
@@ -7572,7 +7579,13 @@ def _test_http_backend_payload(args: dict[str, Any]) -> dict[str, Any]:
         },
     )
     try:
-        with urlrequest.urlopen(request, timeout=timeout) as response:
+        with urlopen_with_proxy(
+            request,
+            url,
+            timeout,
+            proxy_url=proxy,
+            source_label="backend",
+        ) as response:
             status = int(response.status)
             reason = response.reason or ""
             content_type = response.headers.get("content-type", "unknown")
@@ -7585,9 +7598,11 @@ def _test_http_backend_payload(args: dict[str, Any]) -> dict[str, Any]:
         return {"ok": False, "url": url, "logs": logs}
     except urlerror.URLError as exc:
         logs.append(f"< connection failed: {exc.reason}")
+        logs.extend(onion_proxy_failure_hints(url, proxy, exc))
         return {"ok": False, "url": url, "logs": logs}
     except Exception as exc:  # pragma: no cover - defensive boundary
         logs.append(f"< connection failed: {exc}")
+        logs.extend(onion_proxy_failure_hints(url, proxy, exc))
         return {"ok": False, "url": url, "logs": logs}
     logs.append(f"< HTTP {status} {reason}".rstrip())
     logs.append(f"< content-type: {content_type}")
