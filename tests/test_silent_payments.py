@@ -1,4 +1,5 @@
 import json
+import os
 import tempfile
 import unittest
 from decimal import Decimal
@@ -8,6 +9,7 @@ from kassiber.envelope import json_ready
 from kassiber.core import accounts as core_accounts
 from kassiber.core import output_inventory as core_output_inventory
 from kassiber.core import silent_payments
+from kassiber.core import sync_backends
 from kassiber.core import wallets as core_wallets
 from kassiber.core.imports import ImportCoordinatorHooks, import_records_into_wallet
 from kassiber.core.sync import WalletSyncHooks, WalletSyncState, sync_wallet_from_backend
@@ -108,8 +110,11 @@ def _resolve_sync_state(backend, wallet):
 
 
 def _sp_adapter(backend, wallet, sync_state):
-    with open(backend["silent_payment_scan_file"], "r", encoding="utf-8") as handle:
-        payload = json.load(handle)
+    payload = sync_backends._silent_payment_scan_payload(
+        backend,
+        wallet,
+        sync_state.descriptor_plan,
+    )
     return silent_payments.normalize_scan_payload(
         payload,
         backend_name=str(backend["name"]),
@@ -200,6 +205,12 @@ def _scanner_payload(*, complete=True, spent=False):
         "transactions": txs,
         "utxos": [output],
     }
+
+
+def _write_private_scanner_payload(path: Path, payload):
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    if os.name == "posix":
+        path.chmod(0o600)
 
 
 class SilentPaymentsTests(unittest.TestCase):
@@ -336,13 +347,40 @@ class SilentPaymentsTests(unittest.TestCase):
             )
         self.assertEqual(disabled_error.exception.code, "silent_payment_backend_unsupported")
 
-    def test_scanner_payload_imports_transactions_utxos_and_is_idempotent(self):
+    @unittest.skipUnless(os.name == "posix", "POSIX file mode checks are required")
+    def test_scanner_file_requires_private_permissions(self):
         conn = self._db()
         workspace, profile = _book(conn)
         scan_dir = tempfile.TemporaryDirectory(prefix="kassiber-sp-scan-")
         self.addCleanup(scan_dir.cleanup)
         scan_file = Path(scan_dir.name) / "scan.json"
         scan_file.write_text(json.dumps(_scanner_payload()), encoding="utf-8")
+        scan_file.chmod(0o644)
+        created = core_wallets.create_wallet(
+            conn,
+            workspace["id"],
+            profile["id"],
+            "SP receive",
+            "silent-payment",
+            config=_sp_config(),
+        )
+        wallet = conn.execute("SELECT * FROM wallets WHERE id = ?", (created["id"],)).fetchone()
+
+        with self.assertRaises(AppError) as error:
+            sync_wallet_from_backend(conn, _runtime(scan_file), profile, wallet, _sync_hooks())
+
+        self.assertEqual(error.exception.code, "silent_payment_scanner_unavailable")
+        self.assertFalse(error.exception.retryable)
+        self.assertIn("0600", error.exception.hint or "")
+        self.assertEqual(error.exception.details.get("mode"), "0o644")
+
+    def test_scanner_payload_imports_transactions_utxos_and_is_idempotent(self):
+        conn = self._db()
+        workspace, profile = _book(conn)
+        scan_dir = tempfile.TemporaryDirectory(prefix="kassiber-sp-scan-")
+        self.addCleanup(scan_dir.cleanup)
+        scan_file = Path(scan_dir.name) / "scan.json"
+        _write_private_scanner_payload(scan_file, _scanner_payload())
         created = core_wallets.create_wallet(
             conn,
             workspace["id"],
@@ -370,7 +408,7 @@ class SilentPaymentsTests(unittest.TestCase):
         self.assertEqual(conn.execute("SELECT COUNT(*) FROM transactions").fetchone()[0], 1)
         self.assertEqual(conn.execute("SELECT COUNT(*) FROM wallet_utxos").fetchone()[0], 1)
 
-        scan_file.write_text(json.dumps(_scanner_payload(spent=True)), encoding="utf-8")
+        _write_private_scanner_payload(scan_file, _scanner_payload(spent=True))
         result = sync_wallet_from_backend(conn, runtime, profile, wallet, _sync_hooks())
         self.assertEqual(result["records_fetched"], 2)
         self.assertEqual(result["output_inventory"]["active"], 0)
@@ -510,7 +548,7 @@ class SilentPaymentsTests(unittest.TestCase):
         scan_dir = tempfile.TemporaryDirectory(prefix="kassiber-sp-scan-")
         self.addCleanup(scan_dir.cleanup)
         scan_file = Path(scan_dir.name) / "scan.json"
-        scan_file.write_text(json.dumps(_scanner_payload(complete=False)), encoding="utf-8")
+        _write_private_scanner_payload(scan_file, _scanner_payload(complete=False))
         created = core_wallets.create_wallet(
             conn,
             workspace["id"],
@@ -565,7 +603,7 @@ class SilentPaymentsTests(unittest.TestCase):
         scan_dir = tempfile.TemporaryDirectory(prefix="kassiber-sp-scan-")
         self.addCleanup(scan_dir.cleanup)
         scan_file = Path(scan_dir.name) / "scan.json"
-        scan_file.write_text(json.dumps(_scanner_payload()), encoding="utf-8")
+        _write_private_scanner_payload(scan_file, _scanner_payload())
         created = core_wallets.create_wallet(
             conn,
             workspace["id"],
@@ -580,17 +618,15 @@ class SilentPaymentsTests(unittest.TestCase):
         sync_wallet_from_backend(conn, runtime, profile, wallet, _sync_hooks())
         self.assertIsNone(conn.execute("SELECT spent_at FROM wallet_utxos").fetchone()["spent_at"])
 
-        scan_file.write_text(
-            json.dumps(
-                {
-                    "complete": "false",
-                    "descriptor_fingerprint": silent_payments.descriptor_fingerprint(SP_DESCRIPTOR),
-                    "range": {"from_height": 850_000, "to_height": 850_050},
-                    "transactions": [],
-                    "utxos": [],
-                }
-            ),
-            encoding="utf-8",
+        _write_private_scanner_payload(
+            scan_file,
+            {
+                "complete": "false",
+                "descriptor_fingerprint": silent_payments.descriptor_fingerprint(SP_DESCRIPTOR),
+                "range": {"from_height": 850_000, "to_height": 850_050},
+                "transactions": [],
+                "utxos": [],
+            },
         )
         result = sync_wallet_from_backend(conn, runtime, profile, wallet, _sync_hooks())
         self.assertTrue(result["partial_success"])

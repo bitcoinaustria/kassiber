@@ -5,8 +5,10 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+import os
 import socket
 import ssl
+import stat
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
@@ -1332,21 +1334,72 @@ def _backend_identity(backend, sync_state: WalletSyncState):
     }
 
 
+def _raise_silent_payment_scan_file_read_error(exc: OSError):
+    raise AppError(
+        "Silent Payments local scanner output could not be read",
+        code="silent_payment_scanner_unavailable",
+        hint=(
+            "Check the backend's silent_payment_scan_file path and keep it as "
+            "a private regular JSON file."
+        ),
+        retryable=True,
+    ) from exc
+
+
+def _validate_private_silent_payment_scan_file(file_stat):
+    if os.name != "posix":
+        return
+    if not stat.S_ISREG(file_stat.st_mode):
+        raise AppError(
+            "Silent Payments local scanner output must be a regular file",
+            code="silent_payment_scanner_unavailable",
+            hint="Point silent_payment_scan_file at a private regular JSON file.",
+            retryable=False,
+        )
+    current_uid = os.getuid()
+    if file_stat.st_uid != current_uid:
+        raise AppError(
+            "Silent Payments local scanner output must be owned by the current OS user",
+            code="silent_payment_scanner_unavailable",
+            hint="Move the scanner JSON to a file owned by the user running Kassiber.",
+            retryable=False,
+        )
+    if file_stat.st_mode & 0o077:
+        raise AppError(
+            "Silent Payments local scanner output is readable or writable by other users",
+            code="silent_payment_scanner_unavailable",
+            hint="Set the scanner JSON file permissions to 0600 before syncing.",
+            details={"mode": oct(stat.S_IMODE(file_stat.st_mode))},
+            retryable=False,
+        )
+
+
+def _open_private_silent_payment_scan_file(path: Path):
+    if os.name != "posix":
+        return path.open("r", encoding="utf-8")
+    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+    try:
+        fd = os.open(path, flags)
+    except OSError as exc:
+        _raise_silent_payment_scan_file_read_error(exc)
+    try:
+        _validate_private_silent_payment_scan_file(os.fstat(fd))
+        return os.fdopen(fd, "r", encoding="utf-8")
+    except Exception:
+        os.close(fd)
+        raise
+
+
 def _silent_payment_scan_payload(backend, wallet, plan: silent_payments.SilentPaymentPlan):
     config = json.loads(wallet["config_json"] or "{}")
     scan_file = backend_value(backend, *silent_payments.BACKEND_SCAN_FILE_FIELDS)
     if scan_file:
         path = Path(scan_file).expanduser()
         try:
-            with path.open("r", encoding="utf-8") as handle:
+            with _open_private_silent_payment_scan_file(path) as handle:
                 return json.load(handle)
         except OSError as exc:
-            raise AppError(
-                "Silent Payments local scanner output could not be read",
-                code="silent_payment_scanner_unavailable",
-                hint="Check the backend's silent_payment_scan_file path and retry.",
-                retryable=True,
-            ) from exc
+            _raise_silent_payment_scan_file_read_error(exc)
         except json.JSONDecodeError as exc:
             raise AppError(
                 "Silent Payments local scanner output is not valid JSON",

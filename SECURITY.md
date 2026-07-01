@@ -64,7 +64,7 @@ configurable.
 | `wallets sync` against a user-configured Esplora backend | your configured URL | Esplora over HTTP(S) | same categories as `mempool` above |
 | `wallets sync` against a user-configured Electrum backend | your configured `ssl://` or `tcp://` URL | Electrum JSON-RPC over raw TCP/TLS | IP, queried scripthashes, query timing |
 | `wallets sync` against a `bitcoinrpc` backend | your configured URL | HTTP(S) POST with Basic auth | nothing leaves your machine if the node is local |
-| `wallets sync` for a `silent-payment` wallet with a local scanner file | local filesystem path configured by you | local file read | no network request by Kassiber; scanner output and detected Taproot outputs stay local |
+| `wallets sync` for a `silent-payment` wallet with a local scanner file | local filesystem path configured by you | local file read | no network request by Kassiber; scanner output and detected Taproot outputs stay local; on POSIX the scanner file must be user-owned and `0600` |
 | `wallets sync` for a `silent-payment` wallet in server-assisted mode | your explicitly configured SP-capable backend URL/path | HTTP(S) POST through that backend's proxy setting, if any | IP, User-Agent, scan request timing, scan birthday/range, and the watch-only `sp()` scan material needed by that backend |
 | `rates sync` (only) | configured provider (`mempool` backend, Coinbase Exchange, or CoinGecko) | unauthenticated HTTP(S) GET | IP, User-Agent, which fiat pair and window |
 | `ai models`, `chat`, `ai.test_connection` against a configured remote/TEE provider | your configured provider URL or CLI provider | OpenAI-compatible HTTP(S) or the configured local CLI's own transport | prompt/tool context, model request metadata, IP/provider account context according to that provider |
@@ -117,6 +117,11 @@ start or bundle Tor, so the user still needs an existing Tor service.
   `sp(...)` / `spscan` in `wallets.config_json`. It cannot spend, but it is
   privacy-sensitive because it can reveal matching receives to anyone who scans
   the chain with it.
+- Silent Payments local scanner JSON files are not stored inside Kassiber's
+  database. If you configure `silent_payment_scan_file`, protect that file with
+  OS permissions and keep it out of shared or cloud-synced folders. On POSIX,
+  Kassiber refuses scanner files that are not regular files owned by the current
+  user or that grant any group/other permissions.
 - Older installs may still resolve to `~/.local/share/kassiber`,
   `~/.local/share/satbooks`, or a legacy `<data-root>/.env`; run
   `kassiber status` to see the active paths.

@@ -105,6 +105,13 @@ scripthash sync is not enough to discover BIP352 outputs; unsupported backends
 fail with `silent_payment_backend_unsupported` rather than returning a clean
 zero balance.
 
+The local scanner file is outside Kassiber's SQLite/SQLCipher boundary. Treat
+it like wallet metadata: keep it in a private, local directory and do not place
+it in shared, cloud-synced, or world-readable locations. On POSIX systems,
+Kassiber refuses to read scanner JSON files that are not regular files owned by
+the current OS user, or that grant any group/other permissions; use `chmod 600`
+for scanner output files before syncing.
+
 The local scanner JSON shape is intentionally simple and scanner-agnostic:
 
 ```json
