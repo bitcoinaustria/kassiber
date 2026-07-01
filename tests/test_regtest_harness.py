@@ -83,7 +83,18 @@ class RegtestHarnessTest(unittest.TestCase):
 
         self.assertEqual(scenario["id"], "full-accounting-v1")
         wallet_keys = {wallet["key"] for wallet in scenario["wallets"]}
-        self.assertEqual(wallet_keys, {"treasury", "cold", "spending", "merchant"})
+        self.assertEqual(
+            wallet_keys,
+            {
+                "treasury",
+                "cold",
+                "spending",
+                "merchant",
+                "treasury_2020",
+                "merchant_2022",
+                "cold_2024",
+            },
+        )
         operation_kinds = {operation["kind"] for operation in scenario["operations"]}
         self.assertTrue(
             {
@@ -101,18 +112,26 @@ class RegtestHarnessTest(unittest.TestCase):
                 "loan_principal_repaid",
             }.issubset(operation_kinds)
         )
-        self.assertGreaterEqual(scenario["expected"]["min_transactions"], 980)
-        self.assertGreaterEqual(scenario["expected"]["min_active_transactions"], 970)
+        self.assertGreaterEqual(scenario["expected"]["min_transactions"], 830)
+        self.assertGreaterEqual(scenario["expected"]["min_active_transactions"], 825)
         base_time = datetime.fromisoformat(scenario["base_time"].replace("Z", "+00:00"))
         stress = scenario["stress"]
         self.assertTrue(stress["enabled"])
-        self.assertGreaterEqual(stress["cycles"], 190)
+        self.assertGreaterEqual(stress["cycles"], 130)
         stress_span_days = stress["cycles"] * stress["days_between_cycles"]
         self.assertGreaterEqual(stress_span_days, 365 * 7)
         self.assertLess(base_time, datetime(2020, 1, 1, tzinfo=timezone.utc))
         self.assertLess(base_time + timedelta(days=stress_span_days), datetime(2026, 7, 1, tzinfo=timezone.utc))
+        self.assertTrue(stress["business_expenses"]["enabled"])
+        self.assertGreaterEqual(len(stress["business_expenses"]["schedule"]), 6)
+        self.assertEqual(len(stress["wallet_rotations"]), 3)
+        self.assertEqual(len(stress["swap_bridges"]), 3)
+        rates = [float(rate) for rate in scenario["pricing"]["rate_sequence"]]
+        self.assertGreater(max(rates) / min(rates), 2.0)
+        self.assertNotEqual(rates, sorted(rates))
+        self.assertNotEqual(rates, sorted(rates, reverse=True))
         self.assertEqual(scenario["expected"]["collaborative_excluded"], 5)
-        self.assertEqual(scenario["expected"]["min_transfer_pairs"], 2)
+        self.assertEqual(scenario["expected"]["min_transfer_pairs"], 5)
         self.assertEqual(scenario["expected"]["loan_marks"], 4)
         self.assertIn("full-report.xlsx", scenario["expected"]["export_files"])
 

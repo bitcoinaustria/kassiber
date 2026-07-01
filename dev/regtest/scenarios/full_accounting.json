@@ -2,7 +2,7 @@
   "schema_version": 1,
   "id": "full-accounting-v1",
   "title": "Full accounting regtest demo",
-  "description": "Disposable Bitcoin Core regtest scenario covering multi-wallet acquisitions, disposals, self-transfers, collaborative CoinJoin/PayJoin-shaped transactions, and Bitcoin-backed-loan marks.",
+  "description": "Disposable Bitcoin Core regtest scenario covering multi-wallet business acquisitions, regular fiat-expense disposals, self-transfers, wallet key rotations, collaborative CoinJoin/PayJoin-shaped transactions, Bitcoin-backed-loan marks, volatile pricing, and Liquid/on-chain-style bridge swaps.",
   "base_time": "2019-01-15T09:00:00Z",
   "workspace": "Regtest Demo",
   "profile": {
@@ -18,25 +18,150 @@
   "pricing": {
     "pair": "BTC-EUR",
     "base_rate": "42000",
-    "step_rate": "25"
+    "step_rate": "25",
+    "trend_rate": "40",
+    "rate_sequence": [
+      "42000",
+      "31500",
+      "48600",
+      "37100",
+      "61200",
+      "44800",
+      "33800",
+      "57400",
+      "40200",
+      "68900",
+      "51900",
+      "46300"
+    ]
   },
   "stress": {
     "enabled": true,
-    "cycles": 190,
-    "days_between_cycles": 14,
+    "cycles": 132,
+    "days_between_cycles": 20,
     "receipt_btc": {
-      "treasury": "0.00310000",
-      "cold": "0.00230000",
-      "spending": "0.00130000",
-      "merchant": "0.00180000"
+      "treasury": "0.00180000",
+      "cold": "0.00080000",
+      "spending": "0.00090000",
+      "merchant": "0.00140000"
     },
     "payment_btc": {
-      "treasury": "0.00100000",
-      "cold": "0.00110000",
-      "spending": "0.00060000",
-      "merchant": "0.00080000"
+      "treasury": "0.00120000",
+      "cold": "0.00070000",
+      "spending": "0.00090000",
+      "merchant": "0.00110000"
     },
-    "fee_btc": "0.00001000"
+    "fee_btc": "0.00001000",
+    "business_expenses": {
+      "enabled": true,
+      "every_cycles": 1,
+      "fee_btc": "0.00001000",
+      "schedule": [
+        {
+          "id": "payroll",
+          "role": "treasury",
+          "amount_btc": "0.00360000",
+          "note": "Recurring fiat payroll paid from treasury."
+        },
+        {
+          "id": "rent",
+          "role": "merchant",
+          "amount_btc": "0.00240000",
+          "note": "Monthly rent and point-of-sale service bill."
+        },
+        {
+          "id": "cloud",
+          "role": "spending",
+          "amount_btc": "0.00110000",
+          "note": "SaaS, hosting, and monitoring subscriptions."
+        },
+        {
+          "id": "tax_prep",
+          "role": "treasury",
+          "amount_btc": "0.00450000",
+          "note": "Quarterly accounting and tax-preparation invoice."
+        },
+        {
+          "id": "contractor",
+          "role": "merchant",
+          "amount_btc": "0.00280000",
+          "note": "Contractor payout for merchant operations."
+        },
+        {
+          "id": "equipment",
+          "role": "treasury",
+          "amount_btc": "0.00620000",
+          "note": "Irregular hardware and security-device purchase."
+        }
+      ]
+    },
+    "wallet_rotations": [
+      {
+        "id": "treasury_rotation_2020",
+        "cycle": 32,
+        "role": "treasury",
+        "from": "treasury",
+        "to": "treasury_2020",
+        "amount_btc": "0.45000000",
+        "fee_btc": "0.00001000",
+        "note": "Treasury rotates from the original descriptor to the upgraded 2020 key set."
+      },
+      {
+        "id": "merchant_rotation_2022",
+        "cycle": 68,
+        "role": "merchant",
+        "from": "merchant",
+        "to": "merchant_2022",
+        "amount_btc": "0.18000000",
+        "fee_btc": "0.00001000",
+        "note": "Merchant hot wallet rotates after a security review."
+      },
+      {
+        "id": "cold_rotation_2024",
+        "cycle": 104,
+        "role": "cold",
+        "from": "cold",
+        "to": "cold_2024",
+        "amount_btc": "0.50000000",
+        "fee_btc": "0.00001000",
+        "note": "Cold storage is moved to a newer custody policy."
+      }
+    ],
+    "swap_bridges": [
+      {
+        "id": "liquid_bridge_2020",
+        "cycle": 24,
+        "from_role": "treasury",
+        "to_role": "spending",
+        "out_btc": "0.06000000",
+        "in_btc": "0.05850000",
+        "fee_btc": "0.00001000",
+        "pair_kind": "peg-in",
+        "note": "Treasury moves funds through a simulated Liquid peg-in path to the spending lane."
+      },
+      {
+        "id": "submarine_rebalance_2022",
+        "cycle": 72,
+        "from_role": "spending",
+        "to_role": "merchant",
+        "out_btc": "0.03500000",
+        "in_btc": "0.03410000",
+        "fee_btc": "0.00001000",
+        "pair_kind": "submarine-swap",
+        "note": "A Lightning/Liquid-style submarine swap rebalances operational funds."
+      },
+      {
+        "id": "liquid_pegout_2024",
+        "cycle": 108,
+        "from_role": "merchant",
+        "to_role": "treasury",
+        "out_btc": "0.04200000",
+        "in_btc": "0.04080000",
+        "fee_btc": "0.00001000",
+        "pair_kind": "peg-out",
+        "note": "Merchant liquidity is pegged back out to on-chain treasury."
+      }
+    ]
   },
   "accounts": [
     {
@@ -88,6 +213,24 @@
       "label": "Regtest Merchant Wallet",
       "account": "merchant",
       "initial_btc": "0.40000000"
+    },
+    {
+      "key": "treasury_2020",
+      "label": "Regtest Treasury 2020 Rotation",
+      "account": "treasury",
+      "initial_btc": "0.00000000"
+    },
+    {
+      "key": "merchant_2022",
+      "label": "Regtest Merchant 2022 Rotation",
+      "account": "merchant",
+      "initial_btc": "0.00000000"
+    },
+    {
+      "key": "cold_2024",
+      "label": "Regtest Cold Storage 2024 Rotation",
+      "account": "cold",
+      "initial_btc": "0.00000000"
     }
   ],
   "operations": [
@@ -226,10 +369,10 @@
     }
   ],
   "expected": {
-    "min_transactions": 980,
-    "min_active_transactions": 970,
+    "min_transactions": 830,
+    "min_active_transactions": 825,
     "collaborative_excluded": 5,
-    "min_transfer_pairs": 2,
+    "min_transfer_pairs": 5,
     "loan_marks": 4,
     "open_collateral_locks": 0,
     "export_files": [

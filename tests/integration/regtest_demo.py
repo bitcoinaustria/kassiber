@@ -60,7 +60,7 @@ def validate_scenario(scenario: dict[str, Any]) -> None:
         for field in ("key", "label", "account", "initial_btc"):
             if not wallet.get(field):
                 raise ValueError(f"Scenario wallet {wallet.get('key')!r} is missing {field}")
-        _btc(wallet["initial_btc"])
+        _btc_or_zero(wallet["initial_btc"])
     for operation in scenario["operations"]:
         op_id = operation.get("id") or "<unnamed>"
         kind = operation.get("kind")
@@ -101,12 +101,67 @@ def validate_scenario(scenario: dict[str, Any]) -> None:
         if not stress.get("fee_btc"):
             raise ValueError("Scenario stress.fee_btc must be set")
         _btc(stress["fee_btc"])
+        expenses = stress.get("business_expenses") or {}
+        if expenses.get("enabled"):
+            schedule = expenses.get("schedule")
+            if not isinstance(schedule, list) or not schedule:
+                raise ValueError("Scenario stress.business_expenses.schedule must be a non-empty list")
+            if int(expenses.get("every_cycles") or 1) <= 0:
+                raise ValueError("Scenario stress.business_expenses.every_cycles must be positive")
+            _btc(expenses.get("fee_btc") or stress["fee_btc"])
+            for index, expense in enumerate(schedule, start=1):
+                role = expense.get("role")
+                if role not in wallet_key_set:
+                    raise ValueError(
+                        f"Scenario stress.business_expenses.schedule[{index}] references unknown role: {role}"
+                    )
+                _btc(expense.get("amount_btc"))
+        for index, rotation in enumerate(stress.get("wallet_rotations") or [], start=1):
+            cycle = int(rotation.get("cycle") or 0)
+            if cycle < 1 or cycle > cycles:
+                raise ValueError(f"Scenario stress.wallet_rotations[{index}] cycle is outside the stress range")
+            for field in ("role", "from", "to"):
+                if rotation.get(field) not in wallet_key_set:
+                    raise ValueError(
+                        f"Scenario stress.wallet_rotations[{index}] references unknown {field}: {rotation.get(field)}"
+                    )
+            _btc(rotation.get("amount_btc"))
+            _btc(rotation.get("fee_btc") or stress["fee_btc"])
+        for index, bridge in enumerate(stress.get("swap_bridges") or [], start=1):
+            cycle = int(bridge.get("cycle") or 0)
+            if cycle < 1 or cycle > cycles:
+                raise ValueError(f"Scenario stress.swap_bridges[{index}] cycle is outside the stress range")
+            for field in ("from_role", "to_role"):
+                if bridge.get(field) not in wallet_key_set:
+                    raise ValueError(
+                        f"Scenario stress.swap_bridges[{index}] references unknown {field}: {bridge.get(field)}"
+                    )
+            _btc(bridge.get("out_btc"))
+            _btc(bridge.get("in_btc"))
+            _btc(bridge.get("fee_btc") or stress["fee_btc"])
+            pair_kind = bridge.get("pair_kind") or "submarine-swap"
+            if pair_kind not in {"peg-in", "peg-out", "submarine-swap", "swap-refund"}:
+                raise ValueError(f"Scenario stress.swap_bridges[{index}] has unsupported pair_kind: {pair_kind}")
+    pricing = scenario.get("pricing") or {}
+    if pricing.get("rate_sequence"):
+        rates = [Decimal(str(value)) for value in pricing["rate_sequence"]]
+        if any(rate <= 0 for rate in rates):
+            raise ValueError("Scenario pricing.rate_sequence values must be positive")
+        if rates == sorted(rates) or rates == sorted(rates, reverse=True):
+            raise ValueError("Scenario pricing.rate_sequence must be volatile, not monotonic")
 
 
 def _btc(value: Any) -> Decimal:
     amount = Decimal(str(value)).quantize(SAT)
     if amount <= 0:
         raise ValueError(f"BTC amount must be positive: {value}")
+    return amount
+
+
+def _btc_or_zero(value: Any) -> Decimal:
+    amount = Decimal(str(value)).quantize(SAT)
+    if amount < 0:
+        raise ValueError(f"BTC amount must not be negative: {value}")
     return amount
 
 
@@ -510,13 +565,52 @@ def _generate_stress_history(
         for key, value in sorted(stress["payment_btc"].items())
     ]
     fee = _btc(stress["fee_btc"])
+    active_wallet_for = {key: key for key in wallets}
+    rotations_by_cycle: dict[int, list[dict[str, Any]]] = {}
+    for rotation in stress.get("wallet_rotations") or []:
+        rotations_by_cycle.setdefault(int(rotation["cycle"]), []).append(rotation)
+    bridges_by_cycle: dict[int, list[dict[str, Any]]] = {}
+    for bridge in stress.get("swap_bridges") or []:
+        bridges_by_cycle.setdefault(int(bridge["cycle"]), []).append(bridge)
+    expenses = stress.get("business_expenses") or {}
+    expense_schedule = expenses.get("schedule") or []
+    expense_every = int(expenses.get("every_cycles") or 1)
+    expense_fee = _btc(expenses.get("fee_btc") or stress["fee_btc"])
     first_target_ts = current_ts + (2 * SECONDS_PER_DAY)
+    rotations_count = 0
+    business_expense_count = 0
+    swap_bridge_count = 0
+
+    def active_wallet(key_or_role: str) -> DemoWallet:
+        return wallets[active_wallet_for.get(key_or_role, key_or_role)]
 
     for cycle in range(cycles):
         cycle_number = cycle + 1
         cycle_ts = first_target_ts + (cycle * days_between_cycles * SECONDS_PER_DAY)
+        for rotation in rotations_by_cycle.get(cycle_number, []):
+            sender = wallets[rotation["from"]]
+            receiver = wallets[rotation["to"]]
+            txids[f"{rotation['id']}_rotation"] = _send_from_wallet(
+                url,
+                username,
+                password,
+                sender,
+                {receiver.address: _btc(rotation["amount_btc"])},
+                _btc(rotation.get("fee_btc") or stress["fee_btc"]),
+            )
+            active_wallet_for[rotation["role"]] = rotation["to"]
+            rotations_count += 1
+            current_ts = _mine_at(
+                url,
+                username,
+                password,
+                mining_address,
+                current_ts,
+                cycle_ts - (2 * 60 * 60),
+            )
+
         receipt_outputs = {
-            wallets[key].address: amount
+            active_wallet(key).address: amount
             for key, amount in receipt_plan.items()
         }
         txids[f"stress_receipt_{cycle_number:03d}"] = rpc(
@@ -541,7 +635,7 @@ def _generate_stress_history(
             url,
             username,
             password,
-            wallets[payer_key],
+            active_wallet(payer_key),
             {external_address: amount},
             fee,
         )
@@ -554,11 +648,78 @@ def _generate_stress_history(
             cycle_ts + (6 * 60 * 60),
         )
 
+        if expenses.get("enabled") and expense_schedule and cycle % expense_every == 0:
+            expense = expense_schedule[cycle % len(expense_schedule)]
+            expense_id = str(expense.get("id") or expense.get("category") or f"expense_{cycle_number:03d}")
+            txids[f"business_expense_{cycle_number:03d}_{expense_id}"] = _send_from_wallet(
+                url,
+                username,
+                password,
+                active_wallet(expense["role"]),
+                {external_address: _btc(expense["amount_btc"])},
+                expense_fee,
+            )
+            business_expense_count += 1
+            current_ts = _mine_at(
+                url,
+                username,
+                password,
+                mining_address,
+                current_ts,
+                cycle_ts + (9 * 60 * 60),
+            )
+
+        for bridge in bridges_by_cycle.get(cycle_number, []):
+            bridge_id = bridge["id"]
+            source = active_wallet(bridge["from_role"])
+            target = active_wallet(bridge["to_role"])
+            txids[f"{bridge_id}_out"] = _send_from_wallet(
+                url,
+                username,
+                password,
+                source,
+                {external_address: _btc(bridge["out_btc"])},
+                _btc(bridge.get("fee_btc") or stress["fee_btc"]),
+            )
+            current_ts = _mine_at(
+                url,
+                username,
+                password,
+                mining_address,
+                current_ts,
+                cycle_ts + (12 * 60 * 60),
+            )
+            txids[f"{bridge_id}_in"] = rpc(
+                url,
+                username,
+                password,
+                "sendtoaddress",
+                [target.address, _btc(bridge["in_btc"])],
+                wallet=faucet_wallet,
+            )
+            swap_bridge_count += 1
+            current_ts = _mine_at(
+                url,
+                username,
+                password,
+                mining_address,
+                current_ts,
+                cycle_ts + (13 * 60 * 60),
+            )
+
     return current_ts, {
         "cycles": cycles,
         "receipt_wallets": len(receipt_plan),
         "payment_wallets": len(payment_plan),
-        "rows_expected": cycles * (len(receipt_plan) + 1),
+        "business_expenses": business_expense_count,
+        "wallet_rotations": rotations_count,
+        "swap_bridges": swap_bridge_count,
+        "rows_expected": (
+            cycles * (len(receipt_plan) + 1)
+            + business_expense_count
+            + (rotations_count * 2)
+            + (swap_bridge_count * 2)
+        ),
         "span_days": (cycles - 1) * days_between_cycles,
     }
 
@@ -630,6 +791,7 @@ def _create_kassiber_book(
             "60",
             pass_fds=(username_fd.fileno(), password_fd.fileno()),
     )
+    run_cli(data_root, "backends", "set-default", scenario["backend"]["name"])
     scope = _scope(scenario)
     existing_accounts = {
         account["code"]
@@ -698,8 +860,13 @@ def _seed_rates_and_process(data_root: Path, scenario: dict[str, Any]) -> tuple[
     pricing = scenario["pricing"]
     base_rate = Decimal(pricing["base_rate"])
     step_rate = Decimal(pricing["step_rate"])
+    rate_sequence = [Decimal(str(value)) for value in pricing.get("rate_sequence") or []]
+    trend_rate = Decimal(str(pricing.get("trend_rate") or step_rate))
     for index, occurred_at in enumerate(unique_times):
-        rate = base_rate + (step_rate * index)
+        if rate_sequence:
+            rate = rate_sequence[index % len(rate_sequence)] + (trend_rate * (index // len(rate_sequence)))
+        else:
+            rate = base_rate + (step_rate * index)
         run_cli(
             data_root,
             "rates",
@@ -740,6 +907,26 @@ def _pair_transfers(data_root: Path, scenario: dict[str, Any], txids: dict[str, 
                 "carrying-value",
                 "--note",
                 operation["note"],
+            )["data"]
+        )
+    stress = scenario.get("stress") or {}
+    for rotation in stress.get("wallet_rotations") or []:
+        paired.append(
+            run_cli(
+                data_root,
+                "transfers",
+                "pair",
+                *scope,
+                "--tx-out",
+                txids[f"{rotation['id']}_rotation"],
+                "--tx-in",
+                txids[f"{rotation['id']}_rotation"],
+                "--kind",
+                "manual",
+                "--policy",
+                "carrying-value",
+                "--note",
+                rotation.get("note") or f"Wallet key rotation into {rotation['to']}.",
             )["data"]
         )
     return paired
@@ -995,8 +1182,9 @@ def run_demo(
             )
 
         funding_outputs = {
-            wallets[wallet_spec["key"]].address: _btc(wallet_spec["initial_btc"])
+            wallets[wallet_spec["key"]].address: initial_btc
             for wallet_spec in scenario["wallets"]
+            if (initial_btc := _btc_or_zero(wallet_spec["initial_btc"])) > 0
         }
         txids["initial_funding"] = rpc(
             url,
