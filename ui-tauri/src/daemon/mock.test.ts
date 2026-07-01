@@ -4,6 +4,56 @@ import { fixtures } from "./fixtures";
 import { mockDaemon } from "./mock";
 import type { DaemonStreamRecord } from "./transport";
 
+describe("mock daemon transaction graphs", () => {
+  it("returns the requested tx6 income graph instead of the consolidation demo graph", async () => {
+    const graph = await mockDaemon.invoke<{
+      transaction: { id?: string; inputCount?: number | null; outputCount?: number | null };
+      supportLevel: string;
+      annotations?: Array<{ code?: string }>;
+      inputs: Array<{ role?: string; valueSats?: number | null }>;
+      outputs: Array<{ role?: string; wallet?: string; valueSats?: number | null }>;
+    }>({
+      kind: "ui.transactions.graph",
+      args: { transaction: "tx6", allowPublicLookup: true },
+    });
+
+    expect(graph.error).toBeUndefined();
+    expect(graph.data?.transaction.id).toBe("tx6");
+    expect(graph.data?.transaction.inputCount).toBe(1);
+    expect(graph.data?.transaction.outputCount).toBe(2);
+    expect(graph.data?.inputs).toHaveLength(1);
+    expect(graph.data?.outputs[0]).toMatchObject({
+      role: "incoming_payment",
+      wallet: "Cold Storage",
+      valueSats: 3_800_000,
+    });
+    expect(graph.data?.annotations?.map((annotation) => annotation.code)).not.toContain(
+      "multi_source_consolidation",
+    );
+  });
+
+  it("does not silently reuse tx19 when a mock row has no graph fixture", async () => {
+    const graph = await mockDaemon.invoke<{
+      transaction: { id?: string; inputCount?: number | null };
+      supportLevel: string;
+      unsupportedReason?: string | null;
+      inputs: unknown[];
+      outputs: unknown[];
+    }>({
+      kind: "ui.transactions.graph",
+      args: { transaction: "tx-without-graph", allowPublicLookup: true },
+    });
+
+    expect(graph.error).toBeUndefined();
+    expect(graph.data?.transaction.id).toBe("tx-without-graph");
+    expect(graph.data?.transaction.inputCount).toBe(0);
+    expect(graph.data?.supportLevel).toBe("graphless");
+    expect(graph.data?.unsupportedReason).toBe("graphless_import");
+    expect(graph.data?.inputs).toEqual([]);
+    expect(graph.data?.outputs).toEqual([]);
+  });
+});
+
 describe("mock daemon backend settings", () => {
   it("supports settings list and CRUD for demo mode", async () => {
     const list = await mockDaemon.invoke<{

@@ -130,8 +130,89 @@ export const MOCK_TRANSACTIONS: TransactionsList = {
 
 const MOCK_GRAPH_TXID =
   "9f2a16b4d6c85322aa51f542b08964ed4c31a892cb47c42c706a8c32f2da9b11";
+const MOCK_TX6_GRAPH_TXID =
+  "0000000000000000000000000000000000000000000000000000000000000006";
 
 export const MOCK_TRANSACTION_GRAPHS: Record<string, unknown> = {
+  tx6: {
+    transaction: {
+      id: "tx6",
+      txid: MOCK_TX6_GRAPH_TXID,
+      externalId: MOCK_TX6_GRAPH_TXID,
+      inputCount: 1,
+      outputCount: 2,
+      version: 2,
+      locktime: 0,
+      size: 222,
+      vsize: 141,
+      weight: 564,
+      feeRateSatVb: 24.18,
+    },
+    supportLevel: "full",
+    unsupportedReason: null,
+    warnings: [],
+    inputs: [
+      {
+        id: "in-0",
+        index: 0,
+        outpoint: `${"7".repeat(64)}:1`,
+        txid: "7".repeat(64),
+        vout: 1,
+        scriptType: "p2wpkh",
+        valueSats: 3_903_410,
+        valueBtc: 0.0390341,
+        label: "Customer funding",
+        ownership: "external",
+        role: "input",
+        annotations: [{ code: "external_source", label: "External payer input" }],
+      },
+    ],
+    outputs: [
+      {
+        id: "out-0",
+        index: 0,
+        outpoint: `${MOCK_TX6_GRAPH_TXID}:0`,
+        address: "bc1qdemoconsulting000000000000000000000000",
+        scriptType: "p2wpkh",
+        valueSats: 3_800_000,
+        valueBtc: 0.038,
+        label: "Cold Storage receive",
+        wallet: "Cold Storage",
+        ownership: "owned",
+        role: "incoming_payment",
+        annotations: [{ code: "incoming_payment", label: "Owned receive output" }],
+      },
+      {
+        id: "out-1",
+        index: 1,
+        outpoint: `${MOCK_TX6_GRAPH_TXID}:1`,
+        address: "bc1qdemopayerchange0000000000000000000000",
+        scriptType: "p2wpkh",
+        valueSats: 100_000,
+        valueBtc: 0.001,
+        label: "Payer change",
+        ownership: "external",
+        role: "external_recipient",
+        annotations: [{ code: "external_recipient", label: "External change output" }],
+      },
+    ],
+    fee: {
+      id: "fee",
+      label: "Sender-paid network fee",
+      role: "fee",
+      ownership: "network_fee",
+      valueSats: 3_410,
+      valueBtc: 0.0000341,
+      rateSatVb: 24.18,
+      annotations: [{ code: "miner_fee", label: "Network fee" }],
+    },
+    annotations: [],
+    accounting: {
+      quarantine: null,
+      linkedPairs: [],
+      transferGroupIds: [],
+    },
+  },
   tx19: {
     transaction: {
       id: "tx19",
