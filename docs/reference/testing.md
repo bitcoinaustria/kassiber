@@ -10,7 +10,7 @@ regtest infrastructure.
 | --- | --- | --- | --- |
 | FAST | `./scripts/integration-harness.sh fast` | no | Replays recorded regtest tapes through the real sync adapter, import, journal, report, and XLSX export path with `KASSIBER_NO_EGRESS=1`. |
 | SLOW | `./scripts/integration-harness.sh bitcoin-core` | yes, unless reusing a node | Starts or reuses a Bitcoin Core regtest node, creates real wallets and transactions, then drives Kassiber sync, pricing, journal, report, and export. |
-| DEMO | `./scripts/integration-harness.sh demo-full` | yes, unless reusing a node | Builds the checked-in `full-accounting-v1` scenario: ten Kassiber wallets including Bitcoin rotation targets and deterministic Liquid/LBTC import wallets, real regtest acquisitions/disposals/transfers, operating-expense disposals, deprecated rotated-out wallets, batched and consolidation edge cases, a larger multi-year stress ledger, CoinJoin- and PayJoin-shaped collaborative transactions, swap/peg bridge pairs, loan marks, volatile deterministic manual pricing, journals, reports, and transaction exports. |
+| DEMO | `./scripts/integration-harness.sh demo-full` | yes, unless reusing a node | Builds the checked-in `full-accounting-v1` scenario: ten Kassiber wallets including Bitcoin rotation targets and deterministic Liquid/LBTC import wallets, real regtest acquisitions/disposals/transfers, operating-expense disposals, deprecated rotated-out wallets, batched and consolidation edge cases, a larger multi-year stress ledger, CoinJoin- and PayJoin-shaped collaborative transactions, swap/peg bridge pairs, loan marks, bundled real historical BTC/EUR pricing, journals, reports, and transaction exports. |
 
 The slow lane is opt-in with `KASSIBER_INTEGRATION=1`; normal unit gates do not
 start Docker. To reuse an existing regtest node instead of Compose, set an
@@ -74,9 +74,12 @@ the Core RPC backend, then verifies Kassiber behavior through the public CLI:
   book remains reportable without pretending to know provider-specific intent
 - Bitcoin-backed-loan marks for collateral lock/release and BTC principal
   receive/repay, linked under one loan id
-- deterministic but volatile manual BTC/EUR and LBTC/EUR pricing, journal
-  processing, summary reporting, PDF/CSV/XLSX report export, and CSV/XLSX
-  transaction export
+- real historical BTC/EUR pricing from Kassiber's bundled Kraken daily cache,
+  with LBTC rows priced through Kassiber's LBTC-to-BTC rate-pair alias; set
+  `KASSIBER_REGTEST_DEMO_LIVE_RATES=coinbase-exchange` (or another supported
+  live source) to opt into live provider backfill during local demo runs
+- journal processing, summary reporting, PDF/CSV/XLSX report export, and
+  CSV/XLSX transaction export
 
 The scenario manifest lives at
 `dev/regtest/scenarios/full_accounting.json`; the runner lives at

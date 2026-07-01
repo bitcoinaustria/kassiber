@@ -141,8 +141,10 @@ class RegtestHarnessTest(unittest.TestCase):
         liquid_rows = sum(len(rows) for rows in scenario["liquid_ledger"]["wallets"].values())
         self.assertGreaterEqual(liquid_rows, 9)
         self.assertEqual(len(scenario["liquid_ledger"]["transfer_pairs"]), 1)
-        self.assertIn("LBTC-EUR", scenario["pricing"]["pairs"])
-        rates = [float(rate) for rate in scenario["pricing"]["rate_sequence"]]
+        self.assertEqual(scenario["pricing"]["source"], "kraken-bundled")
+        self.assertEqual(scenario["expected"]["pricing_source"], "kraken-csv")
+        self.assertIn("LBTC", scenario["expected"]["require_pricing_provider_assets"])
+        rates = [float(rate) for rate in scenario["pricing"]["fallback"]["rate_sequence"]]
         self.assertGreater(max(rates) / min(rates), 2.0)
         self.assertNotEqual(rates, sorted(rates))
         self.assertNotEqual(rates, sorted(rates, reverse=True))

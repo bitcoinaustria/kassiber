@@ -228,12 +228,13 @@ def validate_scenario(scenario: dict[str, Any]) -> None:
             if not pair.get(field):
                 raise ValueError(f"Scenario liquid_ledger.transfer_pairs[{index}] is missing {field}")
     pricing = scenario.get("pricing") or {}
-    if pricing.get("rate_sequence"):
-        rates = [Decimal(str(value)) for value in pricing["rate_sequence"]]
+    fallback = pricing.get("fallback") or pricing
+    if fallback.get("rate_sequence"):
+        rates = [Decimal(str(value)) for value in fallback["rate_sequence"]]
         if any(rate <= 0 for rate in rates):
-            raise ValueError("Scenario pricing.rate_sequence values must be positive")
+            raise ValueError("Scenario pricing fallback rate_sequence values must be positive")
         if rates == sorted(rates) or rates == sorted(rates, reverse=True):
-            raise ValueError("Scenario pricing.rate_sequence must be volatile, not monotonic")
+            raise ValueError("Scenario pricing fallback rate_sequence must be volatile, not monotonic")
 
 
 def _btc(value: Any) -> Decimal:
@@ -1070,7 +1071,104 @@ def _create_kassiber_book(
             )
 
 
-def _seed_rates_and_process(data_root: Path, scenario: dict[str, Any]) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+def _seed_synthetic_fallback_rates(
+    data_root: Path,
+    scenario: dict[str, Any],
+    unique_times: list[str],
+) -> dict[str, Any]:
+    pricing = scenario["pricing"]
+    fallback = pricing.get("fallback") or pricing
+    base_rate = Decimal(fallback["base_rate"])
+    step_rate = Decimal(fallback["step_rate"])
+    rate_sequence = [Decimal(str(value)) for value in fallback.get("rate_sequence") or []]
+    trend_rate = Decimal(str(fallback.get("trend_rate") or step_rate))
+    pair = pricing["pair"]
+    for index, occurred_at in enumerate(unique_times):
+        if rate_sequence:
+            rate = rate_sequence[index % len(rate_sequence)] + (trend_rate * (index // len(rate_sequence)))
+        else:
+            rate = base_rate + (step_rate * index)
+        run_cli(
+            data_root,
+            "rates",
+            "set",
+            pair,
+            occurred_at,
+            str(rate),
+            "--source",
+            "regtest-demo-fallback",
+            "--granularity",
+            "exact",
+            "--method",
+            scenario["id"],
+        )
+    return {
+        "source": "regtest-demo-fallback",
+        "pair": pair,
+        "samples": len(unique_times),
+        "granularity": "exact",
+        "method": scenario["id"],
+    }
+
+
+def _seed_real_price_cache(
+    data_root: Path,
+    scenario: dict[str, Any],
+    unique_times: list[str],
+) -> dict[str, Any]:
+    pricing = scenario["pricing"]
+    pair = pricing["pair"]
+    source = pricing.get("source") or "kraken-bundled"
+    if source != "kraken-bundled":
+        return {
+            "seed": _seed_synthetic_fallback_rates(data_root, scenario, unique_times),
+            "fallback_reason": f"unsupported pricing source {source!r}",
+        }
+
+    archive_path = ROOT / "kassiber" / "data" / "rates" / "kraken" / "btc_daily"
+    seed = run_cli(
+        data_root,
+        "rates",
+        "sync",
+        "--pair",
+        pair,
+        "--source",
+        "kraken-csv",
+        "--path",
+        str(archive_path),
+    )["data"]
+    result: dict[str, Any] = {
+        "seed": seed,
+        "source": "kraken-bundled",
+        "path": str(archive_path),
+        "pair": pair,
+        "transaction_times": len(unique_times),
+    }
+
+    live_env = str(pricing.get("live_source_env") or "KASSIBER_REGTEST_DEMO_LIVE_RATES")
+    live_source = str(os.environ.get(live_env) or "").strip().lower()
+    if live_source and live_source not in {"0", "false", "no", "off"}:
+        result["live"] = run_cli(
+            data_root,
+            "rates",
+            "sync",
+            "--pair",
+            pair,
+            "--source",
+            live_source,
+            "--days",
+            str(pricing.get("live_days") or 30),
+        )["data"]
+    else:
+        result["live"] = {
+            "skipped": True,
+            "env": live_env,
+            "reason": "not requested",
+        }
+    return result
+
+
+def _seed_rates_and_process(data_root: Path, scenario: dict[str, Any]) -> tuple[dict[str, Any], list[dict[str, Any]], dict[str, Any]]:
     scope = _scope(scenario)
     transactions = run_cli(
         data_root,
@@ -1083,34 +1181,19 @@ def _seed_rates_and_process(data_root: Path, scenario: dict[str, Any]) -> tuple[
         TRANSACTION_LIST_LIMIT,
     )["data"]
     unique_times = sorted({row["occurred_at"] for row in transactions})
-    pricing = scenario["pricing"]
-    base_rate = Decimal(pricing["base_rate"])
-    step_rate = Decimal(pricing["step_rate"])
-    rate_sequence = [Decimal(str(value)) for value in pricing.get("rate_sequence") or []]
-    trend_rate = Decimal(str(pricing.get("trend_rate") or step_rate))
-    rate_pairs = list(pricing.get("pairs") or [pricing["pair"]])
-    for index, occurred_at in enumerate(unique_times):
-        if rate_sequence:
-            rate = rate_sequence[index % len(rate_sequence)] + (trend_rate * (index // len(rate_sequence)))
-        else:
-            rate = base_rate + (step_rate * index)
-        for pair in rate_pairs:
-            run_cli(
-                data_root,
-                "rates",
-                "set",
-                pair,
-                occurred_at,
-                str(rate),
-                "--source",
-                "regtest-demo",
-                "--granularity",
-                "exact",
-                "--method",
-                scenario["id"],
-            )
+    rate_seed = _seed_real_price_cache(data_root, scenario, unique_times)
     journal = run_cli(data_root, "journals", "process", *scope)["data"]
-    return journal, transactions
+    transactions = run_cli(
+        data_root,
+        "transactions",
+        "list",
+        *scope,
+        "--order",
+        "asc",
+        "--limit",
+        TRANSACTION_LIST_LIMIT,
+    )["data"]
+    return journal, transactions, rate_seed
 
 
 def _pair_transfers(data_root: Path, scenario: dict[str, Any], txids: dict[str, str]) -> list[dict[str, Any]]:
@@ -1424,6 +1507,31 @@ def _assert_expected(
     metrics = summary["metrics"]
     if expected_assets and int(metrics.get("assets_in_scope") or 0) < len(expected_assets):
         raise RuntimeError("Report summary did not include all expected assets")
+    expected_pricing_source = expected.get("pricing_source")
+    if expected_pricing_source:
+        observed_sources = {row.get("pricing_provider") for row in transactions if row.get("pricing_provider")}
+        if expected_pricing_source not in observed_sources:
+            raise RuntimeError(f"Expected pricing provider {expected_pricing_source!r}, got {sorted(observed_sources)}")
+    required_pricing_assets = {str(asset).upper() for asset in expected.get("require_pricing_provider_assets") or []}
+    if required_pricing_assets:
+        unpriced = [
+            row
+            for row in transactions
+            if str(row.get("asset") or "").upper() in required_pricing_assets
+            and row.get("excluded") not in {True, 1, "1", "true", "True"}
+            and not row.get("pricing_provider")
+        ]
+        if unpriced:
+            rendered = [
+                {
+                    "external_id": row.get("external_id"),
+                    "asset": row.get("asset"),
+                    "kind": row.get("kind"),
+                    "occurred_at": row.get("occurred_at"),
+                }
+                for row in unpriced[:10]
+            ]
+            raise RuntimeError(f"Expected active {sorted(required_pricing_assets)} rows to be priced: {rendered}")
     min_active = int(expected.get("min_active_transactions") or expected["min_transactions"])
     if int(metrics.get("active_transactions") or 0) < min_active:
         raise RuntimeError("Report summary did not include the expected active transactions")
@@ -1631,7 +1739,7 @@ def run_demo(
         pairs = _pair_transfers(data_root, scenario, txids)
         loan_result = _mark_loans(data_root, scenario, txids)
         deprecated_wallets = _mark_deprecated_wallets(data_root, scenario, wallets)
-        journal, transactions = _seed_rates_and_process(data_root, scenario)
+        journal, transactions, rate_seed = _seed_rates_and_process(data_root, scenario)
         wallet_listing = run_cli(data_root, "wallets", "list", *scope)["data"]
         transfer_listing = run_cli(data_root, "transfers", "list", *scope)["data"]
         quarantines = run_cli(data_root, "journals", "quarantined", *scope)["data"]
@@ -1697,6 +1805,7 @@ def run_demo(
                     ),
                 },
                 "journal": journal,
+                "rates": rate_seed,
                 "summary_metrics": summary["metrics"],
                 "exports": exports,
             },

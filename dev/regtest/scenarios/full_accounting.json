@@ -17,27 +17,28 @@
   },
   "pricing": {
     "pair": "BTC-EUR",
-    "pairs": [
-      "BTC-EUR",
-      "LBTC-EUR"
-    ],
-    "base_rate": "42000",
-    "step_rate": "25",
-    "trend_rate": "40",
-    "rate_sequence": [
-      "42000",
-      "31500",
-      "48600",
-      "37100",
-      "61200",
-      "44800",
-      "33800",
-      "57400",
-      "40200",
-      "68900",
-      "51900",
-      "46300"
-    ]
+    "source": "kraken-bundled",
+    "live_source_env": "KASSIBER_REGTEST_DEMO_LIVE_RATES",
+    "description": "Seed Kassiber's bundled Kraken BTC-EUR daily history and let transaction auto-pricing use the cached real Bitcoin price at or before each backdated transaction. LBTC rows use Kassiber's LBTC->BTC rate-pair alias.",
+    "fallback": {
+      "base_rate": "42000",
+      "step_rate": "25",
+      "trend_rate": "40",
+      "rate_sequence": [
+        "42000",
+        "31500",
+        "48600",
+        "37100",
+        "61200",
+        "44800",
+        "33800",
+        "57400",
+        "40200",
+        "68900",
+        "51900",
+        "46300"
+      ]
+    }
   },
   "stress": {
     "enabled": true,
@@ -310,7 +311,6 @@
           "type": "Spend",
           "date": "2020-03-12T14:00:00Z",
           "sent_amount": "0.01050000",
-          "fiat_value": "620.00",
           "counterparty": "Liquid service vendor",
           "note": "Liquid-hosted service invoice.",
           "txid": "liquid_treasury_vendor_2020"
@@ -319,7 +319,6 @@
           "type": "Income",
           "date": "2021-08-01T12:30:00Z",
           "received_amount": "0.01200000",
-          "fiat_value": "510.00",
           "counterparty": "Liquid customer",
           "note": "Customer paid an LBTC invoice.",
           "txid": "liquid_treasury_income_2021"
@@ -340,7 +339,6 @@
           "type": "Deposit",
           "date": "2021-11-20T10:00:00Z",
           "received_amount": "0.02000000",
-          "fiat_value": "1120.00",
           "counterparty": "Operations top-up",
           "note": "Operations receives LBTC working capital.",
           "txid": "liquid_operations_topup_2021"
@@ -349,7 +347,6 @@
           "type": "Spend",
           "date": "2022-07-05T15:00:00Z",
           "sent_amount": "0.00600000",
-          "fiat_value": "220.00",
           "counterparty": "Liquid SaaS vendor",
           "note": "Operations pays a Liquid-denominated SaaS invoice.",
           "txid": "liquid_operations_saas_2022"
@@ -368,7 +365,6 @@
           "type": "Interest",
           "date": "2025-04-15T08:00:00Z",
           "received_amount": "0.00300000",
-          "fiat_value": "210.00",
           "counterparty": "Liquid yield test desk",
           "note": "Small LBTC interest credit for report coverage.",
           "txid": "liquid_treasury_interest_2025"
@@ -377,7 +373,6 @@
           "type": "Spend",
           "date": "2025-12-10T16:00:00Z",
           "sent_amount": "0.00400000",
-          "fiat_value": "330.00",
           "counterparty": "Security vendor",
           "note": "Hardware wallet and key ceremony supplies paid over Liquid.",
           "txid": "liquid_treasury_security_2025"
@@ -534,6 +529,11 @@
     "wallets": 10,
     "deprecated_wallets": 4,
     "assets": [
+      "BTC",
+      "LBTC"
+    ],
+    "pricing_source": "kraken-csv",
+    "require_pricing_provider_assets": [
       "BTC",
       "LBTC"
     ],
