@@ -33,7 +33,8 @@
     "support": {
       "title": "Support",
       "bugReport": "Fehlerbericht",
-      "donateSats": "Sats spenden"
+      "donateSats": "Sats spenden",
+      "discussions": "Diskussionen"
     },
     "extras": {
       "title": "Extras",
@@ -79,6 +80,11 @@
     "ledger": {
       "label": "Hauptbuch durchsuchen",
       "placeholder": "Einträge, Wallets, Assets suchen…"
+    },
+    "imports": {
+      "title": "Importe",
+      "label": "Importe durchsuchen",
+      "placeholder": "Wallets, Dateiformate suchen…"
     },
     "logs": {
       "label": "Protokoll durchsuchen",

@@ -367,6 +367,7 @@
       "copyId": "ID kopieren",
       "exclude": "Transaktion ausnehmen",
       "voidConfirm": "Diese Transaktion stornieren? Das kann nicht rückgängig gemacht werden.",
+      "excludeConfirm": "Diese Transaktion aus Journals und Berichten ausnehmen? Du kannst sie im Klassifizieren-Tab wieder einbeziehen.",
       "collateral": {
         "collateralBadge": "BTC-Sicherheit gestellt",
         "returnedBadge": "BTC-Sicherheit zurück",
@@ -443,6 +444,10 @@
     "loanMarkFailed": {
       "title": "Darlehensmarkierung konnte nicht gespeichert werden",
       "body": "Kassiber konnte die Darlehensmarkierung nicht speichern."
+    },
+    "transactionExcluded": {
+      "title": "Transaktion ausgenommen",
+      "body": "Verarbeite Journals neu, bevor du Berichten wieder vertraust."
     },
     "evidenceReused": {
       "title": "Beleg wiederverwendet",

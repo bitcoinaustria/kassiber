@@ -864,6 +864,7 @@ class DaemonSmokeTest(unittest.TestCase):
             self.assertIn("ui.source_funds.links.bulk_review", ready["data"]["supported_kinds"])
             self.assertIn("ui.source_funds.links.attach", ready["data"]["supported_kinds"])
             self.assertIn("ui.source_funds.suggest", ready["data"]["supported_kinds"])
+            self.assertIn("ui.source_funds.assemble", ready["data"]["supported_kinds"])
             self.assertIn("ui.source_funds.evidence.list", ready["data"]["supported_kinds"])
             self.assertIn("ui.source_funds.export_pdf", ready["data"]["supported_kinds"])
             self.assertIn("ui.journals.snapshot", ready["data"]["supported_kinds"])

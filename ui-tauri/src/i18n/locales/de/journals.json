@@ -145,6 +145,8 @@
       "otherReview": "Sonstige Prüfung"
     },
     "impact": "Aus Berichten zurückgehalten",
+    "impactBlocksReports": "Blockiert Berichte",
+    "impactHeldForReview": "Zur Prüfung gehalten",
     "source": "Journal-Quarantäne · {{direction}}",
     "ownerFallback": "Aktives Buch",
     "detailFallback": {

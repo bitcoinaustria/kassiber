@@ -315,8 +315,10 @@ SUPPORTED_KINDS = (
     "ui.source_funds.links.bulk_review",
     "ui.source_funds.links.attach",
     "ui.source_funds.suggest",
+    "ui.source_funds.assemble",
     "ui.source_funds.evidence.list",
     "ui.source_funds.export_pdf",
+    "ui.source_funds.export_bundle",
     "ui.source_funds.coverage",
     "ui.source_funds.recipients.list",
     "ui.source_funds.recipients.create",
@@ -1893,6 +1895,23 @@ def _ui_source_funds_payload_from_conn(
             max_suggestions=int(args.get("max_suggestions") or core_source_funds.SUGGESTION_WRITE_CAP),
         )
 
+    if kind == "ui.source_funds.assemble":
+        target = args.get("target_transaction")
+        if not isinstance(target, str) or not target.strip():
+            raise AppError(
+                "ui.source_funds.assemble requires args.target_transaction",
+                code="validation",
+            )
+        return core_source_funds.assemble_history(
+            conn,
+            None,
+            None,
+            hooks,
+            target_transaction_ref=target.strip(),
+            include_broad_hints=bool(args.get("include_broad_hints")),
+            max_passes=int(args.get("max_passes") or 8),
+        )
+
     if kind == "ui.source_funds.evidence.list":
         _, profile = resolve_scope(conn, None, None)
         rows = conn.execute(
@@ -1970,6 +1989,8 @@ def _ui_source_funds_payload_from_conn(
             max_depth=_resolve_report_depth(args.get("max_depth")),
             save_case=False,
             recipient_ref=recipient_ref,
+            include_diagrams=True,
+            report_options=args.get("report_options") if isinstance(args.get("report_options"), dict) else None,
         )
 
     if kind == "ui.source_funds.cases.save":
@@ -2003,6 +2024,8 @@ def _ui_source_funds_payload_from_conn(
             save_case=True,
             case_label=case_label,
             recipient_ref=recipient_ref,
+            include_diagrams=True,
+            report_options=args.get("report_options") if isinstance(args.get("report_options"), dict) else None,
         )
 
     if kind == "ui.source_funds.cases.list":
@@ -2077,12 +2100,8 @@ def _ui_source_funds_payload_from_conn(
         if data_root is None:
             raise AppError("source-funds PDF export requires a data root", code="validation")
         case_ref = args.get("case")
-        target = args.get("target_transaction")
         if case_ref is not None and not isinstance(case_ref, str):
             raise AppError("ui.source_funds.export_pdf case must be a string", code="validation")
-        if target is not None and not isinstance(target, str):
-            raise AppError("ui.source_funds.export_pdf target_transaction must be a string", code="validation")
-        explicit_export_reveal = args.get("reveal_mode")
         path = _managed_report_export_path(data_root, "kassiber-source-funds", ".pdf")
         payload = dict(
             core_source_funds.export_pdf(
@@ -2092,12 +2111,6 @@ def _ui_source_funds_payload_from_conn(
                 path,
                 hooks,
                 case_ref=case_ref,
-                target_transaction_ref=target,
-                target_amount=args.get("target_amount"),
-                report_purpose=str(args.get("report_purpose") or "existing_transaction"),
-                planned_destination=args.get("planned_destination") if isinstance(args.get("planned_destination"), str) else None,
-                planned_note=args.get("planned_note") if isinstance(args.get("planned_note"), str) else None,
-                reveal_mode=str(explicit_export_reveal) if isinstance(explicit_export_reveal, str) and explicit_export_reveal else None,
             )
         )
         payload.update(
@@ -2107,6 +2120,27 @@ def _ui_source_funds_payload_from_conn(
                 "filename": Path(payload["file"]).name,
             }
         )
+        return payload
+
+    if kind == "ui.source_funds.export_bundle":
+        if data_root is None:
+            raise AppError("source-funds bundle export requires a data root", code="validation")
+        case_ref = args.get("case")
+        if case_ref is not None and not isinstance(case_ref, str):
+            raise AppError("ui.source_funds.export_bundle case must be a string", code="validation")
+        path = _managed_report_export_path(data_root, "kassiber-source-funds-bundle", ".zip")
+        payload = dict(
+            core_source_funds.export_bundle(
+                conn,
+                None,
+                None,
+                path,
+                hooks,
+                data_root=data_root,
+                case_ref=case_ref,
+            )
+        )
+        payload["filename"] = Path(payload["file"]).name
         return payload
 
     raise AppError(f"unsupported source-funds daemon export kind: {kind}", code="validation")
@@ -8937,8 +8971,10 @@ def handle_request(
         "ui.source_funds.links.bulk_review",
         "ui.source_funds.links.attach",
         "ui.source_funds.suggest",
+        "ui.source_funds.assemble",
         "ui.source_funds.evidence.list",
         "ui.source_funds.export_pdf",
+        "ui.source_funds.export_bundle",
         "ui.source_funds.coverage",
         "ui.source_funds.recipients.list",
         "ui.source_funds.recipients.create",

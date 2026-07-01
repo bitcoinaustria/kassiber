@@ -43,7 +43,7 @@ describe("quarantine row model", () => {
       source: "Journal quarantine · outbound",
       amount: "-1,000,000 sats BTC",
       basis: "Missing fiat price",
-      impact: "Held from reports",
+      impact: "Held for review",
       status: "Needs review",
       priority: "Medium",
       owner: "AT profile",
@@ -73,6 +73,7 @@ describe("quarantine row model", () => {
 
     expect(row.status).toBe("Blocked");
     expect(row.priority).toBe("High");
+    expect(row.impact).toBe("Blocks reports");
     expect(row.owner).toBe("Active book");
     expect(row.event).toBe("Not enough BTC lots in Cold");
     expect(row.amount).toBe("250,000 sats BTC");

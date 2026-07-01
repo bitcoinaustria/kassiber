@@ -161,9 +161,16 @@ Kassiber is currently in **dev mode**: renaming commands, breaking flags, and re
   `asset`, `wallet`, `since`, `sort`, and `order`. `ui.backends.list` is
   scoped to the active profile and exposes URL presence metadata, not exact
   endpoint URLs. `ui.source_funds.*` exposes the reviewed source-of-funds
-  workstation: source/link/evidence listing, suggestion seeding, explicit link
-  review, report preview, and gated PDF export without adding generic CLI
-  dispatch. Stale local journals may be automatically refreshed before
+  workstation: source/link/evidence listing, suggestion seeding, one-call
+  history assembly (`ui.source_funds.assemble`, local-evidence only — it
+  never contacts a backend), explicit link
+  review, report preview, gated PDF export, and gated evidence-bundle export
+  (`ui.source_funds.export_bundle`) without adding generic CLI dispatch. Report
+  preview/save embed on-device-rendered diagram SVGs (`include_diagrams`) so the
+  desktop preview matches the exported PDF; the hot coverage path skips them.
+  The bundle export zips the report PDF plus the original evidence files
+  attached to disclosed sources and a SHA-256 `manifest.json`, reveal-mode
+  scoped. Stale local journals may be automatically refreshed before
   AI read/report tools and direct GUI reads of journal-derived report kinds,
   with the `ui.journals.process` result included in tool result metadata for
   AI calls. Wallet/backend sync can be allowed per active profile via
@@ -240,8 +247,8 @@ the real transport must be present in `ALLOWED_DAEMON_KINDS`.
 - `journals {process,list,transfers {list},quarantined,events {list,get},quarantine {show,clear,resolve {price-override,exclude}}}`
 - `transfers {pair,list,unpair,payouts {list,create,delete},suggest,bulk-pair,dismiss,rules {list,create,apply,delete,enable,disable}}`
 - `views {list,create,delete}` — generic saved-view CRUD; ``swap_candidates`` is the first surface consumer
-- `source-funds {sources {list,create,attach},links {list,create,review,attach,bulk-review},suggest,cases {list}}`
-- `reports {summary,tax-summary,balance-sheet,portfolio-summary,capital-gains,journal-entries,balance-history,lightning-profitability,source-funds,austrian-e1kv,austrian-tax-summary,exit-tax,export-pdf,export-summary-pdf,export-csv,export-xlsx,export-lightning-profitability-csv,export-source-funds-pdf,export-austrian,export-austrian-e1kv-pdf,export-austrian-e1kv-xlsx,export-austrian-e1kv-csv,export-exit-tax-pdf,export-exit-tax-xlsx}`
+- `source-funds {sources {list,create,attach},links {list,create,review,attach,bulk-review},suggest,assemble,cases {list},coverage,recipients {list,create,update,delete}}` — `assemble` auto-builds the reviewed flow graph behind a target from local evidence only (transaction input/output structure of synced Bitcoin/Liquid wallets, Lightning payment hashes, platform ids, reviewed pairs), looping suggest + deterministic bulk review until convergence; it never contacts a backend.
+- `reports {summary,tax-summary,balance-sheet,portfolio-summary,capital-gains,journal-entries,balance-history,lightning-profitability,source-funds,austrian-e1kv,austrian-tax-summary,exit-tax,export-pdf,export-summary-pdf,export-csv,export-xlsx,export-lightning-profitability-csv,export-source-funds-pdf,export-source-funds-bundle,export-austrian,export-austrian-e1kv-pdf,export-austrian-e1kv-xlsx,export-austrian-e1kv-csv,export-exit-tax-pdf,export-exit-tax-xlsx}`
 - `rates {pairs,sync,rebuild,latest,range,set}`
 - `diagnostics {collect}`
 - `ai providers {list,get,create,update,delete,set-default,clear-default}`

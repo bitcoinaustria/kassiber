@@ -2118,7 +2118,20 @@ const TransactionsTable = ({
                             onSelect={(event: Event) => {
                               event.preventDefault();
                               if (typeof window === "undefined") return;
-                              window.confirm(t("table.row.voidConfirm"));
+                              const confirmed = window.confirm(
+                                t("table.row.excludeConfirm"),
+                              );
+                              if (!confirmed) return;
+                              void metadataUpdate.mutateAsync({
+                                transaction: txn.id,
+                                excluded: true,
+                              });
+                              useUiStore.getState().addNotification({
+                                title: t("notification.transactionExcluded.title"),
+                                body: t("notification.transactionExcluded.body"),
+                                tone: "info",
+                                dedupeKey: `tx-exclude-${txn.id}`,
+                              });
                             }}
                           >
                             <X className="mr-2 size-4" aria-hidden="true" />
