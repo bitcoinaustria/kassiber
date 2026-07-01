@@ -184,6 +184,12 @@ def _backend_extra_config(args: argparse.Namespace) -> dict[str, object] | None:
         config["commando_peer_id"] = args.commando_peer_id
     if getattr(args, "display_name", None) is not None:
         config["display_name"] = args.display_name
+    if getattr(args, "silent_payments", None) is not None:
+        config["silent_payments"] = args.silent_payments
+    if getattr(args, "silent_payment_scan_file", None) is not None:
+        config["silent_payment_scan_file"] = args.silent_payment_scan_file
+    if getattr(args, "silent_payment_scan_path", None) is not None:
+        config["silent_payment_scan_path"] = args.silent_payment_scan_path
     username = read_secret_from_args(args, "username")
     if username is not None:
         config["username"] = username
@@ -201,6 +207,18 @@ def _backend_token(args: argparse.Namespace) -> str | None:
 
 def _backend_auth_header(args: argparse.Namespace) -> str | None:
     return read_secret_from_args(args, "auth-header", legacy_attr="auth_header")
+
+
+def _prepare_wallet_secret_args(args: argparse.Namespace) -> None:
+    enforce_single_stdin_consumer(args, ("sp_descriptor",))
+    sp_descriptor = read_secret_from_args(
+        args,
+        "sp-descriptor",
+        legacy_attr="sp_descriptor",
+        label="Silent Payments descriptor",
+    )
+    if sp_descriptor is not None:
+        args.sp_descriptor = sp_descriptor
 
 
 def _normalized_backend_clear_fields(values: Sequence[str] | None) -> list[str]:
@@ -715,6 +733,22 @@ def build_parser() -> argparse.ArgumentParser:
     backends_create.add_argument("--commando-peer-id", dest="commando_peer_id")
     backends_create.add_argument("--display-name", dest="display_name")
     backends_create.add_argument(
+        "--silent-payments",
+        action="store_true",
+        default=None,
+        help="Mark this backend as deliberately Silent Payments capable.",
+    )
+    backends_create.add_argument(
+        "--silent-payment-scan-file",
+        dest="silent_payment_scan_file",
+        help="Local scanner JSON output file for watch-only Silent Payments sync.",
+    )
+    backends_create.add_argument(
+        "--silent-payment-scan-path",
+        dest="silent_payment_scan_path",
+        help="Explicit server-assisted Silent Payments scan API path on this backend.",
+    )
+    backends_create.add_argument(
         "--username",
         help="DEPRECATED — exposes secrets in shell history; prefer --username-stdin",
     )
@@ -763,6 +797,22 @@ def build_parser() -> argparse.ArgumentParser:
     backends_update.add_argument("--rpc-file", dest="rpc_file")
     backends_update.add_argument("--commando-peer-id", dest="commando_peer_id")
     backends_update.add_argument("--display-name", dest="display_name")
+    backends_update.add_argument(
+        "--silent-payments",
+        action="store_true",
+        default=None,
+        help="Mark this backend as deliberately Silent Payments capable.",
+    )
+    backends_update.add_argument(
+        "--silent-payment-scan-file",
+        dest="silent_payment_scan_file",
+        help="Local scanner JSON output file for watch-only Silent Payments sync.",
+    )
+    backends_update.add_argument(
+        "--silent-payment-scan-path",
+        dest="silent_payment_scan_path",
+        help="Explicit server-assisted Silent Payments scan API path on this backend.",
+    )
     backends_update.add_argument(
         "--username",
         help="DEPRECATED — prefer --username-stdin",
@@ -896,6 +946,32 @@ def build_parser() -> argparse.ArgumentParser:
     wallets_create.add_argument("--change-descriptor-file")
     add_secret_stdin_options(
         wallets_create, "change-descriptor", label="change descriptor"
+    )
+    wallets_create.add_argument(
+        "--sp-descriptor",
+        help="DEPRECATED — exposes Silent Payments scan material in shell history; prefer --sp-descriptor-stdin or --sp-descriptor-file",
+    )
+    wallets_create.add_argument("--sp-descriptor-file")
+    add_secret_stdin_options(
+        wallets_create, "sp-descriptor", label="Silent Payments descriptor"
+    )
+    wallets_create.add_argument(
+        "--sp-scan-mode",
+        choices=["local-index", "local_index", "server-assisted", "server_assisted"],
+        help="Silent Payments scan mode. Default: local-index.",
+    )
+    wallets_create.add_argument("--sp-scan-start-height", type=int)
+    wallets_create.add_argument("--sp-scan-start-date")
+    wallets_create.add_argument("--sp-full-history", action="store_true")
+    wallets_create.add_argument(
+        "--sp-acknowledge-full-history-warning",
+        action="store_true",
+        help="Acknowledge full-history Silent Payments scan runtime/privacy cost.",
+    )
+    wallets_create.add_argument(
+        "--sp-acknowledge-server-warning",
+        action="store_true",
+        help="Acknowledge server-assisted Silent Payments scan privacy exposure.",
     )
     wallets_create.add_argument(
         "--script-type",
@@ -2442,6 +2518,7 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
         if args.wallets_command == "list":
             return emit(args, core_wallets.list_wallets(conn, args.workspace, args.profile))
         if args.wallets_command == "create":
+            _prepare_wallet_secret_args(args)
             return emit(
                 args,
                 dict(

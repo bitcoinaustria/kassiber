@@ -42,8 +42,9 @@ the insert-time secret floor below, not by pretending RAM is hermetic.
 ## Two-stage redaction
 
 **Secret floor — applied at insert, in every buffer.** Seed phrases,
-extended private/public keys, descriptors, API keys, bearer tokens,
-passphrase assignments. These are scrubbed by
+extended private/public keys, descriptors, Silent Payments `sp()` / `spscan` /
+`spspend` material, API keys, bearer tokens, passphrase assignments. These are
+scrubbed by
 [`kassiber/redaction.py`](../../kassiber/redaction.py) (Python),
 `redact_sensitive_text` (Rust), and `redactSecretFloorText` (TypeScript)
 before a record is stored, so this material never exists in any buffer and

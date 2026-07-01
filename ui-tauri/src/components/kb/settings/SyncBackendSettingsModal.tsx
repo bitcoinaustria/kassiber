@@ -501,6 +501,9 @@ export function SyncBackendSettingsModal({
   const [infrastructureOwner, setInfrastructureOwner] =
     React.useState<InfrastructureOwnership>("third_party");
   const [certificate, setCertificate] = React.useState("");
+  const [silentPayments, setSilentPayments] = React.useState(false);
+  const [silentPaymentScanFile, setSilentPaymentScanFile] = React.useState("");
+  const [silentPaymentScanPath, setSilentPaymentScanPath] = React.useState("");
   const [useProxy, setUseProxy] = React.useState(false);
   const [proxyHost, setProxyHost] = React.useState("");
   const [proxyPort, setProxyPort] = React.useState("");
@@ -693,6 +696,9 @@ export function SyncBackendSettingsModal({
           inferredInfrastructureOwnership(initial.url),
       );
       setCertificate(initial.certificate ?? "");
+      setSilentPayments(Boolean(initial.silentPayments));
+      setSilentPaymentScanFile("");
+      setSilentPaymentScanPath("");
       setUseProxy(Boolean(initial.proxy));
       setProxyHost(initial.proxy?.host ?? "");
       setProxyPort(initial.proxy?.port ?? "");
@@ -730,6 +736,9 @@ export function SyncBackendSettingsModal({
       inferredInfrastructureOwnership(nextPreset?.url ?? DEFAULT_BACKEND_URL),
     );
     setCertificate("");
+    setSilentPayments(false);
+    setSilentPaymentScanFile("");
+    setSilentPaymentScanPath("");
     setUseProxy(false);
     setProxyHost("");
     setProxyPort("");
@@ -780,6 +789,9 @@ export function SyncBackendSettingsModal({
     setLightningCli("");
     setLightningDir("");
     setRpcFile("");
+    setSilentPayments(false);
+    setSilentPaymentScanFile("");
+    setSilentPaymentScanPath("");
     setTestState("idle");
     setTestLog("");
   }, [backendSource, initial, open, preset, presetId, t, type]);
@@ -953,6 +965,15 @@ export function SyncBackendSettingsModal({
           ((showElectrumEndpointParts && electrumUseSsl && !trustSsl) || isLnd) &&
           certificate.trim()
             ? certificate.trim()
+            : undefined,
+        silentPayments: type.net === "BTC" ? silentPayments : undefined,
+        silentPaymentScanFile:
+          type.net === "BTC" && silentPayments && silentPaymentScanFile.trim()
+            ? silentPaymentScanFile.trim()
+            : undefined,
+        silentPaymentScanPath:
+          type.net === "BTC" && silentPayments && silentPaymentScanPath.trim()
+            ? silentPaymentScanPath.trim()
             : undefined,
         proxy: proxyCapable
           ? proxyValue
@@ -1217,6 +1238,69 @@ export function SyncBackendSettingsModal({
               <div className="rounded-md border border-sky-500/25 bg-sky-500/5 p-3 text-xs text-muted-foreground">
                 {t("backendModal.explorerApiNote")}
               </div>
+            ) : null}
+
+            {type.net === "BTC" ? (
+              <label className="flex items-center justify-between gap-3 rounded-md border p-3 text-sm">
+                <span>
+                  <span className="block font-medium">
+                    {t("backendModal.silentPaymentsLabel")}
+                  </span>
+                  <span className="text-muted-foreground">
+                    {t("backendModal.silentPaymentsHint")}
+                  </span>
+                </span>
+                <Switch
+                  checked={silentPayments}
+                  onCheckedChange={(checked) => {
+                    setSilentPayments(checked);
+                    setTestState("idle");
+                    setTestLog("");
+                  }}
+                />
+              </label>
+            ) : null}
+
+            {type.net === "BTC" && silentPayments ? (
+              <section className="space-y-3 rounded-md border p-3">
+                <p className="text-xs leading-relaxed text-muted-foreground">
+                  {t("backendModal.silentPaymentsScannerConfigHint")}
+                </p>
+                <div className="space-y-2">
+                  <Label htmlFor="backend-silent-payment-scan-file">
+                    {t("backendModal.silentPaymentsScanFileLabel")}
+                  </Label>
+                  <Input
+                    id="backend-silent-payment-scan-file"
+                    value={silentPaymentScanFile}
+                    onChange={(event) => {
+                      setSilentPaymentScanFile(event.target.value);
+                      setTestState("idle");
+                      setTestLog("");
+                    }}
+                    placeholder={t(
+                      "backendModal.silentPaymentsScanFilePlaceholder",
+                    )}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="backend-silent-payment-scan-path">
+                    {t("backendModal.silentPaymentsScanPathLabel")}
+                  </Label>
+                  <Input
+                    id="backend-silent-payment-scan-path"
+                    value={silentPaymentScanPath}
+                    onChange={(event) => {
+                      setSilentPaymentScanPath(event.target.value);
+                      setTestState("idle");
+                      setTestLog("");
+                    }}
+                    placeholder={t(
+                      "backendModal.silentPaymentsScanPathPlaceholder",
+                    )}
+                  />
+                </div>
+              </section>
             ) : null}
 
             {type.net !== "LN" ? (

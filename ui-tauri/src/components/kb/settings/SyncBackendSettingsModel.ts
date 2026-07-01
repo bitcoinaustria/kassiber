@@ -27,6 +27,9 @@ export function backendTypeIdForConnectionSetup(
   ) {
     return "bitcoin";
   }
+  if (kind === "silentpayment" || sourceId === "silent-payment") {
+    return "bitcoin";
+  }
   if (kind === "coreln") return "coreln";
   if (kind === "lnd") return "lnd";
   if (sourceId === "core-ln") return "coreln";

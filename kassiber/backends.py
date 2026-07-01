@@ -110,7 +110,7 @@ BACKEND_DB_FIELDS = {
 }
 BACKEND_RUNTIME_METADATA_FIELDS = {"config", "is_default", "source"}
 BACKEND_RESERVED_FIELDS = BACKEND_DB_FIELDS | BACKEND_RUNTIME_METADATA_FIELDS
-BACKEND_BOOLEAN_CONFIG_FIELDS = {"insecure"}
+BACKEND_BOOLEAN_CONFIG_FIELDS = {"insecure", "silent_payments"}
 BACKEND_CONFIG_FIELDS = {
     "certificate",
     "commando_peer_id",
@@ -121,10 +121,14 @@ BACKEND_CONFIG_FIELDS = {
     "lightning_dir",
     "password",
     "rpc_file",
+    "silent_payments",
+    "silent_payment_scan_file",
+    "silent_payment_scan_path",
     "username",
     "walletprefix",
 }
 BACKEND_CONFIG_KEY_ALIASES = {
+    "bip352": "silent_payments",
     "commando": "commando_peer_id",
     "commando_id": "commando_peer_id",
     "cookie_file": "cookiefile",
@@ -136,6 +140,9 @@ BACKEND_CONFIG_KEY_ALIASES = {
     "rpc_password": "password",
     "rpcuser": "username",
     "rpc_user": "username",
+    "sp_capable": "silent_payments",
+    "sp_scan_file": "silent_payment_scan_file",
+    "sp_scan_path": "silent_payment_scan_path",
     "wallet_prefix": "walletprefix",
 }
 BACKEND_CLEAR_FIELD_ALIASES = {
@@ -153,6 +160,9 @@ BACKEND_CLEAR_FIELD_ALIASES = {
     "rpc-file": "rpc_file",
     "username": "username",
     "password": "password",
+    "silent-payments": "silent_payments",
+    "silent-payment-scan-file": "silent_payment_scan_file",
+    "silent-payment-scan-path": "silent_payment_scan_path",
     "wallet-prefix": "walletprefix",
 }
 BACKEND_OUTPUT_PRESENCE_FIELDS = {
@@ -184,7 +194,14 @@ BACKEND_SAFE_CONFIG_OUTPUT_FIELDS = (
     "display_name",
     "infrastructure_owner",
     "insecure",
+    "silent_payments",
     "walletprefix",
+)
+BACKEND_SILENT_PAYMENT_SCAN_FIELDS = (
+    "silent_payment_scan_file",
+    "silent_payment_scan_path",
+    "sp_scan_file",
+    "sp_scan_path",
 )
 
 
@@ -559,6 +576,8 @@ def redact_backend_for_output(backend):
             continue
         if field in BACKEND_BOOLEAN_CONFIG_FIELDS:
             value = backend.get(field)
+            if str_or_none(value) is None:
+                continue
             try:
                 payload[field] = value if isinstance(value, bool) else parse_bool(value)
             except AppError:
@@ -567,6 +586,11 @@ def redact_backend_for_output(backend):
         value = str_or_none(backend.get(field))
         if value is not None:
             payload[field] = value
+    if "silent_payments" not in payload and any(
+        str_or_none(backend.get(key)) is not None
+        for key in BACKEND_SILENT_PAYMENT_SCAN_FIELDS
+    ):
+        payload["silent_payments"] = True
     for flag, keys in BACKEND_OUTPUT_PRESENCE_FIELDS.items():
         payload[flag] = any(str_or_none(backend.get(key)) is not None for key in keys)
     return payload

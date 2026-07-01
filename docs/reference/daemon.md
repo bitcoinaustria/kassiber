@@ -249,6 +249,13 @@ require `DELETE LOCAL DATA`.
 `ui.backends.options` returns safe backend setup choices for desktop forms. It
 lists configured backend names, kinds, chain/network metadata, presence flags,
 and default state, but does not expose exact endpoint URLs or tokens.
+`ui.backends.create` / `ui.backends.update` can mark a backend with
+`silent_payments=true` and store either `silent_payment_scan_file` for a local
+scanner result or `silent_payment_scan_path` for an explicitly selected
+server-assisted scanner API. The file/path values are backend config, not
+normal safe output fields. Desktop forms may send replacement values, but
+`ui.backends.list` / `ui.backends.options` expose only the safe capability bit
+and presence-style metadata, never the saved scanner path itself.
 `ui.backends.detect_core` probes common local Bitcoin Core RPC endpoints with
 default cookie-file locations plus local `bitcoin.conf` RPC settings and
 returns candidate URL/network/auth-source metadata without cookie contents.
@@ -273,6 +280,14 @@ etc.) and returns the redacted wallet row. Desktop callers can pass
 `wallet_material` instead of separate descriptor fields; the daemon recognizes
 common descriptor export shapes, including plaintext BSMS descriptor records,
 and stores receive/change descriptors when the material contains both.
+For `kind="silent-payment"`, callers pass `sp_descriptor` plus one scan
+birthday field (`sp_scan_start_height` or `sp_scan_start_date`) or explicit
+full-history acknowledgement (`sp_full_history` with
+`sp_acknowledge_full_history_warning`). Server-assisted scan mode also requires
+`sp_acknowledge_server_warning`. The stored `sp_descriptor` is secret-bearing
+watch-only privacy material and never appears in normal list/get/UI/AI payloads;
+the redacted wallet row exposes only safe state such as material format, scan
+mode, start point, and full-history flag.
 
 `ui.wallets.import_samourai` is the desktop Samourai/Whirlpool watch-only path.
 It accepts `label`, optional `backend`, `network`, and `gap_limit`, plus exactly

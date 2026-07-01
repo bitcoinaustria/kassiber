@@ -2,10 +2,11 @@
 
 Privacy contract: log records live in RAM only — this module never touches
 disk (no FileHandlers, no persistence of any kind). Secret-floor redaction
-(seeds, extended keys, descriptors, API keys, bearer tokens, passphrases)
-is applied AT INSERT via `kassiber.redaction.redact_secret_text`, so that
-material never exists in any buffer. Operational redaction (amounts, txids,
-addresses, paths, URLs) remains a render/export-time concern of consumers.
+(seeds, extended keys, descriptors, Silent Payments scan material, API keys,
+bearer tokens, passphrases) is applied AT INSERT via
+`kassiber.redaction.redact_secret_text`, so that material never exists in any
+buffer. Operational redaction (amounts, txids, addresses, paths, URLs) remains
+a render/export-time concern of consumers.
 Absolute filesystem paths are relativized before storage so records never
 leak the home directory.
 """

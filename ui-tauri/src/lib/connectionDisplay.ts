@@ -15,6 +15,7 @@ export const connectionKindCategoryLabels: Record<ConnectionKind, string> = {
   xpub: "On-chain",
   address: "On-chain",
   descriptor: "On-chain",
+  "silent-payment": "On-chain",
   samourai: "On-chain",
   "core-ln": "Lightning",
   lnd: "Lightning",
@@ -39,6 +40,7 @@ export const connectionKindLabels: Record<ConnectionKind, string> = {
   xpub: "XPUB",
   address: "Address",
   descriptor: "Descriptor",
+  "silent-payment": "Silent Payments",
   samourai: "Samourai",
   "core-ln": "Core Lightning",
   lnd: "LND",
@@ -90,6 +92,8 @@ export function connectionTypeLabel(connection: ConnectionTypeInput): string {
     case "xpub":
     case "descriptor":
       return "Wallet descriptor";
+    case "silent-payment":
+      return "Silent Payments watch-only";
     case "address":
       return "Address list";
     case "samourai":
