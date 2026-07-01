@@ -1187,14 +1187,15 @@ function readTransactionDetailParams(): {
   }
   const params = new URLSearchParams(window.location.search);
   const tab = params.get("tab");
-  return {
+  const rowId = params.get("qrow");
+  const target = {
     transactionId:
       params.get("tx") ?? params.get("transaction") ?? params.get("transactionId"),
     tab: detailTabValues.includes(tab as (typeof detailTabValues)[number])
       ? tab ?? "details"
       : "details",
-    rowId: params.get("qrow"),
   };
+  return rowId ? { ...target, rowId } : target;
 }
 
 const quickFilterValues: TableQuickFilter[] = [

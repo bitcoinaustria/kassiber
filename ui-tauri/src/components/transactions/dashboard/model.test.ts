@@ -18,7 +18,6 @@ import {
   readTransactionScopeParams,
   removeAttachmentRecord,
   replaceAttachmentRecord,
-  readTransactionDetailParams,
   toDashboardTransaction,
   upsertAttachmentRecords,
   type AttachmentRecord,
