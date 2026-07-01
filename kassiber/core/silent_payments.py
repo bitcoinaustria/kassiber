@@ -354,9 +354,13 @@ def validate_wallet_config(config: Mapping[str, Any]) -> dict[str, Any]:
         output.get(CONFIG_SERVER_WARNING_ACK), default=False
     ):
         raise AppError(
-            "Server-assisted Silent Payments scans require an explicit privacy warning acknowledgement",
+            "Server-assisted Silent Payments scans require an explicit privacy and completeness warning acknowledgement",
             code="silent_payment_server_warning_required",
-            hint="Pass --sp-acknowledge-server-warning after selecting a backend deliberately.",
+            hint=(
+                "Pass --sp-acknowledge-server-warning after selecting a backend "
+                "deliberately and accepting that omitted scan candidates can make "
+                "reports incomplete."
+            ),
             retryable=False,
         )
     if not str_or_none(output.get("backend")):

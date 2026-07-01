@@ -105,6 +105,12 @@ scripthash sync is not enough to discover BIP352 outputs; unsupported backends
 fail with `silent_payment_backend_unsupported` rather than returning a clean
 zero balance.
 
+Server-assisted scans are a trust/completeness tradeoff, not just a transport
+choice. The selected backend may learn enough to correlate the wallet, and if
+it omits Silent Payments scan candidates, Kassiber cannot independently prove
+that a reported-complete range found every payment. Prefer a local scanner or a
+self-hosted SP indexer for accounting-critical books.
+
 The local scanner file is outside Kassiber's SQLite/SQLCipher boundary. Treat
 it like wallet metadata: keep it in a private, local directory and do not place
 it in shared, cloud-synced, or world-readable locations. On POSIX systems,

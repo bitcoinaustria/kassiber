@@ -36,6 +36,10 @@ Silent Payments wallets are different again: ordinary scripthash backends
 cannot discover BIP352 outputs. Kassiber requires an explicitly configured
 Silent-Payments-capable backend or local scanner and will not silently fall
 back to the built-in clearnet defaults.
+Server-assisted Silent Payments scans also trust the selected backend for
+completeness: if it omits scan candidates, Kassiber cannot independently prove
+that a reported-complete range found every payment. Use a local scanner or a
+self-hosted SP indexer for accounting-critical books.
 
 Mitigations, in order of effect:
 
@@ -65,7 +69,7 @@ configurable.
 | `wallets sync` against a user-configured Electrum backend | your configured `ssl://` or `tcp://` URL | Electrum JSON-RPC over raw TCP/TLS | IP, queried scripthashes, query timing |
 | `wallets sync` against a `bitcoinrpc` backend | your configured URL | HTTP(S) POST with Basic auth | nothing leaves your machine if the node is local |
 | `wallets sync` for a `silent-payment` wallet with a local scanner file | local filesystem path configured by you | local file read | no network request by Kassiber; scanner output and detected Taproot outputs stay local; on POSIX the scanner file must be user-owned and `0600` |
-| `wallets sync` for a `silent-payment` wallet in server-assisted mode | your explicitly configured SP-capable backend URL/path | HTTP(S) POST through that backend's proxy setting, if any | IP, User-Agent, scan request timing, scan birthday/range, and the watch-only `sp()` scan material needed by that backend |
+| `wallets sync` for a `silent-payment` wallet in server-assisted mode | your explicitly configured SP-capable backend URL/path | HTTP(S) POST through that backend's proxy setting, if any | IP, User-Agent, scan request timing, scan birthday/range, the watch-only `sp()` scan material needed by that backend, and scan completeness depends on that backend not omitting candidates |
 | `rates sync` (only) | configured provider (`mempool` backend, Coinbase Exchange, or CoinGecko) | unauthenticated HTTP(S) GET | IP, User-Agent, which fiat pair and window |
 | `ai models`, `chat`, `ai.test_connection` against a configured remote/TEE provider | your configured provider URL or CLI provider | OpenAI-compatible HTTP(S) or the configured local CLI's own transport | prompt/tool context, model request metadata, IP/provider account context according to that provider |
 | consented mutating AI tools inside `chat` or the desktop Assistant (`ui.wallets.sync`, `ui.rates.rebuild`, `ui.maintenance.run`) | the backends/rate sources of the rows above | as in those rows | as in those rows — tool consent is also network consent for that row |
