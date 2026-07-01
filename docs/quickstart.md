@@ -93,8 +93,8 @@ python3 -m kassiber wallets create \
 python3 -m kassiber wallets sync --wallet donations
 ```
 
-Descriptor and xpub wallets work the same way — `wallets kinds` lists the
-supported kinds. See [reference/backends.md](reference/backends.md) for
+Descriptor, BSMS, and xpub wallets work the same way — `wallets kinds` lists
+the supported kinds. See [reference/backends.md](reference/backends.md) for
 configuring sync backends (the built-in defaults are listed in
 [SECURITY.md](../SECURITY.md#the-big-gotcha-not-running-your-own-node)).
 

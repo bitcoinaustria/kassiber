@@ -120,6 +120,7 @@ from ..wallet_descriptors import (
     normalize_chain,
     normalize_network,
 )
+from ..wallet_setup import parse_bsms_descriptor_record
 from ..importers import load_import_records
 from ..sync_btcpay import (
     DEFAULT_PAGE_SIZE as BTCPAY_DEFAULT_PAGE_SIZE,
@@ -1673,8 +1674,6 @@ def parse_wallet_config(args):
             getattr(args, "descriptor_file", None),
             "Descriptor",
         )
-    if descriptor_text:
-        config["descriptor"] = descriptor_text
     change_descriptor_text = read_secret_from_args(
         args, "change-descriptor", legacy_attr="change_descriptor"
     )
@@ -1684,6 +1683,13 @@ def parse_wallet_config(args):
             getattr(args, "change_descriptor_file", None),
             "Change descriptor",
         )
+    if descriptor_text:
+        bsms_descriptors = parse_bsms_descriptor_record(descriptor_text)
+        if bsms_descriptors:
+            descriptor_text = bsms_descriptors["descriptor"]
+            if not change_descriptor_text:
+                change_descriptor_text = bsms_descriptors.get("change_descriptor")
+        config["descriptor"] = descriptor_text
     if change_descriptor_text:
         config["change_descriptor"] = change_descriptor_text
     addresses = normalize_addresses(getattr(args, "address", None))

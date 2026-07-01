@@ -84,6 +84,22 @@ class ParseWalletConfigMultiScriptTests(unittest.TestCase):
         self.assertNotIn("xpub", config)
         self.assertNotIn("script_types", config)
 
+    def test_bsms_descriptor_record_stores_expanded_descriptors(self):
+        xpub = _xpub()
+        bsms = "\n".join(
+            [
+                "BSMS 1.0",
+                f"wpkh({xpub}/**)",
+                "/0/*,/1/*",
+                "bc1qplaceholderfirstaddress",
+            ]
+        )
+
+        config = parse_wallet_config(_args(descriptor=bsms, chain="bitcoin"))
+
+        self.assertEqual(config.get("descriptor"), f"wpkh({xpub}/0/*)")
+        self.assertEqual(config.get("change_descriptor"), f"wpkh({xpub}/1/*)")
+
     def test_script_type_without_material_is_rejected(self):
         with self.assertRaises(AppError) as ctx:
             parse_wallet_config(_args(script_type=["p2wpkh"]))
