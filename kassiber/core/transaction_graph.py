@@ -13,7 +13,13 @@ import sqlite3
 from collections import defaultdict
 from typing import Any, Mapping, NamedTuple, Sequence
 
-from ..backends import preferred_mempool_api_backend
+from ..backends import (
+    DEFAULT_BACKEND_SETTING,
+    backend_value,
+    list_db_backends,
+    preferred_mempool_api_backend,
+)
+from ..db import get_setting
 from ..errors import AppError
 from ..msat import msat_to_btc
 from ..transfers import detect_intra_transfers, normalize_group_txid
@@ -26,7 +32,7 @@ from .ownership_transfers import (
     derive_recorded_fanout_transfers,
 )
 from .repo import current_context_snapshot
-from .sync_backends import fetch_esplora_transaction
+from .sync_backends import bitcoinrpc_call, fetch_esplora_transaction
 
 
 GRAPH_LOOKUP_TIMEOUT_SECONDS = 5
@@ -566,19 +572,22 @@ def _enrich_bitcoin_graph_raw(
         return _with_graph_lookup_warning(
             raw,
             "bitcoin_reference_lookup_unavailable",
-            "No configured Bitcoin HTTP explorer backend is available to fetch public transaction references.",
+            "No configured Bitcoin graph backend is available to fetch transaction references.",
         )
     try:
-        fetched = fetch_esplora_transaction(
-            str(backend["url"]),
-            str(txid),
-            timeout=_graph_lookup_timeout(backend),
-        )
+        if backend.get("kind") == "bitcoinrpc":
+            fetched = _fetch_bitcoinrpc_transaction_graph(backend, str(txid))
+        else:
+            fetched = fetch_esplora_transaction(
+                str(backend["url"]),
+                str(txid),
+                timeout=_graph_lookup_timeout(backend),
+            )
     except Exception:
         return _with_graph_lookup_warning(
             raw,
             "bitcoin_reference_lookup_failed",
-            "Could not fetch public Bitcoin transaction references from the selected explorer backend.",
+            "Could not fetch Bitcoin transaction references from the selected backend.",
         )
     if not isinstance(fetched, Mapping):
         return _with_graph_lookup_warning(
@@ -622,6 +631,116 @@ def _graph_lookup_timeout(backend: Mapping[str, Any]) -> int:
     if configured is None or configured <= 0:
         return GRAPH_LOOKUP_TIMEOUT_SECONDS
     return min(configured, GRAPH_LOOKUP_TIMEOUT_SECONDS)
+
+
+def _fetch_bitcoinrpc_transaction_graph(
+    backend: Mapping[str, Any],
+    txid: str,
+) -> dict[str, Any]:
+    decoded = bitcoinrpc_call(
+        dict(backend),
+        "getrawtransaction",
+        [txid, True],
+        timeout=_graph_lookup_timeout(backend),
+    )
+    if not isinstance(decoded, Mapping):
+        raise AppError("Bitcoin Core returned an invalid transaction response")
+    return _bitcoinrpc_decoded_to_graph_raw(dict(backend), decoded)
+
+
+def _bitcoinrpc_decoded_to_graph_raw(
+    backend: Mapping[str, Any],
+    decoded: Mapping[str, Any],
+) -> dict[str, Any]:
+    txid = _string_or_none(decoded.get("txid"))
+    graph: dict[str, Any] = {
+        "txid": txid,
+        "version": decoded.get("version"),
+        "locktime": decoded.get("locktime"),
+        "size": decoded.get("size"),
+        "vsize": decoded.get("vsize"),
+        "weight": decoded.get("weight"),
+        "raw_hex": decoded.get("hex"),
+        "vin": [],
+        "vout": [],
+    }
+    for input_entry in decoded.get("vin") if isinstance(decoded.get("vin"), list) else []:
+        if not isinstance(input_entry, Mapping):
+            continue
+        graph_input: dict[str, Any] = {
+            "txid": input_entry.get("txid"),
+            "vout": input_entry.get("vout"),
+            "sequence": input_entry.get("sequence"),
+        }
+        prevout = input_entry.get("prevout")
+        if isinstance(prevout, Mapping):
+            graph_input["prevout"] = _bitcoinrpc_prevout_to_graph(prevout)
+        else:
+            fetched_prevout = _bitcoinrpc_fetch_prevout(
+                backend,
+                input_entry.get("txid"),
+                input_entry.get("vout"),
+            )
+            if fetched_prevout is not None:
+                graph_input["prevout"] = fetched_prevout
+        graph["vin"].append(graph_input)
+    for output_entry in decoded.get("vout") if isinstance(decoded.get("vout"), list) else []:
+        if isinstance(output_entry, Mapping):
+            graph["vout"].append(_bitcoinrpc_vout_to_graph(output_entry))
+    return graph
+
+
+def _bitcoinrpc_fetch_prevout(
+    backend: Mapping[str, Any],
+    txid: Any,
+    vout: Any,
+) -> dict[str, Any] | None:
+    if not _looks_like_txid(txid):
+        return None
+    index = _int_or_none(vout)
+    if index is None or index < 0:
+        return None
+    try:
+        previous = bitcoinrpc_call(
+            dict(backend),
+            "getrawtransaction",
+            [str(txid), True],
+            timeout=_graph_lookup_timeout(backend),
+        )
+    except Exception:
+        return None
+    if not isinstance(previous, Mapping):
+        return None
+    outputs = previous.get("vout")
+    if not isinstance(outputs, list) or index >= len(outputs):
+        return None
+    previous_output = outputs[index]
+    if not isinstance(previous_output, Mapping):
+        return None
+    return _bitcoinrpc_prevout_to_graph(previous_output)
+
+
+def _bitcoinrpc_prevout_to_graph(source: Mapping[str, Any]) -> dict[str, Any]:
+    return _bitcoinrpc_vout_to_graph(source)
+
+
+def _bitcoinrpc_vout_to_graph(source: Mapping[str, Any]) -> dict[str, Any]:
+    script = source.get("scriptPubKey")
+    script_obj = script if isinstance(script, Mapping) else {}
+    address = _string_or_none(script_obj.get("address"))
+    if not address:
+        addresses = script_obj.get("addresses")
+        if isinstance(addresses, list) and addresses:
+            address = _string_or_none(addresses[0])
+    payload: dict[str, Any] = {
+        "n": source.get("n"),
+        "value": source.get("value"),
+        "scriptpubkey": script_obj.get("hex") or source.get("scriptpubkey"),
+        "scriptpubkey_type": script_obj.get("type") or source.get("scriptpubkey_type"),
+    }
+    if address:
+        payload["scriptpubkey_address"] = address
+    return payload
 
 
 def _enrich_liquid_reference_graph_raw(
@@ -720,10 +839,14 @@ def _graph_lookup_backend(
     candidate = preferred_mempool_api_backend(conn, chain, network)
     if candidate is not None:
         return {
+            "kind": "esplora",
             "name": candidate.get("name"),
             "url": candidate.get("api_base_url"),
             "timeout": candidate.get("timeout"),
         }
+    bitcoinrpc_backend = _bitcoinrpc_graph_lookup_backend(conn, row, runtime_config)
+    if bitcoinrpc_backend is not None:
+        return bitcoinrpc_backend
     if not isinstance(runtime_config, Mapping):
         return None
     backend_name = str(runtime_config.get("default_backend") or "")
@@ -735,15 +858,89 @@ def _graph_lookup_backend(
     backend_chain = str(backend.get("chain") or "bitcoin").lower()
     backend_network = str(backend.get("network") or network).lower()
     url = _string_or_none(backend.get("url"))
-    if (
-        kind not in {"esplora", "mempool"}
-        or backend_chain not in {"", chain}
-        or not url
-    ):
+    if kind not in {"esplora", "mempool"} or backend_chain not in {"", chain} or not url:
         return None
     if backend_network and backend_network != network:
         return None
-    return {"name": backend_name, "url": url, "timeout": _int_or_none(backend.get("timeout"))}
+    return {
+        "kind": "esplora",
+        "name": backend_name,
+        "url": url,
+        "timeout": _int_or_none(backend.get("timeout")),
+    }
+
+
+def _bitcoinrpc_graph_lookup_backend(
+    conn: sqlite3.Connection,
+    row: Mapping[str, Any],
+    runtime_config: Mapping[str, Any] | None,
+) -> dict[str, Any] | None:
+    chain, network = _row_chain_network(row)
+    if chain != "bitcoin":
+        return None
+
+    candidates: list[Mapping[str, Any]] = []
+    if isinstance(runtime_config, Mapping):
+        runtime_backends = (
+            runtime_config.get("backends")
+            if isinstance(runtime_config.get("backends"), Mapping)
+            else {}
+        )
+        default_name = str(runtime_config.get("default_backend") or "")
+        default_backend = (
+            runtime_backends.get(default_name)
+            if isinstance(runtime_backends, Mapping) and default_name
+            else None
+        )
+        if isinstance(default_backend, Mapping):
+            candidates.append(default_backend)
+        if isinstance(runtime_backends, Mapping):
+            candidates.extend(
+                backend
+                for name, backend in runtime_backends.items()
+                if name != default_name and isinstance(backend, Mapping)
+            )
+
+    default_backend_name = get_setting(conn, DEFAULT_BACKEND_SETTING)
+    db_backends = list_db_backends(conn)
+    if default_backend_name:
+        candidates.extend(
+            backend
+            for backend in db_backends
+            if str(backend.get("name") or "") == default_backend_name
+        )
+    candidates.extend(
+        backend
+        for backend in db_backends
+        if not default_backend_name
+        or str(backend.get("name") or "") != default_backend_name
+    )
+
+    seen: set[str] = set()
+    for backend in candidates:
+        name = str(backend.get("name") or "")
+        key = name or str(id(backend))
+        if key in seen:
+            continue
+        seen.add(key)
+        kind = str(backend_value(backend, "kind") or "").lower()
+        backend_chain = str(backend_value(backend, "chain") or "bitcoin").lower()
+        backend_network = str(backend_value(backend, "network") or network).lower()
+        if kind != "bitcoinrpc" or backend_chain not in {"", chain}:
+            continue
+        if backend_network and backend_network != network:
+            continue
+        url = _string_or_none(backend_value(backend, "url"))
+        if not url:
+            continue
+        return {
+            **dict(backend),
+            "kind": "bitcoinrpc",
+            "name": name or "bitcoinrpc",
+            "url": url,
+            "timeout": _int_or_none(backend.get("timeout")),
+        }
+    return None
 
 
 def _liquid_graph_lookup_backend(
@@ -1409,7 +1606,7 @@ def _graphless_message(reason: str) -> str:
     if reason == "liquid_reference_graph_not_local":
         return (
             "Kassiber has only the imported Liquid row locally. "
-            "The public transaction references can be inspected in Liquid Network; confidential amounts may remain hidden."
+            "Add a Liquid explorer backend to inspect public input/output references; confidential amounts may remain hidden."
         )
     return "This source record does not contain Bitcoin input/output references for a flow diagram."
 

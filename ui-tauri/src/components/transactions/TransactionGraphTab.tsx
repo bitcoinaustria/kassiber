@@ -2,7 +2,6 @@ import {
   AlertTriangle,
   ArrowRight,
   ArrowRightLeft,
-  ExternalLink,
   Info,
   Maximize2,
 } from "lucide-react";
@@ -1108,11 +1107,6 @@ function GraphEmptyState({
       : reason === "liquid_reference_graph_not_local"
         ? t("graph.liquidBody")
         : t("graph.graphlessBody");
-  const txid = graph?.transaction?.txid ?? graph?.transaction?.externalId;
-  const liquidExplorerHref =
-    reason === "liquid_reference_graph_not_local" && txid
-      ? `https://liquid.network/tx/${encodeURIComponent(txid)}`
-      : null;
   const alertWarnings = (graph?.warnings ?? []).filter(
     (warning) => warning.level === "warning" || warning.level === "error",
   );
@@ -1126,14 +1120,6 @@ function GraphEmptyState({
         <div>
           <div className="text-sm font-medium">{title}</div>
           <div className="mt-1 text-sm text-muted-foreground">{body}</div>
-          {liquidExplorerHref ? (
-            <Button asChild variant="outline" size="sm" className="mt-3 gap-2">
-              <a href={liquidExplorerHref} target="_blank" rel="noreferrer">
-                <ExternalLink className="size-4" aria-hidden="true" />
-                {t("graph.openLiquidNetwork")}
-              </a>
-            </Button>
-          ) : null}
         </div>
       </div>
       </div>

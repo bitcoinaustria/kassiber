@@ -1,11 +1,13 @@
 export interface ExplorerSettings {
   bitcoinBaseUrl: string;
   liquidBaseUrl: string;
+  publicFallbacks: boolean;
 }
 
 export const DEFAULT_EXPLORER_SETTINGS: ExplorerSettings = {
   bitcoinBaseUrl: "",
   liquidBaseUrl: "",
+  publicFallbacks: true,
 };
 
 export type ExplorerNetwork = "bitcoin" | "liquid";
@@ -68,6 +70,7 @@ export function explorerTargetForTransaction({
     network === "liquid" ? settings?.liquidBaseUrl : settings?.bitcoinBaseUrl;
   const configured = Boolean(configuredBase?.trim());
   const fallback = PUBLIC_EXPLORERS[network];
+  if (!configured && settings?.publicFallbacks === false) return null;
   const baseUrl = configured ? configuredBase?.trim() ?? "" : fallback.baseUrl;
   const url = transactionUrl(baseUrl, id);
   if (!url) return null;

@@ -715,4 +715,28 @@ describe("TransactionGraphPanel", () => {
     expect(html).toContain("No graph for this source");
     expect(html).toContain("without valued Bitcoin vin/vout data");
   });
+
+  it("does not hardcode a public Liquid explorer link for graphless Liquid rows", () => {
+    const graphless: TransactionGraphPayload = {
+      transaction: {
+        id: "liquid-row",
+        txid: "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
+      },
+      supportLevel: "graphless",
+      unsupportedReason: "liquid_reference_graph_not_local",
+      inputs: [],
+      outputs: [],
+      fee: null,
+      warnings: [],
+      annotations: [],
+    };
+    const html = renderToStaticMarkup(
+      <TransactionGraphPanel graph={graphless} hideSensitive={false} />,
+    );
+
+    expect(html).toContain("Liquid graph not stored locally");
+    expect(html).toContain("Add a Liquid explorer backend");
+    expect(html).not.toContain("liquid.network");
+    expect(html).not.toContain("Open Liquid Network");
+  });
 });

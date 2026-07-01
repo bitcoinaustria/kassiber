@@ -761,16 +761,23 @@ export function backendExplorerBaseUrl(backend: Backend): string | null {
 // Transaction-explorer links are derived from the configured Explorer-API
 // backends rather than stored separately, so this stays the single source of
 // truth: recompute it from the full backend list after any add/edit/delete.
-// An empty base falls back to the public default (see `@/lib/explorer`).
+// Non-regtest books may fall back to public explorers (see `@/lib/explorer`);
+// regtest books must only expose configured local/private explorer endpoints.
 export function deriveExplorerSettings(backends: Backend[]): ExplorerSettings {
   const baseForNet = (net: Net) =>
     backends
       .filter((backend) => backend.net === net)
       .map(backendExplorerBaseUrl)
       .find((value): value is string => Boolean(value)) ?? "";
+  const activeRegtestBackend = backends.some(
+    (backend) =>
+      backend.isDefault &&
+      String(backend.network ?? "").toLowerCase() === "regtest",
+  );
   return {
     bitcoinBaseUrl: baseForNet("BTC"),
     liquidBaseUrl: baseForNet("LIQUID"),
+    publicFallbacks: !activeRegtestBackend,
   };
 }
 

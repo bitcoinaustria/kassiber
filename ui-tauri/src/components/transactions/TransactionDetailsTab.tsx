@@ -213,12 +213,12 @@ export function TransactionDetailsTab({ ctx }: { ctx: TransactionDetailTabContex
   );
   const swapOutGraphQuery = useDaemon<TransactionGraphPayload>(
     "ui.transactions.graph",
-    { transaction: swapOutTransactionRef ?? "" },
+    { transaction: swapOutTransactionRef ?? "", allowPublicLookup: true },
     { enabled: Boolean(swapOutTransactionRef) },
   );
   const swapInGraphQuery = useDaemon<TransactionGraphPayload>(
     "ui.transactions.graph",
-    { transaction: swapInTransactionRef ?? "" },
+    { transaction: swapInTransactionRef ?? "", allowPublicLookup: true },
     { enabled: Boolean(swapInTransactionRef) },
   );
   const activeSwapGraphQuery =

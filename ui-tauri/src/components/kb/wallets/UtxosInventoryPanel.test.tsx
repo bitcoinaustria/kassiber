@@ -78,7 +78,7 @@ const renderPanel = (
       inventory={inventory}
       hideSensitive={false}
       isRefreshing={false}
-      explorerSettings={{ bitcoinBaseUrl: "", liquidBaseUrl: "" }}
+      explorerSettings={{ bitcoinBaseUrl: "", liquidBaseUrl: "", publicFallbacks: true }}
       onRefresh={vi.fn()}
       onOpenTransaction={options.onOpenTransaction}
     />,
@@ -197,6 +197,7 @@ describe("UtxosInventoryPanel", () => {
     const target = explorerTargetForUtxo(baseInventory.utxos[0], {
       bitcoinBaseUrl: "",
       liquidBaseUrl: "",
+      publicFallbacks: true,
     });
 
     expect(target).toMatchObject({

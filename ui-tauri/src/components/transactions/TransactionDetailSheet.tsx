@@ -200,7 +200,7 @@ export function TransactionDetailSheet({
   const manualPriceRef = React.useRef<HTMLInputElement | null>(null);
   const graphQuery = useDaemon<TransactionGraphPayload>(
     "ui.transactions.graph",
-    { transaction: transaction?.id ?? "" },
+    { transaction: transaction?.id ?? "", allowPublicLookup: true },
     { enabled: Boolean(transaction) },
   );
   React.useEffect(() => {
