@@ -104,7 +104,7 @@ printf '{"request_id":"kraken-bundled-1","kind":"ui.rates.kraken_csv.import","ar
 grep '"kind":"ui.rates.kraken_csv.import"' "$kraken_smoke_out" >/dev/null
 grep '"bundled":true' "$kraken_smoke_out" >/dev/null
 grep '"pairs":2' "$kraken_smoke_out" >/dev/null
-grep '"rows":9129' "$kraken_smoke_out" >/dev/null
+grep '"rows":11123' "$kraken_smoke_out" >/dev/null
 
 mkdir -p "$BINARIES_DIR"
 find "$BINARIES_DIR" -maxdepth 1 -type f -name 'kassiber-cli-*' -delete
