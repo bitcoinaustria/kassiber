@@ -628,6 +628,7 @@
     },
     "silentPayments": {
       "backend": "SP-fähiges Backend",
+      "backendHelper": "Kassiber kann das nicht aus einem normalen Endpunkt erkennen. Wähle nur ein Backend, wenn Betreiber/Doku BIP352-Silent-Payments-Scanning ausdrücklich unterstützen oder wenn du in den Backend-Einstellungen eine lokale Scanner-Datei/einen Scanner-Pfad konfiguriert hast. Normale Esplora-, Electrum- und Bitcoin-Core-History-Syncs reichen nicht aus.",
       "material": "Silent-Payments-Material",
       "materialHelper": "Füge watch-only BIP392-sp()-Material ein, z. B. sp(spscan1q...) oder Scan-Privatschlüssel plus öffentlichen Spend-Schlüssel. Spend-private-Formen werden abgelehnt.",
       "scanMode": "Scan-Modus",

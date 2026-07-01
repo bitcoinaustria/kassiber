@@ -2060,8 +2060,9 @@ export function AddConnectionDialog({
     id: string,
     label: string,
     options: BackendOption[],
+    helper?: React.ReactNode,
   ) => (
-    <SetupField id={id} label={label} error={fieldErrors.backend}>
+    <SetupField id={id} label={label} error={fieldErrors.backend} helper={helper}>
       {options.length ? (
         <select
           id={id}
@@ -2658,6 +2659,7 @@ export function AddConnectionDialog({
             "connection-backend",
             t("add.silentPayments.backend"),
             silentPaymentBackendOptions,
+            t("add.silentPayments.backendHelper"),
           )}
           <SetupField
             id="connection-sp-descriptor"
