@@ -71,6 +71,7 @@ run py -m unittest tests.test_sync_btcpay_incremental -v
 run py -m unittest tests.test_freshness -v
 run py -m unittest tests.test_liquid_electrum_sync -v
 run py -m unittest tests.test_log_ring -v
+run py -m unittest tests.test_regtest_harness -v
 
 echo
 SMOKE_HOME="$(mktemp -d "${TMPDIR:-/tmp}/kassiber-quality-gate-home.XXXXXX")"

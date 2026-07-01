@@ -31,6 +31,18 @@ That covers:
 - CLI smoke suite
 - review regression suite
 - key CLI help/smoke checks
+- the fast regtest replay harness (`tests.test_regtest_harness`)
+
+For local-first wallet-sync proof beyond the default gate, use the opt-in
+integration harness:
+
+```bash
+./scripts/integration-harness.sh fast          # no Docker, no egress
+./scripts/integration-harness.sh bitcoin-core  # disposable Bitcoin Core regtest
+```
+
+See [`docs/reference/testing.md`](docs/reference/testing.md) for the tiered
+FAST/SLOW model and Docker/regtest guardrails.
 
 ### Desktop UI (frontend)
 
