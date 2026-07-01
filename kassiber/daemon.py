@@ -3,6 +3,8 @@ from __future__ import annotations
 import base64
 import copy
 import csv
+import hashlib
+import ipaddress
 import json
 import logging
 import queue
@@ -18,6 +20,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Mapping, TextIO
 from urllib import error as urlerror
+from urllib import parse as urlparse
 from urllib import request as urlrequest
 
 from . import __version__
@@ -151,6 +154,7 @@ from .core.sync_backends import (
 )
 from .backends import (
     BACKEND_KINDS,
+    backend_value,
     load_runtime_config,
     merge_db_backends,
     redact_backend_url,
@@ -6062,6 +6066,7 @@ def _create_backend_payload(ctx: "DaemonContext", args: dict[str, Any]) -> dict[
     kind = common.pop("kind") or ""
     url = common.pop("url") or ""
     common.pop("clear", None)
+    _validate_desktop_bitcoinrpc_cookiefile(kind, url, common.get("config"))
     payload = core_accounts.create_backend(
         ctx.conn,
         name,
@@ -6075,7 +6080,21 @@ def _create_backend_payload(ctx: "DaemonContext", args: dict[str, Any]) -> dict[
 
 def _update_backend_payload(ctx: "DaemonContext", args: dict[str, Any]) -> dict[str, Any]:
     name = _required_str_arg(args, "name", "Backend name")
-    payload = core_accounts.update_backend(ctx.conn, name, _backend_common_args(args))
+    common = _backend_common_args(args)
+    current = dict(resolve_backend(ctx.runtime_config, name))
+    effective_kind = common.get("kind") or str(current.get("kind") or "")
+    effective_url = common.get("url") or str(current.get("url") or "")
+    effective_config = dict(current)
+    for field in common.get("clear") or []:
+        effective_config.pop(field, None)
+    if isinstance(common.get("config"), dict):
+        effective_config.update(common["config"])
+    _validate_desktop_bitcoinrpc_cookiefile(
+        effective_kind,
+        effective_url,
+        effective_config,
+    )
+    payload = core_accounts.update_backend(ctx.conn, name, common)
     merge_db_backends(ctx.conn, ctx.runtime_config)
     return payload
 
@@ -7742,6 +7761,8 @@ def _core_local_probe_candidates(bitcoin_dir: Path) -> list[dict[str, Any]]:
             if network_settings
             else default_url
         )
+        if not _is_loopback_http_url(url):
+            continue
         username = network_settings.get("rpcuser")
         password = network_settings.get("rpcpassword")
         cookiefile = _core_cookie_path(
@@ -7785,7 +7806,103 @@ def _core_local_probe_candidates(bitcoin_dir: Path) -> list[dict[str, Any]]:
     return candidates
 
 
+def _core_candidate_credential_ref(candidate: dict[str, Any]) -> str:
+    parts = [
+        str(candidate.get("network") or ""),
+        str(candidate.get("url") or ""),
+        str(candidate.get("auth_source") or ""),
+        str(candidate.get("credential_source") or ""),
+        str(candidate.get("cookiefile") or ""),
+        str(candidate.get("username") or ""),
+    ]
+    digest = hashlib.sha256("|".join(parts).encode("utf-8")).hexdigest()
+    return f"local-core:{digest[:24]}"
+
+
+def _core_backend_from_credential_ref(ref: str) -> dict[str, Any]:
+    for candidate in _core_local_probe_candidates(Path.home() / ".bitcoin"):
+        if _core_candidate_credential_ref(candidate) == ref:
+            return candidate
+    raise AppError(
+        "Detected Bitcoin Core credentials are no longer available",
+        code="validation",
+        hint="Run Detect my node again or enter RPC credentials manually.",
+        retryable=False,
+    )
+
+
+def _is_loopback_http_url(url: str) -> bool:
+    try:
+        parsed = urlparse.urlsplit(url)
+    except ValueError:
+        return False
+    if parsed.scheme not in {"http", "https"}:
+        return False
+    host = (parsed.hostname or "").strip().lower()
+    if host == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return False
+
+
+def _is_default_core_cookiefile_path(cookiefile: str) -> bool:
+    path = Path(cookiefile).expanduser()
+    try:
+        resolved = path.resolve(strict=False)
+        bitcoin_dir = (Path.home() / ".bitcoin").resolve(strict=False)
+    except OSError:
+        return False
+    return resolved.name == ".cookie" and resolved.is_relative_to(bitcoin_dir)
+
+
+def _validate_desktop_bitcoinrpc_cookiefile(
+    kind: str,
+    url: str,
+    backend_like: Mapping[str, Any] | None,
+) -> None:
+    if kind.strip().lower() != "bitcoinrpc":
+        return
+    cookiefile = backend_value(dict(backend_like or {}), "cookiefile", "cookie_file")
+    if not cookiefile:
+        return
+    if not _is_loopback_http_url(url):
+        raise AppError(
+            "Bitcoin Core cookie-file credentials can only be used with a loopback RPC URL",
+            code="validation",
+            hint=(
+                "Use username/password auth for remote Core RPC, or point the "
+                "cookie-file backend at localhost."
+            ),
+            retryable=False,
+        )
+    if not _is_default_core_cookiefile_path(cookiefile):
+        raise AppError(
+            "Desktop Bitcoin Core cookie-file credentials must point at a default .bitcoin cookie file",
+            code="validation",
+            hint=(
+                "Use a cookie path under ~/.bitcoin ending in .cookie, or use "
+                "username/password auth for non-standard Core data directories."
+            ),
+            retryable=False,
+        )
+
+
 def _inline_bitcoinrpc_backend(args: dict[str, Any]) -> dict[str, Any]:
+    credential_ref = _optional_str_arg(args, "credential_ref")
+    if credential_ref:
+        backend = _core_backend_from_credential_ref(credential_ref)
+        _validate_desktop_bitcoinrpc_cookiefile(
+            "bitcoinrpc",
+            str(backend.get("url") or ""),
+            backend,
+        )
+        timeout = args.get("timeout")
+        if isinstance(timeout, int) and timeout > 0:
+            backend = dict(backend)
+            backend["timeout"] = timeout
+        return backend
     url = _required_str_arg(args, "url", "Bitcoin Core RPC URL")
     timeout = args.get("timeout")
     if not isinstance(timeout, int) or timeout <= 0:
@@ -7813,6 +7930,7 @@ def _inline_bitcoinrpc_backend(args: dict[str, Any]) -> dict[str, Any]:
         "timeout": timeout,
     }
     backend.update(config)
+    _validate_desktop_bitcoinrpc_cookiefile("bitcoinrpc", url, backend)
     return backend
 
 
@@ -7831,6 +7949,11 @@ def _bitcoinrpc_backend_for_probe(
             hint="Choose a backend whose kind is bitcoinrpc.",
             retryable=False,
         )
+    _validate_desktop_bitcoinrpc_cookiefile(
+        "bitcoinrpc",
+        str(backend.get("url") or ""),
+        backend,
+    )
     return backend
 
 
@@ -8065,10 +8188,9 @@ def _detect_core_payload(args: dict[str, Any] | None = None) -> dict[str, Any]:
         }
         if candidate_backend.get("cookiefile"):
             candidate["cookiefile"] = candidate_backend.get("cookiefile")
-        if candidate_backend.get("username"):
-            candidate["username"] = candidate_backend.get("username")
-        if candidate_backend.get("password"):
-            candidate["password"] = candidate_backend.get("password")
+            candidate["credential_ref"] = _core_candidate_credential_ref(
+                candidate_backend
+            )
         candidates.append(candidate)
     return {"candidates": candidates}
 

@@ -12,6 +12,7 @@ from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from contextvars import copy_context
+from dataclasses import replace
 from decimal import Decimal
 from pathlib import Path
 from types import MappingProxyType
@@ -794,11 +795,9 @@ def discover_descriptor_targets(backend, plan, kind, checkpoint=None):
                 "history_cache": history_cache,
             }
     if kind == "bitcoinrpc":
+        checkpoint = checkpoint if isinstance(checkpoint, dict) else {}
         return {
-            "targets": scan_descriptor_targets(
-                plan,
-                highest_used=checkpoint.get("highest_used"),
-            ),
+            "targets": _bitcoinrpc_descriptor_targets_for_checkpoint(plan, checkpoint),
             "history_cache": {},
         }
     raise AppError(f"Descriptor-backed sync is not implemented for backend kind '{kind}'")
@@ -1878,7 +1877,7 @@ def bitcoinrpc_call(backend, method, params=None, wallet_name=None, timeout=None
 
 
 def bitcoinrpc_import_timeout(backend):
-    return max(backend_timeout(backend), 600)
+    return max(backend_timeout(backend), 1800)
 
 
 def bitcoinrpc_wallet_name(backend, wallet):
@@ -1915,7 +1914,7 @@ def bitcoinrpc_ensure_watchonly_wallet(backend, wallet):
         ) from load_error
 
 
-def bitcoinrpc_import_addresses(backend, wallet_name, wallet, addresses):
+def bitcoinrpc_import_addresses(backend, wallet_name, wallet, addresses, birthday_ts=0):
     label = f"{APP_NAME}:{wallet['id']}"
     missing_addresses = []
     descriptors = []
@@ -1924,7 +1923,9 @@ def bitcoinrpc_import_addresses(backend, wallet_name, wallet, addresses):
         if info.get("iswatchonly") or info.get("ismine"):
             continue
         descriptor = bitcoinrpc_call(backend, "getdescriptorinfo", [f"addr({address})"])
-        descriptors.append({"desc": descriptor["descriptor"], "timestamp": 0, "label": label})
+        descriptors.append(
+            {"desc": descriptor["descriptor"], "timestamp": birthday_ts, "label": label}
+        )
         missing_addresses.append(address)
     if not missing_addresses:
         return 0
@@ -1943,7 +1944,7 @@ def bitcoinrpc_import_addresses(backend, wallet_name, wallet, addresses):
         requests = [
             {
                 "scriptPubKey": {"address": address},
-                "timestamp": 0,
+                "timestamp": birthday_ts,
                 "watchonly": True,
                 "label": label,
             }
@@ -1977,14 +1978,56 @@ def _int_mapping(value):
     return output
 
 
-def _bitcoinrpc_descriptor_end(plan, branch, highest_used):
+def _bitcoinrpc_descriptor_end(plan, branch, highest_used, previous_end=None):
     descriptor = branch_descriptor(branch)
     if not getattr(descriptor, "is_wildcard", False):
         return 0
     known_highest = _highest_used_branch_index(highest_used, branch.branch_index)
     if known_highest is None:
-        return max(0, plan.gap_limit - 1)
-    return max(0, known_highest + plan.gap_limit)
+        previous = int(previous_end) if previous_end is not None else -1
+        return max(0, previous, plan.gap_limit - 1)
+    previous = int(previous_end) if previous_end is not None else -1
+    return max(0, previous, known_highest + plan.gap_limit)
+
+
+def _bitcoinrpc_descriptor_targets_for_range_ends(plan, range_ends):
+    range_ends = _int_mapping(range_ends)
+    targets = []
+    for branch in plan.branches:
+        end = range_ends.get(str(branch.branch_index), 0)
+        if end <= 0:
+            targets.append(
+                sync_target_from_derived(
+                    derive_descriptor_target(plan, branch.branch_index, 0)
+                )
+            )
+            continue
+        targets.extend(
+            sync_target_from_derived(target)
+            for target in derive_descriptor_targets(
+                plan,
+                branch_index=branch.branch_index,
+                start=0,
+                end=end + 1,
+            )
+        )
+    return targets
+
+
+def _bitcoinrpc_descriptor_targets_for_checkpoint(plan, checkpoint):
+    checkpoint = checkpoint if isinstance(checkpoint, dict) else {}
+    previous_ends = _int_mapping(checkpoint.get("bitcoinrpc_descriptor_range_ends"))
+    highest_used = checkpoint.get("highest_used")
+    range_ends = {}
+    for branch in plan.branches:
+        branch_key = str(branch.branch_index)
+        range_ends[branch_key] = _bitcoinrpc_descriptor_end(
+            plan,
+            branch,
+            highest_used,
+            previous_ends.get(branch_key),
+        )
+    return _bitcoinrpc_descriptor_targets_for_range_ends(plan, range_ends)
 
 
 def bitcoinrpc_ranged_descriptor(backend, branch, end, birthday_ts):
@@ -2007,7 +2050,12 @@ def bitcoinrpc_import_ranged_descriptors(backend, wallet_name, plan, checkpoint,
     descriptors = []
     for branch in plan.branches:
         branch_key = str(branch.branch_index)
-        end = _bitcoinrpc_descriptor_end(plan, branch, highest_used)
+        end = _bitcoinrpc_descriptor_end(
+            plan,
+            branch,
+            highest_used,
+            previous_ends.get(branch_key),
+        )
         next_ends[branch_key] = max(int(next_ends.get(branch_key, -1)), end)
         if end <= int(previous_ends.get(branch_key, -1)):
             continue
@@ -2143,6 +2191,26 @@ def record_from_bitcoinrpc_details(txid, details, backend_name):
     }
 
 
+def _bitcoinrpc_highest_used_from_details(details, sync_state: WalletSyncState | None):
+    if sync_state is None:
+        return {}
+    target_by_address = {
+        target.get("address"): target
+        for target in sync_state.targets
+        if target.get("address")
+    }
+    highest_used = {}
+    for detail in details:
+        category = str(detail.get("category") or "").lower()
+        if category in {"orphan", "immature"}:
+            continue
+        target = target_by_address.get(detail.get("address"))
+        if target is None:
+            continue
+        highest_used = _merge_highest_used(highest_used, target, True)
+    return highest_used
+
+
 def bitcoinrpc_records_for_wallet(
     backend,
     wallet,
@@ -2150,6 +2218,7 @@ def bitcoinrpc_records_for_wallet(
     wallet_name=None,
     imported_count=None,
     checkpoint=None,
+    sync_state: WalletSyncState | None = None,
 ):
     wallet_name = wallet_name or bitcoinrpc_ensure_watchonly_wallet(backend, wallet)
     if imported_count is None:
@@ -2179,6 +2248,10 @@ def bitcoinrpc_records_for_wallet(
     return records, {
         "core_wallet": wallet_name,
         "imported_addresses": imported_count,
+        "bitcoinrpc_highest_used": _bitcoinrpc_highest_used_from_details(
+            details,
+            sync_state,
+        ),
         **fetch_meta,
     }
 
@@ -2255,21 +2328,51 @@ def bitcoinrpc_utxos_for_wallet_name(backend, wallet_name, addresses, sync_state
 
 
 def bitcoinrpc_sync_adapter(backend, wallet, sync_state: WalletSyncState):
-    addresses = [target["address"] for target in sync_state.targets if target.get("address")]
     wallet_name = bitcoinrpc_ensure_watchonly_wallet(backend, wallet)
     checkpoint = _checkpoint_mapping(sync_state)
+    config = json.loads(_mapping_get(wallet, "config_json", "{}") or "{}")
+    birthday_ts = iso_to_unix(config.get("birthday"))
     descriptor_range_ends = None
+    effective_sync_state = sync_state
     if sync_state.descriptor_plan is not None:
-        config = json.loads(_mapping_get(wallet, "config_json", "{}") or "{}")
         imported_count, descriptor_range_ends = bitcoinrpc_import_ranged_descriptors(
             backend,
             wallet_name,
             sync_state.descriptor_plan,
             checkpoint,
-            iso_to_unix(config.get("birthday")),
+            birthday_ts,
+        )
+        expanded_targets = _bitcoinrpc_descriptor_targets_for_range_ends(
+            sync_state.descriptor_plan,
+            descriptor_range_ends,
+        )
+        effective_sync_state = replace(
+            sync_state,
+            targets=expanded_targets,
+            tracked_scripts={
+                target["script_pubkey"]: target
+                for target in expanded_targets
+                if target.get("script_pubkey")
+            },
         )
     else:
-        imported_count = bitcoinrpc_import_addresses(backend, wallet_name, wallet, addresses)
+        addresses = [
+            target["address"]
+            for target in effective_sync_state.targets
+            if target.get("address")
+        ]
+        imported_count = bitcoinrpc_import_addresses(
+            backend,
+            wallet_name,
+            wallet,
+            addresses,
+            birthday_ts=birthday_ts,
+        )
+    addresses = [
+        target["address"]
+        for target in effective_sync_state.targets
+        if target.get("address")
+    ]
     records, meta = bitcoinrpc_records_for_wallet(
         backend,
         wallet,
@@ -2277,19 +2380,25 @@ def bitcoinrpc_sync_adapter(backend, wallet, sync_state: WalletSyncState):
         wallet_name=wallet_name,
         imported_count=imported_count,
         checkpoint=checkpoint,
+        sync_state=effective_sync_state if sync_state.descriptor_plan is not None else None,
     )
     utxos = bitcoinrpc_utxos_for_wallet_name(
         backend,
         wallet_name,
         addresses,
-        sync_state,
+        effective_sync_state,
     )
     meta["utxos"] = utxos
     if sync_state.descriptor_plan is not None:
         highest_used = dict(checkpoint.get("highest_used") or {})
+        for branch, index in (meta.get("bitcoinrpc_highest_used") or {}).items():
+            previous = _highest_used_branch_index(highest_used, branch)
+            if previous is None or int(index) > previous:
+                highest_used[str(branch)] = int(index)
         for utxo in utxos:
             highest_used = _merge_highest_used(highest_used, utxo, True)
         meta["imported_descriptors"] = imported_count
+    meta.pop("bitcoinrpc_highest_used", None)
     if meta.get("bitcoinrpc_last_block") or descriptor_range_ends is not None:
         next_checkpoint = dict(checkpoint)
         next_checkpoint["backend"] = _backend_identity(backend, sync_state)

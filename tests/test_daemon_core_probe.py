@@ -76,6 +76,115 @@ class DaemonBitcoinRpcProbeTest(unittest.TestCase):
         self.assertEqual(payload["status"], "unresponsive")
         self.assertEqual(payload["warnings"], ["unresponsive"])
 
+    def test_bitcoinrpc_probe_rejects_unsafe_inline_cookiefile(self):
+        ctx = SimpleNamespace(runtime_config={})
+
+        with patch("kassiber.daemon.bitcoinrpc_call") as call:
+            with self.assertRaises(AppError) as raised:
+                daemon._test_bitcoinrpc_backend_payload(
+                    ctx,
+                    {
+                        "url": "https://attacker.example",
+                        "config": {"cookiefile": "/etc/passwd"},
+                    },
+                )
+
+        self.assertEqual(raised.exception.code, "validation")
+        self.assertIn("loopback", str(raised.exception))
+        call.assert_not_called()
+
+    def test_bitcoinrpc_probe_rejects_unsafe_saved_cookiefile_backend(self):
+        ctx = SimpleNamespace(
+            runtime_config={
+                "env_file": "/tmp/backends.env",
+                "default_backend": "core",
+                "backends": {
+                    "core": {
+                        "name": "core",
+                        "kind": "bitcoinrpc",
+                        "url": "http://192.168.1.10:8332",
+                        "cookiefile": "/home/tg/.bitcoin/.cookie",
+                    }
+                },
+            }
+        )
+
+        with patch("kassiber.daemon.bitcoinrpc_call") as call:
+            with self.assertRaises(AppError) as raised:
+                daemon._test_bitcoinrpc_backend_payload(ctx, {"backend": "core"})
+
+        self.assertEqual(raised.exception.code, "validation")
+        self.assertIn("loopback", str(raised.exception))
+        call.assert_not_called()
+
+    def test_bitcoinrpc_probe_rejects_unsafe_detected_credential_ref(self):
+        ctx = SimpleNamespace(runtime_config={})
+        with patch(
+            "kassiber.daemon._core_backend_from_credential_ref",
+            return_value={
+                "name": "local-core-main",
+                "kind": "bitcoinrpc",
+                "network": "main",
+                "url": "http://192.168.1.10:8332",
+                "cookiefile": "/home/tg/.bitcoin/.cookie",
+            },
+        ), patch("kassiber.daemon.bitcoinrpc_call") as call:
+            with self.assertRaises(AppError) as raised:
+                daemon._test_bitcoinrpc_backend_payload(
+                    ctx,
+                    {"credential_ref": "local-core:test"},
+                )
+
+        self.assertEqual(raised.exception.code, "validation")
+        self.assertIn("loopback", str(raised.exception))
+        call.assert_not_called()
+
+    def test_desktop_cookiefile_validation_allows_only_local_default_cookie(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            bitcoin_dir = Path(tmp) / ".bitcoin"
+            bitcoin_dir.mkdir()
+            cookiefile = bitcoin_dir / ".cookie"
+            cookiefile.write_text("__cookie__:secret", encoding="utf-8")
+
+            with patch.object(daemon.Path, "home", return_value=Path(tmp)):
+                daemon._validate_desktop_bitcoinrpc_cookiefile(
+                    "bitcoinrpc",
+                    "http://127.0.0.1:8332",
+                    {"cookiefile": str(cookiefile)},
+                )
+                with self.assertRaises(AppError) as raised:
+                    daemon._validate_desktop_bitcoinrpc_cookiefile(
+                        "bitcoinrpc",
+                        "https://attacker.example",
+                        {"cookiefile": str(cookiefile)},
+                    )
+
+        self.assertEqual(raised.exception.code, "validation")
+        self.assertIn("loopback", str(raised.exception))
+
+    def test_detect_core_skips_non_loopback_bitcoin_conf_rpcconnect(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            bitcoin_dir = Path(tmp) / ".bitcoin"
+            bitcoin_dir.mkdir()
+            (bitcoin_dir / "bitcoin.conf").write_text(
+                "\n".join(
+                    [
+                        "rpcconnect=192.168.1.10",
+                        "rpcuser=alice",
+                        "rpcpassword=correct horse battery staple",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            with patch.object(daemon.Path, "home", return_value=Path(tmp)), patch(
+                "kassiber.daemon._bitcoinrpc_probe_payload",
+            ) as probe:
+                payload = daemon._detect_core_payload({})
+
+        self.assertEqual(payload, {"candidates": []})
+        probe.assert_not_called()
+
     def test_bitcoinrpc_probe_rejects_pruned_below_birthday(self):
         ctx = SimpleNamespace(runtime_config={})
 
@@ -143,8 +252,53 @@ class DaemonBitcoinRpcProbeTest(unittest.TestCase):
         self.assertEqual(candidate["url"], "http://127.0.0.1:8332")
         self.assertEqual(candidate["auth_source"], "cookiefile")
         self.assertTrue(candidate["cookiefile"].endswith(".bitcoin/.cookie"))
+        self.assertTrue(candidate["credential_ref"].startswith("local-core:"))
         self.assertNotIn("secret", str(candidate))
         probe.assert_called_once()
+
+    def test_bitcoinrpc_probe_uses_detected_cookie_credential_ref(self):
+        ctx = SimpleNamespace(runtime_config={})
+        with tempfile.TemporaryDirectory() as tmp:
+            bitcoin_dir = Path(tmp) / ".bitcoin"
+            bitcoin_dir.mkdir()
+            (bitcoin_dir / ".cookie").write_text("__cookie__:secret", encoding="utf-8")
+            ref = daemon._core_candidate_credential_ref(
+                daemon._core_local_probe_candidates(bitcoin_dir)[0]
+            )
+            seen_backend = {}
+
+            def fake_call(backend, method, params=None, wallet_name=None, timeout=None):
+                del params, wallet_name, timeout
+                seen_backend.update(backend)
+                if method == "getblockchaininfo":
+                    return {
+                        "chain": "main",
+                        "blocks": 1,
+                        "headers": 1,
+                        "pruned": False,
+                        "initialblockdownload": False,
+                    }
+                if method == "getnetworkinfo":
+                    return {"version": 270000, "connections": 1}
+                if method == "listwallets":
+                    return []
+                if method == "getbestblockhash":
+                    return "best-block"
+                if method == "getblockfilter":
+                    return {"filter": "00"}
+                raise AssertionError(f"Unexpected RPC call: {method}")
+
+            with patch.object(daemon.Path, "home", return_value=Path(tmp)), patch(
+                "kassiber.daemon.bitcoinrpc_call",
+                side_effect=fake_call,
+            ):
+                payload = daemon._test_bitcoinrpc_backend_payload(
+                    ctx,
+                    {"credential_ref": ref, "timeout": 10},
+                )
+
+        self.assertTrue(payload["reachable"])
+        self.assertTrue(seen_backend["cookiefile"].endswith(".bitcoin/.cookie"))
 
     def test_detect_core_reads_bitcoin_conf_rpc_settings(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -197,9 +351,10 @@ class DaemonBitcoinRpcProbeTest(unittest.TestCase):
             if candidate["auth_source"] == "basic"
         )
         self.assertEqual(basic["url"], "http://127.0.0.1:8332")
-        self.assertEqual(basic["username"], "alice")
-        self.assertEqual(basic["password"], "correct horse battery staple")
         self.assertEqual(basic["credential_source"], "bitcoin.conf")
+        self.assertNotIn("credential_ref", basic)
+        self.assertNotIn("username", basic)
+        self.assertNotIn("password", basic)
         signet = next(
             candidate
             for candidate in payload["candidates"]
@@ -209,7 +364,9 @@ class DaemonBitcoinRpcProbeTest(unittest.TestCase):
         self.assertEqual(signet["url"], "http://127.0.0.1:38332")
         self.assertEqual(signet["auth_source"], "cookiefile")
         self.assertTrue(signet["cookiefile"].endswith(".bitcoin/signet/.cookie"))
+        self.assertTrue(signet["credential_ref"].startswith("local-core:"))
         self.assertNotIn("secret", str(payload))
+        self.assertNotIn("correct horse battery staple", str(payload))
         self.assertTrue(
             any(backend["username"] == "alice" for backend in probed_backends)
         )

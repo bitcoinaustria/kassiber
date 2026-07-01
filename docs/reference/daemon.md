@@ -244,14 +244,18 @@ and default state, but does not expose exact endpoint URLs or tokens.
 `ui.backends.detect_core` probes common local Bitcoin Core RPC endpoints with
 default cookie-file locations plus local `bitcoin.conf` RPC settings and
 returns candidate URL/network/auth-source metadata without cookie contents.
-When `bitcoin.conf` contains `rpcuser`/`rpcpassword`, those values may be
-returned only to this explicit desktop setup flow so the form can be prefilled;
-the kind is not exposed to the AI tool surface. `ui.backends.bitcoinrpc.test`
-probes a saved or inline Core RPC backend with `getblockchaininfo`,
-`getnetworkinfo`, wallet RPC, and `getblockfilter`; it reports reachability,
-peer/sync state, pruning/IBD, wallet-RPC availability, and BIP158 filter-index
-availability. Both endpoints are desktop mutating kinds because they touch local
-RPC/cookie state and are not AI tools.
+When `bitcoin.conf` contains `rpcuser`/`rpcpassword`, the daemon may use those
+credentials internally to prove reachability, but the response does not include
+the username or password. Cookie-file candidates include a bounded
+`credential_ref` for immediate local probing; renderer-supplied cookiefile
+probes and desktop-created Bitcoin Core cookiefile backends are constrained to
+default `~/.bitcoin/**/.cookie` paths and loopback RPC URLs. Users who want to
+save basic auth still enter it explicitly. `ui.backends.bitcoinrpc.test` probes
+a saved or inline Core RPC backend with `getblockchaininfo`, `getnetworkinfo`,
+wallet RPC, and `getblockfilter`; it reports reachability, peer/sync state,
+pruning/IBD, wallet-RPC availability, and BIP158 filter-index availability.
+Both endpoints are desktop mutating kinds because they touch local RPC/cookie
+state and are not AI tools.
 
 `ui.wallets.create` is the desktop connection setup path for local/imported
 wallet sources. It accepts `label`, `kind`, and the same wallet config fields

@@ -485,7 +485,10 @@ class SyncBackendsTest(unittest.TestCase):
             "kind": "esplora",
             "url": "https://esplora.example",
         }
-        wallet = {"id": "wallet-1"}
+        wallet = {
+            "id": "wallet-1",
+            "config_json": '{"birthday": "2024-01-01T00:00:00Z"}',
+        }
 
         def make_state(checkpoint=None):
             return WalletSyncState(
@@ -971,7 +974,10 @@ class SyncBackendsTest(unittest.TestCase):
             tracked_scripts={target["script_pubkey"]: target},
             history_cache={},
         )
-        wallet = {"id": "wallet-1"}
+        wallet = {
+            "id": "wallet-1",
+            "config_json": '{"birthday": "2024-01-01T00:00:00Z"}',
+        }
 
         def fake_bitcoinrpc_call(backend, method, params=None, wallet_name=None, timeout=None):
             del backend
@@ -987,9 +993,18 @@ class SyncBackendsTest(unittest.TestCase):
             if key == ("getdescriptorinfo", ("addr(bc1qcore)",), None):
                 return {"descriptor": "addr(bc1qcore)#abcd"}
             if method == "importdescriptors" and wallet_name == "kassiber-wallet-1":
+                self.assertEqual(timeout, 1800)
                 self.assertEqual(
                     params,
-                    [[{"desc": "addr(bc1qcore)#abcd", "timestamp": 0, "label": "kassiber:wallet-1"}]],
+                    [
+                        [
+                            {
+                                "desc": "addr(bc1qcore)#abcd",
+                                "timestamp": iso_to_unix("2024-01-01T00:00:00Z"),
+                                "label": "kassiber:wallet-1",
+                            }
+                        ]
+                    ],
                 )
                 return [{"success": True}]
             if key == ("listtransactions", ("*", 1000, 0, True), "kassiber-wallet-1"):
@@ -1107,9 +1122,9 @@ class SyncBackendsTest(unittest.TestCase):
             "kassiber.core.sync_backends.bitcoinrpc_call",
             side_effect=AssertionError("discovery must not call Core"),
         ), patch(
-            "kassiber.core.sync_backends.scan_descriptor_targets",
+            "kassiber.core.sync_backends._bitcoinrpc_descriptor_targets_for_checkpoint",
             return_value=[target],
-        ) as scan:
+        ) as derive_targets:
             discovery = discover_descriptor_targets(
                 {"name": "core", "kind": "bitcoinrpc", "url": "http://core.example"},
                 plan,
@@ -1118,7 +1133,10 @@ class SyncBackendsTest(unittest.TestCase):
             )
 
         self.assertEqual(discovery, {"targets": [target], "history_cache": {}})
-        scan.assert_called_once_with(plan, highest_used={"6": 4})
+        derive_targets.assert_called_once_with(
+            plan,
+            {"highest_used": {"6": 4}},
+        )
 
     def test_bitcoinrpc_descriptor_sync_imports_ranged_descriptors_and_checkpoint(self):
         class FakeDescriptor:
@@ -1181,7 +1199,7 @@ class SyncBackendsTest(unittest.TestCase):
             if method == "importdescriptors":
                 descriptors = params[0]
                 self.assertEqual(wallet_name, "kassiber-wallet-1")
-                self.assertEqual(timeout, 600)
+                self.assertEqual(timeout, 1800)
                 self.assertEqual(
                     descriptors,
                     [
@@ -1231,7 +1249,10 @@ class SyncBackendsTest(unittest.TestCase):
                 return {"height": 123}
             raise AssertionError(f"Unexpected RPC call: {(method, params, wallet_name)!r}")
 
-        with patch("kassiber.core.sync_backends.bitcoinrpc_call", side_effect=fake_bitcoinrpc_call):
+        with patch("kassiber.core.sync_backends.bitcoinrpc_call", side_effect=fake_bitcoinrpc_call), patch(
+            "kassiber.core.sync_backends._bitcoinrpc_descriptor_targets_for_range_ends",
+            return_value=targets,
+        ):
             records, meta = bitcoinrpc_sync_adapter(
                 {"name": "core", "kind": "bitcoinrpc", "url": "http://core.example"},
                 wallet,
@@ -1305,7 +1326,10 @@ class SyncBackendsTest(unittest.TestCase):
                 return []
             raise AssertionError(f"Unexpected RPC call: {(method, params, wallet_name)!r}")
 
-        with patch("kassiber.core.sync_backends.bitcoinrpc_call", side_effect=fake_bitcoinrpc_call):
+        with patch("kassiber.core.sync_backends.bitcoinrpc_call", side_effect=fake_bitcoinrpc_call), patch(
+            "kassiber.core.sync_backends._bitcoinrpc_descriptor_targets_for_range_ends",
+            return_value=[target],
+        ):
             records, meta = bitcoinrpc_sync_adapter(
                 {"name": "core", "kind": "bitcoinrpc", "url": "http://core.example"},
                 {"id": "wallet-1", "config_json": "{}"},
@@ -1318,6 +1342,155 @@ class SyncBackendsTest(unittest.TestCase):
         self.assertEqual(
             [method for method, _params, _wallet in calls],
             ["listwallets", "listsinceblock", "listunspent"],
+        )
+
+    def test_bitcoinrpc_descriptor_sync_learns_highest_used_from_history(self):
+        class FakeDescriptor:
+            is_wildcard = True
+
+            def __init__(self, raw):
+                self.raw = raw
+
+            def to_string(self):
+                return self.raw
+
+        plan = DescriptorPlan(
+            chain="bitcoin",
+            network="bitcoin",
+            gap_limit=3,
+            descriptor_fingerprint="fp",
+            branches=(DescriptorBranch(6, "p2tr receive", FakeDescriptor("tr(xpub/0/*)")),),
+        )
+        target = {
+            "address": "bc1preceive2",
+            "script_pubkey": "5120" + "11" * 32,
+            "branch_index": 6,
+            "branch_label": "p2tr receive",
+            "address_index": 2,
+        }
+        sync_state = WalletSyncState(
+            chain="bitcoin",
+            network="bitcoin",
+            descriptor_plan=plan,
+            policy_asset_id="",
+            targets=[target],
+            tracked_scripts={target["script_pubkey"]: target},
+            history_cache={},
+        )
+
+        def fake_bitcoinrpc_call(backend, method, params=None, wallet_name=None, timeout=None):
+            del backend
+            if method == "listwallets":
+                return ["kassiber-wallet-1"]
+            if method == "getdescriptorinfo":
+                return {"descriptor": f"{params[0]}#core"}
+            if method == "importdescriptors":
+                self.assertEqual(timeout, 1800)
+                self.assertEqual(params[0][0]["range"], [0, 2])
+                return [{"success": True}]
+            if method == "listtransactions":
+                return [
+                    {
+                        "txid": "55" * 32,
+                        "category": "receive",
+                        "address": "bc1preceive2",
+                        "amount": 0.001,
+                        "fee": 0,
+                        "blocktime": 1_700_000_000,
+                    }
+                ]
+            if method == "getbestblockhash":
+                return "bb" * 32
+            if method == "listunspent":
+                return []
+            raise AssertionError(f"Unexpected RPC call: {(method, params, wallet_name)!r}")
+
+        with patch("kassiber.core.sync_backends.bitcoinrpc_call", side_effect=fake_bitcoinrpc_call), patch(
+            "kassiber.core.sync_backends._bitcoinrpc_descriptor_targets_for_range_ends",
+            return_value=[target],
+        ):
+            records, meta = bitcoinrpc_sync_adapter(
+                {"name": "core", "kind": "bitcoinrpc", "url": "http://core.example"},
+                {"id": "wallet-1", "config_json": "{}"},
+                sync_state,
+            )
+
+        self.assertEqual(len(records), 1)
+        self.assertEqual(meta["freshness_checkpoint"]["highest_used"], {"6": 2})
+
+    def test_bitcoinrpc_descriptor_sync_widens_from_history_highest_used(self):
+        class FakeDescriptor:
+            is_wildcard = True
+
+            def __init__(self, raw):
+                self.raw = raw
+
+            def to_string(self):
+                return self.raw
+
+        plan = DescriptorPlan(
+            chain="bitcoin",
+            network="bitcoin",
+            gap_limit=3,
+            descriptor_fingerprint="fp",
+            branches=(DescriptorBranch(6, "p2tr receive", FakeDescriptor("tr(xpub/0/*)")),),
+        )
+        target = {
+            "address": "bc1preceive2",
+            "script_pubkey": "5120" + "11" * 32,
+            "branch_index": 6,
+            "branch_label": "p2tr receive",
+            "address_index": 2,
+        }
+        sync_state = WalletSyncState(
+            chain="bitcoin",
+            network="bitcoin",
+            descriptor_plan=plan,
+            policy_asset_id="",
+            targets=[target],
+            tracked_scripts={target["script_pubkey"]: target},
+            history_cache={},
+            checkpoint={
+                "bitcoinrpc_last_block": "aa" * 32,
+                "bitcoinrpc_descriptor_range_ends": {"6": 2},
+                "highest_used": {"6": 2},
+            },
+        )
+
+        def fake_bitcoinrpc_call(backend, method, params=None, wallet_name=None, timeout=None):
+            del backend
+            if method == "listwallets":
+                return ["kassiber-wallet-1"]
+            if method == "getdescriptorinfo":
+                return {"descriptor": f"{params[0]}#core"}
+            if method == "importdescriptors":
+                self.assertEqual(wallet_name, "kassiber-wallet-1")
+                self.assertEqual(timeout, 1800)
+                self.assertEqual(params[0][0]["range"], [0, 5])
+                return [{"success": True}]
+            if method == "listtransactions":
+                return []
+            if method == "getbestblockhash":
+                return "bb" * 32
+            if method == "listunspent":
+                return []
+            raise AssertionError(f"Unexpected RPC call: {(method, params, wallet_name)!r}")
+
+        with patch("kassiber.core.sync_backends.bitcoinrpc_call", side_effect=fake_bitcoinrpc_call), patch(
+            "kassiber.core.sync_backends._bitcoinrpc_descriptor_targets_for_range_ends",
+            return_value=[target],
+        ):
+            records, meta = bitcoinrpc_sync_adapter(
+                {"name": "core", "kind": "bitcoinrpc", "url": "http://core.example"},
+                {"id": "wallet-1", "config_json": "{}"},
+                sync_state,
+            )
+
+        self.assertEqual(records, [])
+        self.assertEqual(meta["imported_descriptors"], 1)
+        self.assertEqual(
+            meta["freshness_checkpoint"]["bitcoinrpc_descriptor_range_ends"],
+            {"6": 5},
         )
 
     def test_wallet_birthday_validation_and_unix_conversion(self):

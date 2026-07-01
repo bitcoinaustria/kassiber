@@ -351,7 +351,9 @@ Use this when you run your own node.
 
 - supports Bitcoin descriptor/xpub/address refresh from your own node
 - Kassiber creates or reuses a dedicated watch-only Core wallet per Kassiber wallet
-- descriptor imports are ranged per receive/change branch; repeated refreshes widen the range from observed UTXOs and otherwise use `listsinceblock`
+- descriptor imports are ranged per receive/change branch; repeated refreshes
+  widen the range from observed transaction history / UTXOs and otherwise use
+  `listsinceblock`
 - local desktop detection understands default cookie files plus `bitcoin.conf`
   RPC auth/ports, and the health probe reports peers, sync state, wallet RPC
   support, pruning, IBD, and BIP158 filter-index availability

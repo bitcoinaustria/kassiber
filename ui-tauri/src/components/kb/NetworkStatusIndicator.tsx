@@ -106,6 +106,34 @@ type BitcoinRpcProbeEnvelope = {
   };
 };
 
+function bitcoinRpcHealth(
+  payload: BitcoinRpcProbeEnvelope | undefined,
+  t: TFunction<"chrome">,
+) {
+  if (!payload?.reachable) {
+    return {
+      ok: false,
+      message: payload?.error?.message ?? t("network.checkFailed"),
+    };
+  }
+  if (payload.wallet_rpc?.available === false) {
+    return {
+      ok: false,
+      message:
+        payload.wallet_rpc.error?.hint ??
+        payload.wallet_rpc.error?.message ??
+        t("network.coreWalletRpcUnavailable"),
+    };
+  }
+  if (payload.ibd) {
+    return { ok: true, message: t("network.coreInitialBlockDownload") };
+  }
+  if (payload.pruned) {
+    return { ok: true, message: t("network.corePruned") };
+  }
+  return { ok: true, message: t("network.coreReachable") };
+}
+
 function connectionRowsFromBackends(
   savedBackends: Backend[],
 ): ConnectionHealthRow[] {
@@ -383,22 +411,21 @@ export function NetworkStatusIndicator({
                     timeout: 5,
                   });
             const payload = envelope.data;
-            const ok =
+            const coreHealth =
               row.probeKind === "bitcoinrpc"
-                ? Boolean((payload as BitcoinRpcProbeEnvelope | undefined)?.reachable)
-                : Boolean((payload as BackendProbeEnvelope | undefined)?.ok);
-            const coreError =
-              row.probeKind === "bitcoinrpc"
-                ? (payload as BitcoinRpcProbeEnvelope | undefined)?.error?.message
+                ? bitcoinRpcHealth(payload as BitcoinRpcProbeEnvelope | undefined, t)
                 : undefined;
+            const ok =
+              coreHealth?.ok ??
+              Boolean((payload as BackendProbeEnvelope | undefined)?.ok);
             return [
               row.id,
               {
                 fingerprint: row.fingerprint,
                 status: ok ? "healthy" : "unhealthy",
                 message:
+                  coreHealth?.message ??
                   (payload as BackendProbeEnvelope | undefined)?.logs?.at(-1) ??
-                  coreError ??
                   (ok
                     ? t("network.checkPassed")
                     : t("network.checkFailed")),

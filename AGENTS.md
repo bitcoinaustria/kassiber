@@ -147,11 +147,13 @@ Kassiber is currently in **dev mode**: renaming commands, breaking flags, and re
   `ui.reports.export_audit_package` for DB-backed auditor handoff packages.
   `ui.backends.detect_core` and `ui.backends.bitcoinrpc.test` contact local
   RPC endpoints / cookie files for desktop setup and health checks; detection
-  also parses local `bitcoin.conf` so the desktop form can prefill explicit
-  RPC credentials, but cookie contents are never returned. The probe reports
-  peer/sync state, pruning/IBD, wallet-RPC support, and BIP158 filter-index
-  availability. These are mutating desktop kinds and must not be exposed to the
-  AI tool surface.
+  also parses local `bitcoin.conf` so the daemon can prove reachability without
+  returning raw `rpcuser`/`rpcpassword`. Cookie-file candidates may return a
+  bounded local `credential_ref`, but renderer-supplied cookiefile probes and
+  desktop-created Core cookiefile backends must stay constrained to default
+  `~/.bitcoin/**/.cookie` paths and loopback RPC URLs. The probe reports peer/sync
+  state, pruning/IBD, wallet-RPC support, and BIP158 filter-index availability.
+  These are mutating desktop kinds and must not be exposed to the AI tool surface.
   Do not model the Connections dialog as a
   command-template picker. Connection setup should select from configured
   chain/indexer backends via `ui.backends.options`; BTCPay setup can create a

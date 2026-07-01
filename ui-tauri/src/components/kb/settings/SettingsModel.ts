@@ -704,9 +704,10 @@ export function backendsForLayer(backends: Backend[], layer: NetworkLayer): Back
 // Resolve the privacy posture for a configured backend. The pure logic lives
 // in `@/lib/backendTrust` so it can be unit-tested without this component.
 export function backendTrust(backend: Backend) {
+  const proxyAppliesToTransport = (backend.kind ?? "").toLowerCase() === "electrum";
   return backendTrustFromEndpoint(
     backend.url || "",
-    Boolean(backend.proxy),
+    Boolean(backend.proxy) && proxyAppliesToTransport,
     backend.infrastructureOwner,
   );
 }

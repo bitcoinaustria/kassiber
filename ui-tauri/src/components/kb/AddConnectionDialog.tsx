@@ -90,6 +90,7 @@ interface SetupFormState {
   coreRpcCookiefile: string;
   coreRpcUsername: string;
   coreRpcPassword: string;
+  coreRpcCredentialRef: string;
   coreRpcNetwork: string;
   btcpayInstanceMode: "saved" | "new";
   btcpaySetupMode: "wallet_sources" | "existing_wallets";
@@ -189,8 +190,7 @@ interface CoreDetectionCandidate {
   network?: string | null;
   auth_source?: string | null;
   credential_source?: string | null;
-  username?: string | null;
-  password?: string | null;
+  credential_ref?: string | null;
   cookiefile?: string | null;
   blocks?: number | null;
   headers?: number | null;
@@ -332,6 +332,12 @@ const ADDRESS_BACKEND_KINDS = new Set([
   "electrum",
   "bitcoinrpc",
 ]);
+const CORE_DEFAULT_RPC_URLS: Record<string, string> = {
+  main: "http://127.0.0.1:8332",
+  test: "http://127.0.0.1:18332",
+  signet: "http://127.0.0.1:38332",
+  regtest: "http://127.0.0.1:18443",
+};
 const DEFAULT_BTCPAY_PAYMENT_METHOD_ID = "BTC-CHAIN";
 const MAX_DESCRIPTOR_GAP_LIMIT = 5000;
 type BullBitcoinWalletNetwork = "bitcoin" | "liquid" | "lightning";
@@ -510,11 +516,12 @@ const formDefaultsFor = (
     label: defaultLabel,
     backend: "",
     birthday: "",
-    coreRpcUrl: "http://127.0.0.1:8332",
+    coreRpcUrl: CORE_DEFAULT_RPC_URLS.main,
     coreRpcAuthMode: "cookiefile",
     coreRpcCookiefile: "",
     coreRpcUsername: "",
     coreRpcPassword: "",
+    coreRpcCredentialRef: "",
     coreRpcNetwork: source.network ?? "main",
     btcpayInstanceMode: "new",
     btcpaySetupMode: "wallet_sources",
@@ -638,9 +645,39 @@ function applyCoreCandidateToForm(
     coreRpcNetwork: candidate.network || current.coreRpcNetwork,
     coreRpcAuthMode: authMode,
     coreRpcCookiefile: candidate.cookiefile || current.coreRpcCookiefile,
-    coreRpcUsername: candidate.username || current.coreRpcUsername,
-    coreRpcPassword: candidate.password || current.coreRpcPassword,
+    coreRpcUsername:
+      candidate.auth_source === "basic" ? "" : current.coreRpcUsername,
+    coreRpcPassword:
+      candidate.auth_source === "basic" ? "" : current.coreRpcPassword,
+    coreRpcCredentialRef: candidate.credential_ref || "",
   };
+}
+
+function coreReadinessMessages(
+  payload: CoreDetectionCandidate | CoreProbeData,
+  t: TFunction,
+) {
+  const messages: string[] = [];
+  if (payload.pruned) {
+    messages.push(t("connections:add.core.prunedWarning"));
+  }
+  if (payload.ibd) {
+    messages.push(t("connections:add.core.initialBlockDownloadWarning"));
+  }
+  if (payload.wallet_rpc?.available === false) {
+    messages.push(
+      payload.wallet_rpc.error?.hint ??
+        payload.wallet_rpc.error?.message ??
+        t("connections:add.core.walletRpcUnavailable"),
+    );
+  }
+  if (payload.block_filters?.available === false) {
+    messages.push(
+      payload.block_filters.error?.hint ??
+        t("connections:add.core.blockFiltersUnavailable"),
+    );
+  }
+  return messages;
 }
 
 function InlineCode({ children }: { children?: React.ReactNode }) {
@@ -899,6 +936,9 @@ export function AddConnectionDialog({
     selected.chain === "bitcoin" ? bitcoinAddressBackends : descriptorBackendOptions;
   const selectedBackendOptions =
     setupKind === "address-list" ? addressBackendOptions : descriptorBackendOptions;
+  const selectedBackend = selectedBackendOptions.find(
+    (backend) => backend.name === form.backend,
+  );
   const defaultBackendName =
     selectedBackendOptions.find((backend) => backend.is_default)?.name ??
     selectedBackendOptions[0]?.name ??
@@ -989,6 +1029,8 @@ export function AddConnectionDialog({
     createBtcpay.isPending ||
     createBullBitcoinWallet.isPending ||
     discoverBtcpay.isPending ||
+    detectCore.isPending ||
+    testCore.isPending ||
     importBip329.isPending ||
     syncWallet.isPending;
   const requiresBackend =
@@ -1234,6 +1276,24 @@ export function AddConnectionDialog({
     return config;
   };
 
+  const updateCoreForm = <K extends keyof SetupFormState>(
+    key: K,
+    value: SetupFormState[K],
+  ) => {
+    setForm((current) => ({
+      ...current,
+      [key]: value,
+      coreRpcCredentialRef: "",
+    }));
+    setCoreTestStatus(null);
+    setFieldErrors((current) => {
+      if (!(key in current)) return current;
+      const next = { ...current };
+      delete next[key];
+      return next;
+    });
+  };
+
   const coreRpcBackendArgs = () => ({
     name: backendNameFromLabel(form.label),
     kind: "bitcoinrpc",
@@ -1242,6 +1302,16 @@ export function AddConnectionDialog({
     network: form.coreRpcNetwork || "main",
     config: coreRpcConfig(),
   });
+
+  const coreRpcProbeArgs = () =>
+    form.coreRpcCredentialRef
+      ? { credential_ref: form.coreRpcCredentialRef, timeout: 10 }
+      : {
+          url: form.coreRpcUrl.trim(),
+          network: form.coreRpcNetwork || "main",
+          config: coreRpcConfig(),
+          timeout: 10,
+        };
 
   const validateSetupForm = (): Partial<Record<keyof SetupFormState, string>> => {
     const errors: Partial<Record<keyof SetupFormState, string>> = {};
@@ -1455,12 +1525,7 @@ export function AddConnectionDialog({
     try {
       if (setupKind === "backend-settings" && selected.id === "bitcoin-core") {
         const backendArgs = coreRpcBackendArgs();
-        const testEnvelope = await testCore.mutateAsync({
-          url: backendArgs.url,
-          network: backendArgs.network,
-          config: backendArgs.config,
-          timeout: 10,
-        });
+        const testEnvelope = await testCore.mutateAsync(coreRpcProbeArgs());
         const probe = testEnvelope.data;
         if (!probe?.reachable) {
           throw new Error(
@@ -2313,7 +2378,11 @@ export function AddConnectionDialog({
             id="connection-birthday"
             label={t("add.descriptor.birthday")}
             error={fieldErrors.birthday}
-            helper={t("add.descriptor.birthdayHelper")}
+            helper={
+              selectedBackend?.kind === "bitcoinrpc"
+                ? t("add.descriptor.birthdayHelperCore")
+                : t("add.descriptor.birthdayHelper")
+            }
           >
             <Input
               id="connection-birthday"
@@ -3667,8 +3736,9 @@ export function AddConnectionDialog({
                     candidate.network ?? "",
                     candidate.auth_source ?? "",
                     candidate.credential_source ?? "",
-                    candidate.cookiefile ?? candidate.username ?? "",
+                    candidate.cookiefile ?? candidate.credential_ref ?? "",
                   ].join("|");
+                  const readinessMessages = coreReadinessMessages(candidate, t);
                   return (
                     <Button
                       key={candidateKey}
@@ -3697,6 +3767,11 @@ export function AddConnectionDialog({
                             auth: coreCandidateAuthLabel(candidate, t),
                           })}
                         </span>
+                        {readinessMessages.length > 0 ? (
+                          <span className="block whitespace-normal text-[11px] font-normal text-amber-700 dark:text-amber-300">
+                            {readinessMessages.join(" ")}
+                          </span>
+                        ) : null}
                       </span>
                     </Button>
                   );
@@ -3714,8 +3789,7 @@ export function AddConnectionDialog({
                 id="connection-core-url"
                 value={form.coreRpcUrl}
                 onChange={(event) => {
-                  updateForm("coreRpcUrl", event.target.value);
-                  setCoreTestStatus(null);
+                  updateCoreForm("coreRpcUrl", event.target.value);
                 }}
               />
             </SetupField>
@@ -3728,7 +3802,17 @@ export function AddConnectionDialog({
                 className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
                 value={form.coreRpcNetwork}
                 onChange={(event) => {
-                  updateForm("coreRpcNetwork", event.target.value);
+                  const network = event.target.value;
+                  setForm((current) => ({
+                    ...current,
+                    coreRpcNetwork: network,
+                    coreRpcUrl: Object.values(CORE_DEFAULT_RPC_URLS).includes(
+                      current.coreRpcUrl.trim(),
+                    )
+                      ? CORE_DEFAULT_RPC_URLS[network]
+                      : current.coreRpcUrl,
+                    coreRpcCredentialRef: "",
+                  }));
                   setCoreTestStatus(null);
                 }}
               >
@@ -3748,11 +3832,10 @@ export function AddConnectionDialog({
               className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
               value={form.coreRpcAuthMode}
               onChange={(event) => {
-                updateForm(
+                updateCoreForm(
                   "coreRpcAuthMode",
                   event.target.value === "basic" ? "basic" : "cookiefile",
                 );
-                setCoreTestStatus(null);
               }}
             >
               <option value="cookiefile">{t("add.core.authCookiefile")}</option>
@@ -3769,8 +3852,7 @@ export function AddConnectionDialog({
                 id="connection-core-cookiefile"
                 value={form.coreRpcCookiefile}
                 onChange={(event) => {
-                  updateForm("coreRpcCookiefile", event.target.value);
-                  setCoreTestStatus(null);
+                  updateCoreForm("coreRpcCookiefile", event.target.value);
                 }}
               />
             </SetupField>
@@ -3785,8 +3867,7 @@ export function AddConnectionDialog({
                   id="connection-core-username"
                   value={form.coreRpcUsername}
                   onChange={(event) => {
-                    updateForm("coreRpcUsername", event.target.value);
-                    setCoreTestStatus(null);
+                    updateCoreForm("coreRpcUsername", event.target.value);
                   }}
                 />
               </SetupField>
@@ -3800,8 +3881,7 @@ export function AddConnectionDialog({
                   type="password"
                   value={form.coreRpcPassword}
                   onChange={(event) => {
-                    updateForm("coreRpcPassword", event.target.value);
-                    setCoreTestStatus(null);
+                    updateCoreForm("coreRpcPassword", event.target.value);
                   }}
                 />
               </SetupField>
@@ -3816,13 +3896,7 @@ export function AddConnectionDialog({
               onClick={async () => {
                 setCoreTestStatus(null);
                 try {
-                  const backendArgs = coreRpcBackendArgs();
-                  const envelope = await testCore.mutateAsync({
-                    url: backendArgs.url,
-                    network: backendArgs.network,
-                    config: backendArgs.config,
-                    timeout: 10,
-                  });
+                  const envelope = await testCore.mutateAsync(coreRpcProbeArgs());
                   const payload = envelope.data;
                   setCoreTestStatus(
                     payload?.reachable
