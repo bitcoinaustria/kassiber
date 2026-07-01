@@ -13,7 +13,7 @@ import re
 import hashlib
 from dataclasses import dataclass
 from decimal import Decimal
-from typing import Any, Mapping, Sequence
+from typing import Any, Mapping
 
 from ..envelope import json_ready
 from ..errors import AppError
@@ -107,7 +107,10 @@ def normalize_scan_mode(value: Any) -> str:
 
 
 def _compact_descriptor(value: Any) -> str:
-    return re.sub(r"\s+", "", str(value or ""))
+    text = re.sub(r"\s+", "", str(value or ""))
+    if "#" in text:
+        text = text.split("#", 1)[0]
+    return text
 
 
 def descriptor_fingerprint(material: Any) -> str:
@@ -194,13 +197,18 @@ def _network_for_key_expr(value: str, *, private: bool) -> str | None:
     return None
 
 
+def _key_network_family(network: str) -> str:
+    return "main" if network == "main" else "test"
+
+
 def _ensure_key_network(value: str, network: str, *, private: bool, label: str) -> None:
     key_network = _network_for_key_expr(value, private=private)
-    if key_network is not None and key_network != network:
+    expected_key_network = _key_network_family(network)
+    if key_network is not None and key_network != expected_key_network:
         raise AppError(
             f"Silent Payments {label} material is for {key_network}, but wallet network is {network}",
             code="validation",
-            hint=f"Use {'mainnet' if network == 'main' else 'testnet'} {label} material for this wallet.",
+            hint=f"Use {'mainnet' if expected_key_network == 'main' else 'testnet'} {label} material for this wallet.",
             retryable=False,
         )
 
@@ -333,7 +341,12 @@ def validate_wallet_config(config: Mapping[str, Any]) -> dict[str, Any]:
         output.pop(CONFIG_SCAN_START_DATE, None)
     full_history = parse_bool(output.get(CONFIG_FULL_HISTORY), default=False)
     output[CONFIG_FULL_HISTORY] = bool(full_history)
-    if not start_height and start_height != 0 and start_date is None and not full_history:
+    if full_history:
+        start_height = None
+        start_date = None
+        output.pop(CONFIG_SCAN_START_HEIGHT, None)
+        output.pop(CONFIG_SCAN_START_DATE, None)
+    if start_height is None and start_date is None and not full_history:
         raise AppError(
             "Silent Payments wallets require a scan start height/date or explicit full-history mode",
             code="silent_payment_scan_start_required",
@@ -634,7 +647,12 @@ def _utxo_from_output(
         "vout": vout,
         "asset": "BTC",
         "amount_sats": _amount_sats(output),
-        "confirmation_status": "confirmed" if block_height and block_height > 0 else "mempool",
+        "confirmation_status": (
+            "confirmed"
+            if (block_height is not None and block_height > 0)
+            or (confirmations is not None and confirmations > 0)
+            else "mempool"
+        ),
         "confirmations": confirmations,
         "block_height": block_height,
         "block_time": block_time,

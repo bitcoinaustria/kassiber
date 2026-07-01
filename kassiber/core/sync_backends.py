@@ -1393,21 +1393,15 @@ def _open_private_silent_payment_scan_file(path: Path):
 def _silent_payment_scan_payload(backend, wallet, plan: silent_payments.SilentPaymentPlan):
     config = json.loads(wallet["config_json"] or "{}")
     scan_file = backend_value(backend, *silent_payments.BACKEND_SCAN_FILE_FIELDS)
-    if scan_file:
-        path = Path(scan_file).expanduser()
-        try:
-            with _open_private_silent_payment_scan_file(path) as handle:
-                return json.load(handle)
-        except OSError as exc:
-            _raise_silent_payment_scan_file_read_error(exc)
-        except json.JSONDecodeError as exc:
-            raise AppError(
-                "Silent Payments local scanner output is not valid JSON",
-                code="silent_payment_scanner_invalid",
-                retryable=False,
-            ) from exc
     scan_path = backend_value(backend, *silent_payments.BACKEND_SCAN_PATH_FIELDS)
-    if scan_path and plan.scan_mode == silent_payments.SCAN_MODE_SERVER:
+    if plan.scan_mode == silent_payments.SCAN_MODE_SERVER:
+        if not scan_path:
+            raise AppError(
+                "Silent Payments server-assisted scanner is not configured for this backend",
+                code="silent_payment_scanner_unavailable",
+                hint="Configure silent_payment_scan_path on the selected SP-capable backend.",
+                retryable=False,
+            )
         payload = {
             "descriptor": config.get(silent_payments.CONFIG_DESCRIPTOR),
             "chain": plan.chain,
@@ -1422,6 +1416,19 @@ def _silent_payment_scan_payload(backend, wallet, plan: silent_payments.SilentPa
             timeout=backend_timeout(backend),
             proxy_url=_backend_proxy_url(backend),
         )
+    if scan_file:
+        path = Path(scan_file).expanduser()
+        try:
+            with _open_private_silent_payment_scan_file(path) as handle:
+                return json.load(handle)
+        except OSError as exc:
+            _raise_silent_payment_scan_file_read_error(exc)
+        except json.JSONDecodeError as exc:
+            raise AppError(
+                "Silent Payments local scanner output is not valid JSON",
+                code="silent_payment_scanner_invalid",
+                retryable=False,
+            ) from exc
     raise AppError(
         "Silent Payments scanner is not configured for this backend",
         code="silent_payment_scanner_unavailable",

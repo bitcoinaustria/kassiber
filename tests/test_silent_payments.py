@@ -141,14 +141,7 @@ def _sync_hooks():
         resolve_sync_state=_resolve_sync_state,
         normalize_addresses=core_wallets.normalize_addresses,
         backend_adapters={"custom": _sp_adapter},
-        update_output_inventory=lambda conn, profile, wallet, backend, sync_state, outputs: core_output_inventory.update_wallet_output_inventory(
-            conn,
-            profile,
-            wallet,
-            backend,
-            sync_state,
-            outputs,
-        ),
+        update_output_inventory=core_output_inventory.update_wallet_output_inventory,
     )
 
 
@@ -239,7 +232,6 @@ class SilentPaymentsTests(unittest.TestCase):
         self.assertEqual(created["silent_payment"]["material_format"], "bip392-spscan")
         self.assertNotIn(SP_DESCRIPTOR, json.dumps(created, sort_keys=True))
 
-        wallet = conn.execute("SELECT * FROM wallets WHERE id = ?", (created["id"],)).fetchone()
         revealed = core_wallets.reveal_wallet_secrets(
             conn,
             workspace["id"],
@@ -249,6 +241,18 @@ class SilentPaymentsTests(unittest.TestCase):
         self.assertEqual(revealed["sp_descriptor"], SP_DESCRIPTOR)
 
     def test_rejects_spending_material_and_requires_scan_start(self):
+        checksummed = silent_payments.validate_watch_only_descriptor(
+            SP_DESCRIPTOR + "#abcd1234",
+            network="main",
+        )
+        self.assertEqual(checksummed["sp_descriptor"], SP_DESCRIPTOR)
+
+        signet_two_key = silent_payments.validate_watch_only_descriptor(
+            "sp(tprv" + ("q" * 40) + ",tpub" + ("q" * 40) + ")",
+            network="signet",
+        )
+        self.assertEqual(signet_two_key["sp_material_format"], "bip392-two-key-watch-only")
+
         with self.assertRaises(AppError) as spending:
             silent_payments.validate_watch_only_descriptor("sp(spspend1q" + ("q" * 40) + ")")
         self.assertEqual(spending.exception.code, "validation")
@@ -300,6 +304,36 @@ class SilentPaymentsTests(unittest.TestCase):
                 _sp_config(sp_scan_mode="server-assisted")
             )
         self.assertEqual(server_warning.exception.code, "silent_payment_server_warning_required")
+
+    def test_full_history_ignores_stale_scan_start_fields(self):
+        validated = silent_payments.validate_wallet_config(
+            _sp_config(
+                sp_scan_start_height=850_000,
+                sp_scan_start_date="2026-06-01T12:00:00Z",
+                sp_full_history=True,
+                sp_acknowledge_full_history_warning=True,
+            )
+        )
+        self.assertNotIn("sp_scan_start_height", validated)
+        self.assertNotIn("sp_scan_start_date", validated)
+
+        plan = silent_payments.build_plan(validated)
+        self.assertIsNone(plan.start_height)
+        self.assertIsNone(plan.start_date)
+        records, meta = silent_payments.normalize_scan_payload(
+            {
+                "complete": True,
+                "descriptor_fingerprint": plan.descriptor_fingerprint,
+                "range": {"from_height": 0},
+                "transactions": [],
+                "utxos": [],
+            },
+            backend_name="sp-local",
+            backend_kind="custom",
+            plan=plan,
+        )
+        self.assertEqual(records, [])
+        self.assertTrue(meta["silent_payment_scan_complete"])
 
     def test_unsupported_backend_is_explicit_not_zero_balance(self):
         plan = silent_payments.build_plan(_sp_config())
@@ -404,7 +438,7 @@ class SilentPaymentsTests(unittest.TestCase):
         self.assertEqual(utxo["script_pubkey"], P2TR_SCRIPT)
         self.assertIsNone(utxo["spent_at"])
 
-        result = sync_wallet_from_backend(conn, runtime, profile, wallet, _sync_hooks())
+        sync_wallet_from_backend(conn, runtime, profile, wallet, _sync_hooks())
         self.assertEqual(conn.execute("SELECT COUNT(*) FROM transactions").fetchone()[0], 1)
         self.assertEqual(conn.execute("SELECT COUNT(*) FROM wallet_utxos").fetchone()[0], 1)
 
@@ -476,6 +510,8 @@ class SilentPaymentsTests(unittest.TestCase):
                                 "silent_payment": True,
                                 "raw": {
                                     "scanDescriptor": SP_DESCRIPTOR,
+                                    "silentPaymentScanKey": "K" + ("a" * 40),
+                                    "scanKey": "L" + ("b" * 40),
                                     "note": "keep",
                                 },
                             },
@@ -490,8 +526,92 @@ class SilentPaymentsTests(unittest.TestCase):
 
         persisted = json.dumps(json_ready({"records": records, "meta": meta}), sort_keys=True)
         self.assertNotIn(SP_DESCRIPTOR, persisted)
+        self.assertNotIn("K" + ("a" * 40), persisted)
+        self.assertNotIn("L" + ("b" * 40), persisted)
         self.assertIn("[redacted-silent-payment-descriptor]", persisted)
+        raw = json.loads(records[0]["raw_json"])
+        output_raw = raw["outputs"][0]["raw"]
+        self.assertEqual(output_raw["silentPaymentScanKey"], "[redacted]")
+        self.assertEqual(output_raw["scanKey"], "[redacted]")
         self.assertIn("keep", persisted)
+
+    def test_confirmations_mark_utxos_confirmed_without_block_height(self):
+        plan = silent_payments.build_plan(_sp_config())
+        records, meta = silent_payments.normalize_scan_payload(
+            {
+                "complete": True,
+                "descriptor_fingerprint": plan.descriptor_fingerprint,
+                "range": {"from_height": 850_000, "to_height": 850_130},
+                "transactions": [
+                    {
+                        "txid": "66" * 32,
+                        "block_time": "2026-06-01T12:00:00Z",
+                        "outputs": [
+                            {
+                                "vout": 0,
+                                "amount_sats": 50_000,
+                                "script_pubkey": P2TR_SCRIPT,
+                                "silent_payment": True,
+                                "confirmations": 3,
+                            },
+                        ],
+                    }
+                ],
+                "utxos": [
+                    {
+                        "txid": "66" * 32,
+                        "vout": 0,
+                        "amount_sats": 50_000,
+                        "script_pubkey": P2TR_SCRIPT,
+                        "confirmations": 3,
+                    },
+                ],
+            },
+            backend_name="sp-local",
+            backend_kind="custom",
+            plan=plan,
+        )
+
+        self.assertEqual(len(records), 1)
+        self.assertEqual(meta["utxos"][0]["confirmation_status"], "confirmed")
+        self.assertEqual(meta["utxos"][0]["confirmations"], 3)
+
+    def test_server_scan_mode_uses_scan_path_when_local_file_is_configured(self):
+        scan_dir = tempfile.TemporaryDirectory(prefix="kassiber-sp-scan-")
+        self.addCleanup(scan_dir.cleanup)
+        scan_file = Path(scan_dir.name) / "stale-scan.json"
+        _write_private_scanner_payload(scan_file, {"stale": True})
+        runtime = _runtime(scan_file)
+        backend = runtime["backends"]["sp-local"]
+        backend["url"] = "https://sp.example.test"
+        backend["silent_payment_scan_path"] = "/silent-payments/scan"
+        config = _sp_config(
+            sp_scan_mode="server-assisted",
+            sp_acknowledge_server_warning=True,
+        )
+        wallet = {"config_json": json.dumps(config)}
+        plan = silent_payments.build_plan(config)
+        calls = []
+
+        def fake_post_json(url, payload, **kwargs):
+            calls.append((url, payload, kwargs))
+            return {
+                "complete": True,
+                "descriptor_fingerprint": plan.descriptor_fingerprint,
+                "range": {"from_height": 850_000, "to_height": 850_130},
+                "transactions": [],
+                "utxos": [],
+            }
+
+        original_post_json = sync_backends.http_post_json
+        sync_backends.http_post_json = fake_post_json
+        self.addCleanup(lambda: setattr(sync_backends, "http_post_json", original_post_json))
+
+        payload = sync_backends._silent_payment_scan_payload(backend, wallet, plan)
+
+        self.assertTrue(payload["complete"])
+        self.assertEqual(calls[0][0], "https://sp.example.test/silent-payments/scan")
+        self.assertEqual(calls[0][1]["descriptor"], SP_DESCRIPTOR)
 
     def test_scan_range_must_cover_wallet_birthday(self):
         plan = silent_payments.build_plan(_sp_config(sp_scan_start_height=850_000))

@@ -1701,6 +1701,7 @@ export function AddConnectionDialog({
         });
       } else if (setupKind === "silent-payment") {
         const startHeight = Number.parseInt(form.spScanStartHeight.trim(), 10);
+        const fullHistory = form.spFullHistory;
         await createWallet.mutateAsync({
           label,
           kind: "silent-payment",
@@ -1709,11 +1710,13 @@ export function AddConnectionDialog({
           network: selected.network,
           sp_descriptor: form.spDescriptor.trim(),
           sp_scan_mode: form.spScanMode,
-          sp_scan_start_height: Number.isFinite(startHeight)
+          sp_scan_start_height: !fullHistory && Number.isFinite(startHeight)
             ? startHeight
             : undefined,
-          sp_scan_start_date: form.spScanStartDate.trim() || undefined,
-          sp_full_history: form.spFullHistory,
+          sp_scan_start_date: !fullHistory
+            ? form.spScanStartDate.trim() || undefined
+            : undefined,
+          sp_full_history: fullHistory,
           sp_acknowledge_full_history_warning:
             form.spAcknowledgeFullHistoryWarning,
           sp_acknowledge_server_warning: form.spAcknowledgeServerWarning,
