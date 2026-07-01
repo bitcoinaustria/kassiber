@@ -93,7 +93,16 @@ class RegtestHarnessTest(unittest.TestCase):
                 "treasury_2020",
                 "merchant_2022",
                 "cold_2024",
+                "liquid_treasury",
+                "liquid_operations",
+                "liquid_treasury_2024",
             },
+        )
+        liquid_wallets = {wallet["key"] for wallet in scenario["wallets"] if wallet.get("chain") == "liquid"}
+        self.assertEqual(liquid_wallets, {"liquid_treasury", "liquid_operations", "liquid_treasury_2024"})
+        self.assertEqual(
+            scenario["deprecated_wallets"],
+            ["treasury", "merchant", "cold", "liquid_treasury"],
         )
         operation_kinds = {operation["kind"] for operation in scenario["operations"]}
         self.assertTrue(
@@ -112,8 +121,11 @@ class RegtestHarnessTest(unittest.TestCase):
                 "loan_principal_repaid",
             }.issubset(operation_kinds)
         )
-        self.assertGreaterEqual(scenario["expected"]["min_transactions"], 830)
-        self.assertGreaterEqual(scenario["expected"]["min_active_transactions"], 825)
+        self.assertEqual(scenario["expected"]["wallets"], 10)
+        self.assertEqual(scenario["expected"]["deprecated_wallets"], 4)
+        self.assertEqual(scenario["expected"]["assets"], ["BTC", "LBTC"])
+        self.assertGreaterEqual(scenario["expected"]["min_transactions"], 840)
+        self.assertGreaterEqual(scenario["expected"]["min_active_transactions"], 835)
         base_time = datetime.fromisoformat(scenario["base_time"].replace("Z", "+00:00"))
         stress = scenario["stress"]
         self.assertTrue(stress["enabled"])
@@ -126,12 +138,16 @@ class RegtestHarnessTest(unittest.TestCase):
         self.assertGreaterEqual(len(stress["business_expenses"]["schedule"]), 6)
         self.assertEqual(len(stress["wallet_rotations"]), 3)
         self.assertEqual(len(stress["swap_bridges"]), 3)
+        liquid_rows = sum(len(rows) for rows in scenario["liquid_ledger"]["wallets"].values())
+        self.assertGreaterEqual(liquid_rows, 9)
+        self.assertEqual(len(scenario["liquid_ledger"]["transfer_pairs"]), 1)
+        self.assertIn("LBTC-EUR", scenario["pricing"]["pairs"])
         rates = [float(rate) for rate in scenario["pricing"]["rate_sequence"]]
         self.assertGreater(max(rates) / min(rates), 2.0)
         self.assertNotEqual(rates, sorted(rates))
         self.assertNotEqual(rates, sorted(rates, reverse=True))
         self.assertEqual(scenario["expected"]["collaborative_excluded"], 5)
-        self.assertEqual(scenario["expected"]["min_transfer_pairs"], 5)
+        self.assertEqual(scenario["expected"]["min_transfer_pairs"], 9)
         self.assertEqual(scenario["expected"]["loan_marks"], 4)
         self.assertIn("full-report.xlsx", scenario["expected"]["export_files"])
 

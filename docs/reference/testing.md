@@ -10,7 +10,7 @@ regtest infrastructure.
 | --- | --- | --- | --- |
 | FAST | `./scripts/integration-harness.sh fast` | no | Replays recorded regtest tapes through the real sync adapter, import, journal, report, and XLSX export path with `KASSIBER_NO_EGRESS=1`. |
 | SLOW | `./scripts/integration-harness.sh bitcoin-core` | yes, unless reusing a node | Starts or reuses a Bitcoin Core regtest node, creates real wallets and transactions, then drives Kassiber sync, pricing, journal, report, and export. |
-| DEMO | `./scripts/integration-harness.sh demo-full` | yes, unless reusing a node | Builds the checked-in `full-accounting-v1` scenario: seven Kassiber wallets including rotation targets, real regtest acquisitions/disposals/transfers, operating-expense disposals, batched and consolidation edge cases, a larger multi-year stress ledger, CoinJoin- and PayJoin-shaped collaborative transactions, swap/peg bridge legs, loan marks, volatile deterministic manual pricing, journals, reports, and transaction exports. |
+| DEMO | `./scripts/integration-harness.sh demo-full` | yes, unless reusing a node | Builds the checked-in `full-accounting-v1` scenario: ten Kassiber wallets including Bitcoin rotation targets and deterministic Liquid/LBTC import wallets, real regtest acquisitions/disposals/transfers, operating-expense disposals, deprecated rotated-out wallets, batched and consolidation edge cases, a larger multi-year stress ledger, CoinJoin- and PayJoin-shaped collaborative transactions, swap/peg bridge pairs, loan marks, volatile deterministic manual pricing, journals, reports, and transaction exports. |
 
 The slow lane is opt-in with `KASSIBER_INTEGRATION=1`; normal unit gates do not
 start Docker. To reuse an existing regtest node instead of Compose, set an
@@ -43,9 +43,11 @@ Bitcoin Core regtest wallets, broadcasts real transactions, syncs Kassiber from
 the Core RPC backend, then verifies Kassiber behavior through the public CLI:
 
 - address-wallet creation and Bitcoin Core watch-only sync
+- file-source Liquid wallet creation and generic-ledger LBTC import through the
+  same `wallets sync --all` path
 - acquisition and disposal rows across Treasury, Cold Storage, Spending, and
-  Merchant wallets, plus empty rotation-target wallets that become active after
-  security upgrades
+  Merchant wallets, plus empty Bitcoin and Liquid rotation-target wallets that
+  become active after security upgrades
 - large single-source custody receipt into cold storage
 - batched treasury payout to multiple external recipients in one transaction
 - same-block merchant point-of-sale receipt burst followed by a many-input
@@ -53,14 +55,15 @@ the Core RPC backend, then verifies Kassiber behavior through the public CLI:
 - a deterministic historical stress lane: 132 cycles spaced 20 days apart, with
   batched inbound funding into operational wallets, rotating outbound payments,
   and regular fiat-expense disposals for payroll, rent, software, tax prep,
-  contractors, and equipment; the demo still adds several hundred synced wallet
-  rows across seven years
-- wallet key-rotation events for treasury, merchant, and cold storage, reviewed
-  as same-asset transfer pairs after sync
+  contractors, and equipment; the demo still adds several hundred synced/imported
+  wallet rows across seven years
+- wallet key-rotation events for treasury, merchant, cold storage, and Liquid
+  treasury, reviewed as same-asset transfer pairs after sync; the old source
+  wallets are then marked deprecated so their history remains visible while
+  refresh-all/background freshness skips them
 - Liquid/on-chain-style bridge events (`peg-in`, `submarine-swap`, `peg-out`)
-  left as ordinary disposal/acquisition legs in the generic-tax demo so the
-  report exercises real taxable swaps without importing Austrian-specific
-  carrying-value semantics
+  pair real Bitcoin Core txids with deterministic LBTC ledger external IDs so
+  the generic-tax demo exercises taxable cross-asset swaps
 - reviewed same-asset transfer pairs for wallet-to-wallet movements
 - CoinJoin-shaped PSBT flow with two owned inputs, equal external/tracked
   outputs, and explicit watched change; the resulting rows are explicitly
@@ -71,8 +74,9 @@ the Core RPC backend, then verifies Kassiber behavior through the public CLI:
   book remains reportable without pretending to know provider-specific intent
 - Bitcoin-backed-loan marks for collateral lock/release and BTC principal
   receive/repay, linked under one loan id
-- deterministic but volatile manual BTC/EUR pricing, journal processing,
-  summary reporting, PDF/CSV/XLSX report export, and CSV/XLSX transaction export
+- deterministic but volatile manual BTC/EUR and LBTC/EUR pricing, journal
+  processing, summary reporting, PDF/CSV/XLSX report export, and CSV/XLSX
+  transaction export
 
 The scenario manifest lives at
 `dev/regtest/scenarios/full_accounting.json`; the runner lives at
@@ -104,7 +108,8 @@ component fixtures, but it should not be treated as an accounting or sync proof.
 
 ## Growth Path
 
-The current checked-in slow lanes cover Bitcoin Core RPC and a full accounting
-demo on Bitcoin regtest. The harness is shaped so Fulcrum/Electrum, explorer
-HTTP, Liquid, and optional BTCPay modules can add new tapes, live tests, and
-scenario manifests without changing the contributor entrypoint.
+The current checked-in slow lanes cover Bitcoin Core RPC, deterministic
+file-source Liquid/LBTC demo wallets, and a full accounting demo on Bitcoin
+regtest. The harness is shaped so Fulcrum/Electrum, explorer HTTP, live Liquid,
+and optional BTCPay modules can add new tapes, live tests, and scenario manifests
+without changing the contributor entrypoint.

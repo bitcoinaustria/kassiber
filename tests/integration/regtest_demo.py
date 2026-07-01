@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import base64
+import csv
 import json
 import os
 import shutil
@@ -18,6 +19,7 @@ from typing import Any
 from urllib import error, request
 
 from kassiber.core.sync_backends import sanitize_wallet_segment
+from kassiber.importers import GENERIC_LEDGER_COLUMNS
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -27,13 +29,38 @@ TRANSACTION_LIST_LIMIT = "1000"
 SECONDS_PER_DAY = 86_400
 
 
+def _wallet_kind(wallet_spec: dict[str, Any]) -> str:
+    return str(wallet_spec.get("kind") or "address").strip().lower()
+
+
+def _wallet_chain(wallet_spec: dict[str, Any]) -> str:
+    return str(wallet_spec.get("chain") or "bitcoin").strip().lower()
+
+
+def _is_core_wallet_spec(wallet_spec: dict[str, Any]) -> bool:
+    return _wallet_kind(wallet_spec) == "address" and _wallet_chain(wallet_spec) == "bitcoin"
+
+
+def _is_core_wallet(wallet: "DemoWallet") -> bool:
+    return wallet.chain == "bitcoin" and bool(wallet.address and wallet.core_wallet)
+
+
+def _is_liquid_ledger_wallet(wallet: "DemoWallet") -> bool:
+    return wallet.chain == "liquid" and wallet.source_format == "generic_ledger"
+
+
 @dataclass
 class DemoWallet:
     key: str
     label: str
     account: str
-    core_wallet: str
-    address: str
+    kind: str = "address"
+    chain: str = "bitcoin"
+    network: str = "regtest"
+    core_wallet: str = ""
+    address: str = ""
+    source_file: str = ""
+    source_format: str = ""
     kassiber_id: str | None = None
     watchonly_wallet: str | None = None
 
@@ -56,11 +83,23 @@ def validate_scenario(scenario: dict[str, Any]) -> None:
     if len(wallet_keys) != len(set(wallet_keys)):
         raise ValueError("Scenario wallet keys must be unique")
     wallet_key_set = set(wallet_keys)
+    wallet_specs_by_key = {wallet["key"]: wallet for wallet in scenario["wallets"]}
+    core_wallet_keys = {wallet["key"] for wallet in scenario["wallets"] if _is_core_wallet_spec(wallet)}
     for wallet in scenario["wallets"]:
         for field in ("key", "label", "account", "initial_btc"):
             if not wallet.get(field):
                 raise ValueError(f"Scenario wallet {wallet.get('key')!r} is missing {field}")
         _btc_or_zero(wallet["initial_btc"])
+        kind = _wallet_kind(wallet)
+        chain = _wallet_chain(wallet)
+        if chain not in {"bitcoin", "liquid"}:
+            raise ValueError(f"Scenario wallet {wallet['key']!r} has unsupported chain: {chain}")
+        if kind not in {"address", "custom"}:
+            raise ValueError(f"Scenario wallet {wallet['key']!r} has unsupported kind: {kind}")
+        if chain == "liquid" and wallet.get("source_format") != "generic_ledger":
+            raise ValueError(
+                f"Scenario Liquid wallet {wallet['key']!r} must use source_format generic_ledger"
+            )
     for operation in scenario["operations"]:
         op_id = operation.get("id") or "<unnamed>"
         kind = operation.get("kind")
@@ -82,6 +121,8 @@ def validate_scenario(scenario: dict[str, Any]) -> None:
         for ref_field, value in refs:
             if value not in wallet_key_set:
                 raise ValueError(f"Scenario operation {op_id} references unknown {ref_field}: {value}")
+            if value not in core_wallet_keys:
+                raise ValueError(f"Scenario operation {op_id} references non-Core wallet {ref_field}: {value}")
     stress = scenario.get("stress") or {}
     if stress.get("enabled"):
         cycles = int(stress.get("cycles") or 0)
@@ -97,6 +138,8 @@ def validate_scenario(scenario: dict[str, Any]) -> None:
             for key, value in entries.items():
                 if key not in wallet_key_set:
                     raise ValueError(f"Scenario stress.{field} references unknown wallet: {key}")
+                if key not in core_wallet_keys:
+                    raise ValueError(f"Scenario stress.{field} references non-Core wallet: {key}")
                 _btc(value)
         if not stress.get("fee_btc"):
             raise ValueError("Scenario stress.fee_btc must be set")
@@ -115,6 +158,10 @@ def validate_scenario(scenario: dict[str, Any]) -> None:
                     raise ValueError(
                         f"Scenario stress.business_expenses.schedule[{index}] references unknown role: {role}"
                     )
+                if role not in core_wallet_keys:
+                    raise ValueError(
+                        f"Scenario stress.business_expenses.schedule[{index}] references non-Core role: {role}"
+                    )
                 _btc(expense.get("amount_btc"))
         for index, rotation in enumerate(stress.get("wallet_rotations") or [], start=1):
             cycle = int(rotation.get("cycle") or 0)
@@ -124,6 +171,10 @@ def validate_scenario(scenario: dict[str, Any]) -> None:
                 if rotation.get(field) not in wallet_key_set:
                     raise ValueError(
                         f"Scenario stress.wallet_rotations[{index}] references unknown {field}: {rotation.get(field)}"
+                    )
+                if rotation.get(field) not in core_wallet_keys:
+                    raise ValueError(
+                        f"Scenario stress.wallet_rotations[{index}] references non-Core {field}: {rotation.get(field)}"
                     )
             _btc(rotation.get("amount_btc"))
             _btc(rotation.get("fee_btc") or stress["fee_btc"])
@@ -136,12 +187,46 @@ def validate_scenario(scenario: dict[str, Any]) -> None:
                     raise ValueError(
                         f"Scenario stress.swap_bridges[{index}] references unknown {field}: {bridge.get(field)}"
                     )
+            source = wallet_specs_by_key[bridge["from_role"]]
+            target = wallet_specs_by_key[bridge["to_role"]]
+            if not (_is_core_wallet_spec(source) or _is_core_wallet_spec(target)):
+                if _wallet_chain(source) != "liquid" or _wallet_chain(target) != "liquid":
+                    raise ValueError(
+                        f"Scenario stress.swap_bridges[{index}] needs a Core or Liquid ledger endpoint"
+                    )
             _btc(bridge.get("out_btc"))
             _btc(bridge.get("in_btc"))
             _btc(bridge.get("fee_btc") or stress["fee_btc"])
             pair_kind = bridge.get("pair_kind") or "submarine-swap"
             if pair_kind not in {"peg-in", "peg-out", "submarine-swap", "swap-refund"}:
                 raise ValueError(f"Scenario stress.swap_bridges[{index}] has unsupported pair_kind: {pair_kind}")
+    for index, deprecated_key in enumerate(scenario.get("deprecated_wallets") or [], start=1):
+        if deprecated_key not in wallet_key_set:
+            raise ValueError(f"Scenario deprecated_wallets[{index}] references unknown wallet: {deprecated_key}")
+    liquid_ledger = scenario.get("liquid_ledger") or {}
+    liquid_wallets = liquid_ledger.get("wallets") or {}
+    if liquid_wallets and not isinstance(liquid_wallets, dict):
+        raise ValueError("Scenario liquid_ledger.wallets must be an object")
+    for wallet_key, rows in liquid_wallets.items():
+        if wallet_key not in wallet_key_set:
+            raise ValueError(f"Scenario liquid_ledger references unknown wallet: {wallet_key}")
+        if _wallet_chain(wallet_specs_by_key[wallet_key]) != "liquid":
+            raise ValueError(f"Scenario liquid_ledger wallet must be Liquid: {wallet_key}")
+        if not isinstance(rows, list):
+            raise ValueError(f"Scenario liquid_ledger wallet rows must be a list: {wallet_key}")
+        for row_index, row in enumerate(rows, start=1):
+            if not row.get("type") or not row.get("date") or not row.get("txid"):
+                raise ValueError(f"Scenario liquid_ledger.{wallet_key}[{row_index}] is missing type/date/txid")
+            if row.get("received_amount"):
+                _btc(row["received_amount"])
+            if row.get("sent_amount") and str(row.get("sent_asset") or "LBTC").upper() == "LBTC":
+                _btc(row["sent_amount"])
+            if row.get("fee_amount") and str(row.get("fee_asset") or "LBTC").upper() == "LBTC":
+                _btc(row["fee_amount"])
+    for index, pair in enumerate(liquid_ledger.get("transfer_pairs") or [], start=1):
+        for field in ("tx_out", "tx_in"):
+            if not pair.get(field):
+                raise ValueError(f"Scenario liquid_ledger.transfer_pairs[{index}] is missing {field}")
     pricing = scenario.get("pricing") or {}
     if pricing.get("rate_sequence"):
         rates = [Decimal(str(value)) for value in pricing["rate_sequence"]]
@@ -177,6 +262,78 @@ def _json_ready(value: Any) -> Any:
     if isinstance(value, list):
         return [_json_ready(item) for item in value]
     return value
+
+
+def _iso_from_ts(ts: int) -> str:
+    return datetime.fromtimestamp(ts, tz=timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def _decimal_text(value: Any) -> str:
+    if value in (None, ""):
+        return ""
+    if isinstance(value, Decimal):
+        return format(value, "f")
+    return str(value)
+
+
+def _liquid_ledger_rows_from_manifest(scenario: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
+    rows_by_wallet: dict[str, list[dict[str, Any]]] = {
+        wallet["key"]: []
+        for wallet in scenario["wallets"]
+        if _wallet_chain(wallet) == "liquid"
+    }
+    for wallet_key, rows in (scenario.get("liquid_ledger") or {}).get("wallets", {}).items():
+        rows_by_wallet.setdefault(wallet_key, []).extend(dict(row) for row in rows)
+    return rows_by_wallet
+
+
+def _append_liquid_ledger_row(
+    rows_by_wallet: dict[str, list[dict[str, Any]]],
+    wallet_key: str,
+    row: dict[str, Any],
+) -> None:
+    rows_by_wallet.setdefault(wallet_key, []).append(dict(row))
+
+
+def _generic_ledger_csv_record(row: dict[str, Any]) -> dict[str, str]:
+    asset = str(row.get("asset") or "LBTC")
+    record = {column: "" for column in GENERIC_LEDGER_COLUMNS}
+    record["Type"] = str(row["type"])
+    record["Date"] = str(row["date"])
+    if row.get("received_amount") not in (None, ""):
+        record["Received Amount"] = _decimal_text(row["received_amount"])
+        record["Received Asset"] = str(row.get("received_asset") or asset)
+    if row.get("sent_amount") not in (None, ""):
+        record["Sent Amount"] = _decimal_text(row["sent_amount"])
+        record["Sent Asset"] = str(row.get("sent_asset") or asset)
+    if row.get("fee_amount") not in (None, ""):
+        record["Fee Amount"] = _decimal_text(row["fee_amount"])
+        record["Fee Asset"] = str(row.get("fee_asset") or asset)
+    if row.get("fiat_value") not in (None, ""):
+        record["Fiat Value"] = _decimal_text(row["fiat_value"])
+    record["Counterparty"] = str(row.get("counterparty") or "")
+    record["Note"] = str(row.get("note") or "")
+    record["Tx-ID"] = str(row["txid"])
+    return record
+
+
+def _write_liquid_ledger_files(
+    base_dir: Path,
+    wallets: dict[str, DemoWallet],
+    rows_by_wallet: dict[str, list[dict[str, Any]]],
+) -> None:
+    import_dir = base_dir / "imports" / "liquid"
+    import_dir.mkdir(parents=True, exist_ok=True)
+    for wallet in wallets.values():
+        if not _is_liquid_ledger_wallet(wallet):
+            continue
+        ledger_path = import_dir / f"{sanitize_wallet_segment(wallet.key)}.csv"
+        with ledger_path.open("w", encoding="utf-8", newline="") as handle:
+            writer = csv.DictWriter(handle, fieldnames=GENERIC_LEDGER_COLUMNS)
+            writer.writeheader()
+            for row in rows_by_wallet.get(wallet.key, []):
+                writer.writerow(_generic_ledger_csv_record(row))
+        wallet.source_file = str(ledger_path)
 
 
 def rpc(url: str, username: str, password: str, method: str, params=None, wallet: str | None = None):
@@ -543,6 +700,7 @@ def _generate_stress_history(
     password: str,
     wallets: dict[str, DemoWallet],
     scenario: dict[str, Any],
+    liquid_rows_by_wallet: dict[str, list[dict[str, Any]]],
     *,
     faucet_wallet: str,
     mining_address: str,
@@ -673,39 +831,84 @@ def _generate_stress_history(
             bridge_id = bridge["id"]
             source = active_wallet(bridge["from_role"])
             target = active_wallet(bridge["to_role"])
-            txids[f"{bridge_id}_out"] = _send_from_wallet(
-                url,
-                username,
-                password,
-                source,
-                {external_address: _btc(bridge["out_btc"])},
-                _btc(bridge.get("fee_btc") or stress["fee_btc"]),
-            )
-            current_ts = _mine_at(
-                url,
-                username,
-                password,
-                mining_address,
-                current_ts,
-                cycle_ts + (12 * 60 * 60),
-            )
-            txids[f"{bridge_id}_in"] = rpc(
-                url,
-                username,
-                password,
-                "sendtoaddress",
-                [target.address, _btc(bridge["in_btc"])],
-                wallet=faucet_wallet,
-            )
+            out_ts = cycle_ts + (12 * 60 * 60)
+            in_ts = cycle_ts + (13 * 60 * 60)
+            if _is_core_wallet(source):
+                txids[f"{bridge_id}_out"] = _send_from_wallet(
+                    url,
+                    username,
+                    password,
+                    source,
+                    {external_address: _btc(bridge["out_btc"])},
+                    _btc(bridge.get("fee_btc") or stress["fee_btc"]),
+                )
+                current_ts = _mine_at(
+                    url,
+                    username,
+                    password,
+                    mining_address,
+                    current_ts,
+                    out_ts,
+                )
+            elif _is_liquid_ledger_wallet(source):
+                out_external_id = bridge.get("out_external_id") or f"{bridge_id}_lbtc_out"
+                txids[f"{bridge_id}_out"] = out_external_id
+                _append_liquid_ledger_row(
+                    liquid_rows_by_wallet,
+                    source.key,
+                    {
+                        "type": "Withdrawal",
+                        "date": _iso_from_ts(out_ts),
+                        "sent_amount": _btc(bridge["out_btc"]),
+                        "fee_amount": _btc(bridge.get("fee_btc") or stress["fee_btc"]),
+                        "fee_asset": "LBTC",
+                        "counterparty": "Regtest bridge desk",
+                        "note": bridge.get("note") or f"{bridge_id} Liquid outbound leg.",
+                        "txid": out_external_id,
+                    },
+                )
+                current_ts = max(current_ts, out_ts)
+            else:
+                raise RuntimeError(f"Swap bridge {bridge_id} source is not syncable: {source.key}")
+
+            if _is_core_wallet(target):
+                txids[f"{bridge_id}_in"] = rpc(
+                    url,
+                    username,
+                    password,
+                    "sendtoaddress",
+                    [target.address, _btc(bridge["in_btc"])],
+                    wallet=faucet_wallet,
+                )
+            elif _is_liquid_ledger_wallet(target):
+                in_external_id = bridge.get("in_external_id") or f"{bridge_id}_lbtc_in"
+                txids[f"{bridge_id}_in"] = in_external_id
+                _append_liquid_ledger_row(
+                    liquid_rows_by_wallet,
+                    target.key,
+                    {
+                        "type": "Deposit",
+                        "date": _iso_from_ts(in_ts),
+                        "received_amount": _btc(bridge["in_btc"]),
+                        "counterparty": "Regtest bridge desk",
+                        "note": bridge.get("note") or f"{bridge_id} Liquid inbound leg.",
+                        "txid": in_external_id,
+                    },
+                )
+            else:
+                raise RuntimeError(f"Swap bridge {bridge_id} target is not syncable: {target.key}")
             swap_bridge_count += 1
-            current_ts = _mine_at(
-                url,
-                username,
-                password,
-                mining_address,
-                current_ts,
-                cycle_ts + (13 * 60 * 60),
-            )
+            if _is_core_wallet(target):
+                current_ts = _mine_at(
+                    url,
+                    username,
+                    password,
+                    mining_address,
+                    current_ts,
+                    in_ts,
+                )
+            else:
+                current_ts = max(current_ts, in_ts)
 
     return current_ts, {
         "cycles": cycles,
@@ -816,32 +1019,55 @@ def _create_kassiber_book(
         )
     for wallet_spec in scenario["wallets"]:
         wallet = wallets[wallet_spec["key"]]
-        created = run_cli(
-            data_root,
-            "wallets",
-            "create",
-            *scope,
-            "--label",
-            wallet.label,
-            "--kind",
-            "address",
-            "--account",
-            wallet.account,
-            "--backend",
-            scenario["backend"]["name"],
-            "--chain",
-            "bitcoin",
-            "--network",
-            "regtest",
-            "--address",
-            wallet.address,
-            "--birthday",
-            birthday,
-        )["data"]
+        if _is_core_wallet(wallet):
+            created = run_cli(
+                data_root,
+                "wallets",
+                "create",
+                *scope,
+                "--label",
+                wallet.label,
+                "--kind",
+                "address",
+                "--account",
+                wallet.account,
+                "--backend",
+                scenario["backend"]["name"],
+                "--chain",
+                "bitcoin",
+                "--network",
+                "regtest",
+                "--address",
+                wallet.address,
+                "--birthday",
+                birthday,
+            )["data"]
+        else:
+            wallet_config = {
+                "chain": wallet.chain,
+                "network": wallet.network,
+                "source_file": wallet.source_file,
+                "source_format": wallet.source_format,
+            }
+            created = run_cli(
+                data_root,
+                "wallets",
+                "create",
+                *scope,
+                "--label",
+                wallet.label,
+                "--kind",
+                wallet.kind,
+                "--account",
+                wallet.account,
+                "--config",
+                json.dumps(wallet_config, sort_keys=True),
+            )["data"]
         wallet.kassiber_id = created["id"]
-        wallet.watchonly_wallet = (
-            f"{sanitize_wallet_segment(wallet_prefix)}-{sanitize_wallet_segment(created['id'])}"
-        )
+        if _is_core_wallet(wallet):
+            wallet.watchonly_wallet = (
+                f"{sanitize_wallet_segment(wallet_prefix)}-{sanitize_wallet_segment(created['id'])}"
+            )
 
 
 def _seed_rates_and_process(data_root: Path, scenario: dict[str, Any]) -> tuple[dict[str, Any], list[dict[str, Any]]]:
@@ -862,25 +1088,27 @@ def _seed_rates_and_process(data_root: Path, scenario: dict[str, Any]) -> tuple[
     step_rate = Decimal(pricing["step_rate"])
     rate_sequence = [Decimal(str(value)) for value in pricing.get("rate_sequence") or []]
     trend_rate = Decimal(str(pricing.get("trend_rate") or step_rate))
+    rate_pairs = list(pricing.get("pairs") or [pricing["pair"]])
     for index, occurred_at in enumerate(unique_times):
         if rate_sequence:
             rate = rate_sequence[index % len(rate_sequence)] + (trend_rate * (index // len(rate_sequence)))
         else:
             rate = base_rate + (step_rate * index)
-        run_cli(
-            data_root,
-            "rates",
-            "set",
-            pricing["pair"],
-            occurred_at,
-            str(rate),
-            "--source",
-            "regtest-demo",
-            "--granularity",
-            "exact",
-            "--method",
-            scenario["id"],
-        )
+        for pair in rate_pairs:
+            run_cli(
+                data_root,
+                "rates",
+                "set",
+                pair,
+                occurred_at,
+                str(rate),
+                "--source",
+                "regtest-demo",
+                "--granularity",
+                "exact",
+                "--method",
+                scenario["id"],
+            )
     journal = run_cli(data_root, "journals", "process", *scope)["data"]
     return journal, transactions
 
@@ -929,7 +1157,71 @@ def _pair_transfers(data_root: Path, scenario: dict[str, Any], txids: dict[str, 
                 rotation.get("note") or f"Wallet key rotation into {rotation['to']}.",
             )["data"]
         )
+    for bridge in stress.get("swap_bridges") or []:
+        bridge_id = bridge["id"]
+        paired.append(
+            run_cli(
+                data_root,
+                "transfers",
+                "pair",
+                *scope,
+                "--tx-out",
+                txids[f"{bridge_id}_out"],
+                "--tx-in",
+                txids[f"{bridge_id}_in"],
+                "--kind",
+                bridge.get("pair_kind") or "submarine-swap",
+                "--policy",
+                bridge.get("pair_policy") or "taxable",
+                "--note",
+                bridge.get("note") or f"{bridge_id} bridge pair.",
+            )["data"]
+        )
+    for pair in (scenario.get("liquid_ledger") or {}).get("transfer_pairs") or []:
+        paired.append(
+            run_cli(
+                data_root,
+                "transfers",
+                "pair",
+                *scope,
+                "--tx-out",
+                txids.get(pair["tx_out"], pair["tx_out"]),
+                "--tx-in",
+                txids.get(pair["tx_in"], pair["tx_in"]),
+                "--kind",
+                pair.get("kind") or "manual",
+                "--policy",
+                pair.get("policy") or "carrying-value",
+                "--note",
+                pair.get("note") or "Liquid wallet rotation.",
+            )["data"]
+        )
     return paired
+
+
+def _mark_deprecated_wallets(
+    data_root: Path,
+    scenario: dict[str, Any],
+    wallets: dict[str, DemoWallet],
+) -> list[dict[str, Any]]:
+    scope = _scope(scenario)
+    deprecated = []
+    for wallet_key in scenario.get("deprecated_wallets") or []:
+        wallet = wallets[wallet_key]
+        if not wallet.kassiber_id:
+            raise RuntimeError(f"Wallet {wallet_key} was not created before deprecation")
+        updated = run_cli(
+            data_root,
+            "wallets",
+            "update",
+            *scope,
+            "--wallet",
+            wallet.kassiber_id,
+            "--config",
+            json.dumps({"deprecated": True}),
+        )["data"]
+        deprecated.append(updated)
+    return deprecated
 
 
 def _mark_loans(data_root: Path, scenario: dict[str, Any], txids: dict[str, str]) -> dict[str, Any]:
@@ -1092,10 +1384,24 @@ def _assert_expected(
     journal: dict[str, Any],
     quarantines: list[dict[str, Any]],
     collaborative_excluded: list[dict[str, Any]],
+    wallet_listing: list[dict[str, Any]],
     summary: dict[str, Any],
     exports: dict[str, Any],
 ) -> None:
     expected = scenario["expected"]
+    if expected.get("wallets") is not None and len(wallet_listing) != int(expected["wallets"]):
+        raise RuntimeError(f"Expected {expected['wallets']} wallets, got {len(wallet_listing)}")
+    expected_deprecated = expected.get("deprecated_wallets")
+    if expected_deprecated is not None:
+        deprecated_count = sum(1 for wallet in wallet_listing if wallet.get("deprecated"))
+        if deprecated_count != int(expected_deprecated):
+            raise RuntimeError(f"Expected {expected_deprecated} deprecated wallets, got {deprecated_count}")
+    expected_assets = set(expected.get("assets") or [])
+    if expected_assets:
+        transaction_assets = {row.get("asset") for row in transactions if row.get("asset")}
+        missing_assets = sorted(expected_assets.difference(transaction_assets))
+        if missing_assets:
+            raise RuntimeError(f"Expected assets were not imported into transactions: {missing_assets}")
     if len(transactions) < int(expected["min_transactions"]):
         raise RuntimeError(f"Expected at least {expected['min_transactions']} transactions, got {len(transactions)}")
     if len(transfers["pairs"]) < int(expected["min_transfer_pairs"]):
@@ -1116,6 +1422,8 @@ def _assert_expected(
         rendered = json.dumps(quarantines[:10], indent=2, sort_keys=True)
         raise RuntimeError(f"Expected zero journal quarantines, got {journal.get('quarantined')}: {rendered}")
     metrics = summary["metrics"]
+    if expected_assets and int(metrics.get("assets_in_scope") or 0) < len(expected_assets):
+        raise RuntimeError("Report summary did not include all expected assets")
     min_active = int(expected.get("min_active_transactions") or expected["min_transactions"])
     if int(metrics.get("active_transactions") or 0) < min_active:
         raise RuntimeError("Report summary did not include the expected active transactions")
@@ -1160,6 +1468,7 @@ def run_demo(
     backend_wallet_prefix = f"{scenario['backend']['wallet_prefix']}-{run_id}"
     faucet_wallet = f"kassiber-demo-{run_id}-external"
     wallets: dict[str, DemoWallet] = {}
+    liquid_rows_by_wallet = _liquid_ledger_rows_from_manifest(scenario)
     txids: dict[str, str] = {}
     try:
         _ensure_wallet(url, username, password, faucet_wallet)
@@ -1169,22 +1478,37 @@ def run_demo(
         current_ts = _mine(url, username, password, faucet_wallet, mining_address, current_ts, blocks=101)
 
         for wallet_spec in scenario["wallets"]:
-            core_wallet = f"kassiber-demo-{run_id}-{sanitize_wallet_segment(wallet_spec['key'])}"
-            _ensure_wallet(url, username, password, core_wallet)
-            created_core_wallets.append(core_wallet)
-            address = rpc(url, username, password, "getnewaddress", [wallet_spec["label"], "bech32"], wallet=core_wallet)
+            if _is_core_wallet_spec(wallet_spec):
+                core_wallet = f"kassiber-demo-{run_id}-{sanitize_wallet_segment(wallet_spec['key'])}"
+                _ensure_wallet(url, username, password, core_wallet)
+                created_core_wallets.append(core_wallet)
+                address = rpc(
+                    url,
+                    username,
+                    password,
+                    "getnewaddress",
+                    [wallet_spec["label"], "bech32"],
+                    wallet=core_wallet,
+                )
+            else:
+                core_wallet = ""
+                address = ""
             wallets[wallet_spec["key"]] = DemoWallet(
                 key=wallet_spec["key"],
                 label=wallet_spec["label"],
                 account=wallet_spec["account"],
+                kind=_wallet_kind(wallet_spec),
+                chain=_wallet_chain(wallet_spec),
+                network=str(wallet_spec.get("network") or ("liquidv1" if _wallet_chain(wallet_spec) == "liquid" else "regtest")),
                 core_wallet=core_wallet,
                 address=address,
+                source_format=str(wallet_spec.get("source_format") or ""),
             )
 
         funding_outputs = {
             wallets[wallet_spec["key"]].address: initial_btc
             for wallet_spec in scenario["wallets"]
-            if (initial_btc := _btc_or_zero(wallet_spec["initial_btc"])) > 0
+            if _is_core_wallet_spec(wallet_spec) and (initial_btc := _btc_or_zero(wallet_spec["initial_btc"])) > 0
         }
         txids["initial_funding"] = rpc(
             url,
@@ -1265,13 +1589,16 @@ def run_demo(
             password,
             wallets,
             scenario,
+            liquid_rows_by_wallet,
             faucet_wallet=faucet_wallet,
             mining_address=mining_address,
             external_address=external_address,
             current_ts=current_ts,
             txids=txids,
         )
+        stress_result["liquid_ledger_rows"] = sum(len(rows) for rows in liquid_rows_by_wallet.values())
 
+        _write_liquid_ledger_files(base_dir, wallets, liquid_rows_by_wallet)
         birthday = datetime.fromtimestamp(birthday_ts, tz=timezone.utc)
         birthday_iso = birthday.isoformat().replace("+00:00", "Z")
         _create_kassiber_book(
@@ -1303,7 +1630,9 @@ def run_demo(
         collaborative_excluded = _exclude_collaborative_shapes(data_root, scenario, txids, transactions)
         pairs = _pair_transfers(data_root, scenario, txids)
         loan_result = _mark_loans(data_root, scenario, txids)
+        deprecated_wallets = _mark_deprecated_wallets(data_root, scenario, wallets)
         journal, transactions = _seed_rates_and_process(data_root, scenario)
+        wallet_listing = run_cli(data_root, "wallets", "list", *scope)["data"]
         transfer_listing = run_cli(data_root, "transfers", "list", *scope)["data"]
         quarantines = run_cli(data_root, "journals", "quarantined", *scope)["data"]
         summary = run_cli(data_root, "reports", "summary", *scope)["data"]
@@ -1316,6 +1645,7 @@ def run_demo(
             journal=journal,
             quarantines=quarantines,
             collaborative_excluded=collaborative_excluded,
+            wallet_listing=wallet_listing,
             summary=summary,
             exports=exports,
         )
@@ -1336,10 +1666,16 @@ def run_demo(
                     key: {
                         "label": wallet.label,
                         "address": wallet.address,
+                        "chain": wallet.chain,
+                        "source_file": wallet.source_file,
                         "kassiber_id": wallet.kassiber_id,
                     }
                     for key, wallet in wallets.items()
                 },
+                "deprecated_wallets": [
+                    {"id": wallet["id"], "label": wallet["label"], "deprecated": wallet.get("deprecated")}
+                    for wallet in deprecated_wallets
+                ],
                 "operations": [{"id": key, "txid": value} for key, value in sorted(txids.items())],
                 "sync": sync,
                 "transactions": {

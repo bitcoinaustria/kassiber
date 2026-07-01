@@ -2,7 +2,7 @@
   "schema_version": 1,
   "id": "full-accounting-v1",
   "title": "Full accounting regtest demo",
-  "description": "Disposable Bitcoin Core regtest scenario covering multi-wallet business acquisitions, regular fiat-expense disposals, self-transfers, wallet key rotations, collaborative CoinJoin/PayJoin-shaped transactions, Bitcoin-backed-loan marks, volatile pricing, and Liquid/on-chain-style bridge swaps.",
+  "description": "Disposable Bitcoin Core regtest scenario covering multi-wallet business acquisitions, regular fiat-expense disposals, self-transfers, wallet key rotations, deprecated old wallets, collaborative CoinJoin/PayJoin-shaped transactions, Bitcoin-backed-loan marks, volatile pricing, and deterministic Liquid/LBTC bridge/import wallets.",
   "base_time": "2019-01-15T09:00:00Z",
   "workspace": "Regtest Demo",
   "profile": {
@@ -17,6 +17,10 @@
   },
   "pricing": {
     "pair": "BTC-EUR",
+    "pairs": [
+      "BTC-EUR",
+      "LBTC-EUR"
+    ],
     "base_rate": "42000",
     "step_rate": "25",
     "trend_rate": "40",
@@ -132,34 +136,40 @@
         "id": "liquid_bridge_2020",
         "cycle": 24,
         "from_role": "treasury",
-        "to_role": "spending",
+        "to_role": "liquid_treasury",
         "out_btc": "0.06000000",
         "in_btc": "0.05850000",
         "fee_btc": "0.00001000",
         "pair_kind": "peg-in",
-        "note": "Treasury moves funds through a simulated Liquid peg-in path to the spending lane."
+        "pair_policy": "taxable",
+        "in_external_id": "liquid_bridge_2020_lbtc_in",
+        "note": "Treasury moves funds through a simulated Liquid peg-in path."
       },
       {
         "id": "submarine_rebalance_2022",
         "cycle": 72,
         "from_role": "spending",
-        "to_role": "merchant",
+        "to_role": "liquid_operations",
         "out_btc": "0.03500000",
         "in_btc": "0.03410000",
         "fee_btc": "0.00001000",
         "pair_kind": "submarine-swap",
+        "pair_policy": "taxable",
+        "in_external_id": "submarine_rebalance_2022_lbtc_in",
         "note": "A Lightning/Liquid-style submarine swap rebalances operational funds."
       },
       {
         "id": "liquid_pegout_2024",
         "cycle": 108,
-        "from_role": "merchant",
+        "from_role": "liquid_treasury_2024",
         "to_role": "treasury",
         "out_btc": "0.04200000",
         "in_btc": "0.04080000",
         "fee_btc": "0.00001000",
         "pair_kind": "peg-out",
-        "note": "Merchant liquidity is pegged back out to on-chain treasury."
+        "pair_policy": "taxable",
+        "out_external_id": "liquid_pegout_2024_lbtc_out",
+        "note": "Liquid treasury liquidity is pegged back out to on-chain treasury."
       }
     ]
   },
@@ -187,6 +197,18 @@
       "label": "Merchant Wallet",
       "type": "asset",
       "asset": "BTC"
+    },
+    {
+      "code": "liquid_treasury",
+      "label": "Liquid Treasury",
+      "type": "asset",
+      "asset": "LBTC"
+    },
+    {
+      "code": "liquid_operations",
+      "label": "Liquid Operations",
+      "type": "asset",
+      "asset": "LBTC"
     }
   ],
   "wallets": [
@@ -231,8 +253,148 @@
       "label": "Regtest Cold Storage 2024 Rotation",
       "account": "cold",
       "initial_btc": "0.00000000"
+    },
+    {
+      "key": "liquid_treasury",
+      "label": "Regtest Liquid Treasury",
+      "account": "liquid_treasury",
+      "kind": "custom",
+      "chain": "liquid",
+      "network": "liquidv1",
+      "source_format": "generic_ledger",
+      "initial_btc": "0.00000000"
+    },
+    {
+      "key": "liquid_operations",
+      "label": "Regtest Liquid Operations",
+      "account": "liquid_operations",
+      "kind": "custom",
+      "chain": "liquid",
+      "network": "liquidv1",
+      "source_format": "generic_ledger",
+      "initial_btc": "0.00000000"
+    },
+    {
+      "key": "liquid_treasury_2024",
+      "label": "Regtest Liquid Treasury 2024 Rotation",
+      "account": "liquid_treasury",
+      "kind": "custom",
+      "chain": "liquid",
+      "network": "liquidv1",
+      "source_format": "generic_ledger",
+      "initial_btc": "0.00000000"
     }
   ],
+  "deprecated_wallets": [
+    "treasury",
+    "merchant",
+    "cold",
+    "liquid_treasury"
+  ],
+  "liquid_ledger": {
+    "wallets": {
+      "liquid_treasury": [
+        {
+          "type": "Buy",
+          "date": "2019-06-10T09:00:00Z",
+          "received_amount": "0.08000000",
+          "sent_amount": "3000.00",
+          "sent_asset": "EUR",
+          "fee_amount": "7.50",
+          "fee_asset": "EUR",
+          "counterparty": "SideSwap Test Desk",
+          "note": "Initial LBTC acquisition for treasury testing.",
+          "txid": "liquid_treasury_buy_2019"
+        },
+        {
+          "type": "Spend",
+          "date": "2020-03-12T14:00:00Z",
+          "sent_amount": "0.01050000",
+          "fiat_value": "620.00",
+          "counterparty": "Liquid service vendor",
+          "note": "Liquid-hosted service invoice.",
+          "txid": "liquid_treasury_vendor_2020"
+        },
+        {
+          "type": "Income",
+          "date": "2021-08-01T12:30:00Z",
+          "received_amount": "0.01200000",
+          "fiat_value": "510.00",
+          "counterparty": "Liquid customer",
+          "note": "Customer paid an LBTC invoice.",
+          "txid": "liquid_treasury_income_2021"
+        },
+        {
+          "type": "Withdrawal",
+          "date": "2024-09-01T10:00:00Z",
+          "sent_amount": "0.04500000",
+          "fee_amount": "0.00005000",
+          "fee_asset": "LBTC",
+          "counterparty": "Internal key ceremony",
+          "note": "Liquid treasury rotates to the 2024 key set.",
+          "txid": "liquid_rotation_2024_out"
+        }
+      ],
+      "liquid_operations": [
+        {
+          "type": "Deposit",
+          "date": "2021-11-20T10:00:00Z",
+          "received_amount": "0.02000000",
+          "fiat_value": "1120.00",
+          "counterparty": "Operations top-up",
+          "note": "Operations receives LBTC working capital.",
+          "txid": "liquid_operations_topup_2021"
+        },
+        {
+          "type": "Spend",
+          "date": "2022-07-05T15:00:00Z",
+          "sent_amount": "0.00600000",
+          "fiat_value": "220.00",
+          "counterparty": "Liquid SaaS vendor",
+          "note": "Operations pays a Liquid-denominated SaaS invoice.",
+          "txid": "liquid_operations_saas_2022"
+        }
+      ],
+      "liquid_treasury_2024": [
+        {
+          "type": "Deposit",
+          "date": "2024-09-01T11:00:00Z",
+          "received_amount": "0.04495000",
+          "counterparty": "Internal key ceremony",
+          "note": "Rotated Liquid treasury funds land in the upgraded wallet.",
+          "txid": "liquid_rotation_2024_in"
+        },
+        {
+          "type": "Interest",
+          "date": "2025-04-15T08:00:00Z",
+          "received_amount": "0.00300000",
+          "fiat_value": "210.00",
+          "counterparty": "Liquid yield test desk",
+          "note": "Small LBTC interest credit for report coverage.",
+          "txid": "liquid_treasury_interest_2025"
+        },
+        {
+          "type": "Spend",
+          "date": "2025-12-10T16:00:00Z",
+          "sent_amount": "0.00400000",
+          "fiat_value": "330.00",
+          "counterparty": "Security vendor",
+          "note": "Hardware wallet and key ceremony supplies paid over Liquid.",
+          "txid": "liquid_treasury_security_2025"
+        }
+      ]
+    },
+    "transfer_pairs": [
+      {
+        "id": "liquid_rotation_2024",
+        "tx_out": "liquid_rotation_2024_out",
+        "tx_in": "liquid_rotation_2024_in",
+        "kind": "manual",
+        "policy": "carrying-value",
+        "note": "Liquid treasury rotates to the upgraded 2024 wallet."
+      }
+    ]
+  },
   "operations": [
     {
       "id": "treasury_external_disposal",
@@ -369,10 +531,16 @@
     }
   ],
   "expected": {
-    "min_transactions": 830,
-    "min_active_transactions": 825,
+    "wallets": 10,
+    "deprecated_wallets": 4,
+    "assets": [
+      "BTC",
+      "LBTC"
+    ],
+    "min_transactions": 840,
+    "min_active_transactions": 835,
     "collaborative_excluded": 5,
-    "min_transfer_pairs": 5,
+    "min_transfer_pairs": 9,
     "loan_marks": 4,
     "open_collateral_locks": 0,
     "export_files": [
