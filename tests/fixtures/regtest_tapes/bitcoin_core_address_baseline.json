@@ -44,7 +44,11 @@
         "vout": 1
       }
     ],
-    "{\"method\":\"listtransactions\",\"params\":[\"*\",1000,1000,true],\"transport\":\"bitcoinrpc\",\"wallet_name\":\"kassiber-wallet-1\"}": [],
+    "{\"method\":\"listsinceblock\",\"params\":[\"44cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",1,true,true],\"transport\":\"bitcoinrpc\",\"wallet_name\":\"kassiber-wallet-1\"}": {
+      "transactions": [],
+      "removed": [],
+      "lastblock": "44cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+    },
     "{\"method\":\"getbestblockhash\",\"params\":[],\"transport\":\"bitcoinrpc\",\"wallet_name\":\"\"}": "44cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
     "{\"method\":\"listunspent\",\"params\":[0,9999999,[\"bcrt1qs758ursh4q9z627kt3pp5yysm78ddny6txaqgw\"],true],\"transport\":\"bitcoinrpc\",\"wallet_name\":\"kassiber-wallet-1\"}": [
       {
@@ -53,19 +57,19 @@
         "confirmations": 1,
         "safe": true,
         "scriptPubKey": "001487a87e0e17a80a2d2bd65c421a1090df8ed6cc9a",
-        "txid": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "txid": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
         "vout": 0
       }
     ],
-    "{\"method\":\"gettransaction\",\"params\":[\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",true],\"transport\":\"bitcoinrpc\",\"wallet_name\":\"kassiber-wallet-1\"}": {
-      "blockhash": "44cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
-      "blocktime": 1700001200,
-      "time": 1700001200,
-      "txid": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+    "{\"method\":\"gettransaction\",\"params\":[\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",true],\"transport\":\"bitcoinrpc\",\"wallet_name\":\"kassiber-wallet-1\"}": {
+      "blockhash": "33bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "blocktime": 1700000600,
+      "time": 1700000600,
+      "txid": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
     },
-    "{\"method\":\"getblockheader\",\"params\":[\"44cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\"],\"transport\":\"bitcoinrpc\",\"wallet_name\":\"\"}": {
-      "height": 103,
-      "time": 1700001200
+    "{\"method\":\"getblockheader\",\"params\":[\"33bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"],\"transport\":\"bitcoinrpc\",\"wallet_name\":\"\"}": {
+      "height": 102,
+      "time": 1700000600
     }
   }
 }

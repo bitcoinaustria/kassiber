@@ -62,6 +62,8 @@ class BitcoinRpcTape:
     def __init__(self, tape: RecordedTape):
         self.tape = tape
         self.calls: list[str] = []
+        self.backends: list[dict[str, Any]] = []
+        self.timeouts: list[int | None] = []
 
     def call(
         self,
@@ -71,10 +73,19 @@ class BitcoinRpcTape:
         wallet_name: str | None = None,
         timeout: int | None = None,
     ) -> Any:
-        del backend, timeout
+        if backend.get("source") != "database":
+            raise AssertionError("Bitcoin RPC tape must be driven by a DB-backed backend row")
+        if backend.get("timeout") != 30:
+            raise AssertionError("Bitcoin RPC tape expected backend timeout 30")
+        self.backends.append(dict(backend))
+        self.timeouts.append(timeout)
         key = rpc_key(method, params, wallet_name=wallet_name)
         self.calls.append(key)
         return self.tape.lookup(key)
+
+    def unused_interactions(self) -> list[str]:
+        used = set(self.calls)
+        return sorted(key for key in self.tape.interactions if key not in used)
 
 
 __all__ = [

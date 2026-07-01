@@ -8,7 +8,13 @@ MODE="${1:-fast}"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
 RUNNER=()
 STARTED_COMPOSE=0
-SUDO_DOCKER=(sudo -n --preserve-env=KASSIBER_REGTEST_RPC_USER,KASSIBER_REGTEST_RPC_PASSWORD,KASSIBER_REGTEST_RPC_PORT,KASSIBER_REGTEST_BITCOIND_IMAGE docker)
+SUDO_DOCKER_ENV=KASSIBER_REGTEST_RPC_USER,KASSIBER_REGTEST_RPC_AUTH,KASSIBER_REGTEST_RPC_PORT,KASSIBER_REGTEST_BITCOIND_IMAGE
+SUDO_DOCKER=(sudo -n --preserve-env="$SUDO_DOCKER_ENV" docker)
+
+export PYTHONHASHSEED="${PYTHONHASHSEED:-0}"
+export TZ="${TZ:-UTC}"
+export LC_ALL="${LC_ALL:-C.UTF-8}"
+export LANG="${LANG:-C.UTF-8}"
 
 if [ -n "${VIRTUAL_ENV:-}" ] && command -v python3 >/dev/null 2>&1; then
   PYTHON_BIN="$(command -v python3)"
@@ -30,6 +36,21 @@ run_fast() {
   KASSIBER_NO_EGRESS=1 py -m unittest tests.test_regtest_harness -v
 }
 
+rpc_auth() {
+  py - <<'PY'
+import hashlib
+import hmac
+import os
+import secrets
+
+user = os.environ["KASSIBER_REGTEST_RPC_USER"]
+password = os.environ["KASSIBER_REGTEST_RPC_PASSWORD"]
+salt = secrets.token_hex(16)
+digest = hmac.new(salt.encode("utf-8"), password.encode("utf-8"), hashlib.sha256).hexdigest()
+print(f"{user}:{salt}${digest}")
+PY
+}
+
 docker_compose() {
   if docker info >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
     docker compose "$@"
@@ -38,10 +59,15 @@ docker_compose() {
   elif docker info >/dev/null 2>&1 && command -v docker-compose >/dev/null 2>&1; then
     docker-compose "$@"
   elif sudo -n docker info >/dev/null 2>&1 && sudo -n docker-compose version >/dev/null 2>&1; then
-    sudo docker-compose "$@"
+    sudo -n env \
+      KASSIBER_REGTEST_RPC_USER="${KASSIBER_REGTEST_RPC_USER:-}" \
+      KASSIBER_REGTEST_RPC_AUTH="${KASSIBER_REGTEST_RPC_AUTH:-}" \
+      KASSIBER_REGTEST_RPC_PORT="${KASSIBER_REGTEST_RPC_PORT:-}" \
+      KASSIBER_REGTEST_BITCOIND_IMAGE="${KASSIBER_REGTEST_BITCOIND_IMAGE:-}" \
+      docker-compose "$@"
   else
     echo "Docker Compose is required for the slow regtest lane." >&2
-    echo "Install Docker or set KASSIBER_REGTEST_CORE_URL for an already-running regtest node." >&2
+    echo "Install Docker or set KASSIBER_REGTEST_CORE_URL with matching RPC credentials for an already-running regtest node." >&2
     exit 2
   fi
 }
@@ -79,21 +105,28 @@ PY
 }
 
 run_bitcoin_core() {
+  local provided_core_url=0
+  if [ -n "${KASSIBER_REGTEST_CORE_URL:-}" ]; then
+    provided_core_url=1
+  fi
+
   export KASSIBER_INTEGRATION=1
   export KASSIBER_REGTEST_RPC_USER="${KASSIBER_REGTEST_RPC_USER:-kassiber}"
   export KASSIBER_REGTEST_RPC_PASSWORD="${KASSIBER_REGTEST_RPC_PASSWORD:-$(py -c 'import secrets; print(secrets.token_urlsafe(24))')}"
+  export KASSIBER_REGTEST_RPC_AUTH="${KASSIBER_REGTEST_RPC_AUTH:-$(rpc_auth)}"
   export KASSIBER_REGTEST_RPC_PORT="${KASSIBER_REGTEST_RPC_PORT:-18443}"
   export KASSIBER_REGTEST_CORE_URL="${KASSIBER_REGTEST_CORE_URL:-http://127.0.0.1:${KASSIBER_REGTEST_RPC_PORT}}"
+  export KASSIBER_REGTEST_COMPOSE_PROJECT="${KASSIBER_REGTEST_COMPOSE_PROJECT:-$(py -c 'import hashlib, os; print("kassiber-regtest-" + hashlib.sha256(os.getcwd().encode()).hexdigest()[:12])')}"
 
   STARTED_COMPOSE=0
-  if [ -z "${KASSIBER_REGTEST_REUSE_CORE:-}" ]; then
-    docker_compose -f dev/regtest/compose.bitcoin.yml up -d
+  if [ -z "${KASSIBER_REGTEST_REUSE_CORE:-}" ] && [ "$provided_core_url" -eq 0 ]; then
+    docker_compose -p "$KASSIBER_REGTEST_COMPOSE_PROJECT" -f dev/regtest/compose.bitcoin.yml up -d
     STARTED_COMPOSE=1
   fi
 
   cleanup() {
     if [ "$STARTED_COMPOSE" -eq 1 ] && [ -z "${KASSIBER_REGTEST_KEEP:-}" ]; then
-      docker_compose -f dev/regtest/compose.bitcoin.yml down -v
+      docker_compose -p "$KASSIBER_REGTEST_COMPOSE_PROJECT" -f dev/regtest/compose.bitcoin.yml down -v
     fi
   }
   trap cleanup EXIT

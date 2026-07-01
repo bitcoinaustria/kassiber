@@ -1,13 +1,14 @@
 from __future__ import annotations
 
-import json
 import socket
 import tempfile
 import unittest
-import zipfile
 from pathlib import Path
 from unittest.mock import patch
 
+import openpyxl
+
+from kassiber import backends as backend_config
 from kassiber.core import accounts as core_accounts
 from kassiber.core import imports as core_imports
 from kassiber.core import output_inventory as core_output_inventory
@@ -99,6 +100,7 @@ class RegtestHarnessTest(unittest.TestCase):
                     "http://127.0.0.1:18443",
                     chain="bitcoin",
                     network="regtest",
+                    timeout=30,
                     config={"wallet": "kassiber-wallet-1", "username": "user", "password": "pass"},
                 )
                 wallet = core_wallets.create_wallet(
@@ -116,16 +118,18 @@ class RegtestHarnessTest(unittest.TestCase):
                     },
                 )
 
-                backend = {
-                    "name": "core-regtest",
-                    "kind": "bitcoinrpc",
-                    "url": "http://127.0.0.1:18443",
-                    "chain": "bitcoin",
-                    "network": "regtest",
-                    "wallet": "kassiber-wallet-1",
-                    "username": "user",
-                    "password": "pass",
-                }
+                runtime_config = backend_config.merge_db_backends(
+                    conn,
+                    {
+                        "env_file": str(data_root / "unused.env"),
+                        "default_backend": "core-regtest",
+                        "bootstrap_default_backend": "core-regtest",
+                        "backends": {},
+                        "bootstrap_backends": {},
+                        "dotenv_backends": [],
+                        "process_env_overrides": {"backends": {}, "default_backend": False},
+                    },
+                )
                 profile_row = conn.execute("SELECT * FROM profiles WHERE id = ?", (profile["id"],)).fetchone()
                 wallet_row = conn.execute("SELECT * FROM wallets WHERE id = ?", (wallet["id"],)).fetchone()
                 hooks = core_sync.WalletSyncHooks(
@@ -138,7 +142,7 @@ class RegtestHarnessTest(unittest.TestCase):
                         source_label,
                         _import_hooks(),
                     ),
-                    resolve_backend=lambda runtime_config, backend_name: backend,
+                    resolve_backend=backend_config.resolve_backend,
                     resolve_sync_state=core_sync_backends.resolve_wallet_sync_targets,
                     normalize_addresses=core_wallets.normalize_addresses,
                     backend_adapters={"bitcoinrpc": core_sync_backends.bitcoinrpc_sync_adapter},
@@ -158,74 +162,150 @@ class RegtestHarnessTest(unittest.TestCase):
                 ):
                     outcome = core_sync.sync_wallet_from_backend(
                         conn,
-                        {},
+                        runtime_config,
                         profile_row,
                         wallet_row,
                         hooks,
                     )
+                    self.assertEqual(outcome["backend_kind"], "bitcoinrpc")
+                    self.assertEqual(outcome["records_fetched"], 2)
+                    self.assertEqual(outcome["imported"], 2)
+                    self.assertEqual(outcome["bitcoinrpc_sync_mode"], "full_scan")
+                    self.assertEqual(outcome["output_inventory"]["observed"], 1)
+                    self.assertEqual(outcome["output_inventory"]["active"], 1)
+                    self.assertIn("bitcoinrpc_last_block", outcome["freshness_checkpoint"])
 
-                self.assertEqual(outcome["backend_kind"], "bitcoinrpc")
-                self.assertEqual(outcome["records_fetched"], 2)
-                self.assertEqual(outcome["imported"], 2)
-                self.assertEqual(outcome["output_inventory"]["observed"], 1)
-                self.assertEqual(outcome["output_inventory"]["active"], 1)
-                self.assertIn("bitcoinrpc_last_block", outcome["freshness_checkpoint"])
+                    tx_rows = conn.execute(
+                        """
+                        SELECT external_id, direction, amount, fee
+                        FROM transactions
+                        ORDER BY occurred_at
+                        """
+                    ).fetchall()
+                    self.assertEqual(len(tx_rows), 2)
+                    self.assertEqual(tx_rows[0]["direction"], "inbound")
+                    self.assertEqual(tx_rows[0]["amount"], 25_000_000_000)
+                    self.assertEqual(tx_rows[1]["direction"], "outbound")
+                    self.assertEqual(tx_rows[1]["amount"], 5_000_000_000)
+                    self.assertEqual(tx_rows[1]["fee"], 1_000_000)
 
-                tx_rows = conn.execute(
-                    "SELECT external_id, direction, amount, fee FROM transactions ORDER BY occurred_at"
-                ).fetchall()
-                self.assertEqual(len(tx_rows), 2)
-                self.assertEqual(tx_rows[0]["direction"], "inbound")
-                self.assertEqual(tx_rows[1]["direction"], "outbound")
+                    utxo = conn.execute(
+                        """
+                        SELECT wu.txid, wu.vout, wu.amount, wu.block_height, wu.block_time, t.id AS transaction_id
+                        FROM wallet_utxos wu
+                        LEFT JOIN transactions t
+                          ON t.profile_id = wu.profile_id
+                         AND t.external_id = wu.txid
+                        """
+                    ).fetchone()
+                    self.assertIsNotNone(utxo)
+                    self.assertEqual(
+                        utxo["txid"],
+                        "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                    )
+                    self.assertEqual(utxo["vout"], 0)
+                    self.assertEqual(utxo["amount"], 19_999_000_000)
+                    self.assertEqual(utxo["block_height"], 102)
+                    self.assertEqual(utxo["block_time"], "2023-11-14T22:23:20Z")
+                    self.assertIsNotNone(utxo["transaction_id"])
 
-                core_rates.set_manual_rate(conn, "BTC-EUR", "2023-11-14T22:13:20Z", "35000")
-                core_rates.set_manual_rate(conn, "BTC-EUR", "2023-11-14T22:23:20Z", "36000")
+                    core_rates.set_manual_rate(conn, "BTC-EUR", "2023-11-14T22:13:20Z", "35000")
+                    core_rates.set_manual_rate(conn, "BTC-EUR", "2023-11-14T22:23:20Z", "36000")
 
-                report_hooks = cli_report_hooks()
-                journal = process_journals(conn, workspace["id"], profile["id"])
-                self.assertGreaterEqual(journal["entries_created"], 1)
+                    report_hooks = cli_report_hooks()
+                    journal = process_journals(conn, workspace["id"], profile["id"])
+                    self.assertEqual(journal["entries_created"], 2)
+                    self.assertEqual(journal["quarantined"], 0)
+                    self.assertEqual(journal["auto_priced"], 2)
+                    self.assertEqual(journal["processed_transactions"], 2)
 
-                summary = core_reports.report_summary(conn, workspace["id"], profile["id"], report_hooks)
-                self.assertEqual(summary["metrics"]["assets_in_scope"], 1)
-                self.assertGreaterEqual(summary["metrics"]["journal_entries"], 1)
+                    priced = conn.execute(
+                        """
+                        SELECT external_id, fiat_rate, fiat_value, pricing_source_kind, pricing_quality
+                        FROM transactions
+                        ORDER BY occurred_at
+                        """
+                    ).fetchall()
+                    self.assertEqual([row["fiat_value"] for row in priced], [8750.0, 1800.0])
+                    self.assertEqual({row["pricing_source_kind"] for row in priced}, {"manual_rate_cache"})
+                    self.assertEqual({row["pricing_quality"] for row in priced}, {"exact"})
 
-                export = core_reports.export_xlsx_report(
-                    conn,
-                    workspace["id"],
-                    profile["id"],
-                    str(export_path),
-                    report_hooks,
-                    verify=True,
-                )
-                self.assertEqual(export["file"], str(export_path))
-                self.assertTrue(export_path.exists())
+                    journal_rows = conn.execute(
+                        """
+                        SELECT entry_type, asset, quantity, fiat_value, cost_basis, proceeds, gain_loss
+                        FROM journal_entries
+                        ORDER BY occurred_at, entry_type
+                        """
+                    ).fetchall()
+                    self.assertEqual(len(journal_rows), 2)
+                    self.assertEqual(journal_rows[0]["entry_type"], "acquisition")
+                    self.assertEqual(journal_rows[0]["quantity"], 25_000_000_000)
+                    self.assertEqual(journal_rows[0]["fiat_value"], 8750.0)
+                    self.assertEqual(journal_rows[1]["entry_type"], "disposal")
+                    self.assertEqual(journal_rows[1]["quantity"], -5_001_000_000)
+                    self.assertEqual(journal_rows[1]["proceeds"], 1800.0)
+                    self.assertAlmostEqual(journal_rows[1]["cost_basis"], 1750.35, places=2)
+                    self.assertAlmostEqual(journal_rows[1]["gain_loss"], 49.65, places=2)
 
-                with zipfile.ZipFile(export_path) as archive:
-                    names = set(archive.namelist())
-                    workbook_xml = archive.read("xl/workbook.xml").decode("utf-8")
-                    shared_strings = archive.read("xl/sharedStrings.xml").decode("utf-8")
-                self.assertIn("xl/worksheets/sheet1.xml", names)
-                self.assertIn('name="Verify"', workbook_xml)
-                self.assertIn('name="Control"', workbook_xml)
-                self.assertIn("Kassiber", shared_strings)
+                    summary = core_reports.report_summary(conn, workspace["id"], profile["id"], report_hooks)
+                    self.assertEqual(summary["metrics"]["assets_in_scope"], 1)
+                    self.assertEqual(summary["metrics"]["journal_entries"], 2)
+                    self.assertEqual(summary["metrics"]["priced_transactions"], 2)
+                    self.assertEqual(summary["metrics"]["quarantines"], 0)
+                    self.assertAlmostEqual(summary["holdings"]["cost_basis"], 6999.65, places=2)
+                    self.assertAlmostEqual(summary["realized"]["gain_loss"], 49.65, places=2)
 
-                # Second run proves replay + DB import idempotency for duplicate backend rows.
-                tape_rpc_repeat = BitcoinRpcTape(RecordedTape.load(TAPE))
-                with no_egress_guard(enabled=True), patch(
-                    "kassiber.core.sync_backends.bitcoinrpc_call",
-                    tape_rpc_repeat.call,
-                ):
+                    export = core_reports.export_xlsx_report(
+                        conn,
+                        workspace["id"],
+                        profile["id"],
+                        str(export_path),
+                        report_hooks,
+                        verify=True,
+                    )
+                    self.assertEqual(export["file"], str(export_path))
+                    self.assertTrue(export_path.exists())
+                    self.assertTrue(export["verified"])
+
+                    workbook = openpyxl.load_workbook(export_path, data_only=False, read_only=True)
+                    self.assertIn("Verify", workbook.sheetnames)
+                    self.assertIn("Control", workbook.sheetnames)
+                    self.assertIn("Acquisitions", workbook.sheetnames)
+                    self.assertIn("Disposals", workbook.sheetnames)
+                    self.assertEqual(workbook["Verify"]["A2"].value, "Verification status")
+                    self.assertIn("ALL CHECKS OK", workbook["Verify"]["B2"].value)
+                    self.assertEqual(workbook["Acquisitions"]["C3"].value, tx_rows[0]["external_id"])
+                    self.assertEqual(workbook["Acquisitions"]["F3"].value, 25_000_000_000)
+                    self.assertEqual(workbook["Acquisitions"]["H3"].value, 8750)
+                    self.assertEqual(workbook["Disposals"]["C3"].value, tx_rows[1]["external_id"])
+                    self.assertEqual(workbook["Disposals"]["F3"].value, 5_001_000_000)
+                    self.assertEqual(workbook["Disposals"]["K3"].value, 49.65)
+                    self.assertIn('"OK"', workbook["Disposals"]["L3"].value)
+                    self.assertEqual(workbook["Control"]["A3"].value, "BTC")
+                    self.assertEqual(workbook["Control"]["F3"].value, 0.19999)
+                    self.assertEqual(workbook["Control"]["I3"].value, 6999.65)
+                    self.assertIn('"OK"', workbook["Control"]["G3"].value)
+                    workbook.close()
+
+                    # Second run feeds the first checkpoint back into Core RPC and
+                    # proves the incremental listsinceblock path plus DB idempotency.
+                    repeat_wallet_row = conn.execute(
+                        "SELECT * FROM wallets WHERE id = ?", (wallet["id"],)
+                    ).fetchone()
                     repeat = core_sync.sync_wallet_from_backend(
                         conn,
-                        {},
+                        runtime_config,
                         profile_row,
-                        wallet_row,
+                        repeat_wallet_row,
                         hooks,
+                        checkpoint=outcome["freshness_checkpoint"],
                     )
                 self.assertEqual(repeat["imported"], 0)
-                self.assertEqual(repeat["skipped"], 2)
+                self.assertEqual(repeat["records_fetched"], 0)
+                self.assertEqual(repeat["bitcoinrpc_sync_mode"], "sinceblock")
                 count = conn.execute("SELECT COUNT(*) AS count FROM transactions").fetchone()["count"]
                 self.assertEqual(count, 2)
+                self.assertEqual(tape_rpc.unused_interactions(), [])
             finally:
                 conn.close()
 
