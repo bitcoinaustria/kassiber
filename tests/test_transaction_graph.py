@@ -913,6 +913,35 @@ class TransactionGraphTest(unittest.TestCase):
 
         fetch.assert_called_once_with("https://testnet.example/api", txid, timeout=5)
 
+    def test_bitcoin_lookup_normalizes_default_http_explorer_root_url(self):
+        txid = "1c" * 32
+        create_db_backend(
+            self.conn,
+            "graph-mempool-root",
+            "mempool",
+            "https://mempool.example",
+            chain="bitcoin",
+            network="main",
+            timeout=5,
+            commit=False,
+        )
+        set_setting(self.conn, "default_backend", "graph-mempool-root")
+        fetched = {
+            "txid": txid,
+            "vin": [{"txid": "1d" * 32, "vout": 0, "prevout": {"scriptpubkey": SCRIPT_A, "value": 9}}],
+            "vout": [{"n": 0, "scriptpubkey": SCRIPT_B, "value": 8}],
+        }
+        self._tx("default-http-root-row", "wallet-a", "outbound", 8_000, txid, "{}")
+
+        with patch(
+            "kassiber.core.transaction_graph.fetch_esplora_transaction",
+            return_value=fetched,
+        ) as fetch:
+            payload = self._graph("default-http-root-row", allow_public_lookup=True)
+
+        fetch.assert_called_once_with("https://mempool.example/api", txid, timeout=5)
+        self.assertEqual(payload["supportLevel"], "full")
+
     def test_bitcoin_lookup_prefers_default_electrum_before_http_backend(self):
         txid = "1a" * 32
         create_db_backend(
@@ -1059,6 +1088,44 @@ class TransactionGraphTest(unittest.TestCase):
         self.assertEqual(payload["unsupportedReason"], "input_prevout_values_missing")
         warning_codes = {warning["code"] for warning in payload["warnings"]}
         self.assertIn("bitcoin_reference_lookup_prevout_limit", warning_codes)
+
+    def test_bitcoin_electrum_coinbase_sentinel_input_does_not_fetch_zero_prevtx(self):
+        txid = "1e" * 32
+        create_db_backend(
+            self.conn,
+            "graph-fulcrum",
+            "electrum",
+            "ssl://fulcrum.example:50002",
+            chain="bitcoin",
+            network="main",
+            timeout=5,
+            commit=False,
+        )
+        self._tx("coinbase-electrum-row", "wallet-a", "inbound", 625_000_000_000, txid, "{}")
+        _FakeElectrumClient.calls = []
+        _FakeElectrumClient.responses = {txid: "coinbase-raw"}
+        decoded_current = {
+            "version": 2,
+            "locktime": 0,
+            "vin": [{"txid": "00" * 32, "vout": 0xFFFFFFFF}],
+            "vout": [{"n": 0, "script_hex": SCRIPT_A, "value_sats": 625_000_000}],
+        }
+
+        with patch("kassiber.core.transaction_graph.ElectrumClient", _FakeElectrumClient), patch(
+            "kassiber.core.transaction_graph.decode_raw_transaction",
+            return_value=decoded_current,
+        ):
+            payload = self._graph("coinbase-electrum-row", allow_public_lookup=True)
+
+        self.assertEqual(
+            _FakeElectrumClient.calls,
+            [("blockchain.transaction.get", (txid,))],
+        )
+        self.assertEqual(payload["supportLevel"], "partial")
+        self.assertEqual(payload["unsupportedReason"], "input_prevout_values_missing")
+        cached = self._cached_graph_raw(txid)
+        self.assertNotIn("txid", cached["vin"][0])
+        self.assertNotIn("vout", cached["vin"][0])
 
     def test_bitcoin_electrum_duplicate_prevtx_inputs_fetch_once_and_cache_complete_graph(self):
         txid = "18" * 32

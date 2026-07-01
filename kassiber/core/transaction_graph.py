@@ -15,6 +15,7 @@ from typing import Any, Mapping, NamedTuple, Sequence
 
 from ..backends import (
     DEFAULT_BACKEND_SETTING,
+    _http_url_base,
     backend_batch_size,
     preferred_mempool_api_backend,
 )
@@ -47,6 +48,8 @@ from .sync_backends import (
 GRAPH_LOOKUP_TIMEOUT_SECONDS = 5
 GRAPH_CACHE_SCHEMA_VERSION = 1
 SATS_TO_MSAT = 1000
+COINBASE_PREVOUT_TXID = "00" * 32
+COINBASE_PREVOUT_VOUT = 0xFFFFFFFF
 # Upper bound on how many input/output strands a single graph payload carries
 # per side. Mirrors mempool.space's line limit so a fan-out transaction (large
 # CoinJoins, sweeping consolidations) cannot inflate the payload or the rendered
@@ -880,7 +883,7 @@ def _default_graph_backend(
         return None
     backend = _graph_backend_from_row(row)
     if _graph_backend_matches(backend, chain, network):
-        return backend
+        return _normalized_graph_lookup_backend(backend)
     return None
 
 
@@ -908,7 +911,7 @@ def _configured_graph_backend(
     for row in rows:
         backend = _graph_backend_from_row(row)
         if _graph_backend_matches(backend, chain, network):
-            return backend
+            return _normalized_graph_lookup_backend(backend)
     return None
 
 
@@ -931,8 +934,18 @@ def _runtime_graph_lookup_backend(
             continue
         candidate = _graph_backend_from_mapping(name, backend)
         if _graph_backend_matches(candidate, chain, network):
-            return candidate
+            return _normalized_graph_lookup_backend(candidate)
     return None
+
+
+def _normalized_graph_lookup_backend(backend: Mapping[str, Any]) -> dict[str, Any]:
+    candidate = dict(backend)
+    kind = normalize_backend_kind(candidate.get("kind"))
+    if kind in {"esplora", "mempool"}:
+        api_url = _http_url_base(candidate.get("url"), api=True)
+        if api_url is not None:
+            candidate["url"] = api_url
+    return candidate
 
 
 def _graph_backend_from_row(row: Mapping[str, Any]) -> dict[str, Any]:
@@ -1267,9 +1280,12 @@ def _bitcoin_electrum_decoded_to_graph_raw(
             continue
         vin_entry: dict[str, Any] = {}
         prev_txid = _string_or_none(entry.get("txid"))
+        prev_vout = _int_or_none(entry.get("vout"))
+        if prev_txid and prev_txid.lower() == COINBASE_PREVOUT_TXID and prev_vout == COINBASE_PREVOUT_VOUT:
+            prev_txid = None
+            prev_vout = None
         if prev_txid:
             vin_entry["txid"] = prev_txid.lower()
-        prev_vout = _int_or_none(entry.get("vout"))
         if prev_vout is not None:
             vin_entry["vout"] = prev_vout
         raw["vin"].append(vin_entry)
