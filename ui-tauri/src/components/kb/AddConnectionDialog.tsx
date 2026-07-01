@@ -1418,7 +1418,7 @@ export function AddConnectionDialog({
       if (!form.spDescriptor.trim()) {
         errors.spDescriptor = t("add.silentPayments.errorMaterial");
       }
-      if (silentPaymentBackendOptions.length > 0 && !form.backend.trim()) {
+      if (!form.backend.trim()) {
         errors.backend = t("add.validation.chooseBackend");
       }
       const startHeightText = form.spScanStartHeight.trim();
@@ -1718,19 +1718,15 @@ export function AddConnectionDialog({
             form.spAcknowledgeFullHistoryWarning,
           sp_acknowledge_server_warning: form.spAcknowledgeServerWarning,
         });
-        if (form.syncAfterCreate) {
-          startSyncNotice(t("add.silentPayments.stillScanning", { label }));
-          try {
-            await syncWallet.mutateAsync({ wallet: label });
-          } finally {
-            clearSyncNotice();
-          }
+        startSyncNotice(t("add.silentPayments.stillScanning", { label }));
+        try {
+          await syncWallet.mutateAsync({ wallet: label });
+        } finally {
+          clearSyncNotice();
         }
         addNotification({
           title: t("add.added.title"),
-          body: form.syncAfterCreate
-            ? t("add.silentPayments.addedBodyScanning", { label })
-            : t("add.silentPayments.addedBody", { label }),
+          body: t("add.silentPayments.addedBodyScanning", { label }),
           tone: "success",
         });
       } else if (setupKind === "samourai") {
@@ -2786,7 +2782,6 @@ export function AddConnectionDialog({
               ) : null}
             </div>
           ) : null}
-          {renderSyncAfterCreate(t("add.silentPayments.scanAfter"))}
         </>
       );
     }

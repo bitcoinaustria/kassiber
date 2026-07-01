@@ -631,7 +631,7 @@
       "material": "Silent Payments material",
       "materialHelper": "Paste watch-only BIP392 sp() material such as sp(spscan1q...) or scan-private plus public spend key. Spend-private forms are rejected.",
       "scanMode": "Scan mode",
-      "scanModeHelper": "Local index keeps scanning on this machine. Server-assisted mode may reveal this Silent Payments wallet to the selected backend.",
+      "scanModeHelper": "Local scanner / local index reads scanner results on this machine and keeps discovery local. Server-assisted backend asks the selected SP-capable backend to scan, which may reveal enough to correlate this Silent Payments wallet.",
       "scanModeLocal": "Local scanner / local index",
       "scanModeServer": "Server-assisted backend",
       "startHeight": "Start height",

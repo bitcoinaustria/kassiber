@@ -631,7 +631,7 @@
       "material": "Silent-Payments-Material",
       "materialHelper": "Füge watch-only BIP392-sp()-Material ein, z. B. sp(spscan1q...) oder Scan-Privatschlüssel plus öffentlichen Spend-Schlüssel. Spend-private-Formen werden abgelehnt.",
       "scanMode": "Scan-Modus",
-      "scanModeHelper": "Der lokale Index scannt auf diesem Gerät. Serverunterstützter Modus kann diese Silent-Payments-Wallet gegenüber dem ausgewählten Backend offenlegen.",
+      "scanModeHelper": "Lokaler Scanner / lokaler Index liest Scanner-Ergebnisse auf diesem Gerät und hält die Erkennung lokal. Serverunterstütztes Backend lässt das ausgewählte SP-fähige Backend scannen; das kann genug offenlegen, um diese Silent-Payments-Wallet zu korrelieren.",
       "scanModeLocal": "Lokaler Scanner / lokaler Index",
       "scanModeServer": "Serverunterstütztes Backend",
       "startHeight": "Start-Height",
