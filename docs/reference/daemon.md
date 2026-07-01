@@ -249,6 +249,21 @@ require `DELETE LOCAL DATA`.
 `ui.backends.options` returns safe backend setup choices for desktop forms. It
 lists configured backend names, kinds, chain/network metadata, presence flags,
 and default state, but does not expose exact endpoint URLs or tokens.
+`ui.backends.detect_core` probes common local Bitcoin Core RPC endpoints with
+default cookie-file locations plus local `bitcoin.conf` RPC settings and
+returns candidate URL/network/auth-source metadata without cookie contents.
+When `bitcoin.conf` contains `rpcuser`/`rpcpassword`, the daemon may use those
+credentials internally to prove reachability, but the response does not include
+the username or password. Cookie-file candidates include a bounded
+`credential_ref` for immediate local probing; renderer-supplied cookiefile
+probes and desktop-created Bitcoin Core cookiefile backends are constrained to
+default `~/.bitcoin/**/.cookie` paths and loopback RPC URLs. Users who want to
+save basic auth still enter it explicitly. `ui.backends.bitcoinrpc.test` probes
+a saved or inline Core RPC backend with `getblockchaininfo`, `getnetworkinfo`,
+wallet RPC, and `getblockfilter`; it reports reachability, peer/sync state,
+pruning/IBD, wallet-RPC availability, and BIP158 filter-index availability.
+Both endpoints are desktop mutating kinds because they touch local RPC/cookie
+state and are not AI tools.
 
 `ui.wallets.create` is the desktop connection setup path for local/imported
 wallet sources. It accepts `label`, `kind`, and the same wallet config fields
@@ -256,8 +271,8 @@ the CLI stores (`backend`, `chain`, `network`, `descriptor`,
 `change_descriptor`, `source_file`, `source_format`, `store_id`,
 etc.) and returns the redacted wallet row. Desktop callers can pass
 `wallet_material` instead of separate descriptor fields; the daemon recognizes
-common descriptor export shapes and stores receive/change descriptors when the
-material contains both.
+common descriptor export shapes, including plaintext BSMS descriptor records,
+and stores receive/change descriptors when the material contains both.
 
 `ui.wallets.import_samourai` is the desktop Samourai/Whirlpool watch-only path.
 It accepts `label`, optional `backend`, `network`, and `gap_limit`, plus exactly
@@ -383,9 +398,10 @@ BTCPay invoice JSON, rejected matches, payment hashes, destination addresses,
 full origin URLs, payment-method configuration, descriptors, xpubs, or API
 tokens.
 
-`ui.metadata.bip329.import` accepts `file` and optional `wallet`, then imports
-BIP329 JSONL labels into the active profile and bridges transaction labels to
-matching local transactions.
+`ui.metadata.bip329.import` accepts `file`, then imports BIP329 JSONL labels
+into the active profile. Labels are deduplicated by record type and reference;
+transaction labels are bridged to matching local transactions across the active
+profile.
 
 `ui.transactions.metadata.update` accepts
 `{"transaction":"...","note":"...","tags":["Reviewed"],"excluded":false}` for

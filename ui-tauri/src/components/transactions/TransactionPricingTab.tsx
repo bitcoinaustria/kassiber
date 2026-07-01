@@ -44,12 +44,16 @@ export function TransactionPricingTab({ ctx }: { ctx: TransactionDetailTabContex
     isProviderSamplePricing,
     isExactPricing,
     isPricingMissing,
+    suppressPricingCacheWarning,
     pricePoint,
     nowRate,
     onOpenMarketDataSettings,
     openMarketDataSettings,
     chooseExactManualPrice,
   } = ctx;
+  const showMissingCacheWarning =
+    isPricingMissing && !hasCacheProvenance && !suppressPricingCacheWarning;
+
   return (
     <>
                   {/* Pricing — single workstation for pricing source + manual override */}
@@ -326,7 +330,7 @@ export function TransactionPricingTab({ ctx }: { ctx: TransactionDetailTabContex
                           </p>
                         </div>
                       ) : null}
-                      {isPricingMissing && !hasCacheProvenance ? (
+                      {showMissingCacheWarning ? (
                         <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3">
                           <div className="flex items-start gap-2">
                             <AlertTriangle

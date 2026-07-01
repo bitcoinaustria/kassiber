@@ -44,11 +44,13 @@ export interface Backend {
   lightningDir?: string;
   rpcFile?: string;
   trustSsl?: boolean;
+  urlSafeForHttpProbe?: boolean;
   infrastructureOwner?: InfrastructureOwnership;
   certificate?: string;
   proxy?: {
     host: string;
     port: string;
+    redactedCredentials?: boolean;
   } | null;
   walletRefs?: string[];
 }
@@ -67,11 +69,13 @@ export interface BackendSettingsRow {
   has_auth_header?: boolean;
   has_token?: boolean;
   has_certificate?: boolean;
+  has_cookiefile?: boolean;
   has_username?: boolean;
   has_password?: boolean;
   has_commando_peer_id?: boolean;
   has_lightning_dir?: boolean;
   has_rpc_file?: boolean;
+  url_safe_for_http_probe?: boolean;
   insecure?: boolean;
   tor_proxy?: string;
   infrastructure_owner?: string;
@@ -360,7 +364,7 @@ export const DEFAULT_BACKENDS: Backend[] = [
     name: "Coinbase Exchange",
     url: "https://api.exchange.coinbase.com",
     net: "FX",
-    health: "BTC/EUR 1m live",
+    health: "Built-in default provider",
     on: true,
     auth: "none",
   },
@@ -369,7 +373,7 @@ export const DEFAULT_BACKENDS: Backend[] = [
     name: "CoinGecko",
     url: "https://api.coingecko.com/api/v3",
     net: "FX",
-    health: "Daily fallback",
+    health: "Built-in fallback provider",
     on: false,
     auth: "none",
   },
@@ -501,14 +505,18 @@ export function normalizeInfrastructureOwnership(
 
 export function parseProxyEndpoint(
   value: string | null | undefined,
-): { host: string; port: string } | undefined {
+): { host: string; port: string; redactedCredentials?: boolean } | undefined {
   const trimmed = value?.trim();
   if (!trimmed) return undefined;
   if (trimmed.includes("://")) {
     try {
       const parsed = new URL(trimmed);
       return parsed.hostname && parsed.port
-        ? { host: parsed.hostname, port: parsed.port }
+        ? {
+            host: parsed.hostname,
+            port: parsed.port,
+            redactedCredentials: parsed.username === "redacted" || undefined,
+          }
         : undefined;
     } catch {
       return undefined;
@@ -544,6 +552,7 @@ export function backendRowToSettingsBackend(row: BackendSettingsRow): Backend {
       : undefined,
     rpcFile: row.has_rpc_file ? CLN_PRESENCE_SENTINEL_RPC_FILE : undefined,
     trustSsl: row.insecure,
+    urlSafeForHttpProbe: row.url_safe_for_http_probe === true,
     proxy: parseProxyEndpoint(row.tor_proxy),
     infrastructureOwner: normalizeInfrastructureOwnership(
       row.infrastructure_owner,
@@ -619,7 +628,10 @@ export function backendPayload(backend: Backend): Record<string, unknown> {
   if (auth === "basic" && backend.password) {
     config.password = backend.password;
   }
-  if (backend.proxy?.host && backend.proxy.port) {
+  if (backend.proxy?.redactedCredentials) {
+    // Preserve an existing credentialed proxy URL; the daemon only returns the
+    // redacted host/port marker, so writing it back would erase credentials.
+  } else if (backend.proxy?.host && backend.proxy.port) {
     payload.tor_proxy = `${backend.proxy.host}:${backend.proxy.port}`;
   } else if (backend.proxy === null) {
     clear.add("tor_proxy");
@@ -706,6 +718,7 @@ export function backendTrust(backend: Backend) {
   return backendTrustFromEndpoint(
     backend.url || "",
     Boolean(backend.proxy),
+    backend.kind,
     backend.infrastructureOwner,
   );
 }

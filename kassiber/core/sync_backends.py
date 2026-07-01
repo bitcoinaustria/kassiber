@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import base64
 import hashlib
-import ipaddress
 import json
 import socket
 import ssl
@@ -12,6 +11,7 @@ from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from contextvars import copy_context
+from dataclasses import replace
 from decimal import Decimal
 from pathlib import Path
 from types import MappingProxyType
@@ -25,12 +25,18 @@ from ..db import APP_NAME
 from ..envelope import json_ready
 from ..errors import AppError
 from ..msat import SATS_PER_BTC, dec
+from ..proxy import (
+    _connect_via_socks5,
+    is_onion_endpoint,
+    urlopen_with_proxy,
+)
 from ..redaction import redact_operational_text
-from ..retry import retry_after_seconds_from_http_error
 from ..time_utils import UNKNOWN_OCCURRED_AT, parse_iso_datetime_or_none, timestamp_to_iso
+from ..time_utils import iso_to_unix
 from ..util import normalize_chain_value, normalize_network_value, parse_bool, parse_int
 from ..wallet_descriptors import (
     SCRIPT_TYPE_BRANCH_BASE,
+    branch_descriptor,
     branch_limits,
     decode_liquid_transaction,
     derive_descriptor_target,
@@ -73,7 +79,15 @@ def _emit_http_backoff(retry_number, max_retries, wait_seconds):
     )
 
 
-def http_get_json(url, timeout=30, *, _sleeper=None, _rng=None, _max_attempts=None):
+def http_get_json(
+    url,
+    timeout=30,
+    *,
+    proxy_url=None,
+    _sleeper=None,
+    _rng=None,
+    _max_attempts=None,
+):
     def _opener():
         request = urlrequest.Request(
             url,
@@ -82,7 +96,13 @@ def http_get_json(url, timeout=30, *, _sleeper=None, _rng=None, _max_attempts=No
                 "User-Agent": f"{APP_NAME}/{__version__}",
             },
         )
-        with urlrequest.urlopen(request, timeout=timeout) as response:
+        with urlopen_with_proxy(
+            request,
+            url,
+            timeout,
+            proxy_url=proxy_url,
+            source_label="backend",
+        ) as response:
             return json.loads(response.read().decode("utf-8"))
 
     return http_client.request_with_retry(
@@ -95,7 +115,16 @@ def http_get_json(url, timeout=30, *, _sleeper=None, _rng=None, _max_attempts=No
     )
 
 
-def http_get_text(url, timeout=30, accept="text/plain", *, _sleeper=None, _rng=None, _max_attempts=None):
+def http_get_text(
+    url,
+    timeout=30,
+    accept="text/plain",
+    *,
+    proxy_url=None,
+    _sleeper=None,
+    _rng=None,
+    _max_attempts=None,
+):
     def _opener():
         request = urlrequest.Request(
             url,
@@ -104,7 +133,13 @@ def http_get_text(url, timeout=30, accept="text/plain", *, _sleeper=None, _rng=N
                 "User-Agent": f"{APP_NAME}/{__version__}",
             },
         )
-        with urlrequest.urlopen(request, timeout=timeout) as response:
+        with urlopen_with_proxy(
+            request,
+            url,
+            timeout,
+            proxy_url=proxy_url,
+            source_label="backend",
+        ) as response:
             return response.read().decode("utf-8")
 
     return http_client.request_with_retry(
@@ -117,7 +152,17 @@ def http_get_text(url, timeout=30, accept="text/plain", *, _sleeper=None, _rng=N
     )
 
 
-def http_post_json(url, payload, headers=None, timeout=30, *, _sleeper=None, _rng=None, _max_attempts=None):
+def http_post_json(
+    url,
+    payload,
+    headers=None,
+    timeout=30,
+    *,
+    proxy_url=None,
+    _sleeper=None,
+    _rng=None,
+    _max_attempts=None,
+):
     def _opener():
         request = urlrequest.Request(
             url,
@@ -130,7 +175,13 @@ def http_post_json(url, payload, headers=None, timeout=30, *, _sleeper=None, _rn
             },
             method="POST",
         )
-        with urlrequest.urlopen(request, timeout=timeout) as response:
+        with urlopen_with_proxy(
+            request,
+            url,
+            timeout,
+            proxy_url=proxy_url,
+            source_label="backend",
+        ) as response:
             return json.loads(response.read().decode("utf-8"))
 
     return http_client.request_with_retry(
@@ -141,6 +192,10 @@ def http_post_json(url, payload, headers=None, timeout=30, *, _sleeper=None, _rn
         max_attempts=_max_attempts,
         on_retry=_emit_http_backoff,
     )
+
+
+def _backend_proxy_url(backend):
+    return backend_value(backend, "tor_proxy", "proxy")
 
 
 def append_url_path(base_url, extra_path):
@@ -161,89 +216,20 @@ def parse_socket_backend_url(url, default_scheme="ssl", default_ports=None):
     return scheme, host, port
 
 
-def _read_exact(sock, length):
-    chunks = []
-    remaining = length
-    while remaining > 0:
-        chunk = sock.recv(remaining)
-        if not chunk:
-            raise AppError("Proxy closed the connection during SOCKS5 negotiation")
-        chunks.append(chunk)
-        remaining -= len(chunk)
-    return b"".join(chunks)
-
-
-def _socks5_address(host):
-    try:
-        address = ipaddress.ip_address(host)
-    except ValueError:
-        try:
-            encoded = host.encode("idna")
-        except UnicodeError as exc:
-            raise AppError(f"SOCKS5 proxy target host is invalid: {exc}") from exc
-        if len(encoded) > 255:
-            raise AppError("SOCKS5 proxy target host is too long")
-        return b"\x03" + bytes([len(encoded)]) + encoded
-    if address.version == 4:
-        return b"\x01" + address.packed
-    return b"\x04" + address.packed
-
-
-def _connect_via_socks5(proxy_url, host, port, timeout):
-    scheme, proxy_host, proxy_port = parse_socket_backend_url(
-        proxy_url,
-        default_scheme="socks5",
-        default_ports={"socks5": 9050, "socks5h": 9050},
-    )
-    if scheme not in {"socks5", "socks5h"}:
-        raise AppError(f"Unsupported Electrum proxy transport '{scheme}'")
-    sock = socket.create_connection((proxy_host, proxy_port), timeout=timeout)
-    try:
-        sock.sendall(b"\x05\x01\x00")
-        greeting = _read_exact(sock, 2)
-        if greeting[0] != 0x05:
-            raise AppError(
-                f"SOCKS5 proxy returned an unexpected greeting (got {greeting!r})"
-            )
-        if greeting[1] != 0x00:
-            raise AppError(
-                "SOCKS5 proxy refused the no-auth method "
-                f"(returned 0x{greeting[1]:02x}); Kassiber only supports "
-                "unauthenticated SOCKS5 proxies such as Tor."
-            )
-        request = (
-            b"\x05\x01\x00"
-            + _socks5_address(host)
-            + int(port).to_bytes(2, byteorder="big")
-        )
-        sock.sendall(request)
-        response = _read_exact(sock, 4)
-        if response[0] != 5:
-            raise AppError("SOCKS5 proxy returned an invalid response")
-        if response[1] != 0:
-            raise AppError(f"SOCKS5 proxy connect failed with code {response[1]}")
-        atyp = response[3]
-        if atyp == 1:
-            _read_exact(sock, 4)
-        elif atyp == 3:
-            length = _read_exact(sock, 1)[0]
-            _read_exact(sock, length)
-        elif atyp == 4:
-            _read_exact(sock, 16)
-        else:
-            raise AppError("SOCKS5 proxy returned an unsupported address type")
-        _read_exact(sock, 2)
-        return sock
-    except Exception:
-        sock.close()
-        raise
-
-
 def _connect_backend_socket(backend, host, port):
     timeout = backend_timeout(backend)
     proxy = backend_value(backend, "tor_proxy", "proxy")
     if proxy:
         return _connect_via_socks5(proxy, host, port, timeout)
+    if is_onion_endpoint(host):
+        raise AppError(
+            ".onion backend URLs require a Tor/SOCKS proxy",
+            code="network_proxy_required",
+            hint=(
+                "Configure --tor-proxy for this backend; Kassiber will not "
+                "connect to .onion hosts directly."
+            ),
+        )
     return socket.create_connection((host, port), timeout=timeout)
 
 
@@ -523,8 +509,6 @@ def validate_backend_for_wallet(backend, chain, network, has_descriptor=False):
             )
     if chain == "liquid" and kind not in {"esplora", "electrum"}:
         raise AppError("Liquid live refresh currently requires an Esplora-compatible or Electrum backend")
-    if has_descriptor and kind == "bitcoinrpc":
-        raise AppError("Descriptor-backed refresh is not implemented for bitcoinrpc yet; use Esplora or Electrum")
     if chain != "bitcoin" and kind == "bitcoinrpc":
         raise AppError(f"Backend kind '{kind}' does not support {chain} wallets")
     return kind
@@ -635,9 +619,9 @@ def scan_descriptor_targets(
     return targets
 
 
-def esplora_scripthash_stats(base_url, script_pubkey_hex, timeout=30):
+def esplora_scripthash_stats(base_url, script_pubkey_hex, timeout=30, *, proxy_url=None):
     resource = append_url_path(base_url, f"scripthash/{scriptpubkey_scripthash(script_pubkey_hex)}")
-    return http_get_json(resource, timeout=timeout)
+    return http_get_json(resource, timeout=timeout, proxy_url=proxy_url)
 
 
 def esplora_stats_fingerprint(payload):
@@ -666,8 +650,13 @@ def esplora_stats_fingerprint(payload):
     ).hexdigest()
 
 
-def esplora_scripthash_has_history(base_url, script_pubkey_hex, timeout=30):
-    payload = esplora_scripthash_stats(base_url, script_pubkey_hex, timeout=timeout)
+def esplora_scripthash_has_history(base_url, script_pubkey_hex, timeout=30, *, proxy_url=None):
+    payload = esplora_scripthash_stats(
+        base_url,
+        script_pubkey_hex,
+        timeout=timeout,
+        proxy_url=proxy_url,
+    )
     chain_stats = payload.get("chain_stats") or {}
     mempool_stats = payload.get("mempool_stats") or {}
     return int(chain_stats.get("tx_count") or 0) + int(mempool_stats.get("tx_count") or 0) > 0
@@ -676,9 +665,15 @@ def esplora_scripthash_has_history(base_url, script_pubkey_hex, timeout=30):
 def _probe_scripts_have_history(backend, kind, script_pubkeys, *, timeout):
     if kind == "esplora":
         workers = _bounded_http_workers(backend)
+        proxy_url = _backend_proxy_url(backend)
 
         def probe(script_pubkey):
-            return esplora_scripthash_has_history(backend["url"], script_pubkey, timeout=timeout)
+            return esplora_scripthash_has_history(
+                backend["url"],
+                script_pubkey,
+                timeout=timeout,
+                proxy_url=proxy_url,
+            )
 
         return _map_bounded(script_pubkeys, probe, workers)
     if kind == "electrum":
@@ -731,6 +726,7 @@ def discover_descriptor_targets(backend, plan, kind, checkpoint=None):
     checkpoint = checkpoint if isinstance(checkpoint, dict) else {}
     if kind == "esplora":
         scan_batch_size = _bounded_http_workers(backend)
+        proxy_url = _backend_proxy_url(backend)
         cached_stats = checkpoint.get("esplora_scripthashes") or {}
 
         def target_used_single(target):
@@ -743,6 +739,7 @@ def discover_descriptor_targets(backend, plan, kind, checkpoint=None):
                 backend["url"],
                 target["script_pubkey"],
                 timeout=timeout,
+                proxy_url=proxy_url,
             )
 
         def target_used_batch(targets):
@@ -793,6 +790,12 @@ def discover_descriptor_targets(backend, plan, kind, checkpoint=None):
                 ),
                 "history_cache": history_cache,
             }
+    if kind == "bitcoinrpc":
+        checkpoint = checkpoint if isinstance(checkpoint, dict) else {}
+        return {
+            "targets": _bitcoinrpc_descriptor_targets_for_checkpoint(plan, checkpoint),
+            "history_cache": {},
+        }
     raise AppError(f"Descriptor-backed sync is not implemented for backend kind '{kind}'")
 
 
@@ -846,7 +849,14 @@ def resolve_wallet_sync_targets(backend, wallet):
     )
 
 
-def fetch_esplora_history(base_url, resource_path, max_pages=None, timeout=30):
+def fetch_esplora_history(
+    base_url,
+    resource_path,
+    max_pages=None,
+    timeout=30,
+    *,
+    proxy_url=None,
+):
     transactions = []
     seen_txids = set()
     last_seen = None
@@ -859,7 +869,7 @@ def fetch_esplora_history(base_url, resource_path, max_pages=None, timeout=30):
             if last_seen
             else append_url_path(base_url, f"{resource_path}/txs/chain")
         )
-        page = http_get_json(chain_url, timeout=timeout)
+        page = http_get_json(chain_url, timeout=timeout, proxy_url=proxy_url)
         if not page:
             break
         for tx in page:
@@ -872,7 +882,7 @@ def fetch_esplora_history(base_url, resource_path, max_pages=None, timeout=30):
         if len(page) < 25:
             break
     mempool_url = append_url_path(base_url, f"{resource_path}/txs/mempool")
-    for tx in http_get_json(mempool_url, timeout=timeout):
+    for tx in http_get_json(mempool_url, timeout=timeout, proxy_url=proxy_url):
         txid = tx.get("txid")
         if txid and txid not in seen_txids:
             seen_txids.add(txid)
@@ -885,26 +895,30 @@ def fetch_esplora_scripthash_transactions(
     script_pubkey_hex,
     max_pages=None,
     timeout=30,
+    *,
+    proxy_url=None,
 ):
     return fetch_esplora_history(
         base_url,
         f"scripthash/{scriptpubkey_scripthash(script_pubkey_hex)}",
         max_pages=max_pages,
         timeout=timeout,
+        proxy_url=proxy_url,
     )
 
 
-def fetch_esplora_scripthash_utxos(base_url, script_pubkey_hex, timeout=30):
+def fetch_esplora_scripthash_utxos(base_url, script_pubkey_hex, timeout=30, *, proxy_url=None):
     return http_get_json(
         append_url_path(
             base_url,
             f"scripthash/{scriptpubkey_scripthash(script_pubkey_hex)}/utxo",
         ),
         timeout=timeout,
+        proxy_url=proxy_url,
     )
 
 
-def fetch_esplora_transaction(base_url, txid, timeout=30):
+def fetch_esplora_transaction(base_url, txid, timeout=30, *, proxy_url=None):
     """Fetch one transaction's JSON by txid.
 
     Esplora returns ``vin`` entries with inline ``prevout`` (including
@@ -913,7 +927,11 @@ def fetch_esplora_transaction(base_url, txid, timeout=30):
     needed for ownership classification. Routed through the shared retry/backoff
     HTTP layer like all other backend reads.
     """
-    return http_get_json(append_url_path(base_url, f"tx/{txid}"), timeout=timeout)
+    return http_get_json(
+        append_url_path(base_url, f"tx/{txid}"),
+        timeout=timeout,
+        proxy_url=proxy_url,
+    )
 
 
 def _legs_from_esplora_tx(tx, chain=""):
@@ -984,7 +1002,12 @@ def fetch_transaction_legs(backend, txid, chain=None, *, client=None):
     chain_source = chain or backend_value(backend, "chain")
     normalized_chain = normalize_chain_value(chain_source) if chain_source else ""
     if kind == "esplora":
-        tx = fetch_esplora_transaction(backend["url"], txid, timeout=timeout)
+        tx = fetch_esplora_transaction(
+            backend["url"],
+            txid,
+            timeout=timeout,
+            proxy_url=_backend_proxy_url(backend),
+        )
         return _legs_from_esplora_tx(tx, normalized_chain)
     if kind == "electrum":
         # Electrum can't be probed for chain, so a Liquid tx decoded as Bitcoin
@@ -1089,12 +1112,13 @@ def _confirmations_from_heights(block_height, tip_height):
     return normalized_tip_height - normalized_block_height + 1
 
 
-def _esplora_tip_height(base_url, timeout=30):
+def _esplora_tip_height(base_url, timeout=30, *, proxy_url=None):
     try:
         return int(
             http_get_text(
                 append_url_path(base_url, "blocks/tip/height"),
                 timeout=timeout,
+                proxy_url=proxy_url,
             ).strip()
         )
     except (AppError, TypeError, ValueError):
@@ -1177,7 +1201,12 @@ def _liquid_utxo_record_from_output(
 def esplora_utxos_for_wallet(backend, sync_state: WalletSyncState):
     timeout = backend_timeout(backend)
     worker_count = _bounded_http_workers(backend)
-    tip_height = _esplora_tip_height(backend["url"], timeout=timeout)
+    proxy_url = _backend_proxy_url(backend)
+    tip_height = _esplora_tip_height(
+        backend["url"],
+        timeout=timeout,
+        proxy_url=proxy_url,
+    )
 
     # Phase 1: fetch each tracked script's UTXO set concurrently, bounded by the
     # same per-wallet worker budget used for stats/history. This phase runs after
@@ -1187,6 +1216,7 @@ def esplora_utxos_for_wallet(backend, sync_state: WalletSyncState):
             backend["url"],
             target["script_pubkey"],
             timeout=timeout,
+            proxy_url=proxy_url,
         )
         return target, list(raw_utxos or [])
 
@@ -1227,6 +1257,7 @@ def esplora_utxos_for_wallet(backend, sync_state: WalletSyncState):
             raw_hex = http_get_text(
                 append_url_path(backend["url"], f"tx/{txid}/hex"),
                 timeout=timeout,
+                proxy_url=proxy_url,
             ).strip()
             return txid, decode_liquid_transaction(raw_hex)
 
@@ -1530,6 +1561,14 @@ def record_components_from_liquid_tx(
             continue
         value_sats, asset_id = liquid_output_amount_asset_id(output, descriptor_plan, target=target)
         net_sats[asset_id] += value_sats
+    # Structured input outpoints for the stored record so source-of-funds
+    # assembly can join Liquid spends against owned outputs offline, the
+    # same way esplora/electrum bitcoin records allow.
+    vin_outpoints = [
+        {"txid": liquid_input_txid(vin), "vout": getattr(vin, "vout", None)}
+        for vin in tx.vin
+        if getattr(vin, "vout", None) is not None
+    ]
     for vin in tx.vin:
         prev_txid = liquid_input_txid(vin)
         prev_vout = getattr(vin, "vout", None)
@@ -1601,6 +1640,7 @@ def record_components_from_liquid_tx(
                         {
                             **(raw_json_context or {}),
                             "txid": txid,
+                            "vin": vin_outpoints,
                             "component": {
                                 "asset_id": asset_id,
                                 "asset": asset_code,
@@ -1622,6 +1662,7 @@ def esplora_records_for_wallet(backend, sync_state: WalletSyncState):
     max_pages = parse_int(backend_value(backend, "maxpages"), default=0) or None
     timeout = backend_timeout(backend)
     worker_count = _bounded_http_workers(backend)
+    proxy_url = _backend_proxy_url(backend)
     checkpoint = _checkpoint_mapping(sync_state)
     previous_stats = checkpoint.get("esplora_scripthashes") or {}
     next_stats = {}
@@ -1631,7 +1672,12 @@ def esplora_records_for_wallet(backend, sync_state: WalletSyncState):
 
     def fetch_stats(target):
         scripthash = scriptpubkey_scripthash(target["script_pubkey"])
-        stats = esplora_scripthash_stats(backend["url"], target["script_pubkey"], timeout=timeout)
+        stats = esplora_scripthash_stats(
+            backend["url"],
+            target["script_pubkey"],
+            timeout=timeout,
+            proxy_url=proxy_url,
+        )
         return target, scripthash, stats
 
     def stats_fetch_progress(index, _result, total):
@@ -1697,6 +1743,7 @@ def esplora_records_for_wallet(backend, sync_state: WalletSyncState):
             target["script_pubkey"],
             max_pages=max_pages,
             timeout=timeout,
+            proxy_url=proxy_url,
         ):
             target_txs.append(tx)
             known_txids.add(tx["txid"])
@@ -1737,6 +1784,7 @@ def esplora_records_for_wallet(backend, sync_state: WalletSyncState):
             raw_hex = http_get_text(
                 append_url_path(backend["url"], f"tx/{txid}/hex"),
                 timeout=backend_timeout(backend),
+                proxy_url=proxy_url,
             ).strip()
             raw_tx_cache[txid] = {
                 "raw_hex": raw_hex,
@@ -1762,6 +1810,7 @@ def esplora_records_for_wallet(backend, sync_state: WalletSyncState):
             raw_hex = http_get_text(
                 append_url_path(backend["url"], f"tx/{txid}/hex"),
                 timeout=timeout,
+                proxy_url=proxy_url,
             ).strip()
             return txid, raw_hex
 
@@ -1847,7 +1896,7 @@ def bitcoinrpc_url(backend, wallet_name=None):
     return backend["url"]
 
 
-def bitcoinrpc_call(backend, method, params=None, wallet_name=None):
+def bitcoinrpc_call(backend, method, params=None, wallet_name=None, timeout=None):
     payload = {
         "jsonrpc": "1.0",
         "id": f"{APP_NAME}-{method}",
@@ -1858,7 +1907,8 @@ def bitcoinrpc_call(backend, method, params=None, wallet_name=None):
         bitcoinrpc_url(backend, wallet_name=wallet_name),
         payload,
         headers=bitcoinrpc_auth_headers(backend),
-        timeout=backend_timeout(backend),
+        timeout=backend_timeout(backend) if timeout is None else timeout,
+        proxy_url=_backend_proxy_url(backend),
     )
     if response.get("error"):
         error = response["error"]
@@ -1867,6 +1917,10 @@ def bitcoinrpc_call(backend, method, params=None, wallet_name=None):
             f" ({error.get('code', 'unknown')}): {error.get('message', error)}"
         )
     return response.get("result")
+
+
+def bitcoinrpc_import_timeout(backend):
+    return max(backend_timeout(backend), 1800)
 
 
 def bitcoinrpc_wallet_name(backend, wallet):
@@ -1903,7 +1957,7 @@ def bitcoinrpc_ensure_watchonly_wallet(backend, wallet):
         ) from load_error
 
 
-def bitcoinrpc_import_addresses(backend, wallet_name, wallet, addresses):
+def bitcoinrpc_import_addresses(backend, wallet_name, wallet, addresses, birthday_ts=0):
     label = f"{APP_NAME}:{wallet['id']}"
     missing_addresses = []
     descriptors = []
@@ -1912,12 +1966,20 @@ def bitcoinrpc_import_addresses(backend, wallet_name, wallet, addresses):
         if info.get("iswatchonly") or info.get("ismine"):
             continue
         descriptor = bitcoinrpc_call(backend, "getdescriptorinfo", [f"addr({address})"])
-        descriptors.append({"desc": descriptor["descriptor"], "timestamp": 0, "label": label})
+        descriptors.append(
+            {"desc": descriptor["descriptor"], "timestamp": birthday_ts, "label": label}
+        )
         missing_addresses.append(address)
     if not missing_addresses:
         return 0
     try:
-        results = bitcoinrpc_call(backend, "importdescriptors", [descriptors], wallet_name=wallet_name)
+        results = bitcoinrpc_call(
+            backend,
+            "importdescriptors",
+            [descriptors],
+            wallet_name=wallet_name,
+            timeout=bitcoinrpc_import_timeout(backend),
+        )
         failures = [result for result in results if not result.get("success")]
         if failures:
             raise AppError(f"descriptor import failed: {failures[0]}")
@@ -1925,18 +1987,138 @@ def bitcoinrpc_import_addresses(backend, wallet_name, wallet, addresses):
         requests = [
             {
                 "scriptPubKey": {"address": address},
-                "timestamp": 0,
+                "timestamp": birthday_ts,
                 "watchonly": True,
                 "label": label,
             }
             for address in missing_addresses
         ]
         options = {"rescan": True}
-        results = bitcoinrpc_call(backend, "importmulti", [requests, options], wallet_name=wallet_name)
+        results = bitcoinrpc_call(
+            backend,
+            "importmulti",
+            [requests, options],
+            wallet_name=wallet_name,
+            timeout=bitcoinrpc_import_timeout(backend),
+        )
         failures = [result for result in results if not result.get("success")]
         if failures:
             raise AppError(f"address import failed: {failures[0]}")
     return len(missing_addresses)
+
+
+def _int_mapping(value):
+    if not isinstance(value, dict):
+        return {}
+    output = {}
+    for key, raw in value.items():
+        try:
+            parsed = int(raw)
+        except (TypeError, ValueError):
+            continue
+        if parsed >= 0:
+            output[str(key)] = parsed
+    return output
+
+
+def _bitcoinrpc_descriptor_end(plan, branch, highest_used, previous_end=None):
+    descriptor = branch_descriptor(branch)
+    if not getattr(descriptor, "is_wildcard", False):
+        return 0
+    known_highest = _highest_used_branch_index(highest_used, branch.branch_index)
+    if known_highest is None:
+        previous = int(previous_end) if previous_end is not None else -1
+        return max(0, previous, plan.gap_limit - 1)
+    previous = int(previous_end) if previous_end is not None else -1
+    return max(0, previous, known_highest + plan.gap_limit)
+
+
+def _bitcoinrpc_descriptor_targets_for_range_ends(plan, range_ends):
+    range_ends = _int_mapping(range_ends)
+    targets = []
+    for branch in plan.branches:
+        end = range_ends.get(str(branch.branch_index), 0)
+        if end <= 0:
+            targets.append(
+                sync_target_from_derived(
+                    derive_descriptor_target(plan, branch.branch_index, 0)
+                )
+            )
+            continue
+        targets.extend(
+            sync_target_from_derived(target)
+            for target in derive_descriptor_targets(
+                plan,
+                branch_index=branch.branch_index,
+                start=0,
+                end=end + 1,
+            )
+        )
+    return targets
+
+
+def _bitcoinrpc_descriptor_targets_for_checkpoint(plan, checkpoint):
+    checkpoint = checkpoint if isinstance(checkpoint, dict) else {}
+    previous_ends = _int_mapping(checkpoint.get("bitcoinrpc_descriptor_range_ends"))
+    highest_used = checkpoint.get("highest_used")
+    range_ends = {}
+    for branch in plan.branches:
+        branch_key = str(branch.branch_index)
+        range_ends[branch_key] = _bitcoinrpc_descriptor_end(
+            plan,
+            branch,
+            highest_used,
+            previous_ends.get(branch_key),
+        )
+    return _bitcoinrpc_descriptor_targets_for_range_ends(plan, range_ends)
+
+
+def bitcoinrpc_ranged_descriptor(backend, branch, end, birthday_ts):
+    descriptor_template = branch_descriptor(branch)
+    raw_descriptor = descriptor_template.to_string()
+    descriptor = bitcoinrpc_call(backend, "getdescriptorinfo", [raw_descriptor])
+    request = {
+        "desc": descriptor["descriptor"],
+        "timestamp": birthday_ts,
+        "internal": branch.branch_index % 2 == 1,
+        "active": False,
+    }
+    if getattr(descriptor_template, "is_wildcard", False):
+        request["range"] = [0, int(end)]
+    return request
+
+
+def bitcoinrpc_import_ranged_descriptors(backend, wallet_name, plan, checkpoint, birthday_ts):
+    checkpoint = checkpoint if isinstance(checkpoint, dict) else {}
+    highest_used = checkpoint.get("highest_used")
+    previous_ends = _int_mapping(checkpoint.get("bitcoinrpc_descriptor_range_ends"))
+    next_ends = dict(previous_ends)
+    descriptors = []
+    for branch in plan.branches:
+        branch_key = str(branch.branch_index)
+        end = _bitcoinrpc_descriptor_end(
+            plan,
+            branch,
+            highest_used,
+            previous_ends.get(branch_key),
+        )
+        next_ends[branch_key] = max(int(next_ends.get(branch_key, -1)), end)
+        if end <= int(previous_ends.get(branch_key, -1)):
+            continue
+        descriptors.append(bitcoinrpc_ranged_descriptor(backend, branch, end, birthday_ts))
+    if not descriptors:
+        return 0, next_ends
+    results = bitcoinrpc_call(
+        backend,
+        "importdescriptors",
+        [descriptors],
+        wallet_name=wallet_name,
+        timeout=bitcoinrpc_import_timeout(backend),
+    )
+    failures = [result for result in results if not result.get("success")]
+    if failures:
+        raise AppError(f"ranged descriptor import failed: {failures[0]}")
+    return len(descriptors), next_ends
 
 
 def _bitcoinrpc_checkpoint_block(checkpoint):
@@ -2055,6 +2237,26 @@ def record_from_bitcoinrpc_details(txid, details, backend_name):
     }
 
 
+def _bitcoinrpc_highest_used_from_details(details, sync_state: WalletSyncState | None):
+    if sync_state is None:
+        return {}
+    target_by_address = {
+        target.get("address"): target
+        for target in sync_state.targets
+        if target.get("address")
+    }
+    highest_used = {}
+    for detail in details:
+        category = str(detail.get("category") or "").lower()
+        if category in {"orphan", "immature"}:
+            continue
+        target = target_by_address.get(detail.get("address"))
+        if target is None:
+            continue
+        highest_used = _merge_highest_used(highest_used, target, True)
+    return highest_used
+
+
 def bitcoinrpc_records_for_wallet(
     backend,
     wallet,
@@ -2062,6 +2264,7 @@ def bitcoinrpc_records_for_wallet(
     wallet_name=None,
     imported_count=None,
     checkpoint=None,
+    sync_state: WalletSyncState | None = None,
 ):
     wallet_name = wallet_name or bitcoinrpc_ensure_watchonly_wallet(backend, wallet)
     if imported_count is None:
@@ -2091,6 +2294,10 @@ def bitcoinrpc_records_for_wallet(
     return records, {
         "core_wallet": wallet_name,
         "imported_addresses": imported_count,
+        "bitcoinrpc_highest_used": _bitcoinrpc_highest_used_from_details(
+            details,
+            sync_state,
+        ),
         **fetch_meta,
     }
 
@@ -2167,10 +2374,51 @@ def bitcoinrpc_utxos_for_wallet_name(backend, wallet_name, addresses, sync_state
 
 
 def bitcoinrpc_sync_adapter(backend, wallet, sync_state: WalletSyncState):
-    addresses = [target["address"] for target in sync_state.targets if target.get("address")]
     wallet_name = bitcoinrpc_ensure_watchonly_wallet(backend, wallet)
-    imported_count = bitcoinrpc_import_addresses(backend, wallet_name, wallet, addresses)
     checkpoint = _checkpoint_mapping(sync_state)
+    config = json.loads(_mapping_get(wallet, "config_json", "{}") or "{}")
+    birthday_ts = iso_to_unix(config.get("birthday"))
+    descriptor_range_ends = None
+    effective_sync_state = sync_state
+    if sync_state.descriptor_plan is not None:
+        imported_count, descriptor_range_ends = bitcoinrpc_import_ranged_descriptors(
+            backend,
+            wallet_name,
+            sync_state.descriptor_plan,
+            checkpoint,
+            birthday_ts,
+        )
+        expanded_targets = _bitcoinrpc_descriptor_targets_for_range_ends(
+            sync_state.descriptor_plan,
+            descriptor_range_ends,
+        )
+        effective_sync_state = replace(
+            sync_state,
+            targets=expanded_targets,
+            tracked_scripts={
+                target["script_pubkey"]: target
+                for target in expanded_targets
+                if target.get("script_pubkey")
+            },
+        )
+    else:
+        addresses = [
+            target["address"]
+            for target in effective_sync_state.targets
+            if target.get("address")
+        ]
+        imported_count = bitcoinrpc_import_addresses(
+            backend,
+            wallet_name,
+            wallet,
+            addresses,
+            birthday_ts=birthday_ts,
+        )
+    addresses = [
+        target["address"]
+        for target in effective_sync_state.targets
+        if target.get("address")
+    ]
     records, meta = bitcoinrpc_records_for_wallet(
         backend,
         wallet,
@@ -2178,22 +2426,36 @@ def bitcoinrpc_sync_adapter(backend, wallet, sync_state: WalletSyncState):
         wallet_name=wallet_name,
         imported_count=imported_count,
         checkpoint=checkpoint,
+        sync_state=effective_sync_state if sync_state.descriptor_plan is not None else None,
     )
-    if meta.get("bitcoinrpc_last_block"):
-        next_checkpoint = dict(checkpoint)
-        next_checkpoint.update(
-            {
-                "backend": _backend_identity(backend, sync_state),
-                "bitcoinrpc_last_block": meta["bitcoinrpc_last_block"],
-            }
-        )
-        meta["freshness_checkpoint"] = next_checkpoint
-    meta["utxos"] = bitcoinrpc_utxos_for_wallet_name(
+    utxos = bitcoinrpc_utxos_for_wallet_name(
         backend,
         wallet_name,
         addresses,
-        sync_state,
+        effective_sync_state,
     )
+    meta["utxos"] = utxos
+    if sync_state.descriptor_plan is not None:
+        highest_used = dict(checkpoint.get("highest_used") or {})
+        for branch, index in (meta.get("bitcoinrpc_highest_used") or {}).items():
+            previous = _highest_used_branch_index(highest_used, branch)
+            if previous is None or int(index) > previous:
+                highest_used[str(branch)] = int(index)
+        for utxo in utxos:
+            highest_used = _merge_highest_used(highest_used, utxo, True)
+        meta["imported_descriptors"] = imported_count
+    meta.pop("bitcoinrpc_highest_used", None)
+    if meta.get("bitcoinrpc_last_block") or descriptor_range_ends is not None:
+        next_checkpoint = dict(checkpoint)
+        next_checkpoint["backend"] = _backend_identity(backend, sync_state)
+        if meta.get("bitcoinrpc_last_block"):
+            next_checkpoint["bitcoinrpc_last_block"] = meta["bitcoinrpc_last_block"]
+        if descriptor_range_ends is not None:
+            next_checkpoint["bitcoinrpc_descriptor_range_ends"] = dict(
+                sorted(descriptor_range_ends.items())
+            )
+            next_checkpoint["highest_used"] = dict(sorted(highest_used.items()))
+        meta["freshness_checkpoint"] = next_checkpoint
     return records, meta
 
 

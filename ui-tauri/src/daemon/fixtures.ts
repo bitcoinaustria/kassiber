@@ -846,18 +846,19 @@ export const fixtures: Record<string, unknown> = {
     graph: {
       nodes: [
         { id: "source:1", node_type: "source", source_type: "fiat_purchase", label: "Reviewed exchange purchase", asset: "BTC" },
-        { id: "tx:1", node_type: "transaction", label: "withdraw-1", wallet: "Exchange", asset: "BTC" },
-        { id: "tx:2", node_type: "transaction", label: "target deposit", wallet: "Multisig Vault", asset: "BTC" },
+        { id: "tx1", node_type: "transaction", transaction_id: "tx1", external_id: SOURCE_FUNDS_FIXTURE_WITHDRAW_TXID, label: "withdraw-1", wallet: "Exchange", asset: "BTC", direction: "outbound", fee: 0.0001, fee_msat: 10_000_000, data_provenance: "platform_export" },
+        { id: "tx2", node_type: "transaction", transaction_id: "tx2", external_id: SOURCE_FUNDS_FIXTURE_TARGET_TXID, label: "target deposit", wallet: "Multisig Vault", asset: "BTC", direction: "inbound", fee: 0, fee_msat: 0, data_provenance: "chain_sync" },
       ],
       edges: [
-        { id: "link:1", link_type: "manual_source", state: "reviewed", method: "manual", allocation_amount: 0.15, asset: "BTC", allocation_policy: "explicit" },
+        { id: "link:1", from: "source:1", to: "tx1", link_type: "manual_source", state: "reviewed", method: "manual", allocation_amount: 0.15, asset: "BTC", allocation_policy: "explicit" },
+        { id: "link:2", from: "tx1", to: "tx2", link_type: "self_transfer", state: "reviewed", method: "manual", allocation_amount: 0.15, asset: "BTC", allocation_policy: "explicit" },
       ],
     },
     allocations: {
       target_amount: 0.15,
       target_amount_msat: 15_000_000_000,
       asset: "BTC",
-      reviewed_edge_count: 1,
+      reviewed_edge_count: 2,
     },
     source_mix: [{ source_type: "fiat_purchase", amount: 0.15, amount_msat: 15_000_000_000, percent_of_target: 100, count: 1 }],
     report_context: {
@@ -878,25 +879,36 @@ export const fixtures: Record<string, unknown> = {
       target_wallet: "Multisig Vault",
       time_range: { start: "2024-10-31T09:00:00Z", end: "2024-11-05T10:12:00Z" },
       transaction_count: 2,
-      link_count: 1,
+      link_count: 2,
       root_source_count: 1,
       source_category_count: 1,
-      data_source_count: 2,
+      data_source_count: 3,
       blocker_count: 0,
       warning_count: 1,
     },
     narrative: {
       generated_by: "local_rule_summary",
       paragraphs: [
-        "This report traces 0.15000000 BTC for Vault migration through 1 reviewed link across 2 transactions.",
+        "This report traces 0.15000000 BTC for Vault migration through 2 reviewed links across 2 transactions.",
         "The reviewed source mix is fiat purchase: 0.15000000 BTC, 100.0% of target. The path spans 2024-10-31T09:00:00Z to 2024-11-05T10:12:00Z and uses 2 local data sources.",
         "Export is currently clear under the current review gates.",
       ],
     },
     data_sources: [
       {
+        label: "Exchange",
+        kind: "wallet",
+        provenance: "platform_export",
+        transaction_count: 1,
+        source_count: 0,
+        assets: ["BTC"],
+        first_seen: "2024-10-31T09:05:00Z",
+        last_seen: "2024-10-31T09:05:00Z",
+      },
+      {
         label: "Multisig Vault",
         kind: "wallet",
+        provenance: "chain_sync",
         transaction_count: 1,
         source_count: 0,
         assets: ["BTC"],
@@ -906,6 +918,7 @@ export const fixtures: Record<string, unknown> = {
       {
         label: "Reviewed exchange purchase",
         kind: "fiat_purchase",
+        provenance: "attested_source",
         transaction_count: 0,
         source_count: 1,
         assets: ["BTC"],
@@ -919,19 +932,41 @@ export const fixtures: Record<string, unknown> = {
         role: "target",
         transaction_count: 1,
         source_count: 0,
+        assets: ["BTC"],
+        fiat_currency: "EUR",
+        fiat_value_total: 10713.03,
         nodes: [
-          { id: "tx:2", node_type: "transaction", label: "target deposit", wallet: "Multisig Vault", asset: "BTC", required_amount: 0.15, occurred_at: "2024-11-05T10:12:00Z", external_id: "mock-target-deposit" },
+          { id: "tx2", node_type: "transaction", label: "target deposit", wallet: "Multisig Vault", asset: "BTC", required_amount: 0.15, occurred_at: "2024-11-05T10:12:00Z", external_id: "mock-target-deposit", direction: "inbound", fee: 0, fee_msat: 0, fiat_currency: "EUR", fiat_value: 10713.03, data_provenance: "chain_sync" },
         ],
       },
       {
         level: 2,
         role: "upstream",
-        transaction_count: 0,
-        source_count: 1,
+        transaction_count: 1,
+        source_count: 0,
+        assets: ["BTC"],
+        fiat_currency: "EUR",
+        fiat_value_total: 10715.5,
         nodes: [
-          { id: "source:1", node_type: "source", source_type: "fiat_purchase", label: "Reviewed exchange purchase", asset: "BTC", required_amount: 0.15, acquired_at: "2024-10-31T09:00:00Z" },
+          { id: "tx1", node_type: "transaction", label: "withdraw-1", wallet: "Exchange", asset: "BTC", required_amount: 0.15, occurred_at: "2024-10-31T09:05:00Z", external_id: SOURCE_FUNDS_FIXTURE_WITHDRAW_TXID, direction: "outbound", fee: 0.0001, fee_msat: 10_000_000, fiat_currency: "EUR", fiat_value: 10715.5, data_provenance: "platform_export" },
         ],
       },
+      {
+        level: 3,
+        role: "upstream",
+        transaction_count: 0,
+        source_count: 1,
+        assets: ["BTC"],
+        fiat_currency: "EUR",
+        fiat_value_total: 10650.0,
+        nodes: [
+          { id: "source:1", node_type: "source", source_type: "fiat_purchase", label: "Reviewed exchange purchase", asset: "BTC", required_amount: 0.15, acquired_at: "2024-10-31T09:00:00Z", direction: "", fiat_currency: "EUR", fiat_value: 10650.0, data_provenance: "" },
+        ],
+      },
+    ],
+    data_provenance_summary: [
+      { provenance: "chain_sync", label: "Blockchain (watch-only sync)", count: 1, percent: 50 },
+      { provenance: "platform_export", label: "Platform export / API", count: 1, percent: 50 },
     ],
     simplified_flow: {
       note: "Simplified flow follows reviewed local links. Wallet transfers and consolidations are shown as reviewed hops; CoinJoin/PayJoin traversal is deferred and shown only as a privacy boundary.",
@@ -940,7 +975,7 @@ export const fixtures: Record<string, unknown> = {
         {
           level: 1,
           role: "source",
-          distance_to_target: 1,
+          distance_to_target: 2,
           nodes: [
             {
               id: "source:1",
@@ -955,12 +990,31 @@ export const fixtures: Record<string, unknown> = {
         },
         {
           level: 2,
+          role: "upstream",
+          distance_to_target: 1,
+          nodes: [
+            {
+              id: "tx1",
+              node_type: "transaction",
+              transaction_id: "tx1",
+              kind: "outbound",
+              label: "withdraw-1",
+              wallet: "Exchange",
+              asset: "BTC",
+              amount: 0.15,
+              occurred_at: "2024-10-31T09:05:00Z",
+            },
+          ],
+        },
+        {
+          level: 3,
           role: "target",
           distance_to_target: 0,
           nodes: [
             {
-              id: "tx:2",
+              id: "tx2",
               node_type: "transaction",
+              transaction_id: "tx19",
               kind: "inbound",
               label: "target deposit",
               wallet: "Multisig Vault",
@@ -975,10 +1029,21 @@ export const fixtures: Record<string, unknown> = {
         {
           id: "link:1",
           from: "source:1",
-          to: "tx:2",
+          to: "tx1",
           link_type: "manual_source",
           asset: "BTC",
           amount: 0.15,
+          percent_of_target: 100,
+          deferred_privacy_hop: false,
+        },
+        {
+          id: "link:2",
+          from: "tx1",
+          to: "tx2",
+          link_type: "self_transfer",
+          asset: "BTC",
+          amount: 0.15,
+          percent_of_target: 100,
           deferred_privacy_hop: false,
         },
       ],
@@ -993,8 +1058,19 @@ export const fixtures: Record<string, unknown> = {
       ],
       explorer_links: SOURCE_FUNDS_FIXTURE_EXPLORER_LINKS,
       attachments: [{ id: "att:1", label: "Exchange statement", attachment_type: "file" }],
+      wallets_named: ["Exchange", "Multisig Vault"],
+      ownership_note:
+        "Sharing this report demonstrates to the recipient that the wallets named above are under common ownership or control, and links their disclosed transactions to your identity.",
       privacy_note: "Txids disclose on-chain neighbors to the recipient. Chain observations are context, not proof of ownership.",
       excluded: ["descriptors", "xpubs", "wallet files", "seeds", "backend tokens", "unrelated wallet history"],
+    },
+    diagrams: {
+      flow_svg:
+        '<svg viewBox="0 0 500 70" xmlns="http://www.w3.org/2000/svg"><rect x="2" y="20" width="120" height="34" rx="4" fill="#ecfdf5" stroke="#16a34a"/><text x="8" y="33" font-family="Helvetica,Arial,sans-serif" font-size="8" font-weight="700" fill="#222222">Fiat purchase</text><text x="8" y="46" font-family="Courier,monospace" font-size="7" fill="#222222">0.30000000 BTC</text><line x1="124" y1="37" x2="184" y2="37" stroke="#666666" stroke-width="2.5"/><polyline points="184,37 179,34 179,40" fill="#666666"/><text x="153" y="32" font-family="Helvetica,Arial,sans-serif" font-size="6" font-weight="700" fill="#666666" text-anchor="middle">100.0%</text><rect x="190" y="20" width="120" height="34" rx="4" fill="#ffffff" stroke="#d9d9d9"/><text x="196" y="33" font-family="Helvetica,Arial,sans-serif" font-size="8" font-weight="700" fill="#222222">Cold storage</text><text x="196" y="46" font-family="Courier,monospace" font-size="7" fill="#222222">0.30000000 BTC</text><line x1="312" y1="37" x2="372" y2="37" stroke="#666666" stroke-width="2.5"/><polyline points="372,37 367,34 367,40" fill="#666666"/><rect x="378" y="20" width="120" height="34" rx="4" fill="#ffffff" stroke="#e3000f" stroke-width="1.2"/><text x="384" y="33" font-family="Helvetica,Arial,sans-serif" font-size="8" font-weight="700" fill="#222222">Broker deposit</text><text x="384" y="46" font-family="Courier,monospace" font-size="7" fill="#222222">0.30000000 BTC</text></svg>',
+      source_mix_ring_svg:
+        '<svg viewBox="0 0 240 100" xmlns="http://www.w3.org/2000/svg"><circle cx="49" cy="50" r="45" fill="#2563eb"/><circle cx="49" cy="50" r="26" fill="#ffffff"/><text x="49" y="50" font-family="Helvetica,Arial,sans-serif" font-size="9" font-weight="700" fill="#222222" text-anchor="middle">0.30000000</text><text x="49" y="60" font-family="Helvetica,Arial,sans-serif" font-size="6" fill="#666666" text-anchor="middle">BTC explained</text><rect x="104" y="46" width="7" height="7" fill="#2563eb"/><text x="115" y="52" font-family="Helvetica,Arial,sans-serif" font-size="6.4" fill="#222222">fiat purchase  100.0%</text></svg>',
+      data_source_ring_svg:
+        '<svg viewBox="0 0 240 100" xmlns="http://www.w3.org/2000/svg"><circle cx="49" cy="50" r="45" fill="#0ea5e9"/><circle cx="49" cy="50" r="26" fill="#ffffff"/><text x="49" y="50" font-family="Helvetica,Arial,sans-serif" font-size="9" font-weight="700" fill="#222222" text-anchor="middle">2</text><text x="49" y="60" font-family="Helvetica,Arial,sans-serif" font-size="6" fill="#666666" text-anchor="middle">transactions</text><rect x="104" y="40" width="7" height="7" fill="#0891b2"/><text x="115" y="46" font-family="Helvetica,Arial,sans-serif" font-size="6.4" fill="#222222">Blockchain (watch-only sync)  50.0%</text><rect x="104" y="52" width="7" height="7" fill="#2563eb"/><text x="115" y="58" font-family="Helvetica,Arial,sans-serif" font-size="6.4" fill="#222222">Platform export / API  50.0%</text></svg>',
     },
   },
   "ui.source_funds.cases.save": {
@@ -1031,18 +1107,19 @@ export const fixtures: Record<string, unknown> = {
     graph: {
       nodes: [
         { id: "source:1", node_type: "source", source_type: "fiat_purchase", label: "Reviewed exchange purchase", asset: "BTC" },
-        { id: "tx:1", node_type: "transaction", label: "withdraw-1", wallet: "Exchange", asset: "BTC" },
-        { id: "tx:2", node_type: "transaction", label: "target deposit", wallet: "Multisig Vault", asset: "BTC" },
+        { id: "tx1", node_type: "transaction", transaction_id: "tx1", external_id: SOURCE_FUNDS_FIXTURE_WITHDRAW_TXID, label: "withdraw-1", wallet: "Exchange", asset: "BTC", direction: "outbound", fee: 0.0001, fee_msat: 10_000_000, data_provenance: "platform_export" },
+        { id: "tx2", node_type: "transaction", transaction_id: "tx2", external_id: SOURCE_FUNDS_FIXTURE_TARGET_TXID, label: "target deposit", wallet: "Multisig Vault", asset: "BTC", direction: "inbound", fee: 0, fee_msat: 0, data_provenance: "chain_sync" },
       ],
       edges: [
-        { id: "link:1", link_type: "manual_source", state: "reviewed", method: "manual", allocation_amount: 0.15, asset: "BTC", allocation_policy: "explicit" },
+        { id: "link:1", from: "source:1", to: "tx1", link_type: "manual_source", state: "reviewed", method: "manual", allocation_amount: 0.15, asset: "BTC", allocation_policy: "explicit" },
+        { id: "link:2", from: "tx1", to: "tx2", link_type: "self_transfer", state: "reviewed", method: "manual", allocation_amount: 0.15, asset: "BTC", allocation_policy: "explicit" },
       ],
     },
     allocations: {
       target_amount: 0.15,
       target_amount_msat: 15_000_000_000,
       asset: "BTC",
-      reviewed_edge_count: 1,
+      reviewed_edge_count: 2,
     },
     source_mix: [{ source_type: "fiat_purchase", amount: 0.15, amount_msat: 15_000_000_000, count: 1 }],
     gaps: [{ code: "missing_history", severity: "warning", message: "Reviewed prior-history gap included.", ref: "source:gap" }],
@@ -1055,6 +1132,9 @@ export const fixtures: Record<string, unknown> = {
       ],
       explorer_links: SOURCE_FUNDS_FIXTURE_EXPLORER_LINKS,
       attachments: [{ id: "att:1", label: "Exchange statement", attachment_type: "file" }],
+      wallets_named: ["Exchange", "Multisig Vault"],
+      ownership_note:
+        "Sharing this report demonstrates to the recipient that the wallets named above are under common ownership or control, and links their disclosed transactions to your identity.",
       privacy_note: "Txids disclose on-chain neighbors to the recipient. Chain observations are context, not proof of ownership.",
       excluded: ["descriptors", "xpubs", "wallet files", "seeds", "backend tokens", "unrelated wallet history"],
     },
@@ -1236,6 +1316,16 @@ export const fixtures: Record<string, unknown> = {
     target_transaction_id: "tx19",
     links: [],
     privacy_warning: "No chain backend was queried.",
+  },
+  "ui.source_funds.assemble": {
+    target_transaction_id: "tx19",
+    passes: 2,
+    inserted: 3,
+    auto_reviewed: 2,
+    awaiting_manual_review: 1,
+    methods: { payment_hash: 1, utxo_spend: 1 },
+    policy:
+      "Assembly derives exact edges from synced transaction inputs/outputs and Lightning payment hashes, plus deterministic platform-id and reviewed-pair matches. Weak hints, chain observations, privacy boundaries, and root-source evidence remain manual review items.",
   },
   "ui.source_funds.evidence.list": {
     attachments: [

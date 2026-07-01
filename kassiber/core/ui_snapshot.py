@@ -856,6 +856,10 @@ def _connections(
         payment_method_id = _string_or_empty(config.get("payment_method_id"))
         gap_limit = config.get("gap_limit")
         has_descriptor = has_descriptor_sync_material(config)
+        try:
+            wallet_chain = normalize_chain(config.get("chain") or "bitcoin")
+        except ValueError:
+            wallet_chain = "bitcoin"
         connection = {
             "id": row["id"],
             "kind": _map_wallet_kind(row["kind"]),
@@ -872,7 +876,7 @@ def _connections(
             "syncSource": sync_source,
             "sourceFormat": source_format,
             "deprecated": wallet_is_deprecated(config),
-            "chain": chain or None,
+            "chain": chain or wallet_chain,
             "network": network or None,
             "policyAsset": policy_asset or None,
             "paymentMethodId": payment_method_id or None,
@@ -3575,13 +3579,6 @@ def _wallet_utxo_support(
             "message": f"UTXO inventory is not implemented for {backend_kind or 'this backend'} sources yet.",
         }
     chain = str(config.get("chain") or "bitcoin").strip().lower() or "bitcoin"
-    if has_descriptor and backend_kind == "bitcoinrpc":
-        return {
-            "supported": False,
-            "status": "unsupported_source",
-            "reason": "bitcoinrpc_descriptor",
-            "message": "Bitcoin Core UTXO inventory is available for address-backed wallets only.",
-        }
     if chain == "liquid":
         if not has_descriptor:
             return {

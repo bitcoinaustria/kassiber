@@ -9,6 +9,7 @@
 
 export type WalletMaterialKind =
   | "descriptor-json"
+  | "bsms"
   | "descriptor"
   | "slip132"
   | "bare-xpub"
@@ -107,6 +108,12 @@ export function detectWalletMaterial(value: string): WalletMaterialDetection {
     };
   }
   const lower = trimmed.toLowerCase();
+  if (lower.startsWith("bsms 1.0")) {
+    return {
+      kind: "bsms",
+      label: "BSMS descriptor record",
+    };
+  }
   if (DESCRIPTOR_PREFIXES.some((prefix) => lower.startsWith(prefix))) {
     return {
       kind: "descriptor",
@@ -131,6 +138,6 @@ export function detectWalletMaterial(value: string): WalletMaterialDetection {
   return {
     kind: "unknown",
     label: "Unrecognized format",
-    hint: "Paste a descriptor, Bitcoin Core descriptor JSON, or a ypub/zpub/upub/vpub key.",
+    hint: "Paste a descriptor, BSMS descriptor record, Bitcoin Core descriptor JSON, or a ypub/zpub/upub/vpub key.",
   };
 }

@@ -1,6 +1,7 @@
 import * as React from "react";
 import {
   CheckCircle2,
+  ChevronRight,
   RefreshCw,
   Server,
   Trash2,
@@ -41,7 +42,12 @@ import {
   CLN_PRESENCE_SENTINEL_RPC_FILE,
   coreLightningBackendModeValid,
 } from "@/lib/lightning";
-import { backendTrustFromEndpoint, inferredInfrastructureOwnership, type InfrastructureOwnership } from "@/lib/backendTrust";
+import {
+  backendTrustFromEndpoint,
+  inferredInfrastructureOwnership,
+  isOnionEndpoint,
+  type InfrastructureOwnership,
+} from "@/lib/backendTrust";
 import {
   DEFAULT_BACKEND_NAME,
   DEFAULT_BACKEND_URL,
@@ -367,6 +373,8 @@ export const AUTH_MODES: Array<{ id: string; labelKey: string }> = [
 
 export type TestState = "idle" | "testing" | "ok" | "fail";
 export type BackendSourceMode = "preset" | "custom";
+const DEFAULT_TOR_PROXY_HOST = "127.0.0.1";
+const DEFAULT_TOR_PROXY_PORT = "9050";
 
 export interface ElectrumEndpointParts {
   host: string;
@@ -394,6 +402,14 @@ export function buildElectrumUrl({ host, port, useSsl }: ElectrumEndpointParts):
   const trimmedPort = port.trim();
   if (!trimmedHost || !trimmedPort) return "";
   return `${useSsl ? "ssl" : "tcp"}://${trimmedHost}:${trimmedPort}`;
+}
+
+function normalizeOnionHttpEndpoint(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed || trimmed.includes("://") || !isOnionEndpoint(trimmed)) {
+    return value;
+  }
+  return `http://${trimmed}`;
 }
 
 export function customBackendName(
@@ -555,16 +571,81 @@ export function SyncBackendSettingsModal({
   const selectedKindIsExplorerApi =
     selectedBackendKind === "esplora" ||
     selectedBackendKind === "liquid-esplora";
+  const proxyCapable =
+    type.net !== "LN" &&
+    [
+      "bitcoinrpc",
+      "btcpay",
+      "electrum",
+      "esplora",
+      "liquid-esplora",
+      "mempool",
+    ].includes(selectedBackendKind);
+  const proxyValue =
+    proxyCapable && useProxy && proxyHost.trim() && proxyPort.trim()
+      ? `${proxyHost.trim()}:${proxyPort.trim()}`
+      : undefined;
+  const onionEndpoint = proxyCapable && isOnionEndpoint(effectiveUrl);
   const effectiveInfrastructureOwner =
     type.net === "LN"
       ? undefined
       : infrastructureOwner;
   const connectionTrust = backendTrustFromEndpoint(
     effectiveUrl,
-    showElectrumEndpointParts && useProxy && Boolean(proxyHost.trim()),
+    Boolean(proxyValue),
+    selectedBackendKind,
     effectiveInfrastructureOwner,
   );
   const ConnectionTrustIcon = connectionTrust.icon;
+  const showAdvancedConnectionSettings =
+    (showElectrumEndpointParts && backendSource === "custom") || proxyCapable;
+
+  React.useEffect(() => {
+    if (!open || !onionEndpoint) return;
+    let changed = false;
+    if (!useProxy) {
+      setUseProxy(true);
+      changed = true;
+    }
+    if (!proxyHost.trim()) {
+      setProxyHost(DEFAULT_TOR_PROXY_HOST);
+      changed = true;
+    }
+    if (!proxyPort.trim()) {
+      setProxyPort(DEFAULT_TOR_PROXY_PORT);
+      changed = true;
+    }
+    if (
+      showElectrumEndpointParts &&
+      electrumUseSsl &&
+      (electrumPort === "50002" || !electrumPort.trim())
+    ) {
+      setElectrumUseSsl(false);
+      setElectrumPort("50001");
+      changed = true;
+    }
+    if (!showElectrumEndpointParts) {
+      const normalizedUrl = normalizeOnionHttpEndpoint(url);
+      if (normalizedUrl !== url) {
+        setUrl(normalizedUrl);
+        changed = true;
+      }
+    }
+    if (changed) {
+      setTestState("idle");
+      setTestLog("");
+    }
+  }, [
+    electrumPort,
+    electrumUseSsl,
+    onionEndpoint,
+    open,
+    proxyHost,
+    proxyPort,
+    showElectrumEndpointParts,
+    url,
+    useProxy,
+  ]);
 
   React.useEffect(() => {
     if (!open) return;
@@ -732,10 +813,7 @@ export function SyncBackendSettingsModal({
             electrumUseSsl && !trustSsl && certificate.trim()
               ? certificate.trim()
               : undefined,
-          proxy:
-            useProxy && proxyHost.trim() && proxyPort.trim()
-              ? `${proxyHost.trim()}:${proxyPort.trim()}`
-              : undefined,
+          proxy: proxyValue,
         });
         const data = envelope.data;
         setTestState(data?.ok ? "ok" : "fail");
@@ -754,6 +832,7 @@ export function SyncBackendSettingsModal({
     try {
       const envelope = await testHttp.mutateAsync({
         url: effectiveUrl,
+        proxy: proxyValue,
       });
       const data = envelope.data;
       setTestState(data?.ok ? "ok" : "fail");
@@ -813,6 +892,11 @@ export function SyncBackendSettingsModal({
     try {
       const authSecret = authVal.trim();
       const authPassword = authVal2.trim();
+      const preserveRedactedProxyCredentials = Boolean(
+        initial?.proxy?.redactedCredentials &&
+          proxyHost.trim() === initial.proxy.host &&
+          proxyPort.trim() === initial.proxy.port,
+      );
       await onSave({
         id: initial?.id ?? name.trim(),
         name: name.trim(),
@@ -870,10 +954,16 @@ export function SyncBackendSettingsModal({
           certificate.trim()
             ? certificate.trim()
             : undefined,
-        proxy:
-          showElectrumEndpointParts && useProxy && proxyHost.trim() && proxyPort.trim()
-            ? { host: proxyHost.trim(), port: proxyPort.trim() }
-            : null,
+        proxy: proxyCapable
+          ? proxyValue
+            ? {
+                host: proxyHost.trim(),
+                port: proxyPort.trim(),
+                redactedCredentials:
+                  preserveRedactedProxyCredentials || undefined,
+              }
+            : null
+          : undefined,
       });
     } catch (error) {
       setTestState("fail");
@@ -1263,137 +1353,169 @@ export function SyncBackendSettingsModal({
               </section>
             )}
 
-            {showElectrumEndpointParts && backendSource === "custom" && (
+            {showAdvancedConnectionSettings && (
               <details
                 className="group rounded-md border bg-muted/10"
-                open={trustSsl || Boolean(certificate) || useProxy || undefined}
+                open={
+                  trustSsl ||
+                  Boolean(certificate) ||
+                  useProxy ||
+                  onionEndpoint ||
+                  undefined
+                }
               >
-                <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2 text-sm font-medium">
-                  <span>{t("backendModal.advancedLabel")}</span>
-                  <span className="text-xs text-muted-foreground">
-                    {t("backendModal.advancedHint")}
+                <summary className="flex min-h-12 cursor-pointer list-none items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                  <ChevronRight
+                    className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-90"
+                    aria-hidden="true"
+                  />
+                  <span className="min-w-0 flex-1">
+                    <span className="block font-medium">
+                      {t("backendModal.advancedLabel")}
+                    </span>
+                    <span className="block text-xs text-muted-foreground">
+                      {t("backendModal.advancedHint")}
+                    </span>
                   </span>
                 </summary>
                 <section className="grid gap-3 border-t p-3 sm:grid-cols-2">
-                  <label className="flex items-center justify-between gap-3 rounded-md border bg-background p-3 text-sm">
-                    <span>
-                      <span className="block font-medium">
-                        {t("backendModal.useSslLabel")}
-                      </span>
-                      <span className="text-muted-foreground">
-                        {t("backendModal.useSslHint")}
-                      </span>
-                    </span>
-                    <Switch
-                      checked={electrumUseSsl}
-                      onCheckedChange={(checked) => {
-                        setElectrumUseSsl(checked);
-                        if (!checked) {
-                          setTrustSsl(false);
-                          setCertificate("");
-                        }
-                        setElectrumPort((current) =>
-                          current === "50002" || current === "50001"
-                            ? checked
-                              ? "50002"
-                              : "50001"
-                            : current,
-                        );
-                        setTestState("idle");
-                        setTestLog("");
-                      }}
-                    />
-                  </label>
-                  <label className="flex items-center justify-between gap-3 rounded-md border bg-background p-3 text-sm">
-                    <span>
-                      <span className="block font-medium">
-                        {t("backendModal.trustSelfSignedLabel")}
-                      </span>
-                      <span className="text-muted-foreground">
-                        {t("backendModal.trustSelfSignedHint")}
-                      </span>
-                    </span>
-                    <Switch
-                      checked={trustSsl}
-                      disabled={!electrumUseSsl}
-                      onCheckedChange={(checked) => {
-                        setTrustSsl(checked);
-                        setTestState("idle");
-                        setTestLog("");
-                      }}
-                    />
-                  </label>
-                  <div className="space-y-2 sm:col-span-2">
-                    <Label htmlFor="backend-certificate">
-                      {t("backendModal.certificateLabel")}
-                    </Label>
-                    <Input
-                      id="backend-certificate"
-                      value={certificate}
-                      onChange={(event) => {
-                        setCertificate(event.target.value);
-                        setTestState("idle");
-                        setTestLog("");
-                      }}
-                      placeholder={t("backendModal.certificatePlaceholder")}
-                      disabled={!electrumUseSsl || trustSsl}
-                    />
-                    {electrumUseSsl && trustSsl ? (
-                      <p className="text-xs text-muted-foreground">
-                        {t("backendModal.certificateIgnored")}
-                      </p>
-                    ) : null}
-                  </div>
-                  <label className="flex items-center justify-between gap-3 rounded-md border bg-background p-3 text-sm sm:col-span-2">
-                    <span>
-                      <span className="block font-medium">
-                        {t("backendModal.useProxyLabel")}
-                      </span>
-                      <span className="text-muted-foreground">
-                        {t("backendModal.useProxyHint")}
-                      </span>
-                    </span>
-                    <Switch
-                      checked={useProxy}
-                      onCheckedChange={(checked) => {
-                        setUseProxy(checked);
-                        setTestState("idle");
-                        setTestLog("");
-                      }}
-                    />
-                  </label>
-                  {useProxy && (
+                  {showElectrumEndpointParts && backendSource === "custom" && (
                     <>
-                      <div className="space-y-2">
-                        <Label htmlFor="backend-proxy-host">
-                          {t("backendModal.proxyHostLabel")}
-                        </Label>
-                        <Input
-                          id="backend-proxy-host"
-                          value={proxyHost}
-                          onChange={(event) => {
-                            setProxyHost(event.target.value);
+                      <label className="flex items-center justify-between gap-3 rounded-md border bg-background p-3 text-sm">
+                        <span>
+                          <span className="block font-medium">
+                            {t("backendModal.useSslLabel")}
+                          </span>
+                          <span className="text-muted-foreground">
+                            {t("backendModal.useSslHint")}
+                          </span>
+                        </span>
+                        <Switch
+                          checked={electrumUseSsl}
+                          onCheckedChange={(checked) => {
+                            setElectrumUseSsl(checked);
+                            if (!checked) {
+                              setTrustSsl(false);
+                              setCertificate("");
+                            }
+                            setElectrumPort((current) =>
+                              current === "50002" || current === "50001"
+                                ? checked
+                                  ? "50002"
+                                  : "50001"
+                                : current,
+                            );
                             setTestState("idle");
                             setTestLog("");
                           }}
-                          placeholder="127.0.0.1"
                         />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="backend-proxy-port">
-                          {t("backendModal.proxyPortLabel")}
-                        </Label>
-                        <Input
-                          id="backend-proxy-port"
-                          value={proxyPort}
-                          onChange={(event) => {
-                            setProxyPort(event.target.value);
+                      </label>
+                      <label className="flex items-center justify-between gap-3 rounded-md border bg-background p-3 text-sm">
+                        <span>
+                          <span className="block font-medium">
+                            {t("backendModal.trustSelfSignedLabel")}
+                          </span>
+                          <span className="text-muted-foreground">
+                            {t("backendModal.trustSelfSignedHint")}
+                          </span>
+                        </span>
+                        <Switch
+                          checked={trustSsl}
+                          disabled={!electrumUseSsl}
+                          onCheckedChange={(checked) => {
+                            setTrustSsl(checked);
                             setTestState("idle");
                             setTestLog("");
                           }}
-                          placeholder="9050"
                         />
+                      </label>
+                      <div className="space-y-2 sm:col-span-2">
+                        <Label htmlFor="backend-certificate">
+                          {t("backendModal.certificateLabel")}
+                        </Label>
+                        <Input
+                          id="backend-certificate"
+                          value={certificate}
+                          onChange={(event) => {
+                            setCertificate(event.target.value);
+                            setTestState("idle");
+                            setTestLog("");
+                          }}
+                          placeholder={t("backendModal.certificatePlaceholder")}
+                          disabled={!electrumUseSsl || trustSsl}
+                        />
+                        {electrumUseSsl && trustSsl ? (
+                          <p className="text-xs text-muted-foreground">
+                            {t("backendModal.certificateIgnored")}
+                          </p>
+                        ) : null}
                       </div>
+                    </>
+                  )}
+                  {proxyCapable && (
+                    <>
+                      {onionEndpoint ? (
+                        <div className="rounded-md border border-sky-500/25 bg-sky-500/10 p-3 text-xs leading-relaxed text-sky-800 sm:col-span-2 dark:text-sky-200">
+                          <div className="text-sm font-medium">
+                            {t("backendModal.onionDetectedTitle")}
+                          </div>
+                          <p className="mt-1">
+                            {t("backendModal.onionDetectedBody")}
+                          </p>
+                        </div>
+                      ) : null}
+                      <label className="flex items-center justify-between gap-3 rounded-md border bg-background p-3 text-sm sm:col-span-2">
+                        <span>
+                          <span className="block font-medium">
+                            {t("backendModal.useProxyLabel")}
+                          </span>
+                          <span className="text-muted-foreground">
+                            {t("backendModal.useProxyHint")}
+                          </span>
+                        </span>
+                        <Switch
+                          checked={useProxy}
+                          onCheckedChange={(checked) => {
+                            setUseProxy(checked);
+                            setTestState("idle");
+                            setTestLog("");
+                          }}
+                        />
+                      </label>
+                      {useProxy && (
+                        <>
+                          <div className="space-y-2">
+                            <Label htmlFor="backend-proxy-host">
+                              {t("backendModal.proxyHostLabel")}
+                            </Label>
+                            <Input
+                              id="backend-proxy-host"
+                              value={proxyHost}
+                              onChange={(event) => {
+                                setProxyHost(event.target.value);
+                                setTestState("idle");
+                                setTestLog("");
+                              }}
+                              placeholder="127.0.0.1"
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="backend-proxy-port">
+                              {t("backendModal.proxyPortLabel")}
+                            </Label>
+                            <Input
+                              id="backend-proxy-port"
+                              value={proxyPort}
+                              onChange={(event) => {
+                                setProxyPort(event.target.value);
+                                setTestState("idle");
+                                setTestLog("");
+                              }}
+                              placeholder="9050"
+                            />
+                          </div>
+                        </>
+                      )}
                     </>
                   )}
                 </section>

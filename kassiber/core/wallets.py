@@ -8,6 +8,7 @@ from pathlib import Path
 
 from ..errors import AppError
 from ..time_utils import now_iso
+from ..time_utils import parse_timestamp
 from ..util import normalize_chain_value, normalize_network_value, parse_bool, str_or_none
 from ..wallet_descriptors import (
     DEFAULT_DESCRIPTOR_GAP_LIMIT,
@@ -17,7 +18,12 @@ from ..wallet_descriptors import (
     liquid_plan_can_unblind,
     normalize_asset_code,
 )
-from ..wallet_setup import normalize_script_types, normalize_wallet_material
+from ..wallet_setup import (
+    BSMS_DESCRIPTOR_SOURCE,
+    normalize_script_types,
+    normalize_wallet_material,
+    parse_bsms_descriptor_record,
+)
 from . import freshness as core_freshness
 from . import output_inventory as core_output_inventory
 from .address_scripts import scriptpubkey_for_address_or_none
@@ -74,6 +80,8 @@ WALLET_SAFE_CONFIG_FIELDS = (
     "altbestand",
     "wasabi_metadata",
     "samourai",
+    "descriptor_source",
+    "synthesize_change",
     "script_types",
     WALLET_DEPRECATED_CONFIG_KEY,
 )
@@ -383,13 +391,21 @@ def parse_wallet_config(args):
         getattr(args, "descriptor_file", None),
         "Descriptor",
     )
-    if descriptor_text:
-        config["descriptor"] = descriptor_text
     change_descriptor_text = read_text_argument(
         getattr(args, "change_descriptor", None),
         getattr(args, "change_descriptor_file", None),
         "Change descriptor",
     )
+    if descriptor_text:
+        bsms_descriptors = parse_bsms_descriptor_record(descriptor_text)
+        if bsms_descriptors:
+            descriptor_text = bsms_descriptors["descriptor"]
+            config["descriptor_source"] = BSMS_DESCRIPTOR_SOURCE
+            config["synthesize_change"] = False
+            if not change_descriptor_text:
+                change_descriptor_text = bsms_descriptors.get("change_descriptor")
+    if descriptor_text:
+        config["descriptor"] = descriptor_text
     if change_descriptor_text:
         config["change_descriptor"] = change_descriptor_text
     script_types = normalize_script_types(getattr(args, "script_type", None))
@@ -425,6 +441,8 @@ def parse_wallet_config(args):
                 f"Descriptor gap limit must be {MAX_DESCRIPTOR_GAP_LIMIT} or lower"
             )
         config["gap_limit"] = args.gap_limit
+    if getattr(args, "birthday", None) is not None:
+        config["birthday"] = args.birthday
     if getattr(args, "policy_asset", None):
         config["policy_asset"] = normalize_asset_code(args.policy_asset)
     if getattr(args, "source_file", None):
@@ -499,6 +517,12 @@ def _validated_wallet_config(normalized_kind, config):
     config = dict(config or {})
     if "addresses" in config:
         config["addresses"] = normalize_addresses(config.get("addresses"))
+    if "birthday" in config:
+        birthday = str_or_none(config.get("birthday"))
+        if birthday is None:
+            config.pop("birthday", None)
+        else:
+            config["birthday"] = parse_timestamp(birthday)
     if WALLET_DEPRECATED_CONFIG_KEY in config:
         config[WALLET_DEPRECATED_CONFIG_KEY] = wallet_is_deprecated(config)
     has_live_material = bool(config.get("descriptor") or config.get("xpub"))

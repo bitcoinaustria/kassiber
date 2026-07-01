@@ -7,7 +7,7 @@ import sqlite3
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Mapping
+from typing import Any, Callable, Iterable, Mapping
 from urllib.parse import unquote, urlparse
 
 from ..db import ensure_data_root, resolve_attachments_root
@@ -232,6 +232,53 @@ def _select_attachment_row(conn, profile_id: str, attachment_id: str):
         """,
         (profile_id, attachment_id),
     ).fetchone()
+
+
+def resolve_attachment_files(
+    conn: sqlite3.Connection,
+    data_root: str,
+    attachment_ids: Iterable[str],
+) -> dict[str, dict[str, Any]]:
+    """Resolve attachment ids to on-disk file info for evidence bundling.
+
+    Returns a mapping ``id -> _attachment_row_to_dict(...)`` enriched with a
+    ``resolved_path`` (absolute string, or ``None`` for URL-only attachments
+    and missing/escaping files). Used by the source-of-funds bundle export to
+    ship the original evidence files alongside the report.
+    """
+    attachments_root = _attachments_root(data_root)
+    out: dict[str, dict[str, Any]] = {}
+    for attachment_id in attachment_ids:
+        key = str(attachment_id)
+        if not key or key in out:
+            continue
+        row = conn.execute(
+            """
+            SELECT id, attachment_type, label, original_filename,
+                   stored_relpath, source_url, media_type, sha256, size_bytes
+            FROM attachments
+            WHERE id = ?
+            """,
+            (key,),
+        ).fetchone()
+        if row is None:
+            continue
+        stored_relpath = row["stored_relpath"] or ""
+        path, valid = _resolve_stored_path(attachments_root, stored_relpath or None)
+        out[key] = {
+            "id": row["id"],
+            "attachment_type": row["attachment_type"],
+            "label": row["label"],
+            "original_filename": row["original_filename"] or "",
+            "url": row["source_url"] or "",
+            "media_type": row["media_type"] or "",
+            "sha256": row["sha256"] or "",
+            "stored_relpath": stored_relpath,
+            "resolved_path": (
+                str(path) if (path is not None and valid and path.exists()) else None
+            ),
+        }
+    return out
 
 
 def add_attachment(

@@ -49,7 +49,7 @@ const Activity = lazyRouteComponent(
 const Reports = lazyRouteComponent(() => import("./routes/Reports"), "Reports");
 const ExitTax = lazyRouteComponent(() => import("./routes/ExitTax"), "ExitTax");
 const SourceFunds = lazyRouteComponent(
-  () => import("./routes/SourceFunds"),
+  () => import("./routes/source-funds"),
   "SourceFunds",
 );
 const Journals = lazyRouteComponent(

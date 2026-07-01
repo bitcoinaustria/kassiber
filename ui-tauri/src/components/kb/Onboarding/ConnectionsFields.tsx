@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -10,6 +10,7 @@ import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
 import { useDaemonMutation } from "@/daemon/client";
+import { isOnionEndpoint } from "@/lib/backendTrust";
 
 import {
   BACKEND_KINDS,
@@ -24,6 +25,17 @@ import {
 } from "./constants";
 import { CheckRow, ChoiceCard, SelectField, TextField } from "./fields";
 import type { OnboardingForm } from "./types";
+
+const DEFAULT_TOR_PROXY_HOST = "127.0.0.1";
+const DEFAULT_TOR_PROXY_PORT = "9050";
+
+function normalizeOnionHttpEndpoint(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed || trimmed.includes("://") || !isOnionEndpoint(trimmed)) {
+    return value;
+  }
+  return `http://${trimmed}`;
+}
 
 interface ConnectionsFieldsProps {
   form: OnboardingForm;
@@ -57,10 +69,12 @@ export const ConnectionsFields = ({ form, update }: ConnectionsFieldsProps) => {
     port: form.backendPort,
     useSsl: form.backendUseSsl,
   });
+  const effectiveBackendUrl = electrumSelected ? electrumUrl : form.backendUrl;
+  const onionEndpoint = customSelected && isOnionEndpoint(effectiveBackendUrl);
   const endpointHint = customSelected
     ? backendEndpointHint(
         form.backendKind,
-        electrumSelected ? electrumUrl : form.backendUrl,
+        effectiveBackendUrl,
       )
     : null;
   const resetTest = () => {
@@ -84,6 +98,54 @@ export const ConnectionsFields = ({ form, update }: ConnectionsFieldsProps) => {
     );
     resetTest();
   };
+  useEffect(() => {
+    if (!onionEndpoint) return;
+    let changed = false;
+    if (!form.backendUseProxy) {
+      update("backendUseProxy", true);
+      changed = true;
+    }
+    if (!form.backendProxyHost.trim()) {
+      update("backendProxyHost", DEFAULT_TOR_PROXY_HOST);
+      changed = true;
+    }
+    if (!form.backendProxyPort.trim()) {
+      update("backendProxyPort", DEFAULT_TOR_PROXY_PORT);
+      changed = true;
+    }
+    if (
+      electrumSelected &&
+      form.backendUseSsl &&
+      (form.backendPort === DEFAULT_ELECTRUM_SSL_PORT || !form.backendPort.trim())
+    ) {
+      update("backendUseSsl", false);
+      update("backendPort", DEFAULT_ELECTRUM_TCP_PORT);
+      update("backendTrustSsl", false);
+      update("backendCertificate", "");
+      changed = true;
+    }
+    if (!electrumSelected) {
+      const normalizedUrl = normalizeOnionHttpEndpoint(form.backendUrl);
+      if (normalizedUrl !== form.backendUrl) {
+        update("backendUrl", normalizedUrl);
+        changed = true;
+      }
+    }
+    if (changed) {
+      setTestState("idle");
+      setTestLog("");
+    }
+  }, [
+    electrumSelected,
+    form.backendPort,
+    form.backendProxyHost,
+    form.backendProxyPort,
+    form.backendUrl,
+    form.backendUseProxy,
+    form.backendUseSsl,
+    onionEndpoint,
+    update,
+  ]);
   const runElectrumTest = () => {
     if (endpointHint || !electrumUrl) {
       setTestState("fail");
@@ -255,40 +317,6 @@ export const ConnectionsFields = ({ form, update }: ConnectionsFieldsProps) => {
                   resetTest();
                 }}
               />
-              <CheckRow
-                id="backend-use-proxy"
-                checked={form.backendUseProxy}
-                onCheckedChange={(checked) => {
-                  update("backendUseProxy", checked);
-                  resetTest();
-                }}
-                label={t("connections.useProxy")}
-                description={t("connections.useProxyDescription")}
-              />
-              {form.backendUseProxy && (
-                <div className="grid gap-3 sm:grid-cols-[1fr_130px]">
-                  <TextField
-                    label={t("connections.proxyHost")}
-                    name="backendProxyHost"
-                    value={form.backendProxyHost}
-                    placeholder={t("connections.proxyHostPlaceholder")}
-                    onChange={(value) => {
-                      update("backendProxyHost", value);
-                      resetTest();
-                    }}
-                  />
-                  <TextField
-                    label={t("connections.port")}
-                    name="backendProxyPort"
-                    value={form.backendProxyPort}
-                    placeholder={t("connections.proxyPortPlaceholder")}
-                    onChange={(value) => {
-                      update("backendProxyPort", value);
-                      resetTest();
-                    }}
-                  />
-                </div>
-              )}
               <div className="space-y-3">
                 <div className="flex flex-wrap items-center gap-3">
                   <Button
@@ -335,6 +363,48 @@ export const ConnectionsFields = ({ form, update }: ConnectionsFieldsProps) => {
                 resetTest();
               }}
             />
+          )}
+          {onionEndpoint && (
+            <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs leading-5 text-blue-950 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-100">
+              <div className="font-medium">
+                {t("connections.onionDetectedTitle")}
+              </div>
+              <p className="m-0 mt-1">{t("connections.onionDetectedBody")}</p>
+            </div>
+          )}
+          <CheckRow
+            id="backend-use-proxy"
+            checked={form.backendUseProxy}
+            onCheckedChange={(checked) => {
+              update("backendUseProxy", checked);
+              resetTest();
+            }}
+            label={t("connections.useProxy")}
+            description={t("connections.useProxyDescription")}
+          />
+          {form.backendUseProxy && (
+            <div className="grid gap-3 sm:grid-cols-[1fr_130px]">
+              <TextField
+                label={t("connections.proxyHost")}
+                name="backendProxyHost"
+                value={form.backendProxyHost}
+                placeholder={t("connections.proxyHostPlaceholder")}
+                onChange={(value) => {
+                  update("backendProxyHost", value);
+                  resetTest();
+                }}
+              />
+              <TextField
+                label={t("connections.port")}
+                name="backendProxyPort"
+                value={form.backendProxyPort}
+                placeholder={t("connections.proxyPortPlaceholder")}
+                onChange={(value) => {
+                  update("backendProxyPort", value);
+                  resetTest();
+                }}
+              />
+            </div>
           )}
           <div className="flex items-start gap-3 rounded-lg border border-line bg-paper p-3 text-xs leading-5 text-ink-2">
             <KeyRound className="mt-0.5 size-4 shrink-0 text-ink" />

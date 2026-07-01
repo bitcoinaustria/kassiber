@@ -195,7 +195,7 @@
     },
     "custom": {
       "title": "Eigenes Sync-Backend nutzen",
-      "description": "Richte Kassiber auf eine Explorer API (Esplora/mempool), Electrum / Fulcrum, Bitcoin Core RPC oder einen Liquid-Endpunkt."
+      "description": "Richte Kassiber auf eine Clearnet- oder .onion-Explorer API (Esplora/mempool), Electrum / Fulcrum, Bitcoin Core RPC oder einen Liquid-Endpunkt."
     },
     "skip": {
       "title": "Verbindungen vorerst überspringen",
@@ -217,8 +217,10 @@
     "certificatePlaceholder": "Optionales Server-Zertifikat (.crt)",
     "certificateIgnored": "Wird ignoriert, solange „Selbstsigniertem Zertifikat vertrauen“ aktiviert ist.",
     "certificateSystemStore": "Leer lassen, um den System-Zertifikatsspeicher zu verwenden.",
-    "useProxy": "Proxy verwenden",
-    "useProxyDescription": "Optionaler Tor- oder SOCKS-Proxy für die Electrum-Verbindung.",
+    "useProxy": "Diese Verbindung über Proxy routen",
+    "useProxyDescription": "Bewusstes Routing pro Verbindung. Nur dieses Backend verwendet den konfigurierten Tor-/SOCKS-/HTTP-Proxy; andere Verbindungen behalten ihr eigenes Routing.",
+    "onionDetectedTitle": ".onion-Endpunkt erkannt",
+    "onionDetectedBody": "Kassiber hat den üblichen lokalen Tor-SOCKS-Proxy nur für diese Verbindung eingetragen. Lass Tor auf 127.0.0.1:9050 laufen oder ändere den Proxy unten; andere Verbindungen behalten ihr eigenes Routing.",
     "proxyHost": "Proxy-Host",
     "proxyHostPlaceholder": "127.0.0.1",
     "proxyPortPlaceholder": "9050",
@@ -230,7 +232,7 @@
     "endpointRequired": "Endpunkt ist erforderlich.",
     "testFailed": "Electrum-Test fehlgeschlagen.",
     "endpointUrl": "Endpunkt-URL",
-    "endpointUrlPlaceholder": "https://… oder ssl://…",
+    "endpointUrlPlaceholder": "https://… oder http://abc…onion/api",
     "credentialsWarning": "Füge hier keine API-Tokens, RPC-Passwörter, Cookies oder Bearer-Header ein. Zugangsdaten sollten erst hinzugefügt werden, nachdem die verschlüsselte Datenbank geöffnet ist.",
     "skipWarningTitle": "Die Watch-only-Aktualisierung ist noch nicht bereit.",
     "skipWarningBody": "Du kannst weiterhin Dateien importieren, aber Adress-Discovery, Wallet-Aktualisierung und Node-gestützte Historie bleiben deaktiviert, bis ein Backend konfiguriert ist.",
@@ -385,7 +387,7 @@
       "noteSkip": "Keine Adress-Discovery oder Watch-only-Aktualisierung, bis die Einstellungen ein Backend hinzufügen.",
       "noteDefaultLoading": "Backend-Adressen werden von Kassiber geladen.",
       "noteDefault": "Öffentliche Betreiber können deine Adressabfragen sehen. Nutze Tor oder einen eigenen Node, falls dir das wichtig ist.",
-      "noteCustomProxy": "Eigenes Electrum-Backend über den konfigurierten Proxy geleitet.",
+      "noteCustomProxy": "Eigenes Backend nur über seinen konfigurierten Proxy geleitet.",
       "noteCustom": "Eigenes Backend. Nutze deine eigene Infrastruktur oder einen vertrauenswürdigen Betreiber."
     },
     "ai": {

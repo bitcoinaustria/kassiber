@@ -218,10 +218,14 @@ Use a Greenfield API key with wallet-history permissions for
 BTCPay payment into authoritative `btcpay_payment` pricing or a commercial
 transaction kind.
 
-Note: `bitcoinrpc` support is currently partial. Kassiber can use it for
-Bitcoin address-based wallets, including the read-only UTXO inventory,
-but descriptor- and xpub-backed source refresh still require Esplora or
-Electrum.
+`bitcoinrpc` supports Bitcoin descriptor/xpub/address wallet refresh. For
+descriptor/xpub wallets Kassiber imports ranged watch-only descriptors into a
+dedicated Core wallet; that import is a backend mutation and may trigger Core's
+blocking rescan. Use a wallet `--birthday` date to bound the rescan when known.
+The desktop Core detector reads default cookie locations and local
+`bitcoin.conf` RPC settings, then probes reachability, peer/sync state, wallet
+RPC support, and BIP158 block-filter availability. Block filters are reported
+for operator visibility; descriptor sync does not require `blockfilterindex=1`.
 
 The backend CLI now accepts the common backend-specific knobs directly:
 
@@ -339,22 +343,53 @@ Use this for Electrum/Fulcrum-style servers.
 
 - Kassiber uses scripthash calls and raw transaction fetches
 - works for Bitcoin and for the current bundled Liquid endpoint
+- accepts clearnet hosts and `.onion` hosts, for example
+  `tcp://abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcd.onion:50001`
+  or `ssl://...onion:50002` when the server's TLS setup matches
 - `INSECURE=1` disables TLS verification and should only be used against servers you control
+
+### Tor / `.onion` backends
+
+Supported backend URLs may be clearnet or `.onion`. For example:
+
+```bash
+python3 -m kassiber backends create fulcrum-onion \
+  --kind electrum \
+  --url tcp://abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcd.onion:50001 \
+  --tor-proxy 127.0.0.1:9050
+
+python3 -m kassiber backends create esplora-onion \
+  --kind esplora \
+  --url http://abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcd.onion/api \
+  --tor-proxy 127.0.0.1:9050
+```
+
+In the desktop app, entering a `.onion` backend host prefills the standard
+local Tor SOCKS proxy for that backend only. Kassiber does not start Tor; keep
+your Tor service running separately.
 
 ### Bitcoin Core RPC
 
 Use this when you run your own node.
 
-- today this path is for Bitcoin address-based refresh; descriptor/xpub refresh is not implemented on `bitcoinrpc` yet
+- supports Bitcoin descriptor/xpub/address refresh from your own node
 - Kassiber creates or reuses a dedicated watch-only Core wallet per Kassiber wallet
+- descriptor imports are ranged per receive/change branch; repeated refreshes
+  widen the range from observed transaction history / UTXOs and otherwise use
+  `listsinceblock`
+- local desktop detection understands default cookie files plus `bitcoin.conf`
+  RPC auth/ports, and the health probe reports peers, sync state, wallet RPC
+  support, pruning, IBD, and BIP158 filter-index availability
 - this keeps refresh state isolated instead of mixing unrelated watch-only imports together
 - plain `http://` is only safe on localhost or over a trusted tunnel
 
 ## Descriptor and Liquid notes
 
 Descriptor wallets derive receive and change scripts locally and then refresh
-through an Esplora- or Electrum-backed backend. Source refresh also updates the
-durable local UTXO inventory shown in the desktop wallet detail view.
+through an Esplora- or Electrum-backed backend. They accept output descriptors,
+common descriptor exports, and plaintext BSMS descriptor records. Source refresh
+also updates the durable local UTXO inventory shown in the desktop wallet
+detail view.
 The default gap limit is 40 unused addresses per branch, and Kassiber caps the configured gap limit at 5,000 to avoid accidental runaway scans.
 
 Example Bitcoin descriptor wallet:
@@ -407,7 +442,17 @@ For Liquid:
 - descriptor sync leaks more wallet structure than fixed-address sync
 - descriptors and blinding keys are Kassiber-managed secrets; prefer stdin/fd
   entry over inline argv, and avoid temporary plaintext descriptor files
-- `tor_proxy` is stored but not wired yet; route the whole process externally if needed
+- `tor_proxy` is a deliberate per-backend routing choice. It is honored by
+  Electrum, Esplora / Explorer-API HTTP reads, BTCPay Greenfield sync, Bitcoin
+  Core RPC, and mempool-rate fetches that use a configured backend. Partial
+  routing is supported: a proxy on one backend does not route any other
+  backend, AI provider, or standalone rate provider. Values may be `HOST:PORT`,
+  `socks5h://HOST:PORT`, `socks5h://USER:PASS@HOST:PORT`, or `http(s)://...`;
+  percent-encode special username/password characters. It is not a bundled Tor
+  daemon or a global proxy for standalone Coinbase/CoinGecko rate providers.
+  The desktop setup forms detect `.onion` hosts, prefill `127.0.0.1:9050`, and
+  keep the notice scoped to the backend being edited; Tor itself must already be
+  running.
 - credentials in argv (`--token <value>`, `--password <value>`,
   `--auth-header <value>`, `--username <value>`) land in shell history
   and the process listing — use the `--*-stdin` / `--*-fd FD` variants

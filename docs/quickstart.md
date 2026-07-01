@@ -93,8 +93,8 @@ python3 -m kassiber wallets create \
 python3 -m kassiber wallets sync --wallet donations
 ```
 
-Descriptor and xpub wallets work the same way — `wallets kinds` lists the
-supported kinds. See [reference/backends.md](reference/backends.md) for
+Descriptor, BSMS, and xpub wallets work the same way — `wallets kinds` lists
+the supported kinds. See [reference/backends.md](reference/backends.md) for
 configuring sync backends (the built-in defaults are listed in
 [SECURITY.md](../SECURITY.md#the-big-gotcha-not-running-your-own-node)).
 
@@ -252,7 +252,8 @@ python3 -m kassiber --machine reports source-funds \
 python3 -m kassiber source-funds suggest \
   --target-transaction <txid-or-id>
 
-# Bulk-accept deterministic links (same-external-id hops, reviewed
+# Bulk-accept deterministic links (transaction input/output structure,
+# Lightning payment hashes, same-external-id hops, reviewed
 # transaction_pairs, one-to-one per-transaction provider/import ids) for
 # this target path; broad and weak matches stay manual.
 python3 -m kassiber source-funds links bulk-review \
@@ -271,6 +272,11 @@ python3 -m kassiber source-funds recipients create \
   --label "Relationship bank" --kind bank \
   --default-reveal-mode standard
 
+# Auto-assemble everything provable from local evidence (tx inputs/outputs
+# of synced wallets, Lightning payment hashes, platform ids, reviewed pairs).
+python3 -m kassiber source-funds assemble \
+  --target-transaction <target-txid-or-id>
+
 # Preview gates and disclosure; save an immutable case before export.
 python3 -m kassiber --machine reports source-funds \
   --target-transaction <target-txid-or-id> \
@@ -282,8 +288,12 @@ python3 -m kassiber reports export-source-funds-pdf \
 ```
 
 Reports carry overview metrics, deterministic narrative text, a simplified
-reviewed flow path, data-source rollups, source mix, level-by-level flow
-rows, transaction details, review gates, and disclosure notes. The
+reviewed flow path, data-source rollups (including how each row entered
+Kassiber: chain sync, platform export, or manual import), source mix with
+root-source details, level-by-level flow rows, per-level transaction detail
+tables (date, source, in/out amount, fee, fiat value, txid, data source),
+review gates, a missing-history section when gaps exist, and disclosure
+notes including the wallets the report names and what sharing it reveals. The
 simplified flow chart follows reviewed local source, wallet-transfer, and
 consolidation-style links; CoinJoin/PayJoin traversal is deferred and shown
 as a privacy boundary rather than ownership proof through unrelated

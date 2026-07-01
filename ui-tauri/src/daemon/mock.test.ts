@@ -54,12 +54,33 @@ describe("mock daemon transaction graphs", () => {
   });
 });
 
+describe("mock daemon transaction resolver", () => {
+  it("resolves quarantine fixture transactions for in-place review", async () => {
+    const resolved = await mockDaemon.invoke<{
+      transaction?: { id?: string; quarantineReason?: string | null } | null;
+    }>({
+      kind: "ui.transactions.resolve",
+      args: { query: "tx-missing-price" },
+    });
+
+    expect(resolved.error).toBeUndefined();
+    expect(resolved.data?.transaction?.id).toBe("tx-missing-price");
+    expect(resolved.data?.transaction?.quarantineReason).toBe("missing_price");
+  });
+});
+
 describe("mock daemon backend settings", () => {
   it("supports settings list and CRUD for demo mode", async () => {
     const list = await mockDaemon.invoke<{
-      backends: Array<{ name: string }>;
+      backends: Array<{ name: string; tor_proxy?: string; url?: string }>;
     }>({ kind: "ui.backends.settings.list" });
     expect(list.data?.backends.length).toBeGreaterThan(0);
+    const onionBackend = list.data?.backends.find(
+      (row) => row.name === "fulcrum-onion-long",
+    );
+    expect(onionBackend?.url).toContain(".onion:50001");
+    expect(onionBackend?.url?.length ?? 0).toBeGreaterThan(60);
+    expect(onionBackend?.tor_proxy).toBe("127.0.0.1:9050");
 
     const created = await mockDaemon.invoke<{ name: string }>({
       kind: "ui.backends.create",

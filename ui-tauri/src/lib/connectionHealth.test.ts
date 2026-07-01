@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   CONNECTION_HEALTH_CHECK_INTERVAL_MS,
   CONNECTION_HEALTH_CHECK_JITTER_MS,
+  abbreviateEndpointMiddle,
   canRunConnectionHealthChecks,
   connectionHealthTone,
   connectionProbeKind,
@@ -27,6 +28,20 @@ describe("connection health model", () => {
     );
     expect(endpointWithPort("tcp://index.example.com")).toBe(
       "tcp://index.example.com:50001",
+    );
+  });
+
+  it("middle-abbreviates long endpoints while preserving both ends", () => {
+    const longEndpoint =
+      "http://abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcd.onion:50001";
+    const shortened = abbreviateEndpointMiddle(longEndpoint, 34);
+
+    expect(shortened).toHaveLength(34);
+    expect(shortened).toContain("…");
+    expect(shortened.startsWith("http://abcdef")).toBe(true);
+    expect(shortened.endsWith(".onion:50001")).toBe(true);
+    expect(abbreviateEndpointMiddle("ssl://node.onion:50002", 34)).toBe(
+      "ssl://node.onion:50002",
     );
   });
 
@@ -70,6 +85,26 @@ describe("connection health model", () => {
     ).toBe("unsupported");
     expect(
       connectionProbeKind({
+        id: "saved-public-esplora",
+        name: "Saved public Esplora",
+        url: "https://mempool.example.com/api",
+        kind: "esplora",
+        net: "BTC",
+        allowDisplayHttpProbe: true,
+      }),
+    ).toBe("http");
+    expect(
+      connectionProbeKind({
+        id: "saved-public-mempool",
+        name: "Saved public mempool",
+        url: "https://mempool.example.com/api",
+        kind: "mempool",
+        net: "BTC",
+        allowDisplayHttpProbe: true,
+      }),
+    ).toBe("http");
+    expect(
+      connectionProbeKind({
         id: "cln",
         name: "Core Lightning",
         url: "cln://commando",
@@ -85,7 +120,7 @@ describe("connection health model", () => {
         kind: "bitcoinrpc",
         net: "BTC",
       }),
-    ).toBe("unsupported");
+    ).toBe("bitcoinrpc");
     expect(
       connectionProbeKind({
         id: "lnd",

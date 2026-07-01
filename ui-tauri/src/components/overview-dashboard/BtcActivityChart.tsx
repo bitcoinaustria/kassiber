@@ -793,6 +793,13 @@ export const BtcActivityChart = ({
                 onDoubleClickCapture={handleChartDoubleClick}
                 onMouseDownCapture={handleChartMouseDown}
               >
+                {plottedData.length === 0 && (
+                  <div className="flex flex-1 items-center justify-center rounded-md border border-dashed text-sm text-muted-foreground">
+                    No balance history yet — sync or import a wallet to build
+                    this chart.
+                  </div>
+                )}
+                {plottedData.length > 0 && (
                 <ChartContainer
                   config={chartConfig}
                   className="min-h-0 flex-1 w-full overflow-visible [&_.recharts-active-dot]:pointer-events-none [&_.recharts-active-dot_*]:pointer-events-none [&_.recharts-tooltip-wrapper]:!z-[100]"
@@ -974,6 +981,7 @@ export const BtcActivityChart = ({
                   )}
                   </ComposedChart>
                 </ChartContainer>
+                )}
                 {plottedData.length > 3 && (
                   <ChartContainer
                     config={chartConfig}

@@ -74,6 +74,43 @@ class PreviewDescriptorTests(unittest.TestCase):
         self.assertEqual(change[0]["derivation_path"], "m/1/0")
         self.assertNotIn(change[0]["address"], {addr["address"] for addr in receive})
 
+    def test_bsms_wallet_material_previews_receive_and_change(self):
+        xpub = _xpub_from_seed()
+        material = "\n".join(
+            [
+                "BSMS 1.0",
+                f"wpkh({xpub}/**)",
+                "/0/*,/1/*",
+                "bc1qplaceholderfirstaddress",
+            ]
+        )
+
+        result = _preview_descriptor_payload({"wallet_material": material, "count": 2})
+
+        self.assertTrue(result["has_change_branch"])
+        receive = [addr for addr in result["addresses"] if addr["branch"] == "receive"]
+        change = [addr for addr in result["addresses"] if addr["branch"] == "change"]
+        self.assertEqual(len(receive), 2)
+        self.assertEqual(len(change), 1)
+        self.assertEqual(change[0]["derivation_path"], "m/1/0")
+
+    def test_bsms_single_restriction_preview_does_not_synthesize_change(self):
+        xpub = _xpub_from_seed()
+        material = "\n".join(
+            [
+                "BSMS 1.0",
+                f"wpkh({xpub}/**)",
+                "/0/*",
+                "bc1qplaceholderfirstaddress",
+            ]
+        )
+
+        result = _preview_descriptor_payload({"wallet_material": material, "count": 2})
+
+        self.assertFalse(result["has_change_branch"])
+        self.assertEqual({addr["branch"] for addr in result["addresses"]}, {"receive"})
+        self.assertEqual(len(result["addresses"]), 2)
+
     def test_fixed_single_address_descriptor_has_no_change_branch(self):
         # A non-ranged descriptor is a single fixed address, not a wallet chain;
         # it must not gain a synthetic change branch.

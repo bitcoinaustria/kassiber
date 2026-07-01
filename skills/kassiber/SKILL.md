@@ -1,6 +1,6 @@
 ---
 name: kassiber
-description: Use this skill when the user wants to use the Kassiber CLI for local-first Bitcoin accounting, wallet onboarding, transaction imports, journal processing, metadata cleanup, or tax and portfolio reports. Applies to requests about Kassiber books, internal workspaces/profiles, accounts, wallets, backends, rates, attachments, BIP329 labels, quarantines, generic tax reporting, and Austrian-support planning/questions, even when the user does not say Kassiber by name.
+description: Use this skill when the user wants to use the Kassiber CLI for local-first Bitcoin accounting, wallet onboarding, transaction imports, journal processing, metadata cleanup, or tax and portfolio reports, or when the user wants to research, draft, or publish a Kassiber GitHub feature request. Applies to requests about Kassiber books, internal workspaces/profiles, accounts, wallets, backends, rates, attachments, BIP329 labels, quarantines, generic tax reporting, Austrian-support planning/questions, and Kassiber issue planning, even when the user does not say Kassiber by name.
 ---
 
 # Kassiber
@@ -121,6 +121,7 @@ Related notes:
 - For first-run setup, roots, context, and books creation, read [references/onboarding.md](references/onboarding.md).
 - For wallet kinds, descriptor setup, backend selection, and imports, read [references/wallets-backends.md](references/wallets-backends.md).
 - For onboarding a brand-new exchange / broker / custodial platform Kassiber does not support yet (the structured intake interview plus the importer implementation checklist), read [references/add-exchange.md](references/add-exchange.md). The user-facing entry point is the `/add-exchange` command.
+- For researching, drafting, and publishing a Kassiber GitHub feature request, read [references/feature-request.md](references/feature-request.md). The user-facing entry point is the `/feature-request` command.
 - For journal processing, quarantine handling, and transfer pairing, read [references/journal-processing.md](references/journal-processing.md).
 - For swap-candidate matching (Lightning ↔ Liquid, BTC ↔ LBTC peg, Boltz submarine swaps), the auto-pair rules engine, and saved review-queue views, read [references/swap-matching.md](references/swap-matching.md).
 - For notes, tags, exclusions, BIP329 labels, and attachments, read [references/metadata.md](references/metadata.md).

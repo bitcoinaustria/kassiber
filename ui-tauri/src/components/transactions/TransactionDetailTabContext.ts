@@ -57,6 +57,9 @@ export type TransactionDetailTabContext = {
   isProviderSamplePricing: boolean;
   isExactPricing: boolean;
   isPricingMissing: boolean;
+  isBasisQuarantine?: boolean;
+  suppressPricingCacheWarning?: boolean;
+  suppressBasisQuarantineWarning?: boolean;
   pricePoint: ReturnType<typeof pricingPriceMoment>;
   nowRate?: number | null;
   onOpenMarketDataSettings?: () => void;
@@ -72,6 +75,7 @@ export type TransactionDetailTabContext = {
   loanLinkCandidates: LoanMark[];
   onUnpair?: (pairId: string) => void | Promise<void>;
   isUnpairing?: boolean;
+  onOpenPairingReview?: () => void;
   onLinkLoan?: (transaction: Transaction, targetTransactionId: string) => void | Promise<void>;
   isLoanLinking?: boolean;
   journalEvents: JournalEventItem[];

@@ -27,6 +27,14 @@ describe("detectWalletMaterial", () => {
     );
   });
 
+  it("recognizes BSMS descriptor records", () => {
+    expect(
+      detectWalletMaterial(
+        "BSMS 1.0\nwsh(sortedmulti(2,xpubA/**,xpubB/**))\n/0/*,/1/*\nbc1q...",
+      ).kind,
+    ).toBe("bsms");
+  });
+
   it("recognizes SLIP132 prefixes", () => {
     expect(detectWalletMaterial("zpub6r...").kind).toBe("slip132");
     expect(detectWalletMaterial("ypub6W...").kind).toBe("slip132");

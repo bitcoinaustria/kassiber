@@ -289,52 +289,72 @@ export function TransactionEditHistoryPanel({
   const { t } = useTranslation("transactions");
   const staleCount = stale?.edit_count ?? 0;
   return (
-    <div className="rounded-md border bg-card p-3">
-      <div className="mb-3 flex items-center justify-between gap-2">
+    <details className="group rounded-md border bg-card">
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-2 p-3 [&::-webkit-details-marker]:hidden">
         <div className="flex items-center gap-2 text-sm font-semibold">
           <History className="size-4 text-muted-foreground" aria-hidden="true" />
           {t("history.panelTitle")}
         </div>
-        {events?.length ? (
-          <Badge variant="secondary" className="rounded-md">
-            {events.length}
-          </Badge>
-        ) : null}
-      </div>
-      {staleCount > 0 ? (
-        <div className="mb-3 flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 p-2 text-xs text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
-          <AlertTriangle className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
-          <div className="min-w-0 flex-1">
-            <div className="font-medium">{t("history.staleCount", { count: staleCount })}</div>
-            <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-amber-800 dark:text-amber-300">
-              <Clock className="size-3" aria-hidden="true" />
-              {stale?.latest_changed_at
-                ? formatHistoryDate(stale.latest_changed_at)
-                : t("history.reportsNeedFreshState")}
-            </div>
-          </div>
-          {onProcessJournals ? (
-            <Button
-              type="button"
-              size="sm"
+        <div className="flex items-center gap-1.5">
+          {staleCount > 0 ? (
+            <Badge
               variant="outline"
-              className="h-7 gap-1.5 border-amber-300 bg-amber-100 text-amber-900 hover:bg-amber-200 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-100"
+              className="rounded-md border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300"
+              title={t("history.staleCount", { count: staleCount })}
+            >
+              {staleCount}
+            </Badge>
+          ) : null}
+          {events?.length ? (
+            <Badge variant="secondary" className="rounded-md">
+              {events.length}
+            </Badge>
+          ) : null}
+          <ChevronRight
+            className="size-3.5 text-muted-foreground transition-transform group-open:rotate-90"
+            aria-hidden="true"
+          />
+        </div>
+      </summary>
+      <div className="border-t p-3">
+        {staleCount > 0 ? (
+          <div className="mb-3 flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 p-2 text-xs text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+            <AlertTriangle className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
+            <div className="min-w-0 flex-1">
+              <div className="font-medium">{t("history.staleCount", { count: staleCount })}</div>
+              <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-amber-800 dark:text-amber-300">
+                <Clock className="size-3" aria-hidden="true" />
+                {stale?.latest_changed_at
+                  ? formatHistoryDate(stale.latest_changed_at)
+                  : t("history.reportsNeedFreshState")}
+              </div>
+            </div>
+            {onProcessJournals ? (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="h-7 gap-1.5 border-amber-300 bg-amber-100 text-amber-900 hover:bg-amber-200 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-100"
               disabled={isProcessingJournals}
               onClick={onProcessJournals}
             >
-              <RefreshCw className={cn("size-3", isProcessingJournals && "animate-spin")} aria-hidden="true" />
-              {t("history.process")}
-            </Button>
-          ) : null}
-        </div>
-      ) : null}
-      <TransactionHistoryTimeline
-        events={events ?? []}
-        hideSensitive={hideSensitive}
-        isLoading={isLoading}
-        onRevert={onRevert}
-        isReverting={isReverting}
-      />
-    </div>
+                <RefreshCw
+                  className={cn("size-3", isProcessingJournals && "animate-spin")}
+                  aria-hidden="true"
+                />
+                {t("history.process")}
+              </Button>
+            ) : null}
+          </div>
+        ) : null}
+        <TransactionHistoryTimeline
+          events={events ?? []}
+          hideSensitive={hideSensitive}
+          isLoading={isLoading}
+          onRevert={onRevert}
+          isReverting={isReverting}
+        />
+      </div>
+    </details>
   );
 }
