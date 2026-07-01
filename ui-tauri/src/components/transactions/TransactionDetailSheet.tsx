@@ -367,6 +367,8 @@ export function TransactionDetailSheet({
           : "pricing";
   const hasJournalQuarantine = Boolean(quarantineReason) && !localDraft.excluded;
   const hasPricingBlocker = isPricingMissing && !localDraft.excluded;
+  const suppressPricingCacheWarning =
+    hasJournalQuarantine && quarantineTargetTab === "pricing";
   const showReviewBanner =
     hasJournalQuarantine || (activeTab !== "pricing" && hasPricingBlocker);
   const confLabel = confirmationsLabel(
@@ -642,6 +644,7 @@ export function TransactionDetailSheet({
     isProviderSamplePricing,
     isExactPricing,
     isPricingMissing,
+    suppressPricingCacheWarning,
     pricePoint,
     nowRate,
     onOpenMarketDataSettings,
@@ -746,7 +749,11 @@ export function TransactionDetailSheet({
                               : t("sheet.banner.viewPricing")
                         : t("sheet.banner.openPricing")
                     }
-                    onPrimaryAction={jumpToQuarantineTarget}
+                    onPrimaryAction={
+                      hasJournalQuarantine && activeTab === quarantineTargetTab
+                        ? undefined
+                        : jumpToQuarantineTarget
+                    }
                     onExclude={setExcluded}
                   />
                 ) : null}
