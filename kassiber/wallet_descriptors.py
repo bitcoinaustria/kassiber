@@ -8,7 +8,11 @@ from hashlib import sha256
 from importlib import import_module
 
 from .errors import AppError
-from .wallet_setup import BARE_XPUB_TEMPLATES
+from .wallet_setup import (
+    BARE_XPUB_TEMPLATES,
+    BSMS_DESCRIPTOR_SOURCE,
+    parse_bsms_descriptor_record,
+)
 
 
 DEFAULT_DESCRIPTOR_GAP_LIMIT = 40
@@ -274,6 +278,17 @@ def load_descriptor_plan(config):
     script_types = ordered_script_types(config.get("script_types"))
     if not descriptor_text and not (xpub and script_types):
         return None
+    change_text = str(config.get("change_descriptor") or "").strip()
+    synthesize_change = config.get("synthesize_change") is not False
+    if descriptor_text:
+        bsms_descriptors = parse_bsms_descriptor_record(descriptor_text)
+        if bsms_descriptors:
+            descriptor_text = bsms_descriptors["descriptor"]
+            synthesize_change = False
+            if not change_text:
+                change_text = bsms_descriptors.get("change_descriptor", "")
+        elif config.get("descriptor_source") == BSMS_DESCRIPTOR_SOURCE:
+            synthesize_change = False
     chain = normalize_chain(config.get("chain"))
     network = normalize_network(chain, config.get("network"))
     gap_limit = int(config.get("gap_limit") or DEFAULT_DESCRIPTOR_GAP_LIMIT)
@@ -310,11 +325,10 @@ def load_descriptor_plan(config):
         )
     normalized_primary_text = normalize_descriptor_text(chain, descriptor_text)
     primary = descriptor_class.from_string(normalized_primary_text)
-    change_text = str(config.get("change_descriptor") or "").strip()
     change_descriptor = (
         descriptor_class.from_string(normalize_descriptor_text(chain, change_text)) if change_text else None
     )
-    if change_descriptor is None:
+    if change_descriptor is None and synthesize_change:
         # No explicit change descriptor: derive the sibling change chain from a
         # receive-only descriptor so internal/change UTXOs are not missed.
         primary = _promote_receive_only_to_multipath(

@@ -65,9 +65,48 @@ def _multisig_keys(account_path: str, chain_index: int) -> tuple[str, str]:
     )
 
 
+def _multisig_template_keys(account_path: str) -> tuple[str, str]:
+    root_a = bip32.HDKey.from_seed(bip39.mnemonic_to_seed(_MNEMONIC))
+    root_b = bip32.HDKey.from_seed(_COSIGNER_SEED)
+    return (
+        _cosigner_template_key(root_a, account_path),
+        _cosigner_template_key(root_b, account_path),
+    )
+
+
+def _cosigner_template_key(root, account_path: str) -> str:
+    fingerprint = root.my_fingerprint.hex()
+    xpub = root.derive(account_path).to_public().to_base58()
+    return f"[{fingerprint}/{account_path[2:]}]{xpub}/**"
+
+
 def _wsh_multisig(chain_index: int) -> str:
     key_a, key_b = _multisig_keys("m/48h/0h/0h/2h", chain_index)
     return f"wsh(sortedmulti(2,{key_a},{key_b}))"
+
+
+def _wsh_bsms_record() -> str:
+    key_a, key_b = _multisig_template_keys("m/48h/0h/0h/2h")
+    return "\n".join(
+        [
+            "BSMS 1.0",
+            f"wsh(sortedmulti(2,{key_a},{key_b}))",
+            "/0/*,/1/*",
+            "bc1qplaceholderfirstaddress",
+        ]
+    )
+
+
+def _wsh_bsms_single_restriction_record() -> str:
+    key_a, key_b = _multisig_template_keys("m/48h/0h/0h/2h")
+    return "\n".join(
+        [
+            "BSMS 1.0",
+            f"wsh(sortedmulti(2,{key_a},{key_b}))",
+            "/0/*",
+            "bc1qplaceholderfirstaddress",
+        ]
+    )
 
 
 def _nested_multisig(chain_index: int) -> str:
@@ -215,6 +254,64 @@ class ChangeBranchSynthesisTests(unittest.TestCase):
 
     def test_multisig_change_matches_explicit_change_descriptor(self):
         self._assert_change_matches_explicit(_wsh_multisig, "bitcoin")
+
+    def test_bsms_template_builds_receive_and_change_branches(self):
+        bsms = load_descriptor_plan({"descriptor": _wsh_bsms_record(), "chain": "bitcoin"})
+        explicit = load_descriptor_plan(
+            {
+                "descriptor": _wsh_multisig(0),
+                "change_descriptor": _wsh_multisig(1),
+                "chain": "bitcoin",
+            }
+        )
+
+        self.assertEqual(
+            {branch.branch_index: branch.branch_label for branch in bsms.branches},
+            {0: "receive", 1: "change"},
+        )
+        for branch_index in (0, 1):
+            self.assertEqual(
+                [
+                    target.address
+                    for target in derive_descriptor_targets(
+                        bsms, branch_index=branch_index, start=0, end=3
+                    )
+                ],
+                [
+                    target.address
+                    for target in derive_descriptor_targets(
+                        explicit, branch_index=branch_index, start=0, end=3
+                    )
+                ],
+            )
+
+    def test_bsms_single_restriction_does_not_synthesize_change_branch(self):
+        plan = load_descriptor_plan(
+            {
+                "descriptor": _wsh_bsms_single_restriction_record(),
+                "chain": "bitcoin",
+            }
+        )
+
+        self.assertEqual(
+            [(branch.branch_index, branch.branch_label) for branch in plan.branches],
+            [(0, "receive")],
+        )
+
+    def test_stored_bsms_source_does_not_synthesize_change_branch(self):
+        plan = load_descriptor_plan(
+            {
+                "descriptor": _wsh_multisig(0),
+                "descriptor_source": "bsms",
+                "synthesize_change": False,
+                "chain": "bitcoin",
+            }
+        )
+
+        self.assertEqual(
+            [(branch.branch_index, branch.branch_label) for branch in plan.branches],
+            [(0, "receive")],
+        )
 
     def test_nested_multisig_change_matches_explicit_change_descriptor(self):
         self._assert_change_matches_explicit(_nested_multisig, "bitcoin")

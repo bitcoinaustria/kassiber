@@ -353,8 +353,10 @@ Use this when you run your own node.
 ## Descriptor and Liquid notes
 
 Descriptor wallets derive receive and change scripts locally and then refresh
-through an Esplora- or Electrum-backed backend. Source refresh also updates the
-durable local UTXO inventory shown in the desktop wallet detail view.
+through an Esplora- or Electrum-backed backend. They accept output descriptors,
+common descriptor exports, and plaintext BSMS descriptor records. Source refresh
+also updates the durable local UTXO inventory shown in the desktop wallet
+detail view.
 The default gap limit is 40 unused addresses per branch, and Kassiber caps the configured gap limit at 5,000 to avoid accidental runaway scans.
 
 Example Bitcoin descriptor wallet:

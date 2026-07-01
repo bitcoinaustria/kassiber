@@ -14,7 +14,11 @@ import unittest
 from embit import bip32
 
 from kassiber.errors import AppError
-from kassiber.wallet_setup import normalize_script_types, normalize_wallet_material
+from kassiber.wallet_setup import (
+    BSMS_DESCRIPTOR_SOURCE,
+    normalize_script_types,
+    normalize_wallet_material,
+)
 
 
 _SLIP132_MAINNET_VERSIONS = {
@@ -254,6 +258,84 @@ class NormalizeWalletMaterialOtherShapesTests(unittest.TestCase):
 
         self.assertEqual(result["descriptor"], "wpkh([abcd0123/84h/0h/0h]xpub6.../0/*)")
         self.assertEqual(result["change_descriptor"], "wpkh([abcd0123/84h/0h/0h]xpub6.../1/*)")
+
+    def test_bsms_template_expands_receive_and_change_descriptors(self):
+        template = (
+            "wsh(sortedmulti(2,"
+            "[11111111/48h/0h/0h/2h]xpubA/**,"
+            "[22222222/48h/0h/0h/2h]xpubB/**))#checksum"
+        )
+        material = "\n".join(
+            [
+                "BSMS 1.0",
+                template,
+                "/0/*,/1/*",
+                "bc1qexamplefirstaddress",
+            ]
+        )
+
+        result = normalize_wallet_material(material)
+
+        self.assertEqual(
+            result["descriptor"],
+            template.replace("/**", "/0/*"),
+        )
+        self.assertEqual(
+            result["change_descriptor"],
+            template.replace("/**", "/1/*"),
+        )
+        self.assertEqual(result["descriptor_source"], BSMS_DESCRIPTOR_SOURCE)
+        self.assertFalse(result["synthesize_change"])
+
+    def test_bsms_descriptor_without_path_restrictions_is_accepted(self):
+        descriptor = (
+            "wsh(sortedmulti(1,"
+            "[11111111/48h/0h/0h/2h]021111111111111111111111111111111111111111111111111111111111111111,"
+            "[22222222/48h/0h/0h/2h]032222222222222222222222222222222222222222222222222222222222222222))"
+        )
+        material = "\n".join(
+            [
+                "BSMS 1.0",
+                descriptor,
+                "No path restrictions",
+                "bc1qexamplefirstaddress",
+            ]
+        )
+
+        result = normalize_wallet_material(material)
+
+        self.assertEqual(result["descriptor"], descriptor)
+        self.assertEqual(result["descriptor_source"], BSMS_DESCRIPTOR_SOURCE)
+        self.assertFalse(result["synthesize_change"])
+
+    def test_bsms_signer_key_record_is_rejected(self):
+        material = "\n".join(
+            [
+                "BSMS 1.0",
+                "00",
+                "[11111111/48h/0h/0h/2h]xpubA",
+                "Signer 1 key",
+                "signature",
+            ]
+        )
+
+        with self.assertRaises(AppError) as ctx:
+            normalize_wallet_material(material)
+        self.assertIn("key records", str(ctx.exception).lower())
+
+    def test_bsms_with_extra_restrictions_is_rejected(self):
+        material = "\n".join(
+            [
+                "BSMS 1.0",
+                "wsh(sortedmulti(2,[11111111/48h/0h/0h/2h]xpubA/**,[22222222/48h/0h/0h/2h]xpubB/**))",
+                "/0/*,/1/*,/2/*",
+                "bc1qexamplefirstaddress",
+            ]
+        )
+
+        with self.assertRaises(AppError) as ctx:
+            normalize_wallet_material(material)
+        self.assertIn("receive/change", str(ctx.exception).lower())
 
     def test_blank_input_is_rejected(self):
         with self.assertRaises(AppError):
