@@ -715,4 +715,96 @@ describe("TransactionGraphPanel", () => {
     expect(html).toContain("No graph for this source");
     expect(html).toContain("without valued Bitcoin vin/vout data");
   });
+
+  it("keeps graphless Liquid rows inside Kassiber instead of linking out", () => {
+    const graphless: TransactionGraphPayload = {
+      transaction: {
+        id: "liquid-row",
+        txid: "a".repeat(64),
+        asset: "LBTC",
+      },
+      supportLevel: "graphless",
+      unsupportedReason: "liquid_reference_graph_not_local",
+      inputs: [],
+      outputs: [],
+      fee: null,
+      warnings: [],
+      annotations: [],
+    };
+    const html = renderToStaticMarkup(
+      <TooltipProvider>
+        <TransactionGraphPanel graph={graphless} hideSensitive={false} />
+      </TooltipProvider>,
+    );
+
+    expect(html).toContain("Liquid graph not stored locally");
+    expect(html).toContain("generic confidential strands");
+    expect(html).not.toContain("liquid.network");
+    expect(html).not.toContain("Open Liquid Network");
+  });
+
+  it("offers Liquid backend setup when the graph lookup has no backend", () => {
+    const graphless: TransactionGraphPayload = {
+      transaction: {
+        id: "liquid-row",
+        txid: "b".repeat(64),
+        asset: "LBTC",
+      },
+      supportLevel: "graphless",
+      unsupportedReason: "liquid_reference_graph_not_local",
+      inputs: [],
+      outputs: [],
+      fee: null,
+      warnings: [
+        {
+          code: "liquid_reference_lookup_unavailable",
+          level: "warning",
+          message:
+            "No configured Liquid backend is available. Add a Liquid backend in Settings to fetch public transaction references.",
+        },
+      ],
+      annotations: [],
+    };
+    const html = renderToStaticMarkup(
+      <TooltipProvider>
+        <TransactionGraphPanel
+          graph={graphless}
+          hideSensitive={false}
+          onResolveIssue={() => undefined}
+        />
+      </TooltipProvider>,
+    );
+
+    expect(html).toContain("Add Liquid backend");
+    expect(html).toContain("No configured Liquid backend");
+    expect(html).not.toContain("liquid.network");
+  });
+
+  it("offers backend review when a partial graph lookup fails", () => {
+    const partial: TransactionGraphPayload = {
+      ...graph,
+      supportLevel: "partial",
+      unsupportedReason: "input_prevout_values_missing",
+      warnings: [
+        {
+          code: "bitcoin_reference_lookup_failed",
+          level: "warning",
+          message:
+            "Could not fetch public Bitcoin transaction references from the selected backend. Review the backend URL and network in Settings.",
+        },
+      ],
+    };
+    const html = renderToStaticMarkup(
+      <TooltipProvider>
+        <TransactionGraphPanel
+          graph={partial}
+          hideSensitive={false}
+          onResolveIssue={() => undefined}
+        />
+      </TooltipProvider>,
+    );
+
+    expect(html).toContain("Review Bitcoin backend");
+    expect(html).toContain("Could not fetch public Bitcoin transaction references");
+  });
 });

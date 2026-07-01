@@ -154,9 +154,17 @@ annotations, and reviewed paired-route context. Bitcoin transactions with
 stored valued vin/vout can render a proportional flow graph; records with only
 safe references render a reference/amountless graph; graphless imports return a
 typed empty state. Liquid confidential transactions may expose public
-references while keeping confidential amounts unsized or hidden. The payload
-never returns descriptors, xpubs, backend URLs/tokens, wallet config, raw
-files, raw JSON blobs, or other secret-bearing material.
+references while keeping confidential amounts unsized or hidden. When the user
+allows a configured public backend lookup, the daemon caches only the sanitized
+reference graph inside the local DB/SQLCipher boundary, keyed by schema version,
+chain, network, and txid, so reopening the same transaction does not refetch the
+same public tx/prevtx material. Kassiber deliberately does not persist raw
+serialized transactions for this graph cache: the graph endpoint needs only the
+normalized refs, prevout values/scripts, and size metadata required to rebuild a
+complete current-transaction graph, not witnesses, arbitrary script payloads, or
+backend response shape. The payload never returns descriptors, xpubs, backend
+URLs/tokens, wallet config, raw files, raw JSON blobs, or other secret-bearing
+material.
 
 `ui.wallets.utxos` accepts `{"wallet":"<wallet id or label>"}` and returns the
 active local UTXO inventory for one wallet. Rows include outpoint, txid, vout,
