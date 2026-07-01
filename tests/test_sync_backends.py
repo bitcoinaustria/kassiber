@@ -24,6 +24,7 @@ from kassiber.core.sync_backends import (
     ElectrumClient,
     _connect_backend_socket,
     _emit_backend_progress,
+    bitcoinrpc_import_ranged_descriptors,
     bitcoinrpc_sync_adapter,
     discover_descriptor_targets,
     electrum_sync_adapter,
@@ -1278,6 +1279,55 @@ class SyncBackendsTest(unittest.TestCase):
         self.assertEqual(meta["utxos"][0]["branch_index"], 6)
         self.assertEqual(len(records), 1)
         self.assertNotIn("scantxoutset", [call[0] for call in calls])
+
+    def test_bitcoinrpc_fixed_descriptor_import_omits_range(self):
+        class FakeDescriptor:
+            is_wildcard = False
+
+            def to_string(self):
+                return "wpkh(xpub/0/5)"
+
+        plan = DescriptorPlan(
+            chain="bitcoin",
+            network="bitcoin",
+            gap_limit=3,
+            descriptor_fingerprint="fp",
+            branches=(DescriptorBranch(0, "receive", FakeDescriptor()),),
+        )
+
+        def fake_bitcoinrpc_call(backend, method, params=None, wallet_name=None, timeout=None):
+            del backend, timeout
+            if method == "getdescriptorinfo":
+                return {"descriptor": "wpkh(xpub/0/5)#core"}
+            if method == "importdescriptors":
+                self.assertEqual(wallet_name, "kassiber-wallet-1")
+                self.assertEqual(
+                    params,
+                    [
+                        [
+                            {
+                                "desc": "wpkh(xpub/0/5)#core",
+                                "timestamp": 0,
+                                "internal": False,
+                                "active": False,
+                            }
+                        ]
+                    ],
+                )
+                return [{"success": True}]
+            raise AssertionError(f"Unexpected RPC call: {(method, params, wallet_name)!r}")
+
+        with patch("kassiber.core.sync_backends.bitcoinrpc_call", side_effect=fake_bitcoinrpc_call):
+            imported_count, range_ends = bitcoinrpc_import_ranged_descriptors(
+                {"name": "core", "kind": "bitcoinrpc", "url": "http://core.example"},
+                "kassiber-wallet-1",
+                plan,
+                {},
+                0,
+            )
+
+        self.assertEqual(imported_count, 1)
+        self.assertEqual(range_ends, {"0": 0})
 
     def test_bitcoinrpc_descriptor_sync_uses_listsinceblock_when_range_unchanged(self):
         class FakeDescriptor:

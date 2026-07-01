@@ -6100,6 +6100,12 @@ def _create_backend_payload(ctx: "DaemonContext", args: dict[str, Any]) -> dict[
     name = _required_str_arg(args, "name", "Backend name")
     kind = common.pop("kind") or ""
     url = common.pop("url") or ""
+    kind, url, common = _merge_bitcoinrpc_credential_ref_for_backend_create(
+        kind,
+        url,
+        common,
+        args,
+    )
     common.pop("clear", None)
     _validate_desktop_bitcoinrpc_cookiefile(kind, url, common.get("config"))
     payload = core_accounts.create_backend(
@@ -7989,6 +7995,50 @@ def _inline_bitcoinrpc_backend(args: dict[str, Any]) -> dict[str, Any]:
     return backend
 
 
+def _merge_bitcoinrpc_credential_ref_for_backend_create(
+    kind: str,
+    url: str,
+    common: dict[str, Any],
+    args: dict[str, Any],
+) -> tuple[str, str, dict[str, Any]]:
+    credential_ref = _optional_str_arg(args, "credential_ref")
+    if not credential_ref:
+        return kind, url, common
+    if kind.strip().lower() != "bitcoinrpc":
+        raise AppError(
+            "credential_ref is only supported for Bitcoin Core RPC backends",
+            code="validation",
+            retryable=False,
+        )
+    detected = _core_backend_from_credential_ref(credential_ref)
+    detected_url = str(detected.get("url") or "")
+    _validate_desktop_bitcoinrpc_cookiefile("bitcoinrpc", detected_url, detected)
+    next_common = dict(common)
+    config = dict(next_common.get("config") or {})
+    cookiefile = backend_value(detected, "cookiefile", "cookie_file")
+    if cookiefile:
+        config["cookiefile"] = cookiefile
+        config.pop("username", None)
+        config.pop("password", None)
+    else:
+        username = backend_value(detected, "username", "rpcuser", "rpc_user")
+        password = backend_value(detected, "password", "rpcpassword", "rpc_password")
+        if not username or password is None:
+            raise AppError(
+                "Detected Bitcoin Core credentials are no longer available",
+                code="validation",
+                hint="Run Detect my node again or enter RPC credentials manually.",
+                retryable=False,
+            )
+        config["username"] = username
+        config["password"] = password
+        config.pop("cookiefile", None)
+    next_common["config"] = config
+    next_common["chain"] = "bitcoin"
+    next_common["network"] = str(detected.get("network") or next_common.get("network") or "")
+    return "bitcoinrpc", detected_url, next_common
+
+
 def _bitcoinrpc_backend_for_probe(
     ctx: "DaemonContext",
     args: dict[str, Any],
@@ -8241,11 +8291,14 @@ def _detect_core_payload(args: dict[str, Any] | None = None) -> dict[str, Any]:
             "block_filters": probe.get("block_filters"),
             "warnings": probe.get("warnings") or [],
         }
-        if candidate_backend.get("cookiefile"):
-            candidate["cookiefile"] = candidate_backend.get("cookiefile")
+        if candidate_backend.get("cookiefile") or (
+            candidate_backend.get("username") and candidate_backend.get("password") is not None
+        ):
             candidate["credential_ref"] = _core_candidate_credential_ref(
                 candidate_backend
             )
+        if candidate_backend.get("cookiefile"):
+            candidate["cookiefile"] = candidate_backend.get("cookiefile")
         candidates.append(candidate)
     return {"candidates": candidates}
 

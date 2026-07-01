@@ -2074,15 +2074,18 @@ def _bitcoinrpc_descriptor_targets_for_checkpoint(plan, checkpoint):
 
 
 def bitcoinrpc_ranged_descriptor(backend, branch, end, birthday_ts):
-    raw_descriptor = branch_descriptor(branch).to_string()
+    descriptor_template = branch_descriptor(branch)
+    raw_descriptor = descriptor_template.to_string()
     descriptor = bitcoinrpc_call(backend, "getdescriptorinfo", [raw_descriptor])
-    return {
+    request = {
         "desc": descriptor["descriptor"],
         "timestamp": birthday_ts,
-        "range": [0, int(end)],
         "internal": branch.branch_index % 2 == 1,
         "active": False,
     }
+    if getattr(descriptor_template, "is_wildcard", False):
+        request["range"] = [0, int(end)]
+    return request
 
 
 def bitcoinrpc_import_ranged_descriptors(backend, wallet_name, plan, checkpoint, birthday_ts):

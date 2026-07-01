@@ -609,7 +609,7 @@ function coreNodeStatusKey(status?: string | null) {
 
 function coreCandidateAuthLabel(
   candidate: CoreDetectionCandidate,
-  t: TFunction,
+  t: TFunction<readonly ["connections", "common"]>,
 ) {
   if (
     candidate.auth_source === "basic" &&
@@ -655,7 +655,7 @@ function applyCoreCandidateToForm(
 
 function coreReadinessMessages(
   payload: CoreDetectionCandidate | CoreProbeData,
-  t: TFunction,
+  t: TFunction<readonly ["connections", "common"]>,
 ) {
   const messages: string[] = [];
   if (payload.pruned) {
@@ -1294,14 +1294,20 @@ export function AddConnectionDialog({
     });
   };
 
-  const coreRpcBackendArgs = () => ({
-    name: backendNameFromLabel(form.label),
-    kind: "bitcoinrpc",
-    url: form.coreRpcUrl.trim(),
-    chain: "bitcoin",
-    network: form.coreRpcNetwork || "main",
-    config: coreRpcConfig(),
-  });
+  const coreRpcBackendArgs = () => {
+    const args: Record<string, unknown> = {
+      name: backendNameFromLabel(form.label),
+      kind: "bitcoinrpc",
+      url: form.coreRpcUrl.trim(),
+      chain: "bitcoin",
+      network: form.coreRpcNetwork || "main",
+      config: coreRpcConfig(),
+    };
+    if (form.coreRpcCredentialRef) {
+      args.credential_ref = form.coreRpcCredentialRef;
+    }
+    return args;
+  };
 
   const coreRpcProbeArgs = () =>
     form.coreRpcCredentialRef
@@ -1366,10 +1372,14 @@ export function AddConnectionDialog({
       if (!form.coreRpcUrl.trim()) {
         errors.coreRpcUrl = t("add.core.errorUrl");
       }
-      if (form.coreRpcAuthMode === "cookiefile" && !form.coreRpcCookiefile.trim()) {
+      if (
+        form.coreRpcAuthMode === "cookiefile" &&
+        !form.coreRpcCookiefile.trim() &&
+        !form.coreRpcCredentialRef
+      ) {
         errors.coreRpcCookiefile = t("add.core.errorCookiefile");
       }
-      if (form.coreRpcAuthMode === "basic") {
+      if (form.coreRpcAuthMode === "basic" && !form.coreRpcCredentialRef) {
         if (!form.coreRpcUsername.trim()) {
           errors.coreRpcUsername = t("add.core.errorUsername");
         }

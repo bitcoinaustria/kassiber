@@ -352,7 +352,7 @@ class DaemonBitcoinRpcProbeTest(unittest.TestCase):
         )
         self.assertEqual(basic["url"], "http://127.0.0.1:8332")
         self.assertEqual(basic["credential_source"], "bitcoin.conf")
-        self.assertNotIn("credential_ref", basic)
+        self.assertTrue(basic["credential_ref"].startswith("local-core:"))
         self.assertNotIn("username", basic)
         self.assertNotIn("password", basic)
         signet = next(
@@ -370,6 +370,102 @@ class DaemonBitcoinRpcProbeTest(unittest.TestCase):
         self.assertTrue(
             any(backend["username"] == "alice" for backend in probed_backends)
         )
+
+    def test_bitcoinrpc_probe_uses_detected_basic_credential_ref(self):
+        ctx = SimpleNamespace(runtime_config={})
+        with tempfile.TemporaryDirectory() as tmp:
+            bitcoin_dir = Path(tmp) / ".bitcoin"
+            bitcoin_dir.mkdir()
+            (bitcoin_dir / "bitcoin.conf").write_text(
+                "rpcuser=alice\nrpcpassword=correct horse battery staple\n",
+                encoding="utf-8",
+            )
+            ref = daemon._core_candidate_credential_ref(
+                next(
+                    candidate
+                    for candidate in daemon._core_local_probe_candidates(bitcoin_dir)
+                    if candidate["auth_source"] == "basic"
+                )
+            )
+            seen_backend = {}
+
+            def fake_call(backend, method, params=None, wallet_name=None, timeout=None):
+                del params, wallet_name, timeout
+                seen_backend.update(backend)
+                if method == "getblockchaininfo":
+                    return {
+                        "chain": "main",
+                        "blocks": 1,
+                        "headers": 1,
+                        "pruned": False,
+                        "initialblockdownload": False,
+                    }
+                if method == "getnetworkinfo":
+                    return {"version": 270000, "connections": 1}
+                if method == "listwallets":
+                    return []
+                if method == "getbestblockhash":
+                    return "best-block"
+                if method == "getblockfilter":
+                    return {"filter": "00"}
+                raise AssertionError(f"Unexpected RPC call: {method}")
+
+            with patch.object(daemon.Path, "home", return_value=Path(tmp)), patch(
+                "kassiber.daemon.bitcoinrpc_call",
+                side_effect=fake_call,
+            ):
+                payload = daemon._test_bitcoinrpc_backend_payload(
+                    ctx,
+                    {"credential_ref": ref, "timeout": 10},
+                )
+
+        self.assertTrue(payload["reachable"])
+        self.assertEqual(seen_backend["username"], "alice")
+        self.assertEqual(seen_backend["password"], "correct horse battery staple")
+
+    def test_backend_create_uses_detected_basic_credential_ref(self):
+        ctx = SimpleNamespace(conn=object(), runtime_config={})
+        detected = {
+            "name": "local-core-main",
+            "kind": "bitcoinrpc",
+            "chain": "bitcoin",
+            "network": "main",
+            "url": "http://127.0.0.1:8332",
+            "auth_source": "basic",
+            "credential_source": "bitcoin.conf",
+            "username": "alice",
+            "password": "correct horse battery staple",
+        }
+        created_payload = {"name": "core"}
+
+        with patch(
+            "kassiber.daemon._core_backend_from_credential_ref",
+            return_value=detected,
+        ), patch("kassiber.daemon.merge_db_backends"), patch(
+            "kassiber.daemon.core_accounts.create_backend",
+            return_value=created_payload,
+        ) as create_backend:
+            payload = daemon._create_backend_payload(
+                ctx,
+                {
+                    "name": "core",
+                    "kind": "bitcoinrpc",
+                    "url": "http://attacker.example:8332",
+                    "credential_ref": "local-core:test",
+                    "config": {"display_name": "Local Core"},
+                },
+            )
+
+        self.assertEqual(payload, created_payload)
+        create_backend.assert_called_once()
+        _conn, name, kind, url = create_backend.call_args.args[:4]
+        self.assertEqual(name, "core")
+        self.assertEqual(kind, "bitcoinrpc")
+        self.assertEqual(url, "http://127.0.0.1:8332")
+        config = create_backend.call_args.kwargs["config"]
+        self.assertEqual(config["display_name"], "Local Core")
+        self.assertEqual(config["username"], "alice")
+        self.assertEqual(config["password"], "correct horse battery staple")
 
     def test_bitcoin_conf_rpc_url_accepts_host_port(self):
         self.assertEqual(
