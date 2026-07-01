@@ -326,6 +326,60 @@
       "body": "Kassiber wrote a new edit history entry with the reverted value."
     }
   },
+  "egress": {
+    "title": "Egress auditor",
+    "subtitle": "Live RAM-only outbound ledger",
+    "refresh": "Refresh",
+    "loadFailed": "Failed to load egress ledger: {{error}}",
+    "empty": "No outbound egress recorded",
+    "gap": "Older rows evicted",
+    "queryPlaceholder": "Filter host, subsystem, label",
+    "metric": {
+      "total": "Recorded",
+      "unexpected": "Unexpected",
+      "update": "Update",
+      "dbHeader": "DB header"
+    },
+    "db": {
+      "title": "SQLCipher header",
+      "classification": "State",
+      "prefix": "Prefix",
+      "none": "none",
+      "ciphertextLike": "Ciphertext-like",
+      "plaintext": "Plaintext SQLite",
+      "missing": "Missing",
+      "unreadable": "Unreadable",
+      "unknown": "Unknown",
+      "incompleteAllowlist": "Allowlist incomplete"
+    },
+    "table": {
+      "time": "Time",
+      "subsystem": "Subsystem",
+      "destination": "Destination",
+      "operation": "Operation",
+      "bytesOut": "Bytes out",
+      "allowlist": "Allowlist",
+      "proxy": "via proxy",
+      "noRows": "No rows match these filters"
+    },
+    "status": {
+      "user": "User",
+      "builtIn": "Built-in",
+      "unexpected": "Unexpected",
+      "unknown": "Locked"
+    },
+    "subsystems": {
+      "title": "Subsystems",
+      "empty": "No subsystem traffic"
+    },
+    "subsystem": {
+      "sync": "Sync",
+      "pricing": "Pricing",
+      "ai": "AI",
+      "update": "Update",
+      "unknown": "Unknown"
+    }
+  },
   "logs": {
     "developerTools": "Developer tools",
     "live": "Live",

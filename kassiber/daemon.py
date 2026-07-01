@@ -171,6 +171,13 @@ from .db import (
     resolve_exports_root,
     resolve_attachments_root,
 )
+from .egress_ledger import (
+    EgressAllowlistEntry,
+    built_in_allowlist_entries,
+    db_header_proof,
+    endpoint_from_url,
+    get_egress_ledger,
+)
 from .envelope import build_envelope, build_error_envelope, json_ready
 from .errors import AppError
 from .proxy import onion_proxy_failure_hints, urlopen_with_proxy
@@ -252,6 +259,7 @@ _GRAPH_SEMANTICS_CACHE: dict[str, tuple[tuple[Any, ...], Any]] = {}
 SUPPORTED_KINDS = (
     "status",
     "ui.logs.snapshot",
+    "ui.egress.snapshot",
     "ui.overview.snapshot",
     "ui.workspace.overview.snapshot",
     "ui.transactions.list",
@@ -2606,10 +2614,69 @@ def _logs_snapshot_payload(request: dict[str, Any]) -> dict[str, Any]:
     return get_log_ring().snapshot(after_id=after_id, limit=limit)
 
 
+def _egress_snapshot_payload(
+    ctx: DaemonContext,
+    request: dict[str, Any],
+) -> dict[str, Any]:
+    args = _coerce_args_dict(request.get("request_id"), request.get("args"))
+    unknown = sorted(set(args) - {"after_id", "limit"})
+    if unknown:
+        raise AppError(
+            "ui.egress.snapshot received unsupported fields",
+            code="validation",
+            details={"unknown": unknown},
+            retryable=False,
+        )
+    after_id = _bounded_snapshot_int(
+        args,
+        "after_id",
+        request_kind="ui.egress.snapshot",
+        default=0,
+        minimum=0,
+        maximum=None,
+    )
+    limit = _bounded_snapshot_int(
+        args,
+        "limit",
+        request_kind="ui.egress.snapshot",
+        default=500,
+        minimum=1,
+        maximum=2000,
+    )
+    db_path = resolve_database_path(resolve_effective_data_root(ctx.data_root))
+    allowlist = _egress_allowlist(ctx)
+    return get_egress_ledger().snapshot(
+        after_id=after_id,
+        limit=limit,
+        allowlist=allowlist,
+        allowlist_complete=ctx.conn is not None,
+        db_header=db_header_proof(db_path),
+    )
+
+
 def _logs_snapshot_int(
     args: dict[str, Any],
     key: str,
     *,
+    default: int,
+    minimum: int,
+    maximum: int | None,
+) -> int:
+    return _bounded_snapshot_int(
+        args,
+        key,
+        request_kind="ui.logs.snapshot",
+        default=default,
+        minimum=minimum,
+        maximum=maximum,
+    )
+
+
+def _bounded_snapshot_int(
+    args: dict[str, Any],
+    key: str,
+    *,
+    request_kind: str,
     default: int,
     minimum: int,
     maximum: int | None,
@@ -2619,19 +2686,78 @@ def _logs_snapshot_int(
     value = args[key]
     if isinstance(value, bool) or not isinstance(value, int):
         raise AppError(
-            f"ui.logs.snapshot {key} must be an integer",
+            f"{request_kind} {key} must be an integer",
             code="validation",
             details={"type": type(value).__name__},
             retryable=False,
         )
     if value < minimum or (maximum is not None and value > maximum):
         raise AppError(
-            f"ui.logs.snapshot {key} is out of range",
+            f"{request_kind} {key} is out of range",
             code="validation",
             details={"min": minimum, "max": maximum},
             retryable=False,
         )
     return value
+
+
+def _egress_allowlist(ctx: DaemonContext) -> list[EgressAllowlistEntry]:
+    entries = built_in_allowlist_entries()
+    runtime_backends = ctx.runtime_config.get("backends")
+    if isinstance(runtime_backends, dict):
+        for raw_name, raw_backend in runtime_backends.items():
+            if not isinstance(raw_backend, dict):
+                continue
+            url = backend_value(raw_backend, "url")
+            if not url:
+                continue
+            host, port, _scheme = endpoint_from_url(url)
+            if not host:
+                continue
+            source = str(raw_backend.get("source") or "configured")
+            entries.append(
+                EgressAllowlistEntry(
+                    host=host,
+                    port=port,
+                    subsystem="any",
+                    label=f"backend:{raw_name}",
+                    source=source,
+                    user_allowlisted=source != "built-in default",
+                )
+            )
+    if ctx.conn is not None:
+        try:
+            rows = ctx.conn.execute(
+                "SELECT name, base_url, kind FROM ai_providers ORDER BY name"
+            ).fetchall()
+        except sqlite3.Error:
+            rows = []
+        for row in rows:
+            base_url = row["base_url"]
+            host, port, scheme = endpoint_from_url(base_url)
+            if scheme not in {"http", "https"}:
+                continue
+            if not host:
+                continue
+            entries.append(
+                EgressAllowlistEntry(
+                    host=host,
+                    port=port,
+                    subsystem="ai",
+                    label=f"ai:{row['name']}",
+                    source=str(row["kind"] or "ai-provider"),
+                    user_allowlisted=True,
+                )
+            )
+    seen = set()
+    deduped = []
+    for entry in entries:
+        key = (entry.host, entry.port, entry.subsystem, entry.label)
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(entry)
+    return deduped
 
 
 def _kind_field(kind: object) -> dict[str, str]:
@@ -9058,6 +9184,15 @@ def handle_request(
             False,
         )
 
+    if kind == "ui.egress.snapshot":
+        return (
+            _with_request_id(
+                build_envelope("ui.egress.snapshot", _egress_snapshot_payload(ctx, request)),
+                request_id,
+            ),
+            False,
+        )
+
     if ctx.conn is None:
         try:
             _open_daemon_connection(ctx)
@@ -11184,7 +11319,7 @@ def run(
                 continue
 
             kind = request.get("kind")
-            logged = kind != "ui.logs.snapshot"
+            logged = kind not in {"ui.logs.snapshot", "ui.egress.snapshot"}
             rid_token = current_request_id.set(
                 _request_id_registry_key(request.get("request_id"))
             )

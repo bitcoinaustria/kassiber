@@ -86,6 +86,10 @@
       "label": "Search imports",
       "placeholder": "Search wallets, file formats..."
     },
+    "egress": {
+      "label": "Search egress",
+      "placeholder": "Search hosts, subsystems..."
+    },
     "logs": {
       "label": "Search logs",
       "placeholder": "Search daemon errors, logs..."

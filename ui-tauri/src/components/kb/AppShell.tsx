@@ -267,6 +267,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { labelKey: "book.quarantine", icon: ShieldAlert, href: "/quarantine" },
       { labelKey: "book.reconcile", icon: Fingerprint, href: "/reconcile" },
+      { labelKey: "book.egress", icon: Plane, href: "/egress" },
       { labelKey: "book.sourceFunds", icon: BadgeCheck, href: "/source-of-funds" },
       { labelKey: "book.swaps", icon: ArrowLeftRight, href: "/swaps" },
       { labelKey: "book.ledger", icon: BookOpen, href: "/journals" },
@@ -332,6 +333,14 @@ const ROUTE_META: Array<[string, RouteMeta]> = [
       titleKey: "routeMeta.imports.title",
       icon: WalletCards,
       searchKey: "routeMeta.imports",
+    },
+  ],
+  [
+    "/egress",
+    {
+      titleKey: "nav:book.egress",
+      icon: Plane,
+      searchKey: "routeMeta.egress",
     },
   ],
   [

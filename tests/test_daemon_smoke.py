@@ -8692,6 +8692,15 @@ class DaemonSmokeTest(unittest.TestCase):
             self.assertEqual(first["data"]["records"], [])
             self.assertIn("started_at", first["data"])
 
+            _write_payload(proc, {"request_id": "egress-0", "kind": "ui.egress.snapshot"})
+            egress = _read_payload(proc)
+            self.assertEqual(egress["kind"], "ui.egress.snapshot")
+            self.assertEqual(egress["request_id"], "egress-0")
+            self.assertEqual(egress["data"]["records"], [])
+            self.assertEqual(egress["data"]["summary"]["update"], 0)
+            self.assertIn("db_header", egress["data"])
+            self.assertFalse(egress["data"]["allowlist_complete"])
+
             _write_payload(proc, {"request_id": "status-1", "kind": "status"})
             self.assertEqual(_read_payload(proc)["request_id"], "status-1")
 

@@ -372,6 +372,16 @@ class ConnectionCatalogDriftTests(unittest.TestCase):
         self.assertIn("ui.logs.snapshot", self._rust_allowlist())
         self.assertIn("ui.logs.snapshot", self._vite_allowlist())
 
+    def test_egress_snapshot_kind_is_allowed_by_desktop_boundaries(self):
+        """The egress auditor is a screenshot-facing RAM-only desktop read.
+        Keep its daemon kind in lockstep across Python, Tauri, and the Vite
+        bridge so packaged and bridge previews exercise the same boundary.
+        """
+
+        self.assertIn("ui.egress.snapshot", set(SUPPORTED_KINDS))
+        self.assertIn("ui.egress.snapshot", self._rust_allowlist())
+        self.assertIn("ui.egress.snapshot", self._vite_allowlist())
+
     def test_refresh_kinds_are_stream_capable_in_desktop_boundaries(self):
         tauri_streaming = re.search(
             r"STREAMING_DAEMON_KINDS[^=]*=\s*&\[(?P<body>.*?)\];",

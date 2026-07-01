@@ -86,6 +86,10 @@
       "label": "Importe durchsuchen",
       "placeholder": "Wallets, Dateiformate suchen…"
     },
+    "egress": {
+      "label": "Egress durchsuchen",
+      "placeholder": "Hosts, Subsysteme suchen…"
+    },
     "logs": {
       "label": "Protokoll durchsuchen",
       "placeholder": "Daemon-Fehler, Logs suchen…"

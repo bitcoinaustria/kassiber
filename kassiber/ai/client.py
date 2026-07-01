@@ -32,6 +32,7 @@ from typing import Any, Iterable, Iterator
 import urllib.error
 import urllib.request
 
+from ..egress_ledger import get_egress_ledger, http_request_bytes_out
 from ..errors import AppError
 from ..redaction import provider_error_body_preview
 
@@ -525,6 +526,13 @@ class OpenAICompatClient:
             data=body,
             method=method,
             headers=self._headers(json_body=body is not None, accept_sse=accept_sse),
+        )
+        get_egress_ledger().record_url(
+            url,
+            subsystem="ai",
+            operation="http.request",
+            method=method,
+            bytes_out=http_request_bytes_out(request, method),
         )
         try:
             return urllib.request.urlopen(

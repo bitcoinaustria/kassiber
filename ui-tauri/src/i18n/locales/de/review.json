@@ -326,6 +326,60 @@
       "body": "Kassiber hat einen neuen Eintrag in der Bearbeitungshistorie mit dem zurückgesetzten Wert geschrieben."
     }
   },
+  "egress": {
+    "title": "Egress-Auditor",
+    "subtitle": "Live-RAM-Ledger für ausgehende Verbindungen",
+    "refresh": "Aktualisieren",
+    "loadFailed": "Egress-Ledger konnte nicht geladen werden: {{error}}",
+    "empty": "Kein ausgehender Egress erfasst",
+    "gap": "Ältere Zeilen verworfen",
+    "queryPlaceholder": "Host, Subsystem, Label filtern",
+    "metric": {
+      "total": "Erfasst",
+      "unexpected": "Unerwartet",
+      "update": "Update",
+      "dbHeader": "DB-Header"
+    },
+    "db": {
+      "title": "SQLCipher-Header",
+      "classification": "Status",
+      "prefix": "Prefix",
+      "none": "kein",
+      "ciphertextLike": "Ciphertext-artig",
+      "plaintext": "Plaintext-SQLite",
+      "missing": "Fehlt",
+      "unreadable": "Nicht lesbar",
+      "unknown": "Unbekannt",
+      "incompleteAllowlist": "Allowlist unvollständig"
+    },
+    "table": {
+      "time": "Zeit",
+      "subsystem": "Subsystem",
+      "destination": "Ziel",
+      "operation": "Operation",
+      "bytesOut": "Bytes raus",
+      "allowlist": "Allowlist",
+      "proxy": "via Proxy",
+      "noRows": "Keine Zeilen passen zu diesen Filtern"
+    },
+    "status": {
+      "user": "Benutzer",
+      "builtIn": "Eingebaut",
+      "unexpected": "Unerwartet",
+      "unknown": "Gesperrt"
+    },
+    "subsystems": {
+      "title": "Subsysteme",
+      "empty": "Kein Subsystem-Traffic"
+    },
+    "subsystem": {
+      "sync": "Sync",
+      "pricing": "Bewertung",
+      "ai": "AI",
+      "update": "Update",
+      "unknown": "Unbekannt"
+    }
+  },
   "logs": {
     "developerTools": "Entwicklerwerkzeuge",
     "live": "Live",
