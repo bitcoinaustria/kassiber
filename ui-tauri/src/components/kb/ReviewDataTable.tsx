@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import {
+  useEffect,
   useMemo,
   useState,
   type ComponentType,
@@ -93,6 +94,12 @@ interface ReviewDataTableProps {
     action: ReviewTransactionAction,
     row: ReviewTableRow,
   ) => void;
+  /**
+   * Reports the rows in the order they are actually shown (after search,
+   * status/metric filters, and sort). Lets a parent drive queue navigation
+   * (e.g. "Save & next") against what the user sees, not the raw input order.
+   */
+  onVisibleRowsChange?: (rows: ReviewTableRow[]) => void;
 }
 
 const statusClass: Record<ReviewTableRow["status"], string> = {
@@ -175,6 +182,7 @@ export function ReviewDataTable({
   showPriorityBadge = true,
   shellClassName = screenShellClassName,
   onOpenTransactionAction,
+  onVisibleRowsChange,
 }: ReviewDataTableProps) {
   const { t } = useTranslation(["journals", "common"]);
   const hideSensitive = useUiStore((s) => s.hideSensitive);
@@ -227,6 +235,9 @@ export function ReviewDataTable({
         : a.date.localeCompare(b.date),
     );
   }, [globalFilter, metricFilterId, rows, sortDirection, statusFilter]);
+  useEffect(() => {
+    onVisibleRowsChange?.(filteredRows);
+  }, [filteredRows, onVisibleRowsChange]);
   const pageSize = 8;
   const pageCount = Math.max(Math.ceil(filteredRows.length / pageSize), 1);
   const currentPage = Math.min(pageIndex, pageCount - 1);

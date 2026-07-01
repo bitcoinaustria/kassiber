@@ -258,7 +258,6 @@
   "review": {
     "column": {
       "event": "Ereignis",
-      "issue": "Problem",
       "evidence": "Nachweis",
       "amountBasis": "Betrag / Anschaffungskosten",
       "impact": "Auswirkung"

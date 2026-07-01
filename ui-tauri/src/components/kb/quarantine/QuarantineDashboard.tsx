@@ -14,7 +14,11 @@ import {
   type Transaction,
   type TransactionEditDraft,
 } from "@/components/transactions";
-import { toDashboardTransaction } from "@/components/transactions/dashboard/model";
+import {
+  readTransactionDetailParams,
+  toDashboardTransaction,
+  updateTransactionDetailParams,
+} from "@/components/transactions/dashboard/model";
 import { useDaemon, useDaemonMutation } from "@/daemon/client";
 import { useCurrency } from "@/lib/currency";
 import type { Tx } from "@/mocks/seed";
@@ -36,10 +40,6 @@ interface QuarantineDashboardProps {
   onProcessJournals: () => void;
 }
 
-type DetailTab = NonNullable<
-  NonNullable<ReviewTableRow["transactionAction"]>["tab"]
->;
-
 interface TransactionResolveEnvelope {
   transaction?: Tx | null;
   query?: string;
@@ -59,7 +59,9 @@ export function QuarantineDashboard({
   const currency = useCurrency();
   const hideSensitive = useUiStore((s) => s.hideSensitive);
   const explorerSettings = useUiStore((s) => s.explorerSettings);
-  const [detailTarget, setDetailTarget] = React.useState(readDetailParams);
+  const [detailTarget, setDetailTarget] = React.useState(
+    readTransactionDetailParams,
+  );
   const [explorerTransaction, setExplorerTransaction] =
     React.useState<Transaction | null>(null);
   const [drafts, setDrafts] = React.useState<
@@ -83,6 +85,10 @@ export function QuarantineDashboard({
     () => quarantineResolvePlan(snapshot, rows, t),
     [rows, snapshot, t],
   );
+  // Track the rows in the order the table actually shows them (search +
+  // status/metric filters + sort), so "Save & next" advances through the
+  // visible queue rather than the raw snapshot order.
+  const [orderedRows, setOrderedRows] = React.useState<ReviewTableRow[]>(rows);
   const reasonGroupCount = snapshot.summary.by_reason.length;
   const detailTransaction = React.useMemo(() => {
     const tx = transactionQuery.data?.data?.transaction;
@@ -100,14 +106,15 @@ export function QuarantineDashboard({
   const selectedRowIndex = React.useMemo(
     () =>
       detailTarget.transactionId
-        ? rows.findIndex(
+        ? orderedRows.findIndex(
             (row) =>
               row.transactionAction?.transactionId === detailTarget.transactionId,
           )
         : -1,
-    [detailTarget.transactionId, rows],
+    [detailTarget.transactionId, orderedRows],
   );
-  const hasNext = selectedRowIndex >= 0 && selectedRowIndex < rows.length - 1;
+  const hasNext =
+    selectedRowIndex >= 0 && selectedRowIndex < orderedRows.length - 1;
 
   const openDetail = React.useCallback(
     (
@@ -116,7 +123,7 @@ export function QuarantineDashboard({
       setSaveError(null);
       const tab = action.tab ?? "details";
       setDetailTarget({ transactionId: action.transactionId, tab });
-      updateDetailParams(action.transactionId, tab);
+      updateTransactionDetailParams(action.transactionId, tab);
     },
     [],
   );
@@ -125,7 +132,7 @@ export function QuarantineDashboard({
     setDetailTarget({ transactionId: null, tab: "details" });
     setExplorerTransaction(null);
     setSaveError(null);
-    updateDetailParams(null);
+    updateTransactionDetailParams(null);
   }, []);
 
   const getDraft = React.useCallback(
@@ -160,13 +167,13 @@ export function QuarantineDashboard({
           draft.manualPrice !== baseline.manualPrice ||
           draft.manualValue !== baseline.manualValue ||
           draft.manualSource !== baseline.manualSource
-        : true;
+        : false;
       const reviewTaxDirty = baseline
         ? draft.reviewStatus !== baseline.reviewStatus ||
           draft.taxable !== baseline.taxable ||
           draft.atRegime !== baseline.atRegime ||
           draft.atCategory !== baseline.atCategory
-        : true;
+        : false;
       const manualPrice = parseManualDecimal(draft.manualPrice);
       const manualValue = parseManualDecimal(draft.manualValue);
       await metadataUpdate.mutateAsync({
@@ -201,14 +208,14 @@ export function QuarantineDashboard({
   const saveAndOpenNext = React.useCallback(
     async (transactionId: string, draft: TransactionEditDraft) => {
       await saveTransactionDraft(transactionId, draft);
-      const next = rows[selectedRowIndex + 1];
+      const next = orderedRows[selectedRowIndex + 1];
       if (next?.transactionAction) {
         openDetail(next.transactionAction);
         return;
       }
       closeDetail();
     },
-    [closeDetail, openDetail, rows, saveTransactionDraft, selectedRowIndex],
+    [closeDetail, openDetail, orderedRows, saveTransactionDraft, selectedRowIndex],
   );
 
   const runResolveStep = React.useCallback(
@@ -250,6 +257,7 @@ export function QuarantineDashboard({
         searchPlaceholder={t("quarantine.searchPlaceholder")}
         emptyMessage={t("quarantine.empty")}
         onOpenTransactionAction={openDetail}
+        onVisibleRowsChange={setOrderedRows}
         actions={
           <QuarantineActions
             isProcessingJournals={isProcessingJournals}
@@ -320,57 +328,5 @@ export function QuarantineDashboard({
         }}
       />
     </>
-  );
-}
-
-function readDetailParams(): { transactionId: string | null; tab: DetailTab } {
-  if (typeof window === "undefined") {
-    return { transactionId: null, tab: "details" };
-  }
-  const params = new URLSearchParams(window.location.search);
-  const tab = params.get("tab");
-  return {
-    transactionId:
-      params.get("tx") ?? params.get("transaction") ?? params.get("transactionId"),
-    tab: isDetailTab(tab) ? tab : "details",
-  };
-}
-
-function updateDetailParams(
-  transactionId: string | null,
-  tab: DetailTab = "details",
-) {
-  if (typeof window === "undefined") return;
-  const params = new URLSearchParams(window.location.search);
-  if (transactionId) {
-    params.set("tx", transactionId);
-    if (tab !== "details") {
-      params.set("tab", tab);
-    } else {
-      params.delete("tab");
-    }
-  } else {
-    params.delete("tx");
-    params.delete("transaction");
-    params.delete("transactionId");
-    params.delete("tab");
-  }
-  const nextQuery = params.toString();
-  window.history.replaceState(
-    null,
-    "",
-    nextQuery
-      ? `${window.location.pathname}?${nextQuery}`
-      : window.location.pathname,
-  );
-}
-
-function isDetailTab(value: string | null): value is DetailTab {
-  return (
-    value === "details" ||
-    value === "classify" ||
-    value === "pricing" ||
-    value === "tax" ||
-    value === "ledger"
   );
 }

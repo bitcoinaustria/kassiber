@@ -134,18 +134,20 @@ export function quarantineResolvePlan(
   rows: ReviewTableRow[],
   t: TFunction<"journals">,
 ): QuarantineResolvePlan {
-  const rowByTransactionId = new Map(
-    rows.map((row) => [row.transactionAction?.transactionId ?? row.id, row]),
-  );
+  // `rows` is produced by `quarantineRows(snapshot)`, so it is a 1:1,
+  // order-preserving projection of `snapshot.items`. Group by index rather
+  // than by transaction id: several quarantine items can share one
+  // transaction id (e.g. split-transfer legs), and a txid-keyed map would
+  // collapse them onto a single row and mis-count / duplicate the steps.
   const groups = new Map<QuarantineResolveStepId, ReviewTableRow[]>();
-  for (const item of snapshot.items) {
-    const row = rowByTransactionId.get(item.transaction_id);
-    if (!row) continue;
+  snapshot.items.forEach((item, index) => {
+    const row = rows[index];
+    if (!row) return;
     const groupId = resolveStepIdForReason(item.reason || "review_required");
     const groupRows = groups.get(groupId) ?? [];
     groupRows.push(row);
     groups.set(groupId, groupRows);
-  }
+  });
 
   const steps: QuarantineResolveStep[] = [];
   for (const id of RESOLVE_STEP_ORDER) {

@@ -258,7 +258,6 @@
   "review": {
     "column": {
       "event": "Event",
-      "issue": "Issue",
       "evidence": "Evidence",
       "amountBasis": "Amount / basis",
       "impact": "Impact"

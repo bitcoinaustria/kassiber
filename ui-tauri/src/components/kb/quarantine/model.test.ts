@@ -346,6 +346,36 @@ describe("quarantine resolve plan", () => {
       blockedCount: 0,
     });
   });
+
+  it("keeps items on distinct repair steps when they share a transaction id", () => {
+    const snapshot = snapshotWith([
+      { ...baseItem, transaction_id: "shared-tx", reason: "missing_spot_price" },
+      { ...baseItem, transaction_id: "shared-tx", reason: "insufficient_lots" },
+    ]);
+    const rows = quarantineRows(snapshot, t);
+
+    const plan = quarantineResolvePlan(snapshot, rows, t);
+    const priceStep = plan.steps.find((step) => step.id === "add-prices");
+    const basisStep = plan.steps.find((step) => step.id === "fix-basis");
+
+    expect(priceStep?.count).toBe(1);
+    expect(basisStep?.count).toBe(1);
+    expect(priceStep?.primaryAction).toMatchObject({
+      transactionId: "shared-tx",
+      tab: "pricing",
+    });
+    expect(basisStep?.primaryAction).toMatchObject({
+      transactionId: "shared-tx",
+      tab: "tax",
+    });
+    // Each step must preview its own row, not a collapsed duplicate of the
+    // last row sharing that transaction id.
+    expect(priceStep?.previewRows[0]?.event).toBe(rows[0].event);
+    expect(basisStep?.previewRows[0]?.event).toBe(rows[1].event);
+    expect(priceStep?.previewRows[0]?.event).not.toBe(
+      basisStep?.previewRows[0]?.event,
+    );
+  });
 });
 
 describe("quarantine reason filters", () => {
