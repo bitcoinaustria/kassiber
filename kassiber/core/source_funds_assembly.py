@@ -143,6 +143,33 @@ def _event_time(row: Mapping[str, Any]) -> str:
     return str(row["occurred_at"] or "")
 
 
+def _allocate_pro_rata(amounts: Sequence[int], target_sum: int) -> list[int]:
+    """Integer pro-rata allocation whose shares sum exactly to target_sum."""
+    if target_sum <= 0:
+        return [0 for _amount in amounts]
+    total = sum(amount for amount in amounts if amount > 0)
+    if total <= 0:
+        return [0 for _amount in amounts]
+    target_sum = min(target_sum, total)
+    if total <= target_sum:
+        return [max(0, amount) for amount in amounts]
+    allocations: list[int] = []
+    floor_sum = 0
+    remainders: list[int] = []
+    for amount in amounts:
+        exact = max(0, amount) * target_sum
+        floor_value = exact // total
+        allocations.append(floor_value)
+        floor_sum += floor_value
+        remainders.append(exact % total)
+    for index in sorted(
+        range(len(amounts)),
+        key=lambda position: (-remainders[position], position),
+    )[: target_sum - floor_sum]:
+        allocations[index] += 1
+    return allocations
+
+
 def derive_utxo_spend_pairs(
     rows: Sequence[Mapping[str, Any]],
     owned_index: Mapping[tuple[str, int], Mapping[str, Any]],
@@ -349,12 +376,18 @@ def derive_utxo_spend_pairs(
         vin_outpoints = tx_inputs(external)
 
         spending_wallets: set[str] = set()
+        input_amounts_by_wallet_asset: dict[tuple[str, str], int] = defaultdict(int)
         for outpoint in vin_outpoints:
             info = owned_index.get(outpoint)
             if info and info.get("ambiguous"):
                 continue
             if info:
-                spending_wallets.add(str(info["wallet_id"]))
+                wallet_id = str(info["wallet_id"])
+                asset = normalize_asset_code(str(info["asset"]))
+                amount = int(info["amount_msat"] or 0)
+                spending_wallets.add(wallet_id)
+                if amount > 0:
+                    input_amounts_by_wallet_asset[(wallet_id, asset)] += amount
 
         # parent_spend edges, sized as a group so they sum to exactly
         # min(total contributed, spend leg amount).
@@ -378,30 +411,20 @@ def derive_utxo_spend_pairs(
                 if total <= 0:
                     continue
                 target_sum = min(total, int(out_leg["amount"]))
-                allocations: list[int] = []
-                if total <= target_sum:
-                    allocations = [group["contributed_msat"] for _key, group in ordered]
-                else:
-                    remainders = []
-                    floor_sum = 0
-                    for _key, group in ordered:
-                        exact = group["contributed_msat"] * target_sum
-                        floor_value = exact // total
-                        allocations.append(floor_value)
-                        floor_sum += floor_value
-                        remainders.append(exact % total)
-                    for index in sorted(
-                        range(len(ordered)),
-                        key=lambda position: (-remainders[position], position),
-                    )[: target_sum - floor_sum]:
-                        allocations[index] += 1
+                allocations = _allocate_pro_rata(
+                    [group["contributed_msat"] for _key, group in ordered],
+                    target_sum,
+                )
                 for (_key, group), allocation in zip(ordered, allocations):
                     emit(
                         group["parent_leg"],
                         out_leg,
                         "parent_spend",
                         allocation,
-                        min(group["contributed_msat"], int(group["parent_leg"]["amount"])),
+                        min(
+                            group["contributed_msat"],
+                            int(group["parent_leg"]["amount"]),
+                        ),
                         group["outpoints"],
                         via=group["via"],
                     )
@@ -410,26 +433,46 @@ def derive_utxo_spend_pairs(
         # leg of each receiving wallet that owns outputs of this tx.
         if not spending_wallets:
             continue
-        received_by_wallet: dict[tuple[str, str], list[tuple[tuple[str, int], int]]] = defaultdict(list)
+        received_by_wallet: dict[
+            tuple[str, str], list[tuple[tuple[str, int], int]]
+        ] = defaultdict(list)
         for outpoint, info in owned_outputs_by_txid.get(external, []):
             received_by_wallet[(str(info["wallet_id"]), str(info["asset"]))].append(
                 (outpoint, int(info["amount_msat"] or 0))
             )
-        for spender_wallet in spending_wallets:
-            for (receiver_wallet, asset), received in received_by_wallet.items():
+        for (receiver_wallet, asset), received in received_by_wallet.items():
+            contributors = [
+                (wallet_id, amount)
+                for (wallet_id, input_asset), amount in sorted(
+                    input_amounts_by_wallet_asset.items()
+                )
+                if input_asset == asset and wallet_id != receiver_wallet and amount > 0
+            ]
+            if not contributors:
+                continue
+            received_total = sum(amount for _outpoint, amount in received)
+            in_leg = leg(external, receiver_wallet, "inbound", asset)
+            if in_leg is None:
+                continue
+            target_sum = min(received_total, int(in_leg["amount"]))
+            allocations = _allocate_pro_rata(
+                [amount for _wallet_id, amount in contributors],
+                target_sum,
+            )
+            for (spender_wallet, contributed), allocation in zip(
+                contributors, allocations
+            ):
                 if receiver_wallet == spender_wallet:
                     continue
                 out_leg = leg(external, spender_wallet, "outbound", asset)
-                in_leg = leg(external, receiver_wallet, "inbound", asset)
-                if out_leg is None or in_leg is None:
+                if out_leg is None:
                     continue
-                received_total = sum(amount for _outpoint, amount in received)
                 emit(
                     out_leg,
                     in_leg,
                     "leg_funding",
-                    min(received_total, int(in_leg["amount"])),
-                    min(received_total, int(out_leg["amount"])),
+                    allocation,
+                    min(contributed, int(out_leg["amount"])),
                     [outpoint for outpoint, _amount in received],
                 )
 
@@ -470,13 +513,17 @@ def derive_payment_hash_pairs(
             continue
         if _event_time(out_tx) > _event_time(in_tx):
             continue
+        out_amount = int(out_tx["amount"])
+        in_amount = int(in_tx["amount"])
+        if out_amount <= 0 or in_amount <= 0 or in_amount > out_amount:
+            continue
         pairs.append(
             {
                 "from_row": out_tx,
                 "to_row": in_tx,
                 "payment_hash": payment_hash,
-                "allocation_msat": int(in_tx["amount"]),
-                "from_allocation_msat": int(out_tx["amount"]),
+                "allocation_msat": in_amount,
+                "from_allocation_msat": out_amount,
                 "explanation": (
                     f"Both legs share payment hash {payment_hash[:16]}…; "
                     "a Lightning payment hash names exactly one payment."

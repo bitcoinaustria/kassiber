@@ -3671,8 +3671,9 @@ def export_bundle(
                 evidence_dir.mkdir(parents=True, exist_ok=True)
                 source = _Path(info["resolved_path"])
                 fname = _bundle_safe_name(label, info.get("original_filename") or "", source.suffix, used_names)
-                shutil.copy2(source, evidence_dir / fname)
-                sha = info.get("sha256") or _sha256_file(evidence_dir / fname)
+                bundled_path = evidence_dir / fname
+                shutil.copy2(source, bundled_path)
+                sha = _sha256_file(bundled_path)
                 evidence_manifest.append(
                     {
                         "label": label,

@@ -293,24 +293,37 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
     if (onboarding.kind === "error" || onboarding.error) {
       throw new Error(onboarding.error?.message ?? t("shell.finishError"));
     }
-    // Best-effort: persist the AI provider the assistant step configured.
-    // Non-fatal — onboarding already succeeded, and the provider can be
-    // added later from Settings -> Assistant; before this call the step's
-    // collected config was silently dropped.
+    // Persist and select the AI provider the assistant step configured.
+    // The default seeded provider can already exist, so onboarding treats
+    // create as "create or update" and then selects the entered provider.
     if (form.aiSetupMode !== "disabled" && form.aiBaseUrl.trim()) {
+      const providerName = form.aiProviderName.trim() || form.aiProviderKind;
+      const providerArgs = {
+        name: providerName,
+        base_url: form.aiBaseUrl.trim(),
+        kind: form.aiProviderKind,
+        acknowledged: form.aiRemoteAcknowledged,
+      };
+      const transport = getTransport("real");
+      const invokeProvider = async (
+        kind:
+          | "ai.providers.create"
+          | "ai.providers.update"
+          | "ai.providers.set_default",
+        args: Record<string, unknown>,
+      ) => {
+        const envelope = await transport.invoke({ kind, args });
+        if (envelope.kind === "error" || envelope.error) {
+          throw new Error(envelope.error?.message ?? t("shell.finishError"));
+        }
+        return envelope;
+      };
       try {
-        await getTransport("real").invoke({
-          kind: "ai.providers.create",
-          args: {
-            name: form.aiProviderName.trim() || form.aiProviderKind,
-            base_url: form.aiBaseUrl.trim(),
-            kind: form.aiProviderKind,
-            acknowledged: form.aiRemoteAcknowledged,
-          },
-        });
+        await invokeProvider("ai.providers.create", providerArgs);
       } catch {
-        // Swallow: assistant setup stays optional and repeatable post-setup.
+        await invokeProvider("ai.providers.update", providerArgs);
       }
+      await invokeProvider("ai.providers.set_default", { name: providerName });
     }
     const identity: Identity = {
       name: form.profile.trim() || "Private",

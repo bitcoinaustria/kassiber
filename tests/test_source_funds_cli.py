@@ -873,7 +873,7 @@ class SourceFundsCliTest(unittest.TestCase):
             self.assertRegex(extracted, r"BTC\s+↔\s+EUR")
 
     def test_reveal_modes_redact_txids_and_attachment_paths(self):
-        self._seed_exportable_disclosure_path()
+        seed = self._seed_exportable_disclosure_path()
         expected_txids = {
             "labels_only": [],
             "minimal": ["disclosure-target"],
@@ -1464,6 +1464,84 @@ class SourceFundsCliTest(unittest.TestCase):
         report = self._source_funds_report_for_target(target=target_id, amount="0.79900000")
         self.assertTrue(report["explain_gates"]["exportable"], report["explain_gates"]["blockers"])
 
+    def test_assemble_apportions_shared_receive_across_spenders(self):
+        """A transaction funded by multiple owned wallets must not assign the
+        full received output to every spender wallet."""
+        p1, p2, tt = "71" * 32, "72" * 32, "73" * 32
+        self._init_default_workspace()
+        self._write_csv(
+            "shared-a.csv",
+            "date,txid,direction,asset,amount,fee,fiat_rate,description\n"
+            f"2026-05-01T09:00:00Z,{p1},inbound,BTC,0.30000000,0,50000,A parent\n"
+            f"2026-05-02T09:00:00Z,{tt},outbound,BTC,0.30000000,0,50000,A contributes\n",
+        )
+        self._write_csv(
+            "shared-b.csv",
+            "date,txid,direction,asset,amount,fee,fiat_rate,description\n"
+            f"2026-05-01T10:00:00Z,{p2},inbound,BTC,0.50000000,0,50000,B parent\n"
+            f"2026-05-02T09:00:00Z,{tt},outbound,BTC,0.50000000,0,50000,B contributes\n",
+        )
+        self._write_csv(
+            "shared-c.csv",
+            "date,txid,direction,asset,amount,fee,fiat_rate,description\n"
+            f"2026-05-02T09:00:00Z,{tt},inbound,BTC,0.79900000,0,50000,C receives\n",
+        )
+        self._create_wallet_and_import("Shared A", "shared-a.csv")
+        self._create_wallet_and_import("Shared B", "shared-b.csv")
+        self._create_wallet_and_import("Shared C", "shared-c.csv")
+        conn = self._db()
+        try:
+            vin_json = json.dumps({"vin": [{"txid": p1, "vout": 0}, {"txid": p2, "vout": 0}]})
+            conn.execute("UPDATE transactions SET raw_json = ? WHERE external_id = ?", (vin_json, tt))
+            self._insert_utxos(
+                conn,
+                [
+                    ("Shared A", p1, 0, 30_000_000_000),
+                    ("Shared B", p2, 0, 50_000_000_000),
+                    ("Shared C", tt, 0, 79_900_000_000),
+                ],
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+        target_id = self._tx_id("Shared C", tt)
+        result = self.cli(
+            "source-funds", "assemble", "--workspace", "Sof", "--profile", "Default",
+            "--target-transaction", target_id,
+        )["data"]
+        self.assertGreaterEqual(result["methods"].get("utxo_spend", 0), 4)
+        links = self.cli(
+            "source-funds", "links", "list", "--workspace", "Sof", "--profile", "Default"
+        )["data"]
+        spend_rows = {self._tx_id("Shared A", tt), self._tx_id("Shared B", tt)}
+        target_allocs = sorted(
+            link["allocation_amount"]
+            for link in links
+            if link["method"] == "utxo_spend"
+            and link["from_transaction_id"] in spend_rows
+            and link["to_transaction_id"] == target_id
+        )
+        self.assertEqual(target_allocs, [0.2996250, 0.4993750])
+        self.assertAlmostEqual(sum(target_allocs), 0.799, places=8)
+
+        source = self.cli(
+            "source-funds", "sources", "create", "--workspace", "Sof", "--profile", "Default",
+            "--type", "fiat_purchase", "--label", "Shared roots", "--asset", "BTC",
+            "--amount", "0.80000000",
+        )["data"]
+        for parent_txid, amount in ((p1, "0.30000000"), (p2, "0.50000000")):
+            self.cli(
+                "source-funds", "links", "create", "--workspace", "Sof", "--profile", "Default",
+                "--from-source", source["id"], "--to-transaction", parent_txid,
+                "--type", "manual_source", "--allocation-amount", amount,
+                "--allocation-policy", "explicit",
+            )
+        report = self._source_funds_report_for_target(target=target_id, amount="0.79900000")
+        blockers = {item["code"] for item in report["explain_gates"]["blockers"]}
+        self.assertNotIn("ambiguous_allocation", blockers)
+        self.assertTrue(report["explain_gates"]["exportable"], report["explain_gates"]["blockers"])
+
     def test_assemble_resolves_through_net_zero_consolidation(self):
         """An in-wallet consolidation nets to a 0-amount row that cannot carry
         allocation demand; assembly must link its parents directly to the
@@ -1588,6 +1666,47 @@ class SourceFundsCliTest(unittest.TestCase):
         self.assertEqual(links[0]["method"], "payment_hash")
         self.assertEqual(links[0]["state"], "reviewed")
         self.assertEqual(links[0]["confidence"], "exact")
+
+    def test_assemble_rejects_payment_hash_when_receive_exceeds_send(self):
+        self._init_default_workspace()
+        payment_hash = "ef" * 32
+        self._write_csv(
+            "ln-small-send.csv",
+            "date,txid,direction,asset,amount,fee,fiat_rate,description\n"
+            "2026-05-03T09:00:00Z,ln-send-small,outbound,BTC,0.01000000,0.00000100,50000,LN payment out\n",
+        )
+        self._write_csv(
+            "ln-large-recv.csv",
+            "date,txid,direction,asset,amount,fee,fiat_rate,description\n"
+            "2026-05-03T09:00:05Z,ln-recv-large,inbound,BTC,0.01100000,0,50000,LN invoice settled\n",
+        )
+        self._create_wallet_and_import("LN Small Send", "ln-small-send.csv")
+        self._create_wallet_and_import("LN Large Receive", "ln-large-recv.csv")
+        conn = self._db()
+        try:
+            conn.execute(
+                "UPDATE transactions SET payment_hash = ?, payment_hash_source = 'import' "
+                "WHERE external_id IN ('ln-send-small', 'ln-recv-large')",
+                (payment_hash,),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+        result = self.cli(
+            "source-funds",
+            "assemble",
+            "--workspace",
+            "Sof",
+            "--profile",
+            "Default",
+            "--target-transaction",
+            "ln-recv-large",
+        )["data"]
+        self.assertEqual(result["auto_reviewed"], 0)
+        links = self.cli(
+            "source-funds", "links", "list", "--workspace", "Sof", "--profile", "Default"
+        )["data"]
+        self.assertFalse([link for link in links if link["method"] == "payment_hash"])
 
     def test_assemble_does_not_cross_privacy_boundaries(self):
         self._seed_utxo_chain()
@@ -1907,7 +2026,7 @@ class SourceFundsCliTest(unittest.TestCase):
         import hashlib
         import zipfile
 
-        self._seed_exportable_disclosure_path()
+        seed = self._seed_exportable_disclosure_path()
 
         # standard mode: original evidence files are bundled.
         preview = self._source_funds_report(reveal_mode="standard", save_case=True)
@@ -1915,6 +2034,17 @@ class SourceFundsCliTest(unittest.TestCase):
             preview["explain_gates"]["exportable"],
             preview["explain_gates"]["blockers"],
         )
+        conn = self._db()
+        try:
+            row = conn.execute(
+                "SELECT stored_relpath, sha256 FROM attachments WHERE id = ?",
+                (seed["file_attachment"],),
+            ).fetchone()
+            stale_sha = row["sha256"]
+            managed_path = self.root / "attachments" / row["stored_relpath"]
+            managed_path.write_text("Tampered evidence bytes after attach\n", encoding="utf-8")
+        finally:
+            conn.close()
         bundle_path = self.root / "bundle.zip"
         exported = self.cli(
             "reports",
@@ -1958,6 +2088,7 @@ class SourceFundsCliTest(unittest.TestCase):
                     hashlib.sha256(archive.read(item["filename"])).hexdigest(),
                     item["sha256"],
                 )
+                self.assertNotEqual(item["sha256"], stale_sha)
             url_items = [e for e in manifest["evidence"] if e.get("source") == "url"]
             self.assertGreaterEqual(len(url_items), 1)
             self.assertTrue(all("source_url" not in item for item in url_items))
