@@ -3,6 +3,7 @@ from __future__ import annotations
 import socket
 import tempfile
 import unittest
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import patch
 
@@ -96,12 +97,16 @@ class RegtestHarnessTest(unittest.TestCase):
                 "loan_principal_repaid",
             }.issubset(operation_kinds)
         )
-        self.assertGreaterEqual(scenario["expected"]["min_transactions"], 350)
-        self.assertGreaterEqual(scenario["expected"]["min_active_transactions"], 340)
+        self.assertGreaterEqual(scenario["expected"]["min_transactions"], 950)
+        self.assertGreaterEqual(scenario["expected"]["min_active_transactions"], 940)
+        base_time = datetime.fromisoformat(scenario["base_time"].replace("Z", "+00:00"))
         stress = scenario["stress"]
         self.assertTrue(stress["enabled"])
-        self.assertGreaterEqual(stress["cycles"], 72)
-        self.assertGreaterEqual(stress["cycles"] * stress["days_between_cycles"], 365 * 2)
+        self.assertGreaterEqual(stress["cycles"], 190)
+        stress_span_days = stress["cycles"] * stress["days_between_cycles"]
+        self.assertGreaterEqual(stress_span_days, 365 * 7)
+        self.assertLess(base_time, datetime(2020, 1, 1, tzinfo=timezone.utc))
+        self.assertLess(base_time + timedelta(days=stress_span_days), datetime(2026, 7, 1, tzinfo=timezone.utc))
         self.assertEqual(scenario["expected"]["collaborative_excluded"], 5)
         self.assertEqual(scenario["expected"]["min_transfer_pairs"], 2)
         self.assertEqual(scenario["expected"]["loan_marks"], 4)

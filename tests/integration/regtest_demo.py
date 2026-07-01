@@ -23,7 +23,7 @@ from kassiber.core.sync_backends import sanitize_wallet_segment
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_SCENARIO = ROOT / "dev" / "regtest" / "scenarios" / "full_accounting.json"
 SAT = Decimal("0.00000001")
-TRANSACTION_LIST_LIMIT = "1000"
+TRANSACTION_LIST_LIMIT = "1500"
 SECONDS_PER_DAY = 86_400
 
 
