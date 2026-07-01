@@ -380,7 +380,33 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
   gate (`test_secrets_smoke`, `test_freshness`, and the Vitest
   `appLogs`/`bridgeContainment` tests), but the dedicated Python redaction suite
   `tests/test_log_ring.py` is not wired into `scripts/quality-gate.sh` and there
-  is no systematic secret-leak scan — add both
+  is no systematic secret-leak scan — add both (the secret-leak scan is folded
+  into the #312 harness Wave 2 secret-hygiene work below)
+- [ ] Real-node integration harness (issue #312) — prove wallet sync +
+  accounting end-to-end against real regtest wallets/txs, reproducible offline
+  by any dev, no funds, no leaks. Design + verification captured in
+  [docs/reference/testing.md](docs/reference/testing.md) and issue #312.
+  Tiered so most PRs never touch Docker: FAST (tape-replay + goldens), MEDIUM
+  (serviceless CPU sweeps), SLOW (`docker compose` regtest = source of truth).
+  - **Wave 1 (no Docker, no compose dependency — land first):** hermetic env
+    (`PYTHONHASHSEED`/`TZ`/`LC_ALL`, seeded RNG, `KASSIBER_NO_EGRESS`
+    socket-`connect` kill-switch); frozen-clock seam routing all ~40 wall-clock
+    reads (incl. `exit_tax.py` deemed-disposal fallback) through one
+    `time_utils.now()` + a grep guard, correlated with bitcoind `setmocktime`;
+    three-tier gate arrays + `skipUnless` env helpers; offline pricing fixtures
+    (incl. BTC-EUR cent-rounding); content-level (never byte) export snapshots
+    leaning on `report_verify` OK/DIFF; mutation suite proving the oracles fail
+    on corruption; and the missing positive golden — a multi-wallet BTC+Liquid
+    transfer/swap → journal → report snapshot.
+  - **Wave 2 (rides the compose stack):** regtest genesis/chain guard before any
+    tx generation (assert `chain=="regtest"` / `"elementsregtest"`, not a
+    hardcoded Liquid genesis); tape *record* phase with provenance stamps so a
+    tape and its golden cannot silently diverge; backend-parity SLOW cases
+    (Core-RPC descriptor parity gated on #310, unmerged draft — skip-with-reason
+    + `expectedFailure` until it lands); digest-pinned images + arm64 replay
+    leg; label-triggered advisory CI lane; scrub-before-upload artifact
+    redaction. Record/nightly lanes must be `workflow_dispatch`/label-triggered
+    (no scheduled CI exists).
 
 ### 1.2 Tauri shell skeleton + typed IPC + first screen
 

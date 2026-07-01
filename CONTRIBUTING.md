@@ -101,3 +101,7 @@ Kassiber cares more about contract and regression safety than vanity metrics. Pr
 - `tests.test_cli_smoke`
 - `tests.test_review_regressions`
 - focused additions when user-visible behavior changes
+
+See [docs/reference/testing.md](docs/reference/testing.md) for how the suite is
+structured, reproducibility recommendations, and the planned real-node
+integration harness (issue #312).

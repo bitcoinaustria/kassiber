@@ -380,7 +380,7 @@ List endpoints with `--limit` also accept `--cursor`. The cursor is an opaque ba
 
 ## Verification
 
-All commands below assume project dependencies are installed — either via `uv sync` (then prefix with `uv run`) or via `pip install -e .` inside an activated venv (then use `python3` directly). The examples use `uv run python` because it works without pre-activation; swap in `python3` when working inside an activated venv. For the baseline push/PR pass, use `./scripts/quality-gate.sh` as the single trusted entrypoint; the commands below are the underlying pieces.
+All commands below assume project dependencies are installed — either via `uv sync` (then prefix with `uv run`) or via `pip install -e .` inside an activated venv (then use `python3` directly). The examples use `uv run python` because it works without pre-activation; swap in `python3` when working inside an activated venv. For the baseline push/PR pass, use `./scripts/quality-gate.sh` as the single trusted entrypoint; the commands below are the underlying pieces. The full testing model (framework, gate, determinism seams, and the planned real-node integration harness in issue #312) is documented in [docs/reference/testing.md](docs/reference/testing.md).
 
 - Compile check:
 
