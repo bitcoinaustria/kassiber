@@ -1936,7 +1936,6 @@ export function AddConnectionDialog({
       } else if (setupKind === "bip329") {
         const envelope = await importBip329.mutateAsync({
           file: form.bip329File.trim(),
-          wallet: form.bip329Wallet.trim() || undefined,
         });
         addNotification({
           title: t("add.bip329.labelsImportedTitle"),
@@ -3672,17 +3671,6 @@ export function AddConnectionDialog({
                 </Button>
               ) : null}
             </div>
-          </SetupField>
-          <SetupField
-            id="connection-bip329-wallet"
-            label={t("add.bip329.targetWalletLabel")}
-            helper={t("add.bip329.targetWalletHelper")}
-          >
-            <Input
-              id="connection-bip329-wallet"
-              value={form.bip329Wallet}
-              onChange={(event) => updateForm("bip329Wallet", event.target.value)}
-            />
           </SetupField>
         </>
       );

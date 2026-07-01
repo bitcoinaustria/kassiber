@@ -1124,51 +1124,69 @@ def revert_transaction_edit(
     }
 
 
-def import_bip329_labels(conn, workspace_ref, profile_ref, file_path, hooks: MetadataHooks, wallet_ref=None):
+def _decode_bip329_data(raw_json):
+    try:
+        payload = json.loads(raw_json or "{}")
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def import_bip329_labels(conn, workspace_ref, profile_ref, file_path, hooks: MetadataHooks):
     workspace, profile = hooks.resolve_scope(conn, workspace_ref, profile_ref)
-    wallet = hooks.resolve_wallet(conn, profile["id"], wallet_ref) if wallet_ref else None
     records = load_bip329_file(file_path)
     imported = 0
     updated = 0
     transaction_tags_added = 0
     transaction_tags_created = 0
+    transaction_labels_by_ref = {}
     for record in records:
         existing = conn.execute(
             """
-            SELECT id
+            SELECT *
             FROM bip329_labels
             WHERE profile_id = ?
-              AND COALESCE(wallet_id, '') = ?
               AND record_type = ?
               AND ref = ?
-              AND COALESCE(label, '') = ?
-              AND COALESCE(origin, '') = ?
             LIMIT 1
             """,
             (
                 profile["id"],
-                wallet["id"] if wallet else "",
                 record["type"],
                 record["ref"],
-                record["label"] or "",
-                record["origin"] or "",
             ),
         ).fetchone()
         if existing:
+            effective_label = record["label"] if record["label"] is not None else existing["label"]
+            effective_origin = record["origin"] if record["origin"] is not None else existing["origin"]
+            effective_spendable = (
+                existing["spendable"]
+                if record["spendable"] is None
+                else (1 if record["spendable"] else 0)
+            )
+            merged_data = _decode_bip329_data(existing["data_json"])
+            merged_data.update(record["data"])
             conn.execute(
                 """
                 UPDATE bip329_labels
-                SET spendable = ?, data_json = ?
+                SET wallet_id = NULL,
+                    label = ?,
+                    origin = ?,
+                    spendable = ?,
+                    data_json = ?
                 WHERE id = ?
                 """,
                 (
-                    None if record["spendable"] is None else (1 if record["spendable"] else 0),
-                    json.dumps(record["data"], sort_keys=True),
+                    effective_label,
+                    effective_origin,
+                    effective_spendable,
+                    json.dumps(merged_data, sort_keys=True),
                     existing["id"],
                 ),
             )
             updated += 1
         else:
+            effective_label = record["label"]
             conn.execute(
                 """
                 INSERT INTO bip329_labels(
@@ -1180,7 +1198,7 @@ def import_bip329_labels(conn, workspace_ref, profile_ref, file_path, hooks: Met
                     str(uuid.uuid4()),
                     workspace["id"],
                     profile["id"],
-                    wallet["id"] if wallet else None,
+                    None,
                     record["type"],
                     record["ref"],
                     record["label"],
@@ -1191,35 +1209,35 @@ def import_bip329_labels(conn, workspace_ref, profile_ref, file_path, hooks: Met
                 ),
             )
             imported += 1
-        if record["type"] == "tx" and record["label"]:
-            query = """
-                SELECT id
-                FROM transactions
-                WHERE profile_id = ? AND external_id = ?
+        if record["type"] == "tx" and effective_label:
+            transaction_labels_by_ref[record["ref"]] = effective_label
+    for tx_ref, label in transaction_labels_by_ref.items():
+        tx_rows = conn.execute(
             """
-            params = [profile["id"], record["ref"]]
-            if wallet:
-                query += " AND wallet_id = ?"
-                params.append(wallet["id"])
-            tx_rows = conn.execute(query, params).fetchall()
-            for tx in tx_rows:
-                tag, created = ensure_tag_row(
-                    conn,
-                    profile["workspace_id"],
-                    profile["id"],
-                    record["label"],
-                    record["label"],
-                    hooks,
-                )
-                if created:
-                    transaction_tags_created += 1
-                before = conn.total_changes
-                conn.execute(
-                    "INSERT OR IGNORE INTO transaction_tags(transaction_id, tag_id) VALUES(?, ?)",
-                    (tx["id"], tag["id"]),
-                )
-                if conn.total_changes > before:
-                    transaction_tags_added += 1
+            SELECT id
+            FROM transactions
+            WHERE profile_id = ? AND external_id = ?
+            """,
+            (profile["id"], tx_ref),
+        ).fetchall()
+        for tx in tx_rows:
+            tag, created = ensure_tag_row(
+                conn,
+                profile["workspace_id"],
+                profile["id"],
+                label,
+                label,
+                hooks,
+            )
+            if created:
+                transaction_tags_created += 1
+            before = conn.total_changes
+            conn.execute(
+                "INSERT OR IGNORE INTO transaction_tags(transaction_id, tag_id) VALUES(?, ?)",
+                (tx["id"], tag["id"]),
+            )
+            if conn.total_changes > before:
+                transaction_tags_added += 1
     if records:
         hooks.invalidate_journals(conn, profile["id"])
     conn.commit()
@@ -1267,7 +1285,6 @@ def list_bip329_labels(
     workspace_ref,
     profile_ref,
     hooks: MetadataHooks,
-    wallet_ref=None,
     cursor=None,
     limit=None,
 ):
@@ -1281,16 +1298,11 @@ def list_bip329_labels(
             code="validation",
             hint=f"Use a smaller --limit; max page size is {MAX_RECORDS_LIMIT}.",
         )
-    wallet = hooks.resolve_wallet(conn, profile["id"], wallet_ref) if wallet_ref else None
     cursor_filters = {
         "workspace_id": workspace["id"],
         "profile_id": profile["id"],
-        "wallet_id": wallet["id"] if wallet else "",
     }
-    wallet_clause = "AND wallet_id = ?" if wallet else ""
     params = [profile["id"]]
-    if wallet:
-        params.append(wallet["id"])
     cursor_data = _decode_bip329_cursor(cursor, cursor_filters)
     cursor_clause = ""
     if cursor_data:
@@ -1312,7 +1324,7 @@ def list_bip329_labels(
             END AS spendable,
             created_at
         FROM bip329_labels
-        WHERE profile_id = ? {wallet_clause} {cursor_clause}
+        WHERE profile_id = ? {cursor_clause}
         ORDER BY created_at DESC, id DESC
         LIMIT ?
         """,
@@ -1333,19 +1345,15 @@ def list_bip329_labels(
     }
 
 
-def export_bip329_labels(conn, workspace_ref, profile_ref, file_path, hooks: MetadataHooks, wallet_ref=None):
+def export_bip329_labels(conn, workspace_ref, profile_ref, file_path, hooks: MetadataHooks):
     _, profile = hooks.resolve_scope(conn, workspace_ref, profile_ref)
-    wallet = hooks.resolve_wallet(conn, profile["id"], wallet_ref) if wallet_ref else None
-    wallet_clause = "AND wallet_id = ?" if wallet else ""
     params = [profile["id"]]
-    if wallet:
-        params.append(wallet["id"])
     rows = conn.execute(
-        f"""
+        """
         SELECT record_type, ref, label, origin, spendable, data_json
         FROM bip329_labels
-        WHERE profile_id = ? {wallet_clause}
-        ORDER BY created_at ASC
+        WHERE profile_id = ?
+        ORDER BY created_at ASC, record_type ASC, ref ASC, id ASC
         """,
         params,
     ).fetchall()

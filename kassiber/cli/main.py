@@ -1274,18 +1274,15 @@ def build_parser() -> argparse.ArgumentParser:
     bip329_import = bip329_sub.add_parser("import")
     bip329_import.add_argument("--workspace")
     bip329_import.add_argument("--profile")
-    bip329_import.add_argument("--wallet")
     bip329_import.add_argument("--file", required=True)
     bip329_list = bip329_sub.add_parser("list")
     bip329_list.add_argument("--workspace")
     bip329_list.add_argument("--profile")
-    bip329_list.add_argument("--wallet")
     bip329_list.add_argument("--cursor")
     bip329_list.add_argument("--limit", type=int, default=core_metadata.DEFAULT_RECORDS_LIMIT)
     bip329_export = bip329_sub.add_parser("export")
     bip329_export.add_argument("--workspace")
     bip329_export.add_argument("--profile")
-    bip329_export.add_argument("--wallet")
     bip329_export.add_argument("--file", required=True)
     exclude = meta_sub.add_parser("exclude")
     exclude.add_argument("--workspace")
@@ -2959,7 +2956,7 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                 return emit(
                     args,
                     core_metadata.import_bip329_labels(
-                        conn, args.workspace, args.profile, args.file, metadata_hooks, wallet_ref=args.wallet
+                        conn, args.workspace, args.profile, args.file, metadata_hooks
                     ),
                 )
             if args.bip329_command == "list":
@@ -2968,7 +2965,6 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                     args.workspace,
                     args.profile,
                     metadata_hooks,
-                    wallet_ref=args.wallet,
                     cursor=args.cursor,
                     limit=args.limit,
                 )
@@ -2981,7 +2977,7 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                 return emit(
                     args,
                     core_metadata.export_bip329_labels(
-                        conn, args.workspace, args.profile, args.file, metadata_hooks, wallet_ref=args.wallet
+                        conn, args.workspace, args.profile, args.file, metadata_hooks
                     ),
                 )
         if args.metadata_command == "exclude":
