@@ -17,7 +17,7 @@ import {
 } from "@/components/kb/wallets";
 import { useDaemon } from "@/daemon/client";
 import { useWalletSyncAction } from "@/hooks/useWalletSyncAction";
-import { connectionKindCategoryLabels } from "@/lib/connectionDisplay";
+import { connectionCategoryLabel } from "@/lib/connectionDisplay";
 import { useCurrency } from "@/lib/currency";
 import { screenShellClassName } from "@/lib/screen-layout";
 import { useUiStore } from "@/store/ui";
@@ -59,7 +59,7 @@ export function Connections() {
   const filteredConnections = snapshot.connections.filter(
     (connection) =>
       (kindFilter === "all" ||
-        connectionKindCategoryLabels[connection.kind] === kindFilter) &&
+        connectionCategoryLabel(connection) === kindFilter) &&
       (statusFilter === "all" || connection.status === statusFilter),
   );
   const hasActiveFilters = kindFilter !== "all" || statusFilter !== "all";
@@ -112,6 +112,7 @@ export function Connections() {
           onSelectConnection={onSelectConnection}
           priceEur={snapshot.priceEur}
           totalBtc={totalBtc}
+          totalCount={snapshot.connections.length}
         />
       </div>
     </div>

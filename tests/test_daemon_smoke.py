@@ -864,6 +864,7 @@ class DaemonSmokeTest(unittest.TestCase):
             self.assertIn("ui.source_funds.links.bulk_review", ready["data"]["supported_kinds"])
             self.assertIn("ui.source_funds.links.attach", ready["data"]["supported_kinds"])
             self.assertIn("ui.source_funds.suggest", ready["data"]["supported_kinds"])
+            self.assertIn("ui.source_funds.assemble", ready["data"]["supported_kinds"])
             self.assertIn("ui.source_funds.evidence.list", ready["data"]["supported_kinds"])
             self.assertIn("ui.source_funds.export_pdf", ready["data"]["supported_kinds"])
             self.assertIn("ui.journals.snapshot", ready["data"]["supported_kinds"])
@@ -989,6 +990,8 @@ class DaemonSmokeTest(unittest.TestCase):
                     row["name"]: row for row in before["data"]["backends"]
                 }
                 self.assertFalse(before_rows["bench"]["is_default"])
+                self.assertFalse(before_rows["bench"]["url_safe_for_http_probe"])
+                self.assertTrue(before_rows["mempool"]["url_safe_for_http_probe"])
 
                 _write_payload(
                     proc,

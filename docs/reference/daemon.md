@@ -263,8 +263,8 @@ the CLI stores (`backend`, `chain`, `network`, `descriptor`,
 `change_descriptor`, `source_file`, `source_format`, `store_id`,
 etc.) and returns the redacted wallet row. Desktop callers can pass
 `wallet_material` instead of separate descriptor fields; the daemon recognizes
-common descriptor export shapes and stores receive/change descriptors when the
-material contains both.
+common descriptor export shapes, including plaintext BSMS descriptor records,
+and stores receive/change descriptors when the material contains both.
 
 `ui.wallets.import_samourai` is the desktop Samourai/Whirlpool watch-only path.
 It accepts `label`, optional `backend`, `network`, and `gap_limit`, plus exactly

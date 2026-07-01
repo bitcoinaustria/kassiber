@@ -367,6 +367,7 @@
       "copyId": "ID kopieren",
       "exclude": "Transaktion ausnehmen",
       "voidConfirm": "Diese Transaktion stornieren? Das kann nicht rückgängig gemacht werden.",
+      "excludeConfirm": "Diese Transaktion aus Journals und Berichten ausnehmen? Du kannst sie im Klassifizieren-Tab wieder einbeziehen.",
       "collateral": {
         "collateralBadge": "BTC-Sicherheit gestellt",
         "returnedBadge": "BTC-Sicherheit zurück",
@@ -443,6 +444,10 @@
     "loanMarkFailed": {
       "title": "Darlehensmarkierung konnte nicht gespeichert werden",
       "body": "Kassiber konnte die Darlehensmarkierung nicht speichern."
+    },
+    "transactionExcluded": {
+      "title": "Transaktion ausgenommen",
+      "body": "Verarbeite Journals neu, bevor du Berichten wieder vertraust."
     },
     "evidenceReused": {
       "title": "Beleg wiederverwendet",
@@ -746,6 +751,8 @@
     "notRealized": "Nicht realisiert",
     "costBasis": "Anschaffungskosten",
     "costBasisHint": "Lot-Basis aus verarbeiteten Journaleinträgen. Anschaffungszeilen nutzen den zum Zeitpunkt erfassten fairen Marktwert.",
+    "basisBlockerTitle": "Anschaffungslot fehlt",
+    "basisBlockerBody": "Kassiber kann diese Veräußerung nicht mit genug früher angeschafftem {{asset}} abgleichen. Synchronisiere oder importiere die finanzierende Anschaffung oder nimm diese Zeile aus, falls sie nicht berichtspflichtig ist. Danach Journale verarbeiten.",
     "proceeds": "Veräußerungserlös",
     "proceedsHint": "Veräußerungserlös aus verarbeiteten Journaleinträgen.",
     "incomeRecognized": "Erfasste Einnahme",
@@ -797,6 +804,7 @@
     "unknown": "Unbekannt",
     "noPairedMovement": "Keine gepaarte Bewegung",
     "noPairedMovementBody": "Wenn diese Tx das andere Leg einer Übertragung, eines Swaps oder eines Peg-in/out ist, erscheint das passende Leg hier. Du kannst auch eine manuelle Paarung aus der Swap-Kandidaten-Warteschlange erstellen.",
+    "openPairingReview": "Paarungsprüfung öffnen",
     "loanLegs": "Darlehenslegs",
     "loanId": "Darlehen {{id}}",
     "loanThisLeg": "Dieses Leg",
@@ -892,6 +900,9 @@
       "missingOrUnderReview": "Die Preisquelle ist als fehlend oder in Prüfung markiert. Speichere eine geprüfte Quelle, bevor du die Journale ausführst.",
       "readinessHint": "Das ist eine Warnung zur Preisbereitschaft aus der Transaktionszeile. Es ist keine aktive Journal-Quarantäne, sofern der Daemon keinen Quarantänegrund zurückgibt.",
       "viewPricing": "Bewertung ansehen",
+      "viewDetails": "Details ansehen",
+      "viewLinked": "Verknüpfungen ansehen",
+      "viewBasisContext": "Kostenbasis ergänzen",
       "openPricing": "Bewertung öffnen",
       "exclude": "Ausnehmen"
     },
@@ -920,6 +931,9 @@
       "excludedFromReports": "Aus Steuerberichten ausgenommen",
       "taxLabel": "Steuer: {{label}}",
       "resolveQuarantine": "Quarantäne beheben, um in Berichten einbezogen zu werden",
+      "resolveSyncMismatch": "Wallet-Outputs neu synchronisieren oder prüfen",
+      "restoreBasis": "Kostenbasis ergänzen",
+      "reviewPairing": "Gepaarte Bewegung prüfen",
       "pricingIncomplete": "Bewertung unvollständig",
       "noQuarantine": "Keine Quarantäne"
     },

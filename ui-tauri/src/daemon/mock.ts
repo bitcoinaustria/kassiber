@@ -531,6 +531,17 @@ let mockBackendSettingsRows: MockBackendSettingsRow[] = [
     has_url: true,
     display_name: "Blockstream Liquid Electrum",
   },
+  {
+    name: "fulcrum-onion-long",
+    kind: "electrum",
+    chain: "bitcoin",
+    network: "main",
+    url: "tcp://abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcd.onion:50001",
+    source: "mock",
+    has_url: true,
+    display_name: "Very Long Onion Fulcrum",
+    tor_proxy: "127.0.0.1:9050",
+  },
 ];
 
 const mockBackendSettingsPayload = () => ({
@@ -3512,8 +3523,9 @@ export const mockDaemon: DaemonTransport = {
     }
 
     if (req.kind === "ui.backends.http.test") {
-      const args = (req.args ?? {}) as { url?: unknown };
+      const args = (req.args ?? {}) as { url?: unknown; proxy?: unknown };
       const url = typeof args.url === "string" ? args.url.trim() : "";
+      const proxy = typeof args.proxy === "string" ? args.proxy.trim() : "";
       if (!url) {
         return {
           kind: "error",
@@ -3537,6 +3549,7 @@ export const mockDaemon: DaemonTransport = {
           logs: [
             `Preview mode: simulated HTTP test for ${url}`,
             "No network request was made.",
+            proxy ? `Proxy: ${proxy}.` : "Proxy: disabled.",
             "Simulated response: HTTP 200 OK",
             "Simulated content-type: application/json",
             "Simulated body: 256 bytes sampled",
@@ -4102,6 +4115,65 @@ export const mockDaemon: DaemonTransport = {
           data: { ...base, txs, nextCursor: null, hasMore: false } as T,
         };
       }
+    }
+
+    if (req.kind === "ui.source_funds.preview") {
+      // Echo target_amount / reveal_mode so the planned-sale amount field has a
+      // visible effect in the mock preview (the real daemon recomputes the
+      // report from these args).
+      const base = fixtures["ui.source_funds.preview"] as Record<string, unknown>;
+      const reqArgs = (req.args ?? {}) as {
+        target_amount?: unknown;
+        reveal_mode?: unknown;
+        report_options?: { reveal_overrides?: Record<string, string> };
+      };
+      const parsedAmount =
+        typeof reqArgs.target_amount === "number"
+          ? reqArgs.target_amount
+          : typeof reqArgs.target_amount === "string" && reqArgs.target_amount.trim()
+            ? Number(reqArgs.target_amount)
+            : null;
+      const clone = structuredClone(base) as Record<string, unknown>;
+      if (parsedAmount != null && Number.isFinite(parsedAmount) && parsedAmount > 0) {
+        clone.target = {
+          ...(clone.target as Record<string, unknown>),
+          required_amount: parsedAmount,
+        };
+        clone.overview = {
+          ...(clone.overview as Record<string, unknown>),
+          target_amount: parsedAmount,
+        };
+      }
+      if (typeof reqArgs.reveal_mode === "string" && reqArgs.reveal_mode) {
+        clone.reveal_mode = reqArgs.reveal_mode;
+      }
+      // Apply per-node reveal overrides so the disclosure preview flips live.
+      const overrides = reqArgs.report_options?.reveal_overrides ?? {};
+      if (Object.keys(overrides).length > 0) {
+        const graph = clone.graph as { nodes?: Record<string, unknown>[] } | undefined;
+        const hidden = new Set<string>();
+        for (const node of graph?.nodes ?? []) {
+          const id = String(node.transaction_id ?? "");
+          if (overrides[id] === "hide") {
+            if (node.external_id) hidden.add(String(node.external_id));
+            node.external_id = "";
+          }
+        }
+        if (hidden.size > 0) {
+          const preview = clone.disclosure_preview as
+            | { txids?: string[] }
+            | undefined;
+          if (preview && Array.isArray(preview.txids)) {
+            preview.txids = preview.txids.filter((txid) => !hidden.has(txid));
+          }
+        }
+      }
+      return {
+        kind: req.kind,
+        schema_version: 1,
+        request_id: req.request_id,
+        data: clone as T,
+      };
     }
 
     if (req.kind === "ui.transactions.graph") {

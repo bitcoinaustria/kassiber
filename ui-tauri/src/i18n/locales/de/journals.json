@@ -133,6 +133,10 @@
     "tableDescription_other": "{{rows}} angezeigt · {{count}} Grundgruppen",
     "searchPlaceholder": "Wallet, txid, Grund, Betrag suchen…",
     "empty": "Keine Transaktionen in Quarantäne im aktiven Buch.",
+    "actions": {
+      "transactions": "Transaktionen",
+      "processJournals": "Journale verarbeiten"
+    },
     "metric": {
       "quarantined": "In Quarantäne",
       "quarantinedFilter": "Alle in Quarantäne",
@@ -141,12 +145,32 @@
       "otherReview": "Sonstige Prüfung"
     },
     "impact": "Aus Berichten zurückgehalten",
+    "impactBlocksReports": "Blockiert Berichte",
+    "impactHeldForReview": "Zur Prüfung gehalten",
     "source": "Journal-Quarantäne · {{direction}}",
     "ownerFallback": "Aktives Buch",
+    "detailFallback": {
+      "price": "Preis",
+      "wallet": "Wallet"
+    },
+    "detail": {
+      "resolveError": "Diese Transaktion konnte nicht aus der Quarantäne-Warteschlange geöffnet werden."
+    },
     "direction": {
       "inbound": "eingehend",
       "outbound": "ausgehend",
       "fallback": "Transaktion"
+    },
+    "issue": {
+      "missingPrice": "Fehlender {{asset}}-Preis für {{direction}}",
+      "pricingReview": "Grober {{asset}}-Preis muss geprüft werden ({{granularity}})",
+      "implausibleFee": "Unplausible Transfergebühr",
+      "implausibleFeeWithWallets": "Unplausible Transfergebühr: {{from}} -> {{to}}",
+      "ownershipTransfer": "Eigenübertragung in {{wallet}} muss gepaart werden",
+      "ownershipAmountMismatch": "Wallet-Sync stimmt in {{wallet}} nicht überein",
+      "transferGroupBlocked": "Transfergruppe blockiert durch {{reason}}",
+      "insufficientLots": "Nicht genug {{asset}}-Lots in {{wallet}}",
+      "missingBasis": "Fehlende {{asset}}-Anschaffungskosten in {{wallet}}"
     },
     "basis": {
       "missingPrice": "Fehlender Fiat-Preis",
@@ -155,23 +179,30 @@
       "reviewRequired": "Prüfung erforderlich",
       "splitTransfer": "Split-Transfer / Swap-Prüfung",
       "coarsePricing": "Grobe Bewertung — prüfen",
-      "ownershipTransfer": "Eigenübertragung zwischen deinen Wallets"
+      "ownershipTransfer": "Eigenübertragung zwischen deinen Wallets",
+      "ownershipAmountMismatch": "Wallet-Sync-Abweichung"
     },
     "evidence": {
       "price": "Füge einen Fiat-Preis oder Kursabdeckung hinzu",
       "pair": "Wähle die passende Bewegung oder verwirf sie",
-      "basis": "Prüfe Anschaffungsverlauf und Anschaffungskosten",
+      "basis": "Für diese Veräußerung ist kein Anschaffungslot verfügbar",
       "asset": "Ordne das Quell-Asset vor der Meldung zu",
       "detail": "{{keys}} prüfen",
       "fallback": "Nachweise prüfen",
       "splitTransfer": "Prüfe die Eigenübertragung und das verbleibende Swap- oder Auszahlungs-Leg",
+      "splitTransferValues": "Implizite Gebühr {{impliedFee}} überschreitet Prüfschwelle {{ceiling}}",
       "coarsePricing": "Aus Tageskursen bewertet — präzise Preise holen oder bestätigen",
+      "coarsePricingValues": "{{quality}} / {{granularity}}-Preis auf {{wallet}}",
+      "priceValues": "Benötigt für {{requiredFor}} · {{route}}",
+      "basisValues": "Benötigt {{required}}, verfügbar {{available}} in {{wallet}}",
+      "ownershipAmountMismatch": "Erfasst {{rowAmount}}, aber eigene Outputs summieren sich auf {{ownedOutputs}}",
+      "ownershipLeg": "Mögliches eigenes Leg: {{amount}}",
       "ownershipTransfer": "Aus der On-Chain-Transaktion belegt — eine Ausgabe ging an eine andere deiner Wallets, der passende Eingang ließ sich aber nicht automatisch zuordnen"
     },
     "nextAction": {
       "price": "Preis setzen, dann Journale verarbeiten",
       "pair": "Paar prüfen, dann Journale verarbeiten",
-      "basis": "Fehlenden Anschaffungskontext ergänzen",
+      "basis": "Finanzierende Anschaffung synchronisieren oder importieren, dann Journale verarbeiten",
       "fallback": "Quellproblem beheben",
       "splitTransfer": "Split-Transfer/Swap prüfen, dann Journale verarbeiten",
       "coarsePricing": "Präzise Preise holen oder bestätigen, dann Journale verarbeiten",
@@ -180,16 +211,63 @@
       "ownershipAmountMismatch": "Der erfasste Betrag weicht von der On-Chain-Transaktion ab — Wallet neu synchronisieren, dann Journale verarbeiten"
     },
     "action": {
-      "openTransaction": "Transaktion öffnen",
-      "openPricing": "Bewertung öffnen",
-      "openPairing": "Paarung öffnen",
-      "openTaxReview": "Steuerprüfung öffnen"
+      "openTransaction": "Details prüfen",
+      "openPricing": "Preis ergänzen",
+      "openPairing": "Transfer prüfen",
+      "openSyncReview": "Sync-Problem prüfen",
+      "openBasisReview": "Kostenbasis ergänzen",
+      "openTaxReview": "Kostenbasis ergänzen"
+    },
+    "resolvePlan": {
+      "button": "Lösungsplan",
+      "eyebrow": "Bulk-Behebung",
+      "title": "Quarantäne-Lösungsplan",
+      "description": "Eine sichere Reihenfolge, um diese Warteschlange zu leeren, ohne steuerliche Behandlung zu raten.",
+      "summary": "{{count}} Zeilen in Quarantäne · {{steps}} Reparaturschritte vor der Journalverarbeitung",
+      "summaryClear": "Keine Quarantänezeilen müssen behoben werden.",
+      "blocked": "{{count}} blockiert",
+      "actionable": "{{count}} ausführbar",
+      "affectedRows": "Betroffene Zeilen",
+      "moreRows_one": "+{{count}} weitere Zeile",
+      "moreRows_other": "+{{count}} weitere Zeilen",
+      "empty": "Die Warteschlange ist sauber.",
+      "step": {
+        "sync-wallets": {
+          "title": "Wallet-Datensätze synchronisieren oder prüfen",
+          "detail": "Zeilen, deren erfasster Betrag von eigenen On-Chain-Outputs abweicht, sollten zuerst synchronisiert oder geprüft werden.",
+          "action": "Sync-Problem prüfen"
+        },
+        "review-transfers": {
+          "title": "Transferentscheidungen prüfen",
+          "detail": "Transfer-, Eigenübertragungs- und Split-Swap-Zeilen brauchen eine menschliche Paarungsentscheidung, bevor Journale der Bewegung vertrauen können.",
+          "action": "Ersten Transfer prüfen"
+        },
+        "fix-basis": {
+          "title": "Fehlende Kostenbasis prüfen",
+          "detail": "Diese Zeilen brauchen Anschaffungs-Lots oder Quellkontext, bevor Steuerberichte ihre Abgänge aufnehmen können.",
+          "action": "Erste Basislücke prüfen"
+        },
+        "add-prices": {
+          "title": "Preise ergänzen oder bestätigen",
+          "detail": "Fehlende oder grobe Preise können im Bewertungstab gelöst und anschließend durch die Warteschlange gespeichert werden.",
+          "action": "Ersten Preis ergänzen"
+        },
+        "review-other": {
+          "title": "Weitere Blocker prüfen",
+          "detail": "Diese Zeilen brauchen eine Einzelfallprüfung, weil sie in keine sichere Bulk-Kategorie passen.",
+          "action": "Erste Zeile prüfen"
+        },
+        "process": {
+          "title": "Journale verarbeiten",
+          "detail": "Diesen Schritt nach den Reparaturen ausführen. Alles, was weiter unsicher ist, bleibt in Quarantäne.",
+          "action": "Journale verarbeiten"
+        }
+      }
     }
   },
   "review": {
     "column": {
       "event": "Ereignis",
-      "issue": "Problem",
       "evidence": "Nachweis",
       "amountBasis": "Betrag / Anschaffungskosten",
       "impact": "Auswirkung"

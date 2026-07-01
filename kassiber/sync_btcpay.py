@@ -21,6 +21,7 @@ from .backends import backend_timeout, backend_value
 from .core.sync import emit_sync_progress
 from .errors import AppError
 from .importers import normalize_btcpay_record, parse_btcpay_labels
+from .proxy import build_proxy_opener
 from .retry import retry_after_seconds_from_http_error
 
 
@@ -63,7 +64,7 @@ def fetch_btcpay_records(
     if page_size <= 0:
         raise AppError("BTCPay page_size must be positive", code="validation")
     timeout = backend_timeout(backend)
-    http_opener = opener or urlrequest.build_opener()
+    http_opener = opener or _backend_http_opener(backend)
     checkpoint = checkpoint if isinstance(checkpoint, dict) else {}
     previous_pages = checkpoint.get("btcpay_pages") or {}
     previous_pagination = checkpoint.get("btcpay_pagination") or {}
@@ -142,7 +143,7 @@ def fetch_btcpay_invoice_provenance(
     if page_size <= 0:
         raise AppError("BTCPay page_size must be positive", code="validation")
     timeout = backend_timeout(backend)
-    http_opener = opener or urlrequest.build_opener()
+    http_opener = opener or _backend_http_opener(backend)
     checkpoint = checkpoint if isinstance(checkpoint, dict) else {}
     previous_pages = checkpoint.get("btcpay_invoice_pages") or {}
     previous_pagination = checkpoint.get("btcpay_invoice_pagination") or {}
@@ -212,7 +213,7 @@ def probe_btcpay_wallet(
             hint="Store the api key with `kassiber backends update --token-stdin` or `--token-fd FD`.",
         )
     timeout = backend_timeout(backend)
-    http_opener = opener or urlrequest.build_opener()
+    http_opener = opener or _backend_http_opener(backend)
     url = _build_list_url(base, store_id, payment_method_id, 0, 1)
     page = _http_get_json(
         http_opener,
@@ -252,7 +253,7 @@ def discover_btcpay_wallet_sources(backend, opener=None):
             hint="Enter a Greenfield API key for this BTCPay instance.",
         )
     timeout = backend_timeout(backend)
-    http_opener = opener or urlrequest.build_opener()
+    http_opener = opener or _backend_http_opener(backend)
     stores_url = _build_stores_url(base)
     raw_stores = _http_get_json(
         http_opener,
@@ -324,6 +325,13 @@ def _build_invoices_url(base, store_id, skip, limit):
     store_q = urlparse.quote(store_id, safe="")
     query = urlparse.urlencode({"skip": str(skip), "take": str(limit)})
     return f"{base.rstrip('/')}/api/v1/stores/{store_q}/invoices?{query}"
+
+
+def _backend_http_opener(backend):
+    return build_proxy_opener(
+        backend_value(backend, "tor_proxy", "proxy"),
+        source_label="BTCPay",
+    )
 
 
 def _page_sort_key(item):

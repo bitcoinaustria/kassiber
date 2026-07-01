@@ -343,7 +343,30 @@ Use this for Electrum/Fulcrum-style servers.
 
 - Kassiber uses scripthash calls and raw transaction fetches
 - works for Bitcoin and for the current bundled Liquid endpoint
+- accepts clearnet hosts and `.onion` hosts, for example
+  `tcp://abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcd.onion:50001`
+  or `ssl://...onion:50002` when the server's TLS setup matches
 - `INSECURE=1` disables TLS verification and should only be used against servers you control
+
+### Tor / `.onion` backends
+
+Supported backend URLs may be clearnet or `.onion`. For example:
+
+```bash
+python3 -m kassiber backends create fulcrum-onion \
+  --kind electrum \
+  --url tcp://abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcd.onion:50001 \
+  --tor-proxy 127.0.0.1:9050
+
+python3 -m kassiber backends create esplora-onion \
+  --kind esplora \
+  --url http://abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcd.onion/api \
+  --tor-proxy 127.0.0.1:9050
+```
+
+In the desktop app, entering a `.onion` backend host prefills the standard
+local Tor SOCKS proxy for that backend only. Kassiber does not start Tor; keep
+your Tor service running separately.
 
 ### Bitcoin Core RPC
 
@@ -363,8 +386,10 @@ Use this when you run your own node.
 ## Descriptor and Liquid notes
 
 Descriptor wallets derive receive and change scripts locally and then refresh
-through an Esplora- or Electrum-backed backend. Source refresh also updates the
-durable local UTXO inventory shown in the desktop wallet detail view.
+through an Esplora- or Electrum-backed backend. They accept output descriptors,
+common descriptor exports, and plaintext BSMS descriptor records. Source refresh
+also updates the durable local UTXO inventory shown in the desktop wallet
+detail view.
 The default gap limit is 40 unused addresses per branch, and Kassiber caps the configured gap limit at 5,000 to avoid accidental runaway scans.
 
 Example Bitcoin descriptor wallet:
@@ -417,7 +442,17 @@ For Liquid:
 - descriptor sync leaks more wallet structure than fixed-address sync
 - descriptors and blinding keys are Kassiber-managed secrets; prefer stdin/fd
   entry over inline argv, and avoid temporary plaintext descriptor files
-- `tor_proxy` is stored but not wired yet; route the whole process externally if needed
+- `tor_proxy` is a deliberate per-backend routing choice. It is honored by
+  Electrum, Esplora / Explorer-API HTTP reads, BTCPay Greenfield sync, Bitcoin
+  Core RPC, and mempool-rate fetches that use a configured backend. Partial
+  routing is supported: a proxy on one backend does not route any other
+  backend, AI provider, or standalone rate provider. Values may be `HOST:PORT`,
+  `socks5h://HOST:PORT`, `socks5h://USER:PASS@HOST:PORT`, or `http(s)://...`;
+  percent-encode special username/password characters. It is not a bundled Tor
+  daemon or a global proxy for standalone Coinbase/CoinGecko rate providers.
+  The desktop setup forms detect `.onion` hosts, prefill `127.0.0.1:9050`, and
+  keep the notice scoped to the backend being edited; Tor itself must already be
+  running.
 - credentials in argv (`--token <value>`, `--password <value>`,
   `--auth-header <value>`, `--username <value>`) land in shell history
   and the process listing — use the `--*-stdin` / `--*-fd FD` variants

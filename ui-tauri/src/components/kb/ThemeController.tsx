@@ -14,6 +14,7 @@ export function ThemeController() {
     const applyTheme = () => {
       const dark = theme === "dark" || (theme === "system" && media.matches);
       document.documentElement.classList.toggle("dark", dark);
+      document.documentElement.classList.toggle("light", !dark);
       document.documentElement.style.colorScheme = dark ? "dark" : "light";
     };
 

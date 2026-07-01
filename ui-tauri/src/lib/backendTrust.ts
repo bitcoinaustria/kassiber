@@ -24,6 +24,15 @@ export interface TrustInfo {
   className: string;
 }
 
+const PROXY_AWARE_TRANSPORTS = new Set([
+  "bitcoinrpc",
+  "btcpay",
+  "electrum",
+  "esplora",
+  "liquid-esplora",
+  "mempool",
+]);
+
 const FIRST_PARTY_CLASS =
   "border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300";
 const SHIELDED_CLASS =
@@ -41,6 +50,14 @@ export function endpointHost(url: string): string {
   } catch {
     return raw.toLowerCase();
   }
+}
+
+export function isOnionHost(host: string): boolean {
+  return host.toLowerCase().endsWith(".onion");
+}
+
+export function isOnionEndpoint(url: string): boolean {
+  return isOnionHost(endpointHost(url));
 }
 
 /**
@@ -71,11 +88,27 @@ export function inferredInfrastructureOwnership(
 export function backendTrustFromEndpoint(
   url: string,
   hasProxy = false,
-  ownership?: InfrastructureOwnership,
+  transportKindOrOwnership?: string | InfrastructureOwnership,
+  ownershipMaybe?: InfrastructureOwnership,
 ): TrustInfo {
+  const ownership =
+    ownershipMaybe ??
+    (transportKindOrOwnership === "self" ||
+    transportKindOrOwnership === "third_party"
+      ? transportKindOrOwnership
+      : undefined);
+  const transportKind =
+    ownershipMaybe === undefined &&
+    (transportKindOrOwnership === "self" ||
+      transportKindOrOwnership === "third_party")
+      ? undefined
+      : transportKindOrOwnership?.toLowerCase();
   const host = endpointHost(url);
   const isLocal = isLocalOrPrivateHost(host);
-  const isOnion = host.endsWith(".onion");
+  const isOnion = isOnionHost(host);
+  const proxyHonored =
+    hasProxy &&
+    (!transportKind || PROXY_AWARE_TRANSPORTS.has(transportKind));
 
   // Truly local wins regardless of the ownership flag — the queries never
   // leave your machine/LAN.
@@ -101,7 +134,7 @@ export function backendTrustFromEndpoint(
     };
   }
 
-  if (isOnion || hasProxy) {
+  if (isOnion || proxyHonored) {
     return {
       posture: "shielded",
       label:
@@ -114,7 +147,7 @@ export function backendTrustFromEndpoint(
             : "Via proxy",
       note: isOnion
         ? "Reached over Tor — this server cannot tie your queries to your IP address, but still sees the queries themselves."
-        : "Routed through a proxy — your IP address stays hidden from this server, which still sees the queries themselves.",
+        : "Only this configured backend is routed through its proxy — your IP address stays hidden from this server, which still sees the queries themselves. Other backends keep their own routing.",
       icon: Network,
       className: SHIELDED_CLASS,
     };

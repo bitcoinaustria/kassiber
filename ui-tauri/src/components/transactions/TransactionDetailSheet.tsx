@@ -94,6 +94,7 @@ export function TransactionDetailSheet({
   explorerSettings,
   isSaving,
   saveError,
+  quarantineReasonOverride,
   nowRate,
   attachments,
   journalEvents = [],
@@ -111,6 +112,7 @@ export function TransactionDetailSheet({
   onRemoveAttachment,
   onUnpair,
   isUnpairing,
+  onOpenPairingReview,
   onOpenMarketDataSettings,
   onRevertHistory,
   onProcessJournals,
@@ -138,6 +140,7 @@ export function TransactionDetailSheet({
   explorerSettings: ExplorerSettings;
   isSaving?: boolean;
   saveError?: string | null;
+  quarantineReasonOverride?: string | null;
   nowRate?: number | null;
   attachments?: AttachmentItem[];
   journalEvents?: JournalEventItem[];
@@ -158,6 +161,7 @@ export function TransactionDetailSheet({
   onRemoveAttachment?: (item: AttachmentItem) => void;
   onUnpair?: (pairId: string) => void | Promise<void>;
   isUnpairing?: boolean;
+  onOpenPairingReview?: () => void;
   onOpenMarketDataSettings?: () => void;
   onRevertHistory?: (target: HistoryRevertTarget) => void | Promise<void>;
   onProcessJournals?: () => void;
@@ -335,9 +339,38 @@ export function TransactionDetailSheet({
     transaction.amount === null;
   const isLabeled =
     localDraft.label !== "Unlabeled" && localDraft.label.trim().length > 0;
-  const quarantineReason = transaction.quarantineReason ?? null;
+  const quarantineReason =
+    quarantineReasonOverride ?? transaction.quarantineReason ?? null;
+  const quarantineReasonCode = quarantineReason?.toLowerCase() ?? "";
+  const isSyncQuarantine = quarantineReasonCode.includes(
+    "ownership_transfer_amount_mismatch",
+  );
+  const isBasisQuarantine =
+    quarantineReasonCode.includes("basis") ||
+    quarantineReasonCode.includes("lot") ||
+    quarantineReasonCode.includes("insufficient");
+  const isTransferQuarantine =
+    quarantineReasonCode.includes("ownership_transfer") ||
+    quarantineReasonCode.includes("transfer") ||
+    quarantineReasonCode.includes("pair") ||
+    quarantineReasonCode.includes("swap");
+  const isSplitTransferQuarantine =
+    quarantineReasonCode.includes("transfer_fee_implausible");
+  const quarantineTargetTab = isSplitTransferQuarantine
+    ? "details"
+    : isSyncQuarantine
+      ? "details"
+      : isTransferQuarantine
+        ? "linked"
+        : isBasisQuarantine
+          ? "tax"
+          : "pricing";
   const hasJournalQuarantine = Boolean(quarantineReason) && !localDraft.excluded;
   const hasPricingBlocker = isPricingMissing && !localDraft.excluded;
+  const suppressPricingCacheWarning =
+    hasJournalQuarantine && quarantineTargetTab === "pricing";
+  const suppressBasisQuarantineWarning =
+    hasJournalQuarantine && quarantineTargetTab === "tax";
   const showReviewBanner =
     hasJournalQuarantine || (activeTab !== "pricing" && hasPricingBlocker);
   const confLabel = confirmationsLabel(
@@ -454,13 +487,19 @@ export function TransactionDetailSheet({
     {
       key: "quarantine",
       label: hasJournalQuarantine
-        ? t("sheet.checklist.resolveQuarantine")
+        ? isSyncQuarantine
+          ? t("sheet.checklist.resolveSyncMismatch")
+          : isBasisQuarantine
+            ? t("sheet.checklist.restoreBasis")
+            : isTransferQuarantine
+              ? t("sheet.checklist.reviewPairing")
+              : t("sheet.checklist.resolveQuarantine")
         : hasPricingBlocker
           ? t("sheet.checklist.pricingIncomplete")
           : t("sheet.checklist.noQuarantine"),
       done: !hasJournalQuarantine && !hasPricingBlocker,
       warn: hasJournalQuarantine || hasPricingBlocker,
-      tab: "pricing",
+      tab: hasJournalQuarantine ? quarantineTargetTab : "pricing",
     },
   ];
 
@@ -518,6 +557,13 @@ export function TransactionDetailSheet({
     setActiveTab("pricing");
     setTimeout(() => manualPriceRef.current?.focus(), 0);
   };
+  const jumpToQuarantineTarget = () => {
+    if (hasJournalQuarantine && quarantineTargetTab !== "pricing") {
+      setActiveTab(quarantineTargetTab);
+      return;
+    }
+    jumpToManualPrice();
+  };
   const chooseExactManualPrice = () => {
     updateDraft("pricingSourceKind", "manual_override");
     updateDraft("pricingQuality", "exact");
@@ -529,6 +575,55 @@ export function TransactionDetailSheet({
   const setExcluded = () => updateDraft("excluded", true);
   const normalizedQuarantineReason = quarantineReason
     ? quarantineReason.replace(/_/g, " ")
+    : null;
+  const reviewBanner = showReviewBanner
+    ? (() => {
+        if (hasJournalQuarantine) {
+          return {
+            title: isBasisQuarantine
+              ? t("tax.basisBlockerTitle")
+              : t("sheet.banner.journalQuarantine"),
+            reason: isBasisQuarantine
+              ? t("tax.basisBlockerBody", {
+                  asset: transaction.asset ?? "asset",
+                })
+              : t("sheet.banner.journalBlocker", {
+                  reason: normalizedQuarantineReason,
+                }),
+            primaryActionLabel: isSyncQuarantine
+              ? t("sheet.banner.viewDetails")
+              : isBasisQuarantine
+                ? t("sheet.banner.viewBasisContext")
+                : isTransferQuarantine
+                  ? t("sheet.banner.viewLinked")
+                  : t("sheet.banner.viewPricing"),
+          };
+        }
+        if (transaction.amount === null) {
+          return {
+            title: t("sheet.banner.missingFiatPrice"),
+            reason: t("sheet.banner.noFiatRecorded", {
+              date: transaction.date,
+            }),
+            hint: t("sheet.banner.readinessHint"),
+            primaryActionLabel: t("sheet.banner.openPricing"),
+          };
+        }
+        if (localDraft.pricingSourceKind === null) {
+          return {
+            title: t("sheet.banner.noPricingSource"),
+            reason: t("sheet.banner.noPersistedSource"),
+            hint: t("sheet.banner.readinessHint"),
+            primaryActionLabel: t("sheet.banner.openPricing"),
+          };
+        }
+        return {
+          title: t("sheet.banner.pricingFlagged"),
+          reason: t("sheet.banner.missingOrUnderReview"),
+          hint: t("sheet.banner.readinessHint"),
+          primaryActionLabel: t("sheet.banner.openPricing"),
+        };
+      })()
     : null;
 
   const taxNarrative = (() => {
@@ -600,6 +695,9 @@ export function TransactionDetailSheet({
     isProviderSamplePricing,
     isExactPricing,
     isPricingMissing,
+    isBasisQuarantine,
+    suppressPricingCacheWarning,
+    suppressBasisQuarantineWarning,
     pricePoint,
     nowRate,
     onOpenMarketDataSettings,
@@ -615,6 +713,7 @@ export function TransactionDetailSheet({
     loanLinkCandidates: loanLinkCandidates ?? [],
     onUnpair,
     isUnpairing,
+    onOpenPairingReview,
     onLinkLoan,
     isLoanLinking,
     journalEvents,
@@ -663,46 +762,22 @@ export function TransactionDetailSheet({
           <div className="min-h-0 flex-1 overflow-y-auto">
             <div className="grid gap-4 p-4 sm:p-6 xl:grid-cols-[minmax(0,1fr)_320px]">
               <div className="min-w-0 space-y-4">
-                {showReviewBanner ? (
+                {reviewBanner ? (
                   <QuarantineBanner
-                    title={
-                      hasJournalQuarantine
-                        ? t("sheet.banner.journalQuarantine")
-                        : transaction.amount === null
-                        ? t("sheet.banner.missingFiatPrice")
-                        : localDraft.pricingSourceKind === null
-                          ? t("sheet.banner.noPricingSource")
-                          : t("sheet.banner.pricingFlagged")
-                    }
-                    reason={
-                      hasJournalQuarantine
-                        ? t("sheet.banner.journalBlocker", {
-                            reason: normalizedQuarantineReason,
-                          })
-                        : transaction.amount === null
-                          ? t("sheet.banner.noFiatRecorded", {
-                              date: transaction.date,
-                            })
-                          : localDraft.pricingSourceKind === null
-                            ? t("sheet.banner.noPersistedSource")
-                            : t("sheet.banner.missingOrUnderReview")
-                    }
-                    hint={
-                      hasJournalQuarantine
+                    title={reviewBanner.title}
+                    reason={reviewBanner.reason}
+                    hint={reviewBanner.hint}
+                    primaryActionLabel={reviewBanner.primaryActionLabel}
+                    onPrimaryAction={
+                      hasJournalQuarantine && activeTab === quarantineTargetTab
                         ? undefined
-                        : t("sheet.banner.readinessHint")
+                        : jumpToQuarantineTarget
                     }
-                    primaryActionLabel={
-                      hasJournalQuarantine
-                        ? t("sheet.banner.viewPricing")
-                        : t("sheet.banner.openPricing")
-                    }
-                    onPrimaryAction={jumpToManualPrice}
                     onExclude={setExcluded}
                   />
                 ) : null}
 
-                {quarantineReason === "transfer_fee_implausible" ? (
+                {isSplitTransferQuarantine ? (
                   <TransactionSplitPayoutCard
                     transactionId={transaction.id}
                     sourceAsset={transaction.asset ?? "BTC"}

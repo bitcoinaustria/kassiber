@@ -18,7 +18,12 @@ from ..wallet_descriptors import (
     liquid_plan_can_unblind,
     normalize_asset_code,
 )
-from ..wallet_setup import normalize_script_types, normalize_wallet_material
+from ..wallet_setup import (
+    BSMS_DESCRIPTOR_SOURCE,
+    normalize_script_types,
+    normalize_wallet_material,
+    parse_bsms_descriptor_record,
+)
 from . import freshness as core_freshness
 from . import output_inventory as core_output_inventory
 from .address_scripts import scriptpubkey_for_address_or_none
@@ -75,6 +80,8 @@ WALLET_SAFE_CONFIG_FIELDS = (
     "altbestand",
     "wasabi_metadata",
     "samourai",
+    "descriptor_source",
+    "synthesize_change",
     "script_types",
     WALLET_DEPRECATED_CONFIG_KEY,
 )
@@ -384,13 +391,21 @@ def parse_wallet_config(args):
         getattr(args, "descriptor_file", None),
         "Descriptor",
     )
-    if descriptor_text:
-        config["descriptor"] = descriptor_text
     change_descriptor_text = read_text_argument(
         getattr(args, "change_descriptor", None),
         getattr(args, "change_descriptor_file", None),
         "Change descriptor",
     )
+    if descriptor_text:
+        bsms_descriptors = parse_bsms_descriptor_record(descriptor_text)
+        if bsms_descriptors:
+            descriptor_text = bsms_descriptors["descriptor"]
+            config["descriptor_source"] = BSMS_DESCRIPTOR_SOURCE
+            config["synthesize_change"] = False
+            if not change_descriptor_text:
+                change_descriptor_text = bsms_descriptors.get("change_descriptor")
+    if descriptor_text:
+        config["descriptor"] = descriptor_text
     if change_descriptor_text:
         config["change_descriptor"] = change_descriptor_text
     script_types = normalize_script_types(getattr(args, "script_type", None))

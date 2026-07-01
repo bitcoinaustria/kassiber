@@ -195,7 +195,7 @@
     },
     "custom": {
       "title": "Use a custom sync backend",
-      "description": "Point Kassiber at an Explorer API (Esplora/mempool), Electrum / Fulcrum, Bitcoin Core RPC, or Liquid endpoint."
+      "description": "Point Kassiber at a clearnet or .onion Explorer API (Esplora/mempool), Electrum / Fulcrum, Bitcoin Core RPC, or Liquid endpoint."
     },
     "skip": {
       "title": "Skip connections for now",
@@ -217,8 +217,10 @@
     "certificatePlaceholder": "Optional server certificate (.crt)",
     "certificateIgnored": "Ignored while 'Trust self-signed certificate' is on.",
     "certificateSystemStore": "Leave empty to use the system certificate store.",
-    "useProxy": "Use proxy",
-    "useProxyDescription": "Optional Tor or SOCKS proxy for the Electrum connection.",
+    "useProxy": "Route this connection via proxy",
+    "useProxyDescription": "Deliberate per-connection routing. Only this backend uses the configured Tor/SOCKS/HTTP proxy; other connections keep their own routing.",
+    "onionDetectedTitle": ".onion endpoint detected",
+    "onionDetectedBody": "Kassiber filled the standard local Tor SOCKS proxy for this connection only. Keep Tor running at 127.0.0.1:9050, or edit the proxy below; other connections keep their own routing.",
     "proxyHost": "Proxy host",
     "proxyHostPlaceholder": "127.0.0.1",
     "proxyPortPlaceholder": "9050",
@@ -230,7 +232,7 @@
     "endpointRequired": "Endpoint is required.",
     "testFailed": "Electrum test failed.",
     "endpointUrl": "Endpoint URL",
-    "endpointUrlPlaceholder": "https://… or ssl://…",
+    "endpointUrlPlaceholder": "https://… or http://abc…onion/api",
     "credentialsWarning": "Do not paste API tokens, RPC passwords, cookies, or bearer headers here. Credentials should be added only after the encrypted database is open.",
     "skipWarningTitle": "Watch-only refresh will not be ready.",
     "skipWarningBody": "You can still import files, but address discovery, wallet refresh, and node-backed history remain disabled until a backend is configured.",
@@ -385,7 +387,7 @@
       "noteSkip": "No address discovery or watch-only refresh until Settings adds a backend.",
       "noteDefaultLoading": "Backend addresses are loading from Kassiber.",
       "noteDefault": "Public operators can see your address queries. Use Tor or your own node if that matters.",
-      "noteCustomProxy": "Custom Electrum backend routed through the configured proxy.",
+      "noteCustomProxy": "Custom backend routed through its configured proxy only.",
       "noteCustom": "Custom backend. Use your own infrastructure or a trusted operator."
     },
     "ai": {

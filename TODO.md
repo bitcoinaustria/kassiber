@@ -327,6 +327,23 @@ top of the monolith.
   copy selected URL references as new rows, duplicate managed file attachments
   under new attachment ids, preserve provenance, and surface copied evidence in
   readiness/audit package manifests.
+- [x] Match strict exchange-facing granularity in the report: per-transaction
+  fee and import-provenance columns (chain sync / platform export / manual
+  import), level-grouped PDF transaction detail tables with in/out amounts and
+  per-level fiat subtotals, provenance-based data-source ring, root-source
+  detail table, contents list on the cover, a missing-history section with
+  unexplained amounts, and a disclosure-footprint summary (wallets named +
+  common-ownership note) in payload, PDF, and desktop preview.
+- [x] Auto-assemble the flow graph from real transaction structure across
+  layers: `utxo_spend` deriver joins vin outpoints (esplora/electrum
+  `raw_json`) and Wasabi `spent_by` against owned `wallet_utxos` for exact
+  same-wallet parent chaining and multi-wallet leg funding (Bitcoin and
+  Liquid); `payment_hash` deriver links Lightning legs; both are
+  deterministic bulk-review methods; one-pair-one-link guard prevents
+  cross-method double allocation; `source-funds assemble` /
+  `ui.source_funds.assemble` loop suggest + bulk review to convergence
+  (local evidence only, no network); desktop review step is assemble-first
+  with actionable gap cards dispatching `next_step.action`.
 - [ ] Add graph visualization polish for dense source-funds cases after real-user feedback; keep the current editor workflow as the source of truth
 - [ ] Add optional configured-backend chain observations with an explicit public-backend privacy warning; keep them weak suggestions unless reviewed
 - [ ] Add optional OCR/photo/invoice extraction after the evidence review and
@@ -666,16 +683,24 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
   explicit counterpart postings, account-type rollups, adjustments, and
   migrations; current `accounts` are wallet/reporting buckets
 - [x] Per-profile Tor proxy configuration. The Electrum client speaks SOCKS5
-  against `backend.tor_proxy`, and the proxy value is now wired end-to-end:
+  against `backend.tor_proxy`, Esplora / Explorer-API HTTP reads, BTCPay
+  Greenfield sync, Bitcoin Core RPC, and mempool-rate fetches honor the same
+  backend proxy, and the proxy value is now wired end-to-end:
   `kassiber backends create/update --tor-proxy` → `core.accounts` →
   `backends.py` INSERT/UPDATE of the `tor_proxy` column, and the desktop save
   path serializes `payload.tor_proxy` (or clears it) through
-  `ui.backends.create/update` to the same write. (SOCKS5 user/pass auth for
-  corporate proxies remains the separate open item below.)
-- [ ] SOCKS5 username/password auth (RFC 1928 method 0x02) for
-  Electrum proxies. Today `_connect_via_socks5` only offers no-auth
-  and emits a precise error when a proxy refuses it, which covers Tor
-  but not corporate SOCKS5 endpoints that require credentials.
+  `ui.backends.create/update` to the same write. Proxy routing is intentionally
+  per-backend; partial routing is supported and called out in UI/docs. Desktop
+  setup detects `.onion` backend hosts and prefills the standard local Tor SOCKS
+  proxy for that backend only.
+- [ ] Guided Tor setup / managed Tor helper is tracked in
+  https://github.com/bitcoinaustria/kassiber/issues/311. Keep it explicit and
+  opt-in: no silent Tor install/start, no global routing, and no clearnet
+  fallback for `.onion` endpoints.
+- [x] SOCKS5 username/password auth (RFC 1929 subnegotiation via SOCKS5
+  method `0x02`) for backend proxies. Proxy URLs may include credentials as
+  `socks5h://USER:PASS@HOST:PORT`; credentials are redacted from backend
+  output snapshots and preserved by desktop edits when already configured.
 - [x] Extend BTCPay Greenfield sync beyond confirmed wallet history with stable invoice/payment ids and raw payload snapshots
 - [x] Import BTCPay invoice/payment fiat facts as authoritative pricing
   observations and reconcile them to wallet transactions before merchant

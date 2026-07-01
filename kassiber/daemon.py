@@ -173,6 +173,7 @@ from .db import (
 )
 from .envelope import build_envelope, build_error_envelope, json_ready
 from .errors import AppError
+from .proxy import onion_proxy_failure_hints, urlopen_with_proxy
 from .log_ring import (
     current_request_id,
     get_log_ring,
@@ -322,8 +323,10 @@ SUPPORTED_KINDS = (
     "ui.source_funds.links.bulk_review",
     "ui.source_funds.links.attach",
     "ui.source_funds.suggest",
+    "ui.source_funds.assemble",
     "ui.source_funds.evidence.list",
     "ui.source_funds.export_pdf",
+    "ui.source_funds.export_bundle",
     "ui.source_funds.coverage",
     "ui.source_funds.recipients.list",
     "ui.source_funds.recipients.create",
@@ -1900,6 +1903,23 @@ def _ui_source_funds_payload_from_conn(
             max_suggestions=int(args.get("max_suggestions") or core_source_funds.SUGGESTION_WRITE_CAP),
         )
 
+    if kind == "ui.source_funds.assemble":
+        target = args.get("target_transaction")
+        if not isinstance(target, str) or not target.strip():
+            raise AppError(
+                "ui.source_funds.assemble requires args.target_transaction",
+                code="validation",
+            )
+        return core_source_funds.assemble_history(
+            conn,
+            None,
+            None,
+            hooks,
+            target_transaction_ref=target.strip(),
+            include_broad_hints=bool(args.get("include_broad_hints")),
+            max_passes=int(args.get("max_passes") or 8),
+        )
+
     if kind == "ui.source_funds.evidence.list":
         _, profile = resolve_scope(conn, None, None)
         rows = conn.execute(
@@ -1977,6 +1997,8 @@ def _ui_source_funds_payload_from_conn(
             max_depth=_resolve_report_depth(args.get("max_depth")),
             save_case=False,
             recipient_ref=recipient_ref,
+            include_diagrams=True,
+            report_options=args.get("report_options") if isinstance(args.get("report_options"), dict) else None,
         )
 
     if kind == "ui.source_funds.cases.save":
@@ -2010,6 +2032,8 @@ def _ui_source_funds_payload_from_conn(
             save_case=True,
             case_label=case_label,
             recipient_ref=recipient_ref,
+            include_diagrams=True,
+            report_options=args.get("report_options") if isinstance(args.get("report_options"), dict) else None,
         )
 
     if kind == "ui.source_funds.cases.list":
@@ -2084,12 +2108,8 @@ def _ui_source_funds_payload_from_conn(
         if data_root is None:
             raise AppError("source-funds PDF export requires a data root", code="validation")
         case_ref = args.get("case")
-        target = args.get("target_transaction")
         if case_ref is not None and not isinstance(case_ref, str):
             raise AppError("ui.source_funds.export_pdf case must be a string", code="validation")
-        if target is not None and not isinstance(target, str):
-            raise AppError("ui.source_funds.export_pdf target_transaction must be a string", code="validation")
-        explicit_export_reveal = args.get("reveal_mode")
         path = _managed_report_export_path(data_root, "kassiber-source-funds", ".pdf")
         payload = dict(
             core_source_funds.export_pdf(
@@ -2099,12 +2119,6 @@ def _ui_source_funds_payload_from_conn(
                 path,
                 hooks,
                 case_ref=case_ref,
-                target_transaction_ref=target,
-                target_amount=args.get("target_amount"),
-                report_purpose=str(args.get("report_purpose") or "existing_transaction"),
-                planned_destination=args.get("planned_destination") if isinstance(args.get("planned_destination"), str) else None,
-                planned_note=args.get("planned_note") if isinstance(args.get("planned_note"), str) else None,
-                reveal_mode=str(explicit_export_reveal) if isinstance(explicit_export_reveal, str) and explicit_export_reveal else None,
             )
         )
         payload.update(
@@ -2114,6 +2128,27 @@ def _ui_source_funds_payload_from_conn(
                 "filename": Path(payload["file"]).name,
             }
         )
+        return payload
+
+    if kind == "ui.source_funds.export_bundle":
+        if data_root is None:
+            raise AppError("source-funds bundle export requires a data root", code="validation")
+        case_ref = args.get("case")
+        if case_ref is not None and not isinstance(case_ref, str):
+            raise AppError("ui.source_funds.export_bundle case must be a string", code="validation")
+        path = _managed_report_export_path(data_root, "kassiber-source-funds-bundle", ".zip")
+        payload = dict(
+            core_source_funds.export_bundle(
+                conn,
+                None,
+                None,
+                path,
+                hooks,
+                data_root=data_root,
+                case_ref=case_ref,
+            )
+        )
+        payload["filename"] = Path(payload["file"]).name
         return payload
 
     raise AppError(f"unsupported source-funds daemon export kind: {kind}", code="validation")
@@ -6149,10 +6184,16 @@ def _apply_wallet_material_config(
         config["script_types"] = material_config["script_types"]
         config.pop("descriptor", None)
         config.pop("change_descriptor", None)
+        config.pop("descriptor_source", None)
+        config.pop("synthesize_change", None)
         return
     config.setdefault("descriptor", material_config["descriptor"])
     if "change_descriptor" in material_config:
         config.setdefault("change_descriptor", material_config["change_descriptor"])
+    if "descriptor_source" in material_config:
+        config["descriptor_source"] = material_config["descriptor_source"]
+    if "synthesize_change" in material_config:
+        config["synthesize_change"] = material_config["synthesize_change"]
 
 
 def _create_wallet_payload(
@@ -7552,6 +7593,7 @@ def _test_electrum_backend_payload(args: dict[str, Any]) -> dict[str, Any]:
                     logs.append(f"Server banner: {banner}")
     except Exception as exc:
         logs.append(f"Connection failed: {exc}")
+        logs.extend(onion_proxy_failure_hints(url, proxy, exc))
         return {
             "ok": False,
             "url": url,
@@ -7568,6 +7610,7 @@ def _test_electrum_backend_payload(args: dict[str, Any]) -> dict[str, Any]:
 
 def _test_http_backend_payload(args: dict[str, Any]) -> dict[str, Any]:
     url = _required_str_arg(args, "url", "HTTP backend URL")
+    proxy = _optional_str_arg(args, "proxy")
     timeout = args.get("timeout")
     if not isinstance(timeout, int) or timeout <= 0:
         timeout = 10
@@ -7581,6 +7624,10 @@ def _test_http_backend_payload(args: dict[str, Any]) -> dict[str, Any]:
         f"$ curl -fsS -L --max-time {timeout} -H 'Accept: application/json' {url}",
         f"> GET {url}",
     ]
+    if proxy:
+        logs.append(f"Proxy: {proxy}.")
+    else:
+        logs.append("Proxy: disabled.")
     request = urlrequest.Request(
         url,
         headers={
@@ -7589,7 +7636,13 @@ def _test_http_backend_payload(args: dict[str, Any]) -> dict[str, Any]:
         },
     )
     try:
-        with urlrequest.urlopen(request, timeout=timeout) as response:
+        with urlopen_with_proxy(
+            request,
+            url,
+            timeout,
+            proxy_url=proxy,
+            source_label="backend",
+        ) as response:
             status = int(response.status)
             reason = response.reason or ""
             content_type = response.headers.get("content-type", "unknown")
@@ -7602,9 +7655,11 @@ def _test_http_backend_payload(args: dict[str, Any]) -> dict[str, Any]:
         return {"ok": False, "url": url, "logs": logs}
     except urlerror.URLError as exc:
         logs.append(f"< connection failed: {exc.reason}")
+        logs.extend(onion_proxy_failure_hints(url, proxy, exc))
         return {"ok": False, "url": url, "logs": logs}
     except Exception as exc:  # pragma: no cover - defensive boundary
         logs.append(f"< connection failed: {exc}")
+        logs.extend(onion_proxy_failure_hints(url, proxy, exc))
         return {"ok": False, "url": url, "logs": logs}
     logs.append(f"< HTTP {status} {reason}".rstrip())
     logs.append(f"< content-type: {content_type}")
@@ -8213,6 +8268,10 @@ def _preview_descriptor_payload(args: dict[str, Any]) -> dict[str, Any]:
         else:
             descriptor_text = descriptor_text or material["descriptor"]
             change_descriptor_text = change_descriptor_text or material.get("change_descriptor")
+            if "descriptor_source" in material:
+                config["descriptor_source"] = material["descriptor_source"]
+            if "synthesize_change" in material:
+                config["synthesize_change"] = material["synthesize_change"]
     chain = _optional_str_arg(args, "chain") or "bitcoin"
     network = _optional_str_arg(args, "network")
     raw_count = args.get("count")
@@ -8437,12 +8496,16 @@ def _update_wallet_payload(
             # exclusive; clear any descriptor left over from a prior shape.
             config_updates["descriptor"] = None
             config_updates["change_descriptor"] = None
+            config_updates["descriptor_source"] = None
+            config_updates["synthesize_change"] = None
         else:
             config_updates["descriptor"] = material_config["descriptor"]
             if "change_descriptor" in material_config:
                 config_updates["change_descriptor"] = material_config["change_descriptor"]
             elif "change_descriptor" not in config_updates:
                 config_updates["change_descriptor"] = None
+            config_updates["descriptor_source"] = material_config.get("descriptor_source")
+            config_updates["synthesize_change"] = material_config.get("synthesize_change")
             # A freshly pasted descriptor supersedes any stored xpub set.
             config_updates["xpub"] = None
             config_updates["script_types"] = None
@@ -9539,8 +9602,10 @@ def handle_request(
         "ui.source_funds.links.bulk_review",
         "ui.source_funds.links.attach",
         "ui.source_funds.suggest",
+        "ui.source_funds.assemble",
         "ui.source_funds.evidence.list",
         "ui.source_funds.export_pdf",
+        "ui.source_funds.export_bundle",
         "ui.source_funds.coverage",
         "ui.source_funds.recipients.list",
         "ui.source_funds.recipients.create",

@@ -139,8 +139,8 @@ import {
   stopDaemonLogBridge,
 } from "@/lib/daemonLogBridge";
 import { isTypingTarget } from "@/lib/keymap";
-import { ScreenAssistantMockup } from "./ScreenAssistantMockup";
 import { FirstSyncCard } from "./FirstSyncCard";
+import { AssistantDock } from "./AssistantDock";
 import { PreAlphaBanner } from "./PreAlphaBanner";
 import { useJournalProcessingAction } from "@/hooks/useJournalProcessingAction";
 import { useWalletSyncAction } from "@/hooks/useWalletSyncAction";
@@ -249,7 +249,7 @@ function notificationProgressValue(value: number | undefined) {
 }
 
 const appMainClassName =
-  "relative min-h-0 w-full flex-1 overflow-auto overscroll-contain bg-background text-zinc-950 dark:text-zinc-50";
+  "relative min-h-0 w-full flex-1 overflow-auto overscroll-contain bg-background text-foreground";
 
 const NAV_GROUPS: NavGroup[] = [
   {
@@ -327,6 +327,14 @@ const ROUTE_META: Array<[string, RouteMeta]> = [
     },
   ],
   [
+    "/imports",
+    {
+      titleKey: "routeMeta.imports.title",
+      icon: WalletCards,
+      searchKey: "routeMeta.imports",
+    },
+  ],
+  [
     "/logs",
     {
       titleKey: "nav:book.logs",
@@ -380,14 +388,6 @@ const ROUTE_META: Array<[string, RouteMeta]> = [
       titleKey: "nav:book.reconcile",
       icon: Fingerprint,
       searchKey: "routeMeta.reconcile",
-    },
-  ],
-  [
-    "/transfers",
-    {
-      titleKey: "nav:book.swaps",
-      icon: ArrowLeftRight,
-      searchKey: "routeMeta.swaps",
     },
   ],
   [
@@ -1427,15 +1427,19 @@ export function AppShell() {
                         tabIndex={-1}
                         className={cn(
                           appMainClassName,
+                          // Reserve dock space only while the dock is
+                          // expanded; the collapsed pill needs a sliver.
                           isAssistantRoute
                             ? "pb-0"
-                            : "pb-[240px]",
+                            : assistantCollapsed
+                              ? "pb-16"
+                              : "pb-[240px]",
                         )}
                       >
                         <Outlet />
                       </main>
                       {isAssistantRoute ? null : (
-                        <ScreenAssistantMockup
+                        <AssistantDock
                           collapsed={assistantCollapsed}
                           className="absolute inset-x-0 bottom-0 z-20"
                         />
@@ -1677,22 +1681,24 @@ function SidebarActions({
           </SidebarMenuButton>
         </SidebarMenuItem>
       ) : null}
-      <SidebarMenuItem>
-        <div className="flex min-h-8 w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0">
-          <Server className="size-4 shrink-0" aria-hidden="true" />
-          <span className="min-w-0 flex-1 truncate group-data-[collapsible=icon]:hidden">
-            {isRealData ? t("shell.dataMode.real") : t("shell.dataMode.mock")}
-          </span>
-          <Switch
-            checked={isRealData}
-            aria-label={t("shell.dataMode.toggle")}
-            onCheckedChange={(checked) =>
-              setDataMode(checked ? "real" : "mock")
-            }
-            className="group-data-[collapsible=icon]:hidden"
-          />
-        </div>
-      </SidebarMenuItem>
+      {developerToolsEnabled ? (
+        <SidebarMenuItem>
+          <div className="flex min-h-8 w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0">
+            <Server className="size-4 shrink-0" aria-hidden="true" />
+            <span className="min-w-0 flex-1 truncate group-data-[collapsible=icon]:hidden">
+              {isRealData ? t("shell.dataMode.real") : t("shell.dataMode.mock")}
+            </span>
+            <Switch
+              checked={isRealData}
+              aria-label={t("shell.dataMode.toggle")}
+              onCheckedChange={(checked) =>
+                setDataMode(checked ? "real" : "mock")
+              }
+              className="group-data-[collapsible=icon]:hidden"
+            />
+          </div>
+        </SidebarMenuItem>
+      ) : null}
       <SidebarMenuItem>
         <Collapsible asChild defaultOpen={supportActive} className="group/collapsible">
           <div>
@@ -1719,9 +1725,13 @@ function SidebarActions({
                 </SidebarMenuSubItem>
                 <SidebarMenuSubItem>
                   <SidebarMenuSubButton asChild>
-                    <a href="#donate">
+                    <a
+                      href="https://github.com/bitcoinaustria/kassiber/discussions"
+                      target="_blank"
+                      rel="noreferrer"
+                    >
                       <Heart className="size-3.5" aria-hidden="true" />
-                      <span>{t("shell.support.donateSats")}</span>
+                      <span>{t("shell.support.discussions")}</span>
                     </a>
                   </SidebarMenuSubButton>
                 </SidebarMenuSubItem>
@@ -2355,7 +2365,7 @@ function AppDashboardHeader({
 
       <div
         ref={searchRootRef}
-        className="relative hidden w-full min-w-0 md:block"
+        className="relative w-full min-w-0"
         onBlur={(event) => {
           if (
             event.relatedTarget instanceof Node &&
