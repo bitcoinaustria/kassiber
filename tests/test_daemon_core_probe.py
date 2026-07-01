@@ -25,7 +25,14 @@ class DaemonBitcoinRpcProbeTest(unittest.TestCase):
                     "initialblockdownload": False,
                 }
             if method == "getnetworkinfo":
-                return {"version": 270000}
+                return {"version": 270000, "connections": 8}
+            if method == "listwallets":
+                return ["kassiber-wallet-1"]
+            if method == "getbestblockhash":
+                return "best-block"
+            if method == "getblockfilter":
+                self.assertEqual(params, ["best-block"])
+                return {"filter": "00", "header": "11"}
             raise AssertionError(f"Unexpected RPC call: {method}")
 
         with patch("kassiber.daemon.bitcoinrpc_call", side_effect=fake_call):
@@ -41,6 +48,11 @@ class DaemonBitcoinRpcProbeTest(unittest.TestCase):
         self.assertEqual(payload["chain"], "main")
         self.assertEqual(payload["blocks"], 850_000)
         self.assertEqual(payload["version"], 270000)
+        self.assertEqual(payload["status"], "synchronized")
+        self.assertEqual(payload["peers"], 8)
+        self.assertTrue(payload["wallet_rpc"]["available"])
+        self.assertTrue(payload["block_filters"]["available"])
+        self.assertEqual(payload["warnings"], [])
         self.assertEqual(calls[0][0]["username"], "rpcuser")
 
     def test_bitcoinrpc_probe_unreachable_returns_payload(self):
@@ -61,6 +73,8 @@ class DaemonBitcoinRpcProbeTest(unittest.TestCase):
         self.assertFalse(payload["reachable"])
         self.assertEqual(payload["error"]["code"], "bitcoinrpc_unreachable")
         self.assertTrue(payload["error"]["retryable"])
+        self.assertEqual(payload["status"], "unresponsive")
+        self.assertEqual(payload["warnings"], ["unresponsive"])
 
     def test_bitcoinrpc_probe_rejects_pruned_below_birthday(self):
         ctx = SimpleNamespace(runtime_config={})
@@ -77,7 +91,7 @@ class DaemonBitcoinRpcProbeTest(unittest.TestCase):
                     "initialblockdownload": False,
                 }
             if method == "getnetworkinfo":
-                return {"version": 270000}
+                return {"version": 270000, "connections": 8}
             if method == "getblockhash":
                 return f"block-{params[0]}"
             if method == "getblockheader":
@@ -113,8 +127,13 @@ class DaemonBitcoinRpcProbeTest(unittest.TestCase):
                     "network": "main",
                     "blocks": 850_000,
                     "headers": 850_000,
+                    "peers": 8,
+                    "status": "synchronized",
                     "pruned": False,
                     "ibd": False,
+                    "wallet_rpc": {"available": True, "loaded_wallet_count": 0},
+                    "block_filters": {"available": True},
+                    "warnings": [],
                 },
             ) as probe:
                 payload = daemon._detect_core_payload({})
@@ -126,6 +145,90 @@ class DaemonBitcoinRpcProbeTest(unittest.TestCase):
         self.assertTrue(candidate["cookiefile"].endswith(".bitcoin/.cookie"))
         self.assertNotIn("secret", str(candidate))
         probe.assert_called_once()
+
+    def test_detect_core_reads_bitcoin_conf_rpc_settings(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            bitcoin_dir = Path(tmp) / ".bitcoin"
+            bitcoin_dir.mkdir()
+            (bitcoin_dir / "bitcoin.conf").write_text(
+                "\n".join(
+                    [
+                        "rpcbind=127.0.0.1",
+                        "rpcuser=alice",
+                        "rpcpassword=correct horse battery staple",
+                        "[signet]",
+                        "rpcport=38332",
+                        "rpccookiefile=signet/.cookie",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            signet_dir = bitcoin_dir / "signet"
+            signet_dir.mkdir()
+            (signet_dir / ".cookie").write_text("__cookie__:secret", encoding="utf-8")
+            probed_backends = []
+
+            def fake_probe(backend):
+                probed_backends.append(dict(backend))
+                return {
+                    "reachable": True,
+                    "chain": backend["network"],
+                    "network": backend["network"],
+                    "blocks": 10,
+                    "headers": 10,
+                    "peers": 2,
+                    "status": "synchronized",
+                    "pruned": False,
+                    "ibd": False,
+                    "wallet_rpc": {"available": True, "loaded_wallet_count": 0},
+                    "block_filters": {"available": True},
+                    "warnings": [],
+                }
+
+            with patch.object(daemon.Path, "home", return_value=Path(tmp)), patch(
+                "kassiber.daemon._bitcoinrpc_probe_payload",
+                side_effect=fake_probe,
+            ):
+                payload = daemon._detect_core_payload({})
+
+        basic = next(
+            candidate
+            for candidate in payload["candidates"]
+            if candidate["auth_source"] == "basic"
+        )
+        self.assertEqual(basic["url"], "http://127.0.0.1:8332")
+        self.assertEqual(basic["username"], "alice")
+        self.assertEqual(basic["password"], "correct horse battery staple")
+        self.assertEqual(basic["credential_source"], "bitcoin.conf")
+        signet = next(
+            candidate
+            for candidate in payload["candidates"]
+            if candidate["network"] == "signet"
+            and candidate["auth_source"] == "cookiefile"
+        )
+        self.assertEqual(signet["url"], "http://127.0.0.1:38332")
+        self.assertEqual(signet["auth_source"], "cookiefile")
+        self.assertTrue(signet["cookiefile"].endswith(".bitcoin/signet/.cookie"))
+        self.assertNotIn("secret", str(payload))
+        self.assertTrue(
+            any(backend["username"] == "alice" for backend in probed_backends)
+        )
+
+    def test_bitcoin_conf_rpc_url_accepts_host_port(self):
+        self.assertEqual(
+            daemon._core_rpc_url_from_settings(
+                "main",
+                {"rpcconnect": "127.0.0.1:28332"},
+            ),
+            "http://127.0.0.1:28332",
+        )
+        self.assertEqual(
+            daemon._core_rpc_url_from_settings(
+                "signet",
+                {"rpcbind": "[::1]:38333"},
+            ),
+            "http://[::1]:38333",
+        )
 
     def test_detect_core_returns_empty_when_no_default_cookie_exists(self):
         with tempfile.TemporaryDirectory() as tmp, patch.object(

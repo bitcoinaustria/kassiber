@@ -81,10 +81,28 @@ type BitcoinRpcProbeEnvelope = {
   network?: string | null;
   blocks?: number | null;
   headers?: number | null;
+  peers?: number | null;
+  status?: string | null;
   pruned?: boolean | null;
   ibd?: boolean | null;
+  wallet_rpc?: {
+    available?: boolean;
+    error?: {
+      message?: string;
+      hint?: string;
+    };
+  } | null;
+  block_filters?: {
+    available?: boolean;
+    error?: {
+      message?: string;
+      hint?: string;
+    };
+  } | null;
+  warnings?: string[];
   error?: {
     message?: string;
+    hint?: string;
   };
 };
 

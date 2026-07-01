@@ -188,15 +188,31 @@ interface CoreDetectionCandidate {
   chain?: string | null;
   network?: string | null;
   auth_source?: string | null;
+  credential_source?: string | null;
+  username?: string | null;
+  password?: string | null;
   cookiefile?: string | null;
   blocks?: number | null;
   headers?: number | null;
+  peers?: number | null;
+  status?: string | null;
   pruned?: boolean | null;
   ibd?: boolean | null;
+  wallet_rpc?: CoreCapabilityPayload | null;
+  block_filters?: CoreCapabilityPayload | null;
+  warnings?: string[];
 }
 
 interface CoreDetectData {
   candidates: CoreDetectionCandidate[];
+}
+
+interface CoreCapabilityPayload {
+  available?: boolean;
+  error?: {
+    message?: string;
+    hint?: string;
+  };
 }
 
 interface CoreProbeData {
@@ -205,12 +221,18 @@ interface CoreProbeData {
   network?: string | null;
   blocks?: number | null;
   headers?: number | null;
+  peers?: number | null;
+  status?: string | null;
   pruned?: boolean | null;
   pruneheight?: number | null;
   version?: number | null;
   ibd?: boolean | null;
+  wallet_rpc?: CoreCapabilityPayload | null;
+  block_filters?: CoreCapabilityPayload | null;
+  warnings?: string[];
   error?: {
     message?: string;
+    hint?: string;
   };
 }
 
@@ -566,6 +588,61 @@ function renderSetupHelper(helper: React.ReactNode) {
   return <div className="text-xs text-muted-foreground">{helper}</div>;
 }
 
+function coreNodeStatusKey(status?: string | null) {
+  switch (status) {
+    case "synchronized":
+    case "synchronizing":
+    case "connecting":
+    case "unresponsive":
+      return status;
+    default:
+      return "unknown";
+  }
+}
+
+function coreCandidateAuthLabel(
+  candidate: CoreDetectionCandidate,
+  t: TFunction,
+) {
+  if (
+    candidate.auth_source === "basic" &&
+    candidate.credential_source === "bitcoin.conf"
+  ) {
+    return t("connections:add.core.authBasicBitcoinConf");
+  }
+  if (candidate.auth_source === "basic") {
+    return t("connections:add.core.authBasic");
+  }
+  if (candidate.credential_source === "bitcoin.conf") {
+    return t("connections:add.core.authCookiefileBitcoinConf");
+  }
+  if (candidate.auth_source === "cookiefile") {
+    return t("connections:add.core.authCookiefile");
+  }
+  return t("connections:add.core.credentialUnknown");
+}
+
+function applyCoreCandidateToForm(
+  current: SetupFormState,
+  candidate: CoreDetectionCandidate,
+): SetupFormState {
+  const authMode =
+    candidate.auth_source === "basic"
+      ? "basic"
+      : candidate.auth_source === "cookiefile"
+        ? "cookiefile"
+        : current.coreRpcAuthMode;
+  return {
+    ...current,
+    coreRpcUrl: candidate.url || current.coreRpcUrl,
+    coreRpcNetwork: candidate.network || current.coreRpcNetwork,
+    coreRpcAuthMode: authMode,
+    coreRpcCookiefile: candidate.cookiefile || current.coreRpcCookiefile,
+    coreRpcUsername: candidate.username || current.coreRpcUsername,
+    coreRpcPassword: candidate.password || current.coreRpcPassword,
+  };
+}
+
 function InlineCode({ children }: { children?: React.ReactNode }) {
   return (
     <code className="rounded bg-muted px-1 py-0.5 font-mono text-[11px] text-foreground">
@@ -762,8 +839,8 @@ export function AddConnectionDialog({
   const [coreDetection, setCoreDetection] =
     React.useState<CoreDetectData | null>(null);
   const [coreTestStatus, setCoreTestStatus] = React.useState<
-    | { ok: true; network?: string | null; blocks?: number | null }
-    | { ok: false; message: string }
+    | ({ ok: true } & CoreProbeData)
+    | { ok: false; message: string; hint?: string | null }
     | null
   >(null);
   const [copiedAddress, setCopiedAddress] = React.useState<string | null>(null);
@@ -1384,9 +1461,17 @@ export function AddConnectionDialog({
           config: backendArgs.config,
           timeout: 10,
         });
-        if (!testEnvelope.data?.reachable) {
+        const probe = testEnvelope.data;
+        if (!probe?.reachable) {
           throw new Error(
-            testEnvelope.data?.error?.message ?? t("add.core.testFailed"),
+            probe?.error?.message ?? t("add.core.testFailed"),
+          );
+        }
+        if (probe.wallet_rpc?.available === false) {
+          throw new Error(
+            probe.wallet_rpc.error?.hint ??
+              probe.wallet_rpc.error?.message ??
+              t("add.core.walletRpcUnavailable"),
           );
         }
         await createBackend.mutateAsync(backendArgs);
@@ -3543,17 +3628,9 @@ export function AddConnectionDialog({
                   setCoreDetection(data);
                   const first = data.candidates[0];
                   if (first) {
-                    setForm((current) => ({
-                      ...current,
-                      coreRpcUrl: first.url || current.coreRpcUrl,
-                      coreRpcNetwork: first.network || current.coreRpcNetwork,
-                      coreRpcAuthMode:
-                        first.auth_source === "cookiefile"
-                          ? "cookiefile"
-                          : current.coreRpcAuthMode,
-                      coreRpcCookiefile:
-                        first.cookiefile || current.coreRpcCookiefile,
-                    }));
+                    setForm((current) =>
+                      applyCoreCandidateToForm(current, first),
+                    );
                   }
                 } catch (error) {
                   setCoreDetection({ candidates: [] });
@@ -3584,33 +3661,46 @@ export function AddConnectionDialog({
                 {t("add.core.detectedNodes")}
               </p>
               <div className="grid gap-2">
-                {candidates.map((candidate) => (
-                  <Button
-                    key={`${candidate.url}-${candidate.network ?? ""}`}
-                    type="button"
-                    variant="outline"
-                    className="justify-start"
-                    onClick={() => {
-                      setForm((current) => ({
-                        ...current,
-                        coreRpcUrl: candidate.url || current.coreRpcUrl,
-                        coreRpcNetwork:
-                          candidate.network || current.coreRpcNetwork,
-                        coreRpcAuthMode:
-                          candidate.auth_source === "cookiefile"
-                            ? "cookiefile"
-                            : current.coreRpcAuthMode,
-                        coreRpcCookiefile:
-                          candidate.cookiefile || current.coreRpcCookiefile,
-                      }));
-                      setCoreTestStatus(null);
-                    }}
-                  >
-                    <span className="truncate">
-                      {candidate.network || "main"} · {candidate.url}
-                    </span>
-                  </Button>
-                ))}
+                {candidates.map((candidate) => {
+                  const candidateKey = [
+                    candidate.url,
+                    candidate.network ?? "",
+                    candidate.auth_source ?? "",
+                    candidate.credential_source ?? "",
+                    candidate.cookiefile ?? candidate.username ?? "",
+                  ].join("|");
+                  return (
+                    <Button
+                      key={candidateKey}
+                      type="button"
+                      variant="outline"
+                      className="h-auto justify-start text-left"
+                      onClick={() => {
+                        setForm((current) =>
+                          applyCoreCandidateToForm(current, candidate),
+                        );
+                        setCoreTestStatus(null);
+                      }}
+                    >
+                      <span className="min-w-0">
+                        <span className="block truncate">
+                          {candidate.network || "main"} · {candidate.url}
+                        </span>
+                        <span className="block truncate text-[11px] font-normal text-muted-foreground">
+                          {t("add.core.candidateMeta", {
+                            status: t(
+                              `add.core.status.${coreNodeStatusKey(candidate.status)}`,
+                            ),
+                            blocks: candidate.blocks ?? "n/a",
+                            headers: candidate.headers ?? "n/a",
+                            peers: candidate.peers ?? "n/a",
+                            auth: coreCandidateAuthLabel(candidate, t),
+                          })}
+                        </span>
+                      </span>
+                    </Button>
+                  );
+                })}
               </div>
             </div>
           ) : null}
@@ -3738,14 +3828,14 @@ export function AddConnectionDialog({
                     payload?.reachable
                       ? {
                           ok: true,
-                          network: payload.network,
-                          blocks: payload.blocks,
+                          ...payload,
                         }
                       : {
                           ok: false,
                           message:
                             payload?.error?.message ??
                             t("add.core.testFailed"),
+                          hint: payload?.error?.hint,
                         },
                   );
                 } catch (error) {
@@ -3765,16 +3855,46 @@ export function AddConnectionDialog({
               {t("add.core.test")}
             </Button>
             {coreTestStatus?.ok ? (
-              <span className="text-xs text-emerald-700 dark:text-emerald-300">
-                {t("add.core.testOk", {
-                  network: coreTestStatus.network || form.coreRpcNetwork,
-                  blocks: coreTestStatus.blocks ?? "n/a",
-                })}
-              </span>
+              <div className="space-y-1 text-xs">
+                <p className="text-emerald-700 dark:text-emerald-300">
+                  {t("add.core.testOkDetailed", {
+                    network: coreTestStatus.network || form.coreRpcNetwork,
+                    status: t(
+                      `add.core.status.${coreNodeStatusKey(coreTestStatus.status)}`,
+                    ),
+                    blocks: coreTestStatus.blocks ?? "n/a",
+                    headers: coreTestStatus.headers ?? "n/a",
+                    peers: coreTestStatus.peers ?? "n/a",
+                  })}
+                </p>
+                {coreTestStatus.pruned ? (
+                  <p className="text-amber-700 dark:text-amber-300">
+                    {t("add.core.prunedWarning")}
+                  </p>
+                ) : null}
+                {coreTestStatus.ibd ? (
+                  <p className="text-amber-700 dark:text-amber-300">
+                    {t("add.core.initialBlockDownloadWarning")}
+                  </p>
+                ) : null}
+                {coreTestStatus.wallet_rpc?.available === false ? (
+                  <p className="text-destructive">
+                    {coreTestStatus.wallet_rpc.error?.hint ??
+                      coreTestStatus.wallet_rpc.error?.message ??
+                      t("add.core.walletRpcUnavailable")}
+                  </p>
+                ) : null}
+                {coreTestStatus.block_filters?.available === false ? (
+                  <p className="text-muted-foreground">
+                    {coreTestStatus.block_filters.error?.hint ??
+                      t("add.core.blockFiltersUnavailable")}
+                  </p>
+                ) : null}
+              </div>
             ) : null}
             {coreTestStatus && !coreTestStatus.ok ? (
               <span className="text-xs text-destructive">
-                {coreTestStatus.message}
+                {coreTestStatus.hint ?? coreTestStatus.message}
               </span>
             ) : null}
           </div>

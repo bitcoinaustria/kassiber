@@ -154,7 +154,10 @@ python3 -m kassiber reports summary
 When syncing descriptor or xpub wallets through your own Bitcoin Core node,
 add a Core RPC backend (`--cookiefile` or `--username` / `--password`) and
 optionally set `--birthday YYYY-MM-DD` on the wallet to bound Core's
-watch-only descriptor rescan.
+watch-only descriptor rescan. The desktop setup can detect a local Core node
+from default cookie paths or `bitcoin.conf`; it reports wallet-RPC and BIP158
+filter-index availability, but Kassiber's current Core sync path is still
+watch-only descriptor import, not filter-first P2P sync.
 
 To reconcile old flows, `kassiber wallets identify` (or the desktop **Reconcile**
 screen) checks whether pasted addresses / transaction ids belong to any of your

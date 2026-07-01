@@ -69,8 +69,9 @@ Use `./scripts/quality-gate.sh` before calling work ready to push. It wraps the 
   bitcoinrpc adapter (discovery stays read-only), persists per-branch imported
   range ends plus observed `highest_used`, supports wallet `birthday` dates for
   bounded rescans, adds desktop local-Core detection and health probes
-  (`ui.backends.detect_core`, `ui.backends.bitcoinrpc.test`), and wires the
-  bilingual Add Connection flow for Core setup.
+  (`ui.backends.detect_core`, `ui.backends.bitcoinrpc.test`) with
+  `bitcoin.conf` parsing plus wallet-RPC / BIP158 capability reporting, and
+  wires the bilingual Add Connection flow for Core setup.
 - [x] Add the shared privacy-import substrate for future wallet importers:
   typed transaction-level privacy-boundary markers, generic privacy-hop tax
   quarantine, source-funds opaque-boundary warnings, and typed desktop

@@ -3575,10 +3575,21 @@ export const mockDaemon: DaemonTransport = {
           network: "main",
           blocks: 850000,
           headers: 850000,
+          peers: 8,
+          status: "synchronized",
           pruned: false,
           pruneheight: null,
           version: 270000,
           ibd: false,
+          wallet_rpc: {
+            available: true,
+            loaded_wallet_count: 1,
+          },
+          block_filters: {
+            available: true,
+            type: "basic",
+          },
+          warnings: [],
         } as T,
       };
     }

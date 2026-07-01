@@ -7601,9 +7601,188 @@ def _test_http_backend_payload(args: dict[str, Any]) -> dict[str, Any]:
 _CORE_LOCAL_CANDIDATES = (
     ("main", "http://127.0.0.1:8332", (".cookie",)),
     ("test", "http://127.0.0.1:18332", ("testnet3", ".cookie")),
+    ("test", "http://127.0.0.1:18332", ("testnet4", ".cookie")),
     ("regtest", "http://127.0.0.1:18443", ("regtest", ".cookie")),
     ("signet", "http://127.0.0.1:38332", ("signet", ".cookie")),
 )
+
+_CORE_NETWORK_ALIASES = {
+    "main": ("main", "mainnet"),
+    "test": ("test", "testnet", "testnet3", "testnet4"),
+    "regtest": ("regtest",),
+    "signet": ("signet",),
+}
+
+_CORE_RPC_PORTS = {
+    "main": 8332,
+    "test": 18332,
+    "regtest": 18443,
+    "signet": 38332,
+}
+
+
+def _parse_bitcoin_conf(text: str) -> dict[str, dict[str, str]]:
+    settings: dict[str, dict[str, str]] = {"global": {}}
+    current_network = "global"
+    for raw_line in text.splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith(("#", ";")):
+            continue
+        if line.startswith("[") and line.endswith("]"):
+            current_network = line[1:-1].strip().lower() or "global"
+            settings.setdefault(current_network, {})
+            continue
+        if "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key = key.strip().lower()
+        value = value.strip()
+        if not key:
+            continue
+        if "." in key:
+            maybe_network, maybe_key = key.split(".", 1)
+            if maybe_network and maybe_key:
+                settings.setdefault(maybe_network.strip().lower(), {})[
+                    maybe_key.strip().lower()
+                ] = value
+                continue
+        settings.setdefault(current_network, {})[key] = value
+    return settings
+
+
+def _bitcoin_conf_network_settings(
+    settings: dict[str, dict[str, str]],
+    network: str,
+) -> dict[str, str]:
+    merged = dict(settings.get("global") or {})
+    for alias in _CORE_NETWORK_ALIASES.get(network, (network,)):
+        merged.update(settings.get(alias) or {})
+    return merged
+
+
+def _core_cookie_path(
+    bitcoin_dir: Path,
+    value: str | None,
+    *default_parts: str,
+) -> Path:
+    if value:
+        path = Path(value).expanduser()
+        if not path.is_absolute():
+            path = bitcoin_dir / path
+        return path
+    return bitcoin_dir.joinpath(*default_parts)
+
+
+def _core_rpc_url_from_settings(network: str, settings: dict[str, str]) -> str:
+    configured_url = settings.get("rpcurl")
+    if configured_url and configured_url.startswith(("http://", "https://")):
+        return configured_url
+    host = settings.get("rpcconnect") or settings.get("rpcbind") or "127.0.0.1"
+    host = host.strip()
+    if "," in host:
+        host = host.split(",", 1)[0].strip()
+    if host in {"", "0.0.0.0", "::", "[::]"}:
+        host = "127.0.0.1"
+    configured_port = settings.get("rpcport")
+    host_port = None
+    if host.startswith("[") and "]" in host:
+        bracket_end = host.find("]")
+        suffix = host[bracket_end + 1 :]
+        if suffix.startswith(":") and suffix[1:].isdigit():
+            host_port = suffix[1:]
+            host = host[: bracket_end + 1]
+    elif host.count(":") == 1:
+        host_part, maybe_port = host.rsplit(":", 1)
+        if maybe_port.isdigit():
+            host = host_part
+            host_port = maybe_port
+    if host.startswith("[") and "]" in host:
+        host_display = host
+    elif ":" in host and not re.match(r"^\d+\.\d+\.\d+\.\d+$", host):
+        host_display = f"[{host}]"
+    else:
+        host_display = host
+    port = configured_port or host_port
+    try:
+        normalized_port = int(port) if port else _CORE_RPC_PORTS[network]
+    except ValueError:
+        normalized_port = _CORE_RPC_PORTS[network]
+    return f"http://{host_display}:{normalized_port}"
+
+
+def _core_local_probe_candidates(bitcoin_dir: Path) -> list[dict[str, Any]]:
+    candidates: list[dict[str, Any]] = []
+    bitcoin_conf = bitcoin_dir / "bitcoin.conf"
+    conf_settings: dict[str, dict[str, str]] = {}
+    if bitcoin_conf.exists():
+        try:
+            conf_settings = _parse_bitcoin_conf(
+                bitcoin_conf.read_text(encoding="utf-8")
+            )
+        except OSError:
+            conf_settings = {}
+    seen: set[tuple[str, str, str, str | None]] = set()
+
+    def add_candidate(candidate: dict[str, Any]) -> None:
+        key = (
+            str(candidate.get("network") or ""),
+            str(candidate.get("url") or ""),
+            str(candidate.get("auth_source") or ""),
+            str(candidate.get("cookiefile") or candidate.get("username") or ""),
+        )
+        if key in seen:
+            return
+        seen.add(key)
+        candidates.append(candidate)
+
+    for network, default_url, cookie_parts in _CORE_LOCAL_CANDIDATES:
+        network_settings = _bitcoin_conf_network_settings(conf_settings, network)
+        url = (
+            _core_rpc_url_from_settings(network, network_settings)
+            if network_settings
+            else default_url
+        )
+        username = network_settings.get("rpcuser")
+        password = network_settings.get("rpcpassword")
+        cookiefile = _core_cookie_path(
+            bitcoin_dir,
+            network_settings.get("rpccookiefile"),
+            *cookie_parts,
+        )
+        if username and password:
+            add_candidate(
+                {
+                    "name": f"local-core-{network}",
+                    "kind": "bitcoinrpc",
+                    "chain": "bitcoin",
+                    "network": network,
+                    "url": url,
+                    "auth_source": "basic",
+                    "credential_source": "bitcoin.conf",
+                    "username": username,
+                    "password": password,
+                    "timeout": 2,
+                }
+            )
+        if cookiefile.exists():
+            add_candidate(
+                {
+                    "name": f"local-core-{network}",
+                    "kind": "bitcoinrpc",
+                    "chain": "bitcoin",
+                    "network": network,
+                    "url": url,
+                    "auth_source": "cookiefile",
+                    "credential_source": (
+                        "bitcoin.conf"
+                        if network_settings.get("rpccookiefile")
+                        else "default"
+                    ),
+                    "cookiefile": str(cookiefile),
+                    "timeout": 2,
+                }
+            )
+    return candidates
 
 
 def _inline_bitcoinrpc_backend(args: dict[str, Any]) -> dict[str, Any]:
@@ -7708,6 +7887,72 @@ def _raise_if_pruned_below_birthday(
         )
 
 
+def _bitcoinrpc_sync_status(
+    blockchain_info: dict[str, Any],
+    network_info: dict[str, Any],
+) -> str:
+    try:
+        blocks = int(blockchain_info.get("blocks") or 0)
+        headers = int(blockchain_info.get("headers") or 0)
+    except (TypeError, ValueError):
+        blocks = headers = 0
+    try:
+        peers = int(network_info.get("connections") or 0)
+    except (TypeError, ValueError):
+        peers = 0
+    if peers == 0:
+        return "connecting"
+    if blockchain_info.get("initialblockdownload") or headers > blocks:
+        return "synchronizing"
+    return "synchronized"
+
+
+def _bitcoinrpc_wallet_rpc_payload(backend: dict[str, Any]) -> dict[str, Any]:
+    try:
+        loaded_wallets = bitcoinrpc_call(backend, "listwallets", timeout=5)
+        return {
+            "available": True,
+            "loaded_wallet_count": (
+                len(loaded_wallets) if isinstance(loaded_wallets, list) else None
+            ),
+        }
+    except AppError as exc:
+        return {
+            "available": False,
+            "error": {
+                "code": exc.code,
+                "message": str(exc),
+                "hint": (
+                    "Kassiber needs Bitcoin Core wallet RPC support to create "
+                    "a watch-only descriptor wallet."
+                ),
+            },
+        }
+
+
+def _bitcoinrpc_block_filter_payload(backend: dict[str, Any]) -> dict[str, Any]:
+    try:
+        best_hash = bitcoinrpc_call(backend, "getbestblockhash", timeout=5)
+        bitcoinrpc_call(backend, "getblockfilter", [best_hash], timeout=5)
+        return {"available": True}
+    except AppError as exc:
+        message = str(exc)
+        hint = None
+        if "Index is not enabled" in message or "blockfilterindex" in message:
+            hint = (
+                "Enable blockfilterindex=1 in bitcoin.conf and let Core build "
+                "the index."
+            )
+        return {
+            "available": False,
+            "error": {
+                "code": exc.code,
+                "message": message,
+                "hint": hint,
+            },
+        }
+
+
 def _bitcoinrpc_probe_payload(
     backend: dict[str, Any],
     *,
@@ -7729,16 +7974,32 @@ def _bitcoinrpc_probe_payload(
         )
     _raise_if_pruned_below_birthday(backend, blockchain_info, birthday_ts)
     core_chain = str(blockchain_info.get("chain") or "").strip()
+    wallet_rpc = _bitcoinrpc_wallet_rpc_payload(backend)
+    block_filters = _bitcoinrpc_block_filter_payload(backend)
+    warnings: list[str] = []
+    if blockchain_info.get("initialblockdownload"):
+        warnings.append("initial_block_download")
+    if blockchain_info.get("pruned"):
+        warnings.append("pruned")
+    if not wallet_rpc.get("available"):
+        warnings.append("wallet_rpc_unavailable")
+    if not block_filters.get("available"):
+        warnings.append("blockfilterindex_disabled")
     return {
         "reachable": True,
+        "status": _bitcoinrpc_sync_status(blockchain_info, network_info),
         "chain": core_chain,
         "network": core_chain,
         "blocks": blockchain_info.get("blocks"),
         "headers": blockchain_info.get("headers"),
+        "peers": network_info.get("connections"),
         "pruned": bool(blockchain_info.get("pruned")),
         "pruneheight": blockchain_info.get("pruneheight"),
         "version": network_info.get("version"),
         "ibd": bool(blockchain_info.get("initialblockdownload")),
+        "wallet_rpc": wallet_rpc,
+        "block_filters": block_filters,
+        "warnings": warnings,
     }
 
 
@@ -7755,14 +8016,19 @@ def _test_bitcoinrpc_backend_payload(
             raise
         return {
             "reachable": False,
+            "status": "unresponsive",
             "chain": None,
             "network": None,
             "blocks": None,
             "headers": None,
+            "peers": None,
             "pruned": None,
             "pruneheight": None,
             "version": None,
             "ibd": None,
+            "wallet_rpc": None,
+            "block_filters": None,
+            "warnings": ["unresponsive"],
             "error": {
                 "code": exc.code,
                 "message": str(exc),
@@ -7776,36 +8042,34 @@ def _detect_core_payload(args: dict[str, Any] | None = None) -> dict[str, Any]:
     del args
     bitcoin_dir = Path.home() / ".bitcoin"
     candidates: list[dict[str, Any]] = []
-    for expected_network, url, cookie_parts in _CORE_LOCAL_CANDIDATES:
-        cookiefile = bitcoin_dir.joinpath(*cookie_parts)
-        if not cookiefile.exists():
-            continue
-        backend = {
-            "name": f"local-core-{expected_network}",
-            "kind": "bitcoinrpc",
-            "chain": "bitcoin",
-            "network": expected_network,
-            "url": url,
-            "cookiefile": str(cookiefile),
-            "timeout": 2,
-        }
+    for candidate_backend in _core_local_probe_candidates(bitcoin_dir):
         try:
-            probe = _bitcoinrpc_probe_payload(backend)
+            probe = _bitcoinrpc_probe_payload(candidate_backend)
         except Exception:
             continue
-        candidates.append(
-            {
-                "url": url,
-                "chain": probe.get("chain"),
-                "network": probe.get("network") or expected_network,
-                "auth_source": "cookiefile",
-                "cookiefile": str(cookiefile),
-                "blocks": probe.get("blocks"),
-                "headers": probe.get("headers"),
-                "pruned": probe.get("pruned"),
-                "ibd": probe.get("ibd"),
-            }
-        )
+        candidate: dict[str, Any] = {
+            "url": candidate_backend["url"],
+            "chain": probe.get("chain"),
+            "network": probe.get("network") or candidate_backend.get("network"),
+            "auth_source": candidate_backend.get("auth_source"),
+            "credential_source": candidate_backend.get("credential_source"),
+            "blocks": probe.get("blocks"),
+            "headers": probe.get("headers"),
+            "peers": probe.get("peers"),
+            "status": probe.get("status"),
+            "pruned": probe.get("pruned"),
+            "ibd": probe.get("ibd"),
+            "wallet_rpc": probe.get("wallet_rpc"),
+            "block_filters": probe.get("block_filters"),
+            "warnings": probe.get("warnings") or [],
+        }
+        if candidate_backend.get("cookiefile"):
+            candidate["cookiefile"] = candidate_backend.get("cookiefile")
+        if candidate_backend.get("username"):
+            candidate["username"] = candidate_backend.get("username")
+        if candidate_backend.get("password"):
+            candidate["password"] = candidate_backend.get("password")
+        candidates.append(candidate)
     return {"candidates": candidates}
 
 

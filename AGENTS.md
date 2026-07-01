@@ -146,8 +146,12 @@ Kassiber is currently in **dev mode**: renaming commands, breaking flags, and re
   `ui.rates.kraken_csv.import` for local Kraken CSV/ZIP history backfills and
   `ui.reports.export_audit_package` for DB-backed auditor handoff packages.
   `ui.backends.detect_core` and `ui.backends.bitcoinrpc.test` contact local
-  RPC endpoints / cookie files for desktop setup and health checks; they are
-  mutating desktop kinds and must not be exposed to the AI tool surface.
+  RPC endpoints / cookie files for desktop setup and health checks; detection
+  also parses local `bitcoin.conf` so the desktop form can prefill explicit
+  RPC credentials, but cookie contents are never returned. The probe reports
+  peer/sync state, pruning/IBD, wallet-RPC support, and BIP158 filter-index
+  availability. These are mutating desktop kinds and must not be exposed to the
+  AI tool surface.
   Do not model the Connections dialog as a
   command-template picker. Connection setup should select from configured
   chain/indexer backends via `ui.backends.options`; BTCPay setup can create a

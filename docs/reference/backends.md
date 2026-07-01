@@ -222,6 +222,10 @@ transaction kind.
 descriptor/xpub wallets Kassiber imports ranged watch-only descriptors into a
 dedicated Core wallet; that import is a backend mutation and may trigger Core's
 blocking rescan. Use a wallet `--birthday` date to bound the rescan when known.
+The desktop Core detector reads default cookie locations and local
+`bitcoin.conf` RPC settings, then probes reachability, peer/sync state, wallet
+RPC support, and BIP158 block-filter availability. Block filters are reported
+for operator visibility; descriptor sync does not require `blockfilterindex=1`.
 
 The backend CLI now accepts the common backend-specific knobs directly:
 
@@ -348,6 +352,9 @@ Use this when you run your own node.
 - supports Bitcoin descriptor/xpub/address refresh from your own node
 - Kassiber creates or reuses a dedicated watch-only Core wallet per Kassiber wallet
 - descriptor imports are ranged per receive/change branch; repeated refreshes widen the range from observed UTXOs and otherwise use `listsinceblock`
+- local desktop detection understands default cookie files plus `bitcoin.conf`
+  RPC auth/ports, and the health probe reports peers, sync state, wallet RPC
+  support, pruning, IBD, and BIP158 filter-index availability
 - this keeps refresh state isolated instead of mixing unrelated watch-only imports together
 - plain `http://` is only safe on localhost or over a trusted tunnel
 
