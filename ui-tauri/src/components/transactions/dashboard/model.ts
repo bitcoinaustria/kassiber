@@ -213,7 +213,7 @@ function toDashboardTransaction(
     pricingFetchedAt: tx.pricingFetchedAt,
     pricingGranularity: tx.pricingGranularity,
     pricingMethod: tx.pricingMethod,
-    reviewStatus: tx.reviewStatus as Transaction["reviewStatus"],
+    reviewStatus: normalizeTransactionReviewStatus(tx.reviewStatus, status),
     taxable: tx.taxable,
     atRegime: tx.atRegime as Transaction["atRegime"],
     atCategory: tx.atCategory as Transaction["atCategory"],
@@ -239,6 +239,26 @@ function toDashboardTransaction(
     status: tag.toLowerCase().includes("review") ? "review" : status,
     confirmations: tx.conf,
   };
+}
+
+function normalizeTransactionReviewStatus(
+  raw: string | null | undefined,
+  fallback: TransactionStatus,
+): TransactionStatus {
+  const normalized = raw?.trim().toLowerCase().replaceAll("-", "_");
+  if (!normalized) return fallback;
+  if (normalized === "completed" || normalized === "complete") return "completed";
+  if (normalized === "pending") return "pending";
+  if (normalized === "failed" || normalized === "error") return "failed";
+  if (
+    normalized === "review" ||
+    normalized === "needs_review" ||
+    normalized === "blocked" ||
+    normalized === "quarantined"
+  ) {
+    return "review";
+  }
+  return fallback;
 }
 
 function dashboardRecordsFromTxs(txs: Tx[], t?: Translator) {
@@ -1157,17 +1177,25 @@ const detailTabValues = [
   "ledger",
 ] as const;
 
-function readTransactionDetailParams() {
-  if (typeof window === "undefined") return { transactionId: null, tab: "details" };
+function readTransactionDetailParams(): {
+  transactionId: string | null;
+  tab: string;
+  rowId?: string | null;
+} {
+  if (typeof window === "undefined") {
+    return { transactionId: null, tab: "details" };
+  }
   const params = new URLSearchParams(window.location.search);
   const tab = params.get("tab");
-  return {
+  const rowId = params.get("qrow");
+  const target = {
     transactionId:
       params.get("tx") ?? params.get("transaction") ?? params.get("transactionId"),
     tab: detailTabValues.includes(tab as (typeof detailTabValues)[number])
       ? tab ?? "details"
       : "details",
   };
+  return rowId ? { ...target, rowId } : target;
 }
 
 const quickFilterValues: TableQuickFilter[] = [
@@ -1202,6 +1230,7 @@ function readTransactionScopeParams(): {
 function updateTransactionDetailParams(
   transactionId: string | null,
   tab = "details",
+  rowId?: string | null,
 ) {
   if (typeof window === "undefined") return;
   const params = new URLSearchParams(window.location.search);
@@ -1212,11 +1241,17 @@ function updateTransactionDetailParams(
     } else {
       params.delete("tab");
     }
+    if (rowId) {
+      params.set("qrow", rowId);
+    } else {
+      params.delete("qrow");
+    }
   } else {
     params.delete("tx");
     params.delete("transaction");
     params.delete("transactionId");
     params.delete("tab");
+    params.delete("qrow");
   }
   const nextQuery = params.toString();
   window.history.replaceState(

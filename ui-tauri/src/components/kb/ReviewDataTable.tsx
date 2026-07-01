@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import {
+  useEffect,
   useMemo,
   useState,
   type ComponentType,
@@ -40,6 +41,7 @@ export type ReviewTableKind = "journal-events" | "quarantine";
 
 export interface ReviewTableRow {
   id: string;
+  rowKey?: string;
   date: string;
   account: string;
   event: string;
@@ -56,8 +58,15 @@ export interface ReviewTableRow {
   transactionAction?: {
     transactionId: string;
     label: string;
-    tab?: "details" | "classify" | "pricing" | "tax" | "ledger";
+    tab?: "details" | "classify" | "pricing" | "tax" | "linked" | "ledger";
+    reviewReason?: string;
   };
+}
+
+type ReviewTransactionAction = NonNullable<ReviewTableRow["transactionAction"]>;
+
+export function reviewRowKey(row: ReviewTableRow) {
+  return row.rowKey ?? row.id;
 }
 
 export interface ReviewMetric {
@@ -87,6 +96,16 @@ interface ReviewDataTableProps {
   showStateColumn?: boolean;
   showPriorityBadge?: boolean;
   shellClassName?: string;
+  onOpenTransactionAction?: (
+    action: ReviewTransactionAction,
+    row: ReviewTableRow,
+  ) => void;
+  /**
+   * Reports the rows in the order they are actually shown (after search,
+   * status/metric filters, and sort). Lets a parent drive queue navigation
+   * (e.g. "Save & next") against what the user sees, not the raw input order.
+   */
+  onVisibleRowsChange?: (rows: ReviewTableRow[]) => void;
 }
 
 const statusClass: Record<ReviewTableRow["status"], string> = {
@@ -168,6 +187,8 @@ export function ReviewDataTable({
   showStateColumn = true,
   showPriorityBadge = true,
   shellClassName = screenShellClassName,
+  onOpenTransactionAction,
+  onVisibleRowsChange,
 }: ReviewDataTableProps) {
   const { t } = useTranslation(["journals", "common"]);
   const hideSensitive = useUiStore((s) => s.hideSensitive);
@@ -196,6 +217,8 @@ export function ReviewDataTable({
         !query ||
         [
           row.id,
+          row.rowKey ?? "",
+          row.transactionAction?.transactionId ?? "",
           row.date,
           row.account,
           row.event,
@@ -220,6 +243,9 @@ export function ReviewDataTable({
         : a.date.localeCompare(b.date),
     );
   }, [globalFilter, metricFilterId, rows, sortDirection, statusFilter]);
+  useEffect(() => {
+    onVisibleRowsChange?.(filteredRows);
+  }, [filteredRows, onVisibleRowsChange]);
   const pageSize = 8;
   const pageCount = Math.max(Math.ceil(filteredRows.length / pageSize), 1);
   const currentPage = Math.min(pageIndex, pageCount - 1);
@@ -431,66 +457,80 @@ export function ReviewDataTable({
           </div>
         ) : null}
 
-        <div className="overflow-x-auto">
-          <Table className="min-w-[940px]">
-            <TableHeader>
-              <TableRow className="bg-muted/50 hover:bg-muted/50">
-                <TableHead className="min-w-[330px]">
-                  {kind === "journal-events"
-                    ? t("review.column.event")
-                    : t("review.column.issue")}
-                </TableHead>
-                <TableHead className="min-w-[180px]">
-                  {t("review.column.evidence")}
-                </TableHead>
-                <TableHead className="min-w-[160px] text-right">
-                  {t("review.column.amountBasis")}
-                </TableHead>
-                <TableHead className="min-w-[140px] text-right">
-                  {t("review.column.impact")}
-                </TableHead>
-                {showStateColumn ? (
-                  <TableHead className="min-w-[170px]">
-                    {t("common:field.status")}
+        {kind === "quarantine" ? (
+          <QuarantineReviewList
+            rows={pageRows}
+            emptyMessage={emptyMessage ?? t("review.empty")}
+            hideSensitive={hideSensitive}
+            showStateColumn={showStateColumn}
+            showPriorityBadge={showPriorityBadge}
+            sortDirection={sortDirection}
+            onSortDirectionChange={() =>
+              setSortDirection((value) => (value === "desc" ? "asc" : "desc"))
+            }
+            onOpenTransactionAction={onOpenTransactionAction}
+          />
+        ) : (
+          <div className="overflow-x-auto">
+            <Table className="min-w-[940px]">
+              <TableHeader>
+                <TableRow className="bg-muted/50 hover:bg-muted/50">
+                  <TableHead className="min-w-[330px]">
+                    {t("review.column.event")}
                   </TableHead>
-                ) : null}
-                <TableHead className="w-[112px] text-right">
-                  <SortButton
-                    label={t("common:field.date")}
-                    direction={sortDirection}
-                    onClick={() =>
-                      setSortDirection((value) =>
-                        value === "desc" ? "asc" : "desc",
-                      )
-                    }
-                  />
-                </TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {pageRows.length ? (
-                pageRows.map((row) => (
-                  <ReviewWorklistRow
-                    key={row.id}
-                    row={row}
-                    hideSensitive={hideSensitive}
-                    showStateColumn={showStateColumn}
-                    showPriorityBadge={showPriorityBadge}
-                  />
-                ))
-              ) : (
-                <TableRow>
-                  <TableCell
-                    colSpan={showStateColumn ? 6 : 5}
-                    className="h-24 text-center text-muted-foreground"
-                  >
-                    {emptyMessage ?? t("review.empty")}
-                  </TableCell>
+                  <TableHead className="min-w-[180px]">
+                    {t("review.column.evidence")}
+                  </TableHead>
+                  <TableHead className="min-w-[160px] text-right">
+                    {t("review.column.amountBasis")}
+                  </TableHead>
+                  <TableHead className="min-w-[140px] text-right">
+                    {t("review.column.impact")}
+                  </TableHead>
+                  {showStateColumn ? (
+                    <TableHead className="min-w-[170px]">
+                      {t("common:field.status")}
+                    </TableHead>
+                  ) : null}
+                  <TableHead className="w-[112px] text-right">
+                    <SortButton
+                      label={t("common:field.date")}
+                      direction={sortDirection}
+                      onClick={() =>
+                        setSortDirection((value) =>
+                          value === "desc" ? "asc" : "desc",
+                        )
+                      }
+                    />
+                  </TableHead>
                 </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </div>
+              </TableHeader>
+              <TableBody>
+                {pageRows.length ? (
+                  pageRows.map((row) => (
+                    <ReviewWorklistRow
+                      key={reviewRowKey(row)}
+                      row={row}
+                      hideSensitive={hideSensitive}
+                      showStateColumn={showStateColumn}
+                      showPriorityBadge={showPriorityBadge}
+                      onOpenTransactionAction={onOpenTransactionAction}
+                    />
+                  ))
+                ) : (
+                  <TableRow>
+                    <TableCell
+                      colSpan={showStateColumn ? 6 : 5}
+                      className="h-24 text-center text-muted-foreground"
+                    >
+                      {emptyMessage ?? t("review.empty")}
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        )}
 
         <div className="flex flex-col gap-3 border-t px-3 py-2.5 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between sm:px-4">
           <span>
@@ -595,19 +635,216 @@ function QueueMetric({
   );
 }
 
-function ReviewWorklistRow({
+function QuarantineReviewList({
+  rows,
+  emptyMessage,
+  hideSensitive,
+  showStateColumn,
+  showPriorityBadge,
+  sortDirection,
+  onSortDirectionChange,
+  onOpenTransactionAction,
+}: {
+  rows: ReviewTableRow[];
+  emptyMessage: string;
+  hideSensitive: boolean;
+  showStateColumn: boolean;
+  showPriorityBadge: boolean;
+  sortDirection: SortDirection;
+  onSortDirectionChange: () => void;
+  onOpenTransactionAction?: (
+    action: ReviewTransactionAction,
+    row: ReviewTableRow,
+  ) => void;
+}) {
+  const { t } = useTranslation(["journals", "common"]);
+
+  if (!rows.length) {
+    return (
+      <div className="px-3 py-8 sm:px-4">
+        <div className="rounded-md border border-dashed border-muted-foreground/40 px-4 py-6 text-center text-sm text-muted-foreground">
+          {emptyMessage}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="overflow-x-auto">
+      <div className="min-w-[1060px]">
+        <div className="flex items-center justify-end border-b bg-muted/30 px-4 py-1.5">
+          <SortButton
+            label={t("common:field.date")}
+            direction={sortDirection}
+            onClick={onSortDirectionChange}
+          />
+        </div>
+        <div className="divide-y">
+          {rows.map((row) => (
+            <QuarantineReviewRow
+              key={reviewRowKey(row)}
+              row={row}
+              hideSensitive={hideSensitive}
+              showStateColumn={showStateColumn}
+              showPriorityBadge={showPriorityBadge}
+              onOpenTransactionAction={onOpenTransactionAction}
+            />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function QuarantineReviewRow({
   row,
   hideSensitive,
   showStateColumn,
   showPriorityBadge,
+  onOpenTransactionAction,
 }: {
   row: ReviewTableRow;
   hideSensitive: boolean;
   showStateColumn: boolean;
   showPriorityBadge: boolean;
+  onOpenTransactionAction?: (
+    action: ReviewTransactionAction,
+    row: ReviewTableRow,
+  ) => void;
 }) {
   const { t } = useTranslation("journals");
   const StatusIcon = statusIcon[row.status];
+  const transactionAction = row.transactionAction;
+
+  return (
+    <div
+      className={cn(
+        "grid grid-cols-[minmax(360px,1.35fr)_minmax(300px,1fr)_minmax(190px,0.55fr)_minmax(210px,0.6fr)] items-stretch gap-0 px-4 py-3 transition-colors hover:bg-muted/35",
+        row.status === "Blocked" && "bg-red-500/[0.035] dark:bg-red-950/10",
+      )}
+    >
+      <div className="flex min-w-0 items-start gap-3 pr-4">
+        <span
+          className={cn(
+            "mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md ring-1 ring-inset",
+            toneStyles[statusTone[row.status]],
+          )}
+          aria-hidden="true"
+        >
+          <StatusIcon className="size-4" />
+        </span>
+        <div className="min-w-0">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <span className="min-w-0 truncate text-sm font-semibold leading-5">
+              {row.event}
+            </span>
+            {showPriorityBadge ? (
+              <Badge
+                variant="secondary"
+                className={cn("h-5 rounded-md px-1.5 text-[10px]", priorityClass[row.priority])}
+              >
+                {t(priorityLabelKey[row.priority])}
+              </Badge>
+            ) : null}
+          </div>
+          <div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1 text-[10px] text-muted-foreground sm:text-xs">
+            <span className="font-mono">{row.id}</span>
+            <span aria-hidden="true">·</span>
+            <span className={cn("max-w-[16rem] truncate", blurClass(hideSensitive))}>
+              {row.account}
+            </span>
+            <span aria-hidden="true">·</span>
+            <span className="font-mono">{row.date}</span>
+          </div>
+          <p className="mt-2 line-clamp-2 text-xs text-muted-foreground">
+            {nextActionLabel(row, t)}
+          </p>
+        </div>
+      </div>
+
+      <div className="min-w-0 border-l px-4">
+        <div className="flex min-w-0 items-center gap-2">
+          <span
+            className={cn("size-2 shrink-0 rounded-full", statusDotClass(row.status))}
+            aria-hidden="true"
+          />
+          <span className="min-w-0 truncate text-xs font-medium text-foreground">
+            {row.source}
+          </span>
+        </div>
+        <p className="mt-1.5 line-clamp-2 text-xs leading-5 text-muted-foreground">
+          {evidenceHint(row, t)}
+        </p>
+      </div>
+
+      <div className="min-w-0 border-l px-4 text-right">
+        <div
+          className={cn(
+            "truncate text-sm font-semibold tabular-nums",
+            blurClass(hideSensitive),
+          )}
+        >
+          {row.amount}
+        </div>
+        <div
+          className={cn(
+            "mt-1 truncate font-mono text-[11px] text-muted-foreground",
+            blurClass(hideSensitive),
+          )}
+        >
+          {row.basis}
+        </div>
+        <div
+          className={cn(
+            "mt-2 truncate text-[11px] font-medium",
+            impactToneClass(row.impact),
+            blurClass(hideSensitive),
+          )}
+        >
+          {row.impact}
+        </div>
+      </div>
+
+      <div className="flex min-w-0 flex-col items-end justify-between gap-2 border-l pl-4 text-right">
+        {showStateColumn ? (
+          <Badge
+            variant="outline"
+            className={cn("rounded-md", statusClass[row.status])}
+          >
+            {t(statusLabelKey[row.status])}
+          </Badge>
+        ) : null}
+        {transactionAction ? (
+          <ReviewTransactionButton
+            transactionAction={transactionAction}
+            row={row}
+            onOpenTransactionAction={onOpenTransactionAction}
+          />
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function ReviewWorklistRow({
+  row,
+  hideSensitive,
+  showStateColumn,
+  showPriorityBadge,
+  onOpenTransactionAction,
+}: {
+  row: ReviewTableRow;
+  hideSensitive: boolean;
+  showStateColumn: boolean;
+  showPriorityBadge: boolean;
+  onOpenTransactionAction?: (
+    action: ReviewTransactionAction,
+    row: ReviewTableRow,
+  ) => void;
+}) {
+  const { t } = useTranslation("journals");
+  const StatusIcon = statusIcon[row.status];
+  const transactionAction = row.transactionAction;
 
   return (
     <TableRow className="align-top hover:bg-muted/35">
@@ -685,27 +922,13 @@ function ReviewWorklistRow({
           <p className="mt-1 text-[10px] text-muted-foreground sm:text-xs">
             {nextActionLabel(row, t)}
           </p>
-          {row.transactionAction ? (
-            <Button
-              asChild
-              variant="outline"
-              size="sm"
-              className="mt-2 h-7 gap-1.5 px-2 text-xs"
-            >
-              <Link
-                to="/transactions"
-                search={{
-                  tx: row.transactionAction.transactionId,
-                  ...(row.transactionAction.tab &&
-                  row.transactionAction.tab !== "details"
-                    ? { tab: row.transactionAction.tab }
-                    : {}),
-                }}
-              >
-                {row.transactionAction.label}
-                <ArrowRight className="size-3.5" aria-hidden="true" />
-              </Link>
-            </Button>
+          {transactionAction ? (
+            <ReviewTransactionButton
+              transactionAction={transactionAction}
+              row={row}
+              className="mt-2"
+              onOpenTransactionAction={onOpenTransactionAction}
+            />
           ) : null}
         </TableCell>
       ) : null}
@@ -715,6 +938,53 @@ function ReviewWorklistRow({
         </span>
       </TableCell>
     </TableRow>
+  );
+}
+
+function ReviewTransactionButton({
+  transactionAction,
+  row,
+  className,
+  onOpenTransactionAction,
+}: {
+  transactionAction: ReviewTransactionAction;
+  row: ReviewTableRow;
+  className?: string;
+  onOpenTransactionAction?: (
+    action: ReviewTransactionAction,
+    row: ReviewTableRow,
+  ) => void;
+}) {
+  const buttonClassName = cn("h-7 gap-1.5 px-2 text-xs", className);
+  if (onOpenTransactionAction) {
+    return (
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className={buttonClassName}
+        onClick={() => onOpenTransactionAction(transactionAction, row)}
+      >
+        {transactionAction.label}
+        <ArrowRight className="size-3.5" aria-hidden="true" />
+      </Button>
+    );
+  }
+  return (
+    <Button asChild variant="outline" size="sm" className={buttonClassName}>
+      <Link
+        to="/transactions"
+        search={{
+          tx: transactionAction.transactionId,
+          ...(transactionAction.tab && transactionAction.tab !== "details"
+            ? { tab: transactionAction.tab }
+            : {}),
+        }}
+      >
+        {transactionAction.label}
+        <ArrowRight className="size-3.5" aria-hidden="true" />
+      </Link>
+    </Button>
   );
 }
 
@@ -778,6 +1048,12 @@ function impactToneClass(impact: string) {
     return "text-emerald-600 dark:text-emerald-400";
   }
   return "text-muted-foreground";
+}
+
+function statusDotClass(status: ReviewTableRow["status"]) {
+  if (status === "Ready" || status === "Resolved") return "bg-emerald-500";
+  if (status === "Needs review") return "bg-amber-500";
+  return "bg-red-500";
 }
 
 const toneStyles: Record<ReviewTone, string> = {

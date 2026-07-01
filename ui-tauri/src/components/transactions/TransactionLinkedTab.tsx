@@ -34,6 +34,7 @@ export function TransactionLinkedTab({ ctx }: { ctx: TransactionDetailTabContext
     loanLinkCandidates,
     onUnpair,
     isUnpairing,
+    onOpenPairingReview,
     onLinkLoan,
     isLoanLinking,
     journalEvents,
@@ -130,6 +131,18 @@ export function TransactionLinkedTab({ ctx }: { ctx: TransactionDetailTabContext
                         <p className="mt-1 text-xs text-muted-foreground">
                           {t("linked.noPairedMovementBody")}
                         </p>
+                        {onOpenPairingReview ? (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="mt-3 gap-1.5"
+                            onClick={onOpenPairingReview}
+                          >
+                            <Repeat2 className="size-3.5" aria-hidden="true" />
+                            {t("linked.openPairingReview")}
+                          </Button>
+                        ) : null}
                       </div>
                     )}
 
