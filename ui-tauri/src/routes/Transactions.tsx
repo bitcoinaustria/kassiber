@@ -31,6 +31,8 @@ interface OverviewSnapshot {
 
 const TRANSACTIONS_PAGE_LIMIT = 100;
 const TRANSACTIONS_WORKBENCH_LIMIT = 500;
+const TRANSACTIONS_WORKBENCH_PAGE_CAP = 4;
+const TRANSACTIONS_HISTORY_BOUNDS_LIMIT = 1;
 
 export function Transactions() {
   const { t } = useTranslation("transactions");
@@ -80,10 +82,35 @@ export function Transactions() {
   const hasNextTransactionsPage = transactionsQuery.hasNextPage;
   const isFetchingNextTransactionsPage = transactionsQuery.isFetchingNextPage;
   const fetchNextTransactionsPage = transactionsQuery.fetchNextPage;
-  const workbenchQuery = useDaemon<TransactionsList>("ui.transactions.list", {
-    limit: TRANSACTIONS_WORKBENCH_LIMIT,
+  const workbenchQuery = useDaemonInfinite<TransactionsList>(
+    "ui.transactions.list",
+    {
+      limit: TRANSACTIONS_WORKBENCH_LIMIT,
+      ...(walletScope ? { wallet: walletScope } : {}),
+    },
+    (lastPage) => lastPage.data?.nextCursor ?? undefined,
+  );
+  const historyBoundsQuery = useDaemon<TransactionsList>("ui.transactions.list", {
+    limit: TRANSACTIONS_HISTORY_BOUNDS_LIMIT,
+    sort: "occurred-at",
+    order: "asc",
     ...(walletScope ? { wallet: walletScope } : {}),
   });
+  const workbenchPageCount = workbenchQuery.data?.pages.length ?? 0;
+  React.useEffect(() => {
+    if (
+      workbenchQuery.hasNextPage &&
+      !workbenchQuery.isFetchingNextPage &&
+      workbenchPageCount < TRANSACTIONS_WORKBENCH_PAGE_CAP
+    ) {
+      void workbenchQuery.fetchNextPage();
+    }
+  }, [
+    workbenchQuery.fetchNextPage,
+    workbenchQuery.hasNextPage,
+    workbenchQuery.isFetchingNextPage,
+    workbenchPageCount,
+  ]);
   const focusedTransaction = useDaemon<{
     transaction?: TransactionsList["txs"][number] | null;
   }>(
@@ -94,11 +121,33 @@ export function Transactions() {
   const overview = useDaemon<OverviewSnapshot>("ui.overview.snapshot");
   const swapQuery = useDaemon<SuggestEnvelope>("ui.transfers.suggest");
   const firstPage = transactionsQuery.data?.pages[0];
-  const workbenchData = workbenchQuery.data?.data ?? null;
+  const workbenchPages =
+    workbenchQuery.data?.pages
+      .map((page) => page.data)
+      .filter((page): page is TransactionsList => Boolean(page)) ?? [];
+  const workbenchData = React.useMemo<TransactionsList | null>(() => {
+    if (!workbenchPages.length) return null;
+    const latest = workbenchPages[workbenchPages.length - 1];
+    return {
+      ...latest,
+      txs: workbenchPages.flatMap((page) => page.txs),
+      hasMore: Boolean(latest.hasMore),
+      nextCursor: latest.nextCursor ?? null,
+    };
+  }, [workbenchPages]);
+  const historyBoundsData = historyBoundsQuery.data?.data ?? null;
   const hasLiveTransactions =
-    workbenchQuery.data?.kind === "ui.transactions.list" && Boolean(workbenchData);
+    Boolean(
+      workbenchQuery.data?.pages.some(
+        (page) => page.kind === "ui.transactions.list",
+      ),
+    ) &&
+    Boolean(workbenchData);
   const hasLiveTableTransactions =
     firstPage?.kind === "ui.transactions.list" && Boolean(firstPage.data);
+  const hasLiveHistoryBounds =
+    historyBoundsQuery.data?.kind === "ui.transactions.list" &&
+    Boolean(historyBoundsData);
   const liveTransactions = React.useMemo<TransactionsList | null>(() => {
     const pages =
       transactionsQuery.data?.pages
@@ -148,8 +197,7 @@ export function Transactions() {
         body={
           workbenchQuery.error instanceof Error
             ? workbenchQuery.error.message
-            : workbenchQuery.data?.error?.message ??
-              t("route.unavailable.body")
+            : t("route.unavailable.body")
         }
       />
     );
@@ -192,6 +240,9 @@ export function Transactions() {
       key={`${scopeParams.wallet ?? ""}::${scopeParams.quick ?? ""}`}
       transactions={transactions}
       tableTransactions={tableTransactions}
+      historyBoundsTransactions={
+        hasLiveHistoryBounds && historyBoundsData ? historyBoundsData : undefined
+      }
       nowRate={nowRate}
       swapCandidates={swapCandidates}
       swapCandidateTotal={swapCandidateTotal}

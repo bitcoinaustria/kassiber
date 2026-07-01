@@ -57,6 +57,7 @@ const TransactionsDashboard = ({
   className,
   transactions = MOCK_TRANSACTIONS,
   tableTransactions,
+  historyBoundsTransactions,
   nowRate = MOCK_OVERVIEW.priceEur,
   swapCandidates,
   swapCandidateTotal,
@@ -74,6 +75,7 @@ const TransactionsDashboard = ({
   className?: string;
   transactions?: TransactionsList;
   tableTransactions?: TransactionsList;
+  historyBoundsTransactions?: TransactionsList;
   nowRate?: number | null;
   swapCandidates?: SwapCandidateReference[];
   swapCandidateTotal?: number | null;
@@ -221,9 +223,30 @@ const TransactionsDashboard = ({
     () => sortTransactionsByDateDesc(records),
     [records],
   );
+  const periodReferenceRecords = React.useMemo(() => {
+    const bounds = historyBoundsTransactions?.txs ?? [];
+    if (!bounds.length) return records;
+
+    const keyed = new Map(
+      records.map((record, index) => [
+        record.id || record.txnId || record.explorerId || `record-${index}`,
+        record,
+      ]),
+    );
+    dashboardRecordsFromTxs(
+      bounds,
+      t as (key: string, opts?: Record<string, unknown>) => string,
+    ).forEach((record, index) => {
+      keyed.set(
+        record.id || record.txnId || record.explorerId || `bounds-${index}`,
+        record,
+      );
+    });
+    return [...keyed.values()];
+  }, [historyBoundsTransactions?.txs, records, t]);
   const availablePeriods = React.useMemo(
-    () => availablePeriodKeysForRecords(records),
-    [records],
+    () => availablePeriodKeysForRecords(periodReferenceRecords),
+    [periodReferenceRecords],
   );
   const periodRecords = React.useMemo(
     () =>
