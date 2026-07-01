@@ -43,6 +43,7 @@ from ..wallet_descriptors import (
     liquid_plan_can_unblind,
 )
 from . import htlc_parser
+from . import silent_payments
 from .address_scripts import address_to_scriptpubkey
 from .sync import WalletSyncState, emit_sync_progress, normalize_backend_kind
 from .wallets import (
@@ -795,6 +796,21 @@ def discover_descriptor_targets(backend, plan, kind, checkpoint=None):
 def resolve_wallet_sync_targets(backend, wallet):
     config = json.loads(wallet["config_json"] or "{}")
     checkpoint = _mapping_get(wallet, "_freshness_checkpoint", {}) or {}
+    if silent_payments.has_silent_payment_sync_material(config):
+        plan = silent_payments.build_plan(config)
+        kind = validate_backend_for_wallet(backend, plan.chain, plan.network, has_descriptor=False)
+        silent_payments.validate_backend_capability(backend, plan, kind=kind)
+        targets = [silent_payments.sync_target(plan)]
+        return WalletSyncState(
+            chain=plan.chain,
+            network=plan.network,
+            descriptor_plan=plan,
+            policy_asset_id="",
+            targets=targets,
+            tracked_scripts={},
+            history_cache={},
+            checkpoint=checkpoint,
+        )
     descriptor_plan = (
         load_wallet_descriptor_plan_from_config(config)
         if (config.get("descriptor") or config.get("xpub"))
@@ -830,7 +846,11 @@ def resolve_wallet_sync_targets(backend, wallet):
             raise AppError("Liquid live refresh currently requires descriptor-backed wallets so outputs can be unblinded locally")
         validate_backend_for_wallet(backend, chain, network, has_descriptor=False)
         targets = [sync_target_from_address(address, chain, network, index) for index, address in enumerate(addresses)]
-    tracked_scripts = {target["script_pubkey"]: target for target in targets}
+    tracked_scripts = {
+        target["script_pubkey"]: target
+        for target in targets
+        if target.get("script_pubkey")
+    }
     return WalletSyncState(
         chain=chain,
         network=network,
@@ -1303,6 +1323,71 @@ def _backend_identity(backend, sync_state: WalletSyncState):
         "network": sync_state.network,
         "batch_size": backend_batch_size(backend),
     }
+
+
+def _silent_payment_scan_payload(backend, wallet, plan: silent_payments.SilentPaymentPlan):
+    config = json.loads(wallet["config_json"] or "{}")
+    scan_file = backend_value(backend, *silent_payments.BACKEND_SCAN_FILE_FIELDS)
+    if scan_file:
+        path = Path(scan_file).expanduser()
+        try:
+            with path.open("r", encoding="utf-8") as handle:
+                return json.load(handle)
+        except OSError as exc:
+            raise AppError(
+                "Silent Payments local scanner output could not be read",
+                code="silent_payment_scanner_unavailable",
+                hint="Check the backend's silent_payment_scan_file path and retry.",
+                retryable=True,
+            ) from exc
+        except json.JSONDecodeError as exc:
+            raise AppError(
+                "Silent Payments local scanner output is not valid JSON",
+                code="silent_payment_scanner_invalid",
+                retryable=False,
+            ) from exc
+    scan_path = backend_value(backend, *silent_payments.BACKEND_SCAN_PATH_FIELDS)
+    if scan_path and plan.scan_mode == silent_payments.SCAN_MODE_SERVER:
+        payload = {
+            "descriptor": config.get(silent_payments.CONFIG_DESCRIPTOR),
+            "chain": plan.chain,
+            "network": plan.network,
+            "start_height": plan.start_height,
+            "start_date": plan.start_date,
+            "full_history": plan.full_history,
+        }
+        return http_post_json(
+            append_url_path(backend["url"], scan_path),
+            payload,
+            timeout=backend_timeout(backend),
+            proxy_url=_backend_proxy_url(backend),
+        )
+    raise AppError(
+        "Silent Payments scanner is not configured for this backend",
+        code="silent_payment_scanner_unavailable",
+        hint=(
+            "Configure a local scanner output file or an explicit server-assisted "
+            "scan path on an SP-capable backend."
+        ),
+        retryable=False,
+    )
+
+
+def _silent_payment_sync_adapter(backend, wallet, sync_state: WalletSyncState):
+    plan = sync_state.descriptor_plan
+    if not silent_payments.is_silent_payment_plan(plan):
+        raise AppError("Wallet sync state is not for Silent Payments", code="validation")
+    kind = normalize_backend_kind(backend.get("kind"))
+    payload = _silent_payment_scan_payload(backend, wallet, plan)
+    return silent_payments.normalize_scan_payload(
+        payload,
+        backend_name=str(backend.get("name") or ""),
+        backend_kind=kind,
+        plan=plan,
+        checkpoint=_checkpoint_mapping(sync_state),
+        wallet_id=str(wallet["id"]) if "id" in wallet.keys() else None,
+        wallet_label=str(wallet["label"]) if "label" in wallet.keys() else None,
+    )
 
 
 def _skip_unchanged_utxo_refresh(meta, sync_state: WalletSyncState):
@@ -1858,7 +1943,8 @@ def esplora_records_for_wallet(backend, sync_state: WalletSyncState):
 
 
 def esplora_sync_adapter(backend, wallet, sync_state):
-    del wallet
+    if silent_payments.is_silent_payment_plan(sync_state.descriptor_plan):
+        return _silent_payment_sync_adapter(backend, wallet, sync_state)
     records, meta = esplora_records_for_wallet(backend, sync_state)
     if _skip_unchanged_utxo_refresh(meta, sync_state):
         meta["utxos_skipped_unchanged"] = True
@@ -2210,6 +2296,8 @@ def bitcoinrpc_utxos_for_wallet_name(backend, wallet_name, addresses, sync_state
 
 
 def bitcoinrpc_sync_adapter(backend, wallet, sync_state: WalletSyncState):
+    if silent_payments.is_silent_payment_plan(sync_state.descriptor_plan):
+        return _silent_payment_sync_adapter(backend, wallet, sync_state)
     addresses = [target["address"] for target in sync_state.targets if target.get("address")]
     wallet_name = bitcoinrpc_ensure_watchonly_wallet(backend, wallet)
     imported_count = bitcoinrpc_import_addresses(backend, wallet_name, wallet, addresses)
@@ -2836,7 +2924,8 @@ def electrum_records_for_wallet(backend, sync_state: WalletSyncState):
 
 
 def electrum_sync_adapter(backend, wallet, sync_state):
-    del wallet
+    if silent_payments.is_silent_payment_plan(sync_state.descriptor_plan):
+        return _silent_payment_sync_adapter(backend, wallet, sync_state)
     records, meta = electrum_records_for_wallet(backend, sync_state)
     if _skip_unchanged_utxo_refresh(meta, sync_state):
         meta["utxos_skipped_unchanged"] = True
@@ -2845,11 +2934,22 @@ def electrum_sync_adapter(backend, wallet, sync_state):
     return records, meta
 
 
+def custom_sync_adapter(backend, wallet, sync_state):
+    if silent_payments.is_silent_payment_plan(sync_state.descriptor_plan):
+        return _silent_payment_sync_adapter(backend, wallet, sync_state)
+    raise AppError(
+        "Custom backends can only sync wallets through an explicit Silent Payments scanner",
+        code="validation",
+        retryable=False,
+    )
+
+
 SYNC_BACKEND_ADAPTERS = MappingProxyType(
     {
         "esplora": esplora_sync_adapter,
         "electrum": electrum_sync_adapter,
         "bitcoinrpc": bitcoinrpc_sync_adapter,
+        "custom": custom_sync_adapter,
     }
 )
 
@@ -2859,6 +2959,7 @@ __all__ = [
     "address_to_scriptpubkey",
     "bitcoinrpc_sync_adapter",
     "bitcoinrpc_utxos_for_wallet_name",
+    "custom_sync_adapter",
     "decode_raw_transaction",
     "electrum_sync_adapter",
     "electrum_utxos_for_wallet",

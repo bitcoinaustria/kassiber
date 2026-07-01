@@ -13,8 +13,10 @@ export function backendTypeIdForConnectionSetup(
   intent: DeferredConnectionSetup | null,
 ): SyncBackendTypeId | undefined {
   const kind = normalizedBackendKind(intent?.backendKind);
+  if (kind === "silentpayment") return "bitcoin";
   if (kind === "coreln") return "coreln";
   if (kind === "lnd") return "lnd";
+  if (intent?.sourceId === "silent-payment") return "bitcoin";
   if (intent?.sourceId === "core-ln") return "coreln";
   if (intent?.sourceId === "lnd") return "lnd";
   return undefined;

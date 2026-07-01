@@ -173,6 +173,7 @@
     "syncMode": {
       "backendDescriptor": "Watch-only-Descriptor",
       "backendAddresses": "Watch-only-Adressen",
+      "backendSilentPayment": "Silent-Payments-Watch-only",
       "fileImport": "Datei-Import",
       "btcpay": "BTCPay-Anreicherung",
       "notConfigured": "Manuell / nicht konfiguriert"
@@ -579,6 +580,30 @@
       "stillScanning": "{{label}} scannt die Adressliste. Große Listen dauern bei Esplora-Backends länger.",
       "addedBody_one": "{{label}} mit {{count}} Adresse erstellt.",
       "addedBody_other": "{{label}} mit {{count}} Adressen erstellt."
+    },
+    "silentPayments": {
+      "backend": "SP-fähiges Backend",
+      "material": "Silent-Payments-Material",
+      "materialHelper": "Füge watch-only BIP392-sp()-Material ein, z. B. sp(spscan1q...) oder Scan-Privatschlüssel plus öffentlichen Spend-Schlüssel. Spend-private-Formen werden abgelehnt.",
+      "scanMode": "Scan-Modus",
+      "scanModeHelper": "Der lokale Index scannt auf diesem Gerät. Serverunterstützter Modus kann diese Silent-Payments-Wallet gegenüber dem ausgewählten Backend offenlegen.",
+      "scanModeLocal": "Lokaler Scanner / lokaler Index",
+      "scanModeServer": "Serverunterstütztes Backend",
+      "startHeight": "Start-Height",
+      "startDate": "Startdatum",
+      "startDateHelper": "Nutze Height oder Datum, wenn du den Wallet-Birthday kennst.",
+      "fullHistory": "Stattdessen vollständige Historie scannen",
+      "fullHistoryAck": "Mir ist bewusst, dass ein Full-History-Scan lange dauern kann und Reports unvollständig bleiben, bis der Bereich fertig ist.",
+      "serverAck": "Mir ist bewusst, dass dieses ausgewählte Backend genug erfahren kann, um diese Silent-Payments-Wallet zu korrelieren. Nicht auf ein anderes Backend ausweichen.",
+      "scanAfter": "Silent Payments nach dem Setup scannen",
+      "stillScanning": "{{label}} scannt Silent Payments. Reports bleiben blockiert, wenn das ausgewählte Backend nur Teilhistorie liefert.",
+      "addedBody": "{{label}} als watch-only Silent-Payments-Quelle erstellt.",
+      "addedBodyScanning": "{{label}} als watch-only Silent-Payments-Quelle erstellt und Scan gestartet.",
+      "errorMaterial": "Füge watch-only Silent-Payments-Material ein.",
+      "errorStartPoint": "Setze eine Start-Height/ein Startdatum oder wähle und bestätige Full-History-Scanning.",
+      "errorStartHeight": "Start-Height muss eine ganze Zahl sein.",
+      "errorFullHistoryAck": "Bestätige die Warnung zum Full-History-Scan.",
+      "errorServerAck": "Bestätige die Datenschutzwarnung zum serverunterstützten Scan."
     },
     "exportFile": {
       "label": "Pfad zur Exportdatei",

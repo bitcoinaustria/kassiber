@@ -415,6 +415,9 @@ def list_backends(runtime_config):
                 "lightning_dir": backend.get("lightning_dir", ""),
                 "rpc_file": backend.get("rpc_file", ""),
                 "infrastructure_owner": backend.get("infrastructure_owner", ""),
+                "silent_payments": backend.get("silent_payments", ""),
+                "silent_payment_scan_file": backend.get("silent_payment_scan_file", ""),
+                "silent_payment_scan_path": backend.get("silent_payment_scan_path", ""),
                 "username": backend.get("username", ""),
                 "password": backend.get("password", ""),
             }

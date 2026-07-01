@@ -23,7 +23,9 @@ from ..wallet_descriptors import (
 )
 from . import output_inventory as core_output_inventory
 from . import ownership as core_ownership
+from . import freshness as core_freshness
 from . import rates as core_rates
+from . import silent_payments
 from . import sync_backends as core_sync_backends
 from . import source_overlap as core_source_overlap
 from . import reports as report_builders
@@ -33,6 +35,7 @@ from .repo import current_context_snapshot
 from .sync import normalize_backend_kind
 from .wallets import (
     has_descriptor_sync_material,
+    has_silent_payment_sync_material,
     load_wallet_descriptor_plan_from_config,
     wallet_btcpay_provenance_config,
     wallet_is_deprecated,
@@ -379,6 +382,7 @@ def _wallet_backend_summary(
     source_format = _string_or_empty(config.get("source_format"))
     sync_source = _string_or_empty(config.get("sync_source"))
     has_descriptor = has_descriptor_sync_material(config)
+    has_silent_payment = has_silent_payment_sync_material(config)
     has_addresses = bool(config.get("addresses"))
     backend_name = explicit_backend
     backend_source = "explicit" if explicit_backend else "none"
@@ -388,6 +392,8 @@ def _wallet_backend_summary(
         sync_mode = "btcpay"
     elif source_file and source_format:
         sync_mode = "file_import"
+    elif has_silent_payment and kind == "silent-payment":
+        sync_mode = "backend_silent_payment"
     elif has_descriptor and kind in {"descriptor", "xpub", "address"}:
         sync_mode = "backend_descriptor"
         if not backend_name and default_backend_name:
@@ -3456,6 +3462,14 @@ def build_wallets_list_snapshot(
                 "network": str(config.get("network") or ""),
                 "descriptor": bool(config.get("descriptor")),
                 "change_descriptor": bool(config.get("change_descriptor")),
+                "silent_payment": {
+                    "configured": has_silent_payment_sync_material(config),
+                    "material_format": str(config.get(silent_payments.CONFIG_MATERIAL_FORMAT) or ""),
+                    "scan_mode": str(config.get(silent_payments.CONFIG_SCAN_MODE) or ""),
+                    "scan_start_height": config.get(silent_payments.CONFIG_SCAN_START_HEIGHT),
+                    "scan_start_date": str(config.get(silent_payments.CONFIG_SCAN_START_DATE) or ""),
+                    "full_history": bool(config.get(silent_payments.CONFIG_FULL_HISTORY)),
+                },
                 "sync_mode": backend_summary["sync_mode"],
                 "sync_source": str(config.get("sync_source") or config.get("source_format") or ""),
                 "transaction_count": tx_count,
@@ -3556,7 +3570,7 @@ def _wallet_utxo_support(
             "reason": "wasabi_import",
             "message": "",
         }
-    if sync_mode not in {"backend_descriptor", "backend_addresses"}:
+    if sync_mode not in {"backend_descriptor", "backend_addresses", "backend_silent_payment"}:
         return {
             "supported": False,
             "status": "unsupported_source",
@@ -3568,9 +3582,30 @@ def _wallet_utxo_support(
             "supported": False,
             "status": "unsupported_source",
             "reason": "backend_missing",
-            "message": "This wallet needs a configured Esplora, Electrum, or Bitcoin Core backend before UTXO inventory can refresh.",
+            "message": "This wallet needs a configured chain backend or local scanner before UTXO inventory can refresh.",
         }
     backend_kind = normalize_backend_kind(backend.get("kind"))
+    if sync_mode == "backend_silent_payment":
+        if backend_kind not in {"esplora", "electrum", "bitcoinrpc", "custom"}:
+            return {
+                "supported": False,
+                "status": "silent_payment_backend_unsupported",
+                "reason": "backend_kind",
+                "message": f"Silent Payments scanning is not implemented for {backend_kind or 'this backend'} sources.",
+            }
+        if not silent_payments.backend_supports_silent_payments(backend):
+            return {
+                "supported": False,
+                "status": "silent_payment_backend_unsupported",
+                "reason": "missing_sp_capability",
+                "message": "This backend is not marked Silent Payments capable; ordinary scripthash sync cannot discover BIP352 outputs.",
+            }
+        return {
+            "supported": True,
+            "status": "supported",
+            "reason": "",
+            "message": "",
+        }
     if backend_kind not in {"esplora", "electrum", "bitcoinrpc"}:
         return {
             "supported": False,
@@ -3752,8 +3787,12 @@ def _wallet_utxo_row_for_ai(row: dict[str, Any]) -> dict[str, Any]:
     redacted = dict(row)
     redacted.pop("address", None)
     redacted.pop("address_label", None)
+    redacted.pop("script_pubkey", None)
+    redacted.pop("branch_label", None)
     redacted.pop("branch_index", None)
     redacted.pop("address_index", None)
+    redacted.pop("derivation_path", None)
+    redacted.pop("derivation_paths", None)
     redacted.pop("anon_history", None)
     return redacted
 
@@ -4504,6 +4543,67 @@ def build_workspace_health_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
     }
 
 
+def _silent_payment_report_blockers(conn: sqlite3.Connection, profile_id: str) -> list[dict[str, Any]]:
+    rows = conn.execute(
+        """
+        SELECT id, label, config_json
+        FROM wallets
+        WHERE profile_id = ?
+          AND kind = 'silent-payment'
+        ORDER BY label ASC
+        """,
+        (profile_id,),
+    ).fetchall()
+    blockers: list[dict[str, Any]] = []
+    for wallet in rows:
+        config = _json_config(wallet["config_json"])
+        if not has_silent_payment_sync_material(config):
+            continue
+        source_key = core_freshness.source_key(core_freshness.SOURCE_ONCHAIN, wallet["id"])
+        state = conn.execute(
+            """
+            SELECT status, stale_reason, blocking_reports, checkpoint_json
+            FROM freshness_source_states
+            WHERE profile_id = ? AND source_key = ?
+            """,
+            (profile_id, source_key),
+        ).fetchone()
+        if state is None:
+            blockers.append(
+                {
+                    "id": f"silent_payment_scan_pending:{wallet['id']}",
+                    "code": "silent_payment_scan_pending",
+                    "severity": "blocking",
+                    "title": "Silent Payments scan pending",
+                    "detail": f"{wallet['label']} has not completed its configured BIP352 scan range yet.",
+                    "daemon_kind": "ui.wallets.sync",
+                }
+            )
+            continue
+        try:
+            checkpoint = json.loads(state["checkpoint_json"] or "{}")
+        except (TypeError, ValueError, json.JSONDecodeError):
+            checkpoint = {}
+        sp_state = checkpoint.get("silent_payment") if isinstance(checkpoint, dict) else None
+        sp_state = sp_state if isinstance(sp_state, dict) else {}
+        scan_complete = bool(sp_state.get("scan_complete"))
+        degraded = bool(sp_state.get("degraded")) or bool(state["blocking_reports"])
+        if scan_complete and not degraded:
+            continue
+        reason = str(sp_state.get("degraded_reason") or state["stale_reason"] or "scan_incomplete")
+        blockers.append(
+            {
+                "id": f"silent_payment_scan_degraded:{wallet['id']}",
+                "code": "silent_payment_scan_incomplete",
+                "severity": "blocking",
+                "title": "Silent Payments scan incomplete",
+                "detail": f"{wallet['label']} has incomplete BIP352 scan coverage ({reason}).",
+                "daemon_kind": "ui.wallets.sync",
+            }
+        )
+    return blockers
+
+
 def build_report_blockers_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
     health = build_workspace_health_snapshot(conn)
     rates_coverage = build_rates_coverage_snapshot(conn, {"limit": 10})
@@ -4547,6 +4647,7 @@ def build_report_blockers_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
                     "daemon_kind": "ui.wallets.sync",
                 }
             )
+        blockers.extend(_silent_payment_report_blockers(conn, health["profile"]["id"]))
         overlap = core_source_overlap.detect_profile_source_overlaps(
             conn,
             health["profile"]["id"],

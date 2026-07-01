@@ -26,6 +26,7 @@ written.
 - Pocket Bitcoin account CSV exports
 - Strike CSV exports
 - Samourai/Whirlpool descriptor and account-xpub source sets
+- Silent Payments watch-only receiving sources (`silent-payment` wallets)
 - BIP329 JSONL labels
 
 Format references used by the dedicated importers:
@@ -51,6 +52,115 @@ Format references used by the dedicated importers:
   and
   <https://code.sparrowwallet.com/sparrowwallet/sparrow/blame/commit/176e440195f975253cdfeab08636b1a897bf78a5/src/main/java/com/sparrowwallet/sparrow/wallet/UtxoEntry.java>
 - BIP329 labels JSONL: <https://bips.xyz/329>
+- BIP352 Silent Payments: <https://github.com/bitcoin/bips/blob/master/bip-0352.mediawiki>
+- BIP392 `sp()` descriptors: <https://github.com/bitcoin/bips/blob/master/bip-0392.mediawiki>
+
+## Silent Payments watch-only sources
+
+Kassiber can track BIP352 receives as a local-first, watch-only wallet source.
+This is accounting infrastructure only: it does not spend, sign, broadcast,
+construct PSBTs, manage sender contacts, or choose a hosted Silent Payments
+server for you.
+
+Create a wallet with BIP392 watch-only material and an explicitly selected
+backend:
+
+```bash
+kassiber backends create sp-local \
+  --kind custom \
+  --url local://silent-payments \
+  --chain bitcoin \
+  --network main \
+  --silent-payments \
+  --silent-payment-scan-file /path/to/sp-scan.json
+
+kassiber wallets create \
+  --label "SP receive" \
+  --kind silent-payment \
+  --backend sp-local \
+  --sp-descriptor-stdin \
+  --sp-scan-start-height 850000
+```
+
+`--sp-descriptor` accepts watch-only `sp(spscan...)` material, or the BIP392
+two-key watch-only shape where the scan key is private and the spend key is
+public. Spend-private forms such as `spspend` are rejected. Prefer
+`--sp-descriptor-stdin`, `--sp-descriptor-fd`, or `--sp-descriptor-file` over
+argv so scan material does not land in shell history.
+
+Every Silent Payments wallet must declare a scan birthday: either
+`--sp-scan-start-height`, `--sp-scan-start-date`, or explicit full-history mode
+with `--sp-full-history --sp-acknowledge-full-history-warning`. Kassiber does
+not silently scan from genesis and does not claim completeness before the
+scanner reports the requested range complete.
+
+Backends must be deliberately marked Silent-Payments-capable with
+`--silent-payments` and must provide either a local scanner JSON file
+(`--silent-payment-scan-file`) or a server-assisted scan endpoint
+(`--silent-payment-scan-path` plus wallet `--sp-scan-mode server-assisted
+--sp-acknowledge-server-warning`). The desktop backend settings dialog exposes
+the same capability bit and replacement scan file/path fields; already-saved
+scanner paths remain hidden in normal safe reads. Ordinary Esplora/Electrum
+scripthash sync is not enough to discover BIP352 outputs; unsupported backends
+fail with `silent_payment_backend_unsupported` rather than returning a clean
+zero balance.
+
+The local scanner JSON shape is intentionally simple and scanner-agnostic:
+
+```json
+{
+  "descriptor_fingerprint": "sha256-of-compact-sp-descriptor",
+  "complete": true,
+  "range": {"from_height": 850000, "to_height": 851000},
+  "transactions": [
+    {
+      "txid": "64-hex...",
+      "block_height": 850100,
+      "block_time": "2026-06-01T12:00:00Z",
+      "outputs": [
+        {
+          "vout": 0,
+          "amount_sats": 50000,
+          "script_pubkey": "5120...",
+          "silent_payment": true
+        }
+      ]
+    }
+  ],
+  "utxos": [
+    {
+      "txid": "64-hex...",
+      "vout": 0,
+      "amount_sats": 50000,
+      "script_pubkey": "5120...",
+      "spent_by": null
+    }
+  ]
+}
+```
+
+Every scanner payload must be bound to the wallet with `descriptor_fingerprint`
+(the hex SHA-256 of the whitespace-compacted `sp(...)` descriptor), or with a
+matching `wallet_id` / `wallet_label`. The binding fields may be top-level or
+inside a top-level `wallet` object. A mismatched or unbound payload is rejected
+so one wallet cannot accidentally ingest another scanner result.
+
+Detected outputs must include concrete Taproot scriptPubKeys and must be
+explicitly marked with `silent_payment: true`, `owned: true`, or
+`matched: true`; unmarked transaction outputs are ignored. Top-level `utxos`
+must correspond to those marked transaction outputs or the scan is rejected.
+Spend transactions that consume owned inputs must include `fee_sats` (or
+`fee_sat`) and should mark owned inputs in `inputs` / `vin` with the same
+ownership flags so the inventory can mark the previous outpoint spent.
+
+Receives import as ordinary BTC inbound transactions and active UTXOs; later
+spends mark the same UTXO spent and import an outbound BTC transaction.
+Re-running sync is idempotent. The reported `range.from_height` /
+`range.start_height` or `range.from_date` / `range.start_date` must cover the
+wallet's configured scan birthday. If a scanner reports `complete=false`, a
+too-narrow range, or another degraded state, Kassiber records partial success,
+blocks report readiness for that source, and does not apply a full UTXO
+snapshot update until the range completes.
 
 ## Generic transaction imports
 

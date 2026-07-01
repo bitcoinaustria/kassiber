@@ -5731,6 +5731,7 @@ def _backend_options_payload(ctx: "DaemonContext") -> dict[str, Any]:
         "has_cookiefile",
         "has_username",
         "has_password",
+        "silent_payments",
     }
     for backend in core_accounts.list_backends(ctx.runtime_config):
         row = dict(backend)
@@ -6021,16 +6022,27 @@ def _coerce_int(
 
 def _backend_config_arg(args: dict[str, Any]) -> dict[str, Any] | None:
     value = args.get("config")
-    if value is None:
-        return None
-    if not isinstance(value, dict):
+    if value is not None and not isinstance(value, dict):
         raise AppError(
             "config must be an object",
             code="validation",
             details={"type": type(value).__name__},
             retryable=False,
         )
-    return value
+    config = dict(value or {})
+    if "silent_payments" in args and args.get("silent_payments") is not None:
+        if not isinstance(args["silent_payments"], bool):
+            raise AppError(
+                "silent_payments must be a boolean",
+                code="validation",
+                details={"type": type(args["silent_payments"]).__name__},
+                retryable=False,
+            )
+        config["silent_payments"] = args["silent_payments"]
+    for key in ("silent_payment_scan_file", "silent_payment_scan_path"):
+        if key in args and args.get(key) is not None:
+            config[key] = _optional_str_arg(args, key)
+    return config or None
 
 
 def _backend_common_args(args: dict[str, Any]) -> dict[str, Any]:
@@ -6190,6 +6202,32 @@ def _create_wallet_payload(
     change_descriptor = _optional_str_arg(args, "change_descriptor")
     if change_descriptor is not None:
         config["change_descriptor"] = change_descriptor
+    sp_descriptor = _optional_str_arg(args, "sp_descriptor")
+    if sp_descriptor is not None:
+        config["sp_descriptor"] = sp_descriptor
+    for key in (
+        "sp_scan_mode",
+        "sp_scan_start_date",
+    ):
+        value = _optional_str_arg(args, key)
+        if value is not None:
+            config[key] = value
+    sp_scan_start_height = args.get("sp_scan_start_height")
+    if sp_scan_start_height not in (None, ""):
+        if not isinstance(sp_scan_start_height, int):
+            raise AppError(
+                "sp_scan_start_height must be an integer",
+                code="validation",
+                retryable=False,
+            )
+        config["sp_scan_start_height"] = sp_scan_start_height
+    for key in (
+        "sp_full_history",
+        "sp_acknowledge_full_history_warning",
+        "sp_acknowledge_server_warning",
+    ):
+        if key in args:
+            config[key] = bool(args.get(key))
     wallet_material = _optional_str_arg(args, "wallet_material")
     if wallet_material is not None:
         script_type = _optional_str_arg(args, "script_type")

@@ -122,19 +122,31 @@ const SECRET_FLOOR_TEXT_PATTERNS: Array<[RegExp, TextBackstopReplacement]> = [
     "[redacted-extended-key]",
   ],
   [
-    /\b(wpkh|sh|wsh|tr|pkh|combo)\([^\n]{16,400}\)(?:#[a-z0-9]{8})?/gi,
+    /\bsp\([^\n]{8,800}\)(?:#[a-z0-9]{8})?/gi,
+    (match) => maskDescriptor(match),
+  ],
+  [
+    /\b(?:t?spscan|t?spspend)1[023456789acdefghjklmnpqrstuvwxyz]{20,1020}\b/gi,
+    "[redacted-silent-payment-key]",
+  ],
+  [
+    /\b(?:sp|tsp)1[023456789acdefghjklmnpqrstuvwxyz]{100,1020}\b/gi,
+    "[redacted-silent-payment-address]",
+  ],
+  [
+    /\b(wpkh|sh|wsh|tr|pkh|combo|sp)\([^\n]{16,400}\)(?:#[a-z0-9]{8})?/gi,
     (match) => maskDescriptor(match),
   ],
   [/\b[Bb]earer\s+[A-Za-z0-9._~+/-]+=*/g, "Bearer [redacted]"],
   [
-    /\b(api[_-]?key|auth[_-]?header|cookie|descriptor|passphrase|password|secret|token)\b(\s*[:=]\s*)([^\s,;"']+)/gi,
+    /\b(api[_-]?key|auth[_-]?header|cookie|descriptor|passphrase|password|secret|silent[_-]?payments?(?:[_-]?(?:descriptor|key|material|scan))?|sp[_-]?descriptor|spscan|spspend|token)\b(\s*[:=]\s*)([^\s,;"']+)/gi,
     "$1$2[redacted]",
   ],
   // JSON-shaped assignments, e.g. a logged object `{"api_key":"sk-..."}`. The
   // pattern above stops at the key's closing quote, so the quoted value
   // survives without this; keep the key and redact the value in place.
   [
-    /("(?:api[_-]?key|auth[_-]?header|cookie|descriptor|mnemonic|recovery[_-]?phrase|passphrase|password|secret|seed(?:[_-]?(?:phrase|words))?|token|xprv)"\s*:\s*)"[^"]*"/gi,
+    /("(?:api[_-]?key|auth[_-]?header|cookie|descriptor|mnemonic|recovery[_-]?phrase|passphrase|password|secret|seed(?:[_-]?(?:phrase|words))?|silent[_-]?payments?(?:[_-]?(?:descriptor|key|material|scan))?|sp[_-]?descriptor|spscan|spspend|token|xprv)"\s*:\s*)"[^"]*"/gi,
     '$1"[redacted]"',
   ],
 ];
@@ -708,7 +720,7 @@ function stringifyLogValue(value: unknown): string {
 }
 
 function maskDescriptor(value: string): string {
-  const scriptType = value.match(/\b(wpkh|sh|wsh|tr|pkh|combo)\(/i)?.[1];
+  const scriptType = value.match(/\b(wpkh|sh|wsh|tr|pkh|combo|sp)\(/i)?.[1];
   if (!scriptType) return "[redacted-descriptor]";
   const origin = value.match(/\[[^\]\n]{1,120}\]/)?.[0] ?? "";
   return `${scriptType}(${origin}[redacted-key])`;

@@ -35,6 +35,7 @@ from ..backends import (
 from ..core import accounts as core_accounts
 from ..core import attachments as core_attachments
 from ..core import commercial as core_commercial
+from ..core import freshness as core_freshness
 from ..core import imports as core_imports
 from ..core.lightning import cln as core_lightning_cln
 from ..core import loans as core_loans
@@ -2170,7 +2171,32 @@ def _mark_wallet_synced(conn, wallet, synced_at=None):
 
 def _mark_wallet_synced_from_results(conn, wallet, results):
     if any(result.get("status") == "synced" for result in results):
-        _mark_wallet_synced(conn, wallet)
+        synced_at = _mark_wallet_synced(conn, wallet)
+        for result in results:
+            checkpoint = result.get("freshness_checkpoint")
+            if not isinstance(checkpoint, dict):
+                continue
+            blocking_reports = bool(result.get("blocking_reports"))
+            core_freshness.upsert_source_state(
+                conn,
+                profile_id=wallet["profile_id"],
+                source_key=core_freshness.source_key(core_freshness.SOURCE_ONCHAIN, wallet["id"]),
+                source_type=core_freshness.SOURCE_ONCHAIN,
+                source_label=wallet["label"],
+                status=(
+                    core_freshness.STATUS_PARTIALLY_STALE
+                    if result.get("partial_success")
+                    else core_freshness.STATUS_FRESH
+                ),
+                stale_reason=result.get("silent_payment_degraded_reason")
+                if result.get("partial_success")
+                else None,
+                blocking_reports=blocking_reports,
+                last_success_at=synced_at,
+                last_phase=core_freshness.PHASE_DONE,
+                progress={"phase": core_freshness.PHASE_DONE},
+                checkpoint=checkpoint,
+            )
 
 
 def sync_wallet_from_backend(

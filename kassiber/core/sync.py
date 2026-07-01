@@ -17,6 +17,7 @@ from ..util import str_or_none
 from . import source_overlap
 from .wallets import (
     has_descriptor_sync_material,
+    has_silent_payment_sync_material,
     wallet_btcpay_provenance_config,
     wallet_btcpay_sync_config,
     wallet_bullbitcoin_wallet_export_config,
@@ -507,14 +508,17 @@ def sync_wallet_from_backend(
     outcome["backend_url"] = redact_backend_url(backend["url"])
     outcome["chain"] = sync_state.chain
     outcome["network"] = sync_state.network
-    outcome["sync_mode"] = "descriptor" if sync_state.descriptor_plan else "addresses"
+    if getattr(sync_state.descriptor_plan, "kind", None) == "silent-payment":
+        outcome["sync_mode"] = "silent_payment"
+    else:
+        outcome["sync_mode"] = "descriptor" if sync_state.descriptor_plan else "addresses"
     outcome["target_count"] = len(sync_state.targets)
     outcome["records_fetched"] = len(normalized_records)
     if "updated" not in outcome and isinstance(outcome.get("updated_records"), list):
         outcome["updated"] = len(outcome["updated_records"])
     if force_full:
         outcome["force_full"] = True
-    if sync_state.descriptor_plan:
+    if sync_state.descriptor_plan and getattr(sync_state.descriptor_plan, "kind", None) != "silent-payment":
         outcome["gap_limit"] = sync_state.descriptor_plan.gap_limit
     else:
         outcome["addresses"] = ",".join(
@@ -546,7 +550,7 @@ def classify_wallet_sync(wallet: WalletRow, normalize_addresses: NormalizeAddres
     if config.get("source_file") and config.get("source_format"):
         return "file"
     addresses = normalize_addresses(config.get("addresses"))
-    if addresses or has_descriptor_sync_material(config):
+    if addresses or has_descriptor_sync_material(config) or has_silent_payment_sync_material(config):
         return "backend"
     return "none"
 
@@ -660,6 +664,7 @@ def sync_wallets(
         source_format = config.get("source_format")
         addresses = hooks.normalize_addresses(config.get("addresses"))
         has_descriptor = has_descriptor_sync_material(config)
+        has_silent_payment = has_silent_payment_sync_material(config)
         if btcpay_config:
             if hooks.sync_btcpay_wallet is None:
                 raise AppError("BTCPay source refresh is not configured for this runtime")
@@ -712,7 +717,7 @@ def sync_wallets(
             )
             results.append({"wallet": sync_wallet["label"], "status": "synced", **outcome})
             continue
-        if addresses or has_descriptor:
+        if addresses or has_descriptor or has_silent_payment:
             checkpoint = {} if force_full else (checkpoints or {}).get(str(wallet["id"]))
             outcome = sync_wallet_from_backend(
                 conn,

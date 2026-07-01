@@ -14,6 +14,7 @@ export type ConnectionKind =
   | "xpub"
   | "address"
   | "descriptor"
+  | "silent-payment"
   | "samourai"
   | "core-ln"
   | "lnd"
