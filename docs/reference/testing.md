@@ -29,6 +29,10 @@ host loopback, and uses a per-worktree Compose project name so parallel runs do
 not share containers or volumes. It uses regtest only, no mainnet funds, no user
 wallet files, and no production descriptors. Set `KASSIBER_REGTEST_KEEP=1` to
 keep the Docker volume for debugging; otherwise it is removed on exit.
+Fresh Compose runs use the scenario manifest's timestamp sequence. Reused Core
+nodes can only move forward from their existing regtest chain tip, so their
+calendar dates may drift while preserving the same relative spacing and row
+shape.
 
 ## Full Accounting Demo
 
