@@ -226,6 +226,13 @@
     "columnConnection": "Verbindung",
     "columnEndpoint": "Endpunkt",
     "lastChecked": "Zuletzt geprüft {{time}}",
+    "route": {
+      "tor": "Tor",
+      "proxy": "Proxy",
+      "torVia": ".onion-Endpunkt nur für dieses Backend über {{proxy}} geroutet.",
+      "torOnion": ".onion-Endpunkt; konfiguriere einen Backend-Proxy, damit Tor ihn auflösen kann.",
+      "proxyVia": "Dieses Backend wird nur über {{proxy}} geroutet."
+    },
     "indicator": {
       "errors": "Verbindungsfehler",
       "warning": "Verbindungsproblem",

@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/table";
 import { useDaemon, useDaemonMutation } from "@/daemon/client";
 import {
+  abbreviateEndpointMiddle,
   canRunConnectionHealthChecks,
   connectionHealthTone,
   connectionProbeKind,
@@ -33,6 +34,7 @@ import {
   type ConnectionIndicatorTone,
   type ConnectionProbeKind,
 } from "@/lib/connectionHealth";
+import { isOnionEndpoint } from "@/lib/backendTrust";
 import { cn } from "@/lib/utils";
 import {
   networkStatusLabel,
@@ -177,7 +179,42 @@ function connectionStatusTitle(
   return connectionStatusLabel(status, t);
 }
 
-function connectionDotClassName(status: ConnectionHealthStatus) {
+function connectionRouteLabel(row: ConnectionHealthRow, t: TFn) {
+  const routeKind = connectionRouteKind(row);
+  if (routeKind === "tor") {
+    return t("network.route.tor");
+  }
+  if (routeKind === "proxy") {
+    return t("network.route.proxy");
+  }
+  return null;
+}
+
+function connectionRouteKind(row: ConnectionHealthRow) {
+  if (isOnionEndpoint(row.rawUrl)) return "tor";
+  if (row.proxy) return "proxy";
+  return null;
+}
+
+function connectionRouteTitle(row: ConnectionHealthRow, t: TFn) {
+  if (isOnionEndpoint(row.rawUrl)) {
+    return row.proxy
+      ? t("network.route.torVia", { proxy: row.proxy })
+      : t("network.route.torOnion");
+  }
+  if (row.proxy) {
+    return t("network.route.proxyVia", { proxy: row.proxy });
+  }
+  return "";
+}
+
+function connectionDotClassName(
+  status: ConnectionHealthStatus,
+  routeKind?: "tor" | "proxy" | null,
+) {
+  if (routeKind === "tor") {
+    return "bg-violet-500";
+  }
   switch (status) {
     case "healthy":
       return "bg-emerald-500";
@@ -340,6 +377,7 @@ export function NetworkStatusIndicator({
                   })
                 : await testHttp.mutateAsync({
                     url: row.rawUrl,
+                    proxy: row.proxy,
                     timeout: 5,
                   });
             const payload = envelope.data;
@@ -485,8 +523,12 @@ export function NetworkStatusIndicator({
             <Table className="table-fixed">
               <TableHeader>
                 <TableRow>
-                  <TableHead className="w-8">{t("network.columnState")}</TableHead>
-                  <TableHead className="w-[42%]">{t("network.columnConnection")}</TableHead>
+                  <TableHead className="w-16">
+                    {t("network.columnState")}
+                  </TableHead>
+                  <TableHead className="w-[38%]">
+                    {t("network.columnConnection")}
+                  </TableHead>
                   <TableHead className="hidden sm:table-cell">{t("network.columnEndpoint")}</TableHead>
                 </TableRow>
               </TableHeader>
@@ -501,16 +543,23 @@ export function NetworkStatusIndicator({
                     t,
                     record,
                   );
+                  const routeLabel = connectionRouteLabel(row, t);
+                  const routeTitle = connectionRouteTitle(row, t);
+                  const routeKind = connectionRouteKind(row);
+                  const dotTitle =
+                    routeKind === "tor" && routeTitle
+                      ? `${rowStatusTitle} · ${routeTitle}`
+                      : rowStatusTitle;
                   return (
                     <TableRow key={row.id}>
                       <TableCell>
                         <span
                           className={cn(
                             "block size-2.5 rounded-full",
-                            connectionDotClassName(rowStatus),
+                            connectionDotClassName(rowStatus, routeKind),
                           )}
                           aria-label={rowStatusText}
-                          title={rowStatusTitle}
+                          title={dotTitle}
                         />
                       </TableCell>
                       <TableCell className="min-w-0">
@@ -527,17 +576,20 @@ export function NetworkStatusIndicator({
                             title={rowStatusTitle}
                           >
                             {row.protocol} · {rowStatusText}
+                            {routeLabel ? ` · ${routeLabel}` : ""}
                           </span>
                         </button>
                       </TableCell>
                       <TableCell className="hidden min-w-0 sm:table-cell">
                         <button
                           type="button"
-                          className="block max-w-full truncate text-left font-mono text-xs text-muted-foreground hover:text-primary focus-visible:rounded-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                          className="flex max-w-full items-center gap-2 text-left font-mono text-xs text-muted-foreground hover:text-primary focus-visible:rounded-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
                           title={row.endpoint}
                           onClick={() => openSettingsConnection(row)}
                         >
-                          {row.endpoint}
+                          <span className="min-w-0 truncate">
+                            {abbreviateEndpointMiddle(row.endpoint)}
+                          </span>
                         </button>
                       </TableCell>
                     </TableRow>

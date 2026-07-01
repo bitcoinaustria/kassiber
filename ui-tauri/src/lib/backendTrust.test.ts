@@ -4,6 +4,8 @@ import {
   backendTrustFromEndpoint,
   endpointHost,
   inferredInfrastructureOwnership,
+  isOnionEndpoint,
+  isOnionHost,
   isLocalOrPrivateHost,
 } from "./backendTrust";
 
@@ -47,6 +49,17 @@ describe("isLocalOrPrivateHost", () => {
     ]) {
       expect(isLocalOrPrivateHost(host)).toBe(false);
     }
+  });
+});
+
+describe("isOnionEndpoint", () => {
+  it("detects onion hosts across backend URL shapes", () => {
+    const onion = "abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcd.onion";
+    expect(isOnionHost(onion)).toBe(true);
+    expect(isOnionEndpoint(`http://${onion}/api`)).toBe(true);
+    expect(isOnionEndpoint(`ssl://${onion}:50002`)).toBe(true);
+    expect(isOnionEndpoint(`${onion}:50001`)).toBe(true);
+    expect(isOnionEndpoint("https://mempool.space/api")).toBe(false);
   });
 });
 
@@ -95,9 +108,20 @@ describe("backendTrustFromEndpoint", () => {
     expect(backendTrustFromEndpoint("http://abc.onion").posture).toBe(
       "shielded",
     );
+    const proxied = backendTrustFromEndpoint(
+      "https://mempool.space/api",
+      true,
+      "esplora",
+    );
+    expect(proxied.posture).toBe("shielded");
+    expect(proxied.note).toContain("Only this configured backend");
+    expect(proxied.note).toContain("Other backends keep their own routing");
+  });
+
+  it("does not treat a stored proxy as shielded for unsupported transports", () => {
     expect(
-      backendTrustFromEndpoint("https://mempool.space/api", true).posture,
-    ).toBe("shielded");
+      backendTrustFromEndpoint("https://lnd.example", true, "lnd").posture,
+    ).toBe("remote");
   });
 
   it("does not downgrade a self-operated endpoint to third-party", () => {

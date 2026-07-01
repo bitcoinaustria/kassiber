@@ -49,6 +49,7 @@ export interface Backend {
   proxy?: {
     host: string;
     port: string;
+    redactedCredentials?: boolean;
   } | null;
   walletRefs?: string[];
 }
@@ -501,14 +502,18 @@ export function normalizeInfrastructureOwnership(
 
 export function parseProxyEndpoint(
   value: string | null | undefined,
-): { host: string; port: string } | undefined {
+): { host: string; port: string; redactedCredentials?: boolean } | undefined {
   const trimmed = value?.trim();
   if (!trimmed) return undefined;
   if (trimmed.includes("://")) {
     try {
       const parsed = new URL(trimmed);
       return parsed.hostname && parsed.port
-        ? { host: parsed.hostname, port: parsed.port }
+        ? {
+            host: parsed.hostname,
+            port: parsed.port,
+            redactedCredentials: parsed.username === "redacted" || undefined,
+          }
         : undefined;
     } catch {
       return undefined;
@@ -619,7 +624,10 @@ export function backendPayload(backend: Backend): Record<string, unknown> {
   if (auth === "basic" && backend.password) {
     config.password = backend.password;
   }
-  if (backend.proxy?.host && backend.proxy.port) {
+  if (backend.proxy?.redactedCredentials) {
+    // Preserve an existing credentialed proxy URL; the daemon only returns the
+    // redacted host/port marker, so writing it back would erase credentials.
+  } else if (backend.proxy?.host && backend.proxy.port) {
     payload.tor_proxy = `${backend.proxy.host}:${backend.proxy.port}`;
   } else if (backend.proxy === null) {
     clear.add("tor_proxy");
@@ -706,6 +714,7 @@ export function backendTrust(backend: Backend) {
   return backendTrustFromEndpoint(
     backend.url || "",
     Boolean(backend.proxy),
+    backend.kind,
     backend.infrastructureOwner,
   );
 }

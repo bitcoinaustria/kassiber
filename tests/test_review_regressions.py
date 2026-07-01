@@ -15,7 +15,11 @@ from pathlib import Path
 from unittest.mock import patch
 from urllib.parse import parse_qs, urlparse
 
-from kassiber.backends import redact_backend_text, redact_backend_value
+from kassiber.backends import (
+    redact_backend_for_output,
+    redact_backend_text,
+    redact_backend_value,
+)
 from kassiber.cli.main import command_needs_db
 from kassiber.cli.handlers import (
     _attachment_hooks,
@@ -5018,6 +5022,19 @@ class ReviewRegressionTest(unittest.TestCase):
             redact_backend_value({"nested": [message]})["nested"][0],
             redacted,
         )
+
+    def test_backend_output_redacts_proxy_credentials(self):
+        payload = redact_backend_for_output(
+            {
+                "name": "mempool",
+                "kind": "esplora",
+                "url": "https://mempool.example/api",
+                "tor_proxy": "socks5h://alice:p%40ss@127.0.0.1:9050",
+            }
+        )
+        self.assertEqual(payload["tor_proxy"], "socks5h://redacted@127.0.0.1:9050")
+        self.assertNotIn("alice", json.dumps(payload))
+        self.assertNotIn("p%40ss", json.dumps(payload))
 
     def test_backend_outputs_redact_secret_values_but_keep_presence_flags(self):
         payload, result = self._run_json("init")

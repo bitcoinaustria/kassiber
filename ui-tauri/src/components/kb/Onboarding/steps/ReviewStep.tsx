@@ -266,7 +266,7 @@ function syncNote(
     }
     return t("review.sync.noteDefault");
   }
-  if (form.backendKind === "electrum" && form.backendUseProxy) {
+  if (form.backendUseProxy) {
     return t("review.sync.noteCustomProxy");
   }
   return t("review.sync.noteCustom");
