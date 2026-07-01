@@ -78,7 +78,13 @@ export function connectionProbeKind(connection: ConnectionHealthInput): Connecti
   }
   if (
     allowDisplayHttpProbe &&
-    ["coingecko", "coinbase-exchange", "esplora", "liquid-esplora"].includes(
+    [
+      "coingecko",
+      "coinbase-exchange",
+      "esplora",
+      "liquid-esplora",
+      "mempool",
+    ].includes(
       kind,
     ) &&
     (url.startsWith("http://") || url.startsWith("https://"))

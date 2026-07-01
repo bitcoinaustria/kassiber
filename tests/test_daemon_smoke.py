@@ -989,6 +989,8 @@ class DaemonSmokeTest(unittest.TestCase):
                     row["name"]: row for row in before["data"]["backends"]
                 }
                 self.assertFalse(before_rows["bench"]["is_default"])
+                self.assertFalse(before_rows["bench"]["url_safe_for_http_probe"])
+                self.assertTrue(before_rows["mempool"]["url_safe_for_http_probe"])
 
                 _write_payload(
                     proc,

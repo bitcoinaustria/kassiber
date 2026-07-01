@@ -44,6 +44,7 @@ export interface Backend {
   lightningDir?: string;
   rpcFile?: string;
   trustSsl?: boolean;
+  urlSafeForHttpProbe?: boolean;
   infrastructureOwner?: InfrastructureOwnership;
   certificate?: string;
   proxy?: {
@@ -72,6 +73,7 @@ export interface BackendSettingsRow {
   has_commando_peer_id?: boolean;
   has_lightning_dir?: boolean;
   has_rpc_file?: boolean;
+  url_safe_for_http_probe?: boolean;
   insecure?: boolean;
   tor_proxy?: string;
   infrastructure_owner?: string;
@@ -544,6 +546,7 @@ export function backendRowToSettingsBackend(row: BackendSettingsRow): Backend {
       : undefined,
     rpcFile: row.has_rpc_file ? CLN_PRESENCE_SENTINEL_RPC_FILE : undefined,
     trustSsl: row.insecure,
+    urlSafeForHttpProbe: row.url_safe_for_http_probe === true,
     proxy: parseProxyEndpoint(row.tor_proxy),
     infrastructureOwner: normalizeInfrastructureOwnership(
       row.infrastructure_owner,

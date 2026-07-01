@@ -10,6 +10,7 @@ from ..backends import (
     delete_db_backend as _delete_db_backend,
     get_db_backend,
     redact_backend_for_output,
+    redact_backend_url,
     set_default_backend as _set_default_backend,
     update_db_backend as _update_db_backend,
 )
@@ -392,13 +393,14 @@ def list_accounts(conn, workspace_ref, profile_ref):
 def list_backends(runtime_config):
     rows = []
     for name, backend in sorted(runtime_config["backends"].items()):
+        url = backend.get("url", "")
         row = redact_backend_for_output(
             {
                 "name": name,
                 "kind": backend.get("kind", ""),
                 "chain": backend.get("chain", ""),
                 "network": backend.get("network", ""),
-                "url": backend.get("url", ""),
+                "url": url,
                 "batch_size": backend.get("batch_size", ""),
                 "default": "yes" if name == runtime_config["default_backend"] else "",
                 "source": backend.get("source", ""),
@@ -416,6 +418,17 @@ def list_backends(runtime_config):
                 "username": backend.get("username", ""),
                 "password": backend.get("password", ""),
             }
+        )
+        row["url_safe_for_http_probe"] = (
+            bool(url)
+            and str(url).lower().startswith(("http://", "https://"))
+            and redact_backend_url(url) == url
+            and not row.get("has_auth_header")
+            and not row.get("has_token")
+            and not row.get("has_cookiefile")
+            and not row.get("has_username")
+            and not row.get("has_password")
+            and not bool(backend.get("tor_proxy"))
         )
         row.pop("cookiefile", None)
         rows.append(row)

@@ -26,6 +26,21 @@ describe("backend settings model", () => {
     expect(backend.walletRefs).toEqual(["Main/Default/Treasury"]);
   });
 
+  it("carries the daemon health-probe safety flag", () => {
+    const backend = backendRowToSettingsBackend({
+      name: "mempool",
+      display_name: "mempool",
+      kind: "esplora",
+      chain: "bitcoin",
+      network: "main",
+      url: "https://mempool.example.com/api",
+      has_url: true,
+      url_safe_for_http_probe: true,
+    });
+
+    expect(backend.urlSafeForHttpProbe).toBe(true);
+  });
+
   it("updates display_name without renaming the backend key", () => {
     const payload = backendPayload({
       id: "liquid",

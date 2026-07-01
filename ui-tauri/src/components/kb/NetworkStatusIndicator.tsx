@@ -112,7 +112,8 @@ function connectionRowFromBackend(
     protocol: backendProtocolLabel(backend),
     probeKind: connectionProbeKind({
       ...backend,
-      allowDisplayHttpProbe: backendId === undefined,
+      allowDisplayHttpProbe:
+        backendId === undefined || backend.urlSafeForHttpProbe === true,
     }),
     settingsHash: settingsHashForConnection(backend),
     proxy: backend.proxy
