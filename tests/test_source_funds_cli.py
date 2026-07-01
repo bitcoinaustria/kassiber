@@ -873,7 +873,7 @@ class SourceFundsCliTest(unittest.TestCase):
             self.assertRegex(extracted, r"BTC\s+↔\s+EUR")
 
     def test_reveal_modes_redact_txids_and_attachment_paths(self):
-        seed = self._seed_exportable_disclosure_path()
+        self._seed_exportable_disclosure_path()
         expected_txids = {
             "labels_only": [],
             "minimal": ["disclosure-target"],
@@ -1542,6 +1542,69 @@ class SourceFundsCliTest(unittest.TestCase):
         self.assertNotIn("ambiguous_allocation", blockers)
         self.assertTrue(report["explain_gates"]["exportable"], report["explain_gates"]["blockers"])
 
+    def test_assemble_apportions_split_receive_parent_requirements(self):
+        """A single spender funding multiple owned receive legs must split
+        its proof requirement across those children."""
+        p1, tt = "74" * 32, "75" * 32
+        self._init_default_workspace()
+        self._write_csv(
+            "split-a.csv",
+            "date,txid,direction,asset,amount,fee,fiat_rate,description\n"
+            f"2026-05-01T09:00:00Z,{p1},inbound,BTC,1.00000000,0,50000,A parent\n"
+            f"2026-05-02T09:00:00Z,{tt},outbound,BTC,1.00000000,0,50000,A splits\n",
+        )
+        self._write_csv(
+            "split-b.csv",
+            "date,txid,direction,asset,amount,fee,fiat_rate,description\n"
+            f"2026-05-02T09:00:00Z,{tt},inbound,BTC,0.60000000,0,50000,B receives\n",
+        )
+        self._write_csv(
+            "split-c.csv",
+            "date,txid,direction,asset,amount,fee,fiat_rate,description\n"
+            f"2026-05-02T09:00:00Z,{tt},inbound,BTC,0.40000000,0,50000,C receives\n",
+        )
+        self._create_wallet_and_import("Split A", "split-a.csv")
+        self._create_wallet_and_import("Split B", "split-b.csv")
+        self._create_wallet_and_import("Split C", "split-c.csv")
+        conn = self._db()
+        try:
+            conn.execute(
+                "UPDATE transactions SET raw_json = ? WHERE external_id = ?",
+                (json.dumps({"vin": [{"txid": p1, "vout": 0}]}), tt),
+            )
+            self._insert_utxos(
+                conn,
+                [
+                    ("Split A", p1, 0, 100_000_000_000),
+                    ("Split B", tt, 0, 60_000_000_000),
+                    ("Split C", tt, 1, 40_000_000_000),
+                ],
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+        suggested = self.cli(
+            "source-funds", "suggest", "--workspace", "Sof", "--profile", "Default"
+        )["data"]
+        self.assertGreaterEqual(suggested["inserted"], 3)
+        links = self.cli(
+            "source-funds", "links", "list", "--workspace", "Sof", "--profile", "Default"
+        )["data"]
+        spend_id = self._tx_id("Split A", tt)
+        by_target = {
+            link["to_transaction_id"]: link
+            for link in links
+            if link["method"] == "utxo_spend"
+            and link["from_transaction_id"] == spend_id
+        }
+        split_b = by_target[self._tx_id("Split B", tt)]
+        split_c = by_target[self._tx_id("Split C", tt)]
+        self.assertEqual(split_b["allocation_amount"], 0.6)
+        self.assertEqual(split_b["from_allocation_amount"], 0.6)
+        self.assertEqual(split_c["allocation_amount"], 0.4)
+        self.assertEqual(split_c["from_allocation_amount"], 0.4)
+
     def test_assemble_resolves_through_net_zero_consolidation(self):
         """An in-wallet consolidation nets to a 0-amount row that cannot carry
         allocation demand; assembly must link its parents directly to the
@@ -1621,6 +1684,72 @@ class SourceFundsCliTest(unittest.TestCase):
         )
         report = self._source_funds_report_for_target(target=target_id, amount="0.25000000")
         self.assertTrue(report["explain_gates"]["exportable"], report["explain_gates"]["blockers"])
+
+    def test_assemble_resolves_through_owned_change_output(self):
+        """A spend from owned change must trace through the change tx inputs,
+        not cap source proof at the small external payment row."""
+        pp, cc, ss = "76" * 32, "77" * 32, "78" * 32
+        self._init_default_workspace()
+        self._write_csv(
+            "change-a.csv",
+            "date,txid,direction,asset,amount,fee,fiat_rate,description\n"
+            f"2026-05-01T09:00:00Z,{pp},inbound,BTC,1.00000000,0,50000,Funding deposit\n"
+            f"2026-05-01T12:00:00Z,{cc},outbound,BTC,0.10000000,0.00010000,50000,Spend with change\n"
+            f"2026-05-02T09:00:00Z,{ss},outbound,BTC,0.80000000,0.00001000,50000,Spend from change\n",
+        )
+        self._write_csv(
+            "change-b.csv",
+            "date,txid,direction,asset,amount,fee,fiat_rate,description\n"
+            f"2026-05-02T09:00:00Z,{ss},inbound,BTC,0.80000000,0,50000,Received\n",
+        )
+        self._create_wallet_and_import("Change A", "change-a.csv")
+        self._create_wallet_and_import("Change B", "change-b.csv")
+        conn = self._db()
+        try:
+            conn.execute(
+                "UPDATE transactions SET raw_json = ? WHERE external_id = ?",
+                (json.dumps({"vin": [{"txid": pp, "vout": 0}]}), cc),
+            )
+            conn.execute(
+                "UPDATE transactions SET raw_json = ? WHERE external_id = ?",
+                (json.dumps({"vin": [{"txid": cc, "vout": 1}]}), ss),
+            )
+            self._insert_utxos(
+                conn,
+                [
+                    ("Change A", pp, 0, 100_000_000_000),
+                    ("Change A", cc, 1, 89_990_000_000),
+                    ("Change B", ss, 0, 80_000_000_000),
+                ],
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+        target_id = self._tx_id("Change B", ss)
+        result = self.cli(
+            "source-funds", "assemble", "--workspace", "Sof", "--profile", "Default",
+            "--target-transaction", target_id,
+        )["data"]
+        self.assertGreaterEqual(result["auto_reviewed"], 2)
+        links = self.cli(
+            "source-funds", "links", "list", "--workspace", "Sof", "--profile", "Default"
+        )["data"]
+        change_leg = self._tx_id("Change A", cc)
+        spend_leg = self._tx_id("Change A", ss)
+        self.assertFalse(
+            [link for link in links if link["from_transaction_id"] == change_leg and link["to_transaction_id"] == spend_leg],
+            "owned change must be a passthrough hop, not a small parent proof",
+        )
+        root_links = [
+            link
+            for link in links
+            if link["from_transaction_id"] == self._tx_id("Change A", pp)
+            and link["to_transaction_id"] == spend_leg
+        ]
+        self.assertEqual(len(root_links), 1)
+        self.assertEqual(root_links[0]["state"], "reviewed")
+        self.assertGreater(root_links[0]["from_allocation_amount"], 0.1)
 
     def test_assemble_links_lightning_legs_by_payment_hash(self):
         self._init_default_workspace()
@@ -1857,6 +1986,44 @@ class SourceFundsCliTest(unittest.TestCase):
             # Scope to the spend leg: the surviving utxo_spend suggestion is
             # the parent hop feeding it.
             self._tx_id("Chain A", self.T_TXID),
+        )["data"]
+        self.assertEqual(result["reviewed"], 0)
+        self.assertGreaterEqual(result["skipped"], 1)
+
+    def test_bulk_review_skips_utxo_suggestion_when_allocation_changes(self):
+        self._seed_utxo_chain()
+        target_id = self._tx_id("Chain A", self.T_TXID)
+        suggested = self.cli(
+            "source-funds",
+            "suggest",
+            "--workspace",
+            "Sof",
+            "--profile",
+            "Default",
+            "--target-transaction",
+            target_id,
+        )["data"]
+        self.assertGreaterEqual(suggested["inserted"], 1)
+        conn = self._db()
+        try:
+            conn.execute("DELETE FROM source_funds_links WHERE method != 'utxo_spend'")
+            conn.execute(
+                "UPDATE wallet_utxos SET amount = ? WHERE txid = ? AND vout = 0",
+                (10_000_000_000, self.P_TXID),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+        result = self.cli(
+            "source-funds",
+            "links",
+            "bulk-review",
+            "--workspace",
+            "Sof",
+            "--profile",
+            "Default",
+            "--target-transaction",
+            target_id,
         )["data"]
         self.assertEqual(result["reviewed"], 0)
         self.assertGreaterEqual(result["skipped"], 1)

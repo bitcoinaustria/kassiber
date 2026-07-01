@@ -143,31 +143,37 @@ def _event_time(row: Mapping[str, Any]) -> str:
     return str(row["occurred_at"] or "")
 
 
-def _allocate_pro_rata(amounts: Sequence[int], target_sum: int) -> list[int]:
-    """Integer pro-rata allocation whose shares sum exactly to target_sum."""
+def _allocate_by_weight(weights: Sequence[int], target_sum: int) -> list[int]:
+    """Integer weighted allocation whose shares sum exactly to target_sum."""
     if target_sum <= 0:
-        return [0 for _amount in amounts]
-    total = sum(amount for amount in amounts if amount > 0)
+        return [0 for _weight in weights]
+    total = sum(max(0, weight) for weight in weights)
     if total <= 0:
-        return [0 for _amount in amounts]
-    target_sum = min(target_sum, total)
-    if total <= target_sum:
-        return [max(0, amount) for amount in amounts]
+        return [0 for _weight in weights]
     allocations: list[int] = []
     floor_sum = 0
     remainders: list[int] = []
-    for amount in amounts:
-        exact = max(0, amount) * target_sum
+    for weight in weights:
+        exact = max(0, weight) * target_sum
         floor_value = exact // total
         allocations.append(floor_value)
         floor_sum += floor_value
         remainders.append(exact % total)
     for index in sorted(
-        range(len(amounts)),
+        range(len(weights)),
         key=lambda position: (-remainders[position], position),
     )[: target_sum - floor_sum]:
         allocations[index] += 1
     return allocations
+
+
+def _allocate_pro_rata(amounts: Sequence[int], target_sum: int) -> list[int]:
+    """Integer pro-rata allocation whose shares sum exactly to target_sum."""
+    total = sum(amount for amount in amounts if amount > 0)
+    target_sum = min(max(0, target_sum), total)
+    if total <= target_sum:
+        return [max(0, amount) for amount in amounts]
+    return _allocate_by_weight(amounts, target_sum)
 
 
 def derive_utxo_spend_pairs(
@@ -278,9 +284,19 @@ def derive_utxo_spend_pairs(
             parent_leg = leg(parent_txid, wallet_id, "inbound", asset) or leg(
                 parent_txid, wallet_id, "outbound", asset
             )
-            if parent_leg is not None and int(parent_leg["amount"]) <= 0:
-                # Net-zero passthrough: attribute this input to the
-                # consolidation's own parents instead.
+            if parent_leg is not None:
+                parent_amount = int(parent_leg["amount"])
+                is_change_passthrough = (
+                    str(parent_leg["direction"] or "") == "outbound"
+                    and amount > parent_amount
+                )
+            else:
+                parent_amount = 0
+                is_change_passthrough = False
+            if parent_leg is not None and (parent_amount <= 0 or is_change_passthrough):
+                # Net-zero or change-output passthrough: attribute this input
+                # to the spend's own parents instead of sizing the child from
+                # a small external-payment row.
                 for key, nested in resolve_parents(
                     parent_txid, wallet_id, asset, depth=depth + 1, visited=visited
                 ).items():
@@ -440,7 +456,8 @@ def derive_utxo_spend_pairs(
             received_by_wallet[(str(info["wallet_id"]), str(info["asset"]))].append(
                 (outpoint, int(info["amount_msat"] or 0))
             )
-        for (receiver_wallet, asset), received in received_by_wallet.items():
+        edge_candidates: list[dict[str, Any]] = []
+        for (receiver_wallet, asset), received in sorted(received_by_wallet.items()):
             contributors = [
                 (wallet_id, amount)
                 for (wallet_id, input_asset), amount in sorted(
@@ -467,13 +484,53 @@ def derive_utxo_spend_pairs(
                 out_leg = leg(external, spender_wallet, "outbound", asset)
                 if out_leg is None:
                     continue
+                edge_candidates.append(
+                    {
+                        "spender_wallet": spender_wallet,
+                        "asset": asset,
+                        "out_leg": out_leg,
+                        "in_leg": in_leg,
+                        "allocation": allocation,
+                        "contributed": contributed,
+                        "outpoints": [outpoint for outpoint, _amount in received],
+                    }
+                )
+        candidates_by_spender: dict[tuple[str, str], list[dict[str, Any]]] = defaultdict(list)
+        for candidate in edge_candidates:
+            if int(candidate["allocation"]) > 0:
+                candidates_by_spender[
+                    (str(candidate["spender_wallet"]), str(candidate["asset"]))
+                ].append(candidate)
+        for (spender_wallet, asset), candidates in sorted(candidates_by_spender.items()):
+            candidates = sorted(
+                candidates,
+                key=lambda candidate: str(candidate["in_leg"]["id"]),
+            )
+            child_total = sum(int(candidate["allocation"]) for candidate in candidates)
+            if child_total <= 0:
+                continue
+            contributed = int(input_amounts_by_wallet_asset[(spender_wallet, asset)])
+            out_leg_amount = int(candidates[0]["out_leg"]["amount"])
+            requirement_total = min(contributed, out_leg_amount)
+            if requirement_total <= 0:
+                continue
+            child_allocations = [int(candidate["allocation"]) for candidate in candidates]
+            if requirement_total <= child_total:
+                from_allocations = _allocate_pro_rata(child_allocations, requirement_total)
+            else:
+                extras = _allocate_by_weight(child_allocations, requirement_total - child_total)
+                from_allocations = [
+                    allocation + extra
+                    for allocation, extra in zip(child_allocations, extras)
+                ]
+            for candidate, from_allocation in zip(candidates, from_allocations):
                 emit(
-                    out_leg,
-                    in_leg,
+                    candidate["out_leg"],
+                    candidate["in_leg"],
                     "leg_funding",
-                    allocation,
-                    min(contributed, int(out_leg["amount"])),
-                    [outpoint for outpoint, _amount in received],
+                    int(candidate["allocation"]),
+                    from_allocation,
+                    candidate["outpoints"],
                 )
 
     return pairs

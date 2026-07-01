@@ -1278,9 +1278,20 @@ def _utxo_spend_still_deterministic(
         owned_index,
         skip_row=_skip_assembly_row,
     )
+    try:
+        expected_allocation = int(row["allocation_amount"] or 0)
+        expected_from_allocation = int(
+            row["from_allocation_amount"]
+            if row["from_allocation_amount"] is not None
+            else expected_allocation
+        )
+    except (TypeError, ValueError):
+        return False
     return any(
         pair["from_row"]["id"] == row["from_transaction_id"]
         and pair["to_row"]["id"] == row["to_transaction_id"]
+        and int(pair["allocation_msat"]) == expected_allocation
+        and int(pair["from_allocation_msat"]) == expected_from_allocation
         for pair in pairs
     )
 
