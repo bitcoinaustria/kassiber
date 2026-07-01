@@ -72,6 +72,7 @@ export type TransactionDetailTabContext = {
   loanLinkCandidates: LoanMark[];
   onUnpair?: (pairId: string) => void | Promise<void>;
   isUnpairing?: boolean;
+  onOpenPairingReview?: () => void;
   onLinkLoan?: (transaction: Transaction, targetTransactionId: string) => void | Promise<void>;
   isLoanLinking?: boolean;
   journalEvents: JournalEventItem[];

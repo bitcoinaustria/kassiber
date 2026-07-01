@@ -2351,6 +2351,11 @@ const TransactionsTable = ({
           });
         }}
         isUnpairing={unpairTransfer.isPending}
+        onOpenPairingReview={() => {
+          setDetailTransaction(null);
+          updateTransactionDetailParams(null);
+          void navigate({ to: "/swaps" });
+        }}
         onOpenMarketDataSettings={() => {
           setDetailTransaction(null);
           updateTransactionDetailParams(null);

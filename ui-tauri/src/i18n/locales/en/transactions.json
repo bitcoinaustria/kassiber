@@ -778,6 +778,7 @@
     "unknown": "Unknown",
     "noPairedMovement": "No paired movement",
     "noPairedMovementBody": "When this tx is the other leg of a transfer, swap, or peg-in/out, the matched leg shows up here. You can also create a manual pair from the swap candidate queue.",
+    "openPairingReview": "Open pairing review",
     "loanLegs": "Loan legs",
     "loanId": "Loan {{id}}",
     "loanThisLeg": "This leg",
@@ -892,6 +893,9 @@
       "missingOrUnderReview": "Pricing source is marked as missing or under review. Save a reviewed source before running journals.",
       "readinessHint": "This is a pricing readiness warning from the transaction row. It is not an active journal quarantine unless the daemon returns a quarantine reason.",
       "viewPricing": "View Pricing",
+      "viewDetails": "View Details",
+      "viewLinked": "View Linked",
+      "viewBasisContext": "Review basis context",
       "openPricing": "Open Pricing",
       "exclude": "Exclude"
     },
@@ -920,6 +924,9 @@
       "excludedFromReports": "Excluded from tax reports",
       "taxLabel": "Tax: {{label}}",
       "resolveQuarantine": "Resolve quarantine to include in reports",
+      "resolveSyncMismatch": "Re-sync or inspect wallet outputs",
+      "restoreBasis": "Restore acquisition basis",
+      "reviewPairing": "Review paired movement",
       "pricingIncomplete": "Pricing incomplete",
       "noQuarantine": "No quarantine"
     },

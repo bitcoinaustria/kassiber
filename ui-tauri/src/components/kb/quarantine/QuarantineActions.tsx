@@ -33,7 +33,7 @@ export function QuarantineActions({
       <Button asChild variant="outline" className="h-9">
         <Link to="/transactions">
           <TableProperties className="size-4" aria-hidden="true" />
-          Transactions
+          {t("quarantine.actions.transactions")}
         </Link>
       </Button>
       <Button
@@ -47,7 +47,7 @@ export function QuarantineActions({
         ) : (
           <RefreshCw className="size-4" aria-hidden="true" />
         )}
-        Process journals
+        {t("quarantine.actions.processJournals")}
       </Button>
     </>
   );

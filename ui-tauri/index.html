@@ -4,6 +4,24 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Kassiber — local-first Bitcoin accounting</title>
+    <script>
+      (() => {
+        try {
+          const raw = window.localStorage.getItem("kb.ui");
+          const state = raw ? JSON.parse(raw)?.state : null;
+          const theme = state?.theme;
+          const lang = state?.lang;
+          if (typeof lang === "string" && lang) {
+            document.documentElement.lang = lang;
+          }
+          if (theme === "dark" || theme === "light") {
+            document.documentElement.classList.add(theme);
+          }
+        } catch {
+          // Keep the boot screen on system theme if persisted UI state is unreadable.
+        }
+      })();
+    </script>
     <style>
       /*
        * Paint a themed background and a quiet boot indicator before any
@@ -89,6 +107,14 @@
         <div class="kb-boot__label">Loading Kassiber…</div>
       </div>
     </div>
+    <script>
+      (() => {
+        const label = document.querySelector(".kb-boot__label");
+        if (label && document.documentElement.lang.startsWith("de")) {
+          label.textContent = "Kassiber wird geladen...";
+        }
+      })();
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

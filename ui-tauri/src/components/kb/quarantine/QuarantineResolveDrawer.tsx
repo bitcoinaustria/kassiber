@@ -160,7 +160,7 @@ function ResolveStepCard({
               </p>
               {step.previewRows.map((row) => (
                 <div
-                  key={row.id}
+                  key={row.rowKey}
                   className="grid grid-cols-[1fr_auto] gap-3 rounded-md border bg-background/60 px-2.5 py-2 text-xs"
                 >
                   <div className="min-w-0">

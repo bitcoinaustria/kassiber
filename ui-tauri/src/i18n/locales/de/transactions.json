@@ -797,6 +797,7 @@
     "unknown": "Unbekannt",
     "noPairedMovement": "Keine gepaarte Bewegung",
     "noPairedMovementBody": "Wenn diese Tx das andere Leg einer Übertragung, eines Swaps oder eines Peg-in/out ist, erscheint das passende Leg hier. Du kannst auch eine manuelle Paarung aus der Swap-Kandidaten-Warteschlange erstellen.",
+    "openPairingReview": "Paarungsprüfung öffnen",
     "loanLegs": "Darlehenslegs",
     "loanId": "Darlehen {{id}}",
     "loanThisLeg": "Dieses Leg",
@@ -892,6 +893,9 @@
       "missingOrUnderReview": "Die Preisquelle ist als fehlend oder in Prüfung markiert. Speichere eine geprüfte Quelle, bevor du die Journale ausführst.",
       "readinessHint": "Das ist eine Warnung zur Preisbereitschaft aus der Transaktionszeile. Es ist keine aktive Journal-Quarantäne, sofern der Daemon keinen Quarantänegrund zurückgibt.",
       "viewPricing": "Bewertung ansehen",
+      "viewDetails": "Details ansehen",
+      "viewLinked": "Verknüpfungen ansehen",
+      "viewBasisContext": "Basis-Kontext prüfen",
       "openPricing": "Bewertung öffnen",
       "exclude": "Ausnehmen"
     },
@@ -920,6 +924,9 @@
       "excludedFromReports": "Aus Steuerberichten ausgenommen",
       "taxLabel": "Steuer: {{label}}",
       "resolveQuarantine": "Quarantäne beheben, um in Berichten einbezogen zu werden",
+      "resolveSyncMismatch": "Wallet-Outputs neu synchronisieren oder prüfen",
+      "restoreBasis": "Anschaffungskosten wiederherstellen",
+      "reviewPairing": "Gepaarte Bewegung prüfen",
       "pricingIncomplete": "Bewertung unvollständig",
       "noQuarantine": "Keine Quarantäne"
     },

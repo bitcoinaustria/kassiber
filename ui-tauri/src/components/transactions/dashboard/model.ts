@@ -1177,8 +1177,14 @@ const detailTabValues = [
   "ledger",
 ] as const;
 
-function readTransactionDetailParams() {
-  if (typeof window === "undefined") return { transactionId: null, tab: "details" };
+function readTransactionDetailParams(): {
+  transactionId: string | null;
+  tab: string;
+  rowId?: string | null;
+} {
+  if (typeof window === "undefined") {
+    return { transactionId: null, tab: "details" };
+  }
   const params = new URLSearchParams(window.location.search);
   const tab = params.get("tab");
   return {
@@ -1187,6 +1193,7 @@ function readTransactionDetailParams() {
     tab: detailTabValues.includes(tab as (typeof detailTabValues)[number])
       ? tab ?? "details"
       : "details",
+    rowId: params.get("qrow"),
   };
 }
 
@@ -1222,6 +1229,7 @@ function readTransactionScopeParams(): {
 function updateTransactionDetailParams(
   transactionId: string | null,
   tab = "details",
+  rowId?: string | null,
 ) {
   if (typeof window === "undefined") return;
   const params = new URLSearchParams(window.location.search);
@@ -1232,11 +1240,17 @@ function updateTransactionDetailParams(
     } else {
       params.delete("tab");
     }
+    if (rowId) {
+      params.set("qrow", rowId);
+    } else {
+      params.delete("qrow");
+    }
   } else {
     params.delete("tx");
     params.delete("transaction");
     params.delete("transactionId");
     params.delete("tab");
+    params.delete("qrow");
   }
   const nextQuery = params.toString();
   window.history.replaceState(

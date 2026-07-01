@@ -14,6 +14,7 @@ import {
   flowChartSelectionLabel,
   isAttachmentListQueryKeyForTransaction,
   matchesFlowChartSelection,
+  readTransactionDetailParams,
   readTransactionScopeParams,
   removeAttachmentRecord,
   replaceAttachmentRecord,
@@ -67,6 +68,24 @@ function rawTx(overrides: Partial<Tx> = {}): Tx {
 }
 
 describe("transaction dashboard chart selection", () => {
+  it("preserves quarantine row ids in transaction detail deep links", () => {
+    vi.stubGlobal("window", {
+      location: {
+        search: "?tx=shared-tx&tab=linked&qrow=shared-tx%3A2",
+      },
+    });
+
+    try {
+      expect(readTransactionDetailParams()).toEqual({
+        transactionId: "shared-tx",
+        tab: "linked",
+        rowId: "shared-tx:2",
+      });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("preserves wallet detail deep-link scope parameters", () => {
     vi.stubGlobal("window", {
       location: {

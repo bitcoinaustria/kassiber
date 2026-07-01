@@ -41,6 +41,7 @@ export type ReviewTableKind = "journal-events" | "quarantine";
 
 export interface ReviewTableRow {
   id: string;
+  rowKey?: string;
   date: string;
   account: string;
   event: string;
@@ -57,11 +58,16 @@ export interface ReviewTableRow {
   transactionAction?: {
     transactionId: string;
     label: string;
-    tab?: "details" | "classify" | "pricing" | "tax" | "ledger";
+    tab?: "details" | "classify" | "pricing" | "tax" | "linked" | "ledger";
+    reviewReason?: string;
   };
 }
 
 type ReviewTransactionAction = NonNullable<ReviewTableRow["transactionAction"]>;
+
+export function reviewRowKey(row: ReviewTableRow) {
+  return row.rowKey ?? row.id;
+}
 
 export interface ReviewMetric {
   label: string;
@@ -211,6 +217,8 @@ export function ReviewDataTable({
         !query ||
         [
           row.id,
+          row.rowKey ?? "",
+          row.transactionAction?.transactionId ?? "",
           row.date,
           row.account,
           row.event,
@@ -501,7 +509,7 @@ export function ReviewDataTable({
                 {pageRows.length ? (
                   pageRows.map((row) => (
                     <ReviewWorklistRow
-                      key={row.id}
+                      key={reviewRowKey(row)}
                       row={row}
                       hideSensitive={hideSensitive}
                       showStateColumn={showStateColumn}
@@ -674,7 +682,7 @@ function QuarantineReviewList({
         <div className="divide-y">
           {rows.map((row) => (
             <QuarantineReviewRow
-              key={row.id}
+              key={reviewRowKey(row)}
               row={row}
               hideSensitive={hideSensitive}
               showStateColumn={showStateColumn}

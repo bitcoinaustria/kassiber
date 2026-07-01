@@ -94,6 +94,7 @@ export function TransactionDetailSheet({
   explorerSettings,
   isSaving,
   saveError,
+  quarantineReasonOverride,
   nowRate,
   attachments,
   journalEvents = [],
@@ -111,6 +112,7 @@ export function TransactionDetailSheet({
   onRemoveAttachment,
   onUnpair,
   isUnpairing,
+  onOpenPairingReview,
   onOpenMarketDataSettings,
   onRevertHistory,
   onProcessJournals,
@@ -138,6 +140,7 @@ export function TransactionDetailSheet({
   explorerSettings: ExplorerSettings;
   isSaving?: boolean;
   saveError?: string | null;
+  quarantineReasonOverride?: string | null;
   nowRate?: number | null;
   attachments?: AttachmentItem[];
   journalEvents?: JournalEventItem[];
@@ -158,6 +161,7 @@ export function TransactionDetailSheet({
   onRemoveAttachment?: (item: AttachmentItem) => void;
   onUnpair?: (pairId: string) => void | Promise<void>;
   isUnpairing?: boolean;
+  onOpenPairingReview?: () => void;
   onOpenMarketDataSettings?: () => void;
   onRevertHistory?: (target: HistoryRevertTarget) => void | Promise<void>;
   onProcessJournals?: () => void;
@@ -335,7 +339,32 @@ export function TransactionDetailSheet({
     transaction.amount === null;
   const isLabeled =
     localDraft.label !== "Unlabeled" && localDraft.label.trim().length > 0;
-  const quarantineReason = transaction.quarantineReason ?? null;
+  const quarantineReason =
+    quarantineReasonOverride ?? transaction.quarantineReason ?? null;
+  const quarantineReasonCode = quarantineReason?.toLowerCase() ?? "";
+  const isSyncQuarantine = quarantineReasonCode.includes(
+    "ownership_transfer_amount_mismatch",
+  );
+  const isBasisQuarantine =
+    quarantineReasonCode.includes("basis") ||
+    quarantineReasonCode.includes("lot") ||
+    quarantineReasonCode.includes("insufficient");
+  const isTransferQuarantine =
+    quarantineReasonCode.includes("ownership_transfer") ||
+    quarantineReasonCode.includes("transfer") ||
+    quarantineReasonCode.includes("pair") ||
+    quarantineReasonCode.includes("swap");
+  const isSplitTransferQuarantine =
+    quarantineReasonCode.includes("transfer_fee_implausible");
+  const quarantineTargetTab = isSplitTransferQuarantine
+    ? "details"
+    : isSyncQuarantine
+      ? "details"
+      : isTransferQuarantine
+        ? "linked"
+        : isBasisQuarantine
+          ? "details"
+          : "pricing";
   const hasJournalQuarantine = Boolean(quarantineReason) && !localDraft.excluded;
   const hasPricingBlocker = isPricingMissing && !localDraft.excluded;
   const showReviewBanner =
@@ -454,13 +483,19 @@ export function TransactionDetailSheet({
     {
       key: "quarantine",
       label: hasJournalQuarantine
-        ? t("sheet.checklist.resolveQuarantine")
+        ? isSyncQuarantine
+          ? t("sheet.checklist.resolveSyncMismatch")
+          : isBasisQuarantine
+            ? t("sheet.checklist.restoreBasis")
+            : isTransferQuarantine
+              ? t("sheet.checklist.reviewPairing")
+              : t("sheet.checklist.resolveQuarantine")
         : hasPricingBlocker
           ? t("sheet.checklist.pricingIncomplete")
           : t("sheet.checklist.noQuarantine"),
       done: !hasJournalQuarantine && !hasPricingBlocker,
       warn: hasJournalQuarantine || hasPricingBlocker,
-      tab: "pricing",
+      tab: hasJournalQuarantine ? quarantineTargetTab : "pricing",
     },
   ];
 
@@ -517,6 +552,13 @@ export function TransactionDetailSheet({
   const jumpToManualPrice = () => {
     setActiveTab("pricing");
     setTimeout(() => manualPriceRef.current?.focus(), 0);
+  };
+  const jumpToQuarantineTarget = () => {
+    if (hasJournalQuarantine && quarantineTargetTab !== "pricing") {
+      setActiveTab(quarantineTargetTab);
+      return;
+    }
+    jumpToManualPrice();
   };
   const chooseExactManualPrice = () => {
     updateDraft("pricingSourceKind", "manual_override");
@@ -615,6 +657,7 @@ export function TransactionDetailSheet({
     loanLinkCandidates: loanLinkCandidates ?? [],
     onUnpair,
     isUnpairing,
+    onOpenPairingReview,
     onLinkLoan,
     isLoanLinking,
     journalEvents,
@@ -694,15 +737,21 @@ export function TransactionDetailSheet({
                     }
                     primaryActionLabel={
                       hasJournalQuarantine
-                        ? t("sheet.banner.viewPricing")
+                        ? isSyncQuarantine
+                          ? t("sheet.banner.viewDetails")
+                          : isBasisQuarantine
+                            ? t("sheet.banner.viewBasisContext")
+                            : isTransferQuarantine
+                              ? t("sheet.banner.viewLinked")
+                              : t("sheet.banner.viewPricing")
                         : t("sheet.banner.openPricing")
                     }
-                    onPrimaryAction={jumpToManualPrice}
+                    onPrimaryAction={jumpToQuarantineTarget}
                     onExclude={setExcluded}
                   />
                 ) : null}
 
-                {quarantineReason === "transfer_fee_implausible" ? (
+                {isSplitTransferQuarantine ? (
                   <TransactionSplitPayoutCard
                     transactionId={transaction.id}
                     sourceAsset={transaction.asset ?? "BTC"}

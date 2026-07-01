@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { reviewRowKey } from "@/components/kb/ReviewDataTable";
 import i18n from "@/i18n";
 
 import {
@@ -78,8 +79,9 @@ describe("quarantine row model", () => {
     expect(row.metricFilterIds).toEqual(["basis-or-pairs"]);
     expect(row.transactionAction).toMatchObject({
       transactionId: "transaction-with-a-long-id",
-      label: "Fix cost basis",
-      tab: "tax",
+      label: "Review acquisition basis",
+      tab: "details",
+      reviewReason: "insufficient_lots",
     });
   });
 
@@ -163,7 +165,7 @@ describe("quarantine row model", () => {
       metricFilterIds: ["basis-or-pairs"],
       transactionAction: {
         label: "Review transfer",
-        tab: "details",
+        tab: "linked",
       },
     });
   });
@@ -186,9 +188,57 @@ describe("quarantine row model", () => {
       "AT profile",
       t,
     );
+    expect(row).toMatchObject({
+      event: "Wallet sync mismatch in Cold",
+      basis: "Wallet sync mismatch",
+      status: "Blocked",
+      priority: "High",
+      transactionAction: {
+        label: "Review sync issue",
+        tab: "details",
+      },
+    });
     expect(row.nextAction).toBe(
       "The recorded amount disagrees with the on-chain transaction — re-sync the wallet, then process journals",
     );
+  });
+
+  it("routes transfer-group blockers by their underlying blocker", () => {
+    const priceBlocked = quarantineItemToRow(
+      {
+        ...baseItem,
+        reason: "derived_transfer_group_blocked",
+        detail: { blocked_by_reason: "missing_spot_price" },
+      },
+      "AT profile",
+      t,
+    );
+    const basisBlocked = quarantineItemToRow(
+      {
+        ...baseItem,
+        reason: "derived_transfer_group_blocked",
+        detail: { blocked_by_reason: "insufficient_lots" },
+      },
+      "AT profile",
+      t,
+    );
+
+    expect(priceBlocked).toMatchObject({
+      event: "Transfer group blocked by Missing Spot Price",
+      basis: "Missing fiat price",
+      metricFilterIds: ["missing-prices"],
+      transactionAction: { label: "Add price", tab: "pricing" },
+    });
+    expect(basisBlocked).toMatchObject({
+      event: "Transfer group blocked by Insufficient Lots",
+      basis: "Missing cost basis",
+      status: "Blocked",
+      transactionAction: {
+        label: "Review acquisition basis",
+        tab: "details",
+        reviewReason: "insufficient_lots",
+      },
+    });
   });
 });
 
@@ -238,6 +288,40 @@ describe("quarantine metrics", () => {
       ["Other review", 0],
     ]);
   });
+
+  it("counts derived transfer-group blockers by their effective reason when items are available", () => {
+    const items = [
+      {
+        ...baseItem,
+        reason: "derived_transfer_group_blocked",
+        detail: { blocked_by_reason: "missing_spot_price" },
+      },
+      {
+        ...baseItem,
+        reason: "derived_transfer_group_blocked",
+        detail: { blocked_by_reason: "insufficient_lots" },
+      },
+    ];
+
+    const metrics = quarantineMetrics(
+      {
+        workspace: "Personal",
+        profile: "AT profile",
+        count: 2,
+        limit: 100,
+        by_reason: [{ reason: "derived_transfer_group_blocked", count: 2 }],
+      },
+      t,
+      items,
+    );
+
+    expect(metrics.map((metric) => [metric.label, metric.value])).toEqual([
+      ["Quarantined", 2],
+      ["Missing prices", 1],
+      ["Basis or pairs", 1],
+      ["Other review", 0],
+    ]);
+  });
 });
 
 describe("quarantine resolve plan", () => {
@@ -279,7 +363,7 @@ describe("quarantine resolve plan", () => {
     const plan = quarantineResolvePlan(snapshot, rows, t);
 
     expect(plan.total).toBe(5);
-    expect(plan.blockedCount).toBe(2);
+    expect(plan.blockedCount).toBe(3);
     expect(plan.actionableCount).toBe(5);
     expect(plan.steps.map((step) => step.id)).toEqual([
       "sync-wallets",
@@ -317,15 +401,16 @@ describe("quarantine resolve plan", () => {
       actionKind: "open-row",
       actionLabel: "Add first price",
       rowIds: ["price-1", "price-2"],
+      rowKeys: ["price-1", "price-2"],
       primaryAction: { transactionId: "price-1", tab: "pricing" },
-      primaryRowId: "price-1",
+      primaryRowKey: "price-1",
     });
     expect(priceStep?.previewRows).toHaveLength(2);
     expect(basisStep).toMatchObject({
       count: 1,
       tone: "alert",
-      primaryAction: { transactionId: "basis-1", tab: "tax" },
-      primaryRowId: "basis-1",
+      primaryAction: { transactionId: "basis-1", tab: "details" },
+      primaryRowKey: "basis-1",
     });
     expect(processStep).toMatchObject({
       count: 3,
@@ -360,20 +445,23 @@ describe("quarantine resolve plan", () => {
     const priceStep = plan.steps.find((step) => step.id === "add-prices");
     const basisStep = plan.steps.find((step) => step.id === "fix-basis");
 
-    expect(rows.map((row) => row.id)).toEqual(["shared-tx:1", "shared-tx:2"]);
+    expect(rows.map((row) => row.id)).toEqual(["shared-tx", "shared-tx"]);
+    expect(rows.map(reviewRowKey)).toEqual(["shared-tx:1", "shared-tx:2"]);
     expect(priceStep?.count).toBe(1);
     expect(basisStep?.count).toBe(1);
-    expect(priceStep?.rowIds).toEqual(["shared-tx:1"]);
-    expect(basisStep?.rowIds).toEqual(["shared-tx:2"]);
-    expect(priceStep?.primaryRowId).toBe("shared-tx:1");
-    expect(basisStep?.primaryRowId).toBe("shared-tx:2");
+    expect(priceStep?.rowIds).toEqual(["shared-tx"]);
+    expect(basisStep?.rowIds).toEqual(["shared-tx"]);
+    expect(priceStep?.rowKeys).toEqual(["shared-tx:1"]);
+    expect(basisStep?.rowKeys).toEqual(["shared-tx:2"]);
+    expect(priceStep?.primaryRowKey).toBe("shared-tx:1");
+    expect(basisStep?.primaryRowKey).toBe("shared-tx:2");
     expect(priceStep?.primaryAction).toMatchObject({
       transactionId: "shared-tx",
       tab: "pricing",
     });
     expect(basisStep?.primaryAction).toMatchObject({
       transactionId: "shared-tx",
-      tab: "tax",
+      tab: "details",
     });
     // Each step must preview its own row, not a collapsed duplicate of the
     // last row sharing that transaction id.
@@ -382,6 +470,42 @@ describe("quarantine resolve plan", () => {
     expect(priceStep?.previewRows[0]?.event).not.toBe(
       basisStep?.previewRows[0]?.event,
     );
+  });
+
+  it("places derived transfer-group blockers in their underlying repair steps", () => {
+    const snapshot = snapshotWith([
+      {
+        ...baseItem,
+        transaction_id: "blocked-price",
+        reason: "derived_transfer_group_blocked",
+        detail: { blocked_by_reason: "missing_spot_price" },
+      },
+      {
+        ...baseItem,
+        transaction_id: "blocked-basis",
+        reason: "derived_transfer_group_blocked",
+        detail: { blocked_by_reason: "insufficient_lots" },
+      },
+    ]);
+    const rows = quarantineRows(snapshot, t);
+
+    const plan = quarantineResolvePlan(snapshot, rows, t);
+    const priceStep = plan.steps.find((step) => step.id === "add-prices");
+    const basisStep = plan.steps.find((step) => step.id === "fix-basis");
+
+    expect(plan.steps.map((step) => step.id)).toEqual([
+      "fix-basis",
+      "add-prices",
+      "process-journals",
+    ]);
+    expect(priceStep?.primaryAction).toMatchObject({
+      transactionId: "blocked-price",
+      tab: "pricing",
+    });
+    expect(basisStep?.primaryAction).toMatchObject({
+      transactionId: "blocked-basis",
+      tab: "details",
+    });
   });
 });
 

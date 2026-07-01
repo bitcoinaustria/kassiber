@@ -133,6 +133,10 @@
     "tableDescription_other": "{{rows}} angezeigt · {{count}} Grundgruppen",
     "searchPlaceholder": "Wallet, txid, Grund, Betrag suchen…",
     "empty": "Keine Transaktionen in Quarantäne im aktiven Buch.",
+    "actions": {
+      "transactions": "Transaktionen",
+      "processJournals": "Journale verarbeiten"
+    },
     "metric": {
       "quarantined": "In Quarantäne",
       "quarantinedFilter": "Alle in Quarantäne",
@@ -161,6 +165,7 @@
       "implausibleFee": "Unplausible Transfergebühr",
       "implausibleFeeWithWallets": "Unplausible Transfergebühr: {{from}} -> {{to}}",
       "ownershipTransfer": "Eigenübertragung in {{wallet}} muss gepaart werden",
+      "ownershipAmountMismatch": "Wallet-Sync stimmt in {{wallet}} nicht überein",
       "transferGroupBlocked": "Transfergruppe blockiert durch {{reason}}",
       "insufficientLots": "Nicht genug {{asset}}-Lots in {{wallet}}",
       "missingBasis": "Fehlende {{asset}}-Anschaffungskosten in {{wallet}}"
@@ -172,7 +177,8 @@
       "reviewRequired": "Prüfung erforderlich",
       "splitTransfer": "Split-Transfer / Swap-Prüfung",
       "coarsePricing": "Grobe Bewertung — prüfen",
-      "ownershipTransfer": "Eigenübertragung zwischen deinen Wallets"
+      "ownershipTransfer": "Eigenübertragung zwischen deinen Wallets",
+      "ownershipAmountMismatch": "Wallet-Sync-Abweichung"
     },
     "evidence": {
       "price": "Füge einen Fiat-Preis oder Kursabdeckung hinzu",
@@ -206,6 +212,8 @@
       "openTransaction": "Details prüfen",
       "openPricing": "Preis ergänzen",
       "openPairing": "Transfer prüfen",
+      "openSyncReview": "Sync-Problem prüfen",
+      "openBasisReview": "Anschaffungskosten prüfen",
       "openTaxReview": "Kostenbasis ergänzen"
     },
     "resolvePlan": {
@@ -233,9 +241,9 @@
           "action": "Ersten Transfer prüfen"
         },
         "fix-basis": {
-          "title": "Fehlende Kostenbasis ergänzen",
+          "title": "Fehlende Kostenbasis prüfen",
           "detail": "Diese Zeilen brauchen Anschaffungs-Lots oder Quellkontext, bevor Steuerberichte ihre Abgänge aufnehmen können.",
-          "action": "Erste Lücke beheben"
+          "action": "Erste Basislücke prüfen"
         },
         "add-prices": {
           "title": "Preise ergänzen oder bestätigen",

@@ -133,6 +133,10 @@
     "tableDescription_other": "{{rows}} shown · {{count}} reason groups",
     "searchPlaceholder": "Search wallet, txid, reason, amount...",
     "empty": "No quarantined transactions in the active book.",
+    "actions": {
+      "transactions": "Transactions",
+      "processJournals": "Process journals"
+    },
     "metric": {
       "quarantined": "Quarantined",
       "quarantinedFilter": "All quarantined",
@@ -161,6 +165,7 @@
       "implausibleFee": "Implausible transfer fee",
       "implausibleFeeWithWallets": "Implausible transfer fee: {{from}} -> {{to}}",
       "ownershipTransfer": "Self-transfer needs pairing in {{wallet}}",
+      "ownershipAmountMismatch": "Wallet sync mismatch in {{wallet}}",
       "transferGroupBlocked": "Transfer group blocked by {{reason}}",
       "insufficientLots": "Not enough {{asset}} lots in {{wallet}}",
       "missingBasis": "Missing {{asset}} cost basis in {{wallet}}"
@@ -172,7 +177,8 @@
       "reviewRequired": "Review required",
       "splitTransfer": "Split transfer / swap review",
       "coarsePricing": "Coarse pricing — verify",
-      "ownershipTransfer": "Self-transfer between your wallets"
+      "ownershipTransfer": "Self-transfer between your wallets",
+      "ownershipAmountMismatch": "Wallet sync mismatch"
     },
     "evidence": {
       "price": "Add a fiat price or rates coverage",
@@ -206,6 +212,8 @@
       "openTransaction": "Review details",
       "openPricing": "Add price",
       "openPairing": "Review transfer",
+      "openSyncReview": "Review sync issue",
+      "openBasisReview": "Review acquisition basis",
       "openTaxReview": "Fix cost basis"
     },
     "resolvePlan": {
@@ -233,9 +241,9 @@
           "action": "Review first transfer"
         },
         "fix-basis": {
-          "title": "Fix missing cost basis",
+          "title": "Review missing cost basis",
           "detail": "These rows need acquisition lots or source context before tax reports can include their disposals.",
-          "action": "Fix first basis gap"
+          "action": "Review first basis gap"
         },
         "add-prices": {
           "title": "Add or confirm prices",
