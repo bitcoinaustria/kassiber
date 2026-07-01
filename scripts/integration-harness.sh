@@ -72,39 +72,56 @@ docker_compose() {
   fi
 }
 
-wait_for_core() {
-  local deadline
-  deadline=$((SECONDS + 90))
-  until py - <<'PY'
+probe_core() {
+  local debug="${1:-0}"
+  KASSIBER_REGTEST_PROBE_DEBUG="$debug" py - <<'PY'
 import base64
 import json
 import os
 import sys
-from urllib import request
+from urllib import error, request
 
 url = os.environ["KASSIBER_REGTEST_CORE_URL"]
 user = os.environ["KASSIBER_REGTEST_RPC_USER"]
 password = os.environ["KASSIBER_REGTEST_RPC_PASSWORD"]
+debug = os.environ.get("KASSIBER_REGTEST_PROBE_DEBUG") == "1"
 payload = json.dumps({"jsonrpc": "1.0", "id": "probe", "method": "getblockchaininfo", "params": []}).encode()
 req = request.Request(url, data=payload, headers={"Content-Type": "application/json"})
 req.add_header("Authorization", "Basic " + base64.b64encode(f"{user}:{password}".encode()).decode())
 try:
     with request.urlopen(req, timeout=3) as response:
         body = json.loads(response.read().decode())
-except Exception:
+except error.HTTPError as exc:
+    body_text = exc.read().decode(errors="replace")
+    if debug:
+        print(f"HTTP {exc.code}: {body_text}", file=sys.stderr)
     sys.exit(1)
-sys.exit(0 if body.get("result", {}).get("chain") == "regtest" else 1)
+except Exception as exc:
+    if debug:
+        print(f"{type(exc).__name__}: {exc}", file=sys.stderr)
+    sys.exit(1)
+ok = body.get("result", {}).get("chain") == "regtest"
+if debug and not ok:
+    print(json.dumps(body, sort_keys=True), file=sys.stderr)
+sys.exit(0 if ok else 1)
 PY
+}
+
+wait_for_core() {
+  local deadline
+  deadline=$((SECONDS + 90))
+  until probe_core 0
   do
     if [ "$SECONDS" -ge "$deadline" ]; then
       echo "Timed out waiting for bitcoind regtest RPC." >&2
+      probe_core 1 || true
       return 1
     fi
     sleep 2
   done
 }
 
-run_bitcoin_core() {
+run_with_bitcoin_core() {
   local provided_core_url=0
   if [ -n "${KASSIBER_REGTEST_CORE_URL:-}" ]; then
     provided_core_url=1
@@ -132,7 +149,28 @@ run_bitcoin_core() {
   trap cleanup EXIT
 
   wait_for_core
+  "$@"
+}
+
+run_bitcoin_core_smoke() {
   py -m unittest tests.integration.test_live_bitcoin_core_regtest -v
+}
+
+run_demo_full() {
+  py -m tests.integration.regtest_demo
+}
+
+run_slow_suite() {
+  run_bitcoin_core_smoke
+  run_demo_full
+}
+
+run_bitcoin_core() {
+  run_with_bitcoin_core run_bitcoin_core_smoke
+}
+
+run_regtest_demo_full() {
+  run_with_bitcoin_core run_demo_full
 }
 
 case "$MODE" in
@@ -142,12 +180,15 @@ case "$MODE" in
   bitcoin-core|slow)
     run_bitcoin_core
     ;;
+  demo|demo-full)
+    run_regtest_demo_full
+    ;;
   all)
     run_fast
-    run_bitcoin_core
+    run_with_bitcoin_core run_slow_suite
     ;;
   *)
-    echo "usage: $0 [fast|bitcoin-core|slow|all]" >&2
+    echo "usage: $0 [fast|bitcoin-core|slow|demo|demo-full|all]" >&2
     exit 2
     ;;
 esac

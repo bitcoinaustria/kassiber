@@ -1,0 +1,187 @@
+{
+  "schema_version": 1,
+  "id": "full-accounting-v1",
+  "title": "Full accounting regtest demo",
+  "description": "Disposable Bitcoin Core regtest scenario covering multi-wallet acquisitions, disposals, self-transfers, collaborative CoinJoin/PayJoin-shaped transactions, and Bitcoin-backed-loan marks.",
+  "base_time": "2025-01-15T09:00:00Z",
+  "workspace": "Regtest Demo",
+  "profile": {
+    "label": "Full Accounting",
+    "fiat_currency": "EUR",
+    "tax_country": "generic",
+    "gains_algorithm": "FIFO"
+  },
+  "backend": {
+    "name": "core-regtest",
+    "wallet_prefix": "kassiber-demo"
+  },
+  "pricing": {
+    "pair": "BTC-EUR",
+    "base_rate": "42000",
+    "step_rate": "175"
+  },
+  "accounts": [
+    {
+      "code": "treasury",
+      "label": "Treasury",
+      "type": "asset",
+      "asset": "BTC"
+    },
+    {
+      "code": "cold",
+      "label": "Cold Storage",
+      "type": "asset",
+      "asset": "BTC"
+    },
+    {
+      "code": "spending",
+      "label": "Spending Wallet",
+      "type": "asset",
+      "asset": "BTC"
+    },
+    {
+      "code": "merchant",
+      "label": "Merchant Wallet",
+      "type": "asset",
+      "asset": "BTC"
+    }
+  ],
+  "wallets": [
+    {
+      "key": "treasury",
+      "label": "Regtest Treasury",
+      "account": "treasury",
+      "initial_btc": "1.20000000"
+    },
+    {
+      "key": "cold",
+      "label": "Regtest Cold Storage",
+      "account": "cold",
+      "initial_btc": "0.90000000"
+    },
+    {
+      "key": "spending",
+      "label": "Regtest Spending Wallet",
+      "account": "spending",
+      "initial_btc": "0.30000000"
+    },
+    {
+      "key": "merchant",
+      "label": "Regtest Merchant Wallet",
+      "account": "merchant",
+      "initial_btc": "0.40000000"
+    }
+  ],
+  "operations": [
+    {
+      "id": "treasury_external_disposal",
+      "kind": "payment",
+      "from": "treasury",
+      "to": "external",
+      "amount_btc": "0.12000000",
+      "fee_btc": "0.00001000",
+      "note": "Treasury pays an external supplier."
+    },
+    {
+      "id": "treasury_to_spending",
+      "kind": "self_transfer",
+      "from": "treasury",
+      "to": "spending",
+      "amount_btc": "0.20000000",
+      "fee_btc": "0.00001000",
+      "note": "Treasury funds the spending wallet."
+    },
+    {
+      "id": "cold_to_treasury",
+      "kind": "self_transfer",
+      "from": "cold",
+      "to": "treasury",
+      "amount_btc": "0.11000000",
+      "fee_btc": "0.00001000",
+      "note": "Cold storage consolidates a slice back to treasury."
+    },
+    {
+      "id": "coinjoin_round",
+      "kind": "coinjoin_shape",
+      "signers": [
+        "treasury",
+        "cold"
+      ],
+      "equal_output_btc": "0.05000000",
+      "fee_btc": "0.00002000",
+      "tracked_output_wallet": "spending",
+      "note": "Two owned inputs, equal-sized external/tracked outputs, and explicit change outputs."
+    },
+    {
+      "id": "payjoin_purchase",
+      "kind": "payjoin_shape",
+      "payer": "spending",
+      "merchant": "merchant",
+      "payment_btc": "0.04000000",
+      "fee_btc": "0.00002000",
+      "note": "Payer and merchant both contribute inputs; merchant receives net payment plus its own change."
+    },
+    {
+      "id": "merchant_settlement",
+      "kind": "payment",
+      "from": "merchant",
+      "to": "external",
+      "amount_btc": "0.03000000",
+      "fee_btc": "0.00001000",
+      "note": "Merchant settles part of the balance externally."
+    },
+    {
+      "id": "collateral_lock",
+      "kind": "loan_collateral_lock",
+      "from": "cold",
+      "to": "external",
+      "amount_btc": "0.12000000",
+      "fee_btc": "0.00001000",
+      "loan_id": "regtest-loan-1",
+      "note": "BTC collateral posted for a fiat loan."
+    },
+    {
+      "id": "collateral_release",
+      "kind": "loan_collateral_release",
+      "from": "external",
+      "to": "cold",
+      "amount_btc": "0.11900000",
+      "loan_id": "regtest-loan-1",
+      "note": "Collateral returned by the lender."
+    },
+    {
+      "id": "loan_principal_received",
+      "kind": "loan_principal_received",
+      "from": "external",
+      "to": "treasury",
+      "amount_btc": "0.07000000",
+      "loan_id": "regtest-loan-1",
+      "note": "Borrowed BTC principal received."
+    },
+    {
+      "id": "loan_principal_repaid",
+      "kind": "loan_principal_repaid",
+      "from": "treasury",
+      "to": "external",
+      "amount_btc": "0.07050000",
+      "fee_btc": "0.00001000",
+      "loan_id": "regtest-loan-1",
+      "note": "Borrowed BTC principal repaid."
+    }
+  ],
+  "expected": {
+    "min_transactions": 15,
+    "min_active_transactions": 12,
+    "collaborative_excluded": 5,
+    "min_transfer_pairs": 2,
+    "loan_marks": 4,
+    "open_collateral_locks": 0,
+    "export_files": [
+      "full-report.pdf",
+      "full-report.csv",
+      "full-report.xlsx",
+      "transactions.csv",
+      "transactions.xlsx"
+    ]
+  }
+}

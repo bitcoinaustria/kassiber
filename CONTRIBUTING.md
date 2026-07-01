@@ -39,6 +39,7 @@ integration harness:
 ```bash
 ./scripts/integration-harness.sh fast          # no Docker, no egress
 ./scripts/integration-harness.sh bitcoin-core  # disposable Bitcoin Core regtest
+./scripts/integration-harness.sh demo-full     # full multi-wallet accounting demo
 ```
 
 See [`docs/reference/testing.md`](docs/reference/testing.md) for the tiered

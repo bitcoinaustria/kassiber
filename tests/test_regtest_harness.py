@@ -23,6 +23,7 @@ from kassiber.cli.handlers import process_journals
 from kassiber.db import open_db
 
 from tests.integration.env import no_egress_guard
+from tests.integration import regtest_demo
 from tests.integration.tapes import BitcoinRpcTape, RecordedTape, TapeMiss
 
 
@@ -75,6 +76,39 @@ class RegtestHarnessTest(unittest.TestCase):
         self.assertEqual(tape.provenance["backend_kind"], "bitcoinrpc")
         with self.assertRaises(TapeMiss):
             tape.lookup("missing interaction")
+
+    def test_full_accounting_demo_manifest_covers_expected_workflows(self):
+        scenario = regtest_demo.load_scenario()
+
+        self.assertEqual(scenario["id"], "full-accounting-v1")
+        wallet_keys = {wallet["key"] for wallet in scenario["wallets"]}
+        self.assertEqual(wallet_keys, {"treasury", "cold", "spending", "merchant"})
+        operation_kinds = {operation["kind"] for operation in scenario["operations"]}
+        self.assertTrue(
+            {
+                "payment",
+                "self_transfer",
+                "coinjoin_shape",
+                "payjoin_shape",
+                "loan_collateral_lock",
+                "loan_collateral_release",
+                "loan_principal_received",
+                "loan_principal_repaid",
+            }.issubset(operation_kinds)
+        )
+        self.assertGreaterEqual(scenario["expected"]["min_transactions"], 15)
+        self.assertGreaterEqual(scenario["expected"]["min_active_transactions"], 12)
+        self.assertEqual(scenario["expected"]["collaborative_excluded"], 5)
+        self.assertEqual(scenario["expected"]["min_transfer_pairs"], 2)
+        self.assertEqual(scenario["expected"]["loan_marks"], 4)
+        self.assertIn("full-report.xlsx", scenario["expected"]["export_files"])
+
+    def test_full_accounting_demo_manifest_validation_fails_closed(self):
+        scenario = regtest_demo.load_scenario()
+        scenario.pop("operations")
+
+        with self.assertRaisesRegex(ValueError, "operations"):
+            regtest_demo.validate_scenario(scenario)
 
     def test_core_rpc_tape_replays_through_sync_journal_report_and_xlsx(self):
         tape_rpc = BitcoinRpcTape(RecordedTape.load(TAPE))

@@ -8,7 +8,10 @@ services:
       -txindex=1
       -fallbackfee=0.0002
       -rpcbind=0.0.0.0
+      -rpcallowip=127.0.0.1
+      -rpcallowip=10.0.0.0/8
       -rpcallowip=172.16.0.0/12
+      -rpcallowip=192.168.0.0/16
       -rpcauth=${KASSIBER_REGTEST_RPC_AUTH}
     ports:
       - "127.0.0.1:${KASSIBER_REGTEST_RPC_PORT:-18443}:18443"
