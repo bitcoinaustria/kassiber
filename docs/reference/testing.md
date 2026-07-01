@@ -10,7 +10,7 @@ regtest infrastructure.
 | --- | --- | --- | --- |
 | FAST | `./scripts/integration-harness.sh fast` | no | Replays recorded regtest tapes through the real sync adapter, import, journal, report, and XLSX export path with `KASSIBER_NO_EGRESS=1`. |
 | SLOW | `./scripts/integration-harness.sh bitcoin-core` | yes, unless reusing a node | Starts or reuses a Bitcoin Core regtest node, creates real wallets and transactions, then drives Kassiber sync, pricing, journal, report, and export. |
-| DEMO | `./scripts/integration-harness.sh demo-full` | yes, unless reusing a node | Builds the checked-in `full-accounting-v1` scenario: four Kassiber wallets, real regtest acquisitions/disposals/transfers, CoinJoin- and PayJoin-shaped collaborative transactions, loan marks, deterministic manual pricing, journals, reports, and transaction exports. |
+| DEMO | `./scripts/integration-harness.sh demo-full` | yes, unless reusing a node | Builds the checked-in `full-accounting-v1` scenario: four Kassiber wallets, real regtest acquisitions/disposals/transfers, a few hundred multi-year stress rows, CoinJoin- and PayJoin-shaped collaborative transactions, loan marks, deterministic manual pricing, journals, reports, and transaction exports. |
 
 The slow lane is opt-in with `KASSIBER_INTEGRATION=1`; normal unit gates do not
 start Docker. To reuse an existing regtest node instead of Compose, set an
@@ -40,6 +40,9 @@ the Core RPC backend, then verifies Kassiber behavior through the public CLI:
 - address-wallet creation and Bitcoin Core watch-only sync
 - acquisition and disposal rows across Treasury, Cold Storage, Spending, and
   Merchant wallets
+- a deterministic stress lane: 72 cycles spaced 14 days apart, with batched
+  inbound funding into all four wallets plus rotating outbound payments, adding
+  roughly 360 synced wallet rows across almost three years
 - reviewed same-asset transfer pairs for wallet-to-wallet movements
 - CoinJoin-shaped PSBT flow with two owned inputs, equal external/tracked
   outputs, and explicit watched change; the resulting rows are explicitly

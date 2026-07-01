@@ -23,6 +23,8 @@ from kassiber.core.sync_backends import sanitize_wallet_segment
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_SCENARIO = ROOT / "dev" / "regtest" / "scenarios" / "full_accounting.json"
 SAT = Decimal("0.00000001")
+TRANSACTION_LIST_LIMIT = "1000"
+SECONDS_PER_DAY = 86_400
 
 
 @dataclass
@@ -76,6 +78,25 @@ def validate_scenario(scenario: dict[str, Any]) -> None:
         for ref_field, value in refs:
             if value not in wallet_key_set:
                 raise ValueError(f"Scenario operation {op_id} references unknown {ref_field}: {value}")
+    stress = scenario.get("stress") or {}
+    if stress.get("enabled"):
+        cycles = int(stress.get("cycles") or 0)
+        days_between_cycles = int(stress.get("days_between_cycles") or 0)
+        if cycles <= 0:
+            raise ValueError("Scenario stress.cycles must be positive")
+        if days_between_cycles <= 0:
+            raise ValueError("Scenario stress.days_between_cycles must be positive")
+        for field in ("receipt_btc", "payment_btc"):
+            entries = stress.get(field)
+            if not isinstance(entries, dict) or not entries:
+                raise ValueError(f"Scenario stress.{field} must be a non-empty object")
+            for key, value in entries.items():
+                if key not in wallet_key_set:
+                    raise ValueError(f"Scenario stress.{field} references unknown wallet: {key}")
+                _btc(value)
+        if not stress.get("fee_btc"):
+            raise ValueError("Scenario stress.fee_btc must be set")
+        _btc(stress["fee_btc"])
 
 
 def _btc(value: Any) -> Decimal:
@@ -194,6 +215,20 @@ def _mine(
 ) -> int:
     next_ts = _advance_time(url, username, password, current_ts)
     rpc(url, username, password, "generatetoaddress", [blocks, address])
+    return next_ts
+
+
+def _mine_at(
+    url: str,
+    username: str,
+    password: str,
+    address: str,
+    current_ts: int,
+    target_ts: int,
+) -> int:
+    next_ts = max(target_ts, current_ts + 600)
+    rpc(url, username, password, "setmocktime", [next_ts])
+    rpc(url, username, password, "generatetoaddress", [1, address])
     return next_ts
 
 
@@ -366,6 +401,87 @@ def _send_payjoin_shape(
     )
 
 
+def _generate_stress_history(
+    url: str,
+    username: str,
+    password: str,
+    wallets: dict[str, DemoWallet],
+    scenario: dict[str, Any],
+    *,
+    faucet_wallet: str,
+    mining_address: str,
+    external_address: str,
+    current_ts: int,
+    txids: dict[str, str],
+) -> tuple[int, dict[str, Any]]:
+    stress = scenario.get("stress") or {}
+    if not stress.get("enabled"):
+        return current_ts, {"cycles": 0, "rows_expected": 0, "span_days": 0}
+
+    cycles = int(stress["cycles"])
+    days_between_cycles = int(stress["days_between_cycles"])
+    receipt_plan = {
+        key: _btc(value)
+        for key, value in sorted(stress["receipt_btc"].items())
+    }
+    payment_plan = [
+        (key, _btc(value))
+        for key, value in sorted(stress["payment_btc"].items())
+    ]
+    fee = _btc(stress["fee_btc"])
+    first_target_ts = current_ts + (2 * SECONDS_PER_DAY)
+
+    for cycle in range(cycles):
+        cycle_number = cycle + 1
+        cycle_ts = first_target_ts + (cycle * days_between_cycles * SECONDS_PER_DAY)
+        receipt_outputs = {
+            wallets[key].address: amount
+            for key, amount in receipt_plan.items()
+        }
+        txids[f"stress_receipt_{cycle_number:03d}"] = rpc(
+            url,
+            username,
+            password,
+            "sendmany",
+            ["", receipt_outputs],
+            wallet=faucet_wallet,
+        )
+        current_ts = _mine_at(
+            url,
+            username,
+            password,
+            mining_address,
+            current_ts,
+            cycle_ts,
+        )
+
+        payer_key, amount = payment_plan[cycle % len(payment_plan)]
+        txids[f"stress_payment_{cycle_number:03d}"] = _send_from_wallet(
+            url,
+            username,
+            password,
+            wallets[payer_key],
+            {external_address: amount},
+            fee,
+        )
+        current_ts = _mine_at(
+            url,
+            username,
+            password,
+            mining_address,
+            current_ts,
+            cycle_ts + (6 * 60 * 60),
+        )
+
+    return current_ts, {
+        "cycles": cycles,
+        "receipt_wallets": len(receipt_plan),
+        "payment_wallets": len(payment_plan),
+        "rows_expected": cycles * (len(receipt_plan) + 1),
+        "span_days": (cycles - 1) * days_between_cycles,
+    }
+
+
 def _scope(scenario: dict[str, Any]) -> tuple[str, str, str, str]:
     return (
         "--workspace",
@@ -495,7 +611,7 @@ def _seed_rates_and_process(data_root: Path, scenario: dict[str, Any]) -> tuple[
         "--order",
         "asc",
         "--limit",
-        "500",
+        TRANSACTION_LIST_LIMIT,
     )["data"]
     unique_times = sorted({row["occurred_at"] for row in transactions})
     pricing = scenario["pricing"]
@@ -770,6 +886,7 @@ def run_demo(
     chain_median_ts = int(chain.get("mediantime") or manifest_ts)
     current_ts = max(manifest_ts, chain_median_ts + 7200)
     rpc(url, username, password, "setmocktime", [current_ts])
+    birthday_ts = current_ts - SECONDS_PER_DAY
 
     created_core_wallets: list[str] = []
     backend_wallet_prefix = f"{scenario['backend']['wallet_prefix']}-{run_id}"
@@ -846,7 +963,20 @@ def run_demo(
                 raise RuntimeError(f"Unsupported scenario operation kind: {kind}")
             current_ts = _mine(url, username, password, faucet_wallet, mining_address, current_ts)
 
-        birthday = datetime.fromtimestamp(current_ts - (len(scenario["operations"]) + 4) * 1200, tz=timezone.utc)
+        current_ts, stress_result = _generate_stress_history(
+            url,
+            username,
+            password,
+            wallets,
+            scenario,
+            faucet_wallet=faucet_wallet,
+            mining_address=mining_address,
+            external_address=external_address,
+            current_ts=current_ts,
+            txids=txids,
+        )
+
+        birthday = datetime.fromtimestamp(birthday_ts, tz=timezone.utc)
         birthday_iso = birthday.isoformat().replace("+00:00", "Z")
         _create_kassiber_book(
             data_root,
@@ -864,9 +994,16 @@ def run_demo(
 
         scope = _scope(scenario)
         sync = run_cli(data_root, "wallets", "sync", *scope, "--all")["data"]
-        transactions = run_cli(data_root, "transactions", "list", *scope, "--limit", "500", "--order", "asc")[
-            "data"
-        ]
+        transactions = run_cli(
+            data_root,
+            "transactions",
+            "list",
+            *scope,
+            "--limit",
+            TRANSACTION_LIST_LIMIT,
+            "--order",
+            "asc",
+        )["data"]
         collaborative_excluded = _exclude_collaborative_shapes(data_root, scenario, txids, transactions)
         pairs = _pair_transfers(data_root, scenario, txids)
         loan_result = _mark_loans(data_root, scenario, txids)
@@ -914,6 +1051,7 @@ def run_demo(
                     "by_direction": dict(sorted(by_direction.items())),
                     "by_wallet": dict(sorted(by_wallet.items())),
                 },
+                "stress": stress_result,
                 "transfers": {
                     "paired": pairs,
                     "count": len(transfer_listing),

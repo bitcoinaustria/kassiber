@@ -18,7 +18,25 @@
   "pricing": {
     "pair": "BTC-EUR",
     "base_rate": "42000",
-    "step_rate": "175"
+    "step_rate": "25"
+  },
+  "stress": {
+    "enabled": true,
+    "cycles": 72,
+    "days_between_cycles": 14,
+    "receipt_btc": {
+      "treasury": "0.00310000",
+      "cold": "0.00230000",
+      "spending": "0.00130000",
+      "merchant": "0.00180000"
+    },
+    "payment_btc": {
+      "treasury": "0.00100000",
+      "cold": "0.00110000",
+      "spending": "0.00060000",
+      "merchant": "0.00080000"
+    },
+    "fee_btc": "0.00001000"
   },
   "accounts": [
     {
@@ -170,8 +188,8 @@
     }
   ],
   "expected": {
-    "min_transactions": 15,
-    "min_active_transactions": 12,
+    "min_transactions": 350,
+    "min_active_transactions": 340,
     "collaborative_excluded": 5,
     "min_transfer_pairs": 2,
     "loan_marks": 4,

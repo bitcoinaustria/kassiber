@@ -96,8 +96,12 @@ class RegtestHarnessTest(unittest.TestCase):
                 "loan_principal_repaid",
             }.issubset(operation_kinds)
         )
-        self.assertGreaterEqual(scenario["expected"]["min_transactions"], 15)
-        self.assertGreaterEqual(scenario["expected"]["min_active_transactions"], 12)
+        self.assertGreaterEqual(scenario["expected"]["min_transactions"], 350)
+        self.assertGreaterEqual(scenario["expected"]["min_active_transactions"], 340)
+        stress = scenario["stress"]
+        self.assertTrue(stress["enabled"])
+        self.assertGreaterEqual(stress["cycles"], 72)
+        self.assertGreaterEqual(stress["cycles"] * stress["days_between_cycles"], 365 * 2)
         self.assertEqual(scenario["expected"]["collaborative_excluded"], 5)
         self.assertEqual(scenario["expected"]["min_transfer_pairs"], 2)
         self.assertEqual(scenario["expected"]["loan_marks"], 4)
