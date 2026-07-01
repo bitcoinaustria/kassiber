@@ -59,6 +59,7 @@ export type TransactionDetailTabContext = {
   isPricingMissing: boolean;
   isBasisQuarantine?: boolean;
   suppressPricingCacheWarning?: boolean;
+  suppressBasisQuarantineWarning?: boolean;
   pricePoint: ReturnType<typeof pricingPriceMoment>;
   nowRate?: number | null;
   onOpenMarketDataSettings?: () => void;

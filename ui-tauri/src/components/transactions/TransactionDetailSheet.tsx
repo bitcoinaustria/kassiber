@@ -369,6 +369,8 @@ export function TransactionDetailSheet({
   const hasPricingBlocker = isPricingMissing && !localDraft.excluded;
   const suppressPricingCacheWarning =
     hasJournalQuarantine && quarantineTargetTab === "pricing";
+  const suppressBasisQuarantineWarning =
+    hasJournalQuarantine && quarantineTargetTab === "tax";
   const showReviewBanner =
     hasJournalQuarantine || (activeTab !== "pricing" && hasPricingBlocker);
   const confLabel = confirmationsLabel(
@@ -646,6 +648,7 @@ export function TransactionDetailSheet({
     isPricingMissing,
     isBasisQuarantine,
     suppressPricingCacheWarning,
+    suppressBasisQuarantineWarning,
     pricePoint,
     nowRate,
     onOpenMarketDataSettings,
@@ -714,7 +717,9 @@ export function TransactionDetailSheet({
                   <QuarantineBanner
                     title={
                       hasJournalQuarantine
-                        ? t("sheet.banner.journalQuarantine")
+                        ? isBasisQuarantine
+                          ? t("tax.basisBlockerTitle")
+                          : t("sheet.banner.journalQuarantine")
                         : transaction.amount === null
                         ? t("sheet.banner.missingFiatPrice")
                         : localDraft.pricingSourceKind === null
@@ -723,9 +728,13 @@ export function TransactionDetailSheet({
                     }
                     reason={
                       hasJournalQuarantine
-                        ? t("sheet.banner.journalBlocker", {
-                            reason: normalizedQuarantineReason,
-                          })
+                        ? isBasisQuarantine
+                          ? t("tax.basisBlockerBody", {
+                              asset: transaction.asset ?? "asset",
+                            })
+                          : t("sheet.banner.journalBlocker", {
+                              reason: normalizedQuarantineReason,
+                            })
                         : transaction.amount === null
                           ? t("sheet.banner.noFiatRecorded", {
                               date: transaction.date,

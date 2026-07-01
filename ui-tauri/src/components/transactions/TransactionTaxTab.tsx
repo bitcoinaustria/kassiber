@@ -42,10 +42,11 @@ export function TransactionTaxTab({ ctx }: { ctx: TransactionDetailTabContext })
     updateDraft,
     journalEvents,
     isBasisQuarantine,
+    suppressBasisQuarantineWarning,
   } = ctx;
   const taxEffect = summarizeTransactionTaxEffect(journalEvents, flow);
   const showBasisQuarantineGuidance = Boolean(
-    isBasisQuarantine && !localDraft.excluded,
+    isBasisQuarantine && !localDraft.excluded && !suppressBasisQuarantineWarning,
   );
   const taxEffectValue = (
     value: number | null,
