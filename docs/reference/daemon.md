@@ -375,9 +375,10 @@ BTCPay invoice JSON, rejected matches, payment hashes, destination addresses,
 full origin URLs, payment-method configuration, descriptors, xpubs, or API
 tokens.
 
-`ui.metadata.bip329.import` accepts `file` and optional `wallet`, then imports
-BIP329 JSONL labels into the active profile and bridges transaction labels to
-matching local transactions.
+`ui.metadata.bip329.import` accepts `file`, then imports BIP329 JSONL labels
+into the active profile. Labels are deduplicated by record type and reference;
+transaction labels are bridged to matching local transactions across the active
+profile.
 
 `ui.transactions.metadata.update` accepts
 `{"transaction":"...","note":"...","tags":["Reviewed"],"excluded":false}` for

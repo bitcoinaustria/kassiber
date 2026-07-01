@@ -5608,8 +5608,6 @@ class ReviewRegressionTest(unittest.TestCase):
             "Main",
             "--profile",
             "Default",
-            "--wallet",
-            "Bip329Page",
             "--file",
             str(bip329_file),
         )
@@ -5623,8 +5621,6 @@ class ReviewRegressionTest(unittest.TestCase):
             "Main",
             "--profile",
             "Default",
-            "--wallet",
-            "Bip329Page",
             "--limit",
             "100",
         )
@@ -5647,9 +5643,10 @@ class ReviewRegressionTest(unittest.TestCase):
             "--cursor",
             first_cursor,
         )
-        self.assertEqual(result.returncode, 1, msg=payload)
-        self.assertEqual(payload.get("kind"), "error")
-        self.assertEqual(payload["error"]["code"], "validation")
+        self._assert_ok(payload, result, "metadata.bip329.list")
+        self.assertEqual(len(payload["data"]), 1)
+        self.assertFalse(payload["has_more"])
+        self.assertIsNone(payload["next_cursor"])
 
         payload, result = self._run_json(
             "metadata",
@@ -5698,8 +5695,6 @@ class ReviewRegressionTest(unittest.TestCase):
             "Main",
             "--profile",
             "Default",
-            "--wallet",
-            "Bip329Page",
             "--limit",
             "100",
             "--cursor",
@@ -5895,7 +5890,6 @@ class ReviewRegressionTest(unittest.TestCase):
             "metadata", "bip329", "import",
             "--workspace", "Main",
             "--profile", "Default",
-            "--wallet", "Labels",
             "--file", str(bip329_file),
         )
         self._assert_ok(payload, result, "metadata.bip329.import")
@@ -5919,7 +5913,6 @@ class ReviewRegressionTest(unittest.TestCase):
             "metadata", "bip329", "list",
             "--workspace", "Main",
             "--profile", "Default",
-            "--wallet", "Labels",
         )
         self._assert_ok(payload, result, "metadata.bip329.list")
         rows = sorted(payload["data"], key=lambda row: (row["type"], row["ref"]))
@@ -5950,7 +5943,6 @@ class ReviewRegressionTest(unittest.TestCase):
             "metadata", "bip329", "export",
             "--workspace", "Main",
             "--profile", "Default",
-            "--wallet", "Labels",
             "--file", str(export_file),
         )
         self._assert_ok(payload, result, "metadata.bip329.export")
@@ -5959,7 +5951,6 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual(
             exported,
             [
-                {"type": "tx", "ref": "demo-bip329-tx", "label": "merchant"},
                 {
                     "type": "output",
                     "ref": "demo-bip329-tx:0",
@@ -5967,6 +5958,175 @@ class ReviewRegressionTest(unittest.TestCase):
                     "origin": "wallet",
                     "spendable": False,
                 },
+                {"type": "tx", "ref": "demo-bip329-tx", "label": "merchant"},
+            ],
+        )
+
+    def test_bip329_import_bridges_transaction_tags_across_wallets(self):
+        self._bootstrap_wallet(label="LabelsA")
+        payload, result = self._run_json(
+            "wallets",
+            "create",
+            "--workspace",
+            "Main",
+            "--profile",
+            "Default",
+            "--label",
+            "LabelsB",
+            "--kind",
+            "phoenix",
+        )
+        self._assert_ok(payload, result, "wallets.create")
+        self._insert_transaction(
+            wallet_label="LabelsA",
+            tx_id="bip329-a",
+            external_id="shared-bip329-tx",
+            occurred_at="2024-05-01T12:00:00Z",
+            amount_msat=100_000_000,
+        )
+        self._insert_transaction(
+            wallet_label="LabelsB",
+            tx_id="bip329-b",
+            external_id="shared-bip329-tx",
+            occurred_at="2024-05-01T12:01:00Z",
+            amount_msat=200_000_000,
+        )
+        bip329_file = self.case_dir / "profile-labels.jsonl"
+        bip329_file.write_text(
+            json.dumps({"type": "tx", "ref": "shared-bip329-tx", "label": "merchant"}) + "\n",
+            encoding="utf-8",
+        )
+
+        payload, result = self._run_json(
+            "metadata", "bip329", "import",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--file", str(bip329_file),
+        )
+        self._assert_ok(payload, result, "metadata.bip329.import")
+        self.assertEqual(payload["data"]["records"], 1)
+        self.assertEqual(payload["data"]["imported"], 1)
+        self.assertEqual(payload["data"]["updated"], 0)
+        self.assertEqual(payload["data"]["transaction_tags_created"], 1)
+        self.assertEqual(payload["data"]["transaction_tags_added"], 2)
+
+        for wallet_label in ("LabelsA", "LabelsB"):
+            payload, result = self._run_json(
+                "metadata", "records", "list",
+                "--workspace", "Main",
+                "--profile", "Default",
+                "--wallet", wallet_label,
+            )
+            self._assert_ok(payload, result, "metadata.records.list")
+            self.assertEqual(len(payload["data"]["records"]), 1)
+            self.assertEqual(
+                payload["data"]["records"][0]["tags"],
+                [{"code": "merchant", "label": "merchant"}],
+            )
+
+    def test_bip329_import_deduplicates_and_merges_overwrites(self):
+        self._bootstrap_wallet(label="Labels")
+        self._insert_transaction(
+            wallet_label="Labels",
+            tx_id="dedupe-tx",
+            occurred_at="2024-05-01T12:00:00Z",
+            amount_msat=100_000_000,
+        )
+        bip329_file = self.case_dir / "duplicate-labels.jsonl"
+        bip329_file.write_text(
+            "\n".join(
+                [
+                    json.dumps({"type": "tx", "ref": "dedupe-tx", "label": "first-tx-label"}),
+                    json.dumps({"type": "tx", "ref": "dedupe-tx", "label": "final-tx-label"}),
+                    json.dumps(
+                        {
+                            "type": "output",
+                            "ref": "dedupe-tx:0",
+                            "label": "change",
+                            "origin": "wallet",
+                            "spendable": False,
+                            "color": "blue",
+                        }
+                    ),
+                    json.dumps(
+                        {
+                            "type": "output",
+                            "ref": "dedupe-tx:0",
+                            "label": "reserve",
+                            "note": "second import wins",
+                        }
+                    ),
+                ]
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+
+        payload, result = self._run_json(
+            "metadata", "bip329", "import",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--file", str(bip329_file),
+        )
+        self._assert_ok(payload, result, "metadata.bip329.import")
+        self.assertEqual(payload["data"]["records"], 4)
+        self.assertEqual(payload["data"]["imported"], 2)
+        self.assertEqual(payload["data"]["updated"], 2)
+        self.assertEqual(payload["data"]["transaction_tags_created"], 1)
+        self.assertEqual(payload["data"]["transaction_tags_added"], 1)
+
+        payload, result = self._run_json(
+            "metadata", "bip329", "list",
+            "--workspace", "Main",
+            "--profile", "Default",
+        )
+        self._assert_ok(payload, result, "metadata.bip329.list")
+        rows = sorted(payload["data"], key=lambda row: (row["type"], row["ref"]))
+        self.assertEqual(len(rows), 2)
+        self.assertEqual(rows[0]["type"], "output")
+        self.assertEqual(rows[0]["ref"], "dedupe-tx:0")
+        self.assertEqual(rows[0]["label"], "reserve")
+        self.assertEqual(rows[0]["origin"], "wallet")
+        self.assertEqual(rows[0]["spendable"], "false")
+        self.assertEqual(rows[1]["type"], "tx")
+        self.assertEqual(rows[1]["ref"], "dedupe-tx")
+        self.assertEqual(rows[1]["label"], "final-tx-label")
+
+        payload, result = self._run_json(
+            "metadata", "records", "list",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--wallet", "Labels",
+        )
+        self._assert_ok(payload, result, "metadata.records.list")
+        self.assertEqual(len(payload["data"]["records"]), 1)
+        self.assertEqual(
+            payload["data"]["records"][0]["tags"],
+            [{"code": "final-tx-label", "label": "final-tx-label"}],
+        )
+
+        export_file = self.case_dir / "dedupe-export.jsonl"
+        payload, result = self._run_json(
+            "metadata", "bip329", "export",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--file", str(export_file),
+        )
+        self._assert_ok(payload, result, "metadata.bip329.export")
+        exported = [json.loads(line) for line in export_file.read_text(encoding="utf-8").splitlines()]
+        self.assertEqual(
+            exported,
+            [
+                {
+                    "type": "output",
+                    "ref": "dedupe-tx:0",
+                    "label": "reserve",
+                    "origin": "wallet",
+                    "spendable": False,
+                    "color": "blue",
+                    "note": "second import wins",
+                },
+                {"type": "tx", "ref": "dedupe-tx", "label": "final-tx-label"},
             ],
         )
 
@@ -11250,6 +11410,85 @@ class ReviewRegressionTest(unittest.TestCase):
         ).fetchone()
         conn.close()
         self.assertEqual(counts, (1, 1, 1, 1))
+
+    def test_migration_collapses_wallet_scoped_bip329_duplicates(self):
+        self.data_root.mkdir(parents=True, exist_ok=True)
+        db_path = self.data_root / "kassiber.sqlite3"
+        conn = sqlite3.connect(db_path)
+        conn.executescript(_OLD_SCHEMA_SQL)
+        conn.executescript(
+            """
+            INSERT INTO workspaces VALUES('ws', 'Main', '2024-01-01T00:00:00Z');
+            INSERT INTO profiles VALUES('pf', 'ws', 'Default', 'USD', 'generic', 365, 'FIFO', NULL, 0, '2024-01-01T00:00:00Z');
+            INSERT INTO accounts VALUES('acct', 'ws', 'pf', 'cash', 'Cash', 'asset', 'BTC', '2024-01-01T00:00:00Z');
+            INSERT INTO wallets VALUES('wal-a', 'ws', 'pf', 'acct', 'Wallet A', 'address', '{}', '2024-01-01T00:00:00Z');
+            INSERT INTO wallets VALUES('wal-b', 'ws', 'pf', 'acct', 'Wallet B', 'address', '{}', '2024-01-01T00:00:00Z');
+            """
+        )
+        conn.executemany(
+            """
+            INSERT INTO bip329_labels(
+                id, workspace_id, profile_id, wallet_id, record_type, ref,
+                label, origin, spendable, data_json, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                (
+                    "label-old",
+                    "ws",
+                    "pf",
+                    "wal-a",
+                    "output",
+                    "migrated-tx:0",
+                    "old",
+                    "wallet",
+                    0,
+                    '{"first": 1}',
+                    "2024-01-01T00:00:00Z",
+                ),
+                (
+                    "label-new",
+                    "ws",
+                    "pf",
+                    "wal-b",
+                    "output",
+                    "migrated-tx:0",
+                    "new",
+                    None,
+                    None,
+                    '{"second": 2}',
+                    "2024-01-02T00:00:00Z",
+                ),
+            ],
+        )
+        conn.commit()
+        conn.close()
+
+        conn = open_db(self.data_root)
+        rows = conn.execute(
+            """
+            SELECT wallet_id, record_type, ref, label, origin, spendable, data_json
+            FROM bip329_labels
+            """
+        ).fetchall()
+        unique_index = conn.execute(
+            """
+            SELECT name
+            FROM sqlite_master
+            WHERE type = 'index' AND name = 'idx_bip329_labels_profile_object'
+            """
+        ).fetchone()
+        conn.close()
+
+        self.assertIsNotNone(unique_index)
+        self.assertEqual(len(rows), 1)
+        self.assertIsNone(rows[0]["wallet_id"])
+        self.assertEqual(rows[0]["record_type"], "output")
+        self.assertEqual(rows[0]["ref"], "migrated-tx:0")
+        self.assertEqual(rows[0]["label"], "new")
+        self.assertEqual(rows[0]["origin"], "wallet")
+        self.assertEqual(rows[0]["spendable"], 0)
+        self.assertEqual(json.loads(rows[0]["data_json"]), {"first": 1, "second": 2})
 
     def test_invalid_import_timestamp_returns_validation_error(self):
         self._bootstrap_wallet(label="BadTS")

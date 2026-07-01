@@ -791,8 +791,6 @@
       "labelFilePath": "Label file path",
       "selectLabelFileTitle": "Select BIP329 label file",
       "labelFileFilter": "BIP329 JSONL",
-      "targetWalletLabel": "Target wallet label",
-      "targetWalletHelper": "Optional. When set, label records target this wallet's transactions; otherwise they import without a wallet scope.",
       "errorPickFile": "Pick the BIP329 label file.",
       "labelsImportedTitle": "Labels imported",
       "labelsImportedBody": "{{count}} label records processed."

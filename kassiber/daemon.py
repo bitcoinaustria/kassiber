@@ -7115,7 +7115,6 @@ def _import_bip329_payload(
         None,
         str(path.resolve()),
         _metadata_hooks(),
-        wallet_ref=_optional_str_arg(args, "wallet"),
     )
 
 

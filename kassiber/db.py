@@ -1379,6 +1379,7 @@ def ensure_schema_compat(conn):
     ensure_column(conn, "wallet_utxos", "anon_history_json", "TEXT NOT NULL DEFAULT '[]'")
     ensure_column(conn, "loan_legs", "loan_id", "TEXT")
     _ensure_ai_provider_secret_refs_schema(conn)
+    _ensure_bip329_wallet_agnostic_schema(conn)
     _drop_legacy_source_funds_recipients_unique(conn)
     _migrate_msat_columns(conn)
     # Added after the msat rebuild, whose fixed column list would otherwise drop
@@ -1392,6 +1393,88 @@ def ensure_schema_compat(conn):
     _ensure_direct_swap_payout_schema(conn)
     _ensure_commercial_reconciliation_schema(conn)
     _ensure_freshness_schema(conn)
+
+
+def _decode_json_object(raw_json):
+    try:
+        payload = json.loads(raw_json or "{}")
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _ensure_bip329_wallet_agnostic_schema(conn):
+    groups = conn.execute(
+        """
+        SELECT profile_id, record_type, ref
+        FROM bip329_labels
+        GROUP BY profile_id, record_type, ref
+        HAVING COUNT(*) > 1
+        """
+    ).fetchall()
+    for group in groups:
+        rows = conn.execute(
+            """
+            SELECT *
+            FROM bip329_labels
+            WHERE profile_id = ?
+              AND record_type = ?
+              AND ref = ?
+            ORDER BY created_at ASC, id ASC
+            """,
+            (group["profile_id"], group["record_type"], group["ref"]),
+        ).fetchall()
+        if not rows:
+            continue
+        label = None
+        origin = None
+        spendable = None
+        data = {}
+        for row in rows:
+            if row["label"] is not None:
+                label = row["label"]
+            if row["origin"] is not None:
+                origin = row["origin"]
+            if row["spendable"] is not None:
+                spendable = row["spendable"]
+            data.update(_decode_json_object(row["data_json"]))
+        canonical = rows[-1]
+        conn.execute(
+            """
+            UPDATE bip329_labels
+            SET wallet_id = NULL,
+                label = ?,
+                origin = ?,
+                spendable = ?,
+                data_json = ?
+            WHERE id = ?
+            """,
+            (label, origin, spendable, json.dumps(data, sort_keys=True), canonical["id"]),
+        )
+        conn.execute(
+            """
+            DELETE FROM bip329_labels
+            WHERE profile_id = ?
+              AND record_type = ?
+              AND ref = ?
+              AND id != ?
+            """,
+            (group["profile_id"], group["record_type"], group["ref"], canonical["id"]),
+        )
+    conn.execute("UPDATE bip329_labels SET wallet_id = NULL WHERE wallet_id IS NOT NULL")
+    conn.execute(
+        """
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_bip329_labels_profile_object
+            ON bip329_labels(profile_id, record_type, ref)
+        """
+    )
+    conn.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_bip329_labels_profile_created
+            ON bip329_labels(profile_id, created_at DESC, id DESC)
+        """
+    )
+    conn.commit()
 
 
 def _ensure_ai_provider_secret_refs_schema(conn):
