@@ -57,6 +57,7 @@ export type TransactionDetailTabContext = {
   isProviderSamplePricing: boolean;
   isExactPricing: boolean;
   isPricingMissing: boolean;
+  isBasisQuarantine?: boolean;
   suppressPricingCacheWarning?: boolean;
   pricePoint: ReturnType<typeof pricingPriceMoment>;
   nowRate?: number | null;

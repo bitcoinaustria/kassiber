@@ -183,7 +183,7 @@
     "evidence": {
       "price": "Füge einen Fiat-Preis oder Kursabdeckung hinzu",
       "pair": "Wähle die passende Bewegung oder verwirf sie",
-      "basis": "Prüfe Anschaffungsverlauf und Anschaffungskosten",
+      "basis": "Für diese Veräußerung ist kein Anschaffungslot verfügbar",
       "asset": "Ordne das Quell-Asset vor der Meldung zu",
       "detail": "{{keys}} prüfen",
       "fallback": "Nachweise prüfen",
@@ -200,7 +200,7 @@
     "nextAction": {
       "price": "Preis setzen, dann Journale verarbeiten",
       "pair": "Paar prüfen, dann Journale verarbeiten",
-      "basis": "Fehlenden Anschaffungskontext ergänzen",
+      "basis": "Finanzierende Anschaffung synchronisieren oder importieren, dann Journale verarbeiten",
       "fallback": "Quellproblem beheben",
       "splitTransfer": "Split-Transfer/Swap prüfen, dann Journale verarbeiten",
       "coarsePricing": "Präzise Preise holen oder bestätigen, dann Journale verarbeiten",
@@ -213,7 +213,7 @@
       "openPricing": "Preis ergänzen",
       "openPairing": "Transfer prüfen",
       "openSyncReview": "Sync-Problem prüfen",
-      "openBasisReview": "Anschaffungskosten prüfen",
+      "openBasisReview": "Kostenbasis ergänzen",
       "openTaxReview": "Kostenbasis ergänzen"
     },
     "resolvePlan": {

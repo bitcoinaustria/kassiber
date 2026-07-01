@@ -79,8 +79,8 @@ describe("quarantine row model", () => {
     expect(row.metricFilterIds).toEqual(["basis-or-pairs"]);
     expect(row.transactionAction).toMatchObject({
       transactionId: "transaction-with-a-long-id",
-      label: "Review acquisition basis",
-      tab: "details",
+      label: "Fix cost basis",
+      tab: "tax",
       reviewReason: "insufficient_lots",
     });
   });
@@ -234,8 +234,8 @@ describe("quarantine row model", () => {
       basis: "Missing cost basis",
       status: "Blocked",
       transactionAction: {
-        label: "Review acquisition basis",
-        tab: "details",
+        label: "Fix cost basis",
+        tab: "tax",
         reviewReason: "insufficient_lots",
       },
     });
@@ -409,7 +409,7 @@ describe("quarantine resolve plan", () => {
     expect(basisStep).toMatchObject({
       count: 1,
       tone: "alert",
-      primaryAction: { transactionId: "basis-1", tab: "details" },
+      primaryAction: { transactionId: "basis-1", tab: "tax" },
       primaryRowKey: "basis-1",
     });
     expect(processStep).toMatchObject({
@@ -461,7 +461,7 @@ describe("quarantine resolve plan", () => {
     });
     expect(basisStep?.primaryAction).toMatchObject({
       transactionId: "shared-tx",
-      tab: "details",
+      tab: "tax",
     });
     // Each step must preview its own row, not a collapsed duplicate of the
     // last row sharing that transaction id.
@@ -504,7 +504,7 @@ describe("quarantine resolve plan", () => {
     });
     expect(basisStep?.primaryAction).toMatchObject({
       transactionId: "blocked-basis",
-      tab: "details",
+      tab: "tax",
     });
   });
 });

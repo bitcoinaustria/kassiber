@@ -183,7 +183,7 @@
     "evidence": {
       "price": "Add a fiat price or rates coverage",
       "pair": "Choose or dismiss the matching movement",
-      "basis": "Review acquisition history and cost basis",
+      "basis": "No acquisition lot is available for this disposal",
       "asset": "Map the source asset before reporting",
       "detail": "Review {{keys}}",
       "fallback": "Review evidence",
@@ -200,7 +200,7 @@
     "nextAction": {
       "price": "Set price, then process journals",
       "pair": "Review pair, then process journals",
-      "basis": "Add missing acquisition context",
+      "basis": "Sync or import the funding acquisition, then process journals",
       "fallback": "Resolve the source issue",
       "splitTransfer": "Review split transfer/swap, then process journals",
       "coarsePricing": "Fetch precise prices or confirm, then process journals",
@@ -213,7 +213,7 @@
       "openPricing": "Add price",
       "openPairing": "Review transfer",
       "openSyncReview": "Review sync issue",
-      "openBasisReview": "Review acquisition basis",
+      "openBasisReview": "Fix cost basis",
       "openTaxReview": "Fix cost basis"
     },
     "resolvePlan": {

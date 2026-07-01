@@ -1,4 +1,5 @@
 import type { ParseKeys } from "i18next";
+import { AlertTriangle } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { Badge } from "@/components/ui/badge";
@@ -30,6 +31,7 @@ import {
 export function TransactionTaxTab({ ctx }: { ctx: TransactionDetailTabContext }) {
   const { t } = useTranslation(["transactions"]);
   const {
+    transaction,
     localDraft,
     dirty,
     dirtyExcluded,
@@ -39,8 +41,12 @@ export function TransactionTaxTab({ ctx }: { ctx: TransactionDetailTabContext })
     hideSensitive,
     updateDraft,
     journalEvents,
+    isBasisQuarantine,
   } = ctx;
   const taxEffect = summarizeTransactionTaxEffect(journalEvents, flow);
+  const showBasisQuarantineGuidance = Boolean(
+    isBasisQuarantine && !localDraft.excluded,
+  );
   const taxEffectValue = (
     value: number | null,
     fallbackKey?: TaxTranslationKey,
@@ -65,6 +71,26 @@ export function TransactionTaxTab({ ctx }: { ctx: TransactionDetailTabContext })
                       </div>
                       <p className={blurClass(hideSensitive)}>{taxNarrative}</p>
                     </div>
+                    {showBasisQuarantineGuidance ? (
+                      <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
+                        <div className="flex items-start gap-2">
+                          <AlertTriangle
+                            className="mt-0.5 size-4 shrink-0 text-amber-600 dark:text-amber-400"
+                            aria-hidden="true"
+                          />
+                          <div className="min-w-0">
+                            <div className="font-medium">
+                              {t("tax.basisBlockerTitle")}
+                            </div>
+                            <p className="mt-1 text-xs text-muted-foreground">
+                              {t("tax.basisBlockerBody", {
+                                asset: transaction.asset ?? "asset",
+                              })}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    ) : null}
                     <div className="rounded-md border bg-background p-3">
                       <div className="mb-3 flex items-center justify-between gap-3">
                         <h3 className="flex items-center gap-1.5 text-sm font-semibold">

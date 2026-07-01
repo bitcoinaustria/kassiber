@@ -697,7 +697,7 @@ function actionLabel(
     return t("quarantine.action.openPairing");
   }
   if (normalized.includes("basis") || normalized.includes("lot")) {
-    return t("quarantine.action.openBasisReview");
+    return t("quarantine.action.openTaxReview");
   }
   return t("quarantine.action.openTransaction");
 }
@@ -712,7 +712,7 @@ function actionTab(
   if (original.includes("ownership_transfer_amount_mismatch")) return "details";
   if (normalized.includes("pricing_review")) return "pricing";
   if (normalized.includes("price")) return "pricing";
-  if (normalized.includes("basis") || normalized.includes("lot")) return "details";
+  if (normalized.includes("basis") || normalized.includes("lot")) return "tax";
   if (
     normalized.includes("ownership_transfer") ||
     normalized.includes("transfer") ||

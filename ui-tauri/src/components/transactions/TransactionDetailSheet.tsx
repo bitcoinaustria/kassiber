@@ -363,7 +363,7 @@ export function TransactionDetailSheet({
       : isTransferQuarantine
         ? "linked"
         : isBasisQuarantine
-          ? "details"
+          ? "tax"
           : "pricing";
   const hasJournalQuarantine = Boolean(quarantineReason) && !localDraft.excluded;
   const hasPricingBlocker = isPricingMissing && !localDraft.excluded;
@@ -644,6 +644,7 @@ export function TransactionDetailSheet({
     isProviderSamplePricing,
     isExactPricing,
     isPricingMissing,
+    isBasisQuarantine,
     suppressPricingCacheWarning,
     pricePoint,
     nowRate,

@@ -746,6 +746,8 @@
     "notRealized": "Nicht realisiert",
     "costBasis": "Anschaffungskosten",
     "costBasisHint": "Lot-Basis aus verarbeiteten Journaleinträgen. Anschaffungszeilen nutzen den zum Zeitpunkt erfassten fairen Marktwert.",
+    "basisBlockerTitle": "Anschaffungslot fehlt",
+    "basisBlockerBody": "Kassiber kann diese Veräußerung nicht mit genug früher angeschafftem {{asset}} abgleichen. Synchronisiere oder importiere die finanzierende Anschaffung oder nimm diese Zeile aus, falls sie nicht berichtspflichtig ist. Danach Journale verarbeiten.",
     "proceeds": "Veräußerungserlös",
     "proceedsHint": "Veräußerungserlös aus verarbeiteten Journaleinträgen.",
     "incomeRecognized": "Erfasste Einnahme",
@@ -895,7 +897,7 @@
       "viewPricing": "Bewertung ansehen",
       "viewDetails": "Details ansehen",
       "viewLinked": "Verknüpfungen ansehen",
-      "viewBasisContext": "Basis-Kontext prüfen",
+      "viewBasisContext": "Kostenbasis ergänzen",
       "openPricing": "Bewertung öffnen",
       "exclude": "Ausnehmen"
     },
@@ -925,7 +927,7 @@
       "taxLabel": "Steuer: {{label}}",
       "resolveQuarantine": "Quarantäne beheben, um in Berichten einbezogen zu werden",
       "resolveSyncMismatch": "Wallet-Outputs neu synchronisieren oder prüfen",
-      "restoreBasis": "Anschaffungskosten wiederherstellen",
+      "restoreBasis": "Kostenbasis ergänzen",
       "reviewPairing": "Gepaarte Bewegung prüfen",
       "pricingIncomplete": "Bewertung unvollständig",
       "noQuarantine": "Keine Quarantäne"

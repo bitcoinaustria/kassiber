@@ -727,6 +727,8 @@
     "notRealized": "Not realized",
     "costBasis": "Cost basis",
     "costBasisHint": "Lot basis from processed journal entries. Acquisition rows use the fair market value recorded at the time.",
+    "basisBlockerTitle": "Missing acquisition lot",
+    "basisBlockerBody": "Kassiber cannot match this disposal to enough earlier acquired {{asset}}. Sync or import the funding acquisition, or exclude this row if it should not be reported. Then process journals.",
     "proceeds": "Proceeds",
     "proceedsHint": "Disposal proceeds from processed journal entries.",
     "incomeRecognized": "Income recognized",
@@ -895,7 +897,7 @@
       "viewPricing": "View Pricing",
       "viewDetails": "View Details",
       "viewLinked": "View Linked",
-      "viewBasisContext": "Review basis context",
+      "viewBasisContext": "Fix cost basis",
       "openPricing": "Open Pricing",
       "exclude": "Exclude"
     },
@@ -925,7 +927,7 @@
       "taxLabel": "Tax: {{label}}",
       "resolveQuarantine": "Resolve quarantine to include in reports",
       "resolveSyncMismatch": "Re-sync or inspect wallet outputs",
-      "restoreBasis": "Restore acquisition basis",
+      "restoreBasis": "Fix cost basis",
       "reviewPairing": "Review paired movement",
       "pricingIncomplete": "Pricing incomplete",
       "noQuarantine": "No quarantine"
