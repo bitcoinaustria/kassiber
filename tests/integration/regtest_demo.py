@@ -23,7 +23,7 @@ from kassiber.core.sync_backends import sanitize_wallet_segment
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_SCENARIO = ROOT / "dev" / "regtest" / "scenarios" / "full_accounting.json"
 SAT = Decimal("0.00000001")
-TRANSACTION_LIST_LIMIT = "1500"
+TRANSACTION_LIST_LIMIT = "1000"
 SECONDS_PER_DAY = 86_400
 
 
@@ -69,8 +69,12 @@ def validate_scenario(scenario: dict[str, Any]) -> None:
         for field in ("amount_btc", "fee_btc", "payment_btc", "equal_output_btc"):
             if field in operation:
                 _btc(operation[field])
+        for value in operation.get("outputs_btc", []):
+            _btc(value)
+        if "count" in operation and int(operation["count"]) <= 0:
+            raise ValueError(f"Scenario operation {op_id} count must be positive")
         refs = []
-        for ref_field in ("from", "to", "payer", "merchant", "tracked_output_wallet"):
+        for ref_field in ("from", "to", "payer", "merchant", "tracked_output_wallet", "wallet"):
             value = operation.get(ref_field)
             if value and value != "external":
                 refs.append((ref_field, value))
@@ -317,6 +321,83 @@ def _send_from_wallet(
         password,
         [{"txid": utxo["txid"], "vout": utxo["vout"]}],
         final_outputs,
+        [wallet.core_wallet],
+    )
+
+
+def _send_batched_payment(
+    url: str,
+    username: str,
+    password: str,
+    wallet: DemoWallet,
+    faucet_wallet: str,
+    operation: dict[str, Any],
+) -> str:
+    outputs = {}
+    for index, value in enumerate(operation["outputs_btc"], start=1):
+        address = rpc(
+            url,
+            username,
+            password,
+            "getnewaddress",
+            [f"{operation['id']} recipient {index}", "bech32"],
+            wallet=faucet_wallet,
+        )
+        outputs[address] = _btc(value)
+    return _send_from_wallet(url, username, password, wallet, outputs, _btc(operation["fee_btc"]))
+
+
+def _send_incoming_burst(
+    url: str,
+    username: str,
+    password: str,
+    wallet: DemoWallet,
+    faucet_wallet: str,
+    operation: dict[str, Any],
+    txids: dict[str, str],
+) -> None:
+    count = int(operation["count"])
+    amount = _btc(operation["amount_btc"])
+    for index in range(1, count + 1):
+        txids[f"{operation['id']}_{index:03d}"] = rpc(
+            url,
+            username,
+            password,
+            "sendtoaddress",
+            [wallet.address, amount],
+            wallet=faucet_wallet,
+        )
+
+
+def _send_many_input_consolidation(
+    url: str,
+    username: str,
+    password: str,
+    wallet: DemoWallet,
+    operation: dict[str, Any],
+) -> str:
+    requested_count = int(operation["count"])
+    fee = _btc(operation["fee_btc"])
+    utxos = sorted(
+        _wallet_utxos(url, username, password, wallet),
+        key=lambda item: Decimal(str(item["amount"])),
+    )
+    if len(utxos) < requested_count:
+        raise RuntimeError(
+            f"Wallet {wallet.key} has only {len(utxos)} UTXOs for "
+            f"{requested_count}-input consolidation"
+        )
+    selected = utxos[:requested_count]
+    input_amount = sum((Decimal(str(utxo["amount"])).quantize(SAT) for utxo in selected), Decimal("0"))
+    output_amount = (input_amount - fee).quantize(SAT)
+    if output_amount <= 0:
+        raise RuntimeError(f"Consolidation fee is too large for {wallet.key}: {fee} BTC")
+    return _send_raw_transaction(
+        url,
+        username,
+        password,
+        [{"txid": utxo["txid"], "vout": utxo["vout"]} for utxo in selected],
+        {wallet.address: output_amount},
         [wallet.core_wallet],
     )
 
@@ -940,6 +1021,33 @@ def run_demo(
                     {to_address: _btc(operation["amount_btc"])},
                     _btc(operation["fee_btc"]),
                 )
+            elif kind == "batched_payment":
+                txids[operation["id"]] = _send_batched_payment(
+                    url,
+                    username,
+                    password,
+                    wallets[operation["from"]],
+                    faucet_wallet,
+                    operation,
+                )
+            elif kind == "incoming_burst":
+                _send_incoming_burst(
+                    url,
+                    username,
+                    password,
+                    wallets[operation["to"]],
+                    faucet_wallet,
+                    operation,
+                    txids,
+                )
+            elif kind == "many_input_consolidation":
+                txids[operation["id"]] = _send_many_input_consolidation(
+                    url,
+                    username,
+                    password,
+                    wallets[operation["wallet"]],
+                    operation,
+                )
             elif kind == "coinjoin_shape":
                 coinjoin_external = rpc(
                     url, username, password, "getnewaddress", ["coinjoin equal output", "bech32"], wallet=faucet_wallet
@@ -949,7 +1057,7 @@ def run_demo(
                 )
             elif kind == "payjoin_shape":
                 txids[operation["id"]] = _send_payjoin_shape(url, username, password, wallets, operation)
-            elif kind in {"loan_collateral_release", "loan_principal_received"}:
+            elif kind in {"loan_collateral_release", "loan_principal_received", "external_receipt"}:
                 receiver = wallets[operation["to"]]
                 txids[operation["id"]] = rpc(
                     url,

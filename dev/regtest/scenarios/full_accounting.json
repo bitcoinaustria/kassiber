@@ -149,6 +149,44 @@
       "note": "Merchant settles part of the balance externally."
     },
     {
+      "id": "cold_large_receipt",
+      "kind": "external_receipt",
+      "from": "external",
+      "to": "cold",
+      "amount_btc": "0.65000000",
+      "note": "A single large custody acquisition arrives into cold storage."
+    },
+    {
+      "id": "treasury_batched_payout",
+      "kind": "batched_payment",
+      "from": "treasury",
+      "to": "external",
+      "outputs_btc": [
+        "0.02500000",
+        "0.01750000",
+        "0.01250000"
+      ],
+      "fee_btc": "0.00001500",
+      "note": "Treasury pays three external recipients in one batched transaction."
+    },
+    {
+      "id": "merchant_pos_deposit_burst",
+      "kind": "incoming_burst",
+      "from": "external",
+      "to": "merchant",
+      "amount_btc": "0.00025000",
+      "count": 12,
+      "note": "Point-of-sale receipts arrive as many small deposits in the same block."
+    },
+    {
+      "id": "merchant_many_input_consolidation",
+      "kind": "many_input_consolidation",
+      "wallet": "merchant",
+      "count": 10,
+      "fee_btc": "0.00001000",
+      "note": "Merchant consolidates small POS UTXOs back into one wallet output, creating a fee-only accounting row."
+    },
+    {
       "id": "collateral_lock",
       "kind": "loan_collateral_lock",
       "from": "cold",
@@ -188,8 +226,8 @@
     }
   ],
   "expected": {
-    "min_transactions": 950,
-    "min_active_transactions": 940,
+    "min_transactions": 980,
+    "min_active_transactions": 970,
     "collaborative_excluded": 5,
     "min_transfer_pairs": 2,
     "loan_marks": 4,

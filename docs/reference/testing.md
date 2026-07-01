@@ -10,7 +10,7 @@ regtest infrastructure.
 | --- | --- | --- | --- |
 | FAST | `./scripts/integration-harness.sh fast` | no | Replays recorded regtest tapes through the real sync adapter, import, journal, report, and XLSX export path with `KASSIBER_NO_EGRESS=1`. |
 | SLOW | `./scripts/integration-harness.sh bitcoin-core` | yes, unless reusing a node | Starts or reuses a Bitcoin Core regtest node, creates real wallets and transactions, then drives Kassiber sync, pricing, journal, report, and export. |
-| DEMO | `./scripts/integration-harness.sh demo-full` | yes, unless reusing a node | Builds the checked-in `full-accounting-v1` scenario: four Kassiber wallets, real regtest acquisitions/disposals/transfers, a larger multi-year stress ledger, CoinJoin- and PayJoin-shaped collaborative transactions, loan marks, deterministic manual pricing, journals, reports, and transaction exports. |
+| DEMO | `./scripts/integration-harness.sh demo-full` | yes, unless reusing a node | Builds the checked-in `full-accounting-v1` scenario: four Kassiber wallets, real regtest acquisitions/disposals/transfers, batched and consolidation edge cases, a larger multi-year stress ledger, CoinJoin- and PayJoin-shaped collaborative transactions, loan marks, deterministic manual pricing, journals, reports, and transaction exports. |
 
 The slow lane is opt-in with `KASSIBER_INTEGRATION=1`; normal unit gates do not
 start Docker. To reuse an existing regtest node instead of Compose, set an
@@ -45,6 +45,10 @@ the Core RPC backend, then verifies Kassiber behavior through the public CLI:
 - address-wallet creation and Bitcoin Core watch-only sync
 - acquisition and disposal rows across Treasury, Cold Storage, Spending, and
   Merchant wallets
+- large single-source custody receipt into cold storage
+- batched treasury payout to multiple external recipients in one transaction
+- same-block merchant point-of-sale receipt burst followed by a many-input
+  consolidation that imports as a fee-only wallet row
 - a deterministic historical stress lane: 190 cycles spaced 14 days apart, with
   batched inbound funding into all four wallets plus rotating outbound payments,
   adding roughly 950 synced wallet rows across seven years

@@ -91,14 +91,18 @@ class RegtestHarnessTest(unittest.TestCase):
                 "self_transfer",
                 "coinjoin_shape",
                 "payjoin_shape",
+                "external_receipt",
+                "batched_payment",
+                "incoming_burst",
+                "many_input_consolidation",
                 "loan_collateral_lock",
                 "loan_collateral_release",
                 "loan_principal_received",
                 "loan_principal_repaid",
             }.issubset(operation_kinds)
         )
-        self.assertGreaterEqual(scenario["expected"]["min_transactions"], 950)
-        self.assertGreaterEqual(scenario["expected"]["min_active_transactions"], 940)
+        self.assertGreaterEqual(scenario["expected"]["min_transactions"], 980)
+        self.assertGreaterEqual(scenario["expected"]["min_active_transactions"], 970)
         base_time = datetime.fromisoformat(scenario["base_time"].replace("Z", "+00:00"))
         stress = scenario["stress"]
         self.assertTrue(stress["enabled"])
