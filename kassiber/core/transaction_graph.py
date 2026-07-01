@@ -13,17 +13,12 @@ import sqlite3
 from collections import defaultdict
 from typing import Any, Mapping, NamedTuple, Sequence
 
-from ..backends import (
-    backend_batch_size,
-    backend_value,
-    list_db_backends,
-    preferred_mempool_api_backend,
-)
+from ..backends import backend_batch_size, preferred_mempool_api_backend
+from ..envelope import json_ready
 from ..errors import AppError
 from ..msat import msat_to_btc
+from ..time_utils import now_iso
 from ..transfers import detect_intra_transfers, normalize_group_txid
-from ..util import normalize_chain_value, normalize_network_value
-from ..wallet_descriptors import decode_liquid_transaction
 from . import ownership as core_ownership
 from .ownership_transfers import (
     _norm_chain_network,
@@ -36,6 +31,7 @@ from .repo import current_context_snapshot
 from .sync import normalize_backend_kind
 from .sync_backends import (
     ElectrumClient,
+    decode_liquid_transaction,
     decode_raw_transaction,
     electrum_call_many,
     fetch_esplora_transaction,
@@ -44,6 +40,7 @@ from .sync_backends import (
 
 
 GRAPH_LOOKUP_TIMEOUT_SECONDS = 5
+GRAPH_CACHE_SCHEMA_VERSION = 1
 SATS_TO_MSAT = 1000
 # Upper bound on how many input/output strands a single graph payload carries
 # per side. Mirrors mempool.space's line limit so a fan-out transaction (large
@@ -397,7 +394,7 @@ def _parse_graph(row: Mapping[str, Any], raw: Mapping[str, Any] | None = None) -
     metadata = _transaction_metadata(raw)
     vin = raw.get("vin")
     vout = raw.get("vout")
-    warnings: list[dict[str, str]] = []
+    warnings: list[dict[str, str]] = _graph_lookup_warnings(raw)
     confidential = _looks_liquid_or_confidential(row, raw)
     if not isinstance(vin, list) or not isinstance(vout, list):
         reason = "graphless_import"
@@ -560,7 +557,7 @@ def _enrich_graph_raw(
     if not allow_public_lookup:
         return raw
     if _looks_liquid_or_confidential(row, raw):
-        return _enrich_liquid_reference_graph_raw(conn, row, raw, runtime_config)
+        return _enrich_liquid_reference_graph_raw(conn, row, raw)
     return _enrich_bitcoin_graph_raw(conn, row, raw, runtime_config)
 
 
@@ -575,49 +572,72 @@ def _enrich_bitcoin_graph_raw(
     txid = _string_or_none(raw.get("txid")) or _txid_from_row(row)
     if not _looks_like_txid(txid):
         return raw
+    chain, network = _row_chain_network(row)
+    cached = _load_graph_lookup_cache(conn, chain, network, str(txid))
+    if cached is not None and _bitcoin_current_graph_has_required_prevouts(cached):
+        return cached
     backend = _graph_lookup_backend(conn, row, runtime_config)
     if backend is None:
         return _with_graph_lookup_warning(
             raw,
             "bitcoin_reference_lookup_unavailable",
-            "No configured Bitcoin backend is available. Add a Bitcoin backend in Settings to fetch public transaction references.",
+            "No configured Bitcoin graph backend is available to fetch public transaction references.",
         )
-    backend_kind = str(backend.get("kind") or "").lower()
-    try:
-        if backend_kind == "electrum":
-            fetched = _fetch_bitcoin_electrum_graph_raw(backend, str(txid))
-        else:
-            fetched = fetch_esplora_transaction(
-                str(backend["url"]),
+    kind = normalize_backend_kind(backend.get("kind"))
+    if kind == "electrum":
+        try:
+            return _fetch_bitcoin_electrum_graph_raw(
+                conn,
+                backend,
+                chain,
+                network,
                 str(txid),
-                timeout=_graph_lookup_timeout(backend),
             )
+        except Exception:
+            return _with_graph_lookup_warning(
+                raw,
+                "bitcoin_reference_lookup_failed",
+                "Could not fetch public Bitcoin transaction references from the selected Electrum backend.",
+            )
+    try:
+        fetched = fetch_esplora_transaction(
+            str(backend["url"]),
+            str(txid),
+            timeout=_graph_lookup_timeout(backend),
+        )
     except Exception:
         return _with_graph_lookup_warning(
             raw,
             "bitcoin_reference_lookup_failed",
-            "Could not fetch public Bitcoin transaction references from the selected backend. Review the backend URL and network in Settings.",
+            "Could not fetch public Bitcoin transaction references from the selected explorer backend.",
         )
     if not isinstance(fetched, Mapping):
         return _with_graph_lookup_warning(
             raw,
             "bitcoin_reference_lookup_invalid",
-            "The selected Bitcoin backend returned an invalid transaction response. Review the backend URL and network in Settings.",
+            "The selected Bitcoin explorer backend returned an invalid transaction response.",
         )
-    fetched_txid = _string_or_none(fetched.get("txid"))
+    sanitized = _sanitize_graph_lookup_raw(fetched, chain, str(txid))
+    fetched_txid = _string_or_none(sanitized.get("txid"))
     if fetched_txid and fetched_txid.lower() != str(txid).lower():
         return _with_graph_lookup_warning(
             raw,
             "bitcoin_reference_lookup_mismatch",
-            "Bitcoin reference lookup returned a different transaction id. Review the selected backend network in Settings.",
+            "Bitcoin reference lookup returned a different transaction id.",
         )
-    if not isinstance(fetched.get("vin"), list) or not isinstance(fetched.get("vout"), list):
+    if not isinstance(sanitized.get("vin"), list) or not isinstance(sanitized.get("vout"), list):
         return _with_graph_lookup_warning(
             raw,
             "bitcoin_reference_lookup_incomplete",
-            "Bitcoin reference lookup did not return public input/output references. Review the backend type and endpoint in Settings.",
+            "Bitcoin reference lookup did not return public input/output references.",
         )
-    return fetched
+    if not _bitcoin_current_graph_has_required_prevouts(sanitized):
+        return _with_graph_lookup_warning(
+            sanitized,
+            "bitcoin_reference_lookup_incomplete",
+            "Bitcoin reference lookup did not return every previous output needed for a complete graph.",
+        )
+    return _store_graph_lookup_cache(conn, chain, network, str(txid), sanitized)
 
 
 def _with_graph_lookup_warning(
@@ -635,6 +655,22 @@ def _with_graph_lookup_warning(
     }
 
 
+def _graph_lookup_warnings(raw: Mapping[str, Any]) -> list[dict[str, str]]:
+    lookup_warning = raw.get("_graphLookupWarning")
+    if not isinstance(lookup_warning, Mapping):
+        return []
+    return [
+        {
+            "code": str(lookup_warning.get("code") or "graph_lookup_warning"),
+            "level": str(lookup_warning.get("level") or "warning"),
+            "message": str(
+                lookup_warning.get("message")
+                or "Public transaction reference lookup did not return a complete graph."
+            ),
+        }
+    ]
+
+
 def _graph_lookup_timeout(backend: Mapping[str, Any]) -> int:
     configured = _int_or_none(backend.get("timeout"))
     if configured is None or configured <= 0:
@@ -646,56 +682,72 @@ def _enrich_liquid_reference_graph_raw(
     conn: sqlite3.Connection,
     row: Mapping[str, Any],
     raw: Mapping[str, Any],
-    runtime_config: Mapping[str, Any] | None,
 ) -> Mapping[str, Any]:
     if isinstance(raw.get("vin"), list) and isinstance(raw.get("vout"), list):
         return raw
     txid = _string_or_none(raw.get("txid")) or _txid_from_row(row)
     if not _looks_like_txid(txid):
         return raw
-    backend = _liquid_graph_lookup_backend(conn, row, runtime_config)
+    chain, network = _row_chain_network(row, default_chain="liquid", default_network="liquidv1")
+    cached = _load_graph_lookup_cache(conn, chain, network, str(txid))
+    if cached is not None:
+        return cached
+    backend = _liquid_graph_lookup_backend(conn, row)
     if backend is None:
         return _with_graph_lookup_warning(
             raw,
             "liquid_reference_lookup_unavailable",
-            "No configured Liquid backend is available. Add a Liquid backend in Settings to fetch public transaction references.",
+            "No configured Liquid graph backend is available to fetch public transaction references.",
         )
-    backend_kind = str(backend.get("kind") or "").lower()
-    try:
-        if backend_kind == "electrum":
-            fetched = _fetch_liquid_electrum_graph_raw(backend, str(txid))
-        else:
-            fetched = fetch_esplora_transaction(
-                str(backend["url"]),
+    kind = normalize_backend_kind(backend.get("kind"))
+    if kind == "electrum":
+        try:
+            return _fetch_liquid_electrum_graph_raw(
+                conn,
+                backend,
+                chain,
+                network,
                 str(txid),
-                timeout=_graph_lookup_timeout(backend),
             )
+        except Exception:
+            return _with_graph_lookup_warning(
+                raw,
+                "liquid_reference_lookup_failed",
+                "Could not fetch public Liquid transaction references from the selected Electrum backend.",
+            )
+    try:
+        fetched = fetch_esplora_transaction(
+            str(backend["url"]),
+            str(txid),
+            timeout=_graph_lookup_timeout(backend),
+        )
     except Exception:
         return _with_graph_lookup_warning(
             raw,
             "liquid_reference_lookup_failed",
-            "Could not fetch public Liquid transaction references from the selected backend. Review the backend URL and network in Settings.",
+            "Could not fetch public Liquid transaction references from the selected explorer backend.",
         )
     if not isinstance(fetched, Mapping):
         return _with_graph_lookup_warning(
             raw,
             "liquid_reference_lookup_invalid",
-            "The selected Liquid backend returned an invalid transaction response. Review the backend URL and network in Settings.",
+            "The selected Liquid explorer backend returned an invalid transaction response.",
         )
-    fetched_txid = _string_or_none(fetched.get("txid"))
+    sanitized = _sanitize_graph_lookup_raw(fetched, chain, str(txid))
+    fetched_txid = _string_or_none(sanitized.get("txid"))
     if fetched_txid and fetched_txid.lower() != str(txid).lower():
         return _with_graph_lookup_warning(
             raw,
             "liquid_reference_lookup_mismatch",
-            "Liquid reference lookup returned a different transaction id. Review the selected backend network in Settings.",
+            "Liquid reference lookup returned a different transaction id.",
         )
-    if not isinstance(fetched.get("vin"), list) or not isinstance(fetched.get("vout"), list):
+    if not isinstance(sanitized.get("vin"), list) or not isinstance(sanitized.get("vout"), list):
         return _with_graph_lookup_warning(
             raw,
             "liquid_reference_lookup_incomplete",
-            "Liquid reference lookup did not return public input/output references. Review the backend type and endpoint in Settings.",
+            "Liquid reference lookup did not return public input/output references.",
         )
-    return fetched
+    return _store_graph_lookup_cache(conn, chain, network, str(txid), sanitized)
 
 
 def _can_lookup_public_bitcoin_graph(row: Mapping[str, Any], raw: Mapping[str, Any]) -> bool:
@@ -743,24 +795,22 @@ def _graph_lookup_backend(
     candidate = preferred_mempool_api_backend(conn, chain, network)
     if candidate is not None:
         return {
-            "kind": "esplora",
             "name": candidate.get("name"),
+            "kind": "esplora",
             "url": candidate.get("api_base_url"),
             "timeout": candidate.get("timeout"),
         }
-    return _preferred_graph_lookup_backend(
-        conn,
-        runtime_config,
-        chain,
-        network,
-        allowed_kinds={"electrum", "esplora", "mempool"},
-    )
+    db_candidate = _configured_graph_backend(conn, chain, network)
+    if db_candidate is not None:
+        return db_candidate
+    if not isinstance(runtime_config, Mapping):
+        return None
+    return _runtime_graph_lookup_backend(runtime_config, chain, network)
 
 
 def _liquid_graph_lookup_backend(
     conn: sqlite3.Connection,
     row: Mapping[str, Any],
-    runtime_config: Mapping[str, Any] | None = None,
 ) -> dict[str, Any] | None:
     chain, network = _row_chain_network(row, default_chain="liquid", default_network="liquidv1")
     if chain != "liquid":
@@ -768,266 +818,534 @@ def _liquid_graph_lookup_backend(
     candidate = preferred_mempool_api_backend(conn, chain, network)
     if candidate is not None:
         return {
-            "kind": "esplora",
             "name": candidate.get("name"),
+            "kind": "esplora",
             "url": candidate.get("api_base_url"),
             "timeout": candidate.get("timeout"),
         }
-    return _preferred_graph_lookup_backend(
-        conn,
-        runtime_config,
-        chain,
-        network,
-        allowed_kinds={"electrum"},
-    )
+    # Symmetry with the Bitcoin path: never silently fetch from a hardcoded
+    # third-party explorer. Without a configured Liquid backend we decline the
+    # lookup; the caller surfaces a warning and the UI still offers an explicit,
+    # user-initiated "open in explorer" link.
+    return _configured_graph_backend(conn, chain, network)
 
 
-def _preferred_graph_lookup_backend(
+def _configured_graph_backend(
     conn: sqlite3.Connection,
-    runtime_config: Mapping[str, Any] | None,
     chain: str,
     network: str,
-    *,
-    allowed_kinds: set[str],
 ) -> dict[str, Any] | None:
-    candidates: list[dict[str, Any]] = []
-    seen: set[str] = set()
+    rows = conn.execute(
+        """
+        SELECT name, kind, chain, network, url, timeout, batch_size, tor_proxy, config_json
+        FROM backends
+        ORDER BY
+            CASE lower(kind)
+                WHEN 'esplora' THEN 0
+                WHEN 'mempool' THEN 0
+                WHEN 'liquid-esplora' THEN 0
+                WHEN 'electrum' THEN 1
+                ELSE 2
+            END,
+            updated_at DESC,
+            name ASC
+        """
+    ).fetchall()
+    for row in rows:
+        backend = _graph_backend_from_row(row)
+        if _graph_backend_matches(backend, chain, network):
+            return backend
+    return None
 
-    def add_candidate(name: str, backend: Mapping[str, Any]) -> None:
-        key = name.strip().lower()
-        if not key or key in seen:
-            return
-        row = dict(backend)
-        row.setdefault("name", key)
-        kind = normalize_backend_kind(backend_value(row, "kind"))
-        if kind not in allowed_kinds:
-            return
-        if not _backend_matches_chain_network(row, chain, network):
-            return
-        url = backend_value(row, "api_base_url") or backend_value(row, "url")
-        if not url:
-            return
-        seen.add(key)
-        row["kind"] = "esplora" if kind == "mempool" else kind
-        row["url"] = str(url)
-        candidates.append(row)
 
-    if isinstance(runtime_config, Mapping):
-        runtime_backends = runtime_config.get("backends")
-        if isinstance(runtime_backends, Mapping):
-            for name, backend in runtime_backends.items():
-                if isinstance(backend, Mapping):
-                    add_candidate(str(name), backend)
-    for backend in list_db_backends(conn):
-        add_candidate(str(backend.get("name") or ""), backend)
-
-    if not candidates:
+def _runtime_graph_lookup_backend(
+    runtime_config: Mapping[str, Any],
+    chain: str,
+    network: str,
+) -> dict[str, Any] | None:
+    backends = runtime_config.get("backends")
+    if not isinstance(backends, Mapping):
         return None
-    default_name = (
-        str(runtime_config.get("default_backend") or "").strip().lower()
-        if isinstance(runtime_config, Mapping)
-        else ""
-    )
-    return sorted(
-        candidates,
-        key=lambda backend: (
-            0 if str(backend.get("name") or "").lower() == default_name else 1,
-            0 if str(backend.get("source") or "") != "built-in default" else 1,
-            str(backend.get("name") or ""),
-        ),
-    )[0]
+    default_name = str(runtime_config.get("default_backend") or "").strip().lower()
+    names = [default_name] if default_name else []
+    names.extend(sorted(str(name) for name in backends if str(name) not in names))
+    for name in names:
+        backend = backends.get(name)
+        if not isinstance(backend, Mapping):
+            continue
+        candidate = _graph_backend_from_mapping(name, backend)
+        if _graph_backend_matches(candidate, chain, network):
+            return candidate
+    return None
 
 
-def _backend_matches_chain_network(
+def _graph_backend_from_row(row: Mapping[str, Any]) -> dict[str, Any]:
+    config = _json_obj(_row_get(row, "config_json"))
+    backend = {
+        "name": _row_get(row, "name"),
+        "kind": _row_get(row, "kind"),
+        "chain": _row_get(row, "chain"),
+        "network": _row_get(row, "network"),
+        "url": _row_get(row, "url"),
+        "timeout": _row_get(row, "timeout"),
+        "batch_size": _row_get(row, "batch_size"),
+        "tor_proxy": _row_get(row, "tor_proxy"),
+    }
+    backend.update(config)
+    return backend
+
+
+def _graph_backend_from_mapping(name: str, backend: Mapping[str, Any]) -> dict[str, Any]:
+    config = backend.get("config") if isinstance(backend.get("config"), Mapping) else {}
+    candidate = {
+        "name": name,
+        "kind": backend.get("kind"),
+        "chain": backend.get("chain"),
+        "network": backend.get("network"),
+        "url": backend.get("url"),
+        "timeout": backend.get("timeout"),
+        "batch_size": backend.get("batch_size"),
+        "tor_proxy": backend.get("tor_proxy"),
+    }
+    if isinstance(config, Mapping):
+        candidate.update(config)
+    return candidate
+
+
+def _graph_backend_matches(
     backend: Mapping[str, Any],
     chain: str,
     network: str,
 ) -> bool:
-    try:
-        backend_chain = normalize_chain_value(backend_value(backend, "chain") or chain)
-        backend_network = normalize_network_value(
-            backend_chain,
-            backend_value(backend, "network")
-            or ("liquidv1" if backend_chain == "liquid" else "main"),
-        )
-    except AppError:
+    kind = normalize_backend_kind(backend.get("kind"))
+    if kind not in {"esplora", "mempool", "electrum"}:
         return False
+    if not _string_or_none(backend.get("url")):
+        return False
+    backend_chain = str(backend.get("chain") or chain).strip().lower()
+    backend_network = str(backend.get("network") or network).strip().lower()
+    if backend_chain in {"", "btc"}:
+        backend_chain = "bitcoin"
+    if backend_chain == "bitcoin" and backend_network in {"", "mainnet"}:
+        backend_network = "main"
+    if backend_chain == "liquid" and backend_network in {"", "main", "mainnet"}:
+        backend_network = "liquidv1"
     return backend_chain == chain and backend_network == network
 
 
+def _load_graph_lookup_cache(
+    conn: sqlite3.Connection,
+    chain: str,
+    network: str,
+    txid: str,
+) -> dict[str, Any] | None:
+    normalized_txid = str(txid).strip().lower()
+    if not _looks_like_txid(normalized_txid):
+        return None
+    row = conn.execute(
+        """
+        SELECT payload_json
+        FROM transaction_graph_cache
+        WHERE schema_version = ?
+          AND chain = ?
+          AND network = ?
+          AND txid = ?
+        """,
+        (GRAPH_CACHE_SCHEMA_VERSION, chain, network, normalized_txid),
+    ).fetchone()
+    if row is None:
+        return None
+    payload = _json_obj(row["payload_json"])
+    if not isinstance(payload.get("vin"), list) or not isinstance(payload.get("vout"), list):
+        return None
+    cached_txid = _string_or_none(payload.get("txid"))
+    if cached_txid and cached_txid.lower() != normalized_txid:
+        return None
+    payload["txid"] = normalized_txid
+    return payload
+
+
+def _store_graph_lookup_cache(
+    conn: sqlite3.Connection,
+    chain: str,
+    network: str,
+    txid: str,
+    raw: Mapping[str, Any],
+) -> dict[str, Any]:
+    normalized_txid = str(txid).strip().lower()
+    # The durable cache deliberately stores the smallest normalized public graph
+    # shape needed to rebuild the UI graph. Do not persist Sparrow-style raw
+    # serialized transactions here: raw tx bytes carry witnesses, arbitrary
+    # scripts/op_return payloads, and unrelated backend response shape that the
+    # Kassiber graph does not need to retain.
+    sanitized = _sanitize_graph_lookup_raw(raw, chain, normalized_txid)
+    if not isinstance(sanitized.get("vin"), list) or not isinstance(sanitized.get("vout"), list):
+        return sanitized
+    timestamp = now_iso()
+    conn.execute(
+        """
+        INSERT INTO transaction_graph_cache(
+            schema_version, chain, network, txid, payload_json, created_at, updated_at
+        )
+        VALUES(?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(schema_version, chain, network, txid) DO UPDATE SET
+            payload_json = excluded.payload_json,
+            updated_at = excluded.updated_at
+        """,
+        (
+            GRAPH_CACHE_SCHEMA_VERSION,
+            chain,
+            network,
+            normalized_txid,
+            json.dumps(json_ready(sanitized), sort_keys=True, separators=(",", ":")),
+            timestamp,
+            timestamp,
+        ),
+    )
+    conn.commit()
+    return sanitized
+
+
 def _fetch_bitcoin_electrum_graph_raw(
+    conn: sqlite3.Connection,
     backend: Mapping[str, Any],
+    chain: str,
+    network: str,
     txid: str,
 ) -> Mapping[str, Any]:
-    with ElectrumClient(dict(backend)) as client:
+    with ElectrumClient(backend) as client:
         raw_hex = client.call("blockchain.transaction.get", [txid])
-        if not isinstance(raw_hex, str) or not raw_hex.strip():
-            raise AppError("Bitcoin Electrum backend returned an empty transaction")
-        decoded = decode_raw_transaction(raw_hex)
-        prev_refs = _bitcoin_prevout_refs(decoded)
-        prev_raws = electrum_call_many(
+        decoded = decode_raw_transaction(str(raw_hex))
+        raw = _bitcoin_electrum_decoded_to_graph_raw(txid, decoded, str(raw_hex))
+        raw = _attach_bitcoin_prevouts_from_cache_or_electrum(
+            conn,
+            backend,
+            chain,
+            network,
+            raw,
             client,
-            [("blockchain.transaction.get", [prev_txid]) for prev_txid in prev_refs],
-            backend_batch_size(backend),
         )
-    prev_txs = {
-        prev_txid: decode_raw_transaction(prev_raw)
-        for prev_txid, prev_raw in zip(prev_refs, prev_raws)
-        if isinstance(prev_raw, str) and prev_raw.strip()
-    }
-    return _bitcoin_decoded_graph_raw(txid, decoded, prev_txs, raw_hex)
-
-
-def _bitcoin_prevout_refs(decoded: Mapping[str, Any]) -> list[str]:
-    refs: list[str] = []
-    seen: set[str] = set()
-    for vin in decoded.get("vin", []):
-        if not isinstance(vin, Mapping):
-            continue
-        prev_txid = _string_or_none(vin.get("txid"))
-        if not prev_txid or prev_txid == "00" * 32:
-            continue
-        if _int_or_none(vin.get("vout")) is None:
-            continue
-        if prev_txid in seen:
-            continue
-        seen.add(prev_txid)
-        refs.append(prev_txid)
-    return refs
-
-
-def _bitcoin_decoded_graph_raw(
-    txid: str,
-    decoded: Mapping[str, Any],
-    prev_txs: Mapping[str, Mapping[str, Any]],
-    raw_hex: str,
-) -> dict[str, Any]:
-    raw: dict[str, Any] = {
-        "txid": txid,
-        "version": decoded.get("version"),
-        "locktime": decoded.get("locktime"),
-        "raw_hex": raw_hex,
-        "vin": [],
-        "vout": [],
-    }
-    for vin in decoded.get("vin", []):
-        if not isinstance(vin, Mapping):
-            continue
-        prev_txid = _string_or_none(vin.get("txid"))
-        prev_vout = _int_or_none(vin.get("vout"))
-        entry: dict[str, Any] = {
-            "txid": prev_txid,
-            "vout": prev_vout,
-            "sequence": _int_or_none(vin.get("sequence")),
-        }
-        prevout = _bitcoin_prevout_from_decoded(prev_txs.get(prev_txid or ""), prev_vout)
-        if prevout is not None:
-            entry["prevout"] = prevout
-        raw["vin"].append({key: value for key, value in entry.items() if value is not None})
-    for output in decoded.get("vout", []):
-        if not isinstance(output, Mapping):
-            continue
-        n = _int_or_none(output.get("n"))
-        if n is None:
-            continue
-        value_sats = _value_sats_or_none(output.get("value_sats"))
-        entry: dict[str, Any] = {
-            "n": n,
-            "scriptpubkey": _string_or_none(output.get("script_hex")),
-            "value": value_sats,
-        }
-        raw["vout"].append({key: value for key, value in entry.items() if value is not None})
-    return raw
-
-
-def _bitcoin_prevout_from_decoded(
-    decoded: Mapping[str, Any] | None,
-    vout: int | None,
-) -> dict[str, Any] | None:
-    if decoded is None or vout is None or vout < 0:
-        return None
-    outputs = decoded.get("vout")
-    if not isinstance(outputs, list) or vout >= len(outputs):
-        return None
-    output = outputs[vout]
-    if not isinstance(output, Mapping):
-        return None
-    value_sats = _value_sats_or_none(output.get("value_sats"))
-    script = _string_or_none(output.get("script_hex"))
-    prevout: dict[str, Any] = {}
-    if script is not None:
-        prevout["scriptpubkey"] = script
-    if value_sats is not None:
-        prevout["value"] = value_sats
-    return prevout or None
+    if not _bitcoin_current_graph_has_required_prevouts(raw):
+        return _with_graph_lookup_warning(
+            raw,
+            "bitcoin_reference_lookup_incomplete",
+            "Bitcoin Electrum lookup did not return every previous output needed for a complete graph.",
+        )
+    return _store_graph_lookup_cache(conn, chain, network, txid, raw)
 
 
 def _fetch_liquid_electrum_graph_raw(
+    conn: sqlite3.Connection,
     backend: Mapping[str, Any],
+    chain: str,
+    network: str,
     txid: str,
 ) -> Mapping[str, Any]:
-    with ElectrumClient(dict(backend)) as client:
+    with ElectrumClient(backend) as client:
         raw_hex = client.call("blockchain.transaction.get", [txid])
-    if not isinstance(raw_hex, str) or not raw_hex.strip():
-        raise AppError("Liquid Electrum backend returned an empty transaction")
-    decoded = decode_liquid_transaction(raw_hex)
-    return _liquid_decoded_graph_raw(txid, decoded)
+    decoded = decode_liquid_transaction(str(raw_hex))
+    raw = _liquid_electrum_decoded_to_graph_raw(txid, decoded, str(raw_hex))
+    return _store_graph_lookup_cache(conn, chain, network, txid, raw)
 
 
-def _liquid_decoded_graph_raw(txid: str, decoded: Any) -> dict[str, Any]:
-    raw: dict[str, Any] = {"txid": txid, "vin": [], "vout": []}
-    version = _int_or_none(getattr(decoded, "version", None))
-    locktime = _int_or_none(getattr(decoded, "locktime", None))
-    if version is not None:
-        raw["version"] = version
-    if locktime is not None:
-        raw["locktime"] = locktime
+def _attach_bitcoin_prevouts_from_cache_or_electrum(
+    conn: sqlite3.Connection,
+    backend: Mapping[str, Any],
+    chain: str,
+    network: str,
+    raw: Mapping[str, Any],
+    client: ElectrumClient,
+) -> dict[str, Any]:
+    enriched = dict(raw)
+    vin = [dict(entry) for entry in enriched.get("vin", []) if isinstance(entry, Mapping)]
+    enriched["vin"] = vin
+    missing: list[str] = []
+    seen_missing: set[str] = set()
+    cached_prev: dict[str, Mapping[str, Any]] = {}
+    for entry in vin:
+        prev_txid = _string_or_none(entry.get("txid"))
+        prev_vout = _int_or_none(entry.get("vout"))
+        if not prev_txid or prev_vout is None:
+            continue
+        if isinstance(entry.get("prevout"), Mapping):
+            prevout = entry["prevout"]
+            if _value_sats_or_none(prevout.get("value")) is not None or _confidential_leg(prevout):
+                continue
+        cached = _load_graph_lookup_cache(conn, chain, network, prev_txid)
+        if cached is not None:
+            cached_prev[prev_txid.lower()] = cached
+            continue
+        normalized = prev_txid.lower()
+        if normalized not in seen_missing:
+            seen_missing.add(normalized)
+            missing.append(normalized)
 
+    if missing:
+        requests = [("blockchain.transaction.get", [prev_txid]) for prev_txid in missing]
+        raw_hexes = electrum_call_many(
+            client,
+            requests,
+            batch_size=backend_batch_size(backend),
+        )
+        for prev_txid, raw_hex in zip(missing, raw_hexes):
+            decoded = decode_raw_transaction(str(raw_hex))
+            prev_raw = _bitcoin_electrum_decoded_to_graph_raw(
+                prev_txid,
+                decoded,
+                str(raw_hex),
+            )
+            cached_prev[prev_txid] = _store_graph_lookup_cache(
+                conn,
+                chain,
+                network,
+                prev_txid,
+                prev_raw,
+            )
+
+    for entry in vin:
+        prev_txid = _string_or_none(entry.get("txid"))
+        prev_vout = _int_or_none(entry.get("vout"))
+        if not prev_txid or prev_vout is None:
+            continue
+        prev_raw = cached_prev.get(prev_txid.lower())
+        if prev_raw is None:
+            continue
+        prevout = _prevout_from_cached_graph(prev_raw, prev_vout)
+        if prevout is not None:
+            entry["prevout"] = prevout
+    return enriched
+
+
+def _prevout_from_cached_graph(
+    raw: Mapping[str, Any],
+    index: int,
+) -> dict[str, Any] | None:
+    vout = raw.get("vout")
+    if not isinstance(vout, list):
+        return None
+    for entry in vout:
+        if not isinstance(entry, Mapping):
+            continue
+        n = _int_or_none(entry.get("n"))
+        if n != index:
+            continue
+        prevout: dict[str, Any] = {}
+        for key in ("scriptpubkey", "scriptpubkey_type", "scriptpubkey_address", "value", "value_state"):
+            if entry.get(key) is not None:
+                prevout[key] = entry.get(key)
+        return prevout
+    return None
+
+
+def _bitcoin_current_graph_has_required_prevouts(raw: Mapping[str, Any]) -> bool:
+    vin = raw.get("vin")
+    vout = raw.get("vout")
+    if not isinstance(vin, list) or not isinstance(vout, list):
+        return False
+    for entry in vin:
+        if not isinstance(entry, Mapping):
+            return False
+        prev_txid = _string_or_none(entry.get("txid"))
+        prev_vout = _int_or_none(entry.get("vout"))
+        if not prev_txid and prev_vout is None:
+            # Coinbase-like inputs do not have a spent previous output.
+            continue
+        if not prev_txid or prev_vout is None:
+            return False
+        prevout = entry.get("prevout")
+        if not isinstance(prevout, Mapping):
+            return False
+        value_sats = _int_or_none(prevout.get("value_sats"))
+        if value_sats is None:
+            value_sats = _value_sats_or_none(prevout.get("value"))
+        if value_sats is None:
+            return False
+        if _string_or_none(prevout.get("scriptpubkey") or prevout.get("script_hex")) is None:
+            return False
+    return True
+
+
+def _bitcoin_electrum_decoded_to_graph_raw(
+    txid: str,
+    decoded: Mapping[str, Any],
+    raw_hex: str | None = None,
+) -> dict[str, Any]:
+    raw: dict[str, Any] = {
+        "txid": str(txid).lower(),
+        "version": _int_or_none(decoded.get("version")),
+        "locktime": _int_or_none(decoded.get("locktime")),
+        "vin": [],
+        "vout": [],
+    }
+    if raw_hex:
+        raw.update(_size_metadata_from_raw_hex(raw_hex))
+    for entry in decoded.get("vin", []) if isinstance(decoded.get("vin"), list) else []:
+        if not isinstance(entry, Mapping):
+            continue
+        vin_entry: dict[str, Any] = {}
+        prev_txid = _string_or_none(entry.get("txid"))
+        if prev_txid:
+            vin_entry["txid"] = prev_txid.lower()
+        prev_vout = _int_or_none(entry.get("vout"))
+        if prev_vout is not None:
+            vin_entry["vout"] = prev_vout
+        raw["vin"].append(vin_entry)
+    for index, entry in enumerate(decoded.get("vout", []) if isinstance(decoded.get("vout"), list) else []):
+        if not isinstance(entry, Mapping):
+            continue
+        n = _int_or_none(entry.get("n"))
+        if n is None:
+            n = index
+        output: dict[str, Any] = {"n": n}
+        script = _string_or_none(entry.get("scriptpubkey") or entry.get("script_hex"))
+        if script is not None:
+            output["scriptpubkey"] = script
+        value_sats = _int_or_none(entry.get("value_sats"))
+        if value_sats is None:
+            value_sats = _value_sats_or_none(entry.get("value"))
+        if value_sats is not None:
+            output["value"] = value_sats
+        raw["vout"].append(output)
+    return raw
+
+
+def _liquid_electrum_decoded_to_graph_raw(
+    txid: str,
+    decoded: Any,
+    raw_hex: str | None = None,
+) -> dict[str, Any]:
+    raw: dict[str, Any] = {
+        "txid": str(txid).lower(),
+        "version": _int_or_none(getattr(decoded, "version", None)),
+        "locktime": _int_or_none(getattr(decoded, "locktime", None)),
+        "vin": [],
+        "vout": [],
+    }
+    if raw_hex:
+        raw.update(_size_metadata_from_raw_hex(raw_hex))
     for vin in getattr(decoded, "vin", []) or []:
-        prev_vout = _int_or_none(getattr(vin, "vout", None))
-        entry: dict[str, Any] = {
-            "prevout": {"valuecommitment": "confidential"},
-        }
         try:
-            entry["txid"] = liquid_input_txid(vin)
+            prev_txid = liquid_input_txid(vin)
         except Exception:
-            pass
+            prev_txid = None
+        entry: dict[str, Any] = {}
+        if prev_txid:
+            entry["txid"] = prev_txid.lower()
+        prev_vout = _int_or_none(getattr(vin, "vout", None))
         if prev_vout is not None:
             entry["vout"] = prev_vout
+        entry["prevout"] = {"value_state": "confidential"}
         raw["vin"].append(entry)
-
     for index, output in enumerate(getattr(decoded, "vout", []) or []):
-        script = _liquid_output_script_hex(output)
-        entry: dict[str, Any] = {"n": index, "scriptpubkey": script}
-        if script:
-            entry["valuecommitment"] = "confidential"
-            entry["assetcommitment"] = "confidential"
+        script = getattr(getattr(output, "script_pubkey", None), "data", b"")
+        script_hex = bytes(script).hex() if isinstance(script, (bytes, bytearray)) else ""
+        entry: dict[str, Any] = {"n": index}
+        if script_hex:
+            entry["scriptpubkey"] = script_hex
+            entry["value_state"] = "confidential"
         else:
-            entry["scriptpubkey_type"] = "fee"
-            value_sats = _liquid_explicit_output_value_sats(output)
-            if value_sats is not None:
-                entry["value"] = value_sats
+            value = _int_or_none(getattr(output, "value", None))
+            if value is not None and value >= 0 and not bool(getattr(output, "is_blinded", False)):
+                entry["scriptpubkey_type"] = "fee"
+                entry["value"] = value
+            else:
+                entry["value_state"] = "confidential"
         raw["vout"].append(entry)
     return raw
 
 
-def _liquid_output_script_hex(output: Any) -> str:
-    script_pubkey = getattr(output, "script_pubkey", None)
-    data = getattr(script_pubkey, "data", None)
-    if isinstance(data, str):
-        return data.strip().lower()
-    if isinstance(data, (bytes, bytearray)):
-        return bytes(data).hex()
-    return ""
+def _sanitize_graph_lookup_raw(
+    raw: Mapping[str, Any],
+    chain: str,
+    txid: str | None = None,
+) -> dict[str, Any]:
+    sanitized: dict[str, Any] = {}
+    raw_txid = _string_or_none(raw.get("txid")) or txid
+    if raw_txid:
+        sanitized["txid"] = str(raw_txid).lower()
+    for key in ("version", "locktime", "size", "vsize", "weight"):
+        value = _int_or_none(raw.get(key))
+        if value is not None:
+            sanitized[key] = value
+    vin = raw.get("vin")
+    vout = raw.get("vout")
+    if isinstance(vin, list):
+        sanitized["vin"] = [
+            entry
+            for entry in (_sanitize_graph_vin(entry, chain) for entry in vin)
+            if entry is not None
+        ]
+    if isinstance(vout, list):
+        sanitized["vout"] = [
+            entry
+            for entry in (_sanitize_graph_vout(entry, chain, index) for index, entry in enumerate(vout))
+            if entry is not None
+        ]
+    return sanitized
 
 
-def _liquid_explicit_output_value_sats(output: Any) -> int | None:
-    value = getattr(output, "value", None)
-    if isinstance(value, bool):
+def _sanitize_graph_vin(entry: Any, chain: str) -> dict[str, Any] | None:
+    if not isinstance(entry, Mapping):
         return None
-    if isinstance(value, int):
-        return value
-    return None
+    sanitized: dict[str, Any] = {}
+    prev_txid = _string_or_none(entry.get("txid"))
+    if prev_txid:
+        sanitized["txid"] = prev_txid.lower()
+    prev_vout = _int_or_none(entry.get("vout"))
+    if prev_vout is not None:
+        sanitized["vout"] = prev_vout
+    prevout = entry.get("prevout")
+    if isinstance(prevout, Mapping):
+        clean_prevout = _sanitize_graph_prevout(prevout, chain)
+        if clean_prevout:
+            sanitized["prevout"] = clean_prevout
+    return sanitized
+
+
+def _sanitize_graph_prevout(entry: Mapping[str, Any], chain: str) -> dict[str, Any]:
+    return _sanitize_graph_value_script(entry, chain, include_n=False)
+
+
+def _sanitize_graph_vout(entry: Any, chain: str, index: int) -> dict[str, Any] | None:
+    if not isinstance(entry, Mapping):
+        return None
+    sanitized = _sanitize_graph_value_script(entry, chain, include_n=True)
+    if sanitized.get("n") is None:
+        sanitized["n"] = index
+    return sanitized
+
+
+def _sanitize_graph_value_script(
+    entry: Mapping[str, Any],
+    chain: str,
+    *,
+    include_n: bool,
+) -> dict[str, Any]:
+    sanitized: dict[str, Any] = {}
+    if include_n:
+        n = _int_or_none(entry.get("n"))
+        if n is not None:
+            sanitized["n"] = n
+    script = _string_or_none(entry.get("scriptpubkey") or entry.get("script_hex"))
+    if script is not None:
+        sanitized["scriptpubkey"] = script
+    script_type = _string_or_none(entry.get("scriptpubkey_type") or entry.get("type"))
+    if script_type is not None:
+        sanitized["scriptpubkey_type"] = script_type
+    address = _string_or_none(entry.get("scriptpubkey_address") or entry.get("address"))
+    if address is not None:
+        sanitized["scriptpubkey_address"] = address
+    confidential = _confidential_leg(entry)
+    value_sats = _int_or_none(entry.get("value_sats"))
+    if value_sats is None:
+        value_sats = _value_sats_or_none(entry.get("value"))
+    if confidential:
+        sanitized["value_state"] = "confidential"
+    elif chain == "liquid" and not _is_liquid_fee_output(sanitized | {"value": value_sats}):
+        sanitized["value_state"] = "confidential"
+    elif value_sats is not None:
+        sanitized["value"] = value_sats
+    return sanitized
 
 
 def _preview_ownership_semantics(
@@ -1691,6 +2009,9 @@ def _partial_value_message(reason: str) -> str:
 
 
 def _confidential_leg(entry: Mapping[str, Any]) -> bool:
+    marker = str(entry.get("value_state") or entry.get("valueState") or "").strip().lower()
+    if marker == "confidential":
+        return True
     return any(
         entry.get(key) is not None
         for key in ("valuecommitment", "assetcommitment", "surjectionproof", "rangeproof")

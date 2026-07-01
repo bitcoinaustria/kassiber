@@ -153,20 +153,18 @@ metadata when locally known, graph support level, warnings, ownership/accounting
 annotations, and reviewed paired-route context. Bitcoin transactions with
 stored valued vin/vout can render a proportional flow graph; records with only
 safe references render a reference/amountless graph; graphless imports return a
-typed empty state. When callers pass `allowPublicLookup: true`, graphless
-Bitcoin or Liquid records with a txid may fetch public vin/vout references from
-the configured backend for the row's chain/network. Bitcoin can use either an
-HTTP explorer-style backend or an Electrum/Fulcrum backend; the Electrum path
-fetches the current raw transaction plus referenced previous transactions so
-prevout amounts are available. Liquid can use either HTTP explorer-style
-backends or Electrum/Fulcrum for reference-only graph data. There is no
-hardcoded third-party explorer fallback. Liquid confidential
-transactions may expose public references while keeping confidential amounts
-unsized or hidden. Lookup warnings use chain-specific codes such as
-`bitcoin_reference_lookup_unavailable` or `liquid_reference_lookup_failed` so
-the UI can offer a matching backend Settings action. The payload never returns
-descriptors, xpubs, backend URLs/tokens, wallet config, raw files, raw JSON
-blobs, or other secret-bearing material.
+typed empty state. Liquid confidential transactions may expose public
+references while keeping confidential amounts unsized or hidden. When the user
+allows a configured public backend lookup, the daemon caches only the sanitized
+reference graph inside the local DB/SQLCipher boundary, keyed by schema version,
+chain, network, and txid, so reopening the same transaction does not refetch the
+same public tx/prevtx material. Kassiber deliberately does not persist raw
+serialized transactions for this graph cache: the graph endpoint needs only the
+normalized refs, prevout values/scripts, and size metadata required to rebuild a
+complete current-transaction graph, not witnesses, arbitrary script payloads, or
+backend response shape. The payload never returns descriptors, xpubs, backend
+URLs/tokens, wallet config, raw files, raw JSON blobs, or other secret-bearing
+material.
 
 `ui.wallets.utxos` accepts `{"wallet":"<wallet id or label>"}` and returns the
 active local UTXO inventory for one wallet. Rows include outpoint, txid, vout,
