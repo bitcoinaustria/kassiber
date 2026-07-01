@@ -1,20 +1,26 @@
 # Kraken Offline History: BTC Daily Values
 
-This directory contains a curated Bitcoin-only Kraken offline history subset of
-OHLCVT daily values for `BTC-EUR` and `BTC-USD`.
+This directory contains a curated Bitcoin-only offline history subset in Kraken
+OHLCVT daily-row format for `BTC-EUR` and `BTC-USD`.
 
-The source files were copied from a local Kraken data export. They combine the
+The Kraken portion was copied from a local Kraken data export. It combines the
 extracted long-history daily files with the 2023 quarterly archives through
 `Kraken_OHLCVT_Q1_2026.zip`, preferring the newer quarterly archive rows where
 they overlap. `BTCUSD_Daily_OHLC.csv` was used as a cross-check for the older
 USD history; it did not contain timestamps beyond `XBTUSD_1440.csv`.
 
+The pre-Kraken portion was backfilled in the same seven-column daily row shape
+from Coin Metrics public BTC `PriceUSD` history. BTC-EUR rows use Coin Metrics
+native EUR reference rates when present, otherwise `PriceUSD` divided by the
+latest official ECB USD/EUR fixing at or before that date. Synthetic backfill
+rows set `open=high=low=close` and `volume=trades=0`.
+
 Coverage:
 
-- `XBTEUR_1440.csv`: `2013-09-10` through `2026-03-31`, with 5 missing early
-  no-candle days.
-- `XBTUSD_1440.csv`: `2013-10-06` through `2026-03-31`, with 12 missing early
-  no-candle days.
+- `XBTEUR_1440.csv`: cached close timestamps from `2011-01-01` through
+  `2026-04-01`.
+- `XBTUSD_1440.csv`: cached close timestamps from `2011-01-01` through
+  `2026-04-01`.
 
 `XBTUSD_1440.csv` was missing `2024-03-31` in the daily archives, so that row
 was derived by rolling up Kraken's own `XBTUSD_1.csv` minute candles for that

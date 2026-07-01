@@ -17,7 +17,9 @@ from kassiber.core.transfer_matching import (
     KIND_PEG_IN,
     KIND_PEG_OUT,
     KIND_SUBMARINE_SWAP,
+    KIND_SWAP_REFUND,
     METHOD_HEURISTIC,
+    METHOD_HTLC_REFUND,
     METHOD_PAYMENT_HASH,
     POLICY_CARRYING_VALUE,
     POLICY_TAXABLE,
@@ -227,6 +229,58 @@ class HeuristicMatchTests(unittest.TestCase):
         ids = _deterministic_self_transfer_ids([out, inbound])
         self.assertEqual(ids, {"o", "i"})
 
+    def test_mixed_case_txid_still_claimed_as_deterministic(self):
+        # Bitcoin txids are case-insensitive hex; two wallets recording the same
+        # self-transfer with opposite casing must still group as one proven
+        # self-transfer (in lockstep with detect_intra_transfers grouping), so
+        # the clean move is not surfaced as a swap candidate.
+        txid = "ab" * 32
+        out = _row(id="o", external_id=txid.upper(), wallet_id="cold",
+                   direction="outbound", asset="BTC", amount=100_100_000_000)
+        inbound = _row(id="i", external_id=txid.lower(), wallet_id="hot",
+                       direction="inbound", asset="BTC", amount=100_000_000_000)
+        ids = _deterministic_self_transfer_ids([out, inbound])
+        self.assertEqual(ids, {"o", "i"})
+
+    def test_zero_value_inbound_does_not_surface_self_transfer_as_swap(self):
+        # Keep this in lockstep with transfers.detect_intra_transfers: a stray
+        # zero-value inbound placeholder sharing the txid must not stop the
+        # deterministic self-transfer prefilter from claiming the real 1-out/1-in
+        # move. Otherwise the heuristic path re-surfaces an ordinary cold->hot
+        # move as a strong carrying-value swap candidate.
+        txid = "11" * 32
+        out = _row(id="o", external_id=txid, wallet_id="cold",
+                   direction="outbound", asset="BTC", amount=100_100_000_000)
+        inbound = _row(id="i", external_id=txid, wallet_id="hot",
+                       direction="inbound", asset="BTC", amount=100_000_000_000)
+        zero_inbound = _row(id="z", external_id=txid, wallet_id="csv",
+                            direction="inbound", asset="BTC", amount=0)
+
+        rows = [out, inbound, zero_inbound]
+        self.assertEqual(_deterministic_self_transfer_ids(rows), {"o", "i"})
+        self.assertEqual(suggest_swap_candidates(rows, tax_country="at"), [])
+
+    def test_fee_inclusive_leg_claimed_as_deterministic(self):
+        # A BTCPay outbound folds the miner fee into `amount` (amount_includes_fee),
+        # so the out/in gap is the fee, not an implausible residual. It must be
+        # claimed as a proven self-transfer (suppressed from swap review), in
+        # lockstep with the journal's fee-inclusive transfer guard — even when the
+        # gap exceeds the standard max(1%, 2500 sats) ceiling.
+        out = _row(id="o", external_id="txid", wallet_id="btcpay",
+                   direction="outbound", asset="BTC", amount=103_000_000,
+                   amount_includes_fee=1)
+        inbound = _row(id="i", external_id="txid", wallet_id="hot",
+                       direction="inbound", asset="BTC", amount=100_000_000)
+        self.assertEqual(_deterministic_self_transfer_ids([out, inbound]), {"o", "i"})
+
+        # Control: the identical gap on a node-backed (recipient-only) outbound is
+        # NOT claimed — it stays eligible for swap review.
+        out_node = _row(id="o2", external_id="txid2", wallet_id="cold",
+                        direction="outbound", asset="BTC", amount=103_000_000)
+        in_node = _row(id="i2", external_id="txid2", wallet_id="hot",
+                       direction="inbound", asset="BTC", amount=100_000_000)
+        self.assertEqual(_deterministic_self_transfer_ids([out_node, in_node]), set())
+
     def test_implausible_fee_self_transfer_not_claimed_as_deterministic(self):
         # The id=47 split-peg shape: a ~41x-tolerance implied fee means the
         # outbound fanned out to an unrecognized recipient, so it must NOT be
@@ -240,14 +294,25 @@ class HeuristicMatchTests(unittest.TestCase):
         self.assertEqual(ids, set())
 
     def test_cross_asset_heuristic_without_recognized_route_skipped(self):
-        # LBTC->BTC across two custom (non-chain, non-Lightning) wallets is not a
-        # recognized peg/submarine route, so the time+amount heuristic must NOT
-        # surface it as a strong candidate (would otherwise be weldable into a
-        # basis-corrupting carrying-value pair).
-        out = _row(id="o", external_id="", wallet_id="w1", wallet_kind="custom",
+        # LBTC->BTC across two custodial-exchange wallets (neither a chain nor a
+        # Lightning kind) is not a recognized peg/submarine route, so the
+        # time+amount heuristic must NOT surface it as a strong candidate (would
+        # otherwise be weldable into a basis-corrupting carrying-value pair).
+        out = _row(id="o", external_id="", wallet_id="w1", wallet_kind="strike",
                    direction="outbound", asset="LBTC", amount=100_000_000)
-        inbound = _row(id="i", external_id="", wallet_id="w2", wallet_kind="custom",
+        inbound = _row(id="i", external_id="", wallet_id="w2", wallet_kind="river",
                        direction="inbound", asset="BTC", amount=99_900_000,
+                       occurred_at="2026-03-14T17:31:00Z")
+        self.assertEqual(suggest_swap_candidates([out, inbound], tax_country="at"), [])
+
+    def test_custom_wallet_cross_asset_peg_is_not_inferred(self):
+        # `custom` is too broad: it can mean custodians, exchanges, CSV-only
+        # sources, or self-custody wallets. Do not infer a carrying-value peg
+        # from asset shape alone.
+        out = _row(id="o", external_id="", wallet_id="w1", wallet_kind="custom",
+                   direction="outbound", asset="BTC", amount=100_000_000)
+        inbound = _row(id="i", external_id="", wallet_id="w2", wallet_kind="custom",
+                       direction="inbound", asset="LBTC", amount=99_900_000,
                        occurred_at="2026-03-14T17:31:00Z")
         self.assertEqual(suggest_swap_candidates([out, inbound], tax_country="at"), [])
 
@@ -567,6 +632,121 @@ class ExcludedRowsTests(unittest.TestCase):
         out = _row(id="o", wallet_id="A", payment_hash=_PAY_HASH, direction="outbound", excluded=1)
         inbound = _row(id="i", wallet_id="B", payment_hash=_PAY_HASH, direction="inbound", asset="LBTC")
         self.assertEqual(suggest_swap_candidates([out, inbound], tax_country="at"), [])
+
+
+class RefundLinkMatchingTests(unittest.TestCase):
+    def test_same_wallet_refund_paired_by_funding_link(self):
+        lockup = _row(
+            id="lockup",
+            wallet_id="wallet-a",
+            external_id="lockup-txid",
+            direction="outbound",
+            amount=10_000_000,
+            occurred_at="2026-03-01T09:00:00Z",
+        )
+        refund = _row(
+            id="refund",
+            wallet_id="wallet-a",  # refund returns to the funding wallet
+            external_id="refund-txid",
+            swap_refund_funding_txid="lockup-txid",
+            direction="inbound",
+            amount=9_950_000,
+            occurred_at="2026-03-05T09:00:00Z",  # well past the 24h window
+        )
+        candidates = suggest_swap_candidates([lockup, refund])
+        self.assertEqual(len(candidates), 1)
+        candidate = candidates[0]
+        self.assertEqual(candidate.out_id, "lockup")
+        self.assertEqual(candidate.in_id, "refund")
+        self.assertEqual(candidate.confidence, CONFIDENCE_EXACT)
+        self.assertEqual(candidate.method, METHOD_HTLC_REFUND)
+        self.assertEqual(candidate.default_kind, KIND_SWAP_REFUND)
+        self.assertEqual(candidate.default_policy, POLICY_CARRYING_VALUE)
+        self.assertEqual(candidate.swap_fee_msat, 50_000)
+
+    def test_refund_link_with_no_matching_funding_leg_is_unmatched(self):
+        # Same-wallet refund whose funding leg isn't present (and same-wallet, so
+        # the heuristic can't rescue it either) stays unmatched.
+        refund = _row(
+            id="refund",
+            wallet_id="wallet-a",
+            external_id="refund-txid",
+            swap_refund_funding_txid="missing-lockup",
+            direction="inbound",
+            amount=9_950_000,
+        )
+        self.assertEqual(suggest_swap_candidates([refund]), [])
+
+    def test_refund_link_beats_heuristic_for_cross_wallet_refund(self):
+        # A different-wallet refund inside the window would also match the
+        # heuristic; the deterministic link must win and emit exactly one
+        # exact candidate, not a duplicate strong one.
+        lockup = _row(
+            id="lockup",
+            wallet_id="wallet-a",
+            external_id="lockup-txid",
+            direction="outbound",
+            amount=10_000_000,
+            occurred_at="2026-03-01T09:00:00Z",
+        )
+        refund = _row(
+            id="refund",
+            wallet_id="wallet-b",
+            external_id="refund-txid",
+            swap_refund_funding_txid="lockup-txid",
+            direction="inbound",
+            amount=9_950_000,
+            occurred_at="2026-03-01T15:00:00Z",
+        )
+        candidates = suggest_swap_candidates([lockup, refund])
+        self.assertEqual(len(candidates), 1)
+        self.assertEqual(candidates[0].method, METHOD_HTLC_REFUND)
+        self.assertEqual(candidates[0].confidence, CONFIDENCE_EXACT)
+
+    def test_refund_link_matches_case_insensitively(self):
+        # txids are hex; sync lowercases the funding link but external_id is
+        # stored verbatim, so the join must not be case-sensitive.
+        mixed_txid = "AABB" + "cc" * 30  # 64 chars, mixed case
+        lockup = _row(
+            id="lockup",
+            wallet_id="wallet-a",
+            external_id=mixed_txid,
+            direction="outbound",
+            amount=10_000_000,
+        )
+        refund = _row(
+            id="refund",
+            wallet_id="wallet-a",
+            external_id="refund-txid",
+            swap_refund_funding_txid=mixed_txid.lower(),
+            direction="inbound",
+            amount=9_950_000,
+        )
+        candidates = suggest_swap_candidates([lockup, refund])
+        self.assertEqual(len(candidates), 1)
+        self.assertEqual(candidates[0].method, METHOD_HTLC_REFUND)
+
+    def test_cross_asset_funding_link_not_paired(self):
+        # The same-asset guard: a refund returns the asset that was locked, so a
+        # link that points at a different-asset outbound is not a swap refund.
+        lockup = _row(
+            id="lockup",
+            wallet_id="wallet-a",
+            external_id="lockup-txid",
+            direction="outbound",
+            asset="LBTC",
+            amount=10_000_000,
+        )
+        refund = _row(
+            id="refund",
+            wallet_id="wallet-a",
+            external_id="refund-txid",
+            swap_refund_funding_txid="lockup-txid",
+            direction="inbound",
+            asset="BTC",
+            amount=9_950_000,
+        )
+        self.assertEqual(suggest_swap_candidates([lockup, refund]), [])
 
 
 if __name__ == "__main__":

@@ -17,7 +17,7 @@ import {
 } from "@/components/kb/wallets";
 import { useDaemon } from "@/daemon/client";
 import { useWalletSyncAction } from "@/hooks/useWalletSyncAction";
-import { connectionKindCategoryLabels } from "@/lib/connectionDisplay";
+import { connectionCategoryLabel } from "@/lib/connectionDisplay";
 import { useCurrency } from "@/lib/currency";
 import { screenShellClassName } from "@/lib/screen-layout";
 import { useUiStore } from "@/store/ui";
@@ -26,7 +26,7 @@ import type { ConnectionStatus, OverviewSnapshot } from "@/mocks/seed";
 
 export function Connections() {
   const { data, isLoading } = useDaemon<OverviewSnapshot>("ui.overview.snapshot");
-  const { syncAll, isSyncing } = useWalletSyncAction();
+  const { isSyncing } = useWalletSyncAction();
   const hideSensitive = useUiStore((s) => s.hideSensitive);
   const currency = useCurrency();
   const navigate = useNavigate();
@@ -59,7 +59,7 @@ export function Connections() {
   const filteredConnections = snapshot.connections.filter(
     (connection) =>
       (kindFilter === "all" ||
-        connectionKindCategoryLabels[connection.kind] === kindFilter) &&
+        connectionCategoryLabel(connection) === kindFilter) &&
       (statusFilter === "all" || connection.status === statusFilter),
   );
   const hasActiveFilters = kindFilter !== "all" || statusFilter !== "all";
@@ -76,9 +76,7 @@ export function Connections() {
   return (
     <div className={screenShellClassName}>
       <WalletsDashboardHeader
-        isSyncing={isSyncing}
         onAddWallet={() => setAddConnectionOpen(true)}
-        onRefreshAll={syncAll}
       />
       <AddConnectionDialog
         open={addConnectionOpen}
@@ -114,6 +112,7 @@ export function Connections() {
           onSelectConnection={onSelectConnection}
           priceEur={snapshot.priceEur}
           totalBtc={totalBtc}
+          totalCount={snapshot.connections.length}
         />
       </div>
     </div>

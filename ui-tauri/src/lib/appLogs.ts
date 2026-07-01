@@ -90,6 +90,7 @@ const OPERATIONAL_FIELD_TYPES = new Set<AppLogFieldType>([
 let memoryRing: AppLogRecord[] = [];
 let memoryRingBytes = 2;
 const subscribers = new Set<() => void>();
+const AMOUNT_PSEUDONYM_SALT = createAmountPseudonymSalt();
 
 type TextBackstopReplacement = string | ((...matches: string[]) => string);
 
@@ -145,65 +146,90 @@ const PUBLIC_SAFE_AMOUNT_UNITS =
 const PUBLIC_SAFE_PAIR_UNITS = PUBLIC_SAFE_AMOUNT_UNITS;
 const PUBLIC_SAFE_CURRENCY_SYMBOLS = "\\u20ac$\\u00a3\\u00a5\\u20bf";
 
-const PUBLIC_SAFE_TEXT_PATTERNS: Array<[RegExp, TextBackstopReplacement]> = [
+// Named operational detectors. txid + amount are handled by the shared
+// pseudonymizers below (both tiers); the rest are public_safe-only hard masks.
+const PS_URL_RE = /\b(?:https?|tcp|ssl):\/\/[^\s,;"')\]}]+/gi;
+const PS_EMAIL_RE = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi;
+const PS_RATE_RE = new RegExp(
+  `\\b(?:${PUBLIC_SAFE_PAIR_UNITS})[/-](?:${PUBLIC_SAFE_PAIR_UNITS})\\s*(?::|=|at|rate)?\\s*${PUBLIC_SAFE_AMOUNT_NUMBER}\\b`,
+  "gi",
+);
+const PS_BECH32_RE = /\b(?:bc1|tb1|bcrt1|lq1|ex1)[023456789acdefghjklmnpqrstuvwxyz]{20,90}\b/gi;
+const PS_BASE58_RE = /\b[13][1-9A-HJ-NP-Za-km-z]{25,34}\b/g;
+const PS_ONION_RE = /\b[A-Za-z0-9.-]{16,}\.onion\b/gi;
+const PS_PATH_RE =
+  /(?:^|[\s"'(])(?:\/Users|\/home|\/var|\/private|\/tmp)\/[^\s,;"')\]}]+/g;
+
+// One combined amount detector covering "UNIT NUM", "NUM UNIT", "SYM NUM" and
+// "NUM SYM". A single .replace() pass means the pseudonym we emit (which itself
+// contains a "~<magnitude> <unit>" string) is never re-scanned and double-masked.
+// All inner groups are non-capturing, so the callback gets (match, offset, full).
+const AMOUNT_TOKEN_RE = new RegExp(
   [
-    /\b(?:https?|tcp|ssl):\/\/[^\s,;"')\]}]+/gi,
-    "[redacted-url]",
-  ],
-  [
-    /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi,
-    "[redacted-email]",
-  ],
-  [
-    new RegExp(
-      `\\b(?:${PUBLIC_SAFE_PAIR_UNITS})[/-](?:${PUBLIC_SAFE_PAIR_UNITS})\\s*(?::|=|at|rate)?\\s*${PUBLIC_SAFE_AMOUNT_NUMBER}\\b`,
-      "gi",
-    ),
-    "[redacted-rate]",
-  ],
-  [
-    new RegExp(
-      `\\b(?:${PUBLIC_SAFE_AMOUNT_UNITS})\\s*${PUBLIC_SAFE_AMOUNT_NUMBER}\\b`,
-      "gi",
-    ),
-    "[redacted-amount]",
-  ],
-  [
-    new RegExp(
-      `\\b${PUBLIC_SAFE_AMOUNT_NUMBER}\\s*(?:${PUBLIC_SAFE_AMOUNT_UNITS})\\b`,
-      "gi",
-    ),
-    "[redacted-amount]",
-  ],
-  [
-    new RegExp(`[${PUBLIC_SAFE_CURRENCY_SYMBOLS}]\\s*${PUBLIC_SAFE_AMOUNT_NUMBER}\\b`, "g"),
-    "[redacted-amount]",
-  ],
-  [
-    new RegExp(`\\b${PUBLIC_SAFE_AMOUNT_NUMBER}\\s*[${PUBLIC_SAFE_CURRENCY_SYMBOLS}]`, "g"),
-    "[redacted-amount]",
-  ],
-  [
-    /\b(?:bc1|tb1|bcrt1|lq1|ex1)[023456789acdefghjklmnpqrstuvwxyz]{20,90}\b/gi,
-    "[redacted-address]",
-  ],
-  [
-    /\b[13][1-9A-HJ-NP-Za-km-z]{25,34}\b/g,
-    "[redacted-address]",
-  ],
-  [
-    /\b[0-9a-f]{64}\b/gi,
-    "[redacted-txid]",
-  ],
-  [
-    /\b[A-Za-z0-9.-]{16,}\.onion\b/gi,
-    "[redacted-onion]",
-  ],
-  [
-    /(?:^|[\s"'(])(?:\/Users|\/home|\/var|\/private|\/tmp)\/[^\s,;"')\]}]+/g,
-    (match) => `${match[0] === "/" ? "" : match[0]}[redacted-path]`,
-  ],
-];
+    `\\b(?:${PUBLIC_SAFE_AMOUNT_UNITS})\\s*${PUBLIC_SAFE_AMOUNT_NUMBER}\\b`,
+    `(?<![A-Za-z0-9])${PUBLIC_SAFE_AMOUNT_NUMBER}\\s*(?:${PUBLIC_SAFE_AMOUNT_UNITS})\\b`,
+    `[${PUBLIC_SAFE_CURRENCY_SYMBOLS}]\\s*${PUBLIC_SAFE_AMOUNT_NUMBER}\\b`,
+    `(?<![A-Za-z0-9])${PUBLIC_SAFE_AMOUNT_NUMBER}\\s*[${PUBLIC_SAFE_CURRENCY_SYMBOLS}]`,
+  ].join("|"),
+  "gi",
+);
+const MARKET_RATE_PAIR_PREFIX_RE = new RegExp(
+  `(?:^|\\b)(?:${PUBLIC_SAFE_PAIR_UNITS})$`,
+  "i",
+);
+
+function createAmountPseudonymSalt(): string {
+  try {
+    const bytes = new Uint32Array(2);
+    globalThis.crypto?.getRandomValues?.(bytes);
+    if (bytes.some((part) => part !== 0)) {
+      return Array.from(bytes, (part) => part.toString(16).padStart(8, "0")).join("");
+    }
+  } catch {
+    // Fall through to a non-cryptographic runtime nonce. The salt is not exported;
+    // it only prevents offline dictionary reversal of low-entropy exact amounts.
+  }
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+}
+
+function isMarketRateTail(full: string, offset: number): boolean {
+  const prev = full[offset - 1];
+  if (prev !== "/" && prev !== "-") return false;
+  return MARKET_RATE_PAIR_PREFIX_RE.test(full.slice(0, offset - 1).trimEnd());
+}
+
+function replaceAmounts(text: string, showScale: boolean): string {
+  return text.replace(
+    AMOUNT_TOKEN_RE,
+    (match: string, offset: number, full: string) => {
+      // A market rate ("BTC/EUR 64000.12") is public data, not the user's
+      // amount — its trailing "EUR 64000.12" is preceded by the pair separator,
+      // so leave it readable (public_safe masks the whole rate separately).
+      if (isMarketRateTail(full, offset)) return match;
+      const numMatch = match.match(/[+-]?\d[\d.,_ ]*\d|[+-]?\d/);
+      const num = numMatch ? numMatch[0] : match;
+      const unit = match.replace(num, "").replace(/\s+/g, "").trim();
+      return pseudoAmount(num, unit, showScale);
+    },
+  );
+}
+
+// Glued/keyed sat amounts: amount_sat=50000, fee_msat: 100000, "value_sats":12345.
+// The unit is part of the identifier, so AMOUNT_TOKEN_RE's \b never fires and the
+// integer LOOKS protected while leaking. Match key=value / key:value where the
+// key ends in a sat/msat unit and pseudonymize just the number, keeping the key.
+const KEYED_AMOUNT_RE =
+  /\b([A-Za-z][A-Za-z0-9_]*(?:msats?|sats?))\b(['"]?\s*[:=]\s*['"]?)([+-]?\d[\d.,_]*\d|[+-]?\d)/gi;
+
+function replaceKeyedAmounts(text: string, showScale: boolean): string {
+  return text.replace(
+    KEYED_AMOUNT_RE,
+    (_m: string, key: string, sep: string, num: string) => {
+      const unit = /msat/i.test(key) ? "msat" : "sat";
+      return `${key}${sep}${pseudoAmount(num, unit, showScale)}`;
+    },
+  );
+}
 
 export function appLogLevels(): AppLogLevel[] {
   return ["trace", "debug", "info", "warning", "error"];
@@ -265,7 +291,7 @@ export function redactLogRecord(
   if (!options.redacted) return record;
   return {
     ...record,
-    msg: redactTextForMode(record.msg, options.mode ?? "public_safe"),
+    msg: redactTextForMode(record.msg, options),
     fields: redactFields(record.fields, options),
     spantrace: record.spantrace?.map((child) => redactLogRecord(child, options)),
   };
@@ -321,7 +347,13 @@ export function exportLogRecords(
     `- OS: ${options.header.os}`,
     `- Generated: ${options.header.generatedAt ?? new Date().toISOString()}`,
     `- Time range: ${options.header.timeRange}`,
-    `- Active filter: ${options.header.activeFilter}`,
+    // The active filter embeds the user's raw log-search query, which can be a
+    // txid/amount they pasted in to find a record; scrub it in redacted exports.
+    `- Active filter: ${
+      options.redacted
+        ? redactTextForMode(options.header.activeFilter, options)
+        : options.header.activeFilter
+    }`,
     `- Redaction: ${options.header.redaction}`,
     "",
     "```log",
@@ -386,7 +418,9 @@ export function exportSupportBundleRecords(
       app_version: options.header.appVersion,
       os: options.header.os,
       time_range: options.header.timeRange,
-      active_filter: options.header.activeFilter,
+      // The active filter carries the user's raw log-search query (possibly a
+      // pasted txid/amount); pseudonymize it like any other operational text.
+      active_filter: redactTextForMode(options.header.activeFilter, renderOptions),
       redaction: mode,
       public_safe: mode === "public_safe",
       format_note: supportBundleFormatNote(mode),
@@ -402,7 +436,7 @@ export function exportSupportBundleRecords(
     {
       kind: "kassiber.support_bundle.issue",
       schema_version: 1,
-      description: redactTextForMode(options.issueDescription.trim(), mode),
+      description: redactTextForMode(options.issueDescription.trim(), renderOptions),
     },
     {
       kind: "kassiber.support_bundle.redaction_report",
@@ -447,9 +481,9 @@ export function exportSupportBundleRecords(
 
 function supportBundleFormatNote(mode: AppLogRedactionMode): string {
   if (mode === "public_safe") {
-    return "Each following JSONL row is independently redacted for public support: wallet/credential material is stripped and operational fields such as amounts, addresses, txids, paths, URLs, emails, IPs, labels, and onion hosts are masked.";
+    return "Each following JSONL row is independently redacted for public support: wallet/credential material is stripped, txids are replaced with stable pseudonyms (txid#…), amounts are replaced with salted runtime pseudonyms (amount#…), and operational fields such as addresses, paths, URLs, emails, IPs, labels, and onion hosts are masked.";
   }
-  return "High-signal support bundles keep operational debugging data readable, including amounts, addresses, txids, paths, URLs, labels, emails, IPs, onion hosts, and error text. They still strip wallet/credential material and are intended for the maintainer or a trusted debugging session, not public posting.";
+  return "High-signal support bundles keep operational debugging data readable, including addresses, paths, URLs, labels, emails, IPs, onion hosts, and error text. Txids are replaced with stable pseudonyms (txid#…), and amounts are replaced with salted runtime pseudonyms (amount#… with a coarse ~magnitude) — never the raw value — so cross-line correlation survives without exposing exact amounts. Wallet/credential material is stripped. Intended for the maintainer or a trusted debugging session, not public posting.";
 }
 
 export function stableMaskedValue(field: AppLogField): string {
@@ -467,7 +501,7 @@ export function stableMaskedValue(field: AppLogField): string {
     case "descriptor":
       return maskDescriptor(value);
     case "txid":
-      return `txid#${stableHash(value)}`;
+      return pseudoTxid(value);
     case "path":
       return maskPath(value);
     case "label":
@@ -480,8 +514,10 @@ export function stableMaskedValue(field: AppLogField): string {
       return `email#${stableHash(value)}`;
     case "ip":
       return `ip#${stableHash(value)}`;
-    case "amount":
-      return `amount#${stableHash(value)}`;
+    case "amount": {
+      const { num, unit } = parseTypedAmount(value);
+      return pseudoAmount(num, unit, false);
+    }
     default:
       return value;
   }
@@ -492,29 +528,47 @@ function redactField(
   options: AppLogRenderOptions,
 ): AppLogField {
   const mode = options.mode ?? "public_safe";
+  const showScale = !options.maskAmounts;
   if (SECRET_FLOOR_FIELD_TYPES.has(field.type)) {
     return { type: "text", value: stableMaskedValue(field) };
   }
-  if (field.type === "text") {
-    const value = stringifyLogValue(field.value);
-    return { ...field, value: redactTextForMode(value, mode) };
+  // txid + amount are pseudonymized in BOTH tiers — never raw in any redacted
+  // export. The stable pseudonym preserves cross-line correlation; for amounts
+  // a coarse magnitude is appended (unless scale is hidden) so sat/msat-scale
+  // and fee-plausibility debugging still works.
+  if (field.type === "txid") {
+    return { type: "text", value: pseudoTxid(String(field.value ?? "")) };
   }
   if (field.type === "amount") {
-    return mode === "public_safe" && options.maskAmounts
-      ? { type: "text", value: stableMaskedValue(field) }
-      : field;
+    const { num, unit } = parseTypedAmount(field.value);
+    return { type: "text", value: pseudoAmount(num, unit, showScale) };
+  }
+  if (field.type === "text") {
+    const value = stringifyLogValue(field.value);
+    return { ...field, value: redactTextForMode(value, options) };
   }
   if (OPERATIONAL_FIELD_TYPES.has(field.type)) {
     if (mode === "public_safe") {
       return { type: "text", value: stableMaskedValue(field) };
     }
-    return { ...field, value: redactSecretFloorText(stringifyLogValue(field.value)) };
+    // high_signal keeps address/url/path/label/etc. readable (owner scope is
+    // txid+amount only) but still runs the secret floor + txid/amount scrub.
+    return {
+      ...field,
+      value: redactTextForMode(stringifyLogValue(field.value), options),
+    };
   }
   if (mode === "high_signal") {
+    // Number/boolean/duration values can't hide a txid/amount string, but a
+    // STRING value mislabeled under a non-operational type can — scrub those
+    // rather than passing them through verbatim.
+    if (typeof field.value === "string") {
+      return { ...field, value: redactTextForMode(field.value, options) };
+    }
     return field;
   }
   const value = stringifyLogValue(field.value);
-  return { ...field, value: redactTextForMode(value, mode) };
+  return { ...field, value: redactTextForMode(value, options) };
 }
 
 function redactFields(
@@ -585,21 +639,44 @@ function secretFloorFieldsAtInsert(
   return changed ? Object.fromEntries(entries) : fields;
 }
 
-function redactTextForMode(value: string, mode: AppLogRedactionMode): string {
+function redactTextForMode(value: string, options: AppLogRenderOptions): string {
+  const mode = options.mode ?? "public_safe";
+  const showScale = !options.maskAmounts;
   return mode === "public_safe"
-    ? redactPublicSafeText(value)
-    : redactSecretFloorText(value);
+    ? redactPublicSafeText(value, showScale)
+    : redactHighSignalText(redactSecretFloorText(value), showScale);
 }
 
 function redactSecretFloorText(value: string): string {
   return applyTextBackstop(value, SECRET_FLOOR_TEXT_PATTERNS);
 }
 
-function redactPublicSafeText(value: string): string {
-  return applyTextBackstop(
-    redactSecretFloorText(value),
-    PUBLIC_SAFE_TEXT_PATTERNS,
-  );
+// high_signal keeps operational data (addresses, paths, URLs, labels) readable
+// for debugging, but txids and amounts are ALWAYS pseudonymized — they are the
+// wallet fingerprint an AI debugging session must never receive raw.
+function redactHighSignalText(value: string, showScale: boolean): string {
+  let out = value.replace(TXID_RE, (m) => pseudoTxid(m));
+  out = replaceAmounts(out, showScale);
+  // Keyed amounts last: replaceAmounts has already run, so the "~magnitude unit"
+  // the keyed pseudonym emits is never re-scanned and double-masked.
+  return replaceKeyedAmounts(out, showScale);
+}
+
+function redactPublicSafeText(value: string, showScale: boolean): string {
+  let out = redactSecretFloorText(value);
+  out = out.replace(PS_URL_RE, "[redacted-url]");
+  out = out.replace(PS_EMAIL_RE, "[redacted-email]");
+  out = out.replace(PS_RATE_RE, "[redacted-rate]");
+  // txid + amount become stable pseudonyms (not [redacted]) so even a public
+  // bundle keeps cross-line correlation; addresses/onion/paths stay hard-masked.
+  out = out.replace(TXID_RE, (m) => pseudoTxid(m));
+  out = replaceAmounts(out, showScale);
+  out = replaceKeyedAmounts(out, showScale);
+  out = out.replace(PS_BECH32_RE, "[redacted-address]");
+  out = out.replace(PS_BASE58_RE, "[redacted-address]");
+  out = out.replace(PS_ONION_RE, "[redacted-onion]");
+  out = out.replace(PS_PATH_RE, (m) => `${m[0] === "/" ? "" : m[0]}[redacted-path]`);
+  return out;
 }
 
 function applyTextBackstop(
@@ -718,7 +795,7 @@ function redactionReportForRecords(
     if (redactSecretFloorText(record.msg) !== record.msg) {
       secretFloorTextHits += 1;
     }
-    if (mode === "public_safe" && redactPublicSafeText(record.msg) !== record.msg) {
+    if (mode === "public_safe" && redactPublicSafeText(record.msg, true) !== record.msg) {
       publicSafeTextHits += 1;
     }
     for (const field of Object.values(record.fields)) {
@@ -734,14 +811,17 @@ function redactionReportForRecords(
       if (redactSecretFloorText(value) !== value) {
         secretFloorTextHits += 1;
       }
-      if (mode === "public_safe" && redactPublicSafeText(value) !== value) {
+      if (mode === "public_safe" && redactPublicSafeText(value, true) !== value) {
         publicSafeTextHits += 1;
       }
     }
   }
   return {
     mode,
-    exact_amounts: mode === "public_safe" ? "masked" : "readable",
+    // txids + amounts are pseudonymized in BOTH tiers; high_signal additionally
+    // keeps a coarse ~magnitude on amounts for debugging, public_safe drops it.
+    txids: "pseudonymized",
+    amounts: mode === "public_safe" ? "pseudonymized" : "pseudonymized-with-magnitude",
     omitted_events_from_start: omittedEvents,
     secret_floor_field_counts: secretFloorFieldCounts,
     operational_field_counts: operationalFieldCounts,
@@ -833,10 +913,75 @@ function maskPath(value: string): string {
 }
 
 function stableHash(value: string): string {
+  // FNV-1a (32-bit). The daemon mirrors this exactly in
+  // kassiber/redaction.py::_stable_hash so a txid pseudonymized Python-side and
+  // one pseudonymized here collapse to the SAME token across the merged stream.
+  // 8 hex chars (32-bit space) keeps cross-line correlation collision-safe on a
+  // full bundle; the old 4-hex truncation collided after a few thousand values.
   let hash = 0x811c9dc5;
   for (let i = 0; i < value.length; i += 1) {
     hash ^= value.charCodeAt(i);
     hash = Math.imul(hash, 0x01000193) >>> 0;
   }
-  return hash.toString(16).padStart(8, "0").slice(0, 4);
+  return hash.toString(16).padStart(8, "0");
+}
+
+// txids and amounts are NEVER readable in an export (any tier) — they are the
+// wallet-fingerprinting data a developer must not hand to an AI after a
+// real-wallet test sync. Txids stay globally stable for correlation; amount
+// tokens are salted so low-entropy exact amounts cannot be dictionary-reversed.
+// {64,} (not {64}) so a >=65-hex run (two concatenated txids, a txid glued to
+// trailing hex) still has a word boundary and is pseudonymized as one token
+// instead of slipping through the {64}\b gap.
+const TXID_RE = /\b[0-9a-f]{64,}\b/gi;
+
+function pseudoTxid(value: string): string {
+  return `txid#${stableHash(value.toLowerCase())}`;
+}
+
+function parseAmountNumber(raw: string): number {
+  // Logs are machine/English (CLI/daemon are not localized), so `.` is the
+  // decimal separator; strip `,`/`_`/space grouping before parsing.
+  return Number.parseFloat(raw.replace(/[,_ ]/g, ""));
+}
+
+// Coarse order-of-magnitude bucket, e.g. 0.0123 -> "~0.01", 12345678 -> "~1e7".
+// Keeps debugging signal (sat/msat scale, fee plausibility) without the exact,
+// fingerprinting value.
+function amountMagnitude(raw: string): string {
+  const n = parseAmountNumber(raw);
+  if (!Number.isFinite(n) || n === 0) return "~0";
+  const exp = Math.floor(Math.log10(Math.abs(n)));
+  const sign = n < 0 ? "-" : "";
+  let body: string;
+  if (exp < 0) body = Math.pow(10, exp).toFixed(-exp);
+  else if (exp <= 4) body = String(Math.pow(10, exp));
+  else body = `1e${exp}`;
+  return `~${sign}${body}`;
+}
+
+function pseudoAmount(rawNumber: string, unit: string, showScale: boolean): string {
+  // Include a runtime-only salt so low-entropy exact amounts cannot be recovered
+  // by enumerating likely values against a public `amount#...` token. The raw
+  // amount still normalizes as a string to avoid float-formatting drift.
+  const key = `${AMOUNT_PSEUDONYM_SALT}|${rawNumber.replace(/[,_ ]/g, "")}|${unit.toLowerCase()}`;
+  const token = `amount#${stableHash(key)}`;
+  if (!showScale) return token;
+  const mag = amountMagnitude(rawNumber);
+  return unit ? `${token} (${mag} ${unit})` : `${token} (${mag})`;
+}
+
+// Split a typed `amount` field value (e.g. "1.234 BTC", "2500 sats", or a bare
+// number) into its numeric and unit parts for pseudonymization.
+function parseTypedAmount(value: unknown): { num: string; unit: string } {
+  const text = typeof value === "number" ? String(value) : String(value ?? "").trim();
+  // Leading currency symbol ("€12,345.67"): fold the symbol into `unit` so the
+  // token matches the free-text path, which derives the unit the same way.
+  const sym = text.match(/^([€$£¥₿])\s*([+-]?[\d.,_ ]*\d)/);
+  if (sym) return { num: sym[2].trim(), unit: sym[1] };
+  const match = text.match(
+    /^([+-]?[\d.,_ ]*\d)\s*([A-Za-z]{1,6}|[€$£¥₿])?/,
+  );
+  if (!match) return { num: text, unit: "" };
+  return { num: match[1].trim(), unit: (match[2] ?? "").trim() };
 }

@@ -1,5 +1,6 @@
 import json
 import unittest
+from unittest.mock import patch
 from urllib.parse import parse_qs, urlsplit
 
 from kassiber.sync_btcpay import fetch_btcpay_invoice_provenance, fetch_btcpay_records
@@ -56,6 +57,27 @@ class BtcpayIncrementalTest(unittest.TestCase):
                 "payments": [],
             }
         ]
+
+    def test_wallet_history_default_opener_uses_backend_proxy(self):
+        backend = {
+            "name": "btcpay",
+            "kind": "btcpay",
+            "url": "https://btcpay.example",
+            "token": "secret",
+            "tor_proxy": "socks5h://127.0.0.1:9050",
+        }
+        opener = _Opener({0: []})
+        with patch(
+            "kassiber.sync_btcpay.build_proxy_opener",
+            return_value=opener,
+        ) as build_opener:
+            records = fetch_btcpay_records(backend, "store", page_size=1)
+        self.assertEqual(records, [])
+        build_opener.assert_called_once_with(
+            "socks5h://127.0.0.1:9050",
+            source_label="BTCPay",
+        )
+        self.assertEqual(len(opener.urls), 1)
 
     def test_wallet_history_skips_unchanged_page_and_continues_to_end(self):
         backend = {"name": "btcpay", "kind": "btcpay", "url": "https://btcpay.example", "token": "secret"}

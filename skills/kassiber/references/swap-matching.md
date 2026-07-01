@@ -34,12 +34,19 @@ re-run `kassiber --machine journals process` before trusting any report.
 
 ## Confidence ladder
 
-`transfers suggest` emits two confidence bands; they have different
-review requirements.
+`transfers suggest` emits `exact` and `strong` confidence bands; they
+have different review requirements.
 
-- **`exact`** — both legs share a Lightning ``payment_hash``. This is
-  cryptographic identity across the swap; bulk-pair these without per-row
-  review. Method is `payment_hash`.
+- **`exact`** — a deterministic link, safe to bulk-pair without per-row
+  review. Two methods produce it:
+  - `payment_hash` — both legs share a Lightning ``payment_hash``
+    (cryptographic identity across the swap).
+  - `htlc_refund` — the inbound leg is a failed-swap refund whose input
+    spends the outbound leg's on-chain HTLC funding output (see
+    [Failed swaps and refunds](#failed-swaps-and-refunds)). Unlike the
+    heuristic, this pairs **same-wallet** legs and ignores the time
+    window, because a refund returns to the funding wallet and lands
+    after the CLTV timeout. Default kind is `swap-refund`.
 - **`strong`** — different wallets, opposite directions, time delta
   within the window (default 24h), and `|out_amount - in_amount|` sits
   below the fee threshold (`max(1% of out, 2500 sats)`). Method is
@@ -71,6 +78,49 @@ suggest) or dismiss the wrong ones.
 - It never silently overrides the existing `transfers pair` validation
   rules: cross-asset `policy=carrying-value` still requires an Austrian
   profile; same-asset `policy=taxable` is still rejected.
+
+## Failed swaps and refunds
+
+A swap that fails (the Lightning payment can't be made, the invoice
+expires) is swept back on-chain through the HTLC's CLTV timeout branch.
+It shows up as two transactions with **different** txids: an outbound
+**lockup** to the swap HTLC, and a later inbound **refund** that returns
+the asset minus on-chain fees. Economically nothing was disposed of —
+the only cost is the miner fees. Left unpaired, the lockup books as a
+phantom SELL and the refund as a phantom BUY.
+
+Two pieces handle this:
+
+- **Pairing is allowed, even same-wallet.** The refund normally returns
+  to the funding wallet, so same-wallet same-asset pairs are accepted.
+  Pair the send and refund with `--kind swap-refund --policy carrying-value`
+  (any same-asset profile — this is a self-transfer, not a cross-asset
+  swap, so it does not need an Austrian profile). The round trip books as
+  a transfer that realizes only the fee delta; no disposal.
+
+  ```
+  kassiber transfers pair --tx-out <lockup-id> --tx-in <refund-id> \
+    --kind swap-refund --policy carrying-value
+  ```
+
+- **Automatic detection from chain data.** When BTC/Liquid descriptor
+  sync (esplora / electrum) sees an inbound tx whose input spends a
+  Boltz v1 HTLC via the refund (timeout) branch, it records the funding
+  txid it spent on `transactions.swap_refund_funding_txid`. The matcher
+  pairs that refund to the outbound leg whose `external_id` is that txid
+  and surfaces it as an **exact** `swap-refund` candidate (method
+  `htlc_refund`) — same-wallet and outside the time window included.
+  Filter to just these with `transfers suggest --method htlc_refund`.
+
+  Surfacing only — like every exact candidate it auto-pairs only via an
+  explicit `transfers bulk-pair`, a rule, or a user action.
+
+Coverage limits: the link needs on-chain witness data, so it covers
+chain-synced Boltz v1 P2WSH HTLC refunds. CSV/exchange imports and Boltz
+v2 Taproot cooperative refunds carry no witness, and rows synced before
+the `swap_refund_funding_txid` column existed are not backfilled — those
+fall back to the heuristic (different-wallet refunds inside the window)
+or to manual `swap-refund` pairing.
 
 ## Direct swap payouts
 
@@ -171,6 +221,11 @@ Where the matcher's exact-match path applies:
 - **Boltz v2 Taproot cooperative spends** reveal nothing on-chain
   (key-path Schnorr signature only), so those swaps fall through to
   the heuristic match by physics, not by deferral.
+- **Failed-swap refunds** take the HTLC timeout branch and reveal no
+  preimage, so there is no `payment_hash`. Sync instead records the
+  funding txid the refund spent on `transactions.swap_refund_funding_txid`,
+  feeding the `htlc_refund` exact path (see
+  [Failed swaps and refunds](#failed-swaps-and-refunds)).
 
 The exact-match path is also future-proofed for `coreln`, `lnd`, and
 `nwc` adapters once they sync — they all expose `payment_hash` on

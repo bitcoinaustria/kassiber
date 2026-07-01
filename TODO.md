@@ -112,14 +112,38 @@ Use `./scripts/quality-gate.sh` before calling work ready to push. It wraps the 
   Veräußerung, gleitender Durchschnittspreis, Wegzugsbesteuerung, Kennzahl,
   Beilage E 1kv, KESt…), Austrian month/“heuer”. Verified via typecheck, the
   en/de parity test, build, and live browser screenshots.
+- [x] **Bitcoin-backed loan marks (per-transaction non-events)** — mark BTC
+  collateral posted/returned for fiat loans and BTC principal received/repaid for
+  BTC-denominated loans. Collateral locks/releases preserve owned basis;
+  borrowed BTC principal is liability principal, not owned-coin
+  acquisition/disposal. The mark suppresses the relevant branches at
+  [`tax_events.py`](kassiber/core/tax_events.py) / [`rp2.py`](kassiber/core/engines/rp2.py);
+  storage is one minimal `loan_legs` row (`transaction_id` + role + optional
+  `loan_id`). Deliberately **not** a facility: no custody / rehypothecation /
+  interest / liquidation modelling. Liquidation is handled by **un-marking**
+  (the outbound reverts to the disposal it really was); `open_collateral_locks`
+  surfaces locks that haven't returned as a reconcile hint. UI is a Transactions
+  row action + badge/detail linked-leg section (no `/loans` screen); CLI
+  `loans mark|link|unmark|list`.
+  - [x] Resilience precursor: a carrying-value swap whose leg was blocked in
+    phase 1 (e.g. `insufficient_lots` on a self-custody round-trip paired as a BTC↔L-BTC
+    swap) is quarantined as a pair in `_select_at_cross_asset_swap_links` instead of
+    being promoted to an `at_swap_link` that bypassed the quantity gate and aborted the
+    whole report. Regression: `ATSwapOverSellQuarantineTest`; contract in
+    [docs/austrian-handoff.md](docs/austrian-handoff.md).
+  - The facility design (provider presets, custody/rehypothecation matrix, import
+    on-ramps, Steuerberater export) was explored in
+    [docs/plan/12-collateralized-loans.md](docs/plan/12-collateralized-loans.md) and
+    deliberately dropped as over-built — the per-tx mark covers the actual tax fact.
 - [ ] **Finish the i18n long tail:**
   - Reporting surfaces deferred by product call: `routes/Reports.tsx`,
     `routes/ExitTax.tsx`, `LightningProfitabilityPanel.tsx`, and report-output
     strings.
   - Shared `lib/` enum→label maps consumed across surfaces
     (`lib/connectionDisplay.ts`, `lib/syncProgress.ts`,
-    `lib/connectionCatalog.ts`, journals `model.ts` helpers): thread the active
-    `t`/`TFunction` so the conversion stays consistent across every consumer.
+    `lib/connectionCatalog.tsx`, `components/kb/journalReportableEntriesModel.ts`):
+    thread the active `t`/`TFunction` so the conversion stays consistent across
+    every consumer.
   - Locale-driven formatting: migrate hardcoded `en-US` `toLocaleString`/`Intl`
     call sites (chart axes, dates, percentages) to `localeForLanguage(lang)`
     with AT decimal-comma / space-before-`%` / `Jänner` conventions. This is
@@ -266,7 +290,7 @@ top of the monolith.
 
 ### 0.5f - External document reconciliation groundwork
 
-- [ ] Add [docs/plan/08-external-document-reconciliation.md](docs/plan/08-external-document-reconciliation.md) follow-through in code and schema rather than letting merchant/invoice scope drift ad hoc
+- [x] Add [docs/plan/08-external-document-reconciliation.md](docs/plan/08-external-document-reconciliation.md) follow-through in code and schema (Implementation Order steps 1-6 shipped: 4-table schema, BTCPay provenance ingest, deterministic matching/allocation, review/confirm workflow, conservative tax normalization, CSV subledger export — daemon/CLI-backed with tests). The remaining tail is tracked separately: optional local AI extraction/tie-breaking (step 7, later-backlog item below) and the richer desktop reconciliation workbench
 - [x] Persist BTCPay confirmed wallet-sync config on wallets so `wallets sync` / `wallets sync --all` can reuse store-backed sources without retyping `--store-id`
 - [x] Let desktop BTCPay setup either create BTCPay-only wallet sources or map store payment methods onto existing settlement wallets for provenance
 - [ ] Keep BTCPay file import conservative (`deposit` / `withdrawal`) until a confirmed document match or explicit review step reclassifies the transaction
@@ -295,6 +319,23 @@ top of the monolith.
   copy selected URL references as new rows, duplicate managed file attachments
   under new attachment ids, preserve provenance, and surface copied evidence in
   readiness/audit package manifests.
+- [x] Match strict exchange-facing granularity in the report: per-transaction
+  fee and import-provenance columns (chain sync / platform export / manual
+  import), level-grouped PDF transaction detail tables with in/out amounts and
+  per-level fiat subtotals, provenance-based data-source ring, root-source
+  detail table, contents list on the cover, a missing-history section with
+  unexplained amounts, and a disclosure-footprint summary (wallets named +
+  common-ownership note) in payload, PDF, and desktop preview.
+- [x] Auto-assemble the flow graph from real transaction structure across
+  layers: `utxo_spend` deriver joins vin outpoints (esplora/electrum
+  `raw_json`) and Wasabi `spent_by` against owned `wallet_utxos` for exact
+  same-wallet parent chaining and multi-wallet leg funding (Bitcoin and
+  Liquid); `payment_hash` deriver links Lightning legs; both are
+  deterministic bulk-review methods; one-pair-one-link guard prevents
+  cross-method double allocation; `source-funds assemble` /
+  `ui.source_funds.assemble` loop suggest + bulk review to convergence
+  (local evidence only, no network); desktop review step is assemble-first
+  with actionable gap cards dispatching `next_step.action`.
 - [ ] Add graph visualization polish for dense source-funds cases after real-user feedback; keep the current editor workflow as the source of truth
 - [ ] Add optional configured-backend chain observations with an explicit public-backend privacy warning; keep them weak suggestions unless reviewed
 - [ ] Add optional OCR/photo/invoice extraction after the evidence review and
@@ -315,8 +356,15 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
   modules so each handler is a pure `(args_dict) -> envelope_dict` callable
 - [ ] Centralize the safe-view contract in `kassiber/core/api/safe_views.py`
   so every consumer sees the same redaction
-- [ ] Add `~/.kassiber/logs/` (or per-project `logs/`) with rotation; teach
-  `diagnostics collect` to fold all logs
+- [x] Local log inspection & export (RAM-only by design). The original
+  "`~/.kassiber/logs/` with rotation + `diagnostics collect` folds all logs"
+  plan is **retired**: an always-on on-disk log file is an explicitly rejected
+  design (see [docs/reference/logging.md](docs/reference/logging.md)) and
+  `collect_public_diagnostics` deliberately folds no logs. The log-export need
+  was met instead by the RAM-only Logs view + redacted support bundles below.
+  (Follow-up: the stale on-disk-logs section in
+  [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md) still contradicts
+  logging.md and should be reconciled.)
   - [x] Add a redacted in-app daemon log screen with a downloadable JSON
     export so prerelease/dev desktop failures can be inspected without losing
     the terse notification surface
@@ -333,11 +381,23 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
 - [x] Add `kassiber/daemon.py` and a `kassiber daemon` subcommand
 - [x] JSONL request/response with `request_id`, `daemon.ready`, and a first
   `status` round-trip
-- [ ] Add `progress` envelopes and mutation-safe long-running request handling
-  beyond the AI chat cancel path
+- [x] `progress` envelopes for sync/freshness kinds beyond the AI chat cancel
+  path (`ui.wallets.sync.progress`, `ui.freshness.run.progress`,
+  `ui.workspace.freshness.run.progress`, background `ui.freshness.progress`),
+  with supervisor streaming/non-streaming classification + non-fatal request
+  timeout
+- [ ] Generic mutation-safe cancellation + long-running handling for the
+  non-sync mutating kinds: the generic `cancel` kind still returns "daemon
+  cancellation is not wired yet" (`daemon.py`) and the serial main loop has no
+  worker pool (depends on the worker-pool item below; overlaps the live-action
+  items in §1.4)
 - [ ] Worker pool with one SQLite connection per worker
 - [x] Smoke coverage for daemon ready/status/shutdown
-- [ ] Redaction audit in CI
+- [ ] Redaction audit in CI: redaction is already partially exercised in the
+  gate (`test_secrets_smoke`, `test_freshness`, and the Vitest
+  `appLogs`/`bridgeContainment` tests), but the dedicated Python redaction suite
+  `tests/test_log_ring.py` is not wired into `scripts/quality-gate.sh` and there
+  is no systematic secret-leak scan — add both
 
 ### 1.2 Tauri shell skeleton + typed IPC + first screen
 
@@ -426,17 +486,25 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
 - [x] Replace the temporary `daemon_unavailable` Tauri command body with a
   Rust supervisor that spawns the Python daemon and dispatches JSONL by
   `request_id`
-- [ ] Generate the Rust daemon kind allowlist from Pydantic contracts instead
-  of the current hand-maintained bootstrap list
+- [ ] Generate the daemon kind allowlists from a single contract source instead
+  of the three hand-maintained lists kept in sync only by
+  `tests/test_connection_catalog_drift.py` (Python `SUPPORTED_KINDS`, Rust
+  `ALLOWED_DAEMON_KINDS`, Vite `ALLOWED_BRIDGE_KINDS`). Note: the `lib.rs` error
+  text already says "the generated daemon allowlist" although nothing generates
+  it yet
 - [ ] Pydantic v2 contracts to JSON Schema to TS types in CI; schema-drift
   fails the build
-- [ ] Bridge mode containment tests (per
-  [04-desktop-ui.md](docs/plan/04-desktop-ui.md) §2.6 + 2.7): negative
-  tests for cross-origin / no-Origin / non-loopback bind / production-env
-  startup / missing-or-wrong token / mutation-disabled-by-default;
-  positive test that `daemon.log` and `supervisor.log` from a captured
-  bridge session contain zero token occurrences. Each gate must be wired
-  into the quality-gate before the bridge code is allowed to land.
+- [ ] Bridge containment tests — partial + spec drift. What shipped is a Vite
+  dev-server HTTP middleware (`ui-tauri/vite.config.ts`), **not** the
+  `daemon --bridge ws://` token-authed WebSocket assumed by
+  [04-desktop-ui.md](docs/plan/04-desktop-ui.md) §2.6/2.7.
+  `ui-tauri/src/lib/bridgeContainment.test.ts` covers loopback-host +
+  cross-origin/no-Origin rejection and stderr redaction (gate-wired via
+  `vitest`). Still open: (a) reconcile the §2.6 token-WS spec with the shipped
+  Vite-proxy model; (b) missing/wrong-token + non-loopback-bind + production-env
+  (`KASSIBER_ENV`) startup refusal + zero-token log grep — none exist today;
+  (c) reconcile "mutation-disabled-by-default" — `ALLOWED_BRIDGE_KINDS`
+  currently permits mutations with no read-only/`--allow-mutations` gate.
 
 ### 1.3 Read-only screens
 
@@ -461,8 +529,13 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
   per-book fiat rows, and a readiness manifest; keep capital-gains/tax exports
   book-scoped so lots, transfers, and mixed-fiat semantics never merge across
   books.
-- [ ] Continue hardening book-management edges: destructive book/book-set
-  deletion UX, backup/restore path, and remaining Settings fixture replacement.
+- [ ] Continue hardening book-management edges. Done: destructive **book-set**
+  (workspace) deletion UX (`ui.workspace.delete` with passphrase + label +
+  plaintext-ack), and Settings fixture replacement (folded into the line below).
+  Remaining: (a) destructive single-**book** deletion UX + a `ui.profiles.delete`
+  daemon kind (today only `ui.profiles.reset_data` exists, which clears data but
+  keeps the book); (b) a GUI backup/restore action behind `ui.backup.*` daemon
+  kinds (currently CLI-only command hints in the Data settings panel).
 - [x] Welcome/onboarding screen refreshed with a shadcn-style, SQLCipher-aware
   setup flow that captures books/tax defaults and database
   protection by initializing the local SQLCipher database through the daemon,
@@ -492,8 +565,12 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
 - [x] Add a Developer tools-gated Logs screen that shows the recent structured
   daemon/transport stream from RAM only and exports redacted snapshots for
   local debugging on explicit download
-- [ ] Replace remaining Settings mock fixture data with typed daemon calls once
-  phase 1.1 exists
+- [x] Replace remaining Settings mock fixture data with typed daemon calls
+  (phase 1.1 daemon mode exists; SettingsScreen + panels read backends /
+  maintenance / AI-provider / status through real daemon kinds). Residual
+  cleanup only: delete the now-orphaned `DEFAULT_BACKENDS`/`DEFAULT_RATE_BACKENDS`
+  exports in `SettingsModel.ts` and the stale "controls are local UI state"
+  header comment in `SettingsScreen.tsx`
 
 ### 1.4 Live actions and workers
 
@@ -509,12 +586,23 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
   one-shot worker handoff, and bound repeat BTCPay page scans with stable-id
   fingerprints, explicit stop reasons, and rotating deep audits for older
   metadata edits.
-- [ ] Finish the remaining live-action worker surfaces: file/import flows,
-  metadata edits, transfer pairing, attachments, quarantine resolve,
-  profile/wallet/backend CRUD, backup/restore.
+- [ ] Finish the remaining live-action worker surfaces. Now wired (daemon kind +
+  UI mutation): file/import flows, metadata edits, transfer pairing, attachments,
+  quarantine resolve (via the per-transaction metadata editor's price-override +
+  exclude), and profile/wallet/backend CRUD. Genuinely unbuilt as a UI/daemon
+  surface: **backup/restore** (CLI-only via `kassiber/backup/cli.py`; Settings
+  explicitly defers to the terminal).
 - [ ] Expand the dedicated progress + cancellation UI beyond sync/freshness
   helpers into every long-running live action.
-- [ ] Separate secret-entry IPC channel; OS-keychain-backed secret refs
+- [x] Separate secret-entry IPC channel (daemon-only
+  `supervisor.ai_secret_store.request/.response` control bridge, not exposed to
+  the webview/assistant) and OS-keychain-backed AI-provider secret refs
+  (`NativeSecretStore`: macOS Keychain / Windows user-scope DPAPI / Linux Secret
+  Service) with per-platform policy, `ai_provider_secret_refs` state,
+  `ai.providers.set_api_key` as the sole api-key ingress, use-time
+  `secret_ref_unavailable`, move/repair/restore handling, a `MockSecretStore`
+  for CI, and leak-regression tests (PR #116). Backend tokens / descriptors /
+  passphrases stay SQLCipher-only by design
 
 ### 1.5 Packaging, signing, distribution
 
@@ -529,11 +617,25 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
   prerelease artifact with commit, ref, run id, and build timestamp
 - [ ] Decide whether production installers should keep the PyInstaller sidecar
   or switch to a `python-build-standalone` runtime tree
-- [ ] Tauri bundler per OS; Apple Developer ID, Windows EV, GPG `.deb`
+- [x] Per-OS Tauri bundles produced as **unsigned** previews in CI (macOS
+  dmg/app, Linux AppImage, Windows msi/nsis via `pnpm tauri build --bundles`)
+- [ ] Production code-signing & distribution: Apple Developer ID + notarization
+  (macOS), Windows EV cert, GPG-signed `.deb` (Linux target is currently
+  AppImage, not `.deb`); flip `tauri.conf.json` `bundle.active` for production
 - [ ] User-initiated update check only; no background polling
 
 ## Later backlog
 
+- [ ] **CLI `--detect-script-types` probe for bare-xpub wallets.** The desktop
+  add-wallet flow auto-detects which script types an xpub has on-chain history
+  for (daemon `ui.wallets.detect_script_types`, core
+  `sync_backends.detect_active_script_types`). The CLI can already create a
+  multi-script xpub wallet by *pinning* types (`wallet create --kind xpub
+  --descriptor xpub… --script-type p2wpkh --script-type p2tr`), but has no
+  auto-detect flag. Add `--detect-script-types` to `wallet create` that resolves
+  the chosen/default backend and calls the shared `detect_active_script_types`
+  helper to fill `config["script_types"]` (fallback to `p2wpkh` when none/no
+  backend), for full GUI/CLI parity.
 - [x] Split `TransactionDetailSheet.tsx` tab bodies into siblings —
   the detail sheet now delegates display helpers, header chrome, the
   right rail, attachments/commercial panels, and each tab body to focused
@@ -572,16 +674,25 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
 - [ ] Full double-entry account model only if a future ledger design needs it:
   explicit counterpart postings, account-type rollups, adjustments, and
   migrations; current `accounts` are wallet/reporting buckets
-- [ ] Per-profile Tor proxy configuration. The Electrum client now
-  speaks SOCKS5 against `backend.tor_proxy`, and onboarding/settings
-  expose a proxy field for the `ui.backends.electrum.test` flow, but
-  the proxy value still has to be wired through `kassiber backends
-  create/update` and through the desktop save path so it actually
-  reaches the column at rest.
-- [ ] SOCKS5 username/password auth (RFC 1928 method 0x02) for
-  Electrum proxies. Today `_connect_via_socks5` only offers no-auth
-  and emits a precise error when a proxy refuses it, which covers Tor
-  but not corporate SOCKS5 endpoints that require credentials.
+- [x] Per-profile Tor proxy configuration. The Electrum client speaks SOCKS5
+  against `backend.tor_proxy`, Esplora / Explorer-API HTTP reads, BTCPay
+  Greenfield sync, Bitcoin Core RPC, and mempool-rate fetches honor the same
+  backend proxy, and the proxy value is now wired end-to-end:
+  `kassiber backends create/update --tor-proxy` → `core.accounts` →
+  `backends.py` INSERT/UPDATE of the `tor_proxy` column, and the desktop save
+  path serializes `payload.tor_proxy` (or clears it) through
+  `ui.backends.create/update` to the same write. Proxy routing is intentionally
+  per-backend; partial routing is supported and called out in UI/docs. Desktop
+  setup detects `.onion` backend hosts and prefills the standard local Tor SOCKS
+  proxy for that backend only.
+- [ ] Guided Tor setup / managed Tor helper is tracked in
+  https://github.com/bitcoinaustria/kassiber/issues/311. Keep it explicit and
+  opt-in: no silent Tor install/start, no global routing, and no clearnet
+  fallback for `.onion` endpoints.
+- [x] SOCKS5 username/password auth (RFC 1929 subnegotiation via SOCKS5
+  method `0x02`) for backend proxies. Proxy URLs may include credentials as
+  `socks5h://USER:PASS@HOST:PORT`; credentials are redacted from backend
+  output snapshots and preserved by desktop edits when already configured.
 - [x] Extend BTCPay Greenfield sync beyond confirmed wallet history with stable invoice/payment ids and raw payload snapshots
 - [x] Import BTCPay invoice/payment fiat facts as authoritative pricing
   observations and reconcile them to wallet transactions before merchant
@@ -599,9 +710,15 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
   provenance panel for BTCPay payment -> invoice -> payment-request/app-origin
   -> document context; the remaining work is the dedicated reconciliation
   queue/workbench for reviewing and resolving suggestions at scale.
-- [ ] Richer transfer pairing for multi-leg self-transfers, including
-  one-outbound/multiple-inbound same-txid moves that should not linger as
-  swap-review noise
+- [ ] Richer transfer pairing for multi-leg self-transfers. The **tax pipeline**
+  half is done (`derive_recorded_fanout_transfers` / `derive_ownership_transfers`
+  decompose 1→N fan-outs in the rp2 engine, with `owned_fanout_unresolved`
+  quarantine for un-decomposable ones). Still open: the **swap-review** half —
+  `_deterministic_self_transfer_ids` (`transfer_matching.py`) only suppresses the
+  clean 1-out/1-in shape, so a conserving 1-outbound/N-inbound same-txid fan-out
+  still surfaces as a spurious strong swap candidate in CLI + daemon review;
+  extend the deterministic suppression to the fan-out shape and emit proper
+  per-leg pairings
 - [x] Better cross-asset transfer accounting beyond audit metadata
   (matcher + rules + saved views + `/swaps` review queue land swap
   pairing end-to-end; AT carrying-value continues through rp2; generic
@@ -610,6 +727,19 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
   source outflow, target payout amount, reviewed sale proceeds, swap fee,
   and Austrian carrying-value handoff are modeled without fake recipient
   wallets.
+- [x] Failed-swap refund handling: same-wallet same-asset pairs are
+  allowed (carrying-value, no longer rejected), the HTLC parser decodes
+  the refund/timeout branch, esplora/electrum/Liquid sync links a refund
+  to its lockup via `transactions.swap_refund_funding_txid` (also accepted
+  as a generic import-record/CSV field), and the matcher surfaces it as an
+  exact `swap-refund` candidate (method `htlc_refund`, same-wallet and
+  window-independent). Surfacing only — no silent auto-pair; the round
+  trip books only the fee, not a SELL + BUY.
+- [ ] Widen the failed-swap refund link beyond freshly chain-synced Boltz
+  v1 P2WSH refunds: backfill `swap_refund_funding_txid` from `raw_json`
+  for rows synced before the column existed, and fold it into the
+  bitcoinrpc HTLC enrichment below. Boltz v2 Taproot cooperative refunds
+  reveal no witness, so they stay heuristic-only by physics.
 - [ ] Daemon kind for ``detect_repeating_patterns`` + "Create rule from
   this pattern?" prompt in the swap review UI (pattern-detector helper
   already exists in `kassiber/core/swap_rules.py`).
@@ -619,12 +749,19 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
   physical-lot answers
 - [ ] Adopt a per-project storage layout: one SQLite DB per project,
   minimal global app state, and no active top-level wallet side tree
-- [ ] Add scoped handoff export/import flows on top of the per-project layout:
-  tax advisor reports stay report-only, audit packages are explicit
-  one-book-or-selected-books packages, and technical wallet evidence remains a
-  separate restricted approval path rather than a normal export checkbox
-- [ ] Keep transaction document links in the project DB; only add managed
-  copied-file storage if a concrete offline/self-contained workflow needs it
+- [ ] Add scoped handoff export/import flows on top of the per-project layout.
+  Shipped: the book-scoped audit-package **export** and the
+  tax-advisor/technical-evidence taxonomy (`ui-tauri/src/lib/handoffExports.ts`).
+  Remaining: (a) the **import** side (none exists); (b) extend audit-package
+  scope from single-book to explicit selected-books packaging; (c) make the
+  restricted technical-wallet-evidence path actionable (today a display-only
+  card with no daemon kind); (d) the per-project DB layout it depends on (item
+  above) is itself still unbuilt
+- [ ] When the per-project storage layout (item above) lands, migrate attachment
+  links **and** the managed-copy blobs into each project bundle rather than the
+  global state-root tree. (The link-only-by-default contingency is already
+  resolved: sha256 hash-and-copy managed storage with gc/verify shipped and is
+  used by the audit-evidence handoff — reuse that copy path, don't rebuild it.)
 - [x] Keep backend definitions and default-backend selection canonical in
   SQLite; dotenv files now bootstrap older/new stores instead of serving as
   the long-term storage path
@@ -676,13 +813,20 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
   and `bootstrap_runtime` warns to stderr whenever the dotenv still contains
   secret-shaped entries while the DB is encrypted. URLs / kinds / chain /
   network stay in the dotenv (they are addresses, not credentials).
-- [ ] Tauri supervisor wiring: passphrase modal at startup, private fd hand-off
-  to the Python sidecar, `auth_required`/`auth_response` relay for reveal
-  flows, and log redaction of `passphrase_secret` / `token` / `descriptor` /
-  `change_descriptor` / `blinding_key` / `auth_header` / `password` envelopes.
+- [ ] Tauri supervisor wiring — mostly shipped; one redaction gap remains. Done:
+  startup passphrase modal (LockScreen → `daemon.unlock`), the stdin
+  `auth_response.passphrase_secret` hand-off, the `auth_required`/`auth_response`
+  reveal relay, and redaction of every named field **except `blinding_key`**.
+  Remaining (security-relevant): add `blinding_key` (and the bare `blinding`
+  substring) to all three secret-floor redaction layers (`supervisor.rs`,
+  `kassiber/redaction.py`, `ui-tauri/src/lib/appLogs.ts`) plus a regression
+  test — `docs/reference/daemon.md` requires it but the reveal payload's
+  `blinding_key` currently passes through unredacted.
 - [ ] Cross-platform CI for SQLCipher: PyInstaller bundle smoke tests on
-  macOS arm64/x86_64, Linux x86_64, Windows x86_64. Today's tracer bullet
-  ran on macOS arm64 only.
+  macOS arm64/x86_64, Linux x86_64, Windows x86_64. The CLI-binary smoke matrix
+  now runs **macOS arm64 (macos-latest) + macOS x86_64 (macos-15-intel) + Linux
+  x86_64 (ubuntu-22.04)**; the remaining gap is **Windows x86_64** CLI-bundle
+  smoke (Windows currently builds only the desktop preview).
 - [ ] Optional convenience: opt-in OS-keychain remember-me layer and biometric
   reveal gate. macOS desktop builds now have the first half for database
   unlock: first lock-screen passphrase entry can enroll Touch ID for the next
@@ -701,6 +845,234 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
 
 ## Open bugs and debt
 
+- [ ] Self-transfer audit follow-ups (deferred from the
+  `claude/self-transfer-fixes` PR, which fixed the as-of/balance-history fee +
+  income double-count, the non-positive-inbound detection asymmetry, and
+  mixed-case txid grouping). These remain because each needs a representation or
+  ordering decision and touches shared import/persistence paths where a rushed
+  change risks regressions:
+  - [x] **BTCPay amount/fee convention — false self-transfer quarantine (P1).**
+    BTCPay's Greenfield wallet-transactions API has no per-tx fee field, so
+    `normalize_btcpay_record` stores `amount = abs(net wallet delta)` (fee folded
+    in) with `fee = 0`, diverging from esplora/electrum/bitcoinrpc (recipient-only
+    amount + separate fee). Fixed via a `transactions.amount_includes_fee` marker
+    (set on BTCPay outbound rows): the transfer-fee guard
+    (`tax_events.normalize_tax_asset_inputs`) and its lockstep mirror
+    (`transfer_matching._deterministic_self_transfer_ids`) now treat the out/in
+    gap on a fee-inclusive leg as the miner fee, not an unrecognized outflow, so a
+    BTCPay-leg self-transfer books correctly instead of being quarantined /
+    routed to swap review. Node backends (marker 0) are unchanged.
+  - [ ] **BTCPay folded-in fee — residual disposals (P2, residual of the above).**
+    The marker fixes the *pure* self-transfer, but the fee value still cannot be
+    read back from the Greenfield API, so the folded-in fee cannot be separated
+    from any other outflow in `amount`. Two residual cases remain, both
+    BTCPay-only, both leaving holdings correct (the net delta is what left):
+    (a) *Standalone payment* — a BTCPay external payment folds the fee into
+    `amount` with `fee = 0`, so its disposal overstates taxable proceeds by
+    `fee * spot` (`rp2.py` SELL `crypto_out_no_fee = amount`, `crypto_fee = 0`).
+    (b) *Paired/batched* — when one BTCPay tx pays a separately-synced owned
+    wallet *and* an external recipient, `detect_intra_transfers` pairs the
+    1-out/1-in legs and the P1 fix's `unrecognized_outflow = 0` books the whole
+    out/in gap (external payment + miner fee) as a transfer fee instead of
+    quarantining it, so the external payment is absorbed silently *regardless of
+    size* — unlike the node-backed sub-ceiling case below, which is bounded by
+    `max(1% of out, 2500 sats)`. A real fix needs out-of-band fee recovery (raw
+    tx / NBXplorer) or a surfaced "fee unknown" state on the disposal; the marker
+    added here is the groundwork.
+  - [x] **Sub-ceiling external payment absorbed as a transfer fee (P2).** When
+    one tx pays an owned wallet + a small external address + change, and the
+    owned destination synced the shared txid, `detect_intra_transfers` paired the
+    self-transfer leg and pre-empted the on-chain ownership deriver, so the
+    external payment (under `max(1% of out, 2500 sats)`) fell through to a
+    non-taxable MOVE fee instead of a taxable disposal. Fixed via
+    `ownership_transfers.graph_partial_payment_out_ids`: after
+    `detect_intra_transfers`, the engine withholds any 1-out/1-in pair whose
+    outbound graph is single-source and shows value leaving to a non-owned
+    recipient (recorded `amount` > owned-to-other-wallets value), so
+    `derive_ownership_transfers` re-derives it — booking the owned MOVE and
+    keeping the external residual as a real disposal. `detect_intra` stays
+    authoritative for graph-less (CSV) rows and pure self-transfers. Tests:
+    `test_ownership_transfers.GraphPartialPaymentTests`,
+    `test_rp2_ownership_transfers.PartialPaymentWithholdingEngineTest`.
+  - [x] **Cross-wallet consolidation quarantined instead of booked (was implicit
+    in the fan-out limitation).** A spend funded by inputs from two or more owned
+    wallets (consolidating e.g. Cold + Hot into Savings) was the one self-transfer
+    shape both `detect_intra_transfers` and `derive_ownership_transfers` declined
+    — each contributor syncs the tx independently and stamps the whole fee onto
+    its own row, so summing the per-wallet rows double-counts the fee — leaving it
+    in the `owned_fanout_unresolved` quarantine. Fixed via
+    `ownership_transfers.derive_multi_source_consolidations` (run before the
+    single-source deriver, feeding its touched ids forward): it reads the single
+    fee once and the destination total from the graph, books one carrying MOVE per
+    contributor (whole fee on the largest contributor), and replaces the recorded
+    destination receipt with synthetic legs. Conservative scope — `>=2` contributing
+    wallets, exactly one owned destination, no external output, all inputs owned,
+    readable esplora graph, exact conservation; anything else still quarantines.
+    Tests: `test_ownership_transfers.MultiSourceConsolidationDeriverTests`,
+    `test_rp2_ownership_transfers.MultiSourceConsolidationEngineTest`.
+  - [x] **Withheld partial-payment pair orphaned when the deriver declines (P1,
+    regression introduced with the withhold above).** `graph_partial_payment_out_ids`
+    withheld the `detect_intra` pair unconditionally; when `derive_ownership_transfers`
+    then DECLINED (ambiguous owned output shared by two wallets, ambiguous
+    destination, amount mismatch) it produced no derived pair and no override, so
+    the source booked a FULL disposal and the destination a phantom acquisition
+    with NO quarantine (the `fanout_holds` premise suppressed the block). Fixed in
+    `rp2.py`: the withheld pairs are kept and ROLLED BACK to their original
+    self-transfer when the deriver did not handle the source (not dropped, not
+    overridden); restored sources are excluded from the block quarantine. Test:
+    `test_rp2_ownership_transfers.PartialPaymentWithholdingEngineTest.test_withhold_rolls_back_when_owned_output_is_ambiguous`.
+  - [x] **Multi-source consolidation double-counts an off-group destination receipt
+    (P1, regression).** `has_external_receipt` required EXACT amount equality, so a
+    destination receipt recorded under a different id at a slightly different amount
+    (sat rounding / net-of-internal-fee, e.g. 0.79999 vs a 0.8 graph total) slipped
+    past and the synthetic legs PLUS the surviving receipt inflated the destination
+    ~2x. Fixed in `ownership_transfers.derive_multi_source_consolidations`: decline
+    when the destination has any off-group same-asset inbound that matches the total
+    OR lands within the spend's time window. Tests:
+    `test_ownership_transfers.MultiSourceConsolidationDeriverTests.test_off_group_receipt_with_nonexact_amount_declined`,
+    `test_rp2_ownership_transfers.MultiSourceConsolidationEngineTest.test_off_group_nonexact_receipt_does_not_double_count`.
+  - [x] **Austrian self-transfer MOVE-fee disposal carried no regime → whole asset
+    aborted (P1, pre-existing).** The IntraTransaction miner fee is a taxable
+    disposal; with both Alt and Neu lots present rp2's moving-average raised
+    `Ambiguous Austrian disposal` and the entire BTC report/journals process aborted
+    (no quarantine). Fixed by stamping `at_regime` on the fee disposal:
+    `austrian._move_transfer_availability` now returns the regime the fee draws from
+    using a fee-first depletion model (the remaining carried quantity moves to the
+    destination), and `infer_outbound_regimes` records it for the out row;
+    `NormalizedTaxTransfer` gained an `at_regime` field and `_compose_transfer_notes` emits `at_regime=...`
+    (matching the SELL path). Affects plain self-transfers and the derived
+    consolidation/fan-out legs. Test:
+    `test_rp2_ownership_transfers.AustrianSelfTransferEngineTest`.
+  - [x] **`derive_recorded_fanout_transfers` grouped by raw external_id (P3).** It
+    diverged from every sibling self-transfer path (which use `normalize_group_txid`),
+    so a mixed-case 64-hex txid fan-out (source synced lowercase, dest CSV-imported
+    uppercase) split into separate groups and stuck in quarantine. Fixed: wrap the
+    group key in `normalize_group_txid`. Test:
+    `test_ownership_transfers.RecordedFanoutDeriverTests.test_mixed_case_txid_fanout_decomposes`.
+  - [x] **bitcoinrpc multi-output tx double-counts the network fee (P2,
+    pre-existing).** `record_from_bitcoinrpc_details` summed `fee` per detail, but
+    Bitcoin Core stamps the SAME whole-tx fee on every `send`-category detail, so an
+    N-output send booked the fee N×: a within-wallet split debited holdings by the
+    phantom extra fee and a multi-recipient send overstated the taxable fee disposal.
+    Fixed: take the fee once (`max` across details). Test:
+    `test_sync_backends...test_bitcoinrpc_multi_output_send_does_not_double_count_fee`.
+  - [x] **Derived multi-leg self-transfer not quarantined atomically (P2).** A
+    consolidation / fan-out split into N MOVE legs could partially book if one leg
+    was quarantined downstream (e.g. a fee leg needed pricing review under
+    `require_coarse_review`), while the recorded destination receipt had already
+    been dropped. Fixed by carrying a `group_id` from every derived multi-leg
+    deriver (`derive_multi_source_consolidations`, `derive_ownership_transfers`,
+    `derive_recorded_fanout_transfers`) into `NormalizedTaxTransfer`, then
+    blocking the whole group in normalization and preflighting grouped MOVE legs
+    atomically in the RP2 gate; real destination receipts replaced by synthetic
+    group legs are carried as block rows so successful `transfer_in` journal
+    entries point at the recorded receipt and failed groups quarantine it. Tests:
+    `test_tax_events...test_derived_transfer_group_blocks_siblings_when_one_leg_needs_review`,
+    `test_rp2_ownership_transfers...test_grouped_consolidation_gate_quarantines_atomically`.
+  - [x] **Same-timestamp chained self-transfers mis-ordered → false
+    insufficient_lots (P2).** Two self-transfers in the SAME block (shared
+    `occurred_at`) where one funds a wallet and the next spends it (Cold→Hot then
+    Hot→Exch — a consolidate-then-forward / batch pattern) could be processed
+    spend-before-fund. Fixed by replacing the stream-index tie-break with
+    `_ordered_rp2_items`, which keeps inbound events before MOVEs before outbound
+    events and topologically orders same-timestamp transfers by wallet dependency;
+    the gate and `IntraTransaction` insertion now share that order. Test:
+    `test_rp2_ownership_transfers...test_same_timestamp_transfer_chain_books_funding_move_first`.
+  - [ ] **Swap-review fee omits out.fee (P2).** `compute_swap_fee = out.amount -
+    in.amount` (`transfer_matching.py:257`) ignores `out.fee`, so the review
+    surface, the persisted `transaction_pairs.swap_fee_msat`, and the GUI
+    "Transfer fee" line (`ui_snapshot.py:1085`) show 0 / "no_fee_detected" for a
+    same-asset on-chain self-transfer whose journal books a real miner-fee
+    disposal. Tax math is correct; this is a display/persistence consistency
+    bug. Fix changes the semantics of a persisted column + 3 call sites
+    (`transfer_matching.py:593`, `handlers.py:507,632`) + GUI + tests, so do it
+    as a focused slice: `swap_fee_msat = out.amount + out.fee - in.amount`.
+  - [ ] **RBF dropped-import phantom disposal (P3).** An RBF-replaced outbound
+    captured in the mempool before eviction has no matching inbound and falls
+    through to a taxable disposal (`tax_events.py:877`). Gated behind the
+    esplora/mempool backend + a sync-timing race (BTCPay is confirmed-only and
+    immune). Fix: a confirmed-only tax gate (`confirmed_at IS NOT NULL`) + a
+    shared-prevout RBF/conflict-dedup pass (matches the deferred BDK-eval note).
+  - [ ] **Fee-tolerance flag desync (P3).** `_deterministic_self_transfer_ids`
+    honors caller `--fee-pct-max/--fee-sats-min` but `tax_events`'s
+    `transfer_fee_implausible` ceiling is hardcoded to the defaults, so
+    `transfers suggest --fee-pct-max 0.5` empties a pair from the swap queue
+    while the report still quarantines it. Fix: make the deterministic
+    self-transfer suppression always use the defaults so the flag only widens
+    heuristic candidate generation.
+  - [ ] **Self-transfer change on an un-indexed script booked as a phantom
+    external disposal (P1, round-2 deep audit).** A pure self-transfer A→B whose
+    change returns to a source script the `OwnedIndex` does not contain (change
+    branch past the derive ceiling, an un-indexed address-list change address, or
+    an un-indexed multi-script-xpub change type) is mis-booked: the recorded
+    outbound `amount` includes the un-indexed change, `_parse_onchain_tx`
+    (`ownership_transfers.py`) discards prevout values so there is no input/output
+    reconciliation, and the deriver folds the change into the external bucket and
+    books the residual (`~341-349`) as a real disposal — silent over-taxation +
+    holdings loss, strictly worse than the deriver-off `transfer_fee_implausible`
+    quarantine. ASSESSED + deferred deliberately (the only round-2 P1 left open):
+    a deriver-only guard cannot distinguish un-indexed change from a real external
+    payment (the graph residual is identical either way), and quarantining large
+    residuals would regress legitimate large partial payments (`test_mixed_spend_books_move_and_residual_without_phantom_fee`).
+    `build_owned_index` already deep-derives the change branch to a ceiling, so this
+    is an index-completeness EDGE (change past the ceiling, address-list wallets
+    that cannot derive change, an un-enumerated multi-script change type), not a
+    common-path bug. A source-coverage discriminator is imperfect (a descriptor
+    wallet's change past the ceiling is still un-indexed despite source="derived").
+    DECISION NEEDED (maintainer): change-address index completeness vs. a
+    `change_unverified` quarantine state for owned-source spends with an
+    unexplained residual. Not rushed — a wrong guard regresses real payments.
+  - [x] **Whole-row direct-swap-payout disposal lost to a same-txid auto-pair
+    hijack (P2, round-2 deep audit).** A reviewed whole-row taxable direct payout
+    whose out tx shares a txid with another owned wallet's recorded inbound was
+    auto-paired by `detect_intra_transfers` (computed before the direct-payout
+    claim set is built) and booked as a non-taxable MOVE — the declared disposal +
+    proceeds vanished silently, no quarantine. Fixed in `rp2.py`: `auto_pairs` is
+    pruned of any pair touching a whole-row direct-payout-claimed id before
+    `apply_manual_pairs`, so the disposal books. Test:
+    `test_rp2_ownership_transfers...test_whole_row_payout_not_hijacked_by_same_txid_inbound`.
+  - [x] **Clamped amount=0 self-send invisible → phantom acquisition (P2, round-2
+    deep audit).** A coinjoin/payjoin-shaped self-send where an owned wallet's net
+    outflow fell below the whole-tx fee gets its outbound `amount` clamped to 0,
+    while a positive inbound lands in another owned wallet under the same txid.
+    Every positive-amount filter skipped the clamped source, so the destination
+    booked a phantom standalone acquisition. Fixed in `tax_events._owned_fanout_row_ids`:
+    a clamped amount=0 outbound sharing a txid with a positive inbound in a
+    DIFFERENT owned wallet is quarantined (`owned_fanout_unresolved`) for review;
+    single-wallet fee/consolidations (no cross-wallet inbound) are untouched.
+    Tests: `test_tax_events.ClampedZeroSelfSendTest`.
+  - [x] **Conflicting (shared-prevout / RBF) self-transfers both booked as MOVEs
+    (P2, round-2 deep audit).** Two self-transfer outbounds spending the SAME
+    prevout (RBF bump / reorg replacement) carry distinct txids, so no pass
+    reconciled them and BOTH booked as carrying MOVEs → destination inflated.
+    Fixed via `ownership_transfers.detect_conflicting_spend_ids` + a quarantine in
+    `tax_events.normalize_tax_asset_inputs`: rows whose txids share an input
+    outpoint are reconciled from the stored graph — a lone confirmed txid wins and
+    its replacements' legs are quarantined `conflicting_spend`; if none or several
+    are confirmed, the whole conflict is quarantined. Quarantine-only, never books.
+    Tests: `test_ownership_transfers.ConflictingSpendTests`. (The broader RBF
+    *dropped-import* phantom-disposal P3 above — opposite shape — remains separate.)
+  - [x] **Direct-payout common path returned engine rows unsorted (P3, latent,
+    round-2 deep audit).** `_direct_payout_synthetic_rows`' no-payout early-return
+    returned rows in caller order, skipping the `_transaction_row_sort_key` sort the
+    payout path applies — masked in production only because the caller pre-sorts via
+    SQL. Fixed: the early-return now sorts unconditionally. (The gate-ordering /
+    same-timestamp determinism part of this finding was already addressed by the
+    F5 same-timestamp fix, which removed the old `_gate_order_key`.)
+  - [ ] **Cross-chain script-collision guard defeated by blank chain/network (P3,
+    round-2 deep audit).** `_norm_chain_network('', '')` defaults to
+    `('bitcoin', 'main')`, so a blank-metadata reused-key Liquid match could pass
+    the bitcoin/main chain filter and book a cross-chain disposal as a non-taxable
+    MOVE. A comparison-time fix (treat blank as a distinct "unknown") was tried but
+    REVERTED — Codex review flagged that legacy address-list / inventory matches
+    legitimately store blank chain metadata and ARE bitcoin/main, so a real
+    bitcoin/main source paying one of them would then fail the same-chain filter
+    and have its owned output mis-booked as an external disposal. The correct fix
+    is to normalize blank Bitcoin address metadata to bitcoin/main when the index
+    is BUILT (`build_owned_index` / address-list + inventory seeding), so genuine
+    cross-chain blanks (if any are reachable) stay distinguishable from
+    legacy-mainnet blanks. Likely unreachable today (chain force-normalization on
+    wallet add/edit), hence P3 / deferred.
 - [x] Austrian E 1kv PDF export no longer uses the Latin-1 text writer:
   `reports export-austrian-e1kv-pdf` / `reports export-austrian` now render a
   ReportLab-backed Steuerbericht with cover, summary/detail sections,
@@ -735,9 +1107,11 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
   (`atk-sys`, `gdk`, ...) pins it to `^0.18`, so reaching 0.20 requires
   upgrading that whole stack (Linux-only surface). Fold into the next
   Tauri/GTK dependency upgrade rather than forcing a standalone `cargo update`.
-- [ ] Add live provider-backed FX adapters beyond CoinGecko and local Kraken
-  CSV archive ingest only after the UI and daemon can expose provider limits,
-  granularity, and review state honestly
+- [x] Add live provider-backed FX adapters beyond CoinGecko and local Kraken CSV
+  (Coinbase Exchange — now the default — and Mempool shipped), under the
+  honest-exposure bar: the UI/daemon expose the provider list, per-rate
+  granularity, and coarse-review state (and dropped fabricated synthetic
+  provider-health rows). Any further providers must keep that same bar
 - [ ] Keep the machine envelope boundary centralized and explicit
 - [ ] Keep docs and examples Bitcoin-only
 - [ ] Add a narrow docs-drift check for shared command / verification /
@@ -758,8 +1132,6 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
   actual dispatch table, or drop the example and direct readers to the
   live `daemon.ready` payload. The PR added a "representative" disclaimer
   as an interim.
-- [ ] Clean up legacy schema-version fixtures called out as a follow-up in
-  PR #101. Original author should point at the specific fixtures meant.
 - [ ] Derive `kassiber.__version__` from package metadata
   (`importlib.metadata.version("kassiber")`) so it stops being a fifth
   place the version drifts. Drift test already catches divergence; this

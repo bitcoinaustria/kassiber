@@ -21,10 +21,8 @@ from kassiber.core.sync import (
 )
 from kassiber.core.sync_backends import (
     ElectrumClient,
-    _connect_via_socks5,
+    _connect_backend_socket,
     _emit_backend_progress,
-    _read_exact,
-    _socks5_address,
     bitcoinrpc_sync_adapter,
     discover_descriptor_targets,
     electrum_sync_adapter,
@@ -36,6 +34,7 @@ from kassiber.core.sync_backends import (
     scriptpubkey_scripthash,
 )
 from kassiber.errors import AppError
+from kassiber.proxy import _connect_via_socks5, _read_exact, _socks5_address
 from kassiber.time_utils import timestamp_to_iso
 from kassiber.wallet_descriptors import DescriptorBranch, DescriptorPlan, DerivedTarget
 
@@ -185,6 +184,18 @@ class SyncBackendsTest(unittest.TestCase):
         self.assertEqual(progress[0]["total"], 10)
         self.assertEqual(progress[1]["processed"], 40)
         self.assertEqual(progress[1]["total"], 100)
+
+    def test_backend_progress_allows_scanned_count_before_total_is_known(self):
+        progress = []
+        token = sync_progress_emitter.set(lambda payload: progress.append(dict(payload)))
+        try:
+            _emit_backend_progress("discovery", targets_checked=150)
+        finally:
+            sync_progress_emitter.reset(token)
+
+        self.assertEqual(progress[0]["phase"], "discovery")
+        self.assertEqual(progress[0]["processed"], 150)
+        self.assertNotIn("total", progress[0])
 
     def test_sync_wallet_from_backend_keeps_inventory_when_utxos_skipped(self):
         wallet = {
@@ -372,8 +383,16 @@ class SyncBackendsTest(unittest.TestCase):
         }
         fetch_calls = []
 
-        def fake_fetch(base_url, script_pubkey_hex, max_pages=None, timeout=30):
-            fetch_calls.append((base_url, script_pubkey_hex, max_pages, timeout))
+        def fake_fetch(
+            base_url,
+            script_pubkey_hex,
+            max_pages=None,
+            timeout=30,
+            proxy_url=None,
+        ):
+            fetch_calls.append(
+                (base_url, script_pubkey_hex, max_pages, timeout, proxy_url)
+            )
             return [tx]
 
         with patch(
@@ -545,6 +564,7 @@ class SyncBackendsTest(unittest.TestCase):
             "https://esplora.example",
             target["script_pubkey"],
             timeout=30,
+            proxy_url=None,
         )
 
     def test_electrum_sync_adapter_returns_record_shape(self):
@@ -801,6 +821,7 @@ class SyncBackendsTest(unittest.TestCase):
             branches=(DescriptorBranch(0, "receive", FakeDescriptor()),),
         )
         checked = []
+        progress = []
 
         def fake_derive(plan, branch_index=None, start=0, end=0):
             del plan
@@ -829,15 +850,24 @@ class SyncBackendsTest(unittest.TestCase):
             "kassiber.core.sync_backends.derive_descriptor_targets",
             side_effect=fake_derive,
         ):
-            targets = scan_descriptor_targets(
-                plan,
-                target_used_batch=target_used_batch,
-                scan_batch_size=1,
-                highest_used={"0": 2},
-            )
+            token = sync_progress_emitter.set(lambda payload: progress.append(dict(payload)))
+            try:
+                targets = scan_descriptor_targets(
+                    plan,
+                    target_used_batch=target_used_batch,
+                    scan_batch_size=1,
+                    highest_used={"0": 2},
+                )
+            finally:
+                sync_progress_emitter.reset(token)
 
         self.assertEqual([target["address_index"] for target in targets], [0, 1, 2, 3, 4])
         self.assertEqual(checked, [3, 4])
+        self.assertEqual(progress[-1]["processed"], 2)
+        self.assertNotIn("total", progress[-1])
+        self.assertEqual(progress[-1]["retained_targets"], 5)
+        self.assertEqual(progress[-1]["unused_streak"], 2)
+        self.assertEqual(progress[-1]["gap_limit"], 2)
 
     def test_first_sync_scans_full_gap_depth_following_used_addresses(self):
         # A first sync (no stored checkpoint, highest_used=None) must walk the
@@ -1089,6 +1119,24 @@ class SyncBackendsTest(unittest.TestCase):
         self.assertEqual(record["occurred_at"], timestamp_to_iso(1_700_000_000))
         self.assertIsNone(record["confirmed_at"])
 
+    def test_bitcoinrpc_multi_output_send_does_not_double_count_fee(self):
+        # Bitcoin Core stamps the SAME whole-tx fee on every `send`-category
+        # detail of one transaction. Summing per detail would double-count it for
+        # a multi-output send; the fee must be booked exactly once.
+        record = record_from_bitcoinrpc_details(
+            "66" * 32,
+            [
+                {"category": "send", "amount": -0.5, "fee": -0.0001, "blocktime": 1_700_000_000},
+                {"category": "send", "amount": -0.3, "fee": -0.0001, "blocktime": 1_700_000_000},
+            ],
+            "core",
+        )
+        self.assertEqual(record["direction"], "outbound")
+        # fee booked once (0.0001), not summed to 0.0002.
+        self.assertAlmostEqual(float(record["fee"]), 0.0001, places=8)
+        # amount = gross_out (0.8) - fee (0.0001), not - 0.0002.
+        self.assertAlmostEqual(float(record["amount"]), 0.7999, places=8)
+
 
 class _FakeSocket:
     """In-memory socket double for SOCKS5 protocol tests."""
@@ -1153,10 +1201,7 @@ class Socks5HelpersTest(unittest.TestCase):
                 b"\x05\x00\x00\x01\x00\x00\x00\x00\x00\x00",
             ],
         )
-        with patch(
-            "kassiber.core.sync_backends.socket.create_connection",
-            return_value=fake,
-        ):
+        with patch("kassiber.proxy.socket.create_connection", return_value=fake):
             sock = _connect_via_socks5(
                 "socks5://127.0.0.1:9050",
                 "node.example",
@@ -1175,13 +1220,31 @@ class Socks5HelpersTest(unittest.TestCase):
         )
         self.assertIn(expected_request, sent)
 
-    def test_connect_via_socks5_rejects_authenticated_proxy(self):
+    def test_connect_via_socks5_authenticates_with_userpass(self):
+        fake = _FakeSocket(
+            [
+                b"\x05\x02",  # proxy selects username/password
+                b"\x01\x00",  # RFC 1929 auth success
+                b"\x05\x00\x00\x01\x00\x00\x00\x00\x00\x00",
+            ],
+        )
+        with patch("kassiber.proxy.socket.create_connection", return_value=fake):
+            sock = _connect_via_socks5(
+                "socks5h://alice:p%40ss@127.0.0.1:9050",
+                "node.example",
+                50002,
+                timeout=5,
+            )
+        self.assertIs(sock, fake)
+        self.assertFalse(fake.closed)
+        sent = bytes(fake.sent)
+        self.assertTrue(sent.startswith(b"\x05\x02\x00\x02"))
+        self.assertIn(b"\x01\x05alice\x04p@ss", sent)
+
+    def test_connect_via_socks5_rejects_auth_required_without_credentials(self):
         fake = _FakeSocket([b"\x05\x02"])  # proxy requires user/pass
-        with patch(
-            "kassiber.core.sync_backends.socket.create_connection",
-            return_value=fake,
-        ):
-            with self.assertRaisesRegex(AppError, "0x02"):
+        with patch("kassiber.proxy.socket.create_connection", return_value=fake):
+            with self.assertRaisesRegex(AppError, "username/password"):
                 _connect_via_socks5(
                     "socks5://127.0.0.1:9050",
                     "node.example",
@@ -1194,10 +1257,7 @@ class Socks5HelpersTest(unittest.TestCase):
         # A SOCKS4 / HTTP proxy will not start its reply with 0x05; the helper
         # should call that out instead of reporting an auth-method mismatch.
         fake = _FakeSocket([b"\x04\x5a"])
-        with patch(
-            "kassiber.core.sync_backends.socket.create_connection",
-            return_value=fake,
-        ):
+        with patch("kassiber.proxy.socket.create_connection", return_value=fake):
             with self.assertRaisesRegex(AppError, "unexpected greeting"):
                 _connect_via_socks5(
                     "socks5://127.0.0.1:9050",
@@ -1214,10 +1274,7 @@ class Socks5HelpersTest(unittest.TestCase):
                 b"\x05\x05\x00\x01\x00\x00\x00\x00\x00\x00",  # status=5 (connection refused)
             ],
         )
-        with patch(
-            "kassiber.core.sync_backends.socket.create_connection",
-            return_value=fake,
-        ):
+        with patch("kassiber.proxy.socket.create_connection", return_value=fake):
             with self.assertRaises(AppError):
                 _connect_via_socks5(
                     "socks5://127.0.0.1:9050",
@@ -1226,6 +1283,16 @@ class Socks5HelpersTest(unittest.TestCase):
                     timeout=5,
                 )
         self.assertTrue(fake.closed)
+
+    def test_connect_backend_socket_rejects_onion_without_proxy(self):
+        with patch("kassiber.core.sync_backends.socket.create_connection") as direct:
+            with self.assertRaisesRegex(AppError, "Tor/SOCKS proxy"):
+                _connect_backend_socket(
+                    {"timeout": 5},
+                    "abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcd.onion",
+                    50001,
+                )
+        direct.assert_not_called()
 
 
 class _FakeHttpResponse:
@@ -1280,6 +1347,19 @@ class HttpRetryAndLimiterTest(unittest.TestCase):
         self.assertEqual(result, {"ok": True})
         # Retry-After header is honored verbatim for the backoff delays.
         self.assertEqual(sleeps, [2.0, 1.0])
+
+    def test_http_get_json_passes_proxy_to_shared_opener(self):
+        with patch(
+            "kassiber.core.sync_backends.urlopen_with_proxy",
+            return_value=_FakeHttpResponse('{"ok": true}'),
+        ) as opener:
+            result = sb.http_get_json(
+                "https://esplora.example/x",
+                proxy_url="127.0.0.1:9050",
+            )
+        self.assertEqual(result, {"ok": True})
+        self.assertEqual(opener.call_args.kwargs["proxy_url"], "127.0.0.1:9050")
+        self.assertEqual(opener.call_args.kwargs["source_label"], "backend")
 
     def test_http_get_text_retries_on_503_then_succeeds(self):
         sleeps = []
@@ -1434,7 +1514,8 @@ class EsploraUtxoParallelTest(unittest.TestCase):
             history_cache={},
         )
 
-        def fake_utxos(base_url, script_pubkey_hex, timeout=30):
+        def fake_utxos(base_url, script_pubkey_hex, timeout=30, proxy_url=None):
+            del base_url, timeout, proxy_url
             # Encode the target's position in the UTXO value so the output order
             # is verifiable independent of which worker finishes first.
             index = next(i for i, t in enumerate(targets) if t["script_pubkey"] == script_pubkey_hex)
@@ -1578,6 +1659,44 @@ class CrossWalletPrefetchTest(unittest.TestCase):
         self.assertEqual(prefetched["w-good"].kind, "esplora")
         self.assertIsInstance(prefetched["w-bad"], AppError)
         self.assertEqual(prefetched["w-bad"].code, "discovery")
+
+    def test_prefetch_runs_preflight_before_backend_adapter(self):
+        wallets = [
+            _backend_sync_wallet("w-good", "Good", "bc1qgood"),
+            _backend_sync_wallet("w-bad", "Bad", "bc1qbad"),
+        ]
+        adapter_calls = []
+
+        def adapter(_backend, wallet, _sync_state):
+            adapter_calls.append(wallet["id"])
+            return [], {}
+
+        hooks = self._hooks()
+        hooks = WalletSyncHooks(
+            import_file=hooks.import_file,
+            insert_records=hooks.insert_records,
+            resolve_backend=hooks.resolve_backend,
+            resolve_sync_state=hooks.resolve_sync_state,
+            normalize_addresses=hooks.normalize_addresses,
+            backend_adapters={"esplora": adapter},
+        )
+
+        def preflight(wallet, _sync_state):
+            if wallet["id"] == "w-bad":
+                raise AppError("overlap", code="source_overlap")
+
+        prefetched = prefetch_wallets_backend(
+            {},
+            {},
+            wallets,
+            hooks,
+            source_overlap_preflight=preflight,
+        )
+
+        self.assertIsInstance(prefetched["w-good"], WalletBackendFetch)
+        self.assertIsInstance(prefetched["w-bad"], AppError)
+        self.assertEqual(prefetched["w-bad"].code, "source_overlap")
+        self.assertEqual(adapter_calls, ["w-good"])
 
     def test_sync_wallets_applies_prefetch_and_reraises_captured_error(self):
         hooks = self._hooks()

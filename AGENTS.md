@@ -28,10 +28,11 @@
   - [kassiber/core/output_inventory.py](kassiber/core/output_inventory.py) — durable watch-only coin/UTXO inventory model updated by chain-backed wallet sync; stores current/spent outpoints, amounts, confirmation state, receive/change metadata, and source freshness without exposing descriptors, xpubs, backend URLs/tokens, raw wallet config, or raw wallet files through UI/AI surfaces.
   - [kassiber/core/ownership.py](kassiber/core/ownership.py) — pure address/txid ownership reconciliation engine behind `wallets identify`, `ui.wallets.identify` (cache-only) and `ui.wallets.identify_onchain` (verify). Given pasted addresses/txids it matches them (by canonical scriptPubKey, with address-string fallback for Liquid confidential addresses) against the watch-only inventory, imported txids, and offline descriptor derivation (receive + change, floored at the synced index, capped by `--scan-to-index`), naming the owning wallet/branch/index and flagging externals; clearly-malformed inputs are flagged `invalid`. A smart CSV importer (`extract_candidates_from_csv`: delimiter sniffing, common `address`/`txid` header aliases, plus strict content-harvest of 64-hex/real-address cells) feeds the same pipeline from `--csv` (CLI) and a desktop "Import CSV" button that sends file content as `csv_text` — never exposed to the AI tool. txids get a per-leg payment/transfer/receipt classification — locally from `transactions.raw_json` (both esplora and Electrum decode shapes) and, for unseen txids, via the opt-in caller-injected fetcher (`fetch_transaction_legs` / `verify_session` in sync_backends; the empty-script Liquid fee output is not counted). The AI variant drops scriptPubKeys, derivation paths, address indices and branch labels.
   - [kassiber/core/reports.py](kassiber/core/reports.py) — extracted report builders, balance-history calculations, and PDF export assembly behind hookable journal/runtime dependencies. `reports tax-summary` rows include `row_type=swap_fees_year` / `swap_fees_total` summarising persisted `transaction_pairs.swap_fee_msat` and `direct_swap_payouts.swap_fee_msat`.
-  - [kassiber/core/transfer_matching.py](kassiber/core/transfer_matching.py) — pure swap-candidate matcher with `payment_hash` (exact) and time + amount (strong) confidence bands, signed fee computation, conflict cluster ids plus match-time `conflict_size` (stamped over the full candidate set so filtered views cannot make a cluster member look solo), and pair/dismissal suppression. Defaults: 24h time window, fee tolerance `max(1%, 2500 sats)`.
+  - [kassiber/core/report_verify.py](kassiber/core/report_verify.py) — the self-verifying XLSX layer appended to `reports export-xlsx` (default on; `--no-verify` / daemon `{"verify": false}` to skip). Adds `Verify` (how-to + tolerance cell), `Acquisitions` / `Disposals` (raw journal ledger with only msat/fiat inputs hard-typed) and `Control` (per-asset reconciliation matrix) sheets whose derived cells are live `write_formula`s carrying Kassiber's number as the cached value, each checked OK/DIFF against it. Reconciliation is per asset at profile scope (`ending basis = Σ acquisition fiat_value − Σ disposal cost_basis`, a method-independent identity); per-disposal lot selection under FIFO/LIFO/HIFO/LOFO is not reproducible by formula and is called out instead of faked. The Austrian E 1kv and exit-tax XLSX exports do not have this layer yet.
+  - [kassiber/core/transfer_matching.py](kassiber/core/transfer_matching.py) — pure swap-candidate matcher with `payment_hash` (exact), `htlc_refund` (exact; failed-swap refund linked to its lockup via `swap_refund_funding_txid`, same-wallet and window-independent, default kind `swap-refund`), and time + amount (strong) confidence bands, signed fee computation, conflict cluster ids plus match-time `conflict_size` (stamped over the full candidate set so filtered views cannot make a cluster member look solo), and pair/dismissal suppression. Defaults: 24h time window, fee tolerance `max(1%, 2500 sats)`.
   - [kassiber/core/lightning/](kassiber/core/lightning/) — read-only Lightning scaffold: typed `NodeSnapshot` / `NodeChannel` / `NodeForward` shapes, `LightningAdapter` Protocol, registry (`register_adapter` / `resolve_adapter` / `registered_kinds`), and the generic `build_profitability_report` / `profitability_csv_rows` helpers. Node adapters (LND, Core Lightning, NWC, …) live in sibling modules and register themselves with the registry; the daemon kinds `ui.connections.node.snapshot` and `ui.reports.lightning_profitability` plus the `reports lightning-profitability` / `reports export-lightning-profitability-csv` CLI commands dispatch through the registry. The desktop / CLI path returns the full payload (`snapshot_to_dict` / `LightningProfitabilityReport.to_envelope_payload`); the AI tool dispatch swaps in redacted variants (`snapshot_to_dict_for_ai` / `to_ai_envelope_payload`) that drop the Tier-3 identity graph (operator pubkey, channel funding outpoints, peer pubkeys / aliases, short channel ids on channels and forwards, per-channel covers-open-cost rows). Adapters MUST follow the discard policy in [docs/reference/lightning-opsec.md](docs/reference/lightning-opsec.md): drop preimages, payment_secrets, full encoded bolt11 strings, route hop pubkey lists, route hints from received invoices, and `failure_source_pubkey` at the adapter boundary; pass `None` for `NodeChannel.peer_pubkey` on private channels (enforced at construction by `__post_init__`). `NodeChannel.__post_init__` enforces the `None`-for-private rule on `peer_pubkey` and runs format-only checks on `short_channel_id` / `funding_outpoint` so smuggling fails at the dataclass boundary; `NodeForward.failure_reason` is a categorical `NodeForwardFailureReason` Literal so adapters cannot smuggle raw node error blobs.
   - [kassiber/core/lightning/lnd.py](kassiber/core/lightning/lnd.py) — LND REST adapter implementing the scaffold's `LightningAdapter` Protocol. Registers itself on import under `kind="lnd"`. Talks to `/v1/getinfo`, `/v1/channels`, `/v1/channels/closed`, `/v1/switch`, `/v1/payments`, `/v1/invoices`, `/v1/balance/{blockchain,channels}`, and `/v1/fees`; sanitizes preimages, encoded bolt11 strings, route hops, and `failure_source_pubkey` before any payload reaches the scaffold shapes. TLS settings (`certificate`, `insecure`) are read via `backend_value` so DB-resolved backend rows are honored.
-  - [kassiber/core/htlc_parser.py](kassiber/core/htlc_parser.py) — pure parser for Boltz v1 P2WSH HTLC redeem scripts (submarine + reverse variants) and claim witnesses. Returns `payment_hash` when extractable; Boltz v2 Taproot cooperative spends fall through to heuristic by physics.
+  - [kassiber/core/htlc_parser.py](kassiber/core/htlc_parser.py) — pure parser for Boltz v1 P2WSH HTLC redeem scripts (submarine + reverse variants), claim witnesses (`extract_from_claim_witness` → `payment_hash`), and refund/timeout-branch witnesses (`extract_from_refund_witness` → `role="refund"`, no preimage; the funding-link signal for failed swaps). Boltz v2 Taproot cooperative spends fall through to heuristic by physics.
   - [kassiber/core/swap_rules.py](kassiber/core/swap_rules.py) — auto-pair rules engine with predicate matching, specificity sort, conflict-cluster skip, and a `detect_repeating_patterns` helper for "create rule from pattern" prompts.
   - [kassiber/core/saved_views.py](kassiber/core/saved_views.py) — generic saved-view CRUD (surface-discriminated). First consumer is the swap-candidate queue (`surface="swap_candidates"`).
   - [kassiber/core/samourai.py](kassiber/core/samourai.py) — local-only Samourai/Whirlpool descriptor-source importer: accepts explicit public descriptor/xpub source sets for Deposit/Badbank/Premix/Postmix/Ricochet sources, creates a redacted logical wallet group, and rejects backup files, recovery words, passphrases, private keys, or other secret-bearing material.
@@ -160,9 +161,16 @@ Kassiber is currently in **dev mode**: renaming commands, breaking flags, and re
   `asset`, `wallet`, `since`, `sort`, and `order`. `ui.backends.list` is
   scoped to the active profile and exposes URL presence metadata, not exact
   endpoint URLs. `ui.source_funds.*` exposes the reviewed source-of-funds
-  workstation: source/link/evidence listing, suggestion seeding, explicit link
-  review, report preview, and gated PDF export without adding generic CLI
-  dispatch. Stale local journals may be automatically refreshed before
+  workstation: source/link/evidence listing, suggestion seeding, one-call
+  history assembly (`ui.source_funds.assemble`, local-evidence only — it
+  never contacts a backend), explicit link
+  review, report preview, gated PDF export, and gated evidence-bundle export
+  (`ui.source_funds.export_bundle`) without adding generic CLI dispatch. Report
+  preview/save embed on-device-rendered diagram SVGs (`include_diagrams`) so the
+  desktop preview matches the exported PDF; the hot coverage path skips them.
+  The bundle export zips the report PDF plus the original evidence files
+  attached to disclosed sources and a SHA-256 `manifest.json`, reveal-mode
+  scoped. Stale local journals may be automatically refreshed before
   AI read/report tools and direct GUI reads of journal-derived report kinds,
   with the `ui.journals.process` result included in tool result metadata for
   AI calls. Wallet/backend sync can be allowed per active profile via
@@ -183,6 +191,43 @@ Kassiber is currently in **dev mode**: renaming commands, breaking flags, and re
 - Transaction attachments are stored in a managed `attachments/` state sibling; file attachments are copied locally and URL attachments remain literal strings with no fetching or indexing.
 - Profile-level tax defaults are stored on `profiles` as `fiat_currency`, `tax_country`, `tax_long_term_days`, and `gains_algorithm`.
 
+## Desktop daemon kinds (allowlist lockstep)
+
+The Tauri shell is deny-by-default: it forwards a daemon `kind` to the Python
+daemon only when that `kind` is in a hand-maintained allowlist. A new `ui.*`
+kind the desktop UI invokes must be added to every layer below, or it works in
+mock dev mode and then fails in the packaged app with `kind_not_allowed` (and
+in `pnpm dev:bridge` with HTTP 403). `pnpm dev:browser` (`VITE_DAEMON=mock`)
+never consults an allowlist, so the mock dev server does **not** prove a kind
+is wired correctly — reproduce against `dev:bridge` or the packaged shell.
+
+When you wire a new desktop-invoked `ui.*` kind, update all of:
+
+| Layer | List | Location |
+| --- | --- | --- |
+| Python daemon (must handle the kind) | `SUPPORTED_KINDS` | [kassiber/daemon.py](kassiber/daemon.py) |
+| Compiled Tauri shell (forwards to daemon) | `ALLOWED_DAEMON_KINDS` | [ui-tauri/src-tauri/src/lib.rs](ui-tauri/src-tauri/src/lib.rs) |
+| Browser dev bridge (`pnpm dev:bridge`) | `ALLOWED_BRIDGE_KINDS` | [ui-tauri/vite.config.ts](ui-tauri/vite.config.ts) |
+| If the kind streams progress records | `STREAMING_DAEMON_KINDS` + `STREAM_CAPABLE_BRIDGE_KINDS` | same two files |
+
+The allowlist is a privilege boundary, not just routing config:
+
+- The webview can invoke only what is listed. AI runtime kinds stay gated
+  separately (`AI_RUNTIME_KINDS` in `lib.rs`); never expose raw shell,
+  filesystem, descriptors, xpubs, secrets, env files, wallet config, or
+  `reveal-*` kinds to the webview invoke path.
+- AI-only read tools (e.g. `ui.transactions.search`, `ui.report.blockers`,
+  `ui.audit.changes_since_last_answer`) and unsolicited daemon→UI event kinds
+  (e.g. `ui.freshness.background`, `ui.freshness.worker`) are intentionally
+  **not** in the desktop allowlist. Do not add a kind just to silence a test —
+  confirm the desktop UI actually invokes it first.
+
+Enforced in the quality gate by
+[tests/test_connection_catalog_drift.py](tests/test_connection_catalog_drift.py):
+`ALLOWED_DAEMON_KINDS` and `ALLOWED_BRIDGE_KINDS` must stay equal and remain a
+subset of `SUPPORTED_KINDS`, and every `ui.*` kind the React app invokes through
+the real transport must be present in `ALLOWED_DAEMON_KINDS`.
+
 ## Command surface
 
 - `init`, `status`, `daemon`, `chat`, `context {show,current,set}`
@@ -193,17 +238,17 @@ Kassiber is currently in **dev mode**: renaming commands, breaking flags, and re
 - `workspaces {list,create}`
 - `profiles {list,create,get,set}`
 - `accounts {list,create}`
-- `wallets {kinds,list,create,get,update,delete,reveal-descriptor,sync,sync-btcpay,attach-btcpay,attach-bullbitcoin-wallet,derive,identify,import-json,import-csv,import-btcpay,import-phoenix,import-river,import-bull,import-coinfinity,import-21bitcoin,import-strike,import-samourai}`
+- `wallets {kinds,list,create,get,update,delete,reveal-descriptor,sync,sync-btcpay,attach-btcpay,attach-bullbitcoin-wallet,derive,identify,import-json,import-csv,import-btcpay,import-phoenix,import-river,import-bull,import-coinfinity,import-21bitcoin,import-strike,import-ledger,ledger-template,import-samourai}`
 - `backends {kinds,list,get,create,update,delete,reveal-token,set-default,clear-default}`
-- `transactions {list}`
+- `transactions {list,export}` (`export --export-format {csv,xlsx} --file [--wallet]` writes the styled transaction ledger — notes, tags, counterparty, linked-file/URL attachments — reusing the report's Transactions sheet; daemon kinds `ui.transactions.export_csv` / `ui.transactions.export_xlsx`)
 - `attachments {add,list,remove,verify,gc}`
 - `metadata records {list,get,note {set,clear},tag {add,remove},excluded {set,clear},history {list,activity,stale,revert}}`
 - `metadata bip329 {import,list,export}`
 - `journals {process,list,transfers {list},quarantined,events {list,get},quarantine {show,clear,resolve {price-override,exclude}}}`
 - `transfers {pair,list,unpair,payouts {list,create,delete},suggest,bulk-pair,dismiss,rules {list,create,apply,delete,enable,disable}}`
 - `views {list,create,delete}` — generic saved-view CRUD; ``swap_candidates`` is the first surface consumer
-- `source-funds {sources {list,create,attach},links {list,create,review,attach,bulk-review},suggest,cases {list}}`
-- `reports {summary,tax-summary,balance-sheet,portfolio-summary,capital-gains,journal-entries,balance-history,lightning-profitability,source-funds,austrian-e1kv,austrian-tax-summary,exit-tax,export-pdf,export-summary-pdf,export-csv,export-xlsx,export-lightning-profitability-csv,export-source-funds-pdf,export-austrian,export-austrian-e1kv-pdf,export-austrian-e1kv-xlsx,export-austrian-e1kv-csv,export-exit-tax-pdf,export-exit-tax-xlsx}`
+- `source-funds {sources {list,create,attach},links {list,create,review,attach,bulk-review},suggest,assemble,cases {list},coverage,recipients {list,create,update,delete}}` — `assemble` auto-builds the reviewed flow graph behind a target from local evidence only (transaction input/output structure of synced Bitcoin/Liquid wallets, Lightning payment hashes, platform ids, reviewed pairs), looping suggest + deterministic bulk review until convergence; it never contacts a backend.
+- `reports {summary,tax-summary,balance-sheet,portfolio-summary,capital-gains,journal-entries,balance-history,lightning-profitability,source-funds,austrian-e1kv,austrian-tax-summary,exit-tax,export-pdf,export-summary-pdf,export-csv,export-xlsx,export-lightning-profitability-csv,export-source-funds-pdf,export-source-funds-bundle,export-austrian,export-austrian-e1kv-pdf,export-austrian-e1kv-xlsx,export-austrian-e1kv-csv,export-exit-tax-pdf,export-exit-tax-xlsx}`
 - `rates {pairs,sync,rebuild,latest,range,set}`
 - `diagnostics {collect}`
 - `ai providers {list,get,create,update,delete,set-default,clear-default}`
@@ -375,6 +420,8 @@ uv run python -m kassiber wallets import-river --help
 uv run python -m kassiber wallets import-coinfinity --help
 uv run python -m kassiber wallets import-21bitcoin --help
 uv run python -m kassiber wallets import-strike --help
+uv run python -m kassiber wallets import-ledger --help
+uv run python -m kassiber wallets ledger-template --help
 uv run python -m kassiber profiles create --help
 uv run python -m kassiber metadata records --help
 uv run python -m kassiber attachments list --help
@@ -411,7 +458,7 @@ uv run python -m kassiber ai providers create --help
 
 - BTC-denominated amounts are stored as INTEGER msat in SQLite. Machine envelopes expose both `amount` (BTC float) and `amount_msat` (integer), and the same for `fee` / `quantity`. Fiat columns (`fiat_value`, `fiat_rate`, etc.) are still REAL.
 - Rates cache (`rates pairs/sync/latest/range/set`) stores BTC-USD / BTC-EUR samples from Coinbase Exchange by default, CoinGecko fallback, local Kraken OHLCVT CSV archive ingest (`rates sync --source kraken-csv --path <csv-zip-or-directory>`), or manual upsert. Coinbase Exchange sync stores sparse 1-minute candles from chunked 300-minute public API windows. Kraken CSV ingest is local-file only, keeps 1-minute sparse candles, and stores the close as the lookup rate plus OHLCVT metadata. `journals process` can auto-fill missing transaction prices from the cache when a matching sample exists at or before the transaction timestamp, but reports still use stored transaction and journal pricing rather than querying the cache live.
-- Phoenix Lightning wallet CSV import is implemented (`wallets import-phoenix`). River Bitcoin Activity / Account Activity CSV import is implemented (`wallets import-river` and `--source-format river_csv`). Bull Bitcoin order CSV import is implemented as exchange evidence (`wallets import-bull` and `--source-format bullbitcoin_csv`), while Bull's unified wallet transaction CSV is wallet-scoped (`--source-format bullbitcoin_wallet_csv`) and can be split by `bullbitcoin_wallet_network` or mapped onto existing wallets with `wallets attach-bullbitcoin-wallet`. Coinfinity order CSV import is implemented (`wallets import-coinfinity` and `--source-format coinfinity_csv`). 21bitcoin transaction CSV import is implemented (`wallets import-21bitcoin` and `--source-format 21bitcoin_csv`). Strike CSV import is implemented (`wallets import-strike` and `--source-format strike_csv`).
+- Phoenix Lightning wallet CSV import is implemented (`wallets import-phoenix`). River Bitcoin Activity / Account Activity CSV import is implemented (`wallets import-river` and `--source-format river_csv`). Bull Bitcoin order CSV import is implemented as exchange evidence (`wallets import-bull` and `--source-format bullbitcoin_csv`), while Bull's unified wallet transaction CSV is wallet-scoped (`--source-format bullbitcoin_wallet_csv`) and can be split by `bullbitcoin_wallet_network` or mapped onto existing wallets with `wallets attach-bullbitcoin-wallet`. Coinfinity order CSV import is implemented (`wallets import-coinfinity` and `--source-format coinfinity_csv`). 21bitcoin transaction CSV import is implemented (`wallets import-21bitcoin` and `--source-format 21bitcoin_csv`). Strike CSV import is implemented (`wallets import-strike` and `--source-format strike_csv`). A generic manual ledger importer is implemented (`wallets import-ledger`, source format `generic_ledger`): a fill-in `.xlsx` (read via `openpyxl`) or CSV/TSV template whose `Type` column maps onto real `(direction, kind)` pairs, one Bitcoin leg per row, with the fiat leg becoming exact `exchange_execution` pricing. `wallets ledger-template` writes the blank template (no DB; `.xlsx` via XlsxWriter or `.csv` by extension), and `ui.transactions.ledger_template` is its desktop kind; the desktop import reuses `ui.wallets.import_file` with `source_format=generic_ledger`. A preview-before-import path is also available: `wallets import-ledger --dry-run` (no DB) and the read-only `ui.wallets.ledger_preview` daemon kind both reuse the loader + per-row normalizer to return `{rows_read, mapped, errors, problems[], preview[]}` without persisting (collecting every rejected row's problem at once, unlike the real import which stops at the first); the desktop Generic-ledger setup panel renders that preview before the import action. Non-template files are auto-detected: `infer_ledger_columns(header)` remaps an arbitrary export's columns (date; a Type/Side column, or direction/sign, or separate sent/received columns; fee; fiat currency/price/value; note; tx id) onto the ledger shape and feeds the same normalizer (taxonomy + exact pricing preserved); rows without an explicit type become `Buy`/`Sell` when a cash counterleg is present, otherwise `Deposit`/`Withdrawal` by direction. Unrecognized columns raise `ledger_unrecognized` (preview returns `confident: false` + detected columns). Template files keep the native path. An explicit `column_map` overrides the guess.
 - No `custom` wallet kind CSV mapping DSL yet.
 - No account adjustments yet.
 - No per-profile Tor proxy configuration yet.

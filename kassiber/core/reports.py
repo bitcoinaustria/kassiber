@@ -399,6 +399,48 @@ def report_balance_sheet(conn, workspace_ref, profile_ref, hooks: ReportHooks):
     return rows
 
 
+# Reconstructing holdings by summing raw journal_entries quantities must mirror
+# the entry-type compensation baked into report_verify._holdings_quantity_formula.
+# The engine books a self-transfer's network fee in TWO rows (transfer_out's
+# quantity already includes the fee, and a separate transfer_fee disposes that
+# same fee) and books earned coins in TWO rows (an `acquisition` lot plus an
+# `income` recognition line). A naive Σ(quantity) therefore double-subtracts the
+# fee and double-counts income, diverging from the BalanceSet-derived holdings
+# tables the live (non-historical) reports read. These helpers keep the as-of
+# portfolio and balance-history paths in lockstep with that canonical balance.
+_HOLDINGS_QUANTITY_SKIP_ENTRY_TYPES = frozenset({"income", "transfer_fee"})
+_HOLDINGS_BASIS_SKIP_ENTRY_TYPES = frozenset({"income"})
+
+
+def _holdings_quantity_delta(entry_type, quantity):
+    """Net-holdings quantity contribution of one journal entry.
+
+    ``transfer_fee`` is skipped (its quantity is already inside ``transfer_out``'s
+    ``sent``); ``income`` is skipped (the coins are already counted by their
+    paired ``acquisition`` lot). Every other entry's stored quantity already
+    carries the correct sign (acquisition / transfer_in positive,
+    disposal / fee / transfer_out negative).
+    """
+    if entry_type in _HOLDINGS_QUANTITY_SKIP_ENTRY_TYPES:
+        return Decimal("0")
+    return quantity
+
+
+def _holdings_basis_delta(entry_type, quantity, fiat_value, cost_basis):
+    """Ending cost-basis contribution of one journal entry.
+
+    Mirrors ``report_verify.basis_recompute``: add acquisition / transfer_in
+    ``fiat_value``, subtract every sub-side ``cost_basis`` (disposal / fee /
+    transfer_out / transfer_fee). ``income`` is skipped because its basis rides
+    on the paired ``acquisition`` lot.
+    """
+    if entry_type in _HOLDINGS_BASIS_SKIP_ENTRY_TYPES:
+        return Decimal("0")
+    if quantity >= 0:
+        return fiat_value
+    return -cost_basis
+
+
 def _historical_portfolio_summary(conn, profile, hooks: ReportHooks, as_of_dt, *, include_wallet_id=False):
     rows = conn.execute(
         """
@@ -408,6 +450,7 @@ def _historical_portfolio_summary(conn, profile, hooks: ReportHooks, as_of_dt, *
             w.label AS wallet,
             COALESCE(a.code, a.label, '') AS account,
             je.asset,
+            je.entry_type,
             je.quantity,
             je.fiat_value,
             COALESCE(je.cost_basis, 0) AS cost_basis
@@ -451,11 +494,30 @@ def _historical_portfolio_summary(conn, profile, hooks: ReportHooks, as_of_dt, *
     for row in rows:
         quantity = msat_to_btc(row["quantity"])
         key = (row["wallet_id"], row["wallet"], row["account"], row["asset"])
-        holdings[key]["quantity"] += quantity
-        if quantity >= 0:
-            holdings[key]["cost_basis"] += dec(row["fiat_value"])
-        else:
-            holdings[key]["cost_basis"] -= dec(row["cost_basis"])
+        holdings[key]["quantity"] += _holdings_quantity_delta(row["entry_type"], quantity)
+        holdings[key]["cost_basis"] += _holdings_basis_delta(
+            row["entry_type"], quantity, dec(row["fiat_value"]), dec(row["cost_basis"])
+        )
+
+    # Per-wallet basis is an allocation, not the raw per-wallet journal sum:
+    # a self-transfer's `transfer_out` carries no cost_basis and `transfer_in`
+    # no fiat_value, so summing per wallet would strand the moved basis in the
+    # source wallet and leave the destination with zero basis. Mirror the live
+    # report's _accumulate_asset_holdings — price each wallet's residual quantity
+    # at the asset's pooled average residual basis (the profile-scope basis total
+    # is method-independent and matches report_verify). The profile-wide cost
+    # basis is unchanged; only its per-wallet attribution becomes the allocation.
+    pool_quantity = defaultdict(lambda: Decimal("0"))
+    pool_cost_basis = defaultdict(lambda: Decimal("0"))
+    for (_pwid, _pwlabel, _pacct, pool_asset), value in holdings.items():
+        pool_quantity[pool_asset] += value["quantity"]
+        pool_cost_basis[pool_asset] += value["cost_basis"]
+    avg_basis_per_unit = {
+        pool_asset: (pool_cost_basis[pool_asset] / pool_quantity[pool_asset])
+        if pool_quantity[pool_asset] > 0
+        else Decimal("0")
+        for pool_asset in pool_quantity
+    }
 
     results = []
     for (wallet_id, wallet_label, account_code, asset), value in sorted(
@@ -465,10 +527,10 @@ def _historical_portfolio_summary(conn, profile, hooks: ReportHooks, as_of_dt, *
         quantity = value["quantity"]
         if quantity <= 0:
             continue
-        cost_basis = value["cost_basis"]
+        avg_cost = avg_basis_per_unit.get(asset, Decimal("0"))
+        cost_basis = quantity * avg_cost
         latest_rate = latest_rates.get(asset, Decimal("0"))
         market_value = quantity * latest_rate
-        avg_cost = cost_basis / quantity if quantity else Decimal("0")
         result = {
             "wallet": wallet_label,
             "account": account_code,
@@ -561,7 +623,7 @@ def report_capital_gains(conn, workspace_ref, profile_ref, hooks: ReportHooks, t
     hooks.require_processed_journals(conn, profile)
     where = [
         "je.profile_id = ?",
-        "je.entry_type IN ('disposal', 'fee', 'transfer_fee', 'income')",
+        "je.entry_type IN ('disposal', 'income')",
         "COALESCE(t.taxability_override, 1) != 0",
         "COALESCE(je.at_category, '') != 'neu_swap'",
     ]
@@ -669,6 +731,7 @@ def report_balance_history(
         SELECT
             je.occurred_at,
             je.asset,
+            je.entry_type,
             je.quantity,
             je.fiat_value,
             COALESCE(je.cost_basis, 0) AS cost_basis
@@ -690,6 +753,39 @@ def report_balance_history(
         params.append(asset)
     sql += " ORDER BY je.occurred_at ASC, je.created_at ASC, je.id ASC"
     rows = conn.execute(sql, params).fetchall()
+    scoped_basis_allocation = bool(wallet_ref or account_ref)
+    pool_events = []
+    if scoped_basis_allocation:
+        # Scoped history reports quantity for the selected wallet/account, but
+        # cost basis follows the profile-wide residual pool allocation used by
+        # the live/as-of portfolio reports.
+        pool_sql = """
+            SELECT
+                je.occurred_at,
+                je.asset,
+                je.entry_type,
+                je.quantity,
+                je.fiat_value,
+                COALESCE(je.cost_basis, 0) AS cost_basis
+            FROM journal_entries je
+            WHERE je.profile_id = ?
+        """
+        pool_params = [profile["id"]]
+        if asset:
+            pool_sql += " AND je.asset = ?"
+            pool_params.append(asset)
+        pool_sql += " ORDER BY je.occurred_at ASC, je.created_at ASC, je.id ASC"
+        for row in conn.execute(pool_sql, pool_params).fetchall():
+            pool_events.append(
+                (
+                    hooks.parse_iso_datetime(row["occurred_at"], "occurred_at"),
+                    row["asset"],
+                    row["entry_type"],
+                    msat_to_btc(row["quantity"]),
+                    dec(row["fiat_value"]),
+                    dec(row["cost_basis"]),
+                )
+            )
     rate_rows = conn.execute(
         """
         SELECT occurred_at, asset, amount, fiat_rate, fiat_value
@@ -711,6 +807,7 @@ def report_balance_history(
             (
                 row_dt,
                 row["asset"],
+                row["entry_type"],
                 msat_to_btc(row["quantity"]),
                 dec(row["fiat_value"]),
                 dec(row["cost_basis"]),
@@ -735,7 +832,10 @@ def report_balance_history(
 
     cumulative = defaultdict(lambda: Decimal("0"))
     cumulative_fiat = defaultdict(lambda: Decimal("0"))
+    pool_quantity = defaultdict(lambda: Decimal("0"))
+    pool_cost_basis = defaultdict(lambda: Decimal("0"))
     event_idx = 0
+    pool_event_idx = 0
     rate_idx = 0
     current_rates = {}
     bucket_start = _floor_to_interval(range_start, interval)
@@ -745,13 +845,25 @@ def report_balance_history(
     while bucket_start <= end_cap:
         bucket_end = _next_interval(bucket_start, interval)
         while event_idx < len(events) and events[event_idx][0] < bucket_end:
-            _, ev_asset, ev_qty, ev_fiat, ev_cost_basis = events[event_idx]
-            cumulative[ev_asset] += ev_qty
-            if ev_qty >= 0:
-                cumulative_fiat[ev_asset] += ev_fiat
-            else:
-                cumulative_fiat[ev_asset] -= ev_cost_basis
+            _, ev_asset, ev_entry_type, ev_qty, ev_fiat, ev_cost_basis = events[event_idx]
+            cumulative[ev_asset] += _holdings_quantity_delta(ev_entry_type, ev_qty)
+            cumulative_fiat[ev_asset] += _holdings_basis_delta(
+                ev_entry_type, ev_qty, ev_fiat, ev_cost_basis
+            )
             event_idx += 1
+        while (
+            scoped_basis_allocation
+            and pool_event_idx < len(pool_events)
+            and pool_events[pool_event_idx][0] < bucket_end
+        ):
+            _, ev_asset, ev_entry_type, ev_qty, ev_fiat, ev_cost_basis = pool_events[
+                pool_event_idx
+            ]
+            pool_quantity[ev_asset] += _holdings_quantity_delta(ev_entry_type, ev_qty)
+            pool_cost_basis[ev_asset] += _holdings_basis_delta(
+                ev_entry_type, ev_qty, ev_fiat, ev_cost_basis
+            )
+            pool_event_idx += 1
         while rate_idx < len(rate_events) and rate_events[rate_idx][0] < bucket_end:
             _, rate_asset, rate = rate_events[rate_idx]
             current_rates[rate_asset] = rate
@@ -762,13 +874,23 @@ def report_balance_history(
             if qty == 0 and asset is None:
                 continue
             rate = current_rates.get(ev_asset, Decimal("0"))
+            if scoped_basis_allocation:
+                pool_qty = pool_quantity.get(ev_asset, Decimal("0"))
+                if pool_qty > 0:
+                    cost_basis = qty * (
+                        pool_cost_basis.get(ev_asset, Decimal("0")) / pool_qty
+                    )
+                else:
+                    cost_basis = Decimal("0")
+            else:
+                cost_basis = cumulative_fiat.get(ev_asset, Decimal("0"))
             results.append(
                 {
                     "period_start": hooks.iso_z(bucket_start),
                     "period_end": hooks.iso_z(bucket_end - timedelta(seconds=1)),
                     "asset": ev_asset,
                     "quantity": float(qty),
-                    "cumulative_cost_basis": float(cumulative_fiat.get(ev_asset, Decimal("0"))),
+                    "cumulative_cost_basis": float(cost_basis),
                     "market_value": float(qty * rate),
                 }
             )
@@ -867,6 +989,71 @@ def _wallet_scope_sql(column: str, wallets: Sequence[Mapping[str, Any]]) -> tupl
         raise AppError("Summary PDF requires at least one wallet in scope", code="validation")
     placeholders = ",".join("?" for _ in ids)
     return f"{column} IN ({placeholders})", ids
+
+
+def _attachment_entry(row):
+    """Normalize an attachment row into a display entry.
+
+    ``display_name`` is the human label shown in the sheet (the URL/file is the
+    link target); ``url`` is empty for file attachments.
+    """
+    label = (row["label"] or "").strip()
+    url = (row["url"] or "").strip()
+    filename = (row["filename"] or "").strip()
+    is_url = str(row["kind"]).lower() == "url"
+    if is_url:
+        display_name = label or url or "(link)"
+        reference = url
+    else:
+        display_name = filename or label or "(file)"
+        reference = filename
+    return {
+        "kind": "url" if is_url else "file",
+        "label": label,
+        "display_name": display_name,
+        "url": url if is_url else "",
+        "reference": reference,
+    }
+
+
+def _tags_by_transaction(conn, tx_where, tx_params):
+    rows = conn.execute(
+        f"""
+        SELECT tt.transaction_id AS tx_id, tg.code AS code
+        FROM transaction_tags tt
+        JOIN tags tg ON tg.id = tt.tag_id
+        JOIN transactions t ON t.id = tt.transaction_id
+        WHERE {tx_where} AND t.excluded = 0
+        ORDER BY tg.code ASC
+        """,
+        tx_params,
+    ).fetchall()
+    grouped = {}
+    for row in rows:
+        grouped.setdefault(row["tx_id"], []).append(row["code"])
+    return {tx_id: ", ".join(codes) for tx_id, codes in grouped.items()}
+
+
+def _attachment_entries_by_transaction(conn, tx_where, tx_params):
+    rows = conn.execute(
+        f"""
+        SELECT
+            a.transaction_id AS tx_id,
+            a.attachment_type AS kind,
+            COALESCE(a.label, '') AS label,
+            COALESCE(a.original_filename, '') AS filename,
+            COALESCE(a.source_url, '') AS url
+        FROM attachments a
+        JOIN transactions t ON t.id = a.transaction_id
+        WHERE {tx_where} AND t.excluded = 0
+        ORDER BY a.created_at ASC
+        """,
+        tx_params,
+    ).fetchall()
+    grouped = {}
+    for row in rows:
+        grouped.setdefault(row["tx_id"], []).append(_attachment_entry(row))
+    return grouped
 
 
 def _report_query_rows(conn, profile, wallet=None):
@@ -979,9 +1166,10 @@ def _report_query_rows(conn, profile, wallet=None):
         tx_params,
     ).fetchall()
 
-    transactions = conn.execute(
+    transaction_rows = conn.execute(
         f"""
         SELECT
+            t.id AS row_id,
             t.occurred_at,
             w.label AS wallet,
             COALESCE(t.external_id, '') AS transaction_id,
@@ -989,7 +1177,9 @@ def _report_query_rows(conn, profile, wallet=None):
             t.asset,
             t.amount,
             t.fee,
-            COALESCE(t.description, '') AS description
+            COALESCE(t.description, '') AS description,
+            COALESCE(t.note, '') AS note,
+            COALESCE(t.counterparty, '') AS counterparty
         FROM transactions t
         JOIN wallets w ON w.id = t.wallet_id
         WHERE {tx_where} AND t.excluded = 0
@@ -997,6 +1187,19 @@ def _report_query_rows(conn, profile, wallet=None):
         """,
         tx_params,
     ).fetchall()
+    tags_by_tx = _tags_by_transaction(conn, tx_where, tx_params)
+    attachments_by_tx = _attachment_entries_by_transaction(conn, tx_where, tx_params)
+    transactions = []
+    for row in transaction_rows:
+        entries = attachments_by_tx.get(row["row_id"], [])
+        transactions.append(
+            {
+                **dict(row),
+                "tags": tags_by_tx.get(row["row_id"], ""),
+                "attachments": "\n".join(entry["display_name"] for entry in entries),
+                "attachments_list": entries,
+            }
+        )
 
     pair_filters = ["p.profile_id = ?", "p.deleted_at IS NULL"]
     pair_params = [profile["id"]]
@@ -2492,6 +2695,7 @@ def _austrian_e1kv_rows(conn, profile, tax_year):
         "je.profile_id = ?",
         "je.at_category IS NOT NULL",
         "je.at_category != 'neu_swap'",
+        "je.entry_type NOT IN ('fee', 'transfer_fee')",
         "COALESCE(t.taxability_override, 1) != 0",
     ]
     params: list[Any] = [profile["id"]]
@@ -3501,18 +3705,23 @@ def _austrian_e1kv_xlsx_write_detail_sheet(
     worksheet.set_margins(left=0.35, right=0.35, top=0.5, bottom=0.5)
 
     last_column = len(headers) - 1
+    widths = [column_widths[i] if i < len(column_widths) else 16 for i in range(len(headers))]
     worksheet.set_row(0, 31)
     worksheet.merge_range(0, 0, 0, last_column, title, formats["detail_title"])
-    worksheet.set_row(1, 34)
+    header_lines = max((_estimate_wrapped_lines(header, widths[i]) for i, header in enumerate(headers)), default=1)
+    worksheet.set_row(1, max(34, header_lines * 15 + 6))
     for column_index, header in enumerate(headers):
-        width = column_widths[column_index] if column_index < len(column_widths) else 16
-        worksheet.set_column(column_index, column_index, width)
+        worksheet.set_column(column_index, column_index, widths[column_index])
         worksheet.write_string(1, column_index, header, formats["header"])
 
     row_index = 2
     if rows:
         for values in rows:
-            worksheet.set_row(row_index, 22)
+            lines = max(
+                (_estimate_wrapped_lines(values[i], widths[i]) for i in range(min(len(values), len(widths)))),
+                default=1,
+            )
+            worksheet.set_row(row_index, max(22, lines * 15 + 4))
             for column_index, value in enumerate(values):
                 format_name = row_format_names[column_index] if column_index < len(row_format_names) else "text"
                 _xlsx_write_value(worksheet, row_index, column_index, value, formats[format_name])
@@ -3524,8 +3733,9 @@ def _austrian_e1kv_xlsx_write_detail_sheet(
         row_index += 1
 
     row_index += 1
+    total_label_width = sum(widths[:value_column]) if value_column > 0 else (widths[0] if widths else 16)
     for label, value in total_rows:
-        worksheet.set_row(row_index, 22)
+        worksheet.set_row(row_index, max(22, _estimate_wrapped_lines(label, total_label_width) * 15 + 4))
         _austrian_e1kv_xlsx_write_total_row(
             worksheet,
             row_index,
@@ -3549,15 +3759,17 @@ def _austrian_e1kv_xlsx_write_overview(report, workbook, formats):
     worksheet.merge_range(0, 0, 0, 2, "I. Übersicht", formats["overview_title"])
     row_index = 2
     for entry in _austrian_e1kv_overview_entries(report):
-        worksheet.set_row(row_index, 25)
         if entry[0] == "heading":
+            worksheet.set_row(row_index, max(25, _estimate_wrapped_lines(entry[1], 100) * 15 + 6))
             worksheet.merge_range(row_index, 0, row_index, 2, entry[1], formats["overview_group"])
             row_index += 2
         elif entry[0] == "section":
+            worksheet.set_row(row_index, max(25, _estimate_wrapped_lines(entry[1], 100) * 15 + 6))
             worksheet.merge_range(row_index, 0, row_index, 2, entry[1], formats["overview_section"])
             row_index += 1
         else:
             _kind, label, cents, total = entry
+            worksheet.set_row(row_index, max(22, _estimate_wrapped_lines(label, 72) * 15 + 4))
             label_format = formats["overview_total_label"] if total else formats["overview_label"]
             value_format = formats["overview_total_money"] if total else formats["overview_money"]
             worksheet.write_string(row_index, 0, label, label_format)
@@ -3623,7 +3835,12 @@ def _austrian_e1kv_xlsx_write_explanations(report, workbook, formats):
         ]
     )
     for row_index, (text, format_name) in enumerate(rows):
-        worksheet.set_row(row_index, 26 if format_name.endswith("heading") or format_name.endswith("title") else 46)
+        if format_name.endswith("heading") or format_name.endswith("title"):
+            worksheet.set_row(row_index, 26)
+        elif text:
+            worksheet.set_row(row_index, max(20, _estimate_wrapped_lines(text, 105) * 15 + 6))
+        else:
+            worksheet.set_row(row_index, 12)
         if text:
             worksheet.write_string(row_index, 0, text, formats[format_name])
         else:
@@ -4066,6 +4283,11 @@ def _generic_report_transaction_rows(context):
                 "fee": float(msat_to_btc(fee_msat)),
                 "fee_msat": fee_msat,
                 "description": row["description"],
+                "note": row.get("note", ""),
+                "counterparty": row.get("counterparty", ""),
+                "tags": row.get("tags", ""),
+                "attachments": row.get("attachments", ""),
+                "attachments_list": row.get("attachments_list", []),
             }
         )
     return rows
@@ -4244,6 +4466,10 @@ def _generic_report_section_specs(context):
                 "fee",
                 "fee_msat",
                 "description",
+                "note",
+                "counterparty",
+                "tags",
+                "attachments",
             ),
             "rows": _generic_report_transaction_rows(context),
         },
@@ -4278,11 +4504,16 @@ def _generic_report_csv_rows(context, sections):
 def _generic_report_xlsx_formats(workbook):
     return {
         "title": workbook.add_format({"bold": True, "font_size": 14, "valign": "vcenter"}),
-        "header": workbook.add_format({"bold": True, "font_size": 11, "valign": "top", "text_wrap": True}),
+        "header": workbook.add_format(
+            {"bold": True, "font_size": 11, "valign": "top", "text_wrap": True, "bg_color": "#EFEFEF", "bottom": 1}
+        ),
         "text": workbook.add_format({"font_size": 11, "valign": "top", "text_wrap": True}),
         "int": workbook.add_format({"font_size": 11, "valign": "top", "num_format": "0"}),
         "quantity": workbook.add_format({"font_size": 11, "valign": "top", "num_format": "0.00000000"}),
         "money": workbook.add_format({"font_size": 11, "valign": "top", "num_format": "#,##0.00"}),
+        "link": workbook.add_format(
+            {"font_size": 11, "valign": "top", "text_wrap": True, "font_color": "#185FA5", "underline": 1}
+        ),
     }
 
 
@@ -4348,6 +4579,21 @@ def _generic_report_column_width(header, rows):
     return max(10, min(sample_width + 2, 38))
 
 
+def _estimate_wrapped_lines(text, width_chars):
+    """Estimate how many wrapped lines a string occupies in a cell that wide."""
+    if text in (None, ""):
+        return 1
+    width = max(1, int(width_chars) - 1)
+    total = 0
+    for segment in str(text).split("\n"):
+        total += max(1, -(-len(segment.rstrip()) // width))
+    return max(1, total)
+
+
+def _row_height_for_lines(lines):
+    return max(16, lines * 15 + 4)
+
+
 def _generic_report_xlsx_write_sheet(workbook, spec, formats):
     worksheet = workbook.add_worksheet(spec["sheet_name"])
     worksheet.set_landscape()
@@ -4356,27 +4602,58 @@ def _generic_report_xlsx_write_sheet(workbook, spec, formats):
     headers = list(spec["headers"])
     rows = spec["rows"]
     last_column = max(len(headers) - 1, 0)
+    widths = [_generic_report_column_width(header, rows) for header in headers]
     worksheet.set_row(0, 28)
     worksheet.merge_range(0, 0, 0, last_column, spec["title"], formats["title"])
-    worksheet.set_row(1, 24)
+    header_lines = max(
+        (_estimate_wrapped_lines(_report_column_label(header), widths[index]) for index, header in enumerate(headers)),
+        default=1,
+    )
+    worksheet.set_row(1, max(24, header_lines * 15 + 4))
     for column_index, header in enumerate(headers):
-        worksheet.set_column(column_index, column_index, _generic_report_column_width(header, rows))
+        worksheet.set_column(column_index, column_index, widths[column_index])
         worksheet.write_string(1, column_index, _report_column_label(header), formats["header"])
     worksheet.freeze_panes(2, 0)
 
     row_index = 2
     if rows:
         for row in rows:
+            lines = 1
             for column_index, header in enumerate(headers):
+                if header == "attachments" and "attachments_list" in row:
+                    _write_attachments_cell(worksheet, row_index, column_index, row, formats)
+                    lines = max(lines, len(row.get("attachments_list") or []) or 1)
+                    continue
                 value = row.get(header, "")
                 format_name = _generic_report_xlsx_format_name(header, value)
+                if format_name == "text":
+                    lines = max(lines, _estimate_wrapped_lines(value, widths[column_index]))
                 _xlsx_write_value(worksheet, row_index, column_index, value, formats[format_name])
+            worksheet.set_row(row_index, _row_height_for_lines(lines))
             row_index += 1
     else:
         worksheet.write_string(row_index, 0, "No rows in scope.", formats["text"])
         row_index += 1
     worksheet.autofilter(1, 0, max(row_index - 1, 1), last_column)
     return worksheet
+
+
+def _write_attachments_cell(worksheet, row_index, column_index, row, formats):
+    """Render the attachments cell: a single URL becomes a clickable link shown
+    behind its name; multiple attachments are listed one per line (Excel allows
+    only one hyperlink per cell, so the per-link clickables live on Evidence)."""
+    entries = row.get("attachments_list") or []
+    if not entries:
+        worksheet.write_blank(row_index, column_index, None, formats["text"])
+        return
+    url_entries = [entry for entry in entries if entry.get("url")]
+    if len(entries) == 1 and url_entries:
+        entry = url_entries[0]
+        worksheet.write_url(row_index, column_index, entry["url"], formats["link"], entry["display_name"])
+        return
+    worksheet.write_string(
+        row_index, column_index, "\n".join(entry["display_name"] for entry in entries), formats["text"]
+    )
 
 
 def export_csv_report(conn, workspace_ref, profile_ref, file_path, hooks: ReportHooks, wallet_ref=None, history_limit=None):
@@ -4403,8 +4680,249 @@ def export_csv_report(conn, workspace_ref, profile_ref, file_path, hooks: Report
     }
 
 
-def export_xlsx_report(conn, workspace_ref, profile_ref, file_path, hooks: ReportHooks, wallet_ref=None, history_limit=None):
+_VERIFY_ADD_ENTRY_TYPES = ("acquisition", "income", "transfer_in")
+_VERIFY_SUB_ENTRY_TYPES = ("disposal", "fee", "transfer_fee", "transfer_out")
+
+
+def _verification_quarantine_detail(detail_json):
+    """Render a quarantine's detail_json as a compact one-line string."""
+    if not detail_json:
+        return ""
+    import json
+
+    try:
+        data = json.loads(detail_json)
+    except (ValueError, TypeError):
+        return str(detail_json)[:200]
+    if isinstance(data, dict):
+        if not data:
+            return ""
+        return "; ".join(f"{key}={value}" for key, value in data.items())[:200]
+    return str(data)[:200]
+
+
+def _build_verification_data(conn, profile, hooks: ReportHooks):
+    """Gather the profile-scope ledger and per-asset Kassiber aggregates that
+    drive the self-verifying ``Control`` / ``Acquisitions`` / ``Disposals``
+    sheets. Reconciliation is per asset across the whole profile (Bitcoin
+    accounting is pooled per asset across wallets), so the wallet filter on the
+    rest of the report does not apply here."""
+    workspace_id = profile["workspace_id"]
+    profile_id = profile["id"]
+
+    ledger_rows = conn.execute(
+        """
+        SELECT
+            je.occurred_at,
+            w.label AS wallet,
+            je.transaction_id AS internal_tx_id,
+            COALESCE(NULLIF(t.external_id, ''), je.transaction_id) AS transaction_id,
+            je.entry_type,
+            je.asset,
+            je.quantity,
+            je.fiat_value,
+            COALESCE(je.cost_basis, 0) AS cost_basis,
+            COALESCE(je.proceeds, 0) AS proceeds,
+            COALESCE(je.gain_loss, 0) AS gain_loss,
+            COALESCE(je.description, '') AS description,
+            COALESCE(je.pricing_source_kind, '') AS pricing_source,
+            COALESCE(je.pricing_quality, '') AS pricing_quality,
+            CASE
+                WHEN COALESCE(t.taxability_override, 1) != 0
+                     AND COALESCE(je.at_category, '') != 'neu_swap'
+                THEN 1 ELSE 0
+            END AS taxable
+        FROM journal_entries je
+        JOIN wallets w ON w.id = je.wallet_id
+        LEFT JOIN transactions t ON t.id = je.transaction_id
+        WHERE je.profile_id = ?
+        ORDER BY je.occurred_at ASC, je.created_at ASC, je.id ASC
+        """,
+        (profile_id,),
+    ).fetchall()
+
+    ledger_tags = _tags_by_transaction(conn, "t.profile_id = ?", [profile_id])
+
+    acquisitions = []
+    disposals = []
+    for row in ledger_rows:
+        magnitude = abs(int(row["quantity"]))
+        common = {
+            "occurred_at": row["occurred_at"],
+            "wallet": row["wallet"],
+            "transaction_id": row["transaction_id"],
+            "asset": row["asset"],
+            "entry_type": row["entry_type"],
+            "quantity_msat": magnitude,
+            "quantity": float(msat_to_btc(magnitude)),
+            "description": row["description"],
+            "tags": ledger_tags.get(row["internal_tx_id"], ""),
+            "pricing_source": row["pricing_source"],
+            "pricing_quality": row["pricing_quality"],
+            "taxable": int(row["taxable"]),
+        }
+        if row["entry_type"] in _VERIFY_ADD_ENTRY_TYPES:
+            common["fiat_value"] = float(row["fiat_value"] or 0.0)
+            common["gain_loss"] = float(row["gain_loss"] or 0.0)
+            acquisitions.append(common)
+        elif row["entry_type"] in _VERIFY_SUB_ENTRY_TYPES:
+            common["proceeds"] = float(row["proceeds"] or 0.0)
+            common["cost_basis"] = float(row["cost_basis"] or 0.0)
+            common["gain_loss"] = float(row["gain_loss"] or 0.0)
+            common["gain_loss_kassiber"] = float(row["gain_loss"] or 0.0)
+            disposals.append(common)
+
+    quarantines = conn.execute(
+        """
+        SELECT
+            jq.reason,
+            jq.detail_json,
+            COALESCE(NULLIF(t.external_id, ''), jq.transaction_id) AS transaction_id,
+            t.occurred_at,
+            t.asset,
+            t.amount,
+            COALESCE(t.description, '') AS description
+        FROM journal_quarantines jq
+        LEFT JOIN transactions t ON t.id = jq.transaction_id
+        WHERE jq.profile_id = ?
+        ORDER BY t.occurred_at ASC, jq.transaction_id ASC
+        """,
+        (profile_id,),
+    ).fetchall()
+    quarantine_rows = []
+    for row in quarantines:
+        amount_msat = row["amount"]
+        quarantine_rows.append(
+            {
+                "occurred_at": row["occurred_at"] or "",
+                "transaction_id": row["transaction_id"],
+                "asset": row["asset"] or "",
+                "amount": float(msat_to_btc(amount_msat)) if amount_msat is not None else "",
+                "reason": row["reason"],
+                "detail": _verification_quarantine_detail(row["detail_json"]),
+                "description": row["description"],
+            }
+        )
+
+    evidence = conn.execute(
+        """
+        SELECT
+            t.occurred_at,
+            w.label AS wallet,
+            COALESCE(t.external_id, '') AS transaction_id,
+            t.asset,
+            a.attachment_type AS kind,
+            COALESCE(a.label, '') AS label,
+            COALESCE(a.original_filename, '') AS filename,
+            COALESCE(a.source_url, '') AS url
+        FROM attachments a
+        JOIN transactions t ON t.id = a.transaction_id
+        JOIN wallets w ON w.id = t.wallet_id
+        WHERE a.profile_id = ? AND t.excluded = 0
+        ORDER BY t.occurred_at ASC, a.created_at ASC
+        """,
+        (profile_id,),
+    ).fetchall()
+    attachments = []
+    for row in evidence:
+        entry = _attachment_entry(row)
+        attachments.append(
+            {
+                "occurred_at": row["occurred_at"] or "",
+                "wallet": row["wallet"],
+                "transaction_id": row["transaction_id"],
+                "asset": row["asset"] or "",
+                "type": entry["kind"],
+                "name": entry["display_name"],
+                "url": entry["url"],
+                "reference": entry["reference"],
+            }
+        )
+
+    portfolio_rows = report_portfolio_summary(conn, workspace_id, profile_id, hooks)
+    capital_rows = report_capital_gains(conn, workspace_id, profile_id, hooks)
+
+    fiat_currency = profile["fiat_currency"]
+    rate_provenance = {}
+    for asset in {row["asset"] for row in portfolio_rows}:
+        pair = core_rates.transaction_rate_pair(asset, fiat_currency)
+        source, timestamp = "transaction price (no market quote)", ""
+        if pair is not None:
+            try:
+                cached_rate = core_rates.get_latest_rate(conn, pair)
+                source = cached_rate.get("source") or source
+                timestamp = cached_rate.get("timestamp") or ""
+            except AppError as exc:
+                if exc.code != "not_found":
+                    raise
+            except sqlite3.OperationalError:
+                # Rates cache table may not exist yet (older DBs); fall back to
+                # the "no market quote" provenance defaults set above.
+                pass
+        rate_provenance[asset] = (source, timestamp)
+
+    holdings_by_asset = {}
+    for row in portfolio_rows:
+        bucket = holdings_by_asset.setdefault(
+            row["asset"],
+            {"quantity": 0.0, "cost_basis": 0.0, "market_value": 0.0, "unrealized_pnl": 0.0},
+        )
+        bucket["quantity"] += float(row["quantity"])
+        bucket["cost_basis"] += float(row["cost_basis"])
+        bucket["market_value"] += float(row["market_value"])
+        bucket["unrealized_pnl"] += float(row["unrealized_pnl"])
+
+    realized_by_asset = {}
+    for row in capital_rows:
+        realized_by_asset[row["asset"]] = realized_by_asset.get(row["asset"], 0.0) + float(row["gain_loss"])
+
+    asset_rows = []
+    for asset in sorted(set(holdings_by_asset) | set(realized_by_asset)):
+        holding = holdings_by_asset.get(
+            asset, {"quantity": 0.0, "cost_basis": 0.0, "market_value": 0.0, "unrealized_pnl": 0.0}
+        )
+        quantity = holding["quantity"]
+        cost_basis = holding["cost_basis"]
+        market_value = holding["market_value"]
+        rate = market_value / quantity if quantity else 0.0
+        avg_cost = cost_basis / quantity if quantity else 0.0
+        realized = realized_by_asset.get(asset, 0.0)
+        rate_source, rate_timestamp = rate_provenance.get(asset, ("", ""))
+        asset_rows.append(
+            {
+                "asset": asset,
+                "rate": rate,
+                "rate_source": rate_source,
+                "rate_as_of": rate_timestamp,
+                "quantity": quantity,
+                "holdings_qty_kassiber": quantity,
+                "cost_basis": cost_basis,
+                "cost_basis_kassiber": cost_basis,
+                "avg_cost_kassiber": avg_cost,
+                "market_value": market_value,
+                "market_value_kassiber": market_value,
+                "unrealized_pnl": holding["unrealized_pnl"],
+                "unrealized_kassiber": holding["unrealized_pnl"],
+                "realized_gain": realized,
+                "realized_gain_kassiber": realized,
+            }
+        )
+
+    return {
+        "acquisitions": acquisitions,
+        "disposals": disposals,
+        "asset_rows": asset_rows,
+        "quarantines": quarantine_rows,
+        "attachments": attachments,
+    }
+
+
+def export_xlsx_report(
+    conn, workspace_ref, profile_ref, file_path, hooks: ReportHooks, wallet_ref=None, history_limit=None, verify=True
+):
     import xlsxwriter
+
+    from . import report_verify
 
     context = _build_full_report_context(
         conn,
@@ -4419,6 +4937,9 @@ def export_xlsx_report(conn, workspace_ref, profile_ref, file_path, hooks: Repor
     path.parent.mkdir(parents=True, exist_ok=True)
 
     workbook = xlsxwriter.Workbook(str(path))
+    if verify:
+        # Verification-sheet formulas should recompute when the file is opened.
+        workbook.set_calc_mode("auto")
     workbook.set_properties(
         {
             "title": context["title"],
@@ -4430,14 +4951,127 @@ def export_xlsx_report(conn, workspace_ref, profile_ref, file_path, hooks: Repor
     formats = _generic_report_xlsx_formats(workbook)
     for spec in sections:
         _generic_report_xlsx_write_sheet(workbook, spec, formats)
+
+    verify_sheets = []
+    if verify:
+        import kassiber
+
+        profile = context["profile"]
+        verification = _build_verification_data(conn, profile, hooks)
+        run_metadata = {
+            "generated_at": context["generated_at"],
+            "kassiber_version": getattr(kassiber, "__version__", ""),
+            "lot_method": profile["gains_algorithm"],
+            "fiat_currency": profile["fiat_currency"],
+            "tax_country": profile["tax_country"],
+            "last_processed_at": profile["last_processed_at"] or "",
+            "processed_tx_count": int(profile["last_processed_tx_count"] or 0),
+            "wallet_scope": context["wallet"]["label"] if context["wallet"] else "All wallets",
+        }
+        verify_sheets = report_verify.augment_workbook(
+            workbook,
+            gains_algorithm=profile["gains_algorithm"],
+            tax_country=profile["tax_country"],
+            fiat_currency=profile["fiat_currency"],
+            wallet_scope_label=context["wallet"]["label"] if context["wallet"] else None,
+            run_metadata=run_metadata,
+            acquisitions=verification["acquisitions"],
+            disposals=verification["disposals"],
+            asset_rows=verification["asset_rows"],
+            quarantines=verification["quarantines"],
+            attachments=verification["attachments"],
+        )
     workbook.close()
     return {
         "file": str(path.resolve()),
         "bytes": path.stat().st_size,
         "title": context["title"],
         "wallet": wallet_ref or "",
-        "sheets": [spec["sheet_name"] for spec in sections],
+        "sheets": [spec["sheet_name"] for spec in sections] + verify_sheets,
+        "verified": bool(verify),
         "rows": sum(len(spec["rows"]) for spec in sections),
+    }
+
+
+TRANSACTIONS_EXPORT_HEADERS = (
+    "occurred_at",
+    "wallet",
+    "transaction_id",
+    "direction",
+    "asset",
+    "amount",
+    "amount_msat",
+    "fee",
+    "fee_msat",
+    "description",
+    "note",
+    "counterparty",
+    "tags",
+    "attachments",
+)
+
+
+def _transactions_export_context(conn, workspace_ref, profile_ref, hooks: ReportHooks, wallet_ref=None):
+    """Build the single-sheet Transactions export spec (wallet-scope aware).
+
+    Reuses the same row builder + columns as the full report's Transactions
+    sheet — including note, counterparty, tags, and the linked-file/URL
+    attachments — so the standalone export matches the report."""
+    workspace, profile = _resolve_report_scope(conn, workspace_ref, profile_ref, hooks)
+    wallet = hooks.resolve_wallet(conn, profile["id"], wallet_ref) if wallet_ref else None
+    query_rows = _report_query_rows(conn, profile, wallet=wallet)
+    rows = _generic_report_transaction_rows({"query_rows": query_rows})
+    title_scope = wallet["label"] if wallet else profile["label"]
+    spec = {
+        "sheet_name": "Transactions",
+        "title": "Transactions",
+        "headers": TRANSACTIONS_EXPORT_HEADERS,
+        "rows": rows,
+    }
+    return {"title": f"Kassiber Transactions - {title_scope}", "spec": spec, "wallet": wallet}
+
+
+def export_transactions_csv_report(conn, workspace_ref, profile_ref, file_path, hooks: ReportHooks, wallet_ref=None):
+    context = _transactions_export_context(conn, workspace_ref, profile_ref, hooks, wallet_ref=wallet_ref)
+    spec = context["spec"]
+    path = Path(file_path).expanduser()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    _write_csv_rows(path, _generic_report_csv_rows({"title": context["title"]}, [spec]))
+    return {
+        "file": str(path.resolve()),
+        "bytes": path.stat().st_size,
+        "title": context["title"],
+        "wallet": wallet_ref or "",
+        "rows": len(spec["rows"]),
+    }
+
+
+def export_transactions_xlsx_report(conn, workspace_ref, profile_ref, file_path, hooks: ReportHooks, wallet_ref=None):
+    import xlsxwriter
+
+    context = _transactions_export_context(conn, workspace_ref, profile_ref, hooks, wallet_ref=wallet_ref)
+    spec = context["spec"]
+    path = Path(file_path).expanduser()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    workbook = xlsxwriter.Workbook(str(path))
+    workbook.set_properties(
+        {
+            "title": context["title"],
+            "subject": "Kassiber transactions export",
+            "author": "Kassiber",
+            "comments": "Transaction ledger with notes, tags, and linked evidence.",
+        }
+    )
+    formats = _generic_report_xlsx_formats(workbook)
+    _generic_report_xlsx_write_sheet(workbook, spec, formats)
+    workbook.close()
+    return {
+        "file": str(path.resolve()),
+        "bytes": path.stat().st_size,
+        "title": context["title"],
+        "wallet": wallet_ref or "",
+        "sheets": [spec["sheet_name"]],
+        "rows": len(spec["rows"]),
     }
 
 
@@ -5001,6 +5635,8 @@ __all__ = [
     "export_csv_report",
     "export_pdf_report",
     "export_summary_pdf_report",
+    "export_transactions_csv_report",
+    "export_transactions_xlsx_report",
     "export_xlsx_report",
     "latest_market_rates_for_profile",
     "latest_transaction_rates_for_profile",

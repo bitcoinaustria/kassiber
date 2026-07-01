@@ -1,3 +1,4 @@
+import json
 import unittest
 from decimal import Decimal
 
@@ -117,7 +118,46 @@ class InferOutboundRegimesTest(unittest.TestCase):
             _row("sell-from-b", "wallet-b", "outbound", 30_000_000, occurred_at="2025-06-01T00:00:00Z"),
         ]
         intra_pairs = [{"out": rows[2], "in": rows[3]}]
-        self.assertEqual(infer_outbound_regimes(rows, intra_pairs), {"sell-from-b": REGIME_NEU})
+        # The self-transfer's out row now also carries a regime: its taxable
+        # miner-fee disposal must be tagged (Neu here — post-cutoff move drawing
+        # the Neu pool) or rp2's moving-average aborts the asset on an ambiguous
+        # disposal. The moved Neu inventory still funds the later sell-from-b.
+        self.assertEqual(
+            infer_outbound_regimes(rows, intra_pairs),
+            {"xfer-out": REGIME_NEU, "sell-from-b": REGIME_NEU},
+        )
+
+    def test_self_transfer_fee_is_fee_first_when_neu_covers_fee_only(self):
+        # A post-cutoff MOVE from a mixed Alt/Neu wallet uses the preferred Neu
+        # slice for the taxable miner fee first. Only the remaining Neu quantity
+        # carries to the destination; otherwise a later sale from the destination
+        # would see Neu inventory that was already consumed by the fee.
+        rows = [
+            _row("buy-alt", "wallet-a", "inbound", 100_000_000, occurred_at="2020-06-01T00:00:00Z"),
+            _row("buy-neu", "wallet-a", "inbound", 10_000_000, occurred_at="2024-06-01T00:00:00Z"),
+            _row(
+                "xfer-out",
+                "wallet-a",
+                "outbound",
+                100_000_000,
+                fee=5_000_000,
+                occurred_at="2025-01-01T00:00:00Z",
+                external_id="xfer-1",
+            ),
+            _row("xfer-in", "wallet-b", "inbound", 100_000_000, occurred_at="2025-01-01T00:00:00Z", external_id="xfer-1"),
+            _row("sell-neu-remainder", "wallet-b", "outbound", 7_000_000, occurred_at="2025-06-01T00:00:00Z"),
+            _row("sell-after-neu-fee", "wallet-b", "outbound", 1_000_000, occurred_at="2025-06-02T00:00:00Z"),
+        ]
+        intra_pairs = [{"out": rows[2], "in": rows[3]}]
+
+        self.assertEqual(
+            infer_outbound_regimes(rows, intra_pairs),
+            {
+                "xfer-out": REGIME_NEU,
+                "sell-neu-remainder": REGIME_NEU,
+                "sell-after-neu-fee": REGIME_ALT,
+            },
+        )
 
 
 class AustrianKennzahlMappingTest(unittest.TestCase):
@@ -380,6 +420,124 @@ class ATCrossAssetValidationWiringTest(unittest.TestCase):
 
         self.assertEqual(ctx.exception.code, "unsupported")
         self.assertIn("PR #4", str(ctx.exception))
+
+
+class ATSwapOverSellQuarantineTest(unittest.TestCase):
+    """An Austrian carrying-value swap whose disposed leg has insufficient
+    quantity must be quarantined as a PAIR before it can be promoted to an
+    at_swap_link.
+
+    Regression for the report-abort path: marking such a leg lets it bypass the
+    single-asset quantity gate on the second prepare pass and reach compute_tax,
+    where rp2's per-account BalanceSet raises an uncatchable "balance went
+    negative" that aborts the whole multi-asset report instead of quarantining
+    the one offending pair. (Real-world trigger: a self-custody round-trip — e.g.
+    BTC funding a friend's multisig that later returns — that the user paired as
+    a BTC↔L-BTC carrying-value swap.)
+    """
+
+    def _profile(self):
+        return {
+            "id": "p1",
+            "workspace_id": "w1",
+            "label": "BA",
+            "tax_country": "at",
+            "gains_algorithm": "moving_average_at",
+        }
+
+    def _wallet_refs(self):
+        return {
+            "onchain": {
+                "id": "onchain",
+                "label": "onchain",
+                "wallet_account_id": "acct-1",
+                "account_code": "A",
+                "account_label": "Account A",
+            },
+            "liquid": {
+                "id": "liquid",
+                "label": "liquid",
+                "wallet_account_id": "acct-1",
+                "account_code": "A",
+                "account_label": "Account A",
+            },
+        }
+
+    def _row(self, tx_id, wallet_id, direction, asset, amount_msat, occurred_at):
+        return {
+            "id": tx_id,
+            "wallet_id": wallet_id,
+            "wallet_label": wallet_id,
+            "asset": asset,
+            "direction": direction,
+            "amount": amount_msat,
+            "fee": 0,
+            "fiat_rate": 50_000,
+            "fiat_value": None,
+            "kind": "deposit" if direction == "inbound" else "withdrawal",
+            "description": tx_id,
+            "note": None,
+            "external_id": tx_id,
+            "occurred_at": occurred_at,
+        }
+
+    def test_oversold_swap_leg_quarantines_pair_without_marking(self):
+        from kassiber.core.austrian import AT_SWAP_QUARANTINE_REASON
+        from kassiber.core.engines.rp2 import (
+            _prepare_assets,
+            _rp2_configuration,
+            _select_at_cross_asset_swap_links,
+        )
+
+        profile = self._profile()
+        wallet_refs = self._wallet_refs()
+        # The BTC account holds only 0.0001 BTC but the swap disposes 0.0005 BTC —
+        # a local over-sell. The L-BTC acquisition leg is otherwise valid.
+        btc_in = self._row("btc-in", "onchain", "inbound", "BTC", 10_000_000, "2025-05-01T00:00:00Z")
+        btc_out = self._row("swap-out", "onchain", "outbound", "BTC", 50_000_000, "2025-06-01T00:00:00Z")
+        lbtc_in = self._row("swap-in", "liquid", "inbound", "L-BTC", 50_000_000, "2025-06-01T00:00:00Z")
+        rows = [btc_in, btc_out, lbtc_in]
+        rows_by_asset = {"BTC": [btc_in, btc_out], "L-BTC": [lbtc_in]}
+
+        with _rp2_configuration(profile, ["onchain", "liquid"], ["BTC", "L-BTC"]) as configuration:
+            prepared_by_asset = _prepare_assets(profile, rows_by_asset, wallet_refs, {}, configuration)
+            # Phase 1 (no swap links yet) must quarantine the over-sold BTC leg.
+            phase1_reasons = {
+                str(q["transaction_id"]): q["reason"]
+                for _, prepared in prepared_by_asset
+                for q in prepared.quarantines
+            }
+            self.assertEqual(phase1_reasons.get("swap-out"), "insufficient_lots")
+
+            pair = {
+                "out_id": "swap-out",
+                "in_id": "swap-in",
+                "out_asset": "BTC",
+                "in_asset": "L-BTC",
+                "policy": "carrying-value",
+                "pair_id": "swap-1",
+            }
+            swap_link_by_row_id, quarantined_row_ids, swap_quarantines = _select_at_cross_asset_swap_links(
+                profile, [pair], rows, prepared_by_asset
+            )
+
+        # The over-sold pair is NOT promoted to an at_swap_link (which would
+        # bypass the quantity gate and abort the whole report)...
+        self.assertNotIn("swap-out", swap_link_by_row_id)
+        self.assertNotIn("swap-in", swap_link_by_row_id)
+        # ...both legs are excluded from the compute pass (so the surviving leg
+        # cannot orphan the cross-asset validator)...
+        self.assertEqual(quarantined_row_ids, {"swap-out", "swap-in"})
+        # ...and the pair surfaces for review under the swap-carry reason, with
+        # the original phase-1 cause preserved in the detail.
+        self.assertEqual(len(swap_quarantines), 2)
+        self.assertEqual(
+            {str(q["transaction_id"]) for q in swap_quarantines},
+            {"swap-out", "swap-in"},
+        )
+        for quarantine in swap_quarantines:
+            self.assertEqual(quarantine["reason"], AT_SWAP_QUARANTINE_REASON)
+            self.assertEqual(json.loads(quarantine["detail_json"])["reason_code"], "insufficient_lots")
 
 
 if __name__ == "__main__":

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import copy
 import csv
 import json
@@ -8,6 +9,7 @@ import queue
 import re
 import sqlite3
 import sys
+import tempfile
 import threading
 import time
 import traceback
@@ -42,8 +44,11 @@ from .ai.prompt import (
     normalize_system_prompt_kind,
 )
 from .ai.providers import (
+    AI_PROVIDER_SECRET_STORE_SQLCIPHER,
     acknowledge_remote_use,
+    ai_provider_secret_ref_namespace,
     get_default_ai_provider_name,
+    is_cli_provider_locator,
     list_db_ai_providers,
     list_with_default as list_ai_providers_with_default,
     normalize_base_url,
@@ -71,6 +76,9 @@ from .cli.handlers import (
     delete_transfer_rule,
     dismiss_transfer_candidate,
     invalidate_journals,
+    loans_link,
+    loans_mark,
+    loans_unmark,
     import_into_profile,
     import_into_wallet,
     list_saved_views_cli,
@@ -83,9 +91,11 @@ from .cli.handlers import (
     set_transfer_rule_enabled,
     suggest_transfer_candidates,
     sync_btcpay_commercial_provenance,
+    update_transaction_pair,
 )
 from .core import audit_package as core_audit_package
 from .core import chat_history as core_chat_history
+from .core import loans as core_loans
 from .core import commercial as core_commercial
 from .core import attachments as core_attachments
 from .core import lightning as core_lightning
@@ -98,6 +108,7 @@ from .core import source_funds_coverage as core_source_funds_coverage
 from .core import source_funds_recipients as core_source_funds_recipients
 from .core import accounts as core_accounts
 from .core import imports as core_imports
+from . import importers as importers_module
 from .core import maintenance as core_maintenance
 from .core import metadata as core_metadata
 from .core import rates as core_rates
@@ -118,6 +129,7 @@ from .core.ui_snapshot import (
     build_rates_coverage_snapshot,
     build_rates_summary_snapshot,
     build_report_blockers_snapshot,
+    build_review_badges_snapshot,
     build_transactions_extremes_snapshot,
     build_transactions_resolve_snapshot,
     build_transactions_search_snapshot,
@@ -131,12 +143,17 @@ from .core.ui_snapshot import (
     build_workspace_health_snapshot,
     build_workspace_overview_snapshot,
 )
-from .core.sync_backends import ElectrumClient
+from .core.transaction_graph import build_transaction_graph_snapshot
+from .core.sync_backends import (
+    ElectrumClient,
+    detect_active_script_types,
+)
 from .backends import (
     BACKEND_KINDS,
     load_runtime_config,
     merge_db_backends,
     redact_backend_url,
+    resolve_backend,
     wallet_backend_references,
 )
 from .db import (
@@ -151,13 +168,14 @@ from .db import (
 )
 from .envelope import build_envelope, build_error_envelope, json_ready
 from .errors import AppError
+from .proxy import onion_proxy_failure_hints, urlopen_with_proxy
 from .log_ring import (
     current_request_id,
     get_log_ring,
     install_ring_logging,
     sanitize_exception,
 )
-from .redaction import redact_secret_text, redact_secret_value
+from .redaction import redact_operational_value, redact_secret_text, redact_secret_value
 from .util import str_or_none
 from .daemon_swap_review import (
     SWAP_REVIEW_DEFAULT_LIMIT,
@@ -197,7 +215,7 @@ from .wallet_descriptors import (
     derive_descriptor_targets,
     load_descriptor_plan,
 )
-from .wallet_setup import normalize_wallet_material
+from .wallet_setup import normalize_script_types, normalize_wallet_material
 
 
 MAX_REQUEST_LINE_CHARS = 1_000_000
@@ -217,6 +235,14 @@ _AI_PROVIDER_SECRET_STORE_IDS = {
 }
 _REQUEST_LOGGER = logging.getLogger("kassiber.daemon.request")
 
+# Profile-scoped graph semantics are expensive to derive (they walk the whole
+# profile). The graph endpoint is read repeatedly — once for the focused tx and
+# again for each eagerly-prefetched swap leg — so we memoise the bundle per
+# profile, keyed by a (journal_input_version, wallet count, utxo count) signature,
+# for the life of the daemon process. Access is serialized on the request thread
+# (single shared sqlite connection).
+_GRAPH_SEMANTICS_CACHE: dict[str, tuple[tuple[Any, ...], Any]] = {}
+
 SUPPORTED_KINDS = (
     "status",
     "ui.logs.snapshot",
@@ -225,7 +251,11 @@ SUPPORTED_KINDS = (
     "ui.transactions.list",
     "ui.transactions.extremes",
     "ui.transactions.resolve",
+    "ui.transactions.graph",
     "ui.transactions.search",
+    "ui.transactions.export_csv",
+    "ui.transactions.export_xlsx",
+    "ui.transactions.ledger_template",
     "ui.transactions.metadata.update",
     "ui.transactions.history",
     "ui.transactions.history.revert",
@@ -241,6 +271,10 @@ SUPPORTED_KINDS = (
     "ui.wallets.utxos",
     "ui.wallets.identify",
     "ui.wallets.identify_onchain",
+    "ui.loans.list",
+    "ui.loans.link",
+    "ui.loans.mark",
+    "ui.loans.unmark",
     "ui.backends.list",
     "ui.backends.options",
     "ui.backends.public_defaults",
@@ -281,8 +315,10 @@ SUPPORTED_KINDS = (
     "ui.source_funds.links.bulk_review",
     "ui.source_funds.links.attach",
     "ui.source_funds.suggest",
+    "ui.source_funds.assemble",
     "ui.source_funds.evidence.list",
     "ui.source_funds.export_pdf",
+    "ui.source_funds.export_bundle",
     "ui.source_funds.coverage",
     "ui.source_funds.recipients.list",
     "ui.source_funds.recipients.create",
@@ -310,6 +346,7 @@ SUPPORTED_KINDS = (
     "ui.transfers.payouts.delete",
     "ui.transfers.pair",
     "ui.transfers.unpair",
+    "ui.transfers.update",
     "ui.transfers.bulk_pair",
     "ui.transfers.dismiss",
     "ui.transfers.rules.list",
@@ -352,10 +389,13 @@ SUPPORTED_KINDS = (
     "ui.secrets.init",
     "ui.secrets.change_passphrase",
     "ui.next_actions",
+    "ui.review.badges",
     "ui.wallets.create",
     "ui.wallets.import_file",
     "ui.wallets.import_samourai",
+    "ui.wallets.ledger_preview",
     "ui.wallets.preview_descriptor",
+    "ui.wallets.detect_script_types",
     "ui.connections.sources",
     "ui.connections.btcpay.create",
     "ui.connections.bullbitcoin_wallet.create",
@@ -424,6 +464,19 @@ _DIRECT_AUTO_JOURNAL_REFRESH_KINDS = {
     "ui.report.blockers",
 }
 _SWAP_MATCHING_DAEMON_KIND_PREFIXES = ("ui.transfers.", "ui.saved_views.")
+_SOURCE_FUNDS_READ_AI_DAEMON_KINDS = {
+    "ui.source_funds.preview",
+    "ui.source_funds.sources.list",
+    "ui.source_funds.links.list",
+}
+_SOURCE_FUNDS_MUTATING_AI_DAEMON_KINDS = {
+    "ui.source_funds.sources.create",
+    "ui.source_funds.links.create",
+    "ui.source_funds.links.review",
+    "ui.source_funds.suggest",
+    "ui.source_funds.links.bulk_review",
+}
+_SOURCE_FUNDS_AI_REDACTED_KEYS = {"source_url", "stored_relpath"}
 PENDING_AI_CANCEL_TTL_SECONDS = 30.0
 MAX_PENDING_AI_CANCELS = 128
 # Hard caps for source-funds daemon kinds that drive build_report. The
@@ -444,6 +497,7 @@ def _resolve_report_depth(max_depth: Any, default: int = 8) -> int:
 AI_TOOL_CONSENT_TIMEOUT_SECONDS = 300.0
 PLAINTEXT_DELETE_ACK = "DELETE LOCAL DATA"
 PLAINTEXT_CHANGE_ACK = "CHANGE LOCAL DATA"
+PLAINTEXT_REVEAL_ACK = "COPY LOCAL SECRET"
 MIN_DATABASE_PASSPHRASE_CHARS = 12
 AUTH_FAILURES_BEFORE_BACKOFF = 3
 AUTH_BACKOFF_BASE_SECONDS = 5.0
@@ -851,7 +905,9 @@ def _error_envelope(
         build_error_envelope(
             code,
             redact_secret_text(message),
-            details=redact_secret_value(details) if details is not None else None,
+            details=redact_operational_value(redact_secret_value(details))
+            if details is not None
+            else None,
             hint=redact_secret_text(hint) if hint is not None else None,
             retryable=retryable,
             debug=debug,
@@ -865,7 +921,9 @@ def _app_error_payload(exc: AppError) -> dict[str, Any]:
         "code": exc.code,
         "message": redact_secret_text(str(exc)),
         "hint": redact_secret_text(exc.hint) if exc.hint else None,
-        "details": redact_secret_value(exc.details) if exc.details is not None else None,
+        "details": redact_operational_value(redact_secret_value(exc.details))
+        if exc.details is not None
+        else None,
         "retryable": bool(exc.retryable),
     }
 
@@ -890,18 +948,31 @@ def _validate_ai_provider_secret_store_id(store_id: str) -> str:
     return store_id
 
 
-def _provider_secret_ref_for_bridge(provider: dict[str, Any]) -> dict[str, Any]:
+def _provider_secret_ref_for_bridge(ctx: DaemonContext, provider: dict[str, Any]) -> dict[str, Any]:
+    provider_name = str(provider.get("name") or "")
+    expected_service, expected_account = ai_provider_secret_ref_namespace(ctx.conn, provider_name)
     ref = dict(provider.get("secret_ref") or {})
-    ref.setdefault("provider_name", provider.get("name"))
-    ref.setdefault("account", provider.get("name"))
-    if not ref.get("service"):
+    store_id = str(ref.get("store_id") or "sqlcipher_inline")
+    state = str(ref.get("state") or "missing")
+    if (
+        store_id == "sqlcipher_inline"
+        or state != "ok"
+        or str(ref.get("service") or "") != expected_service
+        or str(ref.get("account") or provider_name) != expected_account
+    ):
         raise AppError(
-            "AI provider secret ref is missing its service identifier",
+            "AI provider secret ref is outside this project's native secret namespace",
             code="secret_ref_unavailable",
-            details={"refs": [{"provider_name": provider.get("name"), "state": "unavailable"}]},
+            details={"refs": [{"provider_name": provider_name, "store_id": store_id, "state": "unavailable"}]},
             retryable=True,
         )
-    return ref
+    return {
+        "provider_name": provider_name,
+        "store_id": store_id,
+        "service": expected_service,
+        "account": expected_account,
+        "state": state,
+    }
 
 
 def _secret_store_bridge_request(
@@ -1021,9 +1092,16 @@ def _resolve_ai_provider_api_key(
     )
 
 
-def _ai_provider_secret_service_account(provider: dict[str, Any]) -> tuple[str, str]:
-    ref = _provider_secret_ref_for_bridge(provider)
-    return str(ref["service"]), str(ref.get("account") or provider["name"])
+def _ai_provider_has_stored_api_key(provider: dict[str, Any]) -> bool:
+    ref = provider.get("secret_ref") or {}
+    store_id = ref.get("store_id") or AI_PROVIDER_SECRET_STORE_SQLCIPHER
+    if store_id == AI_PROVIDER_SECRET_STORE_SQLCIPHER:
+        return bool(str_or_none(provider.get("api_key")))
+    return ref.get("state") == "ok"
+
+
+def _ai_provider_secret_service_account(ctx: DaemonContext, provider: dict[str, Any]) -> tuple[str, str]:
+    return ai_provider_secret_ref_namespace(ctx.conn, str(provider["name"]))
 
 
 def _set_ai_provider_key_with_selected_store(
@@ -1049,21 +1127,22 @@ def _set_ai_provider_key_with_selected_store(
             retryable=True,
         )
     provider = get_db_ai_provider(ctx.conn, name)
-    service, account = _ai_provider_secret_service_account(provider)
+    provider_name = str(provider["name"])
+    service, account = _ai_provider_secret_service_account(ctx, provider)
     if api_key is None:
         _secret_store_bridge_request(
             ctx,
             op="delete",
-            provider_name=name,
+            provider_name=provider_name,
             store_id=target_store_id,
             service=service,
             account=account,
         )
-        return set_db_ai_provider_api_key(ctx.conn, name, None)
+        return set_db_ai_provider_api_key(ctx.conn, provider_name, None)
     _secret_store_bridge_request(
         ctx,
         op="set",
-        provider_name=name,
+        provider_name=provider_name,
         store_id=target_store_id,
         service=service,
         account=account,
@@ -1071,7 +1150,7 @@ def _set_ai_provider_key_with_selected_store(
     )
     return set_db_ai_provider_native_secret_ref(
         ctx.conn,
-        name,
+        provider_name,
         store_id=target_store_id,
         service=service,
         account=account,
@@ -1088,6 +1167,7 @@ def _move_ai_provider_key(
     api_key: str | None,
 ) -> dict[str, Any]:
     provider = get_db_ai_provider(ctx.conn, name)
+    provider_name = str(provider["name"])
     current_ref = provider.get("secret_ref") or {}
     current_store_id = current_ref.get("store_id") or "sqlcipher_inline"
     target_store_id = _validate_ai_provider_secret_store_id(target_store_id)
@@ -1108,29 +1188,29 @@ def _move_ai_provider_key(
             "AI provider key must be re-entered before it can be moved",
             code="secret_ref_unavailable",
             hint="Re-enter the provider API key in Settings, then retry the storage move.",
-            details={"refs": [_provider_secret_ref_for_bridge(provider)]},
+            details={"refs": [_provider_secret_ref_for_bridge(ctx, provider)]},
             retryable=True,
         )
 
     if target_store_id == "sqlcipher_inline":
-        updated = set_db_ai_provider_api_key(ctx.conn, name, key_to_move)
+        updated = set_db_ai_provider_api_key(ctx.conn, provider_name, key_to_move)
         if current_store_id != "sqlcipher_inline" and _desktop_secret_store_bridge_enabled(args):
-            service, account = _ai_provider_secret_service_account(provider)
+            service, account = _ai_provider_secret_service_account(ctx, provider)
             _secret_store_bridge_request(
                 ctx,
                 op="delete",
-                provider_name=name,
+                provider_name=provider_name,
                 store_id=current_store_id,
                 service=service,
                 account=account,
             )
         return updated
 
-    service, account = _ai_provider_secret_service_account(provider)
+    service, account = _ai_provider_secret_service_account(ctx, provider)
     _secret_store_bridge_request(
         ctx,
         op="set",
-        provider_name=name,
+        provider_name=provider_name,
         store_id=target_store_id,
         service=service,
         account=account,
@@ -1138,7 +1218,7 @@ def _move_ai_provider_key(
     )
     return set_db_ai_provider_native_secret_ref(
         ctx.conn,
-        name,
+        provider_name,
         store_id=target_store_id,
         service=service,
         account=account,
@@ -1155,7 +1235,7 @@ def _delete_native_ai_provider_secret(
     store_id = ref.get("store_id") or "sqlcipher_inline"
     if store_id == "sqlcipher_inline" or not _desktop_secret_store_bridge_enabled(args):
         return
-    service, account = _ai_provider_secret_service_account(dict(provider))
+    service, account = _ai_provider_secret_service_account(ctx, dict(provider))
     try:
         _secret_store_bridge_request(
             ctx,
@@ -1181,7 +1261,7 @@ def _refresh_ai_provider_native_secret_states(
         if not store_id or store_id == "sqlcipher_inline" or ref.get("state") != "ok":
             continue
         try:
-            bridge_ref = _provider_secret_ref_for_bridge(provider)
+            bridge_ref = _provider_secret_ref_for_bridge(ctx, provider)
             data = _secret_store_bridge_request(
                 ctx,
                 op="exists",
@@ -1332,6 +1412,23 @@ def _ui_swap_matching_payload_from_conn(
         if not pair_id:
             raise AppError("ui.transfers.unpair requires pair_id", code="validation")
         return delete_transaction_pair(conn, workspace, profile, str(pair_id))
+    if kind == "ui.transfers.update":
+        pair_id = args.get("pair_id")
+        if not pair_id:
+            raise AppError("ui.transfers.update requires pair_id", code="validation")
+        update_kwargs: dict[str, Any] = {}
+        if args.get("kind") is not None:
+            update_kwargs["kind"] = str(args.get("kind"))
+        if args.get("policy") is not None:
+            update_kwargs["policy"] = str(args.get("policy"))
+        # Only touch notes when the caller sent the field; an explicit empty
+        # string coalesces to None, which clears the note ("" and None both mean
+        # "no note"). `notes` wins over the legacy `note` alias when both appear.
+        if "notes" in args or "note" in args:
+            update_kwargs["notes"] = args.get("notes") or args.get("note")
+        return update_transaction_pair(
+            conn, workspace, profile, str(pair_id), **update_kwargs
+        )
     if kind == "ui.transfers.bulk_pair":
         return bulk_pair_transfers(
             conn,
@@ -1470,6 +1567,18 @@ def _source_funds_hooks() -> core_source_funds.SourceFundsHooks:
         format_table=report_hooks.format_table,
         explorer_base=preferred_explorer_base,
     )
+
+
+def _redact_source_funds_payload_for_ai(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {
+            key: _redact_source_funds_payload_for_ai(item)
+            for key, item in value.items()
+            if key not in _SOURCE_FUNDS_AI_REDACTED_KEYS
+        }
+    if isinstance(value, list):
+        return [_redact_source_funds_payload_for_ai(item) for item in value]
+    return value
 
 
 def _audit_package_hooks() -> core_audit_package.AuditPackageHooks:
@@ -1626,12 +1735,13 @@ def _ui_commercial_payload(
     raise AppError(f"Unsupported commercial daemon kind '{kind}'", code="validation")
 
 
-def _ui_source_funds_payload(
-    ctx: DaemonContext,
+def _ui_source_funds_payload_from_conn(
+    conn: sqlite3.Connection,
     kind: str,
     args: dict[str, Any],
+    *,
+    data_root: str | Path | None = None,
 ) -> dict[str, Any]:
-    conn = _require_conn(ctx)
     hooks = _source_funds_hooks()
     if kind == "ui.source_funds.sources.list":
         return {
@@ -1716,8 +1826,8 @@ def _ui_source_funds_payload(
             from_allocation_amount=args.get("from_allocation_amount"),
             allocation_policy=str(args.get("allocation_policy") or "explicit"),
             explanation=args.get("explanation") if isinstance(args.get("explanation"), str) else None,
-            uses_chain_observation=bool(args.get("uses_chain_observation")),
-            chain_data_confirmed=bool(args.get("chain_data_confirmed", False)),
+            uses_chain_observation=_optional_bool_arg(args, "uses_chain_observation", False),
+            chain_data_confirmed=_optional_bool_arg(args, "chain_data_confirmed", False),
             attachment_ids=[str(item) for item in attachment_ids],
         )
 
@@ -1781,8 +1891,25 @@ def _ui_source_funds_payload(
             None,
             hooks,
             target_transaction_ref=target.strip() if isinstance(target, str) and target.strip() else None,
-            include_broad_hints=bool(args.get("include_broad_hints")),
+            include_broad_hints=_optional_bool_arg(args, "include_broad_hints", False),
             max_suggestions=int(args.get("max_suggestions") or core_source_funds.SUGGESTION_WRITE_CAP),
+        )
+
+    if kind == "ui.source_funds.assemble":
+        target = args.get("target_transaction")
+        if not isinstance(target, str) or not target.strip():
+            raise AppError(
+                "ui.source_funds.assemble requires args.target_transaction",
+                code="validation",
+            )
+        return core_source_funds.assemble_history(
+            conn,
+            None,
+            None,
+            hooks,
+            target_transaction_ref=target.strip(),
+            include_broad_hints=bool(args.get("include_broad_hints")),
+            max_passes=int(args.get("max_passes") or 8),
         )
 
     if kind == "ui.source_funds.evidence.list":
@@ -1862,6 +1989,8 @@ def _ui_source_funds_payload(
             max_depth=_resolve_report_depth(args.get("max_depth")),
             save_case=False,
             recipient_ref=recipient_ref,
+            include_diagrams=True,
+            report_options=args.get("report_options") if isinstance(args.get("report_options"), dict) else None,
         )
 
     if kind == "ui.source_funds.cases.save":
@@ -1895,6 +2024,8 @@ def _ui_source_funds_payload(
             save_case=True,
             case_label=case_label,
             recipient_ref=recipient_ref,
+            include_diagrams=True,
+            report_options=args.get("report_options") if isinstance(args.get("report_options"), dict) else None,
         )
 
     if kind == "ui.source_funds.cases.list":
@@ -1966,14 +2097,12 @@ def _ui_source_funds_payload(
         return core_source_funds_recipients.delete_recipient(conn, profile["id"], recipient["id"])
 
     if kind == "ui.source_funds.export_pdf":
+        if data_root is None:
+            raise AppError("source-funds PDF export requires a data root", code="validation")
         case_ref = args.get("case")
-        target = args.get("target_transaction")
         if case_ref is not None and not isinstance(case_ref, str):
             raise AppError("ui.source_funds.export_pdf case must be a string", code="validation")
-        if target is not None and not isinstance(target, str):
-            raise AppError("ui.source_funds.export_pdf target_transaction must be a string", code="validation")
-        explicit_export_reveal = args.get("reveal_mode")
-        path = _managed_report_export_path(ctx.data_root, "kassiber-source-funds", ".pdf")
+        path = _managed_report_export_path(data_root, "kassiber-source-funds", ".pdf")
         payload = dict(
             core_source_funds.export_pdf(
                 conn,
@@ -1982,12 +2111,6 @@ def _ui_source_funds_payload(
                 path,
                 hooks,
                 case_ref=case_ref,
-                target_transaction_ref=target,
-                target_amount=args.get("target_amount"),
-                report_purpose=str(args.get("report_purpose") or "existing_transaction"),
-                planned_destination=args.get("planned_destination") if isinstance(args.get("planned_destination"), str) else None,
-                planned_note=args.get("planned_note") if isinstance(args.get("planned_note"), str) else None,
-                reveal_mode=str(explicit_export_reveal) if isinstance(explicit_export_reveal, str) and explicit_export_reveal else None,
             )
         )
         payload.update(
@@ -1999,7 +2122,41 @@ def _ui_source_funds_payload(
         )
         return payload
 
+    if kind == "ui.source_funds.export_bundle":
+        if data_root is None:
+            raise AppError("source-funds bundle export requires a data root", code="validation")
+        case_ref = args.get("case")
+        if case_ref is not None and not isinstance(case_ref, str):
+            raise AppError("ui.source_funds.export_bundle case must be a string", code="validation")
+        path = _managed_report_export_path(data_root, "kassiber-source-funds-bundle", ".zip")
+        payload = dict(
+            core_source_funds.export_bundle(
+                conn,
+                None,
+                None,
+                path,
+                hooks,
+                data_root=data_root,
+                case_ref=case_ref,
+            )
+        )
+        payload["filename"] = Path(payload["file"]).name
+        return payload
+
     raise AppError(f"unsupported source-funds daemon export kind: {kind}", code="validation")
+
+
+def _ui_source_funds_payload(
+    ctx: DaemonContext,
+    kind: str,
+    args: dict[str, Any],
+) -> dict[str, Any]:
+    return _ui_source_funds_payload_from_conn(
+        _require_conn(ctx),
+        kind,
+        args,
+        data_root=ctx.data_root,
+    )
 
 
 def _optional_bool_arg(args: dict[str, Any], key: str, default: bool) -> bool:
@@ -2067,6 +2224,25 @@ def _ui_report_export_payload(
 ) -> dict[str, Any]:
     conn = _require_conn(ctx)
     hooks = _report_hooks()
+    transactions_exports = {
+        "ui.transactions.export_csv": ("csv", ".csv", core_reports.export_transactions_csv_report),
+        "ui.transactions.export_xlsx": ("xlsx", ".xlsx", core_reports.export_transactions_xlsx_report),
+    }
+    if kind in transactions_exports:
+        export_format, suffix, exporter = transactions_exports[kind]
+        wallet = args.get("wallet")
+        if wallet is not None and not isinstance(wallet, str):
+            raise AppError(f"{kind} wallet must be a string", code="validation")
+        path = _managed_report_export_path(ctx.data_root, "kassiber-transactions", suffix)
+        payload = dict(exporter(conn, None, None, path, hooks, wallet_ref=wallet))
+        payload.update(
+            {
+                "format": export_format,
+                "scope": "transactions",
+                "filename": Path(payload["file"]).name,
+            }
+        )
+        return payload
     generic_report_exports = {
         "ui.reports.export_pdf": ("pdf", ".pdf", core_reports.export_pdf_report),
         "ui.reports.export_csv": ("csv", ".csv", core_reports.export_csv_report),
@@ -2086,6 +2262,15 @@ def _ui_report_export_payload(
                 f"{kind} wallet must be a string",
                 code="validation",
             )
+        extra: dict[str, Any] = {}
+        if kind == "ui.reports.export_xlsx":
+            verify = args.get("verify", True)
+            if not isinstance(verify, bool):
+                raise AppError(
+                    f"{kind} verify must be a boolean",
+                    code="validation",
+                )
+            extra["verify"] = verify
         payload = dict(
             exporter(
                 conn,
@@ -2095,6 +2280,7 @@ def _ui_report_export_payload(
                 hooks,
                 wallet_ref=wallet,
                 history_limit=args.get("history_limit", 0),
+                **extra,
             )
         )
         payload.update(
@@ -3173,6 +3359,13 @@ def _execute_read_only_ai_tool(call: ParsedAiToolCall, runtime: AiToolRuntime) -
                 payload = build_transactions_extremes_snapshot(conn, call.arguments)
             elif entry.daemon_kind == "ui.transactions.resolve":
                 payload = build_transactions_resolve_snapshot(conn, call.arguments)
+            elif entry.daemon_kind == "ui.transactions.graph":
+                payload = build_transaction_graph_snapshot(
+                    conn,
+                    call.arguments,
+                    runtime.runtime_config,
+                    semantics_cache=_GRAPH_SEMANTICS_CACHE,
+                )
             elif entry.daemon_kind == "ui.transactions.search":
                 payload = build_transactions_search_snapshot(conn, call.arguments)
             elif entry.daemon_kind == "ui.wallets.list":
@@ -3243,6 +3436,15 @@ def _execute_read_only_ai_tool(call: ParsedAiToolCall, runtime: AiToolRuntime) -
                 payload = build_workspace_health_snapshot(conn)
             elif entry.daemon_kind == "ui.next_actions":
                 payload = build_next_actions_snapshot(conn)
+            elif entry.daemon_kind in _SOURCE_FUNDS_READ_AI_DAEMON_KINDS:
+                payload = _redact_source_funds_payload_for_ai(
+                    _ui_source_funds_payload_from_conn(
+                        conn,
+                        entry.daemon_kind,
+                        call.arguments,
+                        data_root=runtime.data_root,
+                    )
+                )
             elif entry.daemon_kind.startswith(_SWAP_MATCHING_DAEMON_KIND_PREFIXES):
                 payload = _ui_swap_matching_payload_from_conn(
                     conn,
@@ -3345,6 +3547,19 @@ def _execute_mutating_ai_tool(call: ParsedAiToolCall, runtime: AiToolRuntime) ->
                     runtime.runtime_config,
                     call.arguments,
                     state=runtime.maintenance_state,
+                )
+                return {"ok": True, "envelope": build_envelope(entry.daemon_kind, payload)}
+
+            return _run_on_daemon_main_thread(runtime, _execute)
+        if entry.daemon_kind in _SOURCE_FUNDS_MUTATING_AI_DAEMON_KINDS:
+            def _execute(conn: sqlite3.Connection) -> dict[str, Any]:
+                payload = _redact_source_funds_payload_for_ai(
+                    _ui_source_funds_payload_from_conn(
+                        conn,
+                        entry.daemon_kind,
+                        call.arguments,
+                        data_root=runtime.data_root,
+                    )
                 )
                 return {"ok": True, "envelope": build_envelope(entry.daemon_kind, payload)}
 
@@ -4187,6 +4402,26 @@ def _write_ai_chat_status(
     )
 
 
+def _effective_ai_chat_tools_enabled(
+    provider_snapshot: dict[str, Any],
+    validated: dict[str, Any],
+) -> bool:
+    if not validated["tools_enabled"]:
+        return False
+    return not is_cli_provider_locator(provider_snapshot.get("base_url"))
+
+
+def _effective_ai_chat_system_prompt_kind(
+    validated: dict[str, Any],
+    *,
+    tools_enabled: bool,
+) -> str | None:
+    system_prompt_kind = validated["system_prompt_kind"]
+    if not tools_enabled and system_prompt_kind == "kassiber":
+        return None
+    return system_prompt_kind
+
+
 def _stream_ai_chat_tool_turn(
     request_id: object,
     client,
@@ -4616,7 +4851,15 @@ def _run_ai_chat_stream(
                 phase="connecting",
                 label="Connecting",
             )
-            if validated["tools_enabled"]:
+            effective_tools_enabled = _effective_ai_chat_tools_enabled(
+                provider_snapshot,
+                validated,
+            )
+            effective_system_prompt_kind = _effective_ai_chat_system_prompt_kind(
+                validated,
+                tools_enabled=effective_tools_enabled,
+            )
+            if effective_tools_enabled:
                 _run_ai_chat_tool_loop(
                     request_id,
                     client,
@@ -4629,7 +4872,7 @@ def _run_ai_chat_stream(
                 return
             stream_messages = build_chat_messages(
                 validated["messages"],
-                system_prompt_kind=validated["system_prompt_kind"],
+                system_prompt_kind=effective_system_prompt_kind,
                 system_prompt=validated["system_prompt"],
             )
             _write_ai_chat_status(
@@ -4751,6 +4994,7 @@ def _require_sensitive_local_auth(
     label: str,
     plaintext_ack_key: str,
     plaintext_ack_value: str,
+    plaintext_ack_hint: str | None = None,
 ) -> tuple[dict[str, Any], bool] | None:
     auth = args.get("auth_response")
     if _database_file_is_encrypted(ctx):
@@ -4786,7 +5030,10 @@ def _require_sensitive_local_auth(
         raise AppError(
             f"{scope} requires plaintext acknowledgement",
             code="validation",
-            hint=f"Ask the user to type {plaintext_ack_value!r} before changing plaintext local data.",
+            hint=(
+                plaintext_ack_hint
+                or f"Ask the user to type {plaintext_ack_value!r} before changing plaintext local data."
+            ),
         )
     return None
 
@@ -4960,6 +5207,23 @@ def _update_profile_payload(
             hint="Choose an accounting method for the book.",
             retryable=False,
         )
+    updates: dict[str, Any] = {"gains_algorithm": gains_algorithm.strip()}
+    # Region (tax_country) is optional: the book-settings dialog only sends it
+    # when the user explicitly switches region, and always pairs it with a
+    # region-valid method in the same update. update_profile enforces the
+    # per-country method then (Austrian books coerced to moving_average_at) and
+    # only re-coerces because the method/country are explicitly present here —
+    # an incidental update never silently rewrites a stored method.
+    tax_country = args.get("tax_country")
+    if tax_country is not None:
+        if not isinstance(tax_country, str) or not tax_country.strip():
+            raise AppError(
+                "Region is required.",
+                code="validation",
+                hint="Choose a supported region for the book.",
+                retryable=False,
+            )
+        updates["tax_country"] = tax_country.strip()
     row = conn.execute(
         "SELECT id, workspace_id FROM profiles WHERE id = ?",
         (profile_id,),
@@ -4973,13 +5237,13 @@ def _update_profile_payload(
             retryable=False,
         )
     # update_profile normalizes/enforces the method (Austrian books are coerced
-    # to moving_average_at) and invalidates journals when it changes, so reports
-    # recompute with the new method.
+    # to moving_average_at), validates the region, and invalidates journals when
+    # the policy changes, so reports recompute with the new region/method.
     return core_accounts.update_profile(
         conn,
         row["workspace_id"],
         profile_id,
-        {"gains_algorithm": gains_algorithm.strip()},
+        updates,
     )
 
 
@@ -5088,14 +5352,34 @@ def _create_profile_payload(
         workspace_id,
         source_profile_id,
     )
+    fiat_currency = defaults["fiat_currency"]
+    tax_country = defaults["tax_country"]
+    gains_algorithm = defaults["gains_algorithm"]
+    tax_long_term_days = int(defaults["tax_long_term_days"])
+    # The "New book" dialog can pick a region + method explicitly. Copying from a
+    # source book inherits its settings verbatim (region/method come from the
+    # source), so explicit picks only apply when no source is chosen. core
+    # create_profile validates the region and coerces/validates the method per
+    # country (Austrian books -> moving_average_at).
+    if source_profile_id is None:
+        requested_country = _optional_string_arg(args, "tax_country")
+        requested_algo = _optional_string_arg(args, "gains_algorithm")
+        if requested_country is not None and requested_country != tax_country:
+            tax_country = requested_country
+            # Region picked away from the inherited default: use that region's
+            # standard holding period instead of a mismatched one (the Austrian
+            # policy overrides this regardless).
+            tax_long_term_days = 365
+        if requested_algo is not None:
+            gains_algorithm = requested_algo
     profile = core_accounts.create_profile(
         conn,
         workspace_id,
         label.strip(),
-        defaults["fiat_currency"],
-        defaults["gains_algorithm"],
-        defaults["tax_country"],
-        int(defaults["tax_long_term_days"]),
+        fiat_currency,
+        gains_algorithm,
+        tax_country,
+        tax_long_term_days,
     )
     workspace = conn.execute(
         "SELECT id, label FROM workspaces WHERE id = ?",
@@ -5385,6 +5669,7 @@ _UI_WALLET_SOURCE_FORMATS = {
     "pocketbitcoin_csv",
     "strike_csv",
     "wasabi_bundle",
+    "generic_ledger",
 }
 
 
@@ -5842,6 +6127,54 @@ def _set_default_backend_payload(ctx: "DaemonContext", args: dict[str, Any]) -> 
     return payload
 
 
+def _script_types_arg(args: dict[str, Any]) -> list[str] | None:
+    """Parse and validate an optional ``script_types`` list arg.
+
+    Returns ``None`` when the key is absent (caller falls back to the single
+    ``script_type`` path), otherwise the normalized (validated/deduped/sorted)
+    list -- possibly empty if the caller passed an empty array.
+    """
+    raw = args.get("script_types")
+    if raw is None:
+        return None
+    if isinstance(raw, str):
+        raw = [raw]
+    if not isinstance(raw, list):
+        raise AppError(
+            "script_types must be an array of script type names",
+            code="validation",
+            details={"type": type(raw).__name__},
+            retryable=False,
+        )
+    return normalize_script_types(raw)
+
+
+def _apply_wallet_material_config(
+    config: dict[str, Any], material_config: dict[str, Any]
+) -> None:
+    """Merge ``normalize_wallet_material`` output into a wallet config.
+
+    Handles both shapes: a rendered ``descriptor`` (legacy/single) and the
+    multi-script ``xpub`` + ``script_types`` form. The two are mutually
+    exclusive, so the xpub shape clears any descriptor and vice versa.
+    """
+    if "xpub" in material_config:
+        config["xpub"] = material_config["xpub"]
+        config["script_types"] = material_config["script_types"]
+        config.pop("descriptor", None)
+        config.pop("change_descriptor", None)
+        config.pop("descriptor_source", None)
+        config.pop("synthesize_change", None)
+        return
+    config.setdefault("descriptor", material_config["descriptor"])
+    if "change_descriptor" in material_config:
+        config.setdefault("change_descriptor", material_config["change_descriptor"])
+    if "descriptor_source" in material_config:
+        config["descriptor_source"] = material_config["descriptor_source"]
+    if "synthesize_change" in material_config:
+        config["synthesize_change"] = material_config["synthesize_change"]
+
+
 def _create_wallet_payload(
     conn: sqlite3.Connection,
     args: dict[str, Any],
@@ -5861,10 +6194,13 @@ def _create_wallet_payload(
         config["change_descriptor"] = change_descriptor
     wallet_material = _optional_str_arg(args, "wallet_material")
     if wallet_material is not None:
-        material_config = normalize_wallet_material(wallet_material)
-        config.setdefault("descriptor", material_config["descriptor"])
-        if "change_descriptor" in material_config:
-            config.setdefault("change_descriptor", material_config["change_descriptor"])
+        script_type = _optional_str_arg(args, "script_type")
+        material_config = normalize_wallet_material(
+            wallet_material,
+            script_type=script_type,
+            script_types=_script_types_arg(args),
+        )
+        _apply_wallet_material_config(config, material_config)
     source_file = _source_file_arg(args)
     if source_file is not None:
         config["source_file"] = source_file
@@ -5915,6 +6251,88 @@ def _create_wallet_payload(
         config=config,
     )
     return {"wallet": wallet}
+
+
+def _ledger_template_payload(
+    ctx: DaemonContext,
+    args: dict[str, Any],
+) -> dict[str, Any]:
+    """Write the generic-ledger fill-in template to a managed export path."""
+    requested = (_optional_str_arg(args, "format") or "xlsx").strip().lower()
+    if requested in {"xlsx", "xlsm"}:
+        suffix = ".xlsx"
+        fmt = "xlsx"
+    elif requested == "csv":
+        suffix = ".csv"
+        fmt = "csv"
+    else:
+        raise AppError(
+            f"Unsupported template format '{requested}'",
+            code="validation",
+            hint="Use xlsx or csv.",
+            retryable=False,
+        )
+    path = _managed_report_export_path(ctx.data_root, "kassiber-ledger-template", suffix)
+    payload = importers_module.write_generic_ledger_template(str(path), fmt)
+    payload["filename"] = Path(payload["file"]).name
+    return payload
+
+
+_LEDGER_PREVIEW_EXTENSIONS = {".csv", ".tsv", ".xlsx", ".xlsm"}
+
+
+def _ledger_preview_extension(filename: str) -> str:
+    extension = Path(filename).suffix.lower()
+    if extension not in _LEDGER_PREVIEW_EXTENSIONS:
+        raise AppError(
+            "Unsupported ledger preview file type.",
+            code="validation",
+            hint="Choose a CSV, TSV, XLSX, or XLSM ledger file.",
+            details={"extension": extension or None},
+            retryable=False,
+        )
+    return extension
+
+
+def _ledger_preview_upload_arg(args: dict[str, Any]) -> tuple[bytes, str]:
+    encoded = _optional_str_arg(args, "source_bytes_base64")
+    filename = _optional_str_arg(args, "filename") or "ledger.csv"
+    if not encoded:
+        raise AppError(
+            "source_bytes_base64 is required",
+            code="validation",
+            hint="Choose the ledger file with the desktop file picker before previewing it.",
+            retryable=False,
+        )
+    extension = _ledger_preview_extension(filename)
+    try:
+        payload = base64.b64decode(encoded, validate=True)
+    except Exception as exc:  # noqa: BLE001 - convert parser detail into stable envelope
+        raise AppError(
+            "Could not decode selected ledger file.",
+            code="validation",
+            hint="Choose the file again and retry the preview.",
+            retryable=False,
+        ) from exc
+    return payload, extension
+
+
+def _ledger_preview_payload(args: dict[str, Any]) -> dict[str, Any]:
+    """Read-only: preview an uploaded generic-ledger file (no persist)."""
+    limit = args.get("limit")
+    # Browser file inputs cannot provide an importable path, so those previews
+    # upload bytes instead of persisting the basename as a future source_file.
+    payload, extension = _ledger_preview_upload_arg(args)
+    with tempfile.NamedTemporaryFile(suffix=extension, delete=False) as handle:
+        temp_path = Path(handle.name)
+        handle.write(payload)
+        handle.flush()
+    try:
+        return importers_module.preview_generic_ledger_records(
+            str(temp_path), limit=200 if limit is None else limit
+        )
+    finally:
+        temp_path.unlink(missing_ok=True)
 
 
 def _import_wallet_file_payload(
@@ -6766,6 +7184,65 @@ def _handle_transaction_metadata_update(
     )
 
 
+def _loans_snapshot(ctx: DaemonContext) -> dict[str, Any]:
+    if ctx.conn is None:
+        raise AppError("database is not open", code="unavailable", retryable=True)
+    _, profile = resolve_scope(ctx.conn, None, None)
+    return {
+        "marks": core_loans.list_collateral_marks(ctx.conn, profile["id"]),
+        "open_locks": core_loans.open_collateral_locks(ctx.conn, profile["id"]),
+        "roles": list(core_loans.COLLATERAL_ROLES),
+        "role_labels": core_loans.ROLE_LABELS,
+    }
+
+
+def _handle_loans_mark(ctx: DaemonContext, request: dict[str, Any]) -> dict[str, Any]:
+    if ctx.conn is None:
+        raise AppError("database is not open", code="unavailable", retryable=True)
+    args = _coerce_args_dict(request.get("request_id"), request.get("args"))
+    return loans_mark(
+        ctx.conn,
+        None,
+        None,
+        _required_str_arg(args, "txid", "transaction id"),
+        mark_as=_required_str_arg(
+            args,
+            "as",
+            "mark target (collateral|returned|principal-received|principal-repaid)",
+        ),
+        note=args.get("note"),
+        loan_id=_optional_str_arg(args, "loan_id"),
+    )
+
+
+def _handle_loans_link(ctx: DaemonContext, request: dict[str, Any]) -> dict[str, Any]:
+    if ctx.conn is None:
+        raise AppError("database is not open", code="unavailable", retryable=True)
+    args = _coerce_args_dict(request.get("request_id"), request.get("args"))
+    raw_txids = args.get("txids")
+    if not isinstance(raw_txids, list) or not all(isinstance(txid, str) for txid in raw_txids):
+        raise AppError(
+            "txids must be a list of transaction ids",
+            code="validation",
+            details={"field": "txids"},
+            retryable=False,
+        )
+    return loans_link(
+        ctx.conn,
+        None,
+        None,
+        raw_txids,
+        loan_id=_optional_str_arg(args, "loan_id"),
+    )
+
+
+def _handle_loans_unmark(ctx: DaemonContext, request: dict[str, Any]) -> dict[str, Any]:
+    if ctx.conn is None:
+        raise AppError("database is not open", code="unavailable", retryable=True)
+    args = _coerce_args_dict(request.get("request_id"), request.get("args"))
+    return loans_unmark(ctx.conn, None, None, _required_str_arg(args, "txid", "transaction id"))
+
+
 def _handle_transaction_history(
     ctx: DaemonContext,
     request: dict[str, Any],
@@ -7095,6 +7572,7 @@ def _test_electrum_backend_payload(args: dict[str, Any]) -> dict[str, Any]:
                     logs.append(f"Server banner: {banner}")
     except Exception as exc:
         logs.append(f"Connection failed: {exc}")
+        logs.extend(onion_proxy_failure_hints(url, proxy, exc))
         return {
             "ok": False,
             "url": url,
@@ -7111,6 +7589,7 @@ def _test_electrum_backend_payload(args: dict[str, Any]) -> dict[str, Any]:
 
 def _test_http_backend_payload(args: dict[str, Any]) -> dict[str, Any]:
     url = _required_str_arg(args, "url", "HTTP backend URL")
+    proxy = _optional_str_arg(args, "proxy")
     timeout = args.get("timeout")
     if not isinstance(timeout, int) or timeout <= 0:
         timeout = 10
@@ -7124,6 +7603,10 @@ def _test_http_backend_payload(args: dict[str, Any]) -> dict[str, Any]:
         f"$ curl -fsS -L --max-time {timeout} -H 'Accept: application/json' {url}",
         f"> GET {url}",
     ]
+    if proxy:
+        logs.append(f"Proxy: {proxy}.")
+    else:
+        logs.append("Proxy: disabled.")
     request = urlrequest.Request(
         url,
         headers={
@@ -7132,7 +7615,13 @@ def _test_http_backend_payload(args: dict[str, Any]) -> dict[str, Any]:
         },
     )
     try:
-        with urlrequest.urlopen(request, timeout=timeout) as response:
+        with urlopen_with_proxy(
+            request,
+            url,
+            timeout,
+            proxy_url=proxy,
+            source_label="backend",
+        ) as response:
             status = int(response.status)
             reason = response.reason or ""
             content_type = response.headers.get("content-type", "unknown")
@@ -7145,9 +7634,11 @@ def _test_http_backend_payload(args: dict[str, Any]) -> dict[str, Any]:
         return {"ok": False, "url": url, "logs": logs}
     except urlerror.URLError as exc:
         logs.append(f"< connection failed: {exc.reason}")
+        logs.extend(onion_proxy_failure_hints(url, proxy, exc))
         return {"ok": False, "url": url, "logs": logs}
     except Exception as exc:  # pragma: no cover - defensive boundary
         logs.append(f"< connection failed: {exc}")
+        logs.extend(onion_proxy_failure_hints(url, proxy, exc))
         return {"ok": False, "url": url, "logs": logs}
     logs.append(f"< HTTP {status} {reason}".rstrip())
     logs.append(f"< content-type: {content_type}")
@@ -7164,29 +7655,42 @@ def _preview_descriptor_payload(args: dict[str, Any]) -> dict[str, Any]:
     descriptor_text = _optional_str_arg(args, "descriptor")
     change_descriptor_text = _optional_str_arg(args, "change_descriptor")
     wallet_material = _optional_str_arg(args, "wallet_material")
+    config: dict[str, Any] = {}
     if wallet_material is not None:
-        material = normalize_wallet_material(wallet_material)
-        descriptor_text = descriptor_text or material["descriptor"]
-        change_descriptor_text = change_descriptor_text or material.get("change_descriptor")
-    if not descriptor_text:
-        raise AppError(
-            "Descriptor or wallet material is required",
-            code="validation",
-            hint="Paste a wallet export, descriptor, or supported extended public key.",
-            retryable=False,
+        script_type = _optional_str_arg(args, "script_type")
+        material = normalize_wallet_material(
+            wallet_material,
+            script_type=script_type,
+            script_types=_script_types_arg(args),
         )
+        if "xpub" in material:
+            config["xpub"] = material["xpub"]
+            config["script_types"] = material["script_types"]
+        else:
+            descriptor_text = descriptor_text or material["descriptor"]
+            change_descriptor_text = change_descriptor_text or material.get("change_descriptor")
+            if "descriptor_source" in material:
+                config["descriptor_source"] = material["descriptor_source"]
+            if "synthesize_change" in material:
+                config["synthesize_change"] = material["synthesize_change"]
     chain = _optional_str_arg(args, "chain") or "bitcoin"
     network = _optional_str_arg(args, "network")
     raw_count = args.get("count")
     count = 5
     if isinstance(raw_count, int) and raw_count > 0:
         count = min(raw_count, 20)
-    config: dict[str, Any] = {
-        "descriptor": descriptor_text,
-        "chain": chain,
-    }
-    if change_descriptor_text:
-        config["change_descriptor"] = change_descriptor_text
+    if "xpub" not in config:
+        if not descriptor_text:
+            raise AppError(
+                "Descriptor or wallet material is required",
+                code="validation",
+                hint="Paste a wallet export, descriptor, or supported extended public key.",
+                retryable=False,
+            )
+        config["descriptor"] = descriptor_text
+        if change_descriptor_text:
+            config["change_descriptor"] = change_descriptor_text
+    config["chain"] = chain
     if network:
         config["network"] = network
     try:
@@ -7203,33 +7707,88 @@ def _preview_descriptor_payload(args: dict[str, Any]) -> dict[str, Any]:
             code="validation",
             retryable=False,
         )
-    receive_targets = derive_descriptor_targets(plan, branch_index=0, start=0, end=count)
-    change_target = derive_descriptor_targets(plan, branch_index=1, start=0, end=1)
-    addresses = [
-        {
-            "branch": "receive",
-            "index": target.address_index,
-            "address": target.address,
-            "derivation_path": target.derivation_path,
-        }
-        for target in receive_targets
-    ]
-    if change_target:
-        addresses.append(
-            {
-                "branch": "change",
-                "index": change_target[0].address_index,
-                "address": change_target[0].address,
-                "derivation_path": change_target[0].derivation_path,
-            }
-        )
+    # Branch-driven so a multi-script xpub previews each enabled type's
+    # receive addresses (labeled "<type> receive"), with one change sample each.
+    addresses = []
+    for branch in plan.branches:
+        is_change = branch.branch_label.endswith("change")
+        end = 1 if is_change else count
+        for target in derive_descriptor_targets(
+            plan, branch_index=branch.branch_index, start=0, end=end
+        ):
+            addresses.append(
+                {
+                    "branch": branch.branch_label,
+                    "index": target.address_index,
+                    "address": target.address,
+                    "derivation_path": target.derivation_path,
+                }
+            )
     return {
         "chain": plan.chain,
         "network": plan.network,
         "addresses": addresses,
         "has_change_branch": any(
-            branch.branch_label == "change" for branch in plan.branches
+            branch.branch_label.endswith("change") for branch in plan.branches
         ),
+    }
+
+
+def _detect_script_types_payload(
+    ctx: "DaemonContext",
+    args: dict[str, Any],
+) -> dict[str, Any]:
+    """Probe which script types a bare xpub uses, for the auto-detect add flow.
+
+    Best-effort: a missing/unreachable/unsupported backend is marked with
+    ``probed: false`` so the UI can force an explicit manual script-type
+    selection. A malformed key is a real validation error.
+    """
+    fallback_script_type = "p2wpkh"
+    wallet_material = _required_str_arg(args, "wallet_material", "Wallet export")
+    material = wallet_material.strip()
+    if material[:4] not in {"xpub", "tpub"}:
+        raise AppError(
+            "Script-type detection only applies to a bare xpub/tpub",
+            code="validation",
+            hint="A descriptor or ypub/zpub key already carries its script type.",
+            retryable=False,
+        )
+    # Reject a malformed key up front rather than silently falling back.
+    normalize_wallet_material(material, script_types=[fallback_script_type])
+    chain = _optional_str_arg(args, "chain") or "bitcoin"
+    network = _optional_str_arg(args, "network")
+    backend_name = _optional_str_arg(args, "backend")
+
+    def _fallback(reason: str | None) -> dict[str, Any]:
+        return {
+            "probed": False,
+            "detected": [],
+            "active": [fallback_script_type],
+            "fallback_used": True,
+            "reason": reason,
+        }
+
+    try:
+        backend = resolve_backend(ctx.runtime_config, backend_name)
+    except AppError as exc:
+        return _fallback(str(exc))
+    try:
+        detected = detect_active_script_types(
+            backend, material, chain=chain, network=network
+        )
+    except AppError as exc:
+        return _fallback(str(exc))
+    active = [entry["script_type"] for entry in detected if entry["has_history"]]
+    fallback_used = not active
+    if fallback_used:
+        active = [fallback_script_type]
+    return {
+        "probed": True,
+        "detected": detected,
+        "active": active,
+        "fallback_used": fallback_used,
+        "reason": None,
     }
 
 
@@ -7303,6 +7862,16 @@ def _update_wallet_payload(
         value = _optional_str_arg(args, key)
         if value is not None:
             config_updates[key] = value
+    deprecated = args.get("deprecated")
+    if deprecated is not None:
+        if not isinstance(deprecated, bool):
+            raise AppError(
+                "deprecated must be a boolean",
+                code="validation",
+                details={"type": type(deprecated).__name__},
+                retryable=False,
+            )
+        config_updates["deprecated"] = deprecated
     if "source_format" in config_updates and config_updates["source_format"] not in _UI_WALLET_SOURCE_FORMATS:
         raise AppError(
             f"Unsupported source format '{config_updates['source_format']}'",
@@ -7314,13 +7883,42 @@ def _update_wallet_payload(
     if source_file is not None:
         config_updates["source_file"] = source_file
     wallet_material = _optional_str_arg(args, "wallet_material")
+    script_types = _script_types_arg(args)
     if wallet_material is not None:
-        material_config = normalize_wallet_material(wallet_material)
-        config_updates["descriptor"] = material_config["descriptor"]
-        if "change_descriptor" in material_config:
-            config_updates["change_descriptor"] = material_config["change_descriptor"]
-        elif "change_descriptor" not in config_updates:
+        script_type = _optional_str_arg(args, "script_type")
+        material_config = normalize_wallet_material(
+            wallet_material, script_type=script_type, script_types=script_types
+        )
+        if "xpub" in material_config:
+            config_updates["xpub"] = material_config["xpub"]
+            config_updates["script_types"] = material_config["script_types"]
+            # A multi-script xpub and a rendered descriptor are mutually
+            # exclusive; clear any descriptor left over from a prior shape.
+            config_updates["descriptor"] = None
             config_updates["change_descriptor"] = None
+            config_updates["descriptor_source"] = None
+            config_updates["synthesize_change"] = None
+        else:
+            config_updates["descriptor"] = material_config["descriptor"]
+            if "change_descriptor" in material_config:
+                config_updates["change_descriptor"] = material_config["change_descriptor"]
+            elif "change_descriptor" not in config_updates:
+                config_updates["change_descriptor"] = None
+            config_updates["descriptor_source"] = material_config.get("descriptor_source")
+            config_updates["synthesize_change"] = material_config.get("synthesize_change")
+            # A freshly pasted descriptor supersedes any stored xpub set.
+            config_updates["xpub"] = None
+            config_updates["script_types"] = None
+    elif script_types is not None:
+        # "Enable more types later": adjust the watched set on an existing
+        # xpub-derived wallet without re-pasting the key.
+        if not script_types:
+            raise AppError(
+                "Select at least one script type",
+                code="validation",
+                retryable=False,
+            )
+        config_updates["script_types"] = script_types
     gap_limit = args.get("gap_limit")
     if gap_limit not in (None, ""):
         if not isinstance(gap_limit, int):
@@ -7913,6 +8511,23 @@ def handle_request(
             False,
         )
 
+    if kind == "ui.transactions.graph":
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.transactions.graph",
+                    build_transaction_graph_snapshot(
+                        ctx.conn,
+                        request.get("args"),
+                        ctx.runtime_config,
+                        semantics_cache=_GRAPH_SEMANTICS_CACHE,
+                    ),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
     if kind == "ui.transactions.metadata.update":
         return (
             _with_request_id(
@@ -7922,6 +8537,29 @@ def handle_request(
                 ),
                 request_id,
             ),
+            False,
+        )
+
+    if kind == "ui.loans.list":
+        return (
+            _with_request_id(build_envelope("ui.loans.list", _loans_snapshot(ctx)), request_id),
+            False,
+        )
+    if kind == "ui.loans.link":
+        return (
+            _with_request_id(
+                build_envelope("ui.loans.link", _handle_loans_link(ctx, request)), request_id
+            ),
+            False,
+        )
+    if kind == "ui.loans.mark":
+        return (
+            _with_request_id(build_envelope("ui.loans.mark", _handle_loans_mark(ctx, request)), request_id),
+            False,
+        )
+    if kind == "ui.loans.unmark":
+        return (
+            _with_request_id(build_envelope("ui.loans.unmark", _handle_loans_unmark(ctx, request)), request_id),
             False,
         )
 
@@ -8293,6 +8931,8 @@ def handle_request(
         )
 
     if kind in {
+        "ui.transactions.export_csv",
+        "ui.transactions.export_xlsx",
         "ui.reports.export_pdf",
         "ui.reports.export_summary_pdf",
         "ui.reports.export_csv",
@@ -8333,8 +8973,10 @@ def handle_request(
         "ui.source_funds.links.bulk_review",
         "ui.source_funds.links.attach",
         "ui.source_funds.suggest",
+        "ui.source_funds.assemble",
         "ui.source_funds.evidence.list",
         "ui.source_funds.export_pdf",
+        "ui.source_funds.export_bundle",
         "ui.source_funds.coverage",
         "ui.source_funds.recipients.list",
         "ui.source_funds.recipients.create",
@@ -8424,6 +9066,18 @@ def handle_request(
                 build_envelope(
                     "ui.journals.transfers.list",
                     build_journals_transfers_list_snapshot(ctx.conn, request.get("args")),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
+    if kind == "ui.review.badges":
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.review.badges",
+                    build_review_badges_snapshot(ctx.conn),
                 ),
                 request_id,
             ),
@@ -8980,6 +9634,33 @@ def handle_request(
             False,
         )
 
+    if kind == "ui.transactions.ledger_template":
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.transactions.ledger_template",
+                    _ledger_template_payload(
+                        ctx,
+                        _coerce_args_dict(request_id, request.get("args")),
+                    ),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
+    if kind == "ui.wallets.ledger_preview":
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.wallets.ledger_preview",
+                    _ledger_preview_payload(_coerce_args_dict(request_id, request.get("args"))),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
     if kind == "ui.wallets.import_file":
         return (
             _with_request_id(
@@ -9016,6 +9697,21 @@ def handle_request(
                 build_envelope(
                     "ui.wallets.preview_descriptor",
                     _preview_descriptor_payload(
+                        _coerce_args_dict(request_id, request.get("args")),
+                    ),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
+    if kind == "ui.wallets.detect_script_types":
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.wallets.detect_script_types",
+                    _detect_script_types_payload(
+                        ctx,
                         _coerce_args_dict(request_id, request.get("args")),
                     ),
                 ),
@@ -9442,12 +10138,10 @@ def handle_request(
         )
 
     if kind == "ai.test_connection":
-        # Transient connection test against caller-supplied credentials —
-        # nothing is persisted. The Settings form uses this to validate the
-        # *entered* base_url + api_key before saving. If `provider` names a
-        # stored row and `api_key` is blank, the saved key is reused so the
-        # form's "leave blank to keep current key" affordance still tests
-        # with credentials.
+        # Transient connection test against caller-supplied provider metadata —
+        # nothing is persisted. Stored credentials may only be reused for the
+        # stored provider URL; otherwise a compromised renderer could redirect
+        # a saved bearer token to an attacker-controlled OpenAI-compatible URL.
         args = _coerce_args_dict(request_id, request.get("args"))
         base_url_raw = args.get("base_url")
         if not isinstance(base_url_raw, str) or not base_url_raw.strip():
@@ -9477,7 +10171,19 @@ def handle_request(
                 except AppError:
                     stored = None
                 if stored:
-                    api_key_text = _resolve_ai_provider_api_key(ctx, stored, args) or ""
+                    stored_url = normalize_base_url(stored.get("base_url"))
+                    has_stored_api_key = _ai_provider_has_stored_api_key(stored)
+                    if has_stored_api_key and canonical_url != stored_url:
+                        raise AppError(
+                            "ai.test_connection cannot reuse a stored API key for a different base_url",
+                            code="validation",
+                            hint=(
+                                "Save the provider URL first, then test it, so stored credentials are "
+                                "only sent to their configured origin."
+                            ),
+                        )
+                    if has_stored_api_key or canonical_url == stored_url:
+                        api_key_text = _resolve_ai_provider_api_key(ctx, stored, args) or ""
         # Use a tight timeout so a dead URL surfaces a clean error before
         # the Tauri supervisor's `DAEMON_INVOKE_TIMEOUT` (15s) kills the
         # daemon process. Test connection is interactive — a 10s ceiling
@@ -9639,13 +10345,12 @@ def _handle_reveal_request(
     scope: str,
     target_kind: str,
 ) -> tuple[dict[str, Any], bool]:
-    """Reveal a sensitive field after a passphrase round-trip.
+    """Reveal a sensitive field after an explicit local-auth round-trip.
 
-    Per the V4.1 plan, the daemon does not return secrets without an
-    explicit `auth_response` from the client carrying the SQLCipher
-    passphrase. We verify by opening a throw-away SQLCipher connection
-    against the on-disk database; a wrong passphrase produces
-    `local_auth_denied`.
+    Encrypted databases require an `auth_response` carrying the SQLCipher
+    passphrase. Plaintext databases have no passphrase to re-check, so callers
+    must send the typed plaintext reveal acknowledgement instead. Both paths
+    are UX gates; the unlocked daemon can already read the local database.
     """
 
     args = request.get("args") or {}
@@ -9661,36 +10366,20 @@ def _handle_reveal_request(
             False,
         )
 
-    auth = args.get("auth_response")
-    if not isinstance(auth, dict) or "passphrase_secret" not in auth:
-        return (
-            _with_request_id(
-                build_envelope(
-                    "auth_required",
-                    {
-                        "scope": scope,
-                        "label": f"Re-enter database passphrase to reveal {target_kind} {target!r}",
-                    },
-                ),
-                request_id,
-            ),
-            False,
-        )
-
-    passphrase = auth.get("passphrase_secret")
-    if not isinstance(passphrase, str) or not passphrase:
-        return (
-            _error_envelope(
-                "local_auth_denied",
-                "auth_response did not include a passphrase",
-                request_id=request_id,
-                retryable=True,
-            ),
-            False,
-        )
-
     try:
-        verified = _verify_passphrase_with_backoff(ctx, scope, passphrase)
+        auth_result = _require_sensitive_local_auth(
+            ctx,
+            args=args,
+            request_id=request_id,
+            scope=scope,
+            label=f"Re-enter database passphrase to reveal {target_kind} {target!r}",
+            plaintext_ack_key="plaintext_reveal_ack",
+            plaintext_ack_value=PLAINTEXT_REVEAL_ACK,
+            plaintext_ack_hint=(
+                f"Ask the user to type {PLAINTEXT_REVEAL_ACK!r} before "
+                "revealing plaintext local secrets."
+            ),
+        )
     except AppError as exc:
         return (
             _error_envelope(
@@ -9703,16 +10392,8 @@ def _handle_reveal_request(
             ),
             False,
         )
-    if not verified:
-        return (
-            _error_envelope(
-                "local_auth_denied",
-                "passphrase verification failed",
-                request_id=request_id,
-                retryable=True,
-            ),
-            False,
-        )
+    if auth_result is not None:
+        return auth_result
 
     if scope == "reveal_token":
         payload = core_accounts.reveal_backend_secrets(ctx.conn, ctx.runtime_config, target)

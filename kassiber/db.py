@@ -133,6 +133,11 @@ CREATE TABLE IF NOT EXISTS transactions (
     asset TEXT NOT NULL,
     amount INTEGER NOT NULL,
     fee INTEGER NOT NULL DEFAULT 0,
+    -- 1 when `amount` is a net wallet-balance delta with the network fee folded
+    -- in and no separate fee is available (BTCPay Greenfield sync). 0 (the
+    -- default) means `amount` is recipient-only and `fee` carries the miner fee
+    -- (esplora/electrum/bitcoinrpc and every CSV importer).
+    amount_includes_fee INTEGER NOT NULL DEFAULT 0,
     fiat_currency TEXT,
     fiat_rate REAL,
     fiat_value REAL,
@@ -162,6 +167,7 @@ CREATE TABLE IF NOT EXISTS transactions (
     raw_json TEXT NOT NULL DEFAULT '{}',
     payment_hash TEXT,
     payment_hash_source TEXT,
+    swap_refund_funding_txid TEXT,
     created_at TEXT NOT NULL
 );
 
@@ -213,6 +219,7 @@ CREATE TABLE IF NOT EXISTS wallet_utxos (
     block_height INTEGER,
     block_time TEXT,
     address TEXT,
+    script_pubkey TEXT,
     address_label TEXT,
     branch_label TEXT,
     branch_index INTEGER,
@@ -462,6 +469,31 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_direct_swap_payouts_active_out
 
 CREATE INDEX IF NOT EXISTS idx_direct_swap_payouts_profile_active
     ON direct_swap_payouts(profile_id) WHERE deleted_at IS NULL;
+
+-- A loan mark on a single transaction. Collateral lock/release roles suppress
+-- the outbound/inbound collateral events because the coins never left the owned
+-- pool. Principal received/repaid roles suppress borrowed-principal movements
+-- because they are liability principal, not acquisition/disposal of owned lots.
+-- The tax engine reads (transaction_id, role) to suppress those events.
+-- Removing the mark reverts the transaction to its normal classification.
+CREATE TABLE IF NOT EXISTS loan_legs (
+    id TEXT PRIMARY KEY,
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    transaction_id TEXT NOT NULL REFERENCES transactions(id) ON DELETE CASCADE,
+    loan_id TEXT,
+    role TEXT NOT NULL,
+    note TEXT,
+    deleted_at TEXT,
+    created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_loan_legs_profile_active
+    ON loan_legs(profile_id) WHERE deleted_at IS NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_loan_legs_active_transaction
+    ON loan_legs(profile_id, transaction_id)
+    WHERE deleted_at IS NULL;
 
 CREATE TABLE IF NOT EXISTS swap_matching_rules (
     id TEXT PRIMARY KEY,
@@ -1276,6 +1308,10 @@ def ensure_schema_compat(conn):
     ensure_column(conn, "profiles", "require_coarse_review", "INTEGER NOT NULL DEFAULT 0")
     ensure_column(conn, "profiles", "journal_input_version", "INTEGER NOT NULL DEFAULT 0")
     ensure_column(conn, "profiles", "last_processed_input_version", "INTEGER NOT NULL DEFAULT 0")
+    # Cached count of unresolved swap/transfer candidates, written when the
+    # matcher runs during journal processing, surfaced as a side-nav hint.
+    # NULL = never computed (no badge).
+    ensure_column(conn, "profiles", "swap_candidate_count", "INTEGER")
     ensure_column(conn, "backends", "batch_size", "INTEGER")
     ensure_column(conn, "backends", "config_json", "TEXT NOT NULL DEFAULT '{}'")
     ensure_column(conn, "journal_entries", "at_category", "TEXT")
@@ -1336,13 +1372,18 @@ def ensure_schema_compat(conn):
     _backfill_source_funds_target_external_id(conn)
     ensure_column(conn, "source_funds_recipients", "active", "INTEGER NOT NULL DEFAULT 1")
     ensure_column(conn, "wallet_utxos", "anonymity_score", "INTEGER")
+    ensure_column(conn, "wallet_utxos", "script_pubkey", "TEXT")
     ensure_column(conn, "wallet_utxos", "spent_by", "TEXT")
     ensure_column(conn, "wallet_utxos", "excluded_from_coinjoin", "INTEGER")
     ensure_column(conn, "wallet_utxos", "key_state", "TEXT")
     ensure_column(conn, "wallet_utxos", "anon_history_json", "TEXT NOT NULL DEFAULT '[]'")
+    ensure_column(conn, "loan_legs", "loan_id", "TEXT")
     _ensure_ai_provider_secret_refs_schema(conn)
     _drop_legacy_source_funds_recipients_unique(conn)
     _migrate_msat_columns(conn)
+    # Added after the msat rebuild, whose fixed column list would otherwise drop
+    # it on a legacy REAL-typed database.
+    ensure_column(conn, "transactions", "amount_includes_fee", "INTEGER NOT NULL DEFAULT 0")
     _migrate_attachment_table_shape(conn)
     ensure_column(conn, "attachments", "copied_from_attachment_id", "TEXT")
     ensure_column(conn, "attachments", "copied_from_transaction_id", "TEXT")
@@ -1867,6 +1908,9 @@ def _ensure_swap_matching_schema(conn):
     _migrate_legacy_transaction_pairs_uniques(conn)
     ensure_column(conn, "transactions", "payment_hash", "TEXT")
     ensure_column(conn, "transactions", "payment_hash_source", "TEXT")
+    # Links an inbound HTLC refund back to its on-chain funding (lockup) txid so
+    # the matcher can pair a failed swap's send + refund even within one wallet.
+    ensure_column(conn, "transactions", "swap_refund_funding_txid", "TEXT")
     ensure_column(conn, "transaction_pairs", "swap_fee_msat", "INTEGER")
     ensure_column(conn, "transaction_pairs", "swap_fee_kind", "TEXT")
     ensure_column(conn, "transaction_pairs", "confidence_at_pair", "TEXT")

@@ -22,6 +22,7 @@ def _row(
     external_id=None,
     raw_json=None,
     privacy_boundary=None,
+    amount_includes_fee=False,
 ):
     return {
         "id": tx_id,
@@ -31,6 +32,7 @@ def _row(
         "asset": "BTC",
         "amount": amount,
         "fee": fee,
+        "amount_includes_fee": amount_includes_fee,
         "fiat_rate": fiat_rate,
         "fiat_value": fiat_value,
         "kind": "deposit" if direction == "inbound" else "withdrawal",
@@ -156,16 +158,71 @@ class NormalizeTaxAssetInputsTest(unittest.TestCase):
         )
         self.assertEqual(inputs.transfers, [])
         self.assertEqual(inputs.events, [])
-        self.assertEqual(len(inputs.quarantines), 1)
-        self.assertEqual(
-            inputs.quarantines[0]["reason"], "transfer_fee_implausible"
+        # BOTH legs of the unbooked pair are quarantined — the recorded inbound
+        # must never be silently dropped (it would later trip insufficient_lots).
+        self.assertEqual(len(inputs.quarantines), 2)
+        self.assertTrue(
+            all(q["reason"] == "transfer_fee_implausible" for q in inputs.quarantines)
         )
-        detail = json.loads(inputs.quarantines[0]["detail_json"])
+        primary = next(
+            q for q in inputs.quarantines
+            if not json.loads(q["detail_json"]).get("paired_leg")
+        )
+        partner = next(
+            q for q in inputs.quarantines
+            if json.loads(q["detail_json"]).get("paired_leg")
+        )
+        self.assertEqual(primary["transaction_id"], out_row["id"])
+        self.assertEqual(partner["transaction_id"], in_row["id"])
+        detail = json.loads(primary["detail_json"])
         self.assertEqual(detail["from_wallet"], "Wallet A")
         self.assertEqual(detail["to_wallet"], "Wallet B")
         self.assertAlmostEqual(detail["implied_fee"], 0.01952253, places=8)
         self.assertGreater(detail["implied_fee"], detail["fee_ceiling"])
         self.assertEqual(detail["required_for"], "transfer_fee_review")
+
+    def test_btcpay_fee_inclusive_self_transfer_books_with_correct_fee(self):
+        # BTCPay reports the net wallet delta with the miner fee folded into
+        # `amount` (fee column 0, amount_includes_fee=1). For a 0.001 BTC move
+        # synced as a BTCPay outbound (0.00103 net) paired with an esplora-style
+        # inbound (0.001 recipient), the 0.00003 gap IS the miner fee — it must
+        # book as a transfer, NOT quarantine transfer_fee_implausible the way the
+        # same gap would for a node-backed (recipient-only) outbound.
+        out_row = _row(
+            "btcpay-out", "wallet-a", "outbound", 103_000_000,
+            fiat_rate=65_000, external_id="btcpay-move", amount_includes_fee=True,
+        )
+        in_row = _row(
+            "node-in", "wallet-b", "inbound", 100_000_000, external_id="btcpay-move",
+        )
+        inputs = normalize_tax_asset_inputs(
+            self.profile, "BTC", [out_row, in_row], self.wallet_refs_by_id,
+            [{"out": out_row, "in": in_row}],
+        )
+        self.assertEqual(inputs.quarantines, [])
+        self.assertEqual(len(inputs.transfers), 1)
+        self.assertAlmostEqual(float(inputs.transfers[0].fee), 0.00003, places=8)
+
+        # Control: the identical amounts WITHOUT the fee-inclusive flag (a
+        # node-backed recipient-only outbound) stay quarantined, so the
+        # split-peg/unrecognized-outflow guard is not weakened in general.
+        out_node = _row(
+            "node-out", "wallet-a", "outbound", 103_000_000,
+            fiat_rate=65_000, external_id="node-move",
+        )
+        in_node = _row(
+            "node-in-2", "wallet-b", "inbound", 100_000_000, external_id="node-move",
+        )
+        control = normalize_tax_asset_inputs(
+            self.profile, "BTC", [out_node, in_node], self.wallet_refs_by_id,
+            [{"out": out_node, "in": in_node}],
+        )
+        self.assertEqual(control.transfers, [])
+        # Both legs quarantined (the in leg is no longer silently dropped).
+        self.assertEqual(len(control.quarantines), 2)
+        self.assertTrue(
+            all(q["reason"] == "transfer_fee_implausible" for q in control.quarantines)
+        )
 
     def test_high_recorded_fee_self_transfer_not_implausible(self):
         # 0.001 BTC moved with a high 0.00005 BTC RECORDED network fee. The full
@@ -242,6 +299,54 @@ class NormalizeTaxAssetInputsTest(unittest.TestCase):
             all(q["reason"] == "owned_fanout_unresolved" for q in inputs.quarantines)
         )
 
+    def test_zero_value_inbound_does_not_block_self_transfer(self):
+        # A stray 0-value inbound row sharing the txid of a real cold->hot
+        # self-transfer must not inflate the inbound count: detect_intra_transfers
+        # still pairs the real legs (rather than skipping a non-1-out/1-in group),
+        # and _owned_fanout_row_ids does not flip the group into a spurious
+        # owned_fanout_unresolved quarantine.
+        from kassiber.transfers import detect_intra_transfers
+
+        refs = {
+            "wallet-a": {"id": "wallet-a", "label": "Wallet A"},
+            "wallet-b": {"id": "wallet-b", "label": "Wallet B"},
+            "wallet-c": {"id": "wallet-c", "label": "Wallet C"},
+        }
+        out_row = _row("move-out", "wallet-a", "outbound", 50_000_000_000,
+                       fee=10_000_000, fiat_rate=60_000, external_id="move-1")
+        in_row = _row("move-in", "wallet-b", "inbound", 50_000_000_000,
+                      fiat_rate=60_000, external_id="move-1")
+        zero_in = _row("zero-in", "wallet-c", "inbound", 0,
+                       fiat_rate=60_000, external_id="move-1")
+        rows = [out_row, in_row, zero_in]
+
+        pairs, matched = detect_intra_transfers(rows)
+        self.assertEqual(len(pairs), 1)
+        self.assertEqual(pairs[0]["out"]["id"], "move-out")
+        self.assertEqual(pairs[0]["in"]["id"], "move-in")
+        self.assertEqual(matched, {"move-out", "move-in"})
+
+        inputs = normalize_tax_asset_inputs(self.profile, "BTC", rows, refs, pairs)
+        self.assertEqual(len(inputs.transfers), 1)
+        self.assertFalse(
+            any(q["reason"] == "owned_fanout_unresolved" for q in inputs.quarantines)
+        )
+
+    def test_detect_intra_transfers_folds_mixed_case_txid(self):
+        # A txid recorded uppercase in one wallet and lowercase in another is the
+        # same on-chain transaction; the grouping must fold case so the pair is
+        # detected rather than split into a phantom disposal + acquisition.
+        from kassiber.transfers import detect_intra_transfers
+
+        txid = "cd" * 32
+        out_row = _row("o", "wallet-a", "outbound", 50_000_000_000,
+                       external_id=txid.upper())
+        in_row = _row("i", "wallet-b", "inbound", 50_000_000_000,
+                      external_id=txid.lower())
+        pairs, matched = detect_intra_transfers([out_row, in_row])
+        self.assertEqual(len(pairs), 1)
+        self.assertEqual(matched, {"o", "i"})
+
     def test_transfer_mismatch_quarantines_without_normalized_transfer(self):
         out_row = _row(
             "tx-out",
@@ -265,9 +370,19 @@ class NormalizeTaxAssetInputsTest(unittest.TestCase):
             [{"out": out_row, "in": in_row}],
         )
         self.assertEqual(inputs.transfers, [])
-        self.assertEqual(len(inputs.quarantines), 1)
-        self.assertEqual(inputs.quarantines[0]["reason"], "transfer_mismatch")
-        detail = json.loads(inputs.quarantines[0]["detail_json"])
+        # Both legs flagged: the recorded inbound is not silently dropped.
+        self.assertEqual(len(inputs.quarantines), 2)
+        self.assertTrue(
+            all(q["reason"] == "transfer_mismatch" for q in inputs.quarantines)
+        )
+        self.assertEqual(
+            {q["transaction_id"] for q in inputs.quarantines}, {"tx-out", "tx-in"}
+        )
+        primary = next(
+            q for q in inputs.quarantines
+            if not json.loads(q["detail_json"]).get("paired_leg")
+        )
+        detail = json.loads(primary["detail_json"])
         self.assertEqual(detail["from_wallet"], "Wallet A")
         self.assertEqual(detail["to_wallet"], "Wallet B")
 
@@ -298,10 +413,143 @@ class NormalizeTaxAssetInputsTest(unittest.TestCase):
         # emitted as a partial zero-fee MOVE that would leave the un-moved fee
         # quantity double-spendable in the source). Resolved by pricing the fee.
         self.assertEqual(inputs.transfers, [])
-        self.assertEqual(len(inputs.quarantines), 1)
-        self.assertEqual(inputs.quarantines[0]["reason"], "missing_spot_price")
-        detail = json.loads(inputs.quarantines[0]["detail_json"])
+        # Both legs flagged: the recorded inbound is not silently dropped.
+        self.assertEqual(len(inputs.quarantines), 2)
+        self.assertTrue(
+            all(q["reason"] == "missing_spot_price" for q in inputs.quarantines)
+        )
+        primary = next(
+            q for q in inputs.quarantines
+            if not json.loads(q["detail_json"]).get("paired_leg")
+        )
+        detail = json.loads(primary["detail_json"])
         self.assertEqual(detail["required_for"], "transfer_fee")
+
+    def test_derived_transfer_group_blocks_siblings_when_one_leg_needs_review(self):
+        refs = {
+            "wallet-a": {"id": "wallet-a", "label": "Wallet A"},
+            "wallet-b": {"id": "wallet-b", "label": "Wallet B"},
+            "wallet-c": {"id": "wallet-c", "label": "Wallet C"},
+        }
+        profile = {**self.profile, "require_coarse_review": True}
+        out_a = _row(
+            "tx-out-a",
+            "wallet-a",
+            "outbound",
+            50_000_000_000,
+            fee=100_000_000,
+            fiat_rate=65_000,
+            external_id="grouped",
+        )
+        out_a["pricing_quality"] = "coarse_fallback"
+        out_c = _row(
+            "tx-out-c",
+            "wallet-c",
+            "outbound",
+            30_000_000_000,
+            fiat_rate=65_000,
+            external_id="grouped",
+        )
+        in_b_from_a = _row(
+            "tx-in-b-a",
+            "wallet-b",
+            "inbound",
+            50_000_000_000,
+            external_id="grouped",
+        )
+        in_b_from_c = _row(
+            "tx-in-b-c",
+            "wallet-b",
+            "inbound",
+            30_000_000_000,
+            external_id="grouped",
+        )
+        replaced_real_receipt = _row(
+            "tx-in-b-real",
+            "wallet-b",
+            "inbound",
+            80_000_000_000,
+            external_id="grouped",
+        )
+        pairs = [
+            {
+                "out": out_a,
+                "in": in_b_from_a,
+                "source": "multi_source_consolidation",
+                "group_id": "grouped-transfer",
+                "group_block_rows": (replaced_real_receipt,),
+            },
+            {
+                "out": out_c,
+                "in": in_b_from_c,
+                "source": "multi_source_consolidation",
+                "group_id": "grouped-transfer",
+                "group_block_rows": (replaced_real_receipt,),
+            },
+        ]
+
+        inputs = normalize_tax_asset_inputs(
+            profile,
+            "BTC",
+            [out_a, out_c, in_b_from_a, in_b_from_c],
+            refs,
+            pairs,
+        )
+
+        self.assertEqual(inputs.transfers, [])
+        self.assertEqual(inputs.ordered_items, [])
+        reasons_by_id = {q["transaction_id"]: q["reason"] for q in inputs.quarantines}
+        self.assertEqual(reasons_by_id["tx-out-a"], "pricing_review_required")
+        self.assertEqual(reasons_by_id["tx-in-b-a"], "pricing_review_required")
+        self.assertEqual(reasons_by_id["tx-out-c"], "derived_transfer_group_blocked")
+        self.assertEqual(reasons_by_id["tx-in-b-c"], "derived_transfer_group_blocked")
+        self.assertEqual(reasons_by_id["tx-in-b-real"], "derived_transfer_group_blocked")
+        blocked_detail = json.loads(
+            next(
+                q["detail_json"]
+                for q in inputs.quarantines
+                if q["transaction_id"] == "tx-out-c"
+            )
+        )
+        self.assertEqual(blocked_detail["transfer_group_id"], "grouped-transfer")
+        self.assertEqual(blocked_detail["blocked_by_reason"], "pricing_review_required")
+
+    def test_blocked_synthetic_group_contaminates_by_journal_transaction_id(self):
+        refs = {
+            "wallet-a": {"id": "wallet-a", "label": "Wallet A"},
+            "wallet-b": {"id": "wallet-b", "label": "Wallet B"},
+        }
+        profile = {**self.profile, "require_coarse_review": True}
+        out_row = _row(
+            "multi-consol:tx:out:wallet-a",
+            "wallet-a",
+            "outbound",
+            50_000_000_000,
+            fee=100_000_000,
+            fiat_rate=65_000,
+            external_id="multi-consol:tx:out:wallet-a",
+        )
+        out_row["journal_transaction_id"] = "real-out-a"
+        out_row["pricing_quality"] = "coarse_fallback"
+        in_row = _row(
+            "multi-consol:tx:in:wallet-a",
+            "wallet-b",
+            "inbound",
+            50_000_000_000,
+            external_id="multi-consol:tx:in:wallet-a",
+        )
+        in_row["journal_transaction_id"] = "real-in-b"
+
+        inputs = normalize_tax_asset_inputs(
+            profile,
+            "BTC",
+            [out_row, in_row],
+            refs,
+            [{"out": out_row, "in": in_row, "group_id": "grouped-transfer"}],
+        )
+
+        self.assertEqual(inputs.transfers, [])
+        self.assertEqual(inputs.earliest_lot_contamination_at, out_row["occurred_at"])
 
     def test_unsupported_direction_quarantines(self):
         inputs = normalize_tax_asset_inputs(
@@ -475,6 +723,212 @@ class DedupeQuarantinesTest(unittest.TestCase):
             ]
         )
         self.assertEqual([q["transaction_id"] for q in out], ["tx-b", "tx-a"])
+
+
+class ClampedZeroSelfSendTest(unittest.TestCase):
+    profile = {"id": "profile-1", "workspace_id": "workspace-1"}
+    refs = {
+        "wallet-a": {"id": "wallet-a", "label": "Wallet A"},
+        "wallet-b": {"id": "wallet-b", "label": "Wallet B"},
+        "wallet-c": {"id": "wallet-c", "label": "Wallet C"},
+        "wallet-d": {"id": "wallet-d", "label": "Wallet D"},
+    }
+
+    def test_clamped_zero_guard_fires_even_when_group_has_a_booked_pair(self):
+        # Codex review: a txid carrying BOTH a normal self-transfer pair AND a
+        # clamped amount=0 outbound with a cross-wallet inbound. The pair must book
+        # as a MOVE, and the clamped source + its cross-wallet receipt must STILL be
+        # quarantined (the earlier "any leg paired -> skip group" path used to skip
+        # the zero-out guard entirely, leaving the receipt a phantom acquisition).
+        a_out = _row("a-out", "wallet-a", "outbound", 50_000_000_000, external_id="mixed")
+        b_in = _row("b-in", "wallet-b", "inbound", 50_000_000_000, external_id="mixed")
+        c_out = _row("c-zero", "wallet-c", "outbound", 0, external_id="mixed")
+        d_in = _row("d-in", "wallet-d", "inbound", 30_000_000_000,
+                    external_id="mixed", fiat_value=18_000)
+        inputs = normalize_tax_asset_inputs(
+            self.profile, "BTC", [a_out, b_in, c_out, d_in], self.refs,
+            [{"out": a_out, "in": b_in}],
+        )
+        # The pair booked as a MOVE.
+        self.assertEqual(len(inputs.transfers), 1)
+        # The clamped source + its cross-wallet receipt are quarantined.
+        quar_ids = {q["transaction_id"] for q in inputs.quarantines
+                    if q["reason"] == "owned_fanout_unresolved"}
+        self.assertEqual(quar_ids, {"c-zero", "d-in"})
+        # d-in is NOT booked as a standalone acquisition.
+        self.assertNotIn("d-in", [e.transaction_id for e in inputs.events])
+
+    def test_clamped_zero_outbound_with_cross_wallet_inbound_quarantines(self):
+        # #9: a coinjoin/payjoin self-send where wallet A's net outflow fell below
+        # the miner fee gets its outbound amount clamped to 0; wallet B receives a
+        # positive inbound under the same txid. Every positive-amount filter skips
+        # A, so without the guard B books a phantom standalone acquisition. The
+        # group must instead be quarantined for review.
+        a_out = _row("a-cj-out", "wallet-a", "outbound", 0, external_id="cj-tx")
+        b_in = _row("b-cj-in", "wallet-b", "inbound", 50_000_000_000,
+                    external_id="cj-tx", fiat_value=30_000)
+        inputs = normalize_tax_asset_inputs(
+            self.profile, "BTC", [a_out, b_in], self.refs, [],
+        )
+        self.assertTrue(
+            any(q["reason"] == "owned_fanout_unresolved" for q in inputs.quarantines)
+        )
+        # B's inbound is NOT booked as a standalone acquisition.
+        self.assertNotIn("b-cj-in", [e.transaction_id for e in inputs.events])
+
+    def test_single_wallet_fee_consolidation_not_quarantined(self):
+        # A clamped amount=0 outbound with NO cross-wallet inbound (an ordinary
+        # within-wallet fee/consolidation) must NOT be quarantined by the guard.
+        a_out = _row("a-fee", "wallet-a", "outbound", 0, fee=2000, external_id="fee-tx")
+        inputs = normalize_tax_asset_inputs(
+            self.profile, "BTC", [a_out], self.refs, [],
+        )
+        self.assertEqual(
+            [q for q in inputs.quarantines if q["reason"] == "owned_fanout_unresolved"],
+            [],
+        )
+
+
+class ConflictPairInteractionTest(unittest.TestCase):
+    profile = {"id": "profile-1", "workspace_id": "workspace-1"}
+    refs = {
+        "wallet-a": {"id": "wallet-a", "label": "Wallet A"},
+        "wallet-b": {"id": "wallet-b", "label": "Wallet B"},
+    }
+
+    def test_conflict_loser_in_manual_pair_does_not_book_transfer(self):
+        # Codex review: a same-asset manual pair whose OUT leg is a shared-prevout
+        # conflict loser must NOT book a transfer using the quarantined loser, even
+        # though the partner has a different txid (apply_manual_pairs allows that).
+        # The caller passes the conflict set (computed over the full asset rows);
+        # the loser is quarantined and the pair is suppressed.
+        out = _row("loser-out", "wallet-a", "outbound", 50_000_000_000, external_id="loser-tx")
+        partner = _row("partner-in", "wallet-b", "inbound", 50_000_000_000,
+                       external_id="other-tx", fiat_value=30_000)
+        inputs = normalize_tax_asset_inputs(
+            self.profile, "BTC", [out, partner], self.refs,
+            [{"out": out, "in": partner}],
+            conflict_row_ids={"loser-out"},
+        )
+        self.assertEqual(list(inputs.transfers), [])
+        self.assertTrue(
+            any(
+                q["reason"] == "conflicting_spend" and q["transaction_id"] == "loser-out"
+                for q in inputs.quarantines
+            )
+        )
+
+    def test_passed_conflict_set_overrides_local_detection(self):
+        # The conflict_row_ids the caller passes (full-asset-row detection, stable
+        # across the two-pass Austrian prep) is honored verbatim — not recomputed
+        # from the possibly-reduced rows handed to this call.
+        a = _row("a", "wallet-a", "outbound", 10_000_000_000, external_id="tx-a", fiat_value=6000)
+        inputs = normalize_tax_asset_inputs(
+            self.profile, "BTC", [a], self.refs, [], conflict_row_ids={"a"},
+        )
+        self.assertTrue(any(q["reason"] == "conflicting_spend" for q in inputs.quarantines))
+        self.assertEqual(list(inputs.events), [])  # the loser is not booked
+
+
+class AustrianSelfTransferRegimeTest(unittest.TestCase):
+    AT_PROFILE = {"id": "p", "workspace_id": "ws", "tax_country": "at"}
+    REFS = {
+        "wallet-a": {"id": "wallet-a", "label": "Wallet A"},
+        "wallet-b": {"id": "wallet-b", "label": "Wallet B"},
+    }
+
+    def _move_fee_regime(self, neu_acq_id):
+        # Alt lot (2020) + Neu acq (2025-02-01) sharing occurred_at with a
+        # self-transfer move (2025-02-01) that has a fee. The Neu acq id flips
+        # whether it sorts before/after the move on the raw DB key.
+        alt = _row("alt", "wallet-a", "inbound", 30_000_000_000,
+                   occurred_at="2020-06-01T00:00:00Z", fiat_rate=10_000)
+        neu = _row(neu_acq_id, "wallet-a", "inbound", 40_000_000_000,
+                   occurred_at="2025-02-01T00:00:00Z", fiat_rate=60_000)
+        out_row = _row("zzz-move-out", "wallet-a", "outbound", 50_000_000_000,
+                       occurred_at="2025-02-01T00:00:00Z", fee=100_000_000,
+                       fiat_rate=60_000, external_id="mv")
+        in_row = _row("mv-in", "wallet-b", "inbound", 50_000_000_000,
+                      occurred_at="2025-02-01T00:00:00Z", external_id="mv")
+        inputs = normalize_tax_asset_inputs(
+            self.AT_PROFILE, "BTC", [alt, neu, out_row, in_row], self.REFS,
+            [{"out": out_row, "in": in_row}],
+        )
+        self.assertEqual(len(inputs.transfers), 1)
+        return inputs.transfers[0].at_regime
+
+    def test_self_transfer_fee_regime_is_order_independent(self):
+        # #4: economically identical books must not differ by the Neu acq's id.
+        # The move post-dates the cutoff and Neu inventory exists, so the fee is
+        # unambiguously neu — deterministically, not an id artifact.
+        self.assertEqual(self._move_fee_regime("aaa-neu"), "neu")
+        self.assertEqual(self._move_fee_regime("zzz-neu"), "neu")
+
+    def test_self_transfer_fee_honors_regime_override(self):
+        alt = _row("alt", "wallet-a", "inbound", 30_000_000_000,
+                   occurred_at="2020-06-01T00:00:00Z", fiat_rate=10_000)
+        neu = _row("neu", "wallet-a", "inbound", 40_000_000_000,
+                   occurred_at="2025-02-01T00:00:00Z", fiat_rate=60_000)
+        out_row = _row("move-out", "wallet-a", "outbound", 50_000_000_000,
+                       occurred_at="2025-02-01T00:00:00Z", fee=100_000_000,
+                       fiat_rate=60_000, external_id="mv")
+        out_row["at_regime_override"] = "alt"
+        in_row = _row("mv-in", "wallet-b", "inbound", 50_000_000_000,
+                      occurred_at="2025-02-01T00:00:00Z", external_id="mv")
+        inputs = normalize_tax_asset_inputs(
+            self.AT_PROFILE, "BTC", [alt, neu, out_row, in_row], self.REFS,
+            [{"out": out_row, "in": in_row}],
+        )
+
+        self.assertEqual(len(inputs.transfers), 1)
+        self.assertEqual(inputs.transfers[0].at_regime, "alt")
+
+    def test_conflict_loser_pair_excluded_from_regime_inference(self):
+        # Codex review: a conflict-loser leg manually paired to an inbound with
+        # another txid must be dropped from regime inference too (not just from
+        # booking) — otherwise infer_outbound_regimes treats the partner inbound as
+        # a transfer leg and skips its Alt/Neu availability, while the booking-time
+        # filter books it standalone, so a later disposal from that wallet is
+        # mis-tagged. Here the Neu partner inbound must count, tagging the later
+        # sell as neu.
+        partner = _row("partner-in", "wallet-b", "inbound", 50_000_000_000,
+                       occurred_at="2024-06-01T00:00:00Z", fiat_rate=60000)
+        loser = _row("loser-out", "wallet-a", "outbound", 50_000_000_000,
+                     occurred_at="2025-01-01T00:00:00Z", fiat_rate=60000, external_id="loser-tx")
+        sell = _row("sell-b", "wallet-b", "outbound", 30_000_000_000,
+                    occurred_at="2025-06-01T00:00:00Z", fiat_rate=60000, fiat_value=18000)
+        inputs = normalize_tax_asset_inputs(
+            self.AT_PROFILE, "BTC", [partner, loser, sell], self.REFS,
+            [{"out": loser, "in": partner}], conflict_row_ids={"loser-out"},
+        )
+        by_id = {e.transaction_id: e for e in inputs.events}
+        self.assertEqual(by_id["sell-b"].at_regime, "neu")
+        self.assertTrue(
+            any(q["reason"] == "conflicting_spend" for q in inputs.quarantines)
+        )
+
+    def test_samourai_internal_transfer_fee_carries_regime(self):
+        # #5: a Whirlpool tx0 (samourai child rows) under AT with mixed Alt/Neu
+        # must stamp at_regime on its MOVE fee disposal, or rp2 aborts the whole
+        # asset on an ambiguous disposal.
+        def _cfg(section):
+            return json.dumps({"samourai": {"role": "child", "group_id": "wp", "section": section}})
+        alt = _row("alt", "wallet-a", "inbound", 30_000_000_000,
+                   occurred_at="2020-06-01T00:00:00Z", fiat_rate=10_000)
+        neu = _row("neu", "wallet-a", "inbound", 40_000_000_000,
+                   occurred_at="2024-06-01T00:00:00Z", fiat_rate=60_000)
+        out_row = _row("wp-out", "wallet-a", "outbound", 50_000_000_000,
+                       occurred_at="2025-02-01T00:00:00Z", fee=100_000_000,
+                       fiat_rate=60_000, external_id="wptx")
+        out_row["config_json"] = _cfg("deposit")
+        in_row = _row("wp-in", "wallet-b", "inbound", 49_900_000_000,
+                      occurred_at="2025-02-01T00:00:00Z", external_id="wptx")
+        in_row["config_json"] = _cfg("premix")
+        inputs = normalize_tax_asset_inputs(
+            self.AT_PROFILE, "BTC", [alt, neu, out_row, in_row], self.REFS, [],
+        )
+        self.assertEqual(len(inputs.transfers), 1)
+        self.assertIn(inputs.transfers[0].at_regime, ("alt", "neu"))
 
 
 if __name__ == "__main__":

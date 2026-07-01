@@ -27,6 +27,10 @@ from ..ai.providers import (
     list_with_default as list_ai_providers_with_default,
 )
 from ..core import chat_history as core_chat_history
+from ..importers import (
+    preview_generic_ledger_records,
+    write_generic_ledger_template,
+)
 from .handlers import (
     APP_NAME,
     BACKEND_CLEAR_FIELD_ALIASES,
@@ -58,6 +62,10 @@ from .handlers import (
     clear_chat_sessions_cli,
     create_saved_view_cli,
     create_transaction_pair,
+    loans_link,
+    loans_list,
+    loans_mark,
+    loans_unmark,
     create_transfer_rule,
     delete_chat_session_cli,
     delete_direct_swap_payout,
@@ -97,6 +105,7 @@ from .handlers import (
     sync_btcpay_commercial_provenance,
     sync_btcpay_into_wallet,
     sync_wallet,
+    update_transaction_pair,
 )
 from ..core import accounts as core_accounts
 from ..core import attachments as core_attachments
@@ -110,6 +119,7 @@ from ..core import reports as core_reports
 from ..core import samourai as core_samourai
 from ..core import source_funds as core_source_funds
 from ..core import source_funds_coverage as core_source_funds_coverage
+from ..core import source_funds_diagram
 from ..core import source_funds_recipients as core_source_funds_recipients
 from ..core import wallets as core_wallets
 from ..core.runtime import bootstrap_runtime, close_runtime, emit_error, resolve_output_format
@@ -120,6 +130,7 @@ from ..diagnostics import (
 )
 from ..backup.cli import add_backup_parser, dispatch_backup
 from ..backends import preferred_explorer_base
+from ..envelope import write_text
 from ..errors import AppError
 from ..log_ring import sanitize_traceback_text
 from ..secrets.cli import add_secrets_parser, dispatch_secrets
@@ -685,7 +696,13 @@ def build_parser() -> argparse.ArgumentParser:
     add_secret_stdin_options(backends_create, "token")
     backends_create.add_argument("--batch-size", type=int)
     backends_create.add_argument("--timeout", type=int)
-    backends_create.add_argument("--tor-proxy")
+    backends_create.add_argument(
+        "--tor-proxy",
+        help=(
+            "Proxy for this backend only; accepts HOST:PORT, "
+            "socks5h://HOST:PORT, socks5h://USER:PASS@HOST:PORT, or http(s)://."
+        ),
+    )
     backends_create.add_argument("--insecure")
     backends_create.add_argument(
         "--certificate",
@@ -728,7 +745,13 @@ def build_parser() -> argparse.ArgumentParser:
     add_secret_stdin_options(backends_update, "token")
     backends_update.add_argument("--batch-size", type=int)
     backends_update.add_argument("--timeout", type=int)
-    backends_update.add_argument("--tor-proxy")
+    backends_update.add_argument(
+        "--tor-proxy",
+        help=(
+            "Proxy for this backend only; accepts HOST:PORT, "
+            "socks5h://HOST:PORT, socks5h://USER:PASS@HOST:PORT, or http(s)://."
+        ),
+    )
     backends_update.add_argument("--insecure")
     backends_update.add_argument(
         "--certificate",
@@ -874,6 +897,16 @@ def build_parser() -> argparse.ArgumentParser:
     add_secret_stdin_options(
         wallets_create, "change-descriptor", label="change descriptor"
     )
+    wallets_create.add_argument(
+        "--script-type",
+        action="append",
+        choices=["p2pkh", "p2sh-p2wpkh", "p2wpkh", "p2tr"],
+        help=(
+            "Script type(s) to derive from a bare xpub passed via --descriptor* "
+            "(repeatable, e.g. --script-type p2wpkh --script-type p2tr). "
+            "Omit for a full output descriptor."
+        ),
+    )
     wallets_create.add_argument("--gap-limit", type=int)
     wallets_create.add_argument("--policy-asset")
     wallets_create.add_argument("--store-id")
@@ -920,6 +953,14 @@ def build_parser() -> argparse.ArgumentParser:
     wallets_reveal.add_argument("--workspace")
     wallets_reveal.add_argument("--profile")
     wallets_reveal.add_argument("--wallet", required=True)
+    wallets_reveal.add_argument(
+        "--material-only",
+        action="store_true",
+        help=(
+            "Print only the pasteable stored descriptor material: the descriptor "
+            "string plus the stored change descriptor on the next line when present."
+        ),
+    )
     wallets_import_json = wallets_sub.add_parser("import-json")
     wallets_import_json.add_argument("--workspace")
     wallets_import_json.add_argument("--profile")
@@ -981,6 +1022,31 @@ def build_parser() -> argparse.ArgumentParser:
     wallets_import_strike.add_argument("--profile")
     wallets_import_strike.add_argument("--wallet")
     wallets_import_strike.add_argument("--file", required=True)
+    wallets_import_ledger = wallets_sub.add_parser(
+        "import-ledger",
+        help="Import a filled-in generic ledger (.xlsx or CSV/TSV) into a wallet",
+    )
+    wallets_import_ledger.add_argument("--workspace")
+    wallets_import_ledger.add_argument("--profile")
+    wallets_import_ledger.add_argument("--wallet", required=True)
+    wallets_import_ledger.add_argument("--file", required=True)
+    wallets_import_ledger.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Preview what would import (rows + problems) without persisting",
+    )
+    wallets_import_ledger.add_argument(
+        "--limit",
+        type=int,
+        help="Limit the number of preview rows returned with --dry-run",
+    )
+    wallets_ledger_template = wallets_sub.add_parser(
+        "ledger-template",
+        help="Write a blank generic-ledger import template (.xlsx, or .csv by extension)",
+    )
+    wallets_ledger_template.add_argument(
+        "--file", required=True, help="Destination path; .csv writes a CSV template, otherwise .xlsx"
+    )
     wallets_import_samourai = wallets_sub.add_parser("import-samourai")
     wallets_import_samourai.add_argument("--workspace")
     wallets_import_samourai.add_argument("--profile")
@@ -1114,6 +1180,13 @@ def build_parser() -> argparse.ArgumentParser:
     )
     tx_list.add_argument("--order", choices=("asc", "desc"), default="desc")
     tx_list.add_argument("--limit", type=int, default=100)
+
+    tx_export = tx_sub.add_parser("export")
+    tx_export.add_argument("--workspace")
+    tx_export.add_argument("--profile")
+    tx_export.add_argument("--wallet")
+    tx_export.add_argument("--export-format", choices=("csv", "xlsx"), default="xlsx")
+    tx_export.add_argument("--file", required=True)
 
     attachments = sub.add_parser("attachments")
     attachments_sub = attachments.add_subparsers(dest="attachments_command", required=True)
@@ -1392,6 +1465,63 @@ def build_parser() -> argparse.ArgumentParser:
     q_exclude.add_argument("--profile")
     q_exclude.add_argument("--transaction", required=True)
 
+    loans_p = sub.add_parser("loans", help="Mark transactions as Bitcoin-backed-loan legs")
+    loans_sub = loans_p.add_subparsers(dest="loans_command", required=True)
+
+    loans_mark_p = loans_sub.add_parser(
+        "mark", help="Mark a transaction as a loan non-event"
+    )
+    loans_mark_p.add_argument("--workspace")
+    loans_mark_p.add_argument("--profile")
+    loans_mark_p.add_argument("--txid", required=True, help="Transaction id or external_id to mark")
+    loans_mark_p.add_argument(
+        "--as",
+        dest="mark_as",
+        required=True,
+        choices=["collateral", "returned", "principal-received", "principal-repaid"],
+        help="'collateral' = BTC posted as collateral for a fiat loan (not a disposal); "
+        "'returned' = BTC collateral coming back (not an acquisition); "
+        "'principal-received' = inbound borrowed BTC principal; "
+        "'principal-repaid' = outbound BTC principal repayment",
+    )
+    loans_mark_p.add_argument("--note", dest="note")
+    loans_mark_p.add_argument(
+        "--loan-id",
+        dest="loan_id",
+        help="Optional loan/group id shared by related loan legs",
+    )
+
+    loans_unmark_p = loans_sub.add_parser(
+        "unmark", help="Remove a transaction's loan mark (reverts to normal tax classification)"
+    )
+    loans_unmark_p.add_argument("--workspace")
+    loans_unmark_p.add_argument("--profile")
+    loans_unmark_p.add_argument("--txid", required=True, help="Transaction id or external_id to unmark")
+
+    loans_link_p = loans_sub.add_parser(
+        "link", help="Tie two or more marked loan legs together"
+    )
+    loans_link_p.add_argument("--workspace")
+    loans_link_p.add_argument("--profile")
+    loans_link_p.add_argument(
+        "--txid",
+        dest="txids",
+        action="append",
+        required=True,
+        help="Transaction id or external_id to link; pass at least twice",
+    )
+    loans_link_p.add_argument(
+        "--loan-id",
+        dest="loan_id",
+        help="Optional loan/group id; generated when omitted",
+    )
+
+    loans_list_p = loans_sub.add_parser(
+        "list", help="List loan marks and open collateral locks"
+    )
+    loans_list_p.add_argument("--workspace")
+    loans_list_p.add_argument("--profile")
+
     transfers = sub.add_parser("transfers")
     transfers_sub = transfers.add_subparsers(dest="transfers_command", required=True)
     transfers_list = transfers_sub.add_parser("list")
@@ -1415,6 +1545,16 @@ def build_parser() -> argparse.ArgumentParser:
     transfers_unpair.add_argument("--workspace")
     transfers_unpair.add_argument("--profile")
     transfers_unpair.add_argument("--pair-id", required=True, dest="pair_id")
+
+    transfers_update = transfers_sub.add_parser(
+        "update", help="Edit the kind / policy / note of an existing pair in place"
+    )
+    transfers_update.add_argument("--workspace")
+    transfers_update.add_argument("--profile")
+    transfers_update.add_argument("--pair-id", required=True, dest="pair_id")
+    transfers_update.add_argument("--kind", choices=list(TRANSFER_PAIR_KINDS))
+    transfers_update.add_argument("--policy", choices=list(TRANSFER_PAIR_POLICIES))
+    transfers_update.add_argument("--note", dest="note")
 
     transfers_payouts = transfers_sub.add_parser("payouts")
     transfers_payouts_sub = transfers_payouts.add_subparsers(dest="payouts_command", required=True)
@@ -1448,7 +1588,7 @@ def build_parser() -> argparse.ArgumentParser:
     transfers_suggest.add_argument("--workspace")
     transfers_suggest.add_argument("--profile")
     transfers_suggest.add_argument("--confidence", choices=("exact", "strong"))
-    transfers_suggest.add_argument("--method", choices=("payment_hash", "heuristic"))
+    transfers_suggest.add_argument("--method", choices=("payment_hash", "heuristic", "htlc_refund"))
     transfers_suggest.add_argument(
         "--asset-pair",
         dest="asset_pair",
@@ -1458,7 +1598,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--candidate-type",
         choices=("transfer", "swap"),
         dest="candidate_type",
-        help="Restrict candidates to same-asset transfers or cross-asset swaps",
+        help="Restrict candidates to Bitcoin movements or other cross-asset swaps",
     )
     transfers_suggest.add_argument(
         "--time-window-seconds",
@@ -1479,7 +1619,7 @@ def build_parser() -> argparse.ArgumentParser:
     transfers_bulk_pair.add_argument(
         "--confidence", choices=("exact", "strong"), default="exact"
     )
-    transfers_bulk_pair.add_argument("--method", choices=("payment_hash", "heuristic"))
+    transfers_bulk_pair.add_argument("--method", choices=("payment_hash", "heuristic", "htlc_refund"))
     transfers_bulk_pair.add_argument(
         "--asset-pair",
         dest="asset_pair",
@@ -1489,7 +1629,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--candidate-type",
         choices=("transfer", "swap"),
         dest="candidate_type",
-        help="Restrict candidates to same-asset transfers or cross-asset swaps",
+        help="Restrict candidates to Bitcoin movements or other cross-asset swaps",
     )
     transfers_bulk_pair.add_argument(
         "--time-window-seconds",
@@ -1557,7 +1697,7 @@ def build_parser() -> argparse.ArgumentParser:
     tr_rules_apply.add_argument("--workspace")
     tr_rules_apply.add_argument("--profile")
     tr_rules_apply.add_argument("--confidence", choices=("exact", "strong"))
-    tr_rules_apply.add_argument("--method", choices=("payment_hash", "heuristic"))
+    tr_rules_apply.add_argument("--method", choices=("payment_hash", "heuristic", "htlc_refund"))
     tr_rules_apply.add_argument(
         "--asset-pair",
         dest="asset_pair",
@@ -1567,7 +1707,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--candidate-type",
         choices=("transfer", "swap"),
         dest="candidate_type",
-        help="Restrict candidates to same-asset transfers or cross-asset swaps",
+        help="Restrict candidates to Bitcoin movements or other cross-asset swaps",
     )
     tr_rules_apply.add_argument(
         "--time-window-seconds",
@@ -1755,6 +1895,16 @@ def build_parser() -> argparse.ArgumentParser:
     sf_suggest.add_argument("--include-broad-hints", action="store_true")
     sf_suggest.add_argument("--max-suggestions", type=int, default=core_source_funds.SUGGESTION_WRITE_CAP)
 
+    sf_assemble = source_funds_sub.add_parser(
+        "assemble",
+        help="Auto-assemble the reviewed flow graph behind a target from local evidence (tx inputs/outputs, payment hashes, platform ids).",
+    )
+    sf_assemble.add_argument("--workspace")
+    sf_assemble.add_argument("--profile")
+    sf_assemble.add_argument("--target-transaction", required=True)
+    sf_assemble.add_argument("--include-broad-hints", action="store_true")
+    sf_assemble.add_argument("--max-passes", type=int, default=8)
+
     sf_cases = source_funds_sub.add_parser("cases")
     sf_cases_sub = sf_cases.add_subparsers(dest="source_funds_cases_command", required=True)
     sf_cases_list = sf_cases_sub.add_parser("list")
@@ -1865,6 +2015,13 @@ def build_parser() -> argparse.ArgumentParser:
     export_xlsx.add_argument("--wallet")
     export_xlsx.add_argument("--file", required=True)
     export_xlsx.add_argument("--history-limit", type=int, default=0)
+    export_xlsx.add_argument(
+        "--no-verify",
+        dest="verify",
+        action="store_false",
+        help="Skip the self-verification sheets (Verify/Acquisitions/Disposals/Control).",
+    )
+    export_xlsx.set_defaults(verify=True)
 
     lightning_profitability = reports_sub.add_parser("lightning-profitability")
     lightning_profitability.add_argument("--workspace")
@@ -1922,6 +2079,37 @@ def build_parser() -> argparse.ArgumentParser:
     source_funds_report.add_argument("--planned-note")
     source_funds_report.add_argument("--reveal-mode", choices=list(core_source_funds.REVEAL_MODES))
     source_funds_report.add_argument("--max-depth", type=int, default=8)
+    source_funds_report.add_argument(
+        "--diagram-detail",
+        choices=list(source_funds_diagram.DIAGRAM_DETAIL_LEVELS),
+        default="summary",
+        help="Simplified-flow detail: 'summary' clusters long paths, 'detailed' shows more hops.",
+    )
+    source_funds_report.add_argument(
+        "--amount-precision",
+        choices=("btc", "sats"),
+        default="btc",
+        help="Render report amounts as BTC (8dp) or whole sats.",
+    )
+    source_funds_report.add_argument(
+        "--mask-recipient",
+        action="store_true",
+        help="Mask the recipient label in the exported report.",
+    )
+    source_funds_report.add_argument(
+        "--omit-section",
+        action="append",
+        choices=list(core_source_funds.OPTIONAL_REPORT_SECTIONS),
+        default=[],
+        help="Omit a verbose PDF section (repeatable).",
+    )
+    source_funds_report.add_argument(
+        "--reveal-override",
+        action="append",
+        default=[],
+        metavar="TXID=show|hide",
+        help="Per-transaction reveal override (repeatable): '<tx-id>=show' or '<tx-id>=hide'.",
+    )
     source_funds_report.add_argument("--save-case", action="store_true")
     source_funds_report.add_argument("--case-label")
     source_funds_report.add_argument("--recipient")
@@ -1929,18 +2117,17 @@ def build_parser() -> argparse.ArgumentParser:
     export_source_funds_pdf = reports_sub.add_parser("export-source-funds-pdf")
     export_source_funds_pdf.add_argument("--workspace")
     export_source_funds_pdf.add_argument("--profile")
-    export_source_funds_pdf.add_argument("--case")
-    export_source_funds_pdf.add_argument("--target-transaction")
-    export_source_funds_pdf.add_argument("--target-amount")
     export_source_funds_pdf.add_argument(
-        "--purpose",
-        choices=list(core_source_funds.REPORT_PURPOSES),
-        default="existing_transaction",
+        "--case",
+        help="Saved case id from `reports source-funds --save-case`; the snapshot freezes target, reveal mode, and report options.",
     )
-    export_source_funds_pdf.add_argument("--planned-destination")
-    export_source_funds_pdf.add_argument("--planned-note")
-    export_source_funds_pdf.add_argument("--reveal-mode", choices=list(core_source_funds.REVEAL_MODES))
     export_source_funds_pdf.add_argument("--file", required=True)
+
+    export_source_funds_bundle = reports_sub.add_parser("export-source-funds-bundle")
+    export_source_funds_bundle.add_argument("--workspace")
+    export_source_funds_bundle.add_argument("--profile")
+    export_source_funds_bundle.add_argument("--case")
+    export_source_funds_bundle.add_argument("--file", required=True)
 
     for report_name in ("export-austrian-e1kv-pdf", "export-austrian"):
         _add_austrian_e1kv_pdf_args(reports_sub.add_parser(report_name))
@@ -2336,11 +2523,21 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                 ),
             )
         if args.wallets_command == "reveal-descriptor":
+            payload = core_wallets.reveal_wallet_secrets(
+                conn, args.workspace, args.profile, args.wallet
+            )
+            if args.material_only:
+                material = payload.get("wallet_material")
+                if not material:
+                    raise AppError(
+                        f"Wallet '{args.wallet}' does not have a descriptor configured",
+                        code="validation",
+                    )
+                write_text(args, material)
+                return 0
             return emit(
                 args,
-                core_wallets.reveal_wallet_secrets(
-                    conn, args.workspace, args.profile, args.wallet
-                ),
+                payload,
             )
         if args.wallets_command == "import-json":
             return emit(args, import_into_wallet(conn, args.workspace, args.profile, args.wallet, args.file, "json"))
@@ -2459,6 +2656,27 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                     "full",
                 ),
             )
+        if args.wallets_command == "import-ledger":
+            if args.dry_run:
+                return emit(
+                    args,
+                    preview_generic_ledger_records(
+                        args.file, limit=args.limit if args.limit is not None else 200
+                    ),
+                )
+            return emit(
+                args,
+                import_into_wallet(
+                    conn,
+                    args.workspace,
+                    args.profile,
+                    args.wallet,
+                    args.file,
+                    "generic_ledger",
+                ),
+            )
+        if args.wallets_command == "ledger-template":
+            return emit(args, write_generic_ledger_template(args.file))
         if args.wallets_command == "import-samourai":
             return emit(
                 args,
@@ -2570,6 +2788,23 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                 args,
                 transactions_payload,
                 envelope_meta=transactions_meta,
+            )
+        if args.transactions_command == "export":
+            exporter = (
+                core_reports.export_transactions_xlsx_report
+                if args.export_format == "xlsx"
+                else core_reports.export_transactions_csv_report
+            )
+            return emit(
+                args,
+                exporter(
+                    conn,
+                    args.workspace,
+                    args.profile,
+                    args.file,
+                    _report_hooks(),
+                    wallet_ref=args.wallet,
+                ),
             )
     if args.command == "attachments":
         attachment_hooks = _attachment_hooks()
@@ -3031,6 +3266,20 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                 args,
                 delete_transaction_pair(conn, args.workspace, args.profile, args.pair_id),
             )
+        if args.transfers_command == "update":
+            update_kwargs = {}
+            if args.kind is not None:
+                update_kwargs["kind"] = args.kind
+            if args.policy is not None:
+                update_kwargs["policy"] = args.policy
+            if args.note is not None:
+                update_kwargs["notes"] = args.note
+            return emit(
+                args,
+                update_transaction_pair(
+                    conn, args.workspace, args.profile, args.pair_id, **update_kwargs
+                ),
+            )
         if args.transfers_command == "payouts":
             if args.payouts_command == "list":
                 return emit(args, list_direct_swap_payouts(conn, args.workspace, args.profile))
@@ -3163,6 +3412,36 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                         candidate_type=getattr(args, "candidate_type", None),
                     ),
                 )
+    if args.command == "loans":
+        if args.loans_command == "mark":
+            return emit(
+                args,
+                loans_mark(
+                    conn,
+                    args.workspace,
+                    args.profile,
+                    args.txid,
+                    mark_as=args.mark_as,
+                    note=args.note,
+                    loan_id=args.loan_id,
+                ),
+            )
+        if args.loans_command == "unmark":
+            return emit(args, loans_unmark(conn, args.workspace, args.profile, args.txid))
+        if args.loans_command == "link":
+            return emit(
+                args,
+                loans_link(
+                    conn,
+                    args.workspace,
+                    args.profile,
+                    args.txids,
+                    loan_id=args.loan_id,
+                ),
+            )
+        if args.loans_command == "list":
+            return emit(args, loans_list(conn, args.workspace, args.profile))
+
     if args.command == "views":
         if args.views_command == "list":
             return emit(
@@ -3472,6 +3751,19 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                     max_suggestions=args.max_suggestions,
                 ),
             )
+        if args.source_funds_command == "assemble":
+            return emit(
+                args,
+                core_source_funds.assemble_history(
+                    conn,
+                    args.workspace,
+                    args.profile,
+                    source_funds_hooks,
+                    target_transaction_ref=args.target_transaction,
+                    include_broad_hints=args.include_broad_hints,
+                    max_passes=args.max_passes,
+                ),
+            )
         if args.source_funds_command == "cases":
             if args.source_funds_cases_command == "list":
                 return emit(args, core_source_funds.list_cases(conn, args.workspace, args.profile, source_funds_hooks))
@@ -3660,6 +3952,7 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                     report_hooks,
                     wallet_ref=args.wallet,
                     history_limit=args.history_limit,
+                    verify=args.verify,
                 ),
             )
         if args.reports_command == "lightning-profitability":
@@ -3723,6 +4016,18 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                 save_case=args.save_case,
                 case_label=args.case_label,
                 recipient_ref=args.recipient,
+                include_diagrams=True,
+                report_options={
+                    "diagram_detail": args.diagram_detail,
+                    "amount_precision": args.amount_precision,
+                    "mask_recipient": args.mask_recipient,
+                    "omit_sections": args.omit_section,
+                    "reveal_overrides": dict(
+                        item.split("=", 1)
+                        for item in (args.reveal_override or [])
+                        if "=" in item
+                    ),
+                },
             )
             if args.format in {"table", "plain"}:
                 return emit(args, "\n".join(core_source_funds.build_report_lines(report, source_funds_hooks)))
@@ -3737,12 +4042,19 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                     args.file,
                     _source_funds_hooks(),
                     case_ref=args.case,
-                    target_transaction_ref=args.target_transaction,
-                    target_amount=args.target_amount,
-                    report_purpose=args.purpose,
-                    planned_destination=args.planned_destination,
-                    planned_note=args.planned_note,
-                    reveal_mode=args.reveal_mode,
+                ),
+            )
+        if args.reports_command == "export-source-funds-bundle":
+            return emit(
+                args,
+                core_source_funds.export_bundle(
+                    conn,
+                    args.workspace,
+                    args.profile,
+                    args.file,
+                    _source_funds_hooks(),
+                    data_root=args.data_root,
+                    case_ref=args.case,
                 ),
             )
         if args.reports_command in {"export-austrian-e1kv-pdf", "export-austrian"}:
@@ -3927,6 +4239,14 @@ def command_needs_db(args: argparse.Namespace) -> bool:
     if args.command == "backends" and getattr(args, "backends_command", None) == "kinds":
         return False
     if args.command == "wallets" and getattr(args, "wallets_command", None) == "kinds":
+        return False
+    if args.command == "wallets" and getattr(args, "wallets_command", None) == "ledger-template":
+        return False
+    if (
+        args.command == "wallets"
+        and getattr(args, "wallets_command", None) == "import-ledger"
+        and getattr(args, "dry_run", False)
+    ):
         return False
     if args.command == "secrets":
         return False

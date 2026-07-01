@@ -17,7 +17,9 @@ import {
   ArrowRight,
   ArrowUpRight,
   AlertTriangle,
+  CheckCircle2,
   CircleDollarSign,
+  Copy,
   Database,
   ListChecks,
   MoreHorizontal,
@@ -32,6 +34,7 @@ import {
 } from "lucide-react";
 
 import { ScreenSkeleton } from "@/components/kb/ScreenSkeleton";
+import { ConnectionAssetBadge } from "@/components/kb/ConnectionAssetBadge";
 import { ConnectionStatusPill } from "@/components/kb/ConnectionStatusPill";
 import { CountBadge } from "@/components/kb/CountBadge";
 import { DetailRow } from "@/components/kb/DetailRow";
@@ -45,6 +48,7 @@ import { useOverviewTransactionDetail } from "@/components/overview-dashboard/us
 import { NodeConnectionDetail } from "./NodeConnectionDetail";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Card,
   CardContent,
@@ -83,11 +87,9 @@ import {
   useDaemon,
   useDaemonMutation,
   useDaemonStreamMutation,
+  retryRetryableDaemonError,
 } from "@/daemon/client";
-import {
-  connectionKindLabels,
-  connectionKindTone,
-} from "@/lib/connectionDisplay";
+import { connectionKindLabels } from "@/lib/connectionDisplay";
 import { screenShellClassName } from "@/lib/screen-layout";
 import { cn } from "@/lib/utils";
 import { formatShortDate } from "@/lib/date";
@@ -97,12 +99,17 @@ import { describeWalletSyncResult, type SyncResult } from "@/lib/syncResults";
 import { transactionBelongsToConnection } from "@/lib/connectionTransactions";
 import { buildBalanceReconciliation } from "@/lib/walletBalanceReconcile";
 import { MISSING_FIAT_LABEL } from "@/lib/currency";
+import { copyTextWithPolicy } from "@/lib/clipboard";
 import {
   startingSyncProgress,
   syncProgressNotification,
   type WalletSyncProgress,
 } from "@/lib/syncProgress";
-import { detectWalletMaterial } from "@/lib/walletMaterialFormat";
+import {
+  BARE_XPUB_SCRIPT_TYPES,
+  type BareXpubScriptType,
+  detectWalletMaterial,
+} from "@/lib/walletMaterialFormat";
 import { useUiStore } from "@/store/ui";
 import { useSyncProgressNotice } from "@/hooks/useSyncProgressNotice";
 import { useConnectionRefreshState } from "@/hooks/useConnectionRefreshState";
@@ -112,6 +119,7 @@ import type {
   NodeSnapshot,
   OverviewSnapshot,
 } from "@/mocks/seed";
+import type { TransactionsList } from "@/mocks/transactions";
 
 // Lightning *node* kinds — sync against a daemon that exposes channels,
 // peers, and routing snapshots. Phoenix is also categorised as "Lightning"
@@ -159,7 +167,10 @@ const relatedViewArrowClass =
 
 const PLAINTEXT_CHANGE_ACK = "CHANGE LOCAL DATA";
 const PLAINTEXT_DELETE_ACK = "DELETE LOCAL DATA";
+const PLAINTEXT_REVEAL_ACK = "COPY LOCAL SECRET";
 const CLEAR_BACKEND_SELECTION = "__kassiber_clear_backend__";
+const DESCRIPTOR_REVEAL_KIND = "wallets.reveal_descriptor";
+const RECENT_TRANSACTION_PREVIEW_LIMIT = 12;
 
 interface UpdateWalletResult {
   wallet: {
@@ -177,6 +188,29 @@ interface DeleteWalletResult {
   };
 }
 
+interface RevealDescriptorResult {
+  id: string;
+  label: string;
+  kind: string;
+  wallet_material?: string | null;
+  descriptor?: string | null;
+  change_descriptor?: string | null;
+}
+
+interface StatusResult {
+  database_encrypted?: boolean;
+}
+
+function walletDescriptorMaterialFromReveal(
+  data: RevealDescriptorResult | undefined,
+) {
+  const material = data?.wallet_material?.trim();
+  if (material) return material;
+  const descriptor = data?.descriptor?.trim();
+  const changeDescriptor = data?.change_descriptor?.trim();
+  return [descriptor, changeDescriptor].filter(Boolean).join("\n");
+}
+
 type WalletListItem = {
   id?: string;
   label: string;
@@ -192,8 +226,11 @@ type WalletListItem = {
   };
   chain?: string;
   network?: string;
+  descriptor?: boolean;
+  change_descriptor?: boolean;
   sync_mode?: string;
   sync_source?: string;
+  deprecated?: boolean;
   transaction_count?: number;
   last_transaction_at?: string | null;
   last_synced_at?: string | null;
@@ -205,6 +242,7 @@ type WalletListItem = {
     payment_method_id: string;
   }>;
   samourai?: SamouraiWalletMetadata | null;
+  script_types?: string[];
 };
 
 type BackendOption = {
@@ -292,6 +330,12 @@ function samouraiSourceLabel(
 function backendOptionLabel(backend: { name: string; display_name?: string }) {
   const label = backend.display_name?.trim() || backend.name;
   return label === backend.name ? label : `${label} (${backend.name})`;
+}
+
+function arraysEqualUnordered(a: string[], b: string[]) {
+  if (a.length !== b.length) return false;
+  const set = new Set(a);
+  return b.every((item) => set.has(item));
 }
 
 function backendOptionChain(backend: Pick<BackendOption, "name" | "chain">) {
@@ -399,7 +443,7 @@ function NodeConnectionContainer({
   const nodeSnapshotQuery = useDaemon<NodeSnapshot>(
     "ui.connections.node.snapshot",
     { connection: connection.id },
-    { retry: false },
+    { retry: retryRetryableDaemonError },
   );
   const liveSnapshot = nodeSnapshotQuery.data?.data;
   const resolvedConnection = liveSnapshot
@@ -570,28 +614,39 @@ function ConnectionDetailView({
     useDaemonMutation<UpdateWalletResult>("ui.wallets.update");
   const deleteWallet =
     useDaemonMutation<DeleteWalletResult>("ui.wallets.delete");
+  const revealDescriptor = useDaemonMutation<RevealDescriptorResult>(
+    DESCRIPTOR_REVEAL_KIND,
+  );
+  const statusQuery = useDaemon<StatusResult>("status");
   const backendOptionsQuery = useDaemon<{
     backends: BackendOption[];
   }>("ui.backends.options");
   const walletsListQuery = useDaemon<{
     wallets: WalletListItem[];
   }>("ui.wallets.list");
+  const walletTransactionsQuery = useDaemon<TransactionsList>(
+    "ui.transactions.list",
+    { wallet: connection.id, limit: RECENT_TRANSACTION_PREVIEW_LIMIT },
+  );
   const walletDetail = walletsListQuery.data?.data?.wallets?.find(
     (wallet) =>
       (wallet.id && wallet.id === connection.id) ||
       wallet.label === connection.label,
   );
+  const isDeprecatedWallet = Boolean(
+    walletDetail?.deprecated ?? connection.deprecated,
+  );
   const coinsInventoryQuery = useDaemon<WalletUtxosData>(
     "ui.wallets.utxos",
     { wallet: connection.id },
-    { retry: false },
+    { retry: retryRetryableDaemonError },
   );
   const utxoTransactionQuery = useDaemon<{
     transaction?: OverviewSnapshot["txs"][number] | null;
   }>(
     "ui.transactions.resolve",
     { query: pendingUtxoTransactionId ?? "" },
-    { enabled: Boolean(pendingUtxoTransactionId), retry: false },
+    { enabled: Boolean(pendingUtxoTransactionId), retry: retryRetryableDaemonError },
   );
   const resolvedUtxoTransaction =
     utxoTransactionQuery.data?.data?.transaction ?? null;
@@ -627,11 +682,13 @@ function ConnectionDetailView({
   const [editPassphrase, setEditPassphrase] = useState("");
   const [editPlaintextAck, setEditPlaintextAck] = useState("");
   const [editWalletMaterial, setEditWalletMaterial] = useState("");
+  const [editScriptTypes, setEditScriptTypes] = useState<string[]>([]);
   const [editGapLimit, setEditGapLimit] = useState("");
   const [editStoreId, setEditStoreId] = useState("");
   const [editPaymentMethodId, setEditPaymentMethodId] = useState("");
   const [editBackend, setEditBackend] = useState("");
   const [editSourceFile, setEditSourceFile] = useState("");
+  const [editDeprecated, setEditDeprecated] = useState(false);
   const [editClearProvenance, setEditClearProvenance] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -639,8 +696,22 @@ function ConnectionDetailView({
   const [deletePlaintextAck, setDeletePlaintextAck] = useState("");
   const [deleteConfirm, setDeleteConfirm] = useState("");
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [revealOpen, setRevealOpen] = useState(false);
+  const [revealPassphrase, setRevealPassphrase] = useState("");
+  const [revealPlaintextAck, setRevealPlaintextAck] = useState("");
+  const [revealError, setRevealError] = useState<string | null>(null);
+  const [revealCopyStatus, setRevealCopyStatus] = useState<
+    "idle" | "success" | "error"
+  >("idle");
+  const revealCloseTimerRef = useRef<number | null>(null);
+  const statusDatabaseEncrypted =
+    statusQuery.data?.kind === "status"
+      ? Boolean(statusQuery.data.data?.database_encrypted)
+      : false;
   const encryptedWorkspace =
-    Boolean(identity?.encrypted) || identity?.databaseMode === "sqlcipher";
+    statusDatabaseEncrypted ||
+    Boolean(identity?.encrypted) ||
+    identity?.databaseMode === "sqlcipher";
   const sourceValue =
     walletDetail?.sync_source ||
     connection.syncSource ||
@@ -656,7 +727,17 @@ function ConnectionDetailView({
   const connectionTxs = txs.filter((tx) =>
     transactionBelongsToConnection(tx, connection),
   );
-  const txsForConnection = connectionTxs.slice(0, 6);
+  const walletTransactions =
+    walletTransactionsQuery.data?.kind === "ui.transactions.list" &&
+    walletTransactionsQuery.data.data?.txs
+      ? walletTransactionsQuery.data.data.txs
+      : connectionTxs;
+  const txsForConnection = walletTransactions.slice(
+    0,
+    RECENT_TRANSACTION_PREVIEW_LIMIT,
+  );
+  const walletTransactionsLoading =
+    walletTransactionsQuery.isLoading && txsForConnection.length === 0;
 
   useEffect(() => {
     if (!pendingUtxoTransactionId || utxoTransactionQuery.isLoading) return;
@@ -697,7 +778,7 @@ function ConnectionDetailView({
     utxoTransactionQuery.isLoading,
     t,
   ]);
-  const txCount = connection.transactionCount ?? connectionTxs.length;
+  const txCount = connection.transactionCount ?? walletTransactions.length;
   const isWalletSyncRunning = syncWallet.isPending || connectionRefreshing;
   const refreshButtonLabel = isWalletSyncRunning
     ? t("detail.refreshing")
@@ -791,14 +872,43 @@ function ConnectionDetailView({
     setEditPassphrase("");
     setEditPlaintextAck("");
     setEditWalletMaterial("");
+    setEditScriptTypes(walletDetail?.script_types ?? []);
     setEditGapLimit(connection.gap != null ? String(connection.gap) : "");
     setEditStoreId("");
     setEditPaymentMethodId("");
     setEditBackend("");
     setEditSourceFile("");
+    setEditDeprecated(isDeprecatedWallet);
     setEditClearProvenance(false);
     setEditError(null);
     setEditOpen(true);
+  };
+
+  // Static literal keys so the typed `t()` resolves them (it rejects
+  // template-literal keys). Shares the add-flow strings since the labels are
+  // network- and context-neutral.
+  const scriptTypeLabelKeys = {
+    p2wpkh: "add.descriptor.scriptType.p2wpkh",
+    "p2sh-p2wpkh": "add.descriptor.scriptType.p2shp2wpkh",
+    p2pkh: "add.descriptor.scriptType.p2pkh",
+    p2tr: "add.descriptor.scriptType.p2tr",
+  } as const satisfies Record<BareXpubScriptType, string>;
+
+  const scriptTypeLabel = (value: BareXpubScriptType) =>
+    t(scriptTypeLabelKeys[value]);
+
+  // Script types this wallet currently watches, in canonical (modern-first)
+  // order. Non-empty only for an auto-detected / pinned xpub wallet.
+  const walletScriptTypes = BARE_XPUB_SCRIPT_TYPES.filter((value) =>
+    (walletDetail?.script_types ?? []).includes(value),
+  );
+  const isXpubDerivedWallet = walletScriptTypes.length > 0;
+  const toggleEditScriptType = (value: string) => {
+    setEditScriptTypes((current) =>
+      current.includes(value)
+        ? current.filter((item) => item !== value)
+        : [...current, value],
+    );
   };
 
   const allBackendOptions = backendOptionsQuery.data?.data?.backends ?? [];
@@ -816,8 +926,37 @@ function ConnectionDetailView({
     canEditLiveBackend &&
     walletChain !== "liquid" &&
     walletDetail?.backend?.source === "explicit";
+  const hasStoredDescriptor = Boolean(walletDetail?.descriptor);
+  const hasStoredChangeDescriptor = Boolean(walletDetail?.change_descriptor);
+  const descriptorRevealStatus = hasStoredChangeDescriptor
+    ? t("detail.reveal.descriptorWithChange")
+    : t("detail.reveal.descriptorOnly");
 
   const editConfigKind = editConfigKindForConnection(connection);
+
+  const openRevealDialog = () => {
+    if (revealCloseTimerRef.current !== null) {
+      window.clearTimeout(revealCloseTimerRef.current);
+      revealCloseTimerRef.current = null;
+    }
+    setRevealPassphrase("");
+    setRevealPlaintextAck("");
+    setRevealError(null);
+    setRevealCopyStatus("idle");
+    setRevealOpen(true);
+  };
+
+  const handleRevealOpenChange = (open: boolean) => {
+    if (!open && revealCloseTimerRef.current !== null) {
+      window.clearTimeout(revealCloseTimerRef.current);
+      revealCloseTimerRef.current = null;
+    }
+    setRevealOpen(open);
+    if (!open) {
+      setRevealError(null);
+      setRevealCopyStatus("idle");
+    }
+  };
 
   const openDeleteDialog = () => {
     setDeletePassphrase("");
@@ -865,11 +1004,30 @@ function ConnectionDetailView({
     const clearFields: string[] = [];
     if (editConfigKind === "descriptor" && walletMaterial) {
       const detection = detectWalletMaterial(walletMaterial);
-      if (detection.kind === "bare-xpub" || detection.kind === "unknown") {
+      if (detection.kind === "unknown") {
         setEditError(detection.hint ?? detection.label);
         return;
       }
+      if (detection.kind === "bare-xpub" && editScriptTypes.length === 0) {
+        setEditError(t("detail.edit.errorSelectScriptType"));
+        return;
+      }
       configChanges.wallet_material = walletMaterial;
+      if (detection.kind === "bare-xpub") {
+        configChanges.script_types = editScriptTypes;
+      }
+    } else if (
+      editConfigKind === "descriptor" &&
+      isXpubDerivedWallet &&
+      !arraysEqualUnordered(editScriptTypes, walletScriptTypes)
+    ) {
+      // "Enable more types later": change the watched set on an existing
+      // xpub-derived wallet without re-pasting the key.
+      if (editScriptTypes.length === 0) {
+        setEditError(t("detail.edit.errorSelectScriptType"));
+        return;
+      }
+      configChanges.script_types = editScriptTypes;
     }
     if (editConfigKind === "descriptor" && gapLimitText) {
       const gapLimit = Number.parseInt(gapLimitText, 10);
@@ -910,6 +1068,9 @@ function ConnectionDetailView({
     }
     if (editClearProvenance && walletProvenanceRoutes.length > 0) {
       clearFields.push("btcpay_provenance");
+    }
+    if (editDeprecated !== isDeprecatedWallet) {
+      configChanges.deprecated = editDeprecated;
     }
     if (
       !labelChanged &&
@@ -990,6 +1151,73 @@ function ConnectionDetailView({
     }
   };
 
+  const onRevealSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setRevealError(null);
+    setRevealCopyStatus("idle");
+    if (encryptedWorkspace && !revealPassphrase) {
+      setRevealError(t("detail.auth.enterPassphrase"));
+      setRevealCopyStatus("error");
+      return;
+    }
+    if (
+      !encryptedWorkspace &&
+      revealPlaintextAck.trim() !== PLAINTEXT_REVEAL_ACK
+    ) {
+      setRevealError(
+        t("detail.reveal.errorPlaintextAck", { ack: PLAINTEXT_REVEAL_ACK }),
+      );
+      setRevealCopyStatus("error");
+      return;
+    }
+
+    try {
+      const envelope = await revealDescriptor.mutateAsync({
+        wallet: connection.id,
+        auth_response: encryptedWorkspace
+          ? { passphrase_secret: revealPassphrase }
+          : { plaintext_reveal_ack: PLAINTEXT_REVEAL_ACK },
+      });
+      const walletMaterial = walletDescriptorMaterialFromReveal(envelope.data);
+      if (!walletMaterial) {
+        setRevealError(t("detail.reveal.errorMissingDescriptor"));
+        setRevealCopyStatus("error");
+        addNotification({
+          title: t("detail.reveal.failedTitle"),
+          body: t("detail.reveal.errorMissingDescriptor"),
+          tone: "error",
+        });
+        return;
+      }
+      await copyTextWithPolicy(walletMaterial);
+      setRevealCopyStatus("success");
+      addNotification({
+        title: t("detail.reveal.copiedTitle"),
+        body: t("detail.reveal.copiedBody", { label: connection.label }),
+        tone: "success",
+      });
+      revealCloseTimerRef.current = window.setTimeout(() => {
+        revealCloseTimerRef.current = null;
+        setRevealOpen(false);
+        setRevealPassphrase("");
+        setRevealPlaintextAck("");
+        setRevealCopyStatus("idle");
+      }, 900);
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : t("detail.reveal.couldNotCopy");
+      setRevealError(message);
+      setRevealCopyStatus("error");
+      addNotification({
+        title: t("detail.reveal.failedTitle"),
+        body: message,
+        tone: "error",
+      });
+    }
+  };
+
   return (
     <div className={screenShellClassName}>
       <Card className="rounded-xl py-3">
@@ -1000,15 +1228,11 @@ function ConnectionDetailView({
                 <ArrowLeft className="size-4" aria-hidden="true" />
               </Link>
             </Button>
-            <span
-              className={cn(
-                "hidden size-9 shrink-0 items-center justify-center rounded-md border sm:flex",
-                connectionKindTone(connection.kind),
-              )}
-              aria-hidden="true"
-            >
-              <Wallet className="size-4" />
-            </span>
+            <ConnectionAssetBadge
+              connection={connection}
+              size="md"
+              className="hidden sm:flex"
+            />
             <div className="min-w-0">
               <h1 className="truncate text-xl font-semibold tracking-tight sm:text-2xl">
                 {connection.label}
@@ -1023,6 +1247,14 @@ function ConnectionDetailView({
                     <ConnectionStatusPill status={connection.status} />
                   </>
                 ) : null}
+                {isDeprecatedWallet ? (
+                  <>
+                    <span aria-hidden="true">·</span>
+                    <Badge variant="secondary" className="rounded-md">
+                      {t("detail.deprecatedBadge")}
+                    </Badge>
+                  </>
+                ) : null}
               </div>
             </div>
           </div>
@@ -1031,7 +1263,6 @@ function ConnectionDetailView({
               type="button"
               variant="outline"
               size="sm"
-              className="min-w-[7.5rem]"
               disabled={isWalletSyncRunning}
               aria-busy={isWalletSyncRunning}
               aria-label={t("detail.refreshAction", {
@@ -1044,7 +1275,35 @@ function ConnectionDetailView({
                 className={cn("size-4", isWalletSyncRunning && "animate-spin")}
                 aria-hidden="true"
               />
-              <span>{refreshButtonLabel}</span>
+              {/*
+                Reserve the width of the widest label so the button never
+                resizes when it flips to the in-progress text. A mid-refresh
+                width change strands a stale composited tile of the spinning
+                icon in WKWebView (the macOS webview), leaving a frozen "ghost"
+                copy of the button overlaid on the live, spinning one. The
+                shift — and the ghost — only showed in locales where the two
+                labels differ in width (e.g. de "Aktualisieren" →
+                "Wird aktualisiert"); English clamped to the same width and
+                stayed clean. Stacking both labels pins the width to the
+                wider one in every locale.
+              */}
+              <span className="grid justify-items-center">
+                <span
+                  aria-hidden="true"
+                  className="invisible col-start-1 row-start-1"
+                >
+                  {t("detail.refresh")}
+                </span>
+                <span
+                  aria-hidden="true"
+                  className="invisible col-start-1 row-start-1"
+                >
+                  {t("detail.refreshing")}
+                </span>
+                <span className="col-start-1 row-start-1">
+                  {refreshButtonLabel}
+                </span>
+              </span>
             </Button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -1057,11 +1316,17 @@ function ConnectionDetailView({
                   <MoreHorizontal className="size-4" aria-hidden="true" />
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-44">
+              <DropdownMenuContent align="end" className="w-56">
                 <DropdownMenuItem onClick={openEditDialog}>
                   <Pencil className="size-4" aria-hidden="true" />
                   {t("common:actions.edit")}
                 </DropdownMenuItem>
+                {hasStoredDescriptor ? (
+                  <DropdownMenuItem onClick={openRevealDialog}>
+                    <Copy className="size-4" aria-hidden="true" />
+                    {t("detail.reveal.menuItem")}
+                  </DropdownMenuItem>
+                ) : null}
                 <DropdownMenuItem
                   disabled={isWalletSyncRunning}
                   onClick={() => onSync({ forceFull: true })}
@@ -1362,9 +1627,27 @@ function ConnectionDetailView({
                 className={cn("size-4", isWalletSyncRunning && "animate-spin")}
                 aria-hidden="true"
               />
-              {isWalletSyncRunning
-                ? t("detail.refreshing")
-                : t("detail.samourai.refreshSource")}
+              {/* Reserve the widest label's width so the spinning icon can't
+                  ghost on a mid-refresh resize — see the header Refresh button. */}
+              <span className="grid justify-items-center">
+                <span
+                  aria-hidden="true"
+                  className="invisible col-start-1 row-start-1"
+                >
+                  {t("detail.samourai.refreshSource")}
+                </span>
+                <span
+                  aria-hidden="true"
+                  className="invisible col-start-1 row-start-1"
+                >
+                  {t("detail.refreshing")}
+                </span>
+                <span className="col-start-1 row-start-1">
+                  {isWalletSyncRunning
+                    ? t("detail.refreshing")
+                    : t("detail.samourai.refreshSource")}
+                </span>
+              </span>
             </Button>
           </div>
         </Card>
@@ -1428,14 +1711,14 @@ function ConnectionDetailView({
                   <CountBadge>{txCount.toLocaleString("en-US")}</CountBadge>
                 </CardTitle>
                 <CardDescription>
-                  {connectionTxs.length > txsForConnection.length
+                  {txCount > txsForConnection.length
                     ? t("detail.recentTransactions.showingRecent", {
                         count: txsForConnection.length,
                       })
                     : t("detail.recentTransactions.recent")}
                 </CardDescription>
               </div>
-              {connectionTxs.length > 0 ? (
+              {txCount > 0 ? (
                 <Button
                   asChild
                   type="button"
@@ -1456,7 +1739,29 @@ function ConnectionDetailView({
             </div>
           </CardHeader>
           <CardContent className="p-0">
-            {txsForConnection.length ? (
+            {walletTransactionsLoading ? (
+              <div className="divide-y">
+                {Array.from(
+                  { length: RECENT_TRANSACTION_PREVIEW_LIMIT },
+                  (_, index) => (
+                    <div
+                      key={index}
+                      className="flex min-w-0 items-start gap-3 px-5 py-3"
+                    >
+                      <div className="mt-0.5 size-8 shrink-0 animate-pulse rounded-md bg-muted" />
+                      <div className="min-w-0 flex-1 space-y-2">
+                        <div className="h-4 w-2/3 animate-pulse rounded bg-muted" />
+                        <div className="h-3 w-1/2 animate-pulse rounded bg-muted" />
+                      </div>
+                      <div className="space-y-2">
+                        <div className="h-4 w-20 animate-pulse rounded bg-muted" />
+                        <div className="ml-auto h-3 w-12 animate-pulse rounded bg-muted" />
+                      </div>
+                    </div>
+                  ),
+                )}
+              </div>
+            ) : txsForConnection.length ? (
               <div className="divide-y">
                 {txsForConnection.map((tx) => (
                   <ConnectionTransactionRow
@@ -1484,9 +1789,28 @@ function ConnectionDetailView({
                       )}
                       aria-hidden="true"
                     />
-                    {isWalletSyncRunning
-                      ? t("detail.refreshing")
-                      : t("detail.recentTransactions.refreshNow")}
+                    {/* Reserve the widest label's width so the spinning icon
+                        can't ghost on a mid-refresh resize — see the header
+                        Refresh button. */}
+                    <span className="grid justify-items-center">
+                      <span
+                        aria-hidden="true"
+                        className="invisible col-start-1 row-start-1"
+                      >
+                        {t("detail.recentTransactions.refreshNow")}
+                      </span>
+                      <span
+                        aria-hidden="true"
+                        className="invisible col-start-1 row-start-1"
+                      >
+                        {t("detail.refreshing")}
+                      </span>
+                      <span className="col-start-1 row-start-1">
+                        {isWalletSyncRunning
+                          ? t("detail.refreshing")
+                          : t("detail.recentTransactions.refreshNow")}
+                      </span>
+                    </span>
                   </Button>
                   <Button asChild type="button" variant="outline" size="sm">
                     <Link to="/imports">
@@ -1549,6 +1873,35 @@ function ConnectionDetailView({
                     .filter(Boolean)
                     .join(" · ")}
                 />
+              ) : null}
+              {isXpubDerivedWallet ? (
+                <DetailRow
+                  label={t("detail.connectionDetails.scriptTypes")}
+                  value={walletScriptTypes
+                    .map((value) => scriptTypeLabel(value))
+                    .join(" · ")}
+                />
+              ) : null}
+              {hasStoredDescriptor ? (
+                <div className="flex min-w-0 items-center gap-3 text-sm">
+                  <span className="shrink-0 text-xs font-medium text-muted-foreground">
+                    {t("detail.connectionDetails.descriptorMaterial")}
+                  </span>
+                  <span className="ml-auto min-w-0 flex-1 text-right">
+                    <span className="block truncate text-muted-foreground">
+                      {descriptorRevealStatus}
+                    </span>
+                  </span>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon-xs"
+                    aria-label={t("detail.reveal.menuItem")}
+                    onClick={openRevealDialog}
+                  >
+                    <Copy className="size-3" aria-hidden="true" />
+                  </Button>
+                </div>
               ) : null}
               <DetailRow
                 label={t("detail.connectionDetails.created")}
@@ -1731,7 +2084,6 @@ function ConnectionDetailView({
                   ? (() => {
                       const detection = detectWalletMaterial(editWalletMaterial);
                       const tone =
-                        detection.kind === "bare-xpub" ||
                         detection.kind === "unknown"
                           ? "text-amber-700 dark:text-amber-300"
                           : "text-emerald-700 dark:text-emerald-300";
@@ -1753,6 +2105,29 @@ function ConnectionDetailView({
                         {t("detail.edit.materialHelper")}
                       </p>
                     )}
+                {detectWalletMaterial(editWalletMaterial).kind === "bare-xpub" ||
+                isXpubDerivedWallet ? (
+                  <div className="space-y-2 rounded-md border bg-muted/20 p-3">
+                    <Label>{t("detail.edit.scriptTypesLabel")}</Label>
+                    <div className="space-y-1.5">
+                      {BARE_XPUB_SCRIPT_TYPES.map((value) => (
+                        <label
+                          key={value}
+                          className="flex items-center gap-2 text-sm"
+                        >
+                          <Checkbox
+                            checked={editScriptTypes.includes(value)}
+                            onCheckedChange={() => toggleEditScriptType(value)}
+                          />
+                          {scriptTypeLabel(value)}
+                        </label>
+                      ))}
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {t("detail.edit.scriptTypesHelper")}
+                    </p>
+                  </div>
+                ) : null}
               </div>
             ) : null}
             {editConfigKind === "descriptor" ? (
@@ -1876,6 +2251,23 @@ function ConnectionDetailView({
                 </label>
               </div>
             ) : null}
+            <div className="space-y-2 rounded-md border border-border/70 p-3">
+              <label className="flex items-start gap-3 text-sm">
+                <Checkbox
+                  className="mt-0.5"
+                  checked={editDeprecated}
+                  onCheckedChange={(checked) =>
+                    setEditDeprecated(checked === true)
+                  }
+                />
+                <span className="grid gap-0.5">
+                  <span>{t("detail.edit.deprecated")}</span>
+                  <span className="text-xs text-muted-foreground">
+                    {t("detail.edit.deprecatedHelper")}
+                  </span>
+                </span>
+              </label>
+            </div>
             {encryptedWorkspace ? (
               <div className="space-y-2">
                 <Label htmlFor="connection-edit-passphrase">
@@ -1917,6 +2309,99 @@ function ConnectionDetailView({
                 {updateWallet.isPending
                   ? t("detail.edit.saving")
                   : t("common:actions.save")}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={revealOpen} onOpenChange={handleRevealOpenChange}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{t("detail.reveal.title")}</DialogTitle>
+            <DialogDescription>
+              {encryptedWorkspace
+                ? t("detail.reveal.descriptionEncrypted", {
+                    label: connection.label,
+                  })
+                : t("detail.reveal.descriptionPlaintext", {
+                    label: connection.label,
+                  })}
+            </DialogDescription>
+          </DialogHeader>
+          <form className="space-y-4" onSubmit={onRevealSubmit}>
+            {hasStoredChangeDescriptor ? (
+              <p className="rounded-md border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+                {t("detail.reveal.includesChange")}
+              </p>
+            ) : null}
+            {encryptedWorkspace ? (
+              <div className="space-y-2">
+                <Label htmlFor="connection-reveal-passphrase">
+                  {t("detail.reveal.passphrase")}
+                </Label>
+                <Input
+                  id="connection-reveal-passphrase"
+                  type="password"
+                  autoComplete="current-password"
+                  value={revealPassphrase}
+                  onChange={(event) => setRevealPassphrase(event.target.value)}
+                />
+                <p className="text-xs text-muted-foreground">
+                  {t("detail.reveal.helper")}
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <Label htmlFor="connection-reveal-ack">
+                  {t("detail.reveal.plaintextChallenge")}
+                </Label>
+                <Input
+                  id="connection-reveal-ack"
+                  value={revealPlaintextAck}
+                  placeholder={PLAINTEXT_REVEAL_ACK}
+                  onChange={(event) =>
+                    setRevealPlaintextAck(event.target.value)
+                  }
+                />
+                <p className="text-xs text-muted-foreground">
+                  {t("detail.reveal.plaintextHelper")}
+                </p>
+              </div>
+            )}
+            {revealError && (
+              <p className="m-0 text-sm text-destructive">{revealError}</p>
+            )}
+            {revealCopyStatus === "success" ? (
+              <p className="m-0 flex items-center gap-2 text-sm text-emerald-600 dark:text-emerald-400">
+                <CheckCircle2 className="size-4 shrink-0" aria-hidden="true" />
+                {t("detail.reveal.copiedInline")}
+              </p>
+            ) : null}
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => handleRevealOpenChange(false)}
+              >
+                {t("common:actions.cancel")}
+              </Button>
+              <Button
+                type="submit"
+                disabled={
+                  revealDescriptor.isPending || revealCopyStatus === "success"
+                }
+              >
+                {revealCopyStatus === "success" ? (
+                  <CheckCircle2 className="size-4" aria-hidden="true" />
+                ) : (
+                  <Copy className="size-4" aria-hidden="true" />
+                )}
+                {revealCopyStatus === "success"
+                  ? t("detail.reveal.copied")
+                  : revealDescriptor.isPending
+                  ? t("detail.reveal.copying")
+                  : t("detail.reveal.copy")}
               </Button>
             </DialogFooter>
           </form>

@@ -10,6 +10,7 @@ from ..backends import (
     delete_db_backend as _delete_db_backend,
     get_db_backend,
     redact_backend_for_output,
+    redact_backend_url,
     set_default_backend as _set_default_backend,
     update_db_backend as _update_db_backend,
 )
@@ -48,17 +49,13 @@ _DEFAULT_ACCOUNTS = (
 
 def _normalized_profile_algorithm(raw_algorithm, policy):
     normalized = str(raw_algorithm or policy.default_accounting_method).strip().upper()
-    # Austria mandates the moving-average method (gleitender Durchschnittspreis,
-    # §2 KryptowährungsVO): Neuvermögen is taxed on a moving average and
-    # Altvermögen is exempt. FIFO/HIFO/etc. are never valid for a user-facing
-    # Austrian book — RP2 only keeps `fifo` available for engine diagnostics —
-    # so coerce any other method to the Austrian default. This closes the path
-    # where an AT book silently inherited FIFO (e.g. copied from a generic book
-    # on "add book", or kept on a generic→AT country switch) and the engine then
-    # mis-applied it. The single chokepoint covers create, update, the daemon
-    # book-create inherit branch, onboarding, and country switches.
-    if str(policy.tax_country or "").strip().lower() == "at":
-        normalized = str(policy.default_accounting_method).strip().upper()
+    # Austria's standard method is the moving average (gleitender
+    # Durchschnittspreis, §2 KryptowährungsVO) and remains the policy default, so
+    # a book with no explicit method (raw_algorithm is None) still lands on it.
+    # Other RP2 methods are now selectable for Austrian books, so an explicit
+    # caller-supplied method is preserved verbatim rather than coerced to the
+    # default — it is only validated against the policy's allowed set below
+    # (`build_austrian_policy` widens that set to include the generic methods).
     allowed = {method.upper() for method in policy.accounting_methods}
     if normalized not in allowed:
         raise AppError(
@@ -396,13 +393,14 @@ def list_accounts(conn, workspace_ref, profile_ref):
 def list_backends(runtime_config):
     rows = []
     for name, backend in sorted(runtime_config["backends"].items()):
+        url = backend.get("url", "")
         row = redact_backend_for_output(
             {
                 "name": name,
                 "kind": backend.get("kind", ""),
                 "chain": backend.get("chain", ""),
                 "network": backend.get("network", ""),
-                "url": backend.get("url", ""),
+                "url": url,
                 "batch_size": backend.get("batch_size", ""),
                 "default": "yes" if name == runtime_config["default_backend"] else "",
                 "source": backend.get("source", ""),
@@ -420,6 +418,17 @@ def list_backends(runtime_config):
                 "username": backend.get("username", ""),
                 "password": backend.get("password", ""),
             }
+        )
+        row["url_safe_for_http_probe"] = (
+            bool(url)
+            and str(url).lower().startswith(("http://", "https://"))
+            and redact_backend_url(url) == url
+            and not row.get("has_auth_header")
+            and not row.get("has_token")
+            and not row.get("has_cookiefile")
+            and not row.get("has_username")
+            and not row.get("has_password")
+            and not bool(backend.get("tor_proxy"))
         )
         row.pop("cookiefile", None)
         rows.append(row)

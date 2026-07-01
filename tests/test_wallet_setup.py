@@ -14,7 +14,11 @@ import unittest
 from embit import bip32
 
 from kassiber.errors import AppError
-from kassiber.wallet_setup import normalize_wallet_material
+from kassiber.wallet_setup import (
+    BSMS_DESCRIPTOR_SOURCE,
+    normalize_script_types,
+    normalize_wallet_material,
+)
 
 
 _SLIP132_MAINNET_VERSIONS = {
@@ -103,6 +107,142 @@ class NormalizeWalletMaterialSlip132Tests(unittest.TestCase):
         self.assertIn("checksum", str(ctx.exception).lower())
 
 
+class NormalizeWalletMaterialBareXpubScriptTypeTests(unittest.TestCase):
+    def test_each_script_type_wraps_bare_xpub(self):
+        _, xpub = _account_xpub()
+        cases = {
+            "p2wpkh": (f"wpkh({xpub}/0/*)", f"wpkh({xpub}/1/*)"),
+            "p2sh-p2wpkh": (f"sh(wpkh({xpub}/0/*))", f"sh(wpkh({xpub}/1/*))"),
+            "p2pkh": (f"pkh({xpub}/0/*)", f"pkh({xpub}/1/*)"),
+            "p2tr": (f"tr({xpub}/0/*)", f"tr({xpub}/1/*)"),
+        }
+        for script_type, (receive, change) in cases.items():
+            with self.subTest(script_type=script_type):
+                result = normalize_wallet_material(xpub, script_type=script_type)
+                self.assertEqual(result["descriptor"], receive)
+                self.assertEqual(result["change_descriptor"], change)
+
+    def test_script_type_wraps_bare_tpub(self):
+        account, _ = _account_xpub()
+        tpub = account.to_base58(version=bytes.fromhex("043587cf"))
+
+        result = normalize_wallet_material(tpub, script_type="p2wpkh")
+
+        self.assertEqual(result["descriptor"], f"wpkh({tpub}/0/*)")
+        self.assertEqual(result["change_descriptor"], f"wpkh({tpub}/1/*)")
+
+    def test_unknown_script_type_is_rejected(self):
+        _, xpub = _account_xpub()
+
+        with self.assertRaises(AppError) as ctx:
+            normalize_wallet_material(xpub, script_type="p2wsh")
+
+        self.assertIn("script type", str(ctx.exception).lower())
+
+    def test_blank_script_type_still_rejects_bare_xpub_as_ambiguous(self):
+        _, xpub = _account_xpub()
+
+        with self.assertRaises(AppError) as ctx:
+            normalize_wallet_material(xpub, script_type="")
+
+        self.assertIn("ambiguous", str(ctx.exception).lower())
+
+    def test_slip132_key_ignores_script_type(self):
+        account, xpub = _account_xpub()
+        ypub = account.to_base58(version=_SLIP132_MAINNET_VERSIONS["ypub"])
+
+        # A ypub already encodes its script type; a stray script_type hint
+        # must not override the SLIP132 resolution.
+        result = normalize_wallet_material(ypub, script_type="p2wpkh")
+
+        self.assertEqual(result["descriptor"], f"sh(wpkh({xpub}/0/*))")
+        self.assertEqual(result["change_descriptor"], f"sh(wpkh({xpub}/1/*))")
+
+    def test_corrupted_bare_xpub_with_script_type_is_rejected(self):
+        _, xpub = _account_xpub()
+        flipped = "A" if xpub[-1] != "A" else "B"
+        broken = xpub[:-1] + flipped
+
+        with self.assertRaises(AppError) as ctx:
+            normalize_wallet_material(broken, script_type="p2wpkh")
+
+        self.assertIn("checksum", str(ctx.exception).lower())
+
+
+class NormalizeScriptTypesTests(unittest.TestCase):
+    def test_validates_dedupes_and_sorts(self):
+        self.assertEqual(
+            normalize_script_types(["p2tr", "p2wpkh", "p2wpkh", "P2TR"]),
+            ["p2tr", "p2wpkh"],
+        )
+
+    def test_none_and_empty_yield_empty_list(self):
+        self.assertEqual(normalize_script_types(None), [])
+        self.assertEqual(normalize_script_types([]), [])
+        self.assertEqual(normalize_script_types([""]), [])
+
+    def test_single_string_is_accepted(self):
+        self.assertEqual(normalize_script_types("p2wpkh"), ["p2wpkh"])
+
+    def test_unknown_type_is_rejected(self):
+        with self.assertRaises(AppError) as ctx:
+            normalize_script_types(["p2wpkh", "p2wsh"])
+        self.assertIn("script type", str(ctx.exception).lower())
+
+
+class NormalizeWalletMaterialMultiScriptTests(unittest.TestCase):
+    def test_bare_xpub_with_script_types_returns_xpub_and_sorted_set(self):
+        _, xpub = _account_xpub()
+
+        result = normalize_wallet_material(xpub, script_types=["p2tr", "p2wpkh"])
+
+        self.assertEqual(result, {"xpub": xpub, "script_types": ["p2tr", "p2wpkh"]})
+        self.assertNotIn("descriptor", result)
+
+    def test_bare_xpub_with_single_script_type_in_list(self):
+        _, xpub = _account_xpub()
+
+        result = normalize_wallet_material(xpub, script_types=["p2wpkh"])
+
+        self.assertEqual(result, {"xpub": xpub, "script_types": ["p2wpkh"]})
+
+    def test_empty_script_types_falls_back_to_ambiguous(self):
+        _, xpub = _account_xpub()
+
+        with self.assertRaises(AppError) as ctx:
+            normalize_wallet_material(xpub, script_types=[])
+
+        self.assertIn("ambiguous", str(ctx.exception).lower())
+
+    def test_unknown_script_type_in_list_is_rejected(self):
+        _, xpub = _account_xpub()
+
+        with self.assertRaises(AppError) as ctx:
+            normalize_wallet_material(xpub, script_types=["p2wpkh", "nope"])
+
+        self.assertIn("script type", str(ctx.exception).lower())
+
+    def test_corrupted_bare_xpub_with_script_types_is_rejected(self):
+        _, xpub = _account_xpub()
+        flipped = "A" if xpub[-1] != "A" else "B"
+        broken = xpub[:-1] + flipped
+
+        with self.assertRaises(AppError) as ctx:
+            normalize_wallet_material(broken, script_types=["p2wpkh"])
+
+        self.assertIn("checksum", str(ctx.exception).lower())
+
+    def test_slip132_key_ignores_script_types(self):
+        account, xpub = _account_xpub()
+        ypub = account.to_base58(version=_SLIP132_MAINNET_VERSIONS["ypub"])
+
+        # A ypub already encodes its script type; multi-script hints are ignored.
+        result = normalize_wallet_material(ypub, script_types=["p2wpkh", "p2tr"])
+
+        self.assertEqual(result["descriptor"], f"sh(wpkh({xpub}/0/*))")
+        self.assertNotIn("xpub", result)
+
+
 class NormalizeWalletMaterialOtherShapesTests(unittest.TestCase):
     def test_descriptor_json_export_keeps_receive_and_change_branches(self):
         payload = json.dumps(
@@ -118,6 +258,84 @@ class NormalizeWalletMaterialOtherShapesTests(unittest.TestCase):
 
         self.assertEqual(result["descriptor"], "wpkh([abcd0123/84h/0h/0h]xpub6.../0/*)")
         self.assertEqual(result["change_descriptor"], "wpkh([abcd0123/84h/0h/0h]xpub6.../1/*)")
+
+    def test_bsms_template_expands_receive_and_change_descriptors(self):
+        template = (
+            "wsh(sortedmulti(2,"
+            "[11111111/48h/0h/0h/2h]xpubA/**,"
+            "[22222222/48h/0h/0h/2h]xpubB/**))#checksum"
+        )
+        material = "\n".join(
+            [
+                "BSMS 1.0",
+                template,
+                "/0/*,/1/*",
+                "bc1qexamplefirstaddress",
+            ]
+        )
+
+        result = normalize_wallet_material(material)
+
+        self.assertEqual(
+            result["descriptor"],
+            template.replace("/**", "/0/*"),
+        )
+        self.assertEqual(
+            result["change_descriptor"],
+            template.replace("/**", "/1/*"),
+        )
+        self.assertEqual(result["descriptor_source"], BSMS_DESCRIPTOR_SOURCE)
+        self.assertFalse(result["synthesize_change"])
+
+    def test_bsms_descriptor_without_path_restrictions_is_accepted(self):
+        descriptor = (
+            "wsh(sortedmulti(1,"
+            "[11111111/48h/0h/0h/2h]021111111111111111111111111111111111111111111111111111111111111111,"
+            "[22222222/48h/0h/0h/2h]032222222222222222222222222222222222222222222222222222222222222222))"
+        )
+        material = "\n".join(
+            [
+                "BSMS 1.0",
+                descriptor,
+                "No path restrictions",
+                "bc1qexamplefirstaddress",
+            ]
+        )
+
+        result = normalize_wallet_material(material)
+
+        self.assertEqual(result["descriptor"], descriptor)
+        self.assertEqual(result["descriptor_source"], BSMS_DESCRIPTOR_SOURCE)
+        self.assertFalse(result["synthesize_change"])
+
+    def test_bsms_signer_key_record_is_rejected(self):
+        material = "\n".join(
+            [
+                "BSMS 1.0",
+                "00",
+                "[11111111/48h/0h/0h/2h]xpubA",
+                "Signer 1 key",
+                "signature",
+            ]
+        )
+
+        with self.assertRaises(AppError) as ctx:
+            normalize_wallet_material(material)
+        self.assertIn("key records", str(ctx.exception).lower())
+
+    def test_bsms_with_extra_restrictions_is_rejected(self):
+        material = "\n".join(
+            [
+                "BSMS 1.0",
+                "wsh(sortedmulti(2,[11111111/48h/0h/0h/2h]xpubA/**,[22222222/48h/0h/0h/2h]xpubB/**))",
+                "/0/*,/1/*,/2/*",
+                "bc1qexamplefirstaddress",
+            ]
+        )
+
+        with self.assertRaises(AppError) as ctx:
+            normalize_wallet_material(material)
+        self.assertIn("receive/change", str(ctx.exception).lower())
 
     def test_blank_input_is_rejected(self):
         with self.assertRaises(AppError):

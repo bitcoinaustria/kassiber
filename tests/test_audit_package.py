@@ -313,6 +313,70 @@ class AuditPackageCoreTest(unittest.TestCase):
         self.assertEqual(direct_ids["url"], url_attachment["id"])
         self.assertEqual(tx_manifest["source_funds_links"][0]["state"], "reviewed")
 
+    def test_audit_package_sanitizes_attachment_id_in_copied_evidence_path(self):
+        self._mark_journals_current()
+        file_attachment = self._add_file_attachment(name="receipt.txt", content=b"controlled\n")
+        malicious_id = "../../escaped/owned"
+        self.conn.execute(
+            "UPDATE attachments SET id = ? WHERE id = ?",
+            (malicious_id, file_attachment["id"]),
+        )
+        self.conn.commit()
+        output_dir = self.root / "exports" / "audit"
+
+        result = audit_package.export_audit_package(
+            self.conn,
+            str(self.data_root),
+            None,
+            None,
+            output_dir,
+            self.audit_hooks,
+            transaction_refs=[self.tx_id],
+        )
+
+        manifest = json.loads(Path(result["manifest"]).read_text(encoding="utf-8"))
+        evidence_files = manifest["package"]["evidence_files"]
+        self.assertEqual(len(evidence_files), 1)
+        self.assertEqual(evidence_files[0]["attachment_id"], malicious_id)
+        self.assertEqual(evidence_files[0]["path"], "evidence/escaped_owned-c11ca40bf0ce-receipt.txt")
+        self.assertTrue((output_dir / evidence_files[0]["path"]).exists())
+        self.assertFalse((self.root / "escaped" / "owned-receipt.txt").exists())
+
+    def test_audit_package_evidence_paths_are_collision_resistant(self):
+        self._mark_journals_current()
+        first = self._add_file_attachment(name="receipt.txt", content=b"first receipt\n")
+        second = self._add_file_attachment(name="receipt.txt", content=b"second receipt\n")
+        self.conn.execute("UPDATE attachments SET id = ? WHERE id = ?", ("a/b", first["id"]))
+        self.conn.execute("UPDATE attachments SET id = ? WHERE id = ?", ("a_b", second["id"]))
+        self.conn.commit()
+        output_dir = self.root / "exports" / "audit"
+
+        result = audit_package.export_audit_package(
+            self.conn,
+            str(self.data_root),
+            None,
+            None,
+            output_dir,
+            self.audit_hooks,
+            transaction_refs=[self.tx_id],
+        )
+
+        manifest = json.loads(Path(result["manifest"]).read_text(encoding="utf-8"))
+        evidence_files = sorted(manifest["package"]["evidence_files"], key=lambda item: item["attachment_id"])
+        self.assertEqual(
+            [item["path"] for item in evidence_files],
+            [
+                "evidence/a_b-c14cddc033f6-receipt.txt",
+                "evidence/a_b-648fa9b31bc7-receipt.txt",
+            ],
+        )
+        copied_by_id = {
+            item["attachment_id"]: (output_dir / item["path"]).read_bytes()
+            for item in evidence_files
+        }
+        self.assertEqual(copied_by_id["a/b"], b"first receipt\n")
+        self.assertEqual(copied_by_id["a_b"], b"second receipt\n")
+
     def test_copy_evidence_duplicates_file_and_url_rows_with_provenance(self):
         source_tx_id = self._insert_source_transaction()
         source_file = self._add_file_attachment(

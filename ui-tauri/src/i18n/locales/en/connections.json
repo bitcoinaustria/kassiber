@@ -2,8 +2,6 @@
   "dashboard": {
     "eyebrow": "Wallets and sources",
     "title": "Wallets",
-    "refreshBook": "Refresh book",
-    "refreshing": "Refreshing",
     "addWallet": "Add wallet"
   },
   "metrics": {
@@ -128,8 +126,34 @@
       "backend": "Backend",
       "account": "Account",
       "network": "Network",
+      "scriptTypes": "Watching",
+      "descriptorMaterial": "Descriptor",
       "created": "Created",
       "kassiberId": "Kassiber ID"
+    },
+    "reveal": {
+      "menuItem": "Copy descriptor",
+      "title": "Copy wallet descriptor",
+      "description": "Re-enter the database passphrase to copy the stored descriptor material for {{label}}.",
+      "descriptionEncrypted": "Re-enter the database passphrase to copy the stored descriptor material for {{label}}.",
+      "descriptionPlaintext": "This book is not encrypted. Confirm before copying the stored descriptor material for {{label}}.",
+      "descriptorWithChange": "Descriptor + change",
+      "descriptorOnly": "Descriptor",
+      "includesChange": "The clipboard payload includes the stored change descriptor on the next line.",
+      "passphrase": "Database passphrase",
+      "helper": "Kassiber copies the raw stored descriptor material, without field labels or table formatting.",
+      "plaintextChallenge": "Type COPY LOCAL SECRET to confirm",
+      "plaintextHelper": "Plaintext books do not have a database passphrase. This extra step prevents accidental clipboard exposure.",
+      "copy": "Copy",
+      "copying": "Copying...",
+      "copied": "Copied",
+      "copiedInline": "Copied to clipboard.",
+      "copiedTitle": "Descriptor copied",
+      "copiedBody": "Copied the descriptor material for {{label}}.",
+      "failedTitle": "Descriptor copy failed",
+      "errorMissingDescriptor": "This wallet does not have that descriptor saved.",
+      "errorPlaintextAck": "Type {{ack}} to copy this local secret.",
+      "couldNotCopy": "Could not copy descriptor."
     },
     "relatedViews": {
       "title": "Related views",
@@ -153,6 +177,7 @@
       "btcpay": "BTCPay enrichment",
       "notConfigured": "Manual / not configured"
     },
+    "deprecatedBadge": "Deprecated",
     "edit": {
       "title": "Edit connection",
       "descriptionEncrypted": "Confirm this change with the local database passphrase.",
@@ -170,6 +195,9 @@
       "detected": "Detected: {{label}}",
       "detectedWithHint": "Detected: {{label}} — {{hint}}",
       "materialHelper": "Leave empty unless you need to change the saved wallet material.",
+      "scriptTypesLabel": "Address types to watch",
+      "scriptTypesHelper": "Kassiber derives a receive and change chain for each selected type. Adding a type re-scans this wallet.",
+      "errorSelectScriptType": "Select at least one address type to watch.",
       "gapLimit": "Gap limit",
       "gapLimitHelper": "Raise this for wallets with long unused address runs. Large values up to 5,000 can take longer, but refreshes keep running until the daemon returns.",
       "btcpayInstance": "BTCPay instance",
@@ -184,6 +212,8 @@
       "selectExportFileTitle": "Select {{label}} export file",
       "clearProvenance": "Clear BTCPay provenance routes",
       "clearProvenanceHelper": "Removes all {{count}} stored route(s). Descriptor/file sync remains the balance source. Re-add routes from Add wallet.",
+      "deprecated": "Deprecated wallet",
+      "deprecatedHelper": "Keep imported history, but exclude this wallet from refresh-all and background refresh. Manual refresh still works.",
       "passphrase": "Passphrase",
       "plaintextChallenge": "Plaintext change challenge",
       "saving": "Saving...",
@@ -420,7 +450,7 @@
   "scanner": {
     "title": "Scan wallet export",
     "scanTitle": "Scan {{title}}",
-    "description": "Scan a descriptor, xpub-family export, Liquid descriptor, or BBQR sequence from a wallet display.",
+    "description": "Scan an output descriptor, xpub-family export, or BBQR sequence from a wallet display.",
     "mode": {
       "auto": "Auto",
       "single": "Single QR",
@@ -461,9 +491,7 @@
     "description": "Choose a watch-only wallet, node, exchange, or local file source.",
     "setupDescription": "Enter the local details Kassiber needs for this connection.",
     "openingScanner": "Opening scanner",
-    "available": "Available",
     "plannedLabel": "Planned",
-    "ready": "Ready",
     "docs": "Docs",
     "searchPlaceholder": "Search sources (e.g. river, descriptor, btcpay)…",
     "noSearchMatch": "No sources match that search.",
@@ -499,7 +527,7 @@
     },
     "descriptor": {
       "walletExport": "Wallet export",
-      "scanHint": "Paste or scan a descriptor, xpub-family export, Liquid descriptor, or BBQR sequence.",
+      "scanHint": "Paste or scan an output descriptor, xpub-family export, or BBQR sequence.",
       "scan": "Scan",
       "gapLimit": "Gap limit",
       "gapLimitHelper": "Default is 40 unused addresses per branch. Raise it for older or heavily used wallets, up to 5,000; long scans keep running until the daemon finishes.",
@@ -514,7 +542,43 @@
       "copy": "Copy",
       "detected": "Detected: {{label}}",
       "detectedWithHint": "Detected: {{label}} — {{hint}}",
-      "couldNotDerive": "Could not derive addresses."
+      "couldNotDerive": "Could not derive addresses.",
+      "autoDetectUnavailable": "Could not auto-detect script types: {{reason}}. Pick a script type manually.",
+      "autoDetectUnavailableReasonUnknown": "backend probe did not run",
+      "scriptTypeLabel": "Script type",
+      "scriptTypeHelperAuto": "Leave this on Detect automatically to watch every address type with on-chain history, or pin a single one.",
+      "scriptTypeDetect": "Detect automatically",
+      "scriptType": {
+        "p2wpkh": "Native SegWit · P2WPKH (bc1q…)",
+        "p2shp2wpkh": "Nested SegWit · P2SH-P2WPKH (3…)",
+        "p2pkh": "Legacy · P2PKH (1…)",
+        "p2tr": "Taproot · P2TR (bc1p…)"
+      },
+      "bareXpubResolved": "{{label}} will be derived as {{scriptType}}.",
+      "bareXpubAutoDetect": "{{label}} — Kassiber will detect and watch whichever address types this key has been used with."
+    },
+    "addressList": {
+      "addresses": "Addresses",
+      "helper": "Paste addresses or load a .txt/.csv file, one per line. A pre-HD Bitcoin Core keypool has no xpub, so every address is scanned — there is no gap limit.",
+      "placeholder": "bc1q…\n1…\n3…",
+      "loadFile": "Load file…",
+      "summary_one": "{{count}} address recognized",
+      "summary_other": "{{count}} addresses recognized",
+      "summaryDuplicates_one": "{{count}} duplicate removed",
+      "summaryDuplicates_other": "{{count}} duplicates removed",
+      "summaryInvalid_one": "{{count}} skipped",
+      "summaryInvalid_other": "{{count}} skipped",
+      "invalidHint": "Skipping entries that are not mainnet addresses, e.g. {{samples}}.",
+      "privateKeysPurged_one": "Removed {{count}} private key — Kassiber is watch-only, never paste private keys.",
+      "privateKeysPurged_other": "Removed {{count}} private keys — Kassiber is watch-only, never paste private keys.",
+      "publicKeysPurged_one": "Removed {{count}} extended/public key — use the Wallet export source for xpubs.",
+      "publicKeysPurged_other": "Removed {{count}} extended/public keys — use the Wallet export source for xpubs.",
+      "scanAfter": "Scan addresses after setup",
+      "errorNeedAddress": "Paste or load at least one mainnet Bitcoin address.",
+      "fileReadFailed": "Could not read the selected file.",
+      "stillScanning": "{{label}} is scanning the address list. Large lists take longer on Esplora backends.",
+      "addedBody_one": "{{label}} created with {{count}} address.",
+      "addedBody_other": "{{label}} created with {{count}} addresses."
     },
     "exportFile": {
       "label": "Export file path",
@@ -531,7 +595,34 @@
       "strikeCsv": "Strike CSV",
       "wasabiBundle": "Wasabi JSON bundle",
       "samouraiSourceSet": "Samourai descriptor source set",
-      "csvOrJson": "CSV or JSON"
+      "csvOrJson": "CSV or JSON",
+      "genericLedger": "Excel or CSV ledger"
+    },
+    "genericLedger": {
+      "templateHint": "New here? Download the template, fill in your transactions, then import the file.",
+      "downloadXlsx": "Download Excel template",
+      "downloadCsv": "CSV instead",
+      "templateWorking": "Preparing…",
+      "saveTemplateTitle": "Save ledger template",
+      "templateReadyTitle": "Template ready",
+      "templateReadyBody": "Fill in your transactions and import the file here.",
+      "templateFailedTitle": "Could not create the template",
+      "preview": {
+        "loading": "Reading your file…",
+        "failed": "Couldn't read that file.",
+        "ready": "{{mapped}} of {{rows}} rows ready",
+        "errorCount": "{{count}} need attention",
+        "more": "+{{count}} more",
+        "colDate": "Date",
+        "colKind": "Type",
+        "colAmount": "Amount",
+        "colValue": "Value",
+        "problemRow": "Row {{row}}: {{message}}",
+        "detected": "Recognized: {{columns}}",
+        "notRecognized": "Couldn't recognize these columns.",
+        "notRecognizedHint": "Download the template, fill it in, and import that instead.",
+        "submitBlocked": "Resolve the preview issues before importing this ledger."
+      }
     },
     "defaultLabel": {
       "importedFile": "Imported file"

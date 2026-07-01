@@ -11,6 +11,9 @@ describe("notificationRouteFor", () => {
 
   it("routes domain titles to their own screens", () => {
     expect(notificationRouteFor("Transactions quarantined")).toBe("/quarantine");
+    expect(
+      notificationRouteFor("2 Transaktionen in Quarantäne prüfen"),
+    ).toBe("/quarantine");
     expect(notificationRouteFor("Journal processing complete")).toBe("/journals");
   });
 });
@@ -37,6 +40,9 @@ describe("notificationTarget", () => {
     expect(notificationTarget("Transactions quarantined", "warning", false)).toBe(
       "/quarantine",
     );
+    expect(
+      notificationTarget("2 Transaktionen in Quarantäne prüfen", "warning", false),
+    ).toBe("/quarantine");
     expect(notificationTarget("Transactions quarantined", "warning", true)).toBe(
       "/quarantine",
     );
@@ -53,5 +59,36 @@ describe("notificationTarget", () => {
 
   it("returns undefined for unmatched non-error titles", () => {
     expect(notificationTarget("All caught up", "info", false)).toBeUndefined();
+  });
+
+  it("prefers an explicit target over title keyword-matching", () => {
+    // A localized warning title the English keyword router can't recognize
+    // (e.g. German "needs attention") must still route via its explicit target.
+    const germanAttention = "Buch-Aktualisierung braucht Aufmerksamkeit";
+    expect(notificationTarget(germanAttention, "warning", false)).toBeUndefined();
+    expect(
+      notificationTarget(germanAttention, "warning", true, "/logs"),
+    ).toBe("/logs");
+    // The explicit /logs target still flows through the dev-tools guard.
+    expect(
+      notificationTarget(germanAttention, "warning", false, "/logs"),
+    ).toBe("/settings");
+    expect(
+      notificationTarget(germanAttention, "warning", false, "/quarantine"),
+    ).toBe("/quarantine");
+
+    const germanTransferReview = "2 Swap-/Transfer-Kandidaten prüfen";
+    expect(
+      notificationTarget(germanTransferReview, "warning", false),
+    ).toBeUndefined();
+    expect(
+      notificationTarget(germanTransferReview, "warning", false, "/swaps"),
+    ).toBe("/swaps");
+  });
+
+  it("ignores an explicit target that is not a known route", () => {
+    expect(
+      notificationTarget("All caught up", "info", false, "/not-a-route"),
+    ).toBeUndefined();
   });
 });

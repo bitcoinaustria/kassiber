@@ -57,15 +57,18 @@ a validation envelope rather than a bare `ValueError` / `KeyError`.
 
 import csv
 import hashlib
+import io
 import json
 import os
-from datetime import datetime, timezone
+import re
+from datetime import date, datetime, timezone
 from decimal import Decimal
 from typing import Any, Mapping
 
 from .envelope import json_ready
 from .errors import AppError
 from .msat import dec, msat_to_btc
+from .time_utils import parse_timestamp
 from .util import str_or_none
 from .wallet_descriptors import normalize_asset_code
 
@@ -120,6 +123,8 @@ def load_import_records(file_path, input_format):
         return load_strike_csv_records(file_path)
     if input_format == "wasabi_bundle":
         return load_wasabi_bundle_records(file_path)
+    if input_format == GENERIC_LEDGER_FORMAT:
+        return load_generic_ledger_records(file_path)
     raise AppError(f"Unsupported input format '{input_format}'")
 
 
@@ -422,7 +427,7 @@ def _normalize_wasabi_history_record(record: dict[str, Any]) -> dict[str, Any]:
         "privacy_hop": "coinjoin" if is_coinjoin else None,
     }
     safe_raw = {key: value for key, value in safe_raw.items() if value not in (None, "")}
-    description = label or ("Wasabi CoinJoin privacy hop" if is_coinjoin else "Wasabi transaction")
+    description = label or ("CoinJoin transaction" if is_coinjoin else "Wasabi transaction")
     return {
         "txid": txid,
         "occurred_at": sanitized.get("datetime") or sanitized.get("date") or sanitized.get("time"),
@@ -675,6 +680,11 @@ def normalize_btcpay_record(record):
         "asset": currency,
         "amount": abs(amount),
         "fee": Decimal("0"),
+        # BTCPay's Greenfield wallet-transactions API reports only the net wallet
+        # balance change, with no per-tx fee field. For a send that net delta
+        # already includes the miner fee, so flag it: the transfer-fee guard must
+        # treat the out/in discrepancy as the fee, not an unrecognized outflow.
+        "amount_includes_fee": amount < 0,
         "fiat_rate": None,
         "fiat_value": None,
         "kind": "withdrawal" if amount < 0 else "deposit",
@@ -2217,6 +2227,1103 @@ def load_river_csv_records(file_path):
 
 def is_river_format(input_format):
     return input_format == "river_csv"
+
+
+# -- Generic ledger (manual / generic tabular import) ------------------------
+#
+# A native, column-mapped import for a fill-in spreadsheet — the same shape an
+# exchange "Excel import" template has, pared to Bitcoin scope. One Bitcoin leg
+# per row (asset + amount + direction); the other side is the cash leg that
+# becomes pricing. Reads .xlsx (via the optional `openpyxl` package) or
+# CSV/TSV; `write_generic_ledger_template` emits the matching fill-in template.
+
+GENERIC_LEDGER_FORMAT = "generic_ledger"
+
+# Column headers for the fill-in template. Order defines the generated layout.
+GENERIC_LEDGER_COLUMNS = (
+    "Type",
+    "Date",
+    "Received Amount",
+    "Received Asset",
+    "Sent Amount",
+    "Sent Asset",
+    "Fee Amount",
+    "Fee Asset",
+    "Fiat Value",
+    "Counterparty",
+    "Note",
+    "Tx-ID",
+)
+
+# Asset codes (normalized via `normalize_asset_code`) treated as the Bitcoin
+# leg. Anything else in an asset cell is treated as a fiat/cash currency (the
+# pricing leg). `SATS`/`SAT` mark an amount denominated in whole satoshis.
+_GENERIC_LEDGER_SATS_ASSETS = {"SATS", "SAT"}
+_GENERIC_LEDGER_CRYPTO_ASSETS = {"BTC", "XBT", "LBTC"} | _GENERIC_LEDGER_SATS_ASSETS
+
+# Type -> (direction, kind). `kind` is None for a plain acquisition/disposal.
+# Every kind here is one the tax engine recognizes (see core/engines/rp2.py):
+# income kinds map to RP2 earn transaction types; gift/donation/lost/stolen are
+# deliberately routed to the non-sale-disposal quarantine for explicit review
+# rather than being booked as ordinary market sales.
+_GENERIC_LEDGER_TYPES = {
+    "buy": ("inbound", "buy"),
+    "purchase": ("inbound", "buy"),
+    "sell": ("outbound", "sell"),
+    "deposit": ("inbound", "deposit"),
+    "receive": ("inbound", "deposit"),
+    "transfer in": ("inbound", "deposit"),
+    "withdrawal": ("outbound", "withdrawal"),
+    "withdraw": ("outbound", "withdrawal"),
+    "send": ("outbound", "withdrawal"),
+    "transfer out": ("outbound", "withdrawal"),
+    "spend": ("outbound", "spend"),
+    "payment": ("outbound", "spend"),
+    "income": ("inbound", "income"),
+    "salary": ("inbound", "wages"),
+    "wages": ("inbound", "wages"),
+    "mining": ("inbound", "mining"),
+    "staking": ("inbound", "staking"),
+    "interest": ("inbound", "interest"),
+    "lending interest": ("inbound", "lending_interest"),
+    "airdrop": ("inbound", "airdrop"),
+    "fork": ("inbound", "hardfork"),
+    "hard fork": ("inbound", "hardfork"),
+    "gift received": ("inbound", None),
+    "gift sent": ("outbound", "gift"),
+    "gift": ("outbound", "gift"),
+    "donation": ("outbound", "donation"),
+    "lost": ("outbound", "lost"),
+    "stolen": ("outbound", "stolen"),
+}
+
+# Canonical Types shown in the template legend + dropdown, grouped for display.
+GENERIC_LEDGER_TYPE_GROUPS = (
+    ("Acquire", ("Buy", "Deposit", "Gift received")),
+    ("Dispose", ("Sell", "Withdrawal", "Spend")),
+    ("Earn", ("Income", "Mining", "Staking", "Interest", "Airdrop", "Fork")),
+    ("Outflow (review)", ("Gift sent", "Donation", "Lost", "Stolen")),
+)
+GENERIC_LEDGER_DISPLAY_TYPES = tuple(
+    label for _group, labels in GENERIC_LEDGER_TYPE_GROUPS for label in labels
+)
+
+
+def _generic_ledger_asset(value):
+    code = str_or_none(value)
+    return normalize_asset_code(code) if code else None
+
+
+def _generic_ledger_is_crypto(asset):
+    return bool(asset) and asset.upper() in _GENERIC_LEDGER_CRYPTO_ASSETS
+
+
+def _generic_ledger_canonical_crypto(asset):
+    upper = asset.upper() if asset else ""
+    if upper in _GENERIC_LEDGER_SATS_ASSETS or upper == "XBT":
+        return "BTC"
+    if upper == "LBTC":
+        return "LBTC"
+    return asset
+
+
+def _generic_ledger_btc_amount(amount, asset):
+    """Coerce a leg amount to BTC Decimals, honoring a sats-denominated asset."""
+    if amount is None:
+        return None
+    if asset and asset.upper() in _GENERIC_LEDGER_SATS_ASSETS:
+        return abs(amount) / Decimal("100000000")
+    return abs(amount)
+
+
+# Header aliases that mark a row as the column header (and the columns the
+# normalizer reads). Used so a sheet using "Transaction Type"/"Timestamp" is
+# still recognized, matching what `normalize_generic_ledger_record` accepts.
+_GENERIC_LEDGER_TYPE_HEADERS = {
+    _normalized_column_key(name) for name in ("Type", "Transaction Type", "Kind")
+}
+_GENERIC_LEDGER_DATE_HEADERS = {
+    _normalized_column_key(name) for name in ("Date", "Timestamp", "Time")
+}
+
+_GENERIC_LEDGER_CURRENCY_SYMBOLS = (
+    "$", "€", "£", "CHF", "USD", "EUR", "GBP", "BTC", "XBT", "LBTC", "SATS", "SAT",
+)
+_GENERIC_LEDGER_EURO_DATE_RE = re.compile(r"^(\d{1,2})\.(\d{1,2})\.(\d{4})(?:[ T](.+))?$")
+
+
+def _generic_ledger_has_header(cells):
+    seen = {_normalized_column_key(cell) for cell in cells if str_or_none(cell)}
+    return bool(seen & _GENERIC_LEDGER_TYPE_HEADERS) and bool(
+        seen & _GENERIC_LEDGER_DATE_HEADERS
+    )
+
+
+# Native template = Type + Date AND a Received/Sent leg column. A file with
+# Type + Date but a single "Amount" column is NOT native — it takes the
+# auto-detect (bring-your-own-file) path instead.
+_GENERIC_LEDGER_NATIVE_AMOUNT_HEADERS = {
+    _normalized_column_key(name)
+    for name in ("Received Amount", "Buy Amount", "Sent Amount", "Sell Amount")
+}
+
+
+def _is_native_ledger(cells):
+    seen = {_normalized_column_key(cell) for cell in cells if str_or_none(cell)}
+    return _generic_ledger_has_header(cells) and bool(
+        seen & _GENERIC_LEDGER_NATIVE_AMOUNT_HEADERS
+    )
+
+
+def _generic_ledger_decimal_cell(value, field, row_label):
+    """Parse a hand-typed number, accepting both ``1,234.56`` and European
+    ``1.234,56`` / ``0,05`` decimal-comma formats. Raises a row-numbered
+    ``validation`` error rather than a context-free one on non-numeric input."""
+    if value in (None, ""):
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    negative = text.startswith("(") and text.endswith(")")
+    if negative:
+        text = text[1:-1].strip()
+    for symbol in _GENERIC_LEDGER_CURRENCY_SYMBOLS:
+        text = text.replace(symbol, "")
+    text = text.replace("\xa0", "").replace(" ", "").strip()
+    if not text:
+        return None
+    has_dot = "." in text
+    has_comma = "," in text
+    if has_dot and has_comma:
+        # The right-most separator is the decimal point; the other groups thousands.
+        if text.rfind(".") > text.rfind(","):
+            text = text.replace(",", "")
+        else:
+            text = text.replace(".", "").replace(",", ".")
+    elif has_comma:
+        # A lone comma is a decimal separator; repeated commas group thousands.
+        text = text.replace(",", "") if text.count(",") > 1 else text.replace(",", ".")
+    elif text.count(".") > 1:
+        # Repeated dots can only be thousands groupings (1.234.567).
+        text = text.replace(".", "")
+    if negative and not text.startswith("-"):
+        text = "-" + text
+    try:
+        return dec(text)
+    except AppError as exc:
+        raise AppError(
+            f"{row_label}: {field} is not a number ({value!r})",
+            code="validation",
+            hint="Use digits like 0.05000000 or 3000,00 — amounts are in BTC unless the asset is SATS.",
+        ) from exc
+
+
+def _generic_ledger_occurred_at(value, row_label):
+    """Validate + normalize the Date cell. Accepts ISO/RFC3339 and Austrian
+    ``DD.MM.YYYY`` (with optional time). Raises a row-numbered error otherwise,
+    instead of letting a context-free error abort the whole import later."""
+    text = str_or_none(value)
+    if not text:
+        raise AppError(
+            f"{row_label}: missing Date",
+            code="validation",
+            hint="Use an ISO date such as 2026-01-15, a full timestamp, or DD.MM.YYYY.",
+        )
+    candidate = text.strip()
+    match = _GENERIC_LEDGER_EURO_DATE_RE.match(candidate)
+    if match:
+        day, month, year, rest = match.groups()
+        candidate = f"{year}-{int(month):02d}-{int(day):02d}"
+        if rest:
+            candidate = f"{candidate}T{rest.strip()}"
+    try:
+        parse_timestamp(candidate)
+    except AppError as exc:
+        raise AppError(
+            f"{row_label}: Date '{text}' is not a recognized date",
+            code="validation",
+            hint="Use ISO 2026-01-15, a full RFC3339 timestamp, or DD.MM.YYYY.",
+        ) from exc
+    return candidate
+
+
+def normalize_generic_ledger_record(record, index=0):
+    """Turn one generic-ledger row into the common import record shape.
+
+    Raises `AppError` with a row-numbered, actionable message on a malformed
+    row rather than silently dropping it, since these rows are hand-entered.
+    """
+    sanitized = {str(key).strip(): value for key, value in record.items() if key is not None}
+    row_label = f"Ledger row {index}" if index else "Ledger row"
+
+    type_text = str_or_none(_get_cell(sanitized, "Type", "Transaction Type", "Kind"))
+    if not type_text:
+        raise AppError(
+            f"{row_label}: missing Type",
+            code="validation",
+            hint="Set a Type such as Buy, Sell, Deposit, Withdrawal, Income, Mining, or Gift sent.",
+        )
+    type_key = " ".join(type_text.strip().lower().split())
+    if type_key not in _GENERIC_LEDGER_TYPES:
+        raise AppError(
+            f"{row_label}: unknown Type '{type_text}'",
+            code="validation",
+            hint="Use one of: " + ", ".join(GENERIC_LEDGER_DISPLAY_TYPES) + ".",
+        )
+    type_direction, kind = _GENERIC_LEDGER_TYPES[type_key]
+
+    received_asset = _generic_ledger_asset(
+        _get_cell(sanitized, "Received Asset", "Received Cur.", "Buy Asset", "Buy Cur.")
+    )
+    sent_asset = _generic_ledger_asset(
+        _get_cell(sanitized, "Sent Asset", "Sent Cur.", "Sell Asset", "Sell Cur.")
+    )
+    received_amount = _generic_ledger_decimal_cell(
+        _get_cell(sanitized, "Received Amount", "Buy Amount"), "Received Amount", row_label
+    )
+    sent_amount = _generic_ledger_decimal_cell(
+        _get_cell(sanitized, "Sent Amount", "Sell Amount"), "Sent Amount", row_label
+    )
+    fee_amount = _generic_ledger_decimal_cell(
+        _get_cell(sanitized, "Fee Amount", "Fee"), "Fee Amount", row_label
+    )
+    fee_asset = _generic_ledger_asset(_get_cell(sanitized, "Fee Asset", "Fee Cur."))
+    explicit_fiat = _generic_ledger_decimal_cell(
+        _get_cell(
+            sanitized,
+            "Fiat Value",
+            "Value (fiat)",
+            "Buy Value (fiat)",
+            "Sell Value (fiat)",
+        ),
+        "Fiat Value",
+        row_label,
+    )
+
+    received_is_crypto = _generic_ledger_is_crypto(received_asset) and received_amount is not None
+    sent_is_crypto = _generic_ledger_is_crypto(sent_asset) and sent_amount is not None
+    if received_is_crypto and sent_is_crypto:
+        raise AppError(
+            f"{row_label}: both sides are Bitcoin — crypto-to-crypto rows are not supported",
+            code="validation",
+            hint="Record one Bitcoin leg per row and price it with a fiat amount or a Fiat Value.",
+        )
+    if not received_is_crypto and not sent_is_crypto:
+        raise AppError(
+            f"{row_label}: no Bitcoin leg found (expected BTC, LBTC, or SATS on the Received or Sent side)",
+            code="validation",
+            hint="Put the Bitcoin amount + asset on the Received side (inbound) or the Sent side (outbound).",
+        )
+
+    if received_is_crypto:
+        direction = "inbound"
+        leg_asset = received_asset
+        amount = _generic_ledger_btc_amount(received_amount, received_asset)
+        fiat_asset = sent_asset if (sent_asset and not _generic_ledger_is_crypto(sent_asset)) else None
+        fiat_leg_amount = sent_amount if fiat_asset else None
+    else:
+        direction = "outbound"
+        leg_asset = sent_asset
+        amount = _generic_ledger_btc_amount(sent_amount, sent_asset)
+        fiat_asset = received_asset if (received_asset and not _generic_ledger_is_crypto(received_asset)) else None
+        fiat_leg_amount = received_amount if fiat_asset else None
+    # `leg_asset` keeps the row's original Bitcoin spelling (e.g. SATS); `asset`
+    # is canonicalized for storage (SATS/XBT -> BTC). The fee fallback below
+    # needs the original so a blank Fee Asset on a SATS leg stays in sats.
+    asset = _generic_ledger_canonical_crypto(leg_asset)
+
+    if type_direction != direction:
+        raise AppError(
+            f"{row_label}: Type '{type_text}' is {type_direction} but the Bitcoin leg is {direction}",
+            code="validation",
+            hint=(
+                "Inbound Types (Buy/Deposit/Income/…) need the Bitcoin amount on the Received side; "
+                "outbound Types (Sell/Withdrawal/Spend/Gift sent/…) on the Sent side."
+            ),
+        )
+
+    fee = Decimal("0")
+    fee_fiat = Decimal("0")
+    if fee_amount is not None and abs(fee_amount) > 0:
+        if _generic_ledger_is_crypto(fee_asset) or fee_asset is None:
+            # No fee asset given defaults to the Bitcoin leg (on-chain/network
+            # fee), using the leg's ORIGINAL spelling so a blank fee on a SATS
+            # leg is read as sats, not BTC.
+            fee = _generic_ledger_btc_amount(abs(fee_amount), fee_asset or leg_asset)
+        else:
+            # A fiat fee only makes sense as an adjustment to a same-currency
+            # cash leg's execution price; network fees belong on the Bitcoin leg.
+            if not (fiat_asset and fiat_leg_amount is not None):
+                raise AppError(
+                    f"{row_label}: a fiat fee ({fee_asset}) needs a matching cash leg",
+                    code="validation",
+                    hint=(
+                        "Put network fees in BTC (Fee Asset BTC or blank), or add the "
+                        "Sent/Received fiat amount this fee applies to."
+                    ),
+                )
+            if fee_asset != fiat_asset:
+                raise AppError(
+                    f"{row_label}: fee currency {fee_asset} does not match the trade currency {fiat_asset}",
+                    code="validation",
+                    hint="Use the same currency for the fee and the row's fiat amount.",
+                )
+            fee_fiat = abs(fee_amount)
+
+    fiat_currency = None
+    fiat_value = None
+    pricing_source_kind = None
+    pricing_quality = None
+    if fiat_leg_amount is not None and fiat_asset:
+        fiat_currency = fiat_asset
+        base = abs(fiat_leg_amount)
+        if direction == "inbound":
+            fiat_value = base + fee_fiat
+        else:
+            fiat_value = max(Decimal("0"), base - fee_fiat)
+        pricing_source_kind = "exchange_execution"
+        pricing_quality = "exact"
+    elif explicit_fiat is not None:
+        # Declared fair-market value in the book currency (no cash leg). Currency
+        # is left unset so it is treated as the book currency downstream.
+        fiat_value = abs(explicit_fiat)
+
+    fiat_rate = None
+    if fiat_value is not None and amount and amount > 0:
+        fiat_rate = fiat_value / amount
+
+    occurred_at = _generic_ledger_occurred_at(
+        _get_cell(sanitized, "Date", "Timestamp", "Time"), row_label
+    )
+
+    # No synthetic positional id: an absent Tx-ID leaves external_id empty so
+    # dedup falls back to the economic fingerprint (occurred_at/direction/asset/
+    # amount/fee). A row-index-based id would shift on insert/reorder and
+    # re-import the same rows as duplicates.
+    txid = str_or_none(_get_cell(sanitized, "Tx-ID", "TxID", "Txid", "Transaction ID"))
+    external_id = txid or ""
+    note = str_or_none(_get_cell(sanitized, "Note", "Comment", "Description"))
+    counterparty = str_or_none(_get_cell(sanitized, "Counterparty", "Exchange", "Platform"))
+
+    return {
+        "txid": external_id,
+        "occurred_at": occurred_at,
+        "direction": direction,
+        "asset": asset,
+        "amount": amount,
+        "fee": fee,
+        "fiat_rate": fiat_rate,
+        "fiat_value": fiat_value,
+        "fiat_currency": fiat_currency,
+        "pricing_source_kind": pricing_source_kind,
+        "pricing_provider": counterparty if pricing_source_kind else None,
+        "pricing_pair": f"{asset}-{fiat_currency}" if (pricing_source_kind and fiat_currency) else None,
+        "pricing_method": "generic_ledger" if pricing_source_kind else None,
+        "pricing_external_ref": txid or None,
+        "pricing_quality": pricing_quality,
+        "kind": kind,
+        "description": note,
+        "counterparty": counterparty,
+        "raw_json": json.dumps(json_ready(sanitized), sort_keys=True),
+    }
+
+
+def _generic_ledger_xlsx_cell(value):
+    if value is None:
+        return ""
+    if isinstance(value, datetime):
+        return value.isoformat()
+    if isinstance(value, date):
+        return value.isoformat()
+    return value
+
+
+def _pick_generic_ledger_sheet(workbook):
+    for sheet in workbook.worksheets:
+        for row in sheet.iter_rows(min_row=1, max_row=10, values_only=True):
+            if _generic_ledger_has_header(row):
+                return sheet
+    return workbook.active
+
+
+def _read_generic_ledger_xlsx(file_path):
+    try:
+        from openpyxl import load_workbook
+    except ImportError as exc:  # pragma: no cover - exercised only without openpyxl
+        raise AppError(
+            "Reading .xlsx ledger files needs the optional 'openpyxl' package",
+            code="dependency_missing",
+            hint="Install kassiber with openpyxl, or export the ledger as CSV and import that instead.",
+        ) from exc
+    try:
+        workbook = load_workbook(file_path, data_only=True)
+    except Exception as exc:  # openpyxl raises assorted errors on malformed files
+        raise AppError(
+            f"Could not read .xlsx ledger file: {exc}",
+            code="validation",
+            hint="Re-export the file as .xlsx or CSV and try again.",
+        ) from exc
+    try:
+        sheet = _pick_generic_ledger_sheet(workbook)
+        rows = [
+            [_generic_ledger_xlsx_cell(cell) for cell in row]
+            for row in sheet.iter_rows(values_only=True)
+        ]
+    finally:
+        workbook.close()
+    return rows
+
+
+def _read_generic_ledger_csv(file_path):
+    with open(file_path, "r", encoding="utf-8-sig", newline="") as handle:
+        text = handle.read()
+    if not text.strip():
+        return []
+    try:
+        dialect: Any = csv.Sniffer().sniff(text[:8192], delimiters=",;\t|")
+    except csv.Error:
+        dialect = None
+    reader = (
+        csv.reader(io.StringIO(text), dialect)
+        if dialect is not None
+        else csv.reader(io.StringIO(text))
+    )
+    return [list(row) for row in reader]
+
+
+def _generic_ledger_rows_to_records(rows):
+    header_index = None
+    for index, row in enumerate(rows):
+        if _generic_ledger_has_header(row):
+            header_index = index
+            break
+    if header_index is None:
+        raise AppError(
+            "Ledger file has no recognizable header row (expected at least 'Type' and 'Date' columns)",
+            code="validation",
+            hint="Download the import template with `wallets ledger-template` and keep its header row.",
+        )
+    header = [str(cell).strip() if cell is not None else "" for cell in rows[header_index]]
+    records = []
+    for row in rows[header_index + 1 :]:
+        if not any(str_or_none(cell) for cell in row):
+            continue
+        record = {}
+        for column_index, name in enumerate(header):
+            if not name:
+                continue
+            record[name] = row[column_index] if column_index < len(row) else ""
+        records.append(record)
+    return records
+
+
+# --------------------------------------------------------------------------- #
+# Bring-your-own-file: auto-detect arbitrary column layouts onto the ledger
+# shape so a non-template export still imports through the same normalizer (and
+# its Type -> (direction, kind) taxonomy + exact fiat pricing) untouched. Only
+# files WITHOUT a native Type+Date header take this path; template files are
+# unchanged.
+# --------------------------------------------------------------------------- #
+_BYO_DATE = {_normalized_column_key(n) for n in ("Date", "Time", "Timestamp", "Datetime", "Date Time", "Datum", "Zeitpunkt", "Executed At", "Trade Date")}
+_BYO_TYPE = {_normalized_column_key(n) for n in ("Type", "Transaction Type", "Tx Type", "Side", "Category", "Action", "Art")}
+_BYO_DIRECTION = {_normalized_column_key(n) for n in ("Direction", "In/Out", "Flow", "Richtung")}
+_BYO_RECEIVED = {_normalized_column_key(n) for n in ("Received Amount", "Received", "Received BTC", "Buy Amount", "Incoming", "Amount Received", "Deposit Amount", "Credit", "Eingang", "Erhalten")}
+_BYO_SENT = {_normalized_column_key(n) for n in ("Sent Amount", "Sent", "Sent BTC", "Sell Amount", "Outgoing", "Amount Sent", "Withdrawal Amount", "Debit", "Ausgang", "Gesendet")}
+_BYO_AMOUNT = {_normalized_column_key(n) for n in ("Amount", "BTC", "Amount BTC", "BTC Amount", "Quantity", "Qty", "Net Amount", "Betrag", "Menge")}
+_BYO_RECEIVED_ASSET = {_normalized_column_key(n) for n in ("Received Asset", "Received Currency", "Buy Asset", "Buy Currency", "Incoming Asset", "Credit Asset")}
+_BYO_SENT_ASSET = {_normalized_column_key(n) for n in ("Sent Asset", "Sent Currency", "Sell Asset", "Sell Currency", "Outgoing Asset", "Debit Asset")}
+_BYO_FEE_ASSET = {_normalized_column_key(n) for n in ("Fee Asset", "Fee Currency", "Fee Cur.", "Fee Coin")}
+# "Currency" is fiat far more often than a crypto-asset column, so it belongs
+# to fiat detection; the crypto asset is only taken from explicit asset columns.
+_BYO_ASSET = {_normalized_column_key(n) for n in ("Asset", "Coin", "Symbol", "Crypto", "Crypto Asset")}
+_BYO_FEE = {_normalized_column_key(n) for n in ("Fee", "Fees", "Fee Amount", "Miner Fee", "Network Fee", "Tx Fee", "Gebühr", "Gebuehr")}
+_BYO_FIAT_CURRENCY = {_normalized_column_key(n) for n in ("Fiat Currency", "Fiat", "Currency", "Quote Currency", "Cash Currency", "Währung", "Waehrung")}
+_BYO_FIAT_VALUE = {_normalized_column_key(n) for n in ("Fiat Value", "Total", "Total Value", "Value", "Proceeds", "Cost", "Gesamt", "Wert")}
+_BYO_FIAT_RATE = {_normalized_column_key(n) for n in ("Price", "Rate", "Unit Price", "Price Per BTC", "BTC Price", "Spot", "Kurs", "Preis")}
+_BYO_NOTE = {_normalized_column_key(n) for n in ("Note", "Notes", "Description", "Memo", "Label", "Comment", "Notiz", "Beschreibung")}
+_BYO_TXID = {_normalized_column_key(n) for n in ("Tx-ID", "TxID", "Txid", "Transaction ID", "Tx Hash", "Hash", "Reference", "Ref")}
+_BYO_COUNTERPARTY = {_normalized_column_key(n) for n in ("Counterparty", "Exchange", "Platform", "Payee", "Gegenpartei")}
+
+_BYO_TYPE_VALUE_MAP = {
+    "in": "Deposit", "incoming": "Deposit", "received": "Deposit", "receive": "Deposit",
+    "credit": "Deposit", "out": "Withdrawal", "outgoing": "Withdrawal", "sent": "Withdrawal",
+    "send": "Withdrawal", "debit": "Withdrawal",
+}
+_BYO_INBOUND_VALUES = {"in", "inbound", "received", "receive", "incoming", "credit", "deposit", "buy"}
+_BYO_OUTBOUND_VALUES = {"out", "outbound", "sent", "send", "outgoing", "debit", "withdrawal", "sell"}
+_BYO_RECEIVED_HEADER_TOKENS = {"received", "receive", "incoming", "credit", "deposit", "buy", "bought", "erhalten", "eingang"}
+_BYO_SENT_HEADER_TOKENS = {"sent", "send", "outgoing", "debit", "withdrawal", "withdraw", "sell", "sold", "ausgang", "gesendet"}
+_BYO_HEADER_ASSET_ALIASES = {
+    "btc": "BTC",
+    "bitcoin": "BTC",
+    "xbt": "BTC",
+    "lbtc": "LBTC",
+    "liquidbtc": "LBTC",
+    "liquid": "LBTC",
+    "sats": "SATS",
+    "sat": "SATS",
+    "eur": "EUR",
+    "euro": "EUR",
+    "usd": "USD",
+    "dollar": "USD",
+    "chf": "CHF",
+    "gbp": "GBP",
+    "aud": "AUD",
+    "cad": "CAD",
+    "jpy": "JPY",
+    "nok": "NOK",
+    "sek": "SEK",
+    "dkk": "DKK",
+    "pln": "PLN",
+    "czk": "CZK",
+    "huf": "HUF",
+}
+
+
+def _byo_number(cell):
+    """Lenient numeric parse (honors locale decimals); None on blank/junk."""
+    try:
+        return _generic_ledger_decimal_cell(cell, "x", "")
+    except AppError:
+        return None
+
+
+def _byo_header_tokens(value):
+    return [token for token in re.split(r"[^a-z0-9]+", str(value or "").casefold()) if token]
+
+
+def _byo_asset_from_header(value):
+    tokens = _byo_header_tokens(value)
+    if not tokens:
+        return None
+    joined = " ".join(tokens)
+    if "liquid bitcoin" in joined:
+        return "LBTC"
+    for token in reversed(tokens):
+        mapped = _BYO_HEADER_ASSET_ALIASES.get(token)
+        if mapped:
+            return mapped
+    return None
+
+
+def _byo_leg_role_from_header(value):
+    tokens = set(_byo_header_tokens(value))
+    if tokens & _BYO_RECEIVED_HEADER_TOKENS:
+        return "received"
+    if tokens & _BYO_SENT_HEADER_TOKENS:
+        return "sent"
+    return None
+
+
+def _byo_type_value(type_value, direction, *, has_cash_counterleg=False):
+    if type_value:
+        return _BYO_TYPE_VALUE_MAP.get(_normalized_column_key(type_value), type_value)
+    if has_cash_counterleg:
+        return "Buy" if direction == "inbound" else "Sell"
+    return "Deposit" if direction == "inbound" else "Withdrawal"
+
+
+def _byo_type_direction(type_value):
+    mapped = _byo_type_value(type_value, None)
+    entry = _GENERIC_LEDGER_TYPES.get(" ".join(str(mapped).strip().lower().split()))
+    return entry[0] if entry else None
+
+
+def _byo_direction_value(value):
+    key = _normalized_column_key(value or "")
+    if key in _BYO_INBOUND_VALUES:
+        return "inbound"
+    if key in _BYO_OUTBOUND_VALUES:
+        return "outbound"
+    return None
+
+
+def infer_ledger_columns(header):
+    """Guess a column plan mapping an arbitrary header onto the ledger shape.
+
+    Returns ``{"plan", "detected", "confident"}``. ``confident`` requires a date
+    column and a usable amount layout (received/sent, or a single amount with a
+    type/direction column, or a signed amount). Used only for non-template files.
+    """
+    norm = {h: _normalized_column_key(h) for h in header if str_or_none(h)}
+    used = set()
+    detected = []
+
+    def take(aliases, field):
+        for original in header:
+            if original in used or original not in norm:
+                continue
+            if norm[original] in aliases:
+                used.add(original)
+                detected.append({"column": original, "field": field})
+                return original
+        return None
+
+    def take_asset_suffixed_leg(field):
+        for original in header:
+            if original in used or original not in norm:
+                continue
+            if _byo_leg_role_from_header(original) == field and _byo_asset_from_header(original):
+                used.add(original)
+                detected.append({"column": original, "field": field})
+                return original
+        return None
+
+    date = take(_BYO_DATE, "date")
+    received = take(_BYO_RECEIVED, "received") or take_asset_suffixed_leg("received")
+    sent = take(_BYO_SENT, "sent") or take_asset_suffixed_leg("sent")
+    amount = None if (received and sent) else take(_BYO_AMOUNT, "amount")
+    type_col = take(_BYO_TYPE, "type")
+    direction = take(_BYO_DIRECTION, "direction") if not type_col else None
+    received_asset = take(_BYO_RECEIVED_ASSET, "received_asset")
+    sent_asset = take(_BYO_SENT_ASSET, "sent_asset")
+    asset = take(_BYO_ASSET, "asset")
+    fee = take(_BYO_FEE, "fee")
+    fee_asset = take(_BYO_FEE_ASSET, "fee_asset")
+    fiat_currency = take(_BYO_FIAT_CURRENCY, "fiat_currency")
+    fiat_value = take(_BYO_FIAT_VALUE, "fiat_value")
+    fiat_rate = take(_BYO_FIAT_RATE, "fiat_rate")
+    note = take(_BYO_NOTE, "description")
+    txid = take(_BYO_TXID, "txid")
+    counterparty = take(_BYO_COUNTERPARTY, "counterparty")
+
+    plan = {
+        "date": date, "type": type_col, "direction": direction,
+        "received": received, "sent": sent, "amount": amount,
+        "received_asset": received_asset, "sent_asset": sent_asset,
+        "asset": asset, "fee": fee, "fee_asset": fee_asset,
+        "fiat_currency": fiat_currency, "fiat_value": fiat_value,
+        "fiat_rate": fiat_rate, "note": note, "txid": txid, "counterparty": counterparty,
+        "received_header_asset": _byo_asset_from_header(received),
+        "sent_header_asset": _byo_asset_from_header(sent),
+        "amount_header_asset": _byo_asset_from_header(amount),
+        "fee_header_asset": _byo_asset_from_header(fee),
+    }
+    confident = bool(date) and bool(received or sent or amount)
+    return {"plan": plan, "detected": detected, "confident": confident}
+
+
+def _ledger_plan_usable(plan):
+    return bool(plan) and bool(plan.get("date")) and bool(
+        plan.get("received") or plan.get("sent") or plan.get("amount")
+    )
+
+
+def _remap_byo_row_to_ledger(row, plan):
+    """Remap one arbitrary row into a #244-shaped ledger record (string cells).
+
+    Only routes raw cell values into the right ledger columns; all parsing and
+    validation stays in ``normalize_generic_ledger_record``.
+    """
+    def cell(col):
+        return str_or_none(row.get(col)) if col else None
+
+    def crypto(asset_code):
+        return _generic_ledger_is_crypto(_generic_ledger_asset(asset_code))
+
+    out = {"Date": cell(plan.get("date")) or ""}
+    asset = cell(plan.get("asset")) or plan.get("amount_header_asset") or "BTC"
+    received_asset = (
+        cell(plan.get("received_asset"))
+        or plan.get("received_header_asset")
+        or asset
+    )
+    sent_asset = (
+        cell(plan.get("sent_asset"))
+        or plan.get("sent_header_asset")
+        or asset
+    )
+    type_value = cell(plan.get("type"))
+
+    direction = None
+    btc_cell = None
+    has_cash_counterleg = False
+    both_amounts_present = False
+    if plan.get("received") or plan.get("sent"):
+        received_num = _byo_number(row.get(plan.get("received"))) if plan.get("received") else None
+        sent_num = _byo_number(row.get(plan.get("sent"))) if plan.get("sent") else None
+        received_present = received_num is not None and received_num != 0
+        sent_present = sent_num is not None and sent_num != 0
+        if received_present and not sent_present:
+            direction, btc_cell = "inbound", cell(plan["received"])
+        elif sent_present and not received_present:
+            direction, btc_cell = "outbound", cell(plan["sent"])
+        elif received_present and sent_present:
+            both_amounts_present = True
+            received_is_crypto = crypto(received_asset)
+            sent_is_crypto = crypto(sent_asset)
+            if received_is_crypto and not sent_is_crypto:
+                direction, btc_cell = "inbound", cell(plan["received"])
+                has_cash_counterleg = True
+            elif sent_is_crypto and not received_is_crypto:
+                direction, btc_cell = "outbound", cell(plan["sent"])
+                has_cash_counterleg = True
+    elif plan.get("amount"):
+        raw = cell(plan["amount"])
+        number = _byo_number(row.get(plan["amount"]))
+        if type_value:
+            direction = _byo_type_direction(type_value)
+            btc_cell = format(abs(number), "f") if (number is not None and direction) else raw
+        elif plan.get("direction"):
+            direction = _byo_direction_value(cell(plan["direction"]))
+            btc_cell = format(abs(number), "f") if number is not None else raw
+        elif number is not None:
+            direction = "outbound" if number < 0 else "inbound"
+            btc_cell = format(abs(number), "f")
+        else:
+            direction, btc_cell = "inbound", raw
+
+    if both_amounts_present:
+        out["Type"] = _byo_type_value(
+            type_value,
+            direction,
+            has_cash_counterleg=has_cash_counterleg,
+        )
+        if plan.get("received"):
+            out["Received Asset"], out["Received Amount"] = received_asset, cell(plan["received"])
+        if plan.get("sent"):
+            out["Sent Asset"], out["Sent Amount"] = sent_asset, cell(plan["sent"])
+        _byo_passthrough(out, row, plan)
+        fee_cell = cell(plan.get("fee"))
+        if fee_cell is not None:
+            out["Fee Amount"] = fee_cell
+            fee_asset = cell(plan.get("fee_asset")) or plan.get("fee_header_asset")
+            if fee_asset:
+                out["Fee Asset"] = fee_asset
+        return out
+
+    if plan.get("received") and direction == "inbound":
+        asset = received_asset
+    elif plan.get("sent") and direction == "outbound":
+        asset = sent_asset
+
+    out["Type"] = _byo_type_value(type_value, direction)
+
+    fiat_currency = cell(plan.get("fiat_currency"))
+    fiat_value = cell(plan.get("fiat_value"))
+    if fiat_value is None and plan.get("fiat_rate") and btc_cell is not None:
+        rate = _byo_number(row.get(plan["fiat_rate"]))
+        magnitude = _byo_number(btc_cell)
+        if rate is not None and magnitude is not None:
+            fiat_value = format(rate * magnitude, "f")
+
+    if direction == "outbound":
+        out["Sent Asset"], out["Sent Amount"] = asset, btc_cell
+        if fiat_value is not None:
+            if fiat_currency:
+                out["Received Asset"], out["Received Amount"] = fiat_currency, fiat_value
+            else:
+                out["Fiat Value"] = fiat_value
+    else:
+        out["Received Asset"], out["Received Amount"] = asset, btc_cell
+        if fiat_value is not None:
+            if fiat_currency:
+                out["Sent Asset"], out["Sent Amount"] = fiat_currency, fiat_value
+            else:
+                out["Fiat Value"] = fiat_value
+
+    fee_cell = cell(plan.get("fee"))
+    if fee_cell is not None:
+        out["Fee Amount"] = fee_cell
+        fee_asset = cell(plan.get("fee_asset")) or plan.get("fee_header_asset")
+        if fee_asset:
+            out["Fee Asset"] = fee_asset
+    _byo_passthrough(out, row, plan)
+    return out
+
+
+def _byo_passthrough(out, row, plan):
+    if plan.get("txid"):
+        out["Tx-ID"] = str_or_none(row.get(plan["txid"]))
+    if plan.get("note"):
+        out["Note"] = str_or_none(row.get(plan["note"]))
+    if plan.get("counterparty"):
+        out["Counterparty"] = str_or_none(row.get(plan["counterparty"]))
+
+
+def _read_ledger_rows(file_path):
+    if not os.path.exists(file_path):
+        raise AppError(
+            f"Import file not found: {file_path}",
+            code="not_found",
+            hint="Check the file path.",
+        )
+    extension = os.path.splitext(file_path)[1].lower()
+    if extension in {".xlsx", ".xlsm"}:
+        return _read_generic_ledger_xlsx(file_path)
+    return _read_generic_ledger_csv(file_path)
+
+
+def _ledger_source_records(rows, column_map=None):
+    """Return #244-shaped record dicts from raw rows.
+
+    Native template files (Type+Date header) use the existing path unchanged.
+    Other files are auto-detected (or use an explicit ``column_map`` plan) and
+    remapped onto the ledger shape, raising ``ledger_unrecognized`` when the
+    columns can't be recognized.
+    """
+    header_row = next((row for row in rows if any(str_or_none(cell) for cell in row)), None)
+    if column_map is None and header_row is not None and _is_native_ledger(header_row):
+        return _generic_ledger_rows_to_records(rows), None
+
+    header = [str(cell).strip() if cell is not None else "" for cell in (header_row or [])]
+    if column_map is not None:
+        plan, detected = column_map, None
+    else:
+        inferred = infer_ledger_columns(header)
+        plan, detected = inferred["plan"], inferred["detected"]
+    if not _ledger_plan_usable(plan):
+        raise AppError(
+            "Could not recognize the columns in this file.",
+            code="ledger_unrecognized",
+            hint="Download the import template (it already has the right columns), fill it in, and import that — or map the columns yourself.",
+            details={"headers": header},
+        )
+    header_index = rows.index(header_row)
+    records = []
+    for raw in rows[header_index + 1 :]:
+        if not any(str_or_none(cell) for cell in raw):
+            continue
+        row = {name: (raw[i] if i < len(raw) else "") for i, name in enumerate(header) if name}
+        records.append(_remap_byo_row_to_ledger(row, plan))
+    return records, detected
+
+
+def load_generic_ledger_records(file_path, column_map=None):
+    """Load a generic-ledger .xlsx or CSV/TSV file into common import records.
+
+    Template files import as before; arbitrary files are auto-detected and
+    remapped onto the ledger shape (``column_map`` overrides the guess).
+    """
+    rows = _read_ledger_rows(file_path)
+    records, _ = _ledger_source_records(rows, column_map)
+    normalized = [
+        normalize_generic_ledger_record(record, index=index)
+        for index, record in enumerate(records, start=1)
+    ]
+    if not normalized:
+        raise AppError(
+            "Ledger file has a header but no transaction rows to import",
+            code="validation",
+            hint="Add at least one transaction row below the header.",
+        )
+    return normalized
+
+
+def _generic_ledger_preview_row(record):
+    """A JSON-safe subset of a normalized ledger record for preview display."""
+    def _safe(value):
+        return format(value, "f") if isinstance(value, Decimal) else value
+
+    return {
+        "occurred_at": record.get("occurred_at"),
+        "direction": record.get("direction"),
+        "asset": record.get("asset"),
+        "amount": _safe(record.get("amount")),
+        "fee": _safe(record.get("fee")),
+        "kind": record.get("kind"),
+        "fiat_currency": record.get("fiat_currency"),
+        "fiat_value": _safe(record.get("fiat_value")),
+        "description": record.get("description"),
+    }
+
+
+def preview_generic_ledger_records(file_path, *, limit=200, column_map=None):
+    """Report what a generic-ledger file would import, without persisting.
+
+    Reuses the same reader + per-row normalizer as the real import, but catches
+    each row's validation error individually so the whole file previews at once
+    (the importer itself stops at the first bad row). Auto-detects arbitrary
+    (non-template) layouts; when the columns can't be recognized, returns
+    ``confident: False`` with the detected columns instead of raising, so the UI
+    can steer the user to the template or a manual mapping.
+    """
+    try:
+        bound = max(0, int(limit))
+    except (TypeError, ValueError):
+        bound = 200
+    rows = _read_ledger_rows(file_path)
+    header_row = next((row for row in rows if any(str_or_none(cell) for cell in row)), None)
+    detected = None
+    native = column_map is None and header_row is not None and _is_native_ledger(header_row)
+    if not native:
+        header = [str(cell).strip() if cell is not None else "" for cell in (header_row or [])]
+        if column_map is not None:
+            plan, detected = column_map, None
+        else:
+            inferred = infer_ledger_columns(header)
+            plan, detected = inferred["plan"], inferred["detected"]
+        if not _ledger_plan_usable(plan):
+            data_rows = [
+                raw for raw in rows[(rows.index(header_row) + 1 if header_row is not None else 0):]
+                if any(str_or_none(cell) for cell in raw)
+            ]
+            return {
+                "confident": False,
+                "detected": detected,
+                "headers": header,
+                "rows_read": len(data_rows),
+                "mapped": 0,
+                "errors": 0,
+                "problems": [],
+                "preview": [],
+                "truncated": False,
+            }
+    records, _ = _ledger_source_records(rows, column_map)
+    normalized = []
+    problems = []
+    for index, record in enumerate(records, start=1):
+        try:
+            normalized.append(normalize_generic_ledger_record(record, index=index))
+        except AppError as exc:
+            problems.append({"row": index, "message": str(exc)})
+    return {
+        "rows_read": len(records),
+        "mapped": len(normalized),
+        "errors": len(problems),
+        "problems": problems[:bound] if bound else problems,
+        "preview": [_generic_ledger_preview_row(record) for record in normalized[:bound]],
+        "truncated": bound > 0 and len(normalized) > bound,
+        "confident": True,
+        "detected": detected,
+    }
+
+
+def is_generic_ledger_format(input_format):
+    return input_format == GENERIC_LEDGER_FORMAT
+
+
+# Bitcoin-only example rows for the fill-in template. Never altcoins.
+_GENERIC_LEDGER_EXAMPLE_ROWS = (
+    ("Buy", "2026-01-15", "0.05000000", "BTC", "3000.00", "EUR", "3.50", "EUR", "", "Coinfinity", "First stack", ""),
+    ("Sell", "2026-02-10", "2200.00", "EUR", "0.03000000", "BTC", "1.00", "EUR", "", "Kraken", "Took some profit", ""),
+    ("Mining", "2026-03-10", "0.00050000", "BTC", "", "", "", "", "32.50", "Solo pool", "Block reward", ""),
+    ("Income", "2026-03-20", "250000", "SATS", "", "", "", "", "160.00", "Freelance client", "Invoice paid in sats", ""),
+    ("Withdrawal", "2026-04-01", "", "", "0.02000000", "BTC", "0.00002000", "BTC", "", "", "Moved to cold storage", ""),
+    ("Spend", "2026-04-15", "", "", "0.00100000", "BTC", "", "", "65.00", "Local merchant", "Coffee and groceries", ""),
+    ("Gift sent", "2026-05-01", "", "", "0.00100000", "BTC", "", "", "", "", "Birthday gift to a friend", ""),
+)
+
+_GENERIC_LEDGER_LEGEND = (
+    ("How to fill in this ledger", ""),
+    ("", ""),
+    ("One row per transaction. Each row has exactly one Bitcoin leg.", ""),
+    ("Type", "What happened. Pick from the dropdown / list below."),
+    ("Date", "Required. 2026-01-15, a full timestamp, or 15.01.2026."),
+    ("Received Amount / Asset", "What came in. For a Buy: the Bitcoin you bought."),
+    ("Sent Amount / Asset", "What went out. For a Buy: the fiat you paid."),
+    ("Fee Amount / Asset", "Optional. Blank Fee Asset means the fee is in Bitcoin."),
+    ("", "A fiat fee must match the row's fiat currency."),
+    ("Fiat Value", "Fair-market value in your book currency. Use it for"),
+    ("", "Income/Mining/Spend/Gift rows that have no cash leg."),
+    ("Counterparty", "Optional. Exchange, merchant, or person."),
+    ("Note", "Optional free text. Stored on the transaction."),
+    ("Tx-ID", "Optional but recommended — lets you re-import safely."),
+    ("", ""),
+    ("Amounts are in BTC (e.g. 0.05000000) unless the Asset is SATS.", ""),
+    ("A comma or dot decimal both work (0,05 = 0.05).", ""),
+    ("Fiat columns must be in your book's currency (a EUR book takes", ""),
+    ("EUR; a JPY book takes JPY). Mixed currencies are rejected.", ""),
+    ("Gift sent / Donation / Lost / Stolen are flagged for review,", ""),
+    ("not auto-sold at market value.", ""),
+    ("To move Bitcoin between your own wallets, import a Withdrawal", ""),
+    ("into the source wallet and a Deposit into the destination", ""),
+    ("wallet with the same Tx-ID.", ""),
+)
+
+
+def _generic_ledger_template_format(output_path):
+    return "csv" if str(output_path).lower().endswith(".csv") else "xlsx"
+
+
+def _write_generic_ledger_csv_template(output_path):
+    with open(output_path, "w", encoding="utf-8", newline="") as handle:
+        writer = csv.writer(handle)
+        writer.writerow(GENERIC_LEDGER_COLUMNS)
+        for row in _GENERIC_LEDGER_EXAMPLE_ROWS:
+            writer.writerow(row)
+
+
+def _write_generic_ledger_xlsx_template(output_path):
+    try:
+        import xlsxwriter
+    except ImportError as exc:  # pragma: no cover - XlsxWriter is a hard dependency
+        raise AppError(
+            "Writing .xlsx templates needs the XlsxWriter package",
+            code="dependency_missing",
+        ) from exc
+    workbook = xlsxwriter.Workbook(output_path, {"in_memory": True})
+    try:
+        header_fmt = workbook.add_format(
+            {"bold": True, "bg_color": "#F2A900", "font_color": "#1A1A1A", "border": 1}
+        )
+        example_fmt = workbook.add_format({"italic": True, "font_color": "#666666"})
+        title_fmt = workbook.add_format({"bold": True, "font_size": 13})
+        term_fmt = workbook.add_format({"bold": True})
+
+        sheet = workbook.add_worksheet("Transactions")
+        sheet.freeze_panes(1, 0)
+        for column_index, name in enumerate(GENERIC_LEDGER_COLUMNS):
+            sheet.write(0, column_index, name, header_fmt)
+        for row_index, row in enumerate(_GENERIC_LEDGER_EXAMPLE_ROWS, start=1):
+            for column_index, value in enumerate(row):
+                sheet.write(row_index, column_index, value, example_fmt)
+        sheet.set_column(0, 0, 14)
+        sheet.set_column(1, 1, 12)
+        sheet.set_column(2, 7, 14)
+        sheet.set_column(8, 8, 12)
+        sheet.set_column(9, 11, 22)
+        last_row = max(200, len(_GENERIC_LEDGER_EXAMPLE_ROWS) + 50)
+        sheet.data_validation(
+            1,
+            0,
+            last_row,
+            0,
+            {
+                "validate": "list",
+                "source": list(GENERIC_LEDGER_DISPLAY_TYPES),
+                "error_message": "Pick a Type from the list (see the Legend sheet).",
+            },
+        )
+
+        legend = workbook.add_worksheet("Legend")
+        legend.set_column(0, 0, 32)
+        legend.set_column(1, 1, 60)
+        legend.write(0, 0, "Generic ledger import", title_fmt)
+        for row_index, (term, definition) in enumerate(_GENERIC_LEDGER_LEGEND, start=2):
+            legend.write(row_index, 0, term, term_fmt if definition else None)
+            legend.write(row_index, 1, definition)
+        type_start = len(_GENERIC_LEDGER_LEGEND) + 4
+        legend.write(type_start, 0, "Transaction Types", title_fmt)
+        cursor = type_start + 1
+        for group_label, labels in GENERIC_LEDGER_TYPE_GROUPS:
+            legend.write(cursor, 0, group_label, term_fmt)
+            legend.write(cursor, 1, ", ".join(labels))
+            cursor += 1
+    finally:
+        workbook.close()
+
+
+def write_generic_ledger_template(output_path, fmt=None):
+    """Write the fill-in ledger template to `output_path` (.xlsx or .csv)."""
+    resolved = (fmt or _generic_ledger_template_format(output_path)).lower()
+    if resolved == "csv":
+        _write_generic_ledger_csv_template(output_path)
+    elif resolved in {"xlsx", "xlsm"}:
+        _write_generic_ledger_xlsx_template(output_path)
+        resolved = "xlsx"
+    else:
+        raise AppError(
+            f"Unsupported template format '{resolved}'",
+            code="validation",
+            hint="Use xlsx or csv.",
+        )
+    return {
+        "file": os.path.abspath(output_path),
+        "format": resolved,
+        "columns": list(GENERIC_LEDGER_COLUMNS),
+        "types": list(GENERIC_LEDGER_DISPLAY_TYPES),
+    }
 
 
 # -- BIP329 ------------------------------------------------------------------

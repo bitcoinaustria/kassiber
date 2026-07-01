@@ -16,15 +16,15 @@
     "outgoing": "Ausgehend",
     "transfer": "Interne Übertragung",
     "swap": "Swap",
-    "layerTransition": "Layer-Übergang"
+    "layerTransition": "Bitcoin-Swap"
   },
   "detailHeader": {
     "confirmationsTitle": "{{count}} on-chain-Bestätigungen",
     "paired": "Verknüpft",
     "pairOut": "Quelle",
     "pairIn": "Ziel",
-    "valueThen": "damals",
-    "valueNow": "jetzt",
+    "valueThen": "FMV damals",
+    "valueNow": "Marktwert jetzt",
     "unassignedWallet": "Nicht zugewiesene Wallet",
     "openExplorer": "Explorer öffnen",
     "close": "Transaktionsdetails schließen"
@@ -49,7 +49,7 @@
     "outgoing": "Senden",
     "transfer": "Interne Übertragung",
     "swap": "Swap",
-    "layerTransition": "Layer-Übergang"
+    "layerTransition": "Bitcoin-Swap"
   },
   "classification": {
     "unlabeled": "Ohne Label",
@@ -120,7 +120,7 @@
       "short": "Eigene Wallet-Übertragung"
     },
     "neuSwap": {
-      "label": "§27b Tausch zum Buchwert / Layer-Übergang",
+      "label": "§27b Bitcoin-Swap zum Buchwert",
       "short": "Neu Tausch"
     },
     "altSpekulation": {
@@ -178,6 +178,8 @@
     "3months": "3 Monate",
     "30days": "30 Tage",
     "5years": "5 Jahre",
+    "10years": "10 Jahre",
+    "15years": "15 Jahre",
     "all": "Gesamt"
   },
   "chartMetric": {
@@ -194,13 +196,6 @@
     "transfers": "Übertragungen",
     "swaps": "Swaps"
   },
-  "dateFilter": {
-    "all": "Alle",
-    "today": "Heute",
-    "yesterday": "Gestern",
-    "last7days": "Letzte 7 Tage",
-    "last30days": "Letzte 30 Tage"
-  },
   "quickFilter": {
     "externalFlow": "Externer Fluss",
     "reviewQueue": "Prüfwarteschlange",
@@ -215,9 +210,16 @@
     "flowChart": "{{bucket}} · {{segment}} · {{mode}}"
   },
   "dashboard": {
-    "refreshBook": "Buch aktualisieren",
-    "refreshing": "Wird aktualisiert…",
-    "refresh": "Aktualisieren"
+    "export": {
+      "label": "Exportieren",
+      "xlsx": "Excel-Arbeitsmappe (.xlsx)",
+      "csv": "CSV-Datei (.csv)",
+      "saveTitle": "Transaktionen-Export speichern",
+      "done": "Transaktionen exportiert",
+      "savedTo": "Gespeichert unter {{name}}",
+      "rows": "{{count}} Transaktionen exportiert",
+      "failed": "Transaktionen-Export fehlgeschlagen"
+    }
   },
   "workbench": {
     "metric": {
@@ -283,6 +285,7 @@
       "missingExplorerLink": "Fehlender Explorer-Link",
       "missingPrice": "Fehlender Preis",
       "failedImport": "Fehlgeschlagener Import",
+      "pairingCandidates": "Paarungskandidaten",
       "swapCandidates": "Swap-Kandidaten",
       "none": "Keine Datenqualitätsprobleme"
     }
@@ -300,9 +303,18 @@
       "network": "Netzwerk",
       "status": "Status"
     },
+    "sort": {
+      "dateInactive": "Nach Transaktionsdatum sortieren",
+      "dateDescending": "Nach Transaktionsdatum sortiert, neueste zuerst",
+      "dateAscending": "Nach Transaktionsdatum sortiert, älteste zuerst",
+      "amountInactive": "Nach Betrag sortieren",
+      "amountDescending": "Nach Betrag sortiert, absteigend",
+      "amountAscending": "Nach Betrag sortiert, aufsteigend"
+    },
     "filter": {
-      "dateAria": "Nach Datum filtern",
-      "datePlaceholder": "Datum",
+      "menuAria": "Transaktionsfilter öffnen",
+      "menuTrigger": "Filter",
+      "menuLabel": "Transaktionsfilter",
       "statusAria": "Nach Status filtern",
       "statusTrigger": "Status",
       "statusLabel": "Nach Status filtern",
@@ -318,7 +330,10 @@
       "walletAria": "Nach Wallet oder Quelle filtern",
       "walletTrigger": "Wallet",
       "walletLabel": "Nach Wallet / Quelle filtern",
-      "allWallets": "Alle Wallets"
+      "allWallets": "Alle Wallets",
+      "feesTrigger": "Gebühren",
+      "feesLabel": "Nach Gebühren filtern",
+      "allFees": "Alle Gebühren"
     },
     "chip": {
       "clearChart": "Diagrammfilter {{label}} entfernen",
@@ -326,7 +341,6 @@
       "clearQuick": "Filter {{label}} entfernen",
       "clearBreakdown": "Filter {{label}} entfernen",
       "clearStatus": "Filter {{label}} entfernen",
-      "clearDate": "Filter {{label}} entfernen",
       "clearFlow": "Filter {{label}} entfernen",
       "clearPayment": "Filter {{label}} entfernen",
       "clearWithFees": "Filter „Mit Gebühren“ entfernen"
@@ -345,24 +359,42 @@
       "excluded": "Ausgenommen",
       "taxable": "Steuerpflichtig",
       "notTaxable": "Nicht steuerpflichtig",
+      "loanNonEvent": "Darlehen ohne Steuerereignis",
       "openExplorerTitle": "{{txid}} im {{explorer}} öffnen",
       "actionsAria": "Aktionen für {{txid}} öffnen",
       "viewDetails": "Details anzeigen",
       "classify": "Klassifizieren",
       "copyId": "ID kopieren",
       "exclude": "Transaktion ausnehmen",
-      "voidConfirm": "Diese Transaktion stornieren? Das kann nicht rückgängig gemacht werden."
+      "voidConfirm": "Diese Transaktion stornieren? Das kann nicht rückgängig gemacht werden.",
+      "excludeConfirm": "Diese Transaktion aus Journals und Berichten ausnehmen? Du kannst sie im Klassifizieren-Tab wieder einbeziehen.",
+      "collateral": {
+        "collateralBadge": "BTC-Sicherheit gestellt",
+        "returnedBadge": "BTC-Sicherheit zurück",
+        "principalReceivedBadge": "BTC-Darlehen erhalten",
+        "principalRepaidBadge": "BTC-Darlehen getilgt",
+        "collateralAccounting": "BTC-Sicherheit für Fiat-Darlehen gestellt",
+        "returnedAccounting": "BTC-Sicherheit zurückgegeben",
+        "principalReceivedAccounting": "BTC-Darlehenskapital erhalten",
+        "principalRepaidAccounting": "BTC-Darlehenskapital getilgt",
+        "markCollateral": "Als BTC-Sicherheit für Fiat-Darlehen markieren",
+        "markReturned": "Als zurückgegebene BTC-Sicherheit markieren",
+        "markPrincipalReceived": "Als erhaltenes BTC-Darlehenskapital markieren",
+        "markPrincipalRepaid": "Als getilgtes BTC-Darlehenskapital markieren",
+        "changePrincipalReceived": "Zu erhaltenem BTC-Darlehenskapital ändern",
+        "changePrincipalRepaid": "Zu getilgtem BTC-Darlehenskapital ändern",
+        "unmark": "Darlehensmarkierung entfernen"
+      }
     },
-    "pagination": {
-      "rowsPerPage": "Zeilen pro Seite:",
-      "refreshing": "Wird aktualisiert…",
-      "rangeOf": "von {{total}}",
+    "virtual": {
+      "refreshing": "Transaktionen werden aktualisiert…",
+      "complete": "{{count}} Transaktionen werden angezeigt",
+      "loaded": "{{count}} geladene Transaktionen werden angezeigt",
+      "moreHint": "Weitere Transaktionen werden beim Scrollen automatisch geladen.",
+      "loadingMore": "Weitere Transaktionen werden geladen…",
       "loadMore": "Mehr laden",
-      "loading": "Wird geladen…",
-      "firstPage": "Zur ersten Seite",
-      "previousPage": "Zur vorherigen Seite",
-      "nextPage": "Zur nächsten Seite",
-      "lastPage": "Zur letzten Seite"
+      "moreAvailable": "Weitere Transaktionen verfügbar",
+      "scrollRegion": "Scrollbare Transaktionstabelle"
     }
   },
   "notification": {
@@ -392,6 +424,30 @@
     "pairRemoved": {
       "title": "Paarung entfernt",
       "body": "Diese Bewegung ist nicht mehr mit dem anderen Leg verknüpft."
+    },
+    "loanMarked": {
+      "title": "Darlehensmarkierung gespeichert",
+      "body": "Verarbeite die Journale neu, damit diese Behandlung in Berichten gilt."
+    },
+    "loanUnmarked": {
+      "title": "Darlehensmarkierung entfernt",
+      "body": "Verarbeite die Journale neu, um die normale steuerliche Behandlung wiederherzustellen."
+    },
+    "loanLinked": {
+      "title": "Darlehenslegs verknüpft",
+      "body": "Diese markierten Darlehenstransaktionen teilen jetzt eine Darlehens-ID."
+    },
+    "loanLinkFailed": {
+      "title": "Darlehenslegs konnten nicht verknüpft werden",
+      "body": "Kassiber konnte diese Darlehensmarkierungen nicht verknüpfen."
+    },
+    "loanMarkFailed": {
+      "title": "Darlehensmarkierung konnte nicht gespeichert werden",
+      "body": "Kassiber konnte die Darlehensmarkierung nicht speichern."
+    },
+    "transactionExcluded": {
+      "title": "Transaktion ausgenommen",
+      "body": "Verarbeite Journals neu, bevor du Berichten wieder vertraust."
     },
     "evidenceReused": {
       "title": "Beleg wiederverwendet",
@@ -514,6 +570,7 @@
     "fee": "Gebühr",
     "feeHint": "Netzwerk- oder Abwicklungsgebühr für diese Transaktion.",
     "feeNone": "Keine",
+    "senderPaidNetworkFee": "Netzwerkgebühr {{value}} (vom Sender bezahlt)",
     "sourceRecord": "Quelldatensatz",
     "type": "Typ",
     "network": "Netzwerk",
@@ -527,8 +584,94 @@
     "included": "Einbezogen",
     "includedYes": "Einbezogen",
     "includedNo": "Ausgenommen",
+    "technical": "Technischer Graph",
+    "inputCount": "Inputs",
+    "outputCount": "Outputs",
+    "networkFee": "Netzwerkgebühr",
+    "feeRate": "Gebührensatz",
+    "version": "Version",
+    "locktime": "Locktime",
+    "size": "Größe",
+    "vsize": "Virtuelle Größe",
+    "weight": "Weight",
+    "unknown": "Unbekannt",
     "note": "Notiz",
     "notePlaceholder": "Quittung, Rechnung, Gegenpartei oder Prüfkontext"
+  },
+  "graph": {
+    "title": "Transaktionsgraph",
+    "sectionTitle": "Transaktionsfluss",
+    "fullSupport": "Bewerteter Bitcoin-Input/Output-Graph",
+    "partialSupport": "Referenzgraph: Transaktionsreferenzen sind verfügbar; einige Beträge fehlen in der lokalen Quelle",
+    "inputPrevoutSupport": "Referenzgraph: Outputs sind bewertet; Input-Beträge brauchen die ausgegebenen vorherigen Outputs",
+    "confidentialSupport": "Referenzgraph: Öffentliche Referenzen sind verfügbar; vertrauliche Beträge bleiben verborgen",
+    "expand": "Vergrößern",
+    "expandedTitle": "Erweiterter Transaktionsgraph",
+    "loading": "Graph wird geladen",
+    "loadingBody": "Lokaler Transaktionsgraph wird gelesen.",
+    "error": "Graph nicht verfügbar",
+    "unsupported": "Nicht unterstützte Graphform",
+    "graphless": "Kein Graph für diese Quelle",
+    "liquidGraphless": "Liquid-Graph nicht lokal gespeichert",
+    "graphlessBody": "Diese Zeile wurde ohne bewertete Bitcoin-vin/vout-Daten importiert; Kassiber kann die Buchungszeile, aber kein Flussdiagramm anzeigen.",
+    "liquidBody": "Kassiber hat lokal nur die importierte Liquid-Zeile. Die öffentlichen Inputs und Outputs können im Liquid Network geprüft werden; vertrauliche Beträge bleiben möglicherweise verborgen.",
+    "openLiquidNetwork": "Liquid Network öffnen",
+    "inputCount": "Inputs",
+    "outputCount": "Outputs",
+    "feeRate": "Gebührensatz",
+    "size": "Größe",
+    "swapRouteTitle": "Verknüpfte Swap-Route",
+    "swapRouteOut": "Ausgehender Teil",
+    "swapRouteConsolidation": "Konsolidierungs-Teil",
+    "swapRouteMiddle": "Swap-Gegenpartei",
+    "swapRouteIn": "Eingehender Teil",
+    "swapRoutePair": "Geprüftes Paar",
+    "swapRouteFee": "Gebühr {{fee}}",
+    "swapRouteSelected": "Ausgewählt",
+    "swapRouteAsset": "Asset",
+    "swapRouteUnknownLeg": "Wallet",
+    "coinjoinRouteTitle": "Coinjoin-Route",
+    "coinjoinRouteMiddle": "Coinjoin",
+    "coinjoinRoutePair": "Geprüfter Coinjoin-Link",
+    "transferRouteTitle": "Manuelle Transfer-Route",
+    "transferRouteMiddle": "Eigentumstransfer",
+    "transferRoutePair": "Geprüfter Eigentums-Link",
+    "pairRouteTitle": "Geprüfte Paar-Route",
+    "pairRouteMiddle": "Geprüftes Paar",
+    "pairRoutePair": "Manueller Link",
+    "hidden": "Verborgen",
+    "overflowMore": "+{{count}} weitere",
+    "confidentialAmount": "Vertraulicher Betrag",
+    "hiddenReferences": "Graph-Referenzen verborgen",
+    "availableReferences": "Graph-Referenzen sind über jeden Strang verfügbar",
+    "diagramAria": "Transaktionsflussdiagramm",
+    "copyInput": "Input-Outpoint kopieren",
+    "copyOutput": "Output-Referenz kopieren",
+    "copyFee": "Gebührenreferenz kopieren",
+    "legAria": "{{role}}-Graph-Strang",
+    "roles": {
+      "input": "Input",
+      "output": "Output",
+      "change": "Wechselgeld",
+      "externalRecipient": "Externer Empfänger",
+      "incomingPayment": "Eingehende Zahlung",
+      "ownedDestination": "Eigene Ziel-Wallet",
+      "opReturn": "OP_RETURN / keine Adresse",
+      "fee": "Gebühr",
+      "overflow": "Weitere",
+      "ambiguousOwnedOutput": "Mehrdeutig eigener Output",
+      "leg": "Strang"
+    },
+    "ownership": {
+      "networkFee": "Netzwerkgebühr",
+      "internalChange": "Interner Wechselgeld-Output",
+      "internalWallet": "Interner Wallet-Strang",
+      "externalWallet": "Externer Wallet-Strang",
+      "ambiguousWallet": "Mehrdeutige Wallet-Zugehörigkeit",
+      "unspendable": "Nicht ausgebbarer Output",
+      "aggregated": "Zusammengefasste Stränge",
+      "unknown": "Zugehörigkeit unbekannt"
+    }
   },
   "commercial": {
     "title": "Kommerzielle Herkunft",
@@ -598,14 +741,25 @@
     "taxableHint": "In die Journalverarbeitung einbezogen.",
     "excluded": "Ausgenommen",
     "excludedHint": "Von der Journalverarbeitung ausgenommen.",
-    "projectedEffect": "Voraussichtliche Auswirkung",
+    "projectedEffect": "Steuerauswirkung",
+    "basisAdded": "Basis hinzugefügt",
+    "basisTreatment": "Basisbehandlung",
+    "basisCarriedForward": "Wird fortgeführt",
+    "journalPending": "Journale berechnen",
+    "noDisposal": "Keine Veräußerung",
+    "noRealization": "Keine Realisierung",
+    "notRealized": "Nicht realisiert",
     "costBasis": "Anschaffungskosten",
-    "costBasisHint": "Anschaffungswert, der von der Steuer-Engine verwendet wird.",
+    "costBasisHint": "Lot-Basis aus verarbeiteten Journaleinträgen. Anschaffungszeilen nutzen den zum Zeitpunkt erfassten fairen Marktwert.",
+    "basisBlockerTitle": "Anschaffungslot fehlt",
+    "basisBlockerBody": "Kassiber kann diese Veräußerung nicht mit genug früher angeschafftem {{asset}} abgleichen. Synchronisiere oder importiere die finanzierende Anschaffung oder nimm diese Zeile aus, falls sie nicht berichtspflichtig ist. Danach Journale verarbeiten.",
     "proceeds": "Veräußerungserlös",
-    "proceedsHint": "Veräußerungswert, der bei ausgehender Tx angewendet wird.",
+    "proceedsHint": "Veräußerungserlös aus verarbeiteten Journaleinträgen.",
+    "incomeRecognized": "Erfasste Einnahme",
+    "taxableIncome": "Steuerpflichtige Einnahme",
     "gainLoss": "Realisierter Gewinn / Verlust",
     "gainLossPending": "Journallauf ausstehend",
-    "gainLossHint": "Wird von RP2 berechnet, sobald die Journale verarbeitet sind.",
+    "gainLossHint": "Realisierter Gewinn/Verlust aus RP2 nach verarbeiteten Journalen.",
     "priceEvidence": "Preisbeleg",
     "sourceMissing": "Quelle fehlt",
     "narrative": {
@@ -650,6 +804,15 @@
     "unknown": "Unbekannt",
     "noPairedMovement": "Keine gepaarte Bewegung",
     "noPairedMovementBody": "Wenn diese Tx das andere Leg einer Übertragung, eines Swaps oder eines Peg-in/out ist, erscheint das passende Leg hier. Du kannst auch eine manuelle Paarung aus der Swap-Kandidaten-Warteschlange erstellen.",
+    "openPairingReview": "Paarungsprüfung öffnen",
+    "loanLegs": "Darlehenslegs",
+    "loanId": "Darlehen {{id}}",
+    "loanThisLeg": "Dieses Leg",
+    "loanLinked": "Verknüpft",
+    "loanLinkCandidates": "Markierte Darlehenslegs",
+    "loanLink": "Verknüpfen",
+    "loanLinking": "Wird verknüpft…",
+    "noLoanLinks": "Kein verknüpftes Darlehensleg.",
     "journalEntries": "Journaleinträge",
     "noJournalEntries": "Noch keine Journaleinträge für diese Zeile. Verarbeite die Journale nach Änderungen an Metadaten oder Bewertung."
   },
@@ -737,6 +900,9 @@
       "missingOrUnderReview": "Die Preisquelle ist als fehlend oder in Prüfung markiert. Speichere eine geprüfte Quelle, bevor du die Journale ausführst.",
       "readinessHint": "Das ist eine Warnung zur Preisbereitschaft aus der Transaktionszeile. Es ist keine aktive Journal-Quarantäne, sofern der Daemon keinen Quarantänegrund zurückgibt.",
       "viewPricing": "Bewertung ansehen",
+      "viewDetails": "Details ansehen",
+      "viewLinked": "Verknüpfungen ansehen",
+      "viewBasisContext": "Kostenbasis ergänzen",
       "openPricing": "Bewertung öffnen",
       "exclude": "Ausnehmen"
     },
@@ -765,6 +931,9 @@
       "excludedFromReports": "Aus Steuerberichten ausgenommen",
       "taxLabel": "Steuer: {{label}}",
       "resolveQuarantine": "Quarantäne beheben, um in Berichten einbezogen zu werden",
+      "resolveSyncMismatch": "Wallet-Outputs neu synchronisieren oder prüfen",
+      "restoreBasis": "Kostenbasis ergänzen",
+      "reviewPairing": "Gepaarte Bewegung prüfen",
       "pricingIncomplete": "Bewertung unvollständig",
       "noQuarantine": "Keine Quarantäne"
     },

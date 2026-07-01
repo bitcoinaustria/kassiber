@@ -15,7 +15,15 @@ import {
   type TransactionStatus,
 } from "@/components/transactions";
 
-type PeriodKey = "ytd" | "30days" | "3months" | "1year" | "5years" | "all";
+type PeriodKey =
+  | "ytd"
+  | "30days"
+  | "3months"
+  | "1year"
+  | "5years"
+  | "10years"
+  | "15years"
+  | "all";
 type FlowChartMetric = "amount" | "count";
 type FlowChartMode = "external" | "all";
 type FlowChartSegment = "incoming" | "outgoing" | "transfers" | "swaps";
@@ -95,10 +103,19 @@ export type SwapCandidateReference = {
   out_id: string;
   in_asset?: string;
   out_asset?: string;
+  default_kind?: string;
+  candidate_type?: "transfer" | "swap";
   conflict_set_id?: string;
   /** Matcher-stamped cluster size over the full candidate set. */
   conflict_size?: number;
 };
+
+const BITCOIN_LAYER_TRANSITION_PAIR_KINDS = new Set([
+  "peg-in",
+  "peg-out",
+  "submarine-swap",
+  "swap-refund",
+]);
 
 const flowColors: Record<TransactionFlow, string> = {
   incoming: "oklch(0.56 0.16 150)",
@@ -196,7 +213,7 @@ function toDashboardTransaction(
     pricingFetchedAt: tx.pricingFetchedAt,
     pricingGranularity: tx.pricingGranularity,
     pricingMethod: tx.pricingMethod,
-    reviewStatus: tx.reviewStatus as Transaction["reviewStatus"],
+    reviewStatus: normalizeTransactionReviewStatus(tx.reviewStatus, status),
     taxable: tx.taxable,
     atRegime: tx.atRegime as Transaction["atRegime"],
     atCategory: tx.atCategory as Transaction["atCategory"],
@@ -224,6 +241,26 @@ function toDashboardTransaction(
   };
 }
 
+function normalizeTransactionReviewStatus(
+  raw: string | null | undefined,
+  fallback: TransactionStatus,
+): TransactionStatus {
+  const normalized = raw?.trim().toLowerCase().replaceAll("-", "_");
+  if (!normalized) return fallback;
+  if (normalized === "completed" || normalized === "complete") return "completed";
+  if (normalized === "pending") return "pending";
+  if (normalized === "failed" || normalized === "error") return "failed";
+  if (
+    normalized === "review" ||
+    normalized === "needs_review" ||
+    normalized === "blocked" ||
+    normalized === "quarantined"
+  ) {
+    return "review";
+  }
+  return fallback;
+}
+
 function dashboardRecordsFromTxs(txs: Tx[], t?: Translator) {
   return txs.map((tx, index) => toDashboardTransaction(tx, index, t));
 }
@@ -236,7 +273,7 @@ const flowLabelStableEnglish: Record<TransactionFlow, string> = {
   outgoing: "outgoing",
   transfer: "internal transfer",
   swap: "swap",
-  "layer-transition": "layer transition",
+  "layer-transition": "Bitcoin swap",
 };
 
 function isRedundantTransactionLabel(label: string, flow: TransactionFlow) {
@@ -453,6 +490,8 @@ const periodLabels = {
   "3months": "transactions:period.3months",
   "30days": "transactions:period.30days",
   "5years": "transactions:period.5years",
+  "10years": "transactions:period.10years",
+  "15years": "transactions:period.15years",
   all: "transactions:period.all",
 } as const satisfies Record<PeriodKey, string>;
 
@@ -495,8 +534,27 @@ const periodKeys: PeriodKey[] = [
   "ytd",
   "1year",
   "5years",
+  "10years",
+  "15years",
   "all",
 ];
+
+const basePeriodKeys: PeriodKey[] = ["30days", "3months", "ytd", "1year"];
+const longHistoryPeriodKeys = [
+  { key: "5years", years: 5 },
+  { key: "10years", years: 10 },
+  { key: "15years", years: 15 },
+] as const satisfies ReadonlyArray<{ key: PeriodKey; years: number }>;
+const MS_PER_YEAR = 365.2425 * 24 * 60 * 60 * 1000;
+
+function isLongHistoryPeriod(period: PeriodKey) {
+  return (
+    period === "5years" ||
+    period === "10years" ||
+    period === "15years" ||
+    period === "all"
+  );
+}
 
 function normalizePeriodParam(value: string | null): PeriodKey | null {
   if (!value) return null;
@@ -531,6 +589,24 @@ function normalizePeriodParam(value: string | null): PeriodKey | null {
   ) {
     return "5years";
   }
+  if (
+    normalized === "10years" ||
+    normalized === "10year" ||
+    normalized === "10yrs" ||
+    normalized === "10yr" ||
+    normalized === "10y"
+  ) {
+    return "10years";
+  }
+  if (
+    normalized === "15years" ||
+    normalized === "15year" ||
+    normalized === "15yrs" ||
+    normalized === "15yr" ||
+    normalized === "15y"
+  ) {
+    return "15years";
+  }
   if (normalized === "all" || normalized === "max") {
     return "all";
   }
@@ -548,6 +624,8 @@ function periodLimit(period: PeriodKey) {
   if (period === "3months") return 18;
   if (period === "ytd") return 40;
   if (period === "5years") return 60;
+  if (period === "10years") return 90;
+  if (period === "15years") return 120;
   if (period === "all") return Number.MAX_SAFE_INTEGER;
   return 30;
 }
@@ -583,6 +661,29 @@ function recordsForPeriod(records: Transaction[], period: PeriodKey) {
     .map((entry) => entry.record);
 }
 
+function availablePeriodKeysForRecords(records: Transaction[]): PeriodKey[] {
+  const dated = records
+    .map((record) => parseTransactionDate(record.date))
+    .filter((date): date is Date => date !== null);
+  if (!dated.length) return [...basePeriodKeys, "all"];
+
+  const end = periodAnchorDate(dated);
+  const earliest = dated.reduce((min, date) => (date < min ? date : min), dated[0]);
+  const historyYears = Math.max(
+    0,
+    (startOfLocalDay(end).getTime() - startOfLocalDay(earliest).getTime()) /
+      MS_PER_YEAR,
+  );
+
+  return [
+    ...basePeriodKeys,
+    ...longHistoryPeriodKeys
+      .filter((period) => historyYears >= period.years)
+      .map((period) => period.key),
+    "all",
+  ];
+}
+
 function parseTransactionDate(value: string) {
   const normalized = value.includes("T") ? value : value.replace(" ", "T");
   const parsed = new Date(normalized);
@@ -613,6 +714,10 @@ function periodStartDate(end: Date, period: PeriodKey, earliest?: Date) {
     start.setHours(0, 0, 0, 0);
   } else if (period === "5years") {
     start.setFullYear(start.getFullYear() - 5);
+  } else if (period === "10years") {
+    start.setFullYear(start.getFullYear() - 10);
+  } else if (period === "15years") {
+    start.setFullYear(start.getFullYear() - 15);
   } else if (period === "all" && earliest) {
     return startOfLocalDay(earliest);
   } else {
@@ -656,7 +761,7 @@ function addBucketStep(date: Date, period: PeriodKey) {
     next.setDate(next.getDate() + 1);
   } else if (period === "3months") {
     next.setDate(next.getDate() + 7);
-  } else if (period === "5years" || period === "all") {
+  } else if (isLongHistoryPeriod(period)) {
     next.setMonth(next.getMonth() + 3);
   } else {
     next.setMonth(next.getMonth() + 1);
@@ -681,7 +786,7 @@ function bucketTransactionDate(date: Date, period: PeriodKey): FlowBucket {
       })}`,
     };
   }
-  if (period === "5years" || period === "all") {
+  if (isLongHistoryPeriod(period)) {
     const quarterStart = new Date(date);
     quarterStart.setMonth(Math.floor(date.getMonth() / 3) * 3, 1);
     quarterStart.setHours(0, 0, 0, 0);
@@ -712,7 +817,7 @@ function buildEmptyFlowBuckets(
   const earliest = dated.reduce((min, date) => (date < min ? date : min), dated[0]);
   let cursor = periodStartDate(end, period, earliest);
   if (period === "3months") cursor = startOfIsoWeek(cursor);
-  if (period === "5years" || period === "all") {
+  if (isLongHistoryPeriod(period)) {
     cursor.setMonth(Math.floor(cursor.getMonth() / 3) * 3, 1);
     cursor.setHours(0, 0, 0, 0);
   }
@@ -736,7 +841,7 @@ function buildEmptyFlowBuckets(
 function flowBucketLabel(period: PeriodKey) {
   if (period === "30days") return "day";
   if (period === "3months") return "week";
-  if (period === "5years" || period === "all") return "quarter";
+  if (isLongHistoryPeriod(period)) return "quarter";
   return "month";
 }
 
@@ -753,10 +858,25 @@ function buildSwapCandidates(
   records: Transaction[],
   candidateRefs?: SwapCandidateReference[],
 ): SwapCandidate[] {
+  return buildPairingCandidates(records, candidateRefs, "swap");
+}
+
+function buildTransferCandidates(
+  records: Transaction[],
+  candidateRefs?: SwapCandidateReference[],
+): SwapCandidate[] {
+  return buildPairingCandidates(records, candidateRefs, "transfer");
+}
+
+function buildPairingCandidates(
+  records: Transaction[],
+  candidateRefs: SwapCandidateReference[] | undefined,
+  reviewType: "transfer" | "swap",
+): SwapCandidate[] {
   if (candidateRefs) {
     const recordsById = new Map(records.map((txn) => [txn.id, txn]));
     return nonConflictedCandidateRefs(candidateRefs)
-      .filter(isCrossAssetCandidateRef)
+      .filter((candidate) => candidateReferenceReviewType(candidate) === reviewType)
       .flatMap((candidate) => {
         const input = recordsById.get(candidate.in_id);
         const out = recordsById.get(candidate.out_id);
@@ -774,6 +894,8 @@ function buildSwapCandidates(
         ];
       });
   }
+
+  if (reviewType === "transfer") return [];
 
   const inbound = records
     .filter((txn) => transactionFlow(txn) === "incoming")
@@ -830,9 +952,24 @@ function buildSwapCandidates(
   return candidates;
 }
 
-function isCrossAssetCandidateRef(candidate: SwapCandidateReference): boolean {
-  if (!candidate.in_asset || !candidate.out_asset) return true;
-  return candidate.in_asset.toUpperCase() !== candidate.out_asset.toUpperCase();
+function candidateReferenceReviewType(
+  candidate: SwapCandidateReference,
+): "transfer" | "swap" {
+  if (candidate.candidate_type === "transfer" || candidate.candidate_type === "swap") {
+    return candidate.candidate_type;
+  }
+  if (
+    candidate.default_kind &&
+    BITCOIN_LAYER_TRANSITION_PAIR_KINDS.has(candidate.default_kind)
+  ) {
+    return "transfer";
+  }
+  if (candidate.in_asset && candidate.out_asset) {
+    return candidate.in_asset.toUpperCase() === candidate.out_asset.toUpperCase()
+      ? "transfer"
+      : "swap";
+  }
+  return "swap";
 }
 
 function nonConflictedCandidateRefs(
@@ -865,7 +1002,7 @@ function buildFlowChartRows(
   records: Transaction[],
   period: PeriodKey,
   currency: Currency,
-  candidateIds = new Set<string>(),
+  candidateFlowOverrides = new Map<string, TransactionFlow>(),
   metric: FlowChartMetric = "amount",
 ): FlowChartPoint[] {
   const grouped = buildEmptyFlowBuckets(period, records);
@@ -888,7 +1025,7 @@ function buildFlowChartRows(
       };
     const value =
       metric === "count" ? 1 : currency === "btc" ? transactionBtc(txn) : (txn.amount ?? 0);
-    const flow = candidateIds.has(txn.id) ? "swap" : transactionFlow(txn);
+    const flow = candidateFlowOverrides.get(txn.id) ?? transactionFlow(txn);
     const segment = flowChartSegmentForFlow(flow);
     if (flow === "incoming") row.incoming += value;
     if (flow === "outgoing") row.outgoing -= value;
@@ -1026,34 +1163,39 @@ function flowAxisDomain(
   return [-maxAbs * 1.12, maxAbs * 1.12];
 }
 
-// `label` holds an i18n key (resolved with t() at the call site); `value`
-// stays a stable lookup/URL token.
-const dateFilterOptions = [
-  { label: "transactions:dateFilter.all", value: "all" },
-  { label: "transactions:dateFilter.today", value: "today" },
-  { label: "transactions:dateFilter.yesterday", value: "yesterday" },
-  { label: "transactions:dateFilter.last7days", value: "7days" },
-  { label: "transactions:dateFilter.last30days", value: "30days" },
-];
-
 type FeeFilter = "all" | "with-fees";
 
 const filterChipClassName =
   "inline-flex h-5 cursor-pointer items-center gap-1 rounded-md bg-gray-50 px-2 text-[10px] font-medium text-gray-600 ring-1 ring-inset ring-gray-500/10 sm:h-6 sm:text-xs dark:bg-gray-800/50 dark:text-gray-400 dark:ring-gray-400/20";
 
-const detailTabValues = ["details", "classify", "pricing", "tax", "ledger"] as const;
+const detailTabValues = [
+  "details",
+  "classify",
+  "pricing",
+  "tax",
+  "linked",
+  "ledger",
+] as const;
 
-function readTransactionDetailParams() {
-  if (typeof window === "undefined") return { transactionId: null, tab: "details" };
+function readTransactionDetailParams(): {
+  transactionId: string | null;
+  tab: string;
+  rowId?: string | null;
+} {
+  if (typeof window === "undefined") {
+    return { transactionId: null, tab: "details" };
+  }
   const params = new URLSearchParams(window.location.search);
   const tab = params.get("tab");
-  return {
+  const rowId = params.get("qrow");
+  const target = {
     transactionId:
       params.get("tx") ?? params.get("transaction") ?? params.get("transactionId"),
     tab: detailTabValues.includes(tab as (typeof detailTabValues)[number])
       ? tab ?? "details"
       : "details",
   };
+  return rowId ? { ...target, rowId } : target;
 }
 
 const quickFilterValues: TableQuickFilter[] = [
@@ -1088,6 +1230,7 @@ function readTransactionScopeParams(): {
 function updateTransactionDetailParams(
   transactionId: string | null,
   tab = "details",
+  rowId?: string | null,
 ) {
   if (typeof window === "undefined") return;
   const params = new URLSearchParams(window.location.search);
@@ -1098,11 +1241,17 @@ function updateTransactionDetailParams(
     } else {
       params.delete("tab");
     }
+    if (rowId) {
+      params.set("qrow", rowId);
+    } else {
+      params.delete("qrow");
+    }
   } else {
     params.delete("tx");
     params.delete("transaction");
     params.delete("transactionId");
     params.delete("tab");
+    params.delete("qrow");
   }
   const nextQuery = params.toString();
   window.history.replaceState(
@@ -1186,13 +1335,15 @@ export {
   PAGE_SIZE_OPTIONS,
   addFlowChartSegmentStats,
   attachmentRecordToItem,
+  availablePeriodKeysForRecords,
   breakdownSelectionLabel,
   bucketTransactionDate,
   buildBreakdown,
   buildFlowChartRows,
   buildSwapCandidates,
+  buildTransferCandidates,
+  candidateReferenceReviewType,
   dashboardRecordsFromTxs,
-  dateFilterOptions,
   filterChipClassName,
   flowAxisDomain,
   flowBucketLabel,

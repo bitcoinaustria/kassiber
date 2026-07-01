@@ -293,6 +293,38 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
     if (onboarding.kind === "error" || onboarding.error) {
       throw new Error(onboarding.error?.message ?? t("shell.finishError"));
     }
+    // Persist and select the AI provider the assistant step configured.
+    // The default seeded provider can already exist, so onboarding treats
+    // create as "create or update" and then selects the entered provider.
+    if (form.aiSetupMode !== "disabled" && form.aiBaseUrl.trim()) {
+      const providerName = form.aiProviderName.trim() || form.aiProviderKind;
+      const providerArgs = {
+        name: providerName,
+        base_url: form.aiBaseUrl.trim(),
+        kind: form.aiProviderKind,
+        acknowledged: form.aiRemoteAcknowledged,
+      };
+      const transport = getTransport("real");
+      const invokeProvider = async (
+        kind:
+          | "ai.providers.create"
+          | "ai.providers.update"
+          | "ai.providers.set_default",
+        args: Record<string, unknown>,
+      ) => {
+        const envelope = await transport.invoke({ kind, args });
+        if (envelope.kind === "error" || envelope.error) {
+          throw new Error(envelope.error?.message ?? t("shell.finishError"));
+        }
+        return envelope;
+      };
+      try {
+        await invokeProvider("ai.providers.create", providerArgs);
+      } catch {
+        await invokeProvider("ai.providers.update", providerArgs);
+      }
+      await invokeProvider("ai.providers.set_default", { name: providerName });
+    }
     const identity: Identity = {
       name: form.profile.trim() || "Private",
       workspace: form.workspace.trim() || "My Books",
@@ -334,7 +366,7 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
           ? form.backendCertificate.trim()
           : undefined,
       backendProxy:
-        form.backendKind === "electrum" && backendProxy
+        form.backendSetupMode === "custom" && backendProxy
           ? {
               host: form.backendProxyHost.trim(),
               port: form.backendProxyPort.trim(),

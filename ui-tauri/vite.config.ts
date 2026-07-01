@@ -7,6 +7,7 @@ import {
 import {
   existsSync,
   readFileSync,
+  statSync,
   realpathSync,
 } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
@@ -23,6 +24,7 @@ const DAEMON_BRIDGE_PATH = "/__kassiber__/daemon";
 const DAEMON_BRIDGE_STREAM_PATH = "/__kassiber__/daemon/stream";
 const FILE_PICKER_BRIDGE_PATH = "/__kassiber__/pick-file";
 const IMPORT_PROJECT_BRIDGE_PATH = "/__kassiber__/import-project";
+const LEDGER_PREVIEW_EXTENSIONS = new Set([".csv", ".tsv", ".xlsx", ".xlsm"]);
 const BRIDGE_REQUEST_TIMEOUT_MS = 10 * 60 * 1000;
 const UI_ROOT = __dirname;
 const NODE_MODULES_REALPATH = (() => {
@@ -38,6 +40,12 @@ const ALLOWED_BRIDGE_KINDS = new Set([
   "ui.workspace.overview.snapshot",
   "ui.transactions.list",
   "ui.transactions.metadata.update",
+  "ui.transactions.resolve",
+  "ui.transactions.graph",
+  "ui.transactions.history",
+  "ui.transactions.history.revert",
+  "ui.activity.history",
+  "ui.activity.stale",
   "ui.attachments.list",
   "ui.attachments.add",
   "ui.attachments.copy",
@@ -52,6 +60,7 @@ const ALLOWED_BRIDGE_KINDS = new Set([
   "ui.backends.create",
   "ui.backends.update",
   "ui.backends.delete",
+  "ui.backends.set_default",
   "ui.backends.electrum.test",
   "ui.backends.http.test",
   "ui.profiles.snapshot",
@@ -79,6 +88,9 @@ const ALLOWED_BRIDGE_KINDS = new Set([
   "ui.reports.export_austrian_e1kv_xlsx",
   "ui.reports.export_austrian_e1kv_csv",
   "ui.reports.export_audit_package",
+  "ui.transactions.export_csv",
+  "ui.transactions.export_xlsx",
+  "ui.transactions.ledger_template",
   "ui.journals.snapshot",
   "ui.journals.events.list",
   "ui.journals.quarantine",
@@ -91,6 +103,7 @@ const ALLOWED_BRIDGE_KINDS = new Set([
   "ui.transfers.payouts.delete",
   "ui.transfers.pair",
   "ui.transfers.unpair",
+  "ui.transfers.update",
   "ui.transfers.bulk_pair",
   "ui.transfers.dismiss",
   "ui.transfers.rules.list",
@@ -117,11 +130,20 @@ const ALLOWED_BRIDGE_KINDS = new Set([
   "ui.secrets.init",
   "ui.secrets.change_passphrase",
   "ui.next_actions",
+  "ui.review.badges",
   "ui.wallets.utxos",
+  "ui.loans.list",
+  "ui.loans.link",
+  "ui.loans.mark",
+  "ui.loans.unmark",
   "ui.wallets.create",
   "ui.wallets.import_file",
   "ui.wallets.import_samourai",
+  "ui.wallets.ledger_preview",
   "ui.wallets.preview_descriptor",
+  "ui.wallets.detect_script_types",
+  "ui.wallets.identify",
+  "ui.wallets.identify_onchain",
   "ui.connections.sources",
   "ui.connections.btcpay.create",
   "ui.connections.btcpay.discover",
@@ -138,6 +160,7 @@ const ALLOWED_BRIDGE_KINDS = new Set([
   "ui.freshness.cancel",
   "ui.freshness.pause",
   "ui.freshness.resume",
+  "wallets.reveal_descriptor",
   "daemon.lock",
   "daemon.unlock",
   // AI provider config and chat kinds. The bridge keeps one daemon process so
@@ -174,8 +197,10 @@ const ALLOWED_BRIDGE_KINDS = new Set([
   "ui.source_funds.links.bulk_review",
   "ui.source_funds.links.attach",
   "ui.source_funds.suggest",
+  "ui.source_funds.assemble",
   "ui.source_funds.evidence.list",
   "ui.source_funds.export_pdf",
+  "ui.source_funds.export_bundle",
   "ui.source_funds.coverage",
   "ui.source_funds.recipients.list",
   "ui.source_funds.recipients.create",
@@ -566,6 +591,18 @@ function normalizeFilePickerFilters(filters: unknown) {
     .filter((extension, index, all) => all.indexOf(extension) === index);
 }
 
+function readLedgerPreviewFileBase64(filePath: string): string {
+  const extension = path.extname(filePath).toLowerCase();
+  if (!LEDGER_PREVIEW_EXTENSIONS.has(extension)) {
+    throw new Error("Ledger preview files must use .csv, .tsv, .xlsx, or .xlsm.");
+  }
+  const metadata = statSync(filePath);
+  if (!metadata.isFile()) {
+    throw new Error("Ledger preview selection must be a file.");
+  }
+  return readFileSync(filePath).toString("base64");
+}
+
 async function pickFileViaNativeBridge(
   request: Record<string, unknown>,
 ): Promise<string[]> {
@@ -665,6 +702,11 @@ async function handleBridgeFilePicker(req: IncomingMessage, res: ServerResponse)
     const paths = await pickFileViaNativeBridge(request);
     if (request.multiple === true) {
       writeJson(res, 200, { paths });
+    } else if (request.includeContentsBase64 === true && paths[0]) {
+      writeJson(res, 200, {
+        path: paths[0],
+        contentsBase64: readLedgerPreviewFileBase64(paths[0]),
+      });
     } else {
       writeJson(res, 200, { path: paths[0] ?? null });
     }

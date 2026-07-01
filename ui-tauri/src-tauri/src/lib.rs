@@ -2,6 +2,7 @@
 mod secret_store;
 mod supervisor;
 
+use base64::Engine;
 use secret_store::{
     secret_store_policy_status, touch_id_delete_passphrase, touch_id_get_passphrase,
     touch_id_passphrase_status, touch_id_store_passphrase, TouchIdPassphraseStatus,
@@ -26,6 +27,7 @@ const SCHEMA_VERSION: u8 = 1;
 const DEFAULT_STATE_DIR: &str = ".kassiber";
 const DEFAULT_DATA_DIR: &str = "data";
 const DB_FILENAMES: &[&str] = &["kassiber.sqlite3", "satbooks.sqlite3"];
+const LEDGER_PREVIEW_EXTENSIONS: &[&str] = &["csv", "tsv", "xlsx", "xlsm"];
 const IMPORT_PICKER_TIMEOUT: Duration = Duration::from_secs(300);
 const TERMINAL_COMMAND_NAME: &str = "kassiber";
 const TERMINAL_COMMAND_MARKER: &str =
@@ -146,6 +148,12 @@ const ALLOWED_DAEMON_KINDS: &[&str] = &[
     "ui.workspace.overview.snapshot",
     "ui.transactions.list",
     "ui.transactions.metadata.update",
+    "ui.transactions.resolve",
+    "ui.transactions.graph",
+    "ui.transactions.history",
+    "ui.transactions.history.revert",
+    "ui.activity.history",
+    "ui.activity.stale",
     "ui.attachments.list",
     "ui.attachments.add",
     "ui.attachments.copy",
@@ -160,6 +168,7 @@ const ALLOWED_DAEMON_KINDS: &[&str] = &[
     "ui.backends.create",
     "ui.backends.update",
     "ui.backends.delete",
+    "ui.backends.set_default",
     "ui.backends.electrum.test",
     "ui.backends.http.test",
     "ui.profiles.snapshot",
@@ -187,6 +196,9 @@ const ALLOWED_DAEMON_KINDS: &[&str] = &[
     "ui.reports.export_austrian_e1kv_xlsx",
     "ui.reports.export_austrian_e1kv_csv",
     "ui.reports.export_audit_package",
+    "ui.transactions.export_csv",
+    "ui.transactions.export_xlsx",
+    "ui.transactions.ledger_template",
     "ui.journals.snapshot",
     "ui.journals.events.list",
     "ui.journals.quarantine",
@@ -199,6 +211,7 @@ const ALLOWED_DAEMON_KINDS: &[&str] = &[
     "ui.transfers.payouts.delete",
     "ui.transfers.pair",
     "ui.transfers.unpair",
+    "ui.transfers.update",
     "ui.transfers.bulk_pair",
     "ui.transfers.dismiss",
     "ui.transfers.rules.list",
@@ -226,11 +239,20 @@ const ALLOWED_DAEMON_KINDS: &[&str] = &[
     "ui.secrets.init",
     "ui.secrets.change_passphrase",
     "ui.next_actions",
+    "ui.review.badges",
     "ui.wallets.utxos",
+    "ui.loans.list",
+    "ui.loans.link",
+    "ui.loans.mark",
+    "ui.loans.unmark",
     "ui.wallets.create",
     "ui.wallets.import_file",
     "ui.wallets.import_samourai",
+    "ui.wallets.ledger_preview",
     "ui.wallets.preview_descriptor",
+    "ui.wallets.detect_script_types",
+    "ui.wallets.identify",
+    "ui.wallets.identify_onchain",
     "ui.connections.sources",
     "ui.connections.btcpay.create",
     "ui.connections.btcpay.discover",
@@ -247,6 +269,7 @@ const ALLOWED_DAEMON_KINDS: &[&str] = &[
     "ui.freshness.cancel",
     "ui.freshness.pause",
     "ui.freshness.resume",
+    "wallets.reveal_descriptor",
     "daemon.lock",
     "daemon.unlock",
     "ai.providers.list",
@@ -283,8 +306,10 @@ const ALLOWED_DAEMON_KINDS: &[&str] = &[
     "ui.source_funds.links.bulk_review",
     "ui.source_funds.links.attach",
     "ui.source_funds.suggest",
+    "ui.source_funds.assemble",
     "ui.source_funds.evidence.list",
     "ui.source_funds.export_pdf",
+    "ui.source_funds.export_bundle",
     "ui.source_funds.coverage",
     "ui.source_funds.recipients.list",
     "ui.source_funds.recipients.create",
@@ -306,12 +331,25 @@ const ALLOWED_DAEMON_KINDS: &[&str] = &[
 /// "<request_kind>.tool_call", etc.) before the terminal envelope. The supervisor
 /// forwards intermediate records to the webview as Tauri events
 /// `daemon://stream` and switches to a per-record inactivity
-/// timeout. Other kinds keep the existing total-budget behavior.
+/// timeout. Other kinds keep the existing total-budget (15s) behavior.
+///
+/// This list also covers long-running, result-bearing kinds the UI invokes that
+/// run heavy sync/RP2 work synchronously on the daemon's single serial loop.
+/// They may not emit intermediate records yet, but they legitimately exceed the
+/// 15s non-streaming budget, so the inactivity timeout lets a sub-window run
+/// finish and return its result instead of the caller being abandoned at 15s. A
+/// fully-silent run beyond the inactivity window returns `daemon_busy` to the
+/// caller without killing the shared daemon; the UX follow-up is to emit real
+/// progress from those handlers. `ui.maintenance.run` is intentionally absent:
+/// it is only ever an AI tool call run inside `ai.chat`, never a top-level
+/// supervisor request, so its classification here would be inert.
 const STREAMING_DAEMON_KINDS: &[&str] = &[
     "ai.chat",
     "ui.wallets.sync",
     "ui.freshness.run",
     "ui.workspace.freshness.run",
+    "ui.journals.process",
+    "ui.rates.rebuild",
 ];
 
 // Daemon kinds that exercise the AI runtime (model calls, chat sessions, tool
@@ -377,12 +415,6 @@ struct MenuActionPayload {
     route: Option<&'static str>,
     #[serde(skip_serializing_if = "Option::is_none")]
     section: Option<&'static str>,
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct TouchIdPassphraseUnlock {
-    passphrase_secret: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -712,6 +744,36 @@ fn save_logs_export_as(destination_path: String, contents: String) -> Result<Str
     write_text_export(destination_path, contents, &["jsonl", "log", "md"])
 }
 
+#[tauri::command]
+fn read_ledger_preview_file_base64(path: String) -> Result<String, String> {
+    let requested = PathBuf::from(path);
+    if !requested.is_absolute() {
+        return Err("Ledger preview path must be absolute.".to_string());
+    }
+    let extension = requested
+        .extension()
+        .and_then(|ext| ext.to_str())
+        .map(|ext| ext.to_ascii_lowercase())
+        .ok_or_else(|| "Ledger preview file must use .csv, .tsv, .xlsx, or .xlsm.".to_string())?;
+    if !LEDGER_PREVIEW_EXTENSIONS
+        .iter()
+        .any(|allowed| *allowed == extension)
+    {
+        return Err("Ledger preview file must use .csv, .tsv, .xlsx, or .xlsm.".to_string());
+    }
+    let canonical = std::fs::canonicalize(&requested)
+        .map_err(|error| format!("Ledger preview file could not be found: {error}"))?;
+    let metadata = canonical
+        .metadata()
+        .map_err(|error| format!("Ledger preview file could not be inspected: {error}"))?;
+    if !metadata.is_file() {
+        return Err("Ledger preview selection must be a file.".to_string());
+    }
+    let bytes = std::fs::read(&canonical)
+        .map_err(|error| format!("Ledger preview file could not be read: {error}"))?;
+    Ok(base64::engine::general_purpose::STANDARD.encode(bytes))
+}
+
 fn ensure_export_destination_outside_managed_root(
     source: &Path,
     destination: &Path,
@@ -819,39 +881,67 @@ fn clear_import_project(state: State<'_, Arc<DaemonSupervisor>>) -> Result<(), S
 #[tauri::command]
 fn touch_id_passphrase_status_command(
     state: State<'_, Arc<DaemonSupervisor>>,
-    data_root: Option<String>,
+    _data_root: Option<String>,
 ) -> Result<TouchIdPassphraseStatus, String> {
-    let account = touch_id_account_for_data_root(&state, data_root)?;
+    let account = touch_id_account_for_active_data_root(&state)?;
     Ok(touch_id_passphrase_status(&account))
 }
 
 #[tauri::command]
 fn touch_id_store_passphrase_command(
     state: State<'_, Arc<DaemonSupervisor>>,
-    data_root: Option<String>,
+    _data_root: Option<String>,
     passphrase_secret: String,
 ) -> Result<TouchIdPassphraseStatus, String> {
-    let account = touch_id_account_for_data_root(&state, data_root)?;
+    let account = touch_id_account_for_active_data_root(&state)?;
     touch_id_store_passphrase(&account, &passphrase_secret)?;
     Ok(touch_id_passphrase_status(&account))
 }
 
 #[tauri::command]
-fn touch_id_unlock_passphrase_command(
+async fn touch_id_unlock_passphrase_command(
+    app: tauri::AppHandle,
     state: State<'_, Arc<DaemonSupervisor>>,
-    data_root: Option<String>,
-) -> Result<Option<TouchIdPassphraseUnlock>, String> {
-    let account = touch_id_account_for_data_root(&state, data_root)?;
-    Ok(touch_id_get_passphrase(&account)?
-        .map(|passphrase_secret| TouchIdPassphraseUnlock { passphrase_secret }))
+    _data_root: Option<String>,
+    require_existing_project: Option<bool>,
+) -> Result<DaemonEnvelope, String> {
+    let account = touch_id_account_for_active_data_root(&state)?;
+    let Some(passphrase_secret) = touch_id_get_passphrase(&account)? else {
+        return Ok(error_envelope(
+            "touch_id_passphrase_not_found",
+            "No Touch ID passphrase was found for these books.",
+            Some("Unlock once with the passphrase to save it again."),
+            None,
+            None,
+            false,
+        ));
+    };
+    let args = json!({
+        "auth_response": { "passphrase_secret": passphrase_secret },
+        "require_existing_project": require_existing_project.unwrap_or(false),
+    });
+    let supervisor = Arc::clone(state.inner());
+    tauri::async_runtime::spawn_blocking(move || {
+        match supervisor.invoke("daemon.unlock", Some(args), &app, false, None) {
+            Ok(mut response) => {
+                attach_secret_store_policy_status(&mut response);
+                serde_json::from_value(response).map_err(|error| {
+                    format!("Python daemon response did not match the envelope contract: {error}")
+                })
+            }
+            Err(error) => Ok(supervisor_error_envelope(error, None)),
+        }
+    })
+    .await
+    .map_err(|error| format!("Touch ID unlock task failed: {error}"))?
 }
 
 #[tauri::command]
 fn touch_id_forget_passphrase_command(
     state: State<'_, Arc<DaemonSupervisor>>,
-    data_root: Option<String>,
+    _data_root: Option<String>,
 ) -> Result<TouchIdPassphraseStatus, String> {
-    let account = touch_id_account_for_data_root(&state, data_root)?;
+    let account = touch_id_account_for_active_data_root(&state)?;
     touch_id_delete_passphrase(&account)?;
     Ok(touch_id_passphrase_status(&account))
 }
@@ -873,13 +963,8 @@ fn terminal_command_remove_command() -> Result<TerminalCommandStatus, String> {
     terminal_command_status()
 }
 
-fn touch_id_account_for_data_root(
-    state: &Arc<DaemonSupervisor>,
-    data_root: Option<String>,
-) -> Result<String, String> {
-    let selected = if let Some(data_root) = data_root.filter(|value| !value.trim().is_empty()) {
-        PathBuf::from(data_root).expanduser()
-    } else if let Some(active) = state.current_data_root().map_err(|error| error.message)? {
+fn touch_id_account_for_active_data_root(state: &Arc<DaemonSupervisor>) -> Result<String, String> {
+    let selected = if let Some(active) = state.current_data_root().map_err(|error| error.message)? {
         active
     } else {
         default_state_data_root()
@@ -1894,6 +1979,7 @@ pub fn run() {
             save_exported_file_as,
             save_chat_export_as,
             save_logs_export_as,
+            read_ledger_preview_file_base64,
             open_external_url,
             select_import_project_directory,
             activate_import_project,
@@ -2667,6 +2753,7 @@ mod tests {
             "ui.source_funds.links.bulk_review",
             "ui.source_funds.links.attach",
             "ui.source_funds.suggest",
+            "ui.source_funds.assemble",
             "ui.source_funds.evidence.list",
             "ui.source_funds.export_pdf",
             "ui.source_funds.coverage",
@@ -2674,6 +2761,42 @@ mod tests {
             "ui.source_funds.recipients.create",
             "ui.source_funds.recipients.update",
             "ui.source_funds.recipients.delete",
+        ];
+        for kind in required {
+            assert!(
+                ALLOWED_DAEMON_KINDS.contains(kind),
+                "daemon kind missing from Tauri allowlist: {kind}"
+            );
+        }
+    }
+
+    #[test]
+    fn xpub_script_type_daemon_kinds_are_in_allowlist() {
+        // The add-wallet auto-detect flow probes script types through this kind;
+        // the packaged desktop shell blocks any kind not in ALLOWED_DAEMON_KINDS,
+        // so a missing entry would silently break detection in production.
+        let required: &[&str] = &[
+            "ui.wallets.detect_script_types",
+            "ui.wallets.preview_descriptor",
+        ];
+        for kind in required {
+            assert!(
+                ALLOWED_DAEMON_KINDS.contains(kind),
+                "daemon kind missing from Tauri allowlist: {kind}"
+            );
+        }
+    }
+
+    #[test]
+    fn loans_daemon_kinds_are_in_allowlist() {
+        // Pin the collateral-mark daemon surface so the Transactions-screen mark
+        // actions come with an explicit allowlist update; otherwise packaged
+        // desktop mode returns kind_not_allowed and the feature breaks silently.
+        let required: &[&str] = &[
+            "ui.loans.list",
+            "ui.loans.link",
+            "ui.loans.mark",
+            "ui.loans.unmark",
         ];
         for kind in required {
             assert!(
@@ -2696,6 +2819,7 @@ mod tests {
             "ui.transfers.payouts.delete",
             "ui.transfers.pair",
             "ui.transfers.unpair",
+            "ui.transfers.update",
             "ui.transfers.bulk_pair",
             "ui.transfers.dismiss",
             "ui.transfers.rules.list",
@@ -2706,6 +2830,25 @@ mod tests {
             "ui.saved_views.list",
             "ui.saved_views.create",
             "ui.saved_views.delete",
+        ];
+        for kind in required {
+            assert!(
+                ALLOWED_DAEMON_KINDS.contains(kind),
+                "daemon kind missing from Tauri allowlist: {kind}"
+            );
+        }
+    }
+
+    #[test]
+    fn transaction_detail_daemon_kinds_are_in_allowlist() {
+        // AppShell tx resolution, the transactions table, and the overview tx
+        // detail drive these through the supervisor; packaged desktop mode
+        // rejects any unlisted kind (these were missing, causing kind_not_allowed).
+        let required: &[&str] = &[
+            "ui.transactions.resolve",
+            "ui.transactions.graph",
+            "ui.transactions.history",
+            "ui.transactions.history.revert",
         ];
         for kind in required {
             assert!(
@@ -2727,6 +2870,19 @@ mod tests {
             "ui.attachments.remove",
             "ui.attachments.open",
         ];
+        for kind in required {
+            assert!(
+                ALLOWED_DAEMON_KINDS.contains(kind),
+                "daemon kind missing from Tauri allowlist: {kind}"
+            );
+        }
+    }
+
+    #[test]
+    fn transactions_export_daemon_kinds_are_in_allowlist() {
+        // The Transactions screen Export button invokes these directly from the
+        // webview; packaged desktop mode rejects any unlisted kind.
+        let required: &[&str] = &["ui.transactions.export_csv", "ui.transactions.export_xlsx"];
         for kind in required {
             assert!(
                 ALLOWED_DAEMON_KINDS.contains(kind),

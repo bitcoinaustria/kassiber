@@ -17,7 +17,7 @@ describe("sync progress notifications", () => {
         processed: 12,
         total: 24,
       }),
-    ).toBe("Cold: Fetching source history; 12 / 24 rows scanned.");
+    ).toBe("Cold: Fetching source history; 12 / 24 scan targets checked.");
 
     const progress = syncProgressNotification({
       wallet: "Cold",
@@ -32,6 +32,35 @@ describe("sync progress notifications", () => {
       indeterminate: false,
       label: "Cold: Fetching source history · 12 / 24",
     });
+  });
+
+  it("keeps descriptor discovery progress count-only because total is unknown", () => {
+    const progress = {
+      wallet: "Cold",
+      phase: "discovery",
+      processed: 150,
+      total: 999,
+      retained_targets: 123,
+      gap_limit: 40,
+      unused_streak: 12,
+    };
+
+    expect(formatSyncProgressBody(progress)).toBe(
+      "Cold: Discovering wallet history; 150 addresses probed. Unused gap 12 / 40.",
+    );
+
+    expect(syncProgressNotification(progress).progress).toEqual({
+      value: 12,
+      indeterminate: true,
+      label: "Cold: Discovering wallet history · 150 addresses probed",
+    });
+
+    expect(activeSyncMaintenanceProgress(progress).details).toEqual([
+      "Cold",
+      "150 addresses probed",
+      "Unused gap 12 / 40",
+      "123 targets selected so far",
+    ]);
   });
 
   it("caps fallback progress before completion", () => {
@@ -78,6 +107,18 @@ describe("sync progress notifications", () => {
       value: 86,
       indeterminate: false,
       label: "Market-rate coverage: Checking market-rate coverage",
+    });
+
+    expect(
+      syncProgressNotification({
+        source_label: "Journal refresh",
+        source_type: "journals",
+        phase: "auto_pair",
+      }).progress,
+    ).toEqual({
+      value: 91,
+      indeterminate: false,
+      label: "Journal refresh: Pairing swaps and transfers",
     });
   });
 
@@ -168,7 +209,7 @@ describe("sync progress notifications", () => {
       details: [
         "Source 2 of 4",
         "Cold",
-        "300 / 600 rows scanned",
+        "300 / 600 scan targets checked",
         "42 imported · 258 unchanged",
       ],
       active: true,
@@ -203,6 +244,9 @@ describe("first-sync milestones", () => {
     );
     expect(firstSyncActiveMilestoneIndex(0.5, true)).toBe(
       indexOfPhase("decode_enrich"),
+    );
+    expect(firstSyncActiveMilestoneIndex(0.92, true)).toBe(
+      indexOfPhase("journal_refresh"),
     );
   });
 

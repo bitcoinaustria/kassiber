@@ -8,7 +8,7 @@ from pathlib import Path
 
 from ..errors import AppError
 from ..time_utils import now_iso
-from ..util import normalize_chain_value, normalize_network_value, str_or_none
+from ..util import normalize_chain_value, normalize_network_value, parse_bool, str_or_none
 from ..wallet_descriptors import (
     DEFAULT_DESCRIPTOR_GAP_LIMIT,
     MAX_DESCRIPTOR_GAP_LIMIT,
@@ -17,7 +17,15 @@ from ..wallet_descriptors import (
     liquid_plan_can_unblind,
     normalize_asset_code,
 )
+from ..wallet_setup import (
+    BSMS_DESCRIPTOR_SOURCE,
+    normalize_script_types,
+    normalize_wallet_material,
+    parse_bsms_descriptor_record,
+)
+from . import freshness as core_freshness
 from . import output_inventory as core_output_inventory
+from .address_scripts import scriptpubkey_for_address_or_none
 from .repo import (
     fetch_wallet_with_account,
     invalidate_journals,
@@ -52,6 +60,7 @@ BTCPAY_PROVENANCE_CONFIG_KEY = "btcpay_provenance"
 BULLBITCOIN_WALLET_NETWORK_CONFIG_KEY = "bullbitcoin_wallet_network"
 BULLBITCOIN_WALLET_EXPORTS_CONFIG_KEY = "bullbitcoin_wallet_exports"
 BULLBITCOIN_WALLET_NETWORKS = ("bitcoin", "liquid", "lightning")
+WALLET_DEPRECATED_CONFIG_KEY = "deprecated"
 WALLET_SAFE_CONFIG_FIELDS = (
     "addresses",
     "backend",
@@ -70,8 +79,15 @@ WALLET_SAFE_CONFIG_FIELDS = (
     "altbestand",
     "wasabi_metadata",
     "samourai",
+    "descriptor_source",
+    "synthesize_change",
+    "script_types",
+    WALLET_DEPRECATED_CONFIG_KEY,
 )
-WALLET_REDACTED_CONFIG_FIELDS = ("descriptor", "change_descriptor")
+# The xpub is as sensitive as the descriptor it expands into (it reveals every
+# address), so it is redacted; its presence still tells the UI the wallet is
+# xpub-derived, and script_types (the watched set) is surfaced for editing.
+WALLET_REDACTED_CONFIG_FIELDS = ("descriptor", "change_descriptor", "xpub")
 
 
 def normalize_wallet_kind(value):
@@ -90,9 +106,13 @@ def normalize_addresses(values):
     seen = set()
     for value in values:
         address = str(value).strip()
-        if not address or address in seen:
+        if not address:
             continue
-        seen.add(address)
+        script_pubkey = scriptpubkey_for_address_or_none(address)
+        key = f"script:{script_pubkey}" if script_pubkey else f"text:{address}"
+        if key in seen:
+            continue
+        seen.add(key)
         output.append(address)
     return output
 
@@ -129,6 +149,7 @@ def wallet_live_chain_config(config):
         [
             config.get("descriptor"),
             config.get("change_descriptor"),
+            config.get("xpub"),
             config.get("addresses"),
             config.get("chain"),
             config.get("network"),
@@ -138,6 +159,36 @@ def wallet_live_chain_config(config):
     chain = normalize_chain_value(config.get("chain"))
     network = normalize_network_value(chain, config.get("network"))
     return chain, network
+
+
+def has_descriptor_sync_material(config):
+    """True when a wallet config carries on-chain derivation material.
+
+    Either an explicit output ``descriptor`` or a bare ``xpub`` with at least one
+    enabled ``script_types`` entry (the multi-script wallet shape). Sync,
+    freshness, and snapshot classification all key off this rather than the raw
+    ``descriptor`` field so xpub-derived wallets are treated as syncable.
+    """
+    if not isinstance(config, dict):
+        return False
+    if str_or_none(config.get("descriptor")):
+        return True
+    return bool(str_or_none(config.get("xpub")) and config.get("script_types"))
+
+
+def wallet_is_deprecated(config):
+    if not isinstance(config, dict):
+        return False
+    return parse_bool(config.get(WALLET_DEPRECATED_CONFIG_KEY), default=False)
+
+
+def _reset_onchain_freshness_checkpoint(conn, profile_id: str, wallet_id: str) -> None:
+    core_freshness.reset_source_checkpoint(
+        conn,
+        profile_id,
+        core_freshness.source_key(core_freshness.SOURCE_ONCHAIN, wallet_id),
+        stale_reason="wallet_config_changed",
+    )
 
 
 def load_wallet_descriptor_plan_from_config(config):
@@ -339,15 +390,39 @@ def parse_wallet_config(args):
         getattr(args, "descriptor_file", None),
         "Descriptor",
     )
-    if descriptor_text:
-        config["descriptor"] = descriptor_text
     change_descriptor_text = read_text_argument(
         getattr(args, "change_descriptor", None),
         getattr(args, "change_descriptor_file", None),
         "Change descriptor",
     )
+    if descriptor_text:
+        bsms_descriptors = parse_bsms_descriptor_record(descriptor_text)
+        if bsms_descriptors:
+            descriptor_text = bsms_descriptors["descriptor"]
+            config["descriptor_source"] = BSMS_DESCRIPTOR_SOURCE
+            config["synthesize_change"] = False
+            if not change_descriptor_text:
+                change_descriptor_text = bsms_descriptors.get("change_descriptor")
+    if descriptor_text:
+        config["descriptor"] = descriptor_text
     if change_descriptor_text:
         config["change_descriptor"] = change_descriptor_text
+    script_types = normalize_script_types(getattr(args, "script_type", None))
+    if script_types:
+        if not descriptor_text:
+            raise AppError(
+                "--script-type requires a bare xpub via "
+                "--descriptor/--descriptor-file/--descriptor-stdin",
+                code="validation",
+            )
+        material_config = normalize_wallet_material(descriptor_text, script_types=script_types)
+        if "xpub" in material_config:
+            # A bare xpub + script types becomes a multi-script wallet: store the
+            # key and the watched set, not a single rendered descriptor.
+            config.pop("descriptor", None)
+            config.pop("change_descriptor", None)
+            config["xpub"] = material_config["xpub"]
+            config["script_types"] = material_config["script_types"]
     addresses = normalize_addresses(getattr(args, "address", None))
     existing_addresses = normalize_addresses(config.get("addresses"))
     if addresses or existing_addresses:
@@ -437,7 +512,12 @@ def create_wallet(conn, workspace_ref, profile_ref, label, kind, account_ref=Non
 
 def _validated_wallet_config(normalized_kind, config):
     config = dict(config or {})
-    descriptor_plan = load_wallet_descriptor_plan_from_config(config) if config.get("descriptor") else None
+    if "addresses" in config:
+        config["addresses"] = normalize_addresses(config.get("addresses"))
+    if WALLET_DEPRECATED_CONFIG_KEY in config:
+        config[WALLET_DEPRECATED_CONFIG_KEY] = wallet_is_deprecated(config)
+    has_live_material = bool(config.get("descriptor") or config.get("xpub"))
+    descriptor_plan = load_wallet_descriptor_plan_from_config(config) if has_live_material else None
     chain, network = wallet_live_chain_config(config)
     if normalized_kind == "address" and not config.get("addresses") and not config.get("source_file"):
         raise AppError(
@@ -446,7 +526,7 @@ def _validated_wallet_config(normalized_kind, config):
         )
     if normalized_kind == "descriptor" and descriptor_plan is None and not config.get("source_file"):
         raise AppError(
-            "Descriptor wallets require --descriptor/--descriptor-file or a file-based source",
+            "Descriptor wallets require a descriptor, an xpub with script types, or a file-based source",
             code="validation",
         )
     if normalized_kind == "coreln" and not config.get("backend"):
@@ -491,10 +571,16 @@ def _validated_wallet_config(normalized_kind, config):
     return config
 
 
+def _sync_material_config_json(config):
+    sync_config = dict(config or {})
+    sync_config.pop(WALLET_DEPRECATED_CONFIG_KEY, None)
+    return json.dumps(sync_config, sort_keys=True)
+
+
 def _wallet_descriptor_state(config):
     descriptor_state = ""
     chain, network = wallet_live_chain_config(config)
-    if config.get("descriptor"):
+    if config.get("descriptor") or config.get("xpub"):
         try:
             descriptor_plan = load_descriptor_plan(config)
             descriptor_state = f"{descriptor_plan.chain}:{descriptor_plan.network}"
@@ -547,6 +633,7 @@ def list_wallets(conn, workspace_ref, profile_ref):
                 "gap_limit": config.get("gap_limit", DEFAULT_DESCRIPTOR_GAP_LIMIT if descriptor_state else ""),
                 "source_format": config.get("source_format", ""),
                 "source_file": config.get("source_file", ""),
+                "deprecated": wallet_is_deprecated(config),
                 "created_at": row["created_at"],
             }
         )
@@ -560,9 +647,9 @@ WALLET_KIND_CATALOG = {
         "requires": ["descriptor"],
     },
     "xpub": {
-        "summary": "Extended-public-key wallet derived to address set; supports on-chain sync via mempool/esplora.",
-        "config_fields": ["descriptor", "gap_limit", "backend", "chain", "network"],
-        "requires": ["descriptor"],
+        "summary": "Extended-public-key wallet: derives one or more script types (pinned with --script-type) to an address set; on-chain sync via mempool/esplora.",
+        "config_fields": ["descriptor", "xpub", "script_types", "gap_limit", "backend", "chain", "network"],
+        "requires": ["descriptor|script_types"],
     },
     "address": {
         "summary": "Bare-address list wallet; useful for receive-only tracking or imports.",
@@ -676,6 +763,7 @@ def wallet_row_to_dict(row):
         "policy_asset": config.get("policy_asset"),
         "source_file": config.get("source_file", ""),
         "source_format": config.get("source_format", ""),
+        "deprecated": wallet_is_deprecated(config),
         "config": safe_config,
         "created_at": row["created_at"],
     }
@@ -685,6 +773,15 @@ def get_wallet_details(conn, workspace_ref, profile_ref, wallet_ref):
     _, profile = resolve_scope(conn, workspace_ref, profile_ref)
     wallet = resolve_wallet(conn, profile["id"], wallet_ref)
     return wallet_row_to_dict(wallet)
+
+
+def wallet_descriptor_material(config):
+    """Return the pasteable stored descriptor material for a wallet config."""
+    descriptor = str_or_none(config.get("descriptor"))
+    change_descriptor = str_or_none(config.get("change_descriptor"))
+    return "\n".join(
+        value for value in (descriptor, change_descriptor) if value
+    )
 
 
 def reveal_wallet_secrets(conn, workspace_ref, profile_ref, wallet_ref):
@@ -702,6 +799,7 @@ def reveal_wallet_secrets(conn, workspace_ref, profile_ref, wallet_ref):
         "id": wallet["id"],
         "label": wallet["label"],
         "kind": wallet["kind"],
+        "wallet_material": wallet_descriptor_material(config),
         "descriptor": config.get("descriptor"),
         "change_descriptor": config.get("change_descriptor"),
         "blinding_key": config.get("blinding_key"),
@@ -738,7 +836,7 @@ def update_wallet(conn, workspace_ref, profile_ref, wallet_ref, updates):
 
     # Preserve legacy Austrian provenance metadata until a deliberate migration removes it.
     config = json.loads(wallet["config_json"] or "{}")
-    original_config_json = json.dumps(config, sort_keys=True)
+    original_sync_material_json = _sync_material_config_json(config)
     for field in clear_fields:
         if field not in config:
             raise AppError(
@@ -755,7 +853,9 @@ def update_wallet(conn, workspace_ref, profile_ref, wallet_ref, updates):
 
     config = _validated_wallet_config(wallet["kind"], config)
     config_json = json.dumps(config, sort_keys=True)
-    config_changed = config_json != original_config_json
+    sync_material_changed = (
+        _sync_material_config_json(config) != original_sync_material_json
+    )
 
     try:
         conn.execute(
@@ -772,12 +872,13 @@ def update_wallet(conn, workspace_ref, profile_ref, wallet_ref, updates):
             code="conflict",
             hint="Choose a different wallet label.",
         ) from exc
-    if config_changed:
+    if sync_material_changed:
         core_output_inventory.clear_wallet_output_inventory(
             conn,
             wallet["id"],
             commit=False,
         )
+        _reset_onchain_freshness_checkpoint(conn, profile["id"], wallet["id"])
     invalidate_journals(conn, profile["id"])
     conn.commit()
     updated = fetch_wallet_with_account(conn, wallet["id"])
@@ -819,6 +920,7 @@ __all__ = [
     "list_wallets",
     "load_wallet_descriptor_plan_from_config",
     "normalize_addresses",
+    "wallet_is_deprecated",
     "normalize_btcpay_payment_method_id",
     "normalize_btcpay_store_id",
     "normalize_wallet_kind",
@@ -827,6 +929,7 @@ __all__ = [
     "update_wallet",
     "wallet_btcpay_provenance_config",
     "wallet_btcpay_sync_config",
+    "wallet_descriptor_material",
     "wallet_live_chain_config",
     "wallet_policy_asset_id",
     "wallet_row_to_dict",

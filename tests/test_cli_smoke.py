@@ -264,6 +264,27 @@ _MANUAL_TO_CSV = """date,txid,direction,asset,amount,fee,fiat_rate,description
 2026-03-15T10:05:00Z,manual-in-leg,inbound,BTC,0.10000000,0,72000,Manual swap in
 """
 
+_FAILED_SWAP_REFUND_CSV = """date,txid,direction,asset,amount,fee,fiat_rate,description
+2026-03-01T09:00:00Z,refund-fund,inbound,BTC,0.20000000,0,70000,Funding
+2026-03-02T09:00:00Z,failed-swap-send,outbound,BTC,0.10000000,0.00010000,72000,Failed swap send
+2026-03-02T11:00:00Z,failed-swap-refund,inbound,BTC,0.09980000,0,72000,Refund from failed swap
+"""
+
+# A failed swap whose on-chain refund carries the funding (lockup) txid link
+# that chain sync stamps on transactions.swap_refund_funding_txid. The lockup
+# and refund share one wallet and sit days apart, so only the deterministic
+# link (not the time+amount heuristic) can pair them. The funding txid must be
+# a real 64-hex value to survive normalize_import_record's validation.
+_LOCKUP_TXID = "aa" * 32
+_REFUND_TXID = "bb" * 32
+_FUNDING_TXID = "cc" * 32
+_FAILED_SWAP_REFUND_LINKED_CSV = (
+    "date,txid,direction,asset,amount,fee,fiat_rate,description,swap_refund_funding_txid\n"
+    f"2026-02-25T09:00:00Z,{_FUNDING_TXID},inbound,BTC,0.20000000,0,70000,Funding,\n"
+    f"2026-03-02T09:00:00Z,{_LOCKUP_TXID},outbound,BTC,0.10000000,0.00010000,72000,Swap lockup,\n"
+    f"2026-03-05T11:00:00Z,{_REFUND_TXID},inbound,BTC,0.09980000,0,72000,Refund from failed swap,{_LOCKUP_TXID}\n"
+)
+
 # Cross-asset (BTC → LBTC) scenario for the carrying-value rejection +
 # taxable acceptance tests.
 _CROSS_BTC_CSV = """date,txid,direction,asset,amount,fee,fiat_rate,description
@@ -348,6 +369,58 @@ def _run(data_root, *args, input_text=None):
     return payload, result.returncode
 
 
+def _unescape_xml(text):
+    return (
+        text.replace("&amp;", "&")
+        .replace("&lt;", "<")
+        .replace("&gt;", ">")
+        .replace("&quot;", '"')
+        .replace("&apos;", "'")
+    )
+
+
+def _load_xlsx_sheets(path):
+    """Parse a workbook into {sheet_name: {row_number: {col_letter: value}}}.
+
+    Numbers become floats; shared/inline strings become Python strings. Used to
+    evaluate the verification sheets' reconciliation in Python the way Excel
+    would, without a formula engine.
+    """
+    with zipfile.ZipFile(path) as workbook:
+        names = re.findall(r'<sheet name="([^"]+)"', workbook.read("xl/workbook.xml").decode("utf-8"))
+        try:
+            ss_xml = workbook.read("xl/sharedStrings.xml").decode("utf-8")
+        except KeyError:
+            ss_xml = ""
+        shared = [
+            _unescape_xml("".join(re.findall(r"<t[^>]*>(.*?)</t>", si, re.DOTALL)))
+            for si in re.findall(r"<si>(.*?)</si>", ss_xml, re.DOTALL)
+        ]
+        sheets = {}
+        for index, name in enumerate(names, start=1):
+            xml = workbook.read(f"xl/worksheets/sheet{index}.xml").decode("utf-8")
+            rows = {}
+            # Handle both self-closing (<c .../>) and content (<c ...>...</c>) cells;
+            # merged/blank cells are self-closing and carry no value.
+            for cell in re.finditer(r'<c r="([A-Z]+)(\d+)"([^>]*?)(?:/>|>(.*?)</c>)', xml, re.DOTALL):
+                col, rownum, attrs, body = cell.group(1), int(cell.group(2)), cell.group(3), cell.group(4)
+                if body is None:
+                    continue
+                vmatch = re.search(r"<v>(.*?)</v>", body, re.DOTALL)
+                if vmatch is None:
+                    continue
+                raw = vmatch.group(1)
+                if 't="s"' in attrs:
+                    value = shared[int(raw)]
+                elif 't="str"' in attrs:
+                    value = _unescape_xml(raw)
+                else:
+                    value = float(raw)
+                rows.setdefault(rownum, {})[col] = value
+            sheets[_unescape_xml(name)] = rows
+    return sheets
+
+
 class CliSmokeTest(unittest.TestCase):
     """Walks through init → workspace → profile → wallet → Phoenix import →
     journals → reports → rates, asserting envelope shape at each step.
@@ -408,6 +481,12 @@ class CliSmokeTest(unittest.TestCase):
         cls.manual_from_csv.write_text(_MANUAL_FROM_CSV, encoding="utf-8")
         cls.manual_to_csv = Path(cls._tmp.name) / "manual-to.csv"
         cls.manual_to_csv.write_text(_MANUAL_TO_CSV, encoding="utf-8")
+        cls.failed_swap_refund_csv = Path(cls._tmp.name) / "failed-swap-refund.csv"
+        cls.failed_swap_refund_csv.write_text(_FAILED_SWAP_REFUND_CSV, encoding="utf-8")
+        cls.failed_swap_refund_linked_csv = Path(cls._tmp.name) / "failed-swap-refund-linked.csv"
+        cls.failed_swap_refund_linked_csv.write_text(
+            _FAILED_SWAP_REFUND_LINKED_CSV, encoding="utf-8"
+        )
         cls.cross_btc_csv = Path(cls._tmp.name) / "cross-btc.csv"
         cls.cross_btc_csv.write_text(_CROSS_BTC_CSV, encoding="utf-8")
         cls.cross_btc_at_csv = Path(cls._tmp.name) / "cross-btc-at.csv"
@@ -1089,6 +1168,391 @@ class CliSmokeTest(unittest.TestCase):
         self.assertIn('name="Transactions"', workbook_xml)
         self.assertIn("Executive summary", shared_strings)
         self.assertIn("Wallet Inventory", shared_strings)
+
+    def test_07ac_export_xlsx_self_verifying(self):
+        verify_path = Path(self._tmp.name) / "kassiber-report-verify.xlsx"
+        plain_path = Path(self._tmp.name) / "kassiber-report-plain.xlsx"
+        for path in (verify_path, plain_path):
+            if path.exists():
+                path.unlink()
+
+        def _read_workbook(path):
+            with zipfile.ZipFile(path) as workbook:
+                names = re.findall(r'<sheet name="([^"]+)"', workbook.read("xl/workbook.xml").decode("utf-8"))
+                sheets = {}
+                for index, name in enumerate(names, start=1):
+                    sheets[name.replace("&amp;", "&")] = workbook.read(
+                        f"xl/worksheets/sheet{index}.xml"
+                    ).decode("utf-8")
+                shared = workbook.read("xl/sharedStrings.xml").decode("utf-8")
+            return sheets, shared
+
+        # Verification is on by default and appends the verify sheets.
+        payload = self._cli(
+            "reports", "export-xlsx",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--file", str(verify_path),
+        )
+        self._assert_kind(payload, "reports.export-xlsx")
+        self.assertTrue(payload["data"]["verified"])
+        for sheet in ("Verify", "Acquisitions", "Disposals", "Control"):
+            self.assertIn(sheet, payload["data"]["sheets"])
+
+        sheets, shared = _read_workbook(verify_path)
+        for sheet in ("Verify", "Acquisitions", "Disposals", "Control"):
+            self.assertIn(sheet, sheets)
+        # The Control sheet recomputes every figure with live formulas.
+        control = sheets["Control"]
+        self.assertIn("<f>", control)
+        self.assertIn("SUMIFS(", control)
+        self.assertIn("Verify!$B$3", control)  # checks reference the tolerance cell
+        # Quantities are msat; BTC = msat / 1e11.
+        self.assertIn("/100000000000", sheets["Acquisitions"])
+        # README guidance, run metadata, and the active lot method are surfaced.
+        self.assertIn("How to verify this report", shared)
+        self.assertIn("Holdings BTC (recompute)", shared)
+        self.assertIn("Active lot-selection method", shared)
+        self.assertIn("Verification status", shared)
+        self.assertIn("Kassiber version", shared)
+        self.assertIn("Pricing Source", shared)  # provenance column on the ledgers
+        self.assertIn("Rate Source", shared)  # rate provenance on Control
+        self.assertIn("ALL CHECKS OK", sheets["Verify"])  # workbook-level status banner
+        # Per-transaction context on the value-layer Transactions sheet.
+        self.assertIn("Attachments", shared)
+        self.assertIn("Tags", shared)
+        self.assertIn("Counterparty", shared)
+        # The URL attachment added in the attachments lifecycle is surfaced.
+        self.assertIn("docs.google.com", shared)
+        # Every linked attachment is a clickable styled link on the Evidence sheet.
+        self.assertIn("Evidence", payload["data"]["sheets"])
+        self.assertIn("Name (link)", shared)
+        with zipfile.ZipFile(verify_path) as workbook:
+            names = re.findall(r'<sheet name="([^"]+)"', workbook.read("xl/workbook.xml").decode("utf-8"))
+            evidence_rels = workbook.read(
+                f"xl/worksheets/_rels/sheet{names.index('Evidence') + 1}.xml.rels"
+            ).decode("utf-8")
+        self.assertIn("docs.google.com", evidence_rels)  # real hyperlink target
+
+        # Cached results must equal Kassiber's numbers: each Disposals gain cell
+        # (column J = proceeds - basis) must match the stored engine gain
+        # (column K) within a cent. This guards against the formulas drifting
+        # from the report figures.
+        disposals = sheets["Disposals"]
+        formula_gains = {
+            int(row): float(val)
+            for row, val in re.findall(r'<c r="J(\d+)"[^>]*><f>.*?</f><v>([^<]*)</v>', disposals)
+        }
+        kassiber_gains = {
+            int(row): float(val)
+            for row, val in re.findall(r'<c r="K(\d+)"[^>]*><v>([^<]*)</v>', disposals)
+        }
+        compared = 0
+        for row, gain in formula_gains.items():
+            if row in kassiber_gains:
+                self.assertAlmostEqual(gain, kassiber_gains[row], places=2)
+                compared += 1
+        self.assertGreater(compared, 0, "expected at least one disposal gain to reconcile")
+
+        # --no-verify produces the lean workbook: no verify sheets, no formulas.
+        payload = self._cli(
+            "reports", "export-xlsx",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--file", str(plain_path),
+            "--no-verify",
+        )
+        self.assertFalse(payload["data"]["verified"])
+        self.assertNotIn("Control", payload["data"]["sheets"])
+        self.assertNotIn("Verify", payload["data"]["sheets"])
+        plain_sheets, _ = _read_workbook(plain_path)
+        self.assertNotIn("Control", plain_sheets)
+        self.assertFalse(any("<f>" in xml for xml in plain_sheets.values()))
+
+    def test_07ad_verify_xlsx_reconciles_including_income(self):
+        # Independent, formula-engine-free reconciliation on a book that
+        # includes an income/earn event. Income is emitted by the engine as BOTH
+        # an `acquisition` lot AND an `income` line, so a naive Σacq − Σdisp
+        # double-counts it. This test evaluates the verification sheets' SUMIFS
+        # logic in Python from the sheet inputs and asserts it reproduces
+        # Kassiber's portfolio + capital-gains figures.
+        with tempfile.TemporaryDirectory(prefix="kassiber-verify-income-") as tmp:
+            root = Path(tmp) / "data"
+            csv_path = Path(tmp) / "book.csv"
+            csv_path.write_text(
+                "date,txid,direction,asset,amount,fee,fiat_rate,description,kind\n"
+                "2026-01-01T10:00:00Z,buy-1,inbound,BTC,0.10000000,0,60000,Buy,buy\n"
+                "2026-02-01T10:00:00Z,int-1,inbound,BTC,0.01000000,0,65000,Interest,interest\n"
+                "2026-03-01T10:00:00Z,sell-1,outbound,BTC,0.02000000,0,70000,Sell,sell\n",
+                encoding="utf-8",
+            )
+            xlsx_path = Path(tmp) / "report.xlsx"
+
+            def run(*args):
+                payload, code = _run(root, *args)
+                self.assertEqual(code, 0, f"{args} -> {json.dumps(payload)[:300]}")
+                return payload
+
+            run("init")
+            run("workspaces", "create", "Main")
+            run("profiles", "create", "--workspace", "Main", "--fiat-currency", "USD", "--tax-country", "generic", "Default")
+            run("wallets", "create", "--workspace", "Main", "--profile", "Default", "--label", "W1", "--kind", "custom")
+            run("wallets", "import-csv", "--workspace", "Main", "--profile", "Default", "--wallet", "W1", "--file", str(csv_path))
+            # A single Google Docs link on the sale -> styled clickable name.
+            sale_doc = "https://docs.google.com/document/d/1sAmPleSaLeReceipt/edit"
+            run("attachments", "add", "--workspace", "Main", "--profile", "Default",
+                "--transaction", "sell-1", "--url", sale_doc, "--label", "Sale receipt")
+            run("journals", "process", "--workspace", "Main", "--profile", "Default")
+            export = run("reports", "export-xlsx", "--workspace", "Main", "--profile", "Default", "--file", str(xlsx_path))
+            self.assertTrue(export["data"]["verified"])
+            self.assertIn("Evidence", export["data"]["sheets"])
+
+            portfolio = run("reports", "portfolio-summary", "--workspace", "Main", "--profile", "Default")["data"]
+            capital = run("reports", "capital-gains", "--workspace", "Main", "--profile", "Default")["data"]
+            kassiber_qty, kassiber_basis, kassiber_realized = {}, {}, {}
+            for row in portfolio:
+                kassiber_qty[row["asset"]] = kassiber_qty.get(row["asset"], 0.0) + float(row["quantity"])
+                kassiber_basis[row["asset"]] = kassiber_basis.get(row["asset"], 0.0) + float(row["cost_basis"])
+            for row in capital:
+                kassiber_realized[row["asset"]] = kassiber_realized.get(row["asset"], 0.0) + float(row["gain_loss"])
+            # Sanity: the book really exercises income (otherwise the guard is vacuous).
+            self.assertAlmostEqual(kassiber_qty["BTC"], 0.09, places=8)
+            self.assertGreater(kassiber_realized["BTC"], 600.0)  # 200 disposal + 650 income
+
+            sheets = _load_xlsx_sheets(xlsx_path)
+            acq = sheets["Acquisitions"]
+            disp = sheets["Disposals"]
+
+            # Pin the load-bearing formula detail: the holdings recompute adds
+            # only acquisition + transfer_in (excluding the income lines), or
+            # recalc silently double-counts earned coins. Plain equality
+            # criteria (no "<>income") keep Apple Numbers happy on import.
+            with zipfile.ZipFile(xlsx_path) as workbook:
+                names = re.findall(r'<sheet name="([^"]+)"', workbook.read("xl/workbook.xml").decode("utf-8"))
+                control_xml = _unescape_xml(
+                    workbook.read(f"xl/worksheets/sheet{names.index('Control') + 1}.xml").decode("utf-8")
+                )
+            self.assertIn('"acquisition"', control_xml)
+            self.assertIn('"transfer_in"', control_xml)
+            self.assertNotIn("<>income", control_xml)
+
+            # Resolve columns by header label (row 2) so the test survives
+            # column additions/reordering.
+            def _headers(rows):
+                return {label: col for col, label in rows.get(2, {}).items()}
+
+            acq_h = _headers(acq)
+            disp_h = _headers(disp)
+
+            def _accumulate(rows, headers, key_fn):
+                asset_col = headers["Asset"]
+                totals = {}
+                for rownum, cells in rows.items():
+                    if rownum < 3 or asset_col not in cells:  # skip header / placeholder
+                        continue
+                    asset = cells[asset_col]
+                    totals[asset] = totals.get(asset, 0.0) + key_fn(cells)
+                return totals
+
+            def _val(cells, headers, label, default=0.0):
+                return cells.get(headers[label], default)
+
+            # Holdings exclude `income` rows on the add side (the paired lot carries them).
+            qty_add = _accumulate(
+                acq, acq_h,
+                lambda c: _val(c, acq_h, "Quantity msat (input)") if _val(c, acq_h, "Type", "") != "income" else 0.0,
+            )
+            qty_sub = _accumulate(disp, disp_h, lambda c: _val(c, disp_h, "Quantity msat (input)"))
+            basis_add = _accumulate(
+                acq, acq_h,
+                lambda c: _val(c, acq_h, "Fiat Value (input)") if _val(c, acq_h, "Type", "") != "income" else 0.0,
+            )
+            basis_sub = _accumulate(disp, disp_h, lambda c: _val(c, disp_h, "Cost Basis (input)"))
+            realized_disp = _accumulate(
+                disp, disp_h,
+                lambda c: (_val(c, disp_h, "Proceeds (input)") - _val(c, disp_h, "Cost Basis (input)"))
+                if _val(c, disp_h, "Taxable") == 1 else 0.0,
+            )
+            realized_acq = _accumulate(
+                acq, acq_h,
+                lambda c: _val(c, acq_h, "Income Gain (input)") if _val(c, acq_h, "Taxable") == 1 else 0.0,
+            )
+
+            for asset, expected in kassiber_qty.items():
+                recompute = (qty_add.get(asset, 0.0) - qty_sub.get(asset, 0.0)) / 1e11
+                self.assertAlmostEqual(recompute, expected, places=8, msg=f"holdings qty {asset}")
+            for asset, expected in kassiber_basis.items():
+                recompute = basis_add.get(asset, 0.0) - basis_sub.get(asset, 0.0)
+                self.assertAlmostEqual(recompute, expected, places=2, msg=f"cost basis {asset}")
+            for asset, expected in kassiber_realized.items():
+                recompute = realized_disp.get(asset, 0.0) + realized_acq.get(asset, 0.0)
+                self.assertAlmostEqual(recompute, expected, places=2, msg=f"realized gain {asset}")
+
+            # The Control sheet's cached recompute values reconcile to Kassiber's.
+            control = sheets["Control"]
+            ctrl_h = _headers(control)
+            label_pairs = [
+                ("Holdings BTC (recompute)", "Holdings BTC (Kassiber)"),
+                ("Cost Basis (recompute)", "Cost Basis (Kassiber)"),
+                ("Avg Price (recompute)", "Avg Price (Kassiber)"),
+                ("Market Value (recompute)", "Market Value (Kassiber)"),
+                ("Unrealized (recompute)", "Unrealized (Kassiber)"),
+                ("Realized Gain (recompute)", "Realized Gain (Kassiber)"),
+            ]
+            asset_col = ctrl_h["Asset"]
+            compared = 0
+            for rownum, cells in control.items():
+                if rownum < 3 or asset_col not in cells:
+                    continue
+                for recompute_label, kassiber_label in label_pairs:
+                    rc, kc = ctrl_h[recompute_label], ctrl_h[kassiber_label]
+                    if rc in cells and kc in cells:
+                        self.assertAlmostEqual(cells[rc], cells[kc], places=2)
+                        compared += 1
+            self.assertGreater(compared, 0, "expected Control rows to reconcile")
+
+            # Rate provenance is surfaced on the Control sheet.
+            self.assertIn("Rate Source", ctrl_h)
+            self.assertIn("Rate As Of", ctrl_h)
+            # Description + tags accompany each ledger row.
+            for headers in (acq_h, disp_h):
+                self.assertIn("Description", headers)
+                self.assertIn("Tags", headers)
+
+            # The single Google Docs link is a real hyperlink: shown behind its
+            # name on the Transactions sheet and listed on the Evidence sheet.
+            with zipfile.ZipFile(xlsx_path) as workbook:
+                names = re.findall(r'<sheet name="([^"]+)"', workbook.read("xl/workbook.xml").decode("utf-8"))
+                tx_rels = workbook.read(
+                    f"xl/worksheets/_rels/sheet{names.index('Transactions') + 1}.xml.rels"
+                ).decode("utf-8")
+                ev_rels = workbook.read(
+                    f"xl/worksheets/_rels/sheet{names.index('Evidence') + 1}.xml.rels"
+                ).decode("utf-8")
+            self.assertIn(sale_doc, tx_rels)  # clickable link in the Transactions cell
+            self.assertIn(sale_doc, ev_rels)  # clickable link on the Evidence sheet
+            # The visible cell text is the name, not the raw URL.
+            tx = sheets["Transactions"]
+            tx_h = {l: c for c, l in tx.get(2, {}).items()}
+            att_values = [tx[r].get(tx_h["Attachments"]) for r in tx if r >= 3 and tx_h["Attachments"] in tx[r]]
+            self.assertIn("Sale receipt", att_values)
+            self.assertNotIn(sale_doc, att_values)  # URL is the link target, not the shown text
+
+    def test_07ae_transactions_export(self):
+        xlsx_path = Path(self._tmp.name) / "kassiber-transactions.xlsx"
+        csv_path = Path(self._tmp.name) / "kassiber-transactions.csv"
+        for path in (xlsx_path, csv_path):
+            if path.exists():
+                path.unlink()
+
+        payload = self._cli(
+            "transactions", "export",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--export-format", "xlsx",
+            "--file", str(xlsx_path),
+        )
+        self._assert_kind(payload, "transactions.export")
+        self.assertEqual(payload["data"]["sheets"], ["Transactions"])
+        self.assertGreater(payload["data"]["rows"], 0)
+        self.assertEqual(xlsx_path.read_bytes()[:2], b"PK")
+        sheets = _load_xlsx_sheets(xlsx_path)
+        headers = {label for label in sheets["Transactions"].get(2, {}).values()}
+        for column in ("Wallet", "Direction", "Asset", "Description", "Tags", "Attachments"):
+            self.assertIn(column, headers)
+
+        payload = self._cli(
+            "transactions", "export",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--export-format", "csv",
+            "--file", str(csv_path),
+        )
+        self._assert_kind(payload, "transactions.export")
+        csv_text = csv_path.read_text(encoding="utf-8")
+        self.assertIn("Kassiber Transactions - Default", csv_text)
+        self.assertIn("Transaction ID", csv_text)
+
+    def test_07af_verify_transfer_fee_and_traceable_ids(self):
+        # A self-transfer with a network fee: the engine records transfer_out for
+        # the full sent amount (fee included) plus a separate transfer_fee row.
+        # The holdings recompute must not subtract the fee twice, and the ledger
+        # Transaction IDs must be the external txids (so they match the
+        # Transactions sheet for evidence cross-reference).
+        with tempfile.TemporaryDirectory(prefix="kassiber-verify-xfer-") as tmp:
+            root = Path(tmp) / "data"
+            a_csv = Path(tmp) / "a.csv"
+            b_csv = Path(tmp) / "b.csv"
+            a_csv.write_text(
+                "date,txid,direction,asset,amount,fee,fiat_rate,description,kind\n"
+                "2024-01-01T00:00:00Z,buy-001,inbound,BTC,1.00000000,0,40000,Buy,buy\n"
+                "2024-06-01T00:00:00Z,xfer-001,outbound,BTC,0.50100000,0,50000,Move to cold,transfer\n",
+                encoding="utf-8",
+            )
+            b_csv.write_text(
+                "date,txid,direction,asset,amount,fee,fiat_rate,description,kind\n"
+                "2024-06-01T00:05:00Z,xfer-001,inbound,BTC,0.50000000,0,50000,Move to cold,transfer\n",
+                encoding="utf-8",
+            )
+            xlsx_path = Path(tmp) / "report.xlsx"
+
+            def run(*args):
+                payload, code = _run(root, *args)
+                self.assertEqual(code, 0, f"{args} -> {json.dumps(payload)[:300]}")
+                return payload
+
+            run("init")
+            run("workspaces", "create", "Main")
+            run("profiles", "create", "--workspace", "Main", "--fiat-currency", "USD", "--tax-country", "generic", "Default")
+            run("wallets", "create", "--workspace", "Main", "--profile", "Default", "--label", "Hot", "--kind", "custom")
+            run("wallets", "create", "--workspace", "Main", "--profile", "Default", "--label", "Cold", "--kind", "custom")
+            run("wallets", "import-csv", "--workspace", "Main", "--profile", "Default", "--wallet", "Hot", "--file", str(a_csv))
+            run("wallets", "import-csv", "--workspace", "Main", "--profile", "Default", "--wallet", "Cold", "--file", str(b_csv))
+            run("rates", "set", "BTC-USD", "2025-06-01T00:00:00Z", "90000")
+            run("journals", "process", "--workspace", "Main", "--profile", "Default")
+            run("reports", "export-xlsx", "--workspace", "Main", "--profile", "Default", "--file", str(xlsx_path))
+
+            portfolio = run("reports", "portfolio-summary", "--workspace", "Main", "--profile", "Default")["data"]
+            kassiber_qty = sum(float(row["quantity"]) for row in portfolio if row["asset"] == "BTC")
+            self.assertAlmostEqual(kassiber_qty, 0.999, places=8)  # 1.0 funded − 0.001 fee burned
+
+            sheets = _load_xlsx_sheets(xlsx_path)
+            acq = sheets["Acquisitions"]
+            disp = sheets["Disposals"]
+            acq_h = {l: c for c, l in acq.get(2, {}).items()}
+            disp_h = {l: c for c, l in disp.get(2, {}).items()}
+
+            def _by_asset(rows, headers, value_label, *, types=None):
+                total = 0.0
+                for rownum, cells in rows.items():
+                    if rownum < 3 or headers["Asset"] not in cells:
+                        continue
+                    if types is not None and cells.get(headers["Type"]) not in types:
+                        continue
+                    total += cells.get(headers[value_label], 0.0)
+                return total
+
+            qty = "Quantity msat (input)"
+            add = _by_asset(acq, acq_h, qty, types={"acquisition", "transfer_in"})
+            sub_all = _by_asset(disp, disp_h, qty)
+            sub_fee = _by_asset(disp, disp_h, qty, types={"transfer_fee"})
+            # Mirror the Control holdings formula: Σadd − (Σdisp − Σtransfer_fee).
+            recompute = (add - (sub_all - sub_fee)) / 1e11
+            self.assertAlmostEqual(recompute, kassiber_qty, places=8)
+
+            # The live formula must re-add transfer_fee and use a BTC tolerance.
+            with zipfile.ZipFile(xlsx_path) as workbook:
+                names = re.findall(r'<sheet name="([^"]+)"', workbook.read("xl/workbook.xml").decode("utf-8"))
+                control_xml = _unescape_xml(
+                    workbook.read(f"xl/worksheets/sheet{names.index('Control') + 1}.xml").decode("utf-8")
+                )
+            self.assertIn('"transfer_fee"', control_xml)
+            self.assertIn("0.00000001", control_xml)  # balance check uses a BTC tolerance, not the fiat cell
+
+            # Ledger Transaction IDs are the external txids, matching Transactions.
+            acq_ids = {acq[r].get(acq_h["Transaction ID"]) for r in acq if r >= 3 and acq_h["Transaction ID"] in acq[r]}
+            self.assertIn("buy-001", acq_ids)
+            self.assertIn("xfer-001", acq_ids)
 
     def test_07aa_pdf_writer_reports_actual_page_count(self):
         from kassiber.pdf_report import write_text_pdf
@@ -1786,21 +2250,14 @@ class CliSmokeTest(unittest.TestCase):
         self.assertEqual(transfer_row["received_msat"], 50000000000)
         self.assertEqual(transfer_row["fee_msat"], 100000000)
 
-        # Only the 0.001 BTC network fee is realized as a taxable disposal.
+        # Network fees are recorded for holdings/audit, but they are not
+        # capital-gains disposals.
         payload = self._cli(
             "reports", "capital-gains",
             "--workspace", "Main",
             "--profile", "Transfer",
         )
-        rows = payload["data"]
-        self.assertEqual(len(rows), 1)
-        gain_row = rows[0]
-        self.assertEqual(gain_row["entry_type"], "transfer_fee")
-        self.assertEqual(gain_row["wallet"], "Cold")
-        self.assertAlmostEqual(float(gain_row["quantity"]), 0.001, places=8)
-        self.assertAlmostEqual(float(gain_row["proceeds"]), 65.0, places=4)
-        self.assertAlmostEqual(float(gain_row["cost_basis"]), 60.0, places=4)
-        self.assertAlmostEqual(float(gain_row["gain_loss"]), 5.0, places=4)
+        self.assertEqual(payload["data"], [])
 
         # Cost basis follows the moved coins to Hot, so both wallets show non-zero
         # holdings with positive average cost.
@@ -1849,13 +2306,7 @@ class CliSmokeTest(unittest.TestCase):
         self._assert_kind(payload, "reports.tax-summary")
         rows = payload["data"]
         detail_rows = [row for row in rows if row["row_type"] == "detail"]
-        self.assertEqual(len(detail_rows), 1)
-        self.assertEqual(detail_rows[0]["transaction_type"], "move")
-        self.assertEqual(detail_rows[0]["quantity_msat"], 100000000)
-        self.assertAlmostEqual(float(detail_rows[0]["gain_loss"]), 5.0, places=4)
-        grand_total = next(row for row in rows if row["row_type"] == "grand_total")
-        self.assertEqual(grand_total["quantity_msat"], 100000000)
-        self.assertAlmostEqual(float(grand_total["gain_loss"]), 5.0, places=4)
+        self.assertEqual(detail_rows, [])
 
     def test_13a_intra_transfer_fiat_value_spot_price(self):
         payload = self._cli(
@@ -1907,12 +2358,7 @@ class CliSmokeTest(unittest.TestCase):
         )
         self._assert_kind(payload, "reports.capital-gains")
         rows = payload["data"]
-        self.assertEqual(len(rows), 1)
-        gain_row = rows[0]
-        self.assertEqual(gain_row["entry_type"], "transfer_fee")
-        self.assertAlmostEqual(float(gain_row["proceeds"]), 65.0, places=4)
-        self.assertAlmostEqual(float(gain_row["cost_basis"]), 60.0, places=4)
-        self.assertAlmostEqual(float(gain_row["gain_loss"]), 5.0, places=4)
+        self.assertEqual(rows, [])
 
     def test_13c_fee_only_consolidation_is_reported_as_fee(self):
         payload = self._cli(
@@ -1964,9 +2410,9 @@ class CliSmokeTest(unittest.TestCase):
         fee_entry = next(e for e in entries if e["entry_type"] == "fee")
         self.assertEqual(fee_entry["wallet"], "Wallet")
         self.assertAlmostEqual(float(fee_entry["quantity"]), -0.001, places=8)
-        self.assertAlmostEqual(float(fee_entry["proceeds"]), 65.0, places=4)
+        self.assertAlmostEqual(float(fee_entry["proceeds"]), 60.0, places=4)
         self.assertAlmostEqual(float(fee_entry["cost_basis"]), 60.0, places=4)
-        self.assertAlmostEqual(float(fee_entry["gain_loss"]), 5.0, places=4)
+        self.assertAlmostEqual(float(fee_entry["gain_loss"]), 0.0, places=4)
 
         payload = self._cli(
             "reports", "summary",
@@ -1977,7 +2423,7 @@ class CliSmokeTest(unittest.TestCase):
         flow = payload["data"]["asset_flow"][0]
         self.assertEqual(flow["outbound_amount_msat"], 0)
         self.assertEqual(flow["fee_amount_msat"], 100000000)
-        self.assertEqual(payload["data"]["realized"]["gain_loss"], 5.0)
+        self.assertEqual(payload["data"]["realized"]["gain_loss"], 0)
 
         payload = self._cli(
             "reports", "tax-summary",
@@ -1986,10 +2432,7 @@ class CliSmokeTest(unittest.TestCase):
         )
         self._assert_kind(payload, "reports.tax-summary")
         detail_rows = [row for row in payload["data"] if row["row_type"] == "detail"]
-        self.assertEqual(len(detail_rows), 1)
-        self.assertEqual(detail_rows[0]["transaction_type"], "fee")
-        self.assertEqual(detail_rows[0]["quantity_msat"], 100000000)
-        self.assertAlmostEqual(float(detail_rows[0]["gain_loss"]), 5.0, places=4)
+        self.assertEqual(detail_rows, [])
 
     def test_13d_split_peg_implausible_fee_is_quarantined_not_taxed(self):
         # A spend that fans out to an owned wallet + a Liquid peg must NOT be
@@ -2389,6 +2832,164 @@ class CliSmokeTest(unittest.TestCase):
             "--transaction", "manual-out-leg",
         )
         self.assertEqual(payload["data"]["excluded"], True)
+
+    def test_14b_same_wallet_failed_swap_refund_pairing(self):
+        workspace = "RefundWorkspace"
+        self._cli("init")
+        self._cli("workspaces", "create", workspace)
+        payload = self._cli(
+            "profiles", "create",
+            "--workspace", workspace,
+            "--fiat-currency", "USD",
+            "--tax-country", "generic",
+            "RefundPair",
+        )
+        self._assert_kind(payload, "profiles.create")
+        self._cli(
+            "wallets", "create",
+            "--workspace", workspace,
+            "--profile", "RefundPair",
+            "--label", "RefundWallet",
+            "--kind", "custom",
+        )
+        self._cli(
+            "wallets", "import-csv",
+            "--workspace", workspace,
+            "--profile", "RefundPair",
+            "--wallet", "RefundWallet",
+            "--file", str(self.failed_swap_refund_csv),
+        )
+
+        payload = self._cli(
+            "transfers", "pair",
+            "--workspace", workspace,
+            "--profile", "RefundPair",
+            "--tx-out", "failed-swap-send",
+            "--tx-in", "failed-swap-refund",
+            "--kind", "manual",
+            "--policy", "carrying-value",
+        )
+        self._assert_kind(payload, "transfers.pair")
+        pair_id = payload["data"]["id"]
+
+        payload = self._cli(
+            "transfers", "list",
+            "--workspace", workspace,
+            "--profile", "RefundPair",
+        )
+        self._assert_kind(payload, "transfers.list")
+        self.assertEqual(len(payload["data"]), 1)
+        self.assertEqual(payload["data"][0]["id"], pair_id)
+        self.assertEqual(payload["data"][0]["out"]["wallet"], "RefundWallet")
+        self.assertEqual(payload["data"][0]["in"]["wallet"], "RefundWallet")
+
+        payload = self._cli(
+            "journals", "process",
+            "--workspace", workspace,
+            "--profile", "RefundPair",
+        )
+        data = payload["data"]
+        self.assertEqual(data["transfers_detected"], 1)
+        self.assertEqual(data["cross_asset_pairs"], 0)
+        self.assertEqual(data["quarantined"], 0)
+        self.assertEqual(data["entries_created"], 4)
+
+        payload = self._cli(
+            "reports", "journal-entries",
+            "--workspace", workspace,
+            "--profile", "RefundPair",
+        )
+        entries = payload["data"]
+        self.assertEqual(
+            sorted(entry["entry_type"] for entry in entries),
+            ["acquisition", "transfer_fee", "transfer_in", "transfer_out"],
+        )
+        out_entry = next(entry for entry in entries if entry["entry_type"] == "transfer_out")
+        in_entry = next(entry for entry in entries if entry["entry_type"] == "transfer_in")
+        self.assertEqual(out_entry["wallet"], "RefundWallet")
+        self.assertEqual(in_entry["wallet"], "RefundWallet")
+        self.assertAlmostEqual(float(out_entry["quantity"]), -0.1001, places=8)
+        self.assertAlmostEqual(float(in_entry["quantity"]), 0.0998, places=8)
+
+        payload = self._cli(
+            "reports", "capital-gains",
+            "--workspace", workspace,
+            "--profile", "RefundPair",
+        )
+        gains = payload["data"]
+        self.assertEqual(gains, [])
+
+    def test_14c_failed_swap_refund_suggested_by_funding_link(self):
+        workspace = "RefundLinkWorkspace"
+        self._cli("init")
+        self._cli("workspaces", "create", workspace)
+        self._cli(
+            "profiles", "create",
+            "--workspace", workspace,
+            "--fiat-currency", "USD",
+            "--tax-country", "generic",
+            "RefundLink",
+        )
+        self._cli(
+            "wallets", "create",
+            "--workspace", workspace,
+            "--profile", "RefundLink",
+            "--label", "LinkWallet",
+            "--kind", "custom",
+        )
+        self._cli(
+            "wallets", "import-csv",
+            "--workspace", workspace,
+            "--profile", "RefundLink",
+            "--wallet", "LinkWallet",
+            "--file", str(self.failed_swap_refund_linked_csv),
+        )
+
+        # The send and refund share one wallet and sit 3 days apart, so the
+        # time+amount heuristic cannot pair them — only the funding-txid link
+        # can. The matcher should surface exactly one exact swap-refund.
+        payload = self._cli(
+            "transfers", "suggest",
+            "--workspace", workspace,
+            "--profile", "RefundLink",
+        )
+        self.assertEqual(payload["kind"], "transfers.suggest")
+        candidates = payload["data"]["candidates"]
+        self.assertEqual(len(candidates), 1)
+        candidate = candidates[0]
+        self.assertEqual(candidate["confidence"], "exact")
+        self.assertEqual(candidate["method"], "htlc_refund")
+        self.assertEqual(candidate["default_kind"], "swap-refund")
+        self.assertEqual(candidate["default_policy"], "carrying-value")
+        self.assertEqual(candidate["out_wallet_label"], "LinkWallet")
+        self.assertEqual(candidate["in_wallet_label"], "LinkWallet")
+
+        # Pair with the dedicated swap-refund kind and confirm the round trip
+        # books only the fee, not a disposal.
+        payload = self._cli(
+            "transfers", "pair",
+            "--workspace", workspace,
+            "--profile", "RefundLink",
+            "--tx-out", _LOCKUP_TXID,
+            "--tx-in", _REFUND_TXID,
+            "--kind", "swap-refund",
+            "--policy", "carrying-value",
+        )
+        self._assert_kind(payload, "transfers.pair")
+        self.assertEqual(payload["data"]["kind"], "swap-refund")
+
+        self._cli(
+            "journals", "process",
+            "--workspace", workspace,
+            "--profile", "RefundLink",
+        )
+        payload = self._cli(
+            "reports", "capital-gains",
+            "--workspace", workspace,
+            "--profile", "RefundLink",
+        )
+        gains = payload["data"]
+        self.assertEqual(gains, [])
 
     def test_15_cross_asset_pair_policies(self):
         payload = self._cli(
@@ -4181,6 +4782,490 @@ class AccountBucketBehaviorTest(unittest.TestCase):
         self.assertEqual(real_buy["external_id"], "pocket-wallet-tx")
         self.assertEqual(real_buy["pricing_provider"], "Pocket Bitcoin")
         self.assertFalse(real_buy["excluded"])
+
+    def test_loans_collateral_lock_is_not_a_disposal_end_to_end(self):
+        # Drives the whole stack via the CLI: a collateral lock leg must suppress
+        # the outbound disposal so the encumbered BTC still shows in the report.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "state" / "kassiber"
+            root.mkdir(parents=True)
+            csv_path = Path(tmp) / "wallet.csv"
+            csv_path.write_text(
+                "date,txid,direction,asset,amount,fee,fiat_rate,description,kind\n"
+                "2026-01-01T10:00:00Z,buy-1,inbound,BTC,1.00000000,0,60000,Buy,buy\n"
+                "2026-02-01T10:00:00Z,lock-1,outbound,BTC,1.00000000,0,65000,Lock to escrow,withdrawal\n",
+                encoding="utf-8",
+            )
+
+            def run(*args):
+                payload, code = _run(root, *args)
+                self.assertEqual(code, 0, f"{args} -> {json.dumps(payload)[:300]}")
+                return payload
+
+            run("init")
+            run("workspaces", "create", "Main")
+            run("profiles", "create", "--workspace", "Main", "--fiat-currency", "USD", "--tax-country", "generic", "Default")
+            run("wallets", "create", "--workspace", "Main", "--profile", "Default", "--label", "W1", "--kind", "custom")
+            run("wallets", "import-csv", "--workspace", "Main", "--profile", "Default", "--wallet", "W1", "--file", str(csv_path))
+
+            def btc_held():
+                run("journals", "process", "--workspace", "Main", "--profile", "Default")
+                rows = run("reports", "portfolio-summary", "--workspace", "Main", "--profile", "Default")["data"]
+                return sum(float(r["quantity"]) for r in rows if r["asset"] == "BTC")
+
+            # Baseline: the outbound is booked as a disposal, so no BTC remains.
+            self.assertAlmostEqual(btc_held(), 0.0, places=8)
+
+            mark = run(
+                "loans", "mark", "--workspace", "Main", "--profile", "Default",
+                "--txid", "lock-1", "--as", "collateral",
+            )["data"]
+            self.assertEqual(mark["role"], "collateral_lock")
+
+            # With the mark, the disposal is suppressed: the BTC is still held
+            # (encumbered), not sold.
+            self.assertAlmostEqual(btc_held(), 1.0, places=8)
+
+            # The lock has no offsetting release, so it surfaces as an open lock.
+            listing = run("loans", "list", "--workspace", "Main", "--profile", "Default")["data"]
+            self.assertEqual(len(listing["open_locks"]), 1)
+            self.assertEqual(listing["open_locks"][0]["role"], "collateral_lock")
+
+            # Liquidation path: removing the mark reverts the outbound to the
+            # disposal it really was, so the BTC leaves the book again.
+            run("loans", "unmark", "--workspace", "Main", "--profile", "Default", "--txid", "lock-1")
+            self.assertAlmostEqual(btc_held(), 0.0, places=8)
+
+            # Handler-level error: marking a missing transaction.
+            payload, code = _run(
+                root, "loans", "mark", "--workspace", "Main", "--profile", "Default",
+                "--txid", "does-not-exist", "--as", "collateral",
+            )
+            self.assertNotEqual(code, 0)
+            self.assertEqual(payload.get("kind"), "error")
+            self.assertEqual(payload["error"]["code"], "not_found")
+
+    def test_loans_principal_received_and_repaid_are_not_tax_events(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "state" / "kassiber"
+            root.mkdir(parents=True)
+            csv_path = Path(tmp) / "wallet.csv"
+            csv_path.write_text(
+                "date,txid,direction,asset,amount,fee,fiat_rate,description,kind\n"
+                "2026-01-01T10:00:00Z,principal-in,inbound,BTC,1.00000000,0,60000,Loan principal received,deposit\n"
+                "2026-02-01T10:00:00Z,principal-out,outbound,BTC,1.00000000,0,65000,Loan principal repaid,withdrawal\n",
+                encoding="utf-8",
+            )
+
+            def run(*args):
+                payload, code = _run(root, *args)
+                self.assertEqual(code, 0, f"{args} -> {json.dumps(payload)[:300]}")
+                return payload
+
+            run("init")
+            run("workspaces", "create", "Main")
+            run(
+                "profiles", "create", "--workspace", "Main",
+                "--fiat-currency", "USD", "--tax-country", "generic", "Default",
+            )
+            run(
+                "wallets", "create", "--workspace", "Main", "--profile", "Default",
+                "--label", "W1", "--kind", "custom",
+            )
+            run(
+                "wallets", "import-csv", "--workspace", "Main", "--profile", "Default",
+                "--wallet", "W1", "--file", str(csv_path),
+            )
+
+            mark_in = run(
+                "loans", "mark", "--workspace", "Main", "--profile", "Default",
+                "--txid", "principal-in", "--as", "principal-received",
+            )["data"]
+            mark_out = run(
+                "loans", "mark", "--workspace", "Main", "--profile", "Default",
+                "--txid", "principal-out", "--as", "principal-repaid",
+            )["data"]
+            self.assertEqual(mark_in["role"], "loan_principal_received")
+            self.assertEqual(mark_out["role"], "loan_principal_repaid")
+            linked = run(
+                "loans", "link", "--workspace", "Main", "--profile", "Default",
+                "--txid", "principal-in", "--txid", "principal-out", "--loan-id", "loan-test",
+            )["data"]
+            self.assertEqual(linked["loan_id"], "loan-test")
+            self.assertEqual(len(linked["transaction_ids"]), 2)
+            listing = run("loans", "list", "--workspace", "Main", "--profile", "Default")["data"]
+            self.assertEqual({mark["loan_id"] for mark in listing["marks"]}, {"loan-test"})
+
+            run("journals", "process", "--workspace", "Main", "--profile", "Default")
+            gains = run(
+                "reports", "capital-gains", "--workspace", "Main", "--profile", "Default",
+            )["data"]
+            self.assertEqual(gains, [])
+
+
+_GENERIC_LEDGER_CSV = """Type,Date,Received Amount,Received Asset,Sent Amount,Sent Asset,Fee Amount,Fee Asset,Fiat Value,Counterparty,Note,Tx-ID
+Buy,2026-01-15,0.05000000,BTC,3000.00,EUR,3.50,EUR,,Coinfinity,First stack,ledger-buy-1
+Sell,2026-02-10,2200.00,EUR,0.03000000,BTC,1.00,EUR,,Kraken,Took some profit,ledger-sell-1
+Mining,2026-03-10,0.00050000,BTC,,,,,32.50,Solo pool,Block reward,ledger-mining-1
+Income,2026-03-20,250000,SATS,,,,,160.00,Freelance,Invoice in sats,ledger-income-1
+Withdrawal,2026-04-01,,,0.02000000,BTC,0.00002000,BTC,,,Moved to cold storage,ledger-withdrawal-1
+Gift sent,2026-05-01,,,0.00100000,BTC,,,,,Birthday gift,ledger-gift-1
+"""
+
+_GENERIC_LEDGER_BAD_TYPE_CSV = """Type,Date,Received Amount,Received Asset,Sent Amount,Sent Asset,Fee Amount,Fee Asset,Fiat Value,Counterparty,Note,Tx-ID
+Margin Trade,2026-01-15,0.05000000,BTC,3000.00,EUR,,,,,,bad-1
+"""
+
+
+class GenericLedgerImportTest(unittest.TestCase):
+    """Generic (manual) ledger template generation + .xlsx/CSV import."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory(prefix="kassiber-generic-ledger-")
+        self.data_root = Path(self._tmp.name) / "data"
+        self._cli("init")
+        self._cli("workspaces", "create", "Manual")
+        self._cli(
+            "profiles", "create",
+            "--workspace", "Manual",
+            "--fiat-currency", "EUR",
+            "--tax-country", "generic",
+            "Book",
+        )
+        self._cli(
+            "wallets", "create",
+            "--workspace", "Manual",
+            "--profile", "Book",
+            "--label", "Manual Ledger",
+            "--kind", "custom",
+        )
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def _cli(self, *args):
+        payload, code = _run(self.data_root, *args)
+        if code != 0:
+            self.fail(
+                f"CLI exited {code} for {args!r}; envelope: {json.dumps(payload)[:400]}"
+            )
+        self.assertEqual(payload.get("schema_version"), 1)
+        self.assertIn("data", payload)
+        return payload
+
+    def _import(self, file_path):
+        return self._cli(
+            "wallets", "import-ledger",
+            "--workspace", "Manual",
+            "--profile", "Book",
+            "--wallet", "Manual Ledger",
+            "--file", str(file_path),
+        )
+
+    def _records_by_external_id(self):
+        payload = self._cli(
+            "transactions", "list",
+            "--workspace", "Manual",
+            "--profile", "Book",
+            "--wallet", "Manual Ledger",
+        )
+        return {row["external_id"]: row for row in payload["data"]}
+
+    def test_template_generates_both_formats_without_a_database(self):
+        # ledger-template is a no-DB writer; it must work before any book exists.
+        for suffix in ("xlsx", "csv"):
+            target = Path(self._tmp.name) / f"template.{suffix}"
+            payload = self._cli("wallets", "ledger-template", "--file", str(target))
+            self.assertEqual(payload["kind"], "wallets.ledger-template")
+            self.assertEqual(payload["data"]["format"], suffix)
+            self.assertTrue(target.exists())
+            self.assertIn("Type", payload["data"]["columns"])
+
+    def test_xlsx_template_round_trips_through_import(self):
+        target = Path(self._tmp.name) / "round-trip.xlsx"
+        self._cli("wallets", "ledger-template", "--file", str(target))
+        payload = self._import(target)
+        # The bundled example rows all import cleanly.
+        self.assertEqual(payload["data"]["input_format"], "generic_ledger")
+        self.assertEqual(payload["data"]["imported"], 7)
+
+    def test_dry_run_previews_without_importing(self):
+        template = Path(self._tmp.name) / "preview.csv"
+        self._cli("wallets", "ledger-template", "--file", str(template))
+        payload = self._cli(
+            "wallets", "import-ledger",
+            "--workspace", "Manual", "--profile", "Book", "--wallet", "Manual Ledger",
+            "--file", str(template), "--dry-run",
+        )
+        self.assertEqual(payload["kind"], "wallets.import-ledger")
+        self.assertGreater(payload["data"]["mapped"], 0)
+        self.assertEqual(payload["data"]["errors"], 0)
+        self.assertTrue(payload["data"]["preview"])
+        self.assertEqual(self._records_by_external_id(), {})  # nothing persisted
+
+        # A bad row is collected as a row-numbered problem, not aborted, and the
+        # whole file still previews (the real importer stops at the first error).
+        bad = Path(self._tmp.name) / "bad.csv"
+        bad.write_text(
+            "Date,Type,Received Asset,Received Amount,Sent Asset,Sent Amount,Fee Amount\n"
+            "2026-01-15,Buy,BTC,0.5,EUR,20000,0\n"
+            "2026-02-01,Frobnicate,BTC,0.1,,,0\n",
+            encoding="utf-8",
+        )
+        bad_payload = self._cli(
+            "wallets", "import-ledger",
+            "--workspace", "Manual", "--profile", "Book", "--wallet", "Manual Ledger",
+            "--file", str(bad), "--dry-run",
+        )
+        self.assertEqual(bad_payload["data"]["mapped"], 1)
+        self.assertEqual(bad_payload["data"]["errors"], 1)
+        self.assertEqual(bad_payload["data"]["problems"][0]["row"], 2)
+        self.assertEqual(self._records_by_external_id(), {})
+
+    def test_byo_columns_are_auto_detected(self):
+        # An arbitrary export (no Type column; sent/received BTC + a fiat price)
+        # imports by auto-detecting the columns onto the ledger shape.
+        byo = Path(self._tmp.name) / "byo.csv"
+        byo.write_text(
+            "Date,Received BTC,Sent BTC,Currency,Price,Note\n"
+            "2026-01-15,0.5,,EUR,40000,Bought\n"
+            "2026-01-20,,0.1,EUR,42000,Sold\n",
+            encoding="utf-8",
+        )
+        preview = self._cli(
+            "wallets", "import-ledger",
+            "--workspace", "Manual", "--profile", "Book", "--wallet", "Manual Ledger",
+            "--file", str(byo), "--dry-run",
+        )
+        self.assertTrue(preview["data"]["confident"])
+        self.assertEqual(preview["data"]["mapped"], 2)
+        fields = {d["field"] for d in preview["data"]["detected"]}
+        self.assertIn("received", fields)
+        self.assertIn("sent", fields)
+
+        imported = self._import(byo)
+        self.assertEqual(imported["data"]["imported"], 2)
+        listed = self._cli(
+            "transactions", "list",
+            "--workspace", "Manual", "--profile", "Book", "--wallet", "Manual Ledger",
+        )["data"]
+        self.assertEqual(len(listed), 2)
+        # The fiat price became exact execution pricing through #244's normalizer.
+        self.assertTrue(all(row.get("fiat_value") for row in listed))
+
+    def test_byo_asset_suffixed_cash_legs_keep_trade_kind_and_pricing(self):
+        buy_file = Path(self._tmp.name) / "byo-cash-leg-buy.csv"
+        buy_file.write_text(
+            "Date,Received BTC,Sent EUR,Note,Tx-ID\n"
+            "2026-01-15,0.5,20000,Bought,byo-buy-1\n",
+            encoding="utf-8",
+        )
+        sell_file = Path(self._tmp.name) / "byo-cash-leg-sell.csv"
+        sell_file.write_text(
+            "Date,Received EUR,Sent BTC,Note,Tx-ID\n"
+            "2026-01-20,4200,0.1,Sold,byo-sell-1\n",
+            encoding="utf-8",
+        )
+        preview = self._cli(
+            "wallets", "import-ledger",
+            "--workspace", "Manual", "--profile", "Book", "--wallet", "Manual Ledger",
+            "--file", str(buy_file), "--dry-run",
+        )
+        self.assertTrue(preview["data"]["confident"])
+        self.assertEqual(preview["data"]["mapped"], 1)
+        detected = {d["column"] for d in preview["data"]["detected"]}
+        self.assertIn("Received BTC", detected)
+        self.assertIn("Sent EUR", detected)
+
+        self._import(buy_file)
+        self._import(sell_file)
+        rows = self._records_by_external_id()
+        buy = rows["byo-buy-1"]
+        self.assertEqual(buy["kind"], "buy")
+        self.assertEqual(buy["direction"], "inbound")
+        self.assertEqual(buy["fiat_value_exact"], "20000")
+        self.assertEqual(buy["pricing_source_kind"], "exchange_execution")
+        self.assertEqual(buy["pricing_pair"], "BTC-EUR")
+        sell = rows["byo-sell-1"]
+        self.assertEqual(sell["kind"], "sell")
+        self.assertEqual(sell["direction"], "outbound")
+        self.assertEqual(sell["fiat_value_exact"], "4200")
+        self.assertEqual(sell["pricing_source_kind"], "exchange_execution")
+        self.assertEqual(sell["pricing_pair"], "BTC-EUR")
+
+    def test_byo_amount_asset_columns_are_not_forced_to_crypto_to_crypto(self):
+        byo = Path(self._tmp.name) / "byo-amount-assets.csv"
+        byo.write_text(
+            "Date,Received Amount,Received Asset,Sent Amount,Sent Asset,Note,Tx-ID\n"
+            "2026-01-15,0.5,BTC,20000,EUR,Bought,byo-asset-buy-1\n",
+            encoding="utf-8",
+        )
+        preview = self._cli(
+            "wallets", "import-ledger",
+            "--workspace", "Manual", "--profile", "Book", "--wallet", "Manual Ledger",
+            "--file", str(byo), "--dry-run",
+        )
+        self.assertTrue(preview["data"]["confident"])
+        self.assertEqual(preview["data"]["mapped"], 1)
+        self.assertEqual(preview["data"]["errors"], 0)
+
+        self._import(byo)
+        row = self._records_by_external_id()["byo-asset-buy-1"]
+        self.assertEqual(row["kind"], "buy")
+        self.assertEqual(row["fiat_value_exact"], "20000")
+        self.assertEqual(row["pricing_pair"], "BTC-EUR")
+
+    def test_byo_unrecognized_columns_are_steered_not_imported(self):
+        junk = Path(self._tmp.name) / "junk.csv"
+        junk.write_text("alpha,beta,gamma\n1,2,3\n", encoding="utf-8")
+        preview = self._cli(
+            "wallets", "import-ledger",
+            "--workspace", "Manual", "--profile", "Book", "--wallet", "Manual Ledger",
+            "--file", str(junk), "--dry-run",
+        )
+        self.assertFalse(preview["data"]["confident"])
+        payload, code = _run(
+            self.data_root, "wallets", "import-ledger",
+            "--workspace", "Manual", "--profile", "Book", "--wallet", "Manual Ledger",
+            "--file", str(junk),
+        )
+        self.assertNotEqual(code, 0)
+        self.assertEqual(payload["error"]["code"], "ledger_unrecognized")
+
+    def test_csv_import_maps_kinds_amounts_and_pricing(self):
+        ledger = Path(self._tmp.name) / "ledger.csv"
+        ledger.write_text(_GENERIC_LEDGER_CSV, encoding="utf-8")
+        payload = self._import(ledger)
+        self.assertEqual(payload["data"]["imported"], 6)
+        self.assertEqual(payload["data"]["skipped"], 0)
+
+        rows = self._records_by_external_id()
+        # Buy: exact exchange execution, fiat fee folded into cost basis.
+        buy = rows["ledger-buy-1"]
+        self.assertEqual(buy["direction"], "inbound")
+        self.assertEqual(buy["kind"], "buy")
+        self.assertEqual(buy["amount_msat"], 5_000_000_000)
+        self.assertEqual(buy["pricing_source_kind"], "exchange_execution")
+        self.assertEqual(buy["pricing_pair"], "BTC-EUR")
+        self.assertEqual(buy["fiat_value_exact"], "3003.50")
+        # Sell: fiat fee netted out of proceeds.
+        sell = rows["ledger-sell-1"]
+        self.assertEqual(sell["direction"], "outbound")
+        self.assertEqual(sell["kind"], "sell")
+        self.assertEqual(sell["fiat_value_exact"], "2199.00")
+        # SATS amount converts to BTC; income kept as an earn kind.
+        income = rows["ledger-income-1"]
+        self.assertEqual(income["kind"], "income")
+        self.assertEqual(income["amount_msat"], 250_000_000)
+        # Withdrawal carries the on-chain fee on the Bitcoin leg.
+        withdrawal = rows["ledger-withdrawal-1"]
+        self.assertEqual(withdrawal["kind"], "withdrawal")
+        self.assertEqual(withdrawal["fee_msat"], 2_000_000)
+        # Gift sent stays a non-sale disposal kind for review.
+        self.assertEqual(rows["ledger-gift-1"]["kind"], "gift")
+
+    def test_sats_leg_blank_fee_asset_stays_in_sats(self):
+        # Regression: a blank Fee Asset on a SATS-denominated leg must read the
+        # fee in sats (the leg's unit), not default to whole BTC. A 500-sat fee
+        # is 500_000 msat, not 500 BTC (5e13 msat).
+        ledger = Path(self._tmp.name) / "sats-fee.csv"
+        ledger.write_text(
+            "Type,Date,Sent Amount,Sent Asset,Fee Amount,Tx-ID\n"
+            "Withdrawal,2026-04-01,250000,SATS,500,sats-fee-1\n",
+            encoding="utf-8",
+        )
+        self._import(ledger)
+        row = self._records_by_external_id()["sats-fee-1"]
+        self.assertEqual(row["amount_msat"], 250_000_000)  # 250k sats = 0.0025 BTC
+        self.assertEqual(row["fee_msat"], 500_000)  # 500 sats, not 500 BTC
+
+    def test_reimport_is_idempotent(self):
+        ledger = Path(self._tmp.name) / "ledger.csv"
+        ledger.write_text(_GENERIC_LEDGER_CSV, encoding="utf-8")
+        self._import(ledger)
+        again = self._import(ledger)
+        self.assertEqual(again["data"]["imported"], 0)
+        self.assertEqual(again["data"]["skipped"], 6)
+
+    def test_unknown_type_aborts_with_a_validation_error(self):
+        ledger = Path(self._tmp.name) / "bad.csv"
+        ledger.write_text(_GENERIC_LEDGER_BAD_TYPE_CSV, encoding="utf-8")
+        payload, code = _run(
+            self.data_root,
+            "wallets", "import-ledger",
+            "--workspace", "Manual",
+            "--profile", "Book",
+            "--wallet", "Manual Ledger",
+            "--file", str(ledger),
+        )
+        self.assertNotEqual(code, 0)
+        self.assertEqual(payload.get("kind"), "error")
+        self.assertEqual(payload["error"]["code"], "validation")
+        self.assertIn("unknown Type", payload["error"]["message"])
+
+    def test_european_decimal_comma_and_date_are_parsed(self):
+        # German/Austrian hand entry: comma decimals, dot thousands, DD.MM.YYYY.
+        ledger = Path(self._tmp.name) / "de-locale.csv"
+        ledger.write_text(
+            "Type;Date;Received Amount;Received Asset;Sent Amount;Sent Asset;Fee Amount;Fee Asset;Tx-ID\n"
+            "Buy;15.01.2026;0,05000000;BTC;3.000,00;EUR;3,50;EUR;de-buy-1\n",
+            encoding="utf-8",
+        )
+        self._import(ledger)
+        row = self._records_by_external_id()["de-buy-1"]
+        self.assertEqual(row["amount_msat"], 5_000_000_000)  # 0.05 BTC, not 5,000,000
+        self.assertEqual(row["occurred_at"], "2026-01-15T00:00:00Z")
+        self.assertEqual(row["fiat_value_exact"], "3003.50")  # 3000,00 + 3,50 fee
+
+    def test_header_aliases_are_accepted(self):
+        ledger = Path(self._tmp.name) / "aliases.csv"
+        ledger.write_text(
+            "Transaction Type,Timestamp,Received Amount,Received Cur.,Sent Amount,Sent Cur.,Tx-ID\n"
+            "Buy,2026-01-15,0.05,BTC,3000,EUR,alias-buy-1\n",
+            encoding="utf-8",
+        )
+        payload = self._import(ledger)
+        self.assertEqual(payload["data"]["imported"], 1)
+        self.assertEqual(self._records_by_external_id()["alias-buy-1"]["kind"], "buy")
+
+    def test_no_txid_rows_reimport_without_duplicates(self):
+        ledger = Path(self._tmp.name) / "no-txid.csv"
+        ledger.write_text(
+            "Type,Date,Received Amount,Received Asset,Sent Amount,Sent Asset,Fiat Value\n"
+            "Mining,2026-03-10,0.00050000,BTC,,,32.50\n"
+            "Spend,2026-04-15,,,0.00100000,BTC,65.00\n",
+            encoding="utf-8",
+        )
+        first = self._import(ledger)
+        self.assertEqual(first["data"]["imported"], 2)
+        # Re-importing (even with the rows reordered) must not double-book, since
+        # identity falls back to the economic fingerprint, not the row position.
+        ledger.write_text(
+            "Type,Date,Received Amount,Received Asset,Sent Amount,Sent Asset,Fiat Value\n"
+            "Spend,2026-04-15,,,0.00100000,BTC,65.00\n"
+            "Mining,2026-03-10,0.00050000,BTC,,,32.50\n",
+            encoding="utf-8",
+        )
+        again = self._import(ledger)
+        self.assertEqual(again["data"]["imported"], 0)
+        self.assertEqual(again["data"]["skipped"], 2)
+
+    def test_mismatched_fiat_fee_currency_is_rejected(self):
+        ledger = Path(self._tmp.name) / "fee-mismatch.csv"
+        ledger.write_text(
+            "Type,Date,Received Amount,Received Asset,Sent Amount,Sent Asset,Fee Amount,Fee Asset,Tx-ID\n"
+            "Buy,2026-01-15,0.05,BTC,3000,EUR,5,USD,fee-bad-1\n",
+            encoding="utf-8",
+        )
+        payload, code = _run(
+            self.data_root,
+            "wallets", "import-ledger",
+            "--workspace", "Manual", "--profile", "Book", "--wallet", "Manual Ledger",
+            "--file", str(ledger),
+        )
+        self.assertNotEqual(code, 0)
+        self.assertEqual(payload["error"]["code"], "validation")
+        self.assertIn("does not match", payload["error"]["message"])
 
 
 if __name__ == "__main__":

@@ -20,6 +20,7 @@ describe("connection catalog", () => {
   it("keeps ready integrations on implemented setup paths", () => {
     const implementedSetupKinds = new Set([
       "descriptor",
+      "address-list",
       "file-wallet",
       "file-enrichment",
       "btcpay",
@@ -39,6 +40,7 @@ describe("connection catalog", () => {
   it("includes the Bitcoin-native connection families Kassiber can already use", () => {
     expect(CONNECTION_SOURCES.map((source) => source.id)).toEqual(
       expect.arrayContaining([
+        "address-list",
         "bitcoin-core",
         "electrum",
         "esplora",
@@ -95,22 +97,42 @@ describe("connection catalog", () => {
 
     expect(bullWallet?.image).toBeTruthy();
     expect(bullWallet?.image).toBe(bullExchange?.image);
+    expect(bullWallet?.image).toContain("bullbitcoin-mark");
     expect(bullWallet?.imageClassName).toContain("size-9");
+    expect(bullWallet?.imageClassName).not.toContain("rounded");
   });
 
-  it("marks transparent dark logos with a light frame for dark mode", () => {
-    for (const id of [
+  it("uses bundled Blockstream Green artwork instead of a generated placeholder", () => {
+    const blockstreamGreen = CONNECTION_SOURCES.find(
+      (source) => source.id === "blockstream-green",
+    );
+
+    expect(blockstreamGreen?.image).toContain("%2300B45A");
+    expect(blockstreamGreen?.image).not.toContain("font-family");
+    expect(blockstreamGreen?.image).not.toContain("GR");
+    expect(blockstreamGreen?.imageClassName).toContain("size-9");
+  });
+
+  it("marks transparent dark logos with a theme-aware frame", () => {
+    const hardwareWalletIds = [
       "bitbox",
       "trezor",
       "coldcard",
       "ledger",
       "foundation-passport",
-      "coinfinity",
-    ]) {
-      expect(
-        CONNECTION_SOURCES.find((source) => source.id === id)
-          ?.imageFrameClassName,
-      ).toContain("bg-white");
+    ];
+
+    for (const id of [...hardwareWalletIds, "coinfinity"]) {
+      const source = CONNECTION_SOURCES.find((candidate) => candidate.id === id);
+
+      expect(source?.imageFrameClassName).toContain("bg-muted");
+    }
+
+    for (const id of hardwareWalletIds) {
+      const source = CONNECTION_SOURCES.find((candidate) => candidate.id === id);
+
+      expect(source?.imageClassName).toContain("brightness-0");
+      expect(source?.imageClassName).toContain("dark:invert");
     }
   });
 });

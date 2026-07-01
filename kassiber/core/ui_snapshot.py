@@ -25,14 +25,17 @@ from . import output_inventory as core_output_inventory
 from . import ownership as core_ownership
 from . import rates as core_rates
 from . import sync_backends as core_sync_backends
+from . import source_overlap as core_source_overlap
 from . import reports as report_builders
 from .samourai import samourai_metadata_from_wallet_config
 from . import transaction_history
 from .repo import current_context_snapshot
 from .sync import normalize_backend_kind
 from .wallets import (
+    has_descriptor_sync_material,
     load_wallet_descriptor_plan_from_config,
     wallet_btcpay_provenance_config,
+    wallet_is_deprecated,
 )
 
 
@@ -375,7 +378,7 @@ def _wallet_backend_summary(
     source_file = _string_or_empty(config.get("source_file"))
     source_format = _string_or_empty(config.get("source_format"))
     sync_source = _string_or_empty(config.get("sync_source"))
-    has_descriptor = bool(config.get("descriptor"))
+    has_descriptor = has_descriptor_sync_material(config)
     has_addresses = bool(config.get("addresses"))
     backend_name = explicit_backend
     backend_source = "explicit" if explicit_backend else "none"
@@ -580,6 +583,33 @@ def _journal_freshness(
         "journal_entry_count": int(journal_entries or 0),
         "quarantine_count": int(quarantines or 0),
         "reason": reason,
+    }
+
+
+def build_review_badges_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
+    """Cheap unresolved-item counts for the active book's side-nav hints.
+
+    Quarantine count and journal freshness come from a single freshness pass;
+    the swap/transfer count is read from the column cached when the matcher runs
+    (see ``cache_swap_candidate_count``), so this never triggers the heavy matcher
+    itself. ``swaps`` is ``None`` until the matcher has run at least once, which
+    the UI renders as "no badge yet" rather than a misleading zero. Takes no
+    args — the side nav only ever reflects the active book.
+    """
+    _context, profile = _active_context_and_profile(conn)
+    freshness = _journal_freshness(conn, profile)
+    swaps: int | None = None
+    if profile is not None:
+        try:
+            if "swap_candidate_count" in profile.keys():
+                raw = profile["swap_candidate_count"]
+                swaps = int(raw) if raw is not None else None
+        except (IndexError, KeyError, ValueError, TypeError):
+            swaps = None
+    return {
+        "quarantine": int(freshness["quarantine_count"]),
+        "journals_needs_processing": bool(freshness["needs_processing"]),
+        "swaps": swaps,
     }
 
 
@@ -820,8 +850,16 @@ def _connections(
         backend_summary = _wallet_backend_summary(row["kind"], config, None)
         source_format = _string_or_empty(config.get("source_format"))
         sync_source = _string_or_empty(config.get("sync_source") or source_format)
+        chain = _string_or_empty(config.get("chain"))
+        network = _string_or_empty(config.get("network"))
+        policy_asset = _string_or_empty(config.get("policy_asset"))
+        payment_method_id = _string_or_empty(config.get("payment_method_id"))
         gap_limit = config.get("gap_limit")
-        has_descriptor = bool(config.get("descriptor"))
+        has_descriptor = has_descriptor_sync_material(config)
+        try:
+            wallet_chain = normalize_chain(config.get("chain") or "bitcoin")
+        except ValueError:
+            wallet_chain = "bitcoin"
         connection = {
             "id": row["id"],
             "kind": _map_wallet_kind(row["kind"]),
@@ -837,6 +875,11 @@ def _connections(
             "syncMode": backend_summary["sync_mode"],
             "syncSource": sync_source,
             "sourceFormat": source_format,
+            "deprecated": wallet_is_deprecated(config),
+            "chain": chain or wallet_chain,
+            "network": network or None,
+            "policyAsset": policy_asset or None,
+            "paymentMethodId": payment_method_id or None,
         }
         if has_descriptor:
             connection["gap"] = (
@@ -2580,10 +2623,10 @@ def _capital_gains_available_years(
 ) -> list[int]:
     reportable_filter = (
         "((je.entry_type = 'disposal' AND COALESCE(je.at_category, '') != 'neu_swap') "
-        "OR je.at_kennzahl IS NOT NULL)"
+        "OR (je.entry_type NOT IN ('fee', 'transfer_fee') AND je.at_kennzahl IS NOT NULL))"
         if primary_only
-        else "(je.entry_type IN ('disposal', 'income', 'fee', 'transfer_fee') "
-        "OR je.at_kennzahl IS NOT NULL)"
+        else "(je.entry_type IN ('disposal', 'income') "
+        "OR (je.entry_type NOT IN ('fee', 'transfer_fee') AND je.at_kennzahl IS NOT NULL))"
     )
     rows = conn.execute(
         f"""
@@ -3185,8 +3228,8 @@ def build_journal_events_list_snapshot(
           AND COALESCE(t.taxability_override, 1) != 0
           AND (
             (je.entry_type = 'disposal' AND COALESCE(je.at_category, '') != 'neu_swap')
-            OR je.entry_type IN ('income', 'fee', 'transfer_fee')
-            OR je.at_kennzahl IS NOT NULL
+            OR je.entry_type = 'income'
+            OR (je.entry_type NOT IN ('fee', 'transfer_fee') AND je.at_kennzahl IS NOT NULL)
           )
         """,
         params,
@@ -3411,15 +3454,26 @@ def build_wallets_list_snapshot(
                 },
                 "chain": str(config.get("chain") or ""),
                 "network": str(config.get("network") or ""),
+                "descriptor": bool(config.get("descriptor")),
+                "change_descriptor": bool(config.get("change_descriptor")),
                 "sync_mode": backend_summary["sync_mode"],
                 "sync_source": str(config.get("sync_source") or config.get("source_format") or ""),
                 "transaction_count": tx_count,
                 "last_transaction_at": row["last_tx_at"],
                 "last_synced_at": last_synced_at or None,
                 "sync_status": "has_transactions" if tx_count else "empty",
+                "deprecated": wallet_is_deprecated(config),
                 "journals_stale": freshness["needs_processing"] and tx_count > 0,
                 "btcpay_provenance": provenance_routes,
                 "samourai": samourai_metadata,
+                # Watched script types for an auto-detected xpub wallet (empty
+                # for explicit-descriptor / non-xpub wallets); lets the detail
+                # screen show and edit the set without revealing the key itself.
+                "script_types": [
+                    str(value)
+                    for value in (config.get("script_types") or [])
+                    if isinstance(value, str)
+                ],
                 "created_at": row["created_at"],
             }
         )
@@ -3493,7 +3547,7 @@ def _wallet_utxo_support(
     backend: Any,
 ) -> dict[str, Any]:
     sync_mode = backend_summary["sync_mode"]
-    has_descriptor = bool(config.get("descriptor"))
+    has_descriptor = has_descriptor_sync_material(config)
     has_addresses = bool(config.get("addresses"))
     if _string_or_empty(config.get("source_format")) == "wasabi_bundle":
         return {
@@ -4491,6 +4545,32 @@ def build_report_blockers_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
                     "title": "No transactions",
                     "detail": "Refresh sources or import transactions before reports can be useful.",
                     "daemon_kind": "ui.wallets.sync",
+                }
+            )
+        overlap = core_source_overlap.detect_profile_source_overlaps(
+            conn,
+            health["profile"]["id"],
+        )
+        if overlap["overlaps"]:
+            repair_preview = core_source_overlap.duplicate_transaction_preview(
+                conn,
+                health["profile"]["id"],
+                overlap["overlaps"],
+            )
+            blockers.append(
+                {
+                    "id": "source_overlap",
+                    "severity": "blocking",
+                    "title": "Overlapping wallet sources",
+                    "detail": (
+                        f"{overlap['overlap_count']} concrete watched script(s) are "
+                        "owned by multiple active sources. Reports can double-count "
+                        "history until one source is reviewed, trimmed, deprecated, "
+                        "or duplicate rows are excluded."
+                    ),
+                    "daemon_kind": "ui.wallets.list",
+                    "overlap": overlap,
+                    "repair_preview": repair_preview,
                 }
             )
         if journals["needs_processing"]:

@@ -4,12 +4,33 @@ import { fixtures } from "./fixtures";
 import { mockDaemon } from "./mock";
 import type { DaemonStreamRecord } from "./transport";
 
+describe("mock daemon transaction resolver", () => {
+  it("resolves quarantine fixture transactions for in-place review", async () => {
+    const resolved = await mockDaemon.invoke<{
+      transaction?: { id?: string; quarantineReason?: string | null } | null;
+    }>({
+      kind: "ui.transactions.resolve",
+      args: { query: "tx-missing-price" },
+    });
+
+    expect(resolved.error).toBeUndefined();
+    expect(resolved.data?.transaction?.id).toBe("tx-missing-price");
+    expect(resolved.data?.transaction?.quarantineReason).toBe("missing_price");
+  });
+});
+
 describe("mock daemon backend settings", () => {
   it("supports settings list and CRUD for demo mode", async () => {
     const list = await mockDaemon.invoke<{
-      backends: Array<{ name: string }>;
+      backends: Array<{ name: string; tor_proxy?: string; url?: string }>;
     }>({ kind: "ui.backends.settings.list" });
     expect(list.data?.backends.length).toBeGreaterThan(0);
+    const onionBackend = list.data?.backends.find(
+      (row) => row.name === "fulcrum-onion-long",
+    );
+    expect(onionBackend?.url).toContain(".onion:50001");
+    expect(onionBackend?.url?.length ?? 0).toBeGreaterThan(60);
+    expect(onionBackend?.tor_proxy).toBe("127.0.0.1:9050");
 
     const created = await mockDaemon.invoke<{ name: string }>({
       kind: "ui.backends.create",
@@ -340,7 +361,7 @@ describe("mock daemon profile method update", () => {
     return (snap.data?.workspaces ?? []).flatMap((w) => w.profiles);
   };
 
-  it("coerces an Austrian book to moving-average regardless of requested method", async () => {
+  it("applies the requested method for an Austrian book (no coercion)", async () => {
     const at = (await profiles()).find((p) => p.taxCountry === "at");
     expect(at).toBeDefined();
     const res = await mockDaemon.invoke<{ id: string }>({
@@ -350,7 +371,7 @@ describe("mock daemon profile method update", () => {
     expect(res.error).toBeUndefined();
     expect(res.data?.id).toBe(at!.id);
     const after = (await profiles()).find((p) => p.id === at!.id);
-    expect(after?.gainsAlgorithm).toBe("MOVING_AVERAGE_AT");
+    expect(after?.gainsAlgorithm).toBe("FIFO");
   });
 
   it("applies the requested method for a generic book", async () => {

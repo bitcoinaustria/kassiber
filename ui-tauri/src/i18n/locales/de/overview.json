@@ -81,6 +81,25 @@
       "couldNotOpenTransactionBody": "Kassiber konnte nicht zum Buch dieser Transaktion wechseln."
     }
   },
+  "bookRefresh": {
+    "refreshInProgressTitle": "Buch-Aktualisierung läuft",
+    "rescanInProgressTitle": "Buch-Rescan läuft",
+    "refreshStartedTitle": "Buch-Aktualisierung gestartet",
+    "rescanStartedTitle": "Buch-Rescan gestartet",
+    "refreshStartedBody": "Kassiber aktualisiert konfigurierte Quellen und Journale.",
+    "rescanStartedBody": "Kassiber scannt konfigurierte Quellen und Journale neu.",
+    "configuredSourcesQueued": "Konfigurierte Quellen eingereiht",
+    "journalsIncluded": "Journale eingeschlossen",
+    "autoPairIncluded": "Sicheres Auto-Pairing eingeschlossen",
+    "needsAttentionTitle": "Buch-Aktualisierung braucht Aufmerksamkeit",
+    "quarantineTitle_one": "{{count}} Transaktion in Quarantäne prüfen",
+    "quarantineTitle_other": "{{count}} Transaktionen in Quarantäne prüfen",
+    "transferReviewTitle_one": "{{count}} Swap-/Transfer-Kandidat prüfen",
+    "transferReviewTitle_other": "{{count}} Swap-/Transfer-Kandidaten prüfen",
+    "finishedTitle": "Buch-Aktualisierung abgeschlossen",
+    "failedTitle": "Buch-Aktualisierung fehlgeschlagen",
+    "failedBody": "Buch-Aktualisierung fehlgeschlagen"
+  },
   "stats": {
     "btcPrice": "BTC-Kurs",
     "refreshing": "Wird aktualisiert…",
@@ -117,7 +136,6 @@
     "reprocessingJournals": "Journale werden neu verarbeitet…",
     "refresh": "Aktualisieren",
     "refreshing": "Wird aktualisiert…",
-    "refreshAria": "Wallets und Journale aktualisieren",
     "addConnection": "Verbindung hinzufügen",
     "addConnectionAria": "Verbindung hinzufügen"
   },
@@ -314,6 +332,10 @@
     "seriesToggle": "{{label}} {{action}}",
     "btcPriceAxis": "BTC-Kurs ({{currency}})",
     "dragHint": "Ziehe das Zeitfenster oder die Griffe, um den Zeitraum anzupassen; Doppelklick zum Zurücksetzen",
+    "empty": {
+      "title": "Noch nichts zum Darstellen",
+      "body": "Verbinde eine Wallet oder importiere Transaktionen und aktualisiere dann, um hier dein Bitcoin-Guthaben und deine Aktivität zu sehen."
+    },
     "stat": {
       "changeInBalance": "Änderung des Bitcoin-Guthabens",
       "highestPosition": "Höchste BTC-Position",

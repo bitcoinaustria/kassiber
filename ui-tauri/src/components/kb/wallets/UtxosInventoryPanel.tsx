@@ -641,7 +641,21 @@ function EmptyState({
           className={cn("size-4", isRefreshing && "animate-spin")}
           aria-hidden="true"
         />
-        {isRefreshing ? t("utxos.refreshing") : t("utxos.refresh")}
+        {/* Reserve the widest label's width so the spinning icon can't ghost
+            on a mid-refresh resize: WKWebView (the macOS webview) strands the
+            old composited tile of the GPU-promoted icon when the button
+            changes width. Stacking both labels pins the width in every locale. */}
+        <span className="grid justify-items-center">
+          <span aria-hidden="true" className="invisible col-start-1 row-start-1">
+            {t("utxos.refresh")}
+          </span>
+          <span aria-hidden="true" className="invisible col-start-1 row-start-1">
+            {t("utxos.refreshing")}
+          </span>
+          <span className="col-start-1 row-start-1">
+            {isRefreshing ? t("utxos.refreshing") : t("utxos.refresh")}
+          </span>
+        </span>
       </Button>
     </div>
   );

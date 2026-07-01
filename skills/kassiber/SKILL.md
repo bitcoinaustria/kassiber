@@ -1,6 +1,6 @@
 ---
 name: kassiber
-description: Use this skill when the user wants to use the Kassiber CLI for local-first Bitcoin accounting, wallet onboarding, transaction imports, journal processing, metadata cleanup, or tax and portfolio reports. Applies to requests about Kassiber books, internal workspaces/profiles, accounts, wallets, backends, rates, attachments, BIP329 labels, quarantines, generic tax reporting, and Austrian-support planning/questions, even when the user does not say Kassiber by name.
+description: Use this skill when the user wants to use the Kassiber CLI for local-first Bitcoin accounting, wallet onboarding, transaction imports, journal processing, metadata cleanup, or tax and portfolio reports, or when the user wants to research, draft, or publish a Kassiber GitHub feature request. Applies to requests about Kassiber books, internal workspaces/profiles, accounts, wallets, backends, rates, attachments, BIP329 labels, quarantines, generic tax reporting, Austrian-support planning/questions, and Kassiber issue planning, even when the user does not say Kassiber by name.
 ---
 
 # Kassiber
@@ -19,7 +19,6 @@ Use these without opening extra references when the request clearly matches:
 
 | User asks for... | First command |
 |---|---|
-| Sync project/current wallets | `kassiber --machine wallets sync --all` |
 | Current balances by account, bucket, asset, or wallet | `kassiber --format plain reports balance-sheet` |
 | Exact summary totals, counts, fees, PnL | `kassiber --machine reports summary` |
 | Rebuild stale reports after imports/metadata/rates | `kassiber --machine journals process` |
@@ -36,7 +35,7 @@ If a fast-path command returns a structured error, inspect the envelope and take
 1. Prefer `kassiber` when it is on `PATH`. If it is not, fall back to `uv run kassiber` or `uv run python -m kassiber` from the Kassiber repo root.
 2. When falling back from `kassiber` to `uv run kassiber` or `uv run python -m kassiber`, keep the subcommand, flags, and operands identical. Only the launcher changes.
 3. When the chat includes pasted Kassiber output or docs, identify the live user request separately from the quoted material before running commands.
-4. Use fast paths for common workflows. Read the relevant reference file only when command shape is unclear, the action mutates durable config, secrets are involved, or the request is outside the fast-path table.
+4. Use fast paths for common read-only workflows. For wallet sync or other operations that contact configured backends, read the relevant reference first and avoid feeding raw command output into remote AI context unless it is documented as public-safe.
 5. Before concluding a reference is missing, verify that you resolved it from `<skill-dir>` rather than the repo root or the current working directory.
 6. If a Kassiber command fails with `unrecognized arguments`, stop and check `--help` or [references/command-templates.md](references/command-templates.md) before retrying. Do not keep guessing positional versus flagged forms.
 7. `--machine`, `--format`, and `--output` are global flags and must come before the subcommand tree, for example `kassiber --format plain reports balance-sheet`.
@@ -121,6 +120,8 @@ Related notes:
 - For fragile CLI command shapes and safe invocation patterns, read [references/command-templates.md](references/command-templates.md).
 - For first-run setup, roots, context, and books creation, read [references/onboarding.md](references/onboarding.md).
 - For wallet kinds, descriptor setup, backend selection, and imports, read [references/wallets-backends.md](references/wallets-backends.md).
+- For onboarding a brand-new exchange / broker / custodial platform Kassiber does not support yet (the structured intake interview plus the importer implementation checklist), read [references/add-exchange.md](references/add-exchange.md). The user-facing entry point is the `/add-exchange` command.
+- For researching, drafting, and publishing a Kassiber GitHub feature request, read [references/feature-request.md](references/feature-request.md). The user-facing entry point is the `/feature-request` command.
 - For journal processing, quarantine handling, and transfer pairing, read [references/journal-processing.md](references/journal-processing.md).
 - For swap-candidate matching (Lightning ↔ Liquid, BTC ↔ LBTC peg, Boltz submarine swaps), the auto-pair rules engine, and saved review-queue views, read [references/swap-matching.md](references/swap-matching.md).
 - For notes, tags, exclusions, BIP329 labels, and attachments, read [references/metadata.md](references/metadata.md).

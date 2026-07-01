@@ -26,6 +26,21 @@ describe("backend settings model", () => {
     expect(backend.walletRefs).toEqual(["Main/Default/Treasury"]);
   });
 
+  it("carries the daemon health-probe safety flag", () => {
+    const backend = backendRowToSettingsBackend({
+      name: "mempool",
+      display_name: "mempool",
+      kind: "esplora",
+      chain: "bitcoin",
+      network: "main",
+      url: "https://mempool.example.com/api",
+      has_url: true,
+      url_safe_for_http_probe: true,
+    });
+
+    expect(backend.urlSafeForHttpProbe).toBe(true);
+  });
+
   it("updates display_name without renaming the backend key", () => {
     const payload = backendPayload({
       id: "liquid",
@@ -96,6 +111,28 @@ describe("backend settings model", () => {
     });
 
     expect(backendTypeIdForSettingsBackend(backend)).toBe("liquid");
+  });
+
+  it("preserves redacted proxy credentials when saving unrelated backend edits", () => {
+    const backend = backendRowToSettingsBackend({
+      name: "mempool",
+      display_name: "Mempool",
+      kind: "esplora",
+      chain: "bitcoin",
+      network: "main",
+      url: "https://mempool.example/api",
+      has_url: true,
+      tor_proxy: "socks5h://redacted@127.0.0.1:9050",
+    });
+
+    expect(backend.proxy).toEqual({
+      host: "127.0.0.1",
+      port: "9050",
+      redactedCredentials: true,
+    });
+    const payload = backendPayload(backend);
+    expect(payload).not.toHaveProperty("tor_proxy");
+    expect(payload.clear).not.toContain("tor_proxy");
   });
 
   it("lets the built-in liquid backend recover from an accidental bitcoin chain", () => {

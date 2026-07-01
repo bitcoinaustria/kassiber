@@ -1,12 +1,21 @@
 import type * as React from "react";
-import { Database, FileInput, Server, Tags, Wallet, Zap } from "lucide-react";
+import {
+  Database,
+  FileInput,
+  FileSpreadsheet,
+  Server,
+  Tags,
+  Wallet,
+  Zap,
+} from "lucide-react";
 
 import bitcoinIcon from "@/assets/integrations/bitcoin.svg";
 import bitpandaIcon from "@/assets/integrations/bitpanda.svg";
 import bitboxIcon from "@/assets/integrations/bitbox.svg";
 import bluewalletIcon from "@/assets/integrations/bluewallet.png";
+import blockstreamGreenIcon from "@/assets/integrations/blockstream-green.svg";
 import btcpayIcon from "@/assets/integrations/btcpay.svg";
-import bullBitcoinIcon from "@/assets/integrations/bullbitcoin.jpg";
+import bullBitcoinIcon from "@/assets/integrations/bullbitcoin-mark.png";
 import coldcardIcon from "@/assets/integrations/coldcard.svg";
 import coinfinityIcon from "@/assets/integrations/coinfinity-mark.svg";
 import coinbaseIcon from "@/assets/integrations/coinbase.svg";
@@ -38,6 +47,7 @@ export type ConnectionCategory =
 
 export type SetupKind =
   | "descriptor"
+  | "address-list"
   | "file-wallet"
   | "file-enrichment"
   | "samourai"
@@ -57,7 +67,8 @@ export type ConnectionSourceFormat =
   | "coinfinity_csv"
   | "21bitcoin_csv"
   | "strike_csv"
-  | "wasabi_bundle";
+  | "wasabi_bundle"
+  | "generic_ledger";
 
 export interface ConnectionSource {
   id: string;
@@ -95,7 +106,9 @@ export const sourceIcon = (
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40"><rect width="40" height="40" rx="10" fill="${background}"/><text x="20" y="24" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="10" font-weight="700" fill="${foreground}">${label}</text></svg>`,
   )}`;
 
-const lightLogoFrame = "bg-white shadow-sm shadow-zinc-950/5 dark:bg-white dark:shadow-black/30";
+const lightLogoFrame =
+  "bg-muted/60 shadow-sm shadow-zinc-950/5 dark:bg-muted/55 dark:shadow-black/20";
+const hardwareWalletIconClassName = "size-9 brightness-0 dark:invert";
 
 export const CONNECTION_CATEGORIES: ConnectionCategoryItem[] = [
   { id: "wallets", label: "Wallets", icon: Wallet },
@@ -113,32 +126,32 @@ export const CONNECTION_SOURCES: ConnectionSource[] = [
   {
     id: "xpub",
     title: "Wallet export",
-    description: "Single-sig descriptor, xpub-family, or wallet export import.",
+    description: "Descriptor, BSMS, xpub-family, or wallet export import.",
     category: "wallets",
     image: bitcoinIcon,
-    imageClassName: "size-7",
+    imageClassName: "size-9",
     status: "ready",
     pathLabel: "Watch-only wallet",
-    formatLabel: "descriptor/xpub-family",
+    formatLabel: "descriptor/BSMS/xpub-family",
     setupKind: "descriptor",
     walletKind: "descriptor",
     chain: "bitcoin",
     details: [
       "Mainnet by default",
       "Uses a configured Bitcoin backend",
-      "ypub/zpub/upub/vpub keys are converted to descriptors",
+      "ypub/zpub/upub/vpub keys and BSMS records are converted to descriptors",
     ],
   },
   {
     id: "descriptor",
     title: "Descriptor",
-    description: "Multisig or descriptor wallet discovery.",
+    description: "Multisig, BSMS, or descriptor wallet discovery.",
     category: "wallets",
     image: bitcoinIcon,
-    imageClassName: "size-7",
+    imageClassName: "size-9",
     status: "ready",
     pathLabel: "Watch-only wallet",
-    formatLabel: "output descriptor",
+    formatLabel: "output descriptor/BSMS",
     setupKind: "descriptor",
     walletKind: "descriptor",
     chain: "bitcoin",
@@ -148,12 +161,33 @@ export const CONNECTION_SOURCES: ConnectionSource[] = [
     ],
   },
   {
+    id: "address-list",
+    title: "Address list",
+    description:
+      "Watch a flat list of individual addresses — e.g. a pre-HD Bitcoin Core keypool.",
+    category: "wallets",
+    image: bitcoinIcon,
+    imageClassName: "size-7",
+    status: "ready",
+    pathLabel: "Watch-only wallet",
+    formatLabel: "address list",
+    setupKind: "address-list",
+    walletKind: "address",
+    chain: "bitcoin",
+    network: "main",
+    details: [
+      "Paste addresses or load a .txt/.csv file, one address per line",
+      "No derivation: every address is scanned, so there is no gap limit",
+      "Use Electrum/Fulcrum or Bitcoin Core RPC for large lists — Esplora is one lookup per address",
+    ],
+  },
+  {
     id: "liquid-descriptor",
     title: "Liquid descriptor",
     description: "Liquid watch-only wallet or Elements descriptor.",
     category: "wallets",
     image: liquidIcon,
-    imageClassName: "size-8",
+    imageClassName: "size-10",
     status: "ready",
     pathLabel: "Watch-only wallet",
     formatLabel: "Liquid descriptor",
@@ -215,7 +249,7 @@ export const CONNECTION_SOURCES: ConnectionSource[] = [
     description: "Your own full node over JSON-RPC. Address-based sync only; no transaction links.",
     category: "nodes",
     image: bitcoinIcon,
-    imageClassName: "size-7",
+    imageClassName: "size-9",
     status: "ready",
     pathLabel: "Node backend",
     formatLabel: "bitcoinrpc",
@@ -296,7 +330,8 @@ export const CONNECTION_SOURCES: ConnectionSource[] = [
     title: "Blockstream Green",
     description: "Bitcoin and Liquid wallet export.",
     category: "wallets",
-    image: sourceIcon("GR", "#00b45a", "#052e16"),
+    image: blockstreamGreenIcon,
+    imageClassName: "size-9",
     status: "planned",
     pathLabel: "Wallet export",
     formatLabel: "descriptor/xpub",
@@ -334,7 +369,7 @@ export const CONNECTION_SOURCES: ConnectionSource[] = [
     category: "wallets",
     image: bitboxIcon,
     imageFrameClassName: lightLogoFrame,
-    imageClassName: "size-9",
+    imageClassName: hardwareWalletIconClassName,
     status: "planned",
     pathLabel: "Wallet export",
     details: ["Use the Descriptor connection for exported descriptors today"],
@@ -346,7 +381,7 @@ export const CONNECTION_SOURCES: ConnectionSource[] = [
     category: "wallets",
     image: trezorIcon,
     imageFrameClassName: lightLogoFrame,
-    imageClassName: "size-9",
+    imageClassName: hardwareWalletIconClassName,
     status: "planned",
     pathLabel: "Wallet export",
     details: ["Use the Descriptor connection for exported descriptors today"],
@@ -358,7 +393,7 @@ export const CONNECTION_SOURCES: ConnectionSource[] = [
     category: "wallets",
     image: coldcardIcon,
     imageFrameClassName: lightLogoFrame,
-    imageClassName: "size-9",
+    imageClassName: hardwareWalletIconClassName,
     status: "planned",
     pathLabel: "Wallet export",
     formatLabel: "skeleton/descriptor",
@@ -371,7 +406,7 @@ export const CONNECTION_SOURCES: ConnectionSource[] = [
     category: "wallets",
     image: ledgerIcon,
     imageFrameClassName: lightLogoFrame,
-    imageClassName: "size-9",
+    imageClassName: hardwareWalletIconClassName,
     status: "planned",
     pathLabel: "Wallet export",
     details: ["Use generic CSV until a dedicated Ledger Live parser lands"],
@@ -383,7 +418,7 @@ export const CONNECTION_SOURCES: ConnectionSource[] = [
     category: "wallets",
     image: foundationPassportIcon,
     imageFrameClassName: lightLogoFrame,
-    imageClassName: "size-9",
+    imageClassName: hardwareWalletIconClassName,
     status: "planned",
     pathLabel: "Wallet export",
     details: ["Use the Descriptor connection for exported descriptors today"],
@@ -459,7 +494,7 @@ export const CONNECTION_SOURCES: ConnectionSource[] = [
     description: "Unified wallet transaction CSV import.",
     category: "wallets",
     image: bullBitcoinIcon,
-    imageClassName: "size-9 rounded-md",
+    imageClassName: "size-9",
     status: "ready",
     pathLabel: "Wallet CSV import",
     formatLabel: "bullbitcoin_wallet_csv",
@@ -515,7 +550,7 @@ export const CONNECTION_SOURCES: ConnectionSource[] = [
     description: "Order CSV import for exact buy/sell execution pricing.",
     category: "exchanges",
     image: bullBitcoinIcon,
-    imageClassName: "size-9 rounded-md",
+    imageClassName: "size-9",
     status: "ready",
     pathLabel: "CSV import",
     formatLabel: "bullbitcoin_csv",
@@ -658,6 +693,25 @@ export const CONNECTION_SOURCES: ConnectionSource[] = [
     status: "planned",
     pathLabel: "CSV/API import",
     details: ["Dedicated BTC parser is not wired yet"],
+  },
+  {
+    id: "generic-ledger",
+    title: "Generic ledger",
+    description: "Fill-in spreadsheet import for manual transactions.",
+    category: "files",
+    image: sourceIcon("XLS", "#f2a900", "#1a1a1a"),
+    icon: FileSpreadsheet,
+    status: "ready",
+    pathLabel: "Spreadsheet import",
+    formatLabel: "Excel (.xlsx) or CSV",
+    setupKind: "file-wallet",
+    walletKind: "custom",
+    sourceFormat: "generic_ledger",
+    details: [
+      "Download the template, fill in your transactions, import the file",
+      "One Bitcoin leg per row; Buy/Sell/Income/Mining/Gift and more",
+      "Amounts in BTC (or SATS); fiat columns in your book's currency",
+    ],
   },
   {
     id: "csv",

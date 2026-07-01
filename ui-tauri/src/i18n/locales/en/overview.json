@@ -81,6 +81,25 @@
       "couldNotOpenTransactionBody": "Kassiber could not switch to that transaction's book."
     }
   },
+  "bookRefresh": {
+    "refreshInProgressTitle": "Refreshing book",
+    "rescanInProgressTitle": "Rescanning book",
+    "refreshStartedTitle": "Book refresh started",
+    "rescanStartedTitle": "Book rescan started",
+    "refreshStartedBody": "Kassiber is refreshing configured sources and journals.",
+    "rescanStartedBody": "Kassiber is rescanning configured sources and journals.",
+    "configuredSourcesQueued": "Configured sources queued",
+    "journalsIncluded": "Journals included",
+    "autoPairIncluded": "Safe auto-pairing included",
+    "needsAttentionTitle": "Book refresh needs attention",
+    "quarantineTitle_one": "Review {{count}} quarantined transaction",
+    "quarantineTitle_other": "Review {{count}} quarantined transactions",
+    "transferReviewTitle_one": "Review {{count}} swap/transfer candidate",
+    "transferReviewTitle_other": "Review {{count}} swap/transfer candidates",
+    "finishedTitle": "Book refresh finished",
+    "failedTitle": "Book refresh failed",
+    "failedBody": "Book refresh failed"
+  },
   "stats": {
     "btcPrice": "BTC price",
     "refreshing": "Refreshing",
@@ -117,7 +136,6 @@
     "reprocessingJournals": "Reprocessing journals",
     "refresh": "Refresh",
     "refreshing": "Refreshing",
-    "refreshAria": "Refresh wallets and journals",
     "addConnection": "Add connection",
     "addConnectionAria": "Add connection"
   },
@@ -314,6 +332,10 @@
     "seriesToggle": "{{action}} {{label}}",
     "btcPriceAxis": "BTC Price ({{currency}})",
     "dragHint": "Drag the timeline window or handles to adjust the timeframe; double-click to reset",
+    "empty": {
+      "title": "Nothing to chart yet",
+      "body": "Connect a wallet or import transactions, then refresh to see your Bitcoin balance and activity here."
+    },
     "stat": {
       "changeInBalance": "Change in Bitcoin balance",
       "highestPosition": "Highest BTC position",

@@ -17,6 +17,10 @@ export type WalletSyncProgress = {
   total?: number;
   imported?: number;
   skipped?: number;
+  retained_targets?: number;
+  gap_limit?: number;
+  unused_streak?: number;
+  branch_index?: number;
   // Emitted with phase "rate_limited" while a backend 429/503 backoff is waiting,
   // so the UI shows "rate limited, retrying" instead of a frozen progress bar.
   retry_attempt?: number;
@@ -33,6 +37,13 @@ function clampProgress(value: number) {
 }
 
 function progressNumbers(progress: WalletSyncProgress) {
+  if (progress.phase === "discovery") {
+    return {
+      processed:
+        typeof progress.processed === "number" ? progress.processed : null,
+      total: null,
+    };
+  }
   return {
     processed:
       typeof progress.processed === "number" ? progress.processed : null,
@@ -60,6 +71,7 @@ const PHASE_LABELS: Record<string, string> = {
   import: "Importing transactions",
   importing: "Importing transactions",
   rate_coverage: "Checking market-rate coverage",
+  auto_pair: "Pairing swaps and transfers",
   journal_refresh: "Refreshing journals",
   rate_limited: "Waiting out rate limit",
   done: "Refresh complete",
@@ -73,6 +85,7 @@ const PHASE_PROGRESS_FRACTIONS: Record<string, number> = {
   import: 0.78,
   importing: 0.78,
   rate_coverage: 0.86,
+  auto_pair: 0.91,
   journal_refresh: 0.94,
   done: 1,
   error: 1,
@@ -96,6 +109,7 @@ export const FIRST_SYNC_MILESTONES: readonly SyncMilestone[] = [
   "decode_enrich",
   "import",
   "rate_coverage",
+  "auto_pair",
   "journal_refresh",
 ].map((phase) => ({
   phase,
@@ -202,18 +216,59 @@ function progressLabel(progress: WalletSyncProgress) {
     return `${prefix}${phase} · ${processed.toLocaleString()} / ${total.toLocaleString()}`;
   }
   if (processed !== null) {
-    return `${prefix}${phase} · ${processed.toLocaleString()} scanned`;
+    return `${prefix}${phase} · ${processed.toLocaleString()} ${progressUnit(progress)}`;
   }
   return `${prefix}${phase}`;
 }
 
+function progressUnit(progress: WalletSyncProgress) {
+  if (progress.phase === "discovery") {
+    return "addresses probed";
+  }
+  if (progress.phase === "backend_fetch") {
+    return "scan targets checked";
+  }
+  if (progress.phase === "decode_enrich") {
+    return "transactions scanned";
+  }
+  return "rows scanned";
+}
+
+function gapLimitLabel(progress: WalletSyncProgress) {
+  if (progress.phase !== "discovery") return null;
+  const gapLimit =
+    typeof progress.gap_limit === "number" && progress.gap_limit > 0
+      ? Math.floor(progress.gap_limit)
+      : null;
+  if (gapLimit === null) return null;
+  const unused =
+    typeof progress.unused_streak === "number" && progress.unused_streak >= 0
+      ? Math.floor(progress.unused_streak)
+      : null;
+  if (unused !== null) {
+    return `Unused gap ${Math.min(unused, gapLimit).toLocaleString()} / ${gapLimit.toLocaleString()}`;
+  }
+  return `Stops after ${gapLimit.toLocaleString()} consecutive unused addresses`;
+}
+
+function retainedTargetLabel(progress: WalletSyncProgress) {
+  if (progress.phase !== "discovery") return null;
+  const retained =
+    typeof progress.retained_targets === "number" && progress.retained_targets >= 0
+      ? Math.floor(progress.retained_targets)
+      : null;
+  if (retained === null) return null;
+  return `${retained.toLocaleString()} targets selected so far`;
+}
+
 function rowProgressLabel(progress: WalletSyncProgress) {
   const { processed, total } = progressNumbers(progress);
+  const unit = progressUnit(progress);
   if (processed !== null && total !== null && total > 0) {
-    return `${processed.toLocaleString()} / ${total.toLocaleString()} rows scanned`;
+    return `${processed.toLocaleString()} / ${total.toLocaleString()} ${unit}`;
   }
   if (processed !== null) {
-    return `${processed.toLocaleString()} rows scanned`;
+    return `${processed.toLocaleString()} ${unit}`;
   }
   return null;
 }
@@ -264,12 +319,15 @@ export function formatSyncProgressBody(progress: WalletSyncProgress) {
   const prefix = source ? `${source}: ` : "";
   const phase = syncPhaseLabel(progress.phase, "refresh is running");
   const { processed, total } = progressNumbers(progress);
+  const unit = progressUnit(progress);
+  const gap = gapLimitLabel(progress);
   if (processed !== null && total !== null && total > 0) {
     const rows = `${processed.toLocaleString()} / ${total.toLocaleString()}`;
-    return `${prefix}${phase}; ${rows} rows scanned.`;
+    return `${prefix}${phase}; ${rows} ${unit}.`;
   }
   if (processed !== null) {
-    return `${prefix}${phase}; ${processed.toLocaleString()} rows scanned.`;
+    const suffix = gap ? ` ${gap}.` : "";
+    return `${prefix}${phase}; ${processed.toLocaleString()} ${unit}.${suffix}`;
   }
   return prefix ? `${prefix}${phase}.` : `${phase}.`;
 }
@@ -279,12 +337,13 @@ export function syncProgressNotification(
   previousValue: number = STARTING_SYNC_PROGRESS_VALUE,
 ): { body: string; progress: NotificationProgress; value: number } {
   const value = computeProgressValue(progress, previousValue);
+  const indeterminate = progress.phase === "discovery";
 
   return {
     body: formatSyncProgressBody(progress),
     progress: {
       value,
-      indeterminate: false,
+      indeterminate,
       label: progressLabel(progress),
     },
     value,
@@ -294,6 +353,9 @@ export function syncProgressNotification(
 function activeSyncTitle(progress: WalletSyncProgress) {
   if (progress.phase === "rate_limited") {
     return "Waiting out rate limit";
+  }
+  if (progress.phase === "auto_pair") {
+    return "Pairing swaps and transfers";
   }
   if (
     progress.source_type === "journals" ||
@@ -332,6 +394,8 @@ export function activeSyncMaintenanceProgress(
     source ? source : sourceType,
     backoffLabel(progress),
     rowProgressLabel(progress),
+    gapLimitLabel(progress),
+    retainedTargetLabel(progress),
     importOutcomeLabel(progress),
   ].filter((item): item is string => Boolean(item));
   const now = options.updatedAt ?? new Date().toISOString();

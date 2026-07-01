@@ -1,6 +1,8 @@
 import type { ParseKeys } from "i18next";
 import {
   ArrowRight,
+  Coins,
+  Link2Off,
   RotateCcw,
   Save,
 } from "lucide-react";
@@ -19,6 +21,7 @@ import {
   TabsTrigger,
 } from "@/components/ui/tabs";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { useDaemon } from "@/daemon/client";
 import { type Currency } from "@/lib/currency";
 import type { ExplorerSettings } from "@/lib/explorer";
 import type {
@@ -44,6 +47,8 @@ import {
   transactionBtc,
   transactionFlow,
   transactionStatusLabels,
+  type LoanMarkTarget,
+  type LoanMark,
   type Transaction,
   type TransactionEditDraft,
   uniqueTags,
@@ -74,6 +79,7 @@ import {
   TransactionLinkedTab,
   TransactionPricingTab,
   TransactionTaxTab,
+  type TransactionGraphPayload,
   type TransactionDetailTabContext,
 } from "./TransactionDetailSheetTabs";
 
@@ -88,6 +94,7 @@ export function TransactionDetailSheet({
   explorerSettings,
   isSaving,
   saveError,
+  quarantineReasonOverride,
   nowRate,
   attachments,
   journalEvents = [],
@@ -105,10 +112,20 @@ export function TransactionDetailSheet({
   onRemoveAttachment,
   onUnpair,
   isUnpairing,
+  onOpenPairingReview,
   onOpenMarketDataSettings,
   onRevertHistory,
   onProcessJournals,
   isProcessingJournals,
+  loanRole,
+  loanMark,
+  linkedLoanMarks,
+  loanLinkCandidates,
+  isLoanMarking,
+  isLoanLinking,
+  onMarkLoan,
+  onUnmarkLoan,
+  onLinkLoan,
   onOpenChange,
   onOpenExplorer,
   onSave,
@@ -123,6 +140,7 @@ export function TransactionDetailSheet({
   explorerSettings: ExplorerSettings;
   isSaving?: boolean;
   saveError?: string | null;
+  quarantineReasonOverride?: string | null;
   nowRate?: number | null;
   attachments?: AttachmentItem[];
   journalEvents?: JournalEventItem[];
@@ -143,10 +161,20 @@ export function TransactionDetailSheet({
   onRemoveAttachment?: (item: AttachmentItem) => void;
   onUnpair?: (pairId: string) => void | Promise<void>;
   isUnpairing?: boolean;
+  onOpenPairingReview?: () => void;
   onOpenMarketDataSettings?: () => void;
   onRevertHistory?: (target: HistoryRevertTarget) => void | Promise<void>;
   onProcessJournals?: () => void;
   isProcessingJournals?: boolean;
+  loanRole?: string | null;
+  loanMark?: LoanMark | null;
+  linkedLoanMarks?: LoanMark[];
+  loanLinkCandidates?: LoanMark[];
+  isLoanMarking?: boolean;
+  isLoanLinking?: boolean;
+  onMarkLoan?: (transaction: Transaction, as: LoanMarkTarget) => void | Promise<void>;
+  onUnmarkLoan?: (transaction: Transaction) => void | Promise<void>;
+  onLinkLoan?: (transaction: Transaction, targetTransactionId: string) => void | Promise<void>;
   onOpenChange: (open: boolean) => void;
   onOpenExplorer: (transaction: Transaction) => void;
   onSave: (
@@ -160,7 +188,8 @@ export function TransactionDetailSheet({
   hasNext?: boolean;
 }) {
   const { t } = useTranslation(["transactions", "common"]);
-  const [activeTab, setActiveTab] = React.useState(initialTab);
+  const visibleInitialTab = initialTab === "graph" ? "details" : initialTab;
+  const [activeTab, setActiveTab] = React.useState(visibleInitialTab);
   const [localDraft, setLocalDraft] =
     React.useState<TransactionEditDraft | null>(draft);
   const [originalDraft, setOriginalDraft] =
@@ -169,10 +198,14 @@ export function TransactionDetailSheet({
   const [balanceCurrency, setBalanceCurrency] =
     React.useState<Currency>(currency);
   const manualPriceRef = React.useRef<HTMLInputElement | null>(null);
-
+  const graphQuery = useDaemon<TransactionGraphPayload>(
+    "ui.transactions.graph",
+    { transaction: transaction?.id ?? "" },
+    { enabled: Boolean(transaction) },
+  );
   React.useEffect(() => {
-    setActiveTab(initialTab);
-  }, [initialTab, transaction?.id]);
+    setActiveTab(visibleInitialTab);
+  }, [visibleInitialTab, transaction?.id]);
 
   React.useEffect(() => {
     setLocalDraft(draft);
@@ -250,6 +283,8 @@ export function TransactionDetailSheet({
   if (!transaction || !localDraft) return null;
 
   const flow = transactionFlow(transaction);
+  const canMarkLoan = Boolean(onMarkLoan || onUnmarkLoan);
+  const loanActionDisabled = Boolean(isSaving || isLoanMarking);
   const explorer = explorerForTransaction(transaction, explorerSettings);
   const transactionDisplayId = transaction.explorerId ?? transaction.txnId;
   const showSourceExternalId = shouldShowSourceExternalId(transaction);
@@ -257,9 +292,14 @@ export function TransactionDetailSheet({
   const feeBtc = transaction.feeBtc ?? 0;
   const feeEur = transaction.feeEur ?? null;
   const impactDirection = balanceImpactDirection(transaction, flow);
-  const principalImpactBtc = impactDirection * amountBtc;
+  const isFeeOnly = transaction.sourceType === "Fee";
+  const principalImpactBtc = isFeeOnly ? 0 : impactDirection * amountBtc;
   const principalImpactEur =
-    transaction.amount === null ? null : impactDirection * transaction.amount;
+    transaction.amount === null
+      ? null
+      : isFeeOnly
+        ? 0
+        : impactDirection * transaction.amount;
   const feeImpactBtc = feeBtc ? -feeBtc : 0;
   const feeImpactEur = feeBtc ? (feeEur === null ? null : -feeEur) : 0;
   const netImpactBtc = principalImpactBtc + feeImpactBtc;
@@ -299,9 +339,38 @@ export function TransactionDetailSheet({
     transaction.amount === null;
   const isLabeled =
     localDraft.label !== "Unlabeled" && localDraft.label.trim().length > 0;
-  const quarantineReason = transaction.quarantineReason ?? null;
+  const quarantineReason =
+    quarantineReasonOverride ?? transaction.quarantineReason ?? null;
+  const quarantineReasonCode = quarantineReason?.toLowerCase() ?? "";
+  const isSyncQuarantine = quarantineReasonCode.includes(
+    "ownership_transfer_amount_mismatch",
+  );
+  const isBasisQuarantine =
+    quarantineReasonCode.includes("basis") ||
+    quarantineReasonCode.includes("lot") ||
+    quarantineReasonCode.includes("insufficient");
+  const isTransferQuarantine =
+    quarantineReasonCode.includes("ownership_transfer") ||
+    quarantineReasonCode.includes("transfer") ||
+    quarantineReasonCode.includes("pair") ||
+    quarantineReasonCode.includes("swap");
+  const isSplitTransferQuarantine =
+    quarantineReasonCode.includes("transfer_fee_implausible");
+  const quarantineTargetTab = isSplitTransferQuarantine
+    ? "details"
+    : isSyncQuarantine
+      ? "details"
+      : isTransferQuarantine
+        ? "linked"
+        : isBasisQuarantine
+          ? "tax"
+          : "pricing";
   const hasJournalQuarantine = Boolean(quarantineReason) && !localDraft.excluded;
   const hasPricingBlocker = isPricingMissing && !localDraft.excluded;
+  const suppressPricingCacheWarning =
+    hasJournalQuarantine && quarantineTargetTab === "pricing";
+  const suppressBasisQuarantineWarning =
+    hasJournalQuarantine && quarantineTargetTab === "tax";
   const showReviewBanner =
     hasJournalQuarantine || (activeTab !== "pricing" && hasPricingBlocker);
   const confLabel = confirmationsLabel(
@@ -323,6 +392,7 @@ export function TransactionDetailSheet({
   const dirtyReviewTax = Boolean(
     dirty.reviewStatus || dirty.taxable || dirty.atRegime || dirty.atCategory,
   );
+  const graphData = graphQuery.data?.data;
 
   const timelineSteps: TimelineStep[] = [
     {
@@ -417,13 +487,19 @@ export function TransactionDetailSheet({
     {
       key: "quarantine",
       label: hasJournalQuarantine
-        ? t("sheet.checklist.resolveQuarantine")
+        ? isSyncQuarantine
+          ? t("sheet.checklist.resolveSyncMismatch")
+          : isBasisQuarantine
+            ? t("sheet.checklist.restoreBasis")
+            : isTransferQuarantine
+              ? t("sheet.checklist.reviewPairing")
+              : t("sheet.checklist.resolveQuarantine")
         : hasPricingBlocker
           ? t("sheet.checklist.pricingIncomplete")
           : t("sheet.checklist.noQuarantine"),
       done: !hasJournalQuarantine && !hasPricingBlocker,
       warn: hasJournalQuarantine || hasPricingBlocker,
-      tab: "pricing",
+      tab: hasJournalQuarantine ? quarantineTargetTab : "pricing",
     },
   ];
 
@@ -481,6 +557,13 @@ export function TransactionDetailSheet({
     setActiveTab("pricing");
     setTimeout(() => manualPriceRef.current?.focus(), 0);
   };
+  const jumpToQuarantineTarget = () => {
+    if (hasJournalQuarantine && quarantineTargetTab !== "pricing") {
+      setActiveTab(quarantineTargetTab);
+      return;
+    }
+    jumpToManualPrice();
+  };
   const chooseExactManualPrice = () => {
     updateDraft("pricingSourceKind", "manual_override");
     updateDraft("pricingQuality", "exact");
@@ -492,6 +575,55 @@ export function TransactionDetailSheet({
   const setExcluded = () => updateDraft("excluded", true);
   const normalizedQuarantineReason = quarantineReason
     ? quarantineReason.replace(/_/g, " ")
+    : null;
+  const reviewBanner = showReviewBanner
+    ? (() => {
+        if (hasJournalQuarantine) {
+          return {
+            title: isBasisQuarantine
+              ? t("tax.basisBlockerTitle")
+              : t("sheet.banner.journalQuarantine"),
+            reason: isBasisQuarantine
+              ? t("tax.basisBlockerBody", {
+                  asset: transaction.asset ?? "asset",
+                })
+              : t("sheet.banner.journalBlocker", {
+                  reason: normalizedQuarantineReason,
+                }),
+            primaryActionLabel: isSyncQuarantine
+              ? t("sheet.banner.viewDetails")
+              : isBasisQuarantine
+                ? t("sheet.banner.viewBasisContext")
+                : isTransferQuarantine
+                  ? t("sheet.banner.viewLinked")
+                  : t("sheet.banner.viewPricing"),
+          };
+        }
+        if (transaction.amount === null) {
+          return {
+            title: t("sheet.banner.missingFiatPrice"),
+            reason: t("sheet.banner.noFiatRecorded", {
+              date: transaction.date,
+            }),
+            hint: t("sheet.banner.readinessHint"),
+            primaryActionLabel: t("sheet.banner.openPricing"),
+          };
+        }
+        if (localDraft.pricingSourceKind === null) {
+          return {
+            title: t("sheet.banner.noPricingSource"),
+            reason: t("sheet.banner.noPersistedSource"),
+            hint: t("sheet.banner.readinessHint"),
+            primaryActionLabel: t("sheet.banner.openPricing"),
+          };
+        }
+        return {
+          title: t("sheet.banner.pricingFlagged"),
+          reason: t("sheet.banner.missingOrUnderReview"),
+          hint: t("sheet.banner.readinessHint"),
+          primaryActionLabel: t("sheet.banner.openPricing"),
+        };
+      })()
     : null;
 
   const taxNarrative = (() => {
@@ -563,6 +695,9 @@ export function TransactionDetailSheet({
     isProviderSamplePricing,
     isExactPricing,
     isPricingMissing,
+    isBasisQuarantine,
+    suppressPricingCacheWarning,
+    suppressBasisQuarantineWarning,
     pricePoint,
     nowRate,
     onOpenMarketDataSettings,
@@ -573,8 +708,14 @@ export function TransactionDetailSheet({
     taxClassification,
     valueAtTimeEur,
     pair,
+    loanMark,
+    linkedLoanMarks: linkedLoanMarks ?? [],
+    loanLinkCandidates: loanLinkCandidates ?? [],
     onUnpair,
     isUnpairing,
+    onOpenPairingReview,
+    onLinkLoan,
+    isLoanLinking,
     journalEvents,
     balanceCurrency,
     setBalanceCurrency,
@@ -585,6 +726,12 @@ export function TransactionDetailSheet({
     feeImpactEur,
     netImpactBtc,
     netImpactEur,
+    graphData,
+    graphLoading: graphQuery.isLoading || (graphQuery.isFetching && !graphData),
+    graphError:
+      graphQuery.error instanceof Error
+        ? graphQuery.error.message
+        : null,
   };
 
   return (
@@ -615,46 +762,22 @@ export function TransactionDetailSheet({
           <div className="min-h-0 flex-1 overflow-y-auto">
             <div className="grid gap-4 p-4 sm:p-6 xl:grid-cols-[minmax(0,1fr)_320px]">
               <div className="min-w-0 space-y-4">
-                {showReviewBanner ? (
+                {reviewBanner ? (
                   <QuarantineBanner
-                    title={
-                      hasJournalQuarantine
-                        ? t("sheet.banner.journalQuarantine")
-                        : transaction.amount === null
-                        ? t("sheet.banner.missingFiatPrice")
-                        : localDraft.pricingSourceKind === null
-                          ? t("sheet.banner.noPricingSource")
-                          : t("sheet.banner.pricingFlagged")
-                    }
-                    reason={
-                      hasJournalQuarantine
-                        ? t("sheet.banner.journalBlocker", {
-                            reason: normalizedQuarantineReason,
-                          })
-                        : transaction.amount === null
-                          ? t("sheet.banner.noFiatRecorded", {
-                              date: transaction.date,
-                            })
-                          : localDraft.pricingSourceKind === null
-                            ? t("sheet.banner.noPersistedSource")
-                            : t("sheet.banner.missingOrUnderReview")
-                    }
-                    hint={
-                      hasJournalQuarantine
+                    title={reviewBanner.title}
+                    reason={reviewBanner.reason}
+                    hint={reviewBanner.hint}
+                    primaryActionLabel={reviewBanner.primaryActionLabel}
+                    onPrimaryAction={
+                      hasJournalQuarantine && activeTab === quarantineTargetTab
                         ? undefined
-                        : t("sheet.banner.readinessHint")
+                        : jumpToQuarantineTarget
                     }
-                    primaryActionLabel={
-                      hasJournalQuarantine
-                        ? t("sheet.banner.viewPricing")
-                        : t("sheet.banner.openPricing")
-                    }
-                    onPrimaryAction={jumpToManualPrice}
                     onExclude={setExcluded}
                   />
                 ) : null}
 
-                {quarantineReason === "transfer_fee_implausible" ? (
+                {isSplitTransferQuarantine ? (
                   <TransactionSplitPayoutCard
                     transactionId={transaction.id}
                     sourceAsset={transaction.asset ?? "BTC"}
@@ -736,7 +859,7 @@ export function TransactionDetailSheet({
               ) : null}
               <span className="hidden items-center gap-1.5 sm:inline-flex">
                 <kbd className="rounded border bg-muted px-1">⌘S</kbd> {t("sheet.footer.shortcutSave")} ·{" "}
-                <kbd className="rounded border bg-muted px-1">1–6</kbd> {t("sheet.footer.shortcutTabs")} ·{" "}
+                <kbd className="rounded border bg-muted px-1">1-6</kbd> {t("sheet.footer.shortcutTabs")} ·{" "}
                 <kbd className="rounded border bg-muted px-1">e</kbd> {t("sheet.footer.shortcutExclude")}
               </span>
               {saveError ? (
@@ -745,7 +868,111 @@ export function TransactionDetailSheet({
                 </span>
               ) : null}
             </div>
-            <div className="flex justify-end gap-2">
+            <div className="flex flex-wrap justify-end gap-2">
+              {canMarkLoan && loanRole && onUnmarkLoan ? (
+                <>
+                  {flow === "outgoing" &&
+                  loanRole !== "loan_principal_repaid" &&
+                  onMarkLoan ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="gap-1.5"
+                      disabled={loanActionDisabled}
+                      onClick={() => {
+                        void onMarkLoan(transaction, "principal-repaid");
+                      }}
+                    >
+                      <Coins className="size-4" aria-hidden="true" />
+                      {t("table.row.collateral.changePrincipalRepaid")}
+                    </Button>
+                  ) : null}
+                  {flow === "incoming" &&
+                  loanRole !== "loan_principal_received" &&
+                  onMarkLoan ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="gap-1.5"
+                      disabled={loanActionDisabled}
+                      onClick={() => {
+                        void onMarkLoan(transaction, "principal-received");
+                      }}
+                    >
+                      <Coins className="size-4" aria-hidden="true" />
+                      {t("table.row.collateral.changePrincipalReceived")}
+                    </Button>
+                  ) : null}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="gap-1.5"
+                    disabled={loanActionDisabled}
+                    onClick={() => {
+                      void onUnmarkLoan(transaction);
+                    }}
+                  >
+                    <Link2Off className="size-4" aria-hidden="true" />
+                    {t("table.row.collateral.unmark")}
+                  </Button>
+                </>
+              ) : null}
+              {canMarkLoan && !loanRole && flow === "incoming" && onMarkLoan ? (
+                <>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="gap-1.5"
+                    disabled={loanActionDisabled}
+                    onClick={() => {
+                      void onMarkLoan(transaction, "principal-received");
+                    }}
+                  >
+                    <Coins className="size-4" aria-hidden="true" />
+                    {t("table.row.collateral.markPrincipalReceived")}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className="gap-1.5"
+                    disabled={loanActionDisabled}
+                    onClick={() => {
+                      void onMarkLoan(transaction, "returned");
+                    }}
+                  >
+                    <Coins className="size-4" aria-hidden="true" />
+                    {t("table.row.collateral.markReturned")}
+                  </Button>
+                </>
+              ) : null}
+              {canMarkLoan && !loanRole && flow === "outgoing" && onMarkLoan ? (
+                <>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="gap-1.5"
+                    disabled={loanActionDisabled}
+                    onClick={() => {
+                      void onMarkLoan(transaction, "principal-repaid");
+                    }}
+                  >
+                    <Coins className="size-4" aria-hidden="true" />
+                    {t("table.row.collateral.markPrincipalRepaid")}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className="gap-1.5"
+                    disabled={loanActionDisabled}
+                    onClick={() => {
+                      void onMarkLoan(transaction, "collateral");
+                    }}
+                  >
+                    <Coins className="size-4" aria-hidden="true" />
+                    {t("table.row.collateral.markCollateral")}
+                  </Button>
+                </>
+              ) : null}
               <Button
                 type="button"
                 variant="outline"

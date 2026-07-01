@@ -63,6 +63,7 @@ import {
 import { saveFile } from "@/lib/filePicker";
 import {
   HANDOFF_EXPORT_MODES,
+  NORMAL_HANDOFF_EXCLUSIONS,
   type HandoffExportMode,
 } from "@/lib/handoffExports";
 import {
@@ -70,6 +71,7 @@ import {
   type ReportExportStatus,
 } from "@/lib/reportExportStatus";
 import { reportYearFromSearch } from "@/lib/reportYear";
+import { exportBasename } from "@/lib/exportFile";
 import { screenPanelClassName, screenShellClassName } from "@/lib/screen-layout";
 import { cn } from "@/lib/utils";
 import {
@@ -83,17 +85,6 @@ import {
 import { useUiStore } from "@/store/ui";
 
 const blurClass = (hidden: boolean) => (hidden ? "sensitive" : "");
-
-const COST_BASIS_METHODS: Array<{
-  k: CostBasisMethod;
-  name: string;
-  desc: string;
-}> = [
-  { k: "fifo", name: "FIFO", desc: "First-in, first-out" },
-  { k: "lifo", name: "LIFO", desc: "Last-in, first-out" },
-  { k: "hifo", name: "HIFO", desc: "Highest-in, first-out" },
-  { k: "lofo", name: "LOFO", desc: "Lowest-in, first-out" },
-];
 
 const METHOD_LABELS: Record<
   CostBasisMethod,
@@ -164,7 +155,14 @@ const AUSTRIAN_KENNZAHL_PLACEHOLDER_ROWS: KennzahlRow[] = [
   },
 ];
 
-type ReportExportFormatId = "csv" | "pdf" | "xlsx" | "summary_pdf" | "audit_package";
+type ReportExportFormatId =
+  | "csv"
+  | "pdf"
+  | "xlsx"
+  | "summary_pdf"
+  | "audit_package"
+  | "transactions_csv"
+  | "transactions_xlsx";
 type AuditPackageScope = "active_profile" | "source_funds_case";
 type ReportTone = "good" | "warning" | "alert" | "neutral";
 type ReportHref = "/journals" | "/quarantine" | "/transactions" | "/reports";
@@ -238,6 +236,8 @@ function reportExportDefaultFilename(
   year: number,
   austrian: boolean,
 ) {
+  if (format === "transactions_xlsx") return "kassiber-transactions.xlsx";
+  if (format === "transactions_csv") return "kassiber-transactions.csv";
   if (format === "audit_package") return `kassiber-audit-package-${year}`;
   if (format === "summary_pdf") return `kassiber-summary-report-${year}.pdf`;
   if (austrian) {
@@ -256,6 +256,10 @@ function reportExportSaveFilters(
 ) {
   if (format === "audit_package") return undefined;
   if (payload?.format === "csv" && payload.files?.length) return undefined;
+  if (format === "transactions_xlsx") {
+    return [{ name: "Excel workbook", extensions: ["xlsx"] }];
+  }
+  if (format === "transactions_csv") return [{ name: "CSV", extensions: ["csv"] }];
   if (format === "pdf" || format === "summary_pdf") {
     return [{ name: "PDF report", extensions: ["pdf"] }];
   }
@@ -368,9 +372,9 @@ function ReportsView({
     .sort((a, b) => b - a);
   const jurisdiction =
     JURISDICTIONS[report.jurisdictionCode] ?? JURISDICTIONS.AT;
-  const [method, setMethod] = useState<CostBasisMethod>(
-    normalizeReportMethod(report.method, jurisdiction),
-  );
+  // The cost-basis method is the book's configured gains algorithm; the
+  // report was computed with it, so the UI treats it as a fact, not a knob.
+  const method = normalizeReportMethod(report.method, jurisdiction);
   const [exportStatus, setExportStatus] = useState<ReportExportStatus | null>(
     null,
   );
@@ -412,11 +416,18 @@ function ReportsView({
     useDaemonMutation<ReportExportResult>("ui.reports.export_austrian_e1kv_xlsx");
   const exportAustrianCsv =
     useDaemonMutation<ReportExportResult>("ui.reports.export_austrian_e1kv_csv");
+  const exportTransactionsXlsx =
+    useDaemonMutation<ReportExportResult>("ui.transactions.export_xlsx");
+  const exportTransactionsCsv =
+    useDaemonMutation<ReportExportResult>("ui.transactions.export_csv");
   const activeProfileIsAustrian = report.jurisdictionCode === "AT";
   const sourceFundsCasesQuery = useDaemon<SourceFundsCasesData>(
     "ui.source_funds.cases.list",
   );
-  const sourceFundsCases = sourceFundsCasesQuery.data?.data?.cases ?? [];
+  const sourceFundsCases = useMemo(
+    () => sourceFundsCasesQuery.data?.data?.cases ?? [],
+    [sourceFundsCasesQuery.data?.data?.cases],
+  );
   const walletChoices = useMemo(
     () => wallets.filter((wallet) => wallet.id || wallet.label),
     [wallets],
@@ -455,7 +466,6 @@ function ReportsView({
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     });
-  const methodLabel = METHOD_LABELS[method] ?? METHOD_LABELS[jurisdiction.defaultMethod];
   const readiness = buildReportReadiness(report, lots, effectiveYear);
   const periodLabel = formatReportPeriod(effectiveYear, jurisdiction.locale);
   const currentExportStatus = reportExportStatusForYear(
@@ -494,6 +504,10 @@ function ReportsView({
         ? exportSummaryPdf
         : format === "audit_package"
           ? exportAuditPackage
+        : format === "transactions_xlsx"
+          ? exportTransactionsXlsx
+        : format === "transactions_csv"
+          ? exportTransactionsCsv
         : format === "csv"
         ? activeProfileIsAustrian
           ? exportAustrianCsv
@@ -524,6 +538,8 @@ function ReportsView({
                 ? { source_funds_case: auditCaseId }
                 : {}),
             }
+        : format === "transactions_xlsx" || format === "transactions_csv"
+          ? {}
         : format === "pdf"
         ? activeProfileIsAustrian
           ? { year: exportYear }
@@ -537,9 +553,13 @@ function ReportsView({
         const payload = envelope.data;
         const exportPath = payload?.file ?? payload?.dir ?? "";
         const filename = (payload?.filename ?? basename(exportPath)) || "report";
+        const isTransactionExport =
+          format === "transactions_xlsx" || format === "transactions_csv";
         const detail =
           payload?.scope === "audit_package"
             ? `${payload.transaction_count ?? 0} transaction${payload.transaction_count === 1 ? "" : "s"} · ${payload.evidence_file_count ?? 0} file${payload.evidence_file_count === 1 ? "" : "s"} · ${payload.url_reference_count ?? 0} link${payload.url_reference_count === 1 ? "" : "s"}`
+          : isTransactionExport && payload?.rows !== undefined
+            ? `${payload.rows} transaction${payload.rows === 1 ? "" : "s"}`
           : payload?.format === "pdf" && payload.pages
             ? `${payload.pages} page${payload.pages === 1 ? "" : "s"}`
             : payload?.format === "xlsx" && payload.sheets?.length
@@ -558,6 +578,8 @@ function ReportsView({
               title:
                 payload?.scope === "audit_package"
                   ? "Save audit package"
+                  : isTransactionExport
+                    ? "Save transactions export"
                   : payload?.format === "csv" && payload.files?.length
                   ? "Save CSV bundle"
                   : "Save report export",
@@ -600,11 +622,13 @@ function ReportsView({
         }
         setSuccessfulExport({ format, year: exportYear });
         addNotification({
-          title: "Report export finished",
+          title: isTransactionExport
+            ? "Transactions exported"
+            : "Report export finished",
           body:
             savedPath === exportPath
               ? detail
-              : `${detail} · saved to ${basename(savedPath)}`,
+              : `${detail} · saved to ${exportBasename(savedPath)}`,
           tone: "success",
         });
       },
@@ -652,7 +676,7 @@ function ReportsView({
         onYearChange={onYearChange}
         periodLabel={periodLabel}
         jurisdiction={jurisdiction}
-        methodLabel={methodLabel}
+        method={method}
       />
 
       <ReportReadinessStrip readiness={readiness} />
@@ -694,19 +718,6 @@ function ReportsView({
               formatNumber={fmt}
             />
           ) : null}
-        </div>
-        <div className="grid min-w-0 gap-3">
-          <ReportFilesPanel
-            year={effectiveYear}
-            activeExport={activeExport}
-            activeProfileIsAustrian={activeProfileIsAustrian}
-            exportStatus={currentExportStatus}
-            openableExportPath={openableExportPath}
-            openingExportPath={openingExportPath}
-            successfulExport={successfulExport}
-            onExport={handleExport}
-            onOpenExport={handleOpenExport}
-          />
           <HandoffScopePanel
             activeExport={activeExport}
             successfulExport={successfulExport}
@@ -726,6 +737,19 @@ function ReportsView({
             includeEditHistory={auditIncludeEditHistory}
             onIncludeEditHistoryChange={setAuditIncludeEditHistory}
             onExport={handleExport}
+          />
+        </div>
+        <div className="grid min-w-0 gap-3">
+          <ReportFilesPanel
+            year={effectiveYear}
+            activeExport={activeExport}
+            activeProfileIsAustrian={activeProfileIsAustrian}
+            exportStatus={currentExportStatus}
+            openableExportPath={openableExportPath}
+            openingExportPath={openingExportPath}
+            successfulExport={successfulExport}
+            onExport={handleExport}
+            onOpenExport={handleOpenExport}
           />
           <SummaryPdfPanel
             year={effectiveYear}
@@ -750,11 +774,6 @@ function ReportsView({
             }}
             onExport={() => handleExport("summary_pdf")}
           />
-          <ReportPolicyPanel
-            jurisdiction={jurisdiction}
-            method={method}
-            setMethod={setMethod}
-          />
         </div>
       </div>
 
@@ -769,16 +788,18 @@ function ReportPackageHeader({
   onYearChange,
   periodLabel,
   jurisdiction,
-  methodLabel,
+  method,
 }: {
   selectedYear: number;
   availableYears: number[];
   onYearChange: (year: number) => void;
   periodLabel: string;
   jurisdiction: (typeof JURISDICTIONS)[string];
-  methodLabel: { name: string; desc: string; fullName?: string };
+  method: CostBasisMethod;
 }) {
+  const methodLabel = METHOD_LABELS[method] ?? METHOD_LABELS[jurisdiction.defaultMethod];
   const methodName = methodLabel.fullName ?? methodLabel.name;
+  const [rulesExpanded, setRulesExpanded] = useState(false);
   const handleYearChange = (value: string) => {
     const nextYear = Number(value);
     if (!Number.isInteger(nextYear)) return;
@@ -817,15 +838,38 @@ function ReportPackageHeader({
             <span className="truncate">{periodLabel}</span>
           </span>
         </div>
-        <div className="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-2">
-          <Badge variant="outline" className="rounded-md">
-            {jurisdiction.code} · {jurisdiction.name}
-          </Badge>
-          <Badge variant="outline" className="hidden max-w-full rounded-md xl:inline-flex">
-            <span className="truncate">{methodName}</span>
-          </Badge>
+        <div className="ml-auto min-w-0">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-8 max-w-full gap-2"
+            aria-label={
+              rulesExpanded ? "Collapse profile rules" : "Expand profile rules"
+            }
+            aria-expanded={rulesExpanded}
+            onClick={() => setRulesExpanded((value) => !value)}
+          >
+            <ShieldAlert className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+            <span className="min-w-0 truncate">
+              Profile rules · {jurisdiction.code} · {methodName}
+            </span>
+            <ChevronDown
+              className={cn(
+                "size-4 shrink-0 text-muted-foreground transition-transform",
+                rulesExpanded && "rotate-180",
+              )}
+              aria-hidden="true"
+            />
+          </Button>
         </div>
       </div>
+      {rulesExpanded ? (
+        <ReportPolicyDetails
+          jurisdiction={jurisdiction}
+          methodName={methodName}
+        />
+      ) : null}
     </div>
   );
 }
@@ -957,10 +1001,15 @@ function KennzahlOverviewPanel({
   hideSensitive: boolean;
   formatNumber: (value: number) => string;
 }) {
+  const [showEmptyFields, setShowEmptyFields] = useState(false);
   const hasMockRows = rows.some((row) => row.source === "mock");
   const hasPendingRows = rows.some((row) => row.source === "pending");
   const sourceLabel = hasPendingRows ? "Pending" : hasMockRows ? "Preview" : "Daemon";
-  const rowGroups = rows.reduce<Array<{ form: string; rows: KennzahlRow[] }>>(
+  const isEmptyField = (row: KennzahlRow) =>
+    row.amount !== null && row.rowCount === 0 && Math.abs(row.amount) < 0.005;
+  const emptyFieldCount = rows.filter(isEmptyField).length;
+  const visibleRows = showEmptyFields ? rows : rows.filter((row) => !isEmptyField(row));
+  const rowGroups = visibleRows.reduce<Array<{ form: string; rows: KennzahlRow[] }>>(
     (groups, row) => {
       const fallbackForm = AUSTRIAN_TAX_FIELD_COPY[row.code]?.form ?? "E 1kv";
       const form = row.form || fallbackForm;
@@ -979,14 +1028,12 @@ function KennzahlOverviewPanel({
     <div className="min-w-0 overflow-hidden rounded-xl border bg-card">
       <div className="flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-start sm:justify-between sm:px-5">
         <div className="flex min-w-0 items-center gap-2">
-          <Button
-            variant="outline"
-            size="icon"
-            className="size-8 shrink-0"
-            aria-label="Tax fields overview"
+          <span
+            aria-hidden="true"
+            className="flex size-8 shrink-0 items-center justify-center rounded-md border"
           >
             <Landmark className="size-4 text-muted-foreground" aria-hidden="true" />
-          </Button>
+          </span>
           <div className="min-w-0">
             <h2 className="truncate text-sm font-medium sm:text-base">
               Tax fields overview
@@ -1001,72 +1048,96 @@ function KennzahlOverviewPanel({
             {sourceLabel}
           </Badge>
           <Badge variant="outline" className="rounded-md">
-            {rows.length} field{rows.length === 1 ? "" : "s"}
+            {visibleRows.length} of {rows.length} fields
           </Badge>
         </div>
       </div>
 
+      {emptyFieldCount ? (
+        <div className="mx-4 mb-3 flex items-center justify-between gap-3 rounded-lg border bg-background/50 px-3 py-2 sm:mx-5">
+          <span className="min-w-0 truncate text-xs text-muted-foreground">
+            {showEmptyFields
+              ? "Showing empty filing fields"
+              : `${emptyFieldCount} empty filing field${emptyFieldCount === 1 ? "" : "s"} hidden`}
+          </span>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-8 shrink-0"
+            onClick={() => setShowEmptyFields((value) => !value)}
+          >
+            {showEmptyFields ? "Hide empty" : "Show empty"}
+          </Button>
+        </div>
+      ) : null}
+
       <div className="grid gap-2 px-4 pb-4 sm:grid-cols-2 sm:px-5">
-        {rowGroups.map((group) => (
-          <Fragment key={group.form}>
-            {rowGroups.length > 1 ? (
-              <div className="pt-1 text-[10px] font-medium tracking-wide text-muted-foreground uppercase sm:col-span-2">
-                {group.form === "E 1kv"
-                  ? "E 1kv filing fields"
-                  : `${group.form} fields outside E 1kv`}
-              </div>
-            ) : null}
-            {group.rows.map((row) => {
-              const displayCopy = AUSTRIAN_TAX_FIELD_COPY[row.code];
-              const displayLabel = displayCopy?.label ?? row.label;
-              const displayNote = displayCopy?.note ?? row.note;
-              const amount = row.amount;
-              const isPending = amount === null;
-              const isEmpty =
-                amount !== null && row.rowCount === 0 && Math.abs(amount) < 0.005;
-              return (
-                <div
-                  key={row.code}
-                  className={cn(
-                    "rounded-lg border bg-background/50 p-3",
-                    isEmpty && "text-muted-foreground",
-                  )}
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <div className="flex min-w-0 items-center gap-2">
-                        <Badge variant="outline" className="rounded-md">
-                          Field {row.code}
-                        </Badge>
-                        <span className="text-[10px] text-muted-foreground sm:text-xs">
-                          {row.rowCount} row{row.rowCount === 1 ? "" : "s"}
-                        </span>
-                      </div>
-                      <p className="mt-2 text-xs leading-5 text-muted-foreground">
-                        {displayLabel}
-                      </p>
-                      {displayNote ? (
-                        <p className="mt-1 text-[10px] text-muted-foreground">
-                          {displayNote}
+        {rowGroups.length ? (
+          rowGroups.map((group) => (
+            <Fragment key={group.form}>
+              {rowGroups.length > 1 ? (
+                <div className="pt-1 text-[10px] font-medium tracking-wide text-muted-foreground uppercase sm:col-span-2">
+                  {group.form === "E 1kv"
+                    ? "E 1kv filing fields"
+                    : `${group.form} fields outside E 1kv`}
+                </div>
+              ) : null}
+              {group.rows.map((row) => {
+                const displayCopy = AUSTRIAN_TAX_FIELD_COPY[row.code];
+                const displayLabel = displayCopy?.label ?? row.label;
+                const displayNote = displayCopy?.note ?? row.note;
+                const amount = row.amount;
+                const isPending = amount === null;
+                const isEmpty = isEmptyField(row);
+                return (
+                  <div
+                    key={row.code}
+                    className={cn(
+                      "rounded-lg border bg-background/50 p-3",
+                      isEmpty && "text-muted-foreground",
+                    )}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="flex min-w-0 items-center gap-2">
+                          <Badge variant="outline" className="rounded-md">
+                            Field {row.code}
+                          </Badge>
+                          <span className="text-[10px] text-muted-foreground sm:text-xs">
+                            {row.rowCount} row{row.rowCount === 1 ? "" : "s"}
+                          </span>
+                        </div>
+                        <p className="mt-2 text-xs leading-5 text-muted-foreground">
+                          {displayLabel}
                         </p>
-                      ) : null}
-                    </div>
-                    <div
-                      className={cn(
-                        "shrink-0 text-right text-sm font-semibold tabular-nums",
-                        blurClass(hideSensitive),
-                      )}
-                    >
-                      {isPending
-                        ? "—"
-                        : formatMoney(jurisdiction.ccy, amount, formatNumber)}
+                        {displayNote ? (
+                          <p className="mt-1 text-[10px] text-muted-foreground">
+                            {displayNote}
+                          </p>
+                        ) : null}
+                      </div>
+                      <div
+                        className={cn(
+                          "shrink-0 text-right text-sm font-semibold tabular-nums",
+                          blurClass(hideSensitive),
+                        )}
+                      >
+                        {isPending
+                          ? "—"
+                          : formatMoney(jurisdiction.ccy, amount, formatNumber)}
+                      </div>
                     </div>
                   </div>
-                </div>
-              );
-            })}
-          </Fragment>
-        ))}
+                );
+              })}
+            </Fragment>
+          ))
+        ) : (
+          <div className="rounded-lg border bg-background/50 p-3 text-xs text-muted-foreground sm:col-span-2">
+            No non-zero filing fields for this year.
+          </div>
+        )}
       </div>
     </div>
   );
@@ -1102,17 +1173,15 @@ function SummaryPdfPanel({
     <div className="min-w-0 overflow-hidden rounded-xl border bg-card">
       <div className="flex items-start justify-between gap-3 px-4 pt-4 sm:px-5">
         <div className="flex min-w-0 items-center gap-2">
-          <Button
-            variant="outline"
-            size="icon"
-            className="size-8 shrink-0"
-            aria-label="Summary PDF"
+          <span
+            aria-hidden="true"
+            className="flex size-8 shrink-0 items-center justify-center rounded-md border"
           >
             <PieChart className="size-4 text-muted-foreground" aria-hidden="true" />
-          </Button>
+          </span>
           <div className="min-w-0">
             <h2 className="truncate text-sm font-medium sm:text-base">
-              Summary PDF
+              Summary snapshot
             </h2>
             <p className="truncate text-[10px] text-muted-foreground sm:text-xs">
               {year} · {selectedCount || "No"} wallet{selectedCount === 1 ? "" : "s"}
@@ -1212,24 +1281,25 @@ function ReportFilesPanel({
   onExport: (format: ReportExportFormatId) => void;
   onOpenExport: (path: string) => void;
 }) {
+  const [transactionLedgerExpanded, setTransactionLedgerExpanded] =
+    useState(false);
+
   return (
     <div className="min-w-0 overflow-hidden rounded-xl border bg-card">
       <div className="flex items-center justify-between gap-3 px-4 pt-4 sm:px-5">
         <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="icon"
-            className="size-8 shrink-0"
-            aria-label="Tax advisor report"
+          <span
+            aria-hidden="true"
+            className="flex size-8 shrink-0 items-center justify-center rounded-md border"
           >
             <FolderOpen className="size-4 text-muted-foreground" />
-          </Button>
+          </span>
           <div>
             <h2 className="text-sm font-medium sm:text-base">
-              Tax advisor report
+              Report package
             </h2>
             <p className="text-[10px] text-muted-foreground sm:text-xs">
-              Safe external handoff · no descriptors or xpubs
+              Filing exports · no descriptors or xpubs
             </p>
           </div>
         </div>
@@ -1248,7 +1318,7 @@ function ReportFilesPanel({
           <ReportFileRow
             id="pdf"
             icon={FileText}
-            title="PDF report"
+            title="PDF filing report"
             detail={
               activeProfileIsAustrian
                 ? `${year} · Austrian E 1kv`
@@ -1265,7 +1335,7 @@ function ReportFilesPanel({
           <ReportFileRow
             id="xlsx"
             icon={FileSpreadsheet}
-            title="XLSX workbook"
+            title="XLSX report workbook"
             detail={
               activeProfileIsAustrian
                 ? `${year} · Multi-sheet Austrian workbook`
@@ -1282,7 +1352,7 @@ function ReportFilesPanel({
           <ReportFileRow
             id="csv"
             icon={FileArchive}
-            title="CSV report"
+            title="CSV report bundle"
             detail={
               activeProfileIsAustrian
                 ? `${year} · Austrian E 1kv CSV bundle`
@@ -1296,6 +1366,69 @@ function ReportFilesPanel({
             }
             onExport={onExport}
           />
+        </div>
+        <div className="overflow-hidden rounded-lg border bg-background/50">
+          <div className="flex items-center justify-between gap-3 px-3 py-3">
+            <div className="min-w-0">
+              <h3 className="truncate text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Transaction ledger
+              </h3>
+              <p className="mt-1 line-clamp-2 text-xs leading-5 text-muted-foreground">
+                Raw profile transactions with notes, tags, counterparties, and attachment references.
+              </p>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              className="size-8 shrink-0"
+              aria-label={
+                transactionLedgerExpanded
+                  ? "Collapse transaction ledger exports"
+                  : "Expand transaction ledger exports"
+              }
+              aria-expanded={transactionLedgerExpanded}
+              onClick={() => setTransactionLedgerExpanded((value) => !value)}
+            >
+              <ChevronDown
+                className={cn(
+                  "size-4 text-muted-foreground transition-transform",
+                  transactionLedgerExpanded && "rotate-180",
+                )}
+                aria-hidden="true"
+              />
+            </Button>
+          </div>
+          {transactionLedgerExpanded ? (
+            <div className="divide-y border-t">
+              <ReportFileRow
+                id="transactions_xlsx"
+                icon={FileSpreadsheet}
+                title="Transactions XLSX"
+                detail="Ledger rows for spreadsheet review"
+                loading={activeExport === "transactions_xlsx"}
+                disabled={Boolean(activeExport)}
+                success={
+                  successfulExport?.format === "transactions_xlsx" &&
+                  successfulExport.year === year
+                }
+                onExport={onExport}
+              />
+              <ReportFileRow
+                id="transactions_csv"
+                icon={FileArchive}
+                title="Transactions CSV"
+                detail="Plain ledger export for external tools"
+                loading={activeExport === "transactions_csv"}
+                disabled={Boolean(activeExport)}
+                success={
+                  successfulExport?.format === "transactions_csv" &&
+                  successfulExport.year === year
+                }
+                onExport={onExport}
+              />
+            </div>
+          ) : null}
         </div>
       </div>
     </div>
@@ -1341,7 +1474,9 @@ function HandoffScopePanel({
   onIncludeEditHistoryChange: (value: boolean) => void;
   onExport: (format: ReportExportFormatId) => void;
 }) {
-  const [expanded, setExpanded] = useState(false);
+  // Open by default: the audit-package export is a real, available action,
+  // not informational copy — burying it cost discoverability.
+  const [expanded, setExpanded] = useState(true);
   const auditExportDisabled =
     Boolean(activeExport) ||
     (auditScope === "source_funds_case" && !auditCaseId);
@@ -1358,10 +1493,10 @@ function HandoffScopePanel({
           </span>
           <div className="min-w-0">
             <h2 className="truncate text-sm font-medium sm:text-base">
-              Handoff scope
+              Auditor handoff
             </h2>
             <p className="truncate text-[10px] text-muted-foreground sm:text-xs">
-              Report exports stay separate from wallet verification data
+              Audit exports and evidence boundaries
             </p>
           </div>
         </div>
@@ -1371,7 +1506,7 @@ function HandoffScopePanel({
           size="icon"
           className="size-8 shrink-0"
           aria-label={
-            expanded ? "Collapse handoff scope" : "Expand handoff scope"
+            expanded ? "Collapse auditor handoff" : "Expand auditor handoff"
           }
           aria-expanded={expanded}
           onClick={() => setExpanded((value) => !value)}
@@ -1387,7 +1522,7 @@ function HandoffScopePanel({
       </div>
 
       {expanded ? (
-        <div className="px-4 pb-4 sm:px-5">
+        <div className="space-y-3 px-4 pb-4 sm:px-5">
           <div className="divide-y rounded-lg border bg-background/50">
             {HANDOFF_EXPORT_MODES.map((mode) => (
               <HandoffModeRow
@@ -1399,6 +1534,12 @@ function HandoffScopePanel({
                 onExport={onExport}
               />
             ))}
+          </div>
+          <div className="flex gap-2 rounded-lg border bg-muted/30 px-3 py-2 text-xs leading-5 text-muted-foreground">
+            <ShieldAlert className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+            <span>
+              Normal handoffs never include {NORMAL_HANDOFF_EXCLUSIONS.join(", ")}.
+            </span>
           </div>
           <AuditPackageControls
             scope={auditScope}
@@ -1449,18 +1590,14 @@ function HandoffModeRow({
         ? "border-amber-500/35 bg-amber-500/10 text-amber-700 dark:text-amber-300"
         : "border-destructive/35 bg-destructive/10 text-destructive";
   const availabilityLabel =
-    mode.availability === "available"
-      ? "Available"
-      : mode.availability === "planned"
-        ? "Planned"
-        : "Separate approval";
+    mode.availability === "planned" ? "Planned" : "Separate approval";
 
   return (
-    <div className="flex items-start gap-3 px-3 py-3">
+    <div className="grid gap-3 px-3 py-3 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-center">
       <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground ring-1 ring-inset ring-border">
         <Icon className="size-4" aria-hidden="true" />
       </span>
-      <div className="min-w-0 flex-1 space-y-2">
+      <div className="min-w-0 space-y-1">
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           <span className="min-w-0 truncate text-sm font-semibold">
             {mode.title}
@@ -1468,28 +1605,22 @@ function HandoffModeRow({
           <Badge variant="outline" className={cn("rounded-md", badgeClass)}>
             {mode.sensitivity}
           </Badge>
-          <Badge variant="outline" className="rounded-md">
-            {availabilityLabel}
-          </Badge>
+          {mode.availability !== "available" ? (
+            <Badge variant="outline" className="rounded-md">
+              {availabilityLabel}
+            </Badge>
+          ) : null}
         </div>
-        <p className="text-xs leading-5 text-muted-foreground">{mode.summary}</p>
-        <div className="grid gap-2 text-[10px] leading-4 text-muted-foreground sm:grid-cols-2">
-          <p>
-            <span className="font-medium text-foreground">Includes: </span>
-            {mode.includes.join(", ")}
-          </p>
-          <p>
-            <span className="font-medium text-foreground">Excludes: </span>
-            {mode.excludes.join(", ")}
-          </p>
-        </div>
+        <p className="text-xs leading-5 text-muted-foreground">
+          {mode.summary} {mode.includes.join(" · ")}
+        </p>
       </div>
       {mode.id === "audit_package" ? (
         <Button
           type="button"
           size="sm"
           variant={auditSuccess ? "default" : "outline"}
-          className="h-8 shrink-0 gap-2"
+          className="h-8 shrink-0 justify-self-start gap-2 sm:justify-self-end"
           disabled={auditExportDisabled}
           onClick={() => onExport("audit_package")}
         >
@@ -1541,10 +1672,18 @@ function AuditPackageControls({
   onIncludeEditHistoryChange: (value: boolean) => void;
 }) {
   return (
-    <div className="mt-3 rounded-lg border bg-background/50 p-3">
-      <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+    <div className="rounded-lg border bg-background/50 p-3">
+      <div className="mb-3 flex min-w-0 items-center gap-2">
+        <PackageCheck className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+        <div className="min-w-0">
+          <h3 className="truncate text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Audit package options
+          </h3>
+        </div>
+      </div>
+      <div className="grid gap-3 md:grid-cols-[220px_minmax(0,1fr)]">
         <div className="space-y-1.5">
-          <LabelText>Audit package scope</LabelText>
+          <LabelText>Scope</LabelText>
           <Select value={scope} onValueChange={(value) => onScopeChange(value as AuditPackageScope)}>
             <SelectTrigger className="h-9">
               <SelectValue />
@@ -1571,7 +1710,7 @@ function AuditPackageControls({
             </Select>
           ) : null}
         </div>
-        <div className="grid gap-2 sm:grid-cols-2">
+        <div className="grid gap-2 sm:grid-cols-3">
           <AuditPackageCheckbox
             label="Copied files"
             checked={includeCopiedAttachments}
@@ -1749,126 +1888,49 @@ function ReportFileRow({
   );
 }
 
-function ReportPolicyPanel({
+function ReportPolicyDetails({
   jurisdiction,
-  method,
-  setMethod,
+  methodName,
 }: {
   jurisdiction: (typeof JURISDICTIONS)[string];
-  method: CostBasisMethod;
-  setMethod: (method: CostBasisMethod) => void;
+  methodName: string;
 }) {
-  const methodLabel = METHOD_LABELS[method] ?? METHOD_LABELS[jurisdiction.defaultMethod];
-  const methodFullName = methodLabel.fullName ?? methodLabel.name;
-  const [expanded, setExpanded] = useState(false);
-
   return (
-    <div className="min-w-0 overflow-hidden rounded-xl border bg-card">
-      <div className="flex items-center justify-between gap-3 px-4 py-4 sm:px-5">
-        <div className="flex min-w-0 items-center gap-2">
-          <Button
-            variant="outline"
-            size="icon"
-            className="size-8 shrink-0"
-            aria-label="Profile rules"
-          >
-            <ShieldAlert className="size-4 text-muted-foreground" />
-          </Button>
-          <div className="min-w-0">
-            <h2 className="truncate text-sm font-medium sm:text-base">
-              Profile rules
-            </h2>
-            <p className="truncate text-[10px] text-muted-foreground sm:text-xs">
-              {jurisdiction.code} ·{" "}
-              <span className="xl:hidden">{methodLabel.name}</span>
-              <span className="hidden xl:inline">{methodFullName}</span>
-            </p>
-          </div>
-        </div>
-        <Button
-          type="button"
-          variant="outline"
-          size="icon"
-          className="size-8 shrink-0"
-          aria-label={
-            expanded ? "Collapse profile rules" : "Expand profile rules"
+    <div className="mt-3 space-y-3">
+      <div className="divide-y rounded-lg border bg-background/50">
+        <ReportFactRow
+          label="Jurisdiction"
+          value={`${jurisdiction.code} · ${jurisdiction.name}`}
+        />
+        <ReportFactRow label="Policy" value={jurisdiction.policy} />
+        <ReportFactRow label="Tax rate" value={jurisdiction.rateLabel} />
+        <ReportFactRow
+          label="Internal transfers"
+          value={jurisdiction.internalsNonTaxable ? "Non-taxable" : "Taxable"}
+        />
+        <ReportFactRow
+          label="Long-term rule"
+          value={
+            jurisdiction.code === "AT"
+              ? "Pre-1 Mar 2021 holdings only"
+              : jurisdiction.longTermDays
+              ? `${jurisdiction.longTermDays} days`
+              : "Not applied"
           }
-          aria-expanded={expanded}
-          onClick={() => setExpanded((value) => !value)}
-        >
-          <ChevronDown
-            className={cn(
-              "size-4 text-muted-foreground transition-transform",
-              expanded && "rotate-180",
-            )}
-            aria-hidden="true"
-          />
-        </Button>
+        />
+        <ReportFactRow
+          label="Cost-basis method"
+          value={jurisdiction.methodNote ?? methodName}
+        />
       </div>
 
-      {expanded ? (
-        <div className="space-y-3 px-4 pb-4 sm:px-5">
-          <div className="divide-y rounded-lg border bg-background/50">
-            <ReportFactRow
-              label="Jurisdiction"
-              value={`${jurisdiction.code} · ${jurisdiction.name}`}
-            />
-            <ReportFactRow label="Policy" value={jurisdiction.policy} />
-            <ReportFactRow label="Tax rate" value={jurisdiction.rateLabel} />
-            <ReportFactRow
-              label="Internal transfers"
-              value={jurisdiction.internalsNonTaxable ? "Non-taxable" : "Taxable"}
-            />
-            <ReportFactRow
-              label="Long-term rule"
-              value={
-                jurisdiction.code === "AT"
-                  ? "Pre-1 Mar 2021 holdings only"
-                  : jurisdiction.longTermDays
-                  ? `${jurisdiction.longTermDays} days`
-                  : "Not applied"
-              }
-            />
-            <ReportFactRow
-              label="Cost-basis method"
-              value={jurisdiction.methodNote ?? methodFullName}
-            />
-          </div>
-
-          {!jurisdiction.methodLocked ? (
-            <div className="grid gap-2">
-              {COST_BASIS_METHODS.map(({ k, name, desc }) => {
-                const active = method === k;
-                return (
-                  <button
-                    key={k}
-                    type="button"
-                    onClick={() => setMethod(k)}
-                    className={cn(
-                      "rounded-lg border p-3 text-left transition-colors",
-                      active
-                        ? "border-primary bg-primary/5"
-                        : "bg-background hover:bg-muted/50",
-                    )}
-                  >
-                    <span className="flex items-center gap-2">
-                      <span
-                        className={cn(
-                          "size-2 rounded-full",
-                          active ? "bg-primary" : "bg-muted-foreground/40",
-                        )}
-                      />
-                      <span className="font-medium">{name}</span>
-                    </span>
-                    <span className="mt-1 block text-xs text-muted-foreground">
-                      {desc}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          ) : null}
-        </div>
+      {!jurisdiction.methodLocked ? (
+        <p className="rounded-lg border bg-background/50 px-3 py-2.5 text-xs text-muted-foreground">
+          Lots on this page were computed with the book's configured cost-basis
+          method ({methodName}). To change it, update the book's gains
+          algorithm in profile settings, then reprocess journals. Switching it
+          here would silently disagree with exported reports.
+        </p>
       ) : null}
     </div>
   );
@@ -1913,14 +1975,12 @@ function LotAuditPanel({
         )}
       >
         <div className="flex min-w-0 items-center gap-2">
-          <Button
-            variant="outline"
-            size="icon"
-            className="size-8 shrink-0"
-            aria-label="Disposed lot audit"
+          <span
+            aria-hidden="true"
+            className="flex size-8 shrink-0 items-center justify-center rounded-md border"
           >
             <Sigma className="size-4 text-muted-foreground" />
-          </Button>
+          </span>
           <div className="min-w-0">
             <h2 className="truncate text-sm font-medium sm:text-base">
               Disposed lot audit
@@ -2050,14 +2110,12 @@ function NeutralSwapAuditPanel({
         )}
       >
         <div className="flex min-w-0 items-center gap-2">
-          <Button
-            variant="outline"
-            size="icon"
-            className="size-8 shrink-0"
-            aria-label="Tax-neutral swap audit"
+          <span
+            aria-hidden="true"
+            className="flex size-8 shrink-0 items-center justify-center rounded-md border"
           >
             <RefreshCw className="size-4 text-muted-foreground" />
-          </Button>
+          </span>
           <div className="min-w-0">
             <h2 className="truncate text-sm font-medium sm:text-base">
               Tax-neutral swap audit

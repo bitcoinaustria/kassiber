@@ -95,6 +95,11 @@ def _btc_value(msat: int | None) -> float | None:
 
 def _safe_filename(value: str | None) -> str:
     raw = Path(value or "").name.strip() or "evidence.bin"
+    return _safe_path_component(raw, fallback="evidence.bin")
+
+
+def _safe_path_component(value: str | None, *, fallback: str) -> str:
+    raw = (value or "").strip() or fallback
     chars = []
     for char in raw:
         if char.isalnum() or char in {".", "_", "-"}:
@@ -102,7 +107,13 @@ def _safe_filename(value: str | None) -> str:
         else:
             chars.append("_")
     cleaned = "".join(chars).strip("._")
-    return cleaned or "evidence.bin"
+    return cleaned or fallback
+
+
+def _safe_evidence_relpath(attachment_id: str, safe_name: str) -> Path:
+    safe_attachment_id = _safe_path_component(attachment_id, fallback="attachment")
+    attachment_digest = hashlib.sha256(attachment_id.encode("utf-8")).hexdigest()[:12]
+    return Path("evidence") / f"{safe_attachment_id}-{attachment_digest}-{safe_name}"
 
 
 def _attachments_root(data_root: str) -> Path:
@@ -948,7 +959,7 @@ def _copy_evidence_files(
             continue
         display_label = attachment_display_label(row)
         safe_name = _safe_filename(row["original_filename"] or display_label)
-        relpath = Path("evidence") / f"{row['id']}-{safe_name}"
+        relpath = _safe_evidence_relpath(str(row["id"]), safe_name)
         destination = output_dir / relpath
         evidence_dir.mkdir(parents=True, exist_ok=True)
         shutil.copy2(stored_path, destination)

@@ -23,10 +23,16 @@ from kassiber.daemon import (
     _auto_tool_context_for_model,
     _execute_mutating_ai_tool,
     _execute_read_only_ai_tool,
+    _effective_ai_chat_system_prompt_kind,
+    _effective_ai_chat_tools_enabled,
     _planned_auto_read_tools,
     _reports_tax_summary_payload,
 )
 from kassiber import daemon as daemon_module
+from kassiber.ai import tools as ai_tools
+from kassiber.ai.providers import ai_provider_secret_service_id
+from kassiber.core import attachments as core_attachments
+from kassiber.core import source_funds as core_source_funds
 from kassiber.log_ring import get_log_ring
 from kassiber.core import freshness as core_freshness
 from kassiber.db import open_db
@@ -386,6 +392,23 @@ def _seed_workspace_with_transaction(
     )
     _run_cli(data_root, "wallets", "import-csv", "--wallet", "Cold", "--file", str(csv_path))
     _run_cli(data_root, "rates", "set", "BTC-EUR", "2026-01-01T00:00:00Z", "50000")
+
+
+def _execute_ai_tool_on_conn(executor, call, runtime, conn):
+    results = []
+    thread = threading.Thread(target=lambda: results.append(executor(call, runtime)))
+    thread.start()
+    task = runtime.main_thread_tasks.get(timeout=1)
+    try:
+        payload = task.callback(conn)
+    except Exception as exc:
+        task.response.put((False, exc))
+    else:
+        task.response.put((True, payload))
+    thread.join(timeout=1)
+    if thread.is_alive():
+        raise AssertionError("AI tool executor did not finish")
+    return results[0]
 
 
 def _seed_austrian_hodl_disposal(data_root, tmp_root):
@@ -841,6 +864,7 @@ class DaemonSmokeTest(unittest.TestCase):
             self.assertIn("ui.source_funds.links.bulk_review", ready["data"]["supported_kinds"])
             self.assertIn("ui.source_funds.links.attach", ready["data"]["supported_kinds"])
             self.assertIn("ui.source_funds.suggest", ready["data"]["supported_kinds"])
+            self.assertIn("ui.source_funds.assemble", ready["data"]["supported_kinds"])
             self.assertIn("ui.source_funds.evidence.list", ready["data"]["supported_kinds"])
             self.assertIn("ui.source_funds.export_pdf", ready["data"]["supported_kinds"])
             self.assertIn("ui.journals.snapshot", ready["data"]["supported_kinds"])
@@ -918,6 +942,7 @@ class DaemonSmokeTest(unittest.TestCase):
             self.assertEqual(status["kind"], "status")
             self.assertEqual(status["schema_version"], 1)
             self.assertEqual(status["data"]["auth"]["mode"], "local")
+            self.assertFalse(status["data"]["database_encrypted"])
             self.assertEqual(status["data"]["data_root"], str(data_root))
 
             _write_payload(proc, {"request_id": "shutdown-1", "kind": "daemon.shutdown"})
@@ -965,6 +990,8 @@ class DaemonSmokeTest(unittest.TestCase):
                     row["name"]: row for row in before["data"]["backends"]
                 }
                 self.assertFalse(before_rows["bench"]["is_default"])
+                self.assertFalse(before_rows["bench"]["url_safe_for_http_probe"])
+                self.assertTrue(before_rows["mempool"]["url_safe_for_http_probe"])
 
                 _write_payload(
                     proc,
@@ -1064,6 +1091,67 @@ class DaemonSmokeTest(unittest.TestCase):
             code, stderr = _close_daemon(proc)
             self.assertEqual(code, 0, stderr)
             self.assertNotIn(secret_marker, stderr)
+
+    def test_ai_provider_set_api_key_to_native_store_uses_normalized_provider_name(self):
+        secret_marker = "sk-native-set-normalized"
+        with tempfile.TemporaryDirectory(prefix="kassiber-daemon-ai-set-native-") as tmp:
+            data_root = Path(tmp) / "data"
+            proc = _start_daemon(data_root)
+            self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.ready")
+            try:
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "provider-1",
+                        "kind": "ai.providers.create",
+                        "args": {
+                            "name": "native-direct",
+                            "base_url": "https://example.test/v1",
+                            "kind": "remote",
+                        },
+                    },
+                )
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "ai.providers.create")
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "set-1",
+                        "kind": "ai.providers.set_api_key",
+                        "args": {
+                            "name": "Native-Direct",
+                            "api_key": secret_marker,
+                            "store_id": "macos_keychain",
+                            "_desktop_secret_store_bridge": True,
+                        },
+                    },
+                )
+                control = _read_payload_timeout(proc)
+                self.assertEqual(control["kind"], "supervisor.ai_secret_store.request")
+                self.assertEqual(control["data"]["op"], "set")
+                self.assertEqual(control["data"]["provider_name"], "native-direct")
+                self.assertEqual(control["data"]["account"], "native-direct")
+                self.assertEqual(control["data"]["secret"], secret_marker)
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": control["request_id"],
+                        "kind": "supervisor.ai_secret_store.response",
+                        "data": {"provider_name": "native-direct", "state": "ok"},
+                    },
+                )
+                updated = _read_payload_timeout(proc)
+                self.assertEqual(updated["kind"], "ai.providers.set_api_key")
+                self.assertEqual(updated["data"]["name"], "native-direct")
+                self.assertEqual(
+                    updated["data"]["secret_ref"],
+                    {"store_id": "macos_keychain", "state": "ok"},
+                )
+                self.assertNotIn(secret_marker, json.dumps(updated, sort_keys=True))
+            finally:
+                _write_payload(proc, {"request_id": "shutdown-1", "kind": "daemon.shutdown"})
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.shutdown")
+                code, stderr = _close_daemon(proc)
+                self.assertEqual(code, 0, stderr)
 
     def test_ai_provider_move_to_native_store_rolls_back_on_bridge_failure(self):
         secret_marker = "sk-native-move-rollback"
@@ -1184,7 +1272,7 @@ class DaemonSmokeTest(unittest.TestCase):
                         "request_id": "move-1",
                         "kind": "ai.providers.move_api_key",
                         "args": {
-                            "name": "native-ok",
+                            "name": "Native-OK",
                             "store_id": "macos_keychain",
                             "_desktop_secret_store_bridge": True,
                         },
@@ -1192,6 +1280,8 @@ class DaemonSmokeTest(unittest.TestCase):
                 )
                 control = _read_payload_timeout(proc)
                 self.assertEqual(control["kind"], "supervisor.ai_secret_store.request")
+                self.assertEqual(control["data"]["provider_name"], "native-ok")
+                self.assertEqual(control["data"]["account"], "native-ok")
                 self.assertEqual(control["data"]["secret"], secret_marker)
                 _write_payload(
                     proc,
@@ -1263,7 +1353,7 @@ class DaemonSmokeTest(unittest.TestCase):
                         (
                             "native-list",
                             "macos_keychain",
-                            "service-hash",
+                            ai_provider_secret_service_id(str(data_root.resolve())),
                             "native-list",
                             "ok",
                             "2026-05-13T00:00:00Z",
@@ -1311,6 +1401,94 @@ class DaemonSmokeTest(unittest.TestCase):
                 code, stderr = _close_daemon(proc)
                 self.assertEqual(code, 0, stderr)
 
+    def test_ai_provider_native_ref_outside_namespace_is_not_resolved(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-daemon-ai-native-foreign-") as tmp:
+            data_root = Path(tmp) / "data"
+            proc = _start_daemon(data_root)
+            self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.ready")
+            try:
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "provider-1",
+                        "kind": "ai.providers.create",
+                        "args": {
+                            "name": "native-foreign",
+                            "base_url": "https://example.test/v1",
+                            "kind": "remote",
+                            "acknowledged": True,
+                        },
+                    },
+                )
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "ai.providers.create")
+                conn = sqlite3.connect(data_root / "kassiber.sqlite3")
+                try:
+                    conn.execute(
+                        """
+                        INSERT INTO ai_provider_secret_refs(
+                            provider_name, store_id, service, account, state,
+                            created_at, rotated_at
+                        ) VALUES(?, ?, ?, ?, ?, ?, ?)
+                        """,
+                        (
+                            "native-foreign",
+                            "macos_keychain",
+                            "com.example.unrelated-password-manager",
+                            "victim@example.test",
+                            "ok",
+                            "2026-05-13T00:00:00Z",
+                            "2026-05-13T00:00:00Z",
+                        ),
+                    )
+                    conn.commit()
+                finally:
+                    conn.close()
+
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "models-1",
+                        "kind": "ai.list_models",
+                        "args": {
+                            "provider": "native-foreign",
+                            "_desktop_secret_store_bridge": True,
+                        },
+                    },
+                )
+                response = _read_payload_timeout(proc)
+                self.assertEqual(response["kind"], "error")
+                self.assertEqual(response["error"]["code"], "secret_ref_unavailable")
+                self.assertNotEqual(
+                    response["kind"],
+                    "supervisor.ai_secret_store.request",
+                    "foreign native refs must not be sent to the desktop bridge",
+                )
+
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "list-1",
+                        "kind": "ai.providers.list",
+                        "args": {"_desktop_secret_store_bridge": True},
+                    },
+                )
+                listed = _read_payload_timeout(proc)
+                self.assertEqual(listed["kind"], "ai.providers.list")
+                provider = next(
+                    row
+                    for row in listed["data"]["providers"]
+                    if row["name"] == "native-foreign"
+                )
+                self.assertEqual(
+                    provider["secret_ref"],
+                    {"store_id": "macos_keychain", "state": "unavailable"},
+                )
+            finally:
+                _write_payload(proc, {"request_id": "shutdown-1", "kind": "daemon.shutdown"})
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.shutdown")
+                code, stderr = _close_daemon(proc)
+                self.assertEqual(code, 0, stderr)
+
     def test_ai_provider_list_keeps_ok_state_on_native_ref_bridge_error(self):
         with tempfile.TemporaryDirectory(prefix="kassiber-daemon-ai-native-transient-") as tmp:
             data_root = Path(tmp) / "data"
@@ -1342,7 +1520,7 @@ class DaemonSmokeTest(unittest.TestCase):
                         (
                             "native-transient",
                             "macos_keychain",
-                            "service-hash",
+                            ai_provider_secret_service_id(str(data_root.resolve())),
                             "native-transient",
                             "ok",
                             "2026-05-13T00:00:00Z",
@@ -1434,7 +1612,7 @@ class DaemonSmokeTest(unittest.TestCase):
                         (
                             "native-delete",
                             "macos_keychain",
-                            "service-hash",
+                            ai_provider_secret_service_id(str(data_root.resolve())),
                             "native-delete",
                             "ok",
                             "2026-05-13T00:00:00Z",
@@ -1769,6 +1947,140 @@ class DaemonSmokeTest(unittest.TestCase):
                 code, stderr = _close_daemon(proc)
                 self.assertEqual(code, 0, stderr)
                 self.assertEqual(stderr, "")
+
+    def test_ai_test_connection_rejects_stored_key_reuse_for_different_url(self):
+        captured: queue.Queue[str] = queue.Queue()
+
+        class Handler(BaseHTTPRequestHandler):
+            def do_GET(self):
+                captured.put(self.headers.get("authorization", ""))
+                body = b'{"data":[]}'
+                self.send_response(200)
+                self.send_header("content-type", "application/json")
+                self.send_header("content-length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def log_message(self, *args):
+                return
+
+        server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            with tempfile.TemporaryDirectory(prefix="kassiber-daemon-ai-key-origin-") as tmp:
+                proc = _start_daemon(Path(tmp) / "data")
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.ready")
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "provider-1",
+                        "kind": "ai.providers.create",
+                        "args": {
+                            "name": "victim",
+                            "base_url": "https://api.example.test/v1",
+                            "kind": "remote",
+                        },
+                    },
+                )
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "ai.providers.create")
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "set-key-1",
+                        "kind": "ai.providers.set_api_key",
+                        "args": {"name": "victim", "api_key": "sk-origin-secret"},
+                    },
+                )
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "ai.providers.set_api_key")
+
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "test-origin-1",
+                        "kind": "ai.test_connection",
+                        "args": {
+                            "provider": "victim",
+                            "base_url": f"http://127.0.0.1:{server.server_port}/v1",
+                        },
+                    },
+                )
+                response = _read_payload_timeout(proc)
+                self.assertEqual(response["kind"], "error")
+                self.assertEqual(response["error"]["code"], "validation")
+                self.assertIn("different base_url", response["error"]["message"])
+                self.assertTrue(captured.empty())
+
+                _write_payload(proc, {"request_id": "shutdown-1", "kind": "daemon.shutdown"})
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.shutdown")
+                code, stderr = _close_daemon(proc)
+                self.assertEqual(code, 0, stderr)
+                self.assertNotIn("sk-origin-secret", stderr)
+        finally:
+            server.shutdown()
+            server.server_close()
+
+    def test_ai_test_connection_allows_no_key_provider_with_different_url(self):
+        captured: queue.Queue[str] = queue.Queue()
+
+        class Handler(BaseHTTPRequestHandler):
+            def do_GET(self):
+                captured.put(self.headers.get("authorization", ""))
+                body = b'{"data":[]}'
+                self.send_response(200)
+                self.send_header("content-type", "application/json")
+                self.send_header("content-length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def log_message(self, *args):
+                return
+
+        server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            with tempfile.TemporaryDirectory(prefix="kassiber-daemon-ai-no-key-origin-") as tmp:
+                proc = _start_daemon(Path(tmp) / "data")
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.ready")
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "provider-1",
+                        "kind": "ai.providers.create",
+                        "args": {
+                            "name": "local",
+                            "base_url": "http://127.0.0.1:11434/v1",
+                            "kind": "local",
+                        },
+                    },
+                )
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "ai.providers.create")
+
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "test-origin-1",
+                        "kind": "ai.test_connection",
+                        "args": {
+                            "provider": "local",
+                            "base_url": f"http://127.0.0.1:{server.server_port}/v1",
+                        },
+                    },
+                )
+                response = _read_payload_timeout(proc)
+                self.assertEqual(response["kind"], "ai.test_connection")
+                self.assertEqual(response["data"]["model_count"], 0)
+                self.assertEqual(captured.get_nowait(), "")
+
+                _write_payload(proc, {"request_id": "shutdown-1", "kind": "daemon.shutdown"})
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.shutdown")
+                code, stderr = _close_daemon(proc)
+                self.assertEqual(code, 0, stderr)
+                self.assertEqual(stderr, "")
+        finally:
+            server.shutdown()
+            server.server_close()
 
     def test_ai_test_connection_redacts_provider_echoed_secret_body(self):
         secret_marker = "sk-provider-echo-secret"
@@ -2610,6 +2922,28 @@ class DaemonSmokeTest(unittest.TestCase):
                 self.assertTrue(descriptor_updated["data"]["wallet"]["descriptor"])
                 self.assertFalse(
                     descriptor_updated["data"]["wallet"]["change_descriptor"]
+                )
+
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "reveal-descriptor-plaintext",
+                        "kind": "wallets.reveal_descriptor",
+                        "args": {
+                            "wallet": "Descriptor UI",
+                            "auth_response": {
+                                "plaintext_reveal_ack": "COPY LOCAL SECRET",
+                            },
+                        },
+                    },
+                )
+                descriptor_revealed = _read_payload_timeout(proc)
+                self.assertEqual(
+                    descriptor_revealed["kind"], "wallets.reveal_descriptor"
+                )
+                self.assertEqual(
+                    descriptor_revealed["data"]["wallet_material"],
+                    receive_descriptor,
                 )
 
                 _write_payload(
@@ -3917,6 +4251,296 @@ class DaemonSmokeTest(unittest.TestCase):
         self.assertTrue(results[0]["ok"])
         self.assertEqual(results[0]["envelope"]["kind"], "ui.transfers.pair")
 
+    def test_source_funds_ai_tool_schemas_track_core_enums(self):
+        self.assertEqual(
+            set(ai_tools._SOURCE_FUNDS_SOURCE_TYPES),
+            set(core_source_funds.SOURCE_TYPES),
+        )
+        self.assertEqual(
+            set(ai_tools._SOURCE_FUNDS_LINK_TYPES),
+            set(core_source_funds.LINK_TYPES),
+        )
+        self.assertEqual(
+            set(ai_tools._SOURCE_FUNDS_LINK_STATES),
+            set(core_source_funds.LINK_STATES),
+        )
+        self.assertEqual(
+            set(ai_tools._SOURCE_FUNDS_CONFIDENCE_LEVELS),
+            set(core_source_funds.CONFIDENCE_LEVELS),
+        )
+        self.assertEqual(
+            set(ai_tools._SOURCE_FUNDS_ALLOCATION_POLICIES),
+            set(core_source_funds.ALLOCATION_POLICIES),
+        )
+        tool_names = {
+            tool["function"]["name"]
+            for tool in ai_tools.openai_tool_definitions(include_mutating=True)
+        }
+        self.assertIn("ui_source_funds_preview", tool_names)
+        self.assertIn("ui_source_funds_sources_create", tool_names)
+        self.assertIn("ui_source_funds_links_create", tool_names)
+        self.assertIn("ui_source_funds_links_review", tool_names)
+        self.assertIn("ui_source_funds_suggest", tool_names)
+        self.assertIn("ui_source_funds_links_bulk_review", tool_names)
+
+    def test_source_funds_ai_tools_create_and_preview_reviewed_non_coinjoin_link(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-ai-source-funds-") as tmp:
+            data_root = Path(tmp) / "data"
+            _seed_workspace_with_transaction(data_root, tmp)
+            conn = open_db(data_root)
+            try:
+                runtime = AiToolRuntime(
+                    data_root=str(data_root),
+                    runtime_config={},
+                    main_thread_tasks=queue.Queue(),
+                    maintenance_state={},
+                )
+                source_result = _execute_ai_tool_on_conn(
+                    _execute_mutating_ai_tool,
+                    ParsedAiToolCall(
+                        call_id="call_source",
+                        name="ui_source_funds_sources_create",
+                        arguments={
+                            "source_type": "fiat_purchase",
+                            "label": "AI reviewed fiat purchase",
+                            "asset": "BTC",
+                            "amount": "0.10000000",
+                            "description": "User-approved source-funds root created through chat.",
+                        },
+                    ),
+                    runtime,
+                    conn,
+                )
+                self.assertTrue(source_result["ok"])
+                self.assertEqual(
+                    source_result["envelope"]["kind"],
+                    "ui.source_funds.sources.create",
+                )
+                source_id = source_result["envelope"]["data"]["id"]
+
+                link_result = _execute_ai_tool_on_conn(
+                    _execute_mutating_ai_tool,
+                    ParsedAiToolCall(
+                        call_id="call_link",
+                        name="ui_source_funds_links_create",
+                        arguments={
+                            "from_source": source_id,
+                            "to_transaction": "seed-inbound-1",
+                            "link_type": "manual_source",
+                            "confidence": "strong",
+                            "allocation_amount": "0.10000000",
+                            "allocation_policy": "explicit",
+                            "explanation": "User approved a non-CoinJoin root-source link from chat.",
+                        },
+                    ),
+                    runtime,
+                    conn,
+                )
+                self.assertTrue(link_result["ok"])
+                self.assertEqual(
+                    link_result["envelope"]["kind"],
+                    "ui.source_funds.links.create",
+                )
+                self.assertEqual(link_result["envelope"]["data"]["link_type"], "manual_source")
+
+                preview_result = _execute_ai_tool_on_conn(
+                    _execute_read_only_ai_tool,
+                    ParsedAiToolCall(
+                        call_id="call_preview",
+                        name="ui_source_funds_preview",
+                        arguments={"target_transaction": "seed-inbound-1"},
+                    ),
+                    runtime,
+                    conn,
+                )
+                self.assertTrue(preview_result["ok"])
+                self.assertTrue(
+                    preview_result["envelope"]["data"]["explain_gates"]["exportable"]
+                )
+            finally:
+                conn.close()
+
+    def test_source_funds_ai_read_tools_redact_attachment_paths_and_urls(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-ai-source-funds-redact-") as tmp:
+            data_root = Path(tmp) / "data"
+            _seed_workspace_with_transaction(data_root, tmp)
+            conn = open_db(data_root)
+            try:
+                evidence_file = Path(tmp) / "private-bank-statement.txt"
+                evidence_file.write_text("bank statement bytes", encoding="utf-8")
+                file_attachment = core_attachments.add_attachment(
+                    conn,
+                    str(data_root),
+                    None,
+                    None,
+                    "seed-inbound-1",
+                    daemon_module._attachment_hooks(),
+                    file_path=str(evidence_file),
+                    label="Bank statement file",
+                )
+                url_attachment = core_attachments.add_attachment(
+                    conn,
+                    str(data_root),
+                    None,
+                    None,
+                    "seed-inbound-1",
+                    daemon_module._attachment_hooks(),
+                    url="https://bank.example/private/statement?token=secret",
+                    label="Bank portal record",
+                )
+                source = core_source_funds.create_source(
+                    conn,
+                    None,
+                    None,
+                    daemon_module._source_funds_hooks(),
+                    source_type="fiat_purchase",
+                    label="Reviewed source with evidence",
+                    asset="BTC",
+                    amount="0.10000000",
+                    attachment_ids=[file_attachment["id"], url_attachment["id"]],
+                )
+                core_source_funds.create_link(
+                    conn,
+                    None,
+                    None,
+                    daemon_module._source_funds_hooks(),
+                    from_source_ref=source["id"],
+                    to_transaction_ref="seed-inbound-1",
+                    link_type="manual_source",
+                    confidence="strong",
+                    allocation_amount="0.10000000",
+                    allocation_policy="explicit",
+                    explanation="User reviewed source evidence.",
+                    attachment_ids=[file_attachment["id"], url_attachment["id"]],
+                )
+
+                runtime = AiToolRuntime(
+                    data_root=str(data_root),
+                    runtime_config={},
+                    main_thread_tasks=queue.Queue(),
+                    maintenance_state={},
+                )
+                source_list = _execute_ai_tool_on_conn(
+                    _execute_read_only_ai_tool,
+                    ParsedAiToolCall(
+                        call_id="call_sources",
+                        name="ui_source_funds_sources_list",
+                        arguments={},
+                    ),
+                    runtime,
+                    conn,
+                )
+                link_list = _execute_ai_tool_on_conn(
+                    _execute_read_only_ai_tool,
+                    ParsedAiToolCall(
+                        call_id="call_links",
+                        name="ui_source_funds_links_list",
+                        arguments={"target_transaction": "seed-inbound-1"},
+                    ),
+                    runtime,
+                    conn,
+                )
+                for result in (source_list, link_list):
+                    self.assertTrue(result["ok"])
+                    payload_text = json.dumps(result["envelope"]["data"], sort_keys=True)
+                    self.assertIn("Bank statement file", payload_text)
+                    self.assertIn("Bank portal record", payload_text)
+                    self.assertNotIn("source_url", payload_text)
+                    self.assertNotIn("stored_relpath", payload_text)
+                    self.assertNotIn("bank.example", payload_text)
+                    self.assertNotIn("private-bank-statement.txt", payload_text)
+            finally:
+                conn.close()
+
+    def test_source_funds_ai_link_create_surfaces_validation_errors(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-ai-source-funds-invalid-") as tmp:
+            data_root = Path(tmp) / "data"
+            _seed_workspace_with_transaction(data_root, tmp)
+            conn = open_db(data_root)
+            try:
+                runtime = AiToolRuntime(
+                    data_root=str(data_root),
+                    runtime_config={},
+                    main_thread_tasks=queue.Queue(),
+                    maintenance_state={},
+                )
+                source_result = _execute_ai_tool_on_conn(
+                    _execute_mutating_ai_tool,
+                    ParsedAiToolCall(
+                        call_id="call_source",
+                        name="ui.source_funds.sources.create",
+                        arguments={
+                            "source_type": "fiat_purchase",
+                            "label": "Validation source",
+                            "asset": "BTC",
+                            "amount": "0.10000000",
+                        },
+                    ),
+                    runtime,
+                    conn,
+                )
+                self.assertTrue(source_result["ok"])
+
+                bad_result = _execute_ai_tool_on_conn(
+                    _execute_mutating_ai_tool,
+                    ParsedAiToolCall(
+                        call_id="call_bad_link",
+                        name="ui.source_funds.links.create",
+                        arguments={
+                            "from_source": source_result["envelope"]["data"]["id"],
+                            "from_transaction": "seed-inbound-1",
+                            "to_transaction": "seed-inbound-1",
+                            "link_type": "manual_source",
+                            "allocation_amount": "0.10000000",
+                            "allocation_policy": "explicit",
+                            "explanation": "Invalid because two parents are supplied.",
+                        },
+                    ),
+                    runtime,
+                    conn,
+                )
+                self.assertFalse(bad_result["ok"])
+                self.assertEqual(bad_result["reason"], "validation")
+                self.assertIn("exactly one", bad_result["message"])
+
+                bad_bool_result = _execute_ai_tool_on_conn(
+                    _execute_mutating_ai_tool,
+                    ParsedAiToolCall(
+                        call_id="call_bad_bool",
+                        name="ui.source_funds.links.create",
+                        arguments={
+                            "from_source": source_result["envelope"]["data"]["id"],
+                            "to_transaction": "seed-inbound-1",
+                            "link_type": "manual_source",
+                            "allocation_amount": "0.10000000",
+                            "allocation_policy": "explicit",
+                            "explanation": "Invalid because boolean args must be real booleans.",
+                            "uses_chain_observation": "false",
+                        },
+                    ),
+                    runtime,
+                    conn,
+                )
+                self.assertFalse(bad_bool_result["ok"])
+                self.assertEqual(bad_bool_result["reason"], "validation")
+                self.assertIn("uses_chain_observation", bad_bool_result["message"])
+
+                bad_suggest_bool_result = _execute_ai_tool_on_conn(
+                    _execute_mutating_ai_tool,
+                    ParsedAiToolCall(
+                        call_id="call_bad_suggest_bool",
+                        name="ui.source_funds.suggest",
+                        arguments={"include_broad_hints": "false"},
+                    ),
+                    runtime,
+                    conn,
+                )
+                self.assertFalse(bad_suggest_bool_result["ok"])
+                self.assertEqual(bad_suggest_bool_result["reason"], "validation")
+                self.assertIn("include_broad_hints", bad_suggest_bool_result["message"])
+            finally:
+                conn.close()
+
     def test_auto_tool_context_marks_imported_text_as_untrusted_user_data(self):
         context = _auto_tool_context_for_model(
             [
@@ -4175,6 +4799,39 @@ class DaemonSmokeTest(unittest.TestCase):
             self.assertTrue(payload["results"][0]["has_backend_url"])
             self.assertFalse(state["auto_sync"]["ok"])  # type: ignore[index]
 
+    def test_auto_sync_app_error_message_redacts_backend_url(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-daemon-state-") as tmp:
+            data_root = Path(tmp) / "data"
+            _seed_workspace_with_transaction(data_root, tmp)
+            conn = sqlite3.connect(data_root / "kassiber.sqlite3")
+            conn.row_factory = sqlite3.Row
+            self.addCleanup(conn.close)
+            profile = conn.execute("SELECT * FROM profiles WHERE label = 'Main'").fetchone()
+            conn.execute(
+                """
+                INSERT INTO settings(key, value)
+                VALUES(?, 'true')
+                """,
+                (f"ai.auto_sync_before_report_reads.profile.{profile['id']}",),
+            )
+            conn.commit()
+            raw_url = "http://user:pass@private-node.local/rpc?token=SECRET_TOKEN"
+
+            with mock.patch(
+                "kassiber.daemon_freshness._wallets_sync_payload",
+                side_effect=AppError(f"Failed to reach backend {raw_url}: offline"),
+            ):
+                payload = _auto_sync_wallets_if_enabled(conn, {}, state={})
+
+            encoded = json.dumps(payload, sort_keys=True)
+            self.assertFalse(payload["ok"])
+            self.assertEqual(payload["reason"], "app_error")
+            self.assertNotIn("private-node.local", encoded)
+            self.assertNotIn("user:pass", encoded)
+            self.assertNotIn("SECRET_TOKEN", encoded)
+            self.assertNotIn("/rpc", encoded)
+            self.assertIn("<backend-url>", payload["message"])
+
     def test_auto_sync_rate_limits_repeated_profile_attempts(self):
         with tempfile.TemporaryDirectory(prefix="kassiber-daemon-state-") as tmp:
             data_root = Path(tmp) / "data"
@@ -4332,9 +4989,11 @@ class DaemonSmokeTest(unittest.TestCase):
             _write_payload(proc, {"request_id": "wallets-1", "kind": "ui.wallets.list"})
             wallets = _read_payload_timeout(proc)
             self.assertEqual(wallets["kind"], "ui.wallets.list")
-            self.assertEqual(wallets["data"]["wallets"][0]["label"], "Cold")
+            wallet = wallets["data"]["wallets"][0]
+            self.assertEqual(wallet["label"], "Cold")
+            self.assertIs(wallet["descriptor"], False)
+            self.assertIs(wallet["change_descriptor"], False)
             wallet_payload = json.dumps(wallets["data"])
-            self.assertNotIn("descriptor", wallet_payload)
             self.assertNotIn("config_json", wallet_payload)
 
             _write_payload(proc, {"request_id": "backends-1", "kind": "ui.backends.list"})
@@ -5798,6 +6457,42 @@ class DaemonSmokeTest(unittest.TestCase):
             self.assertEqual(report_xlsx_file.read_bytes()[:2], b"PK")
             self.assertIn("Overview", report_xlsx["data"]["sheets"])
             self.assertIn("Transactions", report_xlsx["data"]["sheets"])
+            # Self-verification sheets ship by default.
+            self.assertTrue(report_xlsx["data"]["verified"])
+            self.assertIn("Control", report_xlsx["data"]["sheets"])
+
+            _write_payload(
+                proc,
+                {
+                    "request_id": "export-report-xlsx-plain",
+                    "kind": "ui.reports.export_xlsx",
+                    "args": {"verify": False},
+                },
+            )
+            report_xlsx_plain = _read_payload_timeout(proc)
+            self.assertEqual(report_xlsx_plain["kind"], "ui.reports.export_xlsx")
+            self.assertFalse(report_xlsx_plain["data"]["verified"])
+            self.assertNotIn("Control", report_xlsx_plain["data"]["sheets"])
+
+            _write_payload(
+                proc,
+                {"request_id": "export-transactions-xlsx", "kind": "ui.transactions.export_xlsx"},
+            )
+            tx_xlsx = _read_payload_timeout(proc)
+            self.assertEqual(tx_xlsx["kind"], "ui.transactions.export_xlsx")
+            self.assertEqual(tx_xlsx["data"]["scope"], "transactions")
+            self.assertEqual(tx_xlsx["data"]["sheets"], ["Transactions"])
+            self.assertTrue(Path(tx_xlsx["data"]["file"]).is_file())
+            self.assertEqual(Path(tx_xlsx["data"]["file"]).read_bytes()[:2], b"PK")
+
+            _write_payload(
+                proc,
+                {"request_id": "export-transactions-csv", "kind": "ui.transactions.export_csv"},
+            )
+            tx_csv = _read_payload_timeout(proc)
+            self.assertEqual(tx_csv["kind"], "ui.transactions.export_csv")
+            self.assertEqual(tx_csv["data"]["format"], "csv")
+            self.assertTrue(Path(tx_csv["data"]["file"]).is_file())
 
             _write_payload(
                 proc,
@@ -5896,6 +6591,12 @@ class DaemonSmokeTest(unittest.TestCase):
                 wallets_by_label["DescriptorLive"]["backend"]["source"],
                 "explicit",
             )
+            self.assertTrue(wallets_by_label["DescriptorLive"]["descriptor"])
+            self.assertFalse(
+                wallets_by_label["DescriptorLive"]["change_descriptor"]
+            )
+            self.assertFalse(wallets_by_label["FileOnly"]["descriptor"])
+            self.assertFalse(wallets_by_label["FileOnly"]["change_descriptor"])
             self.assertEqual(
                 wallets_by_label["DefaultAddress"]["backend"]["source"],
                 "default",
@@ -6288,6 +6989,41 @@ class DaemonSmokeTest(unittest.TestCase):
             code, stderr = _close_daemon(proc)
             self.assertEqual(code, 0, stderr)
             self.assertEqual(stderr, "")
+
+    def test_ai_chat_cli_provider_auto_disables_tool_loop(self):
+        validated = {
+            "tools_enabled": True,
+            "system_prompt_kind": "kassiber",
+        }
+        provider_snapshot = {"base_url": "codex-cli://default"}
+
+        effective_tools = _effective_ai_chat_tools_enabled(provider_snapshot, validated)
+
+        self.assertFalse(effective_tools)
+        self.assertIsNone(
+            _effective_ai_chat_system_prompt_kind(
+                validated,
+                tools_enabled=effective_tools,
+            )
+        )
+
+    def test_ai_chat_http_provider_keeps_tool_loop(self):
+        validated = {
+            "tools_enabled": True,
+            "system_prompt_kind": "kassiber",
+        }
+        provider_snapshot = {"base_url": "http://127.0.0.1:11434/v1"}
+
+        effective_tools = _effective_ai_chat_tools_enabled(provider_snapshot, validated)
+
+        self.assertTrue(effective_tools)
+        self.assertEqual(
+            _effective_ai_chat_system_prompt_kind(
+                validated,
+                tools_enabled=effective_tools,
+            ),
+            "kassiber",
+        )
 
     def test_ai_chat_cancel_cooperatively_finishes_cancelled(self):
         server = ThreadingHTTPServer(("127.0.0.1", 0), _SlowChatHandler)
@@ -8034,6 +8770,34 @@ class DaemonSmokeTest(unittest.TestCase):
         self.assertTrue(crashed, "no 'request crashed' ring record for crash-1")
         self.assertEqual(crashed[0]["level"], "error")
         self.assertIn("traceback", crashed[0]["fields"])
+
+
+class ErrorEnvelopeRedactionTest(unittest.TestCase):
+    def test_error_details_pseudonymized_at_egress(self):
+        # The REAL daemon error-envelope path must pseudonymize txids/amounts in
+        # structured error.details before the envelope reaches the UI or a CLI
+        # --output disk write (previously only secret KEYS were scrubbed).
+        txid = "a" * 64
+        details = {
+            "stderr": f"node: utxo {txid} fee_msat=1200",
+            "response_preview": "unspent 0.5 BTC",
+            "vout": 2,
+        }
+        envelope = daemon_module._error_envelope(
+            "liquid_mismatch", "sync failed", details=details
+        )
+        whole = json.dumps(envelope)
+        self.assertNotIn(txid, whole)
+        self.assertIn("txid#", whole)
+        self.assertIn("amount#", whole)  # keyed fee_msat + standalone 0.5 BTC
+        self.assertNotIn("fee_msat=1200", whole)
+
+        payload = daemon_module._app_error_payload(
+            AppError("sync failed", code="liquid_mismatch", details=details)
+        )
+        encoded = json.dumps(payload["details"])
+        self.assertNotIn(txid, encoded)
+        self.assertIn("txid#", encoded)
 
 
 if __name__ == "__main__":

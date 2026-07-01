@@ -16,15 +16,15 @@
     "outgoing": "Outgoing",
     "transfer": "Internal transfer",
     "swap": "Swap",
-    "layerTransition": "Layer transition"
+    "layerTransition": "Bitcoin swap"
   },
   "detailHeader": {
     "confirmationsTitle": "{{count}} on-chain confirmations",
     "paired": "Paired",
     "pairOut": "Out",
     "pairIn": "In",
-    "valueThen": "then",
-    "valueNow": "now",
+    "valueThen": "FMV then",
+    "valueNow": "marked now",
     "unassignedWallet": "Unassigned wallet",
     "openExplorer": "Open explorer",
     "close": "Close transaction detail"
@@ -49,7 +49,7 @@
     "outgoing": "Send",
     "transfer": "Internal transfer",
     "swap": "Swap",
-    "layerTransition": "Layer transition"
+    "layerTransition": "Bitcoin swap"
   },
   "classification": {
     "unlabeled": "Unlabeled",
@@ -120,7 +120,7 @@
       "short": "Own-wallet transfer"
     },
     "neuSwap": {
-      "label": "§27b carrying-value swap / layer transition",
+      "label": "§27b carrying-value Bitcoin swap",
       "short": "Neu swap"
     },
     "altSpekulation": {
@@ -178,6 +178,8 @@
     "3months": "3 Months",
     "30days": "30 Days",
     "5years": "5 Years",
+    "10years": "10 Years",
+    "15years": "15 Years",
     "all": "All"
   },
   "chartMetric": {
@@ -194,13 +196,6 @@
     "transfers": "Transfers",
     "swaps": "Swaps"
   },
-  "dateFilter": {
-    "all": "All",
-    "today": "Today",
-    "yesterday": "Yesterday",
-    "last7days": "Last 7 days",
-    "last30days": "Last 30 days"
-  },
   "quickFilter": {
     "externalFlow": "External flow",
     "reviewQueue": "Review queue",
@@ -215,9 +210,16 @@
     "flowChart": "{{bucket}} · {{segment}} · {{mode}}"
   },
   "dashboard": {
-    "refreshBook": "Refresh book",
-    "refreshing": "Refreshing",
-    "refresh": "Refresh"
+    "export": {
+      "label": "Export",
+      "xlsx": "Excel workbook (.xlsx)",
+      "csv": "CSV file (.csv)",
+      "saveTitle": "Save transactions export",
+      "done": "Transactions exported",
+      "savedTo": "Saved to {{name}}",
+      "rows": "{{count}} transactions exported",
+      "failed": "Transactions export failed"
+    }
   },
   "workbench": {
     "metric": {
@@ -283,6 +285,7 @@
       "missingExplorerLink": "Missing explorer link",
       "missingPrice": "Missing price",
       "failedImport": "Failed import",
+      "pairingCandidates": "Pairing candidates",
       "swapCandidates": "Swap candidates",
       "none": "No data quality issues"
     }
@@ -300,9 +303,18 @@
       "network": "Network",
       "status": "Status"
     },
+    "sort": {
+      "dateInactive": "Sort by transaction date",
+      "dateDescending": "Sorted by transaction date, newest first",
+      "dateAscending": "Sorted by transaction date, oldest first",
+      "amountInactive": "Sort by amount",
+      "amountDescending": "Sorted by amount, high to low",
+      "amountAscending": "Sorted by amount, low to high"
+    },
     "filter": {
-      "dateAria": "Filter by date",
-      "datePlaceholder": "Date",
+      "menuAria": "Open transaction filters",
+      "menuTrigger": "Filters",
+      "menuLabel": "Transaction filters",
       "statusAria": "Filter by status",
       "statusTrigger": "Status",
       "statusLabel": "Filter by Status",
@@ -318,7 +330,10 @@
       "walletAria": "Filter by wallet or source",
       "walletTrigger": "Wallet",
       "walletLabel": "Filter by wallet / source",
-      "allWallets": "All wallets"
+      "allWallets": "All wallets",
+      "feesTrigger": "Fees",
+      "feesLabel": "Filter by fees",
+      "allFees": "All fees"
     },
     "chip": {
       "clearChart": "Clear chart filter {{label}}",
@@ -326,7 +341,6 @@
       "clearQuick": "Clear {{label}} filter",
       "clearBreakdown": "Clear {{label}} filter",
       "clearStatus": "Clear {{label}} filter",
-      "clearDate": "Clear {{label}} filter",
       "clearFlow": "Clear {{label}} filter",
       "clearPayment": "Clear {{label}} filter",
       "clearWithFees": "Clear with fees filter"
@@ -345,24 +359,42 @@
       "excluded": "Excluded",
       "taxable": "Taxable",
       "notTaxable": "Not taxable",
+      "loanNonEvent": "Loan non-event",
       "openExplorerTitle": "Open {{txid}} on {{explorer}}",
       "actionsAria": "Open actions for {{txid}}",
       "viewDetails": "View Details",
       "classify": "Classify",
       "copyId": "Copy ID",
       "exclude": "Exclude Transaction",
-      "voidConfirm": "Void this transaction? This cannot be undone."
+      "voidConfirm": "Void this transaction? This cannot be undone.",
+      "excludeConfirm": "Exclude this transaction from journals and reports? You can re-include it from the transaction's Classify tab.",
+      "collateral": {
+        "collateralBadge": "BTC collateral posted",
+        "returnedBadge": "BTC collateral returned",
+        "principalReceivedBadge": "BTC loan received",
+        "principalRepaidBadge": "BTC loan repaid",
+        "collateralAccounting": "BTC collateral posted for fiat loan",
+        "returnedAccounting": "BTC collateral returned",
+        "principalReceivedAccounting": "BTC loan principal received",
+        "principalRepaidAccounting": "BTC loan principal repaid",
+        "markCollateral": "Mark as BTC collateral posted for fiat loan",
+        "markReturned": "Mark as BTC collateral returned",
+        "markPrincipalReceived": "Mark as BTC loan principal received",
+        "markPrincipalRepaid": "Mark as BTC loan principal repaid",
+        "changePrincipalReceived": "Change to BTC loan principal received",
+        "changePrincipalRepaid": "Change to BTC loan principal repaid",
+        "unmark": "Remove loan mark"
+      }
     },
-    "pagination": {
-      "rowsPerPage": "Rows per page:",
-      "refreshing": "Refreshing",
-      "rangeOf": "of {{total}}",
+    "virtual": {
+      "refreshing": "Refreshing transactions",
+      "complete": "Showing {{count}} transactions",
+      "loaded": "Showing {{count}} loaded transactions",
+      "moreHint": "More transactions load automatically as you scroll.",
+      "loadingMore": "Loading more transactions…",
       "loadMore": "Load more",
-      "loading": "Loading",
-      "firstPage": "Go to first page",
-      "previousPage": "Go to previous page",
-      "nextPage": "Go to next page",
-      "lastPage": "Go to last page"
+      "moreAvailable": "More transactions available",
+      "scrollRegion": "Scrollable transaction table"
     }
   },
   "notification": {
@@ -392,6 +424,30 @@
     "pairRemoved": {
       "title": "Pair removed",
       "body": "This movement is no longer linked to the other leg."
+    },
+    "loanMarked": {
+      "title": "Loan mark saved",
+      "body": "Reprocess journals to apply this loan treatment to reports."
+    },
+    "loanUnmarked": {
+      "title": "Loan mark removed",
+      "body": "Reprocess journals to restore the normal tax treatment."
+    },
+    "loanLinked": {
+      "title": "Loan legs linked",
+      "body": "These marked loan transactions now share one loan id."
+    },
+    "loanLinkFailed": {
+      "title": "Could not link loan legs",
+      "body": "Kassiber could not link those loan marks."
+    },
+    "loanMarkFailed": {
+      "title": "Could not update loan mark",
+      "body": "Kassiber could not save the loan mark."
+    },
+    "transactionExcluded": {
+      "title": "Transaction excluded",
+      "body": "Reprocess journals before trusting reports again."
     },
     "evidenceReused": {
       "title": "Evidence reused",
@@ -495,6 +551,7 @@
     "fee": "Fee",
     "feeHint": "Network or settlement fee paid for this transaction.",
     "feeNone": "None",
+    "senderPaidNetworkFee": "Network fee {{value}} (sender-paid)",
     "sourceRecord": "Source record",
     "type": "Type",
     "network": "Network",
@@ -508,8 +565,94 @@
     "included": "Included",
     "includedYes": "Included",
     "includedNo": "Excluded",
+    "technical": "Technical graph",
+    "inputCount": "Inputs",
+    "outputCount": "Outputs",
+    "networkFee": "Network fee",
+    "feeRate": "Fee rate",
+    "version": "Version",
+    "locktime": "Locktime",
+    "size": "Size",
+    "vsize": "Virtual size",
+    "weight": "Weight",
+    "unknown": "Unknown",
     "note": "Note",
     "notePlaceholder": "Receipt, invoice, counterparty, or review context"
+  },
+  "graph": {
+    "title": "Transaction graph",
+    "sectionTitle": "Transaction flow",
+    "fullSupport": "Valued Bitcoin input/output graph",
+    "partialSupport": "Reference graph: transaction references are available; some amounts are not in the local source record",
+    "inputPrevoutSupport": "Reference graph: outputs are valued; input amounts need spent previous-output data",
+    "confidentialSupport": "Reference graph: public references are available; confidential amounts stay hidden",
+    "expand": "Expand",
+    "expandedTitle": "Expanded transaction graph",
+    "loading": "Loading graph",
+    "loadingBody": "Reading the local transaction graph.",
+    "error": "Graph unavailable",
+    "unsupported": "Unsupported graph shape",
+    "graphless": "No graph for this source",
+    "liquidGraphless": "Liquid graph not stored locally",
+    "graphlessBody": "This row was imported without valued Bitcoin vin/vout data, so Kassiber can show the accounting row but not a flow diagram.",
+    "liquidBody": "Kassiber only has the imported Liquid row locally. The public inputs and outputs can be inspected on Liquid Network; confidential amounts may remain hidden.",
+    "openLiquidNetwork": "Open Liquid Network",
+    "inputCount": "Inputs",
+    "outputCount": "Outputs",
+    "feeRate": "Fee rate",
+    "size": "Size",
+    "swapRouteTitle": "Paired swap route",
+    "swapRouteOut": "Spent leg",
+    "swapRouteConsolidation": "Consolidation leg",
+    "swapRouteMiddle": "Swap counterparty",
+    "swapRouteIn": "Received leg",
+    "swapRoutePair": "Reviewed pair",
+    "swapRouteFee": "Fee {{fee}}",
+    "swapRouteSelected": "Selected",
+    "swapRouteAsset": "Asset",
+    "swapRouteUnknownLeg": "Wallet",
+    "coinjoinRouteTitle": "Coinjoin route",
+    "coinjoinRouteMiddle": "Coinjoin",
+    "coinjoinRoutePair": "Reviewed Coinjoin link",
+    "transferRouteTitle": "Manual transfer route",
+    "transferRouteMiddle": "Ownership transfer",
+    "transferRoutePair": "Reviewed ownership link",
+    "pairRouteTitle": "Reviewed pair route",
+    "pairRouteMiddle": "Reviewed pair",
+    "pairRoutePair": "Manual link",
+    "hidden": "Hidden",
+    "overflowMore": "+{{count}} more",
+    "confidentialAmount": "Confidential amount",
+    "hiddenReferences": "Hidden graph references",
+    "availableReferences": "Graph references are available from each strand",
+    "diagramAria": "Transaction flow diagram",
+    "copyInput": "Copy input outpoint",
+    "copyOutput": "Copy output reference",
+    "copyFee": "Copy fee reference",
+    "legAria": "{{role}} graph leg",
+    "roles": {
+      "input": "Input",
+      "output": "Output",
+      "change": "Change",
+      "externalRecipient": "External recipient",
+      "incomingPayment": "Incoming payment",
+      "ownedDestination": "Owned destination",
+      "opReturn": "OP_RETURN / non-address",
+      "fee": "Fee",
+      "overflow": "More",
+      "ambiguousOwnedOutput": "Ambiguous owned output",
+      "leg": "Leg"
+    },
+    "ownership": {
+      "networkFee": "Network fee",
+      "internalChange": "Internal change output",
+      "internalWallet": "Internal wallet leg",
+      "externalWallet": "External wallet leg",
+      "ambiguousWallet": "Ambiguous wallet ownership",
+      "unspendable": "Unspendable output",
+      "aggregated": "Aggregated legs",
+      "unknown": "Ownership unknown"
+    }
   },
   "commercial": {
     "title": "Commercial provenance",
@@ -579,14 +722,25 @@
     "taxableHint": "Included in journal processing.",
     "excluded": "Excluded",
     "excludedHint": "Kept out of journal processing.",
-    "projectedEffect": "Projected effect",
+    "projectedEffect": "Tax effect",
+    "basisAdded": "Basis added",
+    "basisTreatment": "Basis treatment",
+    "basisCarriedForward": "Carried forward",
+    "journalPending": "Run journals to calculate",
+    "noDisposal": "No disposal",
+    "noRealization": "No realization",
+    "notRealized": "Not realized",
     "costBasis": "Cost basis",
-    "costBasisHint": "Acquisition value used by the tax engine.",
+    "costBasisHint": "Lot basis from processed journal entries. Acquisition rows use the fair market value recorded at the time.",
+    "basisBlockerTitle": "Missing acquisition lot",
+    "basisBlockerBody": "Kassiber cannot match this disposal to enough earlier acquired {{asset}}. Sync or import the funding acquisition, or exclude this row if it should not be reported. Then process journals.",
     "proceeds": "Proceeds",
-    "proceedsHint": "Disposal value applied on outgoing tx.",
+    "proceedsHint": "Disposal proceeds from processed journal entries.",
+    "incomeRecognized": "Income recognized",
+    "taxableIncome": "Taxable income",
     "gainLoss": "Gain / loss",
     "gainLossPending": "Pending journal run",
-    "gainLossHint": "Calculated by RP2 once journals are processed.",
+    "gainLossHint": "Realized gain/loss from RP2 after journals are processed.",
     "priceEvidence": "Price evidence",
     "sourceMissing": "Source missing",
     "narrative": {
@@ -631,6 +785,15 @@
     "unknown": "Unknown",
     "noPairedMovement": "No paired movement",
     "noPairedMovementBody": "When this tx is the other leg of a transfer, swap, or peg-in/out, the matched leg shows up here. You can also create a manual pair from the swap candidate queue.",
+    "openPairingReview": "Open pairing review",
+    "loanLegs": "Loan legs",
+    "loanId": "Loan {{id}}",
+    "loanThisLeg": "This leg",
+    "loanLinked": "Linked",
+    "loanLinkCandidates": "Marked loan legs",
+    "loanLink": "Link",
+    "loanLinking": "Linking...",
+    "noLoanLinks": "No linked loan leg.",
     "journalEntries": "Journal entries",
     "noJournalEntries": "No journal entries for this row yet. Process journals after metadata or pricing changes."
   },
@@ -737,6 +900,9 @@
       "missingOrUnderReview": "Pricing source is marked as missing or under review. Save a reviewed source before running journals.",
       "readinessHint": "This is a pricing readiness warning from the transaction row. It is not an active journal quarantine unless the daemon returns a quarantine reason.",
       "viewPricing": "View Pricing",
+      "viewDetails": "View Details",
+      "viewLinked": "View Linked",
+      "viewBasisContext": "Fix cost basis",
       "openPricing": "Open Pricing",
       "exclude": "Exclude"
     },
@@ -765,6 +931,9 @@
       "excludedFromReports": "Excluded from tax reports",
       "taxLabel": "Tax: {{label}}",
       "resolveQuarantine": "Resolve quarantine to include in reports",
+      "resolveSyncMismatch": "Re-sync or inspect wallet outputs",
+      "restoreBasis": "Fix cost basis",
+      "reviewPairing": "Review paired movement",
       "pricingIncomplete": "Pricing incomplete",
       "noQuarantine": "No quarantine"
     },

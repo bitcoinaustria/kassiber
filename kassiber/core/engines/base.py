@@ -12,6 +12,15 @@ class TaxEngineLedgerInputs:
     wallet_refs_by_id: Mapping[str, Mapping[str, Any]]
     manual_pair_records: Sequence[Mapping[str, Any]]
     direct_payout_records: Sequence[Mapping[str, Any]] = ()
+    # Prebuilt profile-wide address-ownership index (kassiber.core.ownership.
+    # OwnedIndex) used to derive self-transfers from the transaction graph;
+    # ``None`` when no on-chain transaction JSON is available to read.
+    owned_index: Any = None
+    # Active loan legs (rows from ``loan_legs`` with a non-null transaction_id).
+    # Each carries a ``role`` that classifies the matching journal transaction:
+    # collateral lock/release and borrowed-principal receive/repay roles are
+    # non-events, while unmarked liquidation falls through to normal disposal.
+    loan_legs: Sequence[Mapping[str, Any]] = ()
 
 
 @dataclass(frozen=True)

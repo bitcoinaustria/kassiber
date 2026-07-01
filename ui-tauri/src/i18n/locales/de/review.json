@@ -2,16 +2,47 @@
   "swap": {
     "tabs": {
       "swaps": "Swaps",
-      "transfers": "Übertragungen"
+      "transfers": "Bitcoin-Bewegungen"
     },
     "queueLabel": "Prüfungs-Warteschlange",
     "page": {
       "swapsTitle": "Swap-Kandidaten",
       "transfersTitle": "Übertragungs-Kandidaten",
-      "swapsDescription": "Prüfe wahrscheinliche Lightning-, Liquid- und on-chain-Legs, bevor du sie als Swaps paarst.",
-      "transfersDescription": "Prüfe wahrscheinliche Wallet-zu-Wallet-Bewegungen, bevor du sie als Übertragungen paarst.",
-      "swapsEmpty": "Keine ungepaarten Swap-Kandidaten. Sobald wahrscheinliche Asset- oder Rail-übergreifende Legs auftauchen, erscheinen sie hier.",
-      "transfersEmpty": "Keine ungepaarten Übertragungs-Kandidaten. Sobald wahrscheinliche Wallet-Bewegungen mit gleichem Asset auftauchen, erscheinen sie hier."
+      "swapsDescription": "Prüfe wahrscheinliche Nicht-Bitcoin-Asset-Swaps, bevor du sie als steuerbare Swaps paarst.",
+      "transfersDescription": "Prüfe Wallet-zu-Wallet-Übertragungen und Bitcoin-Swaps über Lightning, Liquid und On-chain-Rails.",
+      "swapsEmpty": "Keine ungepaarten Asset-Swap-Kandidaten. Falls später Nicht-Bitcoin-Swaps auftauchen, erscheinen sie hier.",
+      "transfersEmpty": "Keine ungepaarten Bitcoin-Bewegungs-Kandidaten. Wallet-Übertragungen, Boltz-Swaps, Pegs und Refunds erscheinen hier."
+    },
+    "paired": {
+      "label": "Gepaart",
+      "backToReview": "Zurück zur Prüfung",
+      "swapsTitle": "Gepaarte Swaps",
+      "transfersTitle": "Gepaarte Übertragungen",
+      "swapsDescription": "Nicht-Bitcoin-Asset-Swaps, die du bereits gepaart hast. Öffne einen, um Art oder Richtlinie zu ändern oder die Paarung aufzuheben.",
+      "transfersDescription": "Wallet-Bewegungen und Bitcoin-Swaps, die du bereits mit Carrying-Value-Behandlung gepaart hast. Öffne eine, um Art oder Richtlinie zu ändern oder die Paarung aufzuheben.",
+      "swapsEmpty": "Noch keine gepaarten Swaps. Swaps, die du aus der Prüfungs-Warteschlange bestätigst, erscheinen hier.",
+      "transfersEmpty": "Noch keine gepaarten Übertragungen. Übertragungen, die du aus der Prüfungs-Warteschlange bestätigst, erscheinen hier.",
+      "loading": "Gepaarte Paare werden geladen…",
+      "loadFailed": "Gepaarte Paare konnten nicht geladen werden: {{error}}",
+      "pairing": "Paarung",
+      "count_one": "{{count}} Paar",
+      "count_other": "{{count}} Paare",
+      "source": "Gepaart über",
+      "sourceManual": "Manuell",
+      "sourceBulkExact": "Sammel · exakt",
+      "sourceBulkSelected": "Sammel · ausgewählt",
+      "sourceRuleAuto": "Auto-Regel",
+      "created": "Gepaart am",
+      "notes": "Notizen",
+      "noNotes": "—",
+      "edit": "Paarung bearbeiten",
+      "sameAssetTaxableHint": "Übertragungen mit gleichem Asset bleiben carrying-value — taxable ist nicht verfügbar.",
+      "unpair": "Paarung aufheben",
+      "rowMenuAria": "Aktionen für Paar {{id}} öffnen",
+      "save": "Änderungen speichern",
+      "unpairTitle": "Diese Transaktionen entpaaren?",
+      "unpairBody": "Die beiden Legs werden wieder ungepaart und erscheinen erneut in der Prüfungs-Warteschlange. Journal- und Steuer-Deltas werden beim nächsten Journal-Lauf neu berechnet.",
+      "unpairConfirm": "Paarung aufheben"
     },
     "savedView": {
       "deleteAria": "Ansicht {{name}} löschen"
@@ -25,6 +56,8 @@
       "exact": "Exakt",
       "strong": "Stark",
       "conflicts": "Konflikte",
+      "history": "Verlauf",
+      "historyAria": "Gepaarten Verlauf anzeigen",
       "showAllAria": "Alle {{label}} anzeigen",
       "filterAria": "{{label}} filtern"
     },
@@ -44,7 +77,8 @@
     "method": {
       "any": "Beliebige Methode",
       "paymentHash": "Payment Hash",
-      "heuristic": "Zeit + Betrag"
+      "heuristic": "Zeit + Betrag",
+      "htlcRefund": "Refund-Verknüpfung"
     },
     "route": {
       "any": "Beliebige Route",
@@ -66,19 +100,15 @@
     "table": {
       "loading": "Kandidaten werden geladen…",
       "loadFailed": "Kandidaten konnten nicht geladen werden: {{error}}",
-      "confidence": "Zuverlässigkeit",
-      "method": "Methode",
+      "status": "Status",
+      "statusConflict": "Konflikt",
       "outgoing": "Ausgehend",
       "incoming": "Eingehend",
       "feeDelta": "Gebührendifferenz",
-      "methodPaymentHash": "Payment Hash",
-      "methodHeuristic": "Zeit + Betrag",
       "ruleBadge": "Regel",
       "selectAria": "Kandidat auswählen",
       "conflictTitle": "Eine dieser Transaktionen erscheint in {{count}} möglichen Treffern. Öffne die Zeile, um den richtigen zu wählen — Paaren oder Verwerfen löst die anderen auf.",
-      "conflictHiddenTitle": " {{count}} alternative Treffer sind durch den aktuellen Tab oder die Filter ausgeblendet.",
-      "conflictShareLeg": "{{count}} Treffer teilen sich ein Leg",
-      "conflictHiddenSuffix": " ({{count}} verborgen)"
+      "conflictHiddenTitle": " {{count}} alternative Treffer sind durch den aktuellen Tab oder die Filter ausgeblendet."
     },
     "bulk": {
       "selected": "{{count}} ausgewählt",
@@ -116,9 +146,11 @@
     },
     "detail": {
       "candidateLabelTransfer": "Übertragungs-Kandidat",
+      "candidateLabelLayerTransition": "Bitcoin-Swap-Kandidat",
       "candidateLabelSwap": "Swap-Kandidat",
       "matchedByPaymentHash": "Über Payment Hash zugeordnet.",
       "matchedByTimeAmount": "Über Zeit und Betrag zugeordnet.",
+      "matchedByRefundLink": "Über HTLC-Refund-Verknüpfung zugeordnet.",
       "delta": "Differenz {{delta}} ({{percent}} %).",
       "outgoing": "Ausgehend",
       "incoming": "Eingehend",
@@ -127,6 +159,7 @@
       "matchRationale": "Treffer-Begründung",
       "rationalePaymentHash": "Beide Legs teilen denselben Lightning Payment Hash.",
       "rationaleHeuristic": "Die Legs liegen nach Berücksichtigung der Gebührendifferenz nah in Zeit und Betrag.",
+      "rationaleHtlcRefund": "Der eingehende Refund gibt den HTLC-Funding-Output des ausgehenden Legs aus, eine deterministische Verknüpfung auch innerhalb einer Wallet.",
       "autoPairRoute": "Auto-Paar-Route: {{rule}}",
       "conflictNote_one": "Eine dieser Transaktionen erscheint auch in {{count}} weiteren möglichen Treffer (er ist eventuell unter dem anderen Tab gelistet oder herausgefiltert). Sammelaktionen überspringen ihn; paare hier den richtigen Treffer oder verwirf die falschen, um den Konflikt aufzulösen.",
       "conflictNote_other": "Eine dieser Transaktionen erscheint auch in {{count}} weiteren möglichen Treffern (er ist eventuell unter dem anderen Tab gelistet oder herausgefiltert). Sammelaktionen überspringen ihn; paare hier den richtigen Treffer oder verwirf die falschen, um den Konflikt aufzulösen.",
@@ -134,8 +167,10 @@
       "pairKind": "Paar-Art",
       "feeLine": "{{fee}} · {{percent}} %",
       "transferFee": "Übertragungsgebühr",
+      "layerTransitionFee": "Bitcoin-Swap-Gebühr",
       "swapFee": "Swap-Gebühr",
       "deltasNote": "Journal- und Steuerdifferenzen werden bei der nächsten Journal-Verarbeitung berechnet.",
+      "layerTransitionOwnershipHint": "Einen Bitcoin-Swap nur paaren, wenn beide Legs dir gehören. Wenn er an jemand anderen gezahlt hat oder von jemand anderem kam, ungepaart als Zahlung oder Eingang lassen.",
       "wallet": "Wallet",
       "amount": "Betrag",
       "occurred": "Erfolgt am",
@@ -143,7 +178,7 @@
     },
     "saveDialog": {
       "title": "Aktuellen Filter als Ansicht speichern",
-      "description": "Die aktiven Filter für Zuverlässigkeit, Methode und Asset-Paar werden wortwörtlich gespeichert. Wähle einen kurzen Namen; der Chip erscheint oben in der Warteschlange für den Abruf mit einem Klick.",
+      "description": "Die aktiven Filter für Zuverlässigkeit, Methode und Route werden wortwörtlich gespeichert. Wähle einen kurzen Namen; der Chip erscheint oben in der Warteschlange für den Abruf mit einem Klick.",
       "nameLabel": "Name der Ansicht",
       "namePlaceholder": "z. B. Boltz Pegouts"
     },
@@ -311,9 +346,9 @@
       "previewIssue": "Vorschau-Problembeschreibung",
       "bundleMode": "Bundle-Modus",
       "highSignalTitle": "High-Signal",
-      "highSignalDescription": "Hält Beträge, Adressen, txids, Pfade, Bezeichnungen, URLs und Fehlertext lesbar.",
+      "highSignalDescription": "Hält Adressen, Pfade, Bezeichnungen, URLs und Fehlertext lesbar. Txids und Beträge werden immer zu stabilen Pseudonymen (Beträge mit grober Größenordnung) – nie der Rohwert.",
       "publicSafeTitle": "Öffentlich-sicher",
-      "publicSafeDescription": "Maskiert betriebliche Felder und exakte Beträge, nachdem Wallet- und Zugangsdaten entfernt wurden.",
+      "publicSafeDescription": "Maskiert betriebliche Felder, nachdem Wallet- und Zugangsdaten entfernt wurden. Txids und Beträge werden zu stabilen Pseudonymen ohne Größenordnung.",
       "preview": "Vorschau",
       "firstLines": "Erste {{count}} Zeilen",
       "saveBundle": "Bundle speichern",
@@ -360,7 +395,7 @@
     "search": "Suche",
     "regexSearch": "Regex-Suche",
     "redactedView": "Geschwärzte Ansicht",
-    "maskAmounts": "Beträge maskieren"
+    "maskAmounts": "Größenordnung ausblenden"
   },
   "imports": {
     "eyebrow": "Verbindungen · Importe · Integrationen",

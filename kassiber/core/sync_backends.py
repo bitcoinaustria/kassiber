@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import base64
 import hashlib
-import ipaddress
 import json
 import socket
 import ssl
@@ -25,10 +24,16 @@ from ..db import APP_NAME
 from ..envelope import json_ready
 from ..errors import AppError
 from ..msat import SATS_PER_BTC, dec
-from ..retry import retry_after_seconds_from_http_error
+from ..proxy import (
+    _connect_via_socks5,
+    is_onion_endpoint,
+    urlopen_with_proxy,
+)
+from ..redaction import redact_operational_text
 from ..time_utils import UNKNOWN_OCCURRED_AT, parse_iso_datetime_or_none, timestamp_to_iso
 from ..util import normalize_chain_value, normalize_network_value, parse_bool, parse_int
 from ..wallet_descriptors import (
+    SCRIPT_TYPE_BRANCH_BASE,
     branch_limits,
     decode_liquid_transaction,
     derive_descriptor_target,
@@ -38,18 +43,13 @@ from ..wallet_descriptors import (
     liquid_plan_can_unblind,
 )
 from . import htlc_parser
+from .address_scripts import address_to_scriptpubkey
 from .sync import WalletSyncState, emit_sync_progress, normalize_backend_kind
 from .wallets import (
     load_wallet_descriptor_plan_from_config,
     normalize_addresses,
     wallet_policy_asset_id,
 )
-
-B58_ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
-B58_INDEX = {char: index for index, char in enumerate(B58_ALPHABET)}
-BECH32_CHARSET = "qpzry9x8gf2tvdw0s3jn54khce6mua7l"
-BECH32_INDEX = {char: index for index, char in enumerate(BECH32_CHARSET)}
-
 
 def _emit_backend_progress(phase: str, **payload):
     event = {"phase": phase, **payload}
@@ -76,7 +76,15 @@ def _emit_http_backoff(retry_number, max_retries, wait_seconds):
     )
 
 
-def http_get_json(url, timeout=30, *, _sleeper=None, _rng=None, _max_attempts=None):
+def http_get_json(
+    url,
+    timeout=30,
+    *,
+    proxy_url=None,
+    _sleeper=None,
+    _rng=None,
+    _max_attempts=None,
+):
     def _opener():
         request = urlrequest.Request(
             url,
@@ -85,7 +93,13 @@ def http_get_json(url, timeout=30, *, _sleeper=None, _rng=None, _max_attempts=No
                 "User-Agent": f"{APP_NAME}/{__version__}",
             },
         )
-        with urlrequest.urlopen(request, timeout=timeout) as response:
+        with urlopen_with_proxy(
+            request,
+            url,
+            timeout,
+            proxy_url=proxy_url,
+            source_label="backend",
+        ) as response:
             return json.loads(response.read().decode("utf-8"))
 
     return http_client.request_with_retry(
@@ -98,7 +112,16 @@ def http_get_json(url, timeout=30, *, _sleeper=None, _rng=None, _max_attempts=No
     )
 
 
-def http_get_text(url, timeout=30, accept="text/plain", *, _sleeper=None, _rng=None, _max_attempts=None):
+def http_get_text(
+    url,
+    timeout=30,
+    accept="text/plain",
+    *,
+    proxy_url=None,
+    _sleeper=None,
+    _rng=None,
+    _max_attempts=None,
+):
     def _opener():
         request = urlrequest.Request(
             url,
@@ -107,7 +130,13 @@ def http_get_text(url, timeout=30, accept="text/plain", *, _sleeper=None, _rng=N
                 "User-Agent": f"{APP_NAME}/{__version__}",
             },
         )
-        with urlrequest.urlopen(request, timeout=timeout) as response:
+        with urlopen_with_proxy(
+            request,
+            url,
+            timeout,
+            proxy_url=proxy_url,
+            source_label="backend",
+        ) as response:
             return response.read().decode("utf-8")
 
     return http_client.request_with_retry(
@@ -120,7 +149,17 @@ def http_get_text(url, timeout=30, accept="text/plain", *, _sleeper=None, _rng=N
     )
 
 
-def http_post_json(url, payload, headers=None, timeout=30, *, _sleeper=None, _rng=None, _max_attempts=None):
+def http_post_json(
+    url,
+    payload,
+    headers=None,
+    timeout=30,
+    *,
+    proxy_url=None,
+    _sleeper=None,
+    _rng=None,
+    _max_attempts=None,
+):
     def _opener():
         request = urlrequest.Request(
             url,
@@ -133,7 +172,13 @@ def http_post_json(url, payload, headers=None, timeout=30, *, _sleeper=None, _rn
             },
             method="POST",
         )
-        with urlrequest.urlopen(request, timeout=timeout) as response:
+        with urlopen_with_proxy(
+            request,
+            url,
+            timeout,
+            proxy_url=proxy_url,
+            source_label="backend",
+        ) as response:
             return json.loads(response.read().decode("utf-8"))
 
     return http_client.request_with_retry(
@@ -144,6 +189,10 @@ def http_post_json(url, payload, headers=None, timeout=30, *, _sleeper=None, _rn
         max_attempts=_max_attempts,
         on_retry=_emit_http_backoff,
     )
+
+
+def _backend_proxy_url(backend):
+    return backend_value(backend, "tor_proxy", "proxy")
 
 
 def append_url_path(base_url, extra_path):
@@ -164,201 +213,21 @@ def parse_socket_backend_url(url, default_scheme="ssl", default_ports=None):
     return scheme, host, port
 
 
-def _read_exact(sock, length):
-    chunks = []
-    remaining = length
-    while remaining > 0:
-        chunk = sock.recv(remaining)
-        if not chunk:
-            raise AppError("Proxy closed the connection during SOCKS5 negotiation")
-        chunks.append(chunk)
-        remaining -= len(chunk)
-    return b"".join(chunks)
-
-
-def _socks5_address(host):
-    try:
-        address = ipaddress.ip_address(host)
-    except ValueError:
-        try:
-            encoded = host.encode("idna")
-        except UnicodeError as exc:
-            raise AppError(f"SOCKS5 proxy target host is invalid: {exc}") from exc
-        if len(encoded) > 255:
-            raise AppError("SOCKS5 proxy target host is too long")
-        return b"\x03" + bytes([len(encoded)]) + encoded
-    if address.version == 4:
-        return b"\x01" + address.packed
-    return b"\x04" + address.packed
-
-
-def _connect_via_socks5(proxy_url, host, port, timeout):
-    scheme, proxy_host, proxy_port = parse_socket_backend_url(
-        proxy_url,
-        default_scheme="socks5",
-        default_ports={"socks5": 9050, "socks5h": 9050},
-    )
-    if scheme not in {"socks5", "socks5h"}:
-        raise AppError(f"Unsupported Electrum proxy transport '{scheme}'")
-    sock = socket.create_connection((proxy_host, proxy_port), timeout=timeout)
-    try:
-        sock.sendall(b"\x05\x01\x00")
-        greeting = _read_exact(sock, 2)
-        if greeting[0] != 0x05:
-            raise AppError(
-                f"SOCKS5 proxy returned an unexpected greeting (got {greeting!r})"
-            )
-        if greeting[1] != 0x00:
-            raise AppError(
-                "SOCKS5 proxy refused the no-auth method "
-                f"(returned 0x{greeting[1]:02x}); Kassiber only supports "
-                "unauthenticated SOCKS5 proxies such as Tor."
-            )
-        request = (
-            b"\x05\x01\x00"
-            + _socks5_address(host)
-            + int(port).to_bytes(2, byteorder="big")
-        )
-        sock.sendall(request)
-        response = _read_exact(sock, 4)
-        if response[0] != 5:
-            raise AppError("SOCKS5 proxy returned an invalid response")
-        if response[1] != 0:
-            raise AppError(f"SOCKS5 proxy connect failed with code {response[1]}")
-        atyp = response[3]
-        if atyp == 1:
-            _read_exact(sock, 4)
-        elif atyp == 3:
-            length = _read_exact(sock, 1)[0]
-            _read_exact(sock, length)
-        elif atyp == 4:
-            _read_exact(sock, 16)
-        else:
-            raise AppError("SOCKS5 proxy returned an unsupported address type")
-        _read_exact(sock, 2)
-        return sock
-    except Exception:
-        sock.close()
-        raise
-
-
 def _connect_backend_socket(backend, host, port):
     timeout = backend_timeout(backend)
     proxy = backend_value(backend, "tor_proxy", "proxy")
     if proxy:
         return _connect_via_socks5(proxy, host, port, timeout)
+    if is_onion_endpoint(host):
+        raise AppError(
+            ".onion backend URLs require a Tor/SOCKS proxy",
+            code="network_proxy_required",
+            hint=(
+                "Configure --tor-proxy for this backend; Kassiber will not "
+                "connect to .onion hosts directly."
+            ),
+        )
     return socket.create_connection((host, port), timeout=timeout)
-
-
-def sha256d(payload):
-    return hashlib.sha256(hashlib.sha256(payload).digest()).digest()
-
-
-def base58check_decode(value):
-    number = 0
-    for char in value:
-        if char not in B58_INDEX:
-            raise AppError(f"Unsupported base58 address: {value}")
-        number = number * 58 + B58_INDEX[char]
-    raw = number.to_bytes((number.bit_length() + 7) // 8, "big") if number else b""
-    leading_zeros = len(value) - len(value.lstrip("1"))
-    payload = (b"\x00" * leading_zeros) + raw
-    if len(payload) < 5:
-        raise AppError(f"Unsupported base58 address: {value}")
-    body, checksum = payload[:-4], payload[-4:]
-    if sha256d(body)[:4] != checksum:
-        raise AppError(f"Invalid base58 checksum for address: {value}")
-    return body
-
-
-def bech32_polymod(values):
-    generators = (0x3B6A57B2, 0x26508E6D, 0x1EA119FA, 0x3D4233DD, 0x2A1462B3)
-    checksum = 1
-    for value in values:
-        top = checksum >> 25
-        checksum = ((checksum & 0x1FFFFFF) << 5) ^ value
-        for index, generator in enumerate(generators):
-            if (top >> index) & 1:
-                checksum ^= generator
-    return checksum
-
-
-def bech32_hrp_expand(hrp):
-    return [ord(char) >> 5 for char in hrp] + [0] + [ord(char) & 31 for char in hrp]
-
-
-def bech32_decode(value):
-    if value.lower() != value and value.upper() != value:
-        raise AppError(f"Invalid bech32 address casing: {value}")
-    normalized = value.lower()
-    separator = normalized.rfind("1")
-    if separator < 1 or separator + 7 > len(normalized):
-        raise AppError(f"Unsupported bech32 address: {value}")
-    hrp = normalized[:separator]
-    data = []
-    for char in normalized[separator + 1 :]:
-        if char not in BECH32_INDEX:
-            raise AppError(f"Unsupported bech32 address: {value}")
-        data.append(BECH32_INDEX[char])
-    polymod = bech32_polymod(bech32_hrp_expand(hrp) + data)
-    if polymod == 1:
-        spec = "bech32"
-    elif polymod == 0x2BC830A3:
-        spec = "bech32m"
-    else:
-        raise AppError(f"Invalid bech32 checksum for address: {value}")
-    return hrp, data[:-6], spec
-
-
-def convertbits(data, from_bits, to_bits, pad=True):
-    accumulator = 0
-    bits = 0
-    output = []
-    max_value = (1 << to_bits) - 1
-    max_accumulator = (1 << (from_bits + to_bits - 1)) - 1
-    for value in data:
-        if value < 0 or value >> from_bits:
-            raise AppError("Invalid bit group in address encoding")
-        accumulator = ((accumulator << from_bits) | value) & max_accumulator
-        bits += from_bits
-        while bits >= to_bits:
-            bits -= to_bits
-            output.append((accumulator >> bits) & max_value)
-    if pad:
-        if bits:
-            output.append((accumulator << (to_bits - bits)) & max_value)
-    elif bits >= from_bits or ((accumulator << (to_bits - bits)) & max_value):
-        raise AppError("Invalid address padding")
-    return output
-
-
-def address_to_scriptpubkey(address):
-    if address.lower().startswith(("bc1", "tb1", "bcrt1")):
-        _, data, spec = bech32_decode(address)
-        if not data:
-            raise AppError(f"Invalid segwit address: {address}")
-        version = data[0]
-        if version > 16:
-            raise AppError(f"Unsupported segwit witness version for address: {address}")
-        program = bytes(convertbits(data[1:], 5, 8, pad=False))
-        if len(program) < 2 or len(program) > 40:
-            raise AppError(f"Invalid segwit program length for address: {address}")
-        if version == 0 and spec != "bech32":
-            raise AppError(f"Invalid bech32 checksum type for address: {address}")
-        if version > 0 and spec != "bech32m":
-            raise AppError(f"Invalid bech32m checksum type for address: {address}")
-        opcode = 0 if version == 0 else 0x50 + version
-        return bytes([opcode, len(program)]) + program
-    payload = base58check_decode(address)
-    version = payload[0]
-    hash160 = payload[1:]
-    if len(hash160) != 20:
-        raise AppError(f"Unsupported base58 payload length for address: {address}")
-    if version in {0x00, 0x6F}:
-        return bytes.fromhex("76a914") + hash160 + bytes.fromhex("88ac")
-    if version in {0x05, 0xC4}:
-        return bytes.fromhex("a914") + hash160 + bytes.fromhex("87")
-    raise AppError(f"Unsupported address version for address: {address}")
 
 
 def output_addresses(vout):
@@ -466,7 +335,11 @@ class ElectrumClient:
                     detail = f"({error.get('code', 'unknown')}): {error.get('message', error)}"
                 else:
                     detail = str(error)
-                raise AppError(f"Electrum call {method} failed {detail}")
+                # The Electrum server message is untrusted free text that can
+                # echo a txid/amount; pseudonymize at the source.
+                raise AppError(
+                    f"Electrum call {method} failed {redact_operational_text(detail)}"
+                )
             return message.get("result")
 
     def batch_call(self, requests):
@@ -507,7 +380,11 @@ class ElectrumClient:
                     detail = f"({error.get('code', 'unknown')}): {error.get('message', error)}"
                 else:
                     detail = str(error)
-                raise AppError(f"Electrum call {method} failed {detail}")
+                # The Electrum server message is untrusted free text that can
+                # echo a txid/amount; pseudonymize at the source.
+                raise AppError(
+                    f"Electrum call {method} failed {redact_operational_text(detail)}"
+                )
             results[index] = message.get("result")
             remaining -= 1
         return results
@@ -656,6 +533,18 @@ def scan_descriptor_targets(
 ):
     limits = branch_limits(plan)
     targets = []
+    targets_checked = 0
+
+    def emit_discovery_progress(branch_index, branch_gap_limit, consecutive_unused):
+        _emit_backend_progress(
+            "discovery",
+            targets_checked=targets_checked,
+            retained_targets=len(targets),
+            branch_index=branch_index,
+            gap_limit=branch_gap_limit,
+            unused_streak=consecutive_unused,
+        )
+
     for branch in plan.branches:
         branch_gap_limit = limits.get(branch.branch_index, plan.gap_limit)
         if branch_gap_limit <= 1:
@@ -691,6 +580,7 @@ def scan_descriptor_targets(
                 used_batch = list(target_used_batch(batch_targets))
                 if len(used_batch) != len(batch_targets):
                     raise AppError("Descriptor discovery returned an unexpected number of usage checks")
+                targets_checked += len(batch_targets)
                 for target, is_used in zip(batch_targets, used_batch):
                     targets.append(target)
                     if is_used:
@@ -700,31 +590,37 @@ def scan_descriptor_targets(
                     address_index += 1
                     if consecutive_unused >= branch_gap_limit:
                         break
-                _emit_backend_progress(
-                    "discovery",
-                    target_count=len(targets),
-                    branch_index=branch.branch_index,
+                emit_discovery_progress(
+                    branch.branch_index,
+                    branch_gap_limit,
+                    consecutive_unused,
                 )
                 continue
             target = sync_target_from_derived(derive_descriptor_target(plan, branch.branch_index, address_index))
             targets.append(target)
+            targets_checked += 1
             if target_used and target_used(target):
                 consecutive_unused = 0
             else:
                 consecutive_unused += 1
             address_index += 1
             if address_index % 50 == 0:
-                _emit_backend_progress(
-                    "discovery",
-                    target_count=len(targets),
-                    branch_index=branch.branch_index,
+                emit_discovery_progress(
+                    branch.branch_index,
+                    branch_gap_limit,
+                    consecutive_unused,
                 )
+        emit_discovery_progress(
+            branch.branch_index,
+            branch_gap_limit,
+            consecutive_unused,
+        )
     return targets
 
 
-def esplora_scripthash_stats(base_url, script_pubkey_hex, timeout=30):
+def esplora_scripthash_stats(base_url, script_pubkey_hex, timeout=30, *, proxy_url=None):
     resource = append_url_path(base_url, f"scripthash/{scriptpubkey_scripthash(script_pubkey_hex)}")
-    return http_get_json(resource, timeout=timeout)
+    return http_get_json(resource, timeout=timeout, proxy_url=proxy_url)
 
 
 def esplora_stats_fingerprint(payload):
@@ -753,11 +649,75 @@ def esplora_stats_fingerprint(payload):
     ).hexdigest()
 
 
-def esplora_scripthash_has_history(base_url, script_pubkey_hex, timeout=30):
-    payload = esplora_scripthash_stats(base_url, script_pubkey_hex, timeout=timeout)
+def esplora_scripthash_has_history(base_url, script_pubkey_hex, timeout=30, *, proxy_url=None):
+    payload = esplora_scripthash_stats(
+        base_url,
+        script_pubkey_hex,
+        timeout=timeout,
+        proxy_url=proxy_url,
+    )
     chain_stats = payload.get("chain_stats") or {}
     mempool_stats = payload.get("mempool_stats") or {}
     return int(chain_stats.get("tx_count") or 0) + int(mempool_stats.get("tx_count") or 0) > 0
+
+
+def _probe_scripts_have_history(backend, kind, script_pubkeys, *, timeout):
+    if kind == "esplora":
+        workers = _bounded_http_workers(backend)
+        proxy_url = _backend_proxy_url(backend)
+
+        def probe(script_pubkey):
+            return esplora_scripthash_has_history(
+                backend["url"],
+                script_pubkey,
+                timeout=timeout,
+                proxy_url=proxy_url,
+            )
+
+        return _map_bounded(script_pubkeys, probe, workers)
+    if kind == "electrum":
+        scripthashes = [scriptpubkey_scripthash(spk) for spk in script_pubkeys]
+        with ElectrumClient(backend) as client:
+            statuses = electrum_call_many(
+                client,
+                [("blockchain.scripthash.subscribe", [scripthash]) for scripthash in scripthashes],
+                batch_size=backend_batch_size(backend),
+            )
+        return [status is not None for status in statuses]
+    raise AppError(f"Script-type detection is not implemented for backend kind '{kind}'")
+
+
+def detect_active_script_types(backend, xpub, *, chain="bitcoin", network=None, timeout=None):
+    """Report which candidate script types a bare xpub has on-chain history for.
+
+    Probes only receive index 0 of each of the four script types -- four history
+    checks against one host, bounded by the backend worker cap. There is
+    deliberately no gap-window scan here: detection must stay rate-limit-safe.
+    """
+    chain = normalize_chain_value(chain)
+    network = normalize_network_value(chain, network)
+    kind = validate_backend_for_wallet(backend, chain, network, has_descriptor=True)
+    if timeout is None:
+        timeout = backend_timeout(backend)
+    candidates = list(SCRIPT_TYPE_BRANCH_BASE)
+    script_pubkeys = []
+    for script_type in candidates:
+        plan = load_wallet_descriptor_plan_from_config(
+            {
+                "xpub": xpub,
+                "script_types": [script_type],
+                "chain": chain,
+                "network": network,
+                "gap_limit": 1,
+            }
+        )
+        base = SCRIPT_TYPE_BRANCH_BASE[script_type]
+        script_pubkeys.append(derive_descriptor_target(plan, base, 0).script_pubkey)
+    history = _probe_scripts_have_history(backend, kind, script_pubkeys, timeout=timeout)
+    return [
+        {"script_type": script_type, "has_history": bool(used)}
+        for script_type, used in zip(candidates, history)
+    ]
 
 
 def discover_descriptor_targets(backend, plan, kind, checkpoint=None):
@@ -765,6 +725,7 @@ def discover_descriptor_targets(backend, plan, kind, checkpoint=None):
     checkpoint = checkpoint if isinstance(checkpoint, dict) else {}
     if kind == "esplora":
         scan_batch_size = _bounded_http_workers(backend)
+        proxy_url = _backend_proxy_url(backend)
         cached_stats = checkpoint.get("esplora_scripthashes") or {}
 
         def target_used_single(target):
@@ -777,6 +738,7 @@ def discover_descriptor_targets(backend, plan, kind, checkpoint=None):
                 backend["url"],
                 target["script_pubkey"],
                 timeout=timeout,
+                proxy_url=proxy_url,
             )
 
         def target_used_batch(targets):
@@ -833,7 +795,11 @@ def discover_descriptor_targets(backend, plan, kind, checkpoint=None):
 def resolve_wallet_sync_targets(backend, wallet):
     config = json.loads(wallet["config_json"] or "{}")
     checkpoint = _mapping_get(wallet, "_freshness_checkpoint", {}) or {}
-    descriptor_plan = load_wallet_descriptor_plan_from_config(config) if config.get("descriptor") else None
+    descriptor_plan = (
+        load_wallet_descriptor_plan_from_config(config)
+        if (config.get("descriptor") or config.get("xpub"))
+        else None
+    )
     history_cache = {}
     if descriptor_plan:
         chain = descriptor_plan.chain
@@ -876,7 +842,14 @@ def resolve_wallet_sync_targets(backend, wallet):
     )
 
 
-def fetch_esplora_history(base_url, resource_path, max_pages=None, timeout=30):
+def fetch_esplora_history(
+    base_url,
+    resource_path,
+    max_pages=None,
+    timeout=30,
+    *,
+    proxy_url=None,
+):
     transactions = []
     seen_txids = set()
     last_seen = None
@@ -889,7 +862,7 @@ def fetch_esplora_history(base_url, resource_path, max_pages=None, timeout=30):
             if last_seen
             else append_url_path(base_url, f"{resource_path}/txs/chain")
         )
-        page = http_get_json(chain_url, timeout=timeout)
+        page = http_get_json(chain_url, timeout=timeout, proxy_url=proxy_url)
         if not page:
             break
         for tx in page:
@@ -902,7 +875,7 @@ def fetch_esplora_history(base_url, resource_path, max_pages=None, timeout=30):
         if len(page) < 25:
             break
     mempool_url = append_url_path(base_url, f"{resource_path}/txs/mempool")
-    for tx in http_get_json(mempool_url, timeout=timeout):
+    for tx in http_get_json(mempool_url, timeout=timeout, proxy_url=proxy_url):
         txid = tx.get("txid")
         if txid and txid not in seen_txids:
             seen_txids.add(txid)
@@ -915,26 +888,30 @@ def fetch_esplora_scripthash_transactions(
     script_pubkey_hex,
     max_pages=None,
     timeout=30,
+    *,
+    proxy_url=None,
 ):
     return fetch_esplora_history(
         base_url,
         f"scripthash/{scriptpubkey_scripthash(script_pubkey_hex)}",
         max_pages=max_pages,
         timeout=timeout,
+        proxy_url=proxy_url,
     )
 
 
-def fetch_esplora_scripthash_utxos(base_url, script_pubkey_hex, timeout=30):
+def fetch_esplora_scripthash_utxos(base_url, script_pubkey_hex, timeout=30, *, proxy_url=None):
     return http_get_json(
         append_url_path(
             base_url,
             f"scripthash/{scriptpubkey_scripthash(script_pubkey_hex)}/utxo",
         ),
         timeout=timeout,
+        proxy_url=proxy_url,
     )
 
 
-def fetch_esplora_transaction(base_url, txid, timeout=30):
+def fetch_esplora_transaction(base_url, txid, timeout=30, *, proxy_url=None):
     """Fetch one transaction's JSON by txid.
 
     Esplora returns ``vin`` entries with inline ``prevout`` (including
@@ -943,7 +920,11 @@ def fetch_esplora_transaction(base_url, txid, timeout=30):
     needed for ownership classification. Routed through the shared retry/backoff
     HTTP layer like all other backend reads.
     """
-    return http_get_json(append_url_path(base_url, f"tx/{txid}"), timeout=timeout)
+    return http_get_json(
+        append_url_path(base_url, f"tx/{txid}"),
+        timeout=timeout,
+        proxy_url=proxy_url,
+    )
 
 
 def _legs_from_esplora_tx(tx, chain=""):
@@ -1014,7 +995,12 @@ def fetch_transaction_legs(backend, txid, chain=None, *, client=None):
     chain_source = chain or backend_value(backend, "chain")
     normalized_chain = normalize_chain_value(chain_source) if chain_source else ""
     if kind == "esplora":
-        tx = fetch_esplora_transaction(backend["url"], txid, timeout=timeout)
+        tx = fetch_esplora_transaction(
+            backend["url"],
+            txid,
+            timeout=timeout,
+            proxy_url=_backend_proxy_url(backend),
+        )
         return _legs_from_esplora_tx(tx, normalized_chain)
     if kind == "electrum":
         # Electrum can't be probed for chain, so a Liquid tx decoded as Bitcoin
@@ -1092,6 +1078,7 @@ def _target_output_metadata(target):
         label = f"{branch_label} #{address_index}"
     return {
         "address": target.get("address") or target.get("unconfidential_address") or "",
+        "script_pubkey": target.get("script_pubkey") or "",
         "address_label": label,
         "branch_label": branch_label,
         "branch_index": target.get("branch_index"),
@@ -1118,12 +1105,13 @@ def _confirmations_from_heights(block_height, tip_height):
     return normalized_tip_height - normalized_block_height + 1
 
 
-def _esplora_tip_height(base_url, timeout=30):
+def _esplora_tip_height(base_url, timeout=30, *, proxy_url=None):
     try:
         return int(
             http_get_text(
                 append_url_path(base_url, "blocks/tip/height"),
                 timeout=timeout,
+                proxy_url=proxy_url,
             ).strip()
         )
     except (AppError, TypeError, ValueError):
@@ -1206,7 +1194,12 @@ def _liquid_utxo_record_from_output(
 def esplora_utxos_for_wallet(backend, sync_state: WalletSyncState):
     timeout = backend_timeout(backend)
     worker_count = _bounded_http_workers(backend)
-    tip_height = _esplora_tip_height(backend["url"], timeout=timeout)
+    proxy_url = _backend_proxy_url(backend)
+    tip_height = _esplora_tip_height(
+        backend["url"],
+        timeout=timeout,
+        proxy_url=proxy_url,
+    )
 
     # Phase 1: fetch each tracked script's UTXO set concurrently, bounded by the
     # same per-wallet worker budget used for stats/history. This phase runs after
@@ -1216,6 +1209,7 @@ def esplora_utxos_for_wallet(backend, sync_state: WalletSyncState):
             backend["url"],
             target["script_pubkey"],
             timeout=timeout,
+            proxy_url=proxy_url,
         )
         return target, list(raw_utxos or [])
 
@@ -1256,6 +1250,7 @@ def esplora_utxos_for_wallet(backend, sync_state: WalletSyncState):
             raw_hex = http_get_text(
                 append_url_path(backend["url"], f"tx/{txid}/hex"),
                 timeout=timeout,
+                proxy_url=proxy_url,
             ).strip()
             return txid, decode_liquid_transaction(raw_hex)
 
@@ -1362,6 +1357,55 @@ def _payment_hash_fields(payment_hash):
     }
 
 
+def _vin_prev_txid(vin):
+    """Prevout txid of a decoded vin (esplora / electrum dict shape)."""
+    if isinstance(vin, dict):
+        txid = vin.get("txid")
+        return str(txid) if txid else None
+    return None
+
+
+def _extract_refund_funding_txid(vins, witness_items_fn, prev_txid_fn=_vin_prev_txid):
+    """Funding txid of the first vin whose witness is an HTLC refund spend.
+
+    A failed swap is swept via the HTLC's CLTV timeout branch, so the vin
+    carrying that refund witness spends the swap's funding (lockup) output.
+    That vin's prevout txid is therefore the on-chain funding transaction the
+    inbound refund should be linked back to. ``witness_items_fn`` decodes one
+    vin's witness items (``_esplora_witness_items`` for dict-shaped BTC/Electrum
+    vins, ``_liquid_witness_items`` for embit Liquid vins) and ``prev_txid_fn``
+    resolves that vin's prevout txid (``_vin_prev_txid`` for dict vins,
+    ``liquid_input_txid`` for embit Liquid vins). Returns ``None`` when no input
+    reveals an HTLC refund or the prevout txid is unavailable.
+
+    Links only the first refund input — a Boltz refund spends a single HTLC, so
+    a tx batch-sweeping multiple failed swaps (rare) links one lockup and the
+    rest fall back to the heuristic / manual pairing.
+    """
+    for vin in vins:
+        items = witness_items_fn(vin)
+        if not items:
+            continue
+        extraction = htlc_parser.extract_from_refund_witness(items)
+        if extraction is None:
+            continue
+        prev_txid = prev_txid_fn(vin)
+        if prev_txid:
+            return prev_txid
+    return None
+
+
+def _swap_refund_fields(funding_txid):
+    """Swap-refund link entries for a sync record, splattable with ``**``.
+
+    Empty dict when there is no link so records that are not HTLC refunds stay
+    unpolluted.
+    """
+    if not funding_txid:
+        return {}
+    return {"swap_refund_funding_txid": funding_txid}
+
+
 def _esplora_witness_items(vin_entry):
     """Decode an esplora vin's ``witness`` array of hex strings into bytes."""
     witness = vin_entry.get("witness") if isinstance(vin_entry, dict) else None
@@ -1428,6 +1472,9 @@ def record_from_bitcoin_esplora_tx(tx, tracked_scripts, backend_name):
     payment_hash = _extract_payment_hash_from_witnesses(
         _esplora_witness_items(vin) for vin in tx.get("vin", [])
     )
+    swap_refund_funding_txid = _extract_refund_funding_txid(
+        tx.get("vin", []), _esplora_witness_items
+    )
     return {
         "txid": tx.get("txid"),
         "occurred_at": occurred_at,
@@ -1443,6 +1490,7 @@ def record_from_bitcoin_esplora_tx(tx, tracked_scripts, backend_name):
         "counterparty": None,
         "raw_json": json.dumps(tx, sort_keys=True),
         **_payment_hash_fields(payment_hash),
+        **_swap_refund_fields(swap_refund_funding_txid),
     }
 
 
@@ -1506,6 +1554,14 @@ def record_components_from_liquid_tx(
             continue
         value_sats, asset_id = liquid_output_amount_asset_id(output, descriptor_plan, target=target)
         net_sats[asset_id] += value_sats
+    # Structured input outpoints for the stored record so source-of-funds
+    # assembly can join Liquid spends against owned outputs offline, the
+    # same way esplora/electrum bitcoin records allow.
+    vin_outpoints = [
+        {"txid": liquid_input_txid(vin), "vout": getattr(vin, "vout", None)}
+        for vin in tx.vin
+        if getattr(vin, "vout", None) is not None
+    ]
     for vin in tx.vin:
         prev_txid = liquid_input_txid(vin)
         prev_vout = getattr(vin, "vout", None)
@@ -1525,6 +1581,13 @@ def record_components_from_liquid_tx(
         _liquid_witness_items(vin) for vin in tx.vin
     )
     payment_hash_fields = _payment_hash_fields(payment_hash)
+    # Liquid vins are embit objects, so the refund link needs the embit-aware
+    # witness + prevout-txid helpers rather than the dict-shaped defaults.
+    swap_refund_fields = _swap_refund_fields(
+        _extract_refund_funding_txid(
+            tx.vin, _liquid_witness_items, prev_txid_fn=liquid_input_txid
+        )
+    )
     records = []
     all_assets = sorted(set(net_sats) | set(fee_sats))
     for asset_id in all_assets:
@@ -1570,6 +1633,7 @@ def record_components_from_liquid_tx(
                         {
                             **(raw_json_context or {}),
                             "txid": txid,
+                            "vin": vin_outpoints,
                             "component": {
                                 "asset_id": asset_id,
                                 "asset": asset_code,
@@ -1581,6 +1645,7 @@ def record_components_from_liquid_tx(
                     sort_keys=True,
                 ),
                 **payment_hash_fields,
+                **swap_refund_fields,
             }
         )
     return records
@@ -1590,6 +1655,7 @@ def esplora_records_for_wallet(backend, sync_state: WalletSyncState):
     max_pages = parse_int(backend_value(backend, "maxpages"), default=0) or None
     timeout = backend_timeout(backend)
     worker_count = _bounded_http_workers(backend)
+    proxy_url = _backend_proxy_url(backend)
     checkpoint = _checkpoint_mapping(sync_state)
     previous_stats = checkpoint.get("esplora_scripthashes") or {}
     next_stats = {}
@@ -1599,7 +1665,12 @@ def esplora_records_for_wallet(backend, sync_state: WalletSyncState):
 
     def fetch_stats(target):
         scripthash = scriptpubkey_scripthash(target["script_pubkey"])
-        stats = esplora_scripthash_stats(backend["url"], target["script_pubkey"], timeout=timeout)
+        stats = esplora_scripthash_stats(
+            backend["url"],
+            target["script_pubkey"],
+            timeout=timeout,
+            proxy_url=proxy_url,
+        )
         return target, scripthash, stats
 
     def stats_fetch_progress(index, _result, total):
@@ -1665,6 +1736,7 @@ def esplora_records_for_wallet(backend, sync_state: WalletSyncState):
             target["script_pubkey"],
             max_pages=max_pages,
             timeout=timeout,
+            proxy_url=proxy_url,
         ):
             target_txs.append(tx)
             known_txids.add(tx["txid"])
@@ -1705,6 +1777,7 @@ def esplora_records_for_wallet(backend, sync_state: WalletSyncState):
             raw_hex = http_get_text(
                 append_url_path(backend["url"], f"tx/{txid}/hex"),
                 timeout=backend_timeout(backend),
+                proxy_url=proxy_url,
             ).strip()
             raw_tx_cache[txid] = {
                 "raw_hex": raw_hex,
@@ -1730,6 +1803,7 @@ def esplora_records_for_wallet(backend, sync_state: WalletSyncState):
             raw_hex = http_get_text(
                 append_url_path(backend["url"], f"tx/{txid}/hex"),
                 timeout=timeout,
+                proxy_url=proxy_url,
             ).strip()
             return txid, raw_hex
 
@@ -1827,6 +1901,7 @@ def bitcoinrpc_call(backend, method, params=None, wallet_name=None):
         payload,
         headers=bitcoinrpc_auth_headers(backend),
         timeout=backend_timeout(backend),
+        proxy_url=_backend_proxy_url(backend),
     )
     if response.get("error"):
         error = response["error"]
@@ -1980,7 +2055,14 @@ def record_from_bitcoinrpc_details(txid, details, backend_name):
         if category in {"orphan", "immature"}:
             continue
         amount_total += dec(detail.get("amount"), "0")
-        fee_total += abs(dec(detail.get("fee"), "0"))
+        # Bitcoin Core stamps the SAME whole-tx fee on every `send`-category
+        # detail of one transaction, so summing per detail double-counts it for a
+        # multi-output send (inflating both the booked outflow and the taxable
+        # fee disposal). Take it once — the shared fee is identical across send
+        # details; receive details carry 0/none, so max() yields the real fee.
+        detail_fee = abs(dec(detail.get("fee"), "0"))
+        if detail_fee > fee_total:
+            fee_total = detail_fee
         if detail.get("blocktime") not in (None, "", 0, "0"):
             confirmed_at = timestamp_to_iso(detail.get("blocktime"), default=None)
         occurred_at = timestamp_to_iso(detail.get("blocktime") or detail.get("time"), default=occurred_at)
@@ -2467,6 +2549,9 @@ def record_from_electrum_tx(txid, tx, height, tracked_scripts, backend_name, tx_
     payment_hash = _extract_payment_hash_from_witnesses(
         _esplora_witness_items(vin) for vin in tx.get("vin", [])
     )
+    swap_refund_funding_txid = _extract_refund_funding_txid(
+        tx.get("vin", []), _esplora_witness_items
+    )
     return {
         "txid": txid,
         "occurred_at": occurred_at,
@@ -2482,6 +2567,7 @@ def record_from_electrum_tx(txid, tx, height, tracked_scripts, backend_name, tx_
         "counterparty": None,
         "raw_json": json.dumps(json_ready(tx), sort_keys=True),
         **_payment_hash_fields(payment_hash),
+        **_swap_refund_fields(swap_refund_funding_txid),
     }
 
 
@@ -2524,19 +2610,47 @@ def electrum_records_for_wallet(backend, sync_state: WalletSyncState):
             batch_size=batch_size,
         )
         history_scripthashes = []
-        for scripthash, status in zip(scripthashes, statuses):
+        total_scripts = len(scripthashes)
+        for status_index, (scripthash, status) in enumerate(
+            zip(scripthashes, statuses),
+            start=1,
+        ):
             next_statuses[scripthash] = status
             target = target_by_scripthash[scripthash]
             highest_used = _merge_highest_used(highest_used, target, status is not None)
             if status is None and previous_statuses.get(scripthash) is None:
                 next_known_txids[scripthash] = []
                 unchanged_scripts += 1
+                if status_index % max(1, batch_size) == 0 or status_index == total_scripts:
+                    _emit_backend_progress(
+                        "backend_fetch",
+                        target_count=total_scripts,
+                        targets_checked=status_index,
+                        scripts_changed=len(history_scripthashes),
+                        scripts_unchanged=unchanged_scripts,
+                    )
                 continue
             if status == previous_statuses.get(scripthash) and scripthash not in previous_dirty:
                 next_known_txids[scripthash] = sorted(previous_known_txids.get(scripthash) or [])
                 unchanged_scripts += 1
+                if status_index % max(1, batch_size) == 0 or status_index == total_scripts:
+                    _emit_backend_progress(
+                        "backend_fetch",
+                        target_count=total_scripts,
+                        targets_checked=status_index,
+                        scripts_changed=len(history_scripthashes),
+                        scripts_unchanged=unchanged_scripts,
+                    )
                 continue
             history_scripthashes.append(scripthash)
+            if status_index % max(1, batch_size) == 0 or status_index == total_scripts:
+                _emit_backend_progress(
+                    "backend_fetch",
+                    target_count=total_scripts,
+                    targets_checked=status_index,
+                    scripts_changed=len(history_scripthashes),
+                    scripts_unchanged=unchanged_scripts,
+                )
         if history_scripthashes:
             changed_scripts = len(history_scripthashes)
             fetched_histories = electrum_call_many(
@@ -2547,7 +2661,10 @@ def electrum_records_for_wallet(backend, sync_state: WalletSyncState):
                 ],
                 batch_size=batch_size,
             )
-            for scripthash, history in zip(history_scripthashes, fetched_histories):
+            for history_index, (scripthash, history) in enumerate(
+                zip(history_scripthashes, fetched_histories),
+                start=1,
+            ):
                 normalized_history = history or []
                 histories.extend(normalized_history)
                 next_known_txids[scripthash] = sorted(
@@ -2559,6 +2676,19 @@ def electrum_records_for_wallet(backend, sync_state: WalletSyncState):
                 )
                 if any(_history_needs_recheck(item) for item in normalized_history):
                     dirty_scripthashes.add(scripthash)
+                if history_index % max(1, batch_size) == 0 or history_index == changed_scripts:
+                    _emit_backend_progress(
+                        "backend_fetch",
+                        target_count=changed_scripts,
+                        targets_checked=history_index,
+                        known_txids=len(
+                            {
+                                item.get("tx_hash")
+                                for item in histories
+                                if isinstance(item, dict) and item.get("tx_hash")
+                            }
+                        ),
+                    )
 
         def lookup(txid):
             if txid not in transactions:
@@ -2647,7 +2777,7 @@ def electrum_records_for_wallet(backend, sync_state: WalletSyncState):
                 )
                 for height, header_hex in zip(missing_heights, header_hexes):
                     header_timestamps[height] = block_header_timestamp(header_hex)
-        for txid, history in ordered_histories:
+        for tx_index, (txid, history) in enumerate(ordered_histories, start=1):
             occurred_at = _history_occurred_at(history, height_to_timestamp)
             if sync_state.chain == "liquid":
                 current_tx = lookup(txid)
@@ -2665,18 +2795,25 @@ def electrum_records_for_wallet(backend, sync_state: WalletSyncState):
                         confirmed_at=None if occurred_at == UNKNOWN_OCCURRED_AT else occurred_at,
                     )
                 )
-                continue
-            tx = lookup(txid)
-            normalized = record_from_electrum_tx(
-                txid,
-                tx,
-                occurred_at,
-                tracked_scripts,
-                backend["name"],
-                lookup,
-            )
-            if normalized:
-                records.append(normalized)
+            else:
+                tx = lookup(txid)
+                normalized = record_from_electrum_tx(
+                    txid,
+                    tx,
+                    occurred_at,
+                    tracked_scripts,
+                    backend["name"],
+                    lookup,
+                )
+                if normalized:
+                    records.append(normalized)
+            if tx_index % 100 == 0 or tx_index == len(ordered_histories):
+                _emit_backend_progress(
+                    "decode_enrich",
+                    transactions_seen=tx_index,
+                    transactions_total=len(ordered_histories),
+                    records=len(records),
+                )
     checkpoint.update(
         {
             "backend": _backend_identity(backend, sync_state),

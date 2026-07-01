@@ -56,12 +56,16 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Iterable, Mapping, Optional, Sequence
 
+from ..transfers import normalize_group_txid
+
 
 LIGHTNING_WALLET_KINDS = frozenset({"phoenix", "coreln", "lnd", "nwc"})
 # On-chain self-custody BTC wallet kinds — eligible ends of a base-layer <-> Liquid
 # peg. wasabi/samourai are on-chain BTC wallets too, so a peg from them must still
 # be recognized (else the cross-asset route guard hides legitimate candidates).
-CHAIN_WALLET_KINDS = frozenset({"descriptor", "xpub", "address", "wasabi", "samourai"})
+CHAIN_WALLET_KINDS = frozenset(
+    {"descriptor", "xpub", "address", "wasabi", "samourai"}
+)
 
 DEFAULT_TIME_WINDOW_SECONDS = 24 * 60 * 60  # 24h
 DEFAULT_FEE_PCT_MAX = 0.01  # 1%
@@ -70,6 +74,9 @@ SATS_TO_MSAT = 1000
 
 METHOD_PAYMENT_HASH = "payment_hash"
 METHOD_HEURISTIC = "heuristic"
+# Deterministic link: an inbound refund's input spent the outbound's HTLC
+# funding output (recorded as transactions.swap_refund_funding_txid by sync).
+METHOD_HTLC_REFUND = "htlc_refund"
 
 CONFIDENCE_EXACT = "exact"
 CONFIDENCE_STRONG = "strong"
@@ -77,6 +84,7 @@ CONFIDENCE_STRONG = "strong"
 KIND_SUBMARINE_SWAP = "submarine-swap"
 KIND_PEG_IN = "peg-in"
 KIND_PEG_OUT = "peg-out"
+KIND_SWAP_REFUND = "swap-refund"
 KIND_MANUAL = "manual"
 
 POLICY_CARRYING_VALUE = "carrying-value"
@@ -186,11 +194,17 @@ def suggest_swap_candidates(
 
     exact_pairs = _match_by_payment_hash(out_rows, in_rows)
 
-    consumed_by_exact_out = {pair[0]["id"] for pair in exact_pairs}
-    consumed_by_exact_in = {pair[1]["id"] for pair in exact_pairs}
+    consumed_out = {pair[0]["id"] for pair in exact_pairs}
+    consumed_in = {pair[1]["id"] for pair in exact_pairs}
+    refund_pairs = _match_by_refund_link(
+        [row for row in out_rows if row["id"] not in consumed_out],
+        [row for row in in_rows if row["id"] not in consumed_in],
+    )
+    consumed_out |= {pair[0]["id"] for pair in refund_pairs}
+    consumed_in |= {pair[1]["id"] for pair in refund_pairs}
     heuristic_pairs = _match_heuristic(
-        [row for row in out_rows if row["id"] not in consumed_by_exact_out],
-        [row for row in in_rows if row["id"] not in consumed_by_exact_in],
+        [row for row in out_rows if row["id"] not in consumed_out],
+        [row for row in in_rows if row["id"] not in consumed_in],
         time_window_seconds=time_window_seconds,
         fee_pct_max=fee_pct_max,
         fee_sats_min=fee_sats_min,
@@ -206,6 +220,17 @@ def suggest_swap_candidates(
             confidence=CONFIDENCE_EXACT,
             method=METHOD_PAYMENT_HASH,
             tax_country=tax_country,
+        ))
+    for out_row, in_row in refund_pairs:
+        if (out_row["id"], in_row["id"]) in dismissed_pairs:
+            continue
+        raw_candidates.append(_build_candidate(
+            out_row,
+            in_row,
+            confidence=CONFIDENCE_EXACT,
+            method=METHOD_HTLC_REFUND,
+            tax_country=tax_country,
+            default_kind=KIND_SWAP_REFUND,
         ))
     for out_row, in_row in heuristic_pairs:
         if (out_row["id"], in_row["id"]) in dismissed_pairs:
@@ -389,7 +414,9 @@ def _deterministic_self_transfer_ids(
         external_id = _record_get(row, "external_id")
         if not external_id:
             continue
-        key = (str(external_id), _record_get(row, "asset"))
+        # Mirror transfers.detect_intra_transfers so a mixed-case txid does not
+        # desync the swap queue from the journal (same self-transfer grouping).
+        key = (normalize_group_txid(external_id), _record_get(row, "asset"))
         grouped.setdefault(key, []).append(row)
 
     deterministic_ids: set[object] = set()
@@ -400,7 +427,12 @@ def _deterministic_self_transfer_ids(
             if _record_get(row, "direction") == "outbound"
             and int(_record_get(row, "amount") or 0) > 0
         ]
-        ins = [row for row in group if _record_get(row, "direction") == "inbound"]
+        ins = [
+            row
+            for row in group
+            if _record_get(row, "direction") == "inbound"
+            and int(_record_get(row, "amount") or 0) > 0
+        ]
         if len(outs) != 1 or len(ins) != 1:
             continue
         out_row = outs[0]
@@ -409,8 +441,14 @@ def _deterministic_self_transfer_ids(
             continue
         out_amount = int(_record_get(out_row, "amount") or 0)
         in_amount = int(_record_get(in_row, "amount") or 0)
-        if out_amount - in_amount > fee_threshold_msat(
-            out_amount, fee_pct_max, fee_sats_min
+        # When the out leg's `amount` is a net wallet delta with the fee folded
+        # in (BTCPay; `amount_includes_fee`), the out/in gap IS the miner fee, so
+        # it is not an implausible residual — keep it a proven self-transfer
+        # (suppressed from swap review), matching the journal's transfer-fee guard
+        # in tax_events.normalize_tax_asset_inputs.
+        if not _record_get(out_row, "amount_includes_fee") and (
+            out_amount - in_amount
+            > fee_threshold_msat(out_amount, fee_pct_max, fee_sats_min)
         ):
             # Implausible implied fee — likely an unrecognized peg/payment leg.
             # Don't claim it as a proven self-transfer; let it reach swap review.
@@ -443,6 +481,41 @@ def _match_by_payment_hash(
                 if _record_get(out_row, "wallet_id") == _record_get(in_row, "wallet_id"):
                     continue
                 pairs.append((out_row, in_row))
+    return pairs
+
+
+def _match_by_refund_link(
+    out_rows: Sequence[Mapping], in_rows: Sequence[Mapping]
+) -> list[tuple[Mapping, Mapping]]:
+    """Pair an inbound HTLC refund with the outbound funding leg it spent.
+
+    Chain sync stamps ``swap_refund_funding_txid`` on an inbound row when its
+    input spends a swap HTLC via the CLTV timeout branch; that txid is the
+    funding (lockup) transaction's id, so it equals the outbound funding leg's
+    ``external_id``. The link is deterministic — the refund provably spends the
+    lockup output — so this path intentionally does NOT skip same-wallet pairs
+    (a failed swap normally refunds to the funding wallet) and ignores the time
+    window (a CLTV refund routinely lands well past the 24h heuristic window).
+    Same-asset only: a refund returns the asset that was locked up.
+    """
+    # txids are hex, so match case-insensitively: sync lowercases
+    # ``swap_refund_funding_txid`` but the lockup's ``external_id`` is stored
+    # verbatim, so normalizing both sides here keeps the join self-contained.
+    out_by_external_id: dict[str, list[Mapping]] = {}
+    for row in out_rows:
+        external_id = _record_get(row, "external_id")
+        if external_id:
+            out_by_external_id.setdefault(str(external_id).lower(), []).append(row)
+    pairs: list[tuple[Mapping, Mapping]] = []
+    for in_row in in_rows:
+        funding_txid = _record_get(in_row, "swap_refund_funding_txid")
+        if not funding_txid:
+            continue
+        in_asset = str(_record_get(in_row, "asset") or "").upper()
+        for out_row in out_by_external_id.get(str(funding_txid).lower(), []):
+            if str(_record_get(out_row, "asset") or "").upper() != in_asset:
+                continue
+            pairs.append((out_row, in_row))
     return pairs
 
 
@@ -528,6 +601,7 @@ def _build_candidate(
     confidence: str,
     method: str,
     tax_country: Optional[str],
+    default_kind: Optional[str] = None,
 ) -> SwapCandidate:
     out_amount = int(_record_get(out_row, "amount") or 0)
     in_amount = int(_record_get(in_row, "amount") or 0)
@@ -560,7 +634,8 @@ def _build_candidate(
         method=method,
         swap_fee_msat=swap_fee_msat,
         swap_fee_kind=swap_fee_kind,
-        default_kind=default_kind_for(out_asset, in_asset, out_wallet_kind, in_wallet_kind),
+        default_kind=default_kind
+        or default_kind_for(out_asset, in_asset, out_wallet_kind, in_wallet_kind),
         default_policy=default_policy,
         # conflict_set_id / conflict_size are filled in by _stamp_conflict_set_ids
     )

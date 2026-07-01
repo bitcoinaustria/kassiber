@@ -43,6 +43,7 @@ from kassiber.ai.client import (
     _http_error_app_error,
     _network_error_app_error,
     _resolve_cli_executable,
+    _cli_subprocess_env,
 )
 from kassiber.ai.prompt import (
     DEFAULT_KASSIBER_SYSTEM_PROMPT,
@@ -56,7 +57,7 @@ from kassiber.ai.tools import (
     redact_tool_arguments,
     summarize_tool_call,
 )
-from kassiber.ai.providers import list_with_default
+from kassiber.ai.providers import ai_provider_secret_service_id, list_with_default
 from kassiber.db import open_db
 from kassiber.errors import AppError
 from kassiber.redaction import redact_secret_text, redact_secret_value
@@ -191,10 +192,18 @@ class ToolCatalogPromptTest(unittest.TestCase):
             "ui_maintenance_settings",
             "ui_workspace_health",
             "ui_next_actions",
+            "ui_source_funds_sources_list",
+            "ui_source_funds_links_list",
+            "ui_source_funds_preview",
             "read_skill_reference",
             "ui_wallets_sync",
             "ui_maintenance_configure",
             "ui_maintenance_run",
+            "ui_source_funds_sources_create",
+            "ui_source_funds_links_create",
+            "ui_source_funds_links_review",
+            "ui_source_funds_suggest",
+            "ui_source_funds_links_bulk_review",
             "ui_transfers_suggest",
             "ui_transfers_review_context",
             "ui_transfers_list",
@@ -284,6 +293,9 @@ class ToolCatalogPromptTest(unittest.TestCase):
         self.assertIn("ui_journals_process", tool_names)
         self.assertIn("ui_maintenance_configure", tool_names)
         self.assertIn("ui_maintenance_run", tool_names)
+        pair_schema = get_tool("ui_transfers_pair").parameters
+        self.assertIn("coinjoin", pair_schema["properties"]["kind"]["enum"])
+        self.assertIn("Coinjoin", get_tool("ui_transfers_pair").description)
 
     def test_mutating_tool_preview_redacts_secret_like_arguments(self):
         tool = get_tool("ui.wallets.sync")
@@ -626,6 +638,58 @@ class CliAIClientTest(unittest.TestCase):
         self.assertIn('model_reasoning_effort="medium"', args)
         self.assertEqual(args[-1], "-")
         self.assertNotIn("--ask-for-approval", args)
+
+    def test_cli_chat_rejects_kassiber_tools(self):
+        client = CliAIClient(locator="claude-cli://default")
+        with self.assertRaises(AppError) as raised:
+            client.chat(
+                messages=[{"role": "user", "content": "hi"}],
+                model=CLI_DEFAULT_MODEL,
+                tools=[{"type": "function", "function": {"name": "status"}}],
+                tool_choice="auto",
+            )
+        self.assertEqual(raised.exception.code, "ai_cli_tools_disabled")
+
+    def test_cli_subprocess_env_drops_unrelated_secrets(self):
+        with patch.dict(
+            "os.environ",
+            {
+                "PATH": "/usr/bin",
+                "KASSIBER_POC_TOKEN": "secret",
+                "BTCPAY_API_KEY": "secret",
+                "ANTHROPIC_API_KEY": "anthropic",
+                "ANTHROPIC_AUTH_TOKEN": "anthropic-token",
+                "ANTHROPIC_BASE_URL": "https://anthropic.example",
+                "CLAUDE_CODE_USE_BEDROCK": "1",
+                "AWS_ACCESS_KEY_ID": "aws-key",
+                "AWS_SECRET_ACCESS_KEY": "aws-secret",
+                "OPENAI_API_KEY": "openai",
+                "CODEX_API_KEY": "codex-key",
+                "CODEX_ACCESS_TOKEN": "codex-token",
+                "HTTPS_PROXY": "http://proxy.example",
+                "NO_PROXY": "localhost,127.0.0.1",
+            },
+            clear=True,
+        ):
+            claude_env = _cli_subprocess_env("claude")
+            codex_env = _cli_subprocess_env("codex")
+        self.assertEqual(claude_env["ANTHROPIC_API_KEY"], "anthropic")
+        self.assertEqual(claude_env["ANTHROPIC_AUTH_TOKEN"], "anthropic-token")
+        self.assertEqual(claude_env["ANTHROPIC_BASE_URL"], "https://anthropic.example")
+        self.assertEqual(claude_env["CLAUDE_CODE_USE_BEDROCK"], "1")
+        self.assertEqual(claude_env["AWS_ACCESS_KEY_ID"], "aws-key")
+        self.assertEqual(claude_env["AWS_SECRET_ACCESS_KEY"], "aws-secret")
+        self.assertNotIn("OPENAI_API_KEY", claude_env)
+        self.assertEqual(codex_env["OPENAI_API_KEY"], "openai")
+        self.assertEqual(codex_env["CODEX_API_KEY"], "codex-key")
+        self.assertEqual(codex_env["CODEX_ACCESS_TOKEN"], "codex-token")
+        self.assertNotIn("ANTHROPIC_API_KEY", codex_env)
+        for env in (claude_env, codex_env):
+            self.assertEqual(env["HTTPS_PROXY"], "http://proxy.example")
+            self.assertEqual(env["NO_PROXY"], "localhost,127.0.0.1")
+            self.assertNotIn("KASSIBER_POC_TOKEN", env)
+            self.assertNotIn("BTCPAY_API_KEY", env)
+            self.assertEqual(env["NO_COLOR"], "1")
 
 
 class ListModelsStrictModeTest(unittest.TestCase):
@@ -1082,7 +1146,7 @@ class ProvidersCrudTest(unittest.TestCase):
                     conn,
                     "openrouter",
                     store_id="macos_keychain",
-                    service="service-hash",
+                    service=ai_provider_secret_service_id(str((Path(tmp) / "data").resolve())),
                     account="openrouter",
                 )
                 self.assertIsNone(updated["api_key"])
@@ -1119,7 +1183,7 @@ class ProvidersCrudTest(unittest.TestCase):
                     (
                         "cloud",
                         "macos_keychain",
-                        "service-hash",
+                        ai_provider_secret_service_id(str((Path(tmp) / "data").resolve())),
                         "cloud",
                         "missing",
                         "2026-05-13T00:00:00Z",
@@ -1156,7 +1220,7 @@ class ProvidersCrudTest(unittest.TestCase):
                     (
                         "cloud",
                         "macos_keychain",
-                        "service-hash",
+                        ai_provider_secret_service_id(str((Path(tmp) / "data").resolve())),
                         "cloud",
                         "ok",
                         "2026-05-13T00:00:00Z",
@@ -1203,7 +1267,7 @@ class ProvidersCrudTest(unittest.TestCase):
                     (
                         "cloud",
                         "macos_keychain",
-                        "service-hash",
+                        ai_provider_secret_service_id(str((Path(tmp) / "data").resolve())),
                         "cloud",
                         "ok",
                         "2026-05-13T00:00:00Z",

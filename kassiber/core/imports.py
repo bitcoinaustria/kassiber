@@ -147,7 +147,8 @@ _EXISTING_TRANSACTION_COLUMNS = """
        fiat_value_exact, pricing_source_kind, pricing_provider, pricing_pair,
        pricing_timestamp, pricing_fetched_at, pricing_granularity, pricing_method,
        pricing_external_ref, pricing_quality, kind, privacy_boundary, description,
-       counterparty, raw_json, payment_hash, payment_hash_source
+       counterparty, raw_json, payment_hash, payment_hash_source,
+       swap_refund_funding_txid
 """
 
 
@@ -579,6 +580,8 @@ def _transaction_merge_updates(existing: Mapping[str, Any], normalized: Mapping[
     if not existing["payment_hash"] and normalized["payment_hash"]:
         updates["payment_hash"] = normalized["payment_hash"]
         updates["payment_hash_source"] = normalized["payment_hash_source"]
+    if not existing["swap_refund_funding_txid"] and normalized["swap_refund_funding_txid"]:
+        updates["swap_refund_funding_txid"] = normalized["swap_refund_funding_txid"]
     if updates and normalized["raw_json"] and normalized["raw_json"] != existing["raw_json"]:
         updates["raw_json"] = normalized["raw_json"]
     return updates
@@ -922,6 +925,16 @@ def normalize_import_record(record: ImportRow, source_label: str = "") -> dict[s
     payment_hash_source = (
         str_or_none(record.get("payment_hash_source")) if payment_hash else None
     )
+    swap_refund_funding_txid = str_or_none(record.get("swap_refund_funding_txid"))
+    if swap_refund_funding_txid is not None:
+        swap_refund_funding_txid = swap_refund_funding_txid.strip().lower()
+        if len(swap_refund_funding_txid) != 64:
+            swap_refund_funding_txid = None
+        else:
+            try:
+                bytes.fromhex(swap_refund_funding_txid)
+            except ValueError:
+                swap_refund_funding_txid = None
     return {
         "external_id": str(record.get("txid") or record.get("id") or ""),
         "occurred_at": occurred_at,
@@ -930,6 +943,7 @@ def normalize_import_record(record: ImportRow, source_label: str = "") -> dict[s
         "asset": normalize_asset_code(record.get("asset") or "BTC"),
         "amount": amount,
         "fee": fee,
+        "amount_includes_fee": bool(record.get("amount_includes_fee")),
         "fiat_currency": _import_price_currency(record),
         **payload,
         "kind": record.get("kind"),
@@ -938,6 +952,7 @@ def normalize_import_record(record: ImportRow, source_label: str = "") -> dict[s
         "counterparty": record.get("counterparty"),
         "payment_hash": payment_hash,
         "payment_hash_source": payment_hash_source,
+        "swap_refund_funding_txid": swap_refund_funding_txid,
         "exchange_evidence_match_by_economics": bool(
             record.get("_exchange_evidence_match_by_economics")
         ),
@@ -1043,14 +1058,16 @@ def insert_wallet_records(
             """
             INSERT INTO transactions(
                 id, workspace_id, profile_id, wallet_id, external_id, fingerprint,
-                occurred_at, confirmed_at, direction, asset, amount, fee, fiat_currency,
+                occurred_at, confirmed_at, direction, asset, amount, fee,
+                amount_includes_fee, fiat_currency,
                 fiat_rate, fiat_value, fiat_price_source, fiat_rate_exact,
                 fiat_value_exact, pricing_source_kind, pricing_provider, pricing_pair,
                 pricing_timestamp, pricing_fetched_at, pricing_granularity,
                 pricing_method, pricing_external_ref, pricing_quality, kind,
                 privacy_boundary, description, counterparty, raw_json,
-                payment_hash, payment_hash_source, created_at
-            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                payment_hash, payment_hash_source, swap_refund_funding_txid,
+                created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 tx_id,
@@ -1065,6 +1082,7 @@ def insert_wallet_records(
                 normalized["asset"],
                 btc_to_msat(normalized["amount"]),
                 btc_to_msat(normalized["fee"]),
+                1 if normalized.get("amount_includes_fee") else 0,
                 normalized["fiat_currency"] or profile["fiat_currency"],
                 normalized["fiat_rate"],
                 normalized["fiat_value"],
@@ -1087,6 +1105,7 @@ def insert_wallet_records(
                 normalized["raw_json"],
                 normalized["payment_hash"],
                 normalized["payment_hash_source"],
+                normalized["swap_refund_funding_txid"],
                 now_iso(),
             ),
         )

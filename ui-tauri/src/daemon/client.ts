@@ -51,6 +51,40 @@ export class DaemonRequestError extends Error {
   }
 }
 
+/** Extra attempts granted to a daemon-flagged retryable error (e.g. the
+ *  transient `daemon_busy` returned while the single-threaded daemon is busy
+ *  with a long sync) before giving up. */
+const RETRYABLE_DAEMON_ERROR_MAX_ATTEMPTS = 5;
+
+/** True when the daemon itself marked the error retryable — a transient
+ *  condition (busy/locked-contention) that should clear on its own. */
+export function isRetryableDaemonError(error: unknown): boolean {
+  return (
+    error instanceof DaemonRequestError && error.envelope.error?.retryable === true
+  );
+}
+
+/** Default read-query retry policy: never retry an auth prompt; ride out a
+ *  transient (daemon-flagged retryable) error a few extra times so a routine
+ *  poll landing during a long sync recovers silently; otherwise the prior 3x. */
+export function retryDaemonQuery(failureCount: number, error: unknown): boolean {
+  if (error instanceof DaemonAuthRequiredError) return false;
+  if (isRetryableDaemonError(error)) {
+    return failureCount < RETRYABLE_DAEMON_ERROR_MAX_ATTEMPTS;
+  }
+  return failureCount < 3;
+}
+
+/** For panels that deliberately opt out of retrying hard/empty-data errors but
+ *  should still ride out a transient busy daemon (so they don't flash an error
+ *  during a sync). Retries ONLY daemon-flagged retryable errors. */
+export function retryRetryableDaemonError(
+  failureCount: number,
+  error: unknown,
+): boolean {
+  return isRetryableDaemonError(error) && failureCount < RETRYABLE_DAEMON_ERROR_MAX_ATTEMPTS;
+}
+
 export function formatDaemonEnvelopeError(
   envelope: DaemonEnvelope,
   options: DaemonErrorFormatOptions = {},
@@ -183,8 +217,7 @@ export function useDaemon<T = unknown>(
       return envelope;
     },
     staleTime: 5 * 60 * 1000,
-    retry: (failureCount, error) =>
-      error instanceof DaemonAuthRequiredError ? false : failureCount < 3,
+    retry: retryDaemonQuery,
     ...options,
   });
 }
@@ -233,8 +266,7 @@ export function useDaemonInfinite<T = unknown>(
     },
     getNextPageParam,
     staleTime: 5 * 60 * 1000,
-    retry: (failureCount, error) =>
-      error instanceof DaemonAuthRequiredError ? false : failureCount < 3,
+    retry: retryDaemonQuery,
     ...options,
   });
 }
@@ -253,6 +285,7 @@ const TARGETED_DAEMON_QUERY_INVALIDATIONS: Record<string, readonly string[]> = {
   ],
   "ui.backends.electrum.test": [],
   "ui.backends.http.test": [],
+  "wallets.reveal_descriptor": [],
   "ui.chat.history.configure": [
     "ui.chat.history.configure",
     "ui.chat.sessions.list",
@@ -280,10 +313,12 @@ const TARGETED_DAEMON_QUERY_INVALIDATIONS: Record<string, readonly string[]> = {
     "ui.reports.summary",
     "ui.reports.tax_summary",
     "ui.transactions.extremes",
+    "ui.transactions.graph",
     "ui.transactions.list",
     "ui.transactions.resolve",
     "ui.wallets.list",
     "ui.wallets.utxos",
+    "ui.review.badges",
     "ui.workspace.health",
   ],
   "ui.wallets.sync": [
@@ -305,10 +340,12 @@ const TARGETED_DAEMON_QUERY_INVALIDATIONS: Record<string, readonly string[]> = {
     "ui.reports.summary",
     "ui.reports.tax_summary",
     "ui.transactions.extremes",
+    "ui.transactions.graph",
     "ui.transactions.list",
     "ui.transactions.resolve",
     "ui.wallets.list",
     "ui.wallets.utxos",
+    "ui.review.badges",
     "ui.workspace.health",
   ],
   "ui.journals.process": [
@@ -328,8 +365,10 @@ const TARGETED_DAEMON_QUERY_INVALIDATIONS: Record<string, readonly string[]> = {
     "ui.reports.summary",
     "ui.reports.tax_summary",
     "ui.transactions.extremes",
+    "ui.transactions.graph",
     "ui.transactions.list",
     "ui.transactions.resolve",
+    "ui.review.badges",
     "ui.workspace.health",
   ],
   "ui.attachments.add": [

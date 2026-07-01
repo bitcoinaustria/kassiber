@@ -41,6 +41,7 @@ _TAURI_LIB_PATH = (
 _VITE_CONFIG_PATH = (
     Path(__file__).resolve().parent.parent / "ui-tauri" / "vite.config.ts"
 )
+_UI_SRC_DIR = Path(__file__).resolve().parent.parent / "ui-tauri" / "src"
 _DESKTOP_MUTATION_KINDS = (
     "ui.backends.options",
     "ui.backends.public_defaults",
@@ -65,6 +66,7 @@ _DESKTOP_MUTATION_KINDS = (
     "ui.rates.rebuild",
     "ui.wallets.update",
     "ui.wallets.delete",
+    "wallets.reveal_descriptor",
     "ai.providers.set_api_key",
     "ai.providers.move_api_key",
 )
@@ -138,6 +140,56 @@ def _split_entries(text: str) -> list[str]:
 def _extract_field(entry: str, field: str) -> str | None:
     match = re.search(rf'\b{re.escape(field)}\s*:\s*"([^"]+)"', entry)
     return match.group(1) if match else None
+
+
+# Hooks that take a daemon ``kind`` as their first string-literal argument,
+# e.g. ``useDaemonMutation<IdentifyReport>("ui.wallets.identify")``.
+_DAEMON_INVOKE_WRAPPERS = (
+    "useDaemon",
+    "useDaemonInfinite",
+    "useDaemonMutation",
+    "useDaemonStreamMutation",
+)
+_WRAPPER_KIND_RE = re.compile(
+    "\\b(?:" + "|".join(_DAEMON_INVOKE_WRAPPERS) + ")\\b"
+    "(?:<[^>]*>)?\\(\\s*[\"'`]([a-z][a-z0-9_.]*)[\"'`]"
+)
+# Kind passed as the ``kind:`` field of an inline transport call, e.g.
+# ``getTransport("real").invoke({ kind: "ui.secrets.init", ... })``. The object
+# literal can straddle newlines, hence DOTALL.
+_INLINE_KIND_RE = re.compile(
+    "\\.(?:invoke|stream)(?:<[^>]*>)?\\(\\s*\\{\\s*kind:\\s*[\"'`]([a-z][a-z0-9_.]*)[\"'`]",
+    re.DOTALL,
+)
+
+
+def _invoked_ui_daemon_kinds() -> dict[str, str]:
+    """Map every ``ui.*`` daemon kind the desktop React app invokes through
+    the real transport to the source file that first references it.
+
+    Only genuine invocation sites count: the ``useDaemon*`` hooks (kind is the
+    first argument) and inline ``transport.invoke`` / ``transport.stream``
+    calls (kind is the ``kind:`` field). Test files and the mock daemon are
+    skipped — the mock never consults an allowlist, so a kind only the mock
+    handles is not a packaged-app concern. Kinds the UI merely *handles*
+    (stream sub-records like ``ai.chat.delta``, unsolicited ``ui.freshness``
+    events, or ``envelope.kind === ...`` checks) never appear as an invocation
+    argument, so they are correctly excluded.
+    """
+
+    invoked: dict[str, str] = {}
+    for path in sorted(_UI_SRC_DIR.rglob("*.ts*")):
+        name = path.as_posix()
+        if ".test." in name or "/mocks/" in name or "/daemon/mock" in name:
+            continue
+        text = path.read_text(encoding="utf-8")
+        for regex in (_WRAPPER_KIND_RE, _INLINE_KIND_RE):
+            for kind in regex.findall(text):
+                if kind.startswith("ui."):
+                    invoked.setdefault(
+                        kind, str(path.relative_to(_UI_SRC_DIR.parent))
+                    )
+    return invoked
 
 
 class ConnectionCatalogDriftTests(unittest.TestCase):
@@ -228,7 +280,7 @@ class ConnectionCatalogDriftTests(unittest.TestCase):
         would surface as runtime ``unknown kind`` errors against whatever
         shell forwarded a kind the daemon dropped. The reverse direction
         (daemon-only kinds) is intentional — AI read tools, daemon
-        lifecycle commands, and reveal kinds stay off the desktop surface.
+        lifecycle commands, and most reveal kinds stay off the desktop surface.
         """
 
         daemon_kinds = set(SUPPORTED_KINDS)
@@ -263,6 +315,50 @@ class ConnectionCatalogDriftTests(unittest.TestCase):
             "Tauri and Vite-bridge daemon kind allowlists have drifted. "
             "Update both lists together (see ui-tauri/src-tauri/src/lib.rs "
             "and ui-tauri/vite.config.ts).",
+        )
+
+    def test_invoked_ui_kinds_are_in_desktop_allowlist(self):
+        """Forward-direction guard: every ``ui.*`` daemon kind the desktop
+        React app actually invokes MUST be in the Tauri shell allowlist.
+
+        The subset test above only proves the allowlist holds nothing the
+        daemon cannot handle; it says nothing about a kind the UI invokes
+        that nobody allowlisted. That gap ships silently — mock dev mode
+        (``VITE_DAEMON=mock``) never consults an allowlist, so the feature
+        looks fine until the packaged app returns ``kind_not_allowed`` (or
+        ``dev:bridge`` returns HTTP 403). This test turns that runtime
+        surprise into a gate failure: when the UI wires a new ``ui.*``
+        invoke, add the kind to ``ALLOWED_DAEMON_KINDS`` in
+        ``ui-tauri/src-tauri/src/lib.rs`` (and the matching
+        ``ALLOWED_BRIDGE_KINDS`` in ``ui-tauri/vite.config.ts`` — the parity
+        test above keeps the two in lockstep).
+
+        Scope: literal kinds at ``useDaemon*`` / ``transport.invoke`` /
+        ``transport.stream`` call sites. A dynamically built kind string
+        would slip past, which is acceptable: every current call site passes
+        a literal.
+        """
+
+        invoked = _invoked_ui_daemon_kinds()
+        # Guard against the extraction silently breaking (e.g. a wrapper
+        # rename) and turning this assertion into a no-op.
+        self.assertGreater(
+            len(invoked),
+            50,
+            "Extracted suspiciously few invoked ui.* kinds — the call-site "
+            "regexes probably need updating after a daemon-client refactor.",
+        )
+        allowed = self._rust_allowlist()
+        missing = {
+            kind: src for kind, src in invoked.items() if kind not in allowed
+        }
+        self.assertEqual(
+            missing,
+            {},
+            "Desktop UI invokes ui.* daemon kinds missing from the Tauri "
+            "allowlist (ALLOWED_DAEMON_KINDS in ui-tauri/src-tauri/src/lib.rs); "
+            "packaged mode will return kind_not_allowed for these. Add each "
+            f"to lib.rs and vite.config.ts: {missing}",
         )
 
     def test_logs_snapshot_kind_is_allowed_by_desktop_boundaries(self):

@@ -1,14 +1,21 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import i18n from "@/i18n";
 
 import {
   attachmentRecordToItem,
+  availablePeriodKeysForRecords,
+  buildFlowChartRows,
+  buildSwapCandidates,
+  buildTransferCandidates,
   bucketTransactionDate,
+  candidateReferenceReviewType,
   dashboardRecordsFromTxs,
   flowChartSelectionLabel,
   isAttachmentListQueryKeyForTransaction,
   matchesFlowChartSelection,
+  readTransactionDetailParams,
+  readTransactionScopeParams,
   removeAttachmentRecord,
   replaceAttachmentRecord,
   toDashboardTransaction,
@@ -20,6 +27,10 @@ import type { Tx } from "@/mocks/seed";
 import type { Transaction, TransactionFlow } from "@/components/transactions";
 
 const t = i18n.getFixedT("en", "transactions");
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 function transaction(
   overrides: Partial<Transaction> = {},
@@ -39,7 +50,86 @@ function transaction(
   };
 }
 
+function rawTx(overrides: Partial<Tx> = {}): Tx {
+  return {
+    id: "tx-1",
+    date: "2026-04-15 08:00",
+    type: "Income",
+    account: "Cold Storage",
+    counter: "Counterparty",
+    amountSat: 410_000,
+    eur: null,
+    rate: null,
+    tag: "Income",
+    conf: 32,
+    ...overrides,
+  };
+}
+
 describe("transaction dashboard chart selection", () => {
+  it("preserves quarantine row ids in transaction detail deep links", () => {
+    vi.stubGlobal("window", {
+      location: {
+        search: "?tx=shared-tx&tab=linked&qrow=shared-tx%3A2",
+      },
+    });
+
+    try {
+      expect(readTransactionDetailParams()).toEqual({
+        transactionId: "shared-tx",
+        tab: "linked",
+        rowId: "shared-tx:2",
+      });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("preserves wallet detail deep-link scope parameters", () => {
+    vi.stubGlobal("window", {
+      location: {
+        search:
+          "?wallet=Satoshi-Liquid%20-%3E%20Satoshi-Onchain-Multi&quick=missing_price",
+      },
+    });
+
+    try {
+      expect(readTransactionScopeParams()).toEqual({
+        wallet: "Satoshi-Liquid -> Satoshi-Onchain-Multi",
+        quick: "missing_price",
+      });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("hides long-range period tabs for young transaction histories", () => {
+    expect(
+      availablePeriodKeysForRecords([
+        transaction({ id: "newer", date: "2100-01-01T12:00:00Z" }),
+        transaction({ id: "older", date: "2099-08-01T12:00:00Z" }),
+      ]),
+    ).toEqual(["30days", "3months", "ytd", "1year", "all"]);
+  });
+
+  it("reveals longer period tabs as transaction history gets older", () => {
+    expect(
+      availablePeriodKeysForRecords([
+        transaction({ id: "newer", date: "2100-01-01T12:00:00Z" }),
+        transaction({ id: "older", date: "2084-01-01T12:00:00Z" }),
+      ]),
+    ).toEqual([
+      "30days",
+      "3months",
+      "ytd",
+      "1year",
+      "5years",
+      "10years",
+      "15years",
+      "all",
+    ]);
+  });
+
   it("does not substitute demo rows for an empty live transaction list", () => {
     expect(dashboardRecordsFromTxs([])).toEqual([]);
   });
@@ -66,6 +156,49 @@ describe("transaction dashboard chart selection", () => {
     expect(transaction.amountBtc).toBe(0.0004218);
     expect(transaction.amount).toBe(30.13);
     expect(transaction.feeBtc).toBe(0.0004218);
+  });
+
+  it("normalizes backend review-status variants before detail rendering", () => {
+    const tx = rawTx({
+      id: "tx-missing-price",
+      counter: "Missing price",
+      tag: "Review",
+      reviewStatus: "needs_review",
+    });
+
+    expect(toDashboardTransaction(tx, 0).reviewStatus).toBe("review");
+  });
+
+  it.each([
+    ["review", "review"],
+    ["needs_review", "review"],
+    ["needs-review", "review"],
+    ["blocked", "review"],
+    ["quarantined", "review"],
+    ["completed", "completed"],
+    ["complete", "completed"],
+    ["pending", "pending"],
+    ["failed", "failed"],
+    ["error", "failed"],
+  ] as const)(
+    "normalizes backend review status %s as %s",
+    (rawStatus, expectedStatus) => {
+      expect(
+        toDashboardTransaction(rawTx({ reviewStatus: rawStatus }), 0).reviewStatus,
+      ).toBe(expectedStatus);
+    },
+  );
+
+  it("falls back to confirmation-derived status for blank or unknown review statuses", () => {
+    expect(
+      toDashboardTransaction(rawTx({ reviewStatus: "", conf: 0 }), 0).reviewStatus,
+    ).toBe("pending");
+    expect(
+      toDashboardTransaction(
+        rawTx({ reviewStatus: "waiting_for_oracle", conf: 12 }),
+        0,
+      ).reviewStatus,
+    ).toBe("completed");
   });
 
   it("labels and matches a whole bucket selection across flows", () => {
@@ -147,6 +280,49 @@ describe("transaction dashboard chart selection", () => {
         (txn) => txn.flow as TransactionFlow,
       ),
     ).toBe(false);
+  });
+
+  it("treats BTC to Liquid BTC candidates as carrying-value Bitcoin swaps", () => {
+    const out = transaction({
+      id: "tx-out",
+      direction: "Send",
+      flow: "outgoing",
+      asset: "BTC",
+      amountBtc: 0.1,
+      amount: 6000,
+    });
+    const input = transaction({
+      id: "tx-in",
+      direction: "Receive",
+      flow: "incoming",
+      asset: "LBTC",
+      amountBtc: 0.0999,
+      amount: 5994,
+    });
+    const candidate = {
+      out_id: "tx-out",
+      in_id: "tx-in",
+      out_asset: "BTC",
+      in_asset: "LBTC",
+      default_kind: "peg-in",
+      candidate_type: "transfer" as const,
+    };
+
+    expect(candidateReferenceReviewType(candidate)).toBe("transfer");
+    expect(buildSwapCandidates([out, input], [candidate])).toEqual([]);
+    expect(buildTransferCandidates([out, input], [candidate])).toHaveLength(1);
+
+    const rows = buildFlowChartRows(
+      [out, input],
+      "1year",
+      "btc",
+      new Map<string, TransactionFlow>([
+        ["tx-out", "layer-transition"],
+        ["tx-in", "layer-transition"],
+      ]),
+      "count",
+    );
+    expect(rows.find((row) => row.transfers === 2)?.swaps).toBe(0);
   });
 });
 
@@ -296,5 +472,24 @@ describe("transaction attachment cache updates", () => {
     ];
 
     expect(removeAttachmentRecord(current, "url-1")).toEqual([current[0]]);
+  });
+});
+
+describe("transaction detail routing", () => {
+  it("falls back to details for the old graph deep-link tab", () => {
+    vi.stubGlobal("window", {
+      location: {
+        search: "?tx=tx-graph&tab=graph",
+        pathname: "/transactions",
+      },
+      history: {
+        replaceState: vi.fn(),
+      },
+    });
+
+    expect(readTransactionDetailParams()).toEqual({
+      transactionId: "tx-graph",
+      tab: "details",
+    });
   });
 });

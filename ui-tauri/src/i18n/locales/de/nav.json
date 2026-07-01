@@ -2,7 +2,7 @@
   "book": {
     "overview": "Übersicht",
     "transactions": "Transaktionen",
-    "ledger": "Hauptbuch",
+    "ledger": "Journale",
     "quarantine": "Quarantäne",
     "wallets": "Wallets",
     "reports": "Berichte",
@@ -18,6 +18,11 @@
   "section": {
     "main": "Allgemein",
     "review": "Prüfung"
+  },
+  "badge": {
+    "quarantine": "Quarantäne: {{count}} zu prüfen",
+    "swaps": "Swaps & Übertragungen: {{count}} zu prüfen",
+    "journals": "Journale müssen verarbeitet werden"
   },
   "openBook": {
     "title": "Aktives Buch geändert",

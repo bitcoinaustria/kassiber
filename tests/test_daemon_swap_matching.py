@@ -155,7 +155,7 @@ class DaemonSwapMatchingTest(unittest.TestCase):
                 },
             )
             self.assertEqual(envelope["kind"], "ui.transfers.suggest")
-            self.assertGreaterEqual(envelope["data"]["counts"]["total"], 1)
+            self.assertEqual(envelope["data"]["counts"]["total"], 0)
 
             envelope = _request_response(
                 proc,
@@ -170,7 +170,13 @@ class DaemonSwapMatchingTest(unittest.TestCase):
                 },
             )
             self.assertEqual(envelope["kind"], "ui.transfers.suggest")
-            self.assertEqual(envelope["data"]["counts"]["total"], 0)
+            self.assertGreaterEqual(envelope["data"]["counts"]["total"], 1)
+            self.assertTrue(
+                all(
+                    candidate["candidate_type"] == "transfer"
+                    for candidate in envelope["data"]["candidates"]
+                )
+            )
 
             envelope = _request_response(
                 proc,
@@ -234,7 +240,7 @@ class DaemonSwapMatchingTest(unittest.TestCase):
                 },
             )
             self.assertEqual(envelope["kind"], "ui.transfers.review_context")
-            self.assertEqual(envelope["data"]["summary"]["candidate_count"], 0)
+            self.assertGreaterEqual(envelope["data"]["summary"]["candidate_count"], 1)
 
         self._with_daemon(call)
 
@@ -268,6 +274,42 @@ class DaemonSwapMatchingTest(unittest.TestCase):
             pair = envelope["data"]["pairs"][0]
             self.assertIn("swap_fee_msat", pair)
             self.assertEqual(pair["pair_source"], "bulk_selected")
+            # Enriched legs power the paired view's rail badges + timestamps.
+            self.assertIn("wallet_kind", pair["out"])
+            self.assertIn("wallet_kind", pair["in"])
+            self.assertTrue(pair["out"]["occurred_at"])
+            self.assertTrue(pair["in"]["occurred_at"])
+
+            # ui.transfers.update edits an existing pair's kind in place.
+            target_kind = "peg-out" if pair["kind"] != "peg-out" else "swap-refund"
+            envelope = _request_response(
+                proc,
+                {
+                    "kind": "ui.transfers.update",
+                    "request_id": "req-update",
+                    "args": {
+                        "workspace": "Main",
+                        "profile": "Swap",
+                        "pair_id": pair["id"],
+                        "kind": target_kind,
+                    },
+                },
+            )
+            self.assertEqual(envelope["kind"], "ui.transfers.update")
+            self.assertEqual(envelope["data"]["kind"], target_kind)
+
+            envelope = _request_response(
+                proc,
+                {
+                    "kind": "ui.transfers.list",
+                    "request_id": "req-list-2",
+                    "args": {"workspace": "Main", "profile": "Swap"},
+                },
+            )
+            updated = next(
+                p for p in envelope["data"]["pairs"] if p["id"] == pair["id"]
+            )
+            self.assertEqual(updated["kind"], target_kind)
 
         self._with_daemon(call)
 

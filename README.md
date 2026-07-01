@@ -69,7 +69,8 @@ carries a working Austrian (§ 27b EStG) plugin with E 1kv exports.
   chain-backed wallet sources.
 - **Imports** — BTCPay CSV/JSON, Phoenix, River, Bull Bitcoin, Coinfinity,
   21bitcoin, Pocket Bitcoin, Strike, Samourai/Whirlpool public descriptor/xpub,
-  generic CSV/JSON, BIP329 labels.
+  generic CSV/JSON, a fill-in Excel/CSV ledger template for manual entry,
+  BIP329 labels.
 - **Review workflows** — notes, tags, exclusions, attachments; append-only
   transaction edit history with Activity review and safe revert; reviewed
   transfer/swap pairing for Lightning, Liquid peg-in/peg-out, and submarine
@@ -79,10 +80,14 @@ carries a working Austrian (§ 27b EStG) plugin with E 1kv exports.
   trusted handoff.
 - **Tax & reports** — RP2 lot accounting (FIFO/LIFO/HIFO/LOFO and moving
   average); Austrian § 27b EStG with E 1kv PDF / XLSX / CSV; summary,
-  balance sheet, capital gains, portfolio, balance history; local
+  balance sheet, capital gains, portfolio, balance history; self-verifying
+  XLSX export with live recompute formulas so you can check every balance,
+  average price, acquisition, disposal and gain in Excel/LibreOffice yourself
+  (`--no-verify` for the lean workbook); local
   BTC-USD / BTC-EUR rates cache (configurable live provider, Coinbase by
   default, CoinGecko supported, plus Kraken OHLCVT local archive and
-  auto-seeded bundled BTC-only Kraken offline history for daily values) and
+  auto-seeded bundled BTC-only offline history for daily values, backfilled to
+  2011-01-01 with Coin Metrics + ECB-derived rows) and
   opt-in desktop background refresh for the latest BTC price.
 - **Sovereign storage** — SQLite system of record; optional SQLCipher 4
   passphrase encryption; single-file `tar | age` backups recoverable with

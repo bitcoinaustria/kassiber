@@ -18,7 +18,7 @@ on:
       - "v*"
 
 permissions:
-  contents: write
+  contents: read
 
 env:
   HOMEBREW_TAP_REPOSITORY: bitcoinaustria/homebrew-kassiber
@@ -45,6 +45,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          persist-credentials: false
           ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag_name || github.ref }}
 
       - name: Set up Python
@@ -113,7 +114,7 @@ jobs:
           grep '"kind":"ui.rates.kraken_csv.import"' "$RUNNER_TEMP/kassiber-kraken-bundled-smoke.jsonl" >/dev/null
           grep '"bundled":true' "$RUNNER_TEMP/kassiber-kraken-bundled-smoke.jsonl" >/dev/null
           grep '"pairs":2' "$RUNNER_TEMP/kassiber-kraken-bundled-smoke.jsonl" >/dev/null
-          grep '"rows":9129' "$RUNNER_TEMP/kassiber-kraken-bundled-smoke.jsonl" >/dev/null
+          grep '"rows":11123' "$RUNNER_TEMP/kassiber-kraken-bundled-smoke.jsonl" >/dev/null
 
           at_root="$RUNNER_TEMP/kassiber-at-smoke"
           ./dist/kassiber --data-root "$at_root" --machine init >/dev/null
@@ -250,6 +251,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          persist-credentials: false
           ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag_name || github.ref }}
 
       - name: Set up Node
@@ -384,6 +386,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          persist-credentials: false
           ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag_name || github.ref }}
 
       - name: Set up Python
@@ -442,7 +445,7 @@ jobs:
           grep '"kind":"ui.rates.kraken_csv.import"' "$RUNNER_TEMP/cli-sidecar-kraken-bundled-smoke.jsonl" >/dev/null
           grep '"bundled":true' "$RUNNER_TEMP/cli-sidecar-kraken-bundled-smoke.jsonl" >/dev/null
           grep '"pairs":2' "$RUNNER_TEMP/cli-sidecar-kraken-bundled-smoke.jsonl" >/dev/null
-          grep '"rows":9129' "$RUNNER_TEMP/cli-sidecar-kraken-bundled-smoke.jsonl" >/dev/null
+          grep '"rows":11123' "$RUNNER_TEMP/cli-sidecar-kraken-bundled-smoke.jsonl" >/dev/null
 
           descriptor_root="$RUNNER_TEMP/kassiber-cli-sidecar-descriptor-smoke"
           "$sidecar" --data-root "$descriptor_root" --machine init >/dev/null
@@ -494,6 +497,8 @@ jobs:
 
   publish:
     name: Publish prerelease
+    permissions:
+      contents: write
     needs:
       - build
       - build-desktop
@@ -595,9 +600,11 @@ jobs:
       - name: Render Homebrew cask
         if: steps.homebrew-tap.outputs.enabled == 'true'
         shell: bash
+        env:
+          RELEASE_TAG_NAME: ${{ github.event_name == 'workflow_dispatch' && inputs.tag_name || github.ref_name }}
         run: |
           set -euo pipefail
-          tag_name="${{ github.event_name == 'workflow_dispatch' && inputs.tag_name || github.ref_name }}"
+          tag_name="${RELEASE_TAG_NAME}"
           version="${tag_name#v}"
           dmg_name="kassiber-macos-universal.dmg"
           dmg_path="release/${dmg_name}"
@@ -616,9 +623,11 @@ jobs:
         if: steps.homebrew-tap.outputs.enabled == 'true'
         shell: bash
         working-directory: homebrew-tap
+        env:
+          RELEASE_TAG_NAME: ${{ github.event_name == 'workflow_dispatch' && inputs.tag_name || github.ref_name }}
         run: |
           set -euo pipefail
-          tag_name="${{ github.event_name == 'workflow_dispatch' && inputs.tag_name || github.ref_name }}"
+          tag_name="${RELEASE_TAG_NAME}"
 
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"

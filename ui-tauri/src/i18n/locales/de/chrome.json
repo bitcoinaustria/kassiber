@@ -10,6 +10,13 @@
     "overviewLink": "Kassiber-Übersicht",
     "back": "Zurück",
     "forward": "Vorwärts",
+    "refresh": "Bücher-Set aktualisieren",
+    "refreshTitle": "Bücher-Set aktualisieren (Cmd/Ctrl+R)",
+    "refreshMenu": {
+      "options": "Aktualisierungsoptionen",
+      "reprocessJournals": "Journale neu verarbeiten",
+      "fullRescan": "Vollständiger Rescan"
+    },
     "switchBooksLabel": "Bücher wechseln. Aktuelle Bücher: {{book}}",
     "booksFallback": "Lokale Bücher",
     "fallbackTitle": "Kassiber",
@@ -26,7 +33,8 @@
     "support": {
       "title": "Support",
       "bugReport": "Fehlerbericht",
-      "donateSats": "Sats spenden"
+      "donateSats": "Sats spenden",
+      "discussions": "Diskussionen"
     },
     "extras": {
       "title": "Extras",
@@ -72,6 +80,11 @@
     "ledger": {
       "label": "Hauptbuch durchsuchen",
       "placeholder": "Einträge, Wallets, Assets suchen…"
+    },
+    "imports": {
+      "title": "Importe",
+      "label": "Importe durchsuchen",
+      "placeholder": "Wallets, Dateiformate suchen…"
     },
     "logs": {
       "label": "Protokoll durchsuchen",
@@ -219,6 +232,13 @@
     "columnConnection": "Verbindung",
     "columnEndpoint": "Endpunkt",
     "lastChecked": "Zuletzt geprüft {{time}}",
+    "route": {
+      "tor": "Tor",
+      "proxy": "Proxy",
+      "torVia": ".onion-Endpunkt nur für dieses Backend über {{proxy}} geroutet.",
+      "torOnion": ".onion-Endpunkt; konfiguriere einen Backend-Proxy, damit Tor ihn auflösen kann.",
+      "proxyVia": "Dieses Backend wird nur über {{proxy}} geroutet."
+    },
     "indicator": {
       "errors": "Verbindungsfehler",
       "warning": "Verbindungsproblem",
@@ -290,7 +310,9 @@
   },
   "firstSync": {
     "defaultTitle": "Dein Buch wird eingerichtet",
+    "defaultTitleRefresh": "Dein Buch wird aktualisiert",
     "body": "Erster Sync — deine Historie wird aus den konfigurierten Quellen aufgebaut. Das läuft einmalig und kann ein paar Minuten dauern.",
+    "bodyRefresh": "Aktualisierung aus deinen konfigurierten Quellen.",
     "preparing": "Quellenaktualisierung wird vorbereitet",
     "working": "Wird bearbeitet…",
     "keepUsing": "Du kannst Kassiber weiter nutzen, während das fertig wird.",

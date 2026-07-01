@@ -2,8 +2,10 @@
  * Swap-matching review queue.
  *
  * Drives the ``ui.transfers.suggest`` daemon kind to surface candidate
- * pairings the matcher believes form one swap (Lightning ↔ Liquid,
- * Liquid ↔ on-chain BTC, etc.). Each row exposes inline kind / policy
+ * pairings the matcher believes form one reviewed movement. Bitcoin rail swaps
+ * (Lightning ↔ Liquid, Liquid ↔ on-chain BTC, etc.) live with the
+ * carrying-value Bitcoin-movement queue; other cross-asset swaps live with
+ * swaps. Each row exposes inline kind / policy
  * controls + per-row Pair / Dismiss actions wired to
  * ``ui.transfers.pair`` and ``ui.transfers.dismiss``.
  *
@@ -31,17 +33,21 @@ import {
 } from "react";
 import {
   AlertTriangle,
+  ArrowLeft,
   ArrowRight,
   Check,
   Eye,
+  History as HistoryIcon,
   Loader2,
   MoreHorizontal,
+  Pencil,
   Plus,
   Settings as SettingsIcon,
   Sparkles,
   Star,
   Trash2,
   Undo2,
+  Unlink,
   X,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -105,7 +111,14 @@ import { screenShellClassName } from "@/lib/screen-layout";
 import { cn } from "@/lib/utils";
 import { useUiStore } from "@/store/ui";
 
-const PAIR_KIND_OPTIONS = ["manual", "peg-in", "peg-out", "submarine-swap"] as const;
+const PAIR_KIND_OPTIONS = [
+  "manual",
+  "coinjoin",
+  "peg-in",
+  "peg-out",
+  "submarine-swap",
+  "swap-refund",
+] as const;
 const PAIR_POLICY_OPTIONS = ["carrying-value", "taxable"] as const;
 // Stable `value` (machine code, used in filter payloads + lookups) paired with a
 // `labelKey` into the `review` namespace; labels are resolved at render.
@@ -118,7 +131,31 @@ const METHOD_OPTIONS = [
   { value: "all", labelKey: "swap.method.any" },
   { value: "payment_hash", labelKey: "swap.method.paymentHash" },
   { value: "heuristic", labelKey: "swap.method.heuristic" },
+  { value: "htlc_refund", labelKey: "swap.method.htlcRefund" },
 ] as const;
+
+type CandidateMethod = "payment_hash" | "heuristic" | "htlc_refund";
+// Per-method i18n keys for the two render sites (the status-cell tooltip and the
+// detail sheet). The Record forces every method (including any future one) to
+// define both labels, so the type checker flags a missing translation instead
+// of silently labelling it as a heuristic match.
+const METHOD_LABEL_KEYS = {
+  payment_hash: {
+    matched: "swap.detail.matchedByPaymentHash",
+    rationale: "swap.detail.rationalePaymentHash",
+  },
+  heuristic: {
+    matched: "swap.detail.matchedByTimeAmount",
+    rationale: "swap.detail.rationaleHeuristic",
+  },
+  htlc_refund: {
+    matched: "swap.detail.matchedByRefundLink",
+    rationale: "swap.detail.rationaleHtlcRefund",
+  },
+} as const satisfies Record<
+  CandidateMethod,
+  { matched: string; rationale: string }
+>;
 const ROUTE_PAIR_OPTIONS = [
   { value: "all", labelKey: "swap.route.any" },
   { value: "LNBTC-LBTC", labelKey: "swap.route.lnToLiquid" },
@@ -132,6 +169,12 @@ const ROUTE_PAIR_VALUES = new Set<string>(ROUTE_PAIR_OPTIONS.map((option) => opt
 type PairKind = (typeof PAIR_KIND_OPTIONS)[number];
 type PairPolicy = (typeof PAIR_POLICY_OPTIONS)[number];
 type SwapRail = "onchain" | "lightning" | "liquid";
+const BITCOIN_LAYER_TRANSITION_KINDS = new Set<PairKind>([
+  "peg-in",
+  "peg-out",
+  "submarine-swap",
+  "swap-refund",
+]);
 
 interface SwapCandidate {
   out_id: string;
@@ -151,12 +194,13 @@ interface SwapCandidate {
   out_occurred_at: string;
   in_occurred_at: string;
   confidence: "exact" | "strong";
-  method: "payment_hash" | "heuristic";
+  method: CandidateMethod;
   swap_fee_msat: number;
   swap_fee: number;
   swap_fee_kind: string;
   default_kind: PairKind;
   default_policy: PairPolicy;
+  candidate_type?: "transfer" | "swap";
   conflict_set_id: string;
   /** Cluster cardinality over the full unfiltered candidate set; > 1 means
    * this candidate shares a leg with others (possibly hidden by filters). */
@@ -213,27 +257,38 @@ function compactRecordId(value: string) {
   return `${value.slice(0, 12)}…${value.slice(-6)}`;
 }
 
-function feePercent(candidate: SwapCandidate) {
-  if (!candidate.out_amount_msat) return 0;
-  return (Math.abs(candidate.swap_fee_msat) / candidate.out_amount_msat) * 100;
+/** Accepts any leg-fee shape (candidate or persisted pair) — only the swapped
+ *  outbound magnitude and the fee delta matter for the percentage. */
+function feePercent(fee: { swap_fee_msat: number; out_amount_msat: number }) {
+  if (!fee.out_amount_msat) return 0;
+  return (Math.abs(fee.swap_fee_msat) / fee.out_amount_msat) * 100;
 }
 
 function candidatePairType(candidate: SwapCandidate) {
-  return candidate.out_asset.toUpperCase() === candidate.in_asset.toUpperCase()
-    ? "transfer"
-    : "swap";
+  if (candidate.out_asset.toUpperCase() === candidate.in_asset.toUpperCase()) {
+    return "transfer";
+  }
+  if (
+    candidate.candidate_type === "transfer" ||
+    isBitcoinLayerTransitionKind(candidate.default_kind)
+  ) {
+    return "layer-transition";
+  }
+  return "swap";
 }
 
 function candidateLabelKey(candidate: SwapCandidate) {
-  return candidatePairType(candidate) === "transfer"
-    ? "swap.detail.candidateLabelTransfer"
-    : "swap.detail.candidateLabelSwap";
+  const type = candidatePairType(candidate);
+  if (type === "transfer") return "swap.detail.candidateLabelTransfer";
+  if (type === "layer-transition") return "swap.detail.candidateLabelLayerTransition";
+  return "swap.detail.candidateLabelSwap";
 }
 
 function candidateFeeLabelKey(candidate: SwapCandidate) {
-  return candidatePairType(candidate) === "transfer"
-    ? "swap.detail.transferFee"
-    : "swap.detail.swapFee";
+  const type = candidatePairType(candidate);
+  if (type === "swap") return "swap.detail.swapFee";
+  if (type === "layer-transition") return "swap.detail.layerTransitionFee";
+  return "swap.detail.transferFee";
 }
 
 interface BulkPairResult {
@@ -275,9 +330,88 @@ interface RulesEnvelope {
   rules: SwapRule[];
 }
 
+/** One leg of a persisted pair as returned by ``ui.transfers.list``. */
+interface PairLeg {
+  transaction_id: string;
+  external_id: string;
+  wallet: string;
+  wallet_kind: string;
+  asset: string;
+  occurred_at: string;
+  amount: number;
+  amount_msat: number;
+  full_amount?: number;
+  full_amount_msat?: number;
+}
+
+/** An already-paired swap/transfer (the inverse of a {@link SwapCandidate}). */
+interface PairedSwap {
+  id: string;
+  out_transaction_id: string;
+  in_transaction_id: string;
+  kind: PairKind;
+  policy: PairPolicy;
+  notes: string | null;
+  swap_fee_msat: number | null;
+  swap_fee_kind: string | null;
+  confidence_at_pair: "exact" | "strong" | null;
+  pair_source: string | null;
+  out_amount: number | null;
+  deleted_at: string | null;
+  created_at: string;
+  out: PairLeg;
+  in: PairLeg;
+}
+
+interface PairsEnvelope {
+  pairs: PairedSwap[];
+}
+
+/** msat → BTC (1 BTC = 100_000_000_000 msat); pairs carry only the msat fee. */
+const MSAT_PER_BTC = 100_000_000_000;
+
+// Persisted ``pair_source`` codes (handlers.py `_PAIR_SOURCE_VALUES`) → i18n
+// keys. Returns a literal key (so the typed `t()` accepts it) or null for an
+// unknown/legacy source, which the caller renders verbatim.
+function pairSourceLabelKey(source: string | null) {
+  switch (source) {
+    case "manual":
+      return "swap.paired.sourceManual" as const;
+    case "bulk_exact":
+      return "swap.paired.sourceBulkExact" as const;
+    case "bulk_selected":
+      return "swap.paired.sourceBulkSelected" as const;
+    case "rule_auto":
+      return "swap.paired.sourceRuleAuto" as const;
+    default:
+      return null;
+  }
+}
+
 const UNDO_WINDOW_MS = 20_000;
 
 type PairingReviewMode = "swaps" | "transfers";
+
+/** Same-asset pairs are pure transfers; known peg/submarine/refund kinds are
+ *  Bitcoin swaps with carrying-value treatment, so they stay in the Bitcoin
+ *  movement tab even when the ledger asset codes differ (BTC vs LBTC). */
+function pairIsSameAsset(pair: PairedSwap) {
+  return pair.out.asset.toUpperCase() === pair.in.asset.toUpperCase();
+}
+
+function isBitcoinLayerTransitionKind(kind: PairKind | string | null | undefined) {
+  return BITCOIN_LAYER_TRANSITION_KINDS.has(kind as PairKind);
+}
+
+function pairPresentationType(pair: PairedSwap) {
+  if (pairIsSameAsset(pair)) return "transfer";
+  if (isBitcoinLayerTransitionKind(pair.kind)) return "layer-transition";
+  return "swap";
+}
+
+function pairReviewMode(pair: PairedSwap): PairingReviewMode {
+  return pairPresentationType(pair) === "swap" ? "swaps" : "transfers";
+}
 
 const RAIL_DETAILS: Record<
   SwapRail,
@@ -304,16 +438,21 @@ const RAIL_DETAILS: Record<
   },
   liquid: {
     label: "Liquid",
-    shortLabel: "LBTC",
+    shortLabel: "Liquid",
     icon: liquidIcon,
     className:
       "border-cyan-200 bg-cyan-50 text-cyan-800 dark:border-cyan-400/30 dark:bg-cyan-950/40 dark:text-cyan-100",
   },
 };
 
-function railForLeg(asset: string, walletKind: string): SwapRail {
-  const assetKey = asset.toUpperCase();
-  const kindKey = walletKind.toLowerCase();
+function railForLeg(
+  asset: string | null | undefined,
+  walletKind: string | null | undefined,
+): SwapRail {
+  // Tolerate a daemon that predates the enriched pair payload (no wallet_kind):
+  // fall through to the on-chain default instead of throwing on .toLowerCase().
+  const assetKey = (asset ?? "").toUpperCase();
+  const kindKey = (walletKind ?? "").toLowerCase();
   if (assetKey === "LBTC" || kindKey.includes("liquid")) return "liquid";
   if (
     kindKey.includes("phoenix") ||
@@ -329,10 +468,17 @@ function railForLeg(asset: string, walletKind: string): SwapRail {
 }
 
 type PairingReviewTab = "swaps" | "transfers";
+type PairingView = "review" | "paired";
 
 export function SwapMatching() {
   const { t } = useTranslation("review");
-  const [activeTab, setActiveTab] = useState<PairingReviewTab>("swaps");
+  const [activeTab, setActiveTab] = useState<PairingReviewTab>("transfers");
+  // Swaps/Transfers is the only tab strip. The settled "History" list isn't a
+  // second tab — it opens from a History card in the review-queue metrics and
+  // returns via a back control. The view is shared across both tabs.
+  const [view, setView] = useState<PairingView>("review");
+  const showHistory = () => setView("paired");
+  const showReview = () => setView("review");
 
   return (
     <div className={screenShellClassName}>
@@ -342,27 +488,574 @@ export function SwapMatching() {
         className="space-y-3"
       >
         <TabsList className="w-full justify-start overflow-x-auto sm:w-fit">
-          <TabsTrigger value="swaps">{t("swap.tabs.swaps")}</TabsTrigger>
           <TabsTrigger value="transfers">{t("swap.tabs.transfers")}</TabsTrigger>
+          <TabsTrigger value="swaps">{t("swap.tabs.swaps")}</TabsTrigger>
         </TabsList>
-        <TabsContent value="swaps" className="mt-0">
-          {activeTab === "swaps" ? <PairingReview mode="swaps" /> : null}
-        </TabsContent>
         <TabsContent value="transfers" className="mt-0">
-          {activeTab === "transfers" ? <PairingReview mode="transfers" /> : null}
+          {activeTab === "transfers" ? (
+            view === "review" ? (
+              <PairingReview mode="transfers" onShowHistory={showHistory} />
+            ) : (
+              <PairedSwaps mode="transfers" onBackToReview={showReview} />
+            )
+          ) : null}
+        </TabsContent>
+        <TabsContent value="swaps" className="mt-0">
+          {activeTab === "swaps" ? (
+            view === "review" ? (
+              <PairingReview mode="swaps" onShowHistory={showHistory} />
+            ) : (
+              <PairedSwaps mode="swaps" onBackToReview={showReview} />
+            )
+          ) : null}
         </TabsContent>
       </Tabs>
     </div>
   );
 }
 
-function PairingReview({ mode }: { mode: PairingReviewMode }) {
+/** A persisted pair's fee, shaped for {@link SwapFeeText} / {@link feePercent}. */
+function pairFee(pair: PairedSwap) {
+  const swapFeeMsat = pair.swap_fee_msat ?? 0;
+  return {
+    swap_fee: swapFeeMsat / MSAT_PER_BTC,
+    swap_fee_msat: swapFeeMsat,
+    out_amount_msat: pair.out.amount_msat,
+  };
+}
+
+/**
+ * Already-paired swaps / transfers for the active rail. Same row layout as the
+ * review queue — reusing {@link SwapLegInline} and {@link SwapFeeText} — but
+ * read-from-the-ledger instead of select-to-pair. Each row can be opened to
+ * edit its kind / policy (``ui.transfers.update``) or unpaired
+ * (``ui.transfers.unpair``).
+ */
+function PairedSwaps({
+  mode,
+  onBackToReview,
+}: {
+  mode: PairingReviewMode;
+  onBackToReview: () => void;
+}) {
+  const { t } = useTranslation(["review", "common"]);
+  const hideSensitive = useUiStore((s) => s.hideSensitive);
+  const { data, isLoading, isError, error } =
+    useDaemon<PairsEnvelope>("ui.transfers.list");
+  const unpairMutation = useDaemonMutation<unknown>("ui.transfers.unpair");
+  const updateMutation = useDaemonMutation<unknown>("ui.transfers.update");
+
+  const [detailPair, setDetailPair] = useState<PairedSwap | null>(null);
+  const [unpairTarget, setUnpairTarget] = useState<PairedSwap | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  const pairs = useMemo(
+    () =>
+      (data?.data?.pairs ?? []).filter(
+        (pair) => pairReviewMode(pair) === mode,
+      ),
+    [data, mode],
+  );
+
+  const title =
+    mode === "transfers"
+      ? t("swap.paired.transfersTitle")
+      : t("swap.paired.swapsTitle");
+  const description =
+    mode === "transfers"
+      ? t("swap.paired.transfersDescription")
+      : t("swap.paired.swapsDescription");
+  const emptyText =
+    mode === "transfers"
+      ? t("swap.paired.transfersEmpty")
+      : t("swap.paired.swapsEmpty");
+
+  const handleSave = useCallback(
+    async (pair: PairedSwap, kind: PairKind, policy: PairPolicy) => {
+      setActionError(null);
+      try {
+        await updateMutation.mutateAsync({ pair_id: pair.id, kind, policy });
+        setDetailPair(null);
+      } catch (err) {
+        setActionError(err instanceof Error ? err.message : String(err));
+      }
+    },
+    [updateMutation],
+  );
+
+  const handleUnpair = useCallback(async () => {
+    if (!unpairTarget) return;
+    setActionError(null);
+    try {
+      await unpairMutation.mutateAsync({ pair_id: unpairTarget.id });
+      setUnpairTarget(null);
+      setDetailPair(null);
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : String(err));
+    }
+  }, [unpairMutation, unpairTarget]);
+
+  const busy = unpairMutation.isPending || updateMutation.isPending;
+
+  return (
+    <div className="min-w-0">
+      <div className="overflow-hidden rounded-xl border bg-card">
+        <header className="flex flex-col gap-3 px-3 py-3 sm:flex-row sm:items-start sm:justify-between sm:px-4">
+          <div className="min-w-0 space-y-1">
+            <p className="text-[10px] font-medium tracking-[0.18em] text-muted-foreground uppercase">
+              {t("swap.paired.label")}
+            </p>
+            <h1 className="text-base font-semibold">{title}</h1>
+            <p className="max-w-3xl text-sm text-muted-foreground">{description}</p>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-9 shrink-0"
+            onClick={onBackToReview}
+          >
+            <ArrowLeft className="size-3.5" aria-hidden="true" />
+            <span>{t("swap.paired.backToReview")}</span>
+          </Button>
+        </header>
+
+        {actionError ? (
+          <div className="border-t px-3 py-3 sm:px-6">
+            <div className="rounded border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+              {actionError}
+            </div>
+          </div>
+        ) : null}
+
+        {isLoading ? (
+          <div className="flex items-center gap-2 border-t px-6 py-8 text-sm text-muted-foreground">
+            <Loader2 className="size-4 animate-spin" /> {t("swap.paired.loading")}
+          </div>
+        ) : isError ? (
+          <div className="border-t px-6 py-6">
+            <div className="rounded border border-destructive/40 bg-destructive/10 p-3 text-sm">
+              {t("swap.paired.loadFailed", { error: String(error) })}
+            </div>
+          </div>
+        ) : pairs.length === 0 ? (
+          <div className="border-t px-6 py-8">
+            <div className="rounded border border-dashed border-muted-foreground/40 p-6 text-center text-sm text-muted-foreground">
+              {emptyText}
+            </div>
+          </div>
+        ) : (
+          <div className="overflow-x-auto border-t">
+            <Table className="min-w-[1200px] w-full table-fixed">
+              <TableHeader>
+                <TableRow className="bg-muted/50 hover:bg-muted/50">
+                  <TableHead className="w-[180px] text-xs font-medium text-muted-foreground">
+                    {t("swap.paired.pairing")}
+                  </TableHead>
+                  <TableHead className="w-[360px] text-xs font-medium text-muted-foreground">
+                    {t("swap.table.outgoing")}
+                  </TableHead>
+                  <TableHead className="w-[44px] text-center"></TableHead>
+                  <TableHead className="w-[360px] text-xs font-medium text-muted-foreground">
+                    {t("swap.table.incoming")}
+                  </TableHead>
+                  <TableHead className="w-[160px] text-right text-xs font-medium text-muted-foreground">
+                    {t("swap.table.feeDelta")}
+                  </TableHead>
+                  <TableHead className="w-[44px]"></TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {pairs.map((pair) => (
+                  <TableRow
+                    key={pair.id}
+                    className="cursor-pointer align-middle hover:bg-muted/35"
+                    onClick={() => {
+                      setActionError(null);
+                      setDetailPair(pair);
+                    }}
+                  >
+                    <TableCell className="whitespace-normal align-top">
+                      <PairingCell pair={pair} />
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap">
+                      <SwapLegInline
+                        direction="out"
+                        asset={pair.out.asset}
+                        amount={pair.out.amount}
+                        wallet={pair.out.wallet}
+                        walletKind={pair.out.wallet_kind}
+                        timestamp={pair.out.occurred_at}
+                        txId={pair.out.transaction_id}
+                        hideSensitive={hideSensitive}
+                      />
+                    </TableCell>
+                    <TableCell className="text-center text-muted-foreground">
+                      <ArrowRight className="mx-auto mt-1 size-4" aria-hidden="true" />
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap">
+                      <SwapLegInline
+                        direction="in"
+                        asset={pair.in.asset}
+                        amount={pair.in.amount}
+                        wallet={pair.in.wallet}
+                        walletKind={pair.in.wallet_kind}
+                        timestamp={pair.in.occurred_at}
+                        txId={pair.in.transaction_id}
+                        hideSensitive={hideSensitive}
+                      />
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap text-right">
+                      <SwapFeeText candidate={pairFee(pair)} hideSensitive={hideSensitive} />
+                    </TableCell>
+                    <TableCell>
+                      <PairedRowMenu
+                        pair={pair}
+                        onEdit={() => {
+                          setActionError(null);
+                          setDetailPair(pair);
+                        }}
+                        onUnpair={() => {
+                          setActionError(null);
+                          setUnpairTarget(pair);
+                        }}
+                        disabled={busy}
+                      />
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        )}
+
+        {!isLoading && !isError && pairs.length > 0 ? (
+          <div className="flex items-center border-t px-3 py-3 text-xs text-muted-foreground sm:px-6">
+            <span>{t("swap.paired.count", { count: pairs.length })}</span>
+          </div>
+        ) : null}
+      </div>
+
+      <PairedDetailSheet
+        pair={detailPair}
+        onOpenChange={(open) => {
+          if (!open) setDetailPair(null);
+        }}
+        onSave={handleSave}
+        onUnpair={(pair) => {
+          setActionError(null);
+          setUnpairTarget(pair);
+        }}
+        saving={updateMutation.isPending}
+        hideSensitive={hideSensitive}
+      />
+
+      <Dialog
+        open={unpairTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setUnpairTarget(null);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t("swap.paired.unpairTitle")}</DialogTitle>
+            <DialogDescription>{t("swap.paired.unpairBody")}</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setUnpairTarget(null)}
+              disabled={unpairMutation.isPending}
+            >
+              {t("common:actions.cancel")}
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => void handleUnpair()}
+              disabled={unpairMutation.isPending}
+            >
+              {unpairMutation.isPending ? (
+                <Loader2 className="mr-1 size-4 animate-spin" />
+              ) : null}
+              {t("swap.paired.unpairConfirm")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+/** The "pairing" summary cell: kind + policy + how/when it was matched. */
+function PairingCell({ pair }: { pair: PairedSwap }) {
+  const { t } = useTranslation("review");
+  const sourceKey = pairSourceLabelKey(pair.pair_source);
+  const sourceLabel = sourceKey ? t(sourceKey) : pair.pair_source;
+  const confidenceLabel = pair.confidence_at_pair
+    ? pair.confidence_at_pair === "exact"
+      ? t("swap.metric.exact")
+      : t("swap.metric.strong")
+    : null;
+  return (
+    <div className="space-y-1">
+      <Badge variant="outline" className="text-[11px]">
+        {pair.kind}
+      </Badge>
+      <div className="text-xs text-muted-foreground">{pair.policy}</div>
+      {sourceLabel || confidenceLabel ? (
+        <div className="text-[11px] text-muted-foreground/80">
+          {sourceLabel}
+          {sourceLabel && confidenceLabel ? " · " : null}
+          {confidenceLabel}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+interface PairedRowMenuProps {
+  pair: PairedSwap;
+  onEdit: () => void;
+  onUnpair: () => void;
+  disabled: boolean;
+}
+
+function PairedRowMenu({ pair, onEdit, onUnpair, disabled }: PairedRowMenuProps) {
+  const { t } = useTranslation("review");
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="size-8 text-muted-foreground hover:text-foreground"
+          aria-label={t("swap.paired.rowMenuAria", { id: pair.id })}
+          onClick={(event) => event.stopPropagation()}
+        >
+          <MoreHorizontal className="size-4" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        <DropdownMenuItem onSelect={onEdit}>
+          <Pencil className="mr-2 size-4" aria-hidden="true" />
+          {t("swap.paired.edit")}
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem
+          className="text-destructive"
+          disabled={disabled}
+          onSelect={onUnpair}
+        >
+          <Unlink className="mr-2 size-4" aria-hidden="true" />
+          {t("swap.paired.unpair")}
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+interface PairedDetailSheetProps {
+  pair: PairedSwap | null;
+  onOpenChange: (open: boolean) => void;
+  onSave: (pair: PairedSwap, kind: PairKind, policy: PairPolicy) => void;
+  onUnpair: (pair: PairedSwap) => void;
+  saving: boolean;
+  hideSensitive: boolean;
+}
+
+function PairedDetailSheet({
+  pair,
+  onOpenChange,
+  onSave,
+  onUnpair,
+  saving,
+  hideSensitive,
+}: PairedDetailSheetProps) {
+  const { t } = useTranslation("review");
+  const [kind, setKind] = useState<PairKind>("manual");
+  const [policy, setPolicy] = useState<PairPolicy>("carrying-value");
+  useEffect(() => {
+    if (pair) {
+      setKind(pair.kind);
+      setPolicy(pair.policy);
+    }
+  }, [pair]);
+  const dirty = pair ? kind !== pair.kind || policy !== pair.policy : false;
+  const sameAsset = pair ? pairIsSameAsset(pair) : false;
+  const presentationType = pair ? pairPresentationType(pair) : "transfer";
+  const sourceKey = pairSourceLabelKey(pair?.pair_source ?? null);
+  return (
+    <Sheet open={Boolean(pair)} onOpenChange={onOpenChange}>
+      <SheetContent className="w-full overflow-y-auto p-0 sm:max-w-2xl">
+        {pair ? (
+          <>
+            <SheetHeader className="border-b p-4 sm:p-6">
+              <SheetTitle>
+                {t(
+                  presentationType === "transfer"
+                    ? "swap.detail.candidateLabelTransfer"
+                    : presentationType === "layer-transition"
+                      ? "swap.detail.candidateLabelLayerTransition"
+                      : "swap.detail.candidateLabelSwap",
+                )}
+              </SheetTitle>
+              <SheetDescription>
+                <span className={blurClass(hideSensitive)}>
+                  {t("swap.detail.delta", {
+                    delta: formatSats(pair.swap_fee_msat ?? 0),
+                    percent: feePercent(pairFee(pair)).toFixed(2),
+                  })}
+                </span>
+              </SheetDescription>
+            </SheetHeader>
+            <div className="space-y-4 p-4 sm:p-6">
+              <div className="grid gap-4 md:grid-cols-2">
+                <SwapLegDetails
+                  title={t("swap.detail.outgoing")}
+                  asset={pair.out.asset}
+                  amount={pair.out.amount}
+                  amountMsat={pair.out.amount_msat}
+                  wallet={pair.out.wallet}
+                  walletKind={pair.out.wallet_kind}
+                  timestamp={pair.out.occurred_at}
+                  txId={pair.out.transaction_id}
+                  hideSensitive={hideSensitive}
+                />
+                <SwapLegDetails
+                  title={t("swap.detail.incoming")}
+                  asset={pair.in.asset}
+                  amount={pair.in.amount}
+                  amountMsat={pair.in.amount_msat}
+                  wallet={pair.in.wallet}
+                  walletKind={pair.in.wallet_kind}
+                  timestamp={pair.in.occurred_at}
+                  txId={pair.in.transaction_id}
+                  hideSensitive={hideSensitive}
+                />
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-1">
+                  <Label>{t("swap.detail.kind")}</Label>
+                  <Select value={kind} onValueChange={(value) => setKind(value as PairKind)}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {PAIR_KIND_OPTIONS.map((option) => (
+                        <SelectItem key={option} value={option}>
+                          {option}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label>{t("swap.detail.policy")}</Label>
+                  <Select
+                    value={policy}
+                    onValueChange={(value) => setPolicy(value as PairPolicy)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {PAIR_POLICY_OPTIONS.map((option) => (
+                        <SelectItem
+                          key={option}
+                          value={option}
+                          disabled={sameAsset && option === "taxable"}
+                        >
+                          {option}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {sameAsset ? (
+                    <p className="text-[11px] text-muted-foreground">
+                      {t("swap.paired.sameAssetTaxableHint")}
+                    </p>
+                  ) : null}
+                </div>
+              </div>
+
+              <div className="rounded-lg border bg-muted/20 p-3 text-sm">
+                <dl className="space-y-1 text-xs">
+                  <DetailRow
+                    label={t("swap.paired.source")}
+                    value={sourceKey ? t(sourceKey) : pair.pair_source ?? "—"}
+                  />
+                  <DetailRow
+                    label={t("swap.paired.created")}
+                    value={formatTimestamp(pair.created_at)}
+                  />
+                  <DetailRow
+                    label={t(
+                      presentationType === "swap"
+                        ? "swap.detail.swapFee"
+                        : presentationType === "layer-transition"
+                          ? "swap.detail.layerTransitionFee"
+                          : "swap.detail.transferFee",
+                    )}
+                    value={
+                      <span className={blurClass(hideSensitive)}>
+                        {t("swap.detail.feeLine", {
+                          fee: formatSats(pair.swap_fee_msat ?? 0),
+                          percent: feePercent(pairFee(pair)).toFixed(2),
+                        })}
+                      </span>
+                    }
+                  />
+                  <DetailRow
+                    label={t("swap.paired.notes")}
+                    value={
+                      pair.notes ? (
+                        <span className={blurClass(hideSensitive)}>{pair.notes}</span>
+                      ) : (
+                        t("swap.paired.noNotes")
+                      )
+                    }
+                  />
+                </dl>
+                <p className="mt-2 text-xs text-muted-foreground">
+                  {t("swap.detail.deltasNote")}
+                </p>
+                {presentationType === "layer-transition" ? (
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    {t("swap.detail.layerTransitionOwnershipHint")}
+                  </p>
+                ) : null}
+              </div>
+            </div>
+            <SheetFooter className="border-t p-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+              <Button variant="outline" onClick={() => onUnpair(pair)}>
+                <Unlink className="mr-2 size-4" aria-hidden="true" />
+                {t("swap.paired.unpair")}
+              </Button>
+              <Button onClick={() => onSave(pair, kind, policy)} disabled={!dirty || saving}>
+                {saving ? <Loader2 className="mr-1 size-4 animate-spin" /> : null}
+                {t("swap.paired.save")}
+              </Button>
+            </SheetFooter>
+          </>
+        ) : null}
+      </SheetContent>
+    </Sheet>
+  );
+}
+
+function PairingReview({
+  mode,
+  onShowHistory,
+}: {
+  mode: PairingReviewMode;
+  onShowHistory: () => void;
+}) {
   const { t } = useTranslation(["review", "common"]);
   const hideSensitive = useUiStore((s) => s.hideSensitive);
   const candidateType = mode === "transfers" ? "transfer" : "swap";
   const savedViewSurface =
     mode === "transfers" ? "transfer_candidates" : "swap_candidates";
-  const routeFilterEnabled = mode === "swaps";
+  const routeFilterEnabled = true;
   const pageTitle =
     mode === "transfers" ? t("swap.page.transfersTitle") : t("swap.page.swapsTitle");
   const pageDescription =
@@ -422,6 +1115,17 @@ function PairingReview({ mode }: { mode: PairingReviewMode }) {
 
   const { data, isLoading, isError, error, refetch, isFetching } =
     useDaemon<SuggestEnvelope>("ui.transfers.suggest", args);
+
+  // Count of already-paired pairs for this rail — powers the History card.
+  // Shares the cached query with the paired (History) view, so it's one fetch.
+  const pairedListQuery = useDaemon<PairsEnvelope>("ui.transfers.list");
+  const historyCount = useMemo(
+    () =>
+      (pairedListQuery.data?.data?.pairs ?? []).filter(
+        (pair) => pairReviewMode(pair) === mode,
+      ).length,
+    [pairedListQuery.data, mode],
+  );
 
   const pairMutation = useDaemonMutation<unknown>("ui.transfers.pair");
   const dismissMutation = useDaemonMutation<unknown>("ui.transfers.dismiss");
@@ -910,7 +1614,7 @@ function PairingReview({ mode }: { mode: PairingReviewMode }) {
             </div>
           </header>
 
-          <div className="grid grid-cols-2 divide-x-0 divide-y divide-border border-t sm:grid-cols-4 sm:divide-x sm:divide-y-0">
+          <div className="grid grid-cols-2 divide-x-0 divide-y divide-border border-t sm:grid-cols-5 sm:divide-x sm:divide-y-0">
             <SwapQueueMetric
               label={t("swap.metric.candidates")}
               ariaLabel={t("swap.metric.showAllAria", { label: t("swap.metric.candidates") })}
@@ -943,6 +1647,13 @@ function PairingReview({ mode }: { mode: PairingReviewMode }) {
               label={t("swap.metric.conflicts")}
               value={counts.conflicts}
               tone={counts.conflicts ? "alert" : "neutral"}
+            />
+            <SwapQueueMetric
+              label={t("swap.metric.history")}
+              ariaLabel={t("swap.metric.historyAria")}
+              value={historyCount}
+              icon={<HistoryIcon className="size-3.5" aria-hidden="true" />}
+              onClick={onShowHistory}
             />
           </div>
 
@@ -1114,15 +1825,12 @@ function PairingReview({ mode }: { mode: PairingReviewMode }) {
             </div>
           ) : (
             <div className="overflow-x-auto border-t">
-              <Table className="min-w-[1320px] w-full table-fixed">
+              <Table className="min-w-[1180px] w-full table-fixed">
                 <TableHeader>
                   <TableRow className="bg-muted/50 hover:bg-muted/50">
                     <TableHead className="w-[42px]"></TableHead>
-                    <TableHead className="w-[118px] text-xs font-medium text-muted-foreground">
-                      {t("swap.table.confidence")}
-                    </TableHead>
-                    <TableHead className="w-[132px] text-xs font-medium text-muted-foreground">
-                      {t("swap.table.method")}
+                    <TableHead className="w-[140px] text-xs font-medium text-muted-foreground">
+                      {t("swap.table.status")}
                     </TableHead>
                     <TableHead className="w-[380px] text-xs font-medium text-muted-foreground">
                       {t("swap.table.outgoing")}
@@ -1149,7 +1857,7 @@ function PairingReview({ mode }: { mode: PairingReviewMode }) {
                         key={key}
                         className={cn(
                           "cursor-pointer align-middle hover:bg-muted/35",
-                          conflicted ? "bg-amber-50/35 dark:bg-amber-950/20" : null,
+                          conflicted ? "bg-rose-50/40 dark:bg-rose-950/20" : null,
                           cursorKey === key ? "bg-muted/60" : null,
                         )}
                         onClick={() => setDetailCandidate(candidate)}
@@ -1164,29 +1872,11 @@ function PairingReview({ mode }: { mode: PairingReviewMode }) {
                           />
                         </TableCell>
                         <TableCell className="whitespace-normal">
-                          <ConfidenceBadge candidate={candidate} />
-                          {conflicted ? (
-                            <p
-                              className="mt-1 inline-flex items-center gap-1 text-xs text-amber-700 dark:text-amber-300"
-                              title={`${t("swap.table.conflictTitle", { count: candidate.conflict_size })}${hiddenSiblings > 0 ? t("swap.table.conflictHiddenTitle", { count: hiddenSiblings }) : ""}`}
-                            >
-                              <AlertTriangle className="size-3" />
-                              {t("swap.table.conflictShareLeg", { count: candidate.conflict_size })}
-                              {hiddenSiblings > 0 ? t("swap.table.conflictHiddenSuffix", { count: hiddenSiblings }) : ""}
-                            </p>
-                          ) : null}
-                        </TableCell>
-                        <TableCell className="whitespace-normal">
-                          <div className="text-xs text-muted-foreground">
-                            {candidate.method === "payment_hash"
-                              ? t("swap.table.methodPaymentHash")
-                              : t("swap.table.methodHeuristic")}
-                          </div>
-                          {candidate.rule_match ? (
-                            <Badge variant="outline" className="mt-1 text-[10px]">
-                              {t("swap.table.ruleBadge")}
-                            </Badge>
-                          ) : null}
+                          <SwapStatusCell
+                            candidate={candidate}
+                            conflicted={conflicted}
+                            hiddenSiblings={hiddenSiblings}
+                          />
                         </TableCell>
                         <TableCell className="whitespace-nowrap">
                           <SwapLegInline
@@ -1373,8 +2063,8 @@ function PairingReview({ mode }: { mode: PairingReviewMode }) {
                   className="grid gap-1 border-b border-border/40 p-2.5 last:border-b-0 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
                 >
                   <span className={cn("min-w-0 truncate text-xs", blurClass(hideSensitive))}>
-                    {candidate.out_asset} {formatBtc(candidate.out_amount)} →{" "}
-                    {candidate.in_asset} {formatBtc(candidate.in_amount)}
+                    {displayAssetLabel(candidate.out_asset)} {formatBtc(candidate.out_amount)} →{" "}
+                    {displayAssetLabel(candidate.in_asset)} {formatBtc(candidate.in_amount)}
                   </span>
                   <span className={cn("text-xs text-muted-foreground", blurClass(hideSensitive))}>
                     {t("swap.preview.feeLine", { fee: formatSats(candidate.swap_fee_msat) })}
@@ -1483,6 +2173,7 @@ function SwapQueueMetric({
   tone = "neutral",
   active = false,
   onClick,
+  icon,
 }: {
   label: string;
   ariaLabel?: string;
@@ -1490,6 +2181,7 @@ function SwapQueueMetric({
   tone?: "neutral" | "good" | "warning" | "alert";
   active?: boolean;
   onClick?: () => void;
+  icon?: ReactNode;
 }) {
   const toneClass = {
     neutral: "text-muted-foreground",
@@ -1505,7 +2197,8 @@ function SwapQueueMetric({
   );
   const content = (
     <>
-      <p className="text-xs font-medium text-muted-foreground">
+      <p className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+        {icon}
         {label}
       </p>
       <p className={cn("text-xl font-semibold tabular-nums", active ? "text-primary" : toneClass)}>
@@ -1589,7 +2282,7 @@ function SwapFeeText({
   candidate,
   hideSensitive,
 }: {
-  candidate: SwapCandidate;
+  candidate: { swap_fee: number; swap_fee_msat: number; out_amount_msat: number };
   hideSensitive: boolean;
 }) {
   const percent = feePercent(candidate);
@@ -1693,6 +2386,7 @@ function SwapCandidateDetailSheet({
   const { t } = useTranslation("review");
   const kind = candidate ? override.kind ?? candidate.default_kind : "manual";
   const policy = candidate ? override.policy ?? candidate.default_policy : "carrying-value";
+  const presentationType = candidate ? candidatePairType(candidate) : "transfer";
   return (
     <Sheet open={Boolean(candidate)} onOpenChange={onOpenChange}>
       <SheetContent className="w-full overflow-y-auto p-0 sm:max-w-2xl">
@@ -1701,9 +2395,7 @@ function SwapCandidateDetailSheet({
             <SheetHeader className="border-b p-4 sm:p-6">
               <SheetTitle>{t(candidateLabelKey(candidate))}</SheetTitle>
               <SheetDescription>
-                {candidate.method === "payment_hash"
-                  ? t("swap.detail.matchedByPaymentHash")
-                  : t("swap.detail.matchedByTimeAmount")}
+                {t(METHOD_LABEL_KEYS[candidate.method].matched)}
                 {" "}
                 <span className={blurClass(hideSensitive)}>
                   {t("swap.detail.delta", {
@@ -1782,9 +2474,7 @@ function SwapCandidateDetailSheet({
                 <div className="rounded-lg border bg-muted/20 p-3 text-sm">
                   <div className="font-medium">{t("swap.detail.matchRationale")}</div>
                   <p className="mt-1 text-muted-foreground">
-                    {candidate.method === "payment_hash"
-                      ? t("swap.detail.rationalePaymentHash")
-                      : t("swap.detail.rationaleHeuristic")}
+                    {t(METHOD_LABEL_KEYS[candidate.method].rationale)}
                   </p>
                   {candidate.rule_match ? (
                     <p className="mt-2 text-xs text-muted-foreground">
@@ -1822,6 +2512,11 @@ function SwapCandidateDetailSheet({
                   <p className="mt-2 text-xs text-muted-foreground">
                     {t("swap.detail.deltasNote")}
                   </p>
+                  {presentationType === "layer-transition" ? (
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      {t("swap.detail.layerTransitionOwnershipHint")}
+                    </p>
+                  ) : null}
                 </div>
               </div>
             </div>
@@ -2112,7 +2807,7 @@ function RulePredicateAssetField({ label, value, onChange }: RuleFieldProps) {
         <SelectContent>
           <SelectItem value="any">{t("swap.createRule.any")}</SelectItem>
           <SelectItem value="BTC">BTC</SelectItem>
-          <SelectItem value="LBTC">LBTC</SelectItem>
+          <SelectItem value="LBTC">BTC on Liquid (LBTC)</SelectItem>
         </SelectContent>
       </Select>
     </div>
@@ -2341,7 +3036,7 @@ interface RailBadgeProps {
 function RailBadge({ rail, asset }: RailBadgeProps) {
   const details = RAIL_DETAILS[rail];
   const railLabel = details.shortLabel.toUpperCase();
-  const assetLabel = asset.toUpperCase();
+  const assetLabel = displayAssetLabel(asset).toUpperCase();
   const labelParts = railLabel === assetLabel ? [assetLabel] : [railLabel, assetLabel];
   return (
     <span
@@ -2349,7 +3044,7 @@ function RailBadge({ rail, asset }: RailBadgeProps) {
         "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium uppercase",
         details.className,
       )}
-      title={`${details.label} ${asset}`}
+      title={`${details.label} ${displayAssetLabel(asset)}`}
     >
       {labelParts.map((part, index) => (
         <Fragment key={part}>
@@ -2361,22 +3056,56 @@ function RailBadge({ rail, asset }: RailBadgeProps) {
   );
 }
 
-interface ConfidenceBadgeProps {
-  candidate: SwapCandidate;
+function displayAssetLabel(asset: string) {
+  const normalized = asset.toUpperCase();
+  return normalized === "LBTC" || normalized === "L-BTC" ? "BTC" : normalized;
 }
 
-function ConfidenceBadge({ candidate }: ConfidenceBadgeProps) {
+interface SwapStatusCellProps {
+  candidate: SwapCandidate;
+  conflicted: boolean;
+  hiddenSiblings: number;
+}
+
+/**
+ * Fused match signal: one traffic light answering "how safe is this to pair?".
+ * Confidence and the match method encode the same thing, so they collapse into
+ * a single cell — green exact / amber strong / red conflict — with the dot
+ * carrying colour and a word carrying meaning (never colour alone). The match
+ * method and conflict detail ride the tooltip; the full rationale is in the
+ * detail sheet. The rule glyph shows only when an auto-pair rule matched.
+ */
+function SwapStatusCell({ candidate, conflicted, hiddenSiblings }: SwapStatusCellProps) {
   const { t } = useTranslation("review");
-  if (candidate.confidence === "exact") {
-    return (
-      <Badge className="bg-emerald-100 text-emerald-900 hover:bg-emerald-100 dark:bg-emerald-950/50 dark:text-emerald-100">
-        {t("swap.metric.exact")}
-      </Badge>
-    );
-  }
+  const dotClass = conflicted
+    ? "bg-rose-500"
+    : candidate.confidence === "exact"
+      ? "bg-emerald-500"
+      : "bg-amber-500";
+  const label = conflicted
+    ? t("swap.table.statusConflict")
+    : candidate.confidence === "exact"
+      ? t("swap.metric.exact")
+      : t("swap.metric.strong");
+  const labelClass = conflicted
+    ? "font-medium text-rose-700 dark:text-rose-300"
+    : "text-foreground";
+  const title = conflicted
+    ? `${t("swap.table.conflictTitle", { count: candidate.conflict_size })}${
+        hiddenSiblings > 0
+          ? t("swap.table.conflictHiddenTitle", { count: hiddenSiblings })
+          : ""
+      }`
+    : t(METHOD_LABEL_KEYS[candidate.method].matched);
   return (
-    <Badge className="bg-amber-100 text-amber-900 hover:bg-amber-100 dark:bg-amber-950/50 dark:text-amber-100">
-      {t("swap.metric.strong")}
-    </Badge>
+    <div className="flex flex-wrap items-center gap-1.5" title={title}>
+      <span className={cn("size-2 shrink-0 rounded-full", dotClass)} aria-hidden="true" />
+      <span className={cn("text-sm", labelClass)}>{label}</span>
+      {candidate.rule_match ? (
+        <Badge variant="outline" className="px-1 py-0 text-[9px] leading-tight">
+          {t("swap.table.ruleBadge")}
+        </Badge>
+      ) : null}
+    </div>
   );
 }

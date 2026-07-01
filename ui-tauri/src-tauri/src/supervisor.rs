@@ -62,6 +62,12 @@ pub struct DaemonSupervisor {
     lifecycle: Mutex<VecDeque<LifecycleRecord>>,
     next_lifecycle_id: AtomicU64,
     event_sink: SharedEventSink,
+    /// Per-request budget for non-streaming kinds. Exceeding it never kills the
+    /// daemon — it just fails the one slow request as `daemon_busy`. Read-style
+    /// calls are retryable; mutating calls are not, since they have already been
+    /// accepted on stdin and may still apply side effects later. A field (not the
+    /// bare const) so tests can shrink it.
+    invoke_timeout: Duration,
 }
 
 /// Daemon lifecycle event kept for the diagnostics screen. `detail` and
@@ -340,6 +346,7 @@ impl DaemonSupervisor {
             lifecycle: Mutex::new(VecDeque::new()),
             next_lifecycle_id: AtomicU64::new(1),
             event_sink: Arc::new(Mutex::new(None)),
+            invoke_timeout: DAEMON_INVOKE_TIMEOUT,
         }
     }
 
@@ -354,7 +361,16 @@ impl DaemonSupervisor {
             lifecycle: Mutex::new(VecDeque::new()),
             next_lifecycle_id: AtomicU64::new(1),
             event_sink: Arc::new(Mutex::new(None)),
+            invoke_timeout: DAEMON_INVOKE_TIMEOUT,
         }
+    }
+
+    /// Shrink the per-request budget so tests exercise the busy-timeout path
+    /// without waiting the production budget.
+    #[cfg(test)]
+    fn with_invoke_timeout(mut self, invoke_timeout: Duration) -> Self {
+        self.invoke_timeout = invoke_timeout;
+        self
     }
 
     #[cfg(test)]
@@ -371,6 +387,7 @@ impl DaemonSupervisor {
             lifecycle: Mutex::new(VecDeque::new()),
             next_lifecycle_id: AtomicU64::new(1),
             event_sink: Arc::new(Mutex::new(None)),
+            invoke_timeout: DAEMON_INVOKE_TIMEOUT,
         }
     }
 
@@ -554,12 +571,12 @@ impl DaemonSupervisor {
         }
 
         // For streaming kinds we use a per-record inactivity timeout so a slow
-        // model that keeps emitting tokens stays alive past the 15s
-        // total-budget. Non-streaming kinds keep the original total deadline.
+        // model that keeps emitting tokens stays alive past the total-budget.
+        // Non-streaming kinds keep the original total deadline.
         let deadline = if streaming {
             None
         } else {
-            Some(Instant::now() + DAEMON_INVOKE_TIMEOUT)
+            Some(Instant::now() + self.invoke_timeout)
         };
 
         let result = loop {
@@ -572,19 +589,36 @@ impl DaemonSupervisor {
                 Ok(Ok(response)) => response,
                 Ok(Err(error)) => break Err(error.with_stderr_tail(process.stderr_tail())),
                 Err(mpsc::RecvTimeoutError::Timeout) => {
-                    process.mark_broken();
-                    process.kill();
-                    let stderr_tail = process.stderr_tail();
-                    self.record_lifecycle("killed", "daemon_timeout", &stderr_tail, "");
-                    break Err(SupervisorError::new(
-                        "daemon_timeout",
-                        format!(
-                            "Python daemon did not answer within {} seconds",
-                            remaining.as_secs()
-                        ),
-                    )
-                    .with_stderr_tail(stderr_tail)
-                    .retryable());
+                    // A non-streaming request blew its budget. The Python daemon
+                    // dispatches requests on one serial loop, so an overdue reply
+                    // almost always means it is *busy* serving another (often
+                    // streaming) request — or doing legitimately long work like a
+                    // big RP2 rebuild — not that it is dead. A request timeout
+                    // therefore NEVER kills the shared process (killing it for a
+                    // routine poll that lands during a long sync was the root of
+                    // the supervisor kill loop). Genuine death is caught by the
+                    // stdout reader (EOF, below) and ensure_process (try_wait); a
+                    // true in-process hang can't last indefinitely because every
+                    // sync network/socket call is timeout-bounded. If the process
+                    // has already exited, surface that; otherwise fail THIS
+                    // request and leave the daemon running.
+                    //
+                    // Returning early WITHOUT unregistering is deliberate: the
+                    // eventual late response finds the (receiver-dropped) sender
+                    // and is discarded by the stdout reader's send-failure path,
+                    // rather than hitting the unknown-request_id branch.
+                    if let Ok(Some(status)) = process.try_wait() {
+                        process.mark_broken();
+                        let stderr_tail = process.stderr_tail();
+                        self.record_lifecycle("exited", &status.to_string(), &stderr_tail, "");
+                        break Err(SupervisorError::new(
+                            "daemon_exited",
+                            format!("Python daemon exited before answering: {status}"),
+                        )
+                        .with_stderr_tail(stderr_tail)
+                        .retryable());
+                    }
+                    return Err(daemon_busy_timeout(kind));
                 }
                 Err(mpsc::RecvTimeoutError::Disconnected) => {
                     process.mark_broken();
@@ -721,6 +755,65 @@ impl DaemonSupervisor {
             SupervisorError::new("daemon_unavailable", "Python daemon is unavailable")
         })
     }
+}
+
+fn daemon_busy_timeout(kind: &str) -> SupervisorError {
+    let error = SupervisorError::new(
+        "daemon_busy",
+        if timeout_is_safe_to_retry(kind) {
+            "The daemon is busy with a long-running operation. Please retry shortly."
+        } else {
+            "The daemon accepted this request but is busy with a long-running operation. Wait for it to finish before submitting it again."
+        },
+    );
+    if timeout_is_safe_to_retry(kind) {
+        error.retryable()
+    } else {
+        error
+    }
+}
+
+fn timeout_is_safe_to_retry(kind: &str) -> bool {
+    matches!(
+        kind,
+        "status"
+            | "ui.audit.evidence.summary"
+            | "ui.backends.options"
+            | "ui.backends.public_defaults"
+            | "ui.documents.list"
+            | "ui.freshness.status"
+            | "ui.logs.snapshot"
+            | "ui.next_actions"
+            | "ui.overview.snapshot"
+            | "ui.profiles.snapshot"
+            // Idempotent reads the UI polls (incl. detail-sheet history and the
+            // retry:false panels — Connection detail, Lightning, balance
+            // history) that should ride out a busy daemon during a sync rather
+            // than flash an error. None mutate (none are auto-journal kinds).
+            | "ui.activity.history"
+            | "ui.activity.stale"
+            | "ui.reports.balance_history"
+            | "ui.reports.lightning_profitability"
+            | "ui.source_funds.preview"
+            | "ui.transactions.commercial_context"
+            | "ui.transactions.history"
+            | "ui.transactions.resolve"
+            // Read-only candidate matcher. Enumerated explicitly rather than via
+            // a `.suggest` suffix because the suggestion *seeders*
+            // ui.source_funds.suggest / ui.btcpay.provenance.suggest share that
+            // suffix but INSERT/upsert + commit, so retrying them after a busy
+            // timeout could double-seed.
+            | "ui.transfers.suggest"
+            | "ui.workspace.health"
+            | "ui.workspace.overview.snapshot"
+            | "ui.wallets.preview_descriptor"
+            | "ui.wallets.detect_script_types"
+            | "ui.wallets.utxos"
+    ) || kind.ends_with(".list")
+        || kind.ends_with(".snapshot")
+        || kind.ends_with(".summary")
+        || kind.ends_with(".coverage")
+        || kind.ends_with(".quarantine")
 }
 
 impl DaemonProcess {
@@ -1140,17 +1233,23 @@ fn spawn_stdout_reader(
                             continue;
                         }
 
-                        fail_stdout_reader(
-                            &broken,
-                            &pending,
-                            &mut startup,
-                            SupervisorError::new(
-                                "daemon_request_id_mismatch",
-                                "Python daemon emitted a response for an unknown request_id",
-                            )
-                            .details(json!({ "request_id": request_id })),
+                        // No pending entry for this request_id. With non-fatal
+                        // request timeouts (daemon_busy), a caller can abandon a
+                        // request the daemon still answers later — including a
+                        // streaming request that emits SEVERAL late records (e.g.
+                        // ai.chat delta then terminal) after its receiver was
+                        // dropped. The first straggler is absorbed by the
+                        // send-failure path above (which then unregisters it), so
+                        // any further records land here; they are expected
+                        // stragglers, not a protocol desync. Drop and log them
+                        // rather than killing the daemon (matching how an event
+                        // record with no sink is handled). A genuinely unknown
+                        // record before daemon.ready is still caught above by the
+                        // `startup.is_some()` guard.
+                        eprintln!(
+                            "kassiber: dropping late daemon record for unknown request_id {request_id:?}"
                         );
-                        return;
+                        continue;
                     }
                     Err(error) => {
                         fail_stdout_reader(
@@ -1391,6 +1490,11 @@ fn handle_secret_store_operation(
 }
 
 fn secret_ref_service_account(data: &Map<String, Value>) -> Result<(&str, &str), String> {
+    let provider_name = data
+        .get("provider_name")
+        .and_then(Value::as_str)
+        .filter(|value| !value.trim().is_empty())
+        .ok_or_else(|| "secret-store bridge request missing provider_name".to_string())?;
     let service = data
         .get("service")
         .and_then(Value::as_str)
@@ -1401,6 +1505,12 @@ fn secret_ref_service_account(data: &Map<String, Value>) -> Result<(&str, &str),
         .and_then(Value::as_str)
         .filter(|value| !value.trim().is_empty())
         .ok_or_else(|| "secret-store bridge request missing account".to_string())?;
+    if account != provider_name {
+        return Err("secret-store account must match the AI provider name".to_string());
+    }
+    if service.len() != 64 || !service.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+        return Err("secret-store service is outside the Kassiber namespace".to_string());
+    }
     Ok((service, account))
 }
 
@@ -1844,7 +1954,7 @@ def emit(payload):
 sys.stderr.write("stub-daemon startup api_key=sk-stub-stderr-secret\n")
 sys.stderr.flush()
 
-emit({"kind":"daemon.ready","schema_version":1,"data":{"version":"test","supported_kinds":["slow","fast","locked","secret-get","emit-event","daemon.shutdown"]}})
+emit({"kind":"daemon.ready","schema_version":1,"data":{"version":"test","supported_kinds":["slow","fast","locked","secret-get","emit-event","daemon.shutdown","ui.overview.snapshot","ui.wallets.create"]}})
 
 def slow(request_id):
     emit({"kind":"slow.delta","schema_version":1,"request_id":request_id,"data":{"delta":{"content":"a"}}})
@@ -1861,13 +1971,24 @@ for line in sys.stdin:
         threading.Thread(target=slow, args=(request_id,), daemon=True).start()
     elif kind == "fast":
         emit({"kind":"fast","schema_version":1,"request_id":request_id,"data":{"ok":True,"pid":os.getpid()}})
+    elif kind in ("busy", "ui.overview.snapshot", "ui.wallets.create"):
+        # Read but never answer: models the single-threaded daemon being busy
+        # on another request. The reader loop stays free for later requests.
+        pass
+    elif kind == "stray":
+        # Emit a record for a request_id the supervisor never sent (a late
+        # straggler from an abandoned/timed-out request) BEFORE this request's
+        # own terminal. The supervisor must drop the stray record and still
+        # resolve this one, rather than killing the daemon.
+        emit({"kind":"ghost.delta","schema_version":1,"request_id":"ghost-1","data":{"delta":"late"}})
+        emit({"kind":"stray","schema_version":1,"request_id":request_id,"data":{"ok":True,"pid":os.getpid()}})
     elif kind == "locked":
         emit({"kind":"auth_required","schema_version":1,"request_id":request_id,"data":{"scope":"unlock_database"}})
     elif kind == "emit-event":
         emit({"kind":"ui.freshness.background","schema_version":1,"event":True,"data":{"enqueued":[],"completed":[]}})
         emit({"kind":"emit-event","schema_version":1,"request_id":request_id,"data":{"ok":True}})
     elif kind == "secret-get":
-        emit({"kind":"supervisor.ai_secret_store.request","schema_version":1,"request_id":"secret-control-1","data":{"op":"get","provider_name":"remote","store_id":"__TEST_STORE_ID__","service":"service-hash","account":"remote"}})
+        emit({"kind":"supervisor.ai_secret_store.request","schema_version":1,"request_id":"secret-control-1","data":{"op":"get","provider_name":"remote","store_id":"__TEST_STORE_ID__","service":"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef","account":"remote"}})
         control = json.loads(sys.stdin.readline())
         emit({"kind":"secret-get","schema_version":1,"request_id":request_id,"data":{"control_kind":control.get("kind"),"state":control.get("data",{}).get("state"),"secret":control.get("data",{}).get("secret")}})
     elif kind == "daemon.shutdown":
@@ -1940,6 +2061,165 @@ for line in sys.stdin:
             |_| {},
         );
         let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn busy_non_streaming_request_does_not_kill_a_live_daemon() {
+        let (dir, script) = write_stub_daemon();
+        let process = DaemonProcess::spawn_command(DaemonCommand {
+            program: script,
+            args: Vec::new(),
+            cwd: dir.clone(),
+            source: "env_python",
+        })
+        .expect("spawn stub daemon");
+        // Short invoke budget so the busy request times out fast.
+        let supervisor = DaemonSupervisor::new_with_process(process)
+            .with_invoke_timeout(Duration::from_millis(200));
+
+        let warm = supervisor
+            .invoke_inner("fast", None, false, Some(json!("warm-1")), |_| {})
+            .expect("warm-up response");
+        let pid_before = response_pid(&warm);
+
+        // A non-streaming request the busy daemon never answers must fail
+        // retryably as daemon_busy WITHOUT killing the process.
+        let busy = supervisor
+            .invoke_inner(
+                "ui.overview.snapshot",
+                None,
+                false,
+                Some(json!("busy-1")),
+                |_| {},
+            )
+            .expect_err("busy request should time out");
+        assert_eq!(busy.code, "daemon_busy");
+        assert!(busy.retryable);
+
+        // The daemon must still answer, on the SAME process (no respawn) — the
+        // late/never response to busy-1 must not have taken the daemon down.
+        let after = supervisor
+            .invoke_inner("fast", None, false, Some(json!("after-1")), |_| {})
+            .expect("daemon still answers after a busy timeout");
+        assert_eq!(response_pid(&after), pid_before);
+
+        let _ = supervisor.invoke_inner(
+            "daemon.shutdown",
+            None,
+            false,
+            Some(json!("shutdown-busy-1")),
+            |_| {},
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn queued_mutating_timeout_is_not_reported_retryable() {
+        let (dir, script) = write_stub_daemon();
+        let process = DaemonProcess::spawn_command(DaemonCommand {
+            program: script,
+            args: Vec::new(),
+            cwd: dir.clone(),
+            source: "env_python",
+        })
+        .expect("spawn stub daemon");
+        let supervisor = DaemonSupervisor::new_with_process(process)
+            .with_invoke_timeout(Duration::from_millis(200));
+
+        let busy = supervisor
+            .invoke_inner(
+                "ui.wallets.create",
+                Some(json!({"name":"Queued wallet"})),
+                false,
+                Some(json!("create-1")),
+                |_| {},
+            )
+            .expect_err("queued mutation should time out");
+        assert_eq!(busy.code, "daemon_busy");
+        assert!(!busy.retryable);
+        assert!(
+            busy.message.contains("accepted this request"),
+            "message should warn the request may still complete"
+        );
+
+        let after = supervisor
+            .invoke_inner("fast", None, false, Some(json!("after-create")), |_| {})
+            .expect("daemon still answers after queued mutation timeout");
+        assert_eq!(after.get("kind").and_then(Value::as_str), Some("fast"));
+
+        let _ = supervisor.invoke_inner(
+            "daemon.shutdown",
+            None,
+            false,
+            Some(json!("shutdown-mutation-timeout")),
+            |_| {},
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn late_record_for_unknown_request_id_does_not_kill_daemon() {
+        // A streaming request that times out (daemon_busy) is left registered;
+        // its first late straggler is absorbed by the send-failure path, but a
+        // SECOND late record (e.g. ai.chat delta then terminal) lands as an
+        // unknown request_id. The daemon must drop it, not die. The stub's
+        // "stray" kind reproduces an unknown-request_id record arriving before a
+        // valid terminal in a single request.
+        let (dir, script) = write_stub_daemon();
+        let process = DaemonProcess::spawn_command(DaemonCommand {
+            program: script,
+            args: Vec::new(),
+            cwd: dir.clone(),
+            source: "env_python",
+        })
+        .expect("spawn stub daemon");
+        let supervisor = DaemonSupervisor::new_with_process(process);
+
+        let stray = supervisor
+            .invoke_inner("stray", None, false, Some(json!("stray-1")), |_| {})
+            .expect("stray request resolves despite the unknown-request_id record");
+        assert_eq!(stray.get("kind").and_then(Value::as_str), Some("stray"));
+        let pid = response_pid(&stray);
+
+        // Daemon must still be alive on the SAME process (the stray record must
+        // not have marked it broken / killed it).
+        let after = supervisor
+            .invoke_inner("fast", None, false, Some(json!("after-stray")), |_| {})
+            .expect("daemon survives an unknown-request_id record");
+        assert_eq!(response_pid(&after), pid);
+
+        let _ = supervisor.invoke_inner(
+            "daemon.shutdown",
+            None,
+            false,
+            Some(json!("shutdown-stray")),
+            |_| {},
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn timeout_retryability_excludes_mutating_suggest_seeders() {
+        // Idempotent reads ride out a busy daemon; mutating kinds must not be
+        // reported retryable, or a resubmit could double-apply. The suggestion
+        // *seeders* share the `.suggest` suffix with the read-only matcher but
+        // INSERT/upsert + commit, so they must be classified as mutating.
+        assert!(timeout_is_safe_to_retry("ui.transfers.suggest"));
+        assert!(timeout_is_safe_to_retry("ui.overview.snapshot"));
+        assert!(timeout_is_safe_to_retry("ui.transactions.list"));
+        assert!(timeout_is_safe_to_retry("ui.transactions.resolve"));
+        assert!(timeout_is_safe_to_retry("ui.transactions.history"));
+        assert!(timeout_is_safe_to_retry("ui.activity.history"));
+        assert!(timeout_is_safe_to_retry("ui.journals.quarantine"));
+        assert!(!timeout_is_safe_to_retry("ui.source_funds.suggest"));
+        assert!(!timeout_is_safe_to_retry("ui.btcpay.provenance.suggest"));
+        assert!(!timeout_is_safe_to_retry("ui.wallets.create"));
+        assert!(!timeout_is_safe_to_retry("ui.transactions.metadata.update"));
+        // Mutating kinds the UI calls must never be retryable.
+        assert!(!timeout_is_safe_to_retry("ui.transactions.history.revert"));
     }
 
     #[test]
@@ -2116,7 +2396,11 @@ for line in sys.stdin:
             },
         );
         mock_store
-            .set("service-hash", "remote", b"bridge-secret")
+            .set(
+                "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+                "remote",
+                b"bridge-secret",
+            )
             .expect("seed mock store");
         let secret_store = Arc::new(mock_store);
         let process = DaemonProcess::spawn_command_with_secret_store(
@@ -2351,6 +2635,7 @@ for line in sys.stdin:
             lifecycle: Mutex::new(VecDeque::new()),
             next_lifecycle_id: AtomicU64::new(1),
             event_sink: Arc::new(Mutex::new(None)),
+            invoke_timeout: DAEMON_INVOKE_TIMEOUT,
         };
 
         let error = supervisor

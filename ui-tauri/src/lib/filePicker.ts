@@ -27,6 +27,11 @@ export interface FilePickerOptions {
   defaultPath?: string;
 }
 
+export interface PickedFileWithContents {
+  path: string;
+  contentsBase64: string;
+}
+
 const FILE_PICKER_BRIDGE_PATH = "/__kassiber__/pick-file";
 
 const isTauriRuntime =
@@ -39,7 +44,12 @@ export const isFilePickerAvailable = isTauriRuntime || isDevBridgeRuntime;
 
 async function callFilePickerBridge(
   body: Record<string, unknown>,
-): Promise<{ path?: unknown; paths?: unknown; error?: unknown }> {
+): Promise<{
+  path?: unknown;
+  paths?: unknown;
+  contentsBase64?: unknown;
+  error?: unknown;
+}> {
   const response = await fetch(FILE_PICKER_BRIDGE_PATH, {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -53,6 +63,7 @@ async function callFilePickerBridge(
   return (await response.json()) as {
     path?: unknown;
     paths?: unknown;
+    contentsBase64?: unknown;
     error?: unknown;
   };
 }
@@ -65,6 +76,24 @@ async function pickFileViaDevBridge(
     throw new Error(String(payload.error));
   }
   return typeof payload.path === "string" && payload.path ? payload.path : null;
+}
+
+async function pickFileWithContentsViaDevBridge(
+  options: FilePickerOptions,
+): Promise<PickedFileWithContents | null> {
+  const payload = await callFilePickerBridge({
+    ...options,
+    multiple: false,
+    includeContentsBase64: true,
+  });
+  if (payload.error) {
+    throw new Error(String(payload.error));
+  }
+  return typeof payload.path === "string" &&
+    payload.path &&
+    typeof payload.contentsBase64 === "string"
+    ? { path: payload.path, contentsBase64: payload.contentsBase64 }
+    : null;
 }
 
 async function pickFilesViaDevBridge(
@@ -96,6 +125,22 @@ export async function pickFile(
   });
   if (typeof selection === "string") return selection;
   return null;
+}
+
+export async function pickFileWithContentsBase64(
+  options: FilePickerOptions = {},
+): Promise<PickedFileWithContents | null> {
+  if (!isFilePickerAvailable) return null;
+  if (isDevBridgeRuntime) {
+    return pickFileWithContentsViaDevBridge(options);
+  }
+  const selected = await pickFile(options);
+  if (!selected) return null;
+  const { invoke } = await import("@tauri-apps/api/core");
+  const contentsBase64 = await invoke<string>("read_ledger_preview_file_base64", {
+    path: selected,
+  });
+  return { path: selected, contentsBase64 };
 }
 
 /**

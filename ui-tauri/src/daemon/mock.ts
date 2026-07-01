@@ -16,6 +16,7 @@ import type {
 import { DEFAULT_OPEN_COST_SAT } from "@/lib/lightning";
 import { accountMatchesLabel } from "@/lib/connectionTransactions";
 import { MOCK_PROFILES } from "@/mocks/profiles";
+import { MOCK_TRANSACTION_GRAPHS } from "@/mocks/transactions";
 import type {
   ProfileGainsAlgorithm,
   ProfileTaxCountry,
@@ -24,6 +25,21 @@ import type {
 import { mockWorkspaceOverviewSnapshot } from "@/mocks/workspaceOverview";
 import { buildExitTaxFixture, type ExitTaxDestination } from "@/mocks/exitTax";
 import { MOCK_AI_CHAT_STREAM, fixtures } from "./fixtures";
+
+// Mirror the daemon's `_tax_policy_label` / `_human_tax_method`: an Austrian
+// book reflects its ACTUAL stored method, so an AT book on FIFO reads as
+// "Austria - FIFO", not the moving-average label "ATM".
+function mockTaxPolicyLabel(
+  country: ProfileTaxCountry,
+  algorithm: ProfileGainsAlgorithm,
+  fiat: string,
+): string {
+  if (country === "at") {
+    const method = algorithm === "MOVING_AVERAGE_AT" ? "ATM" : algorithm;
+    return `Austria - ${method} - ${fiat}`;
+  }
+  return `Generic - ${algorithm} - ${fiat}`;
+}
 
 interface MockChatSession {
   id: string;
@@ -448,6 +464,9 @@ type MockConnection = {
   kind?: string;
   syncMode?: string;
   syncSource?: string;
+  chain?: string;
+  network?: string;
+  paymentMethodId?: string;
   gap?: number;
   /** balance in BTC (float) — present on overview-snapshot connection rows. */
   balance?: number;
@@ -511,6 +530,17 @@ let mockBackendSettingsRows: MockBackendSettingsRow[] = [
     source: "mock",
     has_url: true,
     display_name: "Blockstream Liquid Electrum",
+  },
+  {
+    name: "fulcrum-onion-long",
+    kind: "electrum",
+    chain: "bitcoin",
+    network: "main",
+    url: "tcp://abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcd.onion:50001",
+    source: "mock",
+    has_url: true,
+    display_name: "Very Long Onion Fulcrum",
+    tor_proxy: "127.0.0.1:9050",
   },
 ];
 
@@ -773,6 +803,52 @@ export const mockDaemon: DaemonTransport = {
           history: mockChatHistoryMode,
           history_enabled: mockChatHistoryEnabled(),
           database_encrypted: true,
+        } as T,
+      };
+    }
+
+    if (req.kind === "ui.wallets.ledger_preview") {
+      return {
+        kind: "ui.wallets.ledger_preview",
+        schema_version: 1,
+        request_id: req.request_id,
+        data: {
+          rows_read: 3,
+          mapped: 2,
+          errors: 1,
+          truncated: false,
+          confident: true,
+          detected: [
+            { column: "Date", field: "date" },
+            { column: "Received BTC", field: "received" },
+            { column: "Sent BTC", field: "sent" },
+            { column: "Price", field: "fiat_rate" },
+          ],
+          problems: [{ row: 3, message: "Ledger row 3: unknown Type 'Frobnicate'" }],
+          preview: [
+            {
+              occurred_at: "2026-01-15",
+              direction: "inbound",
+              asset: "BTC",
+              amount: "0.05000000",
+              fee: "0",
+              kind: "buy",
+              fiat_currency: "EUR",
+              fiat_value: "3000.00",
+              description: "Bought",
+            },
+            {
+              occurred_at: "2026-02-10",
+              direction: "outbound",
+              asset: "BTC",
+              amount: "0.01000000",
+              fee: "0.00001000",
+              kind: "sell",
+              fiat_currency: "EUR",
+              fiat_value: "720.00",
+              description: "Sold",
+            },
+          ],
         } as T,
       };
     }
@@ -1405,9 +1481,11 @@ export const mockDaemon: DaemonTransport = {
       const rawGainsAlgorithm =
         typeof args.gains_algorithm === "string" ? args.gains_algorithm : "";
       const gainsAlgorithm: ProfileGainsAlgorithm =
+        rawGainsAlgorithm === "FIFO" ||
         rawGainsAlgorithm === "LIFO" ||
         rawGainsAlgorithm === "HIFO" ||
         rawGainsAlgorithm === "LOFO" ||
+        rawGainsAlgorithm === "MOVING_AVERAGE" ||
         rawGainsAlgorithm === "MOVING_AVERAGE_AT"
           ? rawGainsAlgorithm
           : taxCountry === "at"
@@ -1424,7 +1502,9 @@ export const mockDaemon: DaemonTransport = {
             id: `mock-profile-${Date.now()}`,
             name: profileName,
             taxPolicy:
-              taxCountry === "at" ? "Austria - ATM - EUR" : "Generic defaults",
+              taxCountry === "at"
+                ? mockTaxPolicyLabel("at", gainsAlgorithm, fiatCurrency)
+                : "Generic defaults",
             fiatCurrency,
             taxCountry,
             taxLongTermDays,
@@ -1470,6 +1550,8 @@ export const mockDaemon: DaemonTransport = {
         workspace_id?: unknown;
         label?: unknown;
         source_profile_id?: unknown;
+        tax_country?: unknown;
+        gains_algorithm?: unknown;
       };
       const workspaceId =
         typeof args.workspace_id === "string" ? args.workspace_id : "";
@@ -1521,29 +1603,57 @@ export const mockDaemon: DaemonTransport = {
         };
       }
       const firstProfile = workspace.profiles[0];
+      // The "New book" dialog can pick a region + method explicitly; copying from
+      // a source inherits its settings verbatim instead. Mirror the real daemon.
+      const requestedCountry: ProfileTaxCountry | null =
+        args.tax_country === "at"
+          ? "at"
+          : args.tax_country === "generic"
+            ? "generic"
+            : null;
+      const requestedAlgorithm =
+        typeof args.gains_algorithm === "string" && args.gains_algorithm.trim()
+          ? (args.gains_algorithm.trim() as ProfileGainsAlgorithm)
+          : null;
+      const baseCountry: ProfileTaxCountry =
+        sourceProfile?.taxCountry ??
+        firstProfile?.taxCountry ??
+        (workspace.jurisdiction === "Austria" ? "at" : "generic");
+      const nextCountry: ProfileTaxCountry = sourceProfile
+        ? baseCountry
+        : (requestedCountry ?? baseCountry);
+      const baseAlgorithm: ProfileGainsAlgorithm =
+        sourceProfile?.gainsAlgorithm ??
+        firstProfile?.gainsAlgorithm ??
+        (baseCountry === "at" ? "MOVING_AVERAGE_AT" : "FIFO");
+      // Austrian books default to moving-average but accept any requested
+      // method (no coercion); copy-from-source inherits the source's method.
+      const nextAlgorithm: ProfileGainsAlgorithm = sourceProfile
+        ? baseAlgorithm
+        : (requestedAlgorithm ??
+          (nextCountry === "at" ? "MOVING_AVERAGE_AT" : baseAlgorithm));
+      const nextFiat =
+        nextCountry === "at"
+          ? "EUR"
+          : (sourceProfile?.fiatCurrency ??
+            firstProfile?.fiatCurrency ??
+            workspace.currency);
+      const nextLongTermDays =
+        nextCountry === "at"
+          ? 0
+          : !sourceProfile && nextCountry !== baseCountry
+            ? 365
+            : (sourceProfile?.taxLongTermDays ??
+              firstProfile?.taxLongTermDays ??
+              365);
       const profile = {
         id: `mock-profile-${Date.now()}`,
         name: label,
-        taxPolicy:
-          sourceProfile?.taxPolicy ??
-          firstProfile?.taxPolicy ??
-          `${workspace.jurisdiction} defaults`,
-        fiatCurrency:
-          sourceProfile?.fiatCurrency ??
-          firstProfile?.fiatCurrency ??
-          workspace.currency,
-        taxCountry:
-          sourceProfile?.taxCountry ??
-          firstProfile?.taxCountry ??
-          (workspace.jurisdiction === "Austria" ? "at" : "generic"),
-        taxLongTermDays:
-          sourceProfile?.taxLongTermDays ??
-          firstProfile?.taxLongTermDays ??
-          (workspace.jurisdiction === "Austria" ? 0 : 365),
-        gainsAlgorithm:
-          sourceProfile?.gainsAlgorithm ??
-          firstProfile?.gainsAlgorithm ??
-          (workspace.jurisdiction === "Austria" ? "MOVING_AVERAGE_AT" : "FIFO"),
+        taxPolicy: mockTaxPolicyLabel(nextCountry, nextAlgorithm, nextFiat),
+        fiatCurrency: nextFiat,
+        taxCountry: nextCountry,
+        taxLongTermDays: nextLongTermDays,
+        gainsAlgorithm: nextAlgorithm,
         accounts: 1,
         wallets: 0,
         lastOpened: "Just now",
@@ -1663,6 +1773,7 @@ export const mockDaemon: DaemonTransport = {
       const args = (req.args ?? {}) as {
         profile_id?: unknown;
         gains_algorithm?: unknown;
+        tax_country?: unknown;
       };
       const profileId =
         typeof args.profile_id === "string" ? args.profile_id : "";
@@ -1702,19 +1813,30 @@ export const mockDaemon: DaemonTransport = {
           },
         };
       }
-      // Mirror the daemon's per-country enforcement: Austrian books are always
-      // coerced to moving-average regardless of the requested method.
-      const nextAlgorithm: ProfileGainsAlgorithm =
-        profile.taxCountry === "at"
-          ? "MOVING_AVERAGE_AT"
-          : (requested as ProfileGainsAlgorithm);
+      // Region is optional: the book-settings dialog only sends it on an
+      // explicit switch, always paired with a region-valid method.
+      const nextCountry: ProfileTaxCountry =
+        args.tax_country === "at"
+          ? "at"
+          : args.tax_country === "generic"
+            ? "generic"
+            : (profile.taxCountry ?? "generic");
+      // No per-country coercion: Austrian books accept any requested method
+      // (moving-average remains the default the dialog offers).
+      const nextAlgorithm = requested as ProfileGainsAlgorithm;
+      const nextTaxPolicy = mockTaxPolicyLabel(nextCountry, nextAlgorithm, "EUR");
       mockProfilesSnapshot = {
         ...mockProfilesSnapshot,
         workspaces: mockProfilesSnapshot.workspaces.map((candidate) => ({
           ...candidate,
           profiles: candidate.profiles.map((existing) =>
             existing.id === profileId
-              ? { ...existing, gainsAlgorithm: nextAlgorithm }
+              ? {
+                  ...existing,
+                  gainsAlgorithm: nextAlgorithm,
+                  taxCountry: nextCountry,
+                  taxPolicy: nextTaxPolicy,
+                }
               : existing,
           ),
         })),
@@ -1951,18 +2073,32 @@ export const mockDaemon: DaemonTransport = {
         };
       }
       const overview = mockOverviewSnapshot();
+      // A descriptor / xpub wallet (incl. multi-script xpub) is a backend-synced
+      // wallet: surface its gap limit + descriptor sync mode, and start at zero
+      // transactions so the empty recent-tx state and the count badge agree.
+      const isDescriptorKind = kind === "descriptor" || kind === "xpub";
       const connection = {
         id: `mock-wallet-${Date.now()}`,
         label,
         kind,
-        ...(typeof args.gap_limit === "number" ? { gap: args.gap_limit } : {}),
+        last: "just now",
+        balance: 0,
+        status: "idle",
+        transactionCount: 0,
+        ...(typeof args.gap_limit === "number"
+          ? { gap: args.gap_limit }
+          : isDescriptorKind
+            ? { gap: 40 }
+            : {}),
         ...(sourceFormat
           ? {
               syncMode: "file_import",
               syncSource: sourceFormat,
               sourceFormat,
             }
-          : {}),
+          : isDescriptorKind
+            ? { syncMode: "backend_descriptor" }
+            : {}),
       };
       overview.connections = [...overview.connections, connection];
       return {
@@ -2055,6 +2191,9 @@ export const mockDaemon: DaemonTransport = {
         kind: "custom",
         syncMode: "btcpay",
         syncSource: "btcpay",
+        paymentMethodId,
+        chain: paymentMethodId.includes("LBTC") ? "liquid" : "bitcoin",
+        network: paymentMethodId.includes("LBTC") ? "liquidv1" : "main",
       }));
       overview.connections = [...overview.connections, ...connections];
       return {
@@ -2137,6 +2276,8 @@ export const mockDaemon: DaemonTransport = {
         kind: "bullbitcoin",
         syncMode: "file_import",
         syncSource: "bullbitcoin_wallet_csv",
+        chain: network === "liquid" ? "liquid" : "bitcoin",
+        network: network === "liquid" ? "liquidv1" : network,
       }));
       overview.connections = [...overview.connections, ...connections];
       return {
@@ -3022,6 +3163,46 @@ export const mockDaemon: DaemonTransport = {
       };
     }
 
+    if (req.kind === "ui.wallets.detect_script_types") {
+      const args = (req.args ?? {}) as { wallet_material?: unknown };
+      const material =
+        typeof args.wallet_material === "string"
+          ? args.wallet_material.trim()
+          : "";
+      if (!material.startsWith("xpub") && !material.startsWith("tpub")) {
+        return {
+          kind: "error",
+          schema_version: 1,
+          request_id: req.request_id,
+          error: {
+            code: "validation",
+            message: "Script-type detection only applies to a bare xpub/tpub",
+            retryable: false,
+          },
+        };
+      }
+      // Mock a mixed wallet: history on Native SegWit + Taproot, none on the
+      // legacy/nested chains. Lets the add flow exercise the multi-active path.
+      const detected = [
+        { script_type: "p2pkh", has_history: false },
+        { script_type: "p2sh-p2wpkh", has_history: false },
+        { script_type: "p2wpkh", has_history: true },
+        { script_type: "p2tr", has_history: true },
+      ];
+      return {
+        kind: "ui.wallets.detect_script_types",
+        schema_version: 1,
+        request_id: req.request_id,
+        data: {
+          probed: true,
+          detected,
+          active: ["p2wpkh", "p2tr"],
+          fallback_used: false,
+          reason: null,
+        } as T,
+      };
+    }
+
     if (req.kind === "ui.connections.btcpay.test") {
       const args = (req.args ?? {}) as {
         backend?: unknown;
@@ -3342,8 +3523,9 @@ export const mockDaemon: DaemonTransport = {
     }
 
     if (req.kind === "ui.backends.http.test") {
-      const args = (req.args ?? {}) as { url?: unknown };
+      const args = (req.args ?? {}) as { url?: unknown; proxy?: unknown };
       const url = typeof args.url === "string" ? args.url.trim() : "";
+      const proxy = typeof args.proxy === "string" ? args.proxy.trim() : "";
       if (!url) {
         return {
           kind: "error",
@@ -3367,6 +3549,7 @@ export const mockDaemon: DaemonTransport = {
           logs: [
             `Preview mode: simulated HTTP test for ${url}`,
             "No network request was made.",
+            proxy ? `Proxy: ${proxy}.` : "Proxy: disabled.",
             "Simulated response: HTTP 200 OK",
             "Simulated content-type: application/json",
             "Simulated body: 256 bytes sampled",
@@ -3874,6 +4057,82 @@ export const mockDaemon: DaemonTransport = {
           data: { ...base, txs, nextCursor: null, hasMore: false } as T,
         };
       }
+    }
+
+    if (req.kind === "ui.source_funds.preview") {
+      // Echo target_amount / reveal_mode so the planned-sale amount field has a
+      // visible effect in the mock preview (the real daemon recomputes the
+      // report from these args).
+      const base = fixtures["ui.source_funds.preview"] as Record<string, unknown>;
+      const reqArgs = (req.args ?? {}) as {
+        target_amount?: unknown;
+        reveal_mode?: unknown;
+        report_options?: { reveal_overrides?: Record<string, string> };
+      };
+      const parsedAmount =
+        typeof reqArgs.target_amount === "number"
+          ? reqArgs.target_amount
+          : typeof reqArgs.target_amount === "string" && reqArgs.target_amount.trim()
+            ? Number(reqArgs.target_amount)
+            : null;
+      const clone = structuredClone(base) as Record<string, unknown>;
+      if (parsedAmount != null && Number.isFinite(parsedAmount) && parsedAmount > 0) {
+        clone.target = {
+          ...(clone.target as Record<string, unknown>),
+          required_amount: parsedAmount,
+        };
+        clone.overview = {
+          ...(clone.overview as Record<string, unknown>),
+          target_amount: parsedAmount,
+        };
+      }
+      if (typeof reqArgs.reveal_mode === "string" && reqArgs.reveal_mode) {
+        clone.reveal_mode = reqArgs.reveal_mode;
+      }
+      // Apply per-node reveal overrides so the disclosure preview flips live.
+      const overrides = reqArgs.report_options?.reveal_overrides ?? {};
+      if (Object.keys(overrides).length > 0) {
+        const graph = clone.graph as { nodes?: Record<string, unknown>[] } | undefined;
+        const hidden = new Set<string>();
+        for (const node of graph?.nodes ?? []) {
+          const id = String(node.transaction_id ?? "");
+          if (overrides[id] === "hide") {
+            if (node.external_id) hidden.add(String(node.external_id));
+            node.external_id = "";
+          }
+        }
+        if (hidden.size > 0) {
+          const preview = clone.disclosure_preview as
+            | { txids?: string[] }
+            | undefined;
+          if (preview && Array.isArray(preview.txids)) {
+            preview.txids = preview.txids.filter((txid) => !hidden.has(txid));
+          }
+        }
+      }
+      return {
+        kind: req.kind,
+        schema_version: 1,
+        request_id: req.request_id,
+        data: clone as T,
+      };
+    }
+
+    if (req.kind === "ui.transactions.graph") {
+      const args = (req.args ?? {}) as { transaction?: unknown };
+      const transactionId =
+        typeof args.transaction === "string" && args.transaction.trim()
+          ? args.transaction.trim()
+          : "tx19";
+      const graph =
+        MOCK_TRANSACTION_GRAPHS[transactionId] ??
+        MOCK_TRANSACTION_GRAPHS.tx19;
+      return {
+        kind: "ui.transactions.graph",
+        schema_version: 1,
+        request_id: req.request_id,
+        data: graph as T,
+      };
     }
 
     const fixture = fixtures[req.kind];

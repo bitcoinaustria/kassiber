@@ -2,16 +2,47 @@
   "swap": {
     "tabs": {
       "swaps": "Swaps",
-      "transfers": "Transfers"
+      "transfers": "Bitcoin moves"
     },
     "queueLabel": "Review queue",
     "page": {
       "swapsTitle": "Swap candidates",
       "transfersTitle": "Transfer candidates",
-      "swapsDescription": "Review likely Lightning, Liquid, and on-chain legs before pairing them as swaps.",
-      "transfersDescription": "Review likely wallet-to-wallet moves before pairing them as transfers.",
-      "swapsEmpty": "No unpaired swap candidates. Once likely cross-asset or cross-rail legs show up, they will appear here.",
-      "transfersEmpty": "No unpaired transfer candidates. Once likely same-asset wallet moves show up, they will appear here."
+      "swapsDescription": "Review likely non-Bitcoin asset swaps before pairing them as taxable swaps.",
+      "transfersDescription": "Review wallet-to-wallet transfers and Bitcoin swaps across Lightning, Liquid, and on-chain rails.",
+      "swapsEmpty": "No unpaired asset-swap candidates. If non-Bitcoin swaps show up later, they will appear here.",
+      "transfersEmpty": "No unpaired Bitcoin movement candidates. Wallet transfers, Boltz swaps, pegs, and refunds show up here."
+    },
+    "paired": {
+      "label": "Paired",
+      "backToReview": "Back to review",
+      "swapsTitle": "Paired swaps",
+      "transfersTitle": "Paired transfers",
+      "swapsDescription": "Non-Bitcoin asset swaps you've already paired. Open one to change its kind or policy, or unpair it.",
+      "transfersDescription": "Wallet moves and Bitcoin swaps you've already paired with carrying-value treatment. Open one to change its kind or policy, or unpair it.",
+      "swapsEmpty": "No paired swaps yet. Swaps you confirm from the review queue show up here.",
+      "transfersEmpty": "No paired transfers yet. Transfers you confirm from the review queue show up here.",
+      "loading": "Loading paired pairs…",
+      "loadFailed": "Failed to load paired pairs: {{error}}",
+      "pairing": "Pairing",
+      "count_one": "{{count}} pair",
+      "count_other": "{{count}} pairs",
+      "source": "Paired via",
+      "sourceManual": "Manual",
+      "sourceBulkExact": "Bulk · exact",
+      "sourceBulkSelected": "Bulk · selected",
+      "sourceRuleAuto": "Auto-rule",
+      "created": "Paired on",
+      "notes": "Notes",
+      "noNotes": "—",
+      "edit": "Edit pairing",
+      "sameAssetTaxableHint": "Same-asset transfers stay carrying-value — taxable isn't available.",
+      "unpair": "Unpair",
+      "rowMenuAria": "Open actions for pair {{id}}",
+      "save": "Save changes",
+      "unpairTitle": "Unpair these transactions?",
+      "unpairBody": "The two legs go back to being unpaired and reappear in the review queue. Journal and tax deltas are recomputed on the next journal reprocess.",
+      "unpairConfirm": "Unpair"
     },
     "savedView": {
       "deleteAria": "Delete view {{name}}"
@@ -25,6 +56,8 @@
       "exact": "Exact",
       "strong": "Strong",
       "conflicts": "Conflicts",
+      "history": "History",
+      "historyAria": "View paired history",
       "showAllAria": "Show all {{label}}",
       "filterAria": "Filter {{label}}"
     },
@@ -44,7 +77,8 @@
     "method": {
       "any": "Any method",
       "paymentHash": "Payment hash",
-      "heuristic": "Time + amount"
+      "heuristic": "Time + amount",
+      "htlcRefund": "Refund link"
     },
     "route": {
       "any": "Any route",
@@ -66,19 +100,15 @@
     "table": {
       "loading": "Loading candidates…",
       "loadFailed": "Failed to load candidates: {{error}}",
-      "confidence": "Confidence",
-      "method": "Method",
+      "status": "Status",
+      "statusConflict": "Conflict",
       "outgoing": "Outgoing",
       "incoming": "Incoming",
       "feeDelta": "Fee delta",
-      "methodPaymentHash": "payment hash",
-      "methodHeuristic": "time + amount",
       "ruleBadge": "Rule",
       "selectAria": "Select candidate",
       "conflictTitle": "One of these transactions appears in {{count}} possible matches. Open the row to pick the right one — pairing or dismissing resolves the others.",
-      "conflictHiddenTitle": " {{count}} alternative match(es) are hidden by the current tab or filters.",
-      "conflictShareLeg": "{{count}} matches share a leg",
-      "conflictHiddenSuffix": " ({{count}} hidden)"
+      "conflictHiddenTitle": " {{count}} alternative match(es) are hidden by the current tab or filters."
     },
     "bulk": {
       "selected": "{{count}} selected",
@@ -116,9 +146,11 @@
     },
     "detail": {
       "candidateLabelTransfer": "Transfer candidate",
+      "candidateLabelLayerTransition": "Bitcoin swap candidate",
       "candidateLabelSwap": "Swap candidate",
       "matchedByPaymentHash": "Matched by payment hash.",
       "matchedByTimeAmount": "Matched by time and amount.",
+      "matchedByRefundLink": "Matched by HTLC refund link.",
       "delta": "Delta {{delta}} ({{percent}}%).",
       "outgoing": "Outgoing",
       "incoming": "Incoming",
@@ -127,6 +159,7 @@
       "matchRationale": "Match rationale",
       "rationalePaymentHash": "Both legs share the same Lightning payment hash.",
       "rationaleHeuristic": "The legs are close in time and amount after accounting for the fee delta.",
+      "rationaleHtlcRefund": "The inbound refund spends the outbound's on-chain HTLC funding output, a deterministic link even within one wallet.",
       "autoPairRoute": "Auto-pair route: {{rule}}",
       "conflictNote_one": "One of these transactions also appears in {{count}} other possible match (it may be listed under the other tab or filtered out). Bulk actions skip it; pair the correct match here or dismiss the wrong ones to resolve the conflict.",
       "conflictNote_other": "One of these transactions also appears in {{count}} other possible matches (it may be listed under the other tab or filtered out). Bulk actions skip it; pair the correct match here or dismiss the wrong ones to resolve the conflict.",
@@ -134,8 +167,10 @@
       "pairKind": "Pair kind",
       "feeLine": "{{fee}} · {{percent}}%",
       "transferFee": "Transfer fee",
+      "layerTransitionFee": "Bitcoin swap fee",
       "swapFee": "Swap fee",
       "deltasNote": "Journal and tax deltas are computed on the next journal reprocess.",
+      "layerTransitionOwnershipHint": "Pair a Bitcoin swap only when both legs are yours. If it paid someone else or received from someone else, leave it unpaired as a payment or receipt.",
       "wallet": "Wallet",
       "amount": "Amount",
       "occurred": "Occurred",
@@ -143,7 +178,7 @@
     },
     "saveDialog": {
       "title": "Save current filter as a view",
-      "description": "The active confidence, method, and asset-pair filters are saved verbatim. Pick a short name; the chip appears at the top of the queue for one-click recall.",
+      "description": "The active confidence, method, and route filters are saved verbatim. Pick a short name; the chip appears at the top of the queue for one-click recall.",
       "nameLabel": "View name",
       "namePlaceholder": "e.g. Boltz pegouts"
     },
@@ -311,9 +346,9 @@
       "previewIssue": "Preview issue description",
       "bundleMode": "Bundle mode",
       "highSignalTitle": "High-signal",
-      "highSignalDescription": "Keeps amounts, addresses, txids, paths, labels, URLs, and error text readable.",
+      "highSignalDescription": "Keeps addresses, paths, labels, URLs, and error text readable. Txids and amounts always become stable pseudonyms (amounts keep a coarse magnitude) — never the raw value.",
       "publicSafeTitle": "Public-safe",
-      "publicSafeDescription": "Masks operational fields and exact amounts after stripping wallet and credential material.",
+      "publicSafeDescription": "Masks operational fields after stripping wallet and credential material. Txids and amounts become stable pseudonyms with no magnitude.",
       "preview": "Preview",
       "firstLines": "First {{count}} lines",
       "saveBundle": "Save bundle",
@@ -360,7 +395,7 @@
     "search": "Search",
     "regexSearch": "Regex search",
     "redactedView": "Redacted view",
-    "maskAmounts": "Mask amounts"
+    "maskAmounts": "Hide amount scale"
   },
   "imports": {
     "eyebrow": "Connections · imports · integrations",

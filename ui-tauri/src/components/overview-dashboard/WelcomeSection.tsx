@@ -1,4 +1,4 @@
-import { Plus, RefreshCw } from "lucide-react";
+import { Plus } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
@@ -9,16 +9,12 @@ import { buildOverviewReadiness, readinessToneStyles } from "./model";
 
 export const WelcomeSection = ({
   onAddConnection,
-  onRefresh,
   onProcessJournals,
-  isRefreshing,
   isProcessingJournals,
   snapshot,
 }: {
   onAddConnection: () => void;
-  onRefresh: () => void;
   onProcessJournals: () => void;
-  isRefreshing: boolean;
   isProcessingJournals: boolean;
   snapshot: OverviewSnapshot;
 }) => {
@@ -67,22 +63,6 @@ export const WelcomeSection = ({
       </div>
 
       <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-        <Button
-          variant="outline"
-          size="sm"
-          className="h-8 gap-2"
-          aria-label={t("welcome.refreshAria")}
-          onClick={onRefresh}
-          disabled={isRefreshing}
-        >
-          <RefreshCw
-            className={cn("size-4", isRefreshing && "animate-spin")}
-            aria-hidden="true"
-          />
-          <span className="hidden sm:inline">
-            {isRefreshing ? t("welcome.refreshing") : t("welcome.refresh")}
-          </span>
-        </Button>
         <Button
           size="sm"
           className="h-8 gap-2"

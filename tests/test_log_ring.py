@@ -14,6 +14,14 @@ from kassiber.log_ring import (
     sanitize_exception,
     sanitize_traceback_text,
 )
+from kassiber.redaction import (
+    _stable_hash,
+    redact_operational_text,
+    redact_operational_value,
+)
+
+# A real-shaped (all-hex) txid; the value never matters, only that it is 64 hex.
+TXID = "4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b"
 
 # BIP32 test-vector keys: public, Bitcoin-shaped material safe for fixtures.
 XPRV = "xprv9s21ZrQH143K3QTDL4LXw2F7HEK3wJUD2nW2nRk4stbPy6cq3jPPqjiChkVvvNKmPGJxWUtg6LnF5kejMRNNU3TGtRBeJgk33yuGBxrMPHi"
@@ -271,6 +279,22 @@ class RingHandlerTest(unittest.TestCase):
         self.assertIn("[redacted-private-key]", tb["value"])
         self.assertNotIn("/Users/", tb["value"])
 
+    def test_exc_info_pseudonymizes_operational_ids(self):
+        # End-to-end through the REAL RingHandler (not the helper): a backend
+        # exception carrying a txid + keyed amount must land in the ring
+        # traceback field pseudonymized — error.debug is built the same way.
+        ring = LogRing()
+        logger = self._logger(ring)
+        try:
+            raise ValueError(f"Liquid UTXO {TXID}:3 had fee_msat=1200")
+        except ValueError:
+            logger.error("sync failed", exc_info=True)
+        tb = ring.snapshot()["records"][0]["fields"]["traceback"]["value"]
+        self.assertNotIn(TXID, tb)
+        self.assertIn(f"txid#{_stable_hash(TXID)}", tb)
+        self.assertIn("amount#", tb)  # keyed fee_msat pseudonymized
+        self.assertIn(":3", tb)  # vout stays readable
+
     def test_formatting_errors_do_not_raise(self):
         ring = LogRing()
         logger = self._logger(ring)
@@ -293,15 +317,144 @@ class SanitizeTest(unittest.TestCase):
         self.assertIn("[redacted-private-key]", text)
 
     def test_sanitize_traceback_text_caps_length(self):
-        text = "a" * 1000 + "b" * 9000
+        # Non-hex filler: a long hex run would now be collapsed to a txid
+        # pseudonym before the cap, which is correct but not what this asserts.
+        text = "x" * 1000 + "y" * 9000
         capped = sanitize_traceback_text(text)
         self.assertIn("...[truncated]...", capped)
-        self.assertTrue(capped.startswith("a" * 1000))
-        self.assertTrue(capped.endswith("b" * 7000))
+        self.assertTrue(capped.startswith("x" * 1000))
+        self.assertTrue(capped.endswith("y" * 7000))
         self.assertEqual(len(capped), 1000 + len("...[truncated]...") + 7000)
 
     def test_sanitize_traceback_text_short_input_unchanged(self):
         self.assertEqual(sanitize_traceback_text("short message"), "short message")
+
+    def test_sanitize_traceback_pseudonymizes_txid(self):
+        # A backend exception message that interpolates a txid:vout outpoint must
+        # not ride raw into the ring traceback field / error.debug / CLI export.
+        text = f'  raise AppError("Liquid UTXO {TXID}:3 did not match")'
+        sanitized = sanitize_traceback_text(text)
+        self.assertNotIn(TXID, sanitized)
+        self.assertIn(f"txid#{_stable_hash(TXID)}", sanitized)
+        self.assertIn(":3", sanitized)  # vout stays readable
+
+
+class OperationalRedactionTest(unittest.TestCase):
+    def test_txid_becomes_stable_pseudonym(self):
+        out = redact_operational_text(f"could not price {TXID} now")
+        self.assertNotIn(TXID, out)
+        self.assertEqual(out, f"could not price txid#{_stable_hash(TXID)} now")
+
+    def test_same_txid_same_token_distinct_txids_distinct(self):
+        other = "f" * 64
+        out = redact_operational_text(f"{TXID} and {TXID} but not {other}")
+        token = f"txid#{_stable_hash(TXID)}"
+        self.assertEqual(out.count(token), 2)
+        self.assertNotEqual(_stable_hash(TXID), _stable_hash(other))
+
+    def test_unit_tagged_amounts_pseudonymized(self):
+        for text, raw in (
+            ("moving 12345678 sats", "12345678 sats"),
+            ("value 0.0123 BTC here", "0.0123 BTC"),
+            ("paid € 4500.00 today", "€ 4500.00"),
+        ):
+            out = redact_operational_text(text)
+            self.assertNotIn(raw, out)
+            self.assertIn("amount#", out)
+
+    def test_signed_amounts_pseudonymized(self):
+        for text, raw in (
+            ("fee -2500 sats", "-2500 sats"),
+            ("delta -0.0001 BTC", "-0.0001 BTC"),
+        ):
+            out = redact_operational_text(text)
+            self.assertNotIn(raw, out)
+            self.assertIn("amount#", out)
+
+    def test_amount_token_is_not_unsalted_exact_value_hash(self):
+        out = redact_operational_text("fee 2500 sats")
+        self.assertIn("amount#", out)
+        self.assertNotIn(f"amount#{_stable_hash('2500|sats')}", out)
+
+    def test_market_rate_stays_readable(self):
+        # A BTC/EUR rate is public market data, not the user's amount.
+        out = redact_operational_text("rate BTC/EUR 64000.12 applied")
+        self.assertEqual(out, "rate BTC/EUR 64000.12 applied")
+
+    def test_dash_market_rate_stays_readable(self):
+        out = redact_operational_text("rate BTC-EUR 64000.12 applied")
+        self.assertEqual(out, "rate BTC-EUR 64000.12 applied")
+
+    def test_bare_integer_left_unchanged(self):
+        # No unit/symbol -> cannot be safely auto-detected; documented limitation.
+        self.assertEqual(
+            redact_operational_text("amount 12345678 invalid"),
+            "amount 12345678 invalid",
+        )
+
+    def test_addresses_left_readable(self):
+        # Owner scope is txid + amount only; addresses stay readable.
+        text = "spent to bc1qexampleaddress000000000000000000000"
+        self.assertEqual(redact_operational_text(text), text)
+
+    def test_fnv_matches_webview_contract(self):
+        # The daemon and the webview (ui-tauri/src/lib/appLogs.ts::stableHash)
+        # MUST produce identical tokens so a value pseudonymized on either side
+        # collapses to one token in the merged stream. This pins the contract;
+        # appLogs.test.ts asserts the same literal from the TS side.
+        self.assertEqual(_stable_hash("a" * 64), "d96f0f85")
+
+    def test_keyed_sat_amounts_pseudonymized(self):
+        # Glued/keyed units (amount_sat=, fee_msat:, JSON) look protected but the
+        # standalone-unit detector never fires; the keyed detector covers them.
+        for text, raw in (
+            ("backend amount_sat=50000 reported", "50000"),
+            ('{"fee_msat": 100000} drained', "100000"),
+            ('{"value_sats":12345678,"note":"keep"}', "12345678"),
+        ):
+            out = redact_operational_text(text)
+            self.assertIn("amount#", out)
+            self.assertNotIn(f"={raw}", out)
+            self.assertNotIn(f": {raw}", out)
+            self.assertNotIn(f":{raw}", out)
+        # the key name (and unrelated JSON) stays readable
+        self.assertIn("amount_sat=", redact_operational_text("amount_sat=50000"))
+        self.assertIn('"note":"keep"', redact_operational_text('{"value_sats":1,"note":"keep"}'))
+
+    def test_non_amount_identifier_not_touched(self):
+        # Identifiers that merely contain letters but do not END in a sat/msat
+        # unit must not be pseudonymized (over-redaction guard).
+        for text in ("habitats=5 results=7", "stats=10", "format=3"):
+            self.assertEqual(redact_operational_text(text), text)
+
+    def test_hex_run_over_64_pseudonymized(self):
+        run = "a" * 72
+        out = redact_operational_text(f"blob {run} end")
+        self.assertNotIn(run, out)
+        self.assertIn("txid#", out)
+
+
+class OperationalValueTest(unittest.TestCase):
+    def test_recurses_string_leaves(self):
+        details = {
+            "stderr": f"node: bad utxo {TXID}:3 fee_msat=1200",
+            "response_preview": "unspent 0.5 BTC",
+            "code": "lightning_error",
+            "nested": ["plain", f"see {TXID}"],
+        }
+        out = redact_operational_value(details)
+        flat = repr(out)
+        self.assertNotIn(TXID, flat)
+        self.assertIn(f"txid#{_stable_hash(TXID)}", out["stderr"])
+        self.assertIn(":3", out["stderr"])  # vout stays readable
+        self.assertIn("amount#", out["stderr"])  # keyed fee_msat
+        self.assertIn("amount#", out["response_preview"])  # 0.5 BTC
+        self.assertEqual(out["code"], "lightning_error")  # non-operational untouched
+        self.assertIn(f"txid#{_stable_hash(TXID)}", out["nested"][1])
+
+    def test_non_string_values_untouched(self):
+        details = {"vout": 3, "ok": True, "ratio": 0.5, "missing": None}
+        self.assertEqual(redact_operational_value(details), details)
 
 
 class RelativizePathTest(unittest.TestCase):

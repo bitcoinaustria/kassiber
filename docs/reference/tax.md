@@ -41,9 +41,65 @@ on-chain `txid` and asset. Those deterministic same-chain moves are kept out of
 the swap review queue; `transfers suggest` is for Lightning/Liquid layer hops
 and other pairs that need review.
 
-Reports do not auto-detect or auto-pair cross-asset swaps. If you have
-BTC ↔ LBTC peg-ins / peg-outs or submarine swaps, pair those legs before
-trusting `journals process` and downstream reports.
+### Self-transfer derivation
+
+Same-`txid` matching alone misses the cases users hit — a destination wallet
+that wasn't synced for the period (no inbound row), CSV imports whose `txid`
+columns don't line up, and one spend fanning out to several owned wallets.
+Kassiber closes these with two extra derivation passes during
+`journals process`; both **supplement** same-`txid` matching and never overrule
+a manual pair. A derived move carries its basis across with no disposal, and is
+tagged `ownership_derived` in the transfer audit (its journal entry reads
+"proven by address ownership").
+
+1. **Address-ownership deriver** (Bitcoin base layer). For an on-chain outbound
+   whose full `vin`/`vout` are stored in `raw_json`, each output's script is
+   classified against the profile-wide ownership index, restricted to the source
+   wallet's `(chain, network)`. An output paying an address owned by another of
+   your wallets is a self-transfer leg — proven from the graph, no heuristic. It
+   reuses a recorded destination row on a shared `txid`, synthesizes the inbound
+   leg for a true sync gap, and decomposes a 1→N fan-out. Anything it cannot
+   prove safely (multi-wallet-input consolidation, an ambiguous destination, a
+   stale-RBF amount mismatch, an output owned by two wallets) is **left on its
+   existing path and flagged for review** — never mis-booked.
+
+2. **Recorded fan-out decomposer** (chain-agnostic). When a 1→N self-transfer's
+   legs were *all* synced but there is no readable graph — **Liquid** (output
+   amounts are confidential, so the stored record carries no per-output graph)
+   or a graphless CSV import — the rows themselves are enough: rows sharing one
+   `(external_id, asset)` across two or more of your wallets are all owned, and
+   the amounts conserve (`out.amount == Σ in.amount`). A single outbound fanning
+   to ≥2 recorded destinations is decomposed into per-leg moves. Multi-source
+   consolidations and any group whose amounts don't fully conserve (a
+   destination wasn't synced) are left to the `owned_fanout_unresolved`
+   quarantine.
+
+**Scope.** Graph-based ownership derivation is **Bitcoin base layer only** —
+Liquid amounts are confidential, so a Liquid spend can prove a self-transfer
+only when every destination is also recorded (pass 2). A Liquid move with an
+unsynced destination stays on the review path. BTC↔L-BTC pegs, Boltz swaps, and
+submarine swaps are still Bitcoin movements for accounting, but the ledger keeps
+`BTC` and `LBTC` separate for rail visibility; pair those with `transfers pair`.
+
+Both passes are only as complete as the ownership index and the recorded rows. A
+fan-out that is *partially* resolvable — pass 1 proves some legs from the graph
+but a destination's address is outside the index's scan depth — degrades to the
+existing behavior for the unresolved remainder (a disposal at the source plus a
+fresh-basis acquisition at the destination), not a carried-basis move. Totals
+stay correct; widen the wallet's scan depth or pair the leg manually to fix the
+basis.
+
+**Caveat — unique wallet labels.** Reports key holdings by wallet *label*. Two
+wallets in one profile sharing a label merge their balances, and a derived move
+routed by label can be attributed to the wrong one (totals stay correct).
+`journals process` surfaces a `duplicate_wallet_label` warning; rename them.
+
+Reports do not auto-detect or auto-pair reviewed Bitcoin swaps or other
+cross-asset swaps. If you have BTC ↔ LBTC peg-ins / peg-outs, Boltz swaps, or
+submarine swaps where both legs are yours, pair those legs before trusting
+`journals process` and downstream reports. Swap rails can also route ordinary
+payments or receipts; leave those one-sided or counterparty-owned flows unpaired
+so they keep their normal payment/receipt treatment.
 
 When that signal is missing, you can pair them manually:
 
@@ -60,13 +116,19 @@ python3 -m kassiber transfers unpair --pair-id <PAIR_ID>
 
 Current rules:
 
-- same-asset manual pairs support `--policy carrying-value`
+- same-asset manual pairs support `--policy carrying-value`, including
+  same-wallet failed-swap refunds where the send and refund have different
+  transaction ids
+- reviewed `coinjoin` pairs are same-asset carrying-value links for manually
+  accepted ownership hops when descriptor history is incomplete; they preserve
+  basis but do not prove the full privacy graph or counterparty set
 - same-asset `--policy taxable` is rejected; leave those legs unpaired if you want normal SELL + BUY treatment
 - cross-asset pairs are always stored for audit
 - cross-asset `--policy carrying-value` is supported for Austrian books (`tax_country=at`): Kassiber emits reviewed swap markers, then rp2's native Austrian multi-asset hook carries basis
 - cross-asset `--policy taxable` keeps the normal SELL + BUY treatment
 - non-Austrian books still reject cross-asset `--policy carrying-value`
 - cross-asset swaps are never auto-paired from time / amount heuristics during report generation; use `transfers pair` when those links matter for tax treatment
+- swap-routed payments or receipts should stay unpaired unless both legs are known owned-wallet legs of the same user
 
 Manual pairs override auto-detection.
 
@@ -98,6 +160,19 @@ Quarantine causes typically include:
 - missing cost basis
 - insufficient lots
 - ambiguous or unsupported tax semantics
+- `owned_fanout_unresolved` — a fan-out / consolidation across owned wallets that
+  no derivation pass could resolve (e.g. a destination wasn't synced)
+- `ownership_transfer_*` — the address-ownership deriver proved a self-transfer
+  but could not split it safely; review and pair manually, sync the destination,
+  or review the consolidation:
+  - `_destination_ambiguous` — a recorded inbound could be this leg or an
+    unrelated same-value receipt (no shared `txid`)
+  - `_source_ambiguous` — more than one wallet funded the spend (the per-wallet
+    fee is unreliable)
+  - `_amount_mismatch` — the parsed graph and the recorded amount disagree
+    (stale RBF / re-org `raw_json`)
+  - `_ambiguous_output` — an output is owned by two different wallets
+  - `_destination_missing_ref` — the destination wallet has no account ref
 
 ## Rates and tax input quality
 

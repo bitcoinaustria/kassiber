@@ -34,7 +34,14 @@ import {
   type ConnectionSource,
   type ConnectionSourceFormat,
 } from "@/lib/connectionCatalog";
-import { isFilePickerAvailable, pickFile } from "@/lib/filePicker";
+import { GenericLedgerPreview } from "@/components/kb/GenericLedgerPreview";
+import { saveDaemonExport } from "@/lib/exportFile";
+import { parseAddressList, stripKeyMaterial } from "@/lib/addressList";
+import {
+  isFilePickerAvailable,
+  pickFile,
+  pickFileWithContentsBase64,
+} from "@/lib/filePicker";
 import {
   buildSamouraiSourceSet,
   type SamouraiSection,
@@ -43,7 +50,24 @@ import {
   buildWasabiBundle,
   type WasabiImportMode,
 } from "@/lib/wasabiBundle";
-import { detectWalletMaterial } from "@/lib/walletMaterialFormat";
+import {
+  BARE_XPUB_SCRIPT_TYPES,
+  type BareXpubScriptType,
+  detectWalletMaterial,
+  scriptTypesFromDetectionPayload,
+} from "@/lib/walletMaterialFormat";
+
+
+async function fileToBase64(file: File): Promise<string> {
+  const buffer = await file.arrayBuffer();
+  let binary = "";
+  const bytes = new Uint8Array(buffer);
+  const chunkSize = 0x8000;
+  for (let index = 0; index < bytes.length; index += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(index, index + chunkSize));
+  }
+  return window.btoa(binary);
+}
 
 const WalletMaterialScannerDialog = React.lazy(() =>
   import("./WalletMaterialScannerDialog").then((module) => ({
@@ -69,6 +93,8 @@ interface SetupFormState {
   btcpayServerUrl: string;
   btcpayApiKey: string;
   walletMaterial: string;
+  descriptorScriptType: string;
+  addressList: string;
   gapLimit: string;
   targetWallet: string;
   sourceFile: string;
@@ -121,6 +147,12 @@ interface SyncResult {
   updated_records?: ImportChangeRecord[];
   reconciliation_records?: ImportChangeRecord[];
 }
+
+type GenericLedgerPreviewSource = {
+  filename: string;
+  sourceBytesBase64: string;
+  importable: boolean;
+};
 
 interface BackendOption {
   name: string;
@@ -226,6 +258,11 @@ interface SamouraiImportResult {
 
 type DialogStep = "source" | "setup";
 const DESCRIPTOR_BACKEND_KINDS = new Set(["esplora", "electrum"]);
+const ADDRESS_BACKEND_KINDS = new Set([
+  "esplora",
+  "electrum",
+  "bitcoinrpc",
+]);
 const DEFAULT_BTCPAY_PAYMENT_METHOD_ID = "BTC-CHAIN";
 const MAX_DESCRIPTOR_GAP_LIMIT = 5000;
 type BullBitcoinWalletNetwork = "bitcoin" | "liquid" | "lightning";
@@ -295,6 +332,10 @@ const SAMOURAI_SOURCE_FIELDS: Array<{
 
 function supportsDescriptorSync(backend: BackendOption) {
   return DESCRIPTOR_BACKEND_KINDS.has(backend.kind);
+}
+
+function supportsAddressListSync(backend: BackendOption) {
+  return ADDRESS_BACKEND_KINDS.has(backend.kind);
 }
 
 function isExchangeEvidenceFormat(sourceFormat?: string) {
@@ -372,6 +413,14 @@ function sourceFileFilters(
       { name: t("add.fileFilter.samouraiSourceSet"), extensions: ["json"] },
     ];
   }
+  if (source.sourceFormat === "generic_ledger") {
+    return [
+      {
+        name: t("add.fileFilter.genericLedger"),
+        extensions: ["xlsx", "csv", "tsv"],
+      },
+    ];
+  }
   if (source.id === "csv") {
     return [{ name: t("add.fileFilter.csvOrJson"), extensions: ["csv", "json"] }];
   }
@@ -404,6 +453,8 @@ const formDefaultsFor = (
     btcpayServerUrl: "",
     btcpayApiKey: "",
     walletMaterial: "",
+    descriptorScriptType: "",
+    addressList: "",
     gapLimit: "40",
     targetWallet: "",
     sourceFile: "",
@@ -426,7 +477,8 @@ const formDefaultsFor = (
     bip329File: "",
     syncAfterCreate:
       source.setupKind === "file-wallet" ||
-      source.setupKind === "bullbitcoin-wallet",
+      source.setupKind === "bullbitcoin-wallet" ||
+      source.setupKind === "address-list",
   };
 };
 
@@ -486,7 +538,7 @@ function SourceArtwork({
   return (
     <span
       className={cn(
-        "flex shrink-0 items-center justify-center rounded-lg border bg-background p-1.5",
+        "flex shrink-0 items-center justify-center rounded-lg border border-border/70 bg-muted/60 p-1 shadow-sm shadow-zinc-950/5 dark:border-border/80 dark:bg-muted/55 dark:shadow-black/20",
         className ?? "size-12",
         source.imageFrameClassName,
       )}
@@ -525,6 +577,11 @@ export function AddConnectionDialog({
     useDaemonMutation<{ wallet: { label: string } }>("ui.wallets.create");
   const importFile =
     useDaemonMutation<ImportFileResult>("ui.wallets.import_file");
+  const ledgerTemplate = useDaemonMutation<{
+    file: string;
+    filename: string;
+    format: string;
+  }>("ui.transactions.ledger_template");
   const importSamourai =
     useDaemonMutation<SamouraiImportResult>("ui.wallets.import_samourai");
   const createBtcpay = useDaemonMutation<{
@@ -549,13 +606,22 @@ export function AddConnectionDialog({
     chain: string;
     network: string;
     addresses: {
-      branch: "receive" | "change";
+      // "receive"/"change" for a single descriptor, or a script-type-qualified
+      // label like "p2tr receive" when an xpub watches several script types.
+      branch: string;
       index: number;
       address: string;
       derivation_path?: string | null;
     }[];
     has_change_branch: boolean;
   }>("ui.wallets.preview_descriptor");
+  const detectScriptTypes = useDaemonMutation<{
+    probed: boolean;
+    detected: { script_type: string; has_history: boolean }[];
+    active: string[];
+    fallback_used: boolean;
+    reason?: string | null;
+  }>("ui.wallets.detect_script_types");
   const testBtcpay = useDaemonMutation<{
     backend: string;
     store_id: string;
@@ -599,14 +665,29 @@ export function AddConnectionDialog({
   const [form, setForm] = React.useState(() =>
     formDefaultsFor(CONNECTION_SOURCES[0], t),
   );
+  const [purgedKeys, setPurgedKeys] = React.useState<{
+    privateKeys: number;
+    publicKeys: number;
+  } | null>(null);
+  // Parse once per input change, not once per render — an address-list paste can
+  // hold thousands of entries and this drives the live summary, validation, and
+  // submit.
+  const parsedAddressList = React.useMemo(
+    () => parseAddressList(form.addressList),
+    [form.addressList],
+  );
   const [setupError, setSetupError] = React.useState<string | null>(null);
   const [lastImportResult, setLastImportResult] =
     React.useState<ImportFileResult | null>(null);
+  const [genericLedgerPreviewBlocksSubmit, setGenericLedgerPreviewBlocksSubmit] =
+    React.useState(false);
+  const [genericLedgerPreviewSource, setGenericLedgerPreviewSource] =
+    React.useState<GenericLedgerPreviewSource | null>(null);
   const [fieldErrors, setFieldErrors] = React.useState<
     Partial<Record<keyof SetupFormState, string>>
   >({});
   const [previewAddresses, setPreviewAddresses] = React.useState<
-    { branch: "receive" | "change"; index: number; address: string }[] | null
+    { branch: string; index: number; address: string }[] | null
   >(null);
   const [previewError, setPreviewError] = React.useState<string | null>(null);
   const [scannerOpen, setScannerOpen] = React.useState(false);
@@ -654,6 +735,11 @@ export function AddConnectionDialog({
       supportsDescriptorSync(backend) &&
       (!backend.chain || backend.chain === "bitcoin"),
   );
+  const bitcoinAddressBackends = allBackends.filter(
+    (backend) =>
+      supportsAddressListSync(backend) &&
+      (!backend.chain || backend.chain === "bitcoin"),
+  );
   const liquidBackends = allBackends.filter(
     (backend) =>
       supportsDescriptorSync(backend) &&
@@ -664,7 +750,10 @@ export function AddConnectionDialog({
   );
   const descriptorBackendOptions =
     selected.chain === "liquid" ? liquidBackends : bitcoinBackends;
-  const selectedBackendOptions = descriptorBackendOptions;
+  const addressBackendOptions =
+    selected.chain === "bitcoin" ? bitcoinAddressBackends : descriptorBackendOptions;
+  const selectedBackendOptions =
+    setupKind === "address-list" ? addressBackendOptions : descriptorBackendOptions;
   const defaultBackendName =
     selectedBackendOptions.find((backend) => backend.is_default)?.name ??
     selectedBackendOptions[0]?.name ??
@@ -756,7 +845,10 @@ export function AddConnectionDialog({
     discoverBtcpay.isPending ||
     importBip329.isPending ||
     syncWallet.isPending;
-  const requiresBackend = setupKind === "descriptor" || setupKind === "samourai";
+  const requiresBackend =
+    setupKind === "descriptor" ||
+    setupKind === "samourai" ||
+    setupKind === "address-list";
   const missingBackend = requiresBackend && selectedBackendOptions.length === 0;
   const submitLabel =
     setupKind === "backend-settings"
@@ -793,11 +885,14 @@ export function AddConnectionDialog({
     setSetupError(null);
     setFieldErrors({});
     setLastImportResult(null);
+    setGenericLedgerPreviewBlocksSubmit(false);
+    setGenericLedgerPreviewSource(null);
     setPreviewAddresses(null);
     setPreviewError(null);
     setBtcpayTestStatus(null);
     setBtcpayDiscovery(null);
     setSyncProgress(null);
+    setPurgedKeys(null);
   }, [selected, t]);
 
   React.useEffect(() => {
@@ -810,6 +905,8 @@ export function AddConnectionDialog({
     setStep(initialSourceId && source.status === "ready" ? "setup" : "source");
     setSetupError(null);
     setLastImportResult(null);
+    setGenericLedgerPreviewBlocksSubmit(false);
+    setGenericLedgerPreviewSource(null);
     setSourceQuery("");
   }, [initialSourceId, open]);
 
@@ -820,13 +917,21 @@ export function AddConnectionDialog({
     setFieldErrors({});
     setSetupError(null);
     setLastImportResult(null);
+    setGenericLedgerPreviewBlocksSubmit(false);
+    setGenericLedgerPreviewSource(null);
     setPreviewAddresses(null);
     setPreviewError(null);
+    setPurgedKeys(null);
   }, [open, selected, t]);
 
   React.useEffect(() => {
     if (!defaultBackendName) return;
-    if (setupKind !== "descriptor" && setupKind !== "samourai") return;
+    if (
+      setupKind !== "descriptor" &&
+      setupKind !== "samourai" &&
+      setupKind !== "address-list"
+    )
+      return;
     setForm((current) =>
       current.backend ? current : { ...current, backend: defaultBackendName },
     );
@@ -866,6 +971,10 @@ export function AddConnectionDialog({
     value: SetupFormState[Key],
   ) => {
     setForm((current) => ({ ...current, [key]: value }));
+    if (key === "sourceFile" && selected.sourceFormat === "generic_ledger") {
+      setGenericLedgerPreviewBlocksSubmit(String(value ?? "").trim().length > 0);
+      setGenericLedgerPreviewSource(null);
+    }
     if (
       key === "sourceFile" ||
       key === "samouraiDeposit" ||
@@ -891,6 +1000,55 @@ export function AddConnectionDialog({
       delete next[key];
       return next;
     });
+  };
+
+  const applyAddressInput = (rawText: string) => {
+    const stripped = stripKeyMaterial(rawText);
+    const removed = stripped.privateKeys + stripped.publicKeys > 0;
+    // Only reflow to the scrubbed text when key material was actually removed,
+    // so normal typing/formatting of addresses is left undisturbed.
+    setForm((current) => ({
+      ...current,
+      addressList: removed ? stripped.text : rawText,
+    }));
+    if (removed) {
+      setPurgedKeys((prev) => ({
+        privateKeys: (prev?.privateKeys ?? 0) + stripped.privateKeys,
+        publicKeys: (prev?.publicKeys ?? 0) + stripped.publicKeys,
+      }));
+    } else if (!rawText.trim()) {
+      setPurgedKeys(null);
+    }
+    setFieldErrors((current) => {
+      if (!("addressList" in current)) return current;
+      const next = { ...current };
+      delete next.addressList;
+      return next;
+    });
+  };
+
+  const addressFileInputRef = React.useRef<HTMLInputElement | null>(null);
+
+  const handleAddressFile = async (
+    event: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    const input = event.target;
+    const files = Array.from(input.files ?? []);
+    input.value = ""; // allow re-picking the same file
+    if (files.length === 0) return;
+    try {
+      const texts = await Promise.all(files.map((file) => file.text()));
+      const loaded = texts.join("\n").trim();
+      if (!loaded) return;
+      const existing = form.addressList.trim();
+      applyAddressInput(existing ? `${existing}\n${loaded}` : loaded);
+    } catch (error) {
+      setSetupError(
+        error instanceof Error
+          ? error.message
+          : t("add.addressList.fileReadFailed"),
+      );
+    }
   };
 
   const openBackendSettings = () => {
@@ -919,6 +1077,7 @@ export function AddConnectionDialog({
     const errors: Partial<Record<keyof SetupFormState, string>> = {};
     if (
       setupKind === "descriptor" ||
+      setupKind === "address-list" ||
       setupKind === "file-wallet" ||
       setupKind === "samourai" ||
       setupKind === "btcpay" ||
@@ -928,14 +1087,24 @@ export function AddConnectionDialog({
         errors.label = t("add.validation.labelRequired");
       }
     }
+    if (setupKind === "address-list") {
+      if (parsedAddressList.valid.length === 0) {
+        errors.addressList = t("add.addressList.errorNeedAddress");
+      }
+      if (addressBackendOptions.length > 0 && !form.backend.trim()) {
+        errors.backend = t("add.validation.chooseBackend");
+      }
+    }
     if (setupKind === "descriptor") {
       if (!form.walletMaterial.trim()) {
         errors.walletMaterial = t("add.validation.pasteWalletMaterial");
       } else {
         const detection = detectWalletMaterial(form.walletMaterial);
-        if (detection.kind === "bare-xpub" || detection.kind === "unknown") {
+        if (detection.kind === "unknown") {
           errors.walletMaterial = detection.hint ?? detection.label;
         }
+        // A bare xpub no longer needs a manual pick: an empty script-type
+        // selection means "detect automatically" at submit time.
       }
       const gapLimit = Number.parseInt(form.gapLimit, 10);
       if (!Number.isFinite(gapLimit) || gapLimit <= 0) {
@@ -1000,6 +1169,11 @@ export function AddConnectionDialog({
         }
       } else if (!form.sourceFile.trim()) {
         errors.sourceFile = t("add.enrichment.errorPickExportFile");
+      } else if (
+        selected.sourceFormat === "generic_ledger" &&
+        genericLedgerPreviewBlocksSubmit
+      ) {
+        errors.sourceFile = t("add.genericLedger.preview.submitBlocked");
       }
     }
     if (setupKind === "file-enrichment") {
@@ -1095,6 +1269,25 @@ export function AddConnectionDialog({
       }
       if (setupKind === "descriptor") {
         const gapLimit = Number.parseInt(form.gapLimit, 10);
+        const isBareXpub =
+          detectWalletMaterial(form.walletMaterial).kind === "bare-xpub";
+        // A bare xpub watches the manually pinned type, or — when left on
+        // "Detect automatically" — whichever types the backend shows history
+        // for (the daemon falls back to Native SegWit if none / unreachable).
+        let scriptTypes: string[] | undefined;
+        if (isBareXpub) {
+          if (form.descriptorScriptType) {
+            scriptTypes = [form.descriptorScriptType];
+          } else {
+            const detected = await detectScriptTypes.mutateAsync({
+              wallet_material: form.walletMaterial.trim(),
+              backend: form.backend.trim() || undefined,
+              chain: selected.chain,
+              network: selected.network,
+            });
+            scriptTypes = requireAutoDetectedScriptTypes(detected.data);
+          }
+        }
         await createWallet.mutateAsync({
           label,
           kind: selected.walletKind ?? "descriptor",
@@ -1102,6 +1295,7 @@ export function AddConnectionDialog({
           chain: selected.chain,
           network: selected.network,
           wallet_material: form.walletMaterial.trim(),
+          script_types: scriptTypes,
           gap_limit: Number.isFinite(gapLimit) ? gapLimit : undefined,
         });
         if (form.syncAfterCreate) {
@@ -1117,6 +1311,32 @@ export function AddConnectionDialog({
         addNotification({
           title: t("add.added.title"),
           body: t("add.added.body", { label }),
+          tone: "success",
+        });
+      } else if (setupKind === "address-list") {
+        const parsed = parsedAddressList;
+        await createWallet.mutateAsync({
+          label,
+          kind: selected.walletKind ?? "address",
+          backend: form.backend.trim() || undefined,
+          chain: selected.chain,
+          network: selected.network,
+          addresses: parsed.valid,
+        });
+        if (form.syncAfterCreate) {
+          startSyncNotice(t("add.addressList.stillScanning", { label }));
+          try {
+            await syncWallet.mutateAsync({ wallet: label });
+          } finally {
+            clearSyncNotice();
+          }
+        }
+        addNotification({
+          title: t("add.added.title"),
+          body: t("add.addressList.addedBody", {
+            label,
+            count: parsed.valid.length,
+          }),
           tone: "success",
         });
       } else if (setupKind === "samourai") {
@@ -1520,11 +1740,65 @@ export function AddConnectionDialog({
     </label>
   );
 
+  // Static literal keys so the typed `t()` resolves them (it rejects
+  // template-literal keys). The hyphen in p2sh-p2wpkh isn't a valid i18n key
+  // segment, hence the p2shp2wpkh suffix.
+  const scriptTypeLabelKeys = {
+    p2wpkh: "add.descriptor.scriptType.p2wpkh",
+    "p2sh-p2wpkh": "add.descriptor.scriptType.p2shp2wpkh",
+    p2pkh: "add.descriptor.scriptType.p2pkh",
+    p2tr: "add.descriptor.scriptType.p2tr",
+  } as const satisfies Record<BareXpubScriptType, string>;
+
+  const scriptTypeLabel = (value: BareXpubScriptType) =>
+    t(scriptTypeLabelKeys[value]);
+
+  const requireAutoDetectedScriptTypes = (
+    payload:
+      | {
+          probed?: boolean;
+          active?: unknown;
+          reason?: string | null;
+        }
+      | null
+      | undefined,
+  ) => {
+    const selection = scriptTypesFromDetectionPayload(payload);
+    if (!selection.ok) {
+      throw new Error(
+        t("add.descriptor.autoDetectUnavailable", {
+          reason:
+            selection.reason ??
+            t("add.descriptor.autoDetectUnavailableReasonUnknown"),
+        }),
+      );
+    }
+    return selection.scriptTypes;
+  };
+
   const renderWalletMaterialFeedback = () => {
     const detection = detectWalletMaterial(form.walletMaterial);
     if (detection.kind === "empty") return null;
+    // A bare xpub is no longer a dead end: pinning a script type resolves it,
+    // and leaving the picker on "Detect automatically" auto-detects at submit.
+    if (detection.kind === "bare-xpub") {
+      return (
+        <p className="text-xs text-emerald-700 dark:text-emerald-300">
+          {form.descriptorScriptType
+            ? t("add.descriptor.bareXpubResolved", {
+                label: detection.label,
+                scriptType: scriptTypeLabel(
+                  form.descriptorScriptType as BareXpubScriptType,
+                ),
+              })
+            : t("add.descriptor.bareXpubAutoDetect", {
+                label: detection.label,
+              })}
+        </p>
+      );
+    }
     const tone =
-      detection.kind === "bare-xpub" || detection.kind === "unknown"
+      detection.kind === "unknown"
         ? "text-amber-700 dark:text-amber-300"
         : "text-emerald-700 dark:text-emerald-300";
     return (
@@ -1536,6 +1810,35 @@ export function AddConnectionDialog({
             })
           : t("add.descriptor.detected", { label: detection.label })}
       </p>
+    );
+  };
+
+  const renderBareXpubScriptType = () => {
+    if (detectWalletMaterial(form.walletMaterial).kind !== "bare-xpub") {
+      return null;
+    }
+    return (
+      <SetupField
+        id="connection-script-type"
+        label={t("add.descriptor.scriptTypeLabel")}
+        helper={t("add.descriptor.scriptTypeHelperAuto")}
+      >
+        <select
+          id="connection-script-type"
+          className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+          value={form.descriptorScriptType}
+          onChange={(event) =>
+            updateForm("descriptorScriptType", event.target.value)
+          }
+        >
+          <option value="">{t("add.descriptor.scriptTypeDetect")}</option>
+          {BARE_XPUB_SCRIPT_TYPES.map((value) => (
+            <option key={value} value={value}>
+              {scriptTypeLabel(value)}
+            </option>
+          ))}
+        </select>
+      </SetupField>
     );
   };
 
@@ -1559,10 +1862,14 @@ export function AddConnectionDialog({
               key={`${entry.branch}-${entry.index}`}
               className="flex items-center gap-2"
             >
-              <span className="w-16 shrink-0 text-muted-foreground">
+              <span className="w-32 shrink-0 text-muted-foreground">
                 {entry.branch === "change"
                   ? t("add.descriptor.branchChange")
-                  : t("add.descriptor.branchReceive", { index: entry.index })}
+                  : entry.branch === "receive"
+                    ? t("add.descriptor.branchReceive", { index: entry.index })
+                    : entry.branch.endsWith("change")
+                      ? entry.branch
+                      : `${entry.branch} ${entry.index}`}
               </span>
               <span className="min-w-0 flex-1 truncate">{entry.address}</span>
               <button
@@ -1582,6 +1889,37 @@ export function AddConnectionDialog({
     );
   };
 
+  const downloadLedgerTemplate = async (format: "xlsx" | "csv") => {
+    try {
+      const envelope = await ledgerTemplate.mutateAsync({ format });
+      const file = envelope.data?.file;
+      if (!file) return;
+      const extension = format === "csv" ? "csv" : "xlsx";
+      await saveDaemonExport({
+        exportPath: file,
+        title: t("add.genericLedger.saveTemplateTitle"),
+        defaultName: `kassiber-ledger-template.${extension}`,
+        filters: [
+          {
+            name: t("add.fileFilter.genericLedger"),
+            extensions: [extension],
+          },
+        ],
+      });
+      addNotification({
+        title: t("add.genericLedger.templateReadyTitle"),
+        body: t("add.genericLedger.templateReadyBody"),
+        tone: "success",
+      });
+    } catch (error) {
+      addNotification({
+        title: t("add.genericLedger.templateFailedTitle"),
+        body: error instanceof Error ? error.message : String(error),
+        tone: "error",
+      });
+    }
+  };
+
   const renderSetupFields = () => {
     const sourceFileField = fileWalletSourceField(selected, t);
     const renderSourceFileSetup = (syncLabel?: string) => (
@@ -1597,20 +1935,58 @@ export function AddConnectionDialog({
               id="connection-source-file"
               value={form.sourceFile}
               onChange={(event) => updateForm("sourceFile", event.target.value)}
+              readOnly={selected.sourceFormat === "generic_ledger"}
               required
             />
+            {selected.sourceFormat === "generic_ledger" && !isFilePickerAvailable ? (
+              <Input
+                aria-label={sourceFileField.label}
+                type="file"
+                accept=".csv,.tsv,.xlsx,.xlsm,text/csv,text/tab-separated-values,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel.sheet.macroEnabled.12"
+                onChange={async (event) => {
+                  const file = event.currentTarget.files?.[0];
+                  if (!file) return;
+                  updateForm("sourceFile", file.name);
+                  setGenericLedgerPreviewBlocksSubmit(true);
+                  setGenericLedgerPreviewSource({
+                    filename: file.name,
+                    sourceBytesBase64: await fileToBase64(file),
+                    importable: false,
+                  });
+                }}
+              />
+            ) : null}
             {isFilePickerAvailable ? (
               <Button
                 type="button"
                 variant="outline"
                 onClick={async () => {
-                  const picked = await pickFile({
-                    title: t("add.field.selectExportFileTitle", {
-                      title: selected.title,
-                    }),
-                    filters: sourceFileFilters(selected, t),
-                  });
-                  if (picked) updateForm("sourceFile", picked);
+                  const picked =
+                    selected.sourceFormat === "generic_ledger"
+                      ? await pickFileWithContentsBase64({
+                          title: t("add.field.selectExportFileTitle", {
+                            title: selected.title,
+                          }),
+                          filters: sourceFileFilters(selected, t),
+                        })
+                      : await pickFile({
+                          title: t("add.field.selectExportFileTitle", {
+                            title: selected.title,
+                          }),
+                          filters: sourceFileFilters(selected, t),
+                        });
+                  if (picked) {
+                    const sourceFile =
+                      typeof picked === "string" ? picked : picked.path;
+                    updateForm("sourceFile", sourceFile);
+                    if (typeof picked !== "string") {
+                      setGenericLedgerPreviewSource({
+                        filename: picked.path,
+                        sourceBytesBase64: picked.contentsBase64,
+                        importable: true,
+                      });
+                    }
+                  }
                 }}
               >
                 {t("add.field.browse")}
@@ -1618,6 +1994,41 @@ export function AddConnectionDialog({
             ) : null}
           </div>
         </SetupField>
+        {selected.sourceFormat === "generic_ledger" ? (
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-dashed border-border/70 px-3 py-2">
+            <p className="text-xs text-muted-foreground">
+              {t("add.genericLedger.templateHint")}
+            </p>
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={ledgerTemplate.isPending}
+                onClick={() => downloadLedgerTemplate("xlsx")}
+              >
+                {ledgerTemplate.isPending
+                  ? t("add.genericLedger.templateWorking")
+                  : t("add.genericLedger.downloadXlsx")}
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                disabled={ledgerTemplate.isPending}
+                onClick={() => downloadLedgerTemplate("csv")}
+              >
+                {t("add.genericLedger.downloadCsv")}
+              </Button>
+            </div>
+          </div>
+        ) : null}
+        {selected.sourceFormat === "generic_ledger" && genericLedgerPreviewSource ? (
+          <GenericLedgerPreview
+            source={genericLedgerPreviewSource}
+            onBlockSubmitChange={setGenericLedgerPreviewBlocksSubmit}
+          />
+        ) : null}
         {syncLabel ? renderSyncAfterCreate(syncLabel) : null}
       </>
     );
@@ -1629,7 +2040,7 @@ export function AddConnectionDialog({
           {renderBackendSelect(
             "connection-backend",
             t("add.field.backend"),
-            descriptorBackendOptions,
+            addressBackendOptions,
           )}
           <SetupField
             id="connection-wallet-material"
@@ -1657,6 +2068,7 @@ export function AddConnectionDialog({
               value={form.walletMaterial}
               onChange={(event) => {
                 updateForm("walletMaterial", event.target.value);
+                updateForm("descriptorScriptType", "");
                 setPreviewAddresses(null);
                 setPreviewError(null);
               }}
@@ -1664,6 +2076,7 @@ export function AddConnectionDialog({
             />
             {renderWalletMaterialFeedback()}
           </SetupField>
+          {renderBareXpubScriptType()}
           <SetupField
             id="connection-gap-limit"
             label={t("add.descriptor.gapLimit")}
@@ -1685,13 +2098,37 @@ export function AddConnectionDialog({
               variant="outline"
               size="sm"
               disabled={
-                previewDescriptor.isPending || !form.walletMaterial.trim()
+                previewDescriptor.isPending ||
+                detectScriptTypes.isPending ||
+                !form.walletMaterial.trim()
               }
               onClick={async () => {
                 setPreviewError(null);
                 try {
+                  const isBareXpub =
+                    detectWalletMaterial(form.walletMaterial).kind ===
+                    "bare-xpub";
+                  // Auto mode previews whatever the backend has history for, so
+                  // the preview matches what creating the wallet would watch.
+                  let scriptTypes: string[] | undefined;
+                  if (isBareXpub) {
+                    if (form.descriptorScriptType) {
+                      scriptTypes = [form.descriptorScriptType];
+                    } else {
+                      const detected = await detectScriptTypes.mutateAsync({
+                        wallet_material: form.walletMaterial.trim(),
+                        backend: form.backend.trim() || undefined,
+                        chain: selected.chain,
+                        network: selected.network,
+                      });
+                      scriptTypes = requireAutoDetectedScriptTypes(
+                        detected.data,
+                      );
+                    }
+                  }
                   const envelope = await previewDescriptor.mutateAsync({
                     wallet_material: form.walletMaterial.trim(),
+                    script_types: scriptTypes,
                     chain: selected.chain,
                     network: selected.network,
                     count: 5,
@@ -1707,7 +2144,7 @@ export function AddConnectionDialog({
                 }
               }}
             >
-              {previewDescriptor.isPending
+              {previewDescriptor.isPending || detectScriptTypes.isPending
                 ? t("add.descriptor.deriving")
                 : t("add.descriptor.previewAddresses")}
             </Button>
@@ -1716,6 +2153,93 @@ export function AddConnectionDialog({
             </span>
           </div>
           {renderDescriptorPreview()}
+        </>
+      );
+    }
+
+    if (setupKind === "address-list") {
+      const parsed = parsedAddressList;
+      const invalidSamples = parsed.invalid.slice(0, 3).join(", ");
+      return (
+        <>
+          {renderConnectionLabelField()}
+          {renderBackendSelect(
+            "connection-backend",
+            t("add.field.backend"),
+            descriptorBackendOptions,
+          )}
+          <SetupField
+            id="connection-address-list"
+            label={t("add.addressList.addresses")}
+            error={fieldErrors.addressList}
+            helper={t("add.addressList.helper")}
+          >
+            <Textarea
+              id="connection-address-list"
+              className="min-h-32 font-mono text-xs"
+              value={form.addressList}
+              onChange={(event) => applyAddressInput(event.target.value)}
+              placeholder={t("add.addressList.placeholder")}
+            />
+            <input
+              ref={addressFileInputRef}
+              type="file"
+              accept=".txt,.csv,text/plain,text/csv"
+              multiple
+              className="hidden"
+              onChange={handleAddressFile}
+            />
+            {purgedKeys ? (
+              <p className="text-xs font-medium text-destructive" role="alert">
+                {purgedKeys.privateKeys > 0
+                  ? t("add.addressList.privateKeysPurged", {
+                      count: purgedKeys.privateKeys,
+                    })
+                  : ""}
+                {purgedKeys.privateKeys > 0 && purgedKeys.publicKeys > 0
+                  ? " "
+                  : ""}
+                {purgedKeys.publicKeys > 0
+                  ? t("add.addressList.publicKeysPurged", {
+                      count: purgedKeys.publicKeys,
+                    })
+                  : ""}
+              </p>
+            ) : null}
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => addressFileInputRef.current?.click()}
+              >
+                {t("add.addressList.loadFile")}
+              </Button>
+              {parsed.entries.length > 0 ? (
+                <span className="text-xs text-muted-foreground">
+                  {t("add.addressList.summary", {
+                    count: parsed.valid.length,
+                  })}
+                  {parsed.duplicates > 0
+                    ? ` · ${t("add.addressList.summaryDuplicates", {
+                        count: parsed.duplicates,
+                      })}`
+                    : ""}
+                  {parsed.invalid.length > 0
+                    ? ` · ${t("add.addressList.summaryInvalid", {
+                        count: parsed.invalid.length,
+                      })}`
+                    : ""}
+                </span>
+              ) : null}
+            </div>
+            {parsed.invalid.length > 0 ? (
+              <p className="text-xs text-amber-700 dark:text-amber-300">
+                {t("add.addressList.invalidHint", { samples: invalidSamples })}
+              </p>
+            ) : null}
+          </SetupField>
+          {renderSyncAfterCreate(t("add.addressList.scanAfter"))}
         </>
       );
     }
@@ -2885,11 +3409,9 @@ export function AddConnectionDialog({
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Badge variant={selected.status === "ready" ? "secondary" : "outline"}>
-            {selected.status === "ready"
-              ? t("add.available")
-              : t("add.plannedLabel")}
-          </Badge>
+          {selected.status === "planned" ? (
+            <Badge variant="outline">{t("add.plannedLabel")}</Badge>
+          ) : null}
           {selected.docsHref ? (
             <a
               className="rounded-md border px-2 py-0.5 text-xs text-muted-foreground hover:text-foreground"
@@ -3171,13 +3693,9 @@ export function AddConnectionDialog({
                 <span className="min-w-0 flex-1 space-y-1">
                   <span className="flex flex-wrap items-center gap-2">
                     <span className="font-medium">{source.title}</span>
-                    <Badge
-                      variant={source.status === "ready" ? "secondary" : "outline"}
-                    >
-                      {source.status === "ready"
-                        ? t("add.ready")
-                        : t("add.plannedLabel")}
-                    </Badge>
+                    {source.status === "planned" ? (
+                      <Badge variant="outline">{t("add.plannedLabel")}</Badge>
+                    ) : null}
                   </span>
                   <span className="block text-sm text-muted-foreground">
                     {source.description}
@@ -3301,7 +3819,9 @@ export function AddConnectionDialog({
                     isSubmitting ||
                     setupKind === "planned" ||
                     missingBackend ||
-                    missingBtcpayMappingDiscovery
+                    missingBtcpayMappingDiscovery ||
+                    (selected.sourceFormat === "generic_ledger" &&
+                      genericLedgerPreviewBlocksSubmit)
                   }
                 >
                   {submitLabel}

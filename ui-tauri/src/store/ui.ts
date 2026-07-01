@@ -34,6 +34,10 @@ export interface AppNotification {
   dedupeKey?: string;
   progress?: NotificationProgress;
   createdAt: string;
+  // Optional language-independent click target (an app route path). When set,
+  // the header notification routes here instead of guessing from the (often
+  // localized) title, so a translated title still routes correctly.
+  target?: string;
 }
 
 export interface ActiveMaintenanceProgress {
@@ -97,13 +101,15 @@ export interface Identity {
   taxLongTermDays?: number;
   /**
    * Token matches `kassiber.tax_policy` / rp2 plugin tokens. Generic supports
-   * FIFO/LIFO/HIFO/LOFO; new AT onboarding uses MOVING_AVERAGE_AT only.
+   * FIFO/LIFO/HIFO/LOFO + plain MOVING_AVERAGE; AT defaults to MOVING_AVERAGE_AT
+   * but also accepts the lot methods.
    */
   gainsAlgorithm?:
     | "FIFO"
     | "LIFO"
     | "HIFO"
     | "LOFO"
+    | "MOVING_AVERAGE"
     | "MOVING_AVERAGE_AT";
   databaseMode?: "sqlcipher" | "plaintext";
   migrateCredentials?: boolean;
@@ -137,8 +143,13 @@ export interface SourceFundsDraft {
   plannedDestination?: string;
   plannedNote?: string;
   revealMode?: string;
+  diagramDetail?: "summary" | "detailed";
   selectedRecipientId?: string;
-  currentStep?: "setup" | "review" | "export";
+  /**
+   * Case-dossier stage. Older drafts may carry the retired wizard values
+   * ("setup" / "review"); readers map those onto the dossier stages.
+   */
+  currentStep?: "target" | "trace" | "disclose" | "export" | "setup" | "review";
 }
 
 /** Captures a "I was setting up X, came here to add a backend, take me back" hop. */

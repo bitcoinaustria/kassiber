@@ -19,6 +19,7 @@ import {
   BookOpen,
   Bug,
   Calculator,
+  ChevronDown,
   ChevronRight,
   ChevronsUpDown,
   ClipboardList,
@@ -37,6 +38,8 @@ import {
   Moon,
   Plane,
   Plus,
+  RefreshCw,
+  RotateCcw,
   Search,
   Server,
   Settings,
@@ -136,8 +139,8 @@ import {
   stopDaemonLogBridge,
 } from "@/lib/daemonLogBridge";
 import { isTypingTarget } from "@/lib/keymap";
-import { ScreenAssistantMockup } from "./ScreenAssistantMockup";
 import { FirstSyncCard } from "./FirstSyncCard";
+import { AssistantDock } from "./AssistantDock";
 import { PreAlphaBanner } from "./PreAlphaBanner";
 import { useJournalProcessingAction } from "@/hooks/useJournalProcessingAction";
 import { useWalletSyncAction } from "@/hooks/useWalletSyncAction";
@@ -165,6 +168,7 @@ import {
   type NativeMenuPayload,
 } from "./menuIntent";
 import { notificationTarget } from "./notificationRouting";
+import { planHeaderRefresh } from "./headerRefresh";
 
 // `labelKey` indexes the `nav` namespace (book.*); keep `href` as the stable id.
 type NavItem = {
@@ -178,6 +182,43 @@ type NavItem = {
 type NavGroup = {
   titleKey: string;
   items: NavItem[];
+};
+
+// Cheap unresolved-item counts for the active book, surfaced as side-nav hints
+// (ui.review.badges). `swaps` is null until the transfer matcher has run once.
+type ReviewBadgesSnapshot = {
+  quarantine: number;
+  journals_needs_processing: boolean;
+  swaps: number | null;
+};
+
+type NavBadgeTone = "blocker" | "review";
+
+// A resolved hint for one nav item. `count: null` renders a presence-only dot
+// (e.g. "journals need processing"); a number renders a count pill.
+type NavBadge = {
+  count: number | null;
+  tone: NavBadgeTone;
+  labelKey: string;
+};
+
+// Mirror the notification bell's existing severity language (see
+// notificationAlertClassName) so the same concept reads the same everywhere:
+// red = blocks a correct report (quarantine), amber = needs review/processing
+// (swaps, journals). Soft-tint pills tuned per theme so the count clears WCAG AA
+// on both the near-white (light) and near-black (dark) sidebar.
+const NAV_BADGE_PILL_TONE: Record<NavBadgeTone, string> = {
+  blocker: "bg-red-500/15 text-red-700 dark:bg-red-400/15 dark:text-red-300",
+  review:
+    "bg-amber-500/15 text-amber-800 dark:bg-amber-400/15 dark:text-amber-300",
+};
+
+// Dots reuse each tone's pill-text shade: solid fills need a darker tint in
+// light mode to stay visible on the near-white sidebar (amber-500 was only
+// ~2:1), and these shades are already AA-verified for the pills.
+const NAV_BADGE_DOT_TONE: Record<NavBadgeTone, string> = {
+  blocker: "bg-red-700 dark:bg-red-300",
+  review: "bg-amber-800 dark:bg-amber-300",
 };
 
 // `titleKey` indexes `nav:book.*` for the breadcrumb title; the search keys
@@ -208,7 +249,7 @@ function notificationProgressValue(value: number | undefined) {
 }
 
 const appMainClassName =
-  "relative min-h-0 w-full flex-1 overflow-auto overscroll-contain bg-background text-zinc-950 dark:text-zinc-50";
+  "relative min-h-0 w-full flex-1 overflow-auto overscroll-contain bg-background text-foreground";
 
 const NAV_GROUPS: NavGroup[] = [
   {
@@ -286,6 +327,14 @@ const ROUTE_META: Array<[string, RouteMeta]> = [
     },
   ],
   [
+    "/imports",
+    {
+      titleKey: "routeMeta.imports.title",
+      icon: WalletCards,
+      searchKey: "routeMeta.imports",
+    },
+  ],
+  [
     "/logs",
     {
       titleKey: "nav:book.logs",
@@ -339,14 +388,6 @@ const ROUTE_META: Array<[string, RouteMeta]> = [
       titleKey: "nav:book.reconcile",
       icon: Fingerprint,
       searchKey: "routeMeta.reconcile",
-    },
-  ],
-  [
-    "/transfers",
-    {
-      titleKey: "nav:book.swaps",
-      icon: ArrowLeftRight,
-      searchKey: "routeMeta.swaps",
     },
   ],
   [
@@ -541,40 +582,37 @@ export function AppShell() {
   const bookRefreshActive =
     activeMaintenanceProgress?.id === BOOK_REFRESH_PROGRESS_ID &&
     Boolean(activeMaintenanceProgress?.active);
-  const firstSyncEligible =
-    bookRefreshActive && bookKey !== null && !firstSyncDone[bookKey];
-  // Dismissed state lives in the store (keyed by book) so the book-refresh
-  // notification in the header can re-open the card via reopenFirstSyncCard.
-  const firstSyncCardDismissedMap = useUiStore((s) => s.firstSyncCardDismissed);
-  const dismissFirstSyncCardStore = useUiStore((s) => s.dismissFirstSyncCard);
-  const reopenFirstSyncCardStore = useUiStore((s) => s.reopenFirstSyncCard);
-  const firstSyncCardDismissed =
-    bookKey !== null && Boolean(firstSyncCardDismissedMap[bookKey]);
+  // Show the full-screen sync card for ANY active book refresh (the first sync
+  // OR a later incremental refresh), not only the very first one.
+  const syncCardEligible = bookRefreshActive && bookKey !== null;
+  // Whether this is the book's very first sync — only switches the card's copy
+  // ("setting up / building your history" vs a plain refresh).
+  const isFirstSync = bookKey !== null && !firstSyncDone[bookKey];
+  // Minimized state lives in the store (keyed by book) so the book-refresh
+  // notification in the header can re-open the card. (The store field is still
+  // named `firstSyncCardDismissed` for historical reasons; it now tracks the
+  // minimized state of the sync card for any refresh.)
+  const syncCardMinimizedMap = useUiStore((s) => s.firstSyncCardDismissed);
+  const minimizeSyncCardStore = useUiStore((s) => s.dismissFirstSyncCard);
+  const restoreSyncCardStore = useUiStore((s) => s.reopenFirstSyncCard);
+  const syncCardMinimized =
+    bookKey !== null && Boolean(syncCardMinimizedMap[bookKey]);
   React.useEffect(() => {
-    // Once a book is no longer mid-first-sync, drop any "continue in
-    // background" choice so its next first-sync run starts expanded again.
-    if (
-      !firstSyncEligible &&
-      bookKey !== null &&
-      firstSyncCardDismissedMap[bookKey]
-    ) {
-      reopenFirstSyncCardStore(bookKey);
+    // Once a book is no longer syncing, drop any "continue in background" choice
+    // so its next refresh starts expanded again.
+    if (!syncCardEligible && bookKey !== null && syncCardMinimizedMap[bookKey]) {
+      restoreSyncCardStore(bookKey);
     }
-  }, [
-    firstSyncEligible,
-    bookKey,
-    firstSyncCardDismissedMap,
-    reopenFirstSyncCardStore,
-  ]);
-  const isFirstSync = firstSyncEligible && !firstSyncCardDismissed;
-  const dismissFirstSyncCard = React.useCallback(() => {
-    if (bookKey !== null) dismissFirstSyncCardStore(bookKey);
-  }, [bookKey, dismissFirstSyncCardStore]);
+  }, [syncCardEligible, bookKey, syncCardMinimizedMap, restoreSyncCardStore]);
+  const showSyncCard = syncCardEligible && !syncCardMinimized;
+  const minimizeSyncCard = React.useCallback(() => {
+    if (bookKey !== null) minimizeSyncCardStore(bookKey);
+  }, [bookKey, minimizeSyncCardStore]);
   // The card already shows the title in its header, so feed it the raw phase
   // label rather than the route-composed "Title: detail" string. Gated on
   // `active` to match `shellProgress`, so a stale maintenance record can't leak
   // a value in.
-  const firstSyncCardProgress: RouteProgressState | null =
+  const syncCardProgress: RouteProgressState | null =
     activeMaintenanceProgress?.active
       ? {
           indeterminate: Boolean(
@@ -773,22 +811,48 @@ export function AppShell() {
   );
 
   const unlockWithTouchId = React.useCallback(async () => {
-    const unlocked = await unlockTouchIdPassphrase(touchIdDataRoot);
-    if (!unlocked?.passphraseSecret) {
-      await refreshTouchIdStatus();
+    if (importRootBlocked) {
       return {
         ok: false,
-        error: t("lock.touchIdNotFound"),
+        error: importRootError ?? t("lock.importRootOpening"),
       };
     }
-    return unlockApp(unlocked.passphraseSecret, {
-      rememberWithTouchId: false,
+    bumpDaemonSession();
+    const envelope = await unlockTouchIdPassphrase(touchIdDataRoot, {
+      requireExistingProject: Boolean(identity?.importedProject),
     });
+    const unlocked = envelope.kind === "daemon.unlock";
+    if (unlocked) {
+      setDaemonAuthRequired(false);
+      setTouchIdAutoPromptPending(false);
+      setLocked(false);
+      void queryClient.invalidateQueries({
+        queryKey: ["daemon"],
+      });
+      return { ok: true, error: null };
+    }
+    if (envelope.kind === "auth_required") {
+      setDaemonAuthRequired(true);
+      clearSessionUnlockPassphrase();
+      clearDaemonQueryCache();
+      setLocked(true);
+    } else if (envelope.error?.code === "touch_id_passphrase_not_found") {
+      await refreshTouchIdStatus();
+    }
+    return {
+      ok: false,
+      error: formatDaemonEnvelopeError(envelope) ?? t("lock.touchIdNotFound"),
+    };
   }, [
+    bumpDaemonSession,
+    clearDaemonQueryCache,
+    identity?.importedProject,
+    importRootBlocked,
+    importRootError,
+    queryClient,
     refreshTouchIdStatus,
     t,
     touchIdDataRoot,
-    unlockApp,
   ]);
 
   const resetLocalUiSession = React.useCallback(() => {
@@ -902,6 +966,27 @@ export function AppShell() {
     ],
   );
 
+  // The header refresh button AND the Cmd/Ctrl+R / Cmd/Ctrl+Shift+R shortcuts
+  // route here, so the advertised shortcut behaves exactly like the button:
+  // surface the loader (un-minimize the sync card if it was sent to the
+  // background) and start the book refresh. `syncAll` no-ops while one is
+  // already running, so a mid-refresh trigger just re-opens the card.
+  const runHeaderRefresh = React.useCallback(
+    (options?: { forceFull?: boolean }) => {
+      const plan = planHeaderRefresh({
+        hasWorkspace: ensureWorkspaceForMenuAction(),
+        bookKey,
+      });
+      if (plan.reopenSyncCardForBook !== null) {
+        restoreSyncCardStore(plan.reopenSyncCardForBook);
+      }
+      if (plan.startRefresh) {
+        syncAll({ forceFull: Boolean(options?.forceFull) });
+      }
+    },
+    [bookKey, ensureWorkspaceForMenuAction, restoreSyncCardStore, syncAll],
+  );
+
   const openAddWalletConnection = React.useCallback(
     (reason: string) => {
       if (!ensureWorkspaceForMenuAction()) return;
@@ -928,12 +1013,12 @@ export function AppShell() {
         runMenuJournalProcessing();
         return;
       }
-      runMenuWalletSync({ forceFull: action === "rescan-book" });
+      runHeaderRefresh({ forceFull: action === "rescan-book" });
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [openAddWalletConnection, runMenuJournalProcessing, runMenuWalletSync, t]);
+  }, [openAddWalletConnection, runHeaderRefresh, runMenuJournalProcessing, t]);
 
   React.useEffect(() => {
     if (identity) return;
@@ -1288,6 +1373,8 @@ export function AppShell() {
           <AppDashboardHeader
             meta={routeMeta}
             onLock={lockApp}
+            onRefresh={runHeaderRefresh}
+            isRefreshing={isSyncing}
             daemonEnabled={daemonEnabled}
           />
           <div className="flex min-h-0 flex-1">
@@ -1343,15 +1430,19 @@ export function AppShell() {
                         tabIndex={-1}
                         className={cn(
                           appMainClassName,
+                          // Reserve dock space only while the dock is
+                          // expanded; the collapsed pill needs a sliver.
                           hideDockedAssistant
                             ? "pb-0"
-                            : "pb-[240px]",
+                            : assistantCollapsed
+                              ? "pb-16"
+                              : "pb-[240px]",
                         )}
                       >
                         <Outlet />
                       </main>
                       {hideDockedAssistant ? null : (
-                        <ScreenAssistantMockup
+                        <AssistantDock
                           collapsed={assistantCollapsed}
                           className="absolute inset-x-0 bottom-0 z-20"
                         />
@@ -1371,19 +1462,20 @@ export function AppShell() {
                 {!locked && !importRootBlocked ? (
                   <>
                     <RouteTopProgressLine
-                      // While the full-screen first-sync card is up it already
-                      // shows this progress (plus the blur scrim), so suppress
-                      // the hairline here — it returns once "Continue in
-                      // background" demotes the card.
-                      active={shellBusy && !isFirstSync}
+                      // While the full-screen sync card is up it already shows
+                      // this progress (plus the blur scrim), so suppress the
+                      // hairline here — it returns once "Continue in background"
+                      // minimizes the card.
+                      active={shellBusy && !showSyncCard}
                       progress={shellProgress}
-                      announce={!isFirstSync}
+                      announce={!showSyncCard}
                     />
-                    {isFirstSync ? (
+                    {showSyncCard ? (
                       <FirstSyncCard
-                        progress={firstSyncCardProgress}
+                        progress={syncCardProgress}
                         title={activeMaintenanceProgress?.title}
-                        onDismiss={dismissFirstSyncCard}
+                        isFirstSync={isFirstSync}
+                        onDismiss={minimizeSyncCard}
                       />
                     ) : null}
                   </>
@@ -1477,6 +1569,41 @@ function AppSidebar({
       })).filter((group) => group.items.length > 0),
     [aiFeaturesEnabled],
   );
+  const { data: reviewBadgesData } = useDaemon<ReviewBadgesSnapshot>(
+    "ui.review.badges",
+    undefined,
+    { enabled: daemonEnabled },
+  );
+  const badges = reviewBadgesData?.data;
+  const navBadges = React.useMemo<Record<string, NavBadge>>(() => {
+    const map: Record<string, NavBadge> = {};
+    if (!badges) return map;
+    // Signal, not reassurance: only surface a hint when there is something to
+    // act on — never a "0" or an all-clear marker.
+    if (badges.quarantine > 0) {
+      // Quarantine blocks correct reports — same red as the bell's quarantine alert.
+      map["/quarantine"] = {
+        count: badges.quarantine,
+        tone: "blocker",
+        labelKey: "badge.quarantine",
+      };
+    }
+    if (typeof badges.swaps === "number" && badges.swaps > 0) {
+      map["/swaps"] = {
+        count: badges.swaps,
+        tone: "review",
+        labelKey: "badge.swaps",
+      };
+    }
+    if (badges.journals_needs_processing) {
+      map["/journals"] = {
+        count: null,
+        tone: "review",
+        labelKey: "badge.journals",
+      };
+    }
+    return map;
+  }, [badges]);
 
   return (
     <Sidebar
@@ -1491,7 +1618,12 @@ function AppSidebar({
             <SidebarGroupContent>
               <SidebarMenu>
                 {group.items.map((item) => (
-                  <NavMenuItem key={item.labelKey} item={item} pathname={pathname} />
+                  <NavMenuItem
+                    key={item.labelKey}
+                    item={item}
+                    pathname={pathname}
+                    badge={navBadges[item.href]}
+                  />
                 ))}
               </SidebarMenu>
             </SidebarGroupContent>
@@ -1554,22 +1686,24 @@ function SidebarActions({
           </SidebarMenuButton>
         </SidebarMenuItem>
       ) : null}
-      <SidebarMenuItem>
-        <div className="flex min-h-8 w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0">
-          <Server className="size-4 shrink-0" aria-hidden="true" />
-          <span className="min-w-0 flex-1 truncate group-data-[collapsible=icon]:hidden">
-            {isRealData ? t("shell.dataMode.real") : t("shell.dataMode.mock")}
-          </span>
-          <Switch
-            checked={isRealData}
-            aria-label={t("shell.dataMode.toggle")}
-            onCheckedChange={(checked) =>
-              setDataMode(checked ? "real" : "mock")
-            }
-            className="group-data-[collapsible=icon]:hidden"
-          />
-        </div>
-      </SidebarMenuItem>
+      {developerToolsEnabled ? (
+        <SidebarMenuItem>
+          <div className="flex min-h-8 w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0">
+            <Server className="size-4 shrink-0" aria-hidden="true" />
+            <span className="min-w-0 flex-1 truncate group-data-[collapsible=icon]:hidden">
+              {isRealData ? t("shell.dataMode.real") : t("shell.dataMode.mock")}
+            </span>
+            <Switch
+              checked={isRealData}
+              aria-label={t("shell.dataMode.toggle")}
+              onCheckedChange={(checked) =>
+                setDataMode(checked ? "real" : "mock")
+              }
+              className="group-data-[collapsible=icon]:hidden"
+            />
+          </div>
+        </SidebarMenuItem>
+      ) : null}
       <SidebarMenuItem>
         <Collapsible asChild defaultOpen={supportActive} className="group/collapsible">
           <div>
@@ -1596,9 +1730,13 @@ function SidebarActions({
                 </SidebarMenuSubItem>
                 <SidebarMenuSubItem>
                   <SidebarMenuSubButton asChild>
-                    <a href="#donate">
+                    <a
+                      href="https://github.com/bitcoinaustria/kassiber/discussions"
+                      target="_blank"
+                      rel="noreferrer"
+                    >
                       <Heart className="size-3.5" aria-hidden="true" />
-                      <span>{t("shell.support.donateSats")}</span>
+                      <span>{t("shell.support.discussions")}</span>
                     </a>
                   </SidebarMenuSubButton>
                 </SidebarMenuSubItem>
@@ -1663,12 +1801,55 @@ function SidebarActions({
   );
 }
 
+// Renders a hint next to a nav item. Only mounted when there is something to
+// act on, so the count/dot itself is the signal — there is no empty/all-clear
+// state. Shows a count pill when the sidebar is expanded and a corner dot once
+// it collapses to icons (where the pill is hidden).
+function NavItemBadge({ badge }: { badge: NavBadge }) {
+  const { t } = useTranslation("nav");
+  const label = t(badge.labelKey as never, { count: badge.count ?? 0 });
+  const display =
+    badge.count === null ? null : badge.count > 99 ? "99+" : String(badge.count);
+  return (
+    <>
+      {display === null ? (
+        <span
+          aria-label={label}
+          className={cn(
+            "pointer-events-none absolute top-1/2 right-2.5 size-2 -translate-y-1/2 rounded-full select-none group-data-[collapsible=icon]:hidden",
+            NAV_BADGE_DOT_TONE[badge.tone],
+          )}
+        />
+      ) : (
+        <span
+          aria-label={label}
+          className={cn(
+            "pointer-events-none absolute top-1.5 right-1 flex h-5 min-w-5 items-center justify-center rounded-md px-1 text-xs font-medium tabular-nums select-none group-data-[collapsible=icon]:hidden",
+            NAV_BADGE_PILL_TONE[badge.tone],
+          )}
+        >
+          {display}
+        </span>
+      )}
+      <span
+        aria-label={label}
+        className={cn(
+          "pointer-events-none absolute top-1.5 right-1.5 hidden size-2 rounded-full ring-2 ring-sidebar group-data-[collapsible=icon]:block",
+          NAV_BADGE_DOT_TONE[badge.tone],
+        )}
+      />
+    </>
+  );
+}
+
 function NavMenuItem({
   item,
   pathname,
+  badge,
 }: {
   item: NavItem;
   pathname: string;
+  badge?: NavBadge;
 }) {
   const { t } = useTranslation("nav");
   const Icon = item.icon;
@@ -1694,6 +1875,7 @@ function NavMenuItem({
             <span>{t(item.labelKey as never) /* dynamic key */}</span>
           </Link>
         </SidebarMenuButton>
+        {badge ? <NavItemBadge badge={badge} /> : null}
       </SidebarMenuItem>
     );
   }
@@ -1865,10 +2047,14 @@ function AppVersion() {
 function AppDashboardHeader({
   meta,
   onLock,
+  onRefresh,
+  isRefreshing,
   daemonEnabled,
 }: {
   meta: RouteMeta;
   onLock: () => void;
+  onRefresh: (options?: { forceFull?: boolean }) => void;
+  isRefreshing: boolean;
   daemonEnabled: boolean;
 }) {
   const { t } = useTranslation(["chrome", "nav", "search", "settings"]);
@@ -1881,7 +2067,6 @@ function AppDashboardHeader({
   const aiFeaturesEnabled = useUiStore((s) => s.aiFeaturesEnabled);
   const developerToolsEnabled = useUiStore((s) => s.developerToolsEnabled);
   const identity = useUiStore((s) => s.identity);
-  const firstSyncDone = useUiStore((s) => s.firstSyncDone);
   const reopenFirstSyncCard = useUiStore((s) => s.reopenFirstSyncCard);
   const headerBookKey = bookIdentityKey(identity);
   const setDeferredConnectionSetup = useUiStore(
@@ -2060,7 +2245,12 @@ function AppDashboardHeader({
   const notificationItems: NotificationItem[] = [
     ...appNotifications.map((item) => ({
       ...item,
-      to: notificationTarget(item.title, item.tone, developerToolsEnabled),
+      to: notificationTarget(
+        item.title,
+        item.tone,
+        developerToolsEnabled,
+        item.target,
+      ),
     })),
     ...systemNotificationItems,
   ];
@@ -2181,7 +2371,7 @@ function AppDashboardHeader({
 
       <div
         ref={searchRootRef}
-        className="relative hidden w-full min-w-0 md:block"
+        className="relative w-full min-w-0"
         onBlur={(event) => {
           if (
             event.relatedTarget instanceof Node &&
@@ -2305,6 +2495,63 @@ function AppDashboardHeader({
           )}
       </div>
       <div className="flex min-w-0 items-center justify-end gap-2">
+        {/* Split control: primary click runs an incremental book refresh; the
+            caret opens the other "bring the book current" actions. The book
+            refresh already chains source sync + auto-pair + journals, so this
+            is the single home for sync / refresh / reprocess. */}
+        <div className="flex items-center">
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className={cn(topNavIconButtonClassName, "rounded-r-none")}
+            aria-label={t("shell.refresh")}
+            title={t("shell.refreshTitle")}
+            onClick={() => onRefresh()}
+          >
+            <RefreshCw
+              className={cn(
+                "size-4",
+                isRefreshing && "animate-spin motion-reduce:animate-none",
+              )}
+              aria-hidden="true"
+            />
+          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className={cn(
+                  topNavIconButtonClassName,
+                  "w-5 rounded-l-none border-l border-sidebar-border/60",
+                )}
+                aria-label={t("shell.refreshMenu.options")}
+                title={t("shell.refreshMenu.options")}
+              >
+                <ChevronDown className="size-3" aria-hidden="true" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-60">
+              <DropdownMenuItem onSelect={() => onRefresh()}>
+                <RefreshCw className="size-4" aria-hidden="true" />
+                {t("shell.refresh")}
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                disabled={isProcessingJournals}
+                onSelect={() => runJournalProcessing()}
+              >
+                <ClipboardList className="size-4" aria-hidden="true" />
+                {t("shell.refreshMenu.reprocessJournals")}
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => onRefresh({ forceFull: true })}>
+                <RotateCcw className="size-4" aria-hidden="true" />
+                {t("shell.refreshMenu.fullRescan")}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button
@@ -2351,14 +2598,15 @@ function AppDashboardHeader({
                 <DropdownMenuItem
                   className="flex cursor-pointer items-start justify-between gap-3 whitespace-normal rounded-md"
                   onSelect={(event) => {
-                    // An in-progress book refresh collapsed via "Continue in
-                    // background" re-opens the first-sync card (rather than
+                    // An in-progress book refresh minimized via "Continue in
+                    // background" re-opens the full-screen sync card (rather than
                     // navigating); letting the menu close on select reveals it.
+                    // A live `progress` means a refresh is active, so this covers
+                    // first sync AND later incremental refreshes.
                     if (
                       item.dedupeKey === "book-refresh" &&
                       item.progress &&
-                      headerBookKey !== null &&
-                      !firstSyncDone[headerBookKey]
+                      headerBookKey !== null
                     ) {
                       reopenFirstSyncCard(headerBookKey);
                       return;

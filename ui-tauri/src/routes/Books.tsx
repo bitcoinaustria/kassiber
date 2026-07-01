@@ -53,11 +53,17 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
-import { gainsAlgorithmsFor } from "@/components/kb/Onboarding/constants";
+import {
+  GAINS_ALGORITHM_DEFAULTS,
+  TAX_COUNTRIES,
+  gainsAlgorithmsFor,
+} from "@/components/kb/Onboarding/constants";
+import type { TaxCountry } from "@/components/kb/Onboarding/types";
 import type { ProfilesSnapshot, Profile, Workspace } from "@/mocks/profiles";
 
 const ACCOUNTING_METHOD_LABEL_KEYS = {
   MOVING_AVERAGE_AT: "books.method.MOVING_AVERAGE_AT",
+  MOVING_AVERAGE: "books.method.MOVING_AVERAGE",
   FIFO: "books.method.FIFO",
   LIFO: "books.method.LIFO",
   HIFO: "books.method.HIFO",
@@ -74,6 +80,16 @@ const accountingMethodLabel = (
     ];
   return key ? t(key) : method;
 };
+
+const TAX_COUNTRY_LABEL_KEYS = {
+  at: "books.region.at",
+  generic: "books.region.generic",
+} as const satisfies Record<TaxCountry, string>;
+
+const regionLabel = (
+  country: TaxCountry,
+  t: TFunction<"onboarding">,
+): string => t(TAX_COUNTRY_LABEL_KEYS[country]);
 
 export function Books() {
   const { data, isLoading } = useDaemon<ProfilesSnapshot>(
@@ -119,10 +135,15 @@ function BooksView({ snapshot }: { snapshot: ProfilesSnapshot }) {
   );
   const [profileSource, setProfileSource] = useState<Profile | null>(null);
   const [profileName, setProfileName] = useState("");
+  const [profileCountry, setProfileCountry] = useState<TaxCountry>("generic");
+  const [profileMethod, setProfileMethod] = useState("");
   const [renameTarget, setRenameTarget] =
     useState<PendingProfileRename | null>(null);
   const [renameProfileName, setRenameProfileName] = useState("");
   const [renameProfileMethod, setRenameProfileMethod] = useState("");
+  const [renameProfileCountry, setRenameProfileCountry] =
+    useState<TaxCountry>("generic");
+  const [regionSwitchConfirming, setRegionSwitchConfirming] = useState(false);
   const [renameWorkspaceTarget, setRenameWorkspaceTarget] =
     useState<Workspace | null>(null);
   const [renameWorkspaceName, setRenameWorkspaceName] = useState("");
@@ -173,13 +194,23 @@ function BooksView({ snapshot }: { snapshot: ProfilesSnapshot }) {
     if (!workspace) return;
     setProfileError(null);
     setProfileName("");
+    // Seed the region/method pickers from the workspace's existing default book
+    // so "Default settings" matches what the daemon would otherwise inherit.
+    const baseProfile = sourceProfile ?? workspace.profiles[0] ?? null;
+    const baseCountry = baseProfile?.taxCountry ?? "generic";
+    setProfileCountry(baseCountry);
+    setProfileMethod(
+      baseProfile?.gainsAlgorithm ?? gainsAlgorithmsFor(baseCountry)[0],
+    );
     setProfileWorkspace(workspace);
     setProfileSource(sourceProfile);
   };
 
   const requestRenameProfile = (workspace: Workspace, profile: Profile) => {
     setRenameProfileError(null);
+    setRegionSwitchConfirming(false);
     setRenameProfileName(profile.name);
+    setRenameProfileCountry(profile.taxCountry ?? "generic");
     setRenameProfileMethod(
       profile.gainsAlgorithm ??
         gainsAlgorithmsFor(profile.taxCountry ?? "generic")[0],
@@ -205,7 +236,15 @@ function BooksView({ snapshot }: { snapshot: ProfilesSnapshot }) {
       {
         workspace_id: profileWorkspace.id,
         label,
-        ...(profileSource ? { source_profile_id: profileSource.id } : {}),
+        // Copy-from-source and explicit region/method are mutually exclusive:
+        // copying inherits the source's settings; otherwise the picked region +
+        // method apply.
+        ...(profileSource
+          ? { source_profile_id: profileSource.id }
+          : {
+              tax_country: profileCountry,
+              gains_algorithm: profileMethod,
+            }),
       },
       {
         onSuccess: (response) => {
@@ -260,13 +299,29 @@ function BooksView({ snapshot }: { snapshot: ProfilesSnapshot }) {
     }
     setRenameProfileError(null);
     const profileId = renameTarget.profile.id;
+    const originalCountry = renameTarget.profile.taxCountry ?? "generic";
     const nameChanged = label !== renameTarget.profile.name;
     const methodChanged =
       renameProfileMethod !== (renameTarget.profile.gainsAlgorithm ?? "");
+    const countryChanged = renameProfileCountry !== originalCountry;
+    // A region switch resets the method and reprocesses journals — gate it
+    // behind an explicit confirmation step.
+    if (countryChanged && !regionSwitchConfirming) {
+      setRegionSwitchConfirming(true);
+      return;
+    }
     try {
-      // Method first: update_profile enforces the Austrian method + invalidates
-      // journals so reports recompute.
-      if (methodChanged) {
+      // Method/region first: update_profile enforces the per-country method +
+      // invalidates journals so reports recompute. A region switch must send a
+      // region-valid method in the same call, since generic books reject the
+      // Austrian method (and vice versa).
+      if (countryChanged) {
+        await updateProfile.mutateAsync({
+          profile_id: profileId,
+          gains_algorithm: renameProfileMethod,
+          tax_country: renameProfileCountry,
+        });
+      } else if (methodChanged) {
         await updateProfile.mutateAsync({
           profile_id: profileId,
           gains_algorithm: renameProfileMethod,
@@ -278,7 +333,11 @@ function BooksView({ snapshot }: { snapshot: ProfilesSnapshot }) {
       setRenameTarget(null);
       setRenameProfileName("");
       setRenameProfileMethod("");
+      setRenameProfileCountry("generic");
+      setRegionSwitchConfirming(false);
     } catch (error) {
+      // Drop back to the form so the error is visible alongside the inputs.
+      setRegionSwitchConfirming(false);
       setRenameProfileError(
         error instanceof Error
           ? error.message
@@ -426,11 +485,28 @@ function BooksView({ snapshot }: { snapshot: ProfilesSnapshot }) {
         errorMessage={profileError}
         isSubmitting={createProfile.isPending}
         name={profileName}
+        country={profileCountry}
+        method={profileMethod}
+        methodOptions={gainsAlgorithmsFor(profileCountry)}
         open={Boolean(profileWorkspace)}
         sourceProfile={profileSource}
         workspace={profileWorkspace}
         onNameChange={(value) => {
           setProfileName(value);
+          if (profileError) setProfileError(null);
+        }}
+        onCountryChange={(value) => {
+          setProfileCountry(value);
+          // Reset the method to the region's default; the previous method may be
+          // invalid for the new region.
+          setProfileMethod(GAINS_ALGORITHM_DEFAULTS[value]);
+          if (profileError) setProfileError(null);
+        }}
+        onMethodChange={(value) => {
+          // See RenameProfileDialog: ignore radix's spurious empty fire on a
+          // region switch so the region default survives.
+          if (!value) return;
+          setProfileMethod(value);
           if (profileError) setProfileError(null);
         }}
         onSourceProfileChange={(sourceProfile) => {
@@ -452,21 +528,23 @@ function BooksView({ snapshot }: { snapshot: ProfilesSnapshot }) {
         errorMessage={renameProfileError}
         isSubmitting={renameProfile.isPending || updateProfile.isPending}
         name={renameProfileName}
+        country={renameProfileCountry}
         method={renameProfileMethod}
-        methodOptions={
-          renameTarget
-            ? Array.from(
-                new Set<string>([
-                  ...(renameTarget.profile.gainsAlgorithm
-                    ? [renameTarget.profile.gainsAlgorithm]
-                    : []),
-                  ...gainsAlgorithmsFor(
-                    renameTarget.profile.taxCountry ?? "generic",
-                  ),
-                ]),
-              )
-            : []
-        }
+        methodOptions={Array.from(
+          new Set<string>([
+            // Keep the stored method visible while still on the original region,
+            // even if it isn't in the standard list (e.g. a legacy AT-on-FIFO
+            // book). After a region switch the method is reset to that region's
+            // default, so only the new region's methods apply.
+            ...(renameTarget &&
+            renameProfileCountry === (renameTarget.profile.taxCountry ?? "generic") &&
+            renameTarget.profile.gainsAlgorithm
+              ? [renameTarget.profile.gainsAlgorithm]
+              : []),
+            ...gainsAlgorithmsFor(renameProfileCountry),
+          ]),
+        )}
+        confirmingRegionSwitch={regionSwitchConfirming}
         open={Boolean(renameTarget)}
         profile={renameTarget?.profile ?? null}
         workspace={renameTarget?.workspace ?? null}
@@ -474,16 +552,31 @@ function BooksView({ snapshot }: { snapshot: ProfilesSnapshot }) {
           setRenameProfileName(value);
           if (renameProfileError) setRenameProfileError(null);
         }}
+        onCountryChange={(value) => {
+          setRenameProfileCountry(value);
+          // Reset the method to the new region's default — the previous method
+          // may be invalid there, and update_profile would reject it.
+          setRenameProfileMethod(GAINS_ALGORITHM_DEFAULTS[value]);
+          if (renameProfileError) setRenameProfileError(null);
+        }}
         onMethodChange={(value) => {
+          // A region switch changes the method value AND the option set in the
+          // same render; radix Select then fires a spurious onValueChange("")
+          // because the freshly-set value isn't in its (old) collection yet.
+          // Ignore that empty so the region default isn't clobbered to blank.
+          if (!value) return;
           setRenameProfileMethod(value);
           if (renameProfileError) setRenameProfileError(null);
         }}
+        onCancelRegionSwitch={() => setRegionSwitchConfirming(false)}
         onOpenChange={(open) => {
           if (renameProfile.isPending || updateProfile.isPending) return;
           if (!open) {
             setRenameTarget(null);
             setRenameProfileName("");
             setRenameProfileMethod("");
+            setRenameProfileCountry("generic");
+            setRegionSwitchConfirming(false);
             setRenameProfileError(null);
           }
         }}
@@ -698,7 +791,7 @@ function ProfileCard({
         variant="ghost"
         size="icon"
         className="absolute top-3 right-3 z-10 size-8"
-        aria-label={t("books.profileCard.editName", { name: profile.name })}
+        aria-label={t("books.profileCard.settings", { name: profile.name })}
         onClick={onRename}
       >
         <Pencil className="size-3.5" aria-hidden="true" />
@@ -774,10 +867,15 @@ interface CreateProfileDialogProps {
   errorMessage: string | null;
   isSubmitting: boolean;
   name: string;
+  country: TaxCountry;
+  method: string;
+  methodOptions: string[];
   open: boolean;
   sourceProfile: Profile | null;
   workspace: Workspace | null;
   onNameChange: (value: string) => void;
+  onCountryChange: (value: TaxCountry) => void;
+  onMethodChange: (value: string) => void;
   onOpenChange: (open: boolean) => void;
   onSourceProfileChange: (sourceProfile: Profile | null) => void;
   onSubmit: () => void;
@@ -787,10 +885,15 @@ function CreateProfileDialog({
   errorMessage,
   isSubmitting,
   name,
+  country,
+  method,
+  methodOptions,
   open,
   sourceProfile,
   workspace,
   onNameChange,
+  onCountryChange,
+  onMethodChange,
   onOpenChange,
   onSourceProfileChange,
   onSubmit,
@@ -892,6 +995,61 @@ function CreateProfileDialog({
             />
           </div>
 
+          {sourceProfile ? null : (
+            <>
+              <div className="space-y-2">
+                <Label htmlFor="create-profile-region">
+                  {t("books.create.regionLabel")}
+                </Label>
+                <Select
+                  value={country}
+                  disabled={isSubmitting}
+                  onValueChange={(value) =>
+                    onCountryChange(value as TaxCountry)
+                  }
+                >
+                  <SelectTrigger id="create-profile-region" className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {TAX_COUNTRIES.map((option) => (
+                      <SelectItem key={option} value={option}>
+                        {regionLabel(option, t)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="create-profile-method">
+                  {t("books.create.methodLabel")}
+                </Label>
+                <Select
+                  value={method}
+                  disabled={isSubmitting || methodOptions.length <= 1}
+                  onValueChange={onMethodChange}
+                >
+                  <SelectTrigger id="create-profile-method" className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {methodOptions.map((option) => (
+                      <SelectItem key={option} value={option}>
+                        {accountingMethodLabel(option, t)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {country === "at" ? (
+                  <p className="text-xs text-muted-foreground">
+                    {t("books.create.austrianMethodNote")}
+                  </p>
+                ) : null}
+              </div>
+            </>
+          )}
+
           {errorMessage && (
             <p className="rounded-md border border-destructive/25 bg-destructive/10 px-3 py-2 text-sm text-destructive">
               {errorMessage}
@@ -921,13 +1079,17 @@ interface RenameProfileDialogProps {
   errorMessage: string | null;
   isSubmitting: boolean;
   name: string;
+  country: TaxCountry;
   method: string;
   methodOptions: string[];
+  confirmingRegionSwitch: boolean;
   open: boolean;
   profile: Profile | null;
   workspace: Workspace | null;
   onNameChange: (value: string) => void;
+  onCountryChange: (value: TaxCountry) => void;
   onMethodChange: (value: string) => void;
+  onCancelRegionSwitch: () => void;
   onOpenChange: (open: boolean) => void;
   onSubmit: () => void;
 }
@@ -936,17 +1098,22 @@ function RenameProfileDialog({
   errorMessage,
   isSubmitting,
   name,
+  country,
   method,
   methodOptions,
+  confirmingRegionSwitch,
   open,
   profile,
   workspace,
   onNameChange,
+  onCountryChange,
   onMethodChange,
+  onCancelRegionSwitch,
   onOpenChange,
   onSubmit,
 }: RenameProfileDialogProps) {
   const { t } = useTranslation(["onboarding", "common"]);
+  const fromCountry: TaxCountry = profile?.taxCountry ?? "generic";
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
@@ -958,9 +1125,19 @@ function RenameProfileDialog({
           }}
         >
           <DialogHeader>
-            <DialogTitle>{t("books.renameProfile.title")}</DialogTitle>
+            <DialogTitle>
+              {confirmingRegionSwitch
+                ? t("books.renameProfile.switchRegion.title")
+                : t("books.renameProfile.title")}
+            </DialogTitle>
             <DialogDescription>
-              {t("books.renameProfile.description")}
+              {confirmingRegionSwitch
+                ? t("books.renameProfile.switchRegion.body", {
+                    from: regionLabel(fromCountry, t),
+                    to: regionLabel(country, t),
+                    method: accountingMethodLabel(method, t),
+                  })
+                : t("books.renameProfile.description")}
             </DialogDescription>
           </DialogHeader>
 
@@ -974,47 +1151,78 @@ function RenameProfileDialog({
             </div>
           )}
 
-          <div className="space-y-2">
-            <Label htmlFor="rename-profile-name">
-              {t("books.renameProfile.nameLabel")}
-            </Label>
-            <Input
-              id="rename-profile-name"
-              autoFocus
-              aria-invalid={Boolean(errorMessage)}
-              disabled={isSubmitting}
-              value={name}
-              onChange={(event) => onNameChange(event.currentTarget.value)}
-            />
-          </div>
+          {confirmingRegionSwitch ? (
+            <p className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-700 dark:text-amber-300">
+              {t("books.renameProfile.switchRegion.warning")}
+            </p>
+          ) : (
+            <>
+              <div className="space-y-2">
+                <Label htmlFor="rename-profile-name">
+                  {t("books.renameProfile.nameLabel")}
+                </Label>
+                <Input
+                  id="rename-profile-name"
+                  autoFocus
+                  aria-invalid={Boolean(errorMessage)}
+                  disabled={isSubmitting}
+                  value={name}
+                  onChange={(event) => onNameChange(event.currentTarget.value)}
+                />
+              </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="rename-profile-method">
-              {t("books.renameProfile.methodLabel")}
-            </Label>
-            <Select
-              value={method}
-              disabled={isSubmitting || methodOptions.length <= 1}
-              onValueChange={onMethodChange}
-            >
-              <SelectTrigger id="rename-profile-method">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {methodOptions.map((option) => (
-                  <SelectItem key={option} value={option}>
-                    {accountingMethodLabel(option, t)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {profile?.taxCountry === "at" ? (
-              <p className="text-xs text-muted-foreground">
-                Austrian books use the moving-average method (gleitender
-                Durchschnittspreis); other methods aren&apos;t valid for Austria.
-              </p>
-            ) : null}
-          </div>
+              <div className="space-y-2">
+                <Label htmlFor="rename-profile-region">
+                  {t("books.renameProfile.regionLabel")}
+                </Label>
+                <Select
+                  value={country}
+                  disabled={isSubmitting}
+                  onValueChange={(value) =>
+                    onCountryChange(value as TaxCountry)
+                  }
+                >
+                  <SelectTrigger id="rename-profile-region">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {TAX_COUNTRIES.map((option) => (
+                      <SelectItem key={option} value={option}>
+                        {regionLabel(option, t)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="rename-profile-method">
+                  {t("books.renameProfile.methodLabel")}
+                </Label>
+                <Select
+                  value={method}
+                  disabled={isSubmitting || methodOptions.length <= 1}
+                  onValueChange={onMethodChange}
+                >
+                  <SelectTrigger id="rename-profile-method">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {methodOptions.map((option) => (
+                      <SelectItem key={option} value={option}>
+                        {accountingMethodLabel(option, t)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {country === "at" ? (
+                  <p className="text-xs text-muted-foreground">
+                    {t("books.renameProfile.austrianMethodNote")}
+                  </p>
+                ) : null}
+              </div>
+            </>
+          )}
 
           {errorMessage && (
             <p className="rounded-md border border-destructive/25 bg-destructive/10 px-3 py-2 text-sm text-destructive">
@@ -1023,17 +1231,35 @@ function RenameProfileDialog({
           )}
 
           <DialogFooter className="gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              disabled={isSubmitting}
-              onClick={() => onOpenChange(false)}
-            >
-              {t("common:actions.cancel")}
-            </Button>
-            <Button type="submit" disabled={isSubmitting}>
-              {t("books.renameProfile.submit")}
-            </Button>
+            {confirmingRegionSwitch ? (
+              <>
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={isSubmitting}
+                  onClick={onCancelRegionSwitch}
+                >
+                  {t("books.renameProfile.switchRegion.back")}
+                </Button>
+                <Button type="submit" disabled={isSubmitting}>
+                  {t("books.renameProfile.switchRegion.confirm")}
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={isSubmitting}
+                  onClick={() => onOpenChange(false)}
+                >
+                  {t("common:actions.cancel")}
+                </Button>
+                <Button type="submit" disabled={isSubmitting}>
+                  {t("books.renameProfile.submit")}
+                </Button>
+              </>
+            )}
           </DialogFooter>
         </form>
       </DialogContent>

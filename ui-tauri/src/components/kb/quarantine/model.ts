@@ -1,11 +1,55 @@
 import type { TFunction } from "i18next";
 
-import type {
-  ReviewMetric,
-  ReviewTableRow,
+import {
+  reviewRowKey,
+  type ReviewMetric,
+  type ReviewTableRow,
+  type ReviewTone,
 } from "@/components/kb/ReviewDataTable";
 
 import type { QuarantineItem, QuarantineReason, QuarantineSnapshot } from "./types";
+
+export type QuarantineResolveStepId =
+  | "sync-wallets"
+  | "review-transfers"
+  | "fix-basis"
+  | "add-prices"
+  | "review-other"
+  | "process-journals";
+
+export type QuarantineResolveActionKind =
+  | "open-row"
+  | "process-journals"
+  | "none";
+
+export interface QuarantineResolveStep {
+  id: QuarantineResolveStepId;
+  count: number;
+  tone: ReviewTone;
+  title: string;
+  detail: string;
+  actionLabel: string;
+  actionKind: QuarantineResolveActionKind;
+  primaryAction?: NonNullable<ReviewTableRow["transactionAction"]>;
+  primaryRowKey?: string;
+  rowIds: string[];
+  rowKeys: string[];
+  previewRows: Array<{
+    id: string;
+    rowKey: string;
+    event: string;
+    account: string;
+    amount: string;
+  }>;
+}
+
+export interface QuarantineResolvePlan {
+  total: number;
+  summary: string;
+  steps: QuarantineResolveStep[];
+  actionableCount: number;
+  blockedCount: number;
+}
 
 export function quarantineItemToRow(
   item: QuarantineItem,
@@ -13,8 +57,8 @@ export function quarantineItemToRow(
   t: TFunction<"journals">,
 ): ReviewTableRow {
   const reason = item.reason || "review_required";
-  const reasonText = formatReason(reason);
-  const priority = quarantinePriority(reason);
+  const effectiveReason = effectiveReviewReason(reason, item.detail);
+  const priority = quarantinePriority(effectiveReason, reason);
   const status = priority === "High" ? "Blocked" : "Needs review";
   const amountMsat =
     item.direction === "outbound" ? -Math.abs(item.amount_msat) : item.amount_msat;
@@ -22,21 +66,27 @@ export function quarantineItemToRow(
     id: item.external_id || shortId(item.transaction_id),
     date: formatDate(item.occurred_at || item.confirmed_at || item.created_at, t),
     account: item.wallet,
-    event: reasonText,
+    event: issueLabel(reason, item, t),
     source: t("quarantine.source", { direction: formatDirection(item.direction, t) }),
     amount: formatMsatAmount(amountMsat, item.asset),
     basis: basisLabel(reason, item.detail, t),
-    impact: t("quarantine.impact"),
+    // Per-row consequence, not a constant: high-priority reasons block the
+    // whole report run, the rest hold just this row out of journals.
+    impact:
+      priority === "High"
+        ? t("quarantine.impactBlocksReports")
+        : t("quarantine.impactHeldForReview"),
     status,
     priority,
     owner: profile ?? t("quarantine.ownerFallback"),
     evidenceHint: evidenceHint(reason, item.detail, t),
-    nextAction: nextAction(reason, t),
-    metricFilterIds: quarantineReasonFilterIds(reason),
+    nextAction: nextAction(reason, item.detail, t),
+    metricFilterIds: quarantineReasonFilterIds(effectiveReason),
     transactionAction: {
       transactionId: item.transaction_id,
-      label: actionLabel(reason, t),
-      tab: actionTab(reason),
+      label: actionLabel(reason, item.detail, t),
+      tab: actionTab(reason, item.detail),
+      reviewReason: effectiveReason,
     },
   };
 }
@@ -45,18 +95,21 @@ export function quarantineRows(
   snapshot: QuarantineSnapshot,
   t: TFunction<"journals">,
 ): ReviewTableRow[] {
-  return snapshot.items.map((item) =>
+  const rows = snapshot.items.map((item) =>
     quarantineItemToRow(item, snapshot.summary.profile, t),
   );
+  return disambiguateDuplicateRowIds(rows);
 }
 
 export function quarantineMetrics(
   summary: QuarantineSnapshot["summary"],
   t: TFunction<"journals">,
+  items?: QuarantineItem[],
 ): ReviewMetric[] {
-  const missingPrices = countReasons(summary.by_reason, "price", "pricing_review");
-  const transferReview = countReasons(summary.by_reason, "transfer", "pair", "swap");
-  const basisReview = countReasons(summary.by_reason, "basis", "lot", "insufficient");
+  const reasons = items?.length ? effectiveReasonCounts(items) : summary.by_reason;
+  const missingPrices = countReasons(reasons, "price", "pricing_review");
+  const transferReview = countReasons(reasons, "transfer", "pair", "swap");
+  const basisReview = countReasons(reasons, "basis", "lot", "insufficient");
   const other = Math.max(
     summary.count - missingPrices - transferReview - basisReview,
     0,
@@ -90,6 +143,66 @@ export function quarantineMetrics(
   ];
 }
 
+export function quarantineResolvePlan(
+  snapshot: QuarantineSnapshot,
+  rows: ReviewTableRow[],
+  t: TFunction<"journals">,
+): QuarantineResolvePlan {
+  // `rows` is produced by `quarantineRows(snapshot)`, so it is a 1:1,
+  // order-preserving projection of `snapshot.items`. Group by index rather
+  // than by transaction id: several quarantine items can share one
+  // transaction id (e.g. split-transfer legs), and a txid-keyed map would
+  // collapse them onto a single row and mis-count / duplicate the steps.
+  const groups = new Map<QuarantineResolveStepId, ReviewTableRow[]>();
+  snapshot.items.forEach((item, index) => {
+    const row = rows[index];
+    if (!row) return;
+    const groupId = resolveStepIdForItem(item);
+    const groupRows = groups.get(groupId) ?? [];
+    groupRows.push(row);
+    groups.set(groupId, groupRows);
+  });
+
+  const steps: QuarantineResolveStep[] = [];
+  for (const id of RESOLVE_STEP_ORDER) {
+    const groupRows = groups.get(id);
+    if (!groupRows?.length) continue;
+    steps.push(resolveStep(id, groupRows, t));
+  }
+  if (snapshot.summary.count > 0) {
+    steps.push({
+      id: "process-journals",
+      count: snapshot.summary.count,
+      tone: "good",
+      title: t("quarantine.resolvePlan.step.process.title"),
+      detail: t("quarantine.resolvePlan.step.process.detail"),
+      actionLabel: t("quarantine.resolvePlan.step.process.action"),
+      actionKind: "process-journals",
+      rowIds: rows.map((row) => row.id),
+      rowKeys: rows.map(reviewRowKey),
+      previewRows: [],
+    });
+  }
+
+  const actionableCount = steps
+    .filter((step) => step.actionKind === "open-row")
+    .reduce((total, step) => total + step.count, 0);
+  const blockedCount = rows.filter((row) => row.status === "Blocked").length;
+  return {
+    total: snapshot.summary.count,
+    summary:
+      snapshot.summary.count > 0
+        ? t("quarantine.resolvePlan.summary", {
+            count: snapshot.summary.count,
+            steps: Math.max(steps.length - 1, 0),
+          })
+        : t("quarantine.resolvePlan.summaryClear"),
+    steps,
+    actionableCount,
+    blockedCount,
+  };
+}
+
 export function quarantineReasonFilterIds(reason: string) {
   // Mirrors daemon quarantine reason strings until the API exposes a typed
   // review category for this filter band.
@@ -112,6 +225,164 @@ export function quarantineReasonFilterIds(reason: string) {
   return filters;
 }
 
+const RESOLVE_STEP_ORDER: QuarantineResolveStepId[] = [
+  "sync-wallets",
+  "review-transfers",
+  "fix-basis",
+  "add-prices",
+  "review-other",
+];
+
+function resolveStepIdForItem(item: QuarantineItem): QuarantineResolveStepId {
+  return resolveStepIdForReason(
+    effectiveReviewReason(item.reason || "review_required", item.detail),
+  );
+}
+
+function resolveStepIdForReason(reason: string): QuarantineResolveStepId {
+  const normalized = reason.toLowerCase();
+  if (normalized.includes("ownership_transfer_amount_mismatch")) {
+    return "sync-wallets";
+  }
+  if (
+    normalized.includes("transfer_fee_implausible") ||
+    normalized.includes("ownership_transfer") ||
+    normalized.includes("derived_transfer") ||
+    normalized.includes("transfer") ||
+    normalized.includes("pair") ||
+    normalized.includes("swap")
+  ) {
+    return "review-transfers";
+  }
+  if (
+    normalized.includes("basis") ||
+    normalized.includes("lot") ||
+    normalized.includes("insufficient")
+  ) {
+    return "fix-basis";
+  }
+  if (normalized.includes("price") || normalized.includes("pricing_review")) {
+    return "add-prices";
+  }
+  return "review-other";
+}
+
+function resolveStep(
+  id: QuarantineResolveStepId,
+  rows: ReviewTableRow[],
+  t: TFunction<"journals">,
+): QuarantineResolveStep {
+  const primaryRow = rows.find((row) => row.transactionAction);
+  const primaryAction = primaryRow?.transactionAction;
+  return {
+    id,
+    count: rows.length,
+    tone: resolveStepTone(id, rows),
+    title: resolveStepTitle(id, rows.length, t),
+    detail: resolveStepDetail(id, rows.length, t),
+    actionLabel: resolveStepActionLabel(id, t),
+    actionKind: primaryAction ? "open-row" : "none",
+    primaryAction,
+    primaryRowKey: primaryRow ? reviewRowKey(primaryRow) : undefined,
+    rowIds: rows.map((row) => row.id),
+    rowKeys: rows.map(reviewRowKey),
+    previewRows: rows.slice(0, 3).map((row) => ({
+      id: row.id,
+      rowKey: reviewRowKey(row),
+      event: row.event,
+      account: row.account,
+      amount: row.amount,
+    })),
+  };
+}
+
+function disambiguateDuplicateRowIds(rows: ReviewTableRow[]) {
+  const counts = new Map<string, number>();
+  for (const row of rows) {
+    counts.set(row.id, (counts.get(row.id) ?? 0) + 1);
+  }
+  const seen = new Map<string, number>();
+  return rows.map((row) => {
+    if ((counts.get(row.id) ?? 0) <= 1) return row;
+    const next = (seen.get(row.id) ?? 0) + 1;
+    seen.set(row.id, next);
+    return { ...row, rowKey: `${row.id}:${next}` };
+  });
+}
+
+function resolveStepTone(
+  id: QuarantineResolveStepId,
+  rows: ReviewTableRow[],
+): ReviewTone {
+  if (id === "sync-wallets" || rows.some((row) => row.status === "Blocked")) {
+    return "alert";
+  }
+  if (id === "add-prices" || id === "review-transfers") return "warning";
+  return "neutral";
+}
+
+function resolveStepTitle(
+  id: QuarantineResolveStepId,
+  count: number,
+  t: TFunction<"journals">,
+) {
+  switch (id) {
+    case "sync-wallets":
+      return t("quarantine.resolvePlan.step.sync-wallets.title", { count });
+    case "review-transfers":
+      return t("quarantine.resolvePlan.step.review-transfers.title", { count });
+    case "fix-basis":
+      return t("quarantine.resolvePlan.step.fix-basis.title", { count });
+    case "add-prices":
+      return t("quarantine.resolvePlan.step.add-prices.title", { count });
+    case "review-other":
+      return t("quarantine.resolvePlan.step.review-other.title", { count });
+    case "process-journals":
+      return t("quarantine.resolvePlan.step.process.title", { count });
+  }
+}
+
+function resolveStepDetail(
+  id: QuarantineResolveStepId,
+  count: number,
+  t: TFunction<"journals">,
+) {
+  switch (id) {
+    case "sync-wallets":
+      return t("quarantine.resolvePlan.step.sync-wallets.detail", { count });
+    case "review-transfers":
+      return t("quarantine.resolvePlan.step.review-transfers.detail", { count });
+    case "fix-basis":
+      return t("quarantine.resolvePlan.step.fix-basis.detail", { count });
+    case "add-prices":
+      return t("quarantine.resolvePlan.step.add-prices.detail", { count });
+    case "review-other":
+      return t("quarantine.resolvePlan.step.review-other.detail", { count });
+    case "process-journals":
+      return t("quarantine.resolvePlan.step.process.detail", { count });
+  }
+}
+
+function resolveStepActionLabel(
+  id: QuarantineResolveStepId,
+  t: TFunction<"journals">,
+) {
+  switch (id) {
+    case "sync-wallets":
+      return t("quarantine.resolvePlan.step.sync-wallets.action");
+    case "review-transfers":
+      return t("quarantine.resolvePlan.step.review-transfers.action");
+    case "fix-basis":
+      return t("quarantine.resolvePlan.step.fix-basis.action");
+    case "add-prices":
+      return t("quarantine.resolvePlan.step.add-prices.action");
+    case "review-other":
+      return t("quarantine.resolvePlan.step.review-other.action");
+    case "process-journals":
+      return t("quarantine.resolvePlan.step.process.action");
+  }
+}
+
 function countReasons(reasons: QuarantineReason[], ...needles: string[]) {
   return reasons.reduce((total, row) => {
     const normalized = row.reason.toLowerCase();
@@ -119,6 +390,18 @@ function countReasons(reasons: QuarantineReason[], ...needles: string[]) {
       ? total + row.count
       : total;
   }, 0);
+}
+
+function effectiveReasonCounts(items: QuarantineItem[]): QuarantineReason[] {
+  const counts = new Map<string, number>();
+  items.forEach((item) => {
+    const reason = effectiveReviewReason(
+      item.reason || "review_required",
+      item.detail,
+    );
+    counts.set(reason, (counts.get(reason) ?? 0) + 1);
+  });
+  return Array.from(counts, ([reason, count]) => ({ reason, count }));
 }
 
 // Structural humanizer for the daemon reason CODE (e.g. "missing_price" →
@@ -132,8 +415,26 @@ function formatReason(reason: string) {
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
-function quarantinePriority(reason: string): ReviewTableRow["priority"] {
+function effectiveReviewReason(
+  reason: string,
+  detail: Record<string, unknown>,
+) {
   const normalized = reason.toLowerCase();
+  if (normalized.includes("derived_transfer_group_blocked")) {
+    return detailString(detail, "blocked_by_reason") || reason;
+  }
+  return reason;
+}
+
+function quarantinePriority(
+  reason: string,
+  originalReason = reason,
+): ReviewTableRow["priority"] {
+  const normalized = reason.toLowerCase();
+  const original = originalReason.toLowerCase();
+  if (original.includes("ownership_transfer_amount_mismatch")) {
+    return "High";
+  }
   if (
     normalized.includes("unsupported") ||
     normalized.includes("insufficient") ||
@@ -153,9 +454,16 @@ function basisLabel(
   detail: Record<string, unknown>,
   t: TFunction<"journals">,
 ) {
-  const normalized = reason.toLowerCase();
+  const normalized = effectiveReviewReason(reason, detail).toLowerCase();
+  const original = reason.toLowerCase();
   if (normalized.includes("transfer_fee_implausible")) {
     return t("quarantine.basis.splitTransfer");
+  }
+  if (original.includes("ownership_transfer_amount_mismatch")) {
+    return t("quarantine.basis.ownershipAmountMismatch");
+  }
+  if (normalized.includes("ownership_transfer")) {
+    return t("quarantine.basis.ownershipTransfer");
   }
   if (normalized.includes("pricing_review")) {
     return t("quarantine.basis.coarsePricing");
@@ -171,23 +479,139 @@ function basisLabel(
   return detailReason ? formatReason(detailReason) : t("quarantine.basis.reviewRequired");
 }
 
+function issueLabel(
+  reason: string,
+  item: QuarantineItem,
+  t: TFunction<"journals">,
+) {
+  const normalized = reason.toLowerCase();
+  const detail = item.detail;
+  const asset = detailString(detail, "asset") || item.asset;
+  const fromWallet = detailString(detail, "from_wallet");
+  const toWallet = detailString(detail, "to_wallet");
+  const wallet = detailString(detail, "wallet") || item.wallet;
+  const direction =
+    detailString(detail, "direction") || formatDirection(item.direction, t);
+  if (normalized.includes("derived_transfer_group_blocked")) {
+    return t("quarantine.issue.transferGroupBlocked", {
+      reason: formatReason(detailString(detail, "blocked_by_reason") || reason),
+    });
+  }
+  if (normalized.includes("transfer_fee_implausible")) {
+    return fromWallet && toWallet
+      ? t("quarantine.issue.implausibleFeeWithWallets", {
+          from: fromWallet,
+          to: toWallet,
+        })
+      : t("quarantine.issue.implausibleFee");
+  }
+  if (normalized.includes("pricing_review")) {
+    return t("quarantine.issue.pricingReview", {
+      asset,
+      granularity:
+        detailString(detail, "pricing_granularity") ||
+        t("quarantine.detailFallback.price"),
+    });
+  }
+  if (normalized.includes("price")) {
+    return t("quarantine.issue.missingPrice", { asset, direction });
+  }
+  if (normalized.includes("ownership_transfer_amount_mismatch")) {
+    return t("quarantine.issue.ownershipAmountMismatch", { wallet });
+  }
+  if (normalized.includes("ownership_transfer")) {
+    return t("quarantine.issue.ownershipTransfer", { wallet });
+  }
+  if (normalized.includes("insufficient_lots")) {
+    return t("quarantine.issue.insufficientLots", { asset, wallet });
+  }
+  if (normalized.includes("missing_cost_basis") || normalized.includes("basis")) {
+    return t("quarantine.issue.missingBasis", { asset, wallet });
+  }
+  return formatReason(reason);
+}
+
 function evidenceHint(
   reason: string,
   detail: Record<string, unknown>,
   t: TFunction<"journals">,
 ) {
-  const normalized = reason.toLowerCase();
+  const original = reason.toLowerCase();
+  const normalized = effectiveReviewReason(reason, detail).toLowerCase();
   if (normalized.includes("transfer_fee_implausible")) {
+    const impliedFee = formatBtcDetail(detailNumber(detail, "implied_fee"));
+    const ceiling = formatBtcDetail(detailNumber(detail, "fee_ceiling"));
+    if (impliedFee && ceiling) {
+      return t("quarantine.evidence.splitTransferValues", {
+        impliedFee,
+        ceiling,
+      });
+    }
     return t("quarantine.evidence.splitTransfer");
   }
+  if (original.includes("ownership_transfer")) {
+    const rowAmount = formatMsatDetail(detailNumber(detail, "row_amount_msat"));
+    const ownedOutputs = formatMsatDetail(
+      detailNumber(detail, "owned_outputs_msat"),
+    );
+    const legAmount = formatMsatDetail(detailNumber(detail, "leg_amount_msat"));
+    if (rowAmount && ownedOutputs) {
+      return t("quarantine.evidence.ownershipAmountMismatch", {
+        rowAmount,
+        ownedOutputs,
+      });
+    }
+    if (legAmount) {
+      return t("quarantine.evidence.ownershipLeg", { amount: legAmount });
+    }
+    return t("quarantine.evidence.ownershipTransfer");
+  }
   if (normalized.includes("pricing_review")) {
+    const quality = detailString(detail, "pricing_quality");
+    const granularity = detailString(detail, "pricing_granularity");
+    const wallet = detailString(detail, "wallet");
+    if (quality || granularity || wallet) {
+      return t("quarantine.evidence.coarsePricingValues", {
+        quality: quality || t("quarantine.detailFallback.price"),
+        granularity: granularity || t("quarantine.detailFallback.price"),
+        wallet: wallet || t("quarantine.detailFallback.wallet"),
+      });
+    }
     return t("quarantine.evidence.coarsePricing");
   }
-  if (normalized.includes("price")) return t("quarantine.evidence.price");
+  if (normalized.includes("price")) {
+    const requiredFor = detailString(detail, "required_for");
+    const fromWallet = detailString(detail, "from_wallet");
+    const toWallet = detailString(detail, "to_wallet");
+    if (requiredFor || fromWallet || toWallet) {
+      return t("quarantine.evidence.priceValues", {
+        requiredFor: requiredFor
+          ? formatReason(requiredFor)
+          : t("quarantine.detailFallback.price"),
+        route:
+          fromWallet && toWallet
+            ? `${fromWallet} -> ${toWallet}`
+            : t("quarantine.detailFallback.wallet"),
+      });
+    }
+    return t("quarantine.evidence.price");
+  }
   if (normalized.includes("transfer") || normalized.includes("pair")) {
     return t("quarantine.evidence.pair");
   }
   if (normalized.includes("basis") || normalized.includes("lot")) {
+    const required = formatBtcDetail(detailNumber(detail, "required"));
+    const available =
+      formatBtcDetail(detailNumber(detail, "available")) ||
+      formatBtcDetail(detailNumber(detail, "priced_available"));
+    const fromWallet = detailString(detail, "from_wallet");
+    if (required && available) {
+      return t("quarantine.evidence.basisValues", {
+        required,
+        available,
+        wallet: fromWallet || t("quarantine.detailFallback.wallet"),
+      });
+    }
     return t("quarantine.evidence.basis");
   }
   if (normalized.includes("asset")) return t("quarantine.evidence.asset");
@@ -197,10 +621,51 @@ function evidenceHint(
     : t("quarantine.evidence.fallback");
 }
 
-function nextAction(reason: string, t: TFunction<"journals">) {
-  const normalized = reason.toLowerCase();
+function detailString(detail: Record<string, unknown>, key: string) {
+  const value = detail[key];
+  return typeof value === "string" && value.trim() ? value.trim() : "";
+}
+
+function detailNumber(detail: Record<string, unknown>, key: string) {
+  const value = detail[key];
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function formatBtcDetail(value: number | null) {
+  if (value === null) return "";
+  const sats = Math.round(Math.abs(value) * 100_000_000);
+  return `${sats.toLocaleString("en-US")} sats`;
+}
+
+function formatMsatDetail(value: number | null) {
+  if (value === null) return "";
+  const sats = Math.round(Math.abs(value) / 1000);
+  return `${sats.toLocaleString("en-US")} sats`;
+}
+
+function nextAction(
+  reason: string,
+  detail: Record<string, unknown>,
+  t: TFunction<"journals">,
+) {
+  const original = reason.toLowerCase();
+  const normalized = effectiveReviewReason(reason, detail).toLowerCase();
   if (normalized.includes("transfer_fee_implausible")) {
     return t("quarantine.nextAction.splitTransfer");
+  }
+  if (original.includes("ownership_transfer_source_ambiguous")) {
+    return t("quarantine.nextAction.ownershipConsolidation");
+  }
+  if (original.includes("ownership_transfer_amount_mismatch")) {
+    return t("quarantine.nextAction.ownershipAmountMismatch");
+  }
+  if (normalized.includes("ownership_transfer")) {
+    return t("quarantine.nextAction.ownershipTransfer");
   }
   if (normalized.includes("pricing_review")) {
     return t("quarantine.nextAction.coarsePricing");
@@ -215,10 +680,21 @@ function nextAction(reason: string, t: TFunction<"journals">) {
   return t("quarantine.nextAction.fallback");
 }
 
-function actionLabel(reason: string, t: TFunction<"journals">) {
-  const normalized = reason.toLowerCase();
+function actionLabel(
+  reason: string,
+  detail: Record<string, unknown>,
+  t: TFunction<"journals">,
+) {
+  const original = reason.toLowerCase();
+  const normalized = effectiveReviewReason(reason, detail).toLowerCase();
   if (normalized.includes("transfer_fee_implausible")) {
     return t("quarantine.action.openTransaction");
+  }
+  if (original.includes("ownership_transfer_amount_mismatch")) {
+    return t("quarantine.action.openSyncReview");
+  }
+  if (normalized.includes("ownership_transfer")) {
+    return t("quarantine.action.openPairing");
   }
   if (normalized.includes("pricing_review")) return t("quarantine.action.openPricing");
   if (normalized.includes("price")) return t("quarantine.action.openPricing");
@@ -231,11 +707,25 @@ function actionLabel(reason: string, t: TFunction<"journals">) {
   return t("quarantine.action.openTransaction");
 }
 
-function actionTab(reason: string): NonNullable<ReviewTableRow["transactionAction"]>["tab"] {
-  const normalized = reason.toLowerCase();
+function actionTab(
+  reason: string,
+  detail: Record<string, unknown>,
+): NonNullable<ReviewTableRow["transactionAction"]>["tab"] {
+  const original = reason.toLowerCase();
+  const normalized = effectiveReviewReason(reason, detail).toLowerCase();
+  if (normalized.includes("transfer_fee_implausible")) return "details";
+  if (original.includes("ownership_transfer_amount_mismatch")) return "details";
   if (normalized.includes("pricing_review")) return "pricing";
   if (normalized.includes("price")) return "pricing";
   if (normalized.includes("basis") || normalized.includes("lot")) return "tax";
+  if (
+    normalized.includes("ownership_transfer") ||
+    normalized.includes("transfer") ||
+    normalized.includes("pair") ||
+    normalized.includes("swap")
+  ) {
+    return "linked";
+  }
   return "details";
 }
 

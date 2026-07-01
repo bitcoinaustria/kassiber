@@ -17,12 +17,29 @@ from ...msat import btc_to_msat, dec, msat_to_btc
 from ...tax_policy import build_tax_policy
 from ...transfers import apply_manual_pairs, detect_intra_transfers
 from .. import pricing
+from ..ownership_transfers import (
+    derive_multi_source_consolidations,
+    derive_ownership_transfers,
+    derive_recorded_fanout_transfers,
+    detect_conflicting_spend_ids,
+    graph_multi_owned_destination_out_ids,
+    graph_partial_payment_out_ids,
+)
 from ..austrian import (
     AT_SWAP_QUARANTINE_REASON,
     REGIME_NEU,
     kennzahl_for_disposal_category,
 )
-from ..tax_events import NormalizedTaxAssetInputs, build_tax_quarantine, normalize_tax_asset_inputs
+from ..tax_events import (
+    NormalizedTaxAssetInputs,
+    NormalizedTaxTransfer,
+    build_tax_quarantine,
+    normalize_tax_asset_inputs,
+)
+from ..loans import (
+    LOCK_SUPPRESS_ROLES as _LOAN_LOCK_SUPPRESS_ROLES,
+    RELEASE_SUPPRESS_ROLES as _LOAN_RELEASE_SUPPRESS_ROLES,
+)
 from .base import TaxEngineLedgerInputs, TaxEngineLedgerResult
 
 _RP2_MODULES = None
@@ -278,9 +295,26 @@ def _capital_gains_type(gain_loss: Any) -> str:
 
 def _compose_transfer_notes(transfer: Any) -> str:
     tokens: list[str] = []
+    # The MOVE's miner fee is a taxable disposal; under the Austrian
+    # moving-average method rp2 needs its regime tag in notes or it aborts the
+    # whole asset on "Ambiguous Austrian disposal" when both Alt and Neu lots
+    # exist. Emit it first (matching _compose_event_notes' fixed marker order).
+    regime = getattr(transfer, "at_regime", None)
+    if regime:
+        tokens.append(f"at_regime={regime}")
     pool = getattr(transfer, "at_pool", None)
     if pool:
         tokens.append(f"at_pool={pool}")
+    pairing_source = getattr(transfer, "pairing_source", None)
+    if pairing_source == "ownership_derived":
+        # Make the basis for the non-taxable treatment auditable: this leg was
+        # proven from the on-chain transaction graph (an output paid an address
+        # owned by another of the user's wallets), not a same-txid row match.
+        tokens.append("self-transfer proven by address ownership")
+    elif pairing_source == "multi_source_consolidation":
+        # One leg of a consolidation funded by several owned wallets, split from
+        # the graph + per-wallet rows so the network fee is booked once.
+        tokens.append("self-transfer from multi-wallet consolidation")
     description = getattr(transfer, "description", "") or ""
     if description:
         tokens.append(description)
@@ -436,6 +470,85 @@ def _transfer_item_id(transfer: NormalizedTaxTransfer) -> str:
     return str(transfer.transfer_id or transfer.out_transaction_id)
 
 
+def _ordered_rp2_items(
+    normalized_inputs: NormalizedTaxAssetInputs,
+) -> list[tuple[str, str]]:
+    events_by_id = {event.transaction_id: event for event in normalized_inputs.events}
+    transfers_by_id = {
+        _transfer_item_id(transfer): transfer
+        for transfer in normalized_inputs.transfers
+    }
+    by_time: dict[str, list[tuple[int, tuple[str, str]]]] = defaultdict(list)
+    for index, (kind, ident) in enumerate(normalized_inputs.ordered_items):
+        if kind == "transfer":
+            occurred_at = transfers_by_id[ident].occurred_at
+        else:
+            occurred_at = events_by_id[ident].occurred_at
+        by_time[str(occurred_at)].append((index, (kind, ident)))
+
+    ordered: list[tuple[str, str]] = []
+    for occurred_at in sorted(by_time):
+        bucket = by_time[occurred_at]
+        inbound_events: list[tuple[int, tuple[str, str]]] = []
+        outbound_events: list[tuple[int, tuple[str, str]]] = []
+        transfer_items: list[tuple[int, tuple[str, str]]] = []
+        for indexed_item in bucket:
+            _, (kind, ident) = indexed_item
+            if kind == "transfer":
+                transfer_items.append(indexed_item)
+                continue
+            event = events_by_id[ident]
+            if event.direction == "inbound":
+                inbound_events.append(indexed_item)
+            else:
+                outbound_events.append(indexed_item)
+        ordered.extend(item for _, item in sorted(inbound_events))
+        ordered.extend(_topologically_order_transfers(transfer_items, transfers_by_id))
+        ordered.extend(item for _, item in sorted(outbound_events))
+    return ordered
+
+
+def _topologically_order_transfers(
+    transfer_items: Sequence[tuple[int, tuple[str, str]]],
+    transfers_by_id: Mapping[str, NormalizedTaxTransfer],
+) -> list[tuple[str, str]]:
+    if len(transfer_items) <= 1:
+        return [item for _, item in transfer_items]
+
+    original_order = {ident: index for index, (_, ident) in transfer_items}
+    transfer_ids = [ident for _, (_, ident) in transfer_items]
+    outgoing: dict[str, set[str]] = {ident: set() for ident in transfer_ids}
+    incoming_count: dict[str, int] = {ident: 0 for ident in transfer_ids}
+    for source_id in transfer_ids:
+        source = transfers_by_id[source_id]
+        for target_id in transfer_ids:
+            if source_id == target_id:
+                continue
+            target = transfers_by_id[target_id]
+            if source.to_wallet_id == target.from_wallet_id:
+                if target_id not in outgoing[source_id]:
+                    outgoing[source_id].add(target_id)
+                    incoming_count[target_id] += 1
+
+    ready = sorted(
+        [ident for ident in transfer_ids if incoming_count[ident] == 0],
+        key=lambda ident: original_order[ident],
+    )
+    ordered_ids: list[str] = []
+    while ready:
+        ident = ready.pop(0)
+        ordered_ids.append(ident)
+        for target_id in sorted(outgoing[ident], key=lambda tid: original_order[tid]):
+            incoming_count[target_id] -= 1
+            if incoming_count[target_id] == 0:
+                ready.append(target_id)
+        ready.sort(key=lambda tid: original_order[tid])
+
+    if len(ordered_ids) != len(transfer_ids):
+        return [item for _, item in sorted(transfer_items)]
+    return [("transfer", ident) for ident in ordered_ids]
+
+
 def _row_get(row: Mapping[str, Any] | None, key: str, default: Any = None) -> Any:
     if row is None:
         return default
@@ -539,105 +652,207 @@ def _prepare_rp2_asset_input(profile, normalized_inputs: NormalizedTaxAssetInput
         _transfer_item_id(transfer): transfer
         for transfer in normalized_inputs.transfers
     }
+    ordered_rp2_items = _ordered_rp2_items(normalized_inputs)
+    transfers_by_group: dict[str, list[NormalizedTaxTransfer]] = defaultdict(list)
+    for item_kind, item_id in ordered_rp2_items:
+        if item_kind != "transfer":
+            continue
+        transfer = transfers_by_id[item_id]
+        if transfer.group_id:
+            transfers_by_group[transfer.group_id].append(transfer)
+    processed_transfer_groups: set[str] = set()
 
-    # Walk the ledger in rp2's own order — by timestamp, and within a timestamp
-    # IN before INTRA before OUT — so this gate's availability decision matches
-    # the BalanceSet (which concatenates IN+INTRA+OUT then stable-sorts by
-    # timestamp). The original-stream index is the final, deterministic tiebreak,
-    # replacing the previous nondeterministic random-uuid order that could flip a
-    # same-timestamp buy/sell between re-imports. row_index then follows the same
-    # order rp2 itself processes in.
-    def _gate_order_key(indexed_item):
-        index, (kind, ident) = indexed_item
-        if kind == "transfer":
-            return (transfers_by_id[ident].occurred_at, 1, index)
-        ev = events_by_id[ident]
-        return (ev.occurred_at, 0 if ev.direction == "inbound" else 2, index)
+    def _transfer_gate_failure(
+        transfer: NormalizedTaxTransfer,
+        account_state: Mapping[str, Decimal],
+        priced_state: Decimal,
+    ) -> tuple[str, dict[str, Any]] | None:
+        from_account = transfer.from_wallet_label
+        if account_state[from_account] < transfer.sent:
+            return (
+                "insufficient_lots",
+                {
+                    "from_wallet": transfer.from_wallet_label,
+                    "asset": asset,
+                    "required": float(transfer.sent),
+                    "available": float(account_state[from_account]),
+                },
+            )
+        if priced_state < transfer.sent:
+            return (
+                "missing_cost_basis",
+                {
+                    "from_wallet": transfer.from_wallet_label,
+                    "asset": asset,
+                    "required": float(transfer.sent),
+                    "priced_available": float(priced_state),
+                },
+            )
+        return None
 
-    for _, (item_kind, item_id) in sorted(
-        enumerate(normalized_inputs.ordered_items), key=_gate_order_key
-    ):
+    def _append_transfer_gate_quarantine(
+        transfer: NormalizedTaxTransfer,
+        reason: str,
+        detail: Mapping[str, Any],
+    ) -> None:
+        quarantines.append(build_tax_quarantine(profile, transfer.out_row, reason, detail))
+
+    def _append_group_gate_quarantines(
+        group: Sequence[NormalizedTaxTransfer],
+        failed_transfer: NormalizedTaxTransfer,
+        reason: str,
+        detail: Mapping[str, Any],
+    ) -> None:
+        group_id = str(failed_transfer.group_id)
+        seen: set[str] = set()
+        ordered_group = [failed_transfer] + [
+            transfer for transfer in group if transfer is not failed_transfer
+        ]
+        for transfer in ordered_group:
+            rows_to_flag = [
+                ("out", transfer.out_row),
+                ("in", transfer.in_row),
+                *[
+                    ("replaced", row)
+                    for row in getattr(transfer, "group_block_rows", ())
+                ],
+            ]
+            for side, row in rows_to_flag:
+                transaction_id = str(_row_get(row, "journal_transaction_id") or row["id"])
+                if transaction_id in seen:
+                    continue
+                seen.add(transaction_id)
+                if transfer is failed_transfer and side == "out":
+                    row_reason = reason
+                    row_detail = {**dict(detail), "transfer_group_id": group_id}
+                else:
+                    row_reason = "derived_transfer_group_blocked"
+                    row_detail = {
+                        "asset": asset,
+                        "from_wallet": transfer.from_wallet_label,
+                        "to_wallet": transfer.to_wallet_label,
+                        "direction": "transfer",
+                        "paired_leg": side == "in",
+                        "transfer_group_id": group_id,
+                        "blocked_by_reason": reason,
+                    }
+                quarantines.append(
+                    build_tax_quarantine(profile, row, row_reason, row_detail)
+                )
+
+    def _apply_transfer_to_rp2(transfer: NormalizedTaxTransfer) -> None:
+        nonlocal priced_available, row_index
+        from_account = transfer.from_wallet_label
+        to_account = transfer.to_wallet_label
+        transfer_id = _transfer_item_id(transfer)
+        intra_set.add_entry(
+            IntraTransaction(
+                configuration=configuration,
+                timestamp=transfer.occurred_at,
+                asset=asset,
+                from_exchange=transfer.from_wallet_label,
+                from_holder=holder,
+                to_exchange=transfer.to_wallet_label,
+                to_holder=holder,
+                spot_price=_rp2_decimal(
+                    transfer.spot_price if transfer.spot_price is not None else 0
+                ),
+                crypto_sent=_rp2_decimal(transfer.sent),
+                crypto_received=_rp2_decimal(transfer.received),
+                row=row_index,
+                unique_id=transfer_id,
+                notes=_compose_transfer_notes(transfer),
+            )
+        )
+        row_index += 1
+        # The transfer debits `sent` from the source account and credits
+        # `received` to the destination; the difference (the fee) is the only
+        # quantity that leaves the global priced pool. Matches BalanceSet.
+        account_available[from_account] -= transfer.sent
+        account_available[to_account] += transfer.received
+        priced_available -= transfer.fee
+        audit_row = {
+            "out_id": transfer.out_transaction_id,
+            "in_id": transfer.in_transaction_id,
+            "from_wallet_id": transfer.from_wallet_id,
+            "from_wallet_label": transfer.from_wallet_label,
+            "to_wallet_id": transfer.to_wallet_id,
+            "to_wallet_label": transfer.to_wallet_label,
+            "asset": asset,
+            "occurred_at": transfer.occurred_at,
+            "external_id": transfer.external_id,
+            "crypto_sent": float(transfer.sent),
+            "crypto_received": float(transfer.received),
+            "crypto_fee": float(transfer.fee),
+            "spot_price": (
+                float(transfer.spot_price) if transfer.spot_price is not None else 0.0
+            ),
+            # Provenance for the audit trail: "ownership_derived" when this
+            # MOVE was proven from the on-chain graph rather than row-matched
+            # (None for same-txid / manual pairs).
+            "pairing_source": getattr(transfer, "pairing_source", None),
+        }
+        if transfer.group_id:
+            audit_row["transfer_group_id"] = transfer.group_id
+        if transfer_id != transfer.out_transaction_id:
+            audit_row["rp2_unique_id"] = transfer_id
+        intra_audit.append(audit_row)
+
+    # Walk the ledger in rp2's own timestamp order, with inbounds before intra
+    # transfers before outbounds at each instant. Same-timestamp transfer chains
+    # are topologically ordered by wallet dependency (a MOVE into wallet X before
+    # a same-time MOVE out of X) so this gate's availability decision and the
+    # IntraTransaction insertion order both match the economic flow.
+    for item_kind, item_id in ordered_rp2_items:
         if item_kind == "transfer":
             transfer = transfers_by_id[item_id]
-            transfer_id = _transfer_item_id(transfer)
-            from_account = transfer.from_wallet_label
-            to_account = transfer.to_wallet_label
-            if account_available[from_account] < transfer.sent:
-                quarantines.append(
-                    build_tax_quarantine(
-                        profile,
-                        transfer.out_row,
-                        "insufficient_lots",
-                        {
-                            "from_wallet": transfer.from_wallet_label,
-                            "asset": asset,
-                            "required": float(transfer.sent),
-                            "available": float(account_available[from_account]),
-                        },
+            if transfer.group_id:
+                if transfer.group_id in processed_transfer_groups:
+                    continue
+                processed_transfer_groups.add(transfer.group_id)
+                group = transfers_by_group[transfer.group_id]
+                temp_account = defaultdict(lambda: Decimal("0"), account_available)
+                temp_priced = priced_available
+                failed: tuple[NormalizedTaxTransfer, str, dict[str, Any]] | None = None
+                for candidate in group:
+                    failure = _transfer_gate_failure(
+                        candidate, temp_account, temp_priced
                     )
-                )
-                continue
-            if priced_available < transfer.sent:
-                quarantines.append(
-                    build_tax_quarantine(
-                        profile,
-                        transfer.out_row,
-                        "missing_cost_basis",
-                        {
-                            "from_wallet": transfer.from_wallet_label,
-                            "asset": asset,
-                            "required": float(transfer.sent),
-                            "priced_available": float(priced_available),
-                        },
+                    if failure is not None:
+                        reason, detail = failure
+                        failed = (candidate, reason, detail)
+                        break
+                    temp_account[candidate.from_wallet_label] -= candidate.sent
+                    temp_account[candidate.to_wallet_label] += candidate.received
+                    temp_priced -= candidate.fee
+                if failed is not None:
+                    failed_transfer, reason, detail = failed
+                    _append_group_gate_quarantines(
+                        group, failed_transfer, reason, detail
                     )
-                )
+                    continue
+                for candidate in group:
+                    _apply_transfer_to_rp2(candidate)
                 continue
-            intra_set.add_entry(
-                IntraTransaction(
-                    configuration=configuration,
-                    timestamp=transfer.occurred_at,
-                    asset=asset,
-                    from_exchange=transfer.from_wallet_label,
-                    from_holder=holder,
-                    to_exchange=transfer.to_wallet_label,
-                    to_holder=holder,
-                    spot_price=_rp2_decimal(transfer.spot_price if transfer.spot_price is not None else 0),
-                    crypto_sent=_rp2_decimal(transfer.sent),
-                    crypto_received=_rp2_decimal(transfer.received),
-                    row=row_index,
-                    unique_id=transfer_id,
-                    notes=_compose_transfer_notes(transfer),
-                )
+
+            failure = _transfer_gate_failure(
+                transfer, account_available, priced_available
             )
-            row_index += 1
-            # The transfer debits `sent` from the source account and credits
-            # `received` to the destination; the difference (the fee) is the only
-            # quantity that leaves the global priced pool. Matches BalanceSet.
-            account_available[from_account] -= transfer.sent
-            account_available[to_account] += transfer.received
-            priced_available -= transfer.fee
-            audit_row = {
-                "out_id": transfer.out_transaction_id,
-                "in_id": transfer.in_transaction_id,
-                "from_wallet_id": transfer.from_wallet_id,
-                "from_wallet_label": transfer.from_wallet_label,
-                "to_wallet_id": transfer.to_wallet_id,
-                "to_wallet_label": transfer.to_wallet_label,
-                "asset": asset,
-                "occurred_at": transfer.occurred_at,
-                "external_id": transfer.external_id,
-                "crypto_sent": float(transfer.sent),
-                "crypto_received": float(transfer.received),
-                "crypto_fee": float(transfer.fee),
-                "spot_price": float(transfer.spot_price) if transfer.spot_price is not None else 0.0,
-            }
-            if transfer_id != transfer.out_transaction_id:
-                audit_row["rp2_unique_id"] = transfer_id
-            intra_audit.append(audit_row)
+            if failure is not None:
+                reason, detail = failure
+                _append_transfer_gate_quarantine(transfer, reason, detail)
+                continue
+            _apply_transfer_to_rp2(transfer)
             continue
 
         event = events_by_id[item_id]
         if event.direction == "inbound":
+            if getattr(event, "loan_leg_role", None) in _LOAN_RELEASE_SUPPRESS_ROLES:
+                # Collateral returning from escrow (repayment / recovery /
+                # surplus): the coins re-enter the pool they never left, so
+                # booking an acquisition would double-count. Non-event — skip
+                # emission and leave availability untouched.
+                continue
             kind = _normalized_event_kind(event)
             if (
                 kind not in _RP2_INBOUND_KIND_TO_TRANSACTION_TYPE
@@ -685,6 +900,14 @@ def _prepare_rp2_asset_input(profile, normalized_inputs: NormalizedTaxAssetInput
 
         needed = event.amount + event.fee
         if needed <= 0:
+            continue
+        loan_role = getattr(event, "loan_leg_role", None)
+        if loan_role in _LOAN_LOCK_SUPPRESS_ROLES:
+            # Outbound loan non-events are not disposals: posted collateral stays
+            # owned and principal repayment returns borrowed coins. Skip emission
+            # and leave availability untouched. If collateral is liquidated
+            # instead of returned, the user removes the mark and this outbound
+            # books as the disposal it is.
             continue
         disposal_kind = _normalized_event_kind(event)
         if _kind_has_token(disposal_kind, _NON_SALE_DISPOSAL_KIND_TOKENS):
@@ -1031,6 +1254,14 @@ def _append_rp2_journal_entries(entries, computed_data, wallet_refs_by_label, pr
         proceeds = event["proceeds"]
         cost_basis = event["cost_basis"]
         gain_loss = event["gain_loss"]
+        is_fee_entry = event["entry_type"] in {"fee", "transfer_fee"}
+        if is_fee_entry:
+            # Fees reduce the owned BTC balance and its attached basis, but they
+            # are not capital-gains disposals in Kassiber's reporting model.
+            proceeds = cost_basis
+            gain_loss = Decimal("0")
+            event["at_category"] = None
+            event["at_kennzahl"] = None
         quantity = event["quantity"] if event["entry_type"] == "income" else -event["quantity"]
         entry = {
             "id": str(uuid.uuid4()),
@@ -1062,12 +1293,25 @@ def _append_rp2_journal_entries(entries, computed_data, wallet_refs_by_label, pr
         sent = dec(audit["crypto_sent"])
         received = dec(audit["crypto_received"])
         description = f"Transfer {from_wallet['label']} -> {to_wallet['label']}"
+        if audit.get("pairing_source") == "ownership_derived":
+            # Record the basis for the non-taxable treatment on the entry itself,
+            # so the audit/report shows this MOVE was proven from the on-chain
+            # address graph rather than matched on a shared txid.
+            description += " (proven by address ownership)"
+        elif audit.get("pairing_source") == "multi_source_consolidation":
+            description += " (multi-wallet consolidation)"
         entries.append(
             {
                 "id": str(uuid.uuid4()),
                 "workspace_id": profile["workspace_id"],
                 "profile_id": profile["id"],
-                "transaction_id": audit["out_id"],
+                # Synthetic legs (ownership-derived / split / payout) carry the
+                # real source tx in journal_transaction_id; the journal entry's
+                # transaction_id has an FK into transactions, so map through it
+                # (real legs fall back to their own id).
+                "transaction_id": _journal_transaction_id(
+                    row_by_id.get(audit["out_id"]), audit["out_id"]
+                ),
                 "wallet_id": from_wallet["id"],
                 "account_id": from_wallet["wallet_account_id"],
                 "occurred_at": audit["occurred_at"],
@@ -1087,7 +1331,9 @@ def _append_rp2_journal_entries(entries, computed_data, wallet_refs_by_label, pr
                 "id": str(uuid.uuid4()),
                 "workspace_id": profile["workspace_id"],
                 "profile_id": profile["id"],
-                "transaction_id": audit["in_id"],
+                "transaction_id": _journal_transaction_id(
+                    row_by_id.get(audit["in_id"]), audit["in_id"]
+                ),
                 "wallet_id": to_wallet["id"],
                 "account_id": to_wallet["wallet_account_id"],
                 "occurred_at": audit["occurred_at"],
@@ -1156,12 +1402,15 @@ def _build_tax_summary_rows(computed_data):
             row.is_long_term_capital_gains,
         ),
     ):
+        transaction_type = str(getattr(yearly.transaction_type, "value", yearly.transaction_type)).lower()
+        if transaction_type in {"fee", "move"}:
+            continue
         quantity = dec(yearly.crypto_amount)
         rows.append(
             {
                 "year": int(yearly.year),
                 "asset": yearly.asset,
-                "transaction_type": str(getattr(yearly.transaction_type, "value", yearly.transaction_type)).lower(),
+                "transaction_type": transaction_type,
                 "capital_gains_type": "long" if yearly.is_long_term_capital_gains else "short",
                 "quantity": float(quantity),
                 "quantity_msat": btc_to_msat(quantity),
@@ -1182,10 +1431,17 @@ def _prepare_assets(
     *,
     at_swap_link_by_row_id: Mapping[str, str] | None = None,
     excluded_row_ids: set[str] | None = None,
+    loan_leg_by_transaction_id: Mapping[str, str] | None = None,
 ) -> list[tuple[NormalizedTaxAssetInputs, _RP2PreparedInput]]:
     prepared_by_asset: list[tuple[NormalizedTaxAssetInputs, _RP2PreparedInput]] = []
     excluded = excluded_row_ids or set()
     for asset, asset_rows in rows_by_asset.items():
+        # Detect shared-prevout conflicts against the FULL asset row set, not the
+        # post-exclusion active_rows: the Austrian second pass excludes more rows,
+        # and if a confirmed conflict winner were dropped there the conflict would
+        # vanish and the unconfirmed loser would book. Computing over asset_rows
+        # keeps the loser identified (and quarantined) across both passes.
+        conflict_row_ids = detect_conflicting_spend_ids(asset_rows)
         active_rows = [row for row in asset_rows if str(row["id"]) not in excluded]
         normalized_inputs = normalize_tax_asset_inputs(
             profile,
@@ -1194,6 +1450,8 @@ def _prepare_assets(
             wallet_refs_by_id,
             pairs_by_asset.get(asset, []),
             at_swap_link_by_row_id=at_swap_link_by_row_id,
+            loan_leg_by_transaction_id=loan_leg_by_transaction_id,
+            conflict_row_ids=conflict_row_ids,
         )
         prepared = _prepare_rp2_asset_input(profile, normalized_inputs, configuration)
         prepared_by_asset.append((normalized_inputs, prepared))
@@ -1313,6 +1571,22 @@ def _select_at_cross_asset_swap_links(
                     )
             else:
                 quarantines.extend(_swap_pair_quarantines(profile, pair, rows_by_id, reason_code))
+            quarantined_row_ids.update({out_id, in_id})
+            continue
+
+        # A leg Kassiber already quarantined in phase 1 (insufficient quantity,
+        # missing basis, unclassified income, …) must NOT be promoted to an
+        # at_swap_link. On the second prepare pass the marked row would bypass the
+        # single-asset quantity gate (which defers to the native cross-asset
+        # runner for at_swap rows) and carry the shortfall into compute_tax, where
+        # rp2's per-account BalanceSet raises an uncatchable "balance went
+        # negative" that aborts the WHOLE multi-asset report. Marking only the
+        # surviving leg is no better — it orphans the at_swap_link and trips the
+        # cross-asset validator instead. Quarantine the whole pair so neither leg
+        # reaches compute, preserving the original phase-1 reason for review.
+        leg_reason = quarantine_reasons.get(out_id) or quarantine_reasons.get(in_id)
+        if leg_reason is not None:
+            quarantines.extend(_swap_pair_quarantines(profile, pair, rows_by_id, leg_reason))
             quarantined_row_ids.update({out_id, in_id})
             continue
 
@@ -1470,7 +1744,9 @@ def _direct_payout_synthetic_rows(
     """
 
     if not direct_payout_records:
-        return list(rows), [], [], [], set()
+        # Sort the common (no-payout) path the same way the payout path does
+        # below, so engine row order never depends on the caller pre-sorting.
+        return sorted(rows, key=_transaction_row_sort_key), [], [], [], set()
 
     tax_country = _profile_str(profile, "tax_country").lower()
     rows_by_id = {str(row["id"]): row for row in rows}
@@ -1631,6 +1907,26 @@ def _direct_payout_synthetic_rows(
     return rows_for_engine, cross_asset_pairs, direct_payouts, quarantines, blocked_row_ids
 
 
+def _ownership_block_quarantines(
+    profile: Mapping[str, Any],
+    blocked_sources: Sequence[Mapping[str, Any]],
+) -> list[dict[str, Any]]:
+    quarantines: list[dict[str, Any]] = []
+    for blocked in blocked_sources:
+        row = blocked.get("row")
+        if row is None:
+            continue
+        quarantines.append(
+            build_tax_quarantine(
+                profile,
+                row,
+                str(blocked.get("reason") or "ownership_transfer_unresolved"),
+                dict(blocked.get("detail") or {}),
+            )
+        )
+    return quarantines
+
+
 def _pair_record_out_amount(record: Mapping[str, Any]) -> Any:
     if hasattr(record, "keys"):
         return record["out_amount"] if "out_amount" in record.keys() else None
@@ -1765,6 +2061,14 @@ class GenericRP2TaxEngine:
             inputs.direct_payout_records,
         )
         wallet_labels = {row["wallet_label"] for row in rows_for_engine}
+        # The ownership deriver can route a MOVE into a wallet that recorded no
+        # rows (sync gap); declare every profile wallet as an RP2 exchange so the
+        # synthesized destination leg lands on a known account.
+        wallet_labels |= {
+            ref["label"]
+            for ref in inputs.wallet_refs_by_id.values()
+            if ref.get("label")
+        }
         assets = {row["asset"] for row in rows_for_engine}
         entries: list[dict[str, Any]] = []
         quarantines: list[dict[str, Any]] = list(payout_quarantines)
@@ -1786,11 +2090,287 @@ class GenericRP2TaxEngine:
                 rows_for_engine,
                 inputs.manual_pair_records,
             )
-            auto_pairs, _ = detect_intra_transfers(rows_for_engine)
+            auto_pairs, auto_matched_ids = detect_intra_transfers(rows_for_engine)
+            # Give the address-ownership deriver first refusal on a 1-out/1-in
+            # pair whose outbound graph shows value also left to a NON-owned
+            # recipient (a partial payment). detect_intra_transfers would pair the
+            # owned leg and silently fold the external payment into the implied
+            # MOVE fee; withholding it lets the graph deriver book the owned MOVE
+            # and keep the external residual as a real disposal. detect_intra
+            # stays authoritative for graphless rows and pure self-transfers.
+            withheld_partial_payment_ids = graph_partial_payment_out_ids(
+                auto_pairs, inputs.owned_index
+            )
+            withheld_multi_owned_destination_ids = graph_multi_owned_destination_out_ids(
+                auto_pairs, inputs.owned_index
+            )
+            # Keep the withheld pairs so a partial payment the ownership deriver
+            # cannot actually re-derive (an ambiguous / blocked source) can be
+            # ROLLED BACK to its original self-transfer pair below. Withholding
+            # unconditionally would otherwise orphan the legs — the source books
+            # a full disposal and the destination a phantom acquisition, with no
+            # quarantine — strictly worse than the fee-absorbing MOVE it replaced.
+            withheld_pairs_by_out_id: dict[str, Mapping[str, Any]] = {}
+            if withheld_partial_payment_ids:
+                kept_auto_pairs = []
+                for pair in auto_pairs:
+                    if str(pair["out"]["id"]) in withheld_partial_payment_ids:
+                        auto_matched_ids.discard(str(pair["out"]["id"]))
+                        auto_matched_ids.discard(str(pair["in"]["id"]))
+                        withheld_pairs_by_out_id[str(pair["out"]["id"])] = pair
+                        continue
+                    kept_auto_pairs.append(pair)
+                auto_pairs = kept_auto_pairs
+            # Address-ownership deriver: prove self-transfers from the on-chain
+            # graph (output paid an address owned by another of my wallets), for
+            # the cases same-txid row matching misses — sync-gap destinations,
+            # mismatched txids, and 1->N fan-outs. Supplements (does not replace)
+            # detect_intra_transfers, which still covers same-txid rows the
+            # deriver can't read (CSV imports with no transaction JSON).
+            already_paired_ids = set(auto_matched_ids)
+            for record in split_pair_records:
+                already_paired_ids.add(str(record["out_transaction_id"]))
+                already_paired_ids.add(str(record["in_transaction_id"]))
+            input_rows_by_id = {str(row["id"]): row for row in inputs.rows}
+            # Whole-row direct-payout sources are already decomposed by
+            # _direct_payout_synthetic_rows. Partial payouts leave a reduced
+            # real source row in rows_for_engine for the remainder, and that
+            # row must still be eligible for ownership-derived self-transfers.
+            blocked_payout_id_set = {str(rid) for rid in blocked_payout_row_ids}
+            direct_payout_claimed_ids: set[str] = set()
+            direct_payout_suppressed_in_ids: set[str] = set()
+            for record in inputs.direct_payout_records:
+                out_id = str(record["out_transaction_id"])
+                out_row = input_rows_by_id.get(out_id)
+                if out_row is None:
+                    continue
+                reviewed_out_amount = _direct_payout_record_out_amount(record, out_row)
+                full_out_amount = int(_row_get(out_row, "amount") or 0)
+                if reviewed_out_amount >= full_out_amount:
+                    already_paired_ids.add(out_id)
+                    # Only a SUCCESSFULLY-claimed whole-row payout (exact full
+                    # amount, not rejected as out_amount-invalid) gets a proceeds
+                    # disposal row. Pruning the self-transfer pair for a rejected
+                    # payout (out_amount > source) would drop the transfer with no
+                    # disposal to replace it, leaving the destination as a phantom
+                    # acquisition — so exclude blocked / over-amount payouts here.
+                    if (
+                        reviewed_out_amount == full_out_amount
+                        and out_id not in blocked_payout_id_set
+                    ):
+                        direct_payout_claimed_ids.add(out_id)
+            already_paired_ids |= blocked_payout_id_set
+            # A reviewed whole-row direct payout is a taxable disposal whose
+            # proceeds row keeps the real tx's external_id + outbound direction.
+            # If another owned wallet recorded an inbound under the same txid,
+            # detect_intra_transfers pairs them and would book the disposal as a
+            # non-taxable MOVE — silently dropping the declared proceeds. Adding
+            # the out id to already_paired_ids only stops the deriver; the auto
+            # pair must also be pruned so apply_manual_pairs cannot revive it.
+            if direct_payout_claimed_ids:
+                kept_auto_pairs = []
+                for pair in auto_pairs:
+                    out_id = str(pair["out"]["id"])
+                    in_id = str(pair["in"]["id"])
+                    if (
+                        out_id in direct_payout_claimed_ids
+                        or in_id in direct_payout_claimed_ids
+                    ):
+                        if out_id in direct_payout_claimed_ids:
+                            direct_payout_suppressed_in_ids.add(in_id)
+                        if in_id in direct_payout_claimed_ids:
+                            direct_payout_suppressed_in_ids.add(out_id)
+                        continue
+                    kept_auto_pairs.append(pair)
+                auto_pairs = kept_auto_pairs
+                # When the payout's out row has a readable graph that also pays an
+                # owned wallet, graph_partial_payment_out_ids already moved its
+                # pair into the withheld set BEFORE this prune. Drop it from there
+                # too, or the restore-withheld path below re-adds it and the
+                # reviewed payout still books as a non-taxable MOVE.
+                for claimed in direct_payout_claimed_ids:
+                    withheld = withheld_pairs_by_out_id.pop(claimed, None)
+                    if withheld is not None:
+                        direct_payout_suppressed_in_ids.add(str(withheld["in"]["id"]))
+            if direct_payout_suppressed_in_ids:
+                already_paired_ids |= direct_payout_suppressed_in_ids
+                rows_for_engine = [
+                    row
+                    for row in rows_for_engine
+                    if str(row["id"]) not in direct_payout_suppressed_in_ids
+                ]
+            # Multi-source consolidation deriver (N owned wallets -> 1, graph
+            # readable): the one case detect_intra and the single-source deriver
+            # both decline because per-wallet sync double-counts the fee. It
+            # books the legs from the graph + per-wallet rows; run it FIRST and
+            # feed its touched ids forward so the single-source deriver does not
+            # also block-and-quarantine the same contributors. Anything outside
+            # its conservative scope is untouched and still hits the fan-out
+            # quarantine.
+            consolidation_result = derive_multi_source_consolidations(
+                rows_for_engine,
+                index=inputs.owned_index,
+                wallet_refs_by_id=inputs.wallet_refs_by_id,
+                already_paired_ids=already_paired_ids,
+            )
+            consolidation_drop_ids = (
+                consolidation_result.dropped_out_ids
+                | consolidation_result.dropped_in_ids
+            )
+            if consolidation_drop_ids:
+                already_paired_ids |= consolidation_drop_ids
+                rows_for_engine = [
+                    row
+                    for row in rows_for_engine
+                    if str(row["id"]) not in consolidation_drop_ids
+                ]
+            if consolidation_result.synthetic_rows:
+                rows_for_engine = sorted(
+                    list(rows_for_engine) + consolidation_result.synthetic_rows,
+                    key=_transaction_row_sort_key,
+                )
+            ownership_result = derive_ownership_transfers(
+                rows_for_engine,
+                index=inputs.owned_index,
+                wallet_refs_by_id=inputs.wallet_refs_by_id,
+                already_paired_ids=already_paired_ids,
+            )
+            # Roll back any withheld partial-payment pair the deriver could NOT
+            # re-derive (it neither dropped the source nor overrode it to a
+            # residual disposal — typically an ambiguous owned output or an
+            # ambiguous destination). Restoring the original detect_intra
+            # self-transfer pair returns to the safe pre-withhold behavior (a
+            # MOVE that may absorb a small external leg as fee, or a
+            # transfer_fee_implausible quarantine for a large one) instead of
+            # orphaning the legs into a phantom disposal + phantom acquisition.
+            restored_withheld_out_ids: set[str] = set()
+            blocked_source_ids = {
+                str(_row_get(blocked.get("row") or {}, "id"))
+                for blocked in ownership_result.blocked_sources
+                if blocked.get("row") is not None
+            }
+            multi_owned_withheld_blocks: set[str] = set()
+            if withheld_pairs_by_out_id:
+                handled_withheld = ownership_result.dropped_out_ids | {
+                    str(out_id) for out_id in ownership_result.out_row_overrides
+                }
+                for out_id in withheld_pairs_by_out_id:
+                    if out_id in handled_withheld:
+                        continue
+                    if (
+                        out_id in blocked_source_ids
+                        and out_id in withheld_multi_owned_destination_ids
+                    ):
+                        multi_owned_withheld_blocks.add(out_id)
+                        continue
+                    restored_withheld_out_ids.add(out_id)
+            # A blocked source is a proven self-transfer the deriver could not
+            # safely split. Surface it for review, but NEVER drop it from booking:
+            # a blocked source posts a normal disposal — the same conservative
+            # booking the deriver-off baseline makes — so holdings stay correct.
+            # Dropping it would lose that disposal and silently inflate the source
+            # wallet whenever the destination receipt was recorded under a
+            # different external_id (CSV / separate sync) or not at all. The one
+            # case we skip the quarantine is when a recorded destination shares
+            # the spend's (external_id, asset) group from another wallet: the
+            # existing owned-fanout guard already holds back and quarantines that
+            # whole balanced group, so a second quarantine would be redundant.
+            if ownership_result.blocked_sources:
+                inbound_group_wallets: dict[tuple[Any, Any], set[str]] = {}
+                for candidate in rows_for_engine:
+                    if _row_get(candidate, "direction") == "inbound" and _row_get(
+                        candidate, "external_id"
+                    ):
+                        inbound_group_wallets.setdefault(
+                            (
+                                str(_row_get(candidate, "external_id")),
+                                _row_get(candidate, "asset"),
+                            ),
+                            set(),
+                        ).add(str(_row_get(candidate, "wallet_id")))
+                surfaced_blocks: list[Mapping[str, Any]] = []
+                for blocked in ownership_result.blocked_sources:
+                    row = blocked.get("row")
+                    if row is None:
+                        continue
+                    row_id = str(_row_get(row, "id"))
+                    source_wallet_id = str(_row_get(row, "wallet_id"))
+                    group_key = (
+                        str(_row_get(row, "external_id")),
+                        _row_get(row, "asset"),
+                    )
+                    fanout_holds = any(
+                        wallet_id != source_wallet_id
+                        for wallet_id in inbound_group_wallets.get(group_key, ())
+                    )
+                    # A restored withheld pair is re-paired as a self-transfer
+                    # below, so its source must not also be quarantined here.
+                    if (
+                        (not fanout_holds or row_id in multi_owned_withheld_blocks)
+                        and row_id not in restored_withheld_out_ids
+                    ):
+                        surfaced_blocks.append(blocked)
+                if surfaced_blocks:
+                    quarantines.extend(
+                        _ownership_block_quarantines(self.profile, surfaced_blocks)
+                    )
+            if ownership_result.dropped_out_ids or ownership_result.out_row_overrides:
+                rows_for_engine = [
+                    ownership_result.out_row_overrides.get(str(row["id"]), row)
+                    for row in rows_for_engine
+                    if str(row["id"]) not in ownership_result.dropped_out_ids
+                ]
+            if ownership_result.synthetic_rows:
+                rows_for_engine = sorted(
+                    list(rows_for_engine) + ownership_result.synthetic_rows,
+                    key=_transaction_row_sort_key,
+                )
+            # Recorded fan-out decomposer: rescue a 1->N self-transfer whose legs
+            # were all synced but that has no readable on-chain graph (Liquid
+            # confidential outputs, or a graphless CSV import), so both
+            # detect_intra_transfers and the address-ownership deriver skip it.
+            # It must not re-process a Bitcoin fan-out the ownership deriver
+            # already handled, so feed it every id that deriver touched.
+            fanout_already_paired = set(already_paired_ids)
+            fanout_already_paired |= ownership_result.dropped_out_ids
+            fanout_already_paired |= {
+                str(out_id) for out_id in ownership_result.out_row_overrides
+            }
+            for pair in ownership_result.derived_pairs:
+                fanout_already_paired.add(str(pair["in"]["id"]))
+            for blocked in ownership_result.blocked_sources:
+                blocked_row = blocked.get("row")
+                if blocked_row is not None:
+                    fanout_already_paired.add(str(_row_get(blocked_row, "id")))
+            fanout_result = derive_recorded_fanout_transfers(
+                rows_for_engine, already_paired_ids=fanout_already_paired
+            )
+            if fanout_result.dropped_out_ids:
+                rows_for_engine = [
+                    row
+                    for row in rows_for_engine
+                    if str(row["id"]) not in fanout_result.dropped_out_ids
+                ]
+            if fanout_result.synthetic_rows:
+                rows_for_engine = sorted(
+                    list(rows_for_engine) + fanout_result.synthetic_rows,
+                    key=_transaction_row_sort_key,
+                )
+            if restored_withheld_out_ids:
+                auto_pairs = auto_pairs + [
+                    withheld_pairs_by_out_id[out_id]
+                    for out_id in restored_withheld_out_ids
+                ]
             all_pairs, manual_cross_asset_pairs = apply_manual_pairs(
                 rows_for_engine,
                 auto_pairs,
                 split_pair_records,
+            )
+            all_pairs = (
+                all_pairs
+                + consolidation_result.derived_pairs
+                + ownership_result.derived_pairs
+                + fanout_result.derived_pairs
             )
             # The engine carries the synthetic split leg (so it can mark the
             # cross-asset swap-out without touching the self-transfer remainder),
@@ -1806,6 +2386,14 @@ class GenericRP2TaxEngine:
             pairs_by_asset = defaultdict(list)
             for pair in all_pairs:
                 pairs_by_asset[pair["out"]["asset"]].append(pair)
+            # Active loan marks classify their journal transaction by role.
+            # Suppressed roles are non-events for owned-lot accounting. Row-index
+            # access works for both sqlite3.Row and dict.
+            loan_leg_by_transaction_id = {
+                str(leg["transaction_id"]): str(leg["role"])
+                for leg in (inputs.loan_legs or ())
+                if leg["transaction_id"] is not None
+            }
 
             # Phase 1: normalize + build RP2 `InputData` for every asset. No `compute_tax`
             # runs here so the country's cross-asset validator can see every asset's
@@ -1817,6 +2405,7 @@ class GenericRP2TaxEngine:
                 pairs_by_asset,
                 configuration,
                 excluded_row_ids=blocked_payout_row_ids,
+                loan_leg_by_transaction_id=loan_leg_by_transaction_id,
             )
             swap_link_by_row_id, quarantined_row_ids, swap_quarantines = _select_at_cross_asset_swap_links(
                 self.profile,
@@ -1846,6 +2435,7 @@ class GenericRP2TaxEngine:
                     configuration,
                     at_swap_link_by_row_id=swap_link_by_row_id,
                     excluded_row_ids=excluded_row_ids,
+                    loan_leg_by_transaction_id=loan_leg_by_transaction_id,
                 )
 
             # Phase 2: cross-asset validation via the country hook. Catches invariants

@@ -2,8 +2,6 @@
   "dashboard": {
     "eyebrow": "Wallets und Quellen",
     "title": "Wallets",
-    "refreshBook": "Buch aktualisieren",
-    "refreshing": "Wird aktualisiert",
     "addWallet": "Wallet hinzufügen"
   },
   "metrics": {
@@ -128,8 +126,34 @@
       "backend": "Backend",
       "account": "Konto",
       "network": "Netzwerk",
+      "scriptTypes": "Beobachtet",
+      "descriptorMaterial": "Descriptor",
       "created": "Erstellt",
       "kassiberId": "Kassiber-ID"
+    },
+    "reveal": {
+      "menuItem": "Descriptor kopieren",
+      "title": "Wallet-Descriptor kopieren",
+      "description": "Gib die Datenbank-Passphrase erneut ein, um das für {{label}} gespeicherte Descriptor-Material zu kopieren.",
+      "descriptionEncrypted": "Gib die Datenbank-Passphrase erneut ein, um das für {{label}} gespeicherte Descriptor-Material zu kopieren.",
+      "descriptionPlaintext": "Dieses Buch ist nicht verschlüsselt. Bestätige das Kopieren des für {{label}} gespeicherten Descriptor-Materials.",
+      "descriptorWithChange": "Descriptor + Wechsel",
+      "descriptorOnly": "Descriptor",
+      "includesChange": "Die Zwischenablage enthält den gespeicherten Wechsel-Descriptor in der nächsten Zeile.",
+      "passphrase": "Datenbank-Passphrase",
+      "helper": "Kassiber kopiert das rohe gespeicherte Descriptor-Material, ohne Feldnamen oder Tabellenformatierung.",
+      "plaintextChallenge": "Tippe COPY LOCAL SECRET zur Bestätigung",
+      "plaintextHelper": "Unverschlüsselte Bücher haben keine Datenbank-Passphrase. Dieser Schritt verhindert versehentliches Kopieren in die Zwischenablage.",
+      "copy": "Kopieren",
+      "copying": "Wird kopiert...",
+      "copied": "Kopiert",
+      "copiedInline": "In die Zwischenablage kopiert.",
+      "copiedTitle": "Descriptor kopiert",
+      "copiedBody": "Descriptor-Material für {{label}} kopiert.",
+      "failedTitle": "Descriptor konnte nicht kopiert werden",
+      "errorMissingDescriptor": "Diese Wallet hat diesen Descriptor nicht gespeichert.",
+      "errorPlaintextAck": "Tippe {{ack}}, um dieses lokale Secret zu kopieren.",
+      "couldNotCopy": "Descriptor konnte nicht kopiert werden."
     },
     "relatedViews": {
       "title": "Verwandte Ansichten",
@@ -153,6 +177,7 @@
       "btcpay": "BTCPay-Anreicherung",
       "notConfigured": "Manuell / nicht konfiguriert"
     },
+    "deprecatedBadge": "Veraltet",
     "edit": {
       "title": "Verbindung bearbeiten",
       "descriptionEncrypted": "Bestätige diese Änderung mit der lokalen Datenbank-Passphrase.",
@@ -170,6 +195,9 @@
       "detected": "Erkannt: {{label}}",
       "detectedWithHint": "Erkannt: {{label}} — {{hint}}",
       "materialHelper": "Lass das Feld leer, außer du musst das gespeicherte Wallet-Material ändern.",
+      "scriptTypesLabel": "Zu beobachtende Adresstypen",
+      "scriptTypesHelper": "Kassiber leitet pro gewähltem Typ eine Empfangs- und eine Wechsel-Kette ab. Einen Typ hinzuzufügen, scannt diese Wallet neu.",
+      "errorSelectScriptType": "Wähle mindestens einen Adresstyp zum Beobachten.",
       "gapLimit": "Gap Limit",
       "gapLimitHelper": "Erhöhe das für Wallets mit langen Folgen ungenutzter Adressen. Große Werte bis 5.000 können länger dauern, aber Aktualisierungen laufen weiter, bis der Daemon antwortet.",
       "btcpayInstance": "BTCPay-Instanz",
@@ -184,6 +212,8 @@
       "selectExportFileTitle": "Exportdatei von {{label}} auswählen",
       "clearProvenance": "BTCPay-Herkunftsrouten leeren",
       "clearProvenanceHelper": "Entfernt alle {{count}} gespeicherten Route(n). Descriptor-/Datei-Sync bleibt die Guthaben-Quelle. Füge Routen über Wallet hinzufügen erneut hinzu.",
+      "deprecated": "Veraltete Wallet",
+      "deprecatedHelper": "Importierte Historie behalten, aber diese Wallet von Alle aktualisieren und Hintergrund-Aktualisierung ausschließen. Manuelle Aktualisierung funktioniert weiter.",
       "passphrase": "Passphrase",
       "plaintextChallenge": "Challenge für Klartext-Änderung",
       "saving": "Wird gespeichert...",
@@ -420,7 +450,7 @@
   "scanner": {
     "title": "Wallet-Export scannen",
     "scanTitle": "{{title}} scannen",
-    "description": "Scanne einen Descriptor, einen xpub-Familien-Export, einen Liquid-Descriptor oder eine BBQR-Sequenz von einem Wallet-Display.",
+    "description": "Scanne einen Output-Descriptor, einen xpub-Familien-Export oder eine BBQR-Sequenz von einem Wallet-Display.",
     "mode": {
       "auto": "Auto",
       "single": "Einzel-QR",
@@ -461,9 +491,7 @@
     "description": "Wähle eine Watch-only-Wallet, einen Node, eine Börse oder eine lokale Dateiquelle.",
     "setupDescription": "Gib die lokalen Details ein, die Kassiber für diese Verbindung benötigt.",
     "openingScanner": "Scanner wird geöffnet",
-    "available": "Verfügbar",
     "plannedLabel": "Geplant",
-    "ready": "Bereit",
     "docs": "Doku",
     "searchPlaceholder": "Quellen suchen (z. B. river, descriptor, btcpay)…",
     "noSearchMatch": "Keine Quellen passen zu dieser Suche.",
@@ -499,7 +527,7 @@
     },
     "descriptor": {
       "walletExport": "Wallet-Export",
-      "scanHint": "Füge einen Descriptor, einen xpub-Familien-Export, einen Liquid-Descriptor oder eine BBQR-Sequenz ein oder scanne sie.",
+      "scanHint": "Füge einen Output-Descriptor, einen xpub-Familien-Export oder eine BBQR-Sequenz ein oder scanne sie.",
       "scan": "Scannen",
       "gapLimit": "Gap Limit",
       "gapLimitHelper": "Standard sind 40 ungenutzte Adressen pro Branch. Erhöhe es für ältere oder stark genutzte Wallets, bis 5.000; lange Scans laufen weiter, bis der Daemon fertig ist.",
@@ -514,7 +542,43 @@
       "copy": "Kopieren",
       "detected": "Erkannt: {{label}}",
       "detectedWithHint": "Erkannt: {{label}} — {{hint}}",
-      "couldNotDerive": "Adressen konnten nicht abgeleitet werden."
+      "couldNotDerive": "Adressen konnten nicht abgeleitet werden.",
+      "autoDetectUnavailable": "Script-Typen konnten nicht automatisch erkannt werden: {{reason}}. Wähle einen Script-Typ manuell.",
+      "autoDetectUnavailableReasonUnknown": "Backend-Prüfung wurde nicht ausgeführt",
+      "scriptTypeLabel": "Script-Typ",
+      "scriptTypeHelperAuto": "Lass „Automatisch erkennen“ stehen, dann beobachtet Kassiber jeden Adresstyp mit On-Chain-Historie – oder leg dich auf einen fest.",
+      "scriptTypeDetect": "Automatisch erkennen",
+      "scriptType": {
+        "p2wpkh": "Native SegWit · P2WPKH (bc1q…)",
+        "p2shp2wpkh": "Nested SegWit · P2SH-P2WPKH (3…)",
+        "p2pkh": "Legacy · P2PKH (1…)",
+        "p2tr": "Taproot · P2TR (bc1p…)"
+      },
+      "bareXpubResolved": "{{label}} wird als {{scriptType}} abgeleitet.",
+      "bareXpubAutoDetect": "{{label}} — Kassiber erkennt automatisch, mit welchen Adresstypen dieser Schlüssel genutzt wurde, und beobachtet sie."
+    },
+    "addressList": {
+      "addresses": "Adressen",
+      "helper": "Füge Adressen ein oder lade eine .txt/.csv-Datei, eine pro Zeile. Ein Bitcoin-Core-Schlüsselpool aus der Zeit vor HD hat keinen xpub, daher wird jede Adresse einzeln gescannt – es gibt kein Gap Limit.",
+      "placeholder": "bc1q…\n1…\n3…",
+      "loadFile": "Datei laden…",
+      "summary_one": "{{count}} Adresse erkannt",
+      "summary_other": "{{count}} Adressen erkannt",
+      "summaryDuplicates_one": "{{count}} Duplikat entfernt",
+      "summaryDuplicates_other": "{{count}} Duplikate entfernt",
+      "summaryInvalid_one": "{{count}} übersprungen",
+      "summaryInvalid_other": "{{count}} übersprungen",
+      "invalidHint": "Einträge, die keine Mainnet-Adressen sind, werden übersprungen, z. B. {{samples}}.",
+      "privateKeysPurged_one": "{{count}} privaten Schlüssel entfernt – Kassiber ist Watch-only, füge niemals private Schlüssel ein.",
+      "privateKeysPurged_other": "{{count}} private Schlüssel entfernt – Kassiber ist Watch-only, füge niemals private Schlüssel ein.",
+      "publicKeysPurged_one": "{{count}} erweiterten/öffentlichen Schlüssel entfernt – nutze für xpubs die Quelle „Wallet export“.",
+      "publicKeysPurged_other": "{{count}} erweiterte/öffentliche Schlüssel entfernt – nutze für xpubs die Quelle „Wallet export“.",
+      "scanAfter": "Adressen nach dem Setup scannen",
+      "errorNeedAddress": "Füge mindestens eine Mainnet-Bitcoin-Adresse ein oder lade sie.",
+      "fileReadFailed": "Die ausgewählte Datei konnte nicht gelesen werden.",
+      "stillScanning": "{{label}} scannt die Adressliste. Große Listen dauern bei Esplora-Backends länger.",
+      "addedBody_one": "{{label}} mit {{count}} Adresse erstellt.",
+      "addedBody_other": "{{label}} mit {{count}} Adressen erstellt."
     },
     "exportFile": {
       "label": "Pfad zur Exportdatei",
@@ -531,7 +595,34 @@
       "strikeCsv": "Strike CSV",
       "wasabiBundle": "Wasabi-JSON-Bundle",
       "samouraiSourceSet": "Samourai-Descriptor-Source-Set",
-      "csvOrJson": "CSV oder JSON"
+      "csvOrJson": "CSV oder JSON",
+      "genericLedger": "Excel- oder CSV-Journal"
+    },
+    "genericLedger": {
+      "templateHint": "Neu hier? Lade die Vorlage herunter, trag deine Transaktionen ein und importier die Datei.",
+      "downloadXlsx": "Excel-Vorlage herunterladen",
+      "downloadCsv": "Lieber CSV",
+      "templateWorking": "Wird vorbereitet…",
+      "saveTemplateTitle": "Journal-Vorlage speichern",
+      "templateReadyTitle": "Vorlage bereit",
+      "templateReadyBody": "Trag deine Transaktionen ein und importier die Datei hier.",
+      "templateFailedTitle": "Vorlage konnte nicht erstellt werden",
+      "preview": {
+        "loading": "Datei wird gelesen…",
+        "failed": "Diese Datei konnte nicht gelesen werden.",
+        "ready": "{{mapped}} von {{rows}} Zeilen bereit",
+        "errorCount": "{{count}} brauchen Aufmerksamkeit",
+        "more": "+{{count}} weitere",
+        "colDate": "Datum",
+        "colKind": "Art",
+        "colAmount": "Betrag",
+        "colValue": "Wert",
+        "problemRow": "Zeile {{row}}: {{message}}",
+        "detected": "Erkannt: {{columns}}",
+        "notRecognized": "Diese Spalten wurden nicht erkannt.",
+        "notRecognizedHint": "Lade die Vorlage herunter, fülle sie aus und importiere stattdessen diese.",
+        "submitBlocked": "Behebe die Probleme in der Vorschau, bevor du dieses Journal importierst."
+      }
     },
     "defaultLabel": {
       "importedFile": "Importierte Datei"

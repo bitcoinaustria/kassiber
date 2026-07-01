@@ -1,4 +1,15 @@
-import type { ConnectionKind, ConnectionStatus } from "@/mocks/seed";
+import type { Connection, ConnectionKind, ConnectionStatus } from "@/mocks/seed";
+
+/**
+ * Layer-aware category: the chain wins over the kind so a Liquid
+ * descriptor wallet reads "Liquid", not "On-chain".
+ */
+export function connectionCategoryLabel(
+  connection: Pick<Connection, "kind" | "chain">,
+): string {
+  if (connection.chain === "liquid") return "Liquid";
+  return connectionKindCategoryLabels[connection.kind];
+}
 
 export const connectionKindCategoryLabels: Record<ConnectionKind, string> = {
   xpub: "On-chain",
@@ -48,6 +59,72 @@ export const connectionKindLabels: Record<ConnectionKind, string> = {
   bip329: "BIP329",
 };
 
+export type ConnectionTypeInput = Pick<Connection, "kind"> &
+  Partial<Pick<Connection, "paymentMethodId" | "sourceFormat" | "syncMode" | "syncSource">>;
+
+const sourceFormatLabels: Record<string, string> = {
+  csv: "Generic CSV",
+  json: "Generic JSON",
+  phoenix_csv: "Phoenix CSV",
+  river_csv: "River CSV",
+  bullbitcoin_csv: "Bull Bitcoin CSV",
+  bullbitcoin_wallet_csv: "Bull Bitcoin Wallet CSV",
+  coinfinity_csv: "Coinfinity CSV",
+  "21bitcoin_csv": "21bitcoin CSV",
+  strike_csv: "Strike CSV",
+  wasabi_bundle: "Wasabi export",
+  generic_ledger: "Generic ledger",
+};
+
+export function connectionTypeLabel(connection: ConnectionTypeInput): string {
+  const sourceFormat = connection.sourceFormat?.trim();
+  if (sourceFormat) {
+    return sourceFormatLabels[sourceFormat] ?? sourceFormat;
+  }
+  if (connection.syncMode === "btcpay" || connection.syncSource === "btcpay") {
+    return connection.paymentMethodId
+      ? `BTCPay API · ${connection.paymentMethodId}`
+      : "BTCPay API";
+  }
+  switch (connection.kind) {
+    case "xpub":
+    case "descriptor":
+      return "Wallet descriptor";
+    case "address":
+      return "Address list";
+    case "samourai":
+      return "Samourai watch-only";
+    case "core-ln":
+      return "Core Lightning API";
+    case "lnd":
+      return "LND API";
+    case "nwc":
+      return "NWC API";
+    case "cashu":
+      return "Cashu wallet";
+    case "btcpay":
+      return "BTCPay API";
+    case "csv":
+      return "Generic CSV";
+    case "bip329":
+      return "BIP329 labels";
+    case "custom":
+      return "Custom source";
+    case "kraken":
+    case "bitstamp":
+    case "coinbase":
+    case "bitpanda":
+    case "river":
+    case "bullbitcoin":
+    case "coinfinity":
+    case "strike":
+    case "phoenix":
+      return connectionKindLabels[connection.kind];
+    default:
+      return assertNeverConnectionKind(connection.kind);
+  }
+}
+
 export const connectionStatusStyles: Record<ConnectionStatus, string> = {
   synced:
     "bg-emerald-50 text-emerald-700 ring-emerald-600/20 dark:bg-emerald-900/30 dark:text-emerald-400 dark:ring-emerald-400/20",
@@ -58,36 +135,74 @@ export const connectionStatusStyles: Record<ConnectionStatus, string> = {
     "bg-red-50 text-red-700 ring-red-600/20 dark:bg-red-900/30 dark:text-red-400 dark:ring-red-400/20",
 };
 
-export function connectionKindTone(kind: ConnectionKind) {
-  switch (kind) {
-    case "core-ln":
-    case "lnd":
-    case "nwc":
-    case "phoenix":
-      return "border-amber-600/20 bg-amber-500/10 text-amber-700 dark:text-amber-300";
-    case "kraken":
-    case "bitstamp":
-    case "coinbase":
-    case "bitpanda":
-    case "river":
-    case "bullbitcoin":
-    case "coinfinity":
-    case "strike":
-      return "border-violet-600/20 bg-violet-500/10 text-violet-700 dark:text-violet-300";
-    case "cashu":
-      return "border-sky-600/20 bg-sky-500/10 text-sky-700 dark:text-sky-300";
-    case "btcpay":
-    case "csv":
-    case "bip329":
-    case "custom":
-      return "border-muted-foreground/20 bg-muted text-muted-foreground";
-    case "xpub":
-    case "address":
-    case "descriptor":
-    case "samourai":
-      return "border-emerald-600/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300";
-    default:
-      return assertNeverConnectionKind(kind);
+export type ConnectionAssetLabel = "BTC" | "LBTC" | "LN-BTC";
+
+export type ConnectionAssetInput = Pick<Connection, "kind"> &
+  Partial<
+    Pick<
+      Connection,
+      | "asset"
+      | "chain"
+      | "network"
+      | "policyAsset"
+      | "paymentMethodId"
+      | "sourceFormat"
+      | "syncMode"
+      | "syncSource"
+      | "label"
+    >
+  >;
+
+const lightningConnectionKinds = new Set<ConnectionKind>([
+  "core-ln",
+  "lnd",
+  "nwc",
+  "phoenix",
+]);
+
+const liquidSignals = ["liquid", "liquidv1", "lbtc", "l-btc"];
+const lightningSignals = ["lightning", "ln-btc", "btc-ln", "btc_lightning"];
+
+function hasSignal(values: Array<string | null | undefined>, signals: string[]) {
+  return values.some((value) => {
+    const normalized = value?.trim().toLowerCase();
+    return Boolean(
+      normalized &&
+        signals.some((signal) =>
+          normalized.split(/[^a-z0-9]+/).includes(signal) ||
+          normalized.includes(signal),
+        ),
+    );
+  });
+}
+
+export function connectionAssetLabel(
+  connection: ConnectionAssetInput,
+): ConnectionAssetLabel {
+  const signals = [
+    connection.asset,
+    connection.chain,
+    connection.network,
+    connection.policyAsset,
+    connection.paymentMethodId,
+    connection.sourceFormat,
+    connection.syncMode,
+    connection.syncSource,
+    connection.label,
+  ];
+  if (hasSignal(signals, liquidSignals)) return "LBTC";
+  if (lightningConnectionKinds.has(connection.kind)) return "LN-BTC";
+  if (hasSignal(signals, lightningSignals)) return "LN-BTC";
+  return "BTC";
+}
+
+export function connectionAssetIconKind(asset: ConnectionAssetLabel) {
+  switch (asset) {
+    case "BTC":
+    case "LN-BTC":
+      return "bitcoin";
+    case "LBTC":
+      return "liquid";
   }
 }
 

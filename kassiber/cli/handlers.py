@@ -25,7 +25,9 @@ from ..backends import (
     get_db_backend,
     list_backends,
     list_db_backends,
+    redact_backend_text,
     redact_backend_url,
+    redact_backend_value,
     resolve_backend,
     set_default_backend,
     update_db_backend,
@@ -35,6 +37,7 @@ from ..core import attachments as core_attachments
 from ..core import commercial as core_commercial
 from ..core import imports as core_imports
 from ..core.lightning import cln as core_lightning_cln
+from ..core import loans as core_loans
 from ..core import metadata as core_metadata
 from ..core import output_inventory as core_output_inventory
 from ..core import ownership as core_ownership
@@ -43,6 +46,7 @@ from ..core import pricing
 from ..core import rates as core_rates
 from ..core import reports as core_reports
 from ..core import saved_views as core_saved_views
+from ..core import source_overlap as core_source_overlap
 from ..core import swap_rules as core_swap_rules
 from ..core import sync as core_sync
 from ..core import sync_backends as core_sync_backends
@@ -116,6 +120,7 @@ from ..wallet_descriptors import (
     normalize_chain,
     normalize_network,
 )
+from ..wallet_setup import BSMS_DESCRIPTOR_SOURCE, parse_bsms_descriptor_record
 from ..importers import load_import_records
 from ..sync_btcpay import (
     DEFAULT_PAGE_SIZE as BTCPAY_DEFAULT_PAGE_SIZE,
@@ -217,6 +222,20 @@ def resolve_scope(conn, workspace_ref=None, profile_ref=None):
     workspace = resolve_workspace(conn, workspace_ref)
     profile = resolve_profile(conn, workspace["id"], profile_ref)
     return workspace, profile
+
+
+def cache_swap_candidate_count(conn, workspace_ref, profile_ref, total):
+    """Persist the unresolved swap/transfer candidate count for the side-nav hint.
+
+    Recorded after the matcher runs during journal processing so the badge is
+    served from a cheap column read rather than re-running the heavy matcher on
+    every poll. The caller owns the commit (see ``_auto_pair_before_journals``).
+    """
+    _, profile = resolve_scope(conn, workspace_ref, profile_ref)
+    conn.execute(
+        "UPDATE profiles SET swap_candidate_count = ? WHERE id = ?",
+        (int(total), profile["id"]),
+    )
 
 
 def resolve_wallet(conn, profile_id, ref):
@@ -325,7 +344,13 @@ def _journals_current_for_profile(conn, profile):
     )
 
 
-TRANSFER_PAIR_KINDS = ("manual", "peg-in", "peg-out", "submarine-swap")
+BITCOIN_LAYER_TRANSITION_PAIR_KINDS = (
+    "peg-in",
+    "peg-out",
+    "submarine-swap",
+    "swap-refund",
+)
+TRANSFER_PAIR_KINDS = ("manual", "coinjoin", *BITCOIN_LAYER_TRANSITION_PAIR_KINDS)
 TRANSFER_PAIR_POLICIES = ("carrying-value", "taxable")
 DIRECT_SWAP_PAYOUT_KINDS = ("direct-swap-payout",)
 
@@ -430,11 +455,6 @@ def create_transaction_pair(
     in_row = resolve_transaction(conn, profile["id"], in_ref, direction="inbound")
     if out_row["id"] == in_row["id"]:
         raise AppError("--tx-out and --tx-in must reference different transactions", code="validation")
-    if out_row["wallet_id"] == in_row["wallet_id"] and out_row["asset"] == in_row["asset"]:
-        raise AppError(
-            "Same-wallet pairs must be cross-asset swaps; same-asset legs should stay unpaired or use different wallets.",
-            code="validation",
-        )
     if out_row["asset"] == in_row["asset"] and policy == "taxable":
         raise AppError(
             f"Same-asset taxable pairs are not supported yet "
@@ -758,11 +778,15 @@ def list_transaction_pairs(conn, workspace_ref, profile_ref, *, include_deleted=
             -- out amount must match it. Same-asset / whole pairs keep tout.amount.
             COALESCE(p.out_amount, tout.amount) AS out_amount_msat,
             tout.amount AS out_full_amount_msat,
+            tout.occurred_at AS out_occurred_at,
             wout.label AS out_wallet,
+            wout.kind AS out_wallet_kind,
             tin.external_id AS in_external_id,
             tin.asset AS in_asset,
             tin.amount AS in_amount_msat,
-            win.label AS in_wallet
+            tin.occurred_at AS in_occurred_at,
+            win.label AS in_wallet,
+            win.kind AS in_wallet_kind
         FROM transaction_pairs p
         JOIN transactions tout ON tout.id = p.out_transaction_id
         JOIN transactions tin ON tin.id = p.in_transaction_id
@@ -780,7 +804,9 @@ def list_transaction_pairs(conn, workspace_ref, profile_ref, *, include_deleted=
             "transaction_id": row["out_transaction_id"],
             "external_id": row["out_external_id"] or "",
             "wallet": row["out_wallet"],
+            "wallet_kind": row["out_wallet_kind"],
             "asset": row["out_asset"],
+            "occurred_at": row["out_occurred_at"],
             # `amount` is the swapped portion on a split pair; `full_amount`
             # carries the underlying transaction's total for transparency.
             "amount": float(msat_to_btc(row["out_amount_msat"])),
@@ -792,7 +818,9 @@ def list_transaction_pairs(conn, workspace_ref, profile_ref, *, include_deleted=
             "transaction_id": row["in_transaction_id"],
             "external_id": row["in_external_id"] or "",
             "wallet": row["in_wallet"],
+            "wallet_kind": row["in_wallet_kind"],
             "asset": row["in_asset"],
+            "occurred_at": row["in_occurred_at"],
             "amount": float(msat_to_btc(row["in_amount_msat"])),
             "amount_msat": int(row["in_amount_msat"]),
         }
@@ -825,6 +853,7 @@ def _candidate_to_dict(candidate):
         "swap_fee_kind": candidate.swap_fee_kind,
         "default_kind": candidate.default_kind,
         "default_policy": candidate.default_policy,
+        "candidate_type": _candidate_review_type(candidate),
         "conflict_set_id": candidate.conflict_set_id,
         "conflict_size": candidate.conflict_size,
     }
@@ -871,7 +900,9 @@ def _load_matcher_rows(conn, profile_id):
         """
         SELECT
             t.id, t.profile_id, t.wallet_id, t.external_id, t.payment_hash,
-            t.occurred_at, t.direction, t.asset, t.amount, t.excluded,
+            t.swap_refund_funding_txid,
+            t.occurred_at, t.direction, t.asset, t.amount, t.amount_includes_fee,
+            t.excluded,
             w.label AS wallet_label, w.kind AS wallet_kind
         FROM transactions t
         JOIN wallets w ON w.id = t.wallet_id
@@ -895,6 +926,17 @@ def _candidate_same_asset(candidate):
     return str(candidate.out_asset or "").upper() == str(candidate.in_asset or "").upper()
 
 
+def _candidate_transfer_like(candidate):
+    return (
+        _candidate_same_asset(candidate)
+        or candidate.default_kind in BITCOIN_LAYER_TRANSITION_PAIR_KINDS
+    )
+
+
+def _candidate_review_type(candidate):
+    return "transfer" if _candidate_transfer_like(candidate) else "swap"
+
+
 def _filter_transfer_candidates(
     candidates,
     *,
@@ -910,11 +952,10 @@ def _filter_transfer_candidates(
                 f"Invalid candidate_type '{candidate_type}', expected 'transfer' or 'swap'",
                 code="validation",
             )
-        same_asset = candidate_type == "transfer"
         candidates = [
             c
             for c in candidates
-            if _candidate_same_asset(c) == same_asset
+            if _candidate_review_type(c) == candidate_type
         ]
     if confidence:
         candidates = [c for c in candidates if c.confidence == confidence]
@@ -983,8 +1024,9 @@ def suggest_transfer_candidates(
     Honours optional filters used by the review queue: ``confidence``
     pins to exact / strong; ``asset_pair`` matches the legacy asset-only
     ``OUT-IN`` shape (e.g. ``"LBTC-BTC"``); ``route_pair`` matches the
-    rail-aware route shape (e.g. ``"LNBTC-BTC"``); ``method`` pins to
-    ``payment_hash`` or ``heuristic``.
+    rail-aware route shape (e.g. ``"LNBTC-BTC"``); ``candidate_type`` splits
+    carrying-value Bitcoin movements from other cross-asset swaps; and ``method``
+    pins to ``payment_hash`` or ``heuristic``.
     """
     _, profile = resolve_scope(conn, workspace_ref, profile_ref)
     rows = _load_matcher_rows(conn, profile["id"])
@@ -1048,6 +1090,7 @@ def bulk_pair_transfers(
     route_pair=None,
     method=None,
     candidate_type=None,
+    commit=True,
 ):
     """Run the matcher and auto-pair every solo (non-conflicted) candidate
     whose confidence meets the threshold.
@@ -1111,7 +1154,7 @@ def bulk_pair_transfers(
     except Exception:
         conn.rollback()
         raise
-    if applied:
+    if applied and commit:
         conn.commit()
     total_fee_msat = sum(int(pair.get("swap_fee_msat") or 0) for pair in applied)
     return {
@@ -1137,6 +1180,7 @@ def apply_transfer_rules(
     route_pair=None,
     method=None,
     candidate_type=None,
+    commit=True,
 ):
     """Auto-pair every non-conflicted candidate matched by enabled rules."""
     workspace, profile = resolve_scope(conn, workspace_ref, profile_ref)
@@ -1186,7 +1230,7 @@ def apply_transfer_rules(
     except Exception:
         conn.rollback()
         raise
-    if applied:
+    if applied and commit:
         conn.commit()
     return {
         "applied": applied,
@@ -1482,6 +1526,96 @@ def delete_transaction_pair(conn, workspace_ref, profile_ref, pair_id):
     return {"deleted": pair_id}
 
 
+_UNSET = object()
+
+
+def update_transaction_pair(
+    conn,
+    workspace_ref,
+    profile_ref,
+    pair_id,
+    *,
+    kind=None,
+    policy=None,
+    notes=_UNSET,
+    commit=True,
+):
+    """Edit the kind / policy / notes of an existing (active) pair in place.
+
+    Pairs are the source of truth for transfer/swap accounting; journals are
+    re-derived from them. Changing kind/policy therefore only needs a row
+    update plus a journal invalidation — the legs, amounts, and swap fee are
+    untouched. ``kind`` / ``policy`` default to the stored value when omitted;
+    ``notes`` is only rewritten when explicitly passed. The same-asset /
+    cross-asset policy guards from :func:`create_transaction_pair` are
+    re-applied so an edit can't reach an unsupported combination.
+    """
+    _, profile = resolve_scope(conn, workspace_ref, profile_ref)
+    row = conn.execute(
+        """
+        SELECT p.*, tout.asset AS out_asset, tin.asset AS in_asset
+        FROM transaction_pairs p
+        JOIN transactions tout ON tout.id = p.out_transaction_id
+        JOIN transactions tin ON tin.id = p.in_transaction_id
+        WHERE p.id = ? AND p.profile_id = ? AND p.deleted_at IS NULL
+        """,
+        (pair_id, profile["id"]),
+    ).fetchone()
+    if not row:
+        raise AppError(f"Pair '{pair_id}' not found", code="not_found")
+    new_kind = row["kind"] if kind is None else kind
+    new_policy = row["policy"] if policy is None else policy
+    if new_kind not in TRANSFER_PAIR_KINDS:
+        raise AppError(
+            f"Unsupported pair kind '{new_kind}'. Supported: {', '.join(TRANSFER_PAIR_KINDS)}",
+            code="validation",
+        )
+    if new_policy not in TRANSFER_PAIR_POLICIES:
+        raise AppError(
+            f"Unsupported pair policy '{new_policy}'. Supported: {', '.join(TRANSFER_PAIR_POLICIES)}",
+            code="validation",
+        )
+    same_asset = str(row["out_asset"]).upper() == str(row["in_asset"]).upper()
+    if same_asset and new_policy == "taxable":
+        raise AppError(
+            f"Same-asset taxable pairs are not supported yet "
+            f"(asset={row['out_asset']}). Use --policy carrying-value for a "
+            f"self-transfer, or unpair the legs to keep SELL + BUY treatment.",
+            code="validation",
+            hint="Re-run with --policy carrying-value, or unpair to preserve taxable SELL + BUY behavior.",
+        )
+    if not same_asset and new_policy == "carrying-value":
+        tax_country = str(profile["tax_country"] or "").strip().lower()
+        if tax_country != "at":
+            raise AppError(
+                f"Cross-asset carrying-value pairs are only supported for Austrian profiles right now "
+                f"(out={row['out_asset']}, in={row['in_asset']}). "
+                f"Use --policy taxable for other tax countries.",
+                code="validation",
+                hint="Re-run with --policy taxable, or use an Austrian profile for cross-asset carrying-value swaps.",
+            )
+    new_notes = row["notes"] if notes is _UNSET else notes
+    unchanged = (
+        new_kind == row["kind"]
+        and new_policy == row["policy"]
+        and new_notes == row["notes"]
+    )
+    if not unchanged:
+        conn.execute(
+            "UPDATE transaction_pairs SET kind = ?, policy = ?, notes = ? "
+            "WHERE id = ? AND profile_id = ?",
+            (new_kind, new_policy, new_notes, pair_id, profile["id"]),
+        )
+        invalidate_journals(conn, profile["id"])
+        if commit:
+            conn.commit()
+    return _pair_to_dict(
+        conn.execute(
+            "SELECT * FROM transaction_pairs WHERE id = ?", (pair_id,)
+        ).fetchone()
+    )
+
+
 def init_app(conn):
     set_setting(conn, "app_version", __version__)
     conn.commit()
@@ -1540,8 +1674,6 @@ def parse_wallet_config(args):
             getattr(args, "descriptor_file", None),
             "Descriptor",
         )
-    if descriptor_text:
-        config["descriptor"] = descriptor_text
     change_descriptor_text = read_secret_from_args(
         args, "change-descriptor", legacy_attr="change_descriptor"
     )
@@ -1551,6 +1683,15 @@ def parse_wallet_config(args):
             getattr(args, "change_descriptor_file", None),
             "Change descriptor",
         )
+    if descriptor_text:
+        bsms_descriptors = parse_bsms_descriptor_record(descriptor_text)
+        if bsms_descriptors:
+            descriptor_text = bsms_descriptors["descriptor"]
+            config["descriptor_source"] = BSMS_DESCRIPTOR_SOURCE
+            config["synthesize_change"] = False
+            if not change_descriptor_text:
+                change_descriptor_text = bsms_descriptors.get("change_descriptor")
+        config["descriptor"] = descriptor_text
     if change_descriptor_text:
         config["change_descriptor"] = change_descriptor_text
     addresses = normalize_addresses(getattr(args, "address", None))
@@ -1590,9 +1731,9 @@ WALLET_KIND_CATALOG = {
         "requires": ["descriptor"],
     },
     "xpub": {
-        "summary": "Extended-public-key wallet derived to address set; supports on-chain sync via mempool/esplora.",
-        "config_fields": ["descriptor", "gap_limit", "backend", "chain", "network"],
-        "requires": ["descriptor"],
+        "summary": "Extended-public-key wallet: derives one or more script types (pinned with --script-type) to an address set; on-chain sync via mempool/esplora.",
+        "config_fields": ["descriptor", "xpub", "script_types", "gap_limit", "backend", "chain", "network"],
+        "requires": ["descriptor|script_types"],
     },
     "address": {
         "summary": "Bare-address list wallet; useful for receive-only tracking or imports.",
@@ -2069,14 +2210,21 @@ def sync_wallet(
     if sync_all and wallet_ref:
         raise AppError("--wallet and --all are mutually exclusive", code="validation")
     if sync_all:
-        wallets = conn.execute("SELECT * FROM wallets WHERE profile_id = ? ORDER BY label ASC", (profile["id"],)).fetchall()
+        wallet_rows = conn.execute(
+            "SELECT * FROM wallets WHERE profile_id = ? ORDER BY label ASC",
+            (profile["id"],),
+        ).fetchall()
+        wallets = [
+            wallet
+            for wallet in wallet_rows
+            if not core_wallets.wallet_is_deprecated(
+                json.loads(wallet["config_json"] or "{}")
+            )
+        ]
         hooks = _wallet_sync_hooks(commit=False)
-        # Run the network-only fetch for backend-synced wallets concurrently
-        # before the serial write loop. DB writes and the per-wallet savepoint
-        # isolation below are unchanged — only the fetch is parallelized, and the
-        # per-host limiter keeps total concurrency against any one host within a
-        # single wallet's existing budget. AppErrors are captured per wallet and
-        # re-raised under that wallet's savepoint, preserving rollback isolation.
+        # Run discovery concurrently, apply the DB-backed overlap preflight on
+        # this thread, then run backend fetches concurrently before the serial
+        # write loop. Per-wallet savepoint isolation below is unchanged.
         backend_wallets = [
             wallet
             for wallet in wallets
@@ -2089,6 +2237,14 @@ def sync_wallet(
             hooks,
             checkpoints=freshness_checkpoints,
             force_full=force_full,
+            source_overlap_preflight=(
+                lambda wallet, sync_state: core_source_overlap.raise_for_sync_source_overlap(
+                    conn,
+                    profile,
+                    wallet,
+                    sync_state,
+                )
+            ),
         )
         results = []
         for idx, wallet in enumerate(wallets):
@@ -2115,9 +2271,9 @@ def sync_wallet(
                         "wallet": wallet["label"],
                         "status": "error",
                         "code": exc.code,
-                        "message": str(exc),
-                        "hint": exc.hint or "",
-                        "details": exc.details,
+                        "message": redact_backend_text(str(exc)),
+                        "hint": redact_backend_text(exc.hint) if exc.hint else "",
+                        "details": redact_backend_value(exc.details),
                         "retryable": bool(exc.retryable),
                     }
                 )
@@ -2603,18 +2759,61 @@ def resolve_descriptor_branch_index(plan, branch):
     if branch in (None, "", "all"):
         return None
     normalized = str(branch).strip().lower()
-    if normalized in {"0", "receive", "external"}:
-        return 0
-    if normalized in {"1", "change", "internal"}:
-        return 1
-    raise AppError("Descriptor branch must be one of: all, receive, change, 0, 1")
+    valid = {item.branch_index for item in plan.branches}
+    # A concrete branch index the plan actually has (multi-script xpub wallets
+    # use 4/5 for p2wpkh, 6/7 for p2tr, and so on).
+    if normalized.isdigit():
+        index = int(normalized)
+        if index in valid:
+            return index
+        raise AppError(
+            f"Descriptor branch '{branch}' is not in this wallet's plan; "
+            f"available branches: {sorted(valid)}"
+        )
+    # Legacy aliases should still work for xpub plans when exactly one receive
+    # or change branch is enabled, even if fixed script-type branch ids are 4/5.
+    if normalized in {"receive", "external"}:
+        receive_branches = [
+            item
+            for item in plan.branches
+            if _descriptor_branch_label_key(item.branch_label) == "receive"
+            or _descriptor_branch_label_key(item.branch_label).endswith(" receive")
+        ]
+        if len(receive_branches) == 1:
+            return receive_branches[0].branch_index
+    if normalized in {"change", "internal"}:
+        change_branches = [
+            item
+            for item in plan.branches
+            if _descriptor_branch_label_key(item.branch_label) == "change"
+            or _descriptor_branch_label_key(item.branch_label).endswith(" change")
+        ]
+        if len(change_branches) == 1:
+            return change_branches[0].branch_index
+    # Script-type-qualified labels, e.g. "p2tr receive" or "p2tr-receive".
+    label = _descriptor_branch_label_key(normalized)
+    for item in plan.branches:
+        if _descriptor_branch_label_key(item.branch_label) == label:
+            return item.branch_index
+    raise AppError(
+        "Descriptor branch must be 'all', a branch index in "
+        f"{sorted(valid)}, or a branch label like 'receive'/'p2tr receive'"
+    )
+
+
+def _descriptor_branch_label_key(value):
+    return " ".join(str(value).strip().lower().replace("-", " ").split())
 
 
 def derive_wallet_targets(conn, workspace_ref, profile_ref, wallet_ref, branch=None, start=0, count=None):
     _, profile = resolve_scope(conn, workspace_ref, profile_ref)
     wallet = resolve_wallet(conn, profile["id"], wallet_ref)
     config = json.loads(wallet["config_json"] or "{}")
-    plan = load_wallet_descriptor_plan_from_config(config) if config.get("descriptor") else None
+    plan = (
+        load_wallet_descriptor_plan_from_config(config)
+        if (config.get("descriptor") or config.get("xpub"))
+        else None
+    )
     if plan is None:
         raise AppError(f"Wallet '{wallet['label']}' does not have a descriptor configured")
     if start < 0:
@@ -3107,6 +3306,40 @@ def auto_price_transactions_from_rates_cache(conn, profile):
     return auto_priced
 
 
+def _duplicate_label_warnings(wallet_refs_by_id):
+    """Warn when two wallets in a profile share a label.
+
+    RP2 keys per-account holdings (and exchange identity) by the wallet *label*,
+    so two wallets sharing one label merge their balances, and a derived
+    self-transfer routed by label can land on the wrong account. The books'
+    totals stay correct; the per-wallet attribution does not. Surfaced as a
+    non-blocking warning so the user renames them.
+    """
+    ids_by_label: dict[str, list[str]] = {}
+    for ref in wallet_refs_by_id.values():
+        label = ref.get("label")
+        if not label:
+            continue
+        ids_by_label.setdefault(str(label), []).append(str(ref.get("id")))
+    warnings = []
+    for label, ids in sorted(ids_by_label.items()):
+        if len(ids) > 1:
+            warnings.append(
+                {
+                    "code": "duplicate_wallet_label",
+                    "label": label,
+                    "wallet_ids": sorted(ids),
+                    "message": (
+                        f"{len(ids)} wallets share the label '{label}'. Reports key "
+                        "holdings by wallet label, so their balances merge and a "
+                        "derived self-transfer can be attributed to the wrong "
+                        "wallet. Rename them to be unique."
+                    ),
+                }
+            )
+    return warnings
+
+
 def build_ledger_state(conn, profile):
     require_tax_processing_supported(profile)
     rows = conn.execute(
@@ -3142,22 +3375,67 @@ def build_ledger_state(conn, profile):
     ).fetchall()
     tax_engine = build_tax_engine(profile)
     rates = latest_rates_for_profile(conn, profile["id"])
+    # Build refs for EVERY profile wallet, not just wallets that have rows: the
+    # ownership deriver can route a self-transfer into a wallet that recorded no
+    # inbound row (sync gap), and the intra path resolves the destination ref by
+    # wallet_id — a rowless destination would otherwise KeyError.
     wallet_refs_by_id = {}
-    for row in rows:
-        wallet_config = json.loads(row["config_json"] or "{}")
-        wallet_refs_by_id[row["wallet_id"]] = {
-            "id": row["wallet_id"],
-            "label": row["wallet_label"],
-            "wallet_account_id": row["wallet_account_id"],
-            "account_code": row["account_code"],
-            "account_label": row["account_label"],
+    for wallet in conn.execute(
+        """
+        SELECT
+            w.id AS id,
+            w.label AS label,
+            w.account_id AS wallet_account_id,
+            COALESCE(a.code, 'treasury') AS account_code,
+            COALESCE(a.label, 'Treasury') AS account_label
+        FROM wallets w
+        LEFT JOIN accounts a ON a.id = w.account_id
+        WHERE w.profile_id = ?
+        """,
+        (profile["id"],),
+    ).fetchall():
+        wallet_refs_by_id[wallet["id"]] = {
+            "id": wallet["id"],
+            "label": wallet["label"],
+            "wallet_account_id": wallet["wallet_account_id"],
+            "account_code": wallet["account_code"],
+            "account_label": wallet["account_label"],
         }
+    # The address-ownership index is only useful (and only worth its descriptor
+    # derivation cost) when some on-chain outbound carries full transaction JSON
+    # to read outputs from. Skip the build entirely for pure CSV / Lightning
+    # profiles.
+    warnings = _duplicate_label_warnings(wallet_refs_by_id)
+    owned_index = None
+    has_onchain_outbound = any(
+        row["direction"] == "outbound" and (row["raw_json"] or "").find('"vout"') != -1
+        for row in rows
+    )
+    if has_onchain_outbound:
+        index_wallets = core_ownership.load_profile_wallets(conn, profile["id"])
+        owned_index, ownership_warnings = core_ownership.build_owned_index(
+            conn, profile["id"], index_wallets
+        )
+        warnings.extend(
+            {"code": "ownership_index", "message": str(message)}
+            for message in ownership_warnings or ()
+        )
+    # Active loan marks classify a journal transaction by role. Collateral
+    # lock/release and borrowed-principal receive/repay roles are non-events for
+    # the tax engine; removing a mark reverts the transaction to its normal
+    # classification (a liquidated lock then books as the disposal it is).
+    loan_legs = conn.execute(
+        "SELECT transaction_id, role FROM loan_legs WHERE profile_id = ? AND deleted_at IS NULL",
+        (profile["id"],),
+    ).fetchall()
     engine_state = tax_engine.build_ledger_state(
         TaxEngineLedgerInputs(
             rows=rows,
             wallet_refs_by_id=wallet_refs_by_id,
             manual_pair_records=manual_pair_records,
             direct_payout_records=direct_payout_records,
+            owned_index=owned_index,
+            loan_legs=loan_legs,
         )
     )
     return {
@@ -3170,6 +3448,7 @@ def build_ledger_state(conn, profile):
         "account_holdings": engine_state.account_holdings,
         "wallet_holdings": engine_state.wallet_holdings,
         "latest_rates": rates,
+        "warnings": warnings,
     }
 
 
@@ -3378,6 +3657,8 @@ def process_journals(conn, workspace_ref, profile_ref):
     }
     if state.get("direct_swap_payouts"):
         result["direct_swap_payouts"] = len(state["direct_swap_payouts"])
+    if state.get("warnings"):
+        result["warnings"] = state["warnings"]
     return result
 
 
@@ -4256,3 +4537,85 @@ def cmd_context_set(conn, args):
     else:
         raise AppError("Provide --workspace and/or --profile")
     cmd_context_show(conn, args)
+
+
+# --- Bitcoin-backed loans --------------------------------------------------
+
+
+# `--as` value -> stored loan role.
+_MARK_AS_TO_ROLE = {
+    "collateral": core_loans.COLLATERAL_LOCK,
+    "returned": core_loans.COLLATERAL_RELEASE,
+    "principal-received": core_loans.PRINCIPAL_RECEIVED,
+    "principal-repaid": core_loans.PRINCIPAL_REPAID,
+}
+
+
+def _resolve_loan_txid(conn, profile_id, txid):
+    row = conn.execute(
+        "SELECT id FROM transactions WHERE profile_id = ? AND (id = ? OR external_id = ?)",
+        (profile_id, txid, txid),
+    ).fetchone()
+    if row is None:
+        raise AppError(
+            f"Transaction '{txid}' not found in this book", code="not_found", details={"txid": txid}
+        )
+    return row["id"]
+
+
+def loans_mark(conn, workspace_ref, profile_ref, txid, *, mark_as, note=None, loan_id=None):
+    """Mark a transaction as a loan non-event: collateral lock/release or
+    principal received/repaid."""
+    workspace, profile = resolve_scope(conn, workspace_ref, profile_ref)
+    role = _MARK_AS_TO_ROLE.get(mark_as)
+    if role is None:
+        raise AppError(
+            f"Invalid --as '{mark_as}'. Use one of: {', '.join(_MARK_AS_TO_ROLE)}",
+            code="validation",
+            details={"field": "as", "value": mark_as},
+        )
+    resolved = _resolve_loan_txid(conn, profile["id"], txid)
+    mark = core_loans.mark_collateral(
+        conn,
+        workspace["id"],
+        profile["id"],
+        resolved,
+        role=role,
+        note=note,
+        loan_id=loan_id,
+        commit=False,
+    )
+    invalidate_journals(conn, profile["id"])
+    conn.commit()
+    return mark
+
+
+def loans_unmark(conn, workspace_ref, profile_ref, txid):
+    """Remove a transaction's loan mark — it reverts to its normal tax
+    classification."""
+    _, profile = resolve_scope(conn, workspace_ref, profile_ref)
+    resolved = _resolve_loan_txid(conn, profile["id"], txid)
+    result = core_loans.unmark_collateral(conn, profile["id"], resolved, commit=False)
+    invalidate_journals(conn, profile["id"])
+    conn.commit()
+    return result
+
+
+def loans_link(conn, workspace_ref, profile_ref, txids, *, loan_id=None):
+    """Tie active loan marks together under one lightweight loan id."""
+    _, profile = resolve_scope(conn, workspace_ref, profile_ref)
+    resolved = [_resolve_loan_txid(conn, profile["id"], txid) for txid in txids]
+    result = core_loans.link_loan_marks(
+        conn, profile["id"], resolved, loan_id=loan_id, commit=False
+    )
+    conn.commit()
+    return result
+
+
+def loans_list(conn, workspace_ref, profile_ref):
+    """All loan marks plus open collateral locks."""
+    _, profile = resolve_scope(conn, workspace_ref, profile_ref)
+    return {
+        "marks": core_loans.list_collateral_marks(conn, profile["id"]),
+        "open_locks": core_loans.open_collateral_locks(conn, profile["id"]),
+    }

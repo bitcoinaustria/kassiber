@@ -1,17 +1,14 @@
 from __future__ import annotations
 
 import csv
-import http.client
-from importlib import resources
 import io
+from importlib import resources
 import json
 import logging
 from pathlib import Path
-import ssl
 import tempfile
 import zipfile
 from datetime import datetime, timedelta, timezone
-from urllib import error as urlerror
 from urllib import parse as urlparse
 from urllib import request as urlrequest
 
@@ -20,8 +17,8 @@ from .. import http_client
 from ..backends import preferred_mempool_api_backend
 from ..db import APP_NAME, get_setting, set_setting
 from ..errors import AppError
+from ..proxy import urlopen_with_proxy
 from . import pricing
-from .sync_backends import _connect_via_socks5
 from ..time_utils import _iso_z, _parse_iso_datetime
 
 logger = logging.getLogger(__name__)
@@ -247,100 +244,13 @@ def transaction_price_missing_sql_unqualified():
 
 
 def _urlopen_with_proxy(request, url, timeout, proxy_url=None):
-    proxy = str(proxy_url or "").strip()
-    if not proxy:
-        return urlrequest.urlopen(request, timeout=timeout)
-    scheme = urlparse.urlsplit(proxy).scheme.lower()
-    if scheme in {"http", "https"}:
-        opener = urlrequest.build_opener(
-            urlrequest.ProxyHandler({"http": proxy, "https": proxy})
-        )
-        return opener.open(request, timeout=timeout)
-    if scheme not in {"socks5", "socks5h"}:
-        raise AppError(
-            f"Unsupported rate-provider proxy transport '{scheme or proxy}'",
-            code="validation",
-            hint="Use http://, https://, socks5://, or socks5h:// for market-rate proxy settings.",
-        )
-    return _SocksUrlResponse(url, proxy, timeout, dict(request.header_items()))
-
-
-class _SocksUrlResponse:
-    def __init__(self, url, proxy_url, timeout, headers):
-        self._url = url
-        self._proxy_url = proxy_url
-        self._timeout = timeout
-        self._headers = headers
-        self._connection = None
-        self._response = None
-
-    def __enter__(self):
-        parsed = urlparse.urlsplit(self._url)
-        if parsed.scheme not in {"http", "https"} or not parsed.hostname:
-            raise AppError(
-                f"Unsupported rate-provider URL for proxy fetch: {self._url}",
-                code="validation",
-            )
-        port = parsed.port or (443 if parsed.scheme == "https" else 80)
-        target = urlparse.urlunsplit(("", "", parsed.path or "/", parsed.query, ""))
-        proxy_url = self._proxy_url
-        timeout = self._timeout
-
-        class SocksHTTPConnection(http.client.HTTPConnection):
-            def connect(self):
-                self.sock = _connect_via_socks5(
-                    proxy_url,
-                    parsed.hostname,
-                    port,
-                    timeout,
-                )
-
-        class SocksHTTPSConnection(http.client.HTTPSConnection):
-            def connect(self):
-                raw_sock = _connect_via_socks5(
-                    proxy_url,
-                    parsed.hostname,
-                    port,
-                    timeout,
-                )
-                context = ssl.create_default_context()
-                self.sock = context.wrap_socket(raw_sock, server_hostname=parsed.hostname)
-
-        connection_class = SocksHTTPSConnection if parsed.scheme == "https" else SocksHTTPConnection
-        self._connection = connection_class(parsed.hostname, port, timeout=timeout)
-        try:
-            self._connection.request("GET", target, headers=self._headers)
-            self._response = self._connection.getresponse()
-            if self._response.status >= 400:
-                body = self._response.read()
-                raise urlerror.HTTPError(
-                    self._url,
-                    self._response.status,
-                    self._response.reason,
-                    self._response.headers,
-                    io.BytesIO(body),
-                )
-        except urlerror.HTTPError:
-            self.close()
-            raise
-        except OSError as exc:
-            self.close()
-            raise urlerror.URLError(exc) from exc
-        return self
-
-    def read(self):
-        if self._response is None:
-            return b""
-        return self._response.read()
-
-    def close(self):
-        if self._connection is not None:
-            self._connection.close()
-            self._connection = None
-
-    def __exit__(self, exc_type, exc, traceback):
-        self.close()
-        return False
+    return urlopen_with_proxy(
+        request,
+        url,
+        timeout,
+        proxy_url=proxy_url,
+        source_label="rate-provider",
+    )
 
 
 def http_get_json(

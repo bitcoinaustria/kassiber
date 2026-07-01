@@ -253,3 +253,109 @@ kassiber reports export-pdf --wallet satoshi-liquid --file satoshi-liquid-report
 
 Use these instead of inventing extra report renderers unless the user asks for
 a custom output beyond Kassiber's built-in exports.
+
+### Transactions-only export
+
+For just the transaction ledger (not the full report), use:
+
+```bash
+kassiber transactions export --export-format xlsx --file transactions.xlsx
+kassiber transactions export --export-format csv --file transactions.csv
+kassiber transactions export --wallet satoshi-cold --export-format xlsx --file cold.xlsx
+```
+
+It writes a single styled Transactions sheet (or CSV) with the same columns as
+the report's Transactions sheet — description, note, counterparty, tags, and the
+linked-file/URL Attachments column (single URLs render as clickable links). In
+the desktop GUI this is the **Export** button on the Transactions screen toolbar
+(Excel / CSV), backed by the daemon kinds `ui.transactions.export_csv` /
+`ui.transactions.export_xlsx`. It exports the profile's transactions (wallet
+scope when given), not the screen's transient view filters.
+
+### Self-verifying XLSX (default)
+
+`reports export-xlsx` appends a verification layer so the reader can reproduce
+every figure in Excel/LibreOffice rather than trusting the static numbers:
+
+- **Acquisitions** / **Disposals** — the raw journal ledger. Only the
+  highlighted inputs (msat quantities, fiat values, proceeds, cost basis) are
+  hard numbers; quantities-in-BTC, per-row gain = proceeds − cost basis, and an
+  OK/DIFF check are live formulas. Each row also shows its **Pricing Source**
+  and **Pricing Quality** (coarse/estimated prices are highlighted).
+- **Control** — a per-asset reconciliation matrix. Holdings balance, cost
+  basis, average price, market value, unrealized and realized gain are each
+  recomputed with a live formula over the ledger sheets and shown next to
+  Kassiber's own number with an OK/DIFF check (the check references the editable
+  tolerance in `Verify!B3`). It also shows the **market rate, its source and
+  timestamp** so the valuation is traceable.
+- **Verify** — a plain-language "how to verify" sheet: a workbook-level
+  `ALL CHECKS OK` / mismatch banner, run metadata (lot method, fiat, last
+  processed, Kassiber version), the formula legend, the recalc gotcha, the
+  active lot method, and scope notes.
+- **Quarantined** (only when present) — the transactions Kassiber could not
+  classify, with reason and detail, so the reader can see what is deliberately
+  excluded from every figure.
+
+The main report's **Transactions** sheet is the full per-transaction record:
+description, note, counterparty, tags, and an **Attachments** column. A single
+linked URL renders as a clickable link shown behind its name; multiple
+attachments are listed one per line (Excel allows only one hyperlink per cell).
+The Acquisitions/Disposals ledgers also carry each row's description and tags;
+match a ledger row to its evidence by the Transaction ID. When any attachments
+exist, an **Evidence** sheet lists every link as its own row with a clickable
+styled link — so even a transaction with several links has each one clickable.
+
+Reconciliation is per asset across the whole profile (Bitcoin accounting is
+pooled per asset across wallets; per-wallet cost basis is an allocation).
+Per-disposal cost basis under FIFO/LIFO/HIFO/LOFO is engine-selected and cannot
+be re-derived by a plain formula — the Control sheet verifies the
+method-independent identities instead. Pass `--no-verify` for the lean
+value-only workbook. The daemon kind `ui.reports.export_xlsx` accepts
+`{"verify": false}` for the same effect.
+
+## Source of funds (Mittelherkunftsnachweis)
+
+Target-anchored proof-of-source workflow: pick the outgoing target
+transaction (e.g. a planned exchange sale), link upstream funding evidence,
+review gates, then export a PDF rendered only from a saved immutable case
+snapshot.
+
+```bash
+# Build/maintain the review graph.
+kassiber source-funds sources create --type fiat_purchase --label "Bank purchase" \
+  --asset BTC --amount 0.10000000 --attachment <attachment-id>
+kassiber source-funds links create --from-source <source-id> \
+  --to-transaction <txid-or-id> --type manual_source \
+  --allocation-amount 0.10000000 --allocation-policy explicit
+# One call: derive + auto-review everything provable from local evidence
+# (tx inputs/outputs, payment hashes, platform ids, reviewed pairs).
+kassiber source-funds assemble --target-transaction <txid-or-id>
+
+# Manual equivalents when finer control is needed:
+kassiber source-funds suggest --target-transaction <txid-or-id>
+kassiber source-funds links bulk-review --target-transaction <txid-or-id>
+
+# Preview gates + disclosure, freeze a case, then export it.
+kassiber --machine reports source-funds --target-transaction <txid-or-id> \
+  --target-amount 0.10000000 --reveal-mode standard --save-case
+kassiber reports export-source-funds-pdf --case <case-id> --file sof.pdf
+kassiber reports export-source-funds-bundle --case <case-id> --file sof-bundle.zip
+```
+
+Gotchas:
+
+- `export-source-funds-pdf` / `export-source-funds-bundle` take ONLY
+  `--case` + `--file`: target, reveal mode, and report options are frozen
+  into the snapshot at `--save-case` time and cannot be reshaped at export.
+- Export hard-fails (`export_blocked`) while `explain_gates.blockers` is
+  non-empty; there is no force flag. Resolve blockers (review suggested
+  links, fix allocations, attach missing-history attestations) instead.
+- Reveal modes: `labels_only`, `minimal`, `standard`, `full`. Free-text and
+  txids tighten as the mode narrows; `disclosure_preview` in the machine
+  envelope lists exactly what would be disclosed, the wallets the report
+  names, and the common-ownership consequence of sharing it.
+- The machine envelope carries the granular trace: `flow_levels` (per-level
+  nodes with direction, fee, fiat value, `data_provenance` =
+  chain_sync/platform_export/manual_import, per-level fiat subtotals),
+  `data_provenance_summary`, `source_mix`, `gaps` (missing-history items
+  carry the unexplained amount), and `findings`.

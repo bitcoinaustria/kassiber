@@ -54,11 +54,16 @@ export const DEFAULT_FORM: OnboardingForm = {
 
 export const FIAT_CURRENCIES: FiatCurrency[] = ["EUR", "USD", "CHF", "GBP"];
 
+export const TAX_COUNTRIES: TaxCountry[] = ["generic", "at"];
+
+// Lot-selection methods shared by both regions.
+const LOT_GAINS_ALGORITHMS: GenericGainsAlgorithm[] = ["FIFO", "LIFO", "HIFO", "LOFO"];
+
+// The generic region offers the lot methods plus the plain (non-Austrian)
+// moving-average / average-cost method.
 export const GENERIC_GAINS_ALGORITHMS: GenericGainsAlgorithm[] = [
-  "FIFO",
-  "LIFO",
-  "HIFO",
-  "LOFO",
+  ...LOT_GAINS_ALGORITHMS,
+  "MOVING_AVERAGE",
 ];
 
 export const AUSTRIAN_GAINS_ALGORITHMS: AustrianGainsAlgorithm[] = [
@@ -70,8 +75,14 @@ export const GAINS_ALGORITHM_DEFAULTS: Record<TaxCountry, GainsAlgorithm> = {
   generic: "FIFO",
 };
 
+// Austrian books default to the moving-average method (gleitender
+// Durchschnittspreis) but may also use the lot methods. The Austrian default is
+// listed first so `[0]` is the region default. The plain generic moving-average
+// is intentionally NOT offered for AT — the Austrian variant supersedes it.
 export const gainsAlgorithmsFor = (country: TaxCountry): GainsAlgorithm[] =>
-  country === "at" ? AUSTRIAN_GAINS_ALGORITHMS : GENERIC_GAINS_ALGORITHMS;
+  country === "at"
+    ? [...AUSTRIAN_GAINS_ALGORITHMS, ...LOT_GAINS_ALGORITHMS]
+    : GENERIC_GAINS_ALGORITHMS;
 
 export const parseTaxLongTermDays = (raw: string): number | null => {
   const trimmed = raw.trim();

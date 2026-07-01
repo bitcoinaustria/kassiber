@@ -4,6 +4,24 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Kassiber — local-first Bitcoin accounting</title>
+    <script>
+      (() => {
+        try {
+          const raw = window.localStorage.getItem("kb.ui");
+          const state = raw ? JSON.parse(raw)?.state : null;
+          const theme = state?.theme;
+          const lang = state?.lang;
+          if (typeof lang === "string" && lang) {
+            document.documentElement.lang = lang;
+          }
+          if (theme === "dark" || theme === "light") {
+            document.documentElement.classList.add(theme);
+          }
+        } catch {
+          // Keep the boot screen on system theme if persisted UI state is unreadable.
+        }
+      })();
+    </script>
     <style>
       /*
        * Paint a themed background and a quiet boot indicator before any
@@ -15,18 +33,43 @@
        * React's createRoot replaces #root's children on first render, so
        * the splash disappears as soon as the real UI takes over.
        */
-      :root { color-scheme: light dark; }
-      html, body { margin: 0; padding: 0; height: 100%; }
-      body {
-        background-color: #ffffff;
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
-          "Helvetica Neue", Arial, sans-serif;
-        color: #1f2937;
+      :root {
+        color-scheme: light dark;
+        --kb-boot-bg: #f8fafc;
+        --kb-boot-fg: #111827;
+        --kb-boot-muted: #374151;
+        --kb-boot-ring: rgba(17, 24, 39, 0.16);
+        --kb-boot-ring-active: #111827;
       }
       @media (prefers-color-scheme: dark) {
-        body { background-color: #0a0a0a; color: #e5e7eb; }
-        .kb-boot__spinner { border-color: rgba(229, 231, 235, 0.18); border-top-color: #e5e7eb; }
-        .kb-boot__label { color: rgba(229, 231, 235, 0.6); }
+        :root {
+          --kb-boot-bg: #0a0a0a;
+          --kb-boot-fg: #f4f4f5;
+          --kb-boot-muted: #d4d4d8;
+          --kb-boot-ring: rgba(244, 244, 245, 0.24);
+          --kb-boot-ring-active: #fafafa;
+        }
+      }
+      html.light {
+        --kb-boot-bg: #f8fafc;
+        --kb-boot-fg: #111827;
+        --kb-boot-muted: #374151;
+        --kb-boot-ring: rgba(17, 24, 39, 0.16);
+        --kb-boot-ring-active: #111827;
+      }
+      html.dark {
+        --kb-boot-bg: #0a0a0a;
+        --kb-boot-fg: #f4f4f5;
+        --kb-boot-muted: #d4d4d8;
+        --kb-boot-ring: rgba(244, 244, 245, 0.24);
+        --kb-boot-ring-active: #fafafa;
+      }
+      html, body { margin: 0; padding: 0; height: 100%; }
+      body {
+        background-color: var(--kb-boot-bg);
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          "Helvetica Neue", Arial, sans-serif;
+        color: var(--kb-boot-fg);
       }
       #root { height: 100%; }
       .kb-boot {
@@ -40,15 +83,16 @@
       .kb-boot__spinner {
         width: 28px;
         height: 28px;
-        border: 2px solid rgba(31, 41, 55, 0.16);
-        border-top-color: #1f2937;
+        border: 2px solid var(--kb-boot-ring);
+        border-top-color: var(--kb-boot-ring-active);
         border-radius: 50%;
         animation: kb-boot-spin 0.9s linear infinite;
       }
       .kb-boot__label {
         font-size: 13px;
+        font-weight: 500;
         letter-spacing: 0.04em;
-        color: rgba(31, 41, 55, 0.6);
+        color: var(--kb-boot-muted);
       }
       @keyframes kb-boot-spin { to { transform: rotate(360deg); } }
       @media (prefers-reduced-motion: reduce) {
@@ -63,6 +107,14 @@
         <div class="kb-boot__label">Loading Kassiber…</div>
       </div>
     </div>
+    <script>
+      (() => {
+        const label = document.querySelector(".kb-boot__label");
+        if (label && document.documentElement.lang.startsWith("de")) {
+          label.textContent = "Kassiber wird geladen...";
+        }
+      })();
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

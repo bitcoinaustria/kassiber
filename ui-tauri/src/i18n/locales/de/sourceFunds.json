@@ -11,6 +11,24 @@
       "export": "Export"
     }
   },
+  "caseStages": {
+    "target": {
+      "label": "Ziel",
+      "hint": "Was erklärt werden muss"
+    },
+    "trace": {
+      "label": "Nachverfolgen",
+      "hint": "Historie zusammenstellen"
+    },
+    "disclose": {
+      "label": "Offenlegen",
+      "hint": "Aus Empfängersicht"
+    },
+    "export": {
+      "label": "Export",
+      "hint": "Einfrieren und übergeben"
+    }
+  },
   "purpose": {
     "planned": {
       "title": "Geplanter Verkauf über Exchange",
@@ -109,7 +127,13 @@
   "actionsBar": {
     "findLinks": "Verknüpfungen finden",
     "reviewDeterministic": "Deterministische Hops prüfen",
+    "assemble": "Historie zusammenstellen",
+    "assembling": "Historie wird zusammengestellt…",
     "markGap": "Lücke markieren",
+    "assembleHint": "Kassiber stellt jeden Hop zusammen, den es aus lokalen Nachweisen belegen kann: Transaktions-Inputs/-Outputs synchronisierter Wallets (Bitcoin und Liquid), Lightning-Zahlungshashes, Plattform-IDs und geprüfte Paare. Je mehr Wallets und Verbindungen dieses Buch hat, desto vollständiger wird der zusammengestellte Fluss. Du dokumentierst nur, was übrig bleibt.",
+    "assembleResult_one": "{{count}} Hop belegt",
+    "assembleResult_other": "{{count}} Hops belegt",
+    "assembleResultEmpty": "in diesem Lauf keine neuen Nachweise",
     "manualReviewHint_one": "{{count}} schwacher Vorschlag bzw. Vorschlag aus On-chain-Beobachtung braucht noch eine manuelle Prüfung.",
     "manualReviewHint_other": "{{count}} schwache Vorschläge bzw. Vorschläge aus On-chain-Beobachtung brauchen noch eine manuelle Prüfung."
   },
@@ -122,6 +146,10 @@
     "savingCase": "Fall wird gespeichert…",
     "saveAndExport": "Speichern & PDF exportieren",
     "savedCase": "Gespeicherter Fall {{id}} ({{status}})"
+  },
+  "exportStage": {
+    "title": "Einfrieren und übergeben",
+    "lede": "Der Export rendert aus einem gespeicherten unveränderlichen Fall-Snapshot. Live-Änderungen verändern ein übergebenes Dossier nie; spätere Renderings verwenden dieselben geprüften Falldaten, auch wenn generierte Datei-Metadaten abweichen können."
   },
   "advancedReview": {
     "title": "Erweiterter Prüfeditor",

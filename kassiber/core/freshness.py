@@ -13,6 +13,7 @@ from typing import Any, Callable, Mapping
 
 from ..envelope import json_ready
 from ..errors import AppError
+from ..redaction import redact_operational_text, redact_operational_value
 from ..time_utils import now_iso, parse_iso_datetime_or_none
 
 # Job failures recorded here also flow to the RAM-only log ring via the stdlib
@@ -384,6 +385,32 @@ def get_source_state(
         (profile_id, key),
     ).fetchone()
     return _row_payload(row) if row else None
+
+
+def reset_source_checkpoint(
+    conn: sqlite3.Connection,
+    profile_id: str,
+    key: str,
+    *,
+    stale_reason: str,
+) -> bool:
+    state = get_source_state(conn, profile_id, key)
+    if state is None:
+        return False
+    upsert_source_state(
+        conn,
+        profile_id=profile_id,
+        source_key=key,
+        source_type=state["source_type"],
+        source_label=state["source_label"],
+        status=STATUS_PARTIALLY_STALE,
+        stale_reason=stale_reason,
+        blocking_reports=bool(state.get("blocking_reports")),
+        paused=bool(state.get("paused")),
+        progress={},
+        checkpoint={},
+    )
+    return True
 
 
 def list_source_states(conn: sqlite3.Connection, profile_id: str) -> list[dict[str, Any]]:
@@ -848,18 +875,31 @@ def _mark_error(
     # free-text value. The RAM log ring has no render step, so the message must
     # never reach it.
     error_code = exc.code or "freshness_job_failed"
+    # The exception TYPE (set by run_job for swallowed non-AppErrors) is a code
+    # identifier, never runtime data, so it is safe for the RAM log ring and
+    # makes an otherwise-opaque "freshness_job_failed" diagnosable.
+    error_class = exc.details.get("error_class") if isinstance(exc.details, dict) else None
     if cooldown_until:
         _LOGGER.warning("Freshness %s rate-limited (%s)", source_name, error_code)
+    elif error_class:
+        _LOGGER.error("Freshness %s failed (%s; %s)", source_name, error_code, error_class)
     else:
         _LOGGER.error("Freshness %s failed (%s)", source_name, error_code)
     now = now_iso()
+    # This is a disk write (freshness_jobs.error_json), so pseudonymize txids /
+    # amounts the backend exception may have interpolated before they are
+    # persisted — redact_freshness_payload only scrubs secret *keys*, not
+    # operational ids inside a free-text message.
     error_payload = redact_freshness_payload(
         {
             "code": exc.code or "freshness_job_failed",
-            "message": str(exc),
-            "hint": exc.hint,
+            "message": redact_operational_text(str(exc)),
+            "hint": redact_operational_text(exc.hint) if exc.hint else exc.hint,
             "retryable": exc.retryable,
-            "details": exc.details,
+            # details can carry raw backend output (CLN stderr, Electrum
+            # response_preview) with txids/amounts; pseudonymize its string
+            # leaves before this disk write, not only at read-back render.
+            "details": redact_operational_value(exc.details),
             "rate_limited_until": cooldown_until,
         }
     )
@@ -898,7 +938,7 @@ def _mark_error(
         retry_count=int(job.get("attempts") or 0),
         last_error_at=now,
         last_error_code=exc.code or "freshness_job_failed",
-        last_error_message=str(exc),
+        last_error_message=redact_operational_text(str(exc)),
         last_phase=PHASE_ERROR,
         progress={"phase": PHASE_ERROR},
         checkpoint=(state or {}).get("checkpoint", {}),
@@ -957,6 +997,10 @@ def run_job(
         conn.commit()
         return updated
     except Exception as exc:
+        # Carry the exception's fully-qualified TYPE (never str(exc), which can
+        # hold backend URLs/credentials) so a swallowed non-AppError failure —
+        # e.g. an RP2/Liquid balance error during the journal refresh — is
+        # diagnosable from the log instead of a bare "freshness_job_failed".
         updated = _mark_error(
             conn,
             job,
@@ -964,6 +1008,9 @@ def run_job(
                 str(exc) or exc.__class__.__name__,
                 code="freshness_job_failed",
                 retryable=True,
+                details={
+                    "error_class": f"{exc.__class__.__module__}.{exc.__class__.__qualname__}"
+                },
             ),
         )
         conn.commit()
@@ -1116,6 +1163,7 @@ __all__ = [
     "rate_source_key",
     "redact_freshness_payload",
     "recover_interrupted_jobs",
+    "reset_source_checkpoint",
     "resume_source",
     "run_due_jobs",
     "run_job",

@@ -690,29 +690,6 @@ export function buildStatsData(
   ];
 }
 
-export const fullYearData = [
-  { month: "Jan", thisYear: 42000, prevYear: 38000 },
-  { month: "Feb", thisYear: 38000, prevYear: 45000 },
-  { month: "Mar", thisYear: 52000, prevYear: 41000 },
-  { month: "Apr", thisYear: 45000, prevYear: 48000 },
-  { month: "May", thisYear: 58000, prevYear: 44000 },
-  { month: "Jun", thisYear: 41000, prevYear: 52000 },
-  { month: "Jul", thisYear: 55000, prevYear: 47000 },
-  { month: "Aug", thisYear: 48000, prevYear: 53000 },
-  { month: "Sep", thisYear: 62000, prevYear: 49000 },
-  { month: "Oct", thisYear: 54000, prevYear: 58000 },
-  { month: "Nov", thisYear: 67000, prevYear: 52000 },
-  { month: "Dec", thisYear: 71000, prevYear: 61000 },
-];
-
-export const fiveYearData = [
-  { month: "2022", thisYear: 210000, prevYear: 178000 },
-  { month: "2023", thisYear: 248000, prevYear: 205000 },
-  { month: "2024", thisYear: 287000, prevYear: 244000 },
-  { month: "2025", thisYear: 319000, prevYear: 276000 },
-  { month: "2026", thisYear: 337000, prevYear: 291000 },
-];
-
 export type TimePeriod = "30days" | "3months" | "ytd" | "1year" | "5years" | "all";
 
 // i18n keys in the `overview` namespace, resolved via `t()` at the call site.
@@ -830,37 +807,16 @@ export function formatEditableActivityMarkerMinimum(value: number) {
   return clampActivityMarkerMinimum(value).toFixed(precision);
 }
 
-export function fallbackPortfolioData(
-  data: Array<{ month: string; thisYear: number; prevYear: number }>,
-  snapshot: OverviewSnapshot,
-  metric: PortfolioChartMetric,
-  currency: Currency,
-  { densify }: { densify: boolean },
-): PortfolioChartPoint[] {
-  const fiatRate = activeMarketFiatRate(snapshot);
-  const scoped = densify
-    ? expandFallbackYearData(data, fiatRate)
-    : data;
-  return scoped.map((point, index) => {
-    const valueEur = point.thisYear;
-    const costBasisEur = point.prevYear;
-    const balanceBtc = btcFromEur(valueEur, fiatRate);
-    return buildPortfolioChartPoint(
-      {
-        date: `fallback-${index}`,
-        label: point.month,
-        balanceBtc,
-        valueEur,
-        costBasisEur,
-      },
-      point.month,
-      point.month,
-      metric,
-      currency,
-    );
-  });
+// Whether the snapshot carries real treasury data worth plotting. Mirrors the
+// fallback gate inside `getDataForPeriod`: with no portfolio series, an
+// all-zero balance series, and no activity events, the chart would otherwise
+// render synthetic demo points. Callers use this to show an empty state with a
+// refresh prompt instead of misleading placeholder data.
+export function hasTreasuryChartData(snapshot: OverviewSnapshot): boolean {
+  if (snapshot.portfolioSeries?.length) return true;
+  if (snapshot.balanceSeries.some((value) => value !== 0)) return true;
+  return activityTxs(snapshot).length > 0;
 }
-
 export function getDataForPeriod(
   period: TimePeriod,
   snapshot: OverviewSnapshot,
@@ -868,13 +824,6 @@ export function getDataForPeriod(
   currency: Currency,
   density: "compact" | "detailed",
 ): PortfolioChartPoint[] {
-  const fallback = fallbackPortfolioData(
-    period === "5years" ? fiveYearData : fullYearData,
-    snapshot,
-    metric,
-    currency,
-    { densify: period !== "5years" },
-  );
   if (snapshot.portfolioSeries?.length) {
     const points = buildDatedPortfolioPoints(
       snapshot.portfolioSeries,
@@ -886,10 +835,10 @@ export function getDataForPeriod(
     if (points.length) return points;
   }
   if (!snapshot.balanceSeries.some((value) => value !== 0)) {
-    if (period === "30days") return fallback.slice(-4);
-    if (period === "3months") return fallback.slice(-3);
-    if (period === "ytd") return fallback.slice(0, 6);
-    return fallback;
+    // A book without history gets an honest empty chart, never invented
+    // demo numbers. (Mock mode ships non-zero series via fixtures, so the
+    // demo experience is unaffected.)
+    return [];
   }
   const fiatRate = activeMarketFiatRate(snapshot);
   const labels =

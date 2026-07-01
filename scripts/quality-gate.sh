@@ -38,6 +38,7 @@ run py -m compileall -q kassiber tests
 
 run py -m unittest tests.test_dependency_drift -v
 run py -m unittest tests.test_connection_catalog_drift -v
+run py -m unittest tests.test_transaction_graph -v
 run py -m unittest tests.test_report_contract_drift -v
 run py -m unittest tests.test_homebrew_cask -v
 run py -m unittest tests.test_btcpay_commercial_provenance -v
@@ -54,12 +55,22 @@ run py -m unittest tests.test_rates_kraken_csv -v
 run py -m unittest tests.test_review_regressions -v
 run py -m unittest tests.test_exit_tax -v
 run py -m unittest tests.test_ownership -v
+run py -m unittest tests.test_ownership_transfers -v
+run py -m unittest tests.test_rp2_ownership_transfers -v
+run py -m unittest tests.test_transfer_matching -v
+run py -m unittest tests.test_swap_matching_cli -v
+run py -m unittest tests.test_swap_rules -v
+run py -m unittest tests.test_schema_swap_matching -v
+run py -m unittest tests.test_loans -v
+run py -m unittest tests.test_austrian_classification -v
+run py -m unittest tests.test_daemon_swap_matching -v
 run py -m unittest tests.test_sync_backends -v
 run py -m unittest tests.test_sync_backends_legs -v
 run py -m unittest tests.test_sync_htlc_enrichment -v
 run py -m unittest tests.test_sync_btcpay_incremental -v
 run py -m unittest tests.test_freshness -v
 run py -m unittest tests.test_liquid_electrum_sync -v
+run py -m unittest tests.test_log_ring -v
 
 echo
 SMOKE_HOME="$(mktemp -d "${TMPDIR:-/tmp}/kassiber-quality-gate-home.XXXXXX")"
@@ -78,6 +89,8 @@ smoke_py -m kassiber wallets sync-btcpay --help >/dev/null
 smoke_py -m kassiber wallets import-river --help >/dev/null
 smoke_py -m kassiber wallets import-21bitcoin --help >/dev/null
 smoke_py -m kassiber wallets import-strike --help >/dev/null
+smoke_py -m kassiber wallets import-ledger --help >/dev/null
+smoke_py -m kassiber wallets ledger-template --help >/dev/null
 smoke_py -m kassiber profiles create --help >/dev/null
 smoke_py -m kassiber metadata records --help >/dev/null
 smoke_py -m kassiber attachments list --help >/dev/null

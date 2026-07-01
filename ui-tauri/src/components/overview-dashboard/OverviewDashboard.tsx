@@ -171,9 +171,7 @@ export const OverviewDashboard = ({
       >
         <WelcomeSection
           snapshot={snapshot}
-          onRefresh={refreshOverviewState}
           onProcessJournals={runJournalProcessing}
-          isRefreshing={isRefreshingOverview}
           isProcessingJournals={isProcessingJournals}
           onAddConnection={() => setAddConnectionOpen(true)}
         />
@@ -196,6 +194,8 @@ export const OverviewDashboard = ({
               hideSensitive={hideSensitive}
               currency={currency}
               onOpenTransactionDetail={openTransactionDetail}
+              onRefresh={refreshOverviewState}
+              isRefreshing={isRefreshingOverview}
             />
             <RecentTransactionsTable
               className="min-w-0"
