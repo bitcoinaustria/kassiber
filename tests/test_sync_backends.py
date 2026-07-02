@@ -165,6 +165,75 @@ class SyncBackendsTest(unittest.TestCase):
         self.assertEqual({item.get("wallet") for item in progress}, {"Cold"})
         self.assertEqual(progress[-1]["known_txids"], 2)
 
+    def test_sync_wallet_from_backend_applies_backend_retractions(self):
+        wallet = {"id": "wallet-1", "label": "Cold", "config_json": "{}"}
+        profile = {"id": "profile-1", "workspace_id": "workspace-1"}
+        target = {"address": "bc1qwatch", "script_pubkey": "0014watch"}
+        sync_state = WalletSyncState(
+            chain="bitcoin",
+            network="regtest",
+            descriptor_plan=None,
+            policy_asset_id="",
+            targets=[target],
+            tracked_scripts={target["script_pubkey"]: target},
+            history_cache={},
+        )
+        retracted = []
+        inserted_after_retract = []
+
+        def retract_records(conn, profile, wallet, external_ids, source_label):
+            del conn, profile, wallet
+            retracted.append((source_label, list(external_ids)))
+            return {
+                "retracted": 1,
+                "journal_invalidated": True,
+                "retracted_records": [{"transaction_id": "stale"}],
+            }
+
+        def insert_records(conn, profile, wallet, records, source_label):
+            del conn, profile, wallet
+            inserted_after_retract.append((source_label, bool(retracted), list(records)))
+            return {"imported": 0, "skipped": 0, "journal_invalidated": False}
+
+        hooks = WalletSyncHooks(
+            import_file=lambda *args, **kwargs: {},
+            insert_records=insert_records,
+            retract_records=retract_records,
+            resolve_backend=lambda runtime_config, backend_name: {},
+            resolve_sync_state=lambda backend, wallet: sync_state,
+            normalize_addresses=lambda values: list(values or []),
+            backend_adapters={},
+        )
+        fetch = WalletBackendFetch(
+            backend={
+                "name": "core-regtest",
+                "kind": "bitcoinrpc",
+                "url": "http://127.0.0.1:18443",
+            },
+            sync_state=sync_state,
+            normalized_records=[],
+            adapter_meta={"bitcoinrpc_retracted_txids": ["AA" * 32, "aa" * 32]},
+            kind="bitcoinrpc",
+            started=0.0,
+            force_full=False,
+        )
+
+        outcome = sync_wallet_from_backend(
+            None,
+            {},
+            profile,
+            wallet,
+            hooks,
+            prefetched=fetch,
+        )
+
+        self.assertEqual(retracted, [("backend:core-regtest", ["aa" * 32])])
+        self.assertEqual(inserted_after_retract[0][0], "backend:core-regtest")
+        self.assertTrue(inserted_after_retract[0][1])
+        self.assertEqual(outcome["retracted"], 1)
+        self.assertTrue(outcome["journal_invalidated"])
+        self.assertEqual(outcome["bitcoinrpc_retracted_txids"], ["aa" * 32])
+
     def test_backend_progress_reuses_known_counters_for_ui_progress(self):
         progress = []
         token = sync_progress_emitter.set(lambda payload: progress.append(dict(payload)))
@@ -1113,6 +1182,123 @@ class SyncBackendsTest(unittest.TestCase):
         self.assertEqual(meta["freshness_checkpoint"]["bitcoinrpc_last_block"], "bb" * 32)
         self.assertEqual(len(records), 1)
         self.assertEqual(records[0]["txid"], "44" * 32)
+
+    def test_bitcoinrpc_sinceblock_immature_rows_keep_maturity_checkpoint(self):
+        target = {"address": "bc1qcore", "script_pubkey": "0014core"}
+        sync_state = WalletSyncState(
+            chain="bitcoin",
+            network="bitcoin",
+            descriptor_plan=None,
+            policy_asset_id="",
+            targets=[target],
+            tracked_scripts={target["script_pubkey"]: target},
+            history_cache={},
+            checkpoint={"bitcoinrpc_last_block": "aa" * 32},
+        )
+        wallet = {"id": "wallet-1"}
+        calls = []
+
+        def fake_bitcoinrpc_call(backend, method, params=None, wallet_name=None):
+            del backend
+            key = (method, tuple(params or ()), wallet_name)
+            calls.append(method)
+            if key == ("listwallets", (), None):
+                return ["kassiber-wallet-1"]
+            if key == ("getaddressinfo", ("bc1qcore",), "kassiber-wallet-1"):
+                return {"iswatchonly": True, "ismine": False}
+            if key == ("listsinceblock", ("aa" * 32, 1, True, True), "kassiber-wallet-1"):
+                return {
+                    "transactions": [
+                        {
+                            "txid": "45" * 32,
+                            "category": "immature",
+                            "amount": 50,
+                            "confirmations": 10,
+                            "blocktime": 1_700_000_100,
+                        }
+                    ],
+                    "lastblock": "bb" * 32,
+                    "removed": [],
+                }
+            if key == (
+                "listunspent",
+                (0, 9999999, ["bc1qcore"], True),
+                "kassiber-wallet-1",
+            ):
+                return []
+            raise AssertionError(f"Unexpected RPC call: {key!r}")
+
+        with patch("kassiber.core.sync_backends.bitcoinrpc_call", side_effect=fake_bitcoinrpc_call):
+            records, meta = bitcoinrpc_sync_adapter(
+                {"name": "core", "kind": "bitcoinrpc", "url": "http://core.example"},
+                wallet,
+                sync_state,
+            )
+
+        self.assertNotIn("listtransactions", calls)
+        self.assertEqual(records, [])
+        self.assertTrue(meta["bitcoinrpc_pending_maturity"])
+        self.assertTrue(meta["freshness_checkpoint"]["bitcoinrpc_pending_maturity"])
+
+    def test_bitcoinrpc_pending_maturity_checkpoint_forces_full_scan_until_mature(self):
+        target = {"address": "bc1qcore", "script_pubkey": "0014core"}
+        sync_state = WalletSyncState(
+            chain="bitcoin",
+            network="bitcoin",
+            descriptor_plan=None,
+            policy_asset_id="",
+            targets=[target],
+            tracked_scripts={target["script_pubkey"]: target},
+            history_cache={},
+            checkpoint={
+                "bitcoinrpc_last_block": "aa" * 32,
+                "bitcoinrpc_pending_maturity": True,
+            },
+        )
+        wallet = {"id": "wallet-1"}
+        calls = []
+
+        def fake_bitcoinrpc_call(backend, method, params=None, wallet_name=None):
+            del backend
+            key = (method, tuple(params or ()), wallet_name)
+            calls.append(method)
+            if key == ("listwallets", (), None):
+                return ["kassiber-wallet-1"]
+            if key == ("getaddressinfo", ("bc1qcore",), "kassiber-wallet-1"):
+                return {"iswatchonly": True, "ismine": False}
+            if key == ("listtransactions", ("*", 1000, 0, True), "kassiber-wallet-1"):
+                return [
+                    {
+                        "txid": "45" * 32,
+                        "category": "generate",
+                        "amount": 50,
+                        "confirmations": 101,
+                        "blocktime": 1_700_000_100,
+                    }
+                ]
+            if key == ("getbestblockhash", (), None):
+                return "bb" * 32
+            if key == (
+                "listunspent",
+                (0, 9999999, ["bc1qcore"], True),
+                "kassiber-wallet-1",
+            ):
+                return []
+            raise AssertionError(f"Unexpected RPC call: {key!r}")
+
+        with patch("kassiber.core.sync_backends.bitcoinrpc_call", side_effect=fake_bitcoinrpc_call):
+            records, meta = bitcoinrpc_sync_adapter(
+                {"name": "core", "kind": "bitcoinrpc", "url": "http://core.example"},
+                wallet,
+                sync_state,
+            )
+
+        self.assertNotIn("listsinceblock", calls)
+        self.assertEqual(meta["bitcoinrpc_sync_mode"], "full_scan")
+        self.assertFalse(meta["bitcoinrpc_pending_maturity"])
+        self.assertNotIn("bitcoinrpc_pending_maturity", meta["freshness_checkpoint"])
+        self.assertEqual(len(records), 1)
+        self.assertEqual(records[0]["txid"], "45" * 32)
 
     def test_bitcoinrpc_descriptor_discovery_is_read_only(self):
         class FakeDescriptor:

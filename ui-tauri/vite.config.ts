@@ -378,6 +378,10 @@ class DaemonBridgeSupervisor {
     this.shutdown();
   }
 
+  getDataRoot() {
+    return this.dataRoot;
+  }
+
   shutdown() {
     const child = this.child;
     this.child = null;
@@ -889,6 +893,7 @@ async function handleBridgeResetRegtest(
 
   const repoRoot = path.resolve(__dirname, "..");
   const dataRoot = path.join(regtestDemoHome(), "data");
+  const previousDataRoot = supervisor.getDataRoot();
   try {
     // Stop the daemon so it releases the book we are about to purge.
     supervisor.setDataRoot(null);
@@ -899,6 +904,7 @@ async function handleBridgeResetRegtest(
     await runHarnessStep(repoRoot, ["demo-down", "--purge"]);
     const up = await runHarnessStep(repoRoot, ["demo-up"]);
     if (up.code !== 0) {
+      supervisor.setDataRoot(previousDataRoot);
       writeJsonError(
         res,
         500,
@@ -911,6 +917,7 @@ async function handleBridgeResetRegtest(
     supervisor.setDataRoot(dataRoot);
     writeJson(res, 200, { ok: true, dataRoot });
   } catch (error) {
+    supervisor.setDataRoot(previousDataRoot);
     writeJsonError(
       res,
       500,
@@ -1139,10 +1146,15 @@ function resolveAppVersion(): string {
   }
 }
 
+function resolveRegtestDemoDataRoot(): string {
+  return path.join(regtestDemoHome(), "data");
+}
+
 export default defineConfig({
   define: {
     __APP_COMMIT__: JSON.stringify(resolveAppCommit()),
     __APP_VERSION__: JSON.stringify(resolveAppVersion()),
+    __REGTEST_DEMO_DATA_ROOT__: JSON.stringify(resolveRegtestDemoDataRoot()),
   },
   plugins: [daemonBridgePlugin(), react(), tailwindcss()],
   resolve: {

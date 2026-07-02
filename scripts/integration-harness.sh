@@ -181,24 +181,8 @@ demo_scenario_checksum() {
   py -c 'import hashlib, sys; print(hashlib.sha256(open(sys.argv[1], "rb").read()).hexdigest())' "$DEMO_SCENARIO"
 }
 
-demo_build_book() {
-  local checksum
-  checksum="$(demo_scenario_checksum)"
-  if [ -z "${KASSIBER_REGTEST_DEMO_REBUILD:-}" ] \
-    && [ -d "$DEMO_HOME/data" ] \
-    && [ "$(demo_manifest_get scenario_checksum)" = "$checksum" ]; then
-    echo "Reusing existing demo book (scenario unchanged): $DEMO_HOME/data"
-    return 0
-  fi
-
-  rm -rf "$DEMO_HOME/data" "$DEMO_HOME/exports" "$DEMO_HOME/imports" \
-    "$DEMO_HOME/demo-summary.json" "$DEMO_MANIFEST"
-  mkdir -p "$DEMO_HOME"
-  echo "Building the demo book (a few minutes of regtest history)..."
-  KASSIBER_REGTEST_DEMO_ROOT="$DEMO_HOME" py -m tests.integration.regtest_demo \
-    --keep-core-wallets \
-    --json-output "$DEMO_HOME/demo-summary.json" >/dev/null
-
+demo_write_manifest() {
+  local checksum="$1"
   KASSIBER_DEMO_MANIFEST="$DEMO_MANIFEST" \
   KASSIBER_DEMO_SCENARIO_ID="full-accounting-v1" \
   KASSIBER_DEMO_SCENARIO_CHECKSUM="$checksum" \
@@ -227,6 +211,28 @@ with open(manifest_path, "w", encoding="utf-8") as handle:
     handle.write("\n")
 os.chmod(manifest_path, 0o600)
 PY
+}
+
+demo_build_book() {
+  local checksum
+  checksum="$(demo_scenario_checksum)"
+  if [ -z "${KASSIBER_REGTEST_DEMO_REBUILD:-}" ] \
+    && [ -d "$DEMO_HOME/data" ] \
+    && [ "$(demo_manifest_get scenario_checksum)" = "$checksum" ]; then
+    demo_write_manifest "$checksum"
+    echo "Reusing existing demo book (scenario unchanged): $DEMO_HOME/data"
+    return 0
+  fi
+
+  rm -rf "$DEMO_HOME/data" "$DEMO_HOME/exports" "$DEMO_HOME/imports" \
+    "$DEMO_HOME/demo-summary.json" "$DEMO_MANIFEST"
+  mkdir -p "$DEMO_HOME"
+  echo "Building the demo book (a few minutes of regtest history)..."
+  KASSIBER_REGTEST_DEMO_ROOT="$DEMO_HOME" py -m tests.integration.regtest_demo \
+    --keep-core-wallets \
+    --json-output "$DEMO_HOME/demo-summary.json" >/dev/null
+
+  demo_write_manifest "$checksum"
 }
 
 demo_print_instructions() {

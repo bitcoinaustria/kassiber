@@ -686,11 +686,27 @@ export function canImportProjects(): boolean {
 
 const RESET_REGTEST_BRIDGE_PATH = "/__kassiber__/reset-regtest";
 
+function normalizeDataRootForCompare(dataRoot: string | null | undefined): string {
+  return (dataRoot ?? "").trim().replace(/[\\/]+$/, "");
+}
+
+export function regtestDemoDataRoot(): string {
+  return DAEMON_MODE === "bridge"
+    ? normalizeDataRootForCompare(__REGTEST_DEMO_DATA_ROOT__)
+    : "";
+}
+
+export function isRegtestDemoDataRoot(dataRoot: string | null | undefined): boolean {
+  const demoRoot = regtestDemoDataRoot();
+  return Boolean(demoRoot) && normalizeDataRootForCompare(dataRoot) === demoRoot;
+}
+
 // The full regtest reset shells out to Docker + the harness, which only exists
 // behind the dev Vite bridge. It is deliberately unavailable in the shipped
 // Tauri app so the production daemon never gains a Docker/shell escape hatch.
-export function canResetRegtestDemo(): boolean {
-  return DAEMON_MODE === "bridge";
+export function canResetRegtestDemo(dataRoot?: string | null): boolean {
+  if (DAEMON_MODE !== "bridge") return false;
+  return dataRoot === undefined || isRegtestDemoDataRoot(dataRoot);
 }
 
 export async function resetRegtestDemo(): Promise<{ dataRoot: string }> {

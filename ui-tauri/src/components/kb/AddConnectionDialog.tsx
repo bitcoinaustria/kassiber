@@ -940,7 +940,8 @@ export function AddConnectionDialog({
   const silentPaymentBackendOptions = allBackends.filter(
     (backend) =>
       backend.silent_payments === true &&
-      (!backend.chain || backend.chain === "bitcoin"),
+      (!backend.chain || backend.chain === "bitcoin") &&
+      (form.spScanMode !== "server_assisted" || backend.kind !== "electrum"),
   );
   const liquidBackends = allBackends.filter(
     (backend) =>
@@ -963,6 +964,9 @@ export function AddConnectionDialog({
   const selectedBackend = selectedBackendOptions.find(
     (backend) => backend.name === form.backend,
   );
+  const selectedBackendOptionKey = selectedBackendOptions
+    .map((backend) => backend.name)
+    .join("\0");
   const defaultBackendName =
     selectedBackendOptions.find((backend) => backend.is_default)?.name ??
     selectedBackendOptions[0]?.name ??
@@ -1144,13 +1148,24 @@ export function AddConnectionDialog({
     if (
       setupKind !== "descriptor" &&
       setupKind !== "samourai" &&
-      setupKind !== "address-list"
+      setupKind !== "address-list" &&
+      setupKind !== "silent-payment"
     )
       return;
-    setForm((current) =>
-      current.backend ? current : { ...current, backend: defaultBackendName },
-    );
-  }, [defaultBackendName, setupKind]);
+    setForm((current) => {
+      if (setupKind !== "silent-payment") {
+        return current.backend
+          ? current
+          : { ...current, backend: defaultBackendName };
+      }
+      const backendStillAvailable = selectedBackendOptions.some(
+        (backend) => backend.name === current.backend,
+      );
+      return backendStillAvailable
+        ? current
+        : { ...current, backend: defaultBackendName };
+    });
+  }, [defaultBackendName, selectedBackendOptionKey, setupKind]);
 
   React.useEffect(() => {
     if (setupKind !== "btcpay") return;

@@ -421,7 +421,8 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
   };
 
   const [resetRegtestPending, setResetRegtestPending] = React.useState(false);
-  const regtestResetAvailable = canResetRegtestDemo() && dataMode === "regtest";
+  const regtestResetAvailable =
+    dataMode === "regtest" && canResetRegtestDemo(status?.data_root ?? null);
   const onResetRegtestEnv = () => {
     if (resetRegtestPending) return;
     if (!window.confirm(t("data.resetRegtestConfirm"))) return;

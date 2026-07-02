@@ -2092,6 +2092,18 @@ def _insert_records_for_sync(conn, profile, wallet, records, source_label, *, co
     )
 
 
+def _retract_records_for_sync(conn, profile, wallet, external_ids, source_label, *, commit=True):
+    return core_imports.retract_wallet_records(
+        conn,
+        profile,
+        wallet,
+        external_ids,
+        source_label,
+        _import_coordinator_hooks(),
+        commit=commit,
+    )
+
+
 def _wallet_sync_hooks(commit=True):
     return core_sync.WalletSyncHooks(
         import_file=lambda conn, profile, wallet, file_path, input_format: _import_file_for_sync(
@@ -2109,6 +2121,14 @@ def _wallet_sync_hooks(commit=True):
             records,
             source_label,
             commit=commit,
+        ),
+        retract_records=lambda conn, profile, wallet, external_ids, source_label: _retract_records_for_sync(
+            conn,
+            profile,
+            wallet,
+            external_ids,
+            source_label,
+            commit=False,
         ),
         resolve_backend=resolve_backend,
         resolve_sync_state=core_sync_backends.resolve_wallet_sync_targets,

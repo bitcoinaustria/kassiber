@@ -335,6 +335,49 @@ class SilentPaymentsTests(unittest.TestCase):
         self.assertEqual(records, [])
         self.assertTrue(meta["silent_payment_scan_complete"])
 
+    def test_full_history_accepts_genesis_date_range(self):
+        plan = silent_payments.build_plan(
+            _sp_config(
+                sp_full_history=True,
+                sp_acknowledge_full_history_warning=True,
+            )
+        )
+
+        _records, meta = silent_payments.normalize_scan_payload(
+            {
+                "complete": True,
+                "descriptor_fingerprint": plan.descriptor_fingerprint,
+                "range": {"from_date": "2009-01-03T00:00:00Z"},
+                "transactions": [],
+                "utxos": [],
+            },
+            backend_name="sp-local",
+            backend_kind="custom",
+            plan=plan,
+        )
+
+        self.assertTrue(meta["silent_payment_scan_complete"])
+
+    def test_wallet_label_alone_is_not_a_scanner_binding(self):
+        plan = silent_payments.build_plan(_sp_config())
+
+        with self.assertRaises(AppError) as error:
+            silent_payments.normalize_scan_payload(
+                {
+                    "complete": True,
+                    "wallet": {"wallet_label": "SP receive"},
+                    "range": {"from_height": 850_000, "to_height": 850_130},
+                    "transactions": [],
+                    "utxos": [],
+                },
+                backend_name="sp-local",
+                backend_kind="custom",
+                plan=plan,
+                wallet_label="SP receive",
+            )
+
+        self.assertEqual(error.exception.code, "silent_payment_scan_wallet_mismatch")
+
     def test_unsupported_backend_is_explicit_not_zero_balance(self):
         plan = silent_payments.build_plan(_sp_config())
         backend = {
@@ -343,6 +386,29 @@ class SilentPaymentsTests(unittest.TestCase):
             "url": "ssl://example.invalid:50002",
             "chain": "bitcoin",
             "network": "main",
+            "source": "test",
+        }
+
+        with self.assertRaises(AppError) as error:
+            silent_payments.validate_backend_capability(backend, plan, kind="electrum")
+
+        self.assertEqual(error.exception.code, "silent_payment_backend_unsupported")
+
+    def test_server_assisted_rejects_electrum_transport(self):
+        plan = silent_payments.build_plan(
+            _sp_config(
+                sp_scan_mode="server-assisted",
+                sp_acknowledge_server_warning=True,
+            )
+        )
+        backend = {
+            "name": "electrum-sp",
+            "kind": "electrum",
+            "url": "ssl://electrum.example:50002",
+            "chain": "bitcoin",
+            "network": "main",
+            "silent_payments": True,
+            "silent_payment_scan_path": "/silent-payments/scan",
             "source": "test",
         }
 
