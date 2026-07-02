@@ -11,6 +11,7 @@ import {
   realpathSync,
 } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
+import os from "node:os";
 import path from "node:path";
 import { createInterface } from "node:readline";
 // `vitest/config` re-exports vite's `defineConfig` and adds the `test` field;
@@ -24,6 +25,7 @@ const DAEMON_BRIDGE_PATH = "/__kassiber__/daemon";
 const DAEMON_BRIDGE_STREAM_PATH = "/__kassiber__/daemon/stream";
 const FILE_PICKER_BRIDGE_PATH = "/__kassiber__/pick-file";
 const IMPORT_PROJECT_BRIDGE_PATH = "/__kassiber__/import-project";
+const RESET_REGTEST_BRIDGE_PATH = "/__kassiber__/reset-regtest";
 const LEDGER_PREVIEW_EXTENSIONS = new Set([".csv", ".tsv", ".xlsx", ".xlsm"]);
 const BRIDGE_REQUEST_TIMEOUT_MS = 10 * 60 * 1000;
 const UI_ROOT = __dirname;
@@ -560,6 +562,10 @@ function daemonBridgePlugin() {
           await handleBridgeImportProject(req, res, supervisor);
           return;
         }
+        if (pathname === RESET_REGTEST_BRIDGE_PATH) {
+          await handleBridgeResetRegtest(req, res, supervisor);
+          return;
+        }
         next();
       });
     },
@@ -828,6 +834,87 @@ async function handleBridgeImportProject(
       res,
       500,
       "bridge_project_import_failed",
+      redactBridgeText(error instanceof Error ? error.message : String(error)),
+      true,
+    );
+  }
+}
+
+function regtestDemoHome(): string {
+  const override = process.env.KASSIBER_REGTEST_DEMO_HOME?.trim();
+  if (override) return override;
+  return path.join(os.homedir(), ".kassiber", "regtest-demo");
+}
+
+function runHarnessStep(
+  repoRoot: string,
+  args: string[],
+): Promise<{ code: number; tail: string }> {
+  return new Promise((resolve) => {
+    // Fixed dev script + fixed args — no user-controlled shell input. This is
+    // contributor test tooling gated to the dev bridge; it must never become a
+    // general shell escape hatch.
+    const child = spawn("bash", ["scripts/integration-harness.sh", ...args], {
+      cwd: repoRoot,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let tail = "";
+    const append = (chunk: Buffer) => {
+      tail = (tail + chunk.toString("utf8")).slice(-8000);
+    };
+    child.stdout.on("data", append);
+    child.stderr.on("data", append);
+    child.on("error", (error) => resolve({ code: -1, tail: `${tail}\n${error.message}` }));
+    child.on("close", (code) => resolve({ code: code ?? -1, tail }));
+  });
+}
+
+async function handleBridgeResetRegtest(
+  req: IncomingMessage,
+  res: ServerResponse,
+  supervisor: DaemonBridgeSupervisor,
+) {
+  if (!isLoopbackHost(req.headers.host)) {
+    writeJsonError(res, 403, "bridge_forbidden_host", "regtest reset bridge only accepts loopback hosts");
+    return;
+  }
+  if (req.method !== "POST") {
+    writeJsonError(res, 405, "method_not_allowed", "regtest reset bridge only accepts POST");
+    return;
+  }
+  if (!isAllowedBridgeOrigin(req.headers.origin, req.headers.host)) {
+    writeJsonError(res, 403, "bridge_forbidden_origin", "regtest reset bridge only accepts same-origin browser requests");
+    return;
+  }
+
+  const repoRoot = path.resolve(__dirname, "..");
+  const dataRoot = path.join(regtestDemoHome(), "data");
+  try {
+    // Stop the daemon so it releases the book we are about to purge.
+    supervisor.setDataRoot(null);
+
+    // Full reset = both stores: --purge removes the Docker chain volume and the
+    // demo book, then demo-up rebuilds a fresh, consistent full-span book.
+    // A failing purge (nothing to remove yet) is not fatal.
+    await runHarnessStep(repoRoot, ["demo-down", "--purge"]);
+    const up = await runHarnessStep(repoRoot, ["demo-up"]);
+    if (up.code !== 0) {
+      writeJsonError(
+        res,
+        500,
+        "regtest_reset_failed",
+        redactBridgeText(`demo-up exited with code ${up.code}\n${up.tail}`),
+        true,
+      );
+      return;
+    }
+    supervisor.setDataRoot(dataRoot);
+    writeJson(res, 200, { ok: true, dataRoot });
+  } catch (error) {
+    writeJsonError(
+      res,
+      500,
+      "regtest_reset_failed",
       redactBridgeText(error instanceof Error ? error.message : String(error)),
       true,
     );

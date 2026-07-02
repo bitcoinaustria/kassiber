@@ -684,6 +684,37 @@ export function canImportProjects(): boolean {
   return DAEMON_MODE === "tauri" || DAEMON_MODE === "bridge";
 }
 
+const RESET_REGTEST_BRIDGE_PATH = "/__kassiber__/reset-regtest";
+
+// The full regtest reset shells out to Docker + the harness, which only exists
+// behind the dev Vite bridge. It is deliberately unavailable in the shipped
+// Tauri app so the production daemon never gains a Docker/shell escape hatch.
+export function canResetRegtestDemo(): boolean {
+  return DAEMON_MODE === "bridge";
+}
+
+export async function resetRegtestDemo(): Promise<{ dataRoot: string }> {
+  if (!canResetRegtestDemo()) {
+    throw new Error("Resetting the regtest demo is only available in the dev bridge.");
+  }
+  const response = await fetch(RESET_REGTEST_BRIDGE_PATH, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ action: "reset" }),
+  });
+  const payload = (await response.json()) as Record<string, unknown>;
+  const error =
+    payload.error && typeof payload.error === "object"
+      ? (payload.error as { message?: string | null })
+      : null;
+  if (!response.ok || payload.kind === "error" || error) {
+    throw new Error(error?.message || `Regtest reset failed with HTTP ${response.status}`);
+  }
+  // Fresh chain + book: re-point every query at the rebuilt daemon session.
+  useUiStore.getState().bumpDaemonSession();
+  return { dataRoot: String(payload.dataRoot ?? "") };
+}
+
 export function canUseTouchIdPassphraseUnlock(): boolean {
   if (DAEMON_MODE !== "tauri" || typeof navigator === "undefined") {
     return false;

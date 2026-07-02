@@ -22,10 +22,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useDaemon, useDaemonMutation } from "@/daemon/client";
 import {
+  canResetRegtestDemo,
   canUseTouchIdPassphraseUnlock,
   clearImportProject,
   forgetTouchIdPassphrase,
   getTransport,
+  resetRegtestDemo,
   installTerminalCommand,
   removeTerminalCommand,
   storeTouchIdPassphrase,
@@ -103,6 +105,7 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
   const identity = useUiStore((s) => s.identity);
   const setIdentity = useUiStore((s) => s.setIdentity);
   const addNotification = useUiStore((s) => s.addNotification);
+  const dataMode = useUiStore((s) => s.dataMode);
   const deferredConnectionSetup = useUiStore(
     (s) => s.deferredConnectionSetup,
   );
@@ -415,6 +418,30 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
     setDeletePlaintextAck("");
     setDeleteError(null);
     setDeleteOpen(true);
+  };
+
+  const [resetRegtestPending, setResetRegtestPending] = React.useState(false);
+  const regtestResetAvailable = canResetRegtestDemo() && dataMode === "regtest";
+  const onResetRegtestEnv = () => {
+    if (resetRegtestPending) return;
+    if (!window.confirm(t("data.resetRegtestConfirm"))) return;
+    setResetRegtestPending(true);
+    void resetRegtestDemo()
+      .then(() => {
+        addNotification({
+          tone: "success",
+          title: t("data.resetRegtestDoneTitle"),
+          body: t("data.resetRegtestDoneBody"),
+        });
+      })
+      .catch((error: unknown) => {
+        addNotification({
+          tone: "error",
+          title: t("data.resetRegtestErrorTitle"),
+          body: error instanceof Error ? error.message : t("data.resetRegtestErrorBody"),
+        });
+      })
+      .finally(() => setResetRegtestPending(false));
   };
 
   const openChangePassphrase = () => {
@@ -960,6 +987,9 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
             resetBookDisabled={resetBookData.isPending || !resetBookAvailable}
             onDeleteBooks={openDeleteWorkspace}
             deleteBooksDisabled={deleteWorkspace.isPending}
+            resetRegtestAvailable={regtestResetAvailable}
+            onResetRegtest={onResetRegtestEnv}
+            resetRegtestPending={resetRegtestPending}
           />
         );
       case "desktop-terminal":

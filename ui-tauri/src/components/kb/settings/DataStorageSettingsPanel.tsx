@@ -86,6 +86,9 @@ export function DataStorageSettingsPanel({
   resetBookDisabled,
   onDeleteBooks,
   deleteBooksDisabled,
+  resetRegtestAvailable = false,
+  onResetRegtest,
+  resetRegtestPending = false,
 }: {
   status: StatusData | null;
   onOpenImports: () => void;
@@ -94,6 +97,9 @@ export function DataStorageSettingsPanel({
   resetBookDisabled: boolean;
   onDeleteBooks: () => void;
   deleteBooksDisabled: boolean;
+  resetRegtestAvailable?: boolean;
+  onResetRegtest?: () => void;
+  resetRegtestPending?: boolean;
 }) {
   const { t } = useTranslation("settings");
   return (
@@ -163,6 +169,33 @@ export function DataStorageSettingsPanel({
             {t("data.deleteBooksButton")}
           </Button>
         </div>
+        {resetRegtestAvailable ? (
+          <div className="flex flex-col gap-3 rounded-md border border-destructive/30 bg-background p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0 space-y-1">
+              <p className="text-sm font-medium text-destructive">
+                {t("data.resetRegtestTitle")}
+              </p>
+              <p className="text-sm text-muted-foreground">
+                {t("data.resetRegtestDescription")}
+              </p>
+            </div>
+            <Button
+              type="button"
+              variant="destructive"
+              className="shrink-0"
+              disabled={resetRegtestPending}
+              onClick={onResetRegtest}
+            >
+              <RefreshCw
+                className={`mr-2 size-4 ${resetRegtestPending ? "animate-spin" : ""}`}
+                aria-hidden="true"
+              />
+              {resetRegtestPending
+                ? t("data.resetRegtestPending")
+                : t("data.resetRegtestButton")}
+            </Button>
+          </div>
+        ) : null}
       </section>
     </div>
   );
