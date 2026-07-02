@@ -615,7 +615,6 @@
     "liquidGraphless": "Liquid-Graph nicht lokal gespeichert",
     "graphlessBody": "Diese Zeile wurde ohne bewertete Bitcoin-vin/vout-Daten importiert; Kassiber kann die Buchungszeile, aber kein Flussdiagramm anzeigen.",
     "liquidBody": "Kassiber hat lokal nur die importierte Liquid-Zeile. Füge ein Liquid-Explorer-Backend hinzu, um öffentliche Input-/Output-Referenzen zu prüfen; vertrauliche Beträge bleiben möglicherweise verborgen.",
-    "openLiquidNetwork": "Liquid Network öffnen",
     "inputCount": "Inputs",
     "outputCount": "Outputs",
     "feeRate": "Gebührensatz",

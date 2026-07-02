@@ -21,6 +21,8 @@ export function dataModeFromSourceSwitch(
   checked: boolean,
   activeRegtestBackend: boolean,
 ): DataMode {
-  if (checked) return "real";
-  return activeRegtestBackend ? "regtest" : "mock";
+  // ON is the daemon-backed side (regtest books stay regtest); OFF always
+  // reaches the mock preview so the switch never becomes a dead control.
+  if (checked) return activeRegtestBackend ? "regtest" : "real";
+  return "mock";
 }

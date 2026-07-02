@@ -1672,17 +1672,21 @@ function SidebarActions({
     ) ?? null;
   const activeRegtestBackend =
     String(defaultBackend?.network ?? "").toLowerCase() === "regtest";
-  const normalizedDataMode = dataModeForActiveBackend(
-    dataMode,
-    activeRegtestBackend,
-  );
-  const isLiveData = normalizedDataMode === "real";
+  // Until the backends query resolves, activeRegtestBackend is a placeholder
+  // false; coercing on it would bounce a persisted regtest mode through "real"
+  // and re-key every daemon query on launch.
+  const backendSettingsLoaded = backendSettingsQuery.isSuccess;
+  const normalizedDataMode = backendSettingsLoaded
+    ? dataModeForActiveBackend(dataMode, activeRegtestBackend)
+    : dataMode;
+  const isLiveData = isDaemonDataMode(normalizedDataMode);
 
   React.useEffect(() => {
+    if (!backendSettingsLoaded) return;
     if (normalizedDataMode !== dataMode) {
       setDataMode(normalizedDataMode);
     }
-  }, [dataMode, normalizedDataMode, setDataMode]);
+  }, [backendSettingsLoaded, dataMode, normalizedDataMode, setDataMode]);
 
   const dataModeLabel = t(
     `shell.dataMode.${dataModeLabelKey(normalizedDataMode)}`,

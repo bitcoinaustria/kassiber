@@ -596,7 +596,6 @@
     "liquidGraphless": "Liquid graph not stored locally",
     "graphlessBody": "This row was imported without valued Bitcoin vin/vout data, so Kassiber can show the accounting row but not a flow diagram.",
     "liquidBody": "Kassiber only has the imported Liquid row locally. Add a Liquid explorer backend to inspect public input/output references; confidential amounts may remain hidden.",
-    "openLiquidNetwork": "Open Liquid Network",
     "inputCount": "Inputs",
     "outputCount": "Outputs",
     "feeRate": "Fee rate",

@@ -18,9 +18,10 @@ describe("sidebar data mode model", () => {
     expect(dataModeForActiveBackend("regtest", false)).toBe("real");
   });
 
-  it("maps the sidebar switch to live data or the current non-live side", () => {
-    expect(dataModeFromSourceSwitch(true, true)).toBe("real");
-    expect(dataModeFromSourceSwitch(false, true)).toBe("regtest");
+  it("maps the sidebar switch between the daemon-backed side and preview", () => {
+    expect(dataModeFromSourceSwitch(true, true)).toBe("regtest");
+    expect(dataModeFromSourceSwitch(true, false)).toBe("real");
+    expect(dataModeFromSourceSwitch(false, true)).toBe("mock");
     expect(dataModeFromSourceSwitch(false, false)).toBe("mock");
   });
 });
