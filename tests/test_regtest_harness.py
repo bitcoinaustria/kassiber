@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import random
 import socket
 import tempfile
@@ -33,6 +34,31 @@ from tests.integration.tapes import BitcoinRpcTape, RecordedTape, TapeMiss
 ROOT = Path(__file__).resolve().parent.parent
 TAPE = ROOT / "tests" / "fixtures" / "regtest_tapes" / "bitcoin_core_address_baseline.json"
 EDGE_TAPE = ROOT / "tests" / "fixtures" / "regtest_tapes" / "bitcoin_core_edge_cases.json"
+
+
+_EGRESS_STACK: contextlib.ExitStack | None = None
+
+
+def setUpModule() -> None:
+    """Install the no-egress guard for the whole fast lane when requested.
+
+    `integration-harness.sh fast` exports `KASSIBER_NO_EGRESS=1`; passing
+    `enabled=None` makes the guard consult that flag, so the entire replay lane
+    blocks non-loopback connects by default instead of relying on each test to
+    opt in. Under the plain quality gate (flag unset) this is a no-op, and the
+    per-test `no_egress_guard(enabled=True)` blocks still protect the critical
+    replay paths there.
+    """
+    global _EGRESS_STACK
+    _EGRESS_STACK = contextlib.ExitStack()
+    _EGRESS_STACK.enter_context(no_egress_guard())
+
+
+def tearDownModule() -> None:
+    global _EGRESS_STACK
+    if _EGRESS_STACK is not None:
+        _EGRESS_STACK.close()
+        _EGRESS_STACK = None
 REGTEST_ADDRESS = "bcrt1qs758ursh4q9z627kt3pp5yysm78ddny6txaqgw"
 EDGE_ADDRESSES = [
     "bcrt1qv4jxwefdvdshxefdv9jxgu3ddahx2gfplsfksc",
