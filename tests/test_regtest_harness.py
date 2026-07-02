@@ -322,6 +322,12 @@ class RegtestHarnessTest(unittest.TestCase):
         self.assertIn("sync_latest_rates", demo)
         self.assertIn("sync_latest_rates", harness)
 
+    def test_demo_up_keeps_interactive_book_report_ready(self):
+        harness = (ROOT / "scripts" / "integration-harness.sh").read_text(encoding="utf-8")
+
+        self.assertIn("--no-business-tick", harness)
+        self.assertIn("demo_load_rpc_env", harness)
+
     def test_full_accounting_demo_manifest_validation_rejects_bad_edge_cases(self):
         scenario = regtest_demo.load_scenario()
         rbf = next(op for op in scenario["operations"] if op["kind"] == "rbf_replaced_payment")

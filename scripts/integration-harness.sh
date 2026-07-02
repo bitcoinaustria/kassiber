@@ -240,6 +240,20 @@ os.chmod(manifest_path, 0o600)
 PY
 }
 
+demo_load_rpc_env() {
+  if [ -z "${KASSIBER_REGTEST_RPC_USER:-}" ]; then
+    KASSIBER_REGTEST_RPC_USER="$(demo_manifest_get rpc_user)"
+    [ -n "$KASSIBER_REGTEST_RPC_USER" ] && export KASSIBER_REGTEST_RPC_USER
+  fi
+  if [ -z "${KASSIBER_REGTEST_RPC_PASSWORD:-}" ]; then
+    KASSIBER_REGTEST_RPC_PASSWORD="$(demo_manifest_get rpc_password)"
+    [ -n "$KASSIBER_REGTEST_RPC_PASSWORD" ] && export KASSIBER_REGTEST_RPC_PASSWORD
+  fi
+  export KASSIBER_REGTEST_RPC_AUTH="${KASSIBER_REGTEST_RPC_AUTH:-}"
+  export KASSIBER_REGTEST_RPC_USER="${KASSIBER_REGTEST_RPC_USER:-}"
+  export KASSIBER_REGTEST_RPC_PASSWORD="${KASSIBER_REGTEST_RPC_PASSWORD:-}"
+}
+
 demo_refresh_live_rate() {
   if [ ! -d "$DEMO_HOME/data" ]; then
     return 0
@@ -305,6 +319,7 @@ demo_build_book() {
   echo "Building the demo book (a few minutes of regtest history)..."
   KASSIBER_REGTEST_DEMO_ROOT="$DEMO_HOME" py -m tests.integration.regtest_demo \
     --keep-core-wallets \
+    --no-business-tick \
     --json-output "$DEMO_HOME/demo-summary.json" >/dev/null
 
   demo_refresh_live_rate
@@ -340,14 +355,7 @@ run_demo_up() {
   # credentials so later demo-up runs still match the book's stored backend.
   export KASSIBER_REGTEST_COMPOSE_PROJECT="${KASSIBER_REGTEST_COMPOSE_PROJECT:-kassiber-regtest-demo}"
   export KASSIBER_REGTEST_KEEP=1
-  if [ -z "${KASSIBER_REGTEST_RPC_USER:-}" ]; then
-    KASSIBER_REGTEST_RPC_USER="$(demo_manifest_get rpc_user)"
-    [ -n "$KASSIBER_REGTEST_RPC_USER" ] && export KASSIBER_REGTEST_RPC_USER
-  fi
-  if [ -z "${KASSIBER_REGTEST_RPC_PASSWORD:-}" ]; then
-    KASSIBER_REGTEST_RPC_PASSWORD="$(demo_manifest_get rpc_password)"
-    [ -n "$KASSIBER_REGTEST_RPC_PASSWORD" ] && export KASSIBER_REGTEST_RPC_PASSWORD
-  fi
+  demo_load_rpc_env
   run_with_bitcoin_core demo_build_book
   demo_print_instructions
 }
@@ -382,6 +390,7 @@ run_demo_down() {
   local project
   project="$(demo_manifest_get compose_project)"
   project="${KASSIBER_REGTEST_COMPOSE_PROJECT:-${project:-kassiber-regtest-demo}}"
+  demo_load_rpc_env
   if [ "$purge" = "--purge" ]; then
     docker_compose -p "$project" -f dev/regtest/compose.bitcoin.yml down -v
     rm -rf "$DEMO_HOME"
