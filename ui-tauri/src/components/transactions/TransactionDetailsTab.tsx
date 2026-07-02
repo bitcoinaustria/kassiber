@@ -159,10 +159,32 @@ export function preloadableSwapLegGraphReference(
   return reference;
 }
 
-export function transactionGraphLookupArgs(transactionRef: string | null | undefined) {
+function looksLikeTxid(value: string | null | undefined) {
+  return /^[0-9a-f]{64}$/i.test(value?.trim() ?? "");
+}
+
+function hasPublicGraphLookupReference(
+  transaction: TransactionDetailTabContext["transaction"] | null | undefined,
+) {
+  if (!transaction || !looksLikeTxid(transaction.explorerId)) return false;
+  return transaction.paymentMethod === "On-chain" || transaction.paymentMethod === "Liquid";
+}
+
+export function transactionGraphLookupArgs(
+  transaction: TransactionDetailTabContext["transaction"] | null | undefined,
+) {
+  return {
+    transaction: transaction?.id ?? "",
+    allowPublicLookup: hasPublicGraphLookupReference(transaction),
+  };
+}
+
+export function transactionGraphLookupReferenceArgs(
+  transactionRef: string | null | undefined,
+) {
   return {
     transaction: transactionRef ?? "",
-    allowPublicLookup: true,
+    allowPublicLookup: false,
   };
 }
 
@@ -227,12 +249,12 @@ export function TransactionDetailsTab({ ctx }: { ctx: TransactionDetailTabContex
   );
   const swapOutGraphQuery = useDaemon<TransactionGraphPayload>(
     "ui.transactions.graph",
-    transactionGraphLookupArgs(swapOutTransactionRef),
+    transactionGraphLookupReferenceArgs(swapOutTransactionRef),
     { enabled: Boolean(swapOutTransactionRef) },
   );
   const swapInGraphQuery = useDaemon<TransactionGraphPayload>(
     "ui.transactions.graph",
-    transactionGraphLookupArgs(swapInTransactionRef),
+    transactionGraphLookupReferenceArgs(swapInTransactionRef),
     { enabled: Boolean(swapInTransactionRef) },
   );
   const activeSwapGraphQuery =

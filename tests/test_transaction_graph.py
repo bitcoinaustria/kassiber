@@ -5,7 +5,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import kassiber.core.transaction_graph as tg
-from kassiber.backends import create_db_backend
+from kassiber.backends import DEFAULT_BACKENDS, create_db_backend
 from kassiber.core.sync_backends import address_to_scriptpubkey
 from kassiber.db import ensure_schema_compat, open_db, set_setting
 
@@ -942,6 +942,85 @@ class TransactionGraphTest(unittest.TestCase):
         fetch.assert_called_once_with("https://mempool.example/api", txid, timeout=5)
         self.assertEqual(payload["supportLevel"], "full")
 
+    def test_bitcoin_lookup_uses_runtime_default_before_persisted_default(self):
+        txid = "20" * 32
+        create_db_backend(
+            self.conn,
+            "stored-mempool",
+            "mempool",
+            "https://stored.example/api",
+            chain="bitcoin",
+            network="main",
+            timeout=5,
+            commit=False,
+        )
+        set_setting(self.conn, "default_backend", "stored-mempool")
+        runtime_config = {
+            "default_backend": "runtime-mempool",
+            "backends": {
+                "runtime-mempool": {
+                    "kind": "mempool",
+                    "chain": "bitcoin",
+                    "network": "main",
+                    "url": "https://runtime.example",
+                    "timeout": 5,
+                }
+            },
+        }
+        fetched = {
+            "txid": txid,
+            "vin": [{"txid": "21" * 32, "vout": 0, "prevout": {"scriptpubkey": SCRIPT_A, "value": 9}}],
+            "vout": [{"n": 0, "scriptpubkey": SCRIPT_B, "value": 8}],
+        }
+        self._tx("runtime-default-row", "wallet-a", "outbound", 8_000, txid, "{}")
+
+        with patch(
+            "kassiber.core.transaction_graph.fetch_esplora_transaction",
+            return_value=fetched,
+        ) as fetch:
+            payload = self._graph(
+                "runtime-default-row",
+                allow_public_lookup=True,
+                runtime_config=runtime_config,
+            )
+
+        fetch.assert_called_once_with("https://runtime.example/api", txid, timeout=5)
+        self.assertEqual(payload["supportLevel"], "full")
+
+    def test_http_graph_lookup_uses_backend_proxy(self):
+        txid = "22" * 32
+        create_db_backend(
+            self.conn,
+            "onion-mempool",
+            "mempool",
+            "http://mempoolhiddenexample.onion/api",
+            chain="bitcoin",
+            network="main",
+            timeout=5,
+            tor_proxy="socks5h://127.0.0.1:9050",
+            commit=False,
+        )
+        fetched = {
+            "txid": txid,
+            "vin": [{"txid": "23" * 32, "vout": 0, "prevout": {"scriptpubkey": SCRIPT_A, "value": 9}}],
+            "vout": [{"n": 0, "scriptpubkey": SCRIPT_B, "value": 8}],
+        }
+        self._tx("proxy-http-row", "wallet-a", "outbound", 8_000, txid, "{}")
+
+        with patch(
+            "kassiber.core.transaction_graph.fetch_esplora_transaction",
+            return_value=fetched,
+        ) as fetch:
+            payload = self._graph("proxy-http-row", allow_public_lookup=True)
+
+        fetch.assert_called_once_with(
+            "http://mempoolhiddenexample.onion/api",
+            txid,
+            timeout=5,
+            proxy_url="socks5h://127.0.0.1:9050",
+        )
+        self.assertEqual(payload["supportLevel"], "full")
+
     def test_bitcoin_lookup_prefers_default_electrum_before_http_backend(self):
         txid = "1a" * 32
         create_db_backend(
@@ -992,6 +1071,77 @@ class TransactionGraphTest(unittest.TestCase):
         )
         self.assertEqual(_FakeElectrumClient.backends[0]["timeout"], 5)
         self.assertEqual(payload["supportLevel"], "full")
+
+    def test_runtime_electrum_graph_lookup_preserves_tls_options(self):
+        txid = "24" * 32
+        runtime_config = {
+            "default_backend": "runtime-fulcrum",
+            "backends": {
+                "runtime-fulcrum": {
+                    "kind": "electrum",
+                    "chain": "bitcoin",
+                    "network": "main",
+                    "url": "ssl://fulcrum.example:50002",
+                    "timeout": 60,
+                    "certificate": "/tmp/fulcrum.pem",
+                    "insecure": True,
+                }
+            },
+        }
+        self._tx("runtime-electrum-row", "wallet-a", "outbound", 900_000_000, txid, "{}")
+        _FakeElectrumClient.calls = []
+        _FakeElectrumClient.backends = []
+        _FakeElectrumClient.responses = {txid: "current-raw"}
+        decoded_current = {
+            "version": 2,
+            "locktime": 0,
+            "vin": [],
+            "vout": [{"n": 0, "script_hex": SCRIPT_B, "value_sats": 900_000}],
+        }
+
+        with patch("kassiber.core.transaction_graph.ElectrumClient", _FakeElectrumClient), patch(
+            "kassiber.core.transaction_graph.decode_raw_transaction",
+            return_value=decoded_current,
+        ):
+            payload = self._graph(
+                "runtime-electrum-row",
+                allow_public_lookup=True,
+                runtime_config=runtime_config,
+            )
+
+        self.assertEqual(_FakeElectrumClient.backends[0]["timeout"], 5)
+        self.assertEqual(_FakeElectrumClient.backends[0]["certificate"], "/tmp/fulcrum.pem")
+        self.assertIs(_FakeElectrumClient.backends[0]["insecure"], True)
+        self.assertEqual(payload["supportLevel"], "full")
+
+    def test_liquid_lookup_skips_implicit_builtin_runtime_backends(self):
+        txid = "25" * 32
+        runtime_config = {
+            "default_backend": "fulcrum",
+            "backends": {name: dict(config) for name, config in DEFAULT_BACKENDS.items()},
+        }
+        self._tx(
+            "implicit-liquid-runtime-row",
+            "wallet-a",
+            "outbound",
+            900_000_000,
+            txid,
+            "{}",
+            asset="LBTC",
+        )
+        _FakeElectrumClient.calls = []
+
+        with patch("kassiber.core.transaction_graph.ElectrumClient", _FakeElectrumClient):
+            payload = self._graph(
+                "implicit-liquid-runtime-row",
+                allow_public_lookup=True,
+                runtime_config=runtime_config,
+            )
+
+        self.assertEqual(_FakeElectrumClient.calls, [])
+        self.assertEqual(payload["supportLevel"], "graphless")
+        warning_codes = {warning["code"] for warning in payload["warnings"]}
+        self.assertIn("liquid_reference_lookup_unavailable", warning_codes)
 
     def test_bitcoin_electrum_prevtx_lookup_reuses_cached_prev_transaction(self):
         txid = "16" * 32
