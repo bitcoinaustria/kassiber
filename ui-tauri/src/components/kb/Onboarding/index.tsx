@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
@@ -145,6 +145,7 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
     useState<RegtestStatusData | null>(null);
   const [loadingRegtestStatus, setLoadingRegtestStatus] = useState(false);
   const [openingRegtest, setOpeningRegtest] = useState(false);
+  const autoOpenedRegtestRef = useRef(false);
   const activeSteps = customSteps ?? DEFAULT_STEPS;
   const step = activeSteps[currentStep];
   const importAvailable = canImportProjects();
@@ -183,10 +184,10 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
     setForm((current) => ({ ...current, [key]: value }));
   };
 
-  const clearDaemonQueryCache = () => {
+  const clearDaemonQueryCache = useCallback(() => {
     void queryClient.cancelQueries({ queryKey: ["daemon"] });
     queryClient.removeQueries({ queryKey: ["daemon"] });
-  };
+  }, [queryClient]);
 
   useEffect(() => {
     if (!import.meta.env.DEV || customSteps) {
@@ -481,7 +482,7 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
     setFlowMode("setup");
   };
 
-  const openRegtestDemo = () => {
+  const openRegtestDemo = useCallback(() => {
     if (!regtestStatus || openingRegtest) return;
     setOpeningRegtest(true);
     setFinishError(null);
@@ -533,7 +534,40 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
         );
       })
       .finally(() => setOpeningRegtest(false));
-  };
+  }, [
+    clearDaemonQueryCache,
+    markFirstSyncDone,
+    navigate,
+    openingRegtest,
+    regtestStatus,
+    setDataMode,
+    setIdentity,
+    t,
+  ]);
+
+  useEffect(() => {
+    if (
+      customSteps ||
+      importSelection ||
+      flowMode !== "start" ||
+      loadingRegtestStatus ||
+      !regtestStatus ||
+      openingRegtest ||
+      autoOpenedRegtestRef.current
+    ) {
+      return;
+    }
+    autoOpenedRegtestRef.current = true;
+    openRegtestDemo();
+  }, [
+    customSteps,
+    flowMode,
+    importSelection,
+    loadingRegtestStatus,
+    openingRegtest,
+    openRegtestDemo,
+    regtestStatus,
+  ]);
 
   const refreshImportedProfiles = async () => {
     setLoadingImportProfiles(true);
