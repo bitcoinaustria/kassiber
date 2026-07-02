@@ -8,7 +8,10 @@ import {
   marketRateBackends,
   type Backend,
 } from "./SettingsModel";
-import { backendTypeIdForSettingsBackend } from "./SyncBackendSettingsModel";
+import {
+  backendTypeIdForConnectionSetup,
+  backendTypeIdForSettingsBackend,
+} from "./SyncBackendSettingsModel";
 
 describe("backend settings model", () => {
   it("keeps the stable backend id separate from the editable display name", () => {
@@ -41,6 +44,52 @@ describe("backend settings model", () => {
     });
 
     expect(backend.urlSafeForHttpProbe).toBe(true);
+  });
+
+  it("serializes Silent Payments capability and scanner replacements", () => {
+    const backend = backendRowToSettingsBackend({
+      name: "sp-local",
+      display_name: "SP scanner",
+      kind: "custom",
+      chain: "bitcoin",
+      network: "main",
+      url: "local://silent-payments",
+      has_url: true,
+      silent_payments: true,
+    });
+
+    expect(backend.silentPayments).toBe(true);
+    expect(backend).not.toHaveProperty("silentPaymentScanFile");
+    expect(backend).not.toHaveProperty("silentPaymentScanPath");
+
+    const payload = backendPayload({
+      ...backend,
+      silentPaymentScanFile: "/tmp/sp-scan.json",
+      silentPaymentScanPath: "/silent-payments/scan",
+    });
+
+    expect(payload.config).toMatchObject({
+      silent_payments: true,
+      silent_payment_scan_file: "/tmp/sp-scan.json",
+      silent_payment_scan_path: "/silent-payments/scan",
+    });
+
+    const disabledPayload = backendPayload({
+      ...backend,
+      silentPayments: false,
+      silentPaymentScanFile: "/tmp/kept-hidden.json",
+      silentPaymentScanPath: "/silent-payments/disabled",
+    });
+
+    expect(disabledPayload.config).toMatchObject({
+      silent_payments: false,
+    });
+    expect(disabledPayload.config).not.toHaveProperty(
+      "silent_payment_scan_file",
+    );
+    expect(disabledPayload.config).not.toHaveProperty(
+      "silent_payment_scan_path",
+    );
   });
 
   it("updates display_name without renaming the backend key", () => {
@@ -113,6 +162,23 @@ describe("backend settings model", () => {
     });
 
     expect(backendTypeIdForSettingsBackend(backend)).toBe("liquid");
+  });
+
+  it("opens graph backend diagnostics in the matching network setup path", () => {
+    expect(
+      backendTypeIdForConnectionSetup({
+        sourceId: "liquid",
+        reason: "Transaction graph needs a Liquid backend",
+        backendKind: "liquid",
+      }),
+    ).toBe("liquid");
+    expect(
+      backendTypeIdForConnectionSetup({
+        sourceId: "bitcoin",
+        reason: "Transaction graph needs a Bitcoin backend",
+        backendKind: "bitcoin",
+      }),
+    ).toBe("bitcoin");
   });
 
   it("preserves redacted proxy credentials when saving unrelated backend edits", () => {

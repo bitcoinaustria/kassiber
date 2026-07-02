@@ -281,6 +281,7 @@ interface SamouraiWalletMetadata {
 const syncModeLabelKeys: Record<string, string> = {
   backend_descriptor: "detail.syncMode.backendDescriptor",
   backend_addresses: "detail.syncMode.backendAddresses",
+  backend_silent_payment: "detail.syncMode.backendSilentPayment",
   file_import: "detail.syncMode.fileImport",
   btcpay: "detail.syncMode.btcpay",
   not_configured: "detail.syncMode.notConfigured",
@@ -355,6 +356,7 @@ function isWalletLiveBackendSource(
   return (
     syncMode === "backend_descriptor" ||
     syncMode === "backend_addresses" ||
+    syncMode === "backend_silent_payment" ||
     connection.kind === "descriptor" ||
     connection.kind === "xpub" ||
     connection.kind === "address" ||

@@ -1,7 +1,26 @@
 import { describe, expect, it } from "vitest";
 
 import type { TransactionSwapRoute } from "./TransactionGraphTab";
-import { preloadableSwapLegGraphReference } from "./TransactionDetailsTab";
+import {
+  preloadableSwapLegGraphReference,
+  transactionGraphLookupArgs,
+} from "./TransactionDetailsTab";
+
+describe("transactionGraphLookupArgs", () => {
+  it("opts the detail graph request into configured public lookup", () => {
+    expect(transactionGraphLookupArgs("row-1")).toEqual({
+      transaction: "row-1",
+      allowPublicLookup: true,
+    });
+  });
+
+  it("keeps disabled queries shaped consistently", () => {
+    expect(transactionGraphLookupArgs(null)).toEqual({
+      transaction: "",
+      allowPublicLookup: true,
+    });
+  });
+});
 
 describe("preloadableSwapLegGraphReference", () => {
   it("skips the current transaction leg and returns the paired leg reference", () => {

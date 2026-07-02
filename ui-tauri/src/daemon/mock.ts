@@ -51,6 +51,33 @@ interface MockChatSession {
   entries: { role: "user" | "assistant"; content: string }[];
 }
 
+function mockGraphlessTransactionGraph(transactionId: string) {
+  return {
+    transaction: {
+      id: transactionId,
+      txid: transactionId,
+      externalId: transactionId,
+      inputCount: 0,
+      outputCount: 0,
+    },
+    supportLevel: "graphless",
+    unsupportedReason: "graphless_import",
+    warnings: [
+      {
+        code: "graphless_import",
+        level: "info",
+        message:
+          "This source record does not contain a valued Bitcoin input/output graph.",
+      },
+    ],
+    inputs: [],
+    outputs: [],
+    fee: null,
+    annotations: [],
+    accounting: { quarantine: null, linkedPairs: [], transferGroupIds: [] },
+  };
+}
+
 // Mock chat history uses "encrypted database" semantics: the auto policy
 // persists, mirroring a real install after `secrets init`.
 let mockChatHistoryMode: "auto" | "on" | "off" = "auto";
@@ -4184,7 +4211,7 @@ export const mockDaemon: DaemonTransport = {
           : "tx19";
       const graph =
         MOCK_TRANSACTION_GRAPHS[transactionId] ??
-        MOCK_TRANSACTION_GRAPHS.tx19;
+        mockGraphlessTransactionGraph(transactionId);
       return {
         kind: "ui.transactions.graph",
         schema_version: 1,

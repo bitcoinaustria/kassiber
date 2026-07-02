@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
 
 import { CurrencyToggleText } from "@/components/kb/CurrencyToggleText";
@@ -8,6 +9,7 @@ import { TabsContent } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { useDaemon } from "@/daemon/client";
 import { cn } from "@/lib/utils";
+import { useUiStore } from "@/store/ui";
 
 import {
   DetailField,
@@ -28,6 +30,7 @@ import type { TransactionDetailTabContext } from "./TransactionDetailTabContext"
 import {
   TransactionGraphPanel,
   type TransactionGraphPayload,
+  type TransactionGraphIssueTarget,
   type TransactionSwapRoute,
   type TransactionSwapRouteLegKey,
 } from "./TransactionGraphTab";
@@ -156,8 +159,19 @@ export function preloadableSwapLegGraphReference(
   return reference;
 }
 
+export function transactionGraphLookupArgs(transactionRef: string | null | undefined) {
+  return {
+    transaction: transactionRef ?? "",
+    allowPublicLookup: true,
+  };
+}
+
 export function TransactionDetailsTab({ ctx }: { ctx: TransactionDetailTabContext }) {
   const { t } = useTranslation("transactions");
+  const navigate = useNavigate();
+  const setDeferredConnectionSetup = useUiStore(
+    (state) => state.setDeferredConnectionSetup,
+  );
   const {
     transaction,
     localDraft,
@@ -213,12 +227,12 @@ export function TransactionDetailsTab({ ctx }: { ctx: TransactionDetailTabContex
   );
   const swapOutGraphQuery = useDaemon<TransactionGraphPayload>(
     "ui.transactions.graph",
-    { transaction: swapOutTransactionRef ?? "", allowPublicLookup: true },
+    transactionGraphLookupArgs(swapOutTransactionRef),
     { enabled: Boolean(swapOutTransactionRef) },
   );
   const swapInGraphQuery = useDaemon<TransactionGraphPayload>(
     "ui.transactions.graph",
-    { transaction: swapInTransactionRef ?? "", allowPublicLookup: true },
+    transactionGraphLookupArgs(swapInTransactionRef),
     { enabled: Boolean(swapInTransactionRef) },
   );
   const activeSwapGraphQuery =
@@ -233,6 +247,17 @@ export function TransactionDetailsTab({ ctx }: { ctx: TransactionDetailTabContex
       : activeSwapLeg === "in"
         ? swapInGraphQuery.data?.data
         : undefined;
+  const resolveGraphIssue = (target: TransactionGraphIssueTarget) => {
+    setDeferredConnectionSetup({
+      sourceId: target,
+      reason:
+        target === "liquid"
+          ? t("graph.backendSettingsReasonLiquid")
+          : t("graph.backendSettingsReasonBitcoin"),
+      backendKind: target,
+    });
+    void navigate({ to: "/settings", hash: target });
+  };
   const activeSwapTransactionRef =
     activeSwapLeg === "out"
       ? swapOutTransactionRef
@@ -460,6 +485,7 @@ export function TransactionDetailsTab({ ctx }: { ctx: TransactionDetailTabContex
                           hideSensitive={hideSensitive}
                           selectedSwapLeg={activeSwapLeg}
                           onSelectSwapLeg={setSelectedSwapLeg}
+                          onResolveIssue={resolveGraphIssue}
                         />
                       </div>
                     </div>

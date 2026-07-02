@@ -93,8 +93,13 @@ references, and unsupported imports get an explicit empty state instead of a
 guessed graph. The view is explanatory, not a source of new accounting truth;
 ownership tags such as owned wallet, external recipient, change, transfer,
 swap, Coinjoin, blocker, or quarantine come from the same transaction graph and
-manual-pair semantics used by the journal pipeline. Hidden-sensitive mode keeps
-amounts and long references masked. Reviewed paired routes, including swaps and
+manual-pair semantics used by the journal pipeline. If a public backend lookup
+is allowed, sanitized tx/prevtx graph references are cached in the local DB so
+reopening the panel can reuse them without exposing backend endpoints or raw
+lookup material to the UI; the cache stores normalized graph refs rather than
+raw serialized transactions, and successful Bitcoin graph lookups remain
+complete for the current transaction. Hidden-sensitive mode keeps amounts and
+long references masked. Reviewed paired routes, including swaps and
 manual/AI-consented Coinjoin links, can show the spent and received legs; the
 desktop preloads both safe graph payloads once the route is known so switching
 between legs is UI-only when the daemon data is already available.

@@ -101,6 +101,33 @@ describe("typed app logs", () => {
     expect(stored.msg).toContain('"note":"keep"');
   });
 
+  it("applies the secret floor to Silent Payments material", () => {
+    const spscan = `spscan1q${"p".repeat(120)}`;
+    const spspend = `spspend1q${"q".repeat(120)}`;
+    const spAddress = `sp1q${"p".repeat(120)}`;
+    const descriptor = `sp(${spscan})`;
+
+    emitAppLog({
+      ...record({
+        detail: {
+          type: "text",
+          value: `free text ${descriptor} ${spspend} ${spAddress}`,
+        },
+      }),
+      msg: `silent_payment_material=${descriptor} {"sp_descriptor":"${descriptor}"}`,
+    });
+
+    const stored = getAppLogRecords()[0];
+    const combined = `${stored.msg} ${stored.fields.detail.value}`;
+    expect(combined).toContain("[redacted]");
+    expect(combined).toContain("sp([redacted-key])");
+    expect(combined).toContain("[redacted-silent-payment-key]");
+    expect(combined).toContain("[redacted-silent-payment-address]");
+    expect(combined).not.toContain(spscan);
+    expect(combined).not.toContain(spspend);
+    expect(combined).not.toContain(spAddress);
+  });
+
   it("masks sensitive typed fields without changing the message", () => {
     const emitted = emitAppLog(
       record({

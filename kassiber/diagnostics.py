@@ -146,6 +146,11 @@ _RECOVERY_ASSIGNMENT_RE = re.compile(
     re.IGNORECASE,
 )
 _BECH32_RE = re.compile(r"\b(?:bc1|tb1|bcrt1|lq1|ex1)[0-9a-z]{8,90}\b", re.IGNORECASE)
+_SP_DESCRIPTOR_RE = re.compile(r"\bsp\([^)\n]{8,}\)", re.IGNORECASE)
+_SP_TEXT_RE = re.compile(
+    r"\b(?:t?spscan|t?spspend|t?sp)1q[023456789acdefghjklmnpqrstuvwxyz]{8,}\b",
+    re.IGNORECASE,
+)
 _AMOUNT_UNIT_RE = re.compile(
     r"(?<![A-Za-z0-9_])[-+]?\d+(?:\.\d+)?\s*(?:msat|sats?|btc|lbtc|usd|eur)\b",
     re.IGNORECASE,
@@ -271,6 +276,7 @@ def _privacy_contract() -> dict[str, Any]:
             "attachment filenames and URLs",
             "backend hostnames and full URLs",
             "descriptors and xpubs",
+            "Silent Payments scan material, spscan/spspend keys, and sp() descriptors",
             "exact BTC, asset, fiat, fee, rate, balance, and tax values",
             "labels and notes",
             "local filesystem paths",
@@ -444,6 +450,7 @@ def _wallet_summary(conn: sqlite3.Connection) -> dict[str, Any]:
     addresses = 0
     source_file = 0
     btcpay = 0
+    silent_payment = 0
     configured_backend = 0
     invalid_config = 0
     for row in rows:
@@ -460,6 +467,7 @@ def _wallet_summary(conn: sqlite3.Connection) -> dict[str, Any]:
         addresses += int(bool(config.get("addresses")))
         source_file += int(bool(config.get("source_file")))
         btcpay += int(config.get("sync_source") == "btcpay")
+        silent_payment += int(bool(config.get("sp_descriptor")))
         configured_backend += int(bool(config.get("backend")))
     return {
         "total": len(rows),
@@ -470,6 +478,7 @@ def _wallet_summary(conn: sqlite3.Connection) -> dict[str, Any]:
         "address_lists_configured": addresses,
         "source_files_configured": source_file,
         "btcpay_sync_configured": btcpay,
+        "silent_payment_configured": silent_payment,
         "explicit_backend_configured": configured_backend,
         "invalid_config_rows": invalid_config,
     }
@@ -706,6 +715,8 @@ def sanitize_text(value: Any) -> str | None:
     text = _TIMESTAMP_RE.sub("<timestamp>", text)
     text = _HEX64_RE.sub("<hex64>", text)
     text = _XKEY_RE.sub("<xkey>", text)
+    text = _SP_DESCRIPTOR_RE.sub("<silent-payment>", text)
+    text = _SP_TEXT_RE.sub("<silent-payment>", text)
     text = _BECH32_RE.sub("<address>", text)
     text = _PATHISH_RE.sub("<path>", text)
     text = _AMOUNT_UNIT_RE.sub("<amount>", text)

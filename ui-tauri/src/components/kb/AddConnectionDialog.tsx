@@ -102,6 +102,13 @@ interface SetupFormState {
   btcpayApiKey: string;
   walletMaterial: string;
   descriptorScriptType: string;
+  spDescriptor: string;
+  spScanMode: "local_index" | "server_assisted";
+  spScanStartHeight: string;
+  spScanStartDate: string;
+  spFullHistory: boolean;
+  spAcknowledgeFullHistoryWarning: boolean;
+  spAcknowledgeServerWarning: boolean;
   addressList: string;
   gapLimit: string;
   targetWallet: string;
@@ -169,6 +176,7 @@ interface BackendOption {
   chain?: string;
   network?: string;
   is_default?: boolean;
+  silent_payments?: boolean;
 }
 
 interface BackendOptionsData {
@@ -537,6 +545,13 @@ const formDefaultsFor = (
     btcpayApiKey: "",
     walletMaterial: "",
     descriptorScriptType: "",
+    spDescriptor: "",
+    spScanMode: "local_index",
+    spScanStartHeight: "",
+    spScanStartDate: "",
+    spFullHistory: false,
+    spAcknowledgeFullHistoryWarning: false,
+    spAcknowledgeServerWarning: false,
     addressList: "",
     gapLimit: "40",
     targetWallet: "",
@@ -922,6 +937,11 @@ export function AddConnectionDialog({
       supportsAddressListSync(backend) &&
       (!backend.chain || backend.chain === "bitcoin"),
   );
+  const silentPaymentBackendOptions = allBackends.filter(
+    (backend) =>
+      backend.silent_payments === true &&
+      (!backend.chain || backend.chain === "bitcoin"),
+  );
   const liquidBackends = allBackends.filter(
     (backend) =>
       supportsDescriptorSync(backend) &&
@@ -935,7 +955,11 @@ export function AddConnectionDialog({
   const addressBackendOptions =
     selected.chain === "bitcoin" ? bitcoinAddressBackends : descriptorBackendOptions;
   const selectedBackendOptions =
-    setupKind === "address-list" ? addressBackendOptions : descriptorBackendOptions;
+    setupKind === "address-list"
+      ? addressBackendOptions
+      : setupKind === "silent-payment"
+        ? silentPaymentBackendOptions
+        : descriptorBackendOptions;
   const selectedBackend = selectedBackendOptions.find(
     (backend) => backend.name === form.backend,
   );
@@ -1036,6 +1060,7 @@ export function AddConnectionDialog({
   const requiresBackend =
     setupKind === "descriptor" ||
     setupKind === "samourai" ||
+    setupKind === "silent-payment" ||
     setupKind === "address-list";
   const missingBackend = requiresBackend && selectedBackendOptions.length === 0;
   const submitLabel =
@@ -1323,6 +1348,7 @@ export function AddConnectionDialog({
     const errors: Partial<Record<keyof SetupFormState, string>> = {};
     if (
       setupKind === "descriptor" ||
+      setupKind === "silent-payment" ||
       setupKind === "address-list" ||
       setupKind === "file-wallet" ||
       setupKind === "samourai" ||
@@ -1386,6 +1412,48 @@ export function AddConnectionDialog({
         if (!form.coreRpcPassword.trim()) {
           errors.coreRpcPassword = t("add.core.errorPassword");
         }
+      }
+    }
+    if (setupKind === "silent-payment") {
+      if (!form.spDescriptor.trim()) {
+        errors.spDescriptor = t("add.silentPayments.errorMaterial");
+      }
+      if (!form.backend.trim()) {
+        errors.backend = t("add.validation.chooseBackend");
+      }
+      const startHeightText = form.spScanStartHeight.trim();
+      const hasStartHeight = startHeightText.length > 0;
+      const hasStartDate = form.spScanStartDate.trim().length > 0;
+      if (hasStartHeight) {
+        const startHeight = Number.parseInt(startHeightText, 10);
+        if (
+          !Number.isFinite(startHeight) ||
+          startHeight < 0 ||
+          String(startHeight) !== startHeightText
+        ) {
+          errors.spScanStartHeight = t(
+            "add.silentPayments.errorStartHeight",
+          );
+        }
+      }
+      if (!hasStartHeight && !hasStartDate && !form.spFullHistory) {
+        errors.spScanStartHeight = t("add.silentPayments.errorStartPoint");
+      }
+      if (
+        form.spFullHistory &&
+        !form.spAcknowledgeFullHistoryWarning
+      ) {
+        errors.spAcknowledgeFullHistoryWarning = t(
+          "add.silentPayments.errorFullHistoryAck",
+        );
+      }
+      if (
+        form.spScanMode === "server_assisted" &&
+        !form.spAcknowledgeServerWarning
+      ) {
+        errors.spAcknowledgeServerWarning = t(
+          "add.silentPayments.errorServerAck",
+        );
       }
     }
     if (setupKind === "samourai") {
@@ -1629,6 +1697,39 @@ export function AddConnectionDialog({
             label,
             count: parsed.valid.length,
           }),
+          tone: "success",
+        });
+      } else if (setupKind === "silent-payment") {
+        const startHeight = Number.parseInt(form.spScanStartHeight.trim(), 10);
+        const fullHistory = form.spFullHistory;
+        await createWallet.mutateAsync({
+          label,
+          kind: "silent-payment",
+          backend: form.backend.trim() || undefined,
+          chain: "bitcoin",
+          network: selected.network,
+          sp_descriptor: form.spDescriptor.trim(),
+          sp_scan_mode: form.spScanMode,
+          sp_scan_start_height: !fullHistory && Number.isFinite(startHeight)
+            ? startHeight
+            : undefined,
+          sp_scan_start_date: !fullHistory
+            ? form.spScanStartDate.trim() || undefined
+            : undefined,
+          sp_full_history: fullHistory,
+          sp_acknowledge_full_history_warning:
+            form.spAcknowledgeFullHistoryWarning,
+          sp_acknowledge_server_warning: form.spAcknowledgeServerWarning,
+        });
+        startSyncNotice(t("add.silentPayments.stillScanning", { label }));
+        try {
+          await syncWallet.mutateAsync({ wallet: label });
+        } finally {
+          clearSyncNotice();
+        }
+        addNotification({
+          title: t("add.added.title"),
+          body: t("add.silentPayments.addedBodyScanning", { label }),
           tone: "success",
         });
       } else if (setupKind === "samourai") {
@@ -1962,8 +2063,9 @@ export function AddConnectionDialog({
     id: string,
     label: string,
     options: BackendOption[],
+    helper?: React.ReactNode,
   ) => (
-    <SetupField id={id} label={label} error={fieldErrors.backend}>
+    <SetupField id={id} label={label} error={fieldErrors.backend} helper={helper}>
       {options.length ? (
         <select
           id={id}
@@ -2548,6 +2650,143 @@ export function AddConnectionDialog({
             ) : null}
           </SetupField>
           {renderSyncAfterCreate(t("add.addressList.scanAfter"))}
+        </>
+      );
+    }
+
+    if (setupKind === "silent-payment") {
+      return (
+        <>
+          {renderConnectionLabelField()}
+          {renderBackendSelect(
+            "connection-backend",
+            t("add.silentPayments.backend"),
+            silentPaymentBackendOptions,
+            t("add.silentPayments.backendHelper"),
+          )}
+          <SetupField
+            id="connection-sp-descriptor"
+            label={t("add.silentPayments.material")}
+            error={fieldErrors.spDescriptor}
+            helper={t("add.silentPayments.materialHelper")}
+          >
+            <Textarea
+              id="connection-sp-descriptor"
+              className="min-h-28 font-mono text-xs"
+              value={form.spDescriptor}
+              onChange={(event) =>
+                updateForm("spDescriptor", event.target.value)
+              }
+              placeholder="sp(spscan1q...)"
+              required
+            />
+          </SetupField>
+          <SetupField
+            id="connection-sp-scan-mode"
+            label={t("add.silentPayments.scanMode")}
+            helper={t("add.silentPayments.scanModeHelper")}
+          >
+            <select
+              id="connection-sp-scan-mode"
+              className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+              value={form.spScanMode}
+              onChange={(event) =>
+                updateForm(
+                  "spScanMode",
+                  event.target.value as SetupFormState["spScanMode"],
+                )
+              }
+            >
+              <option value="local_index">
+                {t("add.silentPayments.scanModeLocal")}
+              </option>
+              <option value="server_assisted">
+                {t("add.silentPayments.scanModeServer")}
+              </option>
+            </select>
+          </SetupField>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <SetupField
+              id="connection-sp-start-height"
+              label={t("add.silentPayments.startHeight")}
+              error={fieldErrors.spScanStartHeight}
+            >
+              <Input
+                id="connection-sp-start-height"
+                type="number"
+                min={0}
+                value={form.spScanStartHeight}
+                onChange={(event) =>
+                  updateForm("spScanStartHeight", event.target.value)
+                }
+                disabled={form.spFullHistory}
+              />
+            </SetupField>
+            <SetupField
+              id="connection-sp-start-date"
+              label={t("add.silentPayments.startDate")}
+              error={fieldErrors.spScanStartDate}
+              helper={t("add.silentPayments.startDateHelper")}
+            >
+              <Input
+                id="connection-sp-start-date"
+                type="date"
+                value={form.spScanStartDate}
+                onChange={(event) =>
+                  updateForm("spScanStartDate", event.target.value)
+                }
+                disabled={form.spFullHistory}
+              />
+            </SetupField>
+          </div>
+          <div className="space-y-2 rounded-md border bg-background p-3">
+            <label className="flex items-start gap-2 text-sm">
+              <Checkbox
+                checked={form.spFullHistory}
+                onCheckedChange={(checked) =>
+                  updateForm("spFullHistory", checked === true)
+                }
+              />
+              <span>{t("add.silentPayments.fullHistory")}</span>
+            </label>
+            {form.spFullHistory ? (
+              <label className="flex items-start gap-2 text-sm">
+                <Checkbox
+                  checked={form.spAcknowledgeFullHistoryWarning}
+                  onCheckedChange={(checked) =>
+                    updateForm(
+                      "spAcknowledgeFullHistoryWarning",
+                      checked === true,
+                    )
+                  }
+                />
+                <span>{t("add.silentPayments.fullHistoryAck")}</span>
+              </label>
+            ) : null}
+            {fieldErrors.spAcknowledgeFullHistoryWarning ? (
+              <p className="text-xs text-destructive">
+                {fieldErrors.spAcknowledgeFullHistoryWarning}
+              </p>
+            ) : null}
+          </div>
+          {form.spScanMode === "server_assisted" ? (
+            <div className="space-y-2 rounded-md border border-amber-500/30 bg-amber-500/10 p-3">
+              <label className="flex items-start gap-2 text-sm">
+                <Checkbox
+                  checked={form.spAcknowledgeServerWarning}
+                  onCheckedChange={(checked) =>
+                    updateForm("spAcknowledgeServerWarning", checked === true)
+                  }
+                />
+                <span>{t("add.silentPayments.serverAck")}</span>
+              </label>
+              {fieldErrors.spAcknowledgeServerWarning ? (
+                <p className="text-xs text-destructive">
+                  {fieldErrors.spAcknowledgeServerWarning}
+                </p>
+              ) : null}
+            </div>
+          ) : null}
         </>
       );
     }

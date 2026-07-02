@@ -21,6 +21,7 @@ describe("connection catalog", () => {
     const implementedSetupKinds = new Set([
       "descriptor",
       "address-list",
+      "silent-payment",
       "file-wallet",
       "file-enrichment",
       "btcpay",
@@ -41,6 +42,7 @@ describe("connection catalog", () => {
     expect(CONNECTION_SOURCES.map((source) => source.id)).toEqual(
       expect.arrayContaining([
         "address-list",
+        "silent-payment",
         "bitcoin-core",
         "electrum",
         "esplora",
@@ -73,6 +75,19 @@ describe("connection catalog", () => {
     expect(JSON.stringify(samouraiSources)).not.toMatch(
       /backup|mnemonic|seed|passphrase|recovery/i,
     );
+  });
+
+  it("keeps Silent Payments setup watch-only in the catalog", () => {
+    const source = CONNECTION_SOURCES.find(
+      (candidate) => candidate.id === "silent-payment",
+    );
+
+    expect(source?.setupKind).toBe("silent-payment");
+    expect(source?.walletKind).toBe("silent-payment");
+    expect(`${source?.description} ${source?.details.join(" ")}`).toMatch(
+      /watch-only/i,
+    );
+    expect(JSON.stringify(source)).not.toMatch(/spspend|private key|seed/i);
   });
 
   it("uses bundled official artwork for privacy-wallet imports", () => {

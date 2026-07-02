@@ -171,6 +171,20 @@ CREATE TABLE IF NOT EXISTS transactions (
     created_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS transaction_graph_cache (
+    schema_version INTEGER NOT NULL,
+    chain TEXT NOT NULL,
+    network TEXT NOT NULL,
+    txid TEXT NOT NULL,
+    payload_json TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (schema_version, chain, network, txid)
+);
+
+CREATE INDEX IF NOT EXISTS idx_transaction_graph_cache_updated
+    ON transaction_graph_cache(updated_at DESC);
+
 CREATE TABLE IF NOT EXISTS tags (
     id TEXT PRIMARY KEY,
     workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
@@ -1393,6 +1407,7 @@ def ensure_schema_compat(conn):
     _ensure_direct_swap_payout_schema(conn)
     _ensure_commercial_reconciliation_schema(conn)
     _ensure_freshness_schema(conn)
+    _ensure_transaction_graph_cache_schema(conn)
 
 
 def _decode_json_object(raw_json):
@@ -1574,6 +1589,29 @@ def _ensure_freshness_schema(conn):
             ("updated_at", "TEXT NOT NULL DEFAULT ''"),
         ):
             ensure_column(conn, table, column, definition)
+
+
+def _ensure_transaction_graph_cache_schema(conn):
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS transaction_graph_cache (
+            schema_version INTEGER NOT NULL,
+            chain TEXT NOT NULL,
+            network TEXT NOT NULL,
+            txid TEXT NOT NULL,
+            payload_json TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            PRIMARY KEY (schema_version, chain, network, txid)
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_transaction_graph_cache_updated
+            ON transaction_graph_cache(updated_at DESC)
+        """
+    )
 
 
 def _ensure_commercial_reconciliation_schema(conn):

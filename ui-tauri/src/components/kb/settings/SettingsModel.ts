@@ -47,6 +47,9 @@ export interface Backend {
   urlSafeForHttpProbe?: boolean;
   infrastructureOwner?: InfrastructureOwnership;
   certificate?: string;
+  silentPayments?: boolean;
+  silentPaymentScanFile?: string;
+  silentPaymentScanPath?: string;
   proxy?: {
     host: string;
     port: string;
@@ -79,6 +82,7 @@ export interface BackendSettingsRow {
   insecure?: boolean;
   tor_proxy?: string;
   infrastructure_owner?: string;
+  silent_payments?: boolean;
   wallet_refs?: string[];
 }
 
@@ -557,6 +561,7 @@ export function backendRowToSettingsBackend(row: BackendSettingsRow): Backend {
     infrastructureOwner: normalizeInfrastructureOwnership(
       row.infrastructure_owner,
     ),
+    silentPayments: row.silent_payments === true,
     walletRefs: Array.isArray(row.wallet_refs) ? row.wallet_refs : [],
   };
 }
@@ -585,6 +590,16 @@ export function backendPayload(backend: Backend): Record<string, unknown> {
   }
   if (backend.certificate) {
     config.certificate = backend.certificate;
+  }
+  if (typeof backend.silentPayments === "boolean") {
+    config.silent_payments = backend.silentPayments;
+  }
+  const silentPaymentReplacementsEnabled = backend.silentPayments !== false;
+  if (silentPaymentReplacementsEnabled && backend.silentPaymentScanFile?.trim()) {
+    config.silent_payment_scan_file = backend.silentPaymentScanFile.trim();
+  }
+  if (silentPaymentReplacementsEnabled && backend.silentPaymentScanPath?.trim()) {
+    config.silent_payment_scan_path = backend.silentPaymentScanPath.trim();
   }
   if (backend.commandoPeerId) {
     config.commando_peer_id = backend.commandoPeerId;

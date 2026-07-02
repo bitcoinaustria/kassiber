@@ -48,6 +48,7 @@ export type ConnectionCategory =
 export type SetupKind =
   | "descriptor"
   | "address-list"
+  | "silent-payment"
   | "file-wallet"
   | "file-enrichment"
   | "samourai"
@@ -179,6 +180,28 @@ export const CONNECTION_SOURCES: ConnectionSource[] = [
       "Paste addresses or load a .txt/.csv file, one address per line",
       "No derivation: every address is scanned, so there is no gap limit",
       "Use Electrum/Fulcrum or Bitcoin Core RPC for large lists — Esplora is one lookup per address",
+    ],
+  },
+  {
+    id: "silent-payment",
+    title: "Silent Payments",
+    description:
+      "Watch-only BIP352 receiving/accounting from BIP392 sp() material.",
+    category: "wallets",
+    image: bitcoinIcon,
+    imageClassName: "size-9",
+    status: "ready",
+    pathLabel: "Watch-only wallet",
+    formatLabel: "BIP352 / BIP392 sp()",
+    setupKind: "silent-payment",
+    walletKind: "silent-payment",
+    chain: "bitcoin",
+    network: "main",
+    details: [
+      "Accepts watch-only scan material and public spend material",
+      "Requires a BIP352-capable backend or local scanner selected explicitly",
+      "Needs a scan start height/date, or an acknowledged full-history scan",
+      "No spending, signing, PSBTs, or sender contact book",
     ],
   },
   {

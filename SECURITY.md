@@ -32,6 +32,14 @@ especially so.
 Descriptor wallets are worse than address wallets here: gap-limit
 discovery leaks a contiguous run of receive + change scripts, so the
 backend sees the wallet cluster rather than just individual addresses.
+Silent Payments wallets are different again: ordinary scripthash backends
+cannot discover BIP352 outputs. Kassiber requires an explicitly configured
+Silent-Payments-capable backend or local scanner and will not silently fall
+back to the built-in clearnet defaults.
+Server-assisted Silent Payments scans also trust the selected backend for
+completeness: if it omits scan candidates, Kassiber cannot independently prove
+that a reported-complete range found every payment. Use a local scanner or a
+self-hosted SP indexer for accounting-critical books.
 
 Mitigations, in order of effect:
 
@@ -60,6 +68,8 @@ configurable.
 | `wallets sync` against a user-configured Esplora backend | your configured URL | Esplora over HTTP(S) | same categories as `mempool` above |
 | `wallets sync` against a user-configured Electrum backend | your configured `ssl://` or `tcp://` URL | Electrum JSON-RPC over raw TCP/TLS | IP, queried scripthashes, query timing |
 | `wallets sync` against a `bitcoinrpc` backend | your configured URL | HTTP(S) POST with Basic auth | nothing leaves your machine if the node is local |
+| `wallets sync` for a `silent-payment` wallet with a local scanner file | local filesystem path configured by you | local file read | no network request by Kassiber; scanner output and detected Taproot outputs stay local; on POSIX the scanner file must be user-owned and `0600` |
+| `wallets sync` for a `silent-payment` wallet in server-assisted mode | your explicitly configured SP-capable backend URL/path | HTTP(S) POST through that backend's proxy setting, if any | IP, User-Agent, scan request timing, scan birthday/range, the watch-only `sp()` scan material needed by that backend, and scan completeness depends on that backend not omitting candidates |
 | `rates sync` (only) | configured provider (`mempool` backend, Coinbase Exchange, or CoinGecko) | unauthenticated HTTP(S) GET | IP, User-Agent, which fiat pair and window |
 | `ai models`, `chat`, `ai.test_connection` against a configured remote/TEE provider | your configured provider URL or CLI provider | OpenAI-compatible HTTP(S) or the configured local CLI's own transport | prompt/tool context, model request metadata, IP/provider account context according to that provider |
 | consented mutating AI tools inside `chat` or the desktop Assistant (`ui.wallets.sync`, `ui.rates.rebuild`, `ui.maintenance.run`) | the backends/rate sources of the rows above | as in those rows | as in those rows — tool consent is also network consent for that row |
@@ -107,6 +117,15 @@ start or bundle Tor, so the user still needs an existing Tor service.
 - Liquid descriptor wallets embed **private SLIP77 blinding keys** in
   `wallets.config_json`. Anyone who can read the DB can unblind your
   confidential outputs.
+- Silent Payments wallets store BIP392 watch-only scan material such as
+  `sp(...)` / `spscan` in `wallets.config_json`. It cannot spend, but it is
+  privacy-sensitive because it can reveal matching receives to anyone who scans
+  the chain with it.
+- Silent Payments local scanner JSON files are not stored inside Kassiber's
+  database. If you configure `silent_payment_scan_file`, protect that file with
+  OS permissions and keep it out of shared or cloud-synced folders. On POSIX,
+  Kassiber refuses scanner files that are not regular files owned by the current
+  user or that grant any group/other permissions.
 - Older installs may still resolve to `~/.local/share/kassiber`,
   `~/.local/share/satbooks`, or a legacy `<data-root>/.env`; run
   `kassiber status` to see the active paths.
@@ -180,9 +199,9 @@ safe-to-record contract for secret-bearing config values:
   values and unknown backend config keys are suppressed, while credential
   presence is exposed through `has_*` flags
 - wallet inspection output now uses an allowlisted safe view: raw descriptor
-  material and unknown wallet config keys are suppressed, while callers
-  should rely on state flags such as `descriptor`, `change_descriptor`, and
-  `descriptor_state` instead
+  material, Silent Payments scan material, and unknown wallet config keys are
+  suppressed, while callers should rely on state flags such as `descriptor`,
+  `change_descriptor`, `descriptor_state`, and `silent_payment` instead
 - backend URLs shown in output drop embedded credentials and query strings
 
 This contract is intentionally narrow. It does **not** mean every CLI surface
@@ -194,21 +213,20 @@ sensitive.
 report is designed to be postable publicly: it includes version/platform data,
 command shape, sanitized error context, stack module/function/line frames, DB
 health, and aggregate state counts. It omits raw txids, addresses, descriptors,
-xpubs, labels, notes, exact amounts, exact rates, backend hostnames, local
-paths, raw config, raw API payloads, imported rows, and stack locals. `--save`
-writes the artifact under `exports/diagnostics/` in the active Kassiber state
-root. `--diagnostics-out auto` writes the same public report when a command
-fails.
+xpubs, Silent Payments scan material, labels, notes, exact amounts, exact
+rates, backend hostnames, local paths, raw config, raw API payloads, imported
+rows, and stack locals. `--save` writes the artifact under
+`exports/diagnostics/` in the active Kassiber state root.
+`--diagnostics-out auto` writes the same public report when a command fails.
 
 ## Caveats
 
 - **Secrets on the command line still end up in shell history if you
-  use the deprecated argv forms.** `--token <value>`,
+  use argv forms.** `--token <value>`,
   `--auth-header <value>`, `--password <value>`, `--username <value>`,
-  `--descriptor <value>`, `--change-descriptor <value>`, and
-  `--api-key <value>` are kept
-  for backwards-compatibility with existing scripts and emit a
-  deprecation warning. Prefer the safe replacements:
+  `--descriptor <value>`, `--change-descriptor <value>`,
+  `--sp-descriptor <value>`, and `--api-key <value>` should be avoided for
+  real secrets. Prefer the safe replacements:
   `--token-stdin` / `--token-fd FD` (and the matching `*-stdin` /
   `*-fd` variants for the other secret-bearing fields). Only one
   `--*-stdin` option may be active per invocation; any number of

@@ -18,6 +18,7 @@ from ..wallet_descriptors import (
     liquid_plan_can_unblind,
     normalize_asset_code,
 )
+from . import silent_payments
 from ..wallet_setup import (
     BSMS_DESCRIPTOR_SOURCE,
     normalize_script_types,
@@ -40,6 +41,7 @@ WALLET_KINDS = [
     "descriptor",
     "xpub",
     "address",
+    "silent-payment",
     "coreln",
     "lnd",
     "nwc",
@@ -83,12 +85,18 @@ WALLET_SAFE_CONFIG_FIELDS = (
     "descriptor_source",
     "synthesize_change",
     "script_types",
+    *silent_payments.SAFE_CONFIG_FIELDS,
     WALLET_DEPRECATED_CONFIG_KEY,
 )
 # The xpub is as sensitive as the descriptor it expands into (it reveals every
 # address), so it is redacted; its presence still tells the UI the wallet is
 # xpub-derived, and script_types (the watched set) is surfaced for editing.
-WALLET_REDACTED_CONFIG_FIELDS = ("descriptor", "change_descriptor", "xpub")
+WALLET_REDACTED_CONFIG_FIELDS = (
+    "descriptor",
+    "change_descriptor",
+    "xpub",
+    *silent_payments.REDACTED_CONFIG_FIELDS,
+)
 
 
 def normalize_wallet_kind(value):
@@ -152,6 +160,7 @@ def wallet_live_chain_config(config):
             config.get("change_descriptor"),
             config.get("xpub"),
             config.get("addresses"),
+            config.get(silent_payments.CONFIG_DESCRIPTOR),
             config.get("chain"),
             config.get("network"),
         ]
@@ -175,6 +184,10 @@ def has_descriptor_sync_material(config):
     if str_or_none(config.get("descriptor")):
         return True
     return bool(str_or_none(config.get("xpub")) and config.get("script_types"))
+
+
+def has_silent_payment_sync_material(config):
+    return silent_payments.has_silent_payment_sync_material(config)
 
 
 def wallet_is_deprecated(config):
@@ -386,6 +399,13 @@ def parse_wallet_config(args):
             config.update(json.load(handle))
     if getattr(args, "backend", None):
         config["backend"] = args.backend.strip().lower()
+    sp_descriptor_text = read_text_argument(
+        getattr(args, "sp_descriptor", None),
+        getattr(args, "sp_descriptor_file", None),
+        "Silent Payments descriptor",
+    )
+    if sp_descriptor_text:
+        config[silent_payments.CONFIG_DESCRIPTOR] = sp_descriptor_text
     descriptor_text = read_text_argument(
         getattr(args, "descriptor", None),
         getattr(args, "descriptor_file", None),
@@ -433,6 +453,18 @@ def parse_wallet_config(args):
     if getattr(args, "network", None):
         chain = normalize_chain_value(config.get("chain"))
         config["network"] = normalize_network_value(chain, args.network)
+    if getattr(args, "sp_scan_mode", None):
+        config[silent_payments.CONFIG_SCAN_MODE] = args.sp_scan_mode
+    if getattr(args, "sp_scan_start_height", None) is not None:
+        config[silent_payments.CONFIG_SCAN_START_HEIGHT] = args.sp_scan_start_height
+    if getattr(args, "sp_scan_start_date", None):
+        config[silent_payments.CONFIG_SCAN_START_DATE] = args.sp_scan_start_date
+    if getattr(args, "sp_full_history", False):
+        config[silent_payments.CONFIG_FULL_HISTORY] = True
+    if getattr(args, "sp_acknowledge_full_history_warning", False):
+        config[silent_payments.CONFIG_FULL_HISTORY_ACK] = True
+    if getattr(args, "sp_acknowledge_server_warning", False):
+        config[silent_payments.CONFIG_SERVER_WARNING_ACK] = True
     if getattr(args, "gap_limit", None) is not None:
         if args.gap_limit <= 0:
             raise AppError("Descriptor gap limit must be positive")
@@ -525,6 +557,8 @@ def _validated_wallet_config(normalized_kind, config):
             config["birthday"] = parse_timestamp(birthday)
     if WALLET_DEPRECATED_CONFIG_KEY in config:
         config[WALLET_DEPRECATED_CONFIG_KEY] = wallet_is_deprecated(config)
+    if normalized_kind == silent_payments.WALLET_KIND:
+        return silent_payments.validate_wallet_config(config)
     has_live_material = bool(config.get("descriptor") or config.get("xpub"))
     descriptor_plan = load_wallet_descriptor_plan_from_config(config) if has_live_material else None
     chain, network = wallet_live_chain_config(config)
@@ -639,6 +673,9 @@ def list_wallets(conn, workspace_ref, profile_ref):
                 "backend": config.get("backend", ""),
                 "addresses": ",".join(normalize_addresses(config.get("addresses"))),
                 "descriptor": descriptor_state,
+                "silent_payment": (
+                    "configured" if has_silent_payment_sync_material(config) else ""
+                ),
                 "gap_limit": config.get("gap_limit", DEFAULT_DESCRIPTOR_GAP_LIMIT if descriptor_state else ""),
                 "source_format": config.get("source_format", ""),
                 "source_file": config.get("source_file", ""),
@@ -664,6 +701,19 @@ WALLET_KIND_CATALOG = {
         "summary": "Bare-address list wallet; useful for receive-only tracking or imports.",
         "config_fields": ["addresses", "backend", "chain", "network", "source_file", "source_format"],
         "requires": ["addresses|source_file"],
+    },
+    "silent-payment": {
+        "summary": "Watch-only BIP352/BIP392 Silent Payments receive source; uses an explicit SP-capable backend or local scanner.",
+        "config_fields": [
+            "sp_descriptor",
+            "sp_scan_start_height",
+            "sp_scan_start_date",
+            "sp_scan_mode",
+            "backend",
+            "chain",
+            "network",
+        ],
+        "requires": ["sp_descriptor", "backend", "scan start"],
     },
     "coreln": {
         "summary": "Core Lightning node wallet; read-only live sync through a coreln backend.",
@@ -768,6 +818,14 @@ def wallet_row_to_dict(row):
         "descriptor": bool(config.get("descriptor")),
         "descriptor_state": descriptor_state,
         "change_descriptor": bool(config.get("change_descriptor")),
+        "silent_payment": {
+            "configured": has_silent_payment_sync_material(config),
+            "material_format": config.get(silent_payments.CONFIG_MATERIAL_FORMAT, ""),
+            "scan_mode": config.get(silent_payments.CONFIG_SCAN_MODE, ""),
+            "scan_start_height": config.get(silent_payments.CONFIG_SCAN_START_HEIGHT),
+            "scan_start_date": config.get(silent_payments.CONFIG_SCAN_START_DATE, ""),
+            "full_history": bool(config.get(silent_payments.CONFIG_FULL_HISTORY)),
+        },
         "gap_limit": config.get("gap_limit"),
         "policy_asset": config.get("policy_asset"),
         "source_file": config.get("source_file", ""),
@@ -788,8 +846,9 @@ def wallet_descriptor_material(config):
     """Return the pasteable stored descriptor material for a wallet config."""
     descriptor = str_or_none(config.get("descriptor"))
     change_descriptor = str_or_none(config.get("change_descriptor"))
+    sp_descriptor = str_or_none(config.get(silent_payments.CONFIG_DESCRIPTOR))
     return "\n".join(
-        value for value in (descriptor, change_descriptor) if value
+        value for value in (descriptor, change_descriptor, sp_descriptor) if value
     )
 
 
@@ -811,6 +870,7 @@ def reveal_wallet_secrets(conn, workspace_ref, profile_ref, wallet_ref):
         "wallet_material": wallet_descriptor_material(config),
         "descriptor": config.get("descriptor"),
         "change_descriptor": config.get("change_descriptor"),
+        "sp_descriptor": config.get(silent_payments.CONFIG_DESCRIPTOR),
         "blinding_key": config.get("blinding_key"),
         "addresses": config.get("addresses"),
         "config": config,
@@ -928,6 +988,7 @@ __all__ = [
     "list_wallet_kinds",
     "list_wallets",
     "load_wallet_descriptor_plan_from_config",
+    "has_silent_payment_sync_material",
     "normalize_addresses",
     "wallet_is_deprecated",
     "normalize_btcpay_payment_method_id",
