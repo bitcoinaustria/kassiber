@@ -2193,6 +2193,11 @@ def record_from_bitcoinrpc_details(txid, details, backend_name):
         category = str(detail.get("category") or "").lower()
         if category in {"orphan", "immature"}:
             continue
+        # Conflicted details (RBF-replaced or double-spent) report negative
+        # confirmations and never re-enter the best chain; booking them would
+        # double-count the disposal next to the confirmed replacement.
+        if int(detail.get("confirmations") or 0) < 0:
+            continue
         amount_total += dec(detail.get("amount"), "0")
         # Bitcoin Core stamps the SAME whole-tx fee on every `send`-category
         # detail of one transaction, so summing per detail double-counts it for a

@@ -1606,6 +1606,43 @@ class SyncBackendsTest(unittest.TestCase):
         # amount = gross_out (0.8) - fee (0.0001), not - 0.0002.
         self.assertAlmostEqual(float(record["amount"]), 0.7999, places=8)
 
+    def test_bitcoinrpc_conflicted_details_are_skipped(self):
+        # An RBF-replaced original stays in the wallet with negative
+        # confirmations next to its confirmed replacement; booking it would
+        # double-count the disposal.
+        record = record_from_bitcoinrpc_details(
+            "77" * 32,
+            [
+                {
+                    "category": "send",
+                    "amount": -0.2,
+                    "fee": -0.00001,
+                    "confirmations": -2,
+                    "time": 1_700_000_000,
+                    "walletconflicts": ["88" * 32],
+                }
+            ],
+            "core",
+        )
+        self.assertIsNone(record)
+
+    def test_bitcoinrpc_mature_coinbase_imports_as_deposit(self):
+        record = record_from_bitcoinrpc_details(
+            "99" * 32,
+            [
+                {
+                    "category": "generate",
+                    "amount": 50.0,
+                    "confirmations": 120,
+                    "blocktime": 1_700_000_000,
+                }
+            ],
+            "core",
+        )
+        self.assertEqual(record["direction"], "inbound")
+        self.assertEqual(record["kind"], "deposit")
+        self.assertAlmostEqual(float(record["amount"]), 50.0, places=8)
+
 
 class _FakeSocket:
     """In-memory socket double for SOCKS5 protocol tests."""
