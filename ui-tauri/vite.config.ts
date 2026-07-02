@@ -345,6 +345,7 @@ interface PendingBridgeRequest {
 
 class DaemonBridgeSupervisor {
   private child: ChildProcessWithoutNullStreams | null = null;
+  private suspendedReason: string | null = null;
   // Seed the data root from the environment so `pnpm dev:demo` (and CI) can
   // point the bridge at a prepared book, e.g. the regtest demo book, without
   // going through the interactive import-project flow.
@@ -382,6 +383,20 @@ class DaemonBridgeSupervisor {
     return this.dataRoot;
   }
 
+  // While suspended the bridge must refuse to serve rather than respawn the
+  // daemon: with dataRoot cleared, a respawn would silently fall back to the
+  // developer's real ~/.kassiber book (background jobs would then run against
+  // personal data mid-reset).
+  suspend(reason: string) {
+    this.suspendedReason = reason;
+    this.shutdown();
+  }
+
+  resume(dataRoot: string | null) {
+    this.suspendedReason = null;
+    this.setDataRoot(dataRoot);
+  }
+
   shutdown() {
     const child = this.child;
     this.child = null;
@@ -408,6 +423,17 @@ class DaemonBridgeSupervisor {
     request: Record<string, unknown>,
     onRecord?: (payload: Record<string, unknown>) => void,
   ) {
+    if (this.suspendedReason) {
+      return Promise.resolve({
+        kind: "error",
+        schema_version: 1,
+        error: {
+          code: "bridge_suspended",
+          message: this.suspendedReason,
+          retryable: true,
+        },
+      } as Record<string, unknown>);
+    }
     const child = this.ensureStarted();
     const requestId =
       typeof request.request_id === "string" && request.request_id
@@ -873,6 +899,8 @@ function runHarnessStep(
   });
 }
 
+let regtestResetInFlight = false;
+
 async function handleBridgeResetRegtest(
   req: IncomingMessage,
   res: ServerResponse,
@@ -890,13 +918,21 @@ async function handleBridgeResetRegtest(
     writeJsonError(res, 403, "bridge_forbidden_origin", "regtest reset bridge only accepts same-origin browser requests");
     return;
   }
+  // Purge + rebuild interleaving corrupts the demo home; one reset at a time.
+  if (regtestResetInFlight) {
+    writeJsonError(res, 409, "regtest_reset_in_progress", "A regtest reset is already running.", true);
+    return;
+  }
+  regtestResetInFlight = true;
 
   const repoRoot = path.resolve(__dirname, "..");
   const dataRoot = path.join(regtestDemoHome(), "data");
   const previousDataRoot = supervisor.getDataRoot();
   try {
-    // Stop the daemon so it releases the book we are about to purge.
-    supervisor.setDataRoot(null);
+    // Stop the daemon and refuse to serve until the reset completes. Merely
+    // clearing the data root is not enough: the next UI query would respawn
+    // the daemon against the developer's real ~/.kassiber book.
+    supervisor.suspend("Regtest demo reset in progress.");
 
     // Full reset = both stores: --purge removes the Docker chain volume and the
     // demo book, then demo-up rebuilds a fresh, consistent full-span book.
@@ -914,7 +950,6 @@ async function handleBridgeResetRegtest(
       );
       return;
     }
-    supervisor.setDataRoot(dataRoot);
     writeJson(res, 200, { ok: true, dataRoot });
   } catch (error) {
     supervisor.setDataRoot(previousDataRoot);
@@ -925,6 +960,12 @@ async function handleBridgeResetRegtest(
       redactBridgeText(error instanceof Error ? error.message : String(error)),
       true,
     );
+  } finally {
+    // Success or failure, resume onto the demo data root — never fall back to
+    // the implicit default root. A failed rebuild then surfaces as an empty
+    // or missing demo book instead of silently reading personal data.
+    supervisor.resume(dataRoot);
+    regtestResetInFlight = false;
   }
 }
 

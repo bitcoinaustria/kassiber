@@ -146,17 +146,25 @@ run_with_bitcoin_core() {
   export KASSIBER_REGTEST_COMPOSE_PROJECT="${KASSIBER_REGTEST_COMPOSE_PROJECT:-$(py -c 'import hashlib, os; print("kassiber-regtest-" + hashlib.sha256(os.getcwd().encode()).hexdigest()[:12])')}"
 
   STARTED_COMPOSE=0
-  if [ -z "${KASSIBER_REGTEST_REUSE_CORE:-}" ] && [ "$provided_core_url" -eq 0 ]; then
-    docker_compose -p "$KASSIBER_REGTEST_COMPOSE_PROJECT" -f dev/regtest/compose.bitcoin.yml up -d
-    STARTED_COMPOSE=1
-  fi
-
   cleanup() {
     if [ "$STARTED_COMPOSE" -eq 1 ] && [ -z "${KASSIBER_REGTEST_KEEP:-}" ]; then
       docker_compose -p "$KASSIBER_REGTEST_COMPOSE_PROJECT" -f dev/regtest/compose.bitcoin.yml down -v
     fi
   }
   trap cleanup EXIT
+
+  if [ -z "${KASSIBER_REGTEST_REUSE_CORE:-}" ] && [ "$provided_core_url" -eq 0 ]; then
+    # Mark before `up` so the EXIT trap also removes a half-created project
+    # (network/volume/container) when startup fails, e.g. on a port collision.
+    STARTED_COMPOSE=1
+    if ! docker_compose -p "$KASSIBER_REGTEST_COMPOSE_PROJECT" -f dev/regtest/compose.bitcoin.yml up -d; then
+      echo "Failed to start the regtest bitcoind container." >&2
+      echo "If port ${KASSIBER_REGTEST_RPC_PORT} is already taken (e.g. by the demo-up node)," >&2
+      echo "stop it with './scripts/integration-harness.sh demo-down' or pick another port" >&2
+      echo "via KASSIBER_REGTEST_RPC_PORT=18444 before running this lane." >&2
+      exit 1
+    fi
+  fi
 
   wait_for_core
   "$@"
