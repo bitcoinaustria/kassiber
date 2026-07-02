@@ -70,7 +70,7 @@ UpdateOutputInventory = Callable[
     ],
     Mapping[str, Any],
 ]
-SourceOverlapPreflight = Callable[[WalletRow, "WalletSyncState"], None]
+SourceOverlapPreflight = Callable[[WalletRow, "WalletSyncState"], "WalletSyncState | None"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -205,6 +205,66 @@ def _backend_sync_failure_error(
         details=details,
         retryable=True,
     )
+
+
+def _overlap_filtered_skip_outcome(
+    wallet: WalletRow,
+    *,
+    started: float,
+    force_full: bool,
+    original_target_count: int,
+) -> Mapping[str, Any]:
+    filtered_count = max(0, int(original_target_count or 0))
+    return {
+        "wallet": _wallet_label(wallet),
+        "status": "skipped",
+        "reason": "all sync targets are already covered by canonical wallet sources",
+        "target_count": 0,
+        "filtered_overlap_targets": filtered_count,
+        "elapsed_ms": int((time.monotonic() - started) * 1000),
+        **({"force_full": True} if force_full else {}),
+    }
+
+
+def _apply_source_overlap_preflight(
+    wallet: WalletRow,
+    discovery: WalletBackendDiscovery,
+    source_overlap_preflight: SourceOverlapPreflight | None,
+) -> WalletBackendDiscovery:
+    if (
+        source_overlap_preflight is None
+        or discovery.skip_outcome is not None
+        or discovery.sync_state is None
+    ):
+        return discovery
+    original_target_count = len(discovery.sync_state.targets)
+    filtered_state = source_overlap_preflight(wallet, discovery.sync_state)
+    if filtered_state is None:
+        filtered_state = discovery.sync_state
+    if filtered_state is not discovery.sync_state:
+        discovery = replace(discovery, sync_state=filtered_state)
+    if not filtered_state.targets:
+        return replace(
+            discovery,
+            sync_state=None,
+            kind=discovery.kind,
+            skip_outcome=_overlap_filtered_skip_outcome(
+                wallet,
+                started=discovery.started,
+                force_full=discovery.force_full,
+                original_target_count=original_target_count,
+            ),
+        )
+    return discovery
+
+
+def _prefetched_overlap_payload_present(
+    normalized_records: Sequence[BackendRecord],
+    adapter_meta: Mapping[str, Any],
+) -> bool:
+    if normalized_records:
+        return True
+    return bool(adapter_meta)
 
 
 def _emit_wallet_sync_progress(wallet: WalletRow, payload: Mapping[str, Any]) -> None:
@@ -457,7 +517,11 @@ def fetch_wallet_backend(
         and discovery.skip_outcome is None
         and discovery.sync_state is not None
     ):
-        source_overlap_preflight(wallet, discovery.sync_state)
+        discovery = _apply_source_overlap_preflight(
+            wallet,
+            discovery,
+            source_overlap_preflight,
+        )
     return fetch_wallet_backend_from_discovery(wallet, hooks, discovery)
 
 
@@ -478,7 +542,7 @@ def sync_wallet_from_backend(
     # AppError is re-raised here so it surfaces under this wallet's own savepoint.
     if prefetched is None:
         preflight = (
-            (lambda preflight_wallet, sync_state: source_overlap.raise_for_sync_source_overlap(
+            (lambda preflight_wallet, sync_state: source_overlap.filter_sync_state_for_canonical_owner(
                 conn,
                 profile,
                 preflight_wallet,
@@ -508,12 +572,38 @@ def sync_wallet_from_backend(
     normalized_records = fetch.normalized_records
     kind = fetch.kind
     adapter_meta = dict(fetch.adapter_meta or {})
+    if conn is not None and sync_state is not None:
+        filtered_sync_state = source_overlap.filter_sync_state_for_canonical_owner(
+            conn,
+            profile,
+            wallet,
+            sync_state,
+        )
+        if filtered_sync_state is not sync_state:
+            if _prefetched_overlap_payload_present(normalized_records, adapter_meta):
+                raise AppError(
+                    f"Wallet source overlap changed during refresh for {_wallet_label(wallet)}",
+                    code="source_overlap_retry",
+                    hint=(
+                        "Retry refresh so Kassiber can filter overlapping sync targets before "
+                        "contacting the backend and importing history."
+                    ),
+                    retryable=True,
+                )
+            if not filtered_sync_state.targets:
+                return dict(
+                    _overlap_filtered_skip_outcome(
+                        wallet,
+                        started=started,
+                        force_full=force_full,
+                        original_target_count=len(sync_state.targets),
+                    )
+                )
+            sync_state = filtered_sync_state
     observed_utxos = adapter_meta.pop("utxos", None)
     retracted_external_ids = _string_list(
         adapter_meta.pop("bitcoinrpc_retracted_txids", [])
     )
-    if conn is not None:
-        source_overlap.raise_for_sync_source_overlap(conn, profile, wallet, sync_state)
     retraction_outcome: SyncOutcome | None = None
     if retracted_external_ids and hooks.retract_records is not None:
         retraction_outcome = hooks.retract_records(
@@ -772,7 +862,11 @@ def prefetch_wallets_backend(
             ):
                 continue
             try:
-                source_overlap_preflight(wallet, discovery.sync_state)
+                discoveries[wallet_id] = _apply_source_overlap_preflight(
+                    wallet,
+                    discovery,
+                    source_overlap_preflight,
+                )
             except AppError as exc:
                 discoveries[wallet_id] = exc
 

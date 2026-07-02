@@ -11,7 +11,6 @@ from kassiber.core.sync import WalletBackendFetch, WalletSyncHooks, WalletSyncSt
 from kassiber.core.ui_snapshot import build_report_blockers_snapshot
 from kassiber.core.wallets import normalize_addresses
 from kassiber.db import open_db, set_setting
-from kassiber.errors import AppError
 from kassiber.fingerprints import make_transaction_fingerprint
 from kassiber.msat import btc_to_msat
 from kassiber.wallet_descriptors import derive_descriptor_targets, load_descriptor_plan
@@ -19,6 +18,7 @@ from kassiber.wallet_descriptors import derive_descriptor_targets, load_descript
 
 ADDR_A = "bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu"
 ADDR_B = "bc1q8c6fshw2dlwun7ekn9qwf37cu2rn755upcp6el"
+ADDR_C = "bc1qnjg0jd8228aq7egyzacy8cys3knf9xvrerkf9g"
 _MNEMONIC = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
 
 
@@ -296,7 +296,70 @@ class SourceOverlapTests(unittest.TestCase):
             finally:
                 conn.close()
 
-    def test_sync_still_blocks_descriptor_descriptor_overlap(self):
+    def test_sync_filters_address_list_overlap_but_keeps_unique_targets(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-source-overlap-") as tmp:
+            conn = open_db(Path(tmp) / "data")
+            try:
+                profile = _seed_book(conn)
+                _wallet(
+                    conn,
+                    "desc",
+                    "Descriptor",
+                    "descriptor",
+                    _descriptor_config(gap_limit=1),
+                )
+                address_wallet = _wallet(
+                    conn,
+                    "addr",
+                    "Address list",
+                    "address",
+                    {
+                        "addresses": [ADDR_A, ADDR_C],
+                        "chain": "bitcoin",
+                        "network": "mainnet",
+                    },
+                )
+                targets = [
+                    {
+                        "address": ADDR_A,
+                        "script_pubkey": _script(ADDR_A),
+                        "chain": "bitcoin",
+                        "network": "mainnet",
+                        "branch_label": "address",
+                        "address_index": 0,
+                    },
+                    {
+                        "address": ADDR_C,
+                        "script_pubkey": _script(ADDR_C),
+                        "chain": "bitcoin",
+                        "network": "mainnet",
+                        "branch_label": "address",
+                        "address_index": 1,
+                    },
+                ]
+                sync_state = WalletSyncState(
+                    chain="bitcoin",
+                    network="mainnet",
+                    descriptor_plan=None,
+                    policy_asset_id="",
+                    targets=targets,
+                    tracked_scripts={target["script_pubkey"]: target for target in targets},
+                    history_cache={},
+                )
+
+                filtered = source_overlap.filter_sync_state_for_canonical_owner(
+                    conn,
+                    profile,
+                    address_wallet,
+                    sync_state,
+                )
+
+                self.assertEqual([target["address"] for target in filtered.targets], [ADDR_C])
+                self.assertEqual(set(filtered.tracked_scripts), {_script(ADDR_C)})
+            finally:
+                conn.close()
+
+    def test_sync_skips_fully_overlapped_descriptor_before_backend_fetch(self):
         with tempfile.TemporaryDirectory(prefix="kassiber-source-overlap-") as tmp:
             conn = open_db(Path(tmp) / "data")
             try:
@@ -332,31 +395,33 @@ class SourceOverlapTests(unittest.TestCase):
                     tracked_scripts={target["script_pubkey"]: target},
                     history_cache={},
                 )
-                fetch = WalletBackendFetch(
-                    backend={"name": "default", "kind": "esplora", "url": "https://example.invalid"},
-                    sync_state=sync_state,
-                    normalized_records=[{"id": "would-insert"}],
-                    adapter_meta={},
-                    kind="esplora",
-                    started=0,
-                    force_full=False,
-                )
                 inserted = []
+                adapter_calls = []
+
+                def adapter(_backend, _wallet, _sync_state):
+                    adapter_calls.append(True)
+                    return [{"id": "would-insert"}], {}
+
                 hooks = WalletSyncHooks(
                     import_file=lambda *args: {},
                     insert_records=lambda *args: inserted.append(True) or {},
-                    resolve_backend=lambda *args: {},
+                    resolve_backend=lambda *args: {
+                        "name": "default",
+                        "kind": "esplora",
+                        "url": "https://example.invalid",
+                    },
                     resolve_sync_state=lambda *args: sync_state,
                     normalize_addresses=normalize_addresses,
-                    backend_adapters={},
+                    backend_adapters={"esplora": adapter},
                 )
-                with self.assertRaises(AppError) as raised:
-                    sync_wallet_from_backend(conn, {}, profile, descriptor, hooks, prefetched=fetch)
-                self.assertEqual(raised.exception.code, "source_overlap")
+
+                outcome = sync_wallet_from_backend(conn, {}, profile, descriptor, hooks)
+
+                self.assertEqual(outcome["status"], "skipped")
+                self.assertEqual(outcome["target_count"], 0)
+                self.assertEqual(outcome["filtered_overlap_targets"], 1)
+                self.assertEqual(adapter_calls, [])
                 self.assertEqual(inserted, [])
-                self.assertNotIn(_script(ADDR_A), json.dumps(raised.exception.details))
-                self.assertNotIn("max_address_index", json.dumps(raised.exception.details))
-                self.assertNotIn('"branch"', json.dumps(raised.exception.details))
             finally:
                 conn.close()
 
