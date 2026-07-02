@@ -43,6 +43,7 @@ import {
   type NetworkStatus,
 } from "@/lib/networkStatus";
 import { PENDING_SETTINGS_BACKEND_EDIT_KEY } from "./settingsSections";
+import { visibleConnectionBackends } from "./backendConnectionRows";
 import {
   backendProtocolLabel,
   backendRowToSettingsBackend,
@@ -151,26 +152,6 @@ function connectionRowsFromBackends(
     seen.add(key);
     return true;
   });
-}
-
-function isRegtestBackend(backend: Backend) {
-  return ["regtest", "elementsregtest"].includes(
-    String(backend.network ?? "").toLowerCase(),
-  );
-}
-
-export function visibleConnectionBackends(savedBackends: Backend[]): Backend[] {
-  const activeRegtestBackend = savedBackends.some(
-    (backend) => backend.isDefault && isRegtestBackend(backend),
-  );
-  if (!activeRegtestBackend) return savedBackends;
-
-  return savedBackends.filter(
-    (backend) =>
-      isRegtestBackend(backend) ||
-      backend.isDefault ||
-      (backend.walletRefs?.length ?? 0) > 0,
-  );
 }
 
 function connectionRowFromBackend(

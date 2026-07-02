@@ -32,11 +32,13 @@ export type ConnectionKind =
   | "phoenix"
   | "custom"
   | "csv"
-  | "bip329";
+  | "bip329"
+  | "backend";
 
 export interface Connection {
   id: string;
   kind: ConnectionKind;
+  role?: "wallet" | "backend";
   /** Wallet chain ("bitcoin" | "liquid") from the daemon snapshot. */
   chain?: string | null;
   label: string;
@@ -54,6 +56,12 @@ export interface Connection {
   syncSource?: string;
   sourceFormat?: string;
   deprecated?: boolean;
+  backendId?: string;
+  backendKind?: string | null;
+  endpoint?: string | null;
+  isDefaultBackend?: boolean;
+  settingsHash?: string;
+  walletRefs?: string[];
   transactionCount?: number;
   addresses?: number;
   gap?: number;

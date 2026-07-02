@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { visibleConnectionBackends } from "./NetworkStatusIndicator";
+import {
+  regtestBackendConnections,
+  visibleConnectionBackends,
+} from "./backendConnectionRows";
 import type { Backend } from "./settings/SettingsModel";
 
 function backend(overrides: Partial<Backend>): Backend {
@@ -22,7 +25,7 @@ function backend(overrides: Partial<Backend>): Backend {
 }
 
 describe("visibleConnectionBackends", () => {
-  it("hides unused public defaults when the active backend is regtest", () => {
+  it("hides unused public defaults when regtest backends are configured", () => {
     const rows = visibleConnectionBackends([
       backend({
         id: "core-regtest",
@@ -59,6 +62,34 @@ describe("visibleConnectionBackends", () => {
     expect(rows.map((row) => row.id)).toEqual([
       "core-regtest",
       "liquid-mempool-regtest",
+    ]);
+  });
+
+  it("maps local regtest backends to first-party connection rows", () => {
+    const rows = regtestBackendConnections([
+      backend({
+        id: "bitcoin-mempool-regtest",
+        name: "Bitcoin Mempool Regtest",
+        kind: "mempool",
+        network: "regtest",
+        url: "http://127.0.0.1:18555/api",
+      }),
+      backend({
+        id: "mempool",
+        name: "mempool",
+        url: "https://mempool.bitcoin-austria.at/api",
+      }),
+    ]);
+
+    expect(rows).toMatchObject([
+      {
+        id: "backend:bitcoin-mempool-regtest",
+        role: "backend",
+        kind: "backend",
+        label: "Bitcoin Mempool Regtest",
+        endpoint: "http://127.0.0.1:18555/api",
+        settingsHash: "bitcoin",
+      },
     ]);
   });
 

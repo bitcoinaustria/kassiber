@@ -868,7 +868,9 @@
     },
     "backendSettings": {
       "line1": "Diese Verbindung ist als Backend-Endpunkt in den Einstellungen konfiguriert.",
-      "line2": "Das Wallet-Setup kann dieses Backend dann namentlich auswählen, ohne Endpunkt-URLs oder Zugangsdaten im Verbindungsdialog offenzulegen."
+      "line2": "Das Wallet-Setup kann dieses Backend dann namentlich auswählen, ohne Endpunkt-URLs oder Zugangsdaten im Verbindungsdialog offenzulegen.",
+      "loading": "Konfigurierte Backends werden geladen...",
+      "localTitle": "Lokale Regtest-Infrastruktur"
     },
     "notWired": "Das dedizierte Setup ist noch nicht verdrahtet.",
     "validation": {

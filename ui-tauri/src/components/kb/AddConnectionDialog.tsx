@@ -56,6 +56,14 @@ import {
   detectWalletMaterial,
   scriptTypesFromDetectionPayload,
 } from "@/lib/walletMaterialFormat";
+import {
+  regtestBackendConnections,
+} from "@/components/kb/backendConnectionRows";
+import { PENDING_SETTINGS_BACKEND_EDIT_KEY } from "./settingsSections";
+import {
+  backendRowToSettingsBackend,
+  type BackendSettingsData,
+} from "./settings/SettingsModel";
 
 
 async function fileToBase64(file: File): Promise<string> {
@@ -755,6 +763,9 @@ export function AddConnectionDialog({
     (state) => state.setDeferredConnectionSetup,
   );
   const backendOptions = useDaemon<BackendOptionsData>("ui.backends.options");
+  const backendSettingsQuery = useDaemon<BackendSettingsData>(
+    "ui.backends.settings.list",
+  );
   const walletsList = useDaemon<WalletListData>("ui.wallets.list");
   const createWallet =
     useDaemonMutation<{ wallet: { label: string } }>("ui.wallets.create");
@@ -963,6 +974,15 @@ export function AddConnectionDialog({
         : descriptorBackendOptions;
   const selectedBackend = selectedBackendOptions.find(
     (backend) => backend.name === form.backend,
+  );
+  const configuredLocalBackends = React.useMemo(
+    () =>
+      regtestBackendConnections(
+        backendSettingsQuery.data?.data?.backends.map(
+          backendRowToSettingsBackend,
+        ) ?? [],
+      ),
+    [backendSettingsQuery.data?.data?.backends],
   );
   const selectedBackendOptionKey = selectedBackendOptions
     .map((backend) => backend.name)
@@ -1290,6 +1310,15 @@ export function AddConnectionDialog({
     setDeferredConnectionSetup(intent);
     onOpenChange(false);
     void navigate({ to: "/settings", hash: "backends" });
+  };
+
+  const openConfiguredBackendSettings = (
+    backendId: string,
+    settingsHash?: string,
+  ) => {
+    window.sessionStorage.setItem(PENDING_SETTINGS_BACKEND_EDIT_KEY, backendId);
+    onOpenChange(false);
+    void navigate({ to: "/settings", hash: settingsHash ?? "bitcoin" });
   };
 
   const btcpayInstanceArgs = () => {
@@ -4230,9 +4259,45 @@ export function AddConnectionDialog({
 
     if (setupKind === "backend-settings") {
       return (
-        <div className="space-y-2 rounded-md border bg-background p-3 text-sm text-muted-foreground">
+        <div className="space-y-3 rounded-md border bg-background p-3 text-sm text-muted-foreground">
           <p>{t("add.backendSettings.line1")}</p>
           <p>{t("add.backendSettings.line2")}</p>
+          {backendSettingsQuery.isLoading ? (
+            <p className="text-xs">{t("add.backendSettings.loading")}</p>
+          ) : configuredLocalBackends.length > 0 ? (
+            <div className="space-y-2">
+              <p className="text-xs font-medium text-foreground">
+                {t("add.backendSettings.localTitle")}
+              </p>
+              <div className="grid gap-1.5">
+                {configuredLocalBackends.map((backend) => (
+                  <button
+                    key={backend.id}
+                    type="button"
+                    className="flex min-w-0 items-center justify-between gap-3 rounded-md border bg-muted/30 px-3 py-2 text-left hover:bg-muted/55 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                    onClick={() =>
+                      openConfiguredBackendSettings(
+                        backend.backendId ?? backend.id,
+                        backend.settingsHash,
+                      )
+                    }
+                  >
+                    <span className="min-w-0">
+                      <span className="block truncate text-sm font-medium text-foreground">
+                        {backend.label}
+                      </span>
+                      <span className="block truncate font-mono text-xs text-muted-foreground">
+                        {backend.endpoint}
+                      </span>
+                    </span>
+                    <span className="shrink-0 text-xs text-muted-foreground">
+                      {backend.syncSource}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : null}
         </div>
       );
     }

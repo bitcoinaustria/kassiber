@@ -5,8 +5,11 @@ import type { Connection, ConnectionKind, ConnectionStatus } from "@/mocks/seed"
  * descriptor wallet reads "Liquid", not "On-chain".
  */
 export function connectionCategoryLabel(
-  connection: Pick<Connection, "kind" | "chain">,
+  connection: Pick<Connection, "kind" | "chain" | "role">,
 ): string {
+  if (connection.role === "backend" || connection.kind === "backend") {
+    return "Infrastructure";
+  }
   if (connection.chain === "liquid") return "Liquid";
   return connectionKindCategoryLabels[connection.kind];
 }
@@ -34,6 +37,7 @@ export const connectionKindCategoryLabels: Record<ConnectionKind, string> = {
   custom: "Custom",
   csv: "CSV",
   bip329: "BIP329",
+  backend: "Infrastructure",
 };
 
 export const connectionKindLabels: Record<ConnectionKind, string> = {
@@ -59,10 +63,16 @@ export const connectionKindLabels: Record<ConnectionKind, string> = {
   custom: "Custom",
   csv: "CSV",
   bip329: "BIP329",
+  backend: "Backend",
 };
 
 export type ConnectionTypeInput = Pick<Connection, "kind"> &
-  Partial<Pick<Connection, "paymentMethodId" | "sourceFormat" | "syncMode" | "syncSource">>;
+  Partial<
+    Pick<
+      Connection,
+      "paymentMethodId" | "sourceFormat" | "syncMode" | "syncSource" | "role"
+    >
+  >;
 
 const sourceFormatLabels: Record<string, string> = {
   csv: "Generic CSV",
@@ -79,6 +89,9 @@ const sourceFormatLabels: Record<string, string> = {
 };
 
 export function connectionTypeLabel(connection: ConnectionTypeInput): string {
+  if (connection.role === "backend" || connection.kind === "backend") {
+    return connection.syncSource?.trim() || "Backend endpoint";
+  }
   const sourceFormat = connection.sourceFormat?.trim();
   if (sourceFormat) {
     return sourceFormatLabels[sourceFormat] ?? sourceFormat;

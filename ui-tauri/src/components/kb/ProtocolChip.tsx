@@ -28,6 +28,7 @@ const PROTOCOL_LABEL_KEYS: Record<ConnectionKind, string> = {
   custom: "custom",
   csv: "file",
   bip329: "labels",
+  backend: "custom",
 };
 
 export function ProtocolChip({ kind }: { kind: ConnectionKind }) {

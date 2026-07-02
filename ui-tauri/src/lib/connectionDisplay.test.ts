@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   connectionAssetIconKind,
   connectionAssetLabel,
+  connectionCategoryLabel,
   connectionTypeLabel,
 } from "./connectionDisplay";
 
@@ -50,5 +51,19 @@ describe("connection display", () => {
         sourceFormat: "bullbitcoin_wallet_csv",
       }),
     ).toBe("Bull Bitcoin Wallet CSV");
+    expect(
+      connectionTypeLabel({
+        kind: "backend",
+        role: "backend",
+        syncSource: "Electrum / Fulcrum",
+      }),
+    ).toBe("Electrum / Fulcrum");
+    expect(
+      connectionCategoryLabel({
+        kind: "backend",
+        role: "backend",
+        chain: "liquid",
+      }),
+    ).toBe("Infrastructure");
   });
 });

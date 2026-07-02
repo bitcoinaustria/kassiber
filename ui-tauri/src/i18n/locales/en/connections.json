@@ -868,7 +868,9 @@
     },
     "backendSettings": {
       "line1": "This connection is configured as a backend endpoint in Settings.",
-      "line2": "Wallet setup can then select that backend by name without exposing endpoint URLs or credentials in the connection modal."
+      "line2": "Wallet setup can then select that backend by name without exposing endpoint URLs or credentials in the connection modal.",
+      "loading": "Loading configured backends...",
+      "localTitle": "Local regtest infrastructure"
     },
     "notWired": "Dedicated setup is not wired yet.",
     "validation": {
