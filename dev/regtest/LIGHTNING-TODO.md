@@ -92,10 +92,16 @@ re-research.
      private channels surface `peer_pubkey=None`;
    - a Boltz-shaped submarine swap staged on-chain pairs with the LN leg via
      `htlc_parser` (cross-asset swap coverage, extends the existing
-     `swap_bridges`). The first upstream-Docker guard now lives in
+     `swap_bridges`). The upstream-Docker guard now lives in
      `./scripts/integration-harness.sh boltz-liquid`: it starts or reuses
-     `BoltzExchange/regtest` and verifies Liquid-capable Boltz pair metadata
-     against the demo's Boltz-marked BTC -> L-BTC bridge.
+     `BoltzExchange/regtest`, verifies Liquid-capable Boltz pair metadata
+     against the demo's Boltz-marked BTC -> L-BTC bridge, executes an
+     L-BTC -> BTC Lightning submarine swap, imports Liquid/LN rows generated
+     from the observed txids/hash/amounts into Kassiber, and asserts the swap
+     is paired while a separate Liquid payment remains unpaired.
+   - remaining Boltz live work: execute reverse and chain swaps through Boltz's
+     official client/SDK so Kassiber does not reimplement claim/refund signing
+     and recovery state machines in the test harness.
 7. **macOS caveat to verify early**: bind-mounted unix sockets do not work
    through Docker Desktop's file sharing — the local `rpc_file` mode
    probably cannot cross the container boundary on macOS. The `docker

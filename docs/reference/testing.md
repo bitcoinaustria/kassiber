@@ -11,7 +11,7 @@ regtest infrastructure.
 | FAST | `./scripts/integration-harness.sh fast` | no | Replays recorded regtest tapes through the real sync adapter, import, journal, report, and XLSX export path with `KASSIBER_NO_EGRESS=1`. Includes a baseline watch-only tape and an edge-case tape (multi-address wallet, immature vs. mature coinbase, dust, RBF-replaced conflict pair, same-wallet self-spend, mempool-pending receipt). |
 | SLOW | `./scripts/integration-harness.sh bitcoin-core` | yes, unless reusing a node | Starts or reuses the regtest Compose stack (Bitcoin Core, Elements, Bitcoin Fulcrum, plus local mempool/esplora-compatible loopback endpoints), creates real wallets and transactions (including coinbase maturity and a watched receive), then drives Kassiber sync, pricing, journal, report, and export. |
 | DEMO | `./scripts/integration-harness.sh demo-full` | yes, unless reusing a node | Builds the checked-in `full-accounting-v1` scenario: eleven Kassiber wallets including multi-address Bitcoin wallets, rotation targets, a mining wallet, and deterministic elementsregtest/LBTC import wallets; real regtest acquisitions/disposals/transfers, operating-expense disposals with deterministic amount/fee variation, deprecated rotated-out wallets, batched, consolidation, dust, RBF-replacement, and mempool-pending edge cases, local Bitcoin/Liquid Electrum and mempool-compatible backend rows, a multi-year stress ledger, CoinJoin- and PayJoin-shaped collaborative transactions, swap/peg bridge pairs, loan marks, bundled real historical BTC/EUR pricing, journals, reports, and transaction exports. |
-| BOLTZ | `./scripts/integration-harness.sh boltz-liquid` | yes, upstream Boltz stack | Starts or reuses Boltz's official [`BoltzExchange/regtest`](https://github.com/BoltzExchange/regtest) Docker environment, probes the local Boltz API for Liquid-capable submarine, reverse, and BTC -> L-BTC chain-swap pairs, and verifies the demo scenario's Boltz-marked bridge is backed by live regtest pair metadata. |
+| BOLTZ | `./scripts/integration-harness.sh boltz-liquid` | yes, upstream Boltz stack | Starts or reuses Boltz's official [`BoltzExchange/regtest`](https://github.com/BoltzExchange/regtest) Docker environment, probes the local Boltz API for Liquid-capable submarine, reverse, and BTC -> L-BTC chain-swap pairs, executes a Liquid on-chain payment plus an L-BTC -> BTC Lightning submarine swap, builds Kassiber import rows from the observed txids/hash/amounts, and verifies the swap pairs while the plain Liquid payment stays unpaired. |
 
 The slow lane is opt-in with `KASSIBER_INTEGRATION=1`; normal unit gates do not
 start Docker. To reuse an existing regtest node instead of Compose, set an
@@ -79,13 +79,32 @@ KASSIBER_BOLTZ_REGTEST_AUTO_CLONE=1 ./scripts/integration-harness.sh boltz-liqui
 ```
 
 Set `KASSIBER_BOLTZ_REGTEST_REUSE=1` when the Boltz stack is already running,
-or `KASSIBER_BOLTZ_REGTEST_KEEP=1` to leave it running after the probe. The
-lane intentionally does not hand-roll a Boltz swap executor in Kassiber: Boltz
-warns that direct API integrations should use an official SDK/client because
-the clients own key generation, Taproot/MuSig signing, and recovery flows. This
-first guard therefore proves local Docker/API compatibility and pair coverage;
-full executed Liquid swap fixtures can build on the same lane with an official
-client.
+or `KASSIBER_BOLTZ_REGTEST_KEEP=1` to leave it running after the test. The
+lane uses `docker` directly when available and falls back to passwordless
+`sudo docker`, matching the other regtest lanes. It uses Boltz's documented v2
+API for the low-signing happy path that Kassiber needs to account for today:
+
+- `POST /v2/swap/submarine` with `from=L-BTC`, `to=BTC`, a real LND invoice,
+  and a refund pubkey.
+- `elements-cli-sim-client sendtoaddress` to fund the returned Liquid lockup
+  address, then local Elements mining.
+- a separate `elements-cli-sim-client sendtoaddress` payment to prove ordinary
+  Liquid outflows stay payments and are not matched as swaps.
+- a temporary Kassiber book with a Liquid ledger import and Lightning import
+  generated from the observed txids, payment hash, and amounts, followed by
+  `transfers suggest` and `transfers bulk-pair` assertions.
+
+The same lane still verifies reverse and BTC -> L-BTC chain-swap pair metadata
+because those flows require client-side claim/refund transaction construction.
+They should move from metadata coverage to executed fixtures once the harness
+delegates that signing/recovery state machine to Boltz's official client or SDK.
+
+Boltz's upstream Compose file binds bitcoind RPC to host port `18443`, the same
+default used by Kassiber's own regtest lane. If that port is already occupied,
+the harness writes a temporary Compose file with the host-only binding changed
+to `19443 -> 18443`; internal Boltz services still use `bitcoind:18443`, and
+the upstream checkout stays untouched. Set `KASSIBER_BOLTZ_BITCOIN_RPC_PORT=<port>`
+to choose a different host binding.
 
 ## Full Accounting Demo
 

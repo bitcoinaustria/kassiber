@@ -9,6 +9,8 @@ PYTHON_BIN="${PYTHON_BIN:-python3}"
 RUNNER=()
 STARTED_COMPOSE=0
 STARTED_BOLTZ=0
+BOLTZ_COMPOSE_FILE=""
+BOLTZ_COMPOSE_TEMP=""
 SUDO_DOCKER_ENV=KASSIBER_REGTEST_RPC_USER,KASSIBER_REGTEST_RPC_PASSWORD,KASSIBER_REGTEST_RPC_AUTH,KASSIBER_REGTEST_RPC_PORT,KASSIBER_REGTEST_ELEMENTS_RPC_PORT,KASSIBER_REGTEST_BITCOIND_IMAGE,KASSIBER_REGTEST_ELEMENTSD_IMAGE,KASSIBER_REGTEST_FULCRUM_IMAGE,KASSIBER_REGTEST_BACKEND_STACK_IMAGE,KASSIBER_REGTEST_BITCOIN_ELECTRUM_PORT,KASSIBER_REGTEST_BITCOIN_MEMPOOL_PORT,KASSIBER_REGTEST_LIQUID_ELECTRUM_PORT,KASSIBER_REGTEST_LIQUID_MEMPOOL_PORT
 SUDO_DOCKER=(sudo -n --preserve-env="$SUDO_DOCKER_ENV" docker)
 
@@ -460,6 +462,96 @@ wait_for_boltz_liquid() {
   done
 }
 
+host_port_in_use() {
+  KASSIBER_BOLTZ_HOST_PORT="$1" py - <<'PY'
+import os
+import socket
+import sys
+
+port = int(os.environ["KASSIBER_BOLTZ_HOST_PORT"])
+sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+try:
+    sock.bind(("127.0.0.1", port))
+except OSError:
+    sys.exit(0)
+finally:
+    sock.close()
+sys.exit(1)
+PY
+}
+
+boltz_patch_host_ports() {
+  local dir="$1"
+  local port="${KASSIBER_BOLTZ_BITCOIN_RPC_PORT:-}"
+  BOLTZ_COMPOSE_FILE="$dir/docker-compose.yml"
+  if [ -z "$port" ] && host_port_in_use 18443; then
+    port=19443
+  fi
+  if [ -z "$port" ] || [ "$port" = "18443" ]; then
+    return 0
+  fi
+  BOLTZ_COMPOSE_TEMP="$(mktemp "${TMPDIR:-/tmp}/kassiber-boltz-compose.XXXXXX.yml")"
+  KASSIBER_BOLTZ_REGTEST_DIR="$dir" \
+  KASSIBER_BOLTZ_BITCOIN_RPC_PORT="$port" \
+  KASSIBER_BOLTZ_COMPOSE_TEMP="$BOLTZ_COMPOSE_TEMP" \
+    py - <<'PY'
+import os
+import re
+from pathlib import Path
+
+source = Path(os.environ["KASSIBER_BOLTZ_REGTEST_DIR"]) / "docker-compose.yml"
+target = Path(os.environ["KASSIBER_BOLTZ_COMPOSE_TEMP"])
+text = source.read_text(encoding="utf-8")
+patched = re.sub(
+    r"(?m)^(\s*-\s*)(\d+):18443\s*$",
+    rf"\g<1>{os.environ['KASSIBER_BOLTZ_BITCOIN_RPC_PORT']}:18443",
+    text,
+    count=1,
+)
+target.write_text(patched, encoding="utf-8")
+PY
+  BOLTZ_COMPOSE_FILE="$BOLTZ_COMPOSE_TEMP"
+  echo "Boltz regtest host bitcoind RPC port mapped to $port -> 18443 to avoid local conflicts."
+}
+
+boltz_docker_compose() {
+  local dir="$1"
+  shift
+  local uid gid
+  uid="$(id -u)"
+  gid="$(id -g)"
+  if [ -z "$BOLTZ_COMPOSE_FILE" ]; then
+    BOLTZ_COMPOSE_FILE="$dir/docker-compose.yml"
+  fi
+  if docker info >/dev/null 2>&1; then
+    env UID="$uid" GID="$gid" docker compose \
+      --project-directory "$dir" \
+      -f "$BOLTZ_COMPOSE_FILE" \
+      "$@"
+  elif sudo -n docker info >/dev/null 2>&1; then
+    export KASSIBER_BOLTZ_DOCKER_CMD="${KASSIBER_BOLTZ_DOCKER_CMD:-sudo -n docker}"
+    sudo -n env UID="$uid" GID="$gid" docker compose \
+      --project-directory "$dir" \
+      -f "$BOLTZ_COMPOSE_FILE" \
+      "$@"
+  else
+    echo "Docker access is required for the Boltz Liquid lane." >&2
+    echo "Add the current user to the docker group or allow passwordless sudo docker." >&2
+    exit 2
+  fi
+}
+
+boltz_regtest_start() {
+  local dir="$1"
+  boltz_docker_compose "$dir" down --volumes
+  boltz_docker_compose "$dir" up --remove-orphans -d
+}
+
+boltz_regtest_stop() {
+  local dir="$1"
+  boltz_docker_compose "$dir" down --volumes --remove-orphans -t 0
+}
+
 run_boltz_liquid() {
   local dir
   dir="$(boltz_regtest_dir)"
@@ -469,15 +561,21 @@ run_boltz_liquid() {
 
   cleanup_boltz() {
     if [ "$STARTED_BOLTZ" -eq 1 ] && [ -z "${KASSIBER_BOLTZ_REGTEST_KEEP:-}" ]; then
-      (cd "$dir" && ./stop.sh)
+      boltz_regtest_stop "$dir"
+    fi
+    if [ -n "$BOLTZ_COMPOSE_TEMP" ]; then
+      rm -f "$BOLTZ_COMPOSE_TEMP"
     fi
   }
   trap cleanup_boltz EXIT
 
   if [ -z "${KASSIBER_BOLTZ_REGTEST_REUSE:-}" ]; then
     ensure_boltz_regtest_dir "$dir"
+    boltz_patch_host_ports "$dir"
     STARTED_BOLTZ=1
-    (cd "$dir" && ./start.sh)
+    boltz_regtest_start "$dir"
+  elif ! docker info >/dev/null 2>&1 && sudo -n docker info >/dev/null 2>&1; then
+    export KASSIBER_BOLTZ_DOCKER_CMD="${KASSIBER_BOLTZ_DOCKER_CMD:-sudo -n docker}"
   fi
 
   wait_for_boltz_liquid
