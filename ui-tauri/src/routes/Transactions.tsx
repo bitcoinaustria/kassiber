@@ -32,7 +32,6 @@ interface OverviewSnapshot {
 const TRANSACTIONS_PAGE_LIMIT = 100;
 const TRANSACTIONS_WORKBENCH_LIMIT = 500;
 const TRANSACTIONS_WORKBENCH_PAGE_CAP = 4;
-const TRANSACTIONS_HISTORY_BOUNDS_LIMIT = 1;
 
 export function Transactions() {
   const { t } = useTranslation("transactions");
@@ -91,12 +90,6 @@ export function Transactions() {
     },
     (lastPage) => lastPage.data?.nextCursor ?? undefined,
   );
-  const historyBoundsQuery = useDaemon<TransactionsList>("ui.transactions.list", {
-    limit: TRANSACTIONS_HISTORY_BOUNDS_LIMIT,
-    sort: "occurred-at",
-    order: "asc",
-    ...(walletScope ? { wallet: walletScope } : {}),
-  });
   const workbenchPageCount = workbenchQuery.data?.pages.length ?? 0;
   React.useEffect(() => {
     if (
@@ -136,7 +129,6 @@ export function Transactions() {
       nextCursor: latest.nextCursor ?? null,
     };
   }, [workbenchPages]);
-  const historyBoundsData = historyBoundsQuery.data?.data ?? null;
   const hasLiveTransactions =
     Boolean(
       workbenchQuery.data?.pages.some(
@@ -146,9 +138,6 @@ export function Transactions() {
     Boolean(workbenchData);
   const hasLiveTableTransactions =
     firstPage?.kind === "ui.transactions.list" && Boolean(firstPage.data);
-  const hasLiveHistoryBounds =
-    historyBoundsQuery.data?.kind === "ui.transactions.list" &&
-    Boolean(historyBoundsData);
   const liveTransactions = React.useMemo<TransactionsList | null>(() => {
     const pages =
       transactionsQuery.data?.pages
@@ -241,9 +230,6 @@ export function Transactions() {
       key={`${scopeParams.wallet ?? ""}::${scopeParams.quick ?? ""}`}
       transactions={transactions}
       tableTransactions={tableTransactions}
-      historyBoundsTransactions={
-        hasLiveHistoryBounds && historyBoundsData ? historyBoundsData : undefined
-      }
       nowRate={nowRate}
       swapCandidates={swapCandidates}
       swapCandidateTotal={swapCandidateTotal}

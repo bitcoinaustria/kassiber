@@ -57,7 +57,6 @@ const TransactionsDashboard = ({
   className,
   transactions = MOCK_TRANSACTIONS,
   tableTransactions,
-  historyBoundsTransactions,
   nowRate = MOCK_OVERVIEW.priceEur,
   swapCandidates,
   swapCandidateTotal,
@@ -75,7 +74,6 @@ const TransactionsDashboard = ({
   className?: string;
   transactions?: TransactionsList;
   tableTransactions?: TransactionsList;
-  historyBoundsTransactions?: TransactionsList;
   nowRate?: number | null;
   swapCandidates?: SwapCandidateReference[];
   swapCandidateTotal?: number | null;
@@ -111,6 +109,7 @@ const TransactionsDashboard = ({
     React.useState<NewTransactionDraft>(createNewTransactionDraft);
   const hideSensitive = useUiStore((s) => s.hideSensitive);
   const explorerSettings = useUiStore((s) => s.explorerSettings);
+  const dataMode = useUiStore((s) => s.dataMode);
   const currency = useCurrency();
   const { isSyncing } = useWalletSyncAction();
   const showRefreshSkeleton = isSyncing || isDataRefreshing;
@@ -223,31 +222,28 @@ const TransactionsDashboard = ({
     () => sortTransactionsByDateDesc(records),
     [records],
   );
-  const periodReferenceRecords = React.useMemo(() => {
-    const bounds = historyBoundsTransactions?.txs ?? [];
-    if (!bounds.length) return records;
-
-    const keyed = new Map(
-      records.map((record, index) => [
-        record.id || record.txnId || record.explorerId || `record-${index}`,
-        record,
-      ]),
-    );
-    dashboardRecordsFromTxs(
-      bounds,
-      t as (key: string, opts?: Record<string, unknown>) => string,
-    ).forEach((record, index) => {
-      keyed.set(
-        record.id || record.txnId || record.explorerId || `bounds-${index}`,
-        record,
-      );
-    });
-    return [...keyed.values()];
-  }, [historyBoundsTransactions?.txs, records, t]);
+  // Offer only the period tabs the loaded transactions can actually chart.
+  // Deriving these from the full history bounds (rather than the loaded rows)
+  // let long-range tabs (5/10/15-year, "all") render silently truncated charts
+  // on books larger than the workbench page cap, since the charts render from
+  // the capped `records`. Gating on `records` keeps offered tabs and charted
+  // data consistent; showing the full span for large books needs daemon-side
+  // period aggregates, not an in-memory slice of the newest rows.
   const availablePeriods = React.useMemo(
-    () => availablePeriodKeysForRecords(periodReferenceRecords),
-    [periodReferenceRecords],
+    () => availablePeriodKeysForRecords(records),
+    [records],
   );
+  // In daemon-backed (real/regtest) mode the New Transaction picker must not
+  // offer fabricated MOCK wallet names; derive single-wallet labels from the
+  // loaded book instead (skipping synthesized "A → B" transfer strings).
+  const realWalletSourceOptions = React.useMemo(() => {
+    const labels = new Set<string>();
+    for (const record of records) {
+      const label = record.wallet;
+      if (label && !label.includes("→")) labels.add(label);
+    }
+    return [...labels, "External"];
+  }, [records]);
   const periodRecords = React.useMemo(
     () =>
       period === "all"
@@ -395,7 +391,12 @@ const TransactionsDashboard = ({
           <NewTransactionDialog
             open={newTxnOpen}
             draft={newTransactionDraft}
-            walletSourceOptions={mockNewTransactionWalletSourceOptions}
+            walletSourceOptions={
+              dataMode === "mock"
+                ? mockNewTransactionWalletSourceOptions
+                : realWalletSourceOptions
+            }
+            movementCandidates={dataMode === "mock" ? undefined : []}
             onOpenChange={setNewTxnOpen}
             onDraftChange={setNewTransactionDraft}
             onSaveDraft={() => {
