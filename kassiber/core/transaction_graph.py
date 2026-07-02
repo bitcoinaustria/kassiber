@@ -610,11 +610,23 @@ def _enrich_bitcoin_graph_raw(
                 "bitcoin_reference_lookup_failed",
                 "Could not fetch public Bitcoin transaction references from the selected Electrum backend.",
             )
+    if kind == "bitcoinrpc":
+        try:
+            return _fetch_bitcoinrpc_transaction_graph(
+                conn,
+                backend,
+                chain,
+                network,
+                str(txid),
+            )
+        except Exception:
+            return _with_graph_lookup_warning(
+                raw,
+                "bitcoin_reference_lookup_failed",
+                "Could not fetch public Bitcoin transaction references from the selected Bitcoin Core backend.",
+            )
     try:
-        if kind == "bitcoinrpc":
-            fetched = _fetch_bitcoinrpc_transaction_graph(backend, str(txid))
-        else:
-            fetched = _fetch_graph_esplora_transaction(backend, str(txid))
+        fetched = _fetch_graph_esplora_transaction(backend, str(txid))
     except Exception:
         return _with_graph_lookup_warning(
             raw,
@@ -689,9 +701,12 @@ def _graph_lookup_timeout(backend: Mapping[str, Any]) -> int:
 
 
 def _fetch_bitcoinrpc_transaction_graph(
+    conn: sqlite3.Connection,
     backend: Mapping[str, Any],
+    chain: str,
+    network: str,
     txid: str,
-) -> dict[str, Any]:
+) -> Mapping[str, Any]:
     decoded = bitcoinrpc_call(
         dict(backend),
         "getrawtransaction",
@@ -700,11 +715,26 @@ def _fetch_bitcoinrpc_transaction_graph(
     )
     if not isinstance(decoded, Mapping):
         raise AppError("Bitcoin Core returned an invalid transaction response")
-    return _bitcoinrpc_decoded_to_graph_raw(dict(backend), decoded)
+    raw = _bitcoinrpc_decoded_to_graph_raw(decoded)
+    raw = _attach_bitcoinrpc_prevouts_from_cache_or_rpc(
+        conn,
+        dict(backend),
+        chain,
+        network,
+        raw,
+    )
+    if not _bitcoin_current_graph_has_required_prevouts(raw):
+        if raw.get("_graphLookupWarning"):
+            return raw
+        return _with_graph_lookup_warning(
+            raw,
+            "bitcoin_reference_lookup_incomplete",
+            "Bitcoin Core lookup did not return every previous output needed for a complete graph.",
+        )
+    return _store_graph_lookup_cache(conn, chain, network, txid, raw)
 
 
 def _bitcoinrpc_decoded_to_graph_raw(
-    backend: Mapping[str, Any],
     decoded: Mapping[str, Any],
 ) -> dict[str, Any]:
     txid = _string_or_none(decoded.get("txid"))
@@ -727,17 +757,12 @@ def _bitcoinrpc_decoded_to_graph_raw(
             "vout": input_entry.get("vout"),
             "sequence": input_entry.get("sequence"),
         }
+        # Core only inlines prevout at verbosity 2 (v25+); when present, keep it.
+        # Otherwise the missing previous outputs are resolved once, deduplicated,
+        # by _attach_bitcoinrpc_prevouts_from_cache_or_rpc.
         prevout = input_entry.get("prevout")
         if isinstance(prevout, Mapping):
             graph_input["prevout"] = _bitcoinrpc_prevout_to_graph(prevout)
-        else:
-            fetched_prevout = _bitcoinrpc_fetch_prevout(
-                backend,
-                input_entry.get("txid"),
-                input_entry.get("vout"),
-            )
-            if fetched_prevout is not None:
-                graph_input["prevout"] = fetched_prevout
         graph["vin"].append(graph_input)
     for output_entry in decoded.get("vout") if isinstance(decoded.get("vout"), list) else []:
         if isinstance(output_entry, Mapping):
@@ -745,34 +770,84 @@ def _bitcoinrpc_decoded_to_graph_raw(
     return graph
 
 
-def _bitcoinrpc_fetch_prevout(
+def _attach_bitcoinrpc_prevouts_from_cache_or_rpc(
+    conn: sqlite3.Connection,
     backend: Mapping[str, Any],
-    txid: Any,
-    vout: Any,
-) -> dict[str, Any] | None:
-    if not _looks_like_txid(txid):
-        return None
-    index = _int_or_none(vout)
-    if index is None or index < 0:
-        return None
-    try:
-        previous = bitcoinrpc_call(
-            dict(backend),
-            "getrawtransaction",
-            [str(txid), True],
-            timeout=_graph_lookup_timeout(backend),
+    chain: str,
+    network: str,
+    raw: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Resolve missing previous outputs for a Bitcoin Core graph.
+
+    Mirrors the Electrum path (`_attach_bitcoin_prevouts_from_cache_or_electrum`):
+    each distinct previous txid is fetched at most once, the durable graph cache
+    is consulted and populated, and the number of uncached lookups is capped so a
+    many-input transaction (e.g. a consolidation) cannot fan out into an
+    unbounded run of serial `getrawtransaction` calls against the user's node.
+    """
+    enriched = dict(raw)
+    vin = [dict(entry) for entry in enriched.get("vin", []) if isinstance(entry, Mapping)]
+    enriched["vin"] = vin
+    missing: list[str] = []
+    seen_missing: set[str] = set()
+    cached_prev: dict[str, Mapping[str, Any]] = {}
+    for entry in vin:
+        prev_txid = _string_or_none(entry.get("txid"))
+        prev_vout = _int_or_none(entry.get("vout"))
+        if not prev_txid or prev_vout is None:
+            # Coinbase-like inputs have no spent previous output.
+            continue
+        prevout = entry.get("prevout")
+        if isinstance(prevout, Mapping) and prevout.get("value") is not None:
+            # Already inlined by Core at verbosity 2.
+            continue
+        if not _looks_like_txid(prev_txid):
+            continue
+        cached = _load_graph_lookup_cache(conn, chain, network, prev_txid)
+        if cached is not None:
+            cached_prev[prev_txid.lower()] = cached
+            continue
+        normalized = prev_txid.lower()
+        if normalized not in seen_missing:
+            seen_missing.add(normalized)
+            missing.append(normalized)
+
+    if len(missing) > MAX_ELECTRUM_GRAPH_PREVTX_LOOKUPS:
+        _attach_bitcoin_prevouts_from_cached_graphs(enriched, cached_prev)
+        return _with_graph_lookup_warning(
+            enriched,
+            "bitcoin_reference_lookup_prevout_limit",
+            (
+                "Bitcoin Core graph lookup needs too many uncached previous transactions; "
+                "Kassiber capped the request to avoid flooding the node."
+            ),
         )
-    except Exception:
-        return None
-    if not isinstance(previous, Mapping):
-        return None
-    outputs = previous.get("vout")
-    if not isinstance(outputs, list) or index >= len(outputs):
-        return None
-    previous_output = outputs[index]
-    if not isinstance(previous_output, Mapping):
-        return None
-    return _bitcoinrpc_prevout_to_graph(previous_output)
+
+    for prev_txid in missing:
+        try:
+            previous = bitcoinrpc_call(
+                dict(backend),
+                "getrawtransaction",
+                [prev_txid, True],
+                timeout=_graph_lookup_timeout(backend),
+            )
+        except Exception:
+            # Best-effort: a single unfetchable prevout degrades the graph to a
+            # warning rather than aborting the whole lookup.
+            continue
+        if not isinstance(previous, Mapping):
+            continue
+        prev_raw = _bitcoinrpc_decoded_to_graph_raw(previous)
+        cached_prev[prev_txid] = _store_graph_lookup_cache(
+            conn,
+            chain,
+            network,
+            prev_txid,
+            prev_raw,
+        )
+
+    _attach_bitcoin_prevouts_from_cached_graphs(enriched, cached_prev)
+    return enriched
 
 
 def _bitcoinrpc_prevout_to_graph(source: Mapping[str, Any]) -> dict[str, Any]:
