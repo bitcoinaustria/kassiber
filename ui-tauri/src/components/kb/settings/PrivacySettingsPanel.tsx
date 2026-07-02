@@ -1,14 +1,22 @@
 import * as React from "react";
 import {
+  AlertTriangle,
+  CheckCircle2,
+  Gauge,
+  Info,
+  Loader2,
   Network,
   Pencil,
+  ShieldAlert,
   ShieldCheck,
   ShieldOff,
+  WalletCards,
   type LucideIcon,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
+import { useDaemon } from "@/daemon/client";
 import { cn } from "@/lib/utils";
 import { SettingsSwitchRow } from "./SettingsControls";
 import {
@@ -68,6 +76,104 @@ export interface ExposureGroupDef {
   subtitleKey: string;
   nets: Net[];
   canEdit: boolean;
+}
+
+type PrivacySeverity =
+  | "positive"
+  | "info"
+  | "low"
+  | "medium"
+  | "high"
+  | "critical";
+
+interface PrivacyFinding {
+  code: string;
+  severity: PrivacySeverity;
+  scope: "wallet" | "transaction";
+  count: number;
+  impact: number;
+  occurrences?: number;
+}
+
+interface PrivacyScoreSummary {
+  score: number | null;
+  grade: string | null;
+  state: string;
+  wallet_count: number;
+  transaction_count: number;
+  finding_counts: Record<PrivacySeverity, number>;
+  top_findings: PrivacyFinding[];
+}
+
+interface PrivacyCoverage {
+  wallet_count: number;
+  wallets_with_inventory: number;
+  inventory_outputs: number;
+  active_utxos: number;
+  transaction_total: number;
+  transaction_full: number;
+  transaction_partial: number;
+  transaction_not_analysable: number;
+  transaction_scored: number;
+}
+
+interface PrivacyWalletScore {
+  id: string;
+  label: string;
+  kind: string;
+  score: number | null;
+  grade: string | null;
+  state: string;
+  transaction_count: number;
+  scored_transaction_count: number;
+  inventory_output_count: number;
+  active_utxo_count: number;
+  address: {
+    known_address_count: number;
+    reused_address_count: number;
+    active_utxo_count: number;
+    dust_utxo_count: number;
+    script_type_counts: Record<string, number>;
+  };
+  finding_counts: Record<PrivacySeverity, number>;
+  top_findings: PrivacyFinding[];
+}
+
+interface PrivacyTransactionScore {
+  id: string;
+  external_id: string;
+  wallet_id: string;
+  wallet_label: string;
+  occurred_at: string;
+  direction: string;
+  asset: string;
+  score: number | null;
+  grade: string | null;
+  state: string;
+  support: {
+    level: string;
+    reason: string | null;
+    input_count: number;
+    output_count: number;
+    known_input_values: number;
+    known_output_values: number;
+  };
+  finding_counts: Record<PrivacySeverity, number>;
+  top_findings: PrivacyFinding[];
+}
+
+interface PrivacyHygieneData {
+  profile: { id: string; label: string } | null;
+  summary: PrivacyScoreSummary;
+  coverage: PrivacyCoverage;
+  wallets: PrivacyWalletScore[];
+  transactions: PrivacyTransactionScore[];
+  findings: PrivacyFinding[];
+  meta: {
+    local_only: boolean;
+    egress: string;
+    scope: string;
+  };
 }
 
 // Group outbound network surfaces by the kind of data each one actually sees,
@@ -221,6 +327,420 @@ export function ExposureEndpointRow({
   );
 }
 
+function scoreColor(score: number | null): string {
+  if (score == null) return "#94a3b8";
+  if (score >= 75) return "#10b981";
+  if (score >= 50) return "#f59e0b";
+  if (score >= 25) return "#f97316";
+  return "#ef4444";
+}
+
+function scoreBadgeClass(score: number | null): string {
+  if (score == null) return "border-muted-foreground/20 text-muted-foreground";
+  if (score >= 75) {
+    return "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300";
+  }
+  if (score >= 50) {
+    return "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300";
+  }
+  return "border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-300";
+}
+
+function severityClass(severity: PrivacySeverity): string {
+  switch (severity) {
+    case "positive":
+      return "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300";
+    case "critical":
+    case "high":
+      return "border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-300";
+    case "medium":
+      return "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300";
+    case "low":
+      return "border-sky-500/30 bg-sky-500/10 text-sky-700 dark:text-sky-300";
+    case "info":
+    default:
+      return "border-muted-foreground/20 text-muted-foreground";
+  }
+}
+
+function SeverityIcon({ severity }: { severity: PrivacySeverity }) {
+  if (severity === "positive") {
+    return <CheckCircle2 className="size-3.5" aria-hidden="true" />;
+  }
+  if (severity === "critical" || severity === "high") {
+    return <ShieldAlert className="size-3.5" aria-hidden="true" />;
+  }
+  if (severity === "medium") {
+    return <AlertTriangle className="size-3.5" aria-hidden="true" />;
+  }
+  return <Info className="size-3.5" aria-hidden="true" />;
+}
+
+function formatImpact(impact: number): string {
+  if (impact > 0) return `+${impact}`;
+  return `${impact}`;
+}
+
+function shortTransactionRef(value: string): string {
+  if (/^[0-9a-f]{64}$/i.test(value)) {
+    return `${value.slice(0, 10)}...${value.slice(-6)}`;
+  }
+  return value || "--";
+}
+
+function ScoreBadge({
+  score,
+  grade,
+}: {
+  score: number | null;
+  grade: string | null;
+}) {
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1 rounded-md border px-2 py-0.5 font-mono text-xs font-semibold tabular-nums",
+        scoreBadgeClass(score),
+      )}
+    >
+      <span>{grade ?? "--"}</span>
+      <span>{score == null ? "--" : score}</span>
+    </span>
+  );
+}
+
+function ScoreDonut({
+  score,
+  grade,
+  label,
+}: {
+  score: number | null;
+  grade: string | null;
+  label: string;
+}) {
+  const value = score ?? 0;
+  return (
+    <div
+      className="grid size-32 shrink-0 place-items-center rounded-full p-2"
+      style={{
+        background: `conic-gradient(${scoreColor(score)} ${value}%, hsl(var(--muted)) 0)`,
+      }}
+      role="img"
+      aria-label={label}
+    >
+      <div className="grid size-full place-items-center rounded-full bg-background text-center">
+        <div>
+          <div className="font-mono text-3xl font-semibold tabular-nums">
+            {score == null ? "--" : score}
+          </div>
+          <div className="text-xs font-medium text-muted-foreground">
+            {grade ?? "--"}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function FindingPill({ finding }: { finding: PrivacyFinding }) {
+  const { t } = useTranslation("settings");
+  return (
+    <div className="flex min-w-0 items-start gap-2 rounded-md border bg-background px-3 py-2">
+      <span
+        className={cn(
+          "mt-0.5 inline-flex size-6 shrink-0 items-center justify-center rounded-md border",
+          severityClass(finding.severity),
+        )}
+      >
+        <SeverityIcon severity={finding.severity} />
+      </span>
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-1.5">
+          <p className="text-sm font-medium">
+            {t(`privacy.findings.${finding.code}.title` as never)}
+          </p>
+          <span className="font-mono text-xs text-muted-foreground">
+            {formatImpact(finding.impact)}
+          </span>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          {t(`privacy.findings.${finding.code}.detail` as never, {
+            count: finding.count,
+            occurrences: finding.occurrences ?? finding.count,
+          })}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function FindingList({
+  findings,
+  emptyLabel,
+  limit = 4,
+}: {
+  findings: PrivacyFinding[];
+  emptyLabel: string;
+  limit?: number;
+}) {
+  if (findings.length === 0) {
+    return (
+      <p className="rounded-md border border-dashed bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
+        {emptyLabel}
+      </p>
+    );
+  }
+  return (
+    <div className="grid gap-2">
+      {findings.slice(0, limit).map((finding) => (
+        <FindingPill
+          key={`${finding.code}-${finding.scope}`}
+          finding={finding}
+        />
+      ))}
+    </div>
+  );
+}
+
+function CoverageTile({
+  label,
+  value,
+}: {
+  label: string;
+  value: number;
+}) {
+  return (
+    <div className="rounded-md border bg-background px-3 py-2">
+      <div className="font-mono text-lg font-semibold tabular-nums">{value}</div>
+      <div className="text-xs text-muted-foreground">{label}</div>
+    </div>
+  );
+}
+
+function WalletScoreRow({ wallet }: { wallet: PrivacyWalletScore }) {
+  const { t } = useTranslation("settings");
+  const progress = Math.max(0, Math.min(100, wallet.score ?? 0));
+  return (
+    <div className="rounded-md border bg-background p-3">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className="truncate text-sm font-medium">{wallet.label}</p>
+          <p className="text-xs text-muted-foreground">
+            {t("privacy.scoreWalletMeta", {
+              txs: wallet.transaction_count,
+              utxos: wallet.active_utxo_count,
+            })}
+          </p>
+        </div>
+        <ScoreBadge score={wallet.score} grade={wallet.grade} />
+      </div>
+      <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-muted">
+        <div
+          className="h-full rounded-full"
+          style={{
+            width: `${progress}%`,
+            backgroundColor: scoreColor(wallet.score),
+          }}
+        />
+      </div>
+      <div className="mt-2 flex flex-wrap gap-2 text-xs text-muted-foreground">
+        <span>
+          {t("privacy.scoreReuse", {
+            count: wallet.address.reused_address_count,
+          })}
+        </span>
+        <span>
+          {t("privacy.scoreDust", {
+            count: wallet.address.dust_utxo_count,
+          })}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function TransactionTellRow({ tx }: { tx: PrivacyTransactionScore }) {
+  const { t } = useTranslation("settings");
+  const firstFinding = tx.top_findings[0];
+  return (
+    <div className="rounded-md border bg-background p-3">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className="truncate font-mono text-xs">
+            {shortTransactionRef(tx.external_id || tx.id)}
+          </p>
+          <p className="text-xs text-muted-foreground">
+            {tx.wallet_label} · {t(`privacy.scoreState.${tx.state}` as never)}
+          </p>
+        </div>
+        <ScoreBadge score={tx.score} grade={tx.grade} />
+      </div>
+      {firstFinding ? (
+        <div className="mt-2 flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
+          <span
+            className={cn(
+              "inline-flex size-5 shrink-0 items-center justify-center rounded-md border",
+              severityClass(firstFinding.severity),
+            )}
+          >
+            <SeverityIcon severity={firstFinding.severity} />
+          </span>
+          <span className="min-w-0 truncate">
+            {t(`privacy.findings.${firstFinding.code}.title` as never)}
+          </span>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function PrivacyHygieneSection() {
+  const { t } = useTranslation("settings");
+  const hygieneQuery = useDaemon<PrivacyHygieneData>(
+    "ui.privacy_hygiene.snapshot",
+    undefined,
+    { refetchOnMount: "always" },
+  );
+  const hygiene =
+    hygieneQuery.data?.kind === "ui.privacy_hygiene.snapshot"
+      ? hygieneQuery.data.data
+      : null;
+  const summary = hygiene?.summary ?? null;
+  const coverage = hygiene?.coverage ?? null;
+  const topWallets = React.useMemo(
+    () =>
+      [...(hygiene?.wallets ?? [])]
+        .sort((a, b) => (a.score ?? 101) - (b.score ?? 101))
+        .slice(0, 4),
+    [hygiene?.wallets],
+  );
+  const topTransactions = (hygiene?.transactions ?? []).slice(0, 4);
+
+  return (
+    <section className="space-y-3">
+      <div>
+        <h3 className="text-sm font-semibold">
+          {t("privacy.scoreHeading")}
+        </h3>
+        <p className="text-sm text-muted-foreground">
+          {t("privacy.scoreDescription")}
+        </p>
+      </div>
+
+      {hygieneQuery.isLoading ? (
+        <div className="flex items-center gap-2 rounded-md border bg-background px-3 py-4 text-sm text-muted-foreground">
+          <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+          {t("privacy.scoreLoading")}
+        </div>
+      ) : hygieneQuery.isError ? (
+        <div className="rounded-md border border-red-500/30 bg-red-500/10 px-3 py-3 text-sm text-red-700 dark:text-red-300">
+          {hygieneQuery.error instanceof Error
+            ? hygieneQuery.error.message
+            : t("privacy.scoreUnavailable")}
+        </div>
+      ) : summary ? (
+        <>
+          <div className="grid gap-3 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+            <div className="flex flex-col gap-4 rounded-md border bg-background p-4 sm:flex-row sm:items-center">
+              <ScoreDonut
+                score={summary.score}
+                grade={summary.grade}
+                label={t("privacy.scoreAria", {
+                  score: summary.score ?? 0,
+                  grade: summary.grade ?? "",
+                })}
+              />
+              <div className="min-w-0 space-y-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-xs font-medium text-muted-foreground">
+                    <Gauge className="size-3.5" aria-hidden="true" />
+                    {t(`privacy.scoreState.${summary.state}` as never)}
+                  </span>
+                  <span className="inline-flex items-center gap-1 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-xs font-medium text-emerald-700 dark:text-emerald-300">
+                    <ShieldCheck className="size-3.5" aria-hidden="true" />
+                    {t("privacy.scoreLocalOnly")}
+                  </span>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  {t("privacy.scoreSummary", {
+                    wallets: summary.wallet_count,
+                    transactions: summary.transaction_count,
+                  })}
+                </p>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <p className="text-sm font-medium">{t("privacy.scoreTopFindings")}</p>
+              <FindingList
+                findings={summary.top_findings}
+                emptyLabel={t("privacy.scoreNoFindings")}
+                limit={4}
+              />
+            </div>
+          </div>
+
+          {coverage ? (
+            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+              <CoverageTile
+                label={t("privacy.coverage.full")}
+                value={coverage.transaction_full}
+              />
+              <CoverageTile
+                label={t("privacy.coverage.partial")}
+                value={coverage.transaction_partial}
+              />
+              <CoverageTile
+                label={t("privacy.coverage.notAnalysable")}
+                value={coverage.transaction_not_analysable}
+              />
+              <CoverageTile
+                label={t("privacy.coverage.activeUtxos")}
+                value={coverage.active_utxos}
+              />
+            </div>
+          ) : null}
+
+          <div className="grid gap-3 lg:grid-cols-2">
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <WalletCards className="size-4 text-muted-foreground" aria-hidden="true" />
+                <p className="text-sm font-medium">{t("privacy.scoreWallets")}</p>
+              </div>
+              {topWallets.length > 0 ? (
+                <div className="grid gap-2">
+                  {topWallets.map((wallet) => (
+                    <WalletScoreRow key={wallet.id} wallet={wallet} />
+                  ))}
+                </div>
+              ) : (
+                <p className="rounded-md border border-dashed bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
+                  {t("privacy.scoreNoWallets")}
+                </p>
+              )}
+            </div>
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="size-4 text-muted-foreground" aria-hidden="true" />
+                <p className="text-sm font-medium">{t("privacy.scoreTransactions")}</p>
+              </div>
+              {topTransactions.length > 0 ? (
+                <div className="grid gap-2">
+                  {topTransactions.map((tx) => (
+                    <TransactionTellRow key={tx.id} tx={tx} />
+                  ))}
+                </div>
+              ) : (
+                <p className="rounded-md border border-dashed bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
+                  {t("privacy.scoreNoTransactions")}
+                </p>
+              )}
+            </div>
+          </div>
+        </>
+      ) : null}
+    </section>
+  );
+}
+
 export function PrivacySettingsPanel({
   hideSensitive,
   setHideSensitive,
@@ -272,6 +792,8 @@ export function PrivacySettingsPanel({
 
   return (
     <div className="space-y-6">
+      <PrivacyHygieneSection />
+
       <section className="space-y-3">
         <h3 className="text-sm font-semibold">
           {t("privacy.onScreenHeading")}

@@ -334,6 +334,127 @@
     "offerBiometricDescription": "Merke dir die Präferenz für biometrisches Entsperren dieses Geräts zwischen den Sitzungen."
   },
   "privacy": {
+    "scoreHeading": "Privacy-Hygiene",
+    "scoreDescription": "Lokaler Score aus synchronisierten Transaktionsformen und Wallet-UTXOs. Keine öffentliche Abfrage.",
+    "scoreLoading": "Lokale Privacy-Signale werden geprüft...",
+    "scoreUnavailable": "Privacy-Hygiene ist nicht verfügbar.",
+    "scoreAria": "Privacy-Hygiene-Score {{score}}, Note {{grade}}",
+    "scoreLocalOnly": "Nur lokal",
+    "scoreSummary": "{{wallets}} Wallets · {{transactions}} Transaktionen geprüft",
+    "scoreTopFindings": "Stärkste Signale",
+    "scoreNoFindings": "Noch keine bewerteten Signale in den lokalen Daten.",
+    "scoreWallets": "Wallet-Rollup",
+    "scoreTransactions": "Schlechteste Transaktionen",
+    "scoreNoWallets": "In diesem Buch gibt es noch keine Wallets.",
+    "scoreNoTransactions": "In diesem Buch gibt es noch keine Transaktionen.",
+    "scoreWalletMeta": "{{txs}} Tx · {{utxos}} aktive UTXOs",
+    "scoreReuse": "{{count}} wiederverwendete Adressen",
+    "scoreDust": "{{count}} Dust-UTXOs",
+    "scoreState": {
+      "full": "Volle lokale Abdeckung",
+      "partial": "Teilweise lokale Abdeckung",
+      "address_only": "Nur Adressebene",
+      "not_analysable": "Nicht analysierbar",
+      "not_enough_data": "Nicht genug Daten",
+      "no_wallets": "Keine Wallets",
+      "no_active_profile": "Kein aktives Buch"
+    },
+    "coverage": {
+      "full": "Volle Tx-Scans",
+      "partial": "Teilweise Tx-Scans",
+      "notAnalysable": "Nicht analysierbar",
+      "activeUtxos": "Aktive UTXOs"
+    },
+    "findings": {
+      "address_reuse": {
+        "title": "Adresswiederverwendung",
+        "detail": "{{count}} wiederverwendete Adressgruppen gefunden."
+      },
+      "change_position_fingerprint": {
+        "title": "Change-Positionsmuster",
+        "detail": "{{count}} Transaktion hat eigene Change an einer vorhersehbaren Kante."
+      },
+      "change_type_fingerprint": {
+        "title": "Change-Typ-Mismatch",
+        "detail": "{{count}} Transaktion verrät wahrscheinliche Change über den Script-Typ."
+      },
+      "coin_anonymity_evidence": {
+        "title": "Coin-Anonymitätsnachweis",
+        "detail": "{{count}} UTXOs tragen positive Anonymitätsnachweise."
+      },
+      "coinjoin_pattern": {
+        "title": "CoinJoin-Muster",
+        "detail": "{{count}} Equal-Output-Teilnehmer oder importierter CoinJoin-Nachweis."
+      },
+      "common_input_ownership": {
+        "title": "Common-Input-Link",
+        "detail": "{{count}} Inputs werden durch die Transaktion verknüpft."
+      },
+      "dust_utxo_exposure": {
+        "title": "Dust-UTXOs",
+        "detail": "{{count}} aktive Dust-Outputs erhöhen Review-Rauschen."
+      },
+      "large_utxo_set": {
+        "title": "Großes UTXO-Set",
+        "detail": "{{count}} aktive UTXOs erhöhen Konsolidierungsdruck."
+      },
+      "legacy_address_type": {
+        "title": "Legacy-Script-Typ",
+        "detail": "{{count}} Outputs nutzen ältere Adresstypen."
+      },
+      "op_return_metadata": {
+        "title": "OP_RETURN-Metadaten",
+        "detail": "{{count}} Outputs veröffentlichen permanente Metadaten."
+      },
+      "payjoin_boundary": {
+        "title": "PayJoin-Grenze",
+        "detail": "{{count}} geprüfte PayJoin-Grenze bricht einfache Input-Zuordnung."
+      },
+      "rbf_signal": {
+        "title": "RBF-Signal",
+        "detail": "{{count}} Inputs nutzen Replace-by-Fee-Signaling."
+      },
+      "round_fee_rate": {
+        "title": "Runde Fee-Rate",
+        "detail": "{{count}} Transaktion nutzt einen runden Fee-Rate-Fingerabdruck."
+      },
+      "round_output_amount": {
+        "title": "Runder Output-Betrag",
+        "detail": "{{count}} Outputs sehen wie manuell eingegebene Zahlungsbeträge aus."
+      },
+      "script_type_mix": {
+        "title": "Gemischte Script-Typen",
+        "detail": "{{count}} Script-Familien erscheinen in einer Transaktion."
+      },
+      "taproot_usage": {
+        "title": "Taproot-Nutzung",
+        "detail": "{{count}} Taproot-Outputs verbessern den lokalen Hygiene-Score."
+      },
+      "transaction_coverage_gap": {
+        "title": "Abdeckungslücke",
+        "detail": "{{count}} Transaktionen haben keine lokalen vin/vout-Details."
+      },
+      "transaction_not_analysable": {
+        "title": "Kein lokaler Tx-Graph",
+        "detail": "{{count}} Transaktion hat kein lokales vin/vout für den Score."
+      },
+      "unnecessary_input_heuristic": {
+        "title": "Unnecessary-Input-Signal",
+        "detail": "{{count}} Outputs hätten ohne jeden Input finanziert werden können."
+      },
+      "wallet_fingerprint_locktime": {
+        "title": "nLockTime-Fingerabdruck",
+        "detail": "{{count}} Transaktion trägt eine wallet-typische Locktime."
+      },
+      "wallet_fingerprint_version": {
+        "title": "Versions-Fingerabdruck",
+        "detail": "{{count}} Transaktion nutzt eine ungewöhnliche Version."
+      },
+      "wallet_fingerprint_witness": {
+        "title": "Witness-Fingerabdruck",
+        "detail": "{{count}} Inputs teilen dieselbe Witness-Form."
+      }
+    },
     "exposure": {
       "firstParty": "Eigen",
       "firstPartyHint": "Auf deinem Gerät oder einer Infrastruktur, die du betreibst",

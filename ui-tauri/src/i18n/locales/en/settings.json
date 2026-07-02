@@ -334,6 +334,127 @@
     "offerBiometricDescription": "Remember this device's biometric unlock preference between sessions."
   },
   "privacy": {
+    "scoreHeading": "Privacy hygiene",
+    "scoreDescription": "Local score from synced transaction shapes and wallet UTXOs. No public lookup.",
+    "scoreLoading": "Scanning local privacy tells...",
+    "scoreUnavailable": "Privacy hygiene is unavailable.",
+    "scoreAria": "Privacy hygiene score {{score}}, grade {{grade}}",
+    "scoreLocalOnly": "Local only",
+    "scoreSummary": "{{wallets}} wallets · {{transactions}} transactions checked",
+    "scoreTopFindings": "Strongest tells",
+    "scoreNoFindings": "No scored tells in the local data yet.",
+    "scoreWallets": "Wallet rollup",
+    "scoreTransactions": "Worst transactions",
+    "scoreNoWallets": "No wallets in this book yet.",
+    "scoreNoTransactions": "No transactions in this book yet.",
+    "scoreWalletMeta": "{{txs}} txs · {{utxos}} active UTXOs",
+    "scoreReuse": "{{count}} reused addresses",
+    "scoreDust": "{{count}} dust UTXOs",
+    "scoreState": {
+      "full": "Full local coverage",
+      "partial": "Partial local coverage",
+      "address_only": "Address-level only",
+      "not_analysable": "Not analysable",
+      "not_enough_data": "Not enough data",
+      "no_wallets": "No wallets",
+      "no_active_profile": "No active book"
+    },
+    "coverage": {
+      "full": "Full tx scans",
+      "partial": "Partial tx scans",
+      "notAnalysable": "Not analysable",
+      "activeUtxos": "Active UTXOs"
+    },
+    "findings": {
+      "address_reuse": {
+        "title": "Address reuse",
+        "detail": "{{count}} reused address groups found."
+      },
+      "change_position_fingerprint": {
+        "title": "Change position pattern",
+        "detail": "{{count}} transaction has owned change at a predictable edge."
+      },
+      "change_type_fingerprint": {
+        "title": "Change type mismatch",
+        "detail": "{{count}} transaction reveals likely change by script type."
+      },
+      "coin_anonymity_evidence": {
+        "title": "Coin anonymity evidence",
+        "detail": "{{count}} UTXOs carry positive anonymity evidence."
+      },
+      "coinjoin_pattern": {
+        "title": "CoinJoin pattern",
+        "detail": "{{count}} equal-output participants or imported CoinJoin evidence."
+      },
+      "common_input_ownership": {
+        "title": "Common-input link",
+        "detail": "{{count}} inputs are linked by the transaction."
+      },
+      "dust_utxo_exposure": {
+        "title": "Dust UTXOs",
+        "detail": "{{count}} active dust outputs increase review noise."
+      },
+      "large_utxo_set": {
+        "title": "Large UTXO set",
+        "detail": "{{count}} active UTXOs raise consolidation pressure."
+      },
+      "legacy_address_type": {
+        "title": "Legacy script type",
+        "detail": "{{count}} outputs use older address types."
+      },
+      "op_return_metadata": {
+        "title": "OP_RETURN metadata",
+        "detail": "{{count}} outputs publish permanent metadata."
+      },
+      "payjoin_boundary": {
+        "title": "PayJoin boundary",
+        "detail": "{{count}} reviewed PayJoin boundary breaks simple input ownership."
+      },
+      "rbf_signal": {
+        "title": "RBF signal",
+        "detail": "{{count}} inputs use replace-by-fee signaling."
+      },
+      "round_fee_rate": {
+        "title": "Round fee rate",
+        "detail": "{{count}} transaction uses a round fee-rate fingerprint."
+      },
+      "round_output_amount": {
+        "title": "Round output amount",
+        "detail": "{{count}} outputs look like human-entered payment amounts."
+      },
+      "script_type_mix": {
+        "title": "Mixed script types",
+        "detail": "{{count}} script families appear in one transaction."
+      },
+      "taproot_usage": {
+        "title": "Taproot usage",
+        "detail": "{{count}} Taproot outputs improve the local hygiene score."
+      },
+      "transaction_coverage_gap": {
+        "title": "Coverage gap",
+        "detail": "{{count}} transactions lack local vin/vout detail."
+      },
+      "transaction_not_analysable": {
+        "title": "No local tx graph",
+        "detail": "{{count}} transaction has no local vin/vout to score."
+      },
+      "unnecessary_input_heuristic": {
+        "title": "Unnecessary input tell",
+        "detail": "{{count}} outputs could have been funded without every input."
+      },
+      "wallet_fingerprint_locktime": {
+        "title": "nLockTime fingerprint",
+        "detail": "{{count}} transaction carries a wallet-style locktime."
+      },
+      "wallet_fingerprint_version": {
+        "title": "Version fingerprint",
+        "detail": "{{count}} transaction uses an unusual version."
+      },
+      "wallet_fingerprint_witness": {
+        "title": "Witness fingerprint",
+        "detail": "{{count}} inputs share the same witness shape."
+      }
+    },
     "exposure": {
       "firstParty": "First-party",
       "firstPartyHint": "On your machine or infrastructure you operate",

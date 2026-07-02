@@ -185,6 +185,22 @@ and index details. Unsupported sources return
 `support.status="liquid_unblind_blocked"` unless their descriptor material can
 unblind and account for outputs locally.
 
+`ui.privacy_hygiene.snapshot` is the read-only Phase-1 privacy-hygiene score.
+It accepts optional `{"wallet":"<wallet id or label>", "transaction":"<id or
+txid>", "limit": 50}` arguments and returns the active book's 0-100 / A+-F
+rollup, wallet rollups, worst transaction tells, and coverage counts. The
+engine is local-only over already stored `transactions.raw_json` plus
+`wallet_utxos`: it never fetches missing prevouts or widens exposure through a
+public backend. Bitcoin rows with local `vin`/`vout` get single-transaction
+heuristics such as common-input, round amount, fee/RBF, script-type mix,
+change, wallet-fingerprint, OP_RETURN, and CoinJoin/PayJoin boundary evidence.
+Graphless imports, current Bitcoin Core detail rows, and confidential/incomplete
+shapes degrade to address-level coverage or `not_analysable`; the daemon does
+not return raw JSON, addresses, scriptPubKeys, descriptors, xpubs, backend URLs,
+tokens, or wallet config. Cross-wallet adversary reconstruction, peel chains,
+Boltzmann entropy, coin-selection fingerprinting, and PSBT pre-broadcast checks
+remain out of this Phase-1 surface.
+
 `ui.transactions.history` and `ui.activity.history` read redacted,
 append-only metadata edit events from the same local database as transactions.
 They include stale-report summary metadata by default; callers that only need a
