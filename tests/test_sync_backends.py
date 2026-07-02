@@ -1,8 +1,10 @@
 import io
 import json
 import random
+import tempfile
 import unittest
 from email.message import Message
+from pathlib import Path
 from unittest.mock import patch
 from urllib import error as urlerror
 
@@ -35,6 +37,9 @@ from kassiber.core.sync_backends import (
     scan_descriptor_targets,
     scriptpubkey_scripthash,
 )
+from kassiber.core import imports as core_imports
+from kassiber.core.imports import ImportCoordinatorHooks
+from kassiber.db import open_db
 from kassiber.errors import AppError
 from kassiber.proxy import _connect_via_socks5, _read_exact, _socks5_address
 from kassiber.time_utils import iso_to_unix, timestamp_to_iso
@@ -2407,6 +2412,129 @@ class CrossWalletPrefetchTest(unittest.TestCase):
                 None, {}, {}, [bad], hooks, prefetched={"w-bad": AppError("boom", code="x")}
             )
         self.assertEqual(ctx.exception.code, "x")
+
+
+_RETRACT_NOW = "2026-01-01T00:00:00Z"
+
+
+class RetractWalletRecordsDbTest(unittest.TestCase):
+    """End-to-end DB coverage for imports.retract_wallet_records.
+
+    The sync-layer tests stub retract_records; this exercises the real DELETE +
+    journal-invalidation path — the branch that removes already-booked rows when
+    an authoritative backend reports RBF-replaced / orphaned txids.
+    """
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory(prefix="kassiber-retract-")
+        self.conn = open_db(Path(self.tmp.name) / "data")
+        self.invalidated: list[str] = []
+        self.hooks = ImportCoordinatorHooks(
+            ensure_tag_row=lambda *args, **kwargs: None,
+            invalidate_journals=lambda conn, profile_id: self.invalidated.append(
+                profile_id
+            ),
+        )
+        self._seed()
+
+    def tearDown(self):
+        self.conn.close()
+        self.tmp.cleanup()
+
+    def _seed(self):
+        conn = self.conn
+        conn.execute(
+            "INSERT INTO workspaces(id, label, created_at) VALUES(?, ?, ?)",
+            ("ws-1", "Main", _RETRACT_NOW),
+        )
+        conn.execute(
+            """
+            INSERT INTO profiles(
+                id, workspace_id, label, fiat_currency, tax_country,
+                tax_long_term_days, gains_algorithm, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            ("profile-1", "ws-1", "Default", "EUR", "generic", 365, "FIFO", _RETRACT_NOW),
+        )
+        conn.execute(
+            """
+            INSERT INTO accounts(
+                id, workspace_id, profile_id, code, label, account_type, asset, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            ("acct-1", "ws-1", "profile-1", "treasury", "Treasury", "asset", "BTC", _RETRACT_NOW),
+        )
+        conn.execute(
+            """
+            INSERT INTO wallets(id, workspace_id, profile_id, account_id, label, kind, config_json, created_at)
+            VALUES(?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            ("wallet-a", "ws-1", "profile-1", "acct-1", "Cold", "custom", "{}", _RETRACT_NOW),
+        )
+        for tx_id, external_id, direction in (
+            ("tx-keep", "kept-txid", "inbound"),
+            ("tx-rbf-1", "rbf-original-1", "outbound"),
+            ("tx-rbf-2", "rbf-original-2", "outbound"),
+        ):
+            conn.execute(
+                """
+                INSERT INTO transactions(
+                    id, workspace_id, profile_id, wallet_id, external_id, fingerprint,
+                    occurred_at, direction, asset, amount, fee, fiat_currency,
+                    fiat_rate, fiat_value, kind, description, counterparty, raw_json, created_at
+                ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    tx_id, "ws-1", "profile-1", "wallet-a", external_id, f"fp-{tx_id}",
+                    _RETRACT_NOW, direction, "BTC", 100_000_000, 0, "EUR",
+                    40_000.0, None,
+                    "deposit" if direction == "inbound" else "withdrawal",
+                    None, None, "{}", _RETRACT_NOW,
+                ),
+            )
+        conn.commit()
+
+    def _external_ids(self):
+        return [
+            row["external_id"]
+            for row in self.conn.execute(
+                "SELECT external_id FROM transactions ORDER BY external_id"
+            ).fetchall()
+        ]
+
+    def test_retract_deletes_matching_rows_and_invalidates_journals(self):
+        result = core_imports.retract_wallet_records(
+            self.conn,
+            {"id": "profile-1"},
+            {"id": "wallet-a", "label": "Cold"},
+            # An unknown id plus a case-different duplicate prove normalization
+            # and that only genuine matches are deleted.
+            ["rbf-original-1", "RBF-ORIGINAL-2", "never-seen-txid"],
+            "bitcoinrpc",
+            self.hooks,
+        )
+        self.assertEqual(result["retracted"], 2)
+        self.assertTrue(result["journal_invalidated"])
+        self.assertEqual(len(result["retracted_records"]), 2)
+        self.assertEqual(self._external_ids(), ["kept-txid"])
+        self.assertEqual(self.invalidated, ["profile-1"])
+
+    def test_retract_with_no_matches_is_a_noop(self):
+        result = core_imports.retract_wallet_records(
+            self.conn,
+            {"id": "profile-1"},
+            {"id": "wallet-a", "label": "Cold"},
+            ["not-here", "also-absent"],
+            "bitcoinrpc",
+            self.hooks,
+        )
+        self.assertEqual(result["retracted"], 0)
+        self.assertFalse(result["journal_invalidated"])
+        self.assertEqual(
+            self._external_ids(),
+            ["kept-txid", "rbf-original-1", "rbf-original-2"],
+        )
+        self.assertEqual(self.invalidated, [])
 
 
 if __name__ == "__main__":
