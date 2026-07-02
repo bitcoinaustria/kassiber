@@ -268,7 +268,7 @@
       "blockers": "Blockers",
       "batchable": "Batchable"
     },
-    "noPreview": "Local preview data is not available yet.",
+    "noPreview": "Local case data is not available yet.",
     "manualReview_one": "{{count}} manual review item.",
     "manualReview_other": "{{count}} manual review items.",
     "unresolved": "unresolved"

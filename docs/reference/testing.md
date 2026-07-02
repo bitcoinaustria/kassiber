@@ -128,11 +128,11 @@ generated `data_root` and `export_dir`, for example:
 ./scripts/integration-harness.sh demo-full
 ```
 
-## Developer Demo Environment (replaces mock data)
+## Developer Regtest Demo Environment
 
 `demo-full` is a test lane: it builds a throwaway book and tears the node
 down. For day-to-day development there is a persistent variant that replaces
-the browser mock fixtures with a real, synced book — the same model as
+browser fixtures with a real, synced book — the same model as
 BTCPayServer's `docker-compose up dev` + launch-profile workflow:
 
 ```bash
@@ -169,10 +169,9 @@ containers remain a separate parity target.
 
 `pnpm dev:demo` runs the Vite daemon bridge with
 `KASSIBER_DEV_DATA_ROOT` pointed at the demo book; the desktop preview then
-shows the regtest data mode instead of mock fixtures. `pnpm dev:browser`
-(mock) stays available for pure component work, and the mock fixtures remain
-the basis of UI unit tests — the demo book replaces them only as the
-*interactive* dev dataset.
+shows the regtest data mode instead of static fixtures. `pnpm dev:browser` is an
+alias for the same regtest-backed browser preview. Fixture responses remain for UI
+unit tests only; they are no longer an interactive data mode.
 
 ### Making resync do something (`demo-tick`)
 
@@ -210,8 +209,9 @@ Because the book is backdated with `setmocktime`, a resumed node mints new
 blocks at wall-clock time — new activity lands "now", after the historical
 span, which is exactly what a long-lived real book looks like.
 
-Browser mock mode remains useful for component fixtures, but it should not be
-treated as an accounting or sync proof.
+Fixture transport remains useful for component tests, but it should not be
+treated as an accounting or sync proof and is not exposed as an interactive data
+mode.
 
 ## Guardrails
 

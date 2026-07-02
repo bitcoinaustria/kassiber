@@ -622,9 +622,9 @@ The daemon resolves the wallet, looks up the registered
 [`LightningAdapter`](../../kassiber/core/lightning/adapter.py) for the wallet
 kind (`lnd`, `coreln`, `nwc`), and dispatches the read. LND ships an
 adapter ([`kassiber/core/lightning/lnd.py`](../../kassiber/core/lightning/lnd.py))
-that the daemon imports at startup. Without a registered adapter the
-daemon returns an `lightning_adapter_unavailable` error envelope so the
-desktop can fall back to mock data.
+that the daemon imports at startup. Without a registered adapter the daemon
+returns an `lightning_adapter_unavailable` error envelope so the desktop can
+surface the unavailable-adapter state without inventing data.
 
 ## Encrypted database
 

@@ -268,7 +268,7 @@
       "blockers": "Blocker",
       "batchable": "Stapelfähig"
     },
-    "noPreview": "Lokale Vorschaudaten sind noch nicht verfügbar.",
+    "noPreview": "Lokale Falldaten sind noch nicht verfügbar.",
     "manualReview_one": "{{count}} Eintrag zur manuellen Prüfung.",
     "manualReview_other": "{{count}} Einträge zur manuellen Prüfung.",
     "unresolved": "ungeklärt"

@@ -27,7 +27,6 @@
     "searchNoMatches": "Keine Treffer",
     "dataMode": {
       "real": "Live-Daten",
-      "preview": "Vorschaudaten",
       "regtest": "Regtest",
       "toggle": "Datenquelle umschalten"
     },

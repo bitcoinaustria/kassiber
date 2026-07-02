@@ -141,7 +141,6 @@ import {
 } from "@/lib/daemonLogBridge";
 import {
   dataModeForActiveBackend,
-  dataModeFromSourceSwitch,
   dataModeLabelKey,
 } from "@/components/kb/dataMode";
 import { isTypingTarget } from "@/lib/keymap";
@@ -1680,7 +1679,6 @@ function SidebarActions({
   const normalizedDataMode = backendSettingsLoaded
     ? dataModeForActiveBackend(dataMode, activeRegtestBackend)
     : dataMode;
-  const isLiveData = isDaemonDataMode(normalizedDataMode);
 
   React.useEffect(() => {
     if (!backendSettingsLoaded) return;
@@ -1729,14 +1727,7 @@ function SidebarActions({
             <span className="min-w-0 flex-1 truncate group-data-[collapsible=icon]:hidden">
               {dataModeLabel}
             </span>
-            <Switch
-              checked={isLiveData}
-              aria-label={t("shell.dataMode.toggle")}
-              onCheckedChange={(checked) =>
-                setDataMode(dataModeFromSourceSwitch(checked, activeRegtestBackend))
-              }
-              className="group-data-[collapsible=icon]:hidden"
-            />
+            <span className="size-2 rounded-full bg-emerald-500 group-data-[collapsible=icon]:hidden" />
           </div>
         </SidebarMenuItem>
       ) : null}

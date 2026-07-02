@@ -4,7 +4,6 @@ import { useNavigate } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
 
 import { Wordmark } from "@/components/kb/Wordmark";
-import { Button } from "@/components/ui/button";
 import { dispatchDaemonAuthRequired, useDaemon } from "@/daemon/client";
 import {
   activateImportProject,
@@ -105,25 +104,6 @@ const DEFAULT_STEP_LABEL_KEYS: Record<
 const SECURITY_STEP_INDEX = DEFAULT_STEPS.findIndex(
   (entry) => entry.component === SecurityStep,
 );
-
-const DEV_MOCK_IDENTITY: Identity = {
-  name: "mock books",
-  workspace: "My Books",
-  country: "AT",
-  encrypted: false,
-  profile: "mock books",
-  taxCountry: "at",
-  fiatCurrency: "EUR",
-  taxLongTermDays: 0,
-  gainsAlgorithm: "MOVING_AVERAGE_AT",
-  databaseMode: "plaintext",
-  migrateCredentials: false,
-  backendSetupMode: "skip",
-  aiSetupMode: "local",
-  aiProviderKind: "local",
-  aiProviderName: DEFAULT_AI_PROVIDER_NAME,
-  aiBaseUrl: DEFAULT_AI_BASE_URL,
-};
 
 interface RegtestStatusData {
   state_root?: string | null;
@@ -686,13 +666,6 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
       .finally(() => setLoadingImportProfiles(false));
   };
 
-  const skipToMockPreview = () => {
-    setDataMode("mock");
-    void setSessionUnlockPassphrase(null);
-    setIdentity(DEV_MOCK_IDENTITY);
-    void navigate({ to: "/overview" });
-  };
-
   return (
     <section className="min-h-screen bg-paper px-4 py-6 text-ink sm:px-8 lg:px-10">
       <div
@@ -703,16 +676,6 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
       >
         <div className="flex w-full items-center justify-between gap-4">
           <Wordmark size={22} />
-          {import.meta.env.DEV && !loadingRegtestStatus && !regtestStatus && (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={skipToMockPreview}
-            >
-              {t("shell.mockPreview")}
-            </Button>
-          )}
         </div>
 
         {importSelection ? (

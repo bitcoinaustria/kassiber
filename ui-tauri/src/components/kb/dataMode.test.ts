@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 
 import {
   dataModeForActiveBackend,
-  dataModeFromSourceSwitch,
   dataModeLabelKey,
 } from "./dataMode";
 
@@ -18,10 +17,14 @@ describe("sidebar data mode model", () => {
     expect(dataModeForActiveBackend("regtest", false)).toBe("real");
   });
 
-  it("maps the sidebar switch between the daemon-backed side and preview", () => {
-    expect(dataModeFromSourceSwitch(true, true)).toBe("regtest");
-    expect(dataModeFromSourceSwitch(true, false)).toBe("real");
-    expect(dataModeFromSourceSwitch(false, true)).toBe("mock");
-    expect(dataModeFromSourceSwitch(false, false)).toBe("mock");
+  it("coerces persisted mock mode to the daemon-backed side", () => {
+    expect(dataModeForActiveBackend("mock", true)).toBe("regtest");
+    expect(dataModeForActiveBackend("mock", false)).toBe("real");
+    expect(dataModeLabelKey(dataModeForActiveBackend("mock", true))).toBe(
+      "regtest",
+    );
+    expect(dataModeLabelKey(dataModeForActiveBackend("mock", false))).toBe(
+      "real",
+    );
   });
 });

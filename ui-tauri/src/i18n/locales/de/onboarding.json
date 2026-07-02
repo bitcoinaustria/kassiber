@@ -1,6 +1,5 @@
 {
   "shell": {
-    "mockPreview": "Mock-Vorschau",
     "footer": {
       "privateKeys": "Private Keys gelangen nie in Kassiber.",
       "stateLocation": "Der Zustand bleibt unter ~/.kassiber, sofern nicht anders festgelegt.",
