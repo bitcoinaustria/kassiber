@@ -139,6 +139,7 @@ import {
   startDaemonLogBridge,
   stopDaemonLogBridge,
 } from "@/lib/daemonLogBridge";
+import { safeTauriUnlisten } from "@/lib/tauriUnlisten";
 import {
   dataModeForActiveBackend,
   dataModeLabelKey,
@@ -1290,7 +1291,7 @@ export function AppShell() {
       )
       .then((nextUnlisten) => {
         if (disposed) {
-          nextUnlisten();
+          safeTauriUnlisten(nextUnlisten);
           return;
         }
         unlisten = nextUnlisten;
@@ -1301,7 +1302,7 @@ export function AppShell() {
 
     return () => {
       disposed = true;
-      unlisten?.();
+      safeTauriUnlisten(unlisten);
     };
   }, [
     lockApp,

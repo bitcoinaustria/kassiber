@@ -867,6 +867,62 @@ class FreshnessTest(unittest.TestCase):
         self.assertEqual(len(journal_jobs), 1)
         self.assertEqual(journal_jobs[0]["payload"], {"auto_pair": True})
 
+    def test_onchain_job_sync_uses_job_profile_not_active_context(self):
+        conn = self._db()
+        active_profile_id = _seed_profile(conn)
+        job_profile_id = "second-profile"
+        conn.execute(
+            """
+            INSERT INTO profiles(id, workspace_id, label, fiat_currency, created_at)
+            VALUES(?, 'ws', 'Second Book', 'EUR', '2026-06-04T00:00:00Z')
+            """,
+            (job_profile_id,),
+        )
+        conn.execute("INSERT INTO settings(key, value) VALUES('context_workspace', 'ws')")
+        conn.execute(
+            "INSERT INTO settings(key, value) VALUES('context_profile', ?)",
+            (active_profile_id,),
+        )
+        conn.execute(
+            """
+            INSERT INTO wallets(
+                id, workspace_id, profile_id, account_id, label, kind, config_json, created_at
+            )
+            VALUES(
+                'wallet-second', 'ws', ?, NULL, 'Second Wallet', 'address',
+                '{"addresses":["bc1qsecond"],"chain":"bitcoin","network":"mainnet"}',
+                '2026-06-04T00:00:00Z'
+            )
+            """,
+            (job_profile_id,),
+        )
+        conn.commit()
+        source_key = freshness.source_key(freshness.SOURCE_ONCHAIN, "wallet-second")
+        handler = daemon_freshness._freshness_handlers({})[
+            freshness.JOB_ONCHAIN_WALLET
+        ]
+
+        with patch(
+            "kassiber.daemon_freshness.sync_wallet_from_backend",
+            return_value={"freshness_checkpoint": {"ok": True}},
+        ) as sync_mock:
+            result = handler(
+                conn,
+                {
+                    "profile_id": job_profile_id,
+                    "source_key": source_key,
+                    "payload": {"wallet_id": "wallet-second"},
+                },
+                lambda _payload: None,
+                lambda: None,
+            )
+
+        self.assertEqual(result["wallet"], "Second Wallet")
+        self.assertEqual(result["status"], "synced")
+        call_args = sync_mock.call_args.args
+        self.assertEqual(call_args[2], "ws")
+        self.assertEqual(call_args[3], job_profile_id)
+
     def test_journal_freshness_handler_auto_pairs_before_processing(self):
         conn = self._db()
         profile_id = _seed_profile(conn)

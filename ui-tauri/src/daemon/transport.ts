@@ -17,6 +17,7 @@ import {
   type AppLogField,
   type AppLogLevel,
 } from "@/lib/appLogs";
+import { safeTauriUnlisten } from "@/lib/tauriUnlisten";
 
 export type DaemonMode = "mock" | "bridge" | "tauri";
 
@@ -861,9 +862,13 @@ export async function subscribeDaemonEvents<T = unknown>(
     return () => {};
   }
   const { listen } = await import("@tauri-apps/api/event");
-  return listen<DaemonEventRecord<T>>("daemon://event", (event) => {
-    onEvent(event.payload);
-  });
+  const unlisten = await listen<DaemonEventRecord<T>>(
+    "daemon://event",
+    (event) => {
+      onEvent(event.payload);
+    },
+  );
+  return () => safeTauriUnlisten(unlisten);
 }
 
 const tauriDaemon: DaemonTransport = {
@@ -901,7 +906,7 @@ const tauriDaemon: DaemonTransport = {
         request: { ...req, request_id: requestId },
       });
     } finally {
-      unlisten();
+      safeTauriUnlisten(unlisten);
     }
   },
 };
