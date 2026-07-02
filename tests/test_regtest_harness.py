@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import random
 import socket
 import tempfile
 import unittest
@@ -565,6 +566,70 @@ class RegtestHarnessTest(unittest.TestCase):
                 self.assertEqual(tape_rpc.unused_interactions(), [])
             finally:
                 conn.close()
+
+    def test_full_accounting_demo_has_boom_and_bust_regimes(self):
+        # Balances must not be monotonically up-and-to-the-right: the scenario
+        # models both accumulation and drawdown periods.
+        scenario = regtest_demo.load_scenario()
+        regimes = scenario["stress"]["economic_regimes"]
+        self.assertGreaterEqual(len(regimes), 4)
+        self.assertLessEqual(
+            sum(int(phase["cycles"]) for phase in regimes),
+            scenario["stress"]["cycles"],
+        )
+        downturns = [p for p in regimes if Decimal(p["spend_scale"]) > Decimal(p["receipt_scale"])]
+        booms = [p for p in regimes if Decimal(p["receipt_scale"]) > Decimal(p["spend_scale"])]
+        self.assertTrue(downturns, "expected at least one drawdown regime")
+        self.assertTrue(booms, "expected at least one boom regime")
+
+    def test_regime_scales_select_phase_by_cycle(self):
+        regimes = [
+            {"label": "up", "cycles": 2, "receipt_scale": "1.6", "spend_scale": "0.7"},
+            {"label": "down", "cycles": 3, "receipt_scale": "0.4", "spend_scale": "1.9"},
+        ]
+        self.assertEqual(regtest_demo._regime_scales(1, regimes)[2], "up")
+        self.assertEqual(regtest_demo._regime_scales(2, regimes)[2], "up")
+        self.assertEqual(regtest_demo._regime_scales(3, regimes)[2], "down")
+        self.assertEqual(regtest_demo._regime_scales(5, regimes)[2], "down")
+        # past the last phase -> neutral 1.0/1.0
+        self.assertEqual(
+            regtest_demo._regime_scales(99, regimes),
+            (Decimal("1"), Decimal("1"), "steady"),
+        )
+
+    def test_manifest_validation_requires_boom_and_downturn(self):
+        scenario = regtest_demo.load_scenario()
+        scenario["stress"]["economic_regimes"] = [
+            {"label": "only-up", "cycles": 5, "receipt_scale": "1.5", "spend_scale": "0.8"},
+        ]
+        with self.assertRaisesRegex(ValueError, "downturn"):
+            regtest_demo.validate_scenario(scenario)
+
+    def test_tick_plan_is_deterministic_and_well_formed(self):
+        active = ["spending", "merchant_2022", "treasury_2020"]
+        plan_a = regtest_demo.plan_tick_operations(
+            active, random.Random(7), receipts=3, payments=2, transfers=1
+        )
+        plan_b = regtest_demo.plan_tick_operations(
+            active, random.Random(7), receipts=3, payments=2, transfers=1
+        )
+        shape = lambda plan: [(op["kind"], op["wallet"], op["to"], str(op["amount_btc"])) for op in plan]
+        self.assertEqual(shape(plan_a), shape(plan_b))
+        self.assertEqual(sum(1 for op in plan_a if op["kind"] == "receipt"), 3)
+        self.assertEqual(sum(1 for op in plan_a if op["kind"] == "payment"), 2)
+        self.assertEqual(sum(1 for op in plan_a if op["kind"] == "transfer"), 1)
+        for op in plan_a:
+            self.assertIn(op["wallet"], active)
+            self.assertGreater(Decimal(str(op["amount_btc"])), 0)
+            if op["kind"] == "transfer":
+                self.assertIn(op["to"], active)
+                self.assertNotEqual(op["to"], op["wallet"])
+            else:
+                self.assertIsNone(op["to"])
+
+    def test_tick_plan_requires_active_wallets(self):
+        with self.assertRaises(ValueError):
+            regtest_demo.plan_tick_operations([], random.Random(1))
 
 
 if __name__ == "__main__":

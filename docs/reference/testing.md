@@ -71,6 +71,12 @@ the Core RPC backend, then verifies Kassiber behavior through the public CLI:
   deterministic jitter (`stress.variation_bp`) so the ledger is volatile but
   reproducible; the demo still adds several hundred synced/imported wallet rows
   across seven years
+- deterministic economic regimes (`stress.economic_regimes`) that scale
+  inflows down and outflows up during downturns and vice-versa in booms, so
+  operational balances genuinely rise **and** draw down (e.g. the treasury
+  account falls through a 2020 shock and a 2022 bear market rather than
+  climbing monotonically); regimes stay within each wallet's running balance
+  so RP2's per-account balance gate never trips
 - wallet key-rotation events for treasury, merchant, cold storage, and Liquid
   treasury, reviewed as same-asset transfer pairs after sync; the old source
   wallets are then marked deprecated so their history remains visible while
@@ -143,6 +149,26 @@ shows the regtest data mode instead of mock fixtures. `pnpm dev:browser`
 (mock) stays available for pure component work, and the mock fixtures remain
 the basis of UI unit tests — the demo book replaces them only as the
 *interactive* dev dataset.
+
+### Making resync do something (`demo-tick`)
+
+A freshly built book sits at the chain tip, so an in-app refresh imports
+nothing. To simulate ongoing business so the incremental sync path has real
+work:
+
+```bash
+./scripts/integration-harness.sh demo-tick        # one batch of fresh activity
+./scripts/integration-harness.sh demo-tick 5      # five batches, five blocks
+```
+
+Each tick broadcasts a randomized batch of receipts (external → wallet),
+payments (wallet → external), and self-transfers across the active
+(non-deprecated) wallets, then mines a block so it confirms. Refresh in the
+app (or `wallets sync --all`) and the new rows import. Activity is
+random by default (that is the point); pass `--tick-seed` to
+`tests.integration.regtest_demo --tick` for a reproducible batch. `demo-full`
+itself always ends with one built-in tick + resync and fails if that resync
+imports nothing — a standing guard that "refresh" is never a dead button.
 
 Poke the node like BTCPayServer's `docker-bitcoin-cli.sh`:
 

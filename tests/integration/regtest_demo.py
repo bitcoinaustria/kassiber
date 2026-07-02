@@ -5,6 +5,7 @@ import base64
 import csv
 import json
 import os
+import random
 import shutil
 import subprocess
 import sys
@@ -256,6 +257,31 @@ def validate_scenario(scenario: dict[str, Any]) -> None:
             blocks = int(event.get("blocks") or 0)
             if blocks < 1 or blocks > 3:
                 raise ValueError(f"Scenario stress.mining_events[{index}] blocks must be between 1 and 3")
+        regimes = stress.get("economic_regimes") or []
+        regime_cycle_total = 0
+        has_downturn = False
+        has_boom = False
+        for index, phase in enumerate(regimes, start=1):
+            span = int(phase.get("cycles") or 0)
+            if span <= 0:
+                raise ValueError(f"Scenario stress.economic_regimes[{index}] cycles must be positive")
+            receipt_scale = Decimal(str(phase.get("receipt_scale", "1")))
+            spend_scale = Decimal(str(phase.get("spend_scale", "1")))
+            if receipt_scale <= 0 or spend_scale <= 0:
+                raise ValueError(f"Scenario stress.economic_regimes[{index}] scales must be positive")
+            regime_cycle_total += span
+            if spend_scale > receipt_scale:
+                has_downturn = True
+            if receipt_scale > spend_scale:
+                has_boom = True
+        if regimes:
+            if regime_cycle_total > cycles:
+                raise ValueError("Scenario stress.economic_regimes span more cycles than stress.cycles")
+            if not (has_downturn and has_boom):
+                raise ValueError(
+                    "Scenario stress.economic_regimes must include both a downturn "
+                    "(spend_scale > receipt_scale) and a boom phase so balances rise and fall"
+                )
     for index, deprecated_key in enumerate(scenario.get("deprecated_wallets") or [], start=1):
         if deprecated_key not in wallet_key_set:
             raise ValueError(f"Scenario deprecated_wallets[{index}] references unknown wallet: {deprecated_key}")
@@ -308,19 +334,46 @@ def _varied_amount(
     salt: int,
     spread_bp: int,
     ragged_sats: int = 0,
+    scale: Decimal = Decimal("1"),
 ) -> Decimal:
     """Scale a planned amount by a deterministic per-cycle factor.
 
     Receipts and payments share the same salt so a lean cycle shrinks both
-    sides and wallet margins survive every cycle ordering. `ragged_sats`
-    additionally roughens receipt amounts so the ledger does not look like a
-    spreadsheet of round numbers.
+    sides and wallet margins survive every cycle ordering. `scale` layers the
+    economic regime (boom vs. downturn) on top, and `ragged_sats` roughens
+    receipt amounts so the ledger does not look like a spreadsheet of round
+    numbers. Always returns a positive sat amount so downstream _btc() holds.
     """
     delta_bp = _stress_jitter_bp(cycle, salt, spread_bp)
-    varied = (amount * (10_000 + delta_bp) / 10_000).quantize(SAT)
+    varied = (amount * scale * (10_000 + delta_bp) / 10_000).quantize(SAT)
     if ragged_sats > 0:
         varied += ((cycle * 7919 + salt * 271) % ragged_sats) * SAT
+    if varied <= 0:
+        varied = SAT
     return varied
+
+
+def _regime_scales(cycle: int, regimes: list[dict[str, Any]]) -> tuple[Decimal, Decimal, str]:
+    """Deterministic (receipt_scale, spend_scale, label) for a cycle.
+
+    Regime phases tile from cycle 1 in order; cycles past the last phase (or
+    with no regimes configured) run at neutral 1.0/1.0. A downturn scales
+    receipts down and spend up, so balances genuinely draw down — the book is
+    not monotonically up-and-to-the-right.
+    """
+    start = 1
+    for phase in regimes:
+        span = int(phase.get("cycles") or 0)
+        if span <= 0:
+            continue
+        if start <= cycle < start + span:
+            return (
+                Decimal(str(phase.get("receipt_scale", "1"))),
+                Decimal(str(phase.get("spend_scale", "1"))),
+                str(phase.get("label") or "regime"),
+            )
+        start += span
+    return (Decimal("1"), Decimal("1"), "steady")
 
 
 def _btc(value: Any) -> Decimal:
@@ -917,6 +970,8 @@ def _generate_stress_history(
     fee = _btc(stress["fee_btc"])
     variation_bp = int(stress.get("variation_bp") or 0)
     fee_spread_bp = 4000 if variation_bp else 0
+    regimes = stress.get("economic_regimes") or []
+    regime_labels_seen: list[str] = []
     active_wallet_for = {key: key for key in wallets}
     rotations_by_cycle: dict[int, list[dict[str, Any]]] = {}
     for rotation in stress.get("wallet_rotations") or []:
@@ -943,6 +998,9 @@ def _generate_stress_history(
     for cycle in range(cycles):
         cycle_number = cycle + 1
         cycle_ts = first_target_ts + (cycle * days_between_cycles * SECONDS_PER_DAY)
+        receipt_scale, spend_scale, regime_label = _regime_scales(cycle_number, regimes)
+        if regime_label not in regime_labels_seen:
+            regime_labels_seen.append(regime_label)
         for rotation in rotations_by_cycle.get(cycle_number, []):
             sender = wallets[rotation["from"]]
             receiver = wallets[rotation["to"]]
@@ -972,6 +1030,7 @@ def _generate_stress_history(
                 salt=0,
                 spread_bp=variation_bp,
                 ragged_sats=991,
+                scale=receipt_scale,
             )
             for key, amount in receipt_plan.items()
         }
@@ -1018,7 +1077,7 @@ def _generate_stress_history(
             username,
             password,
             active_wallet(payer_key),
-            {external_address: _varied_amount(amount, cycle_number, salt=0, spread_bp=variation_bp)},
+            {external_address: _varied_amount(amount, cycle_number, salt=0, spread_bp=variation_bp, scale=spend_scale)},
             _varied_amount(fee, cycle_number, salt=3, spread_bp=fee_spread_bp),
         )
         current_ts = _mine_at(
@@ -1043,6 +1102,7 @@ def _generate_stress_history(
                     cycle_number,
                     salt=0,
                     spread_bp=variation_bp,
+                    scale=spend_scale,
                 )},
                 _varied_amount(expense_fee, cycle_number, salt=5, spread_bp=fee_spread_bp),
             )
@@ -1148,6 +1208,7 @@ def _generate_stress_history(
         "swap_bridges": swap_bridge_count,
         "mined_rewards": mined_reward_count,
         "variation_bp": variation_bp,
+        "economic_regimes": regime_labels_seen,
         "rows_expected": (
             cycles * (len(receipt_plan) + 1)
             + business_expense_count
@@ -1845,6 +1906,257 @@ def _assert_expected(
             raise RuntimeError(f"Expected export file was not produced: {filename}")
 
 
+TICK_FEE_BTC = Decimal("0.00001000")
+TICK_RECEIPT_MEMOS = (
+    "Point-of-sale settlement",
+    "Customer invoice paid",
+    "Marketplace payout",
+    "Subscription renewal",
+    "Consulting retainer",
+)
+TICK_PAYMENT_MEMOS = (
+    "Supplier invoice",
+    "Cloud hosting bill",
+    "Contractor payout",
+    "Hardware purchase",
+    "Utility payment",
+)
+
+
+def active_tick_wallets(scenario: dict[str, Any], wallets: dict[str, DemoWallet]) -> list[str]:
+    """Core wallets that should still see fresh activity: on-chain and not
+    marked deprecated by a key rotation."""
+    deprecated = set(scenario.get("deprecated_wallets") or [])
+    return [key for key, wallet in wallets.items() if _is_core_wallet(wallet) and key not in deprecated]
+
+
+def _tick_amount(rng: random.Random, low: Decimal, high: Decimal) -> Decimal:
+    """A random sat-granular amount in [low, high] — inherently ragged, no
+    round numbers, so the ledger keeps looking like real business flow."""
+    low_sats = int((low / SAT).to_integral_value())
+    high_sats = int((high / SAT).to_integral_value())
+    return (Decimal(rng.randint(low_sats, high_sats)) * SAT).quantize(SAT)
+
+
+def plan_tick_operations(
+    active_keys: list[str],
+    rng: random.Random,
+    *,
+    receipts: int = 2,
+    payments: int = 1,
+    transfers: int = 1,
+) -> list[dict[str, Any]]:
+    """Build a randomized batch of simulated business activity.
+
+    Pure: given the active wallet keys and a seeded RNG it deterministically
+    returns receipt (external -> wallet), payment (wallet -> external), and
+    self-transfer (wallet -> wallet) operations. Execution is separate so this
+    can be unit-tested without a node.
+    """
+    active = list(active_keys)
+    if not active:
+        raise ValueError("No active core wallets available for a business tick")
+    ops: list[dict[str, Any]] = []
+    for _ in range(max(0, receipts)):
+        ops.append(
+            {
+                "kind": "receipt",
+                "wallet": rng.choice(active),
+                "to": None,
+                "amount_btc": _tick_amount(rng, Decimal("0.00050000"), Decimal("0.00500000")),
+                "memo": rng.choice(TICK_RECEIPT_MEMOS),
+            }
+        )
+    for _ in range(max(0, payments)):
+        ops.append(
+            {
+                "kind": "payment",
+                "wallet": rng.choice(active),
+                "to": None,
+                "amount_btc": _tick_amount(rng, Decimal("0.00030000"), Decimal("0.00300000")),
+                "memo": rng.choice(TICK_PAYMENT_MEMOS),
+            }
+        )
+    if len(active) >= 2:
+        for _ in range(max(0, transfers)):
+            source, target = rng.sample(active, 2)
+            ops.append(
+                {
+                    "kind": "transfer",
+                    "wallet": source,
+                    "to": target,
+                    "amount_btc": _tick_amount(rng, Decimal("0.00050000"), Decimal("0.00400000")),
+                    "memo": "Internal treasury rebalance",
+                }
+            )
+    rng.shuffle(ops)
+    return ops
+
+
+def execute_business_tick(
+    url: str,
+    username: str,
+    password: str,
+    wallets: dict[str, DemoWallet],
+    *,
+    faucet_wallet: str,
+    mining_address: str,
+    external_address: str,
+    current_ts: int,
+    plan: list[dict[str, Any]],
+    fee: Decimal = TICK_FEE_BTC,
+) -> tuple[int, dict[str, Any]]:
+    """Broadcast a tick plan against the running node and mine one block so the
+    activity confirms and the next incremental sync has real work to do."""
+    executed: list[dict[str, Any]] = []
+    for op in plan:
+        wallet = wallets[op["wallet"]]
+        amount = _btc(op["amount_btc"])
+        if op["kind"] == "receipt":
+            txid = rpc(
+                url,
+                username,
+                password,
+                "sendtoaddress",
+                [wallet.receive_address(), amount],
+                wallet=faucet_wallet,
+            )
+            direction = "inbound"
+        elif op["kind"] == "payment":
+            txid = _send_from_wallet(url, username, password, wallet, {external_address: amount}, fee)
+            direction = "outbound"
+        elif op["kind"] == "transfer":
+            target = wallets[op["to"]]
+            txid = _send_from_wallet(url, username, password, wallet, {target.receive_address(): amount}, fee)
+            direction = "transfer"
+        else:
+            raise RuntimeError(f"Unsupported tick operation kind: {op['kind']}")
+        executed.append(
+            {
+                "kind": op["kind"],
+                "wallet": op["wallet"],
+                "to": op.get("to"),
+                "amount_btc": format(amount, "f"),
+                "direction": direction,
+                "memo": op.get("memo"),
+                "txid": txid,
+            }
+        )
+    current_ts = _mine(url, username, password, faucet_wallet, mining_address, current_ts)
+    tip = rpc(url, username, password, "getbestblockhash")
+    return current_ts, {"operations": executed, "count": len(executed), "tip": tip}
+
+
+def reconstruct_wallets_from_summary(
+    scenario: dict[str, Any],
+    summary_data: dict[str, Any],
+    run_id: str,
+) -> dict[str, DemoWallet]:
+    """Rebuild DemoWallet objects for a running demo node from a saved summary,
+    so a standalone tick can reconnect without re-running the whole demo."""
+    summary_wallets = summary_data.get("wallets") or {}
+    wallets: dict[str, DemoWallet] = {}
+    for wallet_spec in scenario["wallets"]:
+        key = wallet_spec["key"]
+        entry = summary_wallets.get(key) or {}
+        addresses = list(entry.get("addresses") or ([entry["address"]] if entry.get("address") else []))
+        core_wallet = ""
+        if _is_core_wallet_spec(wallet_spec):
+            core_wallet = f"kassiber-demo-{run_id}-{sanitize_wallet_segment(key)}"
+        chain = _wallet_chain(wallet_spec)
+        wallets[key] = DemoWallet(
+            key=key,
+            label=wallet_spec["label"],
+            account=wallet_spec["account"],
+            kind=_wallet_kind(wallet_spec),
+            chain=chain,
+            network=str(wallet_spec.get("network") or ("liquidv1" if chain == "liquid" else "regtest")),
+            core_wallet=core_wallet,
+            address=addresses[0] if addresses else "",
+            addresses=addresses,
+            source_format=str(wallet_spec.get("source_format") or ""),
+            kassiber_id=entry.get("kassiber_id"),
+        )
+    return wallets
+
+
+def demo_tick(
+    *,
+    scenario_path: Path = DEFAULT_SCENARIO,
+    summary_path: Path,
+    count: int = 1,
+    seed: int | None = None,
+    receipts: int = 2,
+    payments: int = 1,
+    transfers: int = 1,
+) -> dict[str, Any]:
+    """Stage fresh simulated business activity on a running demo node so the
+    next in-app refresh/sync actually imports something."""
+    scenario = load_scenario(scenario_path)
+    summary = json.loads(Path(summary_path).read_text(encoding="utf-8"))["data"]
+    run_id = summary["run_id"]
+    url = os.environ.get("KASSIBER_REGTEST_CORE_URL") or summary.get("core_url") or "http://127.0.0.1:18443"
+    username = os.environ.get("KASSIBER_REGTEST_RPC_USER", "kassiber")
+    password = os.environ.get("KASSIBER_REGTEST_RPC_PASSWORD", "kassiber")
+
+    chain = rpc(url, username, password, "getblockchaininfo")
+    if chain.get("chain") != "regtest":
+        raise RuntimeError(f"Refusing to tick against non-regtest Core node: {chain.get('chain')}")
+
+    faucet_wallet = f"kassiber-demo-{run_id}-external"
+    wallets = reconstruct_wallets_from_summary(scenario, summary, run_id)
+    active = active_tick_wallets(scenario, wallets)
+    if not active:
+        raise RuntimeError("Demo summary has no active core wallets to tick")
+
+    _ensure_wallet(url, username, password, faucet_wallet)
+    for key in active:
+        _ensure_wallet(url, username, password, wallets[key].core_wallet)
+
+    mining_address = rpc(url, username, password, "getnewaddress", ["tick mining", "bech32"], wallet=faucet_wallet)
+    external_address = rpc(url, username, password, "getnewaddress", ["tick external", "bech32"], wallet=faucet_wallet)
+
+    rng = random.Random(seed)
+    # Advance from the current tip but never behind wall clock, so new activity
+    # is stamped "now" relative to the backdated historical span.
+    current_ts = max(int(chain.get("mediantime") or 0) + 600, int(time.time()))
+    ticks: list[dict[str, Any]] = []
+    try:
+        for _ in range(max(1, count)):
+            plan = plan_tick_operations(active, rng, receipts=receipts, payments=payments, transfers=transfers)
+            current_ts, tick_result = execute_business_tick(
+                url,
+                username,
+                password,
+                wallets,
+                faucet_wallet=faucet_wallet,
+                mining_address=mining_address,
+                external_address=external_address,
+                current_ts=current_ts,
+                plan=plan,
+            )
+            ticks.append(tick_result)
+    finally:
+        try:
+            rpc(url, username, password, "setmocktime", [0])
+        except RuntimeError:
+            # Best-effort return to real time; a dead node here must not mask a
+            # tick error being unwound.
+            pass
+
+    return {
+        "kind": "regtest.demo.tick",
+        "schema_version": 1,
+        "data": {
+            "run_id": run_id,
+            "core_url": url,
+            "active_wallets": active,
+            "ticks": ticks,
+            "total_operations": sum(tick["count"] for tick in ticks),
+        },
+    }
+
+
 def run_demo(
     *,
     scenario_path: Path = DEFAULT_SCENARIO,
@@ -1852,6 +2164,7 @@ def run_demo(
     export_dir: Path | None = None,
     run_id: str | None = None,
     keep_core_wallets: bool = False,
+    run_business_tick: bool = True,
 ) -> dict[str, Any]:
     scenario = load_scenario(scenario_path)
     url = os.environ.get("KASSIBER_REGTEST_CORE_URL", "http://127.0.0.1:18443")
@@ -2121,6 +2434,54 @@ def run_demo(
             exports=exports,
         )
 
+        # Prove the incremental resync path does real work: after the book is
+        # already synced, stage fresh business activity and sync again. A no-op
+        # resync (nothing imported) would mean "refresh" in the app is dead.
+        resync = None
+        if run_business_tick:
+            tick_rng = random.Random(0xC0FFEE)
+            active_keys = active_tick_wallets(scenario, wallets)
+            tick_plan = plan_tick_operations(active_keys, tick_rng, receipts=3, payments=2, transfers=1)
+            rows_before = len(transactions)
+            current_ts, tick_result = execute_business_tick(
+                url,
+                username,
+                password,
+                wallets,
+                faucet_wallet=faucet_wallet,
+                mining_address=mining_address,
+                external_address=external_address,
+                current_ts=current_ts,
+                plan=tick_plan,
+            )
+            resync_sync = run_cli(data_root, "wallets", "sync", *scope, "--all")["data"]
+            resync_rows = resync_sync if isinstance(resync_sync, list) else [resync_sync]
+            imported = sum(int(row.get("imported") or 0) for row in resync_rows)
+            modes = sorted({str(row.get("bitcoinrpc_sync_mode")) for row in resync_rows if row.get("bitcoinrpc_sync_mode")})
+            transactions = run_cli(
+                data_root,
+                "transactions",
+                "list",
+                *scope,
+                "--limit",
+                TRANSACTION_LIST_LIMIT,
+                "--order",
+                "asc",
+            )["data"]
+            if imported <= 0:
+                raise RuntimeError(
+                    f"Resync after a {tick_result['count']}-op business tick imported nothing (modes={modes})"
+                )
+            if len(transactions) <= rows_before:
+                raise RuntimeError("Business tick + resync did not add ledger rows")
+            resync = {
+                "tick": tick_result,
+                "imported": imported,
+                "sync_modes": modes,
+                "rows_before": rows_before,
+                "rows_after": len(transactions),
+            }
+
         by_direction = Counter(row["direction"] for row in transactions)
         by_wallet = Counter(row["wallet"] for row in transactions)
         result = {
@@ -2151,6 +2512,7 @@ def run_demo(
                 "operations": [{"id": key, "txid": value} for key, value in sorted(txids.items())],
                 "sync": sync,
                 "pending_sync": pending_sync,
+                "resync": resync,
                 "transactions": {
                     "count": len(transactions),
                     "by_direction": dict(sorted(by_direction.items())),
@@ -2209,15 +2571,41 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--run-id")
     parser.add_argument("--json-output", type=Path)
     parser.add_argument("--keep-core-wallets", action="store_true")
+    parser.add_argument("--no-business-tick", action="store_true", help="skip the post-sync resync proof")
+    parser.add_argument(
+        "--tick",
+        action="store_true",
+        help="stage fresh business activity on a running demo node (needs --summary)",
+    )
+    parser.add_argument("--summary", type=Path, help="path to a demo-summary.json from a previous run")
+    parser.add_argument("--tick-count", type=int, default=1)
+    parser.add_argument("--tick-seed", type=int, help="seed for reproducible tick activity (default: random)")
+    parser.add_argument("--receipts", type=int, default=2)
+    parser.add_argument("--payments", type=int, default=1)
+    parser.add_argument("--transfers", type=int, default=1)
     args = parser.parse_args(argv)
 
-    result = run_demo(
-        scenario_path=args.scenario,
-        data_root=args.data_root,
-        export_dir=args.export_dir,
-        run_id=args.run_id,
-        keep_core_wallets=args.keep_core_wallets,
-    )
+    if args.tick:
+        if not args.summary:
+            parser.error("--tick requires --summary pointing at a demo-summary.json")
+        result = demo_tick(
+            scenario_path=args.scenario,
+            summary_path=args.summary,
+            count=args.tick_count,
+            seed=args.tick_seed,
+            receipts=args.receipts,
+            payments=args.payments,
+            transfers=args.transfers,
+        )
+    else:
+        result = run_demo(
+            scenario_path=args.scenario,
+            data_root=args.data_root,
+            export_dir=args.export_dir,
+            run_id=args.run_id,
+            keep_core_wallets=args.keep_core_wallets,
+            run_business_tick=not args.no_business_tick,
+        )
     rendered = json.dumps(result, indent=2, sort_keys=True)
     if args.json_output:
         args.json_output.parent.mkdir(parents=True, exist_ok=True)

@@ -265,6 +265,31 @@ run_demo_up() {
   demo_print_instructions
 }
 
+run_demo_tick() {
+  local count="${1:-1}"
+  if [ ! -f "$DEMO_MANIFEST" ] || [ ! -f "$DEMO_HOME/demo-summary.json" ]; then
+    echo "No demo book at $DEMO_HOME. Run './scripts/integration-harness.sh demo-up' first." >&2
+    exit 2
+  fi
+  export KASSIBER_INTEGRATION=1
+  export KASSIBER_REGTEST_CORE_URL="${KASSIBER_REGTEST_CORE_URL:-$(demo_manifest_get core_url)}"
+  export KASSIBER_REGTEST_RPC_USER="${KASSIBER_REGTEST_RPC_USER:-$(demo_manifest_get rpc_user)}"
+  export KASSIBER_REGTEST_RPC_PASSWORD="${KASSIBER_REGTEST_RPC_PASSWORD:-$(demo_manifest_get rpc_password)}"
+  if ! probe_core 0; then
+    echo "Demo regtest node is not reachable at $KASSIBER_REGTEST_CORE_URL." >&2
+    echo "Start it with './scripts/integration-harness.sh demo-up'." >&2
+    exit 2
+  fi
+  py -m tests.integration.regtest_demo \
+    --tick \
+    --summary "$DEMO_HOME/demo-summary.json" \
+    --tick-count "$count"
+  echo
+  echo "New business activity is confirmed on the demo node."
+  echo "Refresh/sync in the app (or run it directly) to import it:"
+  echo "  uv run python -m kassiber --data-root \"$DEMO_HOME/data\" wallets sync --all"
+}
+
 run_demo_down() {
   local purge="${1:-}"
   local project
@@ -306,6 +331,9 @@ case "$MODE" in
   demo-up)
     run_demo_up
     ;;
+  demo-tick)
+    run_demo_tick "${2:-1}"
+    ;;
   demo-down)
     run_demo_down "${2:-}"
     ;;
@@ -314,7 +342,7 @@ case "$MODE" in
     run_with_bitcoin_core run_slow_suite
     ;;
   *)
-    echo "usage: $0 [fast|bitcoin-core|slow|demo|demo-full|demo-up|demo-down [--purge]|all]" >&2
+    echo "usage: $0 [fast|bitcoin-core|slow|demo|demo-full|demo-up|demo-tick [N]|demo-down [--purge]|all]" >&2
     exit 2
     ;;
 esac

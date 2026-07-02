@@ -45,6 +45,50 @@
     "cycles": 132,
     "days_between_cycles": 20,
     "variation_bp": 2200,
+    "economic_regimes": [
+      {
+        "label": "2019 steady start",
+        "cycles": 18,
+        "receipt_scale": "1.00",
+        "spend_scale": "1.00",
+        "note": "Balanced trading; slight net accumulation."
+      },
+      {
+        "label": "2020 shock drawdown",
+        "cycles": 12,
+        "receipt_scale": "0.45",
+        "spend_scale": "1.80",
+        "note": "Revenue collapses while fixed costs continue; the treasury draws down."
+      },
+      {
+        "label": "2021 boom",
+        "cycles": 28,
+        "receipt_scale": "1.75",
+        "spend_scale": "0.70",
+        "note": "Strong revenue and lean spend; balances climb hard."
+      },
+      {
+        "label": "2022 bear market",
+        "cycles": 24,
+        "receipt_scale": "0.45",
+        "spend_scale": "1.95",
+        "note": "Prolonged downturn; sustained net outflow eats into holdings."
+      },
+      {
+        "label": "2023-24 recovery",
+        "cycles": 22,
+        "receipt_scale": "1.45",
+        "spend_scale": "0.85",
+        "note": "Business recovers and rebuilds reserves."
+      },
+      {
+        "label": "2025 consolidation",
+        "cycles": 28,
+        "receipt_scale": "0.90",
+        "spend_scale": "1.15",
+        "note": "Mature, slightly cash-negative steady state; gentle drawdown."
+      }
+    ],
     "receipt_btc": {
       "treasury": "0.00181337",
       "cold": "0.00079210",
