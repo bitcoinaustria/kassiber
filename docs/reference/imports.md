@@ -12,6 +12,7 @@ written.
 
 - generic JSON / CSV transaction files
 - generic ledger: a fill-in Excel (`.xlsx`) or CSV/TSV template for manual entry
+- local-AI photo/PDF OCR drafts (`wallets preview-document` / `wallets import-document`)
 - BTCPay CSV / JSON exports
 - BTCPay Greenfield confirmed wallet history
 - Wasabi Wallet sanitized RPC/export bundles
@@ -313,6 +314,33 @@ A row with an unrecognized `Type`, no Bitcoin leg, a missing `Date`, or a
 direction that contradicts its `Type` fails the whole import with a
 row-numbered, actionable message — fix the file and re-import (dedup makes
 re-imports safe).
+
+## Local-AI Photo/PDF OCR Drafts
+
+For providers that only send a PDF statement, receipt image, or paper note,
+Kassiber can ask a local Ollama vision/OCR model to draft generic transaction
+rows:
+
+```bash
+kassiber wallets preview-document --file receipt.png --model glm-ocr
+kassiber wallets import-document --wallet WID --file receipt.png --model glm-ocr
+```
+
+`preview-document` is read-only. It requires a local loopback AI provider
+(`http://localhost:11434/v1` by default) and an installed vision/OCR model.
+Recommended Ollama models are `glm-ocr`, `qwen3-vl:8b`,
+`qwen3-vl:4b`, `llama3.2-vision:11b`, and `minicpm-v:8b`.
+
+The preview returns draft rows with `ready` / `quarantined` status,
+per-row and per-cell confidence, evidence text, source regions when the model
+provides them, and a normalized `import_record`. `import-document` imports
+only ready rows unless `--include-quarantined` is passed, then copies the
+source image/PDF into the managed attachments tree for every inserted or
+enriched transaction.
+
+Off-device AI providers are hard-disabled for this path even if they are
+configured for chat. URLs are also rejected: open Google Drive/Docs links in
+the logged-in browser, download the PDF/image, and import the local file.
 
 ## Privacy-hop evidence
 

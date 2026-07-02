@@ -89,6 +89,8 @@ daemon for the exact current allowlist:
       "ui.next_actions",
       "ui.wallets.create",
       "ui.wallets.import_file",
+      "ui.wallets.document_import.preview",
+      "ui.wallets.document_import.import",
       "ui.wallets.import_samourai",
       "ui.connections.btcpay.create",
       "ui.connections.bullbitcoin_wallet.create",
@@ -439,6 +441,22 @@ The result also includes `matched`, `skipped_unmatched`, and
 `skipped_ambiguous` in relevant mode, or `matched`, `unmatched`, `ambiguous`,
 `excluded`, and `reconciliation_records` in Bull Bitcoin/Coinfinity/Pocket full
 mode.
+
+`ui.wallets.document_import.preview` accepts `source_file`, optional
+`provider`, optional `model`, `confidence_threshold`, and `max_pages`. It is
+read-only, but it calls a local AI model, so the Tauri shell gates it through
+`AI_RUNTIME_KINDS`. The daemon rejects non-loopback or non-local providers and
+returns `document_import_model_missing` with Ollama model recommendations when
+no installed vision/OCR model is available. URL inputs are rejected; users
+should download Google Drive/Docs files through their logged-in browser and
+import the local file.
+
+`ui.wallets.document_import.import` accepts `wallet`, a local `source_file`
+or preview `draft.source.path`, preview `rows` (or a full `draft` object),
+optional `selected_row_ids`, optional `include_quarantined`, and optional
+`attach_evidence` (default true). It imports only selected ready rows by
+default, then copies the source file into managed attachments for every
+inserted or enriched transaction.
 
 `ui.connections.sources` returns the daemon's authoritative catalog of
 supported wallet kinds (with summary/config-fields metadata) and the

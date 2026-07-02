@@ -124,6 +124,13 @@ assistant flows. Smaller and less powerful models can still be useful for
 narrower tasks, and should become more practical as Kassiber's prompts, skill
 bundle, and workflows get tighter.
 
+The photo/PDF transaction importer is stricter than chat: it only accepts a
+local loopback provider and an installed vision/OCR model. Good Ollama choices
+for that surface are `glm-ocr` for fast document OCR, `qwen3-vl:8b` or
+`qwen3-vl:4b` for stronger multimodal table reasoning, and
+`llama3.2-vision:11b` / `minicpm-v:8b` as broad fallback models. Remote,
+TEE, Claude CLI, and Codex CLI providers are hard-disabled for document OCR.
+
 Claude CLI and Codex CLI can be added with fixed provider locators:
 
 ```bash

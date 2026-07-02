@@ -285,6 +285,8 @@ const ALLOWED_DAEMON_KINDS: &[&str] = &[
     "ui.loans.unmark",
     "ui.wallets.create",
     "ui.wallets.import_file",
+    "ui.wallets.document_import.preview",
+    "ui.wallets.document_import.import",
     "ui.wallets.import_samourai",
     "ui.wallets.ledger_preview",
     "ui.wallets.preview_descriptor",
@@ -404,6 +406,7 @@ const STREAMING_DAEMON_KINDS: &[&str] = &[
 const AI_RUNTIME_KINDS: &[&str] = &[
     "ai.list_models",
     "ai.test_connection",
+    "ui.wallets.document_import.preview",
     "ai.chat",
     "ai.chat.cancel",
     "ai.tool_call.consent",

@@ -226,6 +226,8 @@ const ALLOWED_BRIDGE_KINDS = new Set([
   "ui.loans.unmark",
   "ui.wallets.create",
   "ui.wallets.import_file",
+  "ui.wallets.document_import.preview",
+  "ui.wallets.document_import.import",
   "ui.wallets.import_samourai",
   "ui.wallets.ledger_preview",
   "ui.wallets.preview_descriptor",

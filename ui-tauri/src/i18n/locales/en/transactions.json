@@ -220,6 +220,38 @@
       "failed": "Transactions export failed"
     }
   },
+  "documentImport": {
+    "trigger": "OCR",
+    "triggerAria": "Import from photo or PDF",
+    "title": "Photo/PDF Import",
+    "description": "Local OCR draft",
+    "source": "Source",
+    "sourcePlaceholder": "/path/to/receipt.pdf",
+    "pick": "Pick",
+    "pickTitle": "Choose photo or PDF",
+    "fileFilter": "Images and PDFs",
+    "pickFailed": "File picker failed",
+    "wallet": "Wallet",
+    "walletPlaceholder": "Choose wallet",
+    "model": "Model",
+    "modelPlaceholder": "Auto, glm-ocr, qwen3-vl:8b",
+    "recommendations": "Recommended local models: glm-ocr · qwen3-vl:8b · llama3.2-vision:11b",
+    "preview": "Preview",
+    "previewFailed": "OCR preview failed",
+    "ready": "{{count}} ready",
+    "quarantined": "{{count}} quarantined",
+    "row": "Row",
+    "confidence": "Confidence",
+    "status": "Status",
+    "statusReady": "Ready",
+    "statusQuarantined": "Quarantined",
+    "selectAll": "Select all ready rows",
+    "selectRow": "Select {{row}}",
+    "importSelected": "Import {{count}}",
+    "importDone": "Document rows imported",
+    "importSummary": "{{count}} rows · {{attachments}} evidence files",
+    "importFailed": "Document import failed"
+  },
   "workbench": {
     "metric": {
       "incoming": "Incoming",

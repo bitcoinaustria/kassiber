@@ -28,6 +28,7 @@ from ..ai.providers import (
     list_with_default as list_ai_providers_with_default,
 )
 from ..core import chat_history as core_chat_history
+from ..core import document_import as core_document_import
 from ..importers import (
     preview_generic_ledger_records,
     write_generic_ledger_template,
@@ -49,6 +50,7 @@ from .handlers import (
     TRANSFER_PAIR_POLICIES,
     _attachment_hooks,
     _commercial_hooks,
+    _import_coordinator_hooks,
     _metadata_hooks,
     _report_hooks,
     clear_quarantine,
@@ -99,6 +101,7 @@ from .handlers import (
     process_journals,
     resolve_scope,
     resolve_transaction,
+    resolve_wallet,
     resolve_quarantine_exclude,
     resolve_quarantine_price_override,
     show_quarantine,
@@ -1376,6 +1379,52 @@ def build_parser() -> argparse.ArgumentParser:
     )
     wallets_ledger_template.add_argument(
         "--file", required=True, help="Destination path; .csv writes a CSV template, otherwise .xlsx"
+    )
+    wallets_preview_document = wallets_sub.add_parser(
+        "preview-document",
+        help="Use a local vision model to draft transaction rows from an image/PDF",
+    )
+    wallets_preview_document.add_argument("--workspace")
+    wallets_preview_document.add_argument("--profile")
+    wallets_preview_document.add_argument("--file", required=True)
+    wallets_preview_document.add_argument("--provider")
+    wallets_preview_document.add_argument("--model")
+    wallets_preview_document.add_argument(
+        "--confidence-threshold",
+        type=float,
+        default=float(core_document_import.DEFAULT_CONFIDENCE_THRESHOLD),
+    )
+    wallets_preview_document.add_argument(
+        "--max-pages",
+        type=int,
+        default=core_document_import.DEFAULT_MAX_PDF_PAGES,
+        help="Maximum PDF pages to render for local OCR",
+    )
+    wallets_import_document = wallets_sub.add_parser(
+        "import-document",
+        help="Import ready local-OCR draft rows into a wallet and attach the source document",
+    )
+    wallets_import_document.add_argument("--workspace")
+    wallets_import_document.add_argument("--profile")
+    wallets_import_document.add_argument("--wallet", required=True)
+    wallets_import_document.add_argument("--file", required=True)
+    wallets_import_document.add_argument("--provider")
+    wallets_import_document.add_argument("--model")
+    wallets_import_document.add_argument(
+        "--confidence-threshold",
+        type=float,
+        default=float(core_document_import.DEFAULT_CONFIDENCE_THRESHOLD),
+    )
+    wallets_import_document.add_argument(
+        "--max-pages",
+        type=int,
+        default=core_document_import.DEFAULT_MAX_PDF_PAGES,
+        help="Maximum PDF pages to render for local OCR",
+    )
+    wallets_import_document.add_argument(
+        "--include-quarantined",
+        action="store_true",
+        help="Import rows that failed the confidence gate",
     )
     wallets_import_samourai = wallets_sub.add_parser("import-samourai")
     wallets_import_samourai.add_argument("--workspace")
@@ -3137,6 +3186,40 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
             )
         if args.wallets_command == "ledger-template":
             return emit(args, write_generic_ledger_template(args.file))
+        if args.wallets_command == "preview-document":
+            return emit(
+                args,
+                core_document_import.preview_document_import(
+                    conn,
+                    source_file=args.file,
+                    provider_name=args.provider,
+                    model=args.model,
+                    confidence_threshold=args.confidence_threshold,
+                    max_pages=args.max_pages,
+                ),
+            )
+        if args.wallets_command == "import-document":
+            _, profile = resolve_scope(conn, args.workspace, args.profile)
+            wallet = resolve_wallet(conn, profile["id"], args.wallet)
+            return emit(
+                args,
+                core_document_import.preview_then_import_document(
+                    conn,
+                    source_file=args.file,
+                    data_root=args.data_root,
+                    wallet=wallet,
+                    profile=profile,
+                    hooks=core_document_import.DocumentImportHooks(
+                        import_hooks=_import_coordinator_hooks(),
+                        attachment_hooks=_attachment_hooks(),
+                    ),
+                    provider_name=args.provider,
+                    model=args.model,
+                    confidence_threshold=args.confidence_threshold,
+                    max_pages=args.max_pages,
+                    include_quarantined=args.include_quarantined,
+                ),
+            )
         if args.wallets_command == "import-samourai":
             return emit(
                 args,

@@ -220,6 +220,38 @@
       "failed": "Transaktionen-Export fehlgeschlagen"
     }
   },
+  "documentImport": {
+    "trigger": "OCR",
+    "triggerAria": "Aus Foto oder PDF importieren",
+    "title": "Foto/PDF-Import",
+    "description": "Lokaler OCR-Entwurf",
+    "source": "Quelle",
+    "sourcePlaceholder": "/pfad/zum/beleg.pdf",
+    "pick": "Wählen",
+    "pickTitle": "Foto oder PDF wählen",
+    "fileFilter": "Bilder und PDFs",
+    "pickFailed": "Dateiauswahl fehlgeschlagen",
+    "wallet": "Wallet",
+    "walletPlaceholder": "Wallet wählen",
+    "model": "Modell",
+    "modelPlaceholder": "Auto, glm-ocr, qwen3-vl:8b",
+    "recommendations": "Empfohlene lokale Modelle: glm-ocr · qwen3-vl:8b · llama3.2-vision:11b",
+    "preview": "Vorschau",
+    "previewFailed": "OCR-Vorschau fehlgeschlagen",
+    "ready": "{{count}} bereit",
+    "quarantined": "{{count}} Quarantäne",
+    "row": "Zeile",
+    "confidence": "Sicherheit",
+    "status": "Status",
+    "statusReady": "Bereit",
+    "statusQuarantined": "Quarantäne",
+    "selectAll": "Alle bereiten Zeilen auswählen",
+    "selectRow": "{{row}} auswählen",
+    "importSelected": "{{count}} importieren",
+    "importDone": "Dokumentzeilen importiert",
+    "importSummary": "{{count}} Zeilen · {{attachments}} Belege",
+    "importFailed": "Dokumentimport fehlgeschlagen"
+  },
   "workbench": {
     "metric": {
       "incoming": "Eingehend",

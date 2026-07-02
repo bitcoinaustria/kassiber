@@ -100,6 +100,7 @@ from .core import chat_history as core_chat_history
 from .core import loans as core_loans
 from .core import commercial as core_commercial
 from .core import attachments as core_attachments
+from .core import document_import as core_document_import
 from .core import lightning as core_lightning
 from .core.lightning import lnd as _core_lightning_lnd  # noqa: F401 — registers the LND adapter on import.
 from .core import reports as core_reports
@@ -441,6 +442,8 @@ SUPPORTED_KINDS = (
     "ui.review.badges",
     "ui.wallets.create",
     "ui.wallets.import_file",
+    "ui.wallets.document_import.preview",
+    "ui.wallets.document_import.import",
     "ui.wallets.import_samourai",
     "ui.wallets.ledger_preview",
     "ui.wallets.preview_descriptor",
@@ -7134,6 +7137,115 @@ def _import_wallet_file_payload(
     return import_into_wallet(conn, None, None, wallet_ref, source_file, source_format)
 
 
+def _document_import_source_file(args: dict[str, Any]) -> str:
+    source_file = (
+        _optional_str_arg(args, "source_file")
+        or _optional_str_arg(args, "file")
+        or _optional_str_arg(args, "file_path")
+    )
+    if source_file:
+        return source_file
+    draft = args.get("draft")
+    if isinstance(draft, dict):
+        source = draft.get("source")
+        if isinstance(source, dict):
+            value = source.get("path")
+            if isinstance(value, str) and value:
+                return value
+    raise AppError(
+        "source_file is required",
+        code="validation",
+        hint="Choose the local image or PDF to import.",
+        retryable=False,
+    )
+
+
+def _document_import_rows(args: dict[str, Any]) -> list[dict[str, Any]]:
+    rows = args.get("rows")
+    if rows is None and isinstance(args.get("draft"), dict):
+        rows = args["draft"].get("rows")
+    if not isinstance(rows, list):
+        raise AppError(
+            "document import rows must be a list",
+            code="validation",
+            hint="Pass the rows returned by ui.wallets.document_import.preview.",
+            retryable=False,
+        )
+    return [row for row in rows if isinstance(row, dict)]
+
+
+def _document_import_selected_row_ids(args: dict[str, Any]) -> list[str] | None:
+    selected = args.get("selected_row_ids") or args.get("row_ids")
+    if selected is None:
+        return None
+    if not isinstance(selected, list):
+        raise AppError("selected_row_ids must be a list", code="validation", retryable=False)
+    return [str(value) for value in selected if str(value)]
+
+
+def _document_import_hooks() -> core_document_import.DocumentImportHooks:
+    return core_document_import.DocumentImportHooks(
+        import_hooks=core_imports.ImportCoordinatorHooks(
+            ensure_tag_row=lambda conn, workspace_id, profile_id, code, label: core_metadata.ensure_tag_row(
+                conn,
+                workspace_id,
+                profile_id,
+                code,
+                label,
+                _metadata_hooks(),
+            ),
+            invalidate_journals=invalidate_journals,
+        ),
+        attachment_hooks=_attachment_hooks(),
+    )
+
+
+def _document_import_preview_payload(
+    conn: sqlite3.Connection,
+    args: dict[str, Any],
+) -> dict[str, Any]:
+    return core_document_import.preview_document_import(
+        conn,
+        source_file=_document_import_source_file(args),
+        provider_name=_optional_str_arg(args, "provider"),
+        model=_optional_str_arg(args, "model"),
+        confidence_threshold=args.get("confidence_threshold"),
+        max_pages=args.get("max_pages"),
+    )
+
+
+def _document_import_import_payload(
+    conn: sqlite3.Connection,
+    data_root: str,
+    args: dict[str, Any],
+) -> dict[str, Any]:
+    wallet_ref = _required_str_arg(args, "wallet", "Wallet")
+    _, profile = resolve_scope(conn, None, None)
+    wallet = core_resolve_wallet(conn, profile["id"], wallet_ref)
+    include_quarantined = args.get("include_quarantined")
+    if include_quarantined is None:
+        include_quarantined = False
+    if not isinstance(include_quarantined, bool):
+        raise AppError("include_quarantined must be a boolean", code="validation")
+    attach_evidence = args.get("attach_evidence")
+    if attach_evidence is None:
+        attach_evidence = True
+    if not isinstance(attach_evidence, bool):
+        raise AppError("attach_evidence must be a boolean", code="validation")
+    return core_document_import.import_document_draft(
+        conn,
+        source_file=_document_import_source_file(args),
+        data_root=data_root,
+        wallet=wallet,
+        profile=profile,
+        rows=_document_import_rows(args),
+        hooks=_document_import_hooks(),
+        include_quarantined=include_quarantined,
+        selected_row_ids=_document_import_selected_row_ids(args),
+        attach_evidence=attach_evidence,
+    )
+
+
 def _import_samourai_payload(
     conn: sqlite3.Connection,
     args: dict[str, Any],
@@ -11934,6 +12046,37 @@ def handle_request(
                     "ui.wallets.import_file",
                     _import_wallet_file_payload(
                         ctx.conn,
+                        _coerce_args_dict(request_id, request.get("args")),
+                    ),
+                ),
+                request_id,
+            ),
+            True,
+        )
+
+    if kind == "ui.wallets.document_import.preview":
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.wallets.document_import.preview",
+                    _document_import_preview_payload(
+                        ctx.conn,
+                        _coerce_args_dict(request_id, request.get("args")),
+                    ),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
+    if kind == "ui.wallets.document_import.import":
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.wallets.document_import.import",
+                    _document_import_import_payload(
+                        ctx.conn,
+                        ctx.data_root,
                         _coerce_args_dict(request_id, request.get("args")),
                     ),
                 ),

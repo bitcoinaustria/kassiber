@@ -355,9 +355,12 @@ top of the monolith.
   with actionable gap cards dispatching `next_step.action`.
 - [ ] Add graph visualization polish for dense source-funds cases after real-user feedback; keep the current editor workflow as the source of truth
 - [ ] Add optional configured-backend chain observations with an explicit public-backend privacy warning; keep them weak suggestions unless reviewed
-- [ ] Add optional OCR/photo/invoice extraction after the evidence review and
-  audit package workflow has real-user feedback; keep suggestions review-gated
-  and never auto-mark evidence complete.
+- [x] Add optional local OCR/photo/PDF transaction extraction as a review-gated
+  draft importer: `wallets preview-document`, `wallets import-document`, and
+  desktop `ui.wallets.document_import.{preview,import}` require loopback local
+  vision/OCR models, quarantine ambiguous rows, and attach the source document
+  as managed evidence. Source-funds-specific extraction polish remains future
+  feedback-driven work.
 
 ## Phase 1 - Desktop UI
 
@@ -736,7 +739,9 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
 - [x] Review/confirmation workflow for proposed matches and commercial annotations
 - [x] Split commercial annotations from RP2-facing tax primitives during journal preparation
 - [x] Accountant-facing export of matched BTC subledger rows with document references
-- [ ] Opt-in local AI extraction and tie-breaking only after deterministic matching is solid
+- [x] Opt-in local AI extraction for long-tail documents now exists as a
+  hard-local OCR draft importer; AI tie-breaking for source-funds/commercial
+  matching remains deferred until there is real-user feedback.
 - [ ] Build the richer desktop visual reconciliation workflow on top of
   the new `ui.btcpay.provenance.*` and `ui.documents.*` daemon-safe
   surfaces. The transaction detail sheet now has a first-pass commercial

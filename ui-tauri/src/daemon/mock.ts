@@ -885,6 +885,114 @@ export const mockDaemon: DaemonTransport = {
       };
     }
 
+    if (req.kind === "ui.wallets.document_import.preview") {
+      const args = (req.args ?? {}) as { source_file?: unknown };
+      const sourcePath =
+        typeof args.source_file === "string" && args.source_file
+          ? args.source_file
+          : "/tmp/receipt.png";
+      return {
+        kind: "ui.wallets.document_import.preview",
+        schema_version: 1,
+        request_id: req.request_id,
+        data: {
+          source: {
+            path: sourcePath,
+            filename: "receipt.png",
+            media_type: "image/png",
+            sha256: "mock",
+          },
+          model: "glm-ocr",
+          confidence_threshold: 0.78,
+          recommendations: [
+            { id: "glm-ocr", command: "ollama pull glm-ocr" },
+            { id: "qwen3-vl:8b", command: "ollama pull qwen3-vl:8b" },
+          ],
+          rows: [
+            {
+              id: "docrow-001",
+              status: "ready",
+              flags: [],
+              confidence: 0.93,
+              evidence_text: "2026-01-15 BTC 0.01000000 EUR 620 OTC Desk",
+              record: {
+                occurred_at: "2026-01-15",
+                direction: "inbound",
+                asset: "BTC",
+                amount_btc: "0.01000000",
+                fee_btc: "0",
+                fiat_currency: "EUR",
+                fiat_value: "620.00",
+                counterparty: "OTC Desk",
+                description: "Receipt row",
+              },
+              import_record: {
+                id: "docrow-001",
+                occurred_at: "2026-01-15",
+                direction: "inbound",
+                asset: "BTC",
+                amount: "0.01000000",
+                fee: "0",
+                fiat_currency: "EUR",
+                fiat_value: "620.00",
+                counterparty: "OTC Desk",
+                description: "Receipt row",
+              },
+            },
+            {
+              id: "docrow-002",
+              status: "quarantined",
+              flags: ["missing_direction", "low_row_confidence"],
+              confidence: 0.55,
+              evidence_text: "handwritten 0.002 BTC",
+              record: {
+                occurred_at: "2026-01-16",
+                direction: null,
+                asset: "BTC",
+                amount_btc: "0.00200000",
+              },
+              import_record: null,
+            },
+          ],
+          summary: {
+            rows: 2,
+            ready: 1,
+            quarantined: 1,
+            has_importable_rows: true,
+          },
+          created_at: new Date().toISOString(),
+        } as T,
+      };
+    }
+
+    if (req.kind === "ui.wallets.document_import.import") {
+      const args = (req.args ?? {}) as { selected_row_ids?: unknown };
+      const selected =
+        Array.isArray(args.selected_row_ids) && args.selected_row_ids.length
+          ? args.selected_row_ids.length
+          : 1;
+      return {
+        kind: "ui.wallets.document_import.import",
+        schema_version: 1,
+        request_id: req.request_id,
+        data: {
+          wallet: "Multisig Vault",
+          source: { filename: "receipt.png", sha256: "mock" },
+          imported: selected,
+          skipped: 0,
+          unchanged: 0,
+          draft_rows_imported: selected,
+          quarantined_skipped: 1,
+          attached_evidence: [
+            {
+              transaction_id: "mock-document-import-tx",
+              attachment_id: "mock-document-import-attachment",
+            },
+          ],
+        } as T,
+      };
+    }
+
     if (req.kind === "ui.wallets.list") {
       const overview = mockOverviewSnapshot();
       return {
