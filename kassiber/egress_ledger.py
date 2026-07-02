@@ -104,6 +104,8 @@ def http_request_bytes_out(request, method: str | None = None) -> int:
         for key, value in request.header_items():
             total += len(str(key).encode("utf-8")) + len(str(value).encode("utf-8")) + 4
     except Exception:
+        # Best-effort accounting: if headers cannot be enumerated, ignore them
+        # and continue with partial byte estimation.
         pass
     data = getattr(request, "data", None)
     if data is not None:
