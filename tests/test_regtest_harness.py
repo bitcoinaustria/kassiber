@@ -198,6 +198,22 @@ class RegtestHarnessTest(unittest.TestCase):
             {(backend["chain"], backend["network"]) for backend in local_backends},
             {("bitcoin", "regtest"), ("liquid", "elementsregtest")},
         )
+        boltz_bridges = [
+            bridge for bridge in scenario["stress"]["swap_bridges"] if bridge.get("provider") == "boltz"
+        ]
+        self.assertEqual(len(boltz_bridges), 1)
+        self.assertEqual(
+            {
+                (
+                    bridge["boltz_flow"],
+                    bridge["boltz_api"],
+                    bridge["boltz_from"],
+                    bridge["boltz_to"],
+                )
+                for bridge in boltz_bridges
+            },
+            {("chain-swap", "/v2/swap/chain", "BTC", "L-BTC")},
+        )
         self.assertEqual(
             scenario["deprecated_wallets"],
             ["treasury", "merchant", "cold", "liquid_treasury"],

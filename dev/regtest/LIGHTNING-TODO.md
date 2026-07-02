@@ -92,7 +92,10 @@ re-research.
      private channels surface `peer_pubkey=None`;
    - a Boltz-shaped submarine swap staged on-chain pairs with the LN leg via
      `htlc_parser` (cross-asset swap coverage, extends the existing
-     `swap_bridges`).
+     `swap_bridges`). The first upstream-Docker guard now lives in
+     `./scripts/integration-harness.sh boltz-liquid`: it starts or reuses
+     `BoltzExchange/regtest` and verifies Liquid-capable Boltz pair metadata
+     against the demo's Boltz-marked BTC -> L-BTC bridge.
 7. **macOS caveat to verify early**: bind-mounted unix sockets do not work
    through Docker Desktop's file sharing — the local `rpc_file` mode
    probably cannot cross the container boundary on macOS. The `docker
