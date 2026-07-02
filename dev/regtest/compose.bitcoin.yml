@@ -27,7 +27,7 @@ services:
       - bitcoind-regtest:/home/bitcoin/.bitcoin
 
   elementsd:
-    image: ${KASSIBER_REGTEST_ELEMENTSD_IMAGE:-blockstream/elementsd:latest}
+    image: ${KASSIBER_REGTEST_ELEMENTSD_IMAGE:-blockstream/elementsd:23.3.3}
     command:
       - elementsd
       - "-printtoconsole"

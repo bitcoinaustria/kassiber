@@ -33,8 +33,12 @@ by the UI/backend health and graph paths:
 
 - `core-regtest` -> Bitcoin Core RPC, authoritative sync backend for Bitcoin
   wallets
-- Elements Core runs as `elementsd` on `elementsregtest` so Liquid developer
-  tooling has a real local daemon instead of a public endpoint
+- Elements Core runs as `elementsd` on `elementsregtest` to provision a local
+  Liquid daemon. Note: the current lanes do not yet sync a Kassiber Liquid
+  wallet from `elementsd` — Liquid demo data is file-source (`generic_ledger`)
+  and the Liquid Electrum/mempool rails below are deterministic local shims
+  serving synthetic LBTC data. Real `elementsd`-backed Liquid sync is a
+  follow-up slice (see Growth Path).
 - `bitcoin-electrum-regtest` -> the `fulcrum` container's Electrum TCP port
 - `bitcoin-mempool-regtest` -> local mempool/esplora-compatible HTTP API
 - `liquid-electrum-regtest` -> local Liquid Electrum-compatible
@@ -167,13 +171,17 @@ What `demo-up` does:
 - keeps the demo Core wallets loaded (`--keep-core-wallets`) so incremental
   syncs from the app keep seeing new activity.
 
-Bitcoin Electrum traffic goes through the real `fulcrum` container. The
-Explorer API and Liquid Electrum rows are still small deterministic local
-services that speak the mempool/esplora and Electrum calls Kassiber exercises
-in development and CI. That keeps the preview fast and repeatable while
-avoiding accidental public mainnet explorers in regtest mode; replacing those
-two compatibility services with the full upstream mempool web stack remains a
-deeper parity target.
+The `fulcrum` container is provisioned and exposed as the
+`bitcoin-electrum-regtest` backend row, but the demo and harness currently
+sync Bitcoin wallets through Core RPC (`core-regtest`) only — no wallet syncs
+through Fulcrum yet, and there is no cross-backend (Core vs Electrum vs
+explorer HTTP) parity comparison. The Explorer API and Liquid Electrum rows are
+small deterministic local services that speak the mempool/esplora and Electrum
+calls Kassiber exercises in development and CI. That keeps the preview fast and
+repeatable while avoiding accidental public mainnet explorers in regtest mode.
+Actually syncing wallets through Fulcrum/Electrum and explorer HTTP, and
+comparing the resulting txids/amounts/fees/UTXOs across backends (issue #312's
+backend-parity acceptance check), remains a follow-up slice.
 
 `pnpm dev:demo` runs the Vite daemon bridge with
 `KASSIBER_DEV_DATA_ROOT` pointed at the demo book; the desktop preview then
@@ -238,13 +246,17 @@ mode.
 
 ## Growth Path
 
-The current checked-in slow lanes cover Bitcoin Core RPC, Elements Core,
-Bitcoin Fulcrum, local mempool/esplora-compatible endpoints, deterministic
-file-source elementsregtest/LBTC demo wallets, and a full accounting demo on
-Bitcoin regtest. The remaining deterministic protocol shims are the HTTP
-Explorer API and Liquid Electrum surfaces; replacing those with upstream
-mempool web/electrs-style indexers can add deeper parity tests without
-changing the contributor entrypoint.
+The current checked-in slow lanes exercise Bitcoin Core RPC end to end (sync,
+pricing, journal, report, export) and a full accounting demo on Bitcoin
+regtest. They also provision Elements Core, Bitcoin Fulcrum, and local
+mempool/esplora-compatible endpoints, and create deterministic file-source
+elementsregtest/LBTC demo wallets — but those backends are not yet driven by a
+real Kassiber sync: no wallet syncs through Fulcrum/Electrum, explorer HTTP, or
+`elementsd`, and there is no cross-backend parity comparison. Wiring live
+multi-backend Bitcoin sync + parity, and real `elementsd`-backed Liquid sync
+(replacing the deterministic Explorer API and Liquid Electrum shims with
+upstream mempool web/electrs-style indexers), are the next parity targets and
+can be added without changing the contributor entrypoint.
 
 Lightning is the next planned slice: the concrete plan — Core Lightning
 regtest nodes in a Compose overlay, an idempotent channel-bootstrap step,
