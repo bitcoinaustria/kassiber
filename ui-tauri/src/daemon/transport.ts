@@ -691,8 +691,12 @@ function normalizeDataRootForCompare(dataRoot: string | null | undefined): strin
 }
 
 export function regtestDemoDataRoot(): string {
+  const configuredRoot =
+    typeof __REGTEST_DEMO_DATA_ROOT__ === "string"
+      ? __REGTEST_DEMO_DATA_ROOT__
+      : "";
   return DAEMON_MODE === "bridge"
-    ? normalizeDataRootForCompare(__REGTEST_DEMO_DATA_ROOT__)
+    ? normalizeDataRootForCompare(configuredRoot)
     : "";
 }
 

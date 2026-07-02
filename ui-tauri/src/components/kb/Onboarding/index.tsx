@@ -703,7 +703,7 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
       >
         <div className="flex w-full items-center justify-between gap-4">
           <Wordmark size={22} />
-          {import.meta.env.DEV && (
+          {import.meta.env.DEV && !loadingRegtestStatus && !regtestStatus && (
             <Button
               type="button"
               variant="outline"
