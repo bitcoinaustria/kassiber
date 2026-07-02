@@ -430,6 +430,19 @@ class SilentPaymentsTests(unittest.TestCase):
         )
         self.assertEqual(legacy_rows[0]["silent_payments"], True)
 
+        scan_path_backend = _runtime(
+            Path(scan_dir.name) / "path-only-scan.json",
+            silent_payments_enabled=None,
+        )["backends"]["sp-local"]
+        scan_path_backend.pop("silent_payment_scan_file")
+        scan_path_backend["silent_payment_scan_path"] = "/silent-payments/scan"
+        self.assertTrue(silent_payments.backend_supports_silent_payments(scan_path_backend))
+        silent_payments.validate_backend_capability(
+            scan_path_backend,
+            silent_payments.build_plan(_sp_config()),
+            kind="custom",
+        )
+
         disabled_backend = _runtime(
             Path(scan_dir.name) / "disabled-scan.json",
             silent_payments_enabled=False,

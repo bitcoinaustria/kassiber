@@ -432,7 +432,10 @@ def backend_supports_silent_payments(backend: Mapping[str, Any]) -> bool:
             return True
     if capability_declared:
         return False
-    return any(str_or_none(_backend_value(backend, key)) for key in BACKEND_SCAN_FILE_FIELDS)
+    return any(
+        str_or_none(_backend_value(backend, key))
+        for key in (*BACKEND_SCAN_FILE_FIELDS, *BACKEND_SCAN_PATH_FIELDS)
+    )
 
 
 def _backend_value(backend: Mapping[str, Any], key: str) -> Any:

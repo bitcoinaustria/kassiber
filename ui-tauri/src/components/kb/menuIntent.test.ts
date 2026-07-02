@@ -33,6 +33,7 @@ describe("isAppRoutePath", () => {
       "/transactions",
       "/reports",
       "/source-of-funds",
+      "/egress",
       "/connections",
       "/books",
       "/journals",

@@ -39,6 +39,24 @@ writes, not a physical guarantee — swap files and OS crash dumps can still
 page buffer contents to disk. Key material is protected against that by
 the insert-time secret floor below, not by pretending RAM is hermetic.
 
+## Egress auditor
+
+The desktop Egress screen is backed by a separate RAM-only ring in
+[`kassiber/egress_ledger.py`](../../kassiber/egress_ledger.py), exposed via
+`ui.egress.snapshot`. It records outbound metadata only: subsystem, host,
+port, operation, method, proxy flag, and outbound byte count. It deliberately
+drops paths, query strings, request bodies, headers, tokens, descriptors, and
+AI prompts before insert.
+
+`ui.egress.snapshot` is pre-unlock-safe like `ui.logs.snapshot`; before the
+database is unlocked it returns captured rows and the SQLCipher header proof
+while marking allowlist matching incomplete. After unlock, rows are annotated
+against configured backend hosts, configured AI provider hosts, and built-in
+price-provider hosts. The `update` subsystem is reported in the summary and
+should remain zero unless an explicit updater is added later. The auditor never
+opens sockets itself, so it must not become a health checker or background
+probe.
+
 ## Two-stage redaction
 
 **Secret floor — applied at insert, in every buffer.** Seed phrases,

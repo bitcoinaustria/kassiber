@@ -1,10 +1,12 @@
 import io
 import json
 import random
+import sqlite3
 import tempfile
 import unittest
 from email.message import Message
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 from urllib import error as urlerror
 
@@ -14,6 +16,7 @@ from kassiber.core.sync import (
     WalletBackendFetch,
     WalletSyncHooks,
     WalletSyncState,
+    NEGATIVE_BALANCE_RESCAN_MIN_GAP_LIMIT,
     classify_wallet_sync,
     emit_sync_progress,
     fetch_wallet_backend,
@@ -43,7 +46,12 @@ from kassiber.db import open_db
 from kassiber.errors import AppError
 from kassiber.proxy import _connect_via_socks5, _read_exact, _socks5_address
 from kassiber.time_utils import iso_to_unix, timestamp_to_iso
-from kassiber.wallet_descriptors import DescriptorBranch, DescriptorPlan, DerivedTarget
+from kassiber.wallet_descriptors import (
+    DEFAULT_DESCRIPTOR_GAP_LIMIT,
+    DescriptorBranch,
+    DescriptorPlan,
+    DerivedTarget,
+)
 
 
 def _header_hex(timestamp):
@@ -400,6 +408,168 @@ class SyncBackendsTest(unittest.TestCase):
         self.assertEqual(checkpoints_seen, [{}])
         self.assertTrue(results[0]["force_full"])
         self.assertTrue(results[0]["utxos_refreshed"])
+
+    def test_sync_wallet_from_backend_repairs_negative_running_balance_with_widened_rescan(self):
+        conn = sqlite3.connect(":memory:")
+        conn.row_factory = sqlite3.Row
+        conn.execute(
+            """
+            CREATE TABLE transactions (
+                id TEXT PRIMARY KEY,
+                profile_id TEXT NOT NULL,
+                wallet_id TEXT NOT NULL,
+                external_id TEXT,
+                occurred_at TEXT NOT NULL,
+                direction TEXT NOT NULL,
+                asset TEXT NOT NULL,
+                amount INTEGER NOT NULL,
+                fee INTEGER NOT NULL DEFAULT 0,
+                excluded INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL
+            )
+            """
+        )
+        wallet = {
+            "id": "wallet-1",
+            "kind": "descriptor",
+            "label": "Vault",
+            "config_json": json.dumps({"backend": "default", "descriptor": "dummy"}),
+        }
+        profile = {"id": "profile-1"}
+        target = {
+            "address": "bc1qwatch",
+            "script_pubkey": "0014watch",
+            "branch_index": 0,
+            "address_index": 0,
+        }
+        adapter_gaps = []
+        checkpoints_seen = []
+
+        def resolve_sync_state(backend, wallet_row):
+            config = json.loads(wallet_row["config_json"] or "{}")
+            gap_limit = int(config.get("gap_limit") or DEFAULT_DESCRIPTOR_GAP_LIMIT)
+            checkpoints_seen.append(wallet_row.get("_freshness_checkpoint"))
+            return WalletSyncState(
+                chain="bitcoin",
+                network="main",
+                descriptor_plan=SimpleNamespace(gap_limit=gap_limit),
+                policy_asset_id="",
+                targets=[target],
+                tracked_scripts={target["script_pubkey"]: target},
+                history_cache={},
+                checkpoint=wallet_row.get("_freshness_checkpoint"),
+            )
+
+        def adapter(backend, wallet_row, sync_state):
+            adapter_gaps.append(sync_state.descriptor_plan.gap_limit)
+            return (
+                [{"pass": len(adapter_gaps)}],
+                {"freshness_checkpoint": {"pass": len(adapter_gaps)}},
+            )
+
+        def insert_records(conn, profile, wallet_row, records, source_label):
+            pass_number = records[0]["pass"]
+            if pass_number == 1:
+                conn.execute(
+                    """
+                    INSERT OR IGNORE INTO transactions(
+                        id, profile_id, wallet_id, external_id, occurred_at,
+                        direction, asset, amount, fee, excluded, created_at
+                    ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)
+                    """,
+                    (
+                        "out-1",
+                        profile["id"],
+                        wallet_row["id"],
+                        "tx-out",
+                        "2026-01-02T00:00:00Z",
+                        "outbound",
+                        "BTC",
+                        1000,
+                        0,
+                        "2026-01-02T00:00:01Z",
+                    ),
+                )
+            else:
+                conn.executemany(
+                    """
+                    INSERT OR IGNORE INTO transactions(
+                        id, profile_id, wallet_id, external_id, occurred_at,
+                        direction, asset, amount, fee, excluded, created_at
+                    ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)
+                    """,
+                    [
+                        (
+                            "in-1",
+                            profile["id"],
+                            wallet_row["id"],
+                            "tx-in",
+                            "2026-01-01T00:00:00Z",
+                            "inbound",
+                            "BTC",
+                            1000,
+                            0,
+                            "2026-01-01T00:00:01Z",
+                        ),
+                        (
+                            "out-1",
+                            profile["id"],
+                            wallet_row["id"],
+                            "tx-out",
+                            "2026-01-02T00:00:00Z",
+                            "outbound",
+                            "BTC",
+                            1000,
+                            0,
+                            "2026-01-02T00:00:01Z",
+                        ),
+                    ],
+                )
+            return {"imported": 1, "skipped": 0, "unchanged": 0}
+
+        hooks = WalletSyncHooks(
+            import_file=lambda *args, **kwargs: {},
+            insert_records=insert_records,
+            resolve_backend=lambda runtime_config, backend_name: {
+                "name": "default",
+                "kind": "esplora",
+                "url": "https://example.invalid",
+            },
+            resolve_sync_state=resolve_sync_state,
+            normalize_addresses=lambda values: list(values or []),
+            backend_adapters={"esplora": adapter},
+        )
+
+        with patch("kassiber.core.sync.source_overlap.raise_for_sync_source_overlap"):
+            outcome = sync_wallet_from_backend(conn, {}, profile, wallet, hooks)
+
+        self.assertEqual(
+            adapter_gaps,
+            [DEFAULT_DESCRIPTOR_GAP_LIMIT, NEGATIVE_BALANCE_RESCAN_MIN_GAP_LIMIT],
+        )
+        self.assertIsNone(checkpoints_seen[0])
+        self.assertEqual(checkpoints_seen[1], {})
+        self.assertTrue(outcome["force_full"])
+        self.assertEqual(outcome["gap_limit"], NEGATIVE_BALANCE_RESCAN_MIN_GAP_LIMIT)
+        self.assertEqual(
+            outcome["negative_balance_rescan"]["original_gap_limit"],
+            DEFAULT_DESCRIPTOR_GAP_LIMIT,
+        )
+        self.assertEqual(
+            outcome["negative_balance_rescan"]["rescan_gap_limit"],
+            NEGATIVE_BALANCE_RESCAN_MIN_GAP_LIMIT,
+        )
+        self.assertTrue(outcome["negative_balance_rescan"]["resolved"])
+        self.assertEqual(
+            outcome["negative_balance_rescan"]["initial_negative_events"][0][
+                "transaction_id"
+            ],
+            "out-1",
+        )
+        self.assertEqual(
+            outcome["negative_balance_rescan"]["remaining_negative_events"],
+            [],
+        )
 
     def test_esplora_sync_adapter_returns_record_shape(self):
         target = {"address": "bc1qesplora", "script_pubkey": "0014" + "11" * 20}

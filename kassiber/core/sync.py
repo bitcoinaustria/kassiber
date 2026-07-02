@@ -14,6 +14,7 @@ from typing import Any, Callable, Mapping, MutableMapping, Sequence
 from ..backends import redact_backend_text, redact_backend_url
 from ..errors import AppError
 from ..util import str_or_none
+from ..wallet_descriptors import DEFAULT_DESCRIPTOR_GAP_LIMIT, MAX_DESCRIPTOR_GAP_LIMIT
 from . import source_overlap
 from .wallets import (
     has_descriptor_sync_material,
@@ -135,6 +136,11 @@ class WalletBackendDiscovery:
 # bounds network concurrency against any single host, so this only limits total
 # thread count for the common case of a handful of distinct backends.
 WALLET_FETCH_FANOUT = 4
+
+# A negative running wallet balance means the local ledger is missing earlier
+# inbound history. One repair refresh widens descriptor discovery enough to find
+# common high-index receive/change gaps without permanently mutating the wallet.
+NEGATIVE_BALANCE_RESCAN_MIN_GAP_LIMIT = 500
 
 
 # Contextvar threaded by the daemon when it wants long-running source refreshes
@@ -465,6 +471,7 @@ def sync_wallet_from_backend(
     *,
     force_full: bool = False,
     prefetched: "WalletBackendFetch | BaseException | None" = None,
+    _allow_negative_balance_rescan: bool = True,
 ) -> SyncOutcome:
     # `prefetched` lets the caller run the network fetch ahead of time (e.g. in
     # parallel across wallets). When omitted, fetch inline as before. A captured
@@ -575,7 +582,109 @@ def sync_wallet_from_backend(
         outcome["scripts_checked"] = scripts_changed + scripts_unchanged
     outcome["utxos_refreshed"] = observed_utxos is not None
     outcome["elapsed_ms"] = int((time.monotonic() - started) * 1000)
+    if _allow_negative_balance_rescan and conn is not None:
+        negative_events = _wallet_negative_balance_events(
+            conn,
+            str(profile["id"]),
+            str(wallet["id"]),
+        )
+        if negative_events:
+            rescan_gap_limit = _negative_balance_rescan_gap_limit(sync_state)
+            repair_wallet = _wallet_with_temporary_gap_limit(wallet, rescan_gap_limit)
+            repair_outcome = sync_wallet_from_backend(
+                conn,
+                runtime_config,
+                profile,
+                repair_wallet,
+                hooks,
+                checkpoint={},
+                force_full=True,
+                _allow_negative_balance_rescan=False,
+            )
+            remaining_events = _wallet_negative_balance_events(
+                conn,
+                str(profile["id"]),
+                str(wallet["id"]),
+            )
+            repair_outcome["negative_balance_rescan"] = {
+                "triggered": True,
+                "resolved": not remaining_events,
+                "initial_negative_events": negative_events,
+                "remaining_negative_events": remaining_events,
+                "original_gap_limit": (
+                    getattr(sync_state.descriptor_plan, "gap_limit", None)
+                    if sync_state.descriptor_plan is not None
+                    else None
+                ),
+                "rescan_gap_limit": rescan_gap_limit,
+            }
+            return repair_outcome
     return outcome
+
+
+def _wallet_negative_balance_events(
+    conn: sqlite3.Connection | None,
+    profile_id: str,
+    wallet_id: str,
+) -> list[dict[str, Any]]:
+    if conn is None:
+        return []
+    rows = conn.execute(
+        """
+        SELECT id, external_id, occurred_at, direction, asset, amount, fee, created_at
+        FROM transactions
+        WHERE profile_id = ? AND wallet_id = ? AND excluded = 0
+        ORDER BY occurred_at ASC, created_at ASC, id ASC
+        """,
+        (profile_id, wallet_id),
+    ).fetchall()
+    balances: dict[str, int] = {}
+    first_negative_by_asset: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        asset = str(row["asset"] or "")
+        amount = int(row["amount"] or 0)
+        fee = int(row["fee"] or 0)
+        if row["direction"] == "inbound":
+            delta = amount
+        elif row["direction"] == "outbound":
+            delta = -amount - fee
+        else:
+            delta = 0
+        next_balance = balances.get(asset, 0) + delta
+        balances[asset] = next_balance
+        if next_balance < 0 and asset not in first_negative_by_asset:
+            first_negative_by_asset[asset] = {
+                "asset": asset,
+                "transaction_id": row["id"],
+                "external_id": row["external_id"],
+                "occurred_at": row["occurred_at"],
+                "delta_msat": delta,
+                "running_balance_msat": next_balance,
+            }
+    return list(first_negative_by_asset.values())
+
+
+def _negative_balance_rescan_gap_limit(sync_state: WalletSyncState) -> int | None:
+    plan = sync_state.descriptor_plan
+    if plan is None:
+        return None
+    try:
+        current = int(getattr(plan, "gap_limit", 0) or 0)
+    except (TypeError, ValueError):
+        current = DEFAULT_DESCRIPTOR_GAP_LIMIT
+    current = max(current, DEFAULT_DESCRIPTOR_GAP_LIMIT)
+    return min(
+        MAX_DESCRIPTOR_GAP_LIMIT,
+        max(NEGATIVE_BALANCE_RESCAN_MIN_GAP_LIMIT, current * 2),
+    )
+
+
+def _wallet_with_temporary_gap_limit(wallet: WalletRow, gap_limit: int | None) -> WalletRow:
+    if gap_limit is None:
+        return wallet
+    config = json.loads(wallet["config_json"] or "{}")
+    config["gap_limit"] = int(gap_limit)
+    return {**dict(wallet), "config_json": json.dumps(config, sort_keys=True)}
 
 
 def classify_wallet_sync(wallet: WalletRow, normalize_addresses: NormalizeAddresses) -> str:

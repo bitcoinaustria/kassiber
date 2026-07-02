@@ -144,6 +144,7 @@ const DEEP_LINK_SETTINGS_SECTIONS: &[&str] = &[
 
 const ALLOWED_DAEMON_KINDS: &[&str] = &[
     "status",
+    "ui.egress.snapshot",
     "ui.overview.snapshot",
     "ui.workspace.overview.snapshot",
     "ui.transactions.list",

@@ -42,6 +42,7 @@ from urllib import request as urlrequest
 from ... import __version__
 from ...backends import backend_timeout, backend_value
 from ...db import APP_NAME
+from ...egress_ledger import get_egress_ledger, http_request_bytes_out
 from ...errors import AppError
 from ...time_utils import timestamp_to_iso
 from .registry import register_adapter
@@ -202,6 +203,13 @@ class LndRestClient:
                 "Grpc-Metadata-macaroon": self.macaroon,
                 "User-Agent": f"{APP_NAME}/{__version__}",
             },
+        )
+        get_egress_ledger().record_url(
+            request.full_url,
+            subsystem="sync",
+            operation="http.request",
+            method=method,
+            bytes_out=http_request_bytes_out(request, method),
         )
         try:
             with urlrequest.urlopen(
