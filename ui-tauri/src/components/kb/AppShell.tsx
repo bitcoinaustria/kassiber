@@ -147,6 +147,7 @@ import { isTypingTarget } from "@/lib/keymap";
 import { FirstSyncCard } from "./FirstSyncCard";
 import { AssistantDock } from "./AssistantDock";
 import { PreAlphaBanner } from "./PreAlphaBanner";
+import { nextAssistantDockCollapsed } from "./assistantDockLayout";
 import { useJournalProcessingAction } from "@/hooks/useJournalProcessingAction";
 import { useWalletSyncAction } from "@/hooks/useWalletSyncAction";
 import { BookSwitcherPopover } from "./BookSwitcherPopover";
@@ -1355,9 +1356,14 @@ export function AppShell() {
     }
 
     const syncAssistantState = () => {
-      const scrollableHeight = Math.max(1, main.scrollHeight - main.clientHeight);
-      const scrolledProgress = main.scrollTop / scrollableHeight;
-      setAssistantCollapsed(main.scrollTop > 96 && scrolledProgress > 0.04);
+      setAssistantCollapsed((collapsed) =>
+        nextAssistantDockCollapsed({
+          collapsed,
+          scrollTop: main.scrollTop,
+          scrollHeight: main.scrollHeight,
+          clientHeight: main.clientHeight,
+        }),
+      );
     };
 
     syncAssistantState();
