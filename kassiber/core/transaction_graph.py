@@ -15,6 +15,7 @@ from typing import Any, Mapping, NamedTuple, Sequence
 
 from ..backends import (
     DEFAULT_BACKEND_SETTING,
+    DEFAULT_BACKENDS,
     _http_url_base,
     backend_batch_size,
     preferred_mempool_api_backend,
@@ -613,11 +614,7 @@ def _enrich_bitcoin_graph_raw(
         if kind == "bitcoinrpc":
             fetched = _fetch_bitcoinrpc_transaction_graph(backend, str(txid))
         else:
-            fetched = fetch_esplora_transaction(
-                str(backend["url"]),
-                str(txid),
-                timeout=_graph_lookup_timeout(backend),
-            )
+            fetched = _fetch_graph_esplora_transaction(backend, str(txid))
     except Exception:
         return _with_graph_lookup_warning(
             raw,
@@ -807,6 +804,14 @@ def _graph_backend_with_timeout_cap(backend: Mapping[str, Any]) -> dict[str, Any
     return capped
 
 
+def _fetch_graph_esplora_transaction(backend: Mapping[str, Any], txid: str) -> Any:
+    kwargs: dict[str, Any] = {"timeout": _graph_lookup_timeout(backend)}
+    proxy_url = _string_or_none(backend.get("tor_proxy"))
+    if proxy_url is not None:
+        kwargs["proxy_url"] = proxy_url
+    return fetch_esplora_transaction(str(backend["url"]), txid, **kwargs)
+
+
 def _enrich_liquid_reference_graph_raw(
     conn: sqlite3.Connection,
     row: Mapping[str, Any],
@@ -846,11 +851,7 @@ def _enrich_liquid_reference_graph_raw(
                 "Could not fetch public Liquid transaction references from the selected Electrum backend.",
             )
     try:
-        fetched = fetch_esplora_transaction(
-            str(backend["url"]),
-            str(txid),
-            timeout=_graph_lookup_timeout(backend),
-        )
+        fetched = _fetch_graph_esplora_transaction(backend, str(txid))
     except Exception:
         return _with_graph_lookup_warning(
             raw,
@@ -922,12 +923,12 @@ def _graph_lookup_backend(
     chain, network = _row_chain_network(row)
     if chain != "bitcoin":
         return None
-    default_candidate = _default_graph_backend(conn, chain, network)
-    if default_candidate is not None:
-        return default_candidate
     runtime_candidate = _runtime_graph_lookup_backend(runtime_config, chain, network)
     if runtime_candidate is not None:
         return runtime_candidate
+    default_candidate = _default_graph_backend(conn, chain, network)
+    if default_candidate is not None:
+        return default_candidate
     candidate = _preferred_mempool_graph_backend(conn, chain, network)
     if candidate is not None:
         return candidate
@@ -942,12 +943,12 @@ def _liquid_graph_lookup_backend(
     chain, network = _row_chain_network(row, default_chain="liquid", default_network="liquidv1")
     if chain != "liquid":
         return None
-    default_candidate = _default_graph_backend(conn, chain, network)
-    if default_candidate is not None:
-        return default_candidate
     runtime_candidate = _runtime_graph_lookup_backend(runtime_config, chain, network)
     if runtime_candidate is not None:
         return runtime_candidate
+    default_candidate = _default_graph_backend(conn, chain, network)
+    if default_candidate is not None:
+        return default_candidate
     candidate = _preferred_mempool_graph_backend(conn, chain, network)
     if candidate is not None:
         return candidate
@@ -973,6 +974,7 @@ def _preferred_mempool_graph_backend(
         "network": network,
         "url": candidate.get("api_base_url"),
         "timeout": candidate.get("timeout"),
+        "tor_proxy": candidate.get("tor_proxy"),
     }
 
 
@@ -1047,10 +1049,35 @@ def _runtime_graph_lookup_backend(
         backend = backends.get(name)
         if not isinstance(backend, Mapping):
             continue
+        if _skip_implicit_builtin_runtime_graph_backend(runtime_config, name, backend, default_name):
+            continue
         candidate = _graph_backend_from_mapping(name, backend)
         if _graph_backend_matches(candidate, chain, network):
             return _normalized_graph_lookup_backend(candidate)
     return None
+
+
+def _skip_implicit_builtin_runtime_graph_backend(
+    runtime_config: Mapping[str, Any],
+    name: str,
+    backend: Mapping[str, Any],
+    default_name: str,
+) -> bool:
+    normalized_name = str(name).strip().lower()
+    if normalized_name == default_name or normalized_name not in DEFAULT_BACKENDS:
+        return False
+    backend_chain, _backend_network = _norm_chain_network(
+        backend.get("chain"),
+        backend.get("network"),
+    )
+    if backend_chain != "liquid":
+        return False
+    if normalized_name in set(runtime_config.get("dotenv_backends") or ()):
+        return False
+    env_overrides = runtime_config.get("process_env_overrides", {}).get("backends", {})
+    if isinstance(env_overrides, Mapping) and env_overrides.get(normalized_name):
+        return False
+    return backend.get("source") == "built-in default"
 
 
 def _normalized_graph_lookup_backend(backend: Mapping[str, Any]) -> dict[str, Any]:
@@ -1089,7 +1116,9 @@ def _graph_backend_from_mapping(name: str, backend: Mapping[str, Any]) -> dict[s
         "url": backend.get("url"),
         "timeout": backend.get("timeout"),
         "batch_size": backend.get("batch_size"),
-        "tor_proxy": backend.get("tor_proxy"),
+        "tor_proxy": backend.get("tor_proxy") or backend.get("proxy"),
+        "certificate": backend.get("certificate"),
+        "insecure": backend.get("insecure"),
     }
     if isinstance(config, Mapping):
         candidate.update(config)
@@ -1106,16 +1135,12 @@ def _graph_backend_matches(
         return False
     if not _string_or_none(backend.get("url")):
         return False
-    backend_chain = str(backend.get("chain") or "bitcoin").strip().lower()
-    if backend_chain in {"", "btc"}:
-        backend_chain = "bitcoin"
-    default_network = "liquidv1" if backend_chain == "liquid" else "main"
-    backend_network = str(backend.get("network") or default_network).strip().lower()
-    if backend_chain == "bitcoin" and backend_network in {"", "mainnet"}:
-        backend_network = "main"
-    if backend_chain == "liquid" and backend_network in {"", "main", "mainnet"}:
-        backend_network = "liquidv1"
-    return backend_chain == chain and backend_network == network
+    backend_chain, backend_network = _norm_chain_network(
+        backend.get("chain"),
+        backend.get("network"),
+    )
+    wanted_chain, wanted_network = _norm_chain_network(chain, network)
+    return backend_chain == wanted_chain and backend_network == wanted_network
 
 
 def _load_graph_lookup_cache(
@@ -2456,11 +2481,7 @@ def _row_chain_network(
             network = "liquidv1"
     elif chain in {"", "btc"}:
         chain = "bitcoin"
-    if chain == "bitcoin" and network in {"", "mainnet"}:
-        network = "main"
-    if chain == "liquid" and network in {"", "main", "mainnet"}:
-        network = "liquidv1"
-    return chain, network
+    return _norm_chain_network(chain, network)
 
 
 def _json_obj(value: Any) -> dict[str, Any]:
