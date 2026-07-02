@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import base64
 import csv
+import hashlib
 import json
 import os
 import random
@@ -49,6 +50,13 @@ def _is_core_wallet(wallet: "DemoWallet") -> bool:
 
 def _is_liquid_ledger_wallet(wallet: "DemoWallet") -> bool:
     return wallet.chain == "liquid" and wallet.source_format == "generic_ledger"
+
+
+def _deterministic_demo_txid(value: str) -> str:
+    text = str(value or "").strip().lower()
+    if len(text) == 64 and all(char in "0123456789abcdef" for char in text):
+        return text
+    return hashlib.sha256(f"kassiber-regtest-demo:{text}".encode("utf-8")).hexdigest()
 
 
 @dataclass
@@ -423,7 +431,10 @@ def _liquid_ledger_rows_from_manifest(scenario: dict[str, Any]) -> dict[str, lis
         if _wallet_chain(wallet) == "liquid"
     }
     for wallet_key, rows in (scenario.get("liquid_ledger") or {}).get("wallets", {}).items():
-        rows_by_wallet.setdefault(wallet_key, []).extend(dict(row) for row in rows)
+        for row in rows:
+            normalized = dict(row)
+            normalized["txid"] = _deterministic_demo_txid(str(normalized.get("txid") or ""))
+            rows_by_wallet.setdefault(wallet_key, []).append(normalized)
     return rows_by_wallet
 
 
@@ -527,6 +538,43 @@ def run_cli(data_root: Path, *args: str, pass_fds: tuple[int, ...] = ()) -> dict
             f"kassiber {' '.join(args)} failed\nstdout={result.stdout}\nstderr={result.stderr}"
         )
     return json.loads(result.stdout)
+
+
+def _local_backend_specs() -> list[dict[str, str]]:
+    return [
+        {
+            "name": "bitcoin-electrum-regtest",
+            "kind": "electrum",
+            "url": f"tcp://127.0.0.1:{os.environ.get('KASSIBER_REGTEST_BITCOIN_ELECTRUM_PORT', '18543')}",
+            "chain": "bitcoin",
+            "network": "regtest",
+            "display_name": "Bitcoin Electrum Regtest",
+        },
+        {
+            "name": "bitcoin-mempool-regtest",
+            "kind": "mempool",
+            "url": f"http://127.0.0.1:{os.environ.get('KASSIBER_REGTEST_BITCOIN_MEMPOOL_PORT', '18544')}/api",
+            "chain": "bitcoin",
+            "network": "regtest",
+            "display_name": "Bitcoin Mempool Regtest",
+        },
+        {
+            "name": "liquid-electrum-regtest",
+            "kind": "electrum",
+            "url": f"tcp://127.0.0.1:{os.environ.get('KASSIBER_REGTEST_LIQUID_ELECTRUM_PORT', '18545')}",
+            "chain": "liquid",
+            "network": "elementsregtest",
+            "display_name": "Liquid Electrum Regtest",
+        },
+        {
+            "name": "liquid-mempool-regtest",
+            "kind": "liquid-esplora",
+            "url": f"http://127.0.0.1:{os.environ.get('KASSIBER_REGTEST_LIQUID_MEMPOOL_PORT', '18546')}/api",
+            "chain": "liquid",
+            "network": "elementsregtest",
+            "display_name": "Liquid Mempool Regtest",
+        },
+    ]
 
 
 def _parse_iso_to_ts(value: str) -> int:
@@ -1140,7 +1188,9 @@ def _generate_stress_history(
                     out_ts,
                 )
             elif _is_liquid_ledger_wallet(source):
-                out_external_id = bridge.get("out_external_id") or f"{bridge_id}_lbtc_out"
+                out_external_id = _deterministic_demo_txid(
+                    str(bridge.get("out_external_id") or f"{bridge_id}_lbtc_out")
+                )
                 txids[f"{bridge_id}_out"] = out_external_id
                 _append_liquid_ledger_row(
                     liquid_rows_by_wallet,
@@ -1170,7 +1220,9 @@ def _generate_stress_history(
                     wallet=faucet_wallet,
                 )
             elif _is_liquid_ledger_wallet(target):
-                in_external_id = bridge.get("in_external_id") or f"{bridge_id}_lbtc_in"
+                in_external_id = _deterministic_demo_txid(
+                    str(bridge.get("in_external_id") or f"{bridge_id}_lbtc_in")
+                )
                 txids[f"{bridge_id}_in"] = in_external_id
                 _append_liquid_ledger_row(
                     liquid_rows_by_wallet,
@@ -1287,22 +1339,42 @@ def _create_kassiber_book(
             "60",
             pass_fds=(username_fd.fileno(), password_fd.fileno()),
     )
+    for backend in _local_backend_specs():
+        run_cli(
+            data_root,
+            "backends",
+            "create",
+            backend["name"],
+            "--kind",
+            backend["kind"],
+            "--url",
+            backend["url"],
+            "--chain",
+            backend["chain"],
+            "--network",
+            backend["network"],
+            "--display-name",
+            backend["display_name"],
+            "--timeout",
+            "10",
+        )
     run_cli(data_root, "backends", "set-default", scenario["backend"]["name"])
     configured_backends = run_cli(data_root, "backends", "list")["data"]
+    allowed_backend_names = {scenario["backend"]["name"], *(backend["name"] for backend in _local_backend_specs())}
     for backend in configured_backends:
         name = str(backend.get("name") or "")
-        if not name or name == scenario["backend"]["name"]:
+        if not name or name in allowed_backend_names:
             continue
         source = str(backend.get("source") or "").lower()
         network = str(backend.get("network") or "").lower()
-        if source == "database" and network != "regtest":
+        if source == "database" and network not in {"regtest", "elementsregtest"}:
             run_cli(data_root, "backends", "delete", name)
     remaining_backends = run_cli(data_root, "backends", "list")["data"]
     unexpected_backends = [
         backend
         for backend in remaining_backends
-        if str(backend.get("name") or "") != scenario["backend"]["name"]
-        or str(backend.get("network") or "").lower() != "regtest"
+        if str(backend.get("name") or "") not in allowed_backend_names
+        or str(backend.get("network") or "").lower() not in {"regtest", "elementsregtest"}
     ]
     if unexpected_backends:
         rendered = [
@@ -1589,9 +1661,9 @@ def _pair_transfers(data_root: Path, scenario: dict[str, Any], txids: dict[str, 
                 "pair",
                 *scope,
                 "--tx-out",
-                txids.get(pair["tx_out"], pair["tx_out"]),
+                txids.get(pair["tx_out"], _deterministic_demo_txid(str(pair["tx_out"]))),
                 "--tx-in",
-                txids.get(pair["tx_in"], pair["tx_in"]),
+                txids.get(pair["tx_in"], _deterministic_demo_txid(str(pair["tx_in"]))),
                 "--kind",
                 pair.get("kind") or "manual",
                 "--policy",
@@ -2417,6 +2489,7 @@ def run_demo(
         journal, transactions, rate_seed = _seed_rates_and_process(data_root, scenario)
         _assert_chain_edge_rows(scenario, txids, transactions)
         wallet_listing = run_cli(data_root, "wallets", "list", *scope)["data"]
+        backend_listing = run_cli(data_root, "backends", "list")["data"]
         transfer_listing = run_cli(data_root, "transfers", "list", *scope)["data"]
         quarantines = run_cli(data_root, "journals", "quarantined", *scope)["data"]
         summary = run_cli(data_root, "reports", "summary", *scope)["data"]
@@ -2518,6 +2591,16 @@ def run_demo(
                     "by_direction": dict(sorted(by_direction.items())),
                     "by_wallet": dict(sorted(by_wallet.items())),
                 },
+                "backends": [
+                    {
+                        "name": backend.get("name"),
+                        "kind": backend.get("kind"),
+                        "chain": backend.get("chain"),
+                        "network": backend.get("network"),
+                        "is_default": backend.get("default") == "yes",
+                    }
+                    for backend in backend_listing
+                ],
                 "stress": stress_result,
                 "transfers": {
                     "paired": pairs,

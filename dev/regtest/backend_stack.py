@@ -1,0 +1,523 @@
+#!/usr/bin/env python3
+from __future__ import annotations
+
+import base64
+import hashlib
+import json
+import os
+import socketserver
+import sys
+import threading
+import time
+from decimal import Decimal
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from typing import Any
+from urllib import error, request
+from urllib.parse import urlparse
+
+
+SATOSHIS = Decimal("100000000")
+
+
+def _env_int(name: str, default: int) -> int:
+    try:
+        return int(os.environ.get(name) or default)
+    except ValueError:
+        return default
+
+
+class RpcClient:
+    def __init__(self) -> None:
+        self.url = os.environ.get("BITCOIN_RPC_URL", "http://bitcoind:18443").rstrip("/")
+        self.user = os.environ.get("BITCOIN_RPC_USER", "kassiber")
+        self.password = os.environ.get("BITCOIN_RPC_PASSWORD", "")
+
+    def call(self, method: str, params: list[Any] | None = None) -> Any:
+        payload = json.dumps(
+            {"jsonrpc": "1.0", "id": f"kassiber-regtest-{method}", "method": method, "params": params or []}
+        ).encode("utf-8")
+        req = request.Request(self.url, data=payload, headers={"Content-Type": "application/json"})
+        token = base64.b64encode(f"{self.user}:{self.password}".encode("utf-8")).decode("ascii")
+        req.add_header("Authorization", f"Basic {token}")
+        with request.urlopen(req, timeout=30) as response:
+            body = json.loads(response.read().decode("utf-8"))
+        if body.get("error"):
+            raise RuntimeError(f"{method} failed: {body['error']}")
+        return body.get("result")
+
+
+def _btc_to_sats(value: Any) -> int | None:
+    if value is None:
+        return None
+    try:
+        return int((Decimal(str(value)) * SATOSHIS).to_integral_value())
+    except Exception:
+        return None
+
+
+def _script_payload(output: dict[str, Any]) -> dict[str, Any]:
+    script = output.get("scriptPubKey") if isinstance(output, dict) else {}
+    if not isinstance(script, dict):
+        script = {}
+    result: dict[str, Any] = {
+        "scriptpubkey": script.get("hex") or output.get("scriptpubkey") or "",
+        "scriptpubkey_type": script.get("type") or output.get("scriptpubkey_type") or "unknown",
+        "value": _btc_to_sats(output.get("value")),
+    }
+    address = script.get("address")
+    if not address and isinstance(script.get("addresses"), list) and script["addresses"]:
+        address = script["addresses"][0]
+    if address:
+        result["scriptpubkey_address"] = address
+    return {key: value for key, value in result.items() if value is not None}
+
+
+class BitcoinIndex:
+    def __init__(self, rpc: RpcClient) -> None:
+        self.rpc = rpc
+        self._lock = threading.Lock()
+        self._cache_until = 0.0
+        self._tip: tuple[int, str, tuple[str, ...]] | None = None
+        self._txs: dict[str, dict[str, Any]] = {}
+        self._history: dict[str, list[dict[str, Any]]] = {}
+        self._utxos: dict[str, list[dict[str, Any]]] = {}
+
+    def raw_tx(self, txid: str) -> dict[str, Any]:
+        return self.rpc.call("getrawtransaction", [txid, True])
+
+    def raw_hex(self, txid: str) -> str:
+        return str(self.rpc.call("getrawtransaction", [txid, False]))
+
+    def esplora_tx(self, txid: str) -> dict[str, Any]:
+        tx = self.raw_tx(txid)
+        return self._to_esplora(tx)
+
+    def _to_esplora(self, tx: dict[str, Any]) -> dict[str, Any]:
+        result: dict[str, Any] = {
+            "txid": tx.get("txid"),
+            "version": tx.get("version"),
+            "locktime": tx.get("locktime"),
+            "size": tx.get("size"),
+            "vsize": tx.get("vsize"),
+            "weight": tx.get("weight"),
+            "vin": [],
+            "vout": [],
+            "status": {
+                "confirmed": bool(tx.get("blockhash")),
+                "block_height": tx.get("blockheight") or tx.get("height"),
+                "block_hash": tx.get("blockhash"),
+                "block_time": tx.get("blocktime") or tx.get("time"),
+            },
+        }
+        for entry in tx.get("vin") or []:
+            if not isinstance(entry, dict):
+                continue
+            vin: dict[str, Any] = {
+                "txid": entry.get("txid"),
+                "vout": entry.get("vout"),
+                "sequence": entry.get("sequence"),
+            }
+            if entry.get("txid") and entry.get("vout") is not None:
+                prevout = self._prevout(entry.get("txid"), entry.get("vout"))
+                if prevout:
+                    vin["prevout"] = prevout
+            result["vin"].append(vin)
+        for output in tx.get("vout") or []:
+            if isinstance(output, dict):
+                result["vout"].append({"n": output.get("n"), **_script_payload(output)})
+        return result
+
+    def _prevout(self, txid: Any, vout: Any) -> dict[str, Any] | None:
+        try:
+            index = int(vout)
+            previous = self.raw_tx(str(txid))
+            outputs = previous.get("vout") or []
+            if index < 0 or index >= len(outputs) or not isinstance(outputs[index], dict):
+                return None
+            return _script_payload(outputs[index])
+        except Exception:
+            return None
+
+    def _refresh(self) -> None:
+        now = time.time()
+        if now < self._cache_until:
+            return
+        with self._lock:
+            if now < self._cache_until:
+                return
+            try:
+                height = int(self.rpc.call("getblockcount"))
+                tip_hash = str(self.rpc.call("getblockhash", [height]))
+                mempool = tuple(sorted(str(txid) for txid in self.rpc.call("getrawmempool") or []))
+            except Exception:
+                self._cache_until = now + 2
+                return
+            tip = (height, tip_hash, mempool)
+            if tip == self._tip:
+                self._cache_until = now + 2
+                return
+            txs: dict[str, dict[str, Any]] = {}
+            history: dict[str, list[dict[str, Any]]] = {}
+            spent: set[tuple[str, int]] = set()
+            for block_height in range(height + 1):
+                block_hash = str(self.rpc.call("getblockhash", [block_height]))
+                block = self.rpc.call("getblock", [block_hash, 2])
+                for tx in block.get("tx") or []:
+                    if isinstance(tx, dict) and tx.get("txid"):
+                        tx["blockheight"] = block_height
+                        txs[str(tx["txid"])] = tx
+                        self._index_tx(history, spent, tx, block_height)
+            for txid in mempool:
+                tx = self.raw_tx(txid)
+                txs[txid] = tx
+                self._index_tx(history, spent, tx, 0)
+            utxos: dict[str, list[dict[str, Any]]] = {}
+            for txid, tx in txs.items():
+                for output in tx.get("vout") or []:
+                    if not isinstance(output, dict):
+                        continue
+                    n = output.get("n")
+                    if not isinstance(n, int) or (txid, n) in spent:
+                        continue
+                    script_hex = _script_payload(output).get("scriptpubkey")
+                    if not script_hex:
+                        continue
+                    key = electrum_scripthash(str(script_hex))
+                    utxos.setdefault(key, []).append(
+                        {
+                            "txid": txid,
+                            "vout": n,
+                            "value": _btc_to_sats(output.get("value")) or 0,
+                            "status": {
+                                "confirmed": bool(tx.get("blockhash")),
+                                "block_height": tx.get("blockheight"),
+                                "block_hash": tx.get("blockhash"),
+                                "block_time": tx.get("blocktime") or tx.get("time"),
+                            },
+                        }
+                    )
+            self._tip = tip
+            self._txs = txs
+            self._history = history
+            self._utxos = utxos
+            self._cache_until = now + 2
+
+    def _index_tx(
+        self,
+        history: dict[str, list[dict[str, Any]]],
+        spent: set[tuple[str, int]],
+        tx: dict[str, Any],
+        height: int,
+    ) -> None:
+        txid = str(tx.get("txid") or "")
+        for entry in tx.get("vin") or []:
+            if isinstance(entry, dict) and entry.get("txid") and entry.get("vout") is not None:
+                try:
+                    spent.add((str(entry["txid"]), int(entry["vout"])))
+                except Exception:
+                    pass
+        for output in tx.get("vout") or []:
+            if not isinstance(output, dict):
+                continue
+            script_hex = _script_payload(output).get("scriptpubkey")
+            if not script_hex:
+                continue
+            key = electrum_scripthash(str(script_hex))
+            history.setdefault(key, []).append({"tx_hash": txid, "height": height})
+
+    def history(self, scripthash: str, *, mempool: bool | None = None) -> list[dict[str, Any]]:
+        self._refresh()
+        rows = list(self._history.get(scripthash, []))
+        if mempool is True:
+            return [row for row in rows if int(row.get("height") or 0) <= 0]
+        if mempool is False:
+            return [row for row in rows if int(row.get("height") or 0) > 0]
+        return rows
+
+    def utxos(self, scripthash: str) -> list[dict[str, Any]]:
+        self._refresh()
+        return list(self._utxos.get(scripthash, []))
+
+
+def electrum_scripthash(script_hex: str) -> str:
+    try:
+        payload = bytes.fromhex(script_hex)
+    except ValueError:
+        payload = b""
+    return hashlib.sha256(payload).digest()[::-1].hex()
+
+
+def electrum_status(history: list[dict[str, Any]]) -> str | None:
+    if not history:
+        return None
+    text = "".join(f"{row['tx_hash']}:{row['height']}:" for row in history)
+    return hashlib.sha256(text.encode("ascii")).hexdigest()
+
+
+def synthetic_liquid_graph(txid: str) -> dict[str, Any]:
+    prev = hashlib.sha256(f"prev:{txid}".encode("ascii")).hexdigest()
+    out_script = "0014" + hashlib.sha256(f"out:{txid}".encode("ascii")).hexdigest()[:40]
+    change_script = "0014" + hashlib.sha256(f"change:{txid}".encode("ascii")).hexdigest()[:40]
+    return {
+        "txid": txid.lower(),
+        "version": 2,
+        "locktime": 0,
+        "size": 420,
+        "vsize": 250,
+        "weight": 1000,
+        "vin": [
+            {
+                "txid": prev,
+                "vout": 0,
+                "prevout": {
+                    "scriptpubkey": out_script,
+                    "scriptpubkey_type": "v0_p2wpkh",
+                    "scriptpubkey_address": "el1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq",
+                    "value_state": "confidential",
+                },
+            }
+        ],
+        "vout": [
+            {
+                "n": 0,
+                "scriptpubkey": change_script,
+                "scriptpubkey_type": "v0_p2wpkh",
+                "scriptpubkey_address": "el1qtestregtestliquidreceiver0000000000000000000000000000000000",
+                "value_state": "confidential",
+            },
+            {"n": 1, "scriptpubkey_type": "fee", "value": 5000},
+        ],
+        "status": {"confirmed": True, "block_height": 1, "block_time": 0},
+    }
+
+
+class ApiHandler(BaseHTTPRequestHandler):
+    server_version = "KassiberRegtestBackend/1.0"
+
+    def do_GET(self) -> None:  # noqa: N802
+        parsed = urlparse(self.path)
+        path = parsed.path.rstrip("/")
+        if path in {"", "/api"}:
+            payload: dict[str, Any] = {
+                "ok": True,
+                "service": self.server.service_name,
+                "chain": self.server.chain,
+                "network": self.server.network,
+            }
+            if self.server.chain == "bitcoin":
+                try:
+                    info = self.server.index.rpc.call("getblockchaininfo")
+                except Exception as exc:
+                    self._error(503, f"bitcoind unavailable: {exc}")
+                    return
+                payload["blocks"] = info.get("blocks")
+                payload["headers"] = info.get("headers")
+            self._json(
+                payload
+            )
+            return
+        prefix = "/api/tx/"
+        if path.startswith(prefix):
+            suffix = path[len(prefix) :]
+            if suffix.endswith("/hex"):
+                txid = suffix[:-4].rstrip("/")
+                self._tx_hex(txid)
+            else:
+                self._tx_json(suffix)
+            return
+        if path.startswith("/api/scripthash/"):
+            self._scripthash(path)
+            return
+        if path == "/api/blocks/tip/height":
+            try:
+                self._text(str(self.server.index.rpc.call("getblockcount")))
+            except Exception as exc:
+                self._error(503, str(exc))
+            return
+        self._error(404, "not found")
+
+    def _tx_json(self, txid: str) -> None:
+        if self.server.chain == "liquid":
+            self._json(synthetic_liquid_graph(txid))
+            return
+        try:
+            self._json(self.server.index.esplora_tx(txid))
+        except Exception as exc:
+            self._error(404, str(exc))
+
+    def _tx_hex(self, txid: str) -> None:
+        if self.server.chain == "liquid":
+            self._text("")
+            return
+        try:
+            self._text(self.server.index.raw_hex(txid))
+        except Exception as exc:
+            self._error(404, str(exc))
+
+    def _scripthash(self, path: str) -> None:
+        if self.server.chain != "bitcoin":
+            self._json([])
+            return
+        parts = path.split("/")
+        if len(parts) < 4:
+            self._error(404, "not found")
+            return
+        scripthash = parts[3]
+        if path.endswith("/txs/mempool"):
+            self._json([self.server.index.esplora_tx(row["tx_hash"]) for row in self.server.index.history(scripthash, mempool=True)])
+        elif "/txs/chain" in path:
+            self._json([self.server.index.esplora_tx(row["tx_hash"]) for row in self.server.index.history(scripthash, mempool=False)])
+        elif path.endswith("/utxo"):
+            self._json(self.server.index.utxos(scripthash))
+        else:
+            self._error(404, "not found")
+
+    def _json(self, payload: Any, status: int = 200) -> None:
+        body = json.dumps(payload, sort_keys=True).encode("utf-8")
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _text(self, payload: str, status: int = 200) -> None:
+        body = payload.encode("utf-8")
+        self.send_response(status)
+        self.send_header("Content-Type", "text/plain; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _error(self, status: int, message: str) -> None:
+        self._json({"ok": False, "error": message}, status=status)
+
+    def log_message(self, fmt: str, *args: Any) -> None:
+        print(f"{self.server.service_name}: {fmt % args}", file=sys.stderr)
+
+
+class ApiServer(ThreadingHTTPServer):
+    def __init__(self, addr: tuple[str, int], *, service_name: str, chain: str, network: str, index: BitcoinIndex):
+        super().__init__(addr, ApiHandler)
+        self.service_name = service_name
+        self.chain = chain
+        self.network = network
+        self.index = index
+
+
+class ElectrumHandler(socketserver.StreamRequestHandler):
+    def handle(self) -> None:
+        for raw_line in self.rfile:
+            try:
+                req = json.loads(raw_line.decode("utf-8"))
+            except json.JSONDecodeError:
+                continue
+            response = self._response(req)
+            self.wfile.write(json.dumps(response, sort_keys=True).encode("utf-8") + b"\n")
+
+    def _response(self, req: dict[str, Any]) -> dict[str, Any]:
+        method = str(req.get("method") or "")
+        params = req.get("params") if isinstance(req.get("params"), list) else []
+        try:
+            result = self._call(method, params)
+            return {"jsonrpc": "2.0", "id": req.get("id"), "result": result}
+        except Exception as exc:
+            return {"jsonrpc": "2.0", "id": req.get("id"), "error": {"code": -1, "message": str(exc)}}
+
+    def _call(self, method: str, params: list[Any]) -> Any:
+        if method == "server.version":
+            if self.server.chain == "bitcoin":
+                self.server.index.rpc.call("getblockchaininfo")
+            return ["Kassiber regtest backend", "1.4"]
+        if method == "server.banner":
+            return f"{self.server.service_name} ({self.server.chain}/{self.server.network})"
+        if method == "blockchain.headers.subscribe":
+            return {"height": 0, "hex": ""}
+        scripthash = str(params[0]) if params else ""
+        if method == "blockchain.scripthash.subscribe":
+            return electrum_status(self.server.index.history(scripthash)) if self.server.chain == "bitcoin" else None
+        if method == "blockchain.scripthash.get_history":
+            return self.server.index.history(scripthash) if self.server.chain == "bitcoin" else []
+        if method == "blockchain.scripthash.listunspent":
+            return self.server.index.utxos(scripthash) if self.server.chain == "bitcoin" else []
+        if method == "blockchain.scripthash.get_balance":
+            utxos = self.server.index.utxos(scripthash) if self.server.chain == "bitcoin" else []
+            return {"confirmed": sum(int(row.get("value") or 0) for row in utxos), "unconfirmed": 0}
+        if method == "blockchain.transaction.get":
+            txid = str(params[0]) if params else ""
+            if self.server.chain == "bitcoin":
+                return self.server.index.raw_hex(txid)
+            raise RuntimeError("Liquid fixture Electrum endpoint only supports health and scripthash probes")
+        raise RuntimeError(f"unsupported method: {method}")
+
+
+class ElectrumServer(socketserver.ThreadingTCPServer):
+    allow_reuse_address = True
+
+    def __init__(self, addr: tuple[str, int], *, service_name: str, chain: str, network: str, index: BitcoinIndex):
+        super().__init__(addr, ElectrumHandler)
+        self.service_name = service_name
+        self.chain = chain
+        self.network = network
+        self.index = index
+
+
+def _serve(server: Any) -> threading.Thread:
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    return thread
+
+
+def main() -> int:
+    rpc = RpcClient()
+    index = BitcoinIndex(rpc)
+    services = [
+        ApiServer(
+            ("0.0.0.0", _env_int("BITCOIN_MEMPOOL_PORT", 8080)),
+            service_name="bitcoin-mempool-regtest",
+            chain="bitcoin",
+            network="regtest",
+            index=index,
+        ),
+        ElectrumServer(
+            ("0.0.0.0", _env_int("BITCOIN_ELECTRUM_PORT", 50001)),
+            service_name="bitcoin-electrum-regtest",
+            chain="bitcoin",
+            network="regtest",
+            index=index,
+        ),
+        ApiServer(
+            ("0.0.0.0", _env_int("LIQUID_MEMPOOL_PORT", 8081)),
+            service_name="liquid-mempool-regtest",
+            chain="liquid",
+            network="elementsregtest",
+            index=index,
+        ),
+        ElectrumServer(
+            ("0.0.0.0", _env_int("LIQUID_ELECTRUM_PORT", 50011)),
+            service_name="liquid-electrum-regtest",
+            chain="liquid",
+            network="elementsregtest",
+            index=index,
+        ),
+    ]
+    for service in services:
+        _serve(service)
+    print(
+        json.dumps(
+            {
+                "ok": True,
+                "services": [
+                    {"name": service.service_name, "chain": service.chain, "network": service.network, "port": service.server_address[1]}
+                    for service in services
+                ],
+            },
+            sort_keys=True,
+        ),
+        flush=True,
+    )
+    while True:
+        time.sleep(3600)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

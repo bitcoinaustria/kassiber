@@ -787,7 +787,9 @@ export function deriveExplorerSettings(backends: Backend[]): ExplorerSettings {
   const activeRegtestBackend = backends.some(
     (backend) =>
       backend.isDefault &&
-      String(backend.network ?? "").toLowerCase() === "regtest",
+      ["regtest", "elementsregtest"].includes(
+        String(backend.network ?? "").toLowerCase(),
+      ),
   );
   return {
     bitcoinBaseUrl: baseForNet("BTC"),

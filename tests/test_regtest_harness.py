@@ -180,6 +180,25 @@ class RegtestHarnessTest(unittest.TestCase):
         liquid_wallets = {wallet["key"] for wallet in scenario["wallets"] if wallet.get("chain") == "liquid"}
         self.assertEqual(liquid_wallets, {"liquid_treasury", "liquid_operations", "liquid_treasury_2024"})
         self.assertEqual(
+            {wallet["network"] for wallet in scenario["wallets"] if wallet.get("chain") == "liquid"},
+            {"elementsregtest"},
+        )
+        local_backends = regtest_demo._local_backend_specs()
+        self.assertEqual(
+            {backend["name"] for backend in local_backends},
+            {
+                "bitcoin-electrum-regtest",
+                "bitcoin-mempool-regtest",
+                "liquid-electrum-regtest",
+                "liquid-mempool-regtest",
+            },
+        )
+        self.assertTrue(all("127.0.0.1" in backend["url"] for backend in local_backends))
+        self.assertEqual(
+            {(backend["chain"], backend["network"]) for backend in local_backends},
+            {("bitcoin", "regtest"), ("liquid", "elementsregtest")},
+        )
+        self.assertEqual(
             scenario["deprecated_wallets"],
             ["treasury", "merchant", "cold", "liquid_treasury"],
         )
@@ -267,6 +286,16 @@ class RegtestHarnessTest(unittest.TestCase):
 
         with self.assertRaisesRegex(ValueError, "operations"):
             regtest_demo.validate_scenario(scenario)
+
+    def test_compose_stack_includes_local_protocol_backends(self):
+        compose = (ROOT / "dev" / "regtest" / "compose.bitcoin.yml").read_text(encoding="utf-8")
+
+        self.assertIn("backend-stack:", compose)
+        self.assertIn("backend_stack.py:/app/backend_stack.py:ro", compose)
+        self.assertIn("KASSIBER_REGTEST_BITCOIN_ELECTRUM_PORT", compose)
+        self.assertIn("KASSIBER_REGTEST_BITCOIN_MEMPOOL_PORT", compose)
+        self.assertIn("KASSIBER_REGTEST_LIQUID_ELECTRUM_PORT", compose)
+        self.assertIn("KASSIBER_REGTEST_LIQUID_MEMPOOL_PORT", compose)
 
     def test_full_accounting_demo_manifest_validation_rejects_bad_edge_cases(self):
         scenario = regtest_demo.load_scenario()

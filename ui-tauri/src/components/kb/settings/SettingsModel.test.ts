@@ -298,4 +298,24 @@ describe("backend settings model", () => {
       publicFallbacks: false,
     });
   });
+
+  it("disables public explorer fallbacks when the active backend is elementsregtest", () => {
+    const settings = deriveExplorerSettings([
+      backendRowToSettingsBackend({
+        name: "liquid-mempool-regtest",
+        kind: "liquid-esplora",
+        chain: "liquid",
+        network: "elementsregtest",
+        url: "http://127.0.0.1:18560/api",
+        is_default: true,
+        has_url: true,
+      }),
+    ]);
+
+    expect(settings).toEqual({
+      bitcoinBaseUrl: "",
+      liquidBaseUrl: "http://127.0.0.1:18560",
+      publicFallbacks: false,
+    });
+  });
 });

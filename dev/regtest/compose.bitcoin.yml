@@ -18,5 +18,26 @@ services:
     volumes:
       - bitcoind-regtest:/home/bitcoin/.bitcoin
 
+  backend-stack:
+    image: ${KASSIBER_REGTEST_BACKEND_STACK_IMAGE:-python:3.12-slim}
+    depends_on:
+      - bitcoind
+    environment:
+      BITCOIN_RPC_URL: http://bitcoind:18443
+      BITCOIN_RPC_USER: ${KASSIBER_REGTEST_RPC_USER}
+      BITCOIN_RPC_PASSWORD: ${KASSIBER_REGTEST_RPC_PASSWORD}
+      BITCOIN_ELECTRUM_PORT: "50001"
+      BITCOIN_MEMPOOL_PORT: "8080"
+      LIQUID_ELECTRUM_PORT: "50011"
+      LIQUID_MEMPOOL_PORT: "8081"
+    command: ["python", "/app/backend_stack.py"]
+    ports:
+      - "127.0.0.1:${KASSIBER_REGTEST_BITCOIN_ELECTRUM_PORT:-18543}:50001"
+      - "127.0.0.1:${KASSIBER_REGTEST_BITCOIN_MEMPOOL_PORT:-18544}:8080"
+      - "127.0.0.1:${KASSIBER_REGTEST_LIQUID_ELECTRUM_PORT:-18545}:50011"
+      - "127.0.0.1:${KASSIBER_REGTEST_LIQUID_MEMPOOL_PORT:-18546}:8081"
+    volumes:
+      - ./backend_stack.py:/app/backend_stack.py:ro
+
 volumes:
   bitcoind-regtest:

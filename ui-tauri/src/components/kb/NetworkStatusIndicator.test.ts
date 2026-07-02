@@ -34,6 +34,14 @@ describe("visibleConnectionBackends", () => {
         walletRefs: ["Regtest Demo/Full Accounting/Treasury"],
       }),
       backend({
+        id: "liquid-mempool-regtest",
+        name: "liquid-mempool-regtest",
+        net: "LIQUID",
+        chain: "liquid",
+        network: "elementsregtest",
+        url: "http://127.0.0.1:18560/api",
+      }),
+      backend({
         id: "mempool",
         name: "mempool",
         url: "https://mempool.bitcoin-austria.at/api",
@@ -48,7 +56,10 @@ describe("visibleConnectionBackends", () => {
       }),
     ]);
 
-    expect(rows.map((row) => row.id)).toEqual(["core-regtest"]);
+    expect(rows.map((row) => row.id)).toEqual([
+      "core-regtest",
+      "liquid-mempool-regtest",
+    ]);
   });
 
   it("keeps normal configured endpoints outside regtest mode", () => {

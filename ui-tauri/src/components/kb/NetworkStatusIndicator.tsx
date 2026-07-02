@@ -154,7 +154,9 @@ function connectionRowsFromBackends(
 }
 
 function isRegtestBackend(backend: Backend) {
-  return String(backend.network ?? "").toLowerCase() === "regtest";
+  return ["regtest", "elementsregtest"].includes(
+    String(backend.network ?? "").toLowerCase(),
+  );
 }
 
 export function visibleConnectionBackends(savedBackends: Backend[]): Backend[] {

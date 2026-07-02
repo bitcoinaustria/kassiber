@@ -9,8 +9,8 @@ regtest infrastructure.
 | Tier | Command | Docker | Purpose |
 | --- | --- | --- | --- |
 | FAST | `./scripts/integration-harness.sh fast` | no | Replays recorded regtest tapes through the real sync adapter, import, journal, report, and XLSX export path with `KASSIBER_NO_EGRESS=1`. Includes a baseline watch-only tape and an edge-case tape (multi-address wallet, immature vs. mature coinbase, dust, RBF-replaced conflict pair, same-wallet self-spend, mempool-pending receipt). |
-| SLOW | `./scripts/integration-harness.sh bitcoin-core` | yes, unless reusing a node | Starts or reuses a Bitcoin Core regtest node, creates real wallets and transactions (including coinbase maturity and a watched receive), then drives Kassiber sync, pricing, journal, report, and export. |
-| DEMO | `./scripts/integration-harness.sh demo-full` | yes, unless reusing a node | Builds the checked-in `full-accounting-v1` scenario: eleven Kassiber wallets including multi-address Bitcoin wallets, rotation targets, a mining wallet, and deterministic Liquid/LBTC import wallets; real regtest acquisitions/disposals/transfers, operating-expense disposals with deterministic amount/fee variation, deprecated rotated-out wallets, batched, consolidation, dust, RBF-replacement, and mempool-pending edge cases, a multi-year stress ledger, CoinJoin- and PayJoin-shaped collaborative transactions, swap/peg bridge pairs, loan marks, bundled real historical BTC/EUR pricing, journals, reports, and transaction exports. |
+| SLOW | `./scripts/integration-harness.sh bitcoin-core` | yes, unless reusing a node | Starts or reuses a Bitcoin Core regtest node plus local Electrum/mempool-compatible loopback endpoints, creates real wallets and transactions (including coinbase maturity and a watched receive), then drives Kassiber sync, pricing, journal, report, and export. |
+| DEMO | `./scripts/integration-harness.sh demo-full` | yes, unless reusing a node | Builds the checked-in `full-accounting-v1` scenario: eleven Kassiber wallets including multi-address Bitcoin wallets, rotation targets, a mining wallet, and deterministic elementsregtest/LBTC import wallets; real regtest acquisitions/disposals/transfers, operating-expense disposals with deterministic amount/fee variation, deprecated rotated-out wallets, batched, consolidation, dust, RBF-replacement, and mempool-pending edge cases, local Bitcoin/Liquid Electrum and mempool-compatible backend rows, a multi-year stress ledger, CoinJoin- and PayJoin-shaped collaborative transactions, swap/peg bridge pairs, loan marks, bundled real historical BTC/EUR pricing, journals, reports, and transaction exports. |
 
 The slow lane is opt-in with `KASSIBER_INTEGRATION=1`; normal unit gates do not
 start Docker. To reuse an existing regtest node instead of Compose, set an
@@ -27,8 +27,20 @@ The Compose lane generates disposable RPC credentials per run unless you set
 them explicitly, passes only the `rpcauth` hash to bitcoind, publishes RPC on
 host loopback, and uses a per-worktree Compose project name so parallel runs do
 not share containers or volumes. It uses regtest only, no mainnet funds, no user
-wallet files, and no production descriptors. Set `KASSIBER_REGTEST_KEEP=1` to
-keep the Docker volume for debugging; otherwise it is removed on exit.
+wallet files, and no production descriptors. The Compose stack publishes only
+loopback ports: Core RPC plus four protocol endpoints used by the UI/backend
+health and graph paths:
+
+- `core-regtest` -> Bitcoin Core RPC, authoritative sync backend for Bitcoin
+  wallets
+- `bitcoin-electrum-regtest` -> Electrum/Fulcrum-compatible TCP endpoint
+- `bitcoin-mempool-regtest` -> mempool/esplora-compatible HTTP API
+- `liquid-electrum-regtest` -> Liquid Electrum-compatible health/scripthash
+  endpoint for the elementsregtest demo rail
+- `liquid-mempool-regtest` -> Liquid mempool/esplora-compatible HTTP API for
+  graph lookups on deterministic LBTC demo txids
+
+Set `KASSIBER_REGTEST_KEEP=1` to keep the Docker volume for debugging; otherwise it is removed on exit.
 Fresh Compose runs use the scenario manifest's historical timestamp sequence,
 starting in January 2019 and covering activity into spring 2026. Reused Core
 nodes can only move forward from their existing regtest chain tip, so their
@@ -46,8 +58,10 @@ the Core RPC backend, then verifies Kassiber behavior through the public CLI:
   operational wallet watching several rotating addresses (fresh receive and
   change addresses per payment, funding spread across the address set, and
   greedy multi-UTXO coin selection) so the book looks like real wallet usage
-- file-source Liquid wallet creation and generic-ledger LBTC import through the
-  same `wallets sync --all` path
+- file-source Liquid wallet creation on `elementsregtest` and generic-ledger
+  LBTC import through the same `wallets sync --all` path; deterministic
+  Liquid external IDs are txid-shaped so the local Liquid mempool-compatible
+  graph endpoint can resolve them instead of linking to public infrastructure
 - acquisition and disposal rows across Treasury, Cold Storage, Spending, and
   Merchant wallets, plus empty Bitcoin and Liquid rotation-target wallets that
   become active after security upgrades
@@ -84,6 +98,10 @@ the Core RPC backend, then verifies Kassiber behavior through the public CLI:
 - Liquid/on-chain-style bridge events (`peg-in`, `submarine-swap`, `peg-out`)
   pair real Bitcoin Core txids with deterministic LBTC ledger external IDs so
   the generic-tax demo exercises taxable cross-asset swaps
+- local backend rows for Bitcoin Core RPC, Bitcoin Electrum/Fulcrum-compatible
+  TCP, Bitcoin mempool-compatible HTTP, Liquid Electrum-compatible TCP, and
+  Liquid mempool-compatible HTTP; the demo deletes public/default backends and
+  fails if any non-regtest backend remains
 - reviewed same-asset transfer pairs for wallet-to-wallet movements
 - CoinJoin-shaped PSBT flow with two owned inputs, equal external/tracked
   outputs, and explicit watched change; the resulting rows are explicitly
@@ -128,7 +146,7 @@ backed by the real Python daemon reading a multi-year regtest book.
 
 What `demo-up` does:
 
-- starts (or reuses) the regtest node under the fixed Compose project
+- starts (or reuses) the regtest node and local protocol backend service under the fixed Compose project
   `kassiber-regtest-demo`, separate from the per-worktree test projects, and
   leaves it running;
 - builds the `full-accounting-v1` book once into
@@ -142,6 +160,12 @@ What `demo-up` does:
   refresh/sync from the GUI keeps working;
 - keeps the demo Core wallets loaded (`--keep-core-wallets`) so incremental
   syncs from the app keep seeing new activity.
+
+The backend service is intentionally a compatibility surface, not upstream
+Fulcrum or the full mempool web application. It speaks the Electrum and
+mempool/esplora calls Kassiber exercises in development and CI while keeping
+the stack small and deterministic. Full `elementsd`, Fulcrum, and mempool web
+containers remain a separate parity target.
 
 `pnpm dev:demo` runs the Vite daemon bridge with
 `KASSIBER_DEV_DATA_ROOT` pointed at the demo book; the desktop preview then
@@ -206,11 +230,13 @@ treated as an accounting or sync proof.
 
 ## Growth Path
 
-The current checked-in slow lanes cover Bitcoin Core RPC, deterministic
-file-source Liquid/LBTC demo wallets, and a full accounting demo on Bitcoin
-regtest. The harness is shaped so Fulcrum/Electrum, explorer HTTP, live Liquid,
-and optional BTCPay modules can add new tapes, live tests, and scenario manifests
-without changing the contributor entrypoint.
+The current checked-in slow lanes cover Bitcoin Core RPC, local
+Electrum/Fulcrum-compatible and mempool/esplora-compatible endpoints,
+deterministic file-source elementsregtest/LBTC demo wallets, and a full
+accounting demo on Bitcoin regtest. The local backend service is a deterministic
+protocol shim; replacing it with full upstream Fulcrum, mempool web, and
+`elementsd` containers can add deeper parity tests without changing the
+contributor entrypoint.
 
 Lightning is the next planned slice: the concrete plan — Core Lightning
 regtest nodes in a Compose overlay, an idempotent channel-bootstrap step,

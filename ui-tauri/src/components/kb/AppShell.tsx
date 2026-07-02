@@ -1670,8 +1670,9 @@ function SidebarActions({
     backendSettingsQuery.data?.data?.backends.find(
       (backend) => backend.name === defaultBackendName || backend.is_default,
     ) ?? null;
-  const activeRegtestBackend =
-    String(defaultBackend?.network ?? "").toLowerCase() === "regtest";
+  const activeRegtestBackend = ["regtest", "elementsregtest"].includes(
+    String(defaultBackend?.network ?? "").toLowerCase(),
+  );
   // Until the backends query resolves, activeRegtestBackend is a placeholder
   // false; coercing on it would bounce a persisted regtest mode through "real"
   // and re-key every daemon query on launch.
