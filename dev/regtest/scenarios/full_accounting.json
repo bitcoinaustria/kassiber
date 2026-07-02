@@ -218,8 +218,13 @@
         "fee_btc": "0.00001000",
         "pair_kind": "submarine-swap",
         "pair_policy": "taxable",
+        "provider": "boltz",
+        "boltz_flow": "chain-swap",
+        "boltz_api": "/v2/swap/chain",
+        "boltz_from": "BTC",
+        "boltz_to": "L-BTC",
         "in_external_id": "submarine_rebalance_2022_lbtc_in",
-        "note": "A Lightning/Liquid-style submarine swap rebalances operational funds."
+        "note": "A Boltz BTC to L-BTC chain-swap-shaped bridge rebalances operational funds through Liquid."
       },
       {
         "id": "liquid_pegout_2024",

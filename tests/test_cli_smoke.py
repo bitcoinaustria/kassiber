@@ -5179,6 +5179,35 @@ class GenericLedgerImportTest(unittest.TestCase):
         self.assertEqual(row["amount_msat"], 250_000_000)  # 250k sats = 0.0025 BTC
         self.assertEqual(row["fee_msat"], 500_000)  # 500 sats, not 500 BTC
 
+    def test_csv_import_preserves_swap_linkage_columns(self):
+        ledger = Path(self._tmp.name) / "swap-linkage.csv"
+        payment_hash = "AA" * 32
+        refund_funding_txid = "bb" * 32
+        ledger.write_text(
+            "Type,Date,Sent Amount,Sent Asset,Tx-ID,Payment Hash,Payment Hash Source,Swap Refund Funding Tx-ID\n"
+            f"Withdrawal,2026-04-01,0.00100000,LBTC,boltz-lockup-1,{payment_hash},boltz-regtest,{refund_funding_txid}\n",
+            encoding="utf-8",
+        )
+        self._import(ledger)
+
+        conn = sqlite3.connect(self.data_root / "kassiber.sqlite3")
+        conn.row_factory = sqlite3.Row
+        try:
+            row = conn.execute(
+                """
+                SELECT asset, payment_hash, payment_hash_source, swap_refund_funding_txid
+                FROM transactions
+                WHERE external_id = 'boltz-lockup-1'
+                """
+            ).fetchone()
+        finally:
+            conn.close()
+        self.assertIsNotNone(row)
+        self.assertEqual(row["asset"], "LBTC")
+        self.assertEqual(row["payment_hash"], payment_hash.lower())
+        self.assertEqual(row["payment_hash_source"], "boltz-regtest")
+        self.assertEqual(row["swap_refund_funding_txid"], refund_funding_txid)
+
     def test_reimport_is_idempotent(self):
         ledger = Path(self._tmp.name) / "ledger.csv"
         ledger.write_text(_GENERIC_LEDGER_CSV, encoding="utf-8")
