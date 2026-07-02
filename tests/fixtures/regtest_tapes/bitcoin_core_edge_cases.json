@@ -1,7 +1,7 @@
 {
   "provenance": {
     "scenario": "bitcoin-core-edge-cases",
-    "recorded_from": "local regtest bitcoind",
+    "recorded_from": "synthetic (hand-authored fixture, not a live capture)",
     "backend_kind": "bitcoinrpc",
     "chain": "bitcoin",
     "network": "regtest",
