@@ -42,8 +42,17 @@ integration harness:
 ./scripts/integration-harness.sh demo-full     # full multi-wallet accounting demo
 ```
 
+For interactive development against a real book instead of mock fixtures
+(needs Docker, `uv`, and `pnpm`):
+
+```bash
+./scripts/integration-harness.sh demo-up       # persistent regtest node + demo book
+cd ui-tauri && pnpm dev:demo                   # dev preview backed by the real daemon
+```
+
 See [`docs/reference/testing.md`](docs/reference/testing.md) for the tiered
-FAST/SLOW model and Docker/regtest guardrails.
+FAST/SLOW model, the developer demo environment, and Docker/regtest
+guardrails.
 
 ### Desktop UI (frontend)
 

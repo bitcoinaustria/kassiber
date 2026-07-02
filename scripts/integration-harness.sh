@@ -160,6 +160,126 @@ run_demo_full() {
   py -m tests.integration.regtest_demo
 }
 
+DEMO_HOME="${KASSIBER_REGTEST_DEMO_HOME:-$HOME/.kassiber/regtest-demo}"
+DEMO_MANIFEST="$DEMO_HOME/demo-manifest.json"
+DEMO_SCENARIO="dev/regtest/scenarios/full_accounting.json"
+
+demo_manifest_get() {
+  KASSIBER_DEMO_MANIFEST="$DEMO_MANIFEST" KASSIBER_DEMO_KEY="$1" py - <<'PY'
+import json
+import os
+
+try:
+    with open(os.environ["KASSIBER_DEMO_MANIFEST"], "r", encoding="utf-8") as handle:
+        print(json.load(handle).get(os.environ["KASSIBER_DEMO_KEY"]) or "")
+except (OSError, ValueError):
+    print("")
+PY
+}
+
+demo_scenario_checksum() {
+  py -c 'import hashlib, sys; print(hashlib.sha256(open(sys.argv[1], "rb").read()).hexdigest())' "$DEMO_SCENARIO"
+}
+
+demo_build_book() {
+  local checksum
+  checksum="$(demo_scenario_checksum)"
+  if [ -z "${KASSIBER_REGTEST_DEMO_REBUILD:-}" ] \
+    && [ -d "$DEMO_HOME/data" ] \
+    && [ "$(demo_manifest_get scenario_checksum)" = "$checksum" ]; then
+    echo "Reusing existing demo book (scenario unchanged): $DEMO_HOME/data"
+    return 0
+  fi
+
+  rm -rf "$DEMO_HOME/data" "$DEMO_HOME/exports" "$DEMO_HOME/imports" \
+    "$DEMO_HOME/demo-summary.json" "$DEMO_MANIFEST"
+  mkdir -p "$DEMO_HOME"
+  echo "Building the demo book (a few minutes of regtest history)..."
+  KASSIBER_REGTEST_DEMO_ROOT="$DEMO_HOME" py -m tests.integration.regtest_demo \
+    --keep-core-wallets \
+    --json-output "$DEMO_HOME/demo-summary.json" >/dev/null
+
+  KASSIBER_DEMO_MANIFEST="$DEMO_MANIFEST" \
+  KASSIBER_DEMO_SCENARIO_ID="full-accounting-v1" \
+  KASSIBER_DEMO_SCENARIO_CHECKSUM="$checksum" \
+  KASSIBER_DEMO_HOME_DIR="$DEMO_HOME" \
+    py - <<'PY'
+import datetime
+import json
+import os
+
+manifest_path = os.environ["KASSIBER_DEMO_MANIFEST"]
+home = os.environ["KASSIBER_DEMO_HOME_DIR"]
+manifest = {
+    "schema_version": 1,
+    "scenario_id": os.environ["KASSIBER_DEMO_SCENARIO_ID"],
+    "scenario_checksum": os.environ["KASSIBER_DEMO_SCENARIO_CHECKSUM"],
+    "created_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+    "data_root": os.path.join(home, "data"),
+    "export_dir": os.path.join(home, "exports"),
+    "core_url": os.environ["KASSIBER_REGTEST_CORE_URL"],
+    "compose_project": os.environ.get("KASSIBER_REGTEST_COMPOSE_PROJECT", ""),
+    "rpc_user": os.environ["KASSIBER_REGTEST_RPC_USER"],
+    "rpc_password": os.environ["KASSIBER_REGTEST_RPC_PASSWORD"],
+}
+with open(manifest_path, "w", encoding="utf-8") as handle:
+    json.dump(manifest, handle, indent=2, sort_keys=True)
+    handle.write("\n")
+os.chmod(manifest_path, 0o600)
+PY
+}
+
+demo_print_instructions() {
+  cat <<EOF
+
+Demo environment is up.
+  data root:  $DEMO_HOME/data
+  exports:    $DEMO_HOME/exports
+  Core RPC:   $KASSIBER_REGTEST_CORE_URL (regtest; credentials in $DEMO_MANIFEST)
+
+Next steps:
+  cd ui-tauri && pnpm dev:demo                       # dev preview on the real demo book
+  uv run python -m kassiber --data-root "$DEMO_HOME/data" reports summary
+  ./dev/regtest/bitcoin-cli.sh getblockchaininfo    # poke the regtest node
+  ./scripts/integration-harness.sh demo-down         # stop the node (book + chain kept)
+  ./scripts/integration-harness.sh demo-down --purge # remove node, chain, and demo book
+EOF
+}
+
+run_demo_up() {
+  # The dev demo stack is machine-global (one demo book per developer), so use
+  # a fixed Compose project instead of the per-worktree test project, keep the
+  # node running after the script exits, and persist the generated RPC
+  # credentials so later demo-up runs still match the book's stored backend.
+  export KASSIBER_REGTEST_COMPOSE_PROJECT="${KASSIBER_REGTEST_COMPOSE_PROJECT:-kassiber-regtest-demo}"
+  export KASSIBER_REGTEST_KEEP=1
+  if [ -z "${KASSIBER_REGTEST_RPC_USER:-}" ]; then
+    KASSIBER_REGTEST_RPC_USER="$(demo_manifest_get rpc_user)"
+    [ -n "$KASSIBER_REGTEST_RPC_USER" ] && export KASSIBER_REGTEST_RPC_USER
+  fi
+  if [ -z "${KASSIBER_REGTEST_RPC_PASSWORD:-}" ]; then
+    KASSIBER_REGTEST_RPC_PASSWORD="$(demo_manifest_get rpc_password)"
+    [ -n "$KASSIBER_REGTEST_RPC_PASSWORD" ] && export KASSIBER_REGTEST_RPC_PASSWORD
+  fi
+  run_with_bitcoin_core demo_build_book
+  demo_print_instructions
+}
+
+run_demo_down() {
+  local purge="${1:-}"
+  local project
+  project="$(demo_manifest_get compose_project)"
+  project="${KASSIBER_REGTEST_COMPOSE_PROJECT:-${project:-kassiber-regtest-demo}}"
+  if [ "$purge" = "--purge" ]; then
+    docker_compose -p "$project" -f dev/regtest/compose.bitcoin.yml down -v
+    rm -rf "$DEMO_HOME"
+    echo "Demo node, chain volume, and demo book removed."
+  else
+    docker_compose -p "$project" -f dev/regtest/compose.bitcoin.yml down
+    echo "Demo node stopped. Chain volume and demo book kept; 'demo-up' resumes them."
+  fi
+}
+
 run_slow_suite() {
   run_bitcoin_core_smoke
   run_demo_full
@@ -183,12 +303,18 @@ case "$MODE" in
   demo|demo-full)
     run_regtest_demo_full
     ;;
+  demo-up)
+    run_demo_up
+    ;;
+  demo-down)
+    run_demo_down "${2:-}"
+    ;;
   all)
     run_fast
     run_with_bitcoin_core run_slow_suite
     ;;
   *)
-    echo "usage: $0 [fast|bitcoin-core|slow|demo|demo-full|all]" >&2
+    echo "usage: $0 [fast|bitcoin-core|slow|demo|demo-full|demo-up|demo-down [--purge]|all]" >&2
     exit 2
     ;;
 esac

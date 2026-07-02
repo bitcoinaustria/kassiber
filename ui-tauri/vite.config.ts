@@ -343,7 +343,11 @@ interface PendingBridgeRequest {
 
 class DaemonBridgeSupervisor {
   private child: ChildProcessWithoutNullStreams | null = null;
-  private dataRoot: string | null = null;
+  // Seed the data root from the environment so `pnpm dev:demo` (and CI) can
+  // point the bridge at a prepared book, e.g. the regtest demo book, without
+  // going through the interactive import-project flow.
+  private dataRoot: string | null =
+    process.env.KASSIBER_DEV_DATA_ROOT?.trim() || null;
   private readonly pending = new Map<string, PendingBridgeRequest>();
   private stderrTail = "";
 

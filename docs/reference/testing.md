@@ -104,9 +104,64 @@ generated `data_root` and `export_dir`, for example:
 ./scripts/integration-harness.sh demo-full
 ```
 
-Open that generated data root from the desktop import/storage flow when you want
-the GUI to inspect the same real demo book. Browser mock mode remains useful for
-component fixtures, but it should not be treated as an accounting or sync proof.
+## Developer Demo Environment (replaces mock data)
+
+`demo-full` is a test lane: it builds a throwaway book and tears the node
+down. For day-to-day development there is a persistent variant that replaces
+the browser mock fixtures with a real, synced book — the same model as
+BTCPayServer's `docker-compose up dev` + launch-profile workflow:
+
+```bash
+./scripts/integration-harness.sh demo-up   # node + demo book, kept running
+cd ui-tauri && pnpm dev:demo               # dev preview on that real book
+```
+
+Prerequisites on any machine: Docker (Desktop or engine), `uv`, and `pnpm`.
+That is the whole setup — two commands from a fresh clone to a browser preview
+backed by the real Python daemon reading a multi-year regtest book.
+
+What `demo-up` does:
+
+- starts (or reuses) the regtest node under the fixed Compose project
+  `kassiber-regtest-demo`, separate from the per-worktree test projects, and
+  leaves it running;
+- builds the `full-accounting-v1` book once into
+  `~/.kassiber/regtest-demo/data` (override with
+  `KASSIBER_REGTEST_DEMO_HOME`) and reuses it on later runs while the
+  scenario file is unchanged; set `KASSIBER_REGTEST_DEMO_REBUILD=1` to force
+  a rebuild;
+- persists the generated regtest RPC credentials in
+  `~/.kassiber/regtest-demo/demo-manifest.json` (mode 600, regtest-only
+  throwaway secrets) so restarts keep matching the book's stored backend and
+  refresh/sync from the GUI keeps working;
+- keeps the demo Core wallets loaded (`--keep-core-wallets`) so incremental
+  syncs from the app keep seeing new activity.
+
+`pnpm dev:demo` runs the Vite daemon bridge with
+`KASSIBER_DEV_DATA_ROOT` pointed at the demo book; the desktop preview then
+shows the regtest data mode instead of mock fixtures. `pnpm dev:browser`
+(mock) stays available for pure component work, and the mock fixtures remain
+the basis of UI unit tests — the demo book replaces them only as the
+*interactive* dev dataset.
+
+Poke the node like BTCPayServer's `docker-bitcoin-cli.sh`:
+
+```bash
+./dev/regtest/bitcoin-cli.sh getblockchaininfo
+./dev/regtest/bitcoin-cli.sh -generate 1
+uv run python -m kassiber --data-root ~/.kassiber/regtest-demo/data reports summary
+```
+
+Tear-down is explicit: `demo-down` stops the node but keeps the chain volume
+and book (a later `demo-up` resumes both); `demo-down --purge` removes the
+node, volume, and demo book.
+
+Because the book is backdated with `setmocktime`, a resumed node mints new
+blocks at wall-clock time — new activity lands "now", after the historical
+span, which is exactly what a long-lived real book looks like.
+
+Browser mock mode remains useful for component fixtures, but it should not be
+treated as an accounting or sync proof.
 
 ## Guardrails
 
@@ -130,3 +185,11 @@ file-source Liquid/LBTC demo wallets, and a full accounting demo on Bitcoin
 regtest. The harness is shaped so Fulcrum/Electrum, explorer HTTP, live Liquid,
 and optional BTCPay modules can add new tapes, live tests, and scenario manifests
 without changing the contributor entrypoint.
+
+Lightning is the next planned slice: the concrete plan — Core Lightning
+regtest nodes in a Compose overlay, an idempotent channel-bootstrap step,
+scenario-manifest extensions, a `lightning-cli` tape for the fast lane, and
+the assertions worth pinning — is written down in
+[`dev/regtest/LIGHTNING-TODO.md`](../../dev/regtest/LIGHTNING-TODO.md),
+based on how BTCPayServer's test stack orchestrates its
+merchant/customer Lightning nodes.
