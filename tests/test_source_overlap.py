@@ -228,13 +228,93 @@ class SourceOverlapTests(unittest.TestCase):
             finally:
                 conn.close()
 
-    def test_sync_blocks_resolved_descriptor_target_that_overlaps_address_wallet(self):
+    def test_sync_allows_partial_address_list_overlap_to_refresh_canonical_source(self):
         with tempfile.TemporaryDirectory(prefix="kassiber-source-overlap-") as tmp:
             conn = open_db(Path(tmp) / "data")
             try:
                 profile = _seed_book(conn)
                 _wallet(conn, "addr", "Address list", "address", {"addresses": [ADDR_A], "chain": "bitcoin", "network": "mainnet"})
                 descriptor = _wallet(conn, "desc", "Descriptor", "descriptor", {"chain": "bitcoin", "network": "mainnet"})
+                target = {
+                    "address": ADDR_A,
+                    "script_pubkey": _script(ADDR_A),
+                    "chain": "bitcoin",
+                    "network": "mainnet",
+                    "branch_label": "receive",
+                    "address_index": 0,
+                }
+                sync_state = WalletSyncState(
+                    chain="bitcoin",
+                    network="mainnet",
+                    descriptor_plan=SimpleNamespace(gap_limit=20),
+                    policy_asset_id="",
+                    targets=[target],
+                    tracked_scripts={target["script_pubkey"]: target},
+                    history_cache={},
+                )
+                fetch = WalletBackendFetch(
+                    backend={"name": "default", "kind": "esplora", "url": "https://example.invalid"},
+                    sync_state=sync_state,
+                    normalized_records=[{"id": "would-insert"}],
+                    adapter_meta={},
+                    kind="esplora",
+                    started=0,
+                    force_full=False,
+                )
+                inserted = []
+                hooks = WalletSyncHooks(
+                    import_file=lambda *args: {},
+                    insert_records=lambda *args: inserted.append(True) or {},
+                    resolve_backend=lambda *args: {},
+                    resolve_sync_state=lambda *args: sync_state,
+                    normalize_addresses=normalize_addresses,
+                    backend_adapters={},
+                )
+                outcome = sync_wallet_from_backend(
+                    conn,
+                    {},
+                    profile,
+                    descriptor,
+                    hooks,
+                    prefetched=fetch,
+                )
+
+                self.assertEqual(inserted, [True])
+                self.assertEqual(outcome["sync_mode"], "descriptor")
+                result = source_overlap.detect_profile_source_overlaps(
+                    conn,
+                    "pf",
+                    candidate_scripts=source_overlap.scripts_from_sync_state(
+                        profile,
+                        descriptor,
+                        sync_state,
+                    ),
+                )
+                self.assertEqual(result["overlap_count"], 1)
+                self.assertIn("address_list", result["overlaps"][0]["evidence"])
+                self.assertNotIn(_script(ADDR_A), json.dumps(result))
+            finally:
+                conn.close()
+
+    def test_sync_still_blocks_descriptor_descriptor_overlap(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-source-overlap-") as tmp:
+            conn = open_db(Path(tmp) / "data")
+            try:
+                profile = _seed_book(conn)
+                _wallet(
+                    conn,
+                    "old",
+                    "Old descriptor",
+                    "descriptor",
+                    _descriptor_config(gap_limit=2),
+                )
+                descriptor = _wallet(
+                    conn,
+                    "new",
+                    "New descriptor",
+                    "descriptor",
+                    {"chain": "bitcoin", "network": "mainnet"},
+                )
                 target = {
                     "address": ADDR_A,
                     "script_pubkey": _script(ADDR_A),

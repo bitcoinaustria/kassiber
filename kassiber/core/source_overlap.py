@@ -651,6 +651,21 @@ def duplicate_transaction_preview(
     }
 
 
+def _is_address_list_overlap(overlap: Mapping[str, Any]) -> bool:
+    evidence = {str(item) for item in (overlap.get("evidence") or [])}
+    if "address_list" in evidence:
+        return True
+    return any(
+        str(wallet.get("kind") or "") == "address"
+        for wallet in (overlap.get("wallets") or [])
+        if isinstance(wallet, Mapping)
+    )
+
+
+def _hard_sync_overlaps(overlaps: Sequence[Mapping[str, Any]]) -> list[Mapping[str, Any]]:
+    return [overlap for overlap in overlaps if not _is_address_list_overlap(overlap)]
+
+
 def raise_for_sync_source_overlap(
     conn: sqlite3.Connection,
     profile: Mapping[str, Any] | sqlite3.Row,
@@ -666,7 +681,8 @@ def raise_for_sync_source_overlap(
         candidate_scripts=candidate_scripts,
         only_wallet_ids={wallet_id},
     )
-    if not result["overlaps"]:
+    hard_overlaps = _hard_sync_overlaps(result["overlaps"])
+    if not hard_overlaps:
         return
     raise AppError(
         f"Wallet source overlap detected for {_row_get(wallet, 'label') or 'wallet'}",
@@ -677,8 +693,8 @@ def raise_for_sync_source_overlap(
             "Kassiber only proves overlap within the checked finite scripts."
         ),
         details={
-            "overlap_count": result["overlap_count"],
-            "overlaps": result["overlaps"],
+            "overlap_count": len(hard_overlaps),
+            "overlaps": hard_overlaps,
             "checked": result["checked"],
         },
         retryable=False,
