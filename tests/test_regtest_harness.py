@@ -61,14 +61,7 @@ def _sync_hooks() -> core_sync.WalletSyncHooks:
         resolve_sync_state=core_sync_backends.resolve_wallet_sync_targets,
         normalize_addresses=core_wallets.normalize_addresses,
         backend_adapters={"bitcoinrpc": core_sync_backends.bitcoinrpc_sync_adapter},
-        update_output_inventory=lambda db, prof, wal, be, state, outputs: core_output_inventory.update_wallet_output_inventory(
-            db,
-            prof,
-            wal,
-            be,
-            state,
-            outputs,
-        ),
+        update_output_inventory=core_output_inventory.update_wallet_output_inventory,
     )
 
 

@@ -203,11 +203,14 @@ class LiveBitcoinCoreRegtestTest(unittest.TestCase):
                 self.assertEqual(export["data"]["file"], str(xlsx_file))
                 self.assertTrue(xlsx_file.exists())
         finally:
+            # Best-effort teardown: a failed unload must not fail the test (the
+            # wallet may never have been created if setup aborted early), but we
+            # still surface it so a leaked regtest wallet is diagnosable.
             for wallet_name in reversed(created_core_wallets):
                 try:
                     _rpc(url, username, password, "unloadwallet", [wallet_name])
-                except AssertionError:
-                    pass
+                except AssertionError as exc:
+                    print(f"cleanup: could not unload {wallet_name}: {exc}", file=sys.stderr)
 
 
 if __name__ == "__main__":

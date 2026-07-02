@@ -497,6 +497,9 @@ def _unload_wallet(url: str, username: str, password: str, wallet_name: str) -> 
     try:
         rpc(url, username, password, "unloadwallet", [wallet_name])
     except RuntimeError:
+        # Best-effort teardown: the wallet may already be unloaded or never
+        # created (setup aborted early); an unload failure must not mask the
+        # real error being unwound.
         pass
 
 
@@ -2189,6 +2192,8 @@ def run_demo(
         try:
             rpc(url, username, password, "setmocktime", [0])
         except RuntimeError:
+            # Best-effort mocktime reset during teardown; if the node is already
+            # gone this must not override the error (if any) being unwound.
             pass
         if not keep_core_wallets:
             for wallet_name in reversed(created_core_wallets):
