@@ -290,7 +290,15 @@ class RegtestHarnessTest(unittest.TestCase):
     def test_compose_stack_includes_local_protocol_backends(self):
         compose = (ROOT / "dev" / "regtest" / "compose.bitcoin.yml").read_text(encoding="utf-8")
 
-        self.assertIn("backend-stack:", compose)
+        self.assertIn("elementsd:", compose)
+        self.assertIn("fulcrum:", compose)
+        self.assertIn("bitcoin-mempool:", compose)
+        self.assertIn("liquid-electrum:", compose)
+        self.assertIn("liquid-mempool:", compose)
+        self.assertNotIn("backend-stack:", compose)
+        self.assertIn("KASSIBER_REGTEST_ELEMENTSD_IMAGE", compose)
+        self.assertIn("KASSIBER_REGTEST_FULCRUM_IMAGE", compose)
+        self.assertIn("KASSIBER_REGTEST_ELEMENTS_RPC_PORT", compose)
         self.assertIn("backend_stack.py:/app/backend_stack.py:ro", compose)
         self.assertIn("KASSIBER_REGTEST_BITCOIN_ELECTRUM_PORT", compose)
         self.assertIn("KASSIBER_REGTEST_BITCOIN_MEMPOOL_PORT", compose)

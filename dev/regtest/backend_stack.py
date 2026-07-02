@@ -467,39 +467,82 @@ def _serve(server: Any) -> threading.Thread:
     return thread
 
 
+ALL_SERVICE_NAMES = {
+    "bitcoin-mempool",
+    "bitcoin-electrum",
+    "liquid-mempool",
+    "liquid-electrum",
+}
+
+
+def _enabled_services() -> set[str]:
+    raw = os.environ.get("KASSIBER_REGTEST_SERVICES", "all")
+    if raw.strip().lower() in {"", "all", "*"}:
+        return set(ALL_SERVICE_NAMES)
+    aliases = {
+        "bitcoin-mempool-regtest": "bitcoin-mempool",
+        "bitcoin-electrum-regtest": "bitcoin-electrum",
+        "liquid-mempool-regtest": "liquid-mempool",
+        "liquid-electrum-regtest": "liquid-electrum",
+    }
+    names: set[str] = set()
+    for item in raw.split(","):
+        name = aliases.get(item.strip().lower(), item.strip().lower())
+        if not name:
+            continue
+        if name not in ALL_SERVICE_NAMES:
+            raise ValueError(f"unknown KASSIBER_REGTEST_SERVICES entry: {item}")
+        names.add(name)
+    if not names:
+        raise ValueError("KASSIBER_REGTEST_SERVICES did not select any services")
+    return names
+
+
 def main() -> int:
     rpc = RpcClient()
     index = BitcoinIndex(rpc)
-    services = [
-        ApiServer(
-            ("0.0.0.0", _env_int("BITCOIN_MEMPOOL_PORT", 8080)),
-            service_name="bitcoin-mempool-regtest",
-            chain="bitcoin",
-            network="regtest",
-            index=index,
-        ),
-        ElectrumServer(
-            ("0.0.0.0", _env_int("BITCOIN_ELECTRUM_PORT", 50001)),
-            service_name="bitcoin-electrum-regtest",
-            chain="bitcoin",
-            network="regtest",
-            index=index,
-        ),
-        ApiServer(
-            ("0.0.0.0", _env_int("LIQUID_MEMPOOL_PORT", 8081)),
-            service_name="liquid-mempool-regtest",
-            chain="liquid",
-            network="elementsregtest",
-            index=index,
-        ),
-        ElectrumServer(
-            ("0.0.0.0", _env_int("LIQUID_ELECTRUM_PORT", 50011)),
-            service_name="liquid-electrum-regtest",
-            chain="liquid",
-            network="elementsregtest",
-            index=index,
-        ),
-    ]
+    enabled = _enabled_services()
+    services: list[Any] = []
+    if "bitcoin-mempool" in enabled:
+        services.append(
+            ApiServer(
+                ("0.0.0.0", _env_int("BITCOIN_MEMPOOL_PORT", 8080)),
+                service_name="bitcoin-mempool-regtest",
+                chain="bitcoin",
+                network="regtest",
+                index=index,
+            )
+        )
+    if "bitcoin-electrum" in enabled:
+        services.append(
+            ElectrumServer(
+                ("0.0.0.0", _env_int("BITCOIN_ELECTRUM_PORT", 50001)),
+                service_name="bitcoin-electrum-regtest",
+                chain="bitcoin",
+                network="regtest",
+                index=index,
+            )
+        )
+    if "liquid-mempool" in enabled:
+        services.append(
+            ApiServer(
+                ("0.0.0.0", _env_int("LIQUID_MEMPOOL_PORT", 8081)),
+                service_name="liquid-mempool-regtest",
+                chain="liquid",
+                network="elementsregtest",
+                index=index,
+            )
+        )
+    if "liquid-electrum" in enabled:
+        services.append(
+            ElectrumServer(
+                ("0.0.0.0", _env_int("LIQUID_ELECTRUM_PORT", 50011)),
+                service_name="liquid-electrum-regtest",
+                chain="liquid",
+                network="elementsregtest",
+                index=index,
+            )
+        )
     for service in services:
         _serve(service)
     print(
