@@ -269,6 +269,7 @@ class RegtestHarnessTest(unittest.TestCase):
         self.assertGreaterEqual(liquid_rows, 9)
         self.assertEqual(len(scenario["liquid_ledger"]["transfer_pairs"]), 1)
         self.assertEqual(scenario["pricing"]["source"], "kraken-bundled")
+        self.assertEqual(scenario["pricing"]["live_source"], "mempool")
         self.assertEqual(scenario["expected"]["pricing_source"], "kraken-csv")
         self.assertIn("LBTC", scenario["expected"]["require_pricing_provider_assets"])
         rates = [float(rate) for rate in scenario["pricing"]["fallback"]["rate_sequence"]]
@@ -304,6 +305,22 @@ class RegtestHarnessTest(unittest.TestCase):
         self.assertIn("KASSIBER_REGTEST_BITCOIN_MEMPOOL_PORT", compose)
         self.assertIn("KASSIBER_REGTEST_LIQUID_ELECTRUM_PORT", compose)
         self.assertIn("KASSIBER_REGTEST_LIQUID_MEMPOOL_PORT", compose)
+
+    def test_local_backend_stack_exposes_mempool_price_api(self):
+        backend_stack = (ROOT / "dev" / "regtest" / "backend_stack.py").read_text(encoding="utf-8")
+
+        self.assertIn("/api/v1/prices", backend_stack)
+        self.assertIn("/api/v1/historical-price", backend_stack)
+        self.assertIn("KASSIBER_REGTEST_BTC_EUR_PRICE", backend_stack)
+
+    def test_demo_latest_rate_seed_does_not_change_book_provider(self):
+        demo = (ROOT / "tests" / "integration" / "regtest_demo.py").read_text(encoding="utf-8")
+        harness = (ROOT / "scripts" / "integration-harness.sh").read_text(encoding="utf-8")
+
+        self.assertNotIn("set_market_rate_provider", demo)
+        self.assertNotIn("set_market_rate_provider", harness)
+        self.assertIn("sync_latest_rates", demo)
+        self.assertIn("sync_latest_rates", harness)
 
     def test_full_accounting_demo_manifest_validation_rejects_bad_edge_cases(self):
         scenario = regtest_demo.load_scenario()

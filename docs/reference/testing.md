@@ -115,9 +115,12 @@ the Core RPC backend, then verifies Kassiber behavior through the public CLI:
 - Bitcoin-backed-loan marks for collateral lock/release and BTC principal
   receive/repay, linked under one loan id
 - real historical BTC/EUR pricing from Kassiber's bundled Kraken daily cache,
-  with LBTC rows priced through Kassiber's LBTC-to-BTC rate-pair alias; set
-  `KASSIBER_REGTEST_DEMO_LIVE_RATES=coinbase-exchange` (or another supported
-  live source) to opt into live provider backfill during local demo runs
+  with LBTC rows priced through Kassiber's LBTC-to-BTC rate-pair alias; the
+  docker preview also writes one current `mempool` latest-quote row from the
+  local Bitcoin mempool-compatible endpoint so the overview's live BTC price
+  is not a historical Kraken row. Set
+  `KASSIBER_REGTEST_DEMO_LIVE_RATES=coinbase-exchange` or `coingecko` to
+  override that provider, or `off` to keep only the historical cache.
 - journal processing, summary reporting, PDF/CSV/XLSX report export, and
   CSV/XLSX transaction export
 

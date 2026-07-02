@@ -21,7 +21,9 @@ from pathlib import Path
 from typing import Any
 from urllib import error, request
 
+from kassiber.core import rates as core_rates
 from kassiber.core.sync_backends import sanitize_wallet_segment
+from kassiber.db import open_db
 from kassiber.importers import GENERIC_LEDGER_COLUMNS
 
 
@@ -1539,20 +1541,45 @@ def _seed_real_price_cache(
     }
 
     live_env = str(pricing.get("live_source_env") or "KASSIBER_REGTEST_DEMO_LIVE_RATES")
-    live_source = str(os.environ.get(live_env) or "").strip().lower()
+    live_source = str(
+        os.environ.get(live_env) or pricing.get("live_source") or ""
+    ).strip().lower()
     if live_source and live_source not in {"0", "false", "no", "off"}:
-        result["live"] = run_cli(
-            data_root,
-            "rates",
-            "sync",
-            "--pair",
-            pair,
-            "--source",
-            live_source,
-            "--days",
-            str(pricing.get("live_days") or 30),
-        )["data"]
+        conn = open_db(data_root)
+        try:
+            normalized_live_source = core_rates.normalize_market_rate_provider(live_source)
+            result["live"] = {
+                "source": normalized_live_source,
+                "pair": pair,
+                "latest": core_rates.sync_latest_rates(
+                    conn,
+                    pair=pair,
+                    source=normalized_live_source,
+                    commit=True,
+                ),
+            }
+            conn.execute(
+                "DELETE FROM settings WHERE key = ? AND value = ?",
+                (core_rates.MARKET_RATE_PROVIDER_SETTING, core_rates.RATE_SOURCE_MEMPOOL),
+            )
+            conn.commit()
+        finally:
+            conn.close()
     else:
+        conn = open_db(data_root)
+        try:
+            for source in core_rates.LIVE_MARKET_RATE_SOURCES:
+                conn.execute(
+                    "DELETE FROM rates_cache WHERE pair = ? AND source = ? AND granularity = 'latest'",
+                    (pair, source),
+                )
+            conn.execute(
+                "DELETE FROM settings WHERE key = ? AND value = ?",
+                (core_rates.MARKET_RATE_PROVIDER_SETTING, core_rates.RATE_SOURCE_MEMPOOL),
+            )
+            conn.commit()
+        finally:
+            conn.close()
         result["live"] = {
             "skipped": True,
             "env": live_env,

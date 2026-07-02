@@ -240,12 +240,60 @@ os.chmod(manifest_path, 0o600)
 PY
 }
 
+demo_refresh_live_rate() {
+  if [ ! -d "$DEMO_HOME/data" ]; then
+    return 0
+  fi
+  KASSIBER_DEMO_SCENARIO="$DEMO_SCENARIO" \
+  KASSIBER_DEMO_DATA_ROOT="$DEMO_HOME/data" \
+    py - <<'PY'
+import json
+import os
+
+from kassiber.core import rates as core_rates
+from kassiber.db import open_db
+
+scenario_path = os.environ["KASSIBER_DEMO_SCENARIO"]
+data_root = os.environ["KASSIBER_DEMO_DATA_ROOT"]
+with open(scenario_path, "r", encoding="utf-8") as handle:
+    scenario = json.load(handle)
+pricing = scenario.get("pricing") or {}
+live_env = str(pricing.get("live_source_env") or "KASSIBER_REGTEST_DEMO_LIVE_RATES")
+live_source = str(os.environ.get(live_env) or pricing.get("live_source") or "").strip().lower()
+pair = pricing.get("pair") or "BTC-EUR"
+conn = open_db(data_root)
+try:
+    if not live_source or live_source in {"0", "false", "no", "off"}:
+        for source in core_rates.LIVE_MARKET_RATE_SOURCES:
+            conn.execute(
+                "DELETE FROM rates_cache WHERE pair = ? AND source = ? AND granularity = 'latest'",
+                (pair, source),
+            )
+        conn.execute(
+            "DELETE FROM settings WHERE key = ? AND value = ?",
+            (core_rates.MARKET_RATE_PROVIDER_SETTING, core_rates.RATE_SOURCE_MEMPOOL),
+        )
+        conn.commit()
+    else:
+        normalized = core_rates.normalize_market_rate_provider(live_source)
+        core_rates.sync_latest_rates(conn, pair=pair, source=normalized, commit=True)
+        conn.execute(
+            "DELETE FROM settings WHERE key = ? AND value = ?",
+            (core_rates.MARKET_RATE_PROVIDER_SETTING, core_rates.RATE_SOURCE_MEMPOOL),
+        )
+        conn.commit()
+finally:
+    conn.close()
+PY
+}
+
 demo_build_book() {
   local checksum
   checksum="$(demo_scenario_checksum)"
   if [ -z "${KASSIBER_REGTEST_DEMO_REBUILD:-}" ] \
     && [ -d "$DEMO_HOME/data" ] \
     && [ "$(demo_manifest_get scenario_checksum)" = "$checksum" ]; then
+    demo_refresh_live_rate
     demo_write_manifest "$checksum"
     echo "Reusing existing demo book (scenario unchanged): $DEMO_HOME/data"
     return 0
@@ -259,6 +307,7 @@ demo_build_book() {
     --keep-core-wallets \
     --json-output "$DEMO_HOME/demo-summary.json" >/dev/null
 
+  demo_refresh_live_rate
   demo_write_manifest "$checksum"
 }
 

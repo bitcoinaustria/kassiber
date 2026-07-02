@@ -13,10 +13,12 @@ from decimal import Decimal
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
 from urllib import error, request
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
 
 SATOSHIS = Decimal("100000000")
+DEFAULT_BTC_EUR_PRICE = Decimal("58968.90")
+DEFAULT_BTC_USD_PRICE = Decimal("63500.00")
 
 
 def _env_int(name: str, default: int) -> int:
@@ -291,6 +293,24 @@ def synthetic_liquid_graph(txid: str) -> dict[str, Any]:
     }
 
 
+def _env_decimal(name: str, default: Decimal) -> Decimal:
+    try:
+        return Decimal(str(os.environ.get(name) or default))
+    except Exception:
+        return default
+
+
+def _price_payload(timestamp: int) -> dict[str, Any]:
+    eur = _env_decimal("KASSIBER_REGTEST_BTC_EUR_PRICE", DEFAULT_BTC_EUR_PRICE)
+    usd = _env_decimal("KASSIBER_REGTEST_BTC_USD_PRICE", DEFAULT_BTC_USD_PRICE)
+    return {
+        "time": timestamp,
+        "EUR": str(eur),
+        "USD": str(usd),
+        "prices": [{"time": timestamp, "EUR": str(eur), "USD": str(usd)}],
+    }
+
+
 class ApiHandler(BaseHTTPRequestHandler):
     server_version = "KassiberRegtestBackend/1.0"
 
@@ -315,6 +335,18 @@ class ApiHandler(BaseHTTPRequestHandler):
             self._json(
                 payload
             )
+            return
+        if path == "/api/v1/prices":
+            self._json(_price_payload(int(time.time())))
+            return
+        if path == "/api/v1/historical-price":
+            query = parse_qs(parsed.query)
+            raw_timestamp = (query.get("timestamp") or [""])[0]
+            try:
+                timestamp = int(raw_timestamp)
+            except (TypeError, ValueError):
+                timestamp = int(time.time())
+            self._json(_price_payload(timestamp))
             return
         prefix = "/api/tx/"
         if path.startswith(prefix):

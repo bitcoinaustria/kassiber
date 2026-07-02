@@ -18,6 +18,7 @@
   "pricing": {
     "pair": "BTC-EUR",
     "source": "kraken-bundled",
+    "live_source": "mempool",
     "live_source_env": "KASSIBER_REGTEST_DEMO_LIVE_RATES",
     "description": "Seed Kassiber's bundled Kraken BTC-EUR daily history and let transaction auto-pricing use the cached real Bitcoin price at or before each backdated transaction. LBTC rows use Kassiber's LBTC->BTC rate-pair alias.",
     "fallback": {
