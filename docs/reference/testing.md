@@ -8,9 +8,9 @@ regtest infrastructure.
 
 | Tier | Command | Docker | Purpose |
 | --- | --- | --- | --- |
-| FAST | `./scripts/integration-harness.sh fast` | no | Replays recorded regtest tapes through the real sync adapter, import, journal, report, and XLSX export path with `KASSIBER_NO_EGRESS=1`. |
-| SLOW | `./scripts/integration-harness.sh bitcoin-core` | yes, unless reusing a node | Starts or reuses a Bitcoin Core regtest node, creates real wallets and transactions, then drives Kassiber sync, pricing, journal, report, and export. |
-| DEMO | `./scripts/integration-harness.sh demo-full` | yes, unless reusing a node | Builds the checked-in `full-accounting-v1` scenario: ten Kassiber wallets including Bitcoin rotation targets and deterministic Liquid/LBTC import wallets, real regtest acquisitions/disposals/transfers, operating-expense disposals, deprecated rotated-out wallets, batched and consolidation edge cases, a larger multi-year stress ledger, CoinJoin- and PayJoin-shaped collaborative transactions, swap/peg bridge pairs, loan marks, bundled real historical BTC/EUR pricing, journals, reports, and transaction exports. |
+| FAST | `./scripts/integration-harness.sh fast` | no | Replays recorded regtest tapes through the real sync adapter, import, journal, report, and XLSX export path with `KASSIBER_NO_EGRESS=1`. Includes a baseline watch-only tape and an edge-case tape (multi-address wallet, immature vs. mature coinbase, dust, RBF-replaced conflict pair, same-wallet self-spend, mempool-pending receipt). |
+| SLOW | `./scripts/integration-harness.sh bitcoin-core` | yes, unless reusing a node | Starts or reuses a Bitcoin Core regtest node, creates real wallets and transactions (including coinbase maturity and a watched receive), then drives Kassiber sync, pricing, journal, report, and export. |
+| DEMO | `./scripts/integration-harness.sh demo-full` | yes, unless reusing a node | Builds the checked-in `full-accounting-v1` scenario: eleven Kassiber wallets including multi-address Bitcoin wallets, rotation targets, a mining wallet, and deterministic Liquid/LBTC import wallets; real regtest acquisitions/disposals/transfers, operating-expense disposals with deterministic amount/fee variation, deprecated rotated-out wallets, batched, consolidation, dust, RBF-replacement, and mempool-pending edge cases, a multi-year stress ledger, CoinJoin- and PayJoin-shaped collaborative transactions, swap/peg bridge pairs, loan marks, bundled real historical BTC/EUR pricing, journals, reports, and transaction exports. |
 
 The slow lane is opt-in with `KASSIBER_INTEGRATION=1`; normal unit gates do not
 start Docker. To reuse an existing regtest node instead of Compose, set an
@@ -42,7 +42,10 @@ does not inject synthetic transaction rows into SQLite. Instead, it creates real
 Bitcoin Core regtest wallets, broadcasts real transactions, syncs Kassiber from
 the Core RPC backend, then verifies Kassiber behavior through the public CLI:
 
-- address-wallet creation and Bitcoin Core watch-only sync
+- address-wallet creation and Bitcoin Core watch-only sync, with every
+  operational wallet watching several rotating addresses (fresh receive and
+  change addresses per payment, funding spread across the address set, and
+  greedy multi-UTXO coin selection) so the book looks like real wallet usage
 - file-source Liquid wallet creation and generic-ledger LBTC import through the
   same `wallets sync --all` path
 - acquisition and disposal rows across Treasury, Cold Storage, Spending, and
@@ -50,13 +53,24 @@ the Core RPC backend, then verifies Kassiber behavior through the public CLI:
   become active after security upgrades
 - large single-source custody receipt into cold storage
 - batched treasury payout to multiple external recipients in one transaction
-- same-block merchant point-of-sale receipt burst followed by a many-input
-  consolidation that imports as a fee-only wallet row
+- same-block merchant point-of-sale receipt burst with sat-level ragged
+  amounts, followed by a many-input consolidation that imports as a fee-only
+  wallet row, and an unsolicited dust deposit that lingers in the UTXO
+  inventory
+- an RBF fee-bumped payment: the conflicted original must be skipped by sync
+  while only the confirmed replacement is booked
+- solo-mining block rewards into a dedicated mining wallet at two points in
+  history (visibly smaller after regtest halvings); immature coinbases must
+  never import
+- a customer payment that is still unconfirmed in the mempool when the book is
+  synced, imported with an empty confirmed-at and a mempool UTXO state
 - a deterministic historical stress lane: 132 cycles spaced 20 days apart, with
   batched inbound funding into operational wallets, rotating outbound payments,
   and regular fiat-expense disposals for payroll, rent, software, tax prep,
-  contractors, and equipment; the demo still adds several hundred synced/imported
-  wallet rows across seven years
+  contractors, and equipment; amounts and fees vary per cycle through a
+  deterministic jitter (`stress.variation_bp`) so the ledger is volatile but
+  reproducible; the demo still adds several hundred synced/imported wallet rows
+  across seven years
 - wallet key-rotation events for treasury, merchant, cold storage, and Liquid
   treasury, reviewed as same-asset transfer pairs after sync; the old source
   wallets are then marked deprecated so their history remains visible while

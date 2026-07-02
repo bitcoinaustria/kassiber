@@ -9,9 +9,10 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import uuid
 from collections import Counter
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from decimal import Decimal
 from pathlib import Path
@@ -59,10 +60,29 @@ class DemoWallet:
     network: str = "regtest"
     core_wallet: str = ""
     address: str = ""
+    addresses: list[str] = field(default_factory=list)
     source_file: str = ""
     source_format: str = ""
     kassiber_id: str | None = None
     watchonly_wallet: str | None = None
+    receive_cursor: int = 0
+    change_cursor: int = 1
+
+    def receive_address(self) -> str:
+        """Rotate deterministically through the watched addresses like a real
+        wallet handing out a fresh receive address per payment request."""
+        if not self.addresses:
+            return self.address
+        chosen = self.addresses[self.receive_cursor % len(self.addresses)]
+        self.receive_cursor += 1
+        return chosen
+
+    def change_address(self) -> str:
+        if not self.addresses:
+            return self.address
+        chosen = self.addresses[self.change_cursor % len(self.addresses)]
+        self.change_cursor += 1
+        return chosen
 
 
 def load_scenario(path: Path = DEFAULT_SCENARIO) -> dict[str, Any]:
@@ -100,14 +120,26 @@ def validate_scenario(scenario: dict[str, Any]) -> None:
             raise ValueError(
                 f"Scenario Liquid wallet {wallet['key']!r} must use source_format generic_ledger"
             )
-    for operation in scenario["operations"]:
+        address_count = int(wallet.get("addresses") or 1)
+        if address_count < 1 or address_count > 12:
+            raise ValueError(f"Scenario wallet {wallet['key']!r} addresses must be between 1 and 12")
+        if address_count > 1 and not _is_core_wallet_spec(wallet):
+            raise ValueError(f"Scenario wallet {wallet['key']!r} only Core wallets rotate addresses")
+    def _validate_operation(operation: dict[str, Any], *, pending: bool = False) -> None:
         op_id = operation.get("id") or "<unnamed>"
         kind = operation.get("kind")
         if not kind:
             raise ValueError(f"Scenario operation {op_id} is missing kind")
-        for field in ("amount_btc", "fee_btc", "payment_btc", "equal_output_btc"):
-            if field in operation:
-                _btc(operation[field])
+        if pending and kind != "external_receipt":
+            raise ValueError(f"Scenario pending operation {op_id} must be an external_receipt")
+        for amount_field in ("amount_btc", "fee_btc", "payment_btc", "equal_output_btc", "replacement_fee_btc"):
+            if amount_field in operation:
+                _btc(operation[amount_field])
+        if kind == "rbf_replaced_payment":
+            if "replacement_fee_btc" not in operation:
+                raise ValueError(f"Scenario operation {op_id} is missing replacement_fee_btc")
+            if _btc(operation["replacement_fee_btc"]) <= _btc(operation["fee_btc"]):
+                raise ValueError(f"Scenario operation {op_id} replacement fee must exceed the original fee")
         for value in operation.get("outputs_btc", []):
             _btc(value)
         if "count" in operation and int(operation["count"]) <= 0:
@@ -123,6 +155,11 @@ def validate_scenario(scenario: dict[str, Any]) -> None:
                 raise ValueError(f"Scenario operation {op_id} references unknown {ref_field}: {value}")
             if value not in core_wallet_keys:
                 raise ValueError(f"Scenario operation {op_id} references non-Core wallet {ref_field}: {value}")
+
+    for operation in scenario["operations"]:
+        _validate_operation(operation)
+    for operation in scenario.get("pending_operations") or []:
+        _validate_operation(operation, pending=True)
     stress = scenario.get("stress") or {}
     if stress.get("enabled"):
         cycles = int(stress.get("cycles") or 0)
@@ -200,6 +237,25 @@ def validate_scenario(scenario: dict[str, Any]) -> None:
             pair_kind = bridge.get("pair_kind") or "submarine-swap"
             if pair_kind not in {"peg-in", "peg-out", "submarine-swap", "swap-refund"}:
                 raise ValueError(f"Scenario stress.swap_bridges[{index}] has unsupported pair_kind: {pair_kind}")
+        variation_bp = int(stress.get("variation_bp") or 0)
+        if variation_bp < 0 or variation_bp > 4000:
+            raise ValueError("Scenario stress.variation_bp must be between 0 and 4000 basis points")
+        for index, event in enumerate(stress.get("mining_events") or [], start=1):
+            cycle = int(event.get("cycle") or 0)
+            if cycle < 1 or cycle > cycles:
+                raise ValueError(f"Scenario stress.mining_events[{index}] cycle is outside the stress range")
+            # Coinbase rewards need 100 blocks to mature; every later cycle mines
+            # at least three blocks, so leave a comfortable maturity margin.
+            if (cycles - cycle) * 3 < 105:
+                raise ValueError(
+                    f"Scenario stress.mining_events[{index}] is too late to mature before sync"
+                )
+            role = event.get("role")
+            if role not in wallet_key_set or role not in core_wallet_keys:
+                raise ValueError(f"Scenario stress.mining_events[{index}] references unknown role: {role}")
+            blocks = int(event.get("blocks") or 0)
+            if blocks < 1 or blocks > 3:
+                raise ValueError(f"Scenario stress.mining_events[{index}] blocks must be between 1 and 3")
     for index, deprecated_key in enumerate(scenario.get("deprecated_wallets") or [], start=1):
         if deprecated_key not in wallet_key_set:
             raise ValueError(f"Scenario deprecated_wallets[{index}] references unknown wallet: {deprecated_key}")
@@ -235,6 +291,36 @@ def validate_scenario(scenario: dict[str, Any]) -> None:
             raise ValueError("Scenario pricing fallback rate_sequence values must be positive")
         if rates == sorted(rates) or rates == sorted(rates, reverse=True):
             raise ValueError("Scenario pricing fallback rate_sequence must be volatile, not monotonic")
+
+
+def _stress_jitter_bp(cycle: int, salt: int, spread_bp: int) -> int:
+    """Deterministic pseudo-variation in [-spread_bp, +spread_bp] basis points."""
+    if spread_bp <= 0:
+        return 0
+    seed = (cycle * 2654435761 + salt * 40503 + 94261) % (2**32)
+    return int(seed % (2 * spread_bp + 1)) - spread_bp
+
+
+def _varied_amount(
+    amount: Decimal,
+    cycle: int,
+    *,
+    salt: int,
+    spread_bp: int,
+    ragged_sats: int = 0,
+) -> Decimal:
+    """Scale a planned amount by a deterministic per-cycle factor.
+
+    Receipts and payments share the same salt so a lean cycle shrinks both
+    sides and wallet margins survive every cycle ordering. `ragged_sats`
+    additionally roughens receipt amounts so the ledger does not look like a
+    spreadsheet of round numbers.
+    """
+    delta_bp = _stress_jitter_bp(cycle, salt, spread_bp)
+    varied = (amount * (10_000 + delta_bp) / 10_000).quantize(SAT)
+    if ragged_sats > 0:
+        varied += ((cycle * 7919 + salt * 271) % ragged_sats) * SAT
+    return varied
 
 
 def _btc(value: Any) -> Decimal:
@@ -462,12 +548,12 @@ def _wallet_utxos(
         username,
         password,
         "listunspent",
-        [min_confirmations, 9999999, [wallet.address], True],
+        [min_confirmations, 9999999, wallet.addresses or [wallet.address], True],
         wallet=wallet.core_wallet,
     )
     return sorted(
         (utxo for utxo in utxos or [] if utxo.get("spendable", True)),
-        key=lambda item: Decimal(str(item["amount"])),
+        key=lambda item: (Decimal(str(item["amount"])), item["txid"], item["vout"]),
         reverse=True,
     )
 
@@ -483,6 +569,28 @@ def _select_one_utxo(
         if Decimal(str(utxo["amount"])) >= needed:
             return utxo
     raise RuntimeError(f"Wallet {wallet.key} has no confirmed watched UTXO >= {needed} BTC")
+
+
+def _select_utxos(
+    url: str,
+    username: str,
+    password: str,
+    wallet: DemoWallet,
+    needed: Decimal,
+) -> list[dict[str, Any]]:
+    """Greedy largest-first coin selection so spends can combine several
+    watched UTXOs, like a real wallet funding a payment across addresses."""
+    selected: list[dict[str, Any]] = []
+    total = Decimal("0")
+    for utxo in _wallet_utxos(url, username, password, wallet):
+        selected.append(utxo)
+        total += Decimal(str(utxo["amount"])).quantize(SAT)
+        if total >= needed:
+            return selected
+    raise RuntimeError(
+        f"Wallet {wallet.key} holds {total} BTC across {len(selected)} confirmed UTXOs, "
+        f"needs {needed} BTC"
+    )
 
 
 def _send_raw_transaction(
@@ -520,19 +628,20 @@ def _send_from_wallet(
     fee: Decimal,
 ) -> str:
     needed = sum(outputs.values(), Decimal("0")) + fee
-    utxo = _select_one_utxo(url, username, password, wallet, needed)
-    input_amount = Decimal(str(utxo["amount"])).quantize(SAT)
+    selected = _select_utxos(url, username, password, wallet, needed)
+    input_amount = sum((Decimal(str(utxo["amount"])).quantize(SAT) for utxo in selected), Decimal("0"))
     change = (input_amount - needed).quantize(SAT)
     if change < 0:
-        raise RuntimeError(f"Selected UTXO is too small for {wallet.key}")
+        raise RuntimeError(f"Selected UTXOs are too small for {wallet.key}")
     final_outputs = dict(outputs)
     if change > 0:
-        final_outputs[wallet.address] = final_outputs.get(wallet.address, Decimal("0")) + change
+        change_address = wallet.change_address()
+        final_outputs[change_address] = final_outputs.get(change_address, Decimal("0")) + change
     return _send_raw_transaction(
         url,
         username,
         password,
-        [{"txid": utxo["txid"], "vout": utxo["vout"]}],
+        [{"txid": utxo["txid"], "vout": utxo["vout"]} for utxo in selected],
         final_outputs,
         [wallet.core_wallet],
     )
@@ -572,12 +681,15 @@ def _send_incoming_burst(
     count = int(operation["count"])
     amount = _btc(operation["amount_btc"])
     for index in range(1, count + 1):
+        # Roughen each point-of-sale receipt by a few sats and rotate the
+        # invoice address, like a merchant terminal handing out fresh invoices.
+        ragged = amount + ((index * 137) % 89) * SAT
         txids[f"{operation['id']}_{index:03d}"] = rpc(
             url,
             username,
             password,
             "sendtoaddress",
-            [wallet.address, amount],
+            [wallet.receive_address(), ragged],
             wallet=faucet_wallet,
         )
 
@@ -610,7 +722,83 @@ def _send_many_input_consolidation(
         username,
         password,
         [{"txid": utxo["txid"], "vout": utxo["vout"]} for utxo in selected],
-        {wallet.address: output_amount},
+        {wallet.receive_address(): output_amount},
+        [wallet.core_wallet],
+    )
+
+
+def _wait_for_watchonly_mempool_tx(
+    url: str,
+    username: str,
+    password: str,
+    wallet: DemoWallet,
+    txid: str,
+    *,
+    attempts: int = 40,
+) -> None:
+    """Wait until the watch-only wallet has picked the mempool tx up.
+
+    Core delivers mempool arrivals to wallets through an async validation
+    queue, so an immediate sync could race past the notification.
+    """
+    if not wallet.watchonly_wallet:
+        raise RuntimeError(f"Wallet {wallet.key} has no watch-only Core wallet to poll")
+    for _ in range(attempts):
+        try:
+            rpc(url, username, password, "gettransaction", [txid], wallet=wallet.watchonly_wallet)
+            return
+        except RuntimeError:
+            time.sleep(0.25)
+    raise RuntimeError(f"Watch-only wallet for {wallet.key} never saw pending tx {txid}")
+
+
+def _send_rbf_replaced_payment(
+    url: str,
+    username: str,
+    password: str,
+    wallet: DemoWallet,
+    external_address: str,
+    operation: dict[str, Any],
+    txids: dict[str, str],
+) -> str:
+    """Broadcast a replaceable payment, then bump its fee before it confirms.
+
+    Only the replacement is ever mined; the original stays in the watch-only
+    wallet history as a conflicted transaction with negative confirmations,
+    which the sync adapter must skip instead of double-counting the spend.
+    """
+    amount = _btc(operation["amount_btc"])
+    original_fee = _btc(operation["fee_btc"])
+    replacement_fee = _btc(operation["replacement_fee_btc"])
+    needed = amount + replacement_fee
+    selected = _select_utxos(url, username, password, wallet, needed)
+    input_amount = sum((Decimal(str(utxo["amount"])).quantize(SAT) for utxo in selected), Decimal("0"))
+    inputs = [
+        {"txid": utxo["txid"], "vout": utxo["vout"], "sequence": 0xFFFFFFFD}
+        for utxo in selected
+    ]
+    change_address = wallet.change_address()
+
+    def outputs_for(fee: Decimal) -> dict[str, Decimal]:
+        change = (input_amount - amount - fee).quantize(SAT)
+        if change <= 0:
+            raise RuntimeError(f"RBF selection leaves no change for {wallet.key}")
+        return {external_address: amount, change_address: change}
+
+    txids[f"{operation['id']}_replaced"] = _send_raw_transaction(
+        url,
+        username,
+        password,
+        inputs,
+        outputs_for(original_fee),
+        [wallet.core_wallet],
+    )
+    return _send_raw_transaction(
+        url,
+        username,
+        password,
+        inputs,
+        outputs_for(replacement_fee),
         [wallet.core_wallet],
     )
 
@@ -641,10 +829,10 @@ def _send_coinjoin_shape(
         raise RuntimeError("coinjoin_shape selected UTXOs leave no change")
     tracked_output_wallet = wallets[operation["tracked_output_wallet"]]
     outputs = {
-        tracked_output_wallet.address: equal_output,
+        tracked_output_wallet.receive_address(): equal_output,
         external_address: equal_output,
-        signer_a.address: change_a,
-        signer_b.address: change_b,
+        signer_a.change_address(): change_a,
+        signer_b.change_address(): change_b,
     }
     return _send_raw_transaction(
         url,
@@ -679,8 +867,8 @@ def _send_payjoin_shape(
     if payer_change <= 0:
         raise RuntimeError("payjoin_shape selected payer UTXO leaves no change")
     outputs = {
-        merchant.address: merchant_output,
-        payer.address: payer_change,
+        merchant.receive_address(): merchant_output,
+        payer.change_address(): payer_change,
     }
     return _send_raw_transaction(
         url,
@@ -724,6 +912,8 @@ def _generate_stress_history(
         for key, value in sorted(stress["payment_btc"].items())
     ]
     fee = _btc(stress["fee_btc"])
+    variation_bp = int(stress.get("variation_bp") or 0)
+    fee_spread_bp = 4000 if variation_bp else 0
     active_wallet_for = {key: key for key in wallets}
     rotations_by_cycle: dict[int, list[dict[str, Any]]] = {}
     for rotation in stress.get("wallet_rotations") or []:
@@ -731,6 +921,9 @@ def _generate_stress_history(
     bridges_by_cycle: dict[int, list[dict[str, Any]]] = {}
     for bridge in stress.get("swap_bridges") or []:
         bridges_by_cycle.setdefault(int(bridge["cycle"]), []).append(bridge)
+    mining_by_cycle: dict[int, list[dict[str, Any]]] = {}
+    for event in stress.get("mining_events") or []:
+        mining_by_cycle.setdefault(int(event["cycle"]), []).append(event)
     expenses = stress.get("business_expenses") or {}
     expense_schedule = expenses.get("schedule") or []
     expense_every = int(expenses.get("every_cycles") or 1)
@@ -739,6 +932,7 @@ def _generate_stress_history(
     rotations_count = 0
     business_expense_count = 0
     swap_bridge_count = 0
+    mined_reward_count = 0
 
     def active_wallet(key_or_role: str) -> DemoWallet:
         return wallets[active_wallet_for.get(key_or_role, key_or_role)]
@@ -754,7 +948,7 @@ def _generate_stress_history(
                 username,
                 password,
                 sender,
-                {receiver.address: _btc(rotation["amount_btc"])},
+                {receiver.receive_address(): _btc(rotation["amount_btc"])},
                 _btc(rotation.get("fee_btc") or stress["fee_btc"]),
             )
             active_wallet_for[rotation["role"]] = rotation["to"]
@@ -769,7 +963,13 @@ def _generate_stress_history(
             )
 
         receipt_outputs = {
-            active_wallet(key).address: amount
+            active_wallet(key).receive_address(): _varied_amount(
+                amount,
+                cycle_number,
+                salt=0,
+                spread_bp=variation_bp,
+                ragged_sats=991,
+            )
             for key, amount in receipt_plan.items()
         }
         txids[f"stress_receipt_{cycle_number:03d}"] = rpc(
@@ -789,14 +989,34 @@ def _generate_stress_history(
             cycle_ts,
         )
 
+        for event in mining_by_cycle.get(cycle_number, []):
+            miner = active_wallet(event["role"])
+            mine_ts = max(cycle_ts + (3 * 60 * 60), current_ts + 600)
+            rpc(url, username, password, "setmocktime", [mine_ts])
+            block_hashes = rpc(
+                url,
+                username,
+                password,
+                "generatetoaddress",
+                [int(event.get("blocks") or 1), miner.receive_address()],
+            )
+            current_ts = mine_ts
+            for reward_index, block_hash in enumerate(block_hashes or [], start=1):
+                block = rpc(url, username, password, "getblock", [block_hash])
+                coinbase_txids = block.get("tx") or []
+                if not coinbase_txids:
+                    raise RuntimeError(f"Mined block {block_hash} has no coinbase transaction")
+                txids[f"{event['id']}_{reward_index:02d}"] = coinbase_txids[0]
+                mined_reward_count += 1
+
         payer_key, amount = payment_plan[cycle % len(payment_plan)]
         txids[f"stress_payment_{cycle_number:03d}"] = _send_from_wallet(
             url,
             username,
             password,
             active_wallet(payer_key),
-            {external_address: amount},
-            fee,
+            {external_address: _varied_amount(amount, cycle_number, salt=0, spread_bp=variation_bp)},
+            _varied_amount(fee, cycle_number, salt=3, spread_bp=fee_spread_bp),
         )
         current_ts = _mine_at(
             url,
@@ -815,8 +1035,13 @@ def _generate_stress_history(
                 username,
                 password,
                 active_wallet(expense["role"]),
-                {external_address: _btc(expense["amount_btc"])},
-                expense_fee,
+                {external_address: _varied_amount(
+                    _btc(expense["amount_btc"]),
+                    cycle_number,
+                    salt=0,
+                    spread_bp=variation_bp,
+                )},
+                _varied_amount(expense_fee, cycle_number, salt=5, spread_bp=fee_spread_bp),
             )
             business_expense_count += 1
             current_ts = _mine_at(
@@ -878,7 +1103,7 @@ def _generate_stress_history(
                     username,
                     password,
                     "sendtoaddress",
-                    [target.address, _btc(bridge["in_btc"])],
+                    [target.receive_address(), _btc(bridge["in_btc"])],
                     wallet=faucet_wallet,
                 )
             elif _is_liquid_ledger_wallet(target):
@@ -918,11 +1143,14 @@ def _generate_stress_history(
         "business_expenses": business_expense_count,
         "wallet_rotations": rotations_count,
         "swap_bridges": swap_bridge_count,
+        "mined_rewards": mined_reward_count,
+        "variation_bp": variation_bp,
         "rows_expected": (
             cycles * (len(receipt_plan) + 1)
             + business_expense_count
             + (rotations_count * 2)
             + (swap_bridge_count * 2)
+            + mined_reward_count
         ),
         "span_days": (cycles - 1) * days_between_cycles,
     }
@@ -1048,6 +1276,9 @@ def _create_kassiber_book(
     for wallet_spec in scenario["wallets"]:
         wallet = wallets[wallet_spec["key"]]
         if _is_core_wallet(wallet):
+            address_args: list[str] = []
+            for watched_address in wallet.addresses or [wallet.address]:
+                address_args.extend(["--address", watched_address])
             created = run_cli(
                 data_root,
                 "wallets",
@@ -1065,8 +1296,7 @@ def _create_kassiber_book(
                 "bitcoin",
                 "--network",
                 "regtest",
-                "--address",
-                wallet.address,
+                *address_args,
                 "--birthday",
                 birthday,
             )["data"]
@@ -1485,6 +1715,40 @@ def _export_reports(data_root: Path, export_dir: Path, scenario: dict[str, Any])
     return {name: {"path": str(exports[name]), **results[name]} for name in exports}
 
 
+def _assert_chain_edge_rows(
+    scenario: dict[str, Any],
+    txids: dict[str, str],
+    transactions: list[dict[str, Any]],
+) -> None:
+    """Pin the on-chain edge cases the scenario stages deliberately."""
+    rows_by_external_id = {row["external_id"]: row for row in transactions}
+    for operation in scenario["operations"]:
+        if operation["kind"] != "rbf_replaced_payment":
+            continue
+        replaced = txids[f"{operation['id']}_replaced"]
+        if replaced in rows_by_external_id:
+            raise RuntimeError(
+                f"RBF-replaced original {replaced} must not be booked next to its replacement"
+            )
+        if txids[operation["id"]] not in rows_by_external_id:
+            raise RuntimeError(f"RBF replacement for {operation['id']} is missing from the ledger")
+    for event in (scenario.get("stress") or {}).get("mining_events") or []:
+        mined = [txid for key, txid in txids.items() if key.startswith(f"{event['id']}_")]
+        if not mined:
+            raise RuntimeError(f"Mining event {event['id']} produced no coinbase txids")
+        missing = [txid for txid in mined if txid not in rows_by_external_id]
+        if missing:
+            raise RuntimeError(f"Matured coinbase rewards were not synced: {missing}")
+    for operation in scenario.get("pending_operations") or []:
+        row = rows_by_external_id.get(txids[operation["id"]])
+        if row is None:
+            raise RuntimeError(f"Pending mempool receipt {operation['id']} was not synced")
+        if row.get("confirmed_at"):
+            raise RuntimeError(
+                f"Pending mempool receipt {operation['id']} must stay unconfirmed at sync time"
+            )
+
+
 def _assert_expected(
     scenario: dict[str, Any],
     *,
@@ -1562,6 +1826,17 @@ def _assert_expected(
     min_active = int(expected.get("min_active_transactions") or expected["min_transactions"])
     if int(metrics.get("active_transactions") or 0) < min_active:
         raise RuntimeError("Report summary did not include the expected active transactions")
+    expected_pending = expected.get("pending_transactions")
+    if expected_pending is not None:
+        pending_count = sum(
+            1
+            for row in transactions
+            if str(row.get("asset") or "").upper() == "BTC" and not row.get("confirmed_at")
+        )
+        if pending_count < int(expected_pending):
+            raise RuntimeError(
+                f"Expected at least {expected_pending} unconfirmed BTC rows, got {pending_count}"
+            )
     for filename in expected["export_files"]:
         if not any(Path(item["path"]).name == filename for item in exports.values()):
             raise RuntimeError(f"Expected export file was not produced: {filename}")
@@ -1617,17 +1892,20 @@ def run_demo(
                 core_wallet = f"kassiber-demo-{run_id}-{sanitize_wallet_segment(wallet_spec['key'])}"
                 _ensure_wallet(url, username, password, core_wallet)
                 created_core_wallets.append(core_wallet)
-                address = rpc(
-                    url,
-                    username,
-                    password,
-                    "getnewaddress",
-                    [wallet_spec["label"], "bech32"],
-                    wallet=core_wallet,
-                )
+                addresses = [
+                    rpc(
+                        url,
+                        username,
+                        password,
+                        "getnewaddress",
+                        [f"{wallet_spec['label']} receive {index}", "bech32"],
+                        wallet=core_wallet,
+                    )
+                    for index in range(1, int(wallet_spec.get("addresses") or 1) + 1)
+                ]
             else:
                 core_wallet = ""
-                address = ""
+                addresses = []
             wallets[wallet_spec["key"]] = DemoWallet(
                 key=wallet_spec["key"],
                 label=wallet_spec["label"],
@@ -1636,15 +1914,27 @@ def run_demo(
                 chain=_wallet_chain(wallet_spec),
                 network=str(wallet_spec.get("network") or ("liquidv1" if _wallet_chain(wallet_spec) == "liquid" else "regtest")),
                 core_wallet=core_wallet,
-                address=address,
+                address=addresses[0] if addresses else "",
+                addresses=addresses,
                 source_format=str(wallet_spec.get("source_format") or ""),
             )
 
-        funding_outputs = {
-            wallets[wallet_spec["key"]].address: initial_btc
-            for wallet_spec in scenario["wallets"]
-            if _is_core_wallet_spec(wallet_spec) and (initial_btc := _btc_or_zero(wallet_spec["initial_btc"])) > 0
-        }
+        # Seed each funded wallet across all of its watched addresses so the
+        # book starts with a realistic spread of UTXOs instead of one coin.
+        funding_outputs: dict[str, Decimal] = {}
+        for wallet_spec in scenario["wallets"]:
+            if not _is_core_wallet_spec(wallet_spec):
+                continue
+            initial_btc = _btc_or_zero(wallet_spec["initial_btc"])
+            if initial_btc <= 0:
+                continue
+            wallet = wallets[wallet_spec["key"]]
+            share = (initial_btc / len(wallet.addresses)).quantize(SAT)
+            remainder = initial_btc - (share * len(wallet.addresses))
+            for index, funding_address in enumerate(wallet.addresses):
+                amount = share + (remainder if index == 0 else Decimal("0"))
+                if amount > 0:
+                    funding_outputs[funding_address] = amount
         txids["initial_funding"] = rpc(
             url,
             username,
@@ -1659,7 +1949,11 @@ def run_demo(
             kind = operation["kind"]
             if kind in {"payment", "self_transfer", "loan_collateral_lock", "loan_principal_repaid"}:
                 sender = wallets[operation["from"]]
-                to_address = external_address if operation["to"] == "external" else wallets[operation["to"]].address
+                to_address = (
+                    external_address
+                    if operation["to"] == "external"
+                    else wallets[operation["to"]].receive_address()
+                )
                 txids[operation["id"]] = _send_from_wallet(
                     url,
                     username,
@@ -1704,6 +1998,16 @@ def run_demo(
                 )
             elif kind == "payjoin_shape":
                 txids[operation["id"]] = _send_payjoin_shape(url, username, password, wallets, operation)
+            elif kind == "rbf_replaced_payment":
+                txids[operation["id"]] = _send_rbf_replaced_payment(
+                    url,
+                    username,
+                    password,
+                    wallets[operation["from"]],
+                    external_address,
+                    operation,
+                    txids,
+                )
             elif kind in {"loan_collateral_release", "loan_principal_received", "external_receipt"}:
                 receiver = wallets[operation["to"]]
                 txids[operation["id"]] = rpc(
@@ -1711,7 +2015,7 @@ def run_demo(
                     username,
                     password,
                     "sendtoaddress",
-                    [receiver.address, _btc(operation["amount_btc"])],
+                    [receiver.receive_address(), _btc(operation["amount_btc"])],
                     wallet=faucet_wallet,
                 )
             else:
@@ -1752,6 +2056,34 @@ def run_demo(
 
         scope = _scope(scenario)
         sync = run_cli(data_root, "wallets", "sync", *scope, "--all")["data"]
+
+        # Broadcast the pending receipts only after the watch-only wallets
+        # exist: a descriptor import rescans blocks, not the mempool, so a
+        # payment sent earlier would be invisible until it confirmed. Doing it
+        # here mirrors real usage (a payment arrives mid-session, the user
+        # refreshes) and drives the incremental sinceblock sync path live.
+        pending_sync = None
+        if scenario.get("pending_operations"):
+            for operation in scenario["pending_operations"]:
+                receiver = wallets[operation["to"]]
+                current_ts = _advance_time(url, username, password, current_ts)
+                txids[operation["id"]] = rpc(
+                    url,
+                    username,
+                    password,
+                    "sendtoaddress",
+                    [receiver.receive_address(), _btc(operation["amount_btc"])],
+                    wallet=faucet_wallet,
+                )
+                _wait_for_watchonly_mempool_tx(
+                    url,
+                    username,
+                    password,
+                    receiver,
+                    txids[operation["id"]],
+                )
+            pending_sync = run_cli(data_root, "wallets", "sync", *scope, "--all")["data"]
+
         transactions = run_cli(
             data_root,
             "transactions",
@@ -1767,6 +2099,7 @@ def run_demo(
         loan_result = _mark_loans(data_root, scenario, txids)
         deprecated_wallets = _mark_deprecated_wallets(data_root, scenario, wallets)
         journal, transactions, rate_seed = _seed_rates_and_process(data_root, scenario)
+        _assert_chain_edge_rows(scenario, txids, transactions)
         wallet_listing = run_cli(data_root, "wallets", "list", *scope)["data"]
         transfer_listing = run_cli(data_root, "transfers", "list", *scope)["data"]
         quarantines = run_cli(data_root, "journals", "quarantined", *scope)["data"]
@@ -1801,6 +2134,7 @@ def run_demo(
                     key: {
                         "label": wallet.label,
                         "address": wallet.address,
+                        "addresses": list(wallet.addresses),
                         "chain": wallet.chain,
                         "source_file": wallet.source_file,
                         "kassiber_id": wallet.kassiber_id,
@@ -1813,6 +2147,7 @@ def run_demo(
                 ],
                 "operations": [{"id": key, "txid": value} for key, value in sorted(txids.items())],
                 "sync": sync,
+                "pending_sync": pending_sync,
                 "transactions": {
                     "count": len(transactions),
                     "by_direction": dict(sorted(by_direction.items())),

@@ -4,6 +4,7 @@ import socket
 import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
+from decimal import Decimal
 from pathlib import Path
 from unittest.mock import patch
 
@@ -30,7 +31,12 @@ from tests.integration.tapes import BitcoinRpcTape, RecordedTape, TapeMiss
 
 ROOT = Path(__file__).resolve().parent.parent
 TAPE = ROOT / "tests" / "fixtures" / "regtest_tapes" / "bitcoin_core_address_baseline.json"
+EDGE_TAPE = ROOT / "tests" / "fixtures" / "regtest_tapes" / "bitcoin_core_edge_cases.json"
 REGTEST_ADDRESS = "bcrt1qs758ursh4q9z627kt3pp5yysm78ddny6txaqgw"
+EDGE_ADDRESSES = [
+    "bcrt1qv4jxwefdvdshxefdv9jxgu3ddahx2gfplsfksc",
+    "bcrt1qv4jxwefdvdshxefdv9jxgu3dw3mk7gfpl9er9m",
+]
 
 
 def _import_hooks() -> core_imports.ImportCoordinatorHooks:
@@ -38,6 +44,84 @@ def _import_hooks() -> core_imports.ImportCoordinatorHooks:
         ensure_tag_row=lambda *args: None,
         invalidate_journals=invalidate_journals,
     )
+
+
+def _sync_hooks() -> core_sync.WalletSyncHooks:
+    return core_sync.WalletSyncHooks(
+        import_file=lambda *args: {},
+        insert_records=lambda db, prof, wal, records, source_label: core_imports.insert_wallet_records(
+            db,
+            prof,
+            wal,
+            records,
+            source_label,
+            _import_hooks(),
+        ),
+        resolve_backend=backend_config.resolve_backend,
+        resolve_sync_state=core_sync_backends.resolve_wallet_sync_targets,
+        normalize_addresses=core_wallets.normalize_addresses,
+        backend_adapters={"bitcoinrpc": core_sync_backends.bitcoinrpc_sync_adapter},
+        update_output_inventory=lambda db, prof, wal, be, state, outputs: core_output_inventory.update_wallet_output_inventory(
+            db,
+            prof,
+            wal,
+            be,
+            state,
+            outputs,
+        ),
+    )
+
+
+def _create_replay_book(conn, data_root: Path, *, core_wallet: str, addresses: list[str]):
+    workspace = core_accounts.create_workspace(conn, "Regtest")
+    profile = core_accounts.create_profile(
+        conn,
+        workspace["id"],
+        "Replay",
+        "EUR",
+        "FIFO",
+        "generic",
+        365,
+    )
+    core_accounts.create_backend(
+        conn,
+        "core-regtest",
+        "bitcoinrpc",
+        "http://127.0.0.1:18443",
+        chain="bitcoin",
+        network="regtest",
+        timeout=30,
+        config={"wallet": core_wallet, "username": "user", "password": "pass"},
+    )
+    wallet = core_wallets.create_wallet(
+        conn,
+        workspace["id"],
+        profile["id"],
+        "Core replay",
+        "address",
+        None,
+        {
+            "backend": "core-regtest",
+            "chain": "bitcoin",
+            "network": "regtest",
+            "addresses": list(addresses),
+        },
+    )
+    runtime_config = backend_config.merge_db_backends(
+        conn,
+        {
+            "env_file": str(data_root / "unused.env"),
+            "default_backend": "core-regtest",
+            "bootstrap_default_backend": "core-regtest",
+            "backends": {},
+            "bootstrap_backends": {},
+            "dotenv_backends": [],
+            "process_env_overrides": {"backends": {}, "default_backend": False},
+        },
+    )
+    profile_row = conn.execute("SELECT * FROM profiles WHERE id = ?", (profile["id"],)).fetchone()
+    wallet_row = conn.execute("SELECT * FROM wallets WHERE id = ?", (wallet["id"],)).fetchone()
+    return workspace, profile, wallet, profile_row, wallet_row, runtime_config
 
 
 class RegtestHarnessTest(unittest.TestCase):
@@ -90,6 +174,7 @@ class RegtestHarnessTest(unittest.TestCase):
                 "cold",
                 "spending",
                 "merchant",
+                "miner",
                 "treasury_2020",
                 "merchant_2022",
                 "cold_2024",
@@ -104,6 +189,17 @@ class RegtestHarnessTest(unittest.TestCase):
             scenario["deprecated_wallets"],
             ["treasury", "merchant", "cold", "liquid_treasury"],
         )
+        # Every operational Bitcoin wallet rotates through several watched
+        # addresses so the demo book looks like real wallet usage, not one
+        # reused address per wallet.
+        multi_address_wallets = {
+            wallet["key"]
+            for wallet in scenario["wallets"]
+            if int(wallet.get("addresses") or 1) > 1
+        }
+        self.assertTrue(
+            {"treasury", "cold", "spending", "merchant", "miner"}.issubset(multi_address_wallets)
+        )
         operation_kinds = {operation["kind"] for operation in scenario["operations"]}
         self.assertTrue(
             {
@@ -111,6 +207,7 @@ class RegtestHarnessTest(unittest.TestCase):
                 "self_transfer",
                 "coinjoin_shape",
                 "payjoin_shape",
+                "rbf_replaced_payment",
                 "external_receipt",
                 "batched_payment",
                 "incoming_burst",
@@ -121,11 +218,20 @@ class RegtestHarnessTest(unittest.TestCase):
                 "loan_principal_repaid",
             }.issubset(operation_kinds)
         )
-        self.assertEqual(scenario["expected"]["wallets"], 10)
+        dust_amounts = [
+            Decimal(operation["amount_btc"])
+            for operation in scenario["operations"]
+            if operation["kind"] == "external_receipt"
+        ]
+        self.assertTrue(any(amount < Decimal("0.00001") for amount in dust_amounts))
+        pending = scenario["pending_operations"]
+        self.assertEqual([op["kind"] for op in pending], ["external_receipt"])
+        self.assertEqual(scenario["expected"]["wallets"], 11)
         self.assertEqual(scenario["expected"]["deprecated_wallets"], 4)
         self.assertEqual(scenario["expected"]["assets"], ["BTC", "LBTC"])
-        self.assertGreaterEqual(scenario["expected"]["min_transactions"], 840)
-        self.assertGreaterEqual(scenario["expected"]["min_active_transactions"], 835)
+        self.assertGreaterEqual(scenario["expected"]["min_transactions"], 845)
+        self.assertGreaterEqual(scenario["expected"]["min_active_transactions"], 840)
+        self.assertEqual(scenario["expected"]["pending_transactions"], 1)
         base_time = datetime.fromisoformat(scenario["base_time"].replace("Z", "+00:00"))
         stress = scenario["stress"]
         self.assertTrue(stress["enabled"])
@@ -138,6 +244,14 @@ class RegtestHarnessTest(unittest.TestCase):
         self.assertGreaterEqual(len(stress["business_expenses"]["schedule"]), 6)
         self.assertEqual(len(stress["wallet_rotations"]), 3)
         self.assertEqual(len(stress["swap_bridges"]), 3)
+        # Deterministic amount/fee variation keeps the multi-year ledger from
+        # looking like a spreadsheet of identical round numbers.
+        self.assertGreaterEqual(int(stress["variation_bp"]), 1000)
+        mining_events = stress["mining_events"]
+        self.assertEqual([event["role"] for event in mining_events], ["miner", "miner"])
+        for event in mining_events:
+            # Coinbase rewards must have >= 100 blocks left to mature before sync.
+            self.assertLessEqual(int(event["cycle"]), stress["cycles"] - 35)
         liquid_rows = sum(len(rows) for rows in scenario["liquid_ledger"]["wallets"].values())
         self.assertGreaterEqual(liquid_rows, 9)
         self.assertEqual(len(scenario["liquid_ledger"]["transfer_pairs"]), 1)
@@ -160,85 +274,48 @@ class RegtestHarnessTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "operations"):
             regtest_demo.validate_scenario(scenario)
 
+    def test_full_accounting_demo_manifest_validation_rejects_bad_edge_cases(self):
+        scenario = regtest_demo.load_scenario()
+        rbf = next(op for op in scenario["operations"] if op["kind"] == "rbf_replaced_payment")
+        rbf_fee = rbf["replacement_fee_btc"]
+        rbf["replacement_fee_btc"] = rbf["fee_btc"]
+        with self.assertRaisesRegex(ValueError, "replacement fee"):
+            regtest_demo.validate_scenario(scenario)
+        rbf["replacement_fee_btc"] = rbf_fee
+
+        pending = scenario["pending_operations"][0]
+        pending_kind = pending["kind"]
+        pending["kind"] = "payment"
+        with self.assertRaisesRegex(ValueError, "external_receipt"):
+            regtest_demo.validate_scenario(scenario)
+        pending["kind"] = pending_kind
+
+        mining_event = scenario["stress"]["mining_events"][0]
+        mining_cycle = mining_event["cycle"]
+        mining_event["cycle"] = scenario["stress"]["cycles"]
+        with self.assertRaisesRegex(ValueError, "too late to mature"):
+            regtest_demo.validate_scenario(scenario)
+        mining_event["cycle"] = mining_cycle
+
+        scenario["wallets"][0]["addresses"] = 99
+        with self.assertRaisesRegex(ValueError, "addresses"):
+            regtest_demo.validate_scenario(scenario)
+
     def test_core_rpc_tape_replays_through_sync_journal_report_and_xlsx(self):
         tape_rpc = BitcoinRpcTape(RecordedTape.load(TAPE))
         with tempfile.TemporaryDirectory() as tmp:
-            data_root = Path(tmp) / "data"
-            export_path = Path(tmp) / "report.xlsx"
+            # resolve() so path assertions survive macOS /var -> /private/var symlinks
+            data_root = Path(tmp).resolve() / "data"
+            export_path = Path(tmp).resolve() / "report.xlsx"
             conn = open_db(data_root)
             try:
-                workspace = core_accounts.create_workspace(conn, "Regtest")
-                profile = core_accounts.create_profile(
+                workspace, profile, wallet, profile_row, wallet_row, runtime_config = _create_replay_book(
                     conn,
-                    workspace["id"],
-                    "Replay",
-                    "EUR",
-                    "FIFO",
-                    "generic",
-                    365,
+                    data_root,
+                    core_wallet="kassiber-wallet-1",
+                    addresses=[REGTEST_ADDRESS],
                 )
-                core_accounts.create_backend(
-                    conn,
-                    "core-regtest",
-                    "bitcoinrpc",
-                    "http://127.0.0.1:18443",
-                    chain="bitcoin",
-                    network="regtest",
-                    timeout=30,
-                    config={"wallet": "kassiber-wallet-1", "username": "user", "password": "pass"},
-                )
-                wallet = core_wallets.create_wallet(
-                    conn,
-                    workspace["id"],
-                    profile["id"],
-                    "Core replay",
-                    "address",
-                    None,
-                    {
-                        "backend": "core-regtest",
-                        "chain": "bitcoin",
-                        "network": "regtest",
-                        "addresses": [REGTEST_ADDRESS],
-                    },
-                )
-
-                runtime_config = backend_config.merge_db_backends(
-                    conn,
-                    {
-                        "env_file": str(data_root / "unused.env"),
-                        "default_backend": "core-regtest",
-                        "bootstrap_default_backend": "core-regtest",
-                        "backends": {},
-                        "bootstrap_backends": {},
-                        "dotenv_backends": [],
-                        "process_env_overrides": {"backends": {}, "default_backend": False},
-                    },
-                )
-                profile_row = conn.execute("SELECT * FROM profiles WHERE id = ?", (profile["id"],)).fetchone()
-                wallet_row = conn.execute("SELECT * FROM wallets WHERE id = ?", (wallet["id"],)).fetchone()
-                hooks = core_sync.WalletSyncHooks(
-                    import_file=lambda *args: {},
-                    insert_records=lambda db, prof, wal, records, source_label: core_imports.insert_wallet_records(
-                        db,
-                        prof,
-                        wal,
-                        records,
-                        source_label,
-                        _import_hooks(),
-                    ),
-                    resolve_backend=backend_config.resolve_backend,
-                    resolve_sync_state=core_sync_backends.resolve_wallet_sync_targets,
-                    normalize_addresses=core_wallets.normalize_addresses,
-                    backend_adapters={"bitcoinrpc": core_sync_backends.bitcoinrpc_sync_adapter},
-                    update_output_inventory=lambda db, prof, wal, be, state, outputs: core_output_inventory.update_wallet_output_inventory(
-                        db,
-                        prof,
-                        wal,
-                        be,
-                        state,
-                        outputs,
-                    ),
-                )
+                hooks = _sync_hooks()
 
                 with no_egress_guard(enabled=True), patch(
                     "kassiber.core.sync_backends.bitcoinrpc_call",
@@ -389,6 +466,109 @@ class RegtestHarnessTest(unittest.TestCase):
                 self.assertEqual(repeat["bitcoinrpc_sync_mode"], "sinceblock")
                 count = conn.execute("SELECT COUNT(*) AS count FROM transactions").fetchone()["count"]
                 self.assertEqual(count, 2)
+                self.assertEqual(tape_rpc.unused_interactions(), [])
+            finally:
+                conn.close()
+
+    def test_core_rpc_tape_replays_realistic_edge_case_wallet(self):
+        # A messy but realistic wallet: two watched addresses, an immature and a
+        # mature coinbase, a dust deposit, an RBF-replaced conflict pair, a
+        # same-wallet self-spend, and a receipt still in the mempool at sync.
+        tape_rpc = BitcoinRpcTape(RecordedTape.load(EDGE_TAPE))
+        with tempfile.TemporaryDirectory() as tmp:
+            data_root = Path(tmp) / "data"
+            conn = open_db(data_root)
+            try:
+                workspace, profile, wallet, profile_row, wallet_row, runtime_config = _create_replay_book(
+                    conn,
+                    data_root,
+                    core_wallet="kassiber-wallet-edge",
+                    addresses=EDGE_ADDRESSES,
+                )
+                hooks = _sync_hooks()
+
+                with no_egress_guard(enabled=True), patch(
+                    "kassiber.core.sync_backends.bitcoinrpc_call",
+                    tape_rpc.call,
+                ):
+                    outcome = core_sync.sync_wallet_from_backend(
+                        conn,
+                        runtime_config,
+                        profile_row,
+                        wallet_row,
+                        hooks,
+                    )
+
+                self.assertEqual(outcome["backend_kind"], "bitcoinrpc")
+                # 7 txids observed; the immature coinbase and the RBF-replaced
+                # original must not become ledger rows.
+                self.assertEqual(outcome["records_fetched"], 5)
+                self.assertEqual(outcome["imported"], 5)
+                self.assertEqual(outcome["output_inventory"]["observed"], 4)
+
+                rows = {
+                    row["external_id"]: row
+                    for row in conn.execute(
+                        """
+                        SELECT external_id, direction, kind, amount, fee, occurred_at, confirmed_at
+                        FROM transactions
+                        """
+                    ).fetchall()
+                }
+                self.assertNotIn("c1" * 32, rows)  # immature coinbase skipped
+                self.assertNotIn("e1" * 32, rows)  # RBF-replaced original skipped
+
+                mature_coinbase = rows["c2" * 32]
+                self.assertEqual(mature_coinbase["direction"], "inbound")
+                self.assertEqual(mature_coinbase["amount"], 2_500_000_000_000)
+
+                dust = rows["d1" * 32]
+                self.assertEqual(dust["direction"], "inbound")
+                self.assertEqual(dust["amount"], 546_000)
+
+                replacement = rows["e2" * 32]
+                self.assertEqual(replacement["direction"], "outbound")
+                self.assertEqual(replacement["amount"], 29_988_000_000)
+                self.assertEqual(replacement["fee"], 12_000_000)
+
+                self_spend = rows["f1" * 32]
+                self.assertEqual(self_spend["direction"], "outbound")
+                self.assertEqual(self_spend["kind"], "fee")
+                self.assertEqual(self_spend["amount"], 0)
+                self.assertEqual(self_spend["fee"], 1_800_000)
+
+                pending = rows["a9" * 32]
+                self.assertEqual(pending["direction"], "inbound")
+                self.assertEqual(pending["amount"], 2_500_000_000)
+                self.assertIsNone(pending["confirmed_at"])
+
+                mempool_utxo = conn.execute(
+                    "SELECT block_height, block_time FROM wallet_utxos WHERE txid = ?",
+                    ("a9" * 32,),
+                ).fetchone()
+                self.assertIsNotNone(mempool_utxo)
+                self.assertIsNone(mempool_utxo["block_height"])
+
+                for occurred_at, rate in (
+                    ("2023-11-14T22:13:20Z", "34000"),
+                    ("2023-11-14T23:13:20Z", "34500"),
+                    ("2023-11-15T00:13:20Z", "35000"),
+                    ("2023-11-15T01:00:00Z", "35500"),
+                    ("2023-11-15T02:00:00Z", "36000"),
+                ):
+                    core_rates.set_manual_rate(conn, "BTC-EUR", occurred_at, rate)
+
+                journal = process_journals(conn, workspace["id"], profile["id"])
+                self.assertEqual(journal["quarantined"], 0)
+                self.assertEqual(journal["processed_transactions"], 5)
+                self.assertEqual(journal["auto_priced"], 5)
+
+                summary = core_reports.report_summary(
+                    conn, workspace["id"], profile["id"], cli_report_hooks()
+                )
+                self.assertEqual(summary["metrics"]["quarantines"], 0)
+                self.assertEqual(summary["metrics"]["active_transactions"], 5)
+
                 self.assertEqual(tape_rpc.unused_interactions(), [])
             finally:
                 conn.close()

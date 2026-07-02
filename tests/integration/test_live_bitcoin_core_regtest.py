@@ -93,8 +93,9 @@ class LiveBitcoinCoreRegtestTest(unittest.TestCase):
             )
 
             with tempfile.TemporaryDirectory() as tmp:
-                data_root = Path(tmp) / "data"
-                xlsx_file = Path(tmp) / "core-regtest.xlsx"
+                # resolve() so path assertions survive macOS /var -> /private/var symlinks
+                data_root = Path(tmp).resolve() / "data"
+                xlsx_file = Path(tmp).resolve() / "core-regtest.xlsx"
 
                 _run(data_root, "init")
                 _run(data_root, "workspaces", "create", "Regtest")
@@ -175,8 +176,11 @@ class LiveBitcoinCoreRegtestTest(unittest.TestCase):
                     ["external", "bech32"],
                     wallet=source_wallet,
                 )
+                # Mining to the watched address exercises coinbase handling:
+                # only matured "generate" rows may import, immature ones must not.
                 _rpc(url, username, password, "generatetoaddress", [101, address])
                 _rpc(url, username, password, "sendtoaddress", [send_address, 0.01], wallet=source_wallet)
+                _rpc(url, username, password, "sendtoaddress", [address, 0.015], wallet=source_wallet)
                 _rpc(url, username, password, "generatetoaddress", [1, address])
 
                 sync = _run(data_root, "wallets", "sync", "--wallet", "Core regtest")
@@ -185,7 +189,10 @@ class LiveBitcoinCoreRegtestTest(unittest.TestCase):
                 self.assertGreaterEqual(sync_data["records_fetched"], 1)
 
                 transactions = _run(data_root, "transactions", "list", "--limit", "100")
-                self.assertGreaterEqual(len(transactions["data"]), 1)
+                self.assertGreaterEqual(len(transactions["data"]), 2)
+                directions = {row["direction"] for row in transactions["data"]}
+                # mature coinbase + explicit receive inbound, watched spend outbound
+                self.assertEqual(directions, {"inbound", "outbound"})
                 for row in transactions["data"]:
                     _run(data_root, "rates", "set", "BTC-EUR", row["occurred_at"], "30000")
                 journal = _run(data_root, "journals", "process")
