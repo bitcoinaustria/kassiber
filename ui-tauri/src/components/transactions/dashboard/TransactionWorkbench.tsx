@@ -1157,7 +1157,7 @@ function FlowTooltip({
                         </span>
                       )}
                       {stats.failed > 0 && (
-                        <span className="rounded bg-[var(--color-accent)]/10 px-1.5 py-0.5 text-[var(--color-accent)]">
+                        <span className="rounded bg-[var(--kb-accent)]/10 px-1.5 py-0.5 text-[var(--kb-accent)]">
                           {t("workbench.tooltip.failed", { count: stats.failed })}
                         </span>
                       )}

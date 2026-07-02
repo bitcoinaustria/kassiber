@@ -511,9 +511,9 @@ export const mixBase = "var(--background)";
 export const palette = {
   primary: "var(--primary)",
   risk: {
-    main: "var(--color-accent)",
-    soft: `color-mix(in oklch, var(--color-accent) 16%, transparent)`,
-    light: `color-mix(in oklch, var(--color-accent) 70%, ${mixBase})`,
+    main: "var(--kb-accent)",
+    soft: `color-mix(in oklch, var(--kb-accent) 16%, transparent)`,
+    light: `color-mix(in oklch, var(--kb-accent) 70%, ${mixBase})`,
   },
   secondary: {
     light: `color-mix(in oklch, var(--primary) 75%, ${mixBase})`,

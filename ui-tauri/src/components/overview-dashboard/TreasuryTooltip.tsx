@@ -105,7 +105,7 @@ export function TreasuryTooltip({
             className={cn(
               "shrink-0 text-right font-semibold tabular-nums",
               eventTone === "good" && "text-emerald-500",
-              eventTone === "bad" && "text-[var(--color-accent)]",
+              eventTone === "bad" && "text-[var(--kb-accent)]",
               blurClass(hideSensitive),
             )}
           >
@@ -267,7 +267,7 @@ export function TooltipMetricRow({
         className={cn(
           "font-medium tabular-nums",
           tone === "good" && "text-emerald-500",
-          tone === "bad" && "text-[var(--color-accent)]",
+          tone === "bad" && "text-[var(--kb-accent)]",
           blurClass(hidden),
         )}
       >

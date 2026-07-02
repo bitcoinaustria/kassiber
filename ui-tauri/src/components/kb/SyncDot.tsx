@@ -17,7 +17,7 @@ const CONFIG: Record<
   synced: { color: "bg-[#3fa66a]", pulse: false, titleKey: "synced" },
   syncing: { color: "bg-[#c9a43a]", pulse: true, titleKey: "syncing" },
   idle: { color: "bg-ink-3", pulse: false, titleKey: "idle" },
-  error: { color: "bg-accent", pulse: false, titleKey: "error" },
+  error: { color: "bg-[var(--kb-accent)]", pulse: false, titleKey: "error" },
 };
 
 export function SyncDot({ status, className }: SyncDotProps) {

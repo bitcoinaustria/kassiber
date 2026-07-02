@@ -26,7 +26,7 @@ export function ChartStat({
         className={cn(
           "mt-0.5 truncate text-sm font-semibold tabular-nums",
           tone === "good" && "text-emerald-600 dark:text-emerald-400",
-          tone === "bad" && "text-[var(--color-accent)]",
+          tone === "bad" && "text-[var(--kb-accent)]",
           blurClass(hidden),
         )}
       >

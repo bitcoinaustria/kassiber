@@ -132,10 +132,10 @@ export function BalanceChart({
             </g>
           );
         })}
-        <path d={areaPath} fill="var(--color-accent)" fillOpacity="0.08" />
+        <path d={areaPath} fill="var(--kb-accent)" fillOpacity="0.08" />
         <path
           d={linePath}
-          stroke="var(--color-accent)"
+          stroke="var(--kb-accent)"
           strokeWidth="1.5"
           fill="none"
         />
@@ -148,7 +148,7 @@ export function BalanceChart({
                 cy={p[1]}
                 r="2"
                 fill="var(--color-paper-2)"
-                stroke="var(--color-accent)"
+                stroke="var(--kb-accent)"
                 strokeWidth="1"
               />
             ),

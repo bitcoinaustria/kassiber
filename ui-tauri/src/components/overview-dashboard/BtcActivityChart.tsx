@@ -596,7 +596,7 @@ export const BtcActivityChart = ({
                     "font-semibold",
                     netBtc >= 0
                       ? "text-emerald-600 dark:text-emerald-400"
-                      : "text-[var(--color-accent)]",
+                      : "text-[var(--kb-accent)]",
                     blurClass(hideSensitive),
                   )}
                 >
@@ -629,7 +629,7 @@ export const BtcActivityChart = ({
                     "font-semibold",
                     gainEur >= 0
                       ? "text-emerald-600 dark:text-emerald-400"
-                      : "text-[var(--color-accent)]",
+                      : "text-[var(--kb-accent)]",
                     blurClass(hideSensitive),
                   )}
                 >

@@ -120,8 +120,8 @@ export const AiFields = ({ form, update }: AiFieldsProps) => {
       )}
 
       {disabledSelected && (
-        <div className="flex items-start gap-3 rounded-lg border border-accent bg-[rgba(227,0,15,0.04)] p-4 text-xs leading-5 text-ink-2">
-          <Sparkles className="mt-0.5 size-4 shrink-0 text-accent" />
+        <div className="flex items-start gap-3 rounded-lg border border-[var(--kb-accent)] bg-[rgba(227,0,15,0.04)] p-4 text-xs leading-5 text-ink-2">
+          <Sparkles className="mt-0.5 size-4 shrink-0 text-[var(--kb-accent)]" />
           <p className="m-0">{t("ai.disabledNote")}</p>
         </div>
       )}
