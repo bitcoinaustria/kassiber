@@ -1,0 +1,115 @@
+x-regtest-api-base: &regtest-api-base
+  image: ${KASSIBER_REGTEST_BACKEND_STACK_IMAGE:-python:3.12-slim}
+  command: ["python", "/app/backend_stack.py"]
+  volumes:
+    - ./backend_stack.py:/app/backend_stack.py:ro
+
+services:
+  bitcoind:
+    image: ${KASSIBER_REGTEST_BITCOIND_IMAGE:-bitcoin/bitcoin:27.1}
+    command:
+      - "-printtoconsole"
+      - "-regtest=1"
+      - "-server=1"
+      - "-txindex=1"
+      - "-fallbackfee=0.0002"
+      - "-rpcthreads=8"
+      - "-rpcworkqueue=64"
+      - "-rpcbind=0.0.0.0"
+      - "-rpcallowip=127.0.0.1"
+      - "-rpcallowip=10.0.0.0/8"
+      - "-rpcallowip=172.16.0.0/12"
+      - "-rpcallowip=192.168.0.0/16"
+      - "-rpcauth=${KASSIBER_REGTEST_RPC_AUTH}"
+    ports:
+      - "127.0.0.1:${KASSIBER_REGTEST_RPC_PORT:-18443}:18443"
+    volumes:
+      - bitcoind-regtest:/home/bitcoin/.bitcoin
+
+  elementsd:
+    image: ${KASSIBER_REGTEST_ELEMENTSD_IMAGE:-blockstream/elementsd:23.3.3}
+    command:
+      - elementsd
+      - "-printtoconsole"
+      - "-chain=elementsregtest"
+      - "-server=1"
+      - "-txindex=1"
+      - "-validatepegin=0"
+      - "-fallbackfee=0.0001"
+      - "-datadir=/data"
+      - "-rpcport=7041"
+      - "-rpcbind=0.0.0.0"
+      - "-rpcallowip=127.0.0.1"
+      - "-rpcallowip=10.0.0.0/8"
+      - "-rpcallowip=172.16.0.0/12"
+      - "-rpcallowip=192.168.0.0/16"
+      - "-rpcauth=${KASSIBER_REGTEST_RPC_AUTH}"
+    ports:
+      - "127.0.0.1:${KASSIBER_REGTEST_ELEMENTS_RPC_PORT:-18547}:7041"
+    volumes:
+      - elementsd-regtest:/data
+
+  fulcrum:
+    image: ${KASSIBER_REGTEST_FULCRUM_IMAGE:-cculianu/fulcrum:v2.1.1}
+    depends_on:
+      - bitcoind
+    environment:
+      DATA_DIR: /data
+      SSL_CERTFILE: /data/fulcrum.crt
+      SSL_KEYFILE: /data/fulcrum.key
+      RPCUSER: ${KASSIBER_REGTEST_RPC_USER}
+      RPCPASSWORD: ${KASSIBER_REGTEST_RPC_PASSWORD}
+    command:
+      - Fulcrum
+      - --bitcoind=bitcoind:18443
+      - --tcp=0.0.0.0:50001
+      - --polltime=0.5
+      - --bd-timeout=60
+    ports:
+      - "127.0.0.1:${KASSIBER_REGTEST_BITCOIN_ELECTRUM_PORT:-18543}:50001"
+    volumes:
+      - fulcrum-regtest:/data
+
+  bitcoin-mempool:
+    <<: *regtest-api-base
+    depends_on:
+      - bitcoind
+    environment:
+      BITCOIN_RPC_URL: http://bitcoind:18443
+      BITCOIN_RPC_USER: ${KASSIBER_REGTEST_RPC_USER}
+      BITCOIN_RPC_PASSWORD: ${KASSIBER_REGTEST_RPC_PASSWORD}
+      BITCOIN_MEMPOOL_PORT: "8080"
+      KASSIBER_REGTEST_SERVICES: bitcoin-mempool
+    ports:
+      - "127.0.0.1:${KASSIBER_REGTEST_BITCOIN_MEMPOOL_PORT:-18544}:8080"
+
+  liquid-electrum:
+    <<: *regtest-api-base
+    depends_on:
+      - elementsd
+    environment:
+      BITCOIN_RPC_URL: http://bitcoind:18443
+      BITCOIN_RPC_USER: ${KASSIBER_REGTEST_RPC_USER}
+      BITCOIN_RPC_PASSWORD: ${KASSIBER_REGTEST_RPC_PASSWORD}
+      LIQUID_ELECTRUM_PORT: "50011"
+      KASSIBER_REGTEST_SERVICES: liquid-electrum
+    ports:
+      - "127.0.0.1:${KASSIBER_REGTEST_LIQUID_ELECTRUM_PORT:-18545}:50011"
+
+  liquid-mempool:
+    <<: *regtest-api-base
+    depends_on:
+      - elementsd
+    environment:
+      BITCOIN_RPC_URL: http://bitcoind:18443
+      BITCOIN_RPC_USER: ${KASSIBER_REGTEST_RPC_USER}
+      BITCOIN_RPC_PASSWORD: ${KASSIBER_REGTEST_RPC_PASSWORD}
+      LIQUID_MEMPOOL_PORT: "8081"
+      KASSIBER_REGTEST_SERVICES: liquid-mempool
+    ports:
+      - "127.0.0.1:${KASSIBER_REGTEST_LIQUID_MEMPOOL_PORT:-18546}:8081"
+
+volumes:
+  bitcoind-regtest:
+  elementsd-regtest:
+  fulcrum-regtest:

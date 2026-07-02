@@ -109,7 +109,9 @@ Server-assisted scans are a trust/completeness tradeoff, not just a transport
 choice. The selected backend may learn enough to correlate the wallet, and if
 it omits Silent Payments scan candidates, Kassiber cannot independently prove
 that a reported-complete range found every payment. Prefer a local scanner or a
-self-hosted SP indexer for accounting-critical books.
+self-hosted SP indexer for accounting-critical books. Server-assisted scanner
+endpoints must be HTTP(S); Electrum `ssl://` / `tcp://` backends can only be
+used with local scanner-file mode.
 
 The local scanner file is outside Kassiber's SQLite/SQLCipher boundary. Treat
 it like wallet metadata: keep it in a private, local directory and do not place
@@ -153,8 +155,10 @@ The local scanner JSON shape is intentionally simple and scanner-agnostic:
 ```
 
 Every scanner payload must be bound to the wallet with `descriptor_fingerprint`
-(the hex SHA-256 of the whitespace-compacted `sp(...)` descriptor), or with a
-matching `wallet_id` / `wallet_label`. The binding fields may be top-level or
+(the hex SHA-256 of the whitespace-compacted `sp(...)` descriptor) or a
+matching `wallet_id` / `kassiber_wallet_id`. A `wallet_label` may also be
+included and is rejected when it mismatches, but labels are profile-local and
+are not accepted as the only binding. The binding fields may be top-level or
 inside a top-level `wallet` object. A mismatched or unbound payload is rejected
 so one wallet cannot accidentally ingest another scanner result.
 

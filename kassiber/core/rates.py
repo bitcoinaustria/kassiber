@@ -596,6 +596,8 @@ def _sync_rates_coingecko(
 
 def _mempool_provider_backend(conn):
     backend = preferred_mempool_api_backend(conn, chain="bitcoin", network="main")
+    if backend is None and _active_profile_has_regtest_wallet(conn):
+        backend = preferred_mempool_api_backend(conn, chain="bitcoin", network="regtest")
     if backend is None:
         raise AppError(
             "No HTTP mempool/esplora Bitcoin backend is configured for market prices",
@@ -604,6 +606,40 @@ def _mempool_provider_backend(conn):
             retryable=False,
         )
     return backend
+
+
+def _active_profile_has_regtest_wallet(conn):
+    profile_id = get_setting(conn, "context_profile")
+    if not profile_id:
+        return False
+    rows = conn.execute(
+        "SELECT config_json FROM wallets WHERE profile_id = ?",
+        (profile_id,),
+    ).fetchall()
+    backend_names = set()
+    for row in rows:
+        try:
+            config = json.loads(row["config_json"] or "{}")
+        except (TypeError, json.JSONDecodeError):
+            config = {}
+        network = str(config.get("network") or "").strip().lower()
+        if network in {"regtest", "elementsregtest", "liquidregtest"}:
+            return True
+        backend_name = str(config.get("backend") or "").strip().lower()
+        if backend_name:
+            backend_names.add(backend_name)
+    for backend_name in sorted(backend_names):
+        backend = conn.execute(
+            "SELECT network FROM backends WHERE lower(name) = ?",
+            (backend_name,),
+        ).fetchone()
+        if backend and str(backend["network"] or "").strip().lower() in {
+            "regtest",
+            "elementsregtest",
+            "liquidregtest",
+        }:
+            return True
+    return False
 
 
 def _mempool_url(api_base_url, path, query=None):

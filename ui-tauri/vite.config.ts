@@ -11,6 +11,7 @@ import {
   realpathSync,
 } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
+import os from "node:os";
 import path from "node:path";
 import { createInterface } from "node:readline";
 // `vitest/config` re-exports vite's `defineConfig` and adds the `test` field;
@@ -24,6 +25,7 @@ const DAEMON_BRIDGE_PATH = "/__kassiber__/daemon";
 const DAEMON_BRIDGE_STREAM_PATH = "/__kassiber__/daemon/stream";
 const FILE_PICKER_BRIDGE_PATH = "/__kassiber__/pick-file";
 const IMPORT_PROJECT_BRIDGE_PATH = "/__kassiber__/import-project";
+const RESET_REGTEST_BRIDGE_PATH = "/__kassiber__/reset-regtest";
 const LEDGER_PREVIEW_EXTENSIONS = new Set([".csv", ".tsv", ".xlsx", ".xlsm"]);
 const BRIDGE_REQUEST_TIMEOUT_MS = 10 * 60 * 1000;
 const UI_ROOT = __dirname;
@@ -344,7 +346,12 @@ interface PendingBridgeRequest {
 
 class DaemonBridgeSupervisor {
   private child: ChildProcessWithoutNullStreams | null = null;
-  private dataRoot: string | null = null;
+  private suspendedReason: string | null = null;
+  // Seed the data root from the environment so `pnpm dev:demo` (and CI) can
+  // point the bridge at a prepared book, e.g. the regtest demo book, without
+  // going through the interactive import-project flow.
+  private dataRoot: string | null =
+    process.env.KASSIBER_DEV_DATA_ROOT?.trim() || null;
   private readonly pending = new Map<string, PendingBridgeRequest>();
   private stderrTail = "";
 
@@ -373,6 +380,24 @@ class DaemonBridgeSupervisor {
     this.shutdown();
   }
 
+  getDataRoot() {
+    return this.dataRoot;
+  }
+
+  // While suspended the bridge must refuse to serve rather than respawn the
+  // daemon: with dataRoot cleared, a respawn would silently fall back to the
+  // developer's real ~/.kassiber book (background jobs would then run against
+  // personal data mid-reset).
+  suspend(reason: string) {
+    this.suspendedReason = reason;
+    this.shutdown();
+  }
+
+  resume(dataRoot: string | null) {
+    this.suspendedReason = null;
+    this.setDataRoot(dataRoot);
+  }
+
   shutdown() {
     const child = this.child;
     this.child = null;
@@ -399,6 +424,17 @@ class DaemonBridgeSupervisor {
     request: Record<string, unknown>,
     onRecord?: (payload: Record<string, unknown>) => void,
   ) {
+    if (this.suspendedReason) {
+      return Promise.resolve({
+        kind: "error",
+        schema_version: 1,
+        error: {
+          code: "bridge_suspended",
+          message: this.suspendedReason,
+          retryable: true,
+        },
+      } as Record<string, unknown>);
+    }
     const child = this.ensureStarted();
     const requestId =
       typeof request.request_id === "string" && request.request_id
@@ -555,6 +591,10 @@ function daemonBridgePlugin() {
         }
         if (pathname === IMPORT_PROJECT_BRIDGE_PATH) {
           await handleBridgeImportProject(req, res, supervisor);
+          return;
+        }
+        if (pathname === RESET_REGTEST_BRIDGE_PATH) {
+          await handleBridgeResetRegtest(req, res, supervisor);
           return;
         }
         next();
@@ -831,6 +871,105 @@ async function handleBridgeImportProject(
   }
 }
 
+function regtestDemoHome(): string {
+  const override = process.env.KASSIBER_REGTEST_DEMO_HOME?.trim();
+  if (override) return override;
+  return path.join(os.homedir(), ".kassiber", "regtest-demo");
+}
+
+function runHarnessStep(
+  repoRoot: string,
+  args: string[],
+): Promise<{ code: number; tail: string }> {
+  return new Promise((resolve) => {
+    // Fixed dev script + fixed args — no user-controlled shell input. This is
+    // contributor test tooling gated to the dev bridge; it must never become a
+    // general shell escape hatch.
+    const child = spawn("bash", ["scripts/integration-harness.sh", ...args], {
+      cwd: repoRoot,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let tail = "";
+    const append = (chunk: Buffer) => {
+      tail = (tail + chunk.toString("utf8")).slice(-8000);
+    };
+    child.stdout.on("data", append);
+    child.stderr.on("data", append);
+    child.on("error", (error) => resolve({ code: -1, tail: `${tail}\n${error.message}` }));
+    child.on("close", (code) => resolve({ code: code ?? -1, tail }));
+  });
+}
+
+let regtestResetInFlight = false;
+
+async function handleBridgeResetRegtest(
+  req: IncomingMessage,
+  res: ServerResponse,
+  supervisor: DaemonBridgeSupervisor,
+) {
+  if (!isLoopbackHost(req.headers.host)) {
+    writeJsonError(res, 403, "bridge_forbidden_host", "regtest reset bridge only accepts loopback hosts");
+    return;
+  }
+  if (req.method !== "POST") {
+    writeJsonError(res, 405, "method_not_allowed", "regtest reset bridge only accepts POST");
+    return;
+  }
+  if (!isAllowedBridgeOrigin(req.headers.origin, req.headers.host)) {
+    writeJsonError(res, 403, "bridge_forbidden_origin", "regtest reset bridge only accepts same-origin browser requests");
+    return;
+  }
+  // Purge + rebuild interleaving corrupts the demo home; one reset at a time.
+  if (regtestResetInFlight) {
+    writeJsonError(res, 409, "regtest_reset_in_progress", "A regtest reset is already running.", true);
+    return;
+  }
+  regtestResetInFlight = true;
+
+  const repoRoot = path.resolve(__dirname, "..");
+  const dataRoot = path.join(regtestDemoHome(), "data");
+  const previousDataRoot = supervisor.getDataRoot();
+  try {
+    // Stop the daemon and refuse to serve until the reset completes. Merely
+    // clearing the data root is not enough: the next UI query would respawn
+    // the daemon against the developer's real ~/.kassiber book.
+    supervisor.suspend("Regtest demo reset in progress.");
+
+    // Full reset = both stores: --purge removes the Docker chain volume and the
+    // demo book, then demo-up rebuilds a fresh, consistent full-span book.
+    // A failing purge (nothing to remove yet) is not fatal.
+    await runHarnessStep(repoRoot, ["demo-down", "--purge"]);
+    const up = await runHarnessStep(repoRoot, ["demo-up"]);
+    if (up.code !== 0) {
+      supervisor.setDataRoot(previousDataRoot);
+      writeJsonError(
+        res,
+        500,
+        "regtest_reset_failed",
+        redactBridgeText(`demo-up exited with code ${up.code}\n${up.tail}`),
+        true,
+      );
+      return;
+    }
+    writeJson(res, 200, { ok: true, dataRoot });
+  } catch (error) {
+    supervisor.setDataRoot(previousDataRoot);
+    writeJsonError(
+      res,
+      500,
+      "regtest_reset_failed",
+      redactBridgeText(error instanceof Error ? error.message : String(error)),
+      true,
+    );
+  } finally {
+    // Success or failure, resume onto the demo data root — never fall back to
+    // the implicit default root. A failed rebuild then surfaces as an empty
+    // or missing demo book instead of silently reading personal data.
+    supervisor.resume(dataRoot);
+    regtestResetInFlight = false;
+  }
+}
+
 async function handleBridgeInvoke(
   req: IncomingMessage,
   res: ServerResponse,
@@ -1049,10 +1188,15 @@ function resolveAppVersion(): string {
   }
 }
 
+function resolveRegtestDemoDataRoot(): string {
+  return path.join(regtestDemoHome(), "data");
+}
+
 export default defineConfig({
   define: {
     __APP_COMMIT__: JSON.stringify(resolveAppCommit()),
     __APP_VERSION__: JSON.stringify(resolveAppVersion()),
+    __REGTEST_DEMO_DATA_ROOT__: JSON.stringify(resolveRegtestDemoDataRoot()),
   },
   plugins: [daemonBridgePlugin(), react(), tailwindcss()],
   resolve: {

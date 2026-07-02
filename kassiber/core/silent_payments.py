@@ -14,6 +14,7 @@ import hashlib
 from dataclasses import dataclass
 from decimal import Decimal
 from typing import Any, Mapping
+from urllib.parse import urlsplit
 
 from ..envelope import json_ready
 from ..errors import AppError
@@ -40,6 +41,7 @@ SCAN_MODES = {SCAN_MODE_LOCAL, SCAN_MODE_SERVER}
 BACKEND_CAPABILITY_FIELDS = ("silent_payments", "sp_capable", "bip352")
 BACKEND_SCAN_FILE_FIELDS = ("silent_payment_scan_file", "sp_scan_file")
 BACKEND_SCAN_PATH_FIELDS = ("silent_payment_scan_path", "sp_scan_path")
+BITCOIN_GENESIS_DATE = "2009-01-03T00:00:00Z"
 
 REDACTED_CONFIG_FIELDS = (CONFIG_DESCRIPTOR,)
 SAFE_CONFIG_FIELDS = (
@@ -467,6 +469,16 @@ def validate_backend_capability(backend: Mapping[str, Any], plan: SilentPaymentP
             hint="Use a deliberately configured SP-capable backend or local scanner.",
             retryable=False,
         )
+    if plan.scan_mode == SCAN_MODE_SERVER:
+        backend_url = str_or_none(_backend_value(backend, "url")) or ""
+        scheme = urlsplit(backend_url).scheme.lower()
+        if kind == "electrum" or scheme not in {"http", "https"}:
+            raise AppError(
+                f"Backend '{backend.get('name')}' cannot run server-assisted Silent Payments scans over {scheme or kind}",
+                code="silent_payment_backend_unsupported",
+                hint="Use an HTTPS SP scanner endpoint, or switch the wallet to local scanner output mode.",
+                retryable=False,
+            )
     if not backend_supports_silent_payments(backend):
         raise AppError(
             f"Backend '{backend.get('name')}' is not marked Silent Payments capable",
@@ -710,6 +722,13 @@ def _validate_payload_binding(
         or binding.get("sp_descriptor_fingerprint")
         or binding.get("wallet_fingerprint")
     )
+    actual_wallet_label = str_or_none(binding.get("wallet_label") or binding.get("label"))
+    if actual_wallet_label is not None and wallet_label is not None and actual_wallet_label != wallet_label:
+        raise AppError(
+            "Silent Payments scanner output wallet_label does not match this wallet",
+            code="silent_payment_scan_wallet_mismatch",
+            retryable=False,
+        )
     if actual_fingerprint is not None:
         if actual_fingerprint.lower() != plan.descriptor_fingerprint:
             raise AppError(
@@ -727,19 +746,10 @@ def _validate_payload_binding(
                 retryable=False,
             )
         return
-    actual_wallet_label = str_or_none(binding.get("wallet_label") or binding.get("label"))
-    if actual_wallet_label is not None and wallet_label is not None:
-        if actual_wallet_label != wallet_label:
-            raise AppError(
-                "Silent Payments scanner output wallet_label does not match this wallet",
-                code="silent_payment_scan_wallet_mismatch",
-                retryable=False,
-            )
-        return
     raise AppError(
         "Silent Payments scanner output must be bound to the wallet",
         code="silent_payment_scan_wallet_mismatch",
-        hint="Include descriptor_fingerprint, wallet_id, or wallet_label in the scanner JSON.",
+        hint="Include descriptor_fingerprint or wallet_id in the scanner JSON.",
         retryable=False,
     )
 
@@ -762,9 +772,16 @@ def _range_start_date(range_payload: Mapping[str, Any]) -> str | None:
 def _scan_range_covers_plan(range_payload: Mapping[str, Any], plan: SilentPaymentPlan) -> tuple[bool, str | None]:
     from_height = _range_start_height(range_payload)
     if plan.full_history:
-        if from_height is None or from_height > 0:
-            return False, "scan_range_incomplete"
-    if plan.start_height is not None:
+        if from_height is not None:
+            if from_height > 0:
+                return False, "scan_range_incomplete"
+        else:
+            from_date = _range_start_date(range_payload)
+            parsed_from = parse_iso_datetime_or_none(from_date)
+            parsed_genesis = parse_iso_datetime_or_none(BITCOIN_GENESIS_DATE)
+            if parsed_from is None or parsed_genesis is None or parsed_from > parsed_genesis:
+                return False, "scan_range_incomplete"
+    elif plan.start_height is not None:
         if from_height is None or from_height > plan.start_height:
             return False, "scan_range_incomplete"
     if plan.start_date is not None:

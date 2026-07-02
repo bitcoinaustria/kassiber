@@ -4,6 +4,7 @@ import {
   backendPayload,
   backendTrust,
   backendRowToSettingsBackend,
+  deriveExplorerSettings,
   marketRateBackends,
   type Backend,
 } from "./SettingsModel";
@@ -276,5 +277,45 @@ describe("backend settings model", () => {
     expect(marketBackend.health).toBe("via desk-mempool");
     expect(marketBackend.infrastructureOwner).toBe("self");
     expect(marketBackend.on).toBe(true);
+  });
+
+  it("disables public explorer fallbacks when the active backend is regtest", () => {
+    const settings = deriveExplorerSettings([
+      backendRowToSettingsBackend({
+        name: "core-regtest",
+        kind: "bitcoinrpc",
+        chain: "bitcoin",
+        network: "regtest",
+        url: "http://127.0.0.1:18456",
+        is_default: true,
+        has_url: true,
+      }),
+    ]);
+
+    expect(settings).toEqual({
+      bitcoinBaseUrl: "",
+      liquidBaseUrl: "",
+      publicFallbacks: false,
+    });
+  });
+
+  it("disables public explorer fallbacks when the active backend is elementsregtest", () => {
+    const settings = deriveExplorerSettings([
+      backendRowToSettingsBackend({
+        name: "liquid-mempool-regtest",
+        kind: "liquid-esplora",
+        chain: "liquid",
+        network: "elementsregtest",
+        url: "http://127.0.0.1:18560/api",
+        is_default: true,
+        has_url: true,
+      }),
+    ]);
+
+    expect(settings).toEqual({
+      bitcoinBaseUrl: "",
+      liquidBaseUrl: "http://127.0.0.1:18560",
+      publicFallbacks: false,
+    });
   });
 });

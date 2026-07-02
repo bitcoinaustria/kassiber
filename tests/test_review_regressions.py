@@ -828,6 +828,24 @@ class ReviewRegressionTest(unittest.TestCase):
                     "Network fee",
                     "2026-02-01T12:00:00Z",
                 ),
+                (
+                    "je-ui-income",
+                    "ws-ui",
+                    "pf-ui",
+                    "tx-ui-in",
+                    "wal-ui",
+                    "2026-01-15T12:00:00Z",
+                    "income",
+                    "BTC",
+                    btc_to_msat("0.02"),
+                    1_000,
+                    50_000,
+                    None,
+                    None,
+                    None,
+                    "Income recognition; basis rides on the paired acquisition",
+                    "2026-01-15T12:00:00Z",
+                ),
             ],
         )
         conn.execute(
@@ -1185,6 +1203,113 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual(
             [point["balanceBtc"] for point in overview["portfolioSeries"]],
             [1.0, 1.0, 1.0],
+        )
+
+    def test_overview_portfolio_series_labels_kraken_daily_rates_by_effective_day(self):
+        self._bootstrap_wallet(label="Kraken Daily")
+        conn = open_db(self.data_root)
+        self.addCleanup(conn.close)
+        now = "2026-01-01T00:00:00Z"
+        profile = conn.execute(
+            "SELECT id, workspace_id FROM profiles WHERE label = 'Default'"
+        ).fetchone()
+        wallet = conn.execute(
+            "SELECT id, account_id FROM wallets WHERE label = 'Kraken Daily'"
+        ).fetchone()
+        conn.execute(
+            "UPDATE profiles SET fiat_currency = 'EUR' WHERE id = ?",
+            (profile["id"],),
+        )
+        conn.executemany(
+            """
+            INSERT INTO rates_cache(pair, timestamp, rate, source, fetched_at, granularity, method)
+            VALUES(?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                ("BTC-EUR", "2026-01-02T00:00:00Z", 50_000, "kraken-csv", now, "daily", "ohlcvt_csv"),
+                ("BTC-EUR", "2026-01-03T00:00:00Z", 60_000, "kraken-csv", now, "daily", "ohlcvt_csv"),
+            ],
+        )
+        conn.execute(
+            """
+            INSERT INTO transactions(
+                id, workspace_id, profile_id, wallet_id, external_id, fingerprint,
+                occurred_at, confirmed_at, direction, asset, amount, fee,
+                fiat_currency, fiat_rate, fiat_value, fiat_price_source, kind,
+                description, counterparty, note, excluded, raw_json, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "tx-kraken-daily-in",
+                profile["workspace_id"],
+                profile["id"],
+                wallet["id"],
+                "kraken-daily-in",
+                "fp-kraken-daily-in",
+                "2026-01-01T10:00:00Z",
+                "2026-01-01T10:10:00Z",
+                "inbound",
+                "BTC",
+                btc_to_msat("1.0"),
+                0,
+                "EUR",
+                50_000,
+                50_000,
+                "rates_cache",
+                "transfer",
+                "Initial funding",
+                "Exchange",
+                None,
+                0,
+                "{}",
+                now,
+            ),
+        )
+        conn.execute(
+            """
+            INSERT INTO journal_entries(
+                id, workspace_id, profile_id, transaction_id, wallet_id, account_id,
+                occurred_at, entry_type, asset, quantity, fiat_value, unit_cost,
+                cost_basis, proceeds, gain_loss, description, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "je-kraken-daily-in",
+                profile["workspace_id"],
+                profile["id"],
+                "tx-kraken-daily-in",
+                wallet["id"],
+                wallet["account_id"],
+                "2026-01-01T10:00:00Z",
+                "acquisition",
+                "BTC",
+                btc_to_msat("1.0"),
+                50_000,
+                50_000,
+                None,
+                None,
+                None,
+                "Initial funding",
+                now,
+            ),
+        )
+        set_setting(conn, "context_workspace", profile["workspace_id"])
+        set_setting(conn, "context_profile", profile["id"])
+        conn.commit()
+
+        overview = build_overview_snapshot(conn)
+
+        self.assertEqual(
+            [point["date"] for point in overview["portfolioSeries"]],
+            ["2026-01-01", "2026-01-02"],
+        )
+        self.assertEqual(
+            [point["priceEur"] for point in overview["portfolioSeries"]],
+            [50_000, 60_000],
+        )
+        self.assertEqual(
+            [point["priceTimestamp"] for point in overview["portfolioSeries"]],
+            ["2026-01-02T00:00:00Z", "2026-01-03T00:00:00Z"],
         )
 
     def test_overview_portfolio_series_treats_btc_lbtc_swaps_as_bitcoin_balance(self):

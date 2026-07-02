@@ -26,8 +26,8 @@ Current development modes:
 
 - `pnpm dev` in `ui-tauri/` runs the browser dashboard against the
   loopback-only Vite daemon bridge by default. `pnpm dev:bridge` is the
-  explicit form of the same mode. Use `pnpm dev:browser` for mock daemon
-  fixtures when you want disconnected UI layout work. In bridge mode, the
+  explicit form of the same mode. Use `pnpm dev:browser` for the regtest demo
+  browser preview. In bridge mode, the
   Welcome screen can open existing local books through a dev-only loopback
   folder picker; the Vite bridge validates the selected Kassiber data root and
   restarts its Python daemon with `--data-root` before the normal unlock/profile

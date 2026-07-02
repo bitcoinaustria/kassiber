@@ -35,6 +35,7 @@ HistoryCache = MutableMapping[str, Sequence[HistoryEntry]]
 ProgressCallback = Callable[[Mapping[str, Any]], None]
 ImportFile = Callable[[sqlite3.Connection, ProfileRow, WalletRow, str, str], SyncOutcome]
 InsertRecords = Callable[[sqlite3.Connection, ProfileRow, WalletRow, Sequence[BackendRecord], str], SyncOutcome]
+RetractRecords = Callable[[sqlite3.Connection, ProfileRow, WalletRow, Sequence[str], str], SyncOutcome]
 ResolveBackend = Callable[[RuntimeConfig, str | None], Mapping[str, Any]]
 ResolveSyncState = Callable[[Mapping[str, Any], WalletRow], "WalletSyncState"]
 NormalizeAddresses = Callable[[Any], Sequence[str]]
@@ -92,6 +93,7 @@ class WalletSyncHooks:
     resolve_sync_state: ResolveSyncState
     normalize_addresses: NormalizeAddresses
     backend_adapters: Mapping[str, BackendAdapter]
+    retract_records: RetractRecords | None = None
     sync_btcpay_wallet: SyncBTCPayWallet | None = None
     enrich_btcpay_wallet: EnrichBTCPayWallet | None = None
     enrich_bullbitcoin_wallet: EnrichBullBitcoinWallet | None = None
@@ -286,6 +288,23 @@ def normalize_backend_kind(kind: Any) -> str:
         "liquid-esplora": "esplora",
     }
     return aliases.get(value, value)
+
+
+def _string_list(value: Any) -> list[str]:
+    if not isinstance(value, Sequence) or isinstance(value, (str, bytes, bytearray)):
+        return []
+    seen: set[str] = set()
+    output: list[str] = []
+    for item in value:
+        text = str_or_none(item)
+        if text is None:
+            continue
+        normalized = text.strip().lower()
+        if not normalized or normalized in seen:
+            continue
+        seen.add(normalized)
+        output.append(normalized)
+    return output
 
 
 def discover_wallet_backend(
@@ -490,8 +509,20 @@ def sync_wallet_from_backend(
     kind = fetch.kind
     adapter_meta = dict(fetch.adapter_meta or {})
     observed_utxos = adapter_meta.pop("utxos", None)
+    retracted_external_ids = _string_list(
+        adapter_meta.pop("bitcoinrpc_retracted_txids", [])
+    )
     if conn is not None:
         source_overlap.raise_for_sync_source_overlap(conn, profile, wallet, sync_state)
+    retraction_outcome: SyncOutcome | None = None
+    if retracted_external_ids and hooks.retract_records is not None:
+        retraction_outcome = hooks.retract_records(
+            conn,
+            profile,
+            wallet,
+            retracted_external_ids,
+            f"backend:{backend['name']}",
+        )
     outcome = hooks.insert_records(
         conn,
         profile,
@@ -523,6 +554,17 @@ def sync_wallet_from_backend(
     outcome["records_fetched"] = len(normalized_records)
     if "updated" not in outcome and isinstance(outcome.get("updated_records"), list):
         outcome["updated"] = len(outcome["updated_records"])
+    if retracted_external_ids:
+        outcome["bitcoinrpc_retracted_txids"] = retracted_external_ids
+    if retraction_outcome is not None:
+        outcome["retracted"] = int(retraction_outcome.get("retracted") or 0)
+        outcome["retracted_records"] = list(
+            retraction_outcome.get("retracted_records") or []
+        )
+        outcome["journal_invalidated"] = bool(
+            outcome.get("journal_invalidated")
+            or retraction_outcome.get("journal_invalidated")
+        )
     if force_full:
         outcome["force_full"] = True
     if sync_state.descriptor_plan and getattr(sync_state.descriptor_plan, "kind", None) != "silent-payment":

@@ -38,6 +38,7 @@ from .repo import current_context_snapshot
 from .sync import normalize_backend_kind
 from .sync_backends import (
     ElectrumClient,
+    bitcoinrpc_call,
     decode_liquid_transaction,
     decode_raw_transaction,
     electrum_call_many,
@@ -591,7 +592,7 @@ def _enrich_bitcoin_graph_raw(
         return _with_graph_lookup_warning(
             raw,
             "bitcoin_reference_lookup_unavailable",
-            "No configured Bitcoin graph backend is available to fetch public transaction references.",
+            "No configured Bitcoin graph backend is available to fetch transaction references.",
         )
     kind = normalize_backend_kind(backend.get("kind"))
     if kind == "electrum":
@@ -609,13 +610,28 @@ def _enrich_bitcoin_graph_raw(
                 "bitcoin_reference_lookup_failed",
                 "Could not fetch public Bitcoin transaction references from the selected Electrum backend.",
             )
+    if kind == "bitcoinrpc":
+        try:
+            return _fetch_bitcoinrpc_transaction_graph(
+                conn,
+                backend,
+                chain,
+                network,
+                str(txid),
+            )
+        except Exception:
+            return _with_graph_lookup_warning(
+                raw,
+                "bitcoin_reference_lookup_failed",
+                "Could not fetch public Bitcoin transaction references from the selected Bitcoin Core backend.",
+            )
     try:
         fetched = _fetch_graph_esplora_transaction(backend, str(txid))
     except Exception:
         return _with_graph_lookup_warning(
             raw,
             "bitcoin_reference_lookup_failed",
-            "Could not fetch public Bitcoin transaction references from the selected explorer backend.",
+            "Could not fetch Bitcoin transaction references from the selected backend.",
         )
     if not isinstance(fetched, Mapping):
         return _with_graph_lookup_warning(
@@ -682,6 +698,179 @@ def _graph_lookup_timeout(backend: Mapping[str, Any]) -> int:
     if configured is None or configured <= 0:
         return GRAPH_LOOKUP_TIMEOUT_SECONDS
     return min(configured, GRAPH_LOOKUP_TIMEOUT_SECONDS)
+
+
+def _fetch_bitcoinrpc_transaction_graph(
+    conn: sqlite3.Connection,
+    backend: Mapping[str, Any],
+    chain: str,
+    network: str,
+    txid: str,
+) -> Mapping[str, Any]:
+    decoded = bitcoinrpc_call(
+        dict(backend),
+        "getrawtransaction",
+        [txid, True],
+        timeout=_graph_lookup_timeout(backend),
+    )
+    if not isinstance(decoded, Mapping):
+        raise AppError("Bitcoin Core returned an invalid transaction response")
+    raw = _bitcoinrpc_decoded_to_graph_raw(decoded)
+    raw = _attach_bitcoinrpc_prevouts_from_cache_or_rpc(
+        conn,
+        dict(backend),
+        chain,
+        network,
+        raw,
+    )
+    if not _bitcoin_current_graph_has_required_prevouts(raw):
+        if raw.get("_graphLookupWarning"):
+            return raw
+        return _with_graph_lookup_warning(
+            raw,
+            "bitcoin_reference_lookup_incomplete",
+            "Bitcoin Core lookup did not return every previous output needed for a complete graph.",
+        )
+    return _store_graph_lookup_cache(conn, chain, network, txid, raw)
+
+
+def _bitcoinrpc_decoded_to_graph_raw(
+    decoded: Mapping[str, Any],
+) -> dict[str, Any]:
+    txid = _string_or_none(decoded.get("txid"))
+    graph: dict[str, Any] = {
+        "txid": txid,
+        "version": decoded.get("version"),
+        "locktime": decoded.get("locktime"),
+        "size": decoded.get("size"),
+        "vsize": decoded.get("vsize"),
+        "weight": decoded.get("weight"),
+        "raw_hex": decoded.get("hex"),
+        "vin": [],
+        "vout": [],
+    }
+    for input_entry in decoded.get("vin") if isinstance(decoded.get("vin"), list) else []:
+        if not isinstance(input_entry, Mapping):
+            continue
+        graph_input: dict[str, Any] = {
+            "txid": input_entry.get("txid"),
+            "vout": input_entry.get("vout"),
+            "sequence": input_entry.get("sequence"),
+        }
+        # Core only inlines prevout at verbosity 2 (v25+); when present, keep it.
+        # Otherwise the missing previous outputs are resolved once, deduplicated,
+        # by _attach_bitcoinrpc_prevouts_from_cache_or_rpc.
+        prevout = input_entry.get("prevout")
+        if isinstance(prevout, Mapping):
+            graph_input["prevout"] = _bitcoinrpc_prevout_to_graph(prevout)
+        graph["vin"].append(graph_input)
+    for output_entry in decoded.get("vout") if isinstance(decoded.get("vout"), list) else []:
+        if isinstance(output_entry, Mapping):
+            graph["vout"].append(_bitcoinrpc_vout_to_graph(output_entry))
+    return graph
+
+
+def _attach_bitcoinrpc_prevouts_from_cache_or_rpc(
+    conn: sqlite3.Connection,
+    backend: Mapping[str, Any],
+    chain: str,
+    network: str,
+    raw: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Resolve missing previous outputs for a Bitcoin Core graph.
+
+    Mirrors the Electrum path (`_attach_bitcoin_prevouts_from_cache_or_electrum`):
+    each distinct previous txid is fetched at most once, the durable graph cache
+    is consulted and populated, and the number of uncached lookups is capped so a
+    many-input transaction (e.g. a consolidation) cannot fan out into an
+    unbounded run of serial `getrawtransaction` calls against the user's node.
+    """
+    enriched = dict(raw)
+    vin = [dict(entry) for entry in enriched.get("vin", []) if isinstance(entry, Mapping)]
+    enriched["vin"] = vin
+    missing: list[str] = []
+    seen_missing: set[str] = set()
+    cached_prev: dict[str, Mapping[str, Any]] = {}
+    for entry in vin:
+        prev_txid = _string_or_none(entry.get("txid"))
+        prev_vout = _int_or_none(entry.get("vout"))
+        if not prev_txid or prev_vout is None:
+            # Coinbase-like inputs have no spent previous output.
+            continue
+        prevout = entry.get("prevout")
+        if isinstance(prevout, Mapping) and prevout.get("value") is not None:
+            # Already inlined by Core at verbosity 2.
+            continue
+        if not _looks_like_txid(prev_txid):
+            continue
+        cached = _load_graph_lookup_cache(conn, chain, network, prev_txid)
+        if cached is not None:
+            cached_prev[prev_txid.lower()] = cached
+            continue
+        normalized = prev_txid.lower()
+        if normalized not in seen_missing:
+            seen_missing.add(normalized)
+            missing.append(normalized)
+
+    if len(missing) > MAX_ELECTRUM_GRAPH_PREVTX_LOOKUPS:
+        _attach_bitcoin_prevouts_from_cached_graphs(enriched, cached_prev)
+        return _with_graph_lookup_warning(
+            enriched,
+            "bitcoin_reference_lookup_prevout_limit",
+            (
+                "Bitcoin Core graph lookup needs too many uncached previous transactions; "
+                "Kassiber capped the request to avoid flooding the node."
+            ),
+        )
+
+    for prev_txid in missing:
+        try:
+            previous = bitcoinrpc_call(
+                dict(backend),
+                "getrawtransaction",
+                [prev_txid, True],
+                timeout=_graph_lookup_timeout(backend),
+            )
+        except Exception:
+            # Best-effort: a single unfetchable prevout degrades the graph to a
+            # warning rather than aborting the whole lookup.
+            continue
+        if not isinstance(previous, Mapping):
+            continue
+        prev_raw = _bitcoinrpc_decoded_to_graph_raw(previous)
+        cached_prev[prev_txid] = _store_graph_lookup_cache(
+            conn,
+            chain,
+            network,
+            prev_txid,
+            prev_raw,
+        )
+
+    _attach_bitcoin_prevouts_from_cached_graphs(enriched, cached_prev)
+    return enriched
+
+
+def _bitcoinrpc_prevout_to_graph(source: Mapping[str, Any]) -> dict[str, Any]:
+    return _bitcoinrpc_vout_to_graph(source)
+
+
+def _bitcoinrpc_vout_to_graph(source: Mapping[str, Any]) -> dict[str, Any]:
+    script = source.get("scriptPubKey")
+    script_obj = script if isinstance(script, Mapping) else {}
+    address = _string_or_none(script_obj.get("address"))
+    if not address:
+        addresses = script_obj.get("addresses")
+        if isinstance(addresses, list) and addresses:
+            address = _string_or_none(addresses[0])
+    payload: dict[str, Any] = {
+        "n": source.get("n"),
+        "value": source.get("value"),
+        "scriptpubkey": script_obj.get("hex") or source.get("scriptpubkey"),
+        "scriptpubkey_type": script_obj.get("type") or source.get("scriptpubkey_type"),
+    }
+    if address:
+        payload["scriptpubkey_address"] = address
+    return payload
 
 
 def _graph_backend_with_timeout_cap(backend: Mapping[str, Any]) -> dict[str, Any]:
@@ -904,7 +1093,8 @@ def _configured_graph_backend(
                 WHEN 'mempool' THEN 0
                 WHEN 'liquid-esplora' THEN 0
                 WHEN 'electrum' THEN 1
-                ELSE 2
+                WHEN 'bitcoinrpc' THEN 2
+                ELSE 3
             END,
             updated_at DESC,
             name ASC
@@ -1016,7 +1206,7 @@ def _graph_backend_matches(
     network: str,
 ) -> bool:
     kind = normalize_backend_kind(backend.get("kind"))
-    if kind not in {"esplora", "mempool", "electrum"}:
+    if kind not in {"esplora", "mempool", "electrum", "bitcoinrpc"}:
         return False
     if not _string_or_none(backend.get("url")):
         return False
@@ -2116,7 +2306,7 @@ def _graphless_message(reason: str) -> str:
     if reason == "liquid_reference_graph_not_local":
         return (
             "Kassiber has only the imported Liquid row locally. "
-            "The public transaction references can be inspected in Liquid Network; confidential amounts may remain hidden."
+            "Add a Liquid explorer backend to inspect public input/output references; confidential amounts may remain hidden."
         )
     return "This source record does not contain Bitcoin input/output references for a flow diagram."
 

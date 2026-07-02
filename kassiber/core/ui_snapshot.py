@@ -10,7 +10,7 @@ from typing import Any
 
 from ..backends import backend_value, redact_backend_for_output
 from ..errors import AppError
-from ..msat import msat_to_btc
+from ..msat import dec, msat_to_btc
 from ..time_utils import _iso_z, _parse_iso_datetime
 from ..wallet_descriptors import (
     BITCOIN_NETWORK_ALIASES,
@@ -1361,7 +1361,7 @@ def _portfolio_cost_basis_by_date(
 ) -> dict[str, float]:
     rows = conn.execute(
         """
-        SELECT occurred_at, quantity, fiat_value, COALESCE(cost_basis, 0) AS cost_basis
+        SELECT occurred_at, entry_type, quantity, fiat_value, COALESCE(cost_basis, 0) AS cost_basis
         FROM journal_entries
         WHERE profile_id = ? AND asset IN ('BTC', 'LBTC')
         ORDER BY occurred_at ASC, created_at ASC, id ASC
@@ -1374,11 +1374,14 @@ def _portfolio_cost_basis_by_date(
         date_key = (row["occurred_at"] or "")[:10]
         if not date_key:
             continue
-        quantity = int(row["quantity"] or 0)
-        if quantity >= 0:
-            cost_basis += float(row["fiat_value"] or 0)
-        else:
-            cost_basis -= float(row["cost_basis"] or 0)
+        cost_basis += float(
+            report_builders._holdings_basis_delta(
+                row["entry_type"],
+                msat_to_btc(row["quantity"]),
+                dec(row["fiat_value"]),
+                dec(row["cost_basis"]),
+            )
+        )
         by_date[date_key] = cost_basis
     return by_date
 
@@ -1401,9 +1404,28 @@ def _daily_rate_rows(
         return []
     return conn.execute(
         """
-        WITH ranked AS (
+        WITH keyed AS (
             SELECT
-                substr(timestamp, 1, 10) AS rate_day,
+                CASE
+                    WHEN source = 'kraken-csv'
+                         AND granularity = 'daily'
+                         AND method = 'ohlcvt_csv'
+                    THEN date(timestamp, '-1 day')
+                    ELSE substr(timestamp, 1, 10)
+                END AS rate_day,
+                timestamp,
+                rate,
+                source,
+                fetched_at,
+                granularity,
+                method
+            FROM rates_cache
+            WHERE pair = ?
+              AND timestamp >= ?
+        ),
+        ranked AS (
+            SELECT
+                rate_day,
                 timestamp,
                 rate,
                 source,
@@ -1411,7 +1433,7 @@ def _daily_rate_rows(
                 granularity,
                 method,
                 ROW_NUMBER() OVER (
-                    PARTITION BY substr(timestamp, 1, 10)
+                    PARTITION BY rate_day
                     ORDER BY CASE
                                  WHEN source = 'manual'
                                       AND timestamp LIKE substr(timestamp, 1, 10) || 'T00:00:00%'
@@ -1424,9 +1446,7 @@ def _daily_rate_rows(
                              fetched_at DESC,
                              source ASC
                 ) AS rn
-            FROM rates_cache
-            WHERE pair = ?
-              AND timestamp >= ?
+            FROM keyed
         )
         SELECT rate_day, timestamp, rate, source, fetched_at, granularity, method
         FROM ranked
@@ -1443,7 +1463,7 @@ def _portfolio_cost_basis_by_transaction(
 ) -> dict[str, float]:
     rows = conn.execute(
         """
-        SELECT transaction_id, quantity, fiat_value, cost_basis
+        SELECT transaction_id, entry_type, quantity, fiat_value, cost_basis
         FROM journal_entries
         WHERE profile_id = ? AND asset IN ('BTC', 'LBTC')
         ORDER BY occurred_at ASC, created_at ASC, id ASC
@@ -1456,11 +1476,14 @@ def _portfolio_cost_basis_by_transaction(
         transaction_id = row["transaction_id"]
         if not transaction_id:
             continue
-        quantity = int(row["quantity"] or 0)
-        if quantity >= 0:
-            cost_basis += float(row["fiat_value"] or 0)
-        else:
-            cost_basis -= float(row["cost_basis"] or 0)
+        cost_basis += float(
+            report_builders._holdings_basis_delta(
+                row["entry_type"],
+                msat_to_btc(row["quantity"]),
+                dec(row["fiat_value"]),
+                dec(row["cost_basis"]),
+            )
+        )
         by_transaction[str(transaction_id)] = cost_basis
     return by_transaction
 
@@ -1471,7 +1494,7 @@ def _current_portfolio_cost_basis(
 ) -> float:
     rows = conn.execute(
         """
-        SELECT quantity, fiat_value, cost_basis
+        SELECT entry_type, quantity, fiat_value, cost_basis
         FROM journal_entries
         WHERE profile_id = ? AND asset IN ('BTC', 'LBTC')
         ORDER BY occurred_at ASC, created_at ASC, id ASC
@@ -1480,11 +1503,14 @@ def _current_portfolio_cost_basis(
     ).fetchall()
     cost_basis = 0.0
     for row in rows:
-        quantity = int(row["quantity"] or 0)
-        if quantity >= 0:
-            cost_basis += float(row["fiat_value"] or 0)
-        else:
-            cost_basis -= float(row["cost_basis"] or 0)
+        cost_basis += float(
+            report_builders._holdings_basis_delta(
+                row["entry_type"],
+                msat_to_btc(row["quantity"]),
+                dec(row["fiat_value"]),
+                dec(row["cost_basis"]),
+            )
+        )
     return cost_basis
 
 

@@ -509,6 +509,193 @@ class TransactionGraphTest(unittest.TestCase):
             {warning["code"] for warning in payload["warnings"]},
         )
 
+    def test_bitcoin_graphless_txid_row_fetches_bitcoin_core_graph(self):
+        txid = "8a" * 32
+        prev_txid = "9b" * 32
+        create_db_backend(
+            self.conn,
+            "core-regtest",
+            "bitcoinrpc",
+            "http://127.0.0.1:18443",
+            chain="bitcoin",
+            network="regtest",
+            config={"username": "kassiber", "password": "secret"},
+            commit=False,
+        )
+        self.conn.execute(
+            "UPDATE wallets SET config_json = ? WHERE id = ?",
+            (json.dumps({"chain": "bitcoin", "network": "regtest"}), "wallet-a"),
+        )
+        self._tx(
+            "core-row",
+            "wallet-a",
+            "outbound",
+            800_000_000,
+            txid,
+            "{}",
+            fee_msat=2_000_000,
+        )
+        decoded = {
+            "txid": txid,
+            "version": 2,
+            "locktime": 0,
+            "size": 141,
+            "vsize": 141,
+            "weight": 564,
+            "vin": [{"txid": prev_txid, "vout": 1, "sequence": 0xFFFFFFFF}],
+            "vout": [
+                {
+                    "n": 0,
+                    "value": 0.008,
+                    "scriptPubKey": {
+                        "hex": "0014" + "11" * 20,
+                        "type": "witness_v0_keyhash",
+                        "address": ADDR_B,
+                    },
+                },
+                {
+                    "n": 1,
+                    "value": 0.00198,
+                    "scriptPubKey": {"hex": "0014" + "22" * 20, "type": "witness_v0_keyhash"},
+                },
+            ],
+        }
+        previous = {
+            "txid": prev_txid,
+            "vout": [
+                {"n": 0, "value": 0.001, "scriptPubKey": {"hex": SCRIPT_A}},
+                {
+                    "n": 1,
+                    "value": 0.01,
+                    "scriptPubKey": {
+                        "hex": SCRIPT_A,
+                        "type": "witness_v0_keyhash",
+                        "address": ADDR_A,
+                    },
+                },
+            ],
+        }
+
+        def fake_rpc(_backend, method, params=None, **_kwargs):
+            self.assertEqual(method, "getrawtransaction")
+            lookup_txid = params[0]
+            if lookup_txid == txid:
+                return decoded
+            if lookup_txid == prev_txid:
+                return previous
+            raise AssertionError(f"unexpected txid {lookup_txid}")
+
+        with patch("kassiber.core.transaction_graph.bitcoinrpc_call", side_effect=fake_rpc) as rpc:
+            payload = self._graph("core-row", allow_public_lookup=True)
+
+        self.assertEqual(rpc.call_count, 2)
+        self.assertEqual(payload["supportLevel"], "full")
+        self.assertIsNone(payload["unsupportedReason"])
+        self.assertEqual(payload["transaction"]["vsize"], 141)
+        self.assertEqual(payload["inputs"][0]["outpoint"], f"{prev_txid}:1")
+        self.assertEqual(payload["inputs"][0]["valueSats"], 1_000_000)
+        self.assertEqual(payload["outputs"][0]["address"], ADDR_B)
+        self.assertEqual(payload["outputs"][0]["valueSats"], 800_000)
+        self.assertEqual(payload["fee"]["valueSats"], 2_000)
+
+    def test_bitcoin_core_graph_dedups_shared_prevout_txid(self):
+        # Two inputs spending different vouts of the SAME previous txid must
+        # resolve with a single deduplicated getrawtransaction for that prev tx
+        # (2 RPCs total: the focused tx + one shared prevout), not one per input.
+        txid = "8c" * 32
+        prev_txid = "9d" * 32
+        create_db_backend(
+            self.conn,
+            "core-regtest",
+            "bitcoinrpc",
+            "http://127.0.0.1:18443",
+            chain="bitcoin",
+            network="regtest",
+            config={"username": "kassiber", "password": "secret"},
+            commit=False,
+        )
+        self.conn.execute(
+            "UPDATE wallets SET config_json = ? WHERE id = ?",
+            (json.dumps({"chain": "bitcoin", "network": "regtest"}), "wallet-a"),
+        )
+        self._tx(
+            "core-dedup-row",
+            "wallet-a",
+            "outbound",
+            1_500_000_000,
+            txid,
+            "{}",
+            fee_msat=1_000_000,
+        )
+        decoded = {
+            "txid": txid,
+            "version": 2,
+            "locktime": 0,
+            "vsize": 200,
+            "vin": [
+                {"txid": prev_txid, "vout": 0, "sequence": 0xFFFFFFFF},
+                {"txid": prev_txid, "vout": 1, "sequence": 0xFFFFFFFF},
+            ],
+            "vout": [
+                {
+                    "n": 0,
+                    "value": 0.015,
+                    "scriptPubKey": {
+                        "hex": "0014" + "11" * 20,
+                        "type": "witness_v0_keyhash",
+                        "address": ADDR_B,
+                    },
+                },
+            ],
+        }
+        previous = {
+            "txid": prev_txid,
+            "vout": [
+                {
+                    "n": 0,
+                    "value": 0.006,
+                    "scriptPubKey": {
+                        "hex": SCRIPT_A,
+                        "type": "witness_v0_keyhash",
+                        "address": ADDR_A,
+                    },
+                },
+                {
+                    "n": 1,
+                    "value": 0.01,
+                    "scriptPubKey": {
+                        "hex": SCRIPT_A,
+                        "type": "witness_v0_keyhash",
+                        "address": ADDR_A,
+                    },
+                },
+            ],
+        }
+        prev_lookups = 0
+
+        def fake_rpc(_backend, method, params=None, **_kwargs):
+            nonlocal prev_lookups
+            self.assertEqual(method, "getrawtransaction")
+            lookup_txid = params[0]
+            if lookup_txid == txid:
+                return decoded
+            if lookup_txid == prev_txid:
+                prev_lookups += 1
+                return previous
+            raise AssertionError(f"unexpected txid {lookup_txid}")
+
+        with patch("kassiber.core.transaction_graph.bitcoinrpc_call", side_effect=fake_rpc) as rpc:
+            payload = self._graph("core-dedup-row", allow_public_lookup=True)
+
+        # Shared prev txid fetched exactly once despite two inputs referencing it.
+        self.assertEqual(prev_lookups, 1)
+        self.assertEqual(rpc.call_count, 2)
+        self.assertEqual(payload["supportLevel"], "full")
+        self.assertEqual(payload["inputs"][0]["outpoint"], f"{prev_txid}:0")
+        self.assertEqual(payload["inputs"][0]["valueSats"], 600_000)
+        self.assertEqual(payload["inputs"][1]["outpoint"], f"{prev_txid}:1")
+        self.assertEqual(payload["inputs"][1]["valueSats"], 1_000_000)
+
     def test_public_graph_lookup_populates_cache_and_reuses_it(self):
         txid = "8a" * 32
         backend_url = "https://mempool.example/api?token=do-not-cache"
@@ -822,6 +1009,8 @@ class TransactionGraphTest(unittest.TestCase):
         fetch.assert_not_called()
         self.assertEqual(payload["supportLevel"], "graphless")
         self.assertEqual(payload["unsupportedReason"], "liquid_reference_graph_not_local")
+        self.assertIn("Add a Liquid explorer backend", payload["warnings"][0]["message"])
+        self.assertNotIn("Liquid Network", payload["warnings"][0]["message"])
         warning_codes = {warning["code"] for warning in payload["warnings"]}
         self.assertIn("liquid_reference_lookup_unavailable", warning_codes)
 

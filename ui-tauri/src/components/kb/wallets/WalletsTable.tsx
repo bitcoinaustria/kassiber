@@ -121,7 +121,7 @@ export function WalletsTable({
           <TableHeader>
             <TableRow className="bg-muted/50 hover:bg-muted/50">
               <SortableHead
-                label="Wallet/source"
+                label="Connection"
                 sortKey="label"
                 activeKey={sortKey}
                 dir={sortDir}
@@ -270,15 +270,21 @@ function WalletRow({
   priceEur,
   totalBtc,
 }: WalletRowProps) {
+  const isBackend = connection.role === "backend";
   const pct = totalBtc > 0 ? (connection.balance / totalBtc) * 100 : 0;
   const isEur = currency === "eur";
   const metadataItems = [
+    isBackend ? connection.endpoint : null,
+    isBackend && connection.isDefaultBackend ? "default backend" : null,
+    isBackend ? "first-party infra" : null,
     connection.addresses != null ? `${connection.addresses} addresses` : null,
     connection.channels != null ? `${connection.channels} channels` : null,
     connection.gap != null ? `gap limit ${connection.gap}` : null,
     connection.deprecated ? "deprecated" : null,
   ].filter(Boolean);
-  const compositionTitle = hideSensitive
+  const compositionTitle = isBackend
+    ? "First-party infrastructure"
+    : hideSensitive
     ? "Wallet share hidden"
     : pct < 0.1
       ? "<0.1% of total balance"
@@ -324,9 +330,13 @@ function WalletRow({
         </Badge>
       </TableCell>
       <TableCell className="text-right">
-        <span className="text-sm font-medium tabular-nums">
-          {(connection.transactionCount ?? 0).toLocaleString()}
-        </span>
+        {isBackend ? (
+          <span className="text-sm text-muted-foreground">—</span>
+        ) : (
+          <span className="text-sm font-medium tabular-nums">
+            {(connection.transactionCount ?? 0).toLocaleString()}
+          </span>
+        )}
       </TableCell>
       <TableCell>
         <div className="flex flex-col gap-1 text-sm whitespace-nowrap">
@@ -335,41 +345,65 @@ function WalletRow({
         </div>
       </TableCell>
       <TableCell className="hidden lg:table-cell">
-        <div
-          className="relative h-2 overflow-hidden rounded-full bg-muted"
-          title={compositionTitle}
-        >
+        {isBackend ? (
           <div
-            className="absolute inset-y-0 left-0 rounded-full bg-primary transition-[width]"
-            style={{ width: `${Math.max(1.5, pct)}%` }}
-          />
-        </div>
+            className="text-xs text-muted-foreground"
+            title={compositionTitle}
+          >
+            {connection.syncSource ?? "Backend endpoint"}
+          </div>
+        ) : (
+          <div
+            className="relative h-2 overflow-hidden rounded-full bg-muted"
+            title={compositionTitle}
+          >
+            <div
+              className="absolute inset-y-0 left-0 rounded-full bg-primary transition-[width]"
+              style={{ width: `${Math.max(1.5, pct)}%` }}
+            />
+          </div>
+        )}
       </TableCell>
       <TableCell className="text-right">
-        <div
-          className={cn(
-            "font-medium tabular-nums",
-            hiddenSensitiveClassName(hideSensitive),
-          )}
-        >
-          <CurrencyToggleText>
-            {isEur
-              ? formatEur(connection.balance * priceEur)
-              : `₿ ${formatBtc(connection.balance)}`}
-          </CurrencyToggleText>
-        </div>
-        <div
-          className={cn(
-            "text-xs text-muted-foreground tabular-nums",
-            hiddenSensitiveClassName(hideSensitive),
-          )}
-        >
-          <CurrencyToggleText>
-            {isEur
-              ? `₿ ${formatBtc(connection.balance)}`
-              : formatEur(connection.balance * priceEur)}
-          </CurrencyToggleText>
-        </div>
+        {isBackend ? (
+          <>
+            <div className="font-medium tabular-nums">
+              {connection.isDefaultBackend ? "Default" : "Configured"}
+            </div>
+            <div className="text-xs text-muted-foreground tabular-nums">
+              {connection.walletRefs?.length
+                ? `${connection.walletRefs.length.toLocaleString()} wallets`
+                : connection.backendKind}
+            </div>
+          </>
+        ) : (
+          <>
+            <div
+              className={cn(
+                "font-medium tabular-nums",
+                hiddenSensitiveClassName(hideSensitive),
+              )}
+            >
+              <CurrencyToggleText>
+                {isEur
+                  ? formatEur(connection.balance * priceEur)
+                  : `₿ ${formatBtc(connection.balance)}`}
+              </CurrencyToggleText>
+            </div>
+            <div
+              className={cn(
+                "text-xs text-muted-foreground tabular-nums",
+                hiddenSensitiveClassName(hideSensitive),
+              )}
+            >
+              <CurrencyToggleText>
+                {isEur
+                  ? `₿ ${formatBtc(connection.balance)}`
+                  : formatEur(connection.balance * priceEur)}
+              </CurrencyToggleText>
+            </div>
+          </>
+        )}
       </TableCell>
     </TableRow>
   );

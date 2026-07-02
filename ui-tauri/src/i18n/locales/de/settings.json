@@ -393,7 +393,16 @@
     "resetBookButton": "Buch zurücksetzen",
     "deleteBooksTitle": "Bücher-Set löschen",
     "deleteBooksDescription": "Entferne die aktuellen Bücher-Datensätze aus der lokalen Datenbank.",
-    "deleteBooksButton": "Bücher löschen"
+    "deleteBooksButton": "Bücher löschen",
+    "resetRegtestTitle": "Regtest-Demo-Umgebung zurücksetzen",
+    "resetRegtestDescription": "Wirf die lokale Regtest-Bitcoin-Node samt ihrer Chain weg und baue danach das komplette Demo-Buch neu auf. Nur für die Entwicklung; dauert ein paar Minuten.",
+    "resetRegtestButton": "Zurücksetzen & neu aufbauen",
+    "resetRegtestPending": "Baue neu auf …",
+    "resetRegtestConfirm": "Das löscht die Regtest-Chain und das Demo-Buch und baut beide von Grund auf neu. Dabei läuft die Docker-Regtest-Node, das dauert ein paar Minuten. Fortfahren?",
+    "resetRegtestDoneTitle": "Regtest-Demo neu aufgebaut",
+    "resetRegtestDoneBody": "Eine frische Regtest-Chain und ein neues Demo-Buch sind bereit.",
+    "resetRegtestErrorTitle": "Regtest-Reset fehlgeschlagen",
+    "resetRegtestErrorBody": "Die Regtest-Umgebung konnte nicht neu aufgebaut werden. Prüfe, ob Docker läuft."
   },
   "ai": {
     "featuresLabel": "AI-Funktionen",

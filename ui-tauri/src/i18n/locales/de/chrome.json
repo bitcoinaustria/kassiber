@@ -26,9 +26,9 @@
     },
     "searchNoMatches": "Keine Treffer",
     "dataMode": {
-      "real": "Echte Daten",
-      "mock": "Mock-Daten",
-      "toggle": "Modus für echte Daten umschalten"
+      "real": "Live-Daten",
+      "regtest": "Regtest",
+      "toggle": "Datenquelle umschalten"
     },
     "support": {
       "title": "Support",

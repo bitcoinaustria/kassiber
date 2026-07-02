@@ -1,6 +1,5 @@
 {
   "shell": {
-    "mockPreview": "Mock-only preview",
     "footer": {
       "privateKeys": "Private keys never enter Kassiber.",
       "stateLocation": "State stays under ~/.kassiber unless overridden.",
@@ -149,6 +148,11 @@
       "desktopOnly": "desktop app only",
       "tooltipAvailable": "Open existing local Kassiber books",
       "tooltipUnavailable": "Opening existing books is available in the desktop app"
+    },
+    "regtest": {
+      "titleOpening": "Opening Regtest Demo…",
+      "title": "Open Regtest Demo",
+      "body": "Skip setup and open the generated regtest book connected to the local Docker stack."
     },
     "quickStart": "Or create with recommended defaults",
     "privacyNote": "Kassiber stores watch-only accounting data locally. Private keys never enter the app.",

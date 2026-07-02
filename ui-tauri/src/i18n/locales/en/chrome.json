@@ -26,9 +26,9 @@
     },
     "searchNoMatches": "No matches",
     "dataMode": {
-      "real": "Real data",
-      "mock": "Mock data",
-      "toggle": "Toggle real data mode"
+      "real": "Live data",
+      "regtest": "Regtest",
+      "toggle": "Toggle data source"
     },
     "support": {
       "title": "Support",

@@ -109,6 +109,7 @@ const TransactionsDashboard = ({
     React.useState<NewTransactionDraft>(createNewTransactionDraft);
   const hideSensitive = useUiStore((s) => s.hideSensitive);
   const explorerSettings = useUiStore((s) => s.explorerSettings);
+  const dataMode = useUiStore((s) => s.dataMode);
   const currency = useCurrency();
   const { isSyncing } = useWalletSyncAction();
   const showRefreshSkeleton = isSyncing || isDataRefreshing;
@@ -221,10 +222,28 @@ const TransactionsDashboard = ({
     () => sortTransactionsByDateDesc(records),
     [records],
   );
+  // Offer only the period tabs the loaded transactions can actually chart.
+  // Deriving these from the full history bounds (rather than the loaded rows)
+  // let long-range tabs (5/10/15-year, "all") render silently truncated charts
+  // on books larger than the workbench page cap, since the charts render from
+  // the capped `records`. Gating on `records` keeps offered tabs and charted
+  // data consistent; showing the full span for large books needs daemon-side
+  // period aggregates, not an in-memory slice of the newest rows.
   const availablePeriods = React.useMemo(
     () => availablePeriodKeysForRecords(records),
     [records],
   );
+  // In daemon-backed (real/regtest) mode the New Transaction picker must not
+  // offer fabricated MOCK wallet names; derive single-wallet labels from the
+  // loaded book instead (skipping synthesized "A → B" transfer strings).
+  const realWalletSourceOptions = React.useMemo(() => {
+    const labels = new Set<string>();
+    for (const record of records) {
+      const label = record.wallet;
+      if (label && !label.includes("→")) labels.add(label);
+    }
+    return [...labels, "External"];
+  }, [records]);
   const periodRecords = React.useMemo(
     () =>
       period === "all"
@@ -372,7 +391,12 @@ const TransactionsDashboard = ({
           <NewTransactionDialog
             open={newTxnOpen}
             draft={newTransactionDraft}
-            walletSourceOptions={mockNewTransactionWalletSourceOptions}
+            walletSourceOptions={
+              dataMode === "mock"
+                ? mockNewTransactionWalletSourceOptions
+                : realWalletSourceOptions
+            }
+            movementCandidates={dataMode === "mock" ? undefined : []}
             onOpenChange={setNewTxnOpen}
             onDraftChange={setNewTransactionDraft}
             onSaveDraft={() => {

@@ -15,17 +15,30 @@ import {
   WalletsMetricGrid,
   WalletsTable,
 } from "@/components/kb/wallets";
+import { regtestBackendConnections } from "@/components/kb/backendConnectionRows";
+import { PENDING_SETTINGS_BACKEND_EDIT_KEY } from "@/components/kb/settingsSections";
 import { useDaemon } from "@/daemon/client";
 import { useWalletSyncAction } from "@/hooks/useWalletSyncAction";
 import { connectionCategoryLabel } from "@/lib/connectionDisplay";
 import { useCurrency } from "@/lib/currency";
 import { screenShellClassName } from "@/lib/screen-layout";
 import { useUiStore } from "@/store/ui";
+import {
+  backendRowToSettingsBackend,
+  type BackendSettingsData,
+} from "@/components/kb/settings/SettingsModel";
 
-import type { ConnectionStatus, OverviewSnapshot } from "@/mocks/seed";
+import type {
+  Connection,
+  ConnectionStatus,
+  OverviewSnapshot,
+} from "@/mocks/seed";
 
 export function Connections() {
   const { data, isLoading } = useDaemon<OverviewSnapshot>("ui.overview.snapshot");
+  const backendSettingsQuery = useDaemon<BackendSettingsData>(
+    "ui.backends.settings.list",
+  );
   const { isSyncing } = useWalletSyncAction();
   const hideSensitive = useUiStore((s) => s.hideSensitive);
   const currency = useCurrency();
@@ -55,8 +68,16 @@ export function Connections() {
   }
 
   const snapshot = data.data;
+  const backendRows =
+    backendSettingsQuery.data?.data?.backends.map(backendRowToSettingsBackend) ??
+    [];
+  const backendConnections = regtestBackendConnections(backendRows);
+  const connections: Connection[] = [
+    ...snapshot.connections,
+    ...backendConnections,
+  ];
   const totalBtc = snapshot.connections.reduce((s, c) => s + c.balance, 0);
-  const filteredConnections = snapshot.connections.filter(
+  const filteredConnections = connections.filter(
     (connection) =>
       (kindFilter === "all" ||
         connectionCategoryLabel(connection) === kindFilter) &&
@@ -67,11 +88,24 @@ export function Connections() {
     setKindFilter("all");
     setStatusFilter("all");
   };
-  const onSelectConnection = (id: string) =>
+  const onSelectConnection = (id: string) => {
+    const connection = connections.find((row) => row.id === id);
+    if (connection?.role === "backend" && connection.backendId) {
+      window.sessionStorage.setItem(
+        PENDING_SETTINGS_BACKEND_EDIT_KEY,
+        connection.backendId,
+      );
+      void navigate({
+        to: "/settings",
+        hash: connection.settingsHash ?? "bitcoin",
+      });
+      return;
+    }
     void navigate({
       to: "/connections/$connectionId",
       params: { connectionId: id },
     });
+  };
 
   return (
     <div className={screenShellClassName}>
@@ -112,7 +146,7 @@ export function Connections() {
           onSelectConnection={onSelectConnection}
           priceEur={snapshot.priceEur}
           totalBtc={totalBtc}
-          totalCount={snapshot.connections.length}
+          totalCount={connections.length}
         />
       </div>
     </div>

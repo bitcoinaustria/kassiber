@@ -74,6 +74,7 @@ export function NewTransactionDialog({
   open,
   draft,
   walletSourceOptions,
+  movementCandidates = mockNewTransactionMovementCandidates,
   onOpenChange,
   onDraftChange,
   onSaveDraft,
@@ -81,6 +82,7 @@ export function NewTransactionDialog({
   open: boolean;
   draft: NewTransactionDraft;
   walletSourceOptions: string[];
+  movementCandidates?: typeof mockNewTransactionMovementCandidates;
   onOpenChange: (open: boolean) => void;
   onDraftChange: (draft: NewTransactionDraft) => void;
   onSaveDraft: () => void;
@@ -154,7 +156,7 @@ export function NewTransactionDialog({
     draft.atRegime,
     draft.atCategory,
   );
-  const selectedMovement = mockNewTransactionMovementCandidates.find(
+  const selectedMovement = movementCandidates.find(
     (candidate) => candidate.id === draft.movementId,
   );
   const movementLabel =
@@ -655,7 +657,7 @@ export function NewTransactionDialog({
                   placeholder={t("newDialog.field.movementPlaceholder")}
                 />
                 <div className="grid gap-1 sm:grid-cols-3">
-                  {mockNewTransactionMovementCandidates.map((candidate) => (
+                  {movementCandidates.map((candidate) => (
                     <button
                       key={candidate.id}
                       type="button"

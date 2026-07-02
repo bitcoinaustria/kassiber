@@ -43,6 +43,7 @@ import {
   type NetworkStatus,
 } from "@/lib/networkStatus";
 import { PENDING_SETTINGS_BACKEND_EDIT_KEY } from "./settingsSections";
+import { visibleConnectionBackends } from "./backendConnectionRows";
 import {
   backendProtocolLabel,
   backendRowToSettingsBackend,
@@ -139,7 +140,7 @@ function bitcoinRpcHealth(
 function connectionRowsFromBackends(
   savedBackends: Backend[],
 ): ConnectionHealthRow[] {
-  const rows = savedBackends
+  const rows = visibleConnectionBackends(savedBackends)
     .filter((backend) => backend.on && backend.url.trim())
     .map((backend) =>
       connectionRowFromBackend(backend, `backend:${backend.id}`, backend.id),

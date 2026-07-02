@@ -146,6 +146,58 @@ class PaymentHashExactMatchTests(unittest.TestCase):
         self.assertEqual(candidate.default_policy, POLICY_CARRYING_VALUE)
         self.assertEqual(candidate.swap_fee_msat, 500_000)
 
+    def test_liquid_to_lightning_boltz_submarine_pair_via_payment_hash(self):
+        lockup = _row(
+            id="boltz-liquid-lockup",
+            external_id="liquid-lockup-txid",
+            wallet_id="liquid",
+            wallet_label="Liquid on-chain",
+            wallet_kind="custom",
+            payment_hash=_PAY_HASH,
+            direction="outbound",
+            asset="LBTC",
+            occurred_at="2026-03-14T17:30:00Z",
+            amount=100_000_000,
+        )
+        invoice = _row(
+            id="boltz-ln-settlement",
+            external_id="phoenix-invoice-id",
+            wallet_id="phoenix",
+            wallet_label="Phoenix",
+            wallet_kind="phoenix",
+            payment_hash=_PAY_HASH,
+            direction="inbound",
+            asset="BTC",
+            occurred_at="2026-03-14T17:32:00Z",
+            amount=99_000_000,
+        )
+        ordinary_payment = _row(
+            id="ordinary-liquid-payment",
+            external_id="liquid-payment-txid",
+            wallet_id="liquid",
+            wallet_label="Liquid on-chain",
+            wallet_kind="custom",
+            payment_hash=None,
+            direction="outbound",
+            asset="LBTC",
+            occurred_at="2026-03-14T17:31:00Z",
+            amount=42_000_000,
+        )
+
+        candidates = suggest_swap_candidates(
+            [lockup, invoice, ordinary_payment],
+            tax_country="at",
+        )
+
+        self.assertEqual(len(candidates), 1)
+        candidate = candidates[0]
+        self.assertEqual(candidate.confidence, CONFIDENCE_EXACT)
+        self.assertEqual(candidate.method, METHOD_PAYMENT_HASH)
+        self.assertEqual(candidate.out_id, "boltz-liquid-lockup")
+        self.assertEqual(candidate.in_id, "boltz-ln-settlement")
+        self.assertEqual(candidate.default_kind, KIND_SUBMARINE_SWAP)
+        self.assertEqual(candidate.swap_fee_msat, 1_000_000)
+
     def test_same_wallet_payment_hash_pair_skipped(self):
         out = _row(id="a", wallet_id="w", payment_hash=_PAY_HASH, direction="outbound")
         inbound = _row(id="b", wallet_id="w", payment_hash=_PAY_HASH, direction="inbound")

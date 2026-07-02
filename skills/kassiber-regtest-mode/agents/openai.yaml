@@ -1,0 +1,4 @@
+interface:
+  display_name: "Kassiber Regtest Mode"
+  short_description: "Fast local regtest harness guidance"
+  default_prompt: "Use $kassiber-regtest-mode to run the fastest suitable local regtest harness check."

@@ -1,0 +1,69 @@
+name: integration
+
+# Opt-in real-node integration lanes for issue #312 (item 10: manual/nightly CI).
+#
+# This workflow is intentionally NOT triggered on pull_request or push, so it
+# never gates normal PR CI (that stays in ci.yml). The Docker-free fast replay
+# lane runs on a nightly schedule; the heavier Docker lanes (real regtest Bitcoin
+# Core node) run only on manual dispatch, since GitHub-hosted ubuntu runners ship
+# Docker and the lanes are slow.
+on:
+  workflow_dispatch:
+    inputs:
+      lane:
+        description: "Integration lane to run"
+        type: choice
+        default: bitcoin-core
+        options:
+          - fast
+          - bitcoin-core
+          - demo-full
+  schedule:
+    # Nightly Docker-free fast replay lane (arbitrary off-peak minute).
+    - cron: "17 3 * * *"
+
+jobs:
+  fast:
+    # Nightly schedule always runs the fast lane; on manual dispatch it runs only
+    # when "fast" is chosen (the docker-lane job covers the heavier lanes).
+    if: github.event_name == 'schedule' || github.event.inputs.lane == 'fast'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Sync dependencies
+        run: uv sync --frozen
+
+      - name: Fast replay lane (no Docker)
+        run: ./scripts/integration-harness.sh fast
+
+  docker-lane:
+    # Heavy Docker lanes are manual-only. Docker is preinstalled on ubuntu-latest;
+    # the harness generates disposable regtest RPC credentials per run and sets
+    # KASSIBER_INTEGRATION=1 itself.
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.lane != 'fast'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Sync dependencies
+        run: uv sync --frozen
+
+      - name: Integration lane (${{ github.event.inputs.lane }})
+        run: ./scripts/integration-harness.sh "${{ github.event.inputs.lane }}"

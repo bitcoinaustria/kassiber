@@ -93,7 +93,7 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { bookIdentityKey, useUiStore } from "@/store/ui";
+import { bookIdentityKey, isDaemonDataMode, useUiStore } from "@/store/ui";
 import type { AppNotification, ThemePreference } from "@/store/ui";
 import { BOOK_REFRESH_PROGRESS_ID } from "@/lib/syncProgress";
 import {
@@ -129,6 +129,7 @@ import {
 } from "@/store/sessionLock";
 import type { OverviewSnapshot } from "@/mocks/seed";
 import type { ProfilesSnapshot } from "@/mocks/profiles";
+import type { BackendSettingsData } from "@/components/kb/settings/SettingsModel";
 import { AssistantSessionProvider } from "@/components/ai/AssistantSessionProvider";
 import type { AssistantReturnPath } from "@/components/ai/assistantSession";
 import kLedgerMarkUrl from "@/assets/k-ledger-mark-transparent.svg";
@@ -138,6 +139,10 @@ import {
   startDaemonLogBridge,
   stopDaemonLogBridge,
 } from "@/lib/daemonLogBridge";
+import {
+  dataModeForActiveBackend,
+  dataModeLabelKey,
+} from "@/components/kb/dataMode";
 import { isTypingTarget } from "@/lib/keymap";
 import { FirstSyncCard } from "./FirstSyncCard";
 import { AssistantDock } from "./AssistantDock";
@@ -1039,7 +1044,7 @@ export function AppShell() {
   // workspace; if not, drop the stale identity and bounce back to onboarding
   // instead of stranding the user on /overview with no data.
   React.useEffect(() => {
-    if (dataMode !== "real") return;
+    if (!isDaemonDataMode(dataMode)) return;
     if (!daemonEnabled) return;
     if (identity?.importedProject) return;
     if (!identity) return;
@@ -1206,7 +1211,7 @@ export function AppShell() {
   }, [appLockPolicy.lockOnWindowClose, encryptedWorkspace, lockApp]);
 
   React.useEffect(() => {
-    const bridgeable = daemonEnabled && dataMode === "real";
+    const bridgeable = daemonEnabled && isDaemonDataMode(dataMode);
     if (!bridgeable) return;
     startDaemonLogBridge({ isEnabled: () => bridgeable });
     return () => stopDaemonLogBridge();
@@ -1659,7 +1664,64 @@ function SidebarActions({
   const { t } = useTranslation(["chrome", "nav"]);
   const dataMode = useUiStore((state) => state.dataMode);
   const setDataMode = useUiStore((state) => state.setDataMode);
-  const isRealData = dataMode === "real";
+  const explorerPublicFallbacks = useUiStore(
+    (state) => state.explorerSettings.publicFallbacks,
+  );
+  const setExplorerSettings = useUiStore((state) => state.setExplorerSettings);
+  const backendSettingsQuery = useDaemon<BackendSettingsData>(
+    "ui.backends.settings.list",
+    undefined,
+    {
+      staleTime: 15_000,
+      refetchOnWindowFocus: false,
+    },
+  );
+  const defaultBackendName =
+    backendSettingsQuery.data?.data?.summary.default_backend ?? null;
+  const defaultBackend =
+    backendSettingsQuery.data?.data?.backends.find(
+      (backend) => backend.name === defaultBackendName || backend.is_default,
+    ) ?? null;
+  const activeRegtestBackend = ["regtest", "elementsregtest"].includes(
+    String(defaultBackend?.network ?? "").toLowerCase(),
+  );
+  // Until the backends query resolves, activeRegtestBackend is a placeholder
+  // false; coercing on it would bounce a persisted regtest mode through "real"
+  // and re-key every daemon query on launch.
+  const backendSettingsLoaded = backendSettingsQuery.isSuccess;
+  const normalizedDataMode = backendSettingsLoaded
+    ? dataModeForActiveBackend(dataMode, activeRegtestBackend)
+    : dataMode;
+
+  React.useEffect(() => {
+    if (!backendSettingsLoaded) return;
+    if (normalizedDataMode !== dataMode) {
+      setDataMode(normalizedDataMode);
+    }
+  }, [backendSettingsLoaded, dataMode, normalizedDataMode, setDataMode]);
+
+  // Keep public-explorer fallbacks disabled whenever a regtest/elementsregtest
+  // book is active, without waiting for the Settings screen to mount. Otherwise
+  // the store default (publicFallbacks: true) leaves a freshly-launched or
+  // onboarding-opened regtest book handing regtest txids to a public explorer
+  // until Settings is visited. Mirrors deriveExplorerSettings' publicFallbacks
+  // rule so the two writers never disagree; base URLs stay owned by Settings.
+  React.useEffect(() => {
+    if (!backendSettingsLoaded) return;
+    const allowPublicFallbacks = !activeRegtestBackend;
+    if (explorerPublicFallbacks !== allowPublicFallbacks) {
+      setExplorerSettings({ publicFallbacks: allowPublicFallbacks });
+    }
+  }, [
+    backendSettingsLoaded,
+    activeRegtestBackend,
+    explorerPublicFallbacks,
+    setExplorerSettings,
+  ]);
+
+  const dataModeLabel = t(
+    `shell.dataMode.${dataModeLabelKey(normalizedDataMode)}`,
+  );
   const supportActive = pathname === "/diagnostics";
 
   return (
@@ -1695,16 +1757,9 @@ function SidebarActions({
           <div className="flex min-h-8 w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0">
             <Server className="size-4 shrink-0" aria-hidden="true" />
             <span className="min-w-0 flex-1 truncate group-data-[collapsible=icon]:hidden">
-              {isRealData ? t("shell.dataMode.real") : t("shell.dataMode.mock")}
+              {dataModeLabel}
             </span>
-            <Switch
-              checked={isRealData}
-              aria-label={t("shell.dataMode.toggle")}
-              onCheckedChange={(checked) =>
-                setDataMode(checked ? "real" : "mock")
-              }
-              className="group-data-[collapsible=icon]:hidden"
-            />
+            <span className="size-2 rounded-full bg-emerald-500 group-data-[collapsible=icon]:hidden" />
           </div>
         </SidebarMenuItem>
       ) : null}

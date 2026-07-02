@@ -114,6 +114,69 @@ class KrakenCsvRatesTest(unittest.TestCase):
         set_setting(conn, "default_backend", "own-mempool")
         conn.commit()
 
+    def _seed_regtest_mempool_backend(self, conn):
+        create_db_backend(
+            conn,
+            "regtest-mempool",
+            "mempool",
+            "http://127.0.0.1:18544/api",
+            chain="bitcoin",
+            network="regtest",
+            timeout=11,
+            commit=False,
+        )
+        set_setting(conn, "default_backend", "regtest-mempool")
+        conn.commit()
+
+    def _seed_active_wallet_scope(self, conn, *, network="regtest", backend="regtest-mempool"):
+        created_at = "2026-07-02T12:00:00Z"
+        conn.execute(
+            "INSERT INTO workspaces(id, label, created_at) VALUES(?, ?, ?)",
+            ("ws-rates", "Rates", created_at),
+        )
+        conn.execute(
+            """
+            INSERT INTO profiles(id, workspace_id, label, fiat_currency, created_at)
+            VALUES(?, ?, ?, ?, ?)
+            """,
+            ("pf-rates", "ws-rates", "Default", "EUR", created_at),
+        )
+        conn.execute(
+            """
+            INSERT INTO accounts(id, workspace_id, profile_id, code, label, account_type, asset, created_at)
+            VALUES(?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "acct-rates",
+                "ws-rates",
+                "pf-rates",
+                "BTC",
+                "BTC",
+                "asset",
+                "BTC",
+                created_at,
+            ),
+        )
+        conn.execute(
+            """
+            INSERT INTO wallets(id, workspace_id, profile_id, account_id, label, kind, config_json, created_at)
+            VALUES(?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "wal-rates",
+                "ws-rates",
+                "pf-rates",
+                "acct-rates",
+                "Rates Wallet",
+                "address",
+                json.dumps({"chain": "bitcoin", "network": network, "backend": backend}),
+                created_at,
+            ),
+        )
+        set_setting(conn, "context_workspace", "ws-rates")
+        set_setting(conn, "context_profile", "pf-rates")
+        conn.commit()
+
     def _seed_transaction_needing_rate(
         self,
         conn,
@@ -943,6 +1006,59 @@ class KrakenCsvRatesTest(unittest.TestCase):
         self.assertEqual(row["rate_exact"], "60010.50")
         self.assertEqual(row["granularity"], "latest")
         self.assertEqual(row["method"], "mempool_prices")
+
+    def test_mempool_latest_rate_sync_falls_back_to_regtest_backend(self):
+        conn = open_db(str(self.data_root))
+        self.addCleanup(conn.close)
+        self._seed_regtest_mempool_backend(conn)
+        self._seed_active_wallet_scope(conn)
+        calls = []
+
+        def fake_http(url, timeout=30, proxy_url=None):
+            calls.append((url, timeout, proxy_url))
+            return {"EUR": "58968.90", "time": 1782993600}
+
+        with patch.object(core_rates, "http_get_json", side_effect=fake_http):
+            summary = core_rates.sync_latest_rates(
+                conn,
+                pair="BTC-EUR",
+                source=core_rates.RATE_SOURCE_MEMPOOL,
+            )
+
+        self.assertEqual(
+            calls,
+            [("http://127.0.0.1:18544/api/v1/prices", 11, None)],
+        )
+        self.assertEqual(summary[0]["source"], core_rates.RATE_SOURCE_MEMPOOL)
+        self.assertEqual(summary[0]["mode"], "latest_quote")
+        row = conn.execute(
+            """
+            SELECT timestamp, rate_exact, source, granularity, method
+            FROM rates_cache
+            WHERE pair = 'BTC-EUR' AND source = 'mempool'
+            """
+        ).fetchone()
+        self.assertEqual(row["timestamp"], "2026-07-02T12:00:00Z")
+        self.assertEqual(row["rate_exact"], "58968.90")
+        self.assertEqual(row["granularity"], "latest")
+        self.assertEqual(row["method"], "mempool_prices")
+
+    def test_mempool_latest_rate_sync_requires_regtest_scope_for_regtest_backend(self):
+        conn = open_db(str(self.data_root))
+        self.addCleanup(conn.close)
+        self._seed_regtest_mempool_backend(conn)
+        calls = []
+
+        with patch.object(core_rates, "http_get_json", side_effect=calls.append):
+            with self.assertRaises(AppError) as ctx:
+                core_rates.sync_latest_rates(
+                    conn,
+                    pair="BTC-EUR",
+                    source=core_rates.RATE_SOURCE_MEMPOOL,
+                )
+
+        self.assertEqual(calls, [])
+        self.assertEqual(ctx.exception.code, "config_error")
 
     def test_mempool_sync_fetches_missing_transaction_minute_from_backend(self):
         conn = open_db(str(self.data_root))

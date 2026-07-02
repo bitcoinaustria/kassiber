@@ -2308,9 +2308,53 @@ def _bitcoinrpc_checkpoint_block(checkpoint):
     return None
 
 
+def _bitcoinrpc_txids_from_details(details):
+    txids = set()
+    for detail in details or []:
+        if not isinstance(detail, dict):
+            continue
+        txid = str(detail.get("txid") or "").strip().lower()
+        if txid:
+            txids.add(txid)
+    return txids
+
+
+def _bitcoinrpc_detail_category(detail):
+    return str(detail.get("category") or "").lower()
+
+
+def _bitcoinrpc_detail_is_retracted(detail):
+    if _bitcoinrpc_detail_category(detail) == "orphan":
+        return True
+    return int(detail.get("confirmations") or 0) < 0
+
+
+def _bitcoinrpc_retracted_txids(details):
+    return {
+        str(detail.get("txid") or "").strip().lower()
+        for detail in details or []
+        if isinstance(detail, dict)
+        and detail.get("txid")
+        and _bitcoinrpc_detail_is_retracted(detail)
+    }
+
+
+def _bitcoinrpc_has_immature_details(details):
+    return any(
+        isinstance(detail, dict)
+        and _bitcoinrpc_detail_category(detail) == "immature"
+        for detail in details or []
+    )
+
+
 def fetch_bitcoinrpc_wallet_transactions(backend, wallet_name, page_size=1000, checkpoint=None):
-    last_block = _bitcoinrpc_checkpoint_block(checkpoint)
+    checkpoint = checkpoint if isinstance(checkpoint, dict) else {}
+    pending_maturity = bool(checkpoint.get("bitcoinrpc_pending_maturity"))
+    last_block = None if pending_maturity else _bitcoinrpc_checkpoint_block(checkpoint)
     fallback_reason = None
+    removed_txids = set()
+    if pending_maturity:
+        fallback_reason = "Bitcoin Core wallet has immature transactions awaiting maturity"
     if last_block:
         try:
             payload = bitcoinrpc_call(
@@ -2332,12 +2376,22 @@ def fetch_bitcoinrpc_wallet_transactions(backend, wallet_name, page_size=1000, c
                 if not isinstance(transactions, list):
                     fallback_reason = "Bitcoin Core RPC listsinceblock returned unexpected transactions"
                 elif removed:
+                    removed_txids = _bitcoinrpc_txids_from_details(removed)
                     fallback_reason = "Bitcoin Core RPC listsinceblock reported removed transactions"
                 else:
+                    retracted_txids = _bitcoinrpc_retracted_txids(transactions)
                     return list(transactions), {
                         "bitcoinrpc_sync_mode": "sinceblock",
                         "bitcoinrpc_last_block": payload.get("lastblock") or last_block,
                         "bitcoinrpc_removed": 0,
+                        "bitcoinrpc_pending_maturity": _bitcoinrpc_has_immature_details(
+                            transactions
+                        ),
+                        **(
+                            {"bitcoinrpc_retracted_txids": sorted(retracted_txids)}
+                            if retracted_txids
+                            else {}
+                        ),
                     }
 
     transactions = []
@@ -2350,7 +2404,13 @@ def fetch_bitcoinrpc_wallet_transactions(backend, wallet_name, page_size=1000, c
         if len(page) < page_size:
             break
         skip += page_size
-    meta = {"bitcoinrpc_sync_mode": "full_scan"}
+    retracted_txids = removed_txids | _bitcoinrpc_retracted_txids(transactions)
+    meta = {
+        "bitcoinrpc_sync_mode": "full_scan",
+        "bitcoinrpc_pending_maturity": _bitcoinrpc_has_immature_details(transactions),
+    }
+    if retracted_txids:
+        meta["bitcoinrpc_retracted_txids"] = sorted(retracted_txids)
     if fallback_reason:
         meta["bitcoinrpc_sinceblock_fallback"] = fallback_reason
     try:
@@ -2368,8 +2428,8 @@ def record_from_bitcoinrpc_details(txid, details, backend_name):
     occurred_at = UNKNOWN_OCCURRED_AT
     confirmed_at = None
     for detail in details:
-        category = str(detail.get("category") or "").lower()
-        if category in {"orphan", "immature"}:
+        category = _bitcoinrpc_detail_category(detail)
+        if category == "immature" or _bitcoinrpc_detail_is_retracted(detail):
             continue
         amount_total += dec(detail.get("amount"), "0")
         # Bitcoin Core stamps the SAME whole-tx fee on every `send`-category
@@ -2425,8 +2485,8 @@ def _bitcoinrpc_highest_used_from_details(details, sync_state: WalletSyncState |
     }
     highest_used = {}
     for detail in details:
-        category = str(detail.get("category") or "").lower()
-        if category in {"orphan", "immature"}:
+        category = _bitcoinrpc_detail_category(detail)
+        if category == "immature" or _bitcoinrpc_detail_is_retracted(detail):
             continue
         target = target_by_address.get(detail.get("address"))
         if target is None:
@@ -2469,6 +2529,12 @@ def bitcoinrpc_records_for_wallet(
         normalized = record_from_bitcoinrpc_details(txid, tx_details, backend["name"])
         if normalized:
             records.append(normalized)
+    retracted_txids = set(fetch_meta.get("bitcoinrpc_retracted_txids") or [])
+    if retracted_txids:
+        active_txids = {str(record.get("txid") or "").lower() for record in records}
+        fetch_meta["bitcoinrpc_retracted_txids"] = sorted(retracted_txids - active_txids)
+        if not fetch_meta["bitcoinrpc_retracted_txids"]:
+            fetch_meta.pop("bitcoinrpc_retracted_txids", None)
     return records, {
         "core_wallet": wallet_name,
         "imported_addresses": imported_count,
@@ -2630,6 +2696,10 @@ def bitcoinrpc_sync_adapter(backend, wallet, sync_state: WalletSyncState):
         next_checkpoint["backend"] = _backend_identity(backend, sync_state)
         if meta.get("bitcoinrpc_last_block"):
             next_checkpoint["bitcoinrpc_last_block"] = meta["bitcoinrpc_last_block"]
+        if meta.get("bitcoinrpc_pending_maturity"):
+            next_checkpoint["bitcoinrpc_pending_maturity"] = True
+        else:
+            next_checkpoint.pop("bitcoinrpc_pending_maturity", None)
         if descriptor_range_ends is not None:
             next_checkpoint["bitcoinrpc_descriptor_range_ends"] = dict(
                 sorted(descriptor_range_ends.items())

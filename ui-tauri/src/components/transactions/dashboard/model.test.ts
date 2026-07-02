@@ -130,6 +130,29 @@ describe("transaction dashboard chart selection", () => {
     ]);
   });
 
+  it("reveals long periods when the oldest bound extends a recent workbench slice", () => {
+    const recentSlice = Array.from({ length: 500 }, (_, index) =>
+      transaction({
+        id: `recent-${index}`,
+        date: `2026-04-${String((index % 28) + 1).padStart(2, "0")}T12:00:00Z`,
+      }),
+    );
+
+    expect(availablePeriodKeysForRecords(recentSlice)).toEqual([
+      "30days",
+      "3months",
+      "ytd",
+      "1year",
+      "all",
+    ]);
+    expect(
+      availablePeriodKeysForRecords([
+        ...recentSlice,
+        transaction({ id: "oldest-bound", date: "2019-01-15T09:00:00Z" }),
+      ]),
+    ).toContain("5years");
+  });
+
   it("does not substitute demo rows for an empty live transaction list", () => {
     expect(dashboardRecordsFromTxs([])).toEqual([]);
   });
