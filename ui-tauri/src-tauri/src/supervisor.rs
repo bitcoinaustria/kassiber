@@ -781,6 +781,7 @@ fn timeout_is_safe_to_retry(kind: &str) -> bool {
             | "ui.backends.options"
             | "ui.backends.public_defaults"
             | "ui.documents.list"
+            | "ui.egress.snapshot"
             | "ui.freshness.status"
             | "ui.logs.snapshot"
             | "ui.next_actions"

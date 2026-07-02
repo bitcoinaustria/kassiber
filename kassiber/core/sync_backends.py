@@ -24,6 +24,7 @@ from .. import __version__
 from .. import http_client
 from ..backends import backend_batch_size, backend_timeout, backend_value, resolve_backend
 from ..db import APP_NAME
+from ..egress_ledger import get_egress_ledger
 from ..envelope import json_ready
 from ..errors import AppError
 from ..msat import SATS_PER_BTC, dec
@@ -222,6 +223,14 @@ def parse_socket_backend_url(url, default_scheme="ssl", default_ports=None):
 def _connect_backend_socket(backend, host, port):
     timeout = backend_timeout(backend)
     proxy = backend_value(backend, "tor_proxy", "proxy")
+    get_egress_ledger().record(
+        subsystem="sync",
+        host=host,
+        port=port,
+        scheme="electrum",
+        operation="socket.connect",
+        via_proxy=bool(proxy),
+    )
     if proxy:
         return _connect_via_socks5(proxy, host, port, timeout)
     if is_onion_endpoint(host):
@@ -263,6 +272,8 @@ class ElectrumClient:
         self.socket = None
         self.reader = None
         self.request_id = 0
+        self._egress_host = None
+        self._egress_port = None
 
     def __enter__(self):
         scheme, host, port = parse_socket_backend_url(
@@ -271,6 +282,8 @@ class ElectrumClient:
             default_ports={"ssl": 50002, "tcp": 50001},
         )
         raw_socket = _connect_backend_socket(self.backend, host, port)
+        self._egress_host = host
+        self._egress_port = port
         if scheme in {"ssl", "tls"}:
             certificate = backend_value(self.backend, "certificate")
             context = ssl.create_default_context(cafile=certificate)
@@ -328,6 +341,15 @@ class ElectrumClient:
             }
         ).encode("utf-8") + b"\n"
         self.socket.sendall(payload)
+        get_egress_ledger().record(
+            subsystem="sync",
+            host=self._egress_host,
+            port=self._egress_port,
+            scheme="electrum",
+            operation="socket.write",
+            method=method,
+            bytes_out=len(payload),
+        )
         while True:
             line = self.reader.readline()
             if not line:
@@ -368,7 +390,17 @@ class ElectrumClient:
                     }
                 )
             )
-        self.socket.sendall(("\n".join(payload_lines) + "\n").encode("utf-8"))
+        payload = ("\n".join(payload_lines) + "\n").encode("utf-8")
+        self.socket.sendall(payload)
+        get_egress_ledger().record(
+            subsystem="sync",
+            host=self._egress_host,
+            port=self._egress_port,
+            scheme="electrum",
+            operation="socket.write",
+            method="batch",
+            bytes_out=len(payload),
+        )
         results = [None] * len(requests)
         remaining = len(requests)
         while remaining:
