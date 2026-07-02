@@ -70,6 +70,7 @@ run py -m unittest tests.test_sync_htlc_enrichment -v
 run py -m unittest tests.test_sync_btcpay_incremental -v
 run py -m unittest tests.test_freshness -v
 run py -m unittest tests.test_liquid_electrum_sync -v
+run py -m unittest tests.test_silent_payments -v
 run py -m unittest tests.test_log_ring -v
 run py -m unittest tests.test_regtest_harness -v
 
