@@ -1655,6 +1655,10 @@ function SidebarActions({
   const { t } = useTranslation(["chrome", "nav"]);
   const dataMode = useUiStore((state) => state.dataMode);
   const setDataMode = useUiStore((state) => state.setDataMode);
+  const explorerPublicFallbacks = useUiStore(
+    (state) => state.explorerSettings.publicFallbacks,
+  );
+  const setExplorerSettings = useUiStore((state) => state.setExplorerSettings);
   const backendSettingsQuery = useDaemon<BackendSettingsData>(
     "ui.backends.settings.list",
     undefined,
@@ -1686,6 +1690,25 @@ function SidebarActions({
       setDataMode(normalizedDataMode);
     }
   }, [backendSettingsLoaded, dataMode, normalizedDataMode, setDataMode]);
+
+  // Keep public-explorer fallbacks disabled whenever a regtest/elementsregtest
+  // book is active, without waiting for the Settings screen to mount. Otherwise
+  // the store default (publicFallbacks: true) leaves a freshly-launched or
+  // onboarding-opened regtest book handing regtest txids to a public explorer
+  // until Settings is visited. Mirrors deriveExplorerSettings' publicFallbacks
+  // rule so the two writers never disagree; base URLs stay owned by Settings.
+  React.useEffect(() => {
+    if (!backendSettingsLoaded) return;
+    const allowPublicFallbacks = !activeRegtestBackend;
+    if (explorerPublicFallbacks !== allowPublicFallbacks) {
+      setExplorerSettings({ publicFallbacks: allowPublicFallbacks });
+    }
+  }, [
+    backendSettingsLoaded,
+    activeRegtestBackend,
+    explorerPublicFallbacks,
+    setExplorerSettings,
+  ]);
 
   const dataModeLabel = t(
     `shell.dataMode.${dataModeLabelKey(normalizedDataMode)}`,
