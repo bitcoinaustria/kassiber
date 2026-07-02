@@ -150,6 +150,11 @@
       "tooltipAvailable": "Bestehende lokale Kassiber-Bücher öffnen",
       "tooltipUnavailable": "Bestehende Bücher öffnen ist in der Desktop-App verfügbar"
     },
+    "regtest": {
+      "titleOpening": "Regtest-Demo wird geöffnet…",
+      "title": "Regtest-Demo öffnen",
+      "body": "Setup überspringen und das generierte Regtest-Buch mit lokalem Docker-Stack öffnen."
+    },
     "quickStart": "Oder mit empfohlenen Standardwerten erstellen",
     "privacyNote": "Kassiber speichert reine Watch-only-Buchhaltungsdaten lokal. Private Keys gelangen nie in die App.",
     "highlights": {

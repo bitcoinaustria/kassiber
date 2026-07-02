@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
@@ -12,13 +12,19 @@ import {
   canUseTouchIdPassphraseUnlock,
   clearImportProject,
   getTransport,
+  isRegtestDemoDataRoot,
   selectImportProjectDirectory,
   storeTouchIdPassphrase,
   type DaemonEnvelope,
   type ImportProjectSelection,
 } from "@/daemon/transport";
 import { cn } from "@/lib/utils";
-import { useUiStore, type DataMode, type Identity } from "@/store/ui";
+import {
+  bookIdentityKey,
+  useUiStore,
+  type DataMode,
+  type Identity,
+} from "@/store/ui";
 import {
   clearSessionUnlockPassphrase,
   setSessionUnlockPassphrase,
@@ -119,6 +125,18 @@ const DEV_MOCK_IDENTITY: Identity = {
   aiBaseUrl: DEFAULT_AI_BASE_URL,
 };
 
+interface RegtestStatusData {
+  state_root?: string | null;
+  data_root?: string | null;
+  database?: string | null;
+  database_encrypted?: boolean | null;
+  current_workspace?: string | null;
+  current_profile?: string | null;
+  default_backend?: string | null;
+  transactions?: number | null;
+  wallets?: number | null;
+}
+
 export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) => {
   const { t } = useTranslation("onboarding");
   const navigate = useNavigate();
@@ -127,6 +145,7 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
   const setAppLockPolicy = useUiStore((state) => state.setAppLockPolicy);
   const dataMode = useUiStore((state) => state.dataMode);
   const setDataMode = useUiStore((state) => state.setDataMode);
+  const markFirstSyncDone = useUiStore((state) => state.markFirstSyncDone);
   const preImportDataModeRef = useRef<DataMode | null>(null);
   const [flowMode, setFlowMode] = useState<"start" | "setup">(
     customSteps ? "setup" : "start",
@@ -142,6 +161,10 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
   const [importing, setImporting] = useState(false);
   const [loadingImportProfiles, setLoadingImportProfiles] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
+  const [regtestStatus, setRegtestStatus] =
+    useState<RegtestStatusData | null>(null);
+  const [loadingRegtestStatus, setLoadingRegtestStatus] = useState(false);
+  const [openingRegtest, setOpeningRegtest] = useState(false);
   const activeSteps = customSteps ?? DEFAULT_STEPS;
   const step = activeSteps[currentStep];
   const importAvailable = canImportProjects();
@@ -184,6 +207,48 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
     void queryClient.cancelQueries({ queryKey: ["daemon"] });
     queryClient.removeQueries({ queryKey: ["daemon"] });
   };
+
+  useEffect(() => {
+    if (!import.meta.env.DEV || customSteps) {
+      setRegtestStatus(null);
+      return;
+    }
+
+    let cancelled = false;
+    setLoadingRegtestStatus(true);
+    void getTransport("regtest")
+      .invoke<RegtestStatusData>({
+        kind: "status",
+        request_id: "onboarding-regtest-status",
+      })
+      .then((envelope) => {
+        if (
+          cancelled ||
+          envelope.kind === "auth_required" ||
+          envelope.kind === "error" ||
+          envelope.error
+        ) {
+          return;
+        }
+        const data = envelope.data ?? null;
+        const dataRoot = data?.data_root ?? null;
+        const isRegtest =
+          isRegtestDemoDataRoot(dataRoot) ||
+          data?.current_workspace === "Regtest Demo" ||
+          data?.default_backend === "core-regtest";
+        setRegtestStatus(isRegtest ? data : null);
+      })
+      .catch(() => {
+        if (!cancelled) setRegtestStatus(null);
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingRegtestStatus(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [customSteps]);
 
   const handleAuthRequired = (envelope: DaemonEnvelope) => {
     clearSessionUnlockPassphrase();
@@ -436,6 +501,60 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
     setFlowMode("setup");
   };
 
+  const openRegtestDemo = () => {
+    if (!regtestStatus || openingRegtest) return;
+    setOpeningRegtest(true);
+    setFinishError(null);
+    setImportError(null);
+    void (async () => {
+      setDataMode("regtest");
+      await setSessionUnlockPassphrase(null);
+      clearDaemonQueryCache();
+      const profileName =
+        regtestStatus.current_profile?.trim() || "Full Accounting";
+      const workspaceName =
+        regtestStatus.current_workspace?.trim() || "Regtest Demo";
+      const encrypted = Boolean(regtestStatus.database_encrypted);
+      const identity: Identity = {
+        name: profileName,
+        workspace: workspaceName,
+        country: "AT",
+        encrypted,
+        profile: profileName,
+        taxCountry: "at",
+        fiatCurrency: "EUR",
+        taxLongTermDays: 0,
+        gainsAlgorithm: "MOVING_AVERAGE_AT",
+        databaseMode: encrypted ? "sqlcipher" : "plaintext",
+        migrateCredentials: false,
+        backendSetupMode: "custom",
+        backendKind: "bitcoinrpc",
+        backendName: regtestStatus.default_backend || "core-regtest",
+        importedProject:
+          canImportProjects() &&
+          regtestStatus.state_root &&
+          regtestStatus.data_root &&
+          regtestStatus.database
+            ? {
+                stateRoot: regtestStatus.state_root,
+                dataRoot: regtestStatus.data_root,
+                database: regtestStatus.database,
+              }
+            : undefined,
+      };
+      setIdentity(identity);
+      const bookKey = bookIdentityKey(identity);
+      if (bookKey) markFirstSyncDone(bookKey);
+      void navigate({ to: "/overview" });
+    })()
+      .catch((error: unknown) => {
+        setFinishError(
+          error instanceof Error ? error.message : t("shell.finishError"),
+        );
+      })
+      .finally(() => setOpeningRegtest(false));
+  };
+
   const refreshImportedProfiles = async () => {
     setLoadingImportProfiles(true);
     setImportError(null);
@@ -613,9 +732,12 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
           <StartChoicePanel
             importAvailable={importAvailable}
             importing={importing}
+            openingRegtest={openingRegtest}
             onSetup={beginSetup}
             onImport={beginImport}
             onQuickStart={beginQuickStart}
+            onOpenRegtest={openRegtestDemo}
+            regtestAvailable={Boolean(regtestStatus) && !loadingRegtestStatus}
           />
         ) : (
           <>
