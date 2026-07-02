@@ -186,6 +186,19 @@ class OwnedIndex:
             return []
         return self.by_script.get(script_hex.lower(), [])
 
+    def lookup_outpoint(self, outpoint: Any) -> list[OwnedMatch]:
+        key = str(outpoint or "").lower()
+        if not key:
+            return []
+        value = self.by_outpoint.get(key)
+        if value is None:
+            return []
+        if isinstance(value, list):
+            return _sorted_matches(value)
+        # Compatibility for older tests or callers that constructed the index by
+        # assigning a single OwnedMatch directly.
+        return _sorted_matches([value])
+
 
 def _address_key(address: str | None) -> str:
     text = str(address or "").strip()
@@ -238,14 +251,7 @@ def _wallet_labels_for_matches(matches: Sequence[OwnedMatch]) -> list[str]:
 
 
 def _outpoint_matches(index: OwnedIndex, outpoint: Any) -> list[OwnedMatch]:
-    value = index.by_outpoint.get(str(outpoint or ""))
-    if value is None:
-        return []
-    if isinstance(value, list):
-        return _sorted_matches(value)
-    # Compatibility for older tests or callers that constructed the index by
-    # assigning a single OwnedMatch directly.
-    return _sorted_matches([value])
+    return index.lookup_outpoint(outpoint)
 
 
 def classify_token_type(token: str) -> str:

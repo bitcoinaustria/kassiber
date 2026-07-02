@@ -1927,10 +1927,19 @@ def _annotate_graph(
 def _input_matches(node: Mapping[str, Any], owned_index: Any) -> list[Any]:
     outpoint = node.get("outpoint")
     if outpoint:
-        match = owned_index.by_outpoint.get(str(outpoint).lower())
-        if match is not None:
-            return [match]
+        matches = _lookup_outpoint(owned_index, outpoint)
+        if matches:
+            return matches
     return owned_index.lookup_script(node.get("_script"))
+
+
+def _lookup_outpoint(owned_index: Any, outpoint: Any) -> list[Any]:
+    if hasattr(owned_index, "lookup_outpoint"):
+        return list(owned_index.lookup_outpoint(outpoint))
+    value = getattr(owned_index, "by_outpoint", {}).get(str(outpoint or "").lower())
+    if value is None:
+        return []
+    return value if isinstance(value, list) else [value]
 
 
 def _filter_matches_to_chain_network(

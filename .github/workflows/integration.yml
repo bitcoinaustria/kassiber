@@ -18,6 +18,7 @@ on:
           - fast
           - bitcoin-core
           - demo-full
+          - silent-payments
   schedule:
     # Nightly Docker-free fast replay lane (arbitrary off-peak minute).
     - cron: "17 3 * * *"
