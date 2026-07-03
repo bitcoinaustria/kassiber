@@ -2284,7 +2284,7 @@ def sync_wallet(
             checkpoints=freshness_checkpoints,
             force_full=force_full,
             source_overlap_preflight=(
-                lambda wallet, sync_state: core_source_overlap.raise_for_sync_source_overlap(
+                lambda wallet, sync_state: core_source_overlap.filter_sync_state_for_canonical_owner(
                     conn,
                     profile,
                     wallet,

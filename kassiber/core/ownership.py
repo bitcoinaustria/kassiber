@@ -127,6 +127,8 @@ _TXID_HEADER_ALIASES = frozenset(
 # many are collected (bounding the per-cell validation work on a huge local
 # file), and the caller surfaces a truncation warning.
 MAX_HARVEST_CANDIDATES = 10_000
+_CANONICAL_WALLET_KINDS = frozenset({"descriptor", "xpub", "silent-payment"})
+_MATCH_SOURCE_PRIORITY = {"derived": 0, "inventory": 1, "address_list": 2}
 
 
 @dataclass(frozen=True)
@@ -142,6 +144,7 @@ class OwnedMatch:
     address_index: int | None
     derivation_path: str | None
     source: str  # "inventory" | "derived" | "address_list"
+    wallet_kind: str = ""
 
 
 @dataclass
@@ -150,7 +153,7 @@ class OwnedIndex:
 
     by_script: dict[str, list[OwnedMatch]] = field(default_factory=dict)
     by_address: dict[str, list[OwnedMatch]] = field(default_factory=dict)
-    by_outpoint: dict[str, OwnedMatch] = field(default_factory=dict)
+    by_outpoint: dict[str, list[OwnedMatch]] = field(default_factory=dict)
     txid_wallets: dict[str, set[tuple[str, str]]] = field(default_factory=dict)
     scanned_depth: dict[str, dict[str, int]] = field(default_factory=dict)
 
@@ -168,7 +171,7 @@ class OwnedIndex:
     def add_outpoint(self, txid: str | None, vout: Any, match: OwnedMatch) -> None:
         if not txid or vout is None:
             return
-        self.by_outpoint.setdefault(f"{str(txid).lower()}:{int(vout)}", match)
+        self.by_outpoint.setdefault(f"{str(txid).lower()}:{int(vout)}", []).append(match)
 
     def note_txid(self, txid: str | None, wallet_id: str, wallet_label: str) -> None:
         if not txid:
@@ -207,6 +210,42 @@ def _script_hex_for_address(address: str) -> str | None:
         return None
     except Exception:  # defensive: never let a parse quirk abort a batch
         return None
+
+
+def _match_sort_key(match: OwnedMatch) -> tuple[int, int, str, str]:
+    kind_priority = 0 if match.wallet_kind in _CANONICAL_WALLET_KINDS else 1
+    source_priority = _MATCH_SOURCE_PRIORITY.get(match.source, 9)
+    return (kind_priority, source_priority, match.wallet_label, match.wallet_id)
+
+
+def _sorted_matches(matches: Sequence[OwnedMatch]) -> list[OwnedMatch]:
+    return sorted(matches, key=_match_sort_key)
+
+
+def _ownership_ambiguous(matches: Sequence[OwnedMatch]) -> bool:
+    return len({match.wallet_id for match in matches}) > 1
+
+
+def _wallet_labels_for_matches(matches: Sequence[OwnedMatch]) -> list[str]:
+    labels: list[str] = []
+    seen: set[str] = set()
+    for match in _sorted_matches(matches):
+        if match.wallet_label in seen:
+            continue
+        seen.add(match.wallet_label)
+        labels.append(match.wallet_label)
+    return labels
+
+
+def _outpoint_matches(index: OwnedIndex, outpoint: Any) -> list[OwnedMatch]:
+    value = index.by_outpoint.get(str(outpoint or ""))
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return _sorted_matches(value)
+    # Compatibility for older tests or callers that constructed the index by
+    # assigning a single OwnedMatch directly.
+    return _sorted_matches([value])
 
 
 def classify_token_type(token: str) -> str:
@@ -496,6 +535,7 @@ def build_owned_index(
                     address_index=None,
                     derivation_path=None,
                     source="address_list",
+                    wallet_kind=str(wallet["kind"] or ""),
                 )
                 index.add_address(address, match)
                 index.add_script(_script_hex_for_address(address), match)
@@ -536,12 +576,13 @@ def _seed_from_inventory(
         "address_index, chain, network FROM wallet_utxos WHERE profile_id = ?",
         (profile_id,),
     ).fetchall()
-    label_by_id = _wallet_label_lookup(conn, profile_id)
+    wallet_by_id = _wallet_summary_lookup(conn, profile_id)
     for row in rows:
         wallet_id = str(row["wallet_id"])
         if wallet_id_set and wallet_id not in wallet_id_set:
             continue
-        wallet_label = label_by_id.get(wallet_id, wallet_id)
+        wallet_summary = wallet_by_id.get(wallet_id, {})
+        wallet_label = str(wallet_summary.get("label") or wallet_id)
         match = OwnedMatch(
             wallet_id=wallet_id,
             wallet_label=wallet_label,
@@ -552,6 +593,7 @@ def _seed_from_inventory(
             address_index=row["address_index"],
             derivation_path=None,
             source="inventory",
+            wallet_kind=str(wallet_summary.get("kind") or ""),
         )
         index.add_address(row["address"], match)
         index.add_script(_script_hex_for_address(row["address"]) if row["address"] else None, match)
@@ -594,6 +636,15 @@ def _wallet_label_lookup(conn: sqlite3.Connection, profile_id: str) -> dict[str,
     }
 
 
+def _wallet_summary_lookup(conn: sqlite3.Connection, profile_id: str) -> dict[str, dict[str, str]]:
+    return {
+        str(row["id"]): {"label": str(row["label"]), "kind": str(row["kind"] or "")}
+        for row in conn.execute(
+            "SELECT id, label, kind FROM wallets WHERE profile_id = ?", (profile_id,)
+        ).fetchall()
+    }
+
+
 def _derive_wallet_into_index(
     index: OwnedIndex,
     wallet: Mapping[str, Any],
@@ -623,6 +674,7 @@ def _derive_wallet_into_index(
             address_index=target.address_index,
             derivation_path=target.derivation_path,
             source="derived",
+            wallet_kind=str(wallet["kind"] or ""),
         )
         index.add_script(target.script_pubkey, match)
         index.add_address(target.address, match)
@@ -636,6 +688,7 @@ def _match_to_dict(match: OwnedMatch) -> dict[str, Any]:
     return {
         "wallet": match.wallet_label,
         "wallet_id": match.wallet_id,
+        "wallet_kind": match.wallet_kind,
         "account": match.account,
         "chain": match.chain,
         "network": match.network,
@@ -654,6 +707,7 @@ def classify_address(token: Mapping[str, Any], index: OwnedIndex) -> dict[str, A
         matches = index.lookup_script(script_hex)
     chain = token.get("chain") or (matches[0].chain if matches else "")
     if matches:
+        matches = _sorted_matches(matches)
         primary = matches[0]
         return {
             "input": address,
@@ -661,6 +715,9 @@ def classify_address(token: Mapping[str, Any], index: OwnedIndex) -> dict[str, A
             "chain": chain or primary.chain,
             "status": "owned",
             "classification": "owned_address",
+            "ownership_ambiguous": _ownership_ambiguous(matches),
+            "canonical_wallet": primary.wallet_label,
+            "canonical_wallet_id": primary.wallet_id,
             "matches": [_match_to_dict(m) for m in matches],
             "note": _ownership_note(matches),
         }
@@ -670,12 +727,14 @@ def classify_address(token: Mapping[str, Any], index: OwnedIndex) -> dict[str, A
         "chain": chain,
         "status": "external",
         "classification": "external_address",
+        "ownership_ambiguous": False,
         "matches": [],
         "note": "Not derived from or seen by any wallet in this profile.",
     }
 
 
 def _ownership_note(matches: Sequence[OwnedMatch]) -> str:
+    matches = _sorted_matches(matches)
     primary = matches[0]
     where = primary.branch_label or "address"
     if primary.address_index is not None:
@@ -704,6 +763,8 @@ def classify_txid(
                 "chain": "",
                 "status": "owned",
                 "classification": "touches_wallet",
+                "ownership_ambiguous": False,
+                "ambiguous_legs": 0,
                 "wallets": wallets,
                 "owned_inputs": None,
                 "owned_outputs": None,
@@ -722,6 +783,8 @@ def classify_txid(
             "chain": "",
             "status": "unknown",
             "classification": "unknown",
+            "ownership_ambiguous": False,
+            "ambiguous_legs": 0,
             "wallets": [],
             "owned_inputs": None,
             "owned_outputs": None,
@@ -740,19 +803,34 @@ def classify_txid(
     owned_in = 0
     unresolved_inputs = 0
     involved: set[str] = set()
+    ambiguous_legs = 0
     for leg in legs.get("inputs", []):
-        match = index.by_outpoint.get(str(leg.get("outpoint") or ""))
-        if match is None:
+        matches = _outpoint_matches(index, leg.get("outpoint"))
+        if not matches:
             script = leg.get("script")
             script_matches = index.lookup_script(script)
-            match = script_matches[0] if script_matches else None
-            if match is None and script is None and source != "local_tx":
+            matches = _sorted_matches(script_matches) if script_matches else []
+            if not matches and script is None and source != "local_tx":
                 unresolved_inputs += 1
-        owned = match is not None
+        owned = bool(matches)
         owned_in += 1 if owned else 0
-        if match is not None:
-            involved.add(match.wallet_label)
-        in_legs.append({"side": "input", "outpoint": leg.get("outpoint"), "owned": owned, "wallet": match.wallet_label if match else ""})
+        primary = matches[0] if matches else None
+        if matches:
+            for label in _wallet_labels_for_matches(matches):
+                involved.add(label)
+        leg_ambiguous = _ownership_ambiguous(matches) if matches else False
+        ambiguous_legs += 1 if leg_ambiguous else 0
+        leg_row = {
+            "side": "input",
+            "outpoint": leg.get("outpoint"),
+            "owned": owned,
+            "wallet": primary.wallet_label if primary else "",
+            "ownership_ambiguous": leg_ambiguous,
+        }
+        if matches:
+            leg_row["wallets"] = _wallet_labels_for_matches(matches)
+            leg_row["canonical_wallet_id"] = primary.wallet_id if primary else ""
+        in_legs.append(leg_row)
 
     out_legs: list[dict[str, Any]] = []
     owned_out = 0
@@ -763,18 +841,31 @@ def classify_txid(
             # outputs are provably unspendable. Neither is a recipient.
             continue
         script_matches = index.lookup_script(script)
-        match = script_matches[0] if script_matches else None
-        owned = match is not None
+        matches = _sorted_matches(script_matches) if script_matches else []
+        owned = bool(matches)
         owned_out += 1 if owned else 0
-        if match is not None:
-            involved.add(match.wallet_label)
+        primary = matches[0] if matches else None
+        if matches:
+            for label in _wallet_labels_for_matches(matches):
+                involved.add(label)
+        leg_ambiguous = _ownership_ambiguous(matches) if matches else False
+        ambiguous_legs += 1 if leg_ambiguous else 0
         out_legs.append(
             {
                 "side": "output",
                 "n": leg.get("n"),
                 "owned": owned,
-                "wallet": match.wallet_label if match else "",
-                "branch": match.branch_label if match else "",
+                "wallet": primary.wallet_label if primary else "",
+                "branch": primary.branch_label if primary else "",
+                "ownership_ambiguous": leg_ambiguous,
+                **(
+                    {
+                        "wallets": _wallet_labels_for_matches(matches),
+                        "canonical_wallet_id": primary.wallet_id if primary else "",
+                    }
+                    if matches
+                    else {}
+                ),
             }
         )
     for _wid, label in local_wallets:
@@ -795,6 +886,8 @@ def classify_txid(
         "chain": chain,
         "status": status,
         "classification": classification,
+        "ownership_ambiguous": ambiguous_legs > 0,
+        "ambiguous_legs": ambiguous_legs,
         "wallets": sorted(involved),
         "owned_inputs": owned_in,
         "owned_outputs": owned_out,
@@ -1053,6 +1146,7 @@ def flatten_result_row(item: Mapping[str, Any]) -> dict[str, Any]:
         "chain": item.get("chain", ""),
         "status": item.get("status", ""),
         "classification": item.get("classification", ""),
+        "ownership_ambiguous": bool(item.get("ownership_ambiguous")),
         "wallet": ", ".join(w for w in wallets if w),
         "account": ", ".join(accounts),
         "branch": primary.get("branch", "") if primary else "",
@@ -1084,6 +1178,7 @@ def redact_result_for_ai(item: Mapping[str, Any]) -> dict[str, Any]:
         "chain": item.get("chain", ""),
         "status": item.get("status", ""),
         "classification": item.get("classification", ""),
+        "ownership_ambiguous": bool(item.get("ownership_ambiguous")),
         "note": item.get("note", ""),
     }
     wallets: list[str] = []

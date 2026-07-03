@@ -414,9 +414,9 @@ export const ConnectionsFields = ({ form, update }: ConnectionsFieldsProps) => {
       )}
 
       {skipSelected && (
-        <div className="space-y-3 rounded-lg border border-accent bg-[rgba(227,0,15,0.04)] p-4">
+        <div className="space-y-3 rounded-lg border border-[var(--kb-accent)] bg-[rgba(227,0,15,0.04)] p-4">
           <div className="flex items-start gap-3">
-            <AlertTriangle className="mt-0.5 size-5 shrink-0 text-accent" />
+            <AlertTriangle className="mt-0.5 size-5 shrink-0 text-[var(--kb-accent)]" />
             <div>
               <p className="m-0 font-semibold text-ink">
                 {t("connections.skipWarningTitle")}

@@ -319,7 +319,7 @@ function ProfileList({
                       </p>
                       {profile.active && (
                         <CheckCircle2
-                          className="size-4 shrink-0 text-accent"
+                          className="size-4 shrink-0 text-[var(--kb-accent)]"
                           aria-label={t("import.active")}
                         />
                       )}

@@ -2565,6 +2565,67 @@ class CrossWalletPrefetchTest(unittest.TestCase):
         self.assertEqual(prefetched["w-bad"].code, "source_overlap")
         self.assertEqual(adapter_calls, ["w-good"])
 
+    def test_prefetch_uses_sync_state_returned_by_preflight(self):
+        wallet = _backend_sync_wallet("w-filter", "Filtered", "bc1qfilter")
+        targets = [
+            {"address": "bc1qoverlap", "script_pubkey": "0014" + "11" * 20},
+            {"address": "bc1qunique", "script_pubkey": "0014" + "22" * 20},
+        ]
+        adapter_target_counts = []
+
+        def resolve_sync_state(_backend, _wallet):
+            return WalletSyncState(
+                chain="bitcoin",
+                network="bitcoin",
+                descriptor_plan=None,
+                policy_asset_id="",
+                targets=targets,
+                tracked_scripts={target["script_pubkey"]: target for target in targets},
+                history_cache={},
+            )
+
+        def preflight(_wallet, sync_state):
+            kept = [sync_state.targets[1]]
+            return WalletSyncState(
+                chain=sync_state.chain,
+                network=sync_state.network,
+                descriptor_plan=sync_state.descriptor_plan,
+                policy_asset_id=sync_state.policy_asset_id,
+                targets=kept,
+                tracked_scripts={kept[0]["script_pubkey"]: kept[0]},
+                history_cache=sync_state.history_cache,
+                checkpoint=sync_state.checkpoint,
+            )
+
+        def adapter(_backend, _wallet, sync_state):
+            adapter_target_counts.append(len(sync_state.targets))
+            return [], {}
+
+        hooks = WalletSyncHooks(
+            import_file=lambda *a, **k: {},
+            insert_records=lambda *a, **k: {"imported": 0, "skipped": 0},
+            resolve_backend=lambda runtime_config, backend_name: {
+                "name": "default",
+                "kind": "esplora",
+                "url": "https://esplora.example",
+            },
+            resolve_sync_state=resolve_sync_state,
+            normalize_addresses=lambda values: list(values or []),
+            backend_adapters={"esplora": adapter},
+        )
+
+        prefetched = prefetch_wallets_backend(
+            {},
+            {},
+            [wallet],
+            hooks,
+            source_overlap_preflight=preflight,
+        )
+
+        self.assertIsInstance(prefetched["w-filter"], WalletBackendFetch)
+        self.assertEqual(adapter_target_counts, [1])
+        self.assertEqual(prefetched["w-filter"].sync_state.targets[0]["address"], "bc1qunique")
+
     def test_sync_wallets_applies_prefetch_and_reraises_captured_error(self):
         hooks = self._hooks()
         good = _backend_sync_wallet("w-good", "Good", "bc1qgood")

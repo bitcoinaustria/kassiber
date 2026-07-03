@@ -119,7 +119,7 @@ const BITCOIN_LAYER_TRANSITION_PAIR_KINDS = new Set([
 
 const flowColors: Record<TransactionFlow, string> = {
   incoming: "oklch(0.56 0.16 150)",
-  outgoing: "var(--color-accent)",
+  outgoing: "var(--kb-accent)",
   transfer: "oklch(0.56 0.04 260)",
   swap: "oklch(0.62 0.16 246)",
   "layer-transition": "oklch(0.65 0.11 185)",

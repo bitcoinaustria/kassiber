@@ -9,7 +9,7 @@ resolved sync targets, address-list scripts, and existing wallet_utxos rows.
 
 import json
 import sqlite3
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any, Mapping, Sequence
 
 from ..errors import AppError
@@ -25,6 +25,13 @@ from .wallets import (
 )
 
 MAX_STORED_DESCRIPTOR_TARGETS_PER_BRANCH = 20_000
+_CANONICAL_WALLET_KINDS = {"descriptor", "xpub", "silent-payment"}
+_SOURCE_PRIORITY = {
+    "inventory": 0,
+    "descriptor_config": 0,
+    "address_list": 1,
+    "sync_target": 2,
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -435,6 +442,19 @@ def _checked_source_counts(sources: Sequence[SourceScript]) -> list[dict[str, An
     return sorted(counts.values(), key=lambda item: (item["wallet"], item["wallet_id"]))
 
 
+def _canonical_wallet_sort_key(item: Mapping[str, Any]) -> tuple[int, int, int, int, str, str]:
+    kind = str(item.get("kind") or "")
+    source_priority = item.get("_source_priority")
+    return (
+        1 if item.get("deprecated") else 0,
+        0 if kind in _CANONICAL_WALLET_KINDS else 1,
+        int(source_priority if source_priority is not None else 99),
+        0 if item.get("active_transaction_count") else 1,
+        str(item.get("label") or ""),
+        str(item.get("id") or ""),
+    )
+
+
 def _overlap_payload(
     key: tuple[str, str, str, str],
     sources: Sequence[SourceScript],
@@ -453,20 +473,21 @@ def _overlap_payload(
                 "deprecated": source.deprecated,
                 "active_transaction_count": source.active_transaction_count,
                 "sources": [],
+                "_source_priority": 99,
             },
         )
         if source.source not in row["sources"]:
             row["sources"].append(source.source)
-    wallets = sorted(by_wallet.values(), key=lambda item: (item["label"], item["id"]))
-    recommended = sorted(
-        wallets,
-        key=lambda item: (
-            1 if item["deprecated"] else 0,
-            0 if item["kind"] in {"descriptor", "xpub"} else 1,
-            0 if item["active_transaction_count"] else 1,
-            item["label"],
-        ),
-    )[0]
+        row["_source_priority"] = min(
+            int(row["_source_priority"]),
+            _SOURCE_PRIORITY.get(source.source, 99),
+        )
+    raw_wallets = sorted(by_wallet.values(), key=lambda item: (item["label"], item["id"]))
+    recommended = sorted(raw_wallets, key=_canonical_wallet_sort_key)[0]
+    wallets = [
+        {key: value for key, value in wallet.items() if key != "_source_priority"}
+        for wallet in raw_wallets
+    ]
     address_repairs = []
     for wallet in wallets:
         if wallet["id"] == recommended["id"]:
@@ -519,14 +540,13 @@ def _overlap_payload(
     }
 
 
-def detect_profile_source_overlaps(
+def _source_script_groups(
     conn: sqlite3.Connection,
     profile_id: str,
     *,
     candidate_scripts: Sequence[SourceScript] | None = None,
     include_deprecated: bool = False,
-    only_wallet_ids: set[str] | None = None,
-) -> dict[str, Any]:
+) -> tuple[dict[tuple[str, str, str, str], list[SourceScript]], list[SourceScript]]:
     active_counts = _active_transaction_counts(conn, profile_id)
     candidate_scripts = list(candidate_scripts or [])
     candidate_wallet_ids = {source.wallet_id for source in candidate_scripts}
@@ -555,6 +575,23 @@ def detect_profile_source_overlaps(
             continue
         key = (source.profile_id, chain, network, source.script_pubkey)
         grouped.setdefault(key, []).append(source)
+    return grouped, filtered
+
+
+def detect_profile_source_overlaps(
+    conn: sqlite3.Connection,
+    profile_id: str,
+    *,
+    candidate_scripts: Sequence[SourceScript] | None = None,
+    include_deprecated: bool = False,
+    only_wallet_ids: set[str] | None = None,
+) -> dict[str, Any]:
+    grouped, filtered = _source_script_groups(
+        conn,
+        profile_id,
+        candidate_scripts=candidate_scripts,
+        include_deprecated=include_deprecated,
+    )
     overlaps = []
     for key, group in grouped.items():
         wallet_ids = {source.wallet_id for source in group}
@@ -574,6 +611,77 @@ def detect_profile_source_overlaps(
             "descriptor_global_overlap_proven": False,
         },
     }
+
+
+def _target_script_pubkey(target: Mapping[str, Any]) -> str:
+    return str(target.get("script_pubkey") or "").strip().lower()
+
+
+def _filter_sync_targets(sync_state: Any, filtered_scripts: set[str]) -> Any:
+    targets = list(getattr(sync_state, "targets", []) or [])
+    kept_targets = [
+        target
+        for target in targets
+        if _target_script_pubkey(target) not in filtered_scripts
+    ]
+    if len(kept_targets) == len(targets):
+        return sync_state
+    tracked_scripts = {}
+    for key, target in dict(getattr(sync_state, "tracked_scripts", {}) or {}).items():
+        key_script = str(key or "").strip().lower()
+        target_script = _target_script_pubkey(target) if isinstance(target, Mapping) else ""
+        if key_script in filtered_scripts or target_script in filtered_scripts:
+            continue
+        tracked_scripts[key] = target
+    return replace(sync_state, targets=kept_targets, tracked_scripts=tracked_scripts)
+
+
+def filter_sync_state_for_canonical_owner(
+    conn: sqlite3.Connection,
+    profile: Mapping[str, Any] | sqlite3.Row,
+    wallet: Mapping[str, Any] | sqlite3.Row,
+    sync_state: Any,
+) -> Any:
+    """Remove sync targets whose script is already owned by a better source.
+
+    The filter is deliberately script-level and runs before backend fetches.
+    It never compares amounts, timestamps, or transaction counts, so address
+    reuse and same-amount transactions cannot collapse distinct history rows.
+    """
+    profile_id = str(_row_get(profile, "id"))
+    wallet_id = str(_row_get(wallet, "id"))
+    candidate_scripts = scripts_from_sync_state(profile, wallet, sync_state)
+    if not candidate_scripts:
+        return sync_state
+    try:
+        grouped, _filtered = _source_script_groups(
+            conn,
+            profile_id,
+            candidate_scripts=candidate_scripts,
+        )
+    except sqlite3.OperationalError as exc:
+        if "no such table" in str(exc).lower():
+            return sync_state
+        raise
+    filtered_scripts: set[str] = set()
+    for key, group in grouped.items():
+        wallet_ids = {source.wallet_id for source in group}
+        if len(wallet_ids) < 2 or wallet_id not in wallet_ids:
+            continue
+        current_targets = [
+            source
+            for source in group
+            if source.wallet_id == wallet_id and source.source == "sync_target"
+        ]
+        if not current_targets:
+            continue
+        overlap = _overlap_payload(key, group)
+        if str(overlap.get("recommended_canonical_wallet_id") or "") == wallet_id:
+            continue
+        filtered_scripts.update(source.script_pubkey for source in current_targets)
+    if not filtered_scripts:
+        return sync_state
+    return _filter_sync_targets(sync_state, filtered_scripts)
 
 
 def duplicate_transaction_preview(
@@ -651,6 +759,21 @@ def duplicate_transaction_preview(
     }
 
 
+def _is_address_list_overlap(overlap: Mapping[str, Any]) -> bool:
+    evidence = {str(item) for item in (overlap.get("evidence") or [])}
+    if "address_list" in evidence:
+        return True
+    return any(
+        str(wallet.get("kind") or "") == "address"
+        for wallet in (overlap.get("wallets") or [])
+        if isinstance(wallet, Mapping)
+    )
+
+
+def _hard_sync_overlaps(overlaps: Sequence[Mapping[str, Any]]) -> list[Mapping[str, Any]]:
+    return [overlap for overlap in overlaps if not _is_address_list_overlap(overlap)]
+
+
 def raise_for_sync_source_overlap(
     conn: sqlite3.Connection,
     profile: Mapping[str, Any] | sqlite3.Row,
@@ -666,7 +789,8 @@ def raise_for_sync_source_overlap(
         candidate_scripts=candidate_scripts,
         only_wallet_ids={wallet_id},
     )
-    if not result["overlaps"]:
+    hard_overlaps = _hard_sync_overlaps(result["overlaps"])
+    if not hard_overlaps:
         return
     raise AppError(
         f"Wallet source overlap detected for {_row_get(wallet, 'label') or 'wallet'}",
@@ -677,8 +801,8 @@ def raise_for_sync_source_overlap(
             "Kassiber only proves overlap within the checked finite scripts."
         ),
         details={
-            "overlap_count": result["overlap_count"],
-            "overlaps": result["overlaps"],
+            "overlap_count": len(hard_overlaps),
+            "overlaps": hard_overlaps,
             "checked": result["checked"],
         },
         retryable=False,
@@ -689,6 +813,7 @@ __all__ = [
     "SourceScript",
     "detect_profile_source_overlaps",
     "duplicate_transaction_preview",
+    "filter_sync_state_for_canonical_owner",
     "raise_for_sync_source_overlap",
     "scripts_from_sync_state",
 ]

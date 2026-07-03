@@ -2,6 +2,7 @@ import * as React from "react";
 import { useNavigate } from "@tanstack/react-router";
 
 import { useUiStore } from "@/store/ui";
+import { safeTauriUnlisten } from "@/lib/tauriUnlisten";
 import {
   dispatchMenuIntent,
   type NativeMenuPayload,
@@ -70,7 +71,7 @@ export function RootIntentListener() {
       )
       .then((nextUnlisten) => {
         if (disposed) {
-          nextUnlisten();
+          safeTauriUnlisten(nextUnlisten);
           return;
         }
         unlisten = nextUnlisten;
@@ -84,7 +85,7 @@ export function RootIntentListener() {
 
     return () => {
       disposed = true;
-      unlisten?.();
+      safeTauriUnlisten(unlisten);
     };
   }, [navigate]);
 

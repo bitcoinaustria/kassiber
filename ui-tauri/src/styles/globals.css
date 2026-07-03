@@ -41,9 +41,14 @@
 
 :root {
   --app-ui-scale: 0.9;
-  /* Bitcoin Austria red for hand-built accents. `--color-accent` from the
-     @theme block above is shadowed by the shadcn accent remap in the
-     `@theme inline` block below, so custom surfaces reference this alias. */
+  /*
+   * Bitcoin Austria brand red, theme-aware. The `@theme inline` block at
+   * the bottom remaps --color-accent to shadcn's neutral --accent, which
+   * shadows the brand value from the first @theme block at runtime — so
+   * neither `var(--color-accent)` nor bare `accent` utilities render red.
+   * Use var(--kb-accent) (or bg-[var(--kb-accent)] etc.) wherever the
+   * brand red is intended.
+   */
   --kb-accent: #e3000f;
   --background: oklch(1 0 0);
   --app-chrome: oklch(0.985 0 0);
@@ -185,7 +190,6 @@
  */
 
 .dark {
-  --kb-accent: #ff3341;
   --color-paper: #101010;
   --color-paper-2: #171717;
   --color-ink: #f4f4f5;
@@ -195,6 +199,8 @@
   --color-line-2: #424248;
   --color-accent: #ff3341;
   --color-accent-2: #ff6a73;
+
+  --kb-accent: #ff3341;
 
   --background: oklch(0.145 0 0);
   --app-chrome: oklch(0.18 0 0);

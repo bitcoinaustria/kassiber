@@ -108,7 +108,7 @@ export function PortfolioInspector({
         <div
           className={cn(
             "mt-1 text-sm font-semibold tabular-nums",
-            primaryDelta >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-[var(--color-accent)]",
+            primaryDelta >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-[var(--kb-accent)]",
             blurClass(hideSensitive),
           )}
         >
@@ -149,7 +149,7 @@ export function InspectorMetric({
         className={cn(
           "mt-0.5 truncate text-sm font-semibold tabular-nums",
           tone === "good" && "text-emerald-600 dark:text-emerald-400",
-          tone === "bad" && "text-[var(--color-accent)]",
+          tone === "bad" && "text-[var(--kb-accent)]",
           blurClass(hidden),
         )}
       >
