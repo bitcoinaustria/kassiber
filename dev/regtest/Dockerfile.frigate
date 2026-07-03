@@ -1,0 +1,30 @@
+FROM debian:bookworm-slim
+
+ARG TARGETARCH
+ARG FRIGATE_VERSION=1.5.3
+ARG FRIGATE_TARBALL_SHA256=
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates tar wget \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN set -eux; \
+    case "${TARGETARCH:-amd64}" in \
+      amd64) FRIGATE_ARCH="x86_64" ;; \
+      arm64) FRIGATE_ARCH="aarch64" ;; \
+      *) echo "Unsupported Frigate Docker architecture: ${TARGETARCH}" >&2; exit 1 ;; \
+    esac; \
+    wget -O /tmp/frigate.tar.gz "https://github.com/sparrowwallet/frigate/releases/download/${FRIGATE_VERSION}/frigate-${FRIGATE_VERSION}-${FRIGATE_ARCH}.tar.gz"; \
+    if [ -n "${FRIGATE_TARBALL_SHA256}" ]; then \
+      echo "${FRIGATE_TARBALL_SHA256}  /tmp/frigate.tar.gz" | sha256sum -c -; \
+    fi; \
+    tar -xzf /tmp/frigate.tar.gz -C /opt; \
+    rm /tmp/frigate.tar.gz
+
+RUN useradd --system --create-home --home-dir /home/frigate frigate \
+    && mkdir -p /data \
+    && chown -R frigate:frigate /data /opt/frigate
+
+USER frigate
+EXPOSE 50001
+CMD ["/opt/frigate/bin/frigate"]

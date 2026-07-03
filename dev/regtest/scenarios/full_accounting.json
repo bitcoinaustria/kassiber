@@ -13,6 +13,7 @@
   },
   "backend": {
     "name": "core-regtest",
+    "default": "bitcoin-mempool-regtest",
     "wallet_prefix": "kassiber-demo"
   },
   "pricing": {
@@ -313,6 +314,18 @@
       "account": "merchant",
       "addresses": 4,
       "initial_btc": "0.40166921"
+    },
+    {
+      "key": "silent_payments",
+      "label": "Regtest Silent Payments Wallet",
+      "account": "merchant",
+      "kind": "silent-payment",
+      "chain": "bitcoin",
+      "network": "regtest",
+      "sp_descriptor": "sp(tspscan1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq)",
+      "sp_scan_start_height": 0,
+      "detected_btc": "0.01234567",
+      "initial_btc": "0.00000000"
     },
     {
       "key": "miner",
@@ -641,7 +654,7 @@
     }
   ],
   "expected": {
-    "wallets": 11,
+    "wallets": 12,
     "deprecated_wallets": 4,
     "assets": [
       "BTC",
@@ -652,8 +665,8 @@
       "BTC",
       "LBTC"
     ],
-    "min_transactions": 845,
-    "min_active_transactions": 840,
+    "min_transactions": 846,
+    "min_active_transactions": 841,
     "pending_transactions": 1,
     "collaborative_excluded": 5,
     "min_transfer_pairs": 9,
