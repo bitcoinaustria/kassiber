@@ -18,13 +18,20 @@
  * shadcn/ui keeps its original neutral component palette below.
  */
 @theme {
-  --color-paper: #ffffff;
-  --color-paper-2: #fafafa;
+  /*
+   * Light-mode custom palette. Softened off pure white and darkened for
+   * legibility: `paper` is no longer #fff (reduces glare), `paper-2` is a
+   * genuine second surface, muted `ink-3` now clears WCAG AA (4.5:1) on
+   * paper, and the hairline `line`/`line-2` dividers are actually visible.
+   * `.dark` overrides these below; the brand red (`accent`) is unchanged.
+   */
+  --color-paper: #fbfbfb;
+  --color-paper-2: #eff0f2;
   --color-ink: #222222;
-  --color-ink-2: #4a4a4a;
-  --color-ink-3: #8a8a8a;
-  --color-line: #ececec;
-  --color-line-2: #d4d4d4;
+  --color-ink-2: #454545;
+  --color-ink-3: #6b6b6b;
+  --color-line: #d3d4d6;
+  --color-line-2: #c0c1c4;
   --color-accent: #e3000f;
   --color-accent-2: #ff4954;
 
@@ -50,8 +57,16 @@
    * brand red is intended.
    */
   --kb-accent: #e3000f;
-  --background: oklch(1 0 0);
-  --app-chrome: oklch(0.985 0 0);
+  /*
+   * Light theme. Three-step neutral surface ramp gives the flat UI depth
+   * instead of a single wall of pure white: chrome (frame) < background
+   * (content panel, softened off #fff to cut glare) < card (bright, so cards
+   * lift off the panel). Muted text is darkened to clear WCAG AA (4.5:1) on
+   * every surface, and borders/inputs are strong enough to actually read.
+   * Dark theme lives untouched in `.dark` below.
+   */
+  --background: oklch(0.988 0 0);
+  --app-chrome: oklch(0.955 0 0);
   --foreground: oklch(0.145 0 0);
   --card: oklch(1 0 0);
   --card-foreground: oklch(0.145 0 0);
@@ -59,24 +74,24 @@
   --popover-foreground: oklch(0.145 0 0);
   --primary: oklch(0.205 0 0);
   --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
+  --secondary: oklch(0.94 0 0);
   --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
+  --muted: oklch(0.955 0 0);
+  --muted-foreground: oklch(0.47 0 0);
+  --accent: oklch(0.955 0 0);
   --accent-foreground: oklch(0.205 0 0);
   --destructive: oklch(0.577 0.245 27.325);
   --destructive-foreground: oklch(0.985 0 0);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
+  --border: oklch(0.86 0 0);
+  --input: oklch(0.83 0 0);
+  --ring: oklch(0.62 0 0);
   --sidebar: var(--app-chrome);
   --sidebar-foreground: hsl(240 5.3% 26.1%);
   --sidebar-primary: hsl(240 5.9% 10%);
   --sidebar-primary-foreground: hsl(0 0% 98%);
-  --sidebar-accent: hsl(240 4.8% 95.9%);
+  --sidebar-accent: hsl(240 6% 89%);
   --sidebar-accent-foreground: hsl(240 5.9% 10%);
-  --sidebar-border: hsl(220 13% 91%);
+  --sidebar-border: hsl(220 13% 80%);
   --sidebar-ring: hsl(217.2 91.2% 59.8%);
 }
 
