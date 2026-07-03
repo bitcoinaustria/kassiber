@@ -1424,11 +1424,37 @@ class ProvidersCrudTest(unittest.TestCase):
             try:
                 created = create_db_ai_provider(
                     conn,
-                    "lan-ollama",
-                    "http://192.168.1.10:11434/v1",
+                    "local-ollama",
+                    "http://127.0.0.1:11434/v1",
                     kind="local",
                 )
                 self.assertIsNotNone(created["acknowledged_at"])
+            finally:
+                conn.close()
+
+    def test_local_kind_requires_loopback_endpoint(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-ai-local-loopback-") as tmp:
+            conn = open_db(str(Path(tmp) / "data"))
+            try:
+                with self.assertRaises(AppError) as ctx:
+                    create_db_ai_provider(
+                        conn,
+                        "off-device",
+                        "https://api.example/v1",
+                        kind="local",
+                    )
+                self.assertEqual(ctx.exception.code, "validation")
+
+                created = create_db_ai_provider(
+                    conn,
+                    "remote-device",
+                    "https://api.example/v1",
+                    kind="remote",
+                )
+                self.assertIsNone(created["acknowledged_at"])
+                with self.assertRaises(AppError) as ack_ctx:
+                    require_ai_provider_acknowledged(created)
+                self.assertEqual(ack_ctx.exception.code, "ai_remote_ack_required")
             finally:
                 conn.close()
 

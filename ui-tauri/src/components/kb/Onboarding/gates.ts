@@ -1,6 +1,7 @@
 import {
   aiBaseUrlHint,
   backendEndpointHint,
+  localAiBaseUrlHint,
   databasePassphraseHint,
   electrumEndpointUrl,
   parseTaxLongTermDays,
@@ -32,7 +33,7 @@ export const connectionsComplete = (form: OnboardingForm): boolean => {
         : form.backendUrl;
     return Boolean(
       form.backendName.trim() &&
-        backendEndpointHint(form.backendKind, backendUrl) === null,
+      backendEndpointHint(form.backendKind, backendUrl) === null,
     );
   }
   return true;
@@ -40,7 +41,9 @@ export const connectionsComplete = (form: OnboardingForm): boolean => {
 
 /** The (optional) AI choice is internally consistent. */
 export const aiComplete = (form: OnboardingForm): boolean => {
-  if (form.aiSetupMode !== "disabled") {
+  if (form.aiSetupMode === "local") {
+    if (localAiBaseUrlHint(form.aiBaseUrl) !== null) return false;
+  } else if (form.aiSetupMode !== "disabled") {
     if (aiBaseUrlHint(form.aiBaseUrl) !== null) return false;
   }
   if (form.aiSetupMode === "remote") {
