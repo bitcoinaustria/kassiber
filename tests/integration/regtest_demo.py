@@ -116,7 +116,17 @@ def load_scenario(path: Path = DEFAULT_SCENARIO) -> dict[str, Any]:
 
 
 def validate_scenario(scenario: dict[str, Any]) -> None:
-    required = {"schema_version", "id", "base_time", "workspace", "profile", "wallets", "operations", "expected"}
+    required = {
+        "schema_version",
+        "id",
+        "base_time",
+        "latest_time",
+        "workspace",
+        "profile",
+        "wallets",
+        "operations",
+        "expected",
+    }
     missing = sorted(required.difference(scenario))
     if missing:
         raise ValueError(f"Scenario manifest is missing: {', '.join(missing)}")
@@ -220,6 +230,17 @@ def validate_scenario(scenario: dict[str, Any]) -> None:
         if not stress.get("fee_btc"):
             raise ValueError("Scenario stress.fee_btc must be set")
         _btc(stress["fee_btc"])
+        base_ts = _parse_iso_to_ts(str(scenario["base_time"]))
+        latest_ts = _parse_iso_to_ts(str(scenario["latest_time"]))
+        estimated_end_ts = estimate_scenario_end_ts(scenario, start_ts=base_ts)
+        if latest_ts <= base_ts:
+            raise ValueError("Scenario latest_time must be after base_time")
+        if estimated_end_ts > latest_ts:
+            estimated = _iso_from_ts(estimated_end_ts)
+            latest = _iso_from_ts(latest_ts)
+            raise ValueError(
+                f"Scenario timeline ends at {estimated}, after latest_time {latest}"
+            )
         expenses = stress.get("business_expenses") or {}
         if expenses.get("enabled"):
             schedule = expenses.get("schedule")
@@ -719,6 +740,32 @@ def _local_backend_specs(*, silent_payment_scan_file: str | None = None) -> list
 def _parse_iso_to_ts(value: str) -> int:
     parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
     return int(parsed.astimezone(timezone.utc).timestamp())
+
+
+def estimate_scenario_end_ts(scenario: dict[str, Any], *, start_ts: int | None = None) -> int:
+    current_ts = start_ts if start_ts is not None else _parse_iso_to_ts(str(scenario["base_time"]))
+
+    # run_demo performs one maturity mine, one initial-funding mine, then one
+    # confirmation mine per hand-authored operation before the long stress run.
+    current_ts += 600
+    current_ts += 600
+    current_ts += len(scenario.get("operations") or []) * 600
+
+    stress = scenario.get("stress") or {}
+    if stress.get("enabled"):
+        cycles = int(stress.get("cycles") or 0)
+        days_between_cycles = int(stress.get("days_between_cycles") or 0)
+        if cycles > 0 and days_between_cycles > 0:
+            first_target_ts = current_ts + (2 * SECONDS_PER_DAY)
+            last_cycle_ts = first_target_ts + ((cycles - 1) * days_between_cycles * SECONDS_PER_DAY)
+            current_ts = max(current_ts, last_cycle_ts + (13 * 60 * 60))
+
+    silent_payment_wallets = [
+        wallet for wallet in scenario.get("wallets") or [] if _is_silent_payment_wallet_spec(wallet)
+    ]
+    current_ts += len(silent_payment_wallets) * 600
+    current_ts += len(scenario.get("pending_operations") or []) * 600
+    return current_ts
 
 
 def _ensure_wallet(url: str, username: str, password: str, wallet_name: str) -> None:
@@ -2464,6 +2511,15 @@ def run_demo(
     manifest_ts = _parse_iso_to_ts(scenario["base_time"])
     chain_median_ts = int(chain.get("mediantime") or manifest_ts)
     current_ts = max(manifest_ts, chain_median_ts + 7200)
+    latest_ts = _parse_iso_to_ts(scenario["latest_time"])
+    estimated_end_ts = estimate_scenario_end_ts(scenario, start_ts=current_ts)
+    if estimated_end_ts > latest_ts:
+        raise RuntimeError(
+            "Regtest demo chain tip is too far ahead for the backdated accounting scenario "
+            f"(estimated end {_iso_from_ts(estimated_end_ts)}, latest allowed {_iso_from_ts(latest_ts)}). "
+            "Reset the persistent demo chain with './scripts/integration-harness.sh demo-down --purge' "
+            "or run demo-up after the managed rebuild resets the chain volume."
+        )
     rpc(url, username, password, "setmocktime", [current_ts])
     birthday_ts = current_ts - SECONDS_PER_DAY
 

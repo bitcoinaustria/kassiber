@@ -405,6 +405,19 @@ demo_scenario_checksum() {
   py -c 'import hashlib, sys; print(hashlib.sha256(open(sys.argv[1], "rb").read()).hexdigest())' "$DEMO_SCENARIO"
 }
 
+demo_book_needs_rebuild() {
+  local checksum
+  local current_checksum
+  checksum="$(demo_scenario_checksum)"
+  current_checksum="$(demo_manifest_get scenario_checksum)"
+  if [ -n "${KASSIBER_REGTEST_DEMO_REBUILD:-}" ] \
+    || [ ! -d "$DEMO_HOME/data" ] \
+    || [ "$current_checksum" != "$checksum" ]; then
+    return 0
+  fi
+  return 1
+}
+
 demo_write_manifest() {
   local checksum="$1"
   KASSIBER_DEMO_MANIFEST="$DEMO_MANIFEST" \
@@ -547,15 +560,24 @@ PY
 
 demo_build_book() {
   local checksum
+  local current_checksum
   checksum="$(demo_scenario_checksum)"
+  current_checksum="$(demo_manifest_get scenario_checksum)"
   demo_assert_safe_home rebuild
   if [ -z "${KASSIBER_REGTEST_DEMO_REBUILD:-}" ] \
     && [ -d "$DEMO_HOME/data" ] \
-    && [ "$(demo_manifest_get scenario_checksum)" = "$checksum" ]; then
+    && [ "$current_checksum" = "$checksum" ]; then
     demo_refresh_live_rate
     demo_write_manifest "$checksum"
     echo "Reusing existing demo book (scenario unchanged): $DEMO_HOME/data"
     return 0
+  fi
+
+  if [ -z "${KASSIBER_REGTEST_REUSE_CORE:-}" ] && [ -z "${KASSIBER_REGTEST_DEMO_CHAIN_RESET_DONE:-}" ]; then
+    echo "Resetting the managed demo regtest chain for a backdated rebuild..."
+    docker_compose -p "$KASSIBER_REGTEST_COMPOSE_PROJECT" -f dev/regtest/compose.bitcoin.yml down -v --remove-orphans
+    docker_compose -p "$KASSIBER_REGTEST_COMPOSE_PROJECT" -f dev/regtest/compose.bitcoin.yml up -d
+    wait_for_core
   fi
 
   demo_assert_safe_home rebuild
@@ -603,7 +625,13 @@ run_demo_up() {
   export KASSIBER_REGTEST_COMPOSE_PROJECT="${KASSIBER_REGTEST_COMPOSE_PROJECT:-kassiber-regtest-demo}"
   export KASSIBER_REGTEST_KEEP=1
   export KASSIBER_REGTEST_COMPOSE_PROFILES="${KASSIBER_REGTEST_COMPOSE_PROFILES:-silent-payments}"
+  export COMPOSE_PROFILES="$KASSIBER_REGTEST_COMPOSE_PROFILES"
   demo_load_rpc_env
+  if demo_book_needs_rebuild && [ -z "${KASSIBER_REGTEST_REUSE_CORE:-}" ]; then
+    echo "Removing the managed demo regtest chain before rebuilding the backdated book..."
+    docker_compose -p "$KASSIBER_REGTEST_COMPOSE_PROJECT" -f dev/regtest/compose.bitcoin.yml down -v --remove-orphans
+    export KASSIBER_REGTEST_DEMO_CHAIN_RESET_DONE=1
+  fi
   run_with_bitcoin_core demo_build_book
   demo_print_instructions
 }
