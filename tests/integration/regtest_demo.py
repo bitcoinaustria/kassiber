@@ -2433,10 +2433,10 @@ def _assert_live_liquid_sync_rows(
         wallet_key = wallet_spec["key"]
         wallet_label = str(wallet_spec["label"])
         expected = [
-            (f"{wallet_key}_liquid_live_receive", "inbound"),
-            (f"{wallet_key}_liquid_live_spend", "outbound"),
+            (f"{wallet_key}_liquid_live_receive", "inbound", _btc(wallet_spec["live_receipt_btc"])),
+            (f"{wallet_key}_liquid_live_spend", "outbound", _btc(wallet_spec["live_spend_btc"])),
         ]
-        for txid_key, direction in expected:
+        for txid_key, direction, expected_amount in expected:
             txid = txids.get(txid_key)
             if not txid:
                 raise RuntimeError(f"Liquid live sync did not stage txid {txid_key}")
@@ -2454,6 +2454,16 @@ def _assert_live_liquid_sync_rows(
                 raise RuntimeError(
                     f"Liquid live sync tx {txid} has direction {row.get('direction')!r}, expected {direction!r}"
                 )
+            actual_amount = Decimal(str(row.get("amount") or "0")).quantize(SAT)
+            if actual_amount != expected_amount:
+                raise RuntimeError(
+                    f"Liquid live sync tx {txid} has amount {actual_amount}, expected {expected_amount}"
+                )
+            actual_fee = Decimal(str(row.get("fee") or "0")).quantize(SAT)
+            if direction == "inbound" and actual_fee != Decimal("0"):
+                raise RuntimeError(f"Liquid live sync inbound tx {txid} unexpectedly has fee {actual_fee}")
+            if direction == "outbound" and actual_fee <= Decimal("0"):
+                raise RuntimeError(f"Liquid live sync outbound tx {txid} should include a positive fee")
             if not row.get("confirmed_at"):
                 raise RuntimeError(f"Liquid live sync tx {txid} should be confirmed")
 
