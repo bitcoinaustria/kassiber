@@ -416,6 +416,14 @@ class RegtestHarnessTest(unittest.TestCase):
             harness.index('rm -rf "$DEMO_HOME"'),
         )
 
+    def test_demo_manifest_writer_uses_private_atomic_replacement(self):
+        harness = (ROOT / "scripts" / "integration-harness.sh").read_text(encoding="utf-8")
+
+        self.assertIn("os.chmod(home, 0o700)", harness)
+        self.assertIn("os.open(candidate, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)", harness)
+        self.assertIn("os.replace(tmp_path, manifest_path)", harness)
+        self.assertNotIn('open(manifest_path, "w"', harness)
+
     def test_full_accounting_demo_manifest_validation_rejects_bad_edge_cases(self):
         scenario = regtest_demo.load_scenario()
         rbf = next(op for op in scenario["operations"] if op["kind"] == "rbf_replaced_payment")
