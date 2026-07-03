@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
 
-import { CurrencyToggleText } from "@/components/kb/CurrencyToggleText";
 import { Badge } from "@/components/ui/badge";
 import { TabsContent } from "@/components/ui/tabs";
 import { useDaemon } from "@/daemon/client";
@@ -21,7 +20,6 @@ import {
   blurClass,
   currencyFormatter,
   formatBtcAmount,
-  formatFee,
   formatShortTxid,
   SATS_PER_BTC,
 } from "./model";
@@ -202,12 +200,10 @@ export function TransactionDetailsTab({ ctx }: { ctx: TransactionDetailTabContex
     dirtyExcluded,
     transactionDisplayId,
     hideSensitive,
-    feeBtc,
     commercialContext,
     commercialContextLoading,
     showSourceExternalId,
     tags,
-    currency,
     graphData,
     graphLoading,
     graphError,
@@ -339,7 +335,7 @@ export function TransactionDetailsTab({ ctx }: { ctx: TransactionDetailTabContex
     <>
                   {/* Details — read-only source-of-record + book metadata */}
                   <TabsContent value="details" className="mt-4 space-y-4">
-                    <div className="grid gap-3 sm:grid-cols-3">
+                    <div className="grid gap-3 sm:grid-cols-2">
                       <DetailField
                         label={t("details.transactionId")}
                         value={formatShortTxid(transactionDisplayId)}
@@ -364,30 +360,6 @@ export function TransactionDetailsTab({ ctx }: { ctx: TransactionDetailTabContex
                         }
                         hidden={hideSensitive}
                         hint={t("details.priceAtTimeHint")}
-                      />
-                      <DetailField
-                        label={t("details.fee")}
-                        value={
-                          feeBtc ? (
-                            <CurrencyToggleText
-                              className={blurClass(hideSensitive)}
-                            >
-                              {formatFee(transaction, currency)}
-                            </CurrencyToggleText>
-                          ) : graphNetworkFeeBtc ? (
-                            <CurrencyToggleText
-                              className={blurClass(hideSensitive)}
-                            >
-                              {t("details.senderPaidNetworkFee", {
-                                value: formatBtcAmount(graphNetworkFeeBtc),
-                              })}
-                            </CurrencyToggleText>
-                          ) : (
-                            t("details.feeNone")
-                          )
-                        }
-                        hidden={hideSensitive}
-                        hint={t("details.feeHint")}
                       />
                     </div>
                     <TransactionLedgerSection ctx={ctx} />

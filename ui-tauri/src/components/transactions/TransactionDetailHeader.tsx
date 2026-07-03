@@ -75,6 +75,10 @@ export function TransactionDetailHeader({
 }) {
   const { t } = useTranslation(["transactions"]);
   const StatusIcon = transactionStatusIcons[reviewStatus];
+  const confirmations = transaction.confirmations ?? 0;
+  const showReviewStatusChip =
+    reviewStatus !== "completed" &&
+    !(reviewStatus === "pending" && confirmations <= 0);
 
   return (
     <SheetHeader className="border-b p-0">
@@ -103,7 +107,7 @@ export function TransactionDetailHeader({
                 {confLabel}
               </HeaderChip>
             ) : null}
-            {reviewStatus !== "completed" ? (
+            {showReviewStatusChip ? (
               <HeaderChip
                 icon={
                   <StatusIcon className="size-3" aria-hidden="true" />

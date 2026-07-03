@@ -236,7 +236,7 @@ export function TransactionDetailSheet({
     [],
   );
 
-  // Keyboard shortcuts: 1-6 tabs, Cmd/Ctrl+S save, Esc close, e excluded, t focus tag.
+  // Keyboard shortcuts: 1-5 tabs, Cmd/Ctrl+S save, Esc close, e excluded, t focus tag.
   // Suppress shortcuts while focus is inside another modal (e.g. AttachLinksDialog)
   // so dialog keys don't reach back into the underlying sheet.
   React.useEffect(() => {

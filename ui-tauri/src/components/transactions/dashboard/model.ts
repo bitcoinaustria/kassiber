@@ -1173,7 +1173,6 @@ const detailTabValues = [
   "pricing",
   "tax",
   "linked",
-  "ledger",
 ] as const;
 
 function readTransactionDetailParams(): {
