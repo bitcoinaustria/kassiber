@@ -83,6 +83,51 @@ class RegtestBackendStackTest(unittest.TestCase):
 
         self.assertEqual(captured, [{"seen": "deadbeef"}])
 
+    def test_index_utxos_include_electrum_and_esplora_keys(self) -> None:
+        script_hex = "0014" + "11" * 20
+
+        class FakeRpc:
+            def call(self, method, params=None):
+                params = params or []
+                if method == "getblockcount":
+                    return 1
+                if method == "getblockhash":
+                    return f"block-{params[0]}"
+                if method == "getrawmempool":
+                    return []
+                if method == "getblock":
+                    height = int(str(params[0]).split("-", 1)[1])
+                    return {
+                        "tx": [
+                            {
+                                "txid": f"tx-{height}",
+                                "blockhash": params[0],
+                                "time": 1_700_000_000 + height,
+                                "vout": [
+                                    {
+                                        "n": 0,
+                                        "value": 0.00010000,
+                                        "scriptPubKey": {
+                                            "hex": script_hex,
+                                            "type": "witness_v0_keyhash",
+                                        },
+                                    }
+                                ],
+                            }
+                        ]
+                    }
+                raise AssertionError(f"unexpected RPC call: {method} {params}")
+
+        index = backend_stack.BitcoinIndex(FakeRpc())
+        rows = index.utxos(backend_stack.electrum_scripthash(script_hex))
+
+        self.assertEqual(len(rows), 2)
+        self.assertEqual(rows[1]["tx_hash"], "tx-1")
+        self.assertEqual(rows[1]["tx_pos"], 0)
+        self.assertEqual(rows[1]["height"], 1)
+        self.assertEqual(rows[1]["txid"], "tx-1")
+        self.assertEqual(rows[1]["vout"], 0)
+
 
 if __name__ == "__main__":
     unittest.main()
