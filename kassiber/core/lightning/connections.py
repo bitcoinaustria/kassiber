@@ -20,6 +20,7 @@ import json
 import sqlite3
 from typing import Any
 
+from ...backends import get_db_backend, resolve_backend
 from ...errors import AppError
 from ..repo.context import resolve_scope
 
@@ -116,3 +117,37 @@ def resolve_lightning_connection(
     backend = config.get("backend")
     row["backend_name"] = str(backend) if isinstance(backend, str) and backend else None
     return row
+
+
+def resolve_lightning_backend(
+    conn: sqlite3.Connection,
+    runtime_config: dict[str, object] | None,
+    wallet: dict[str, Any],
+) -> dict[str, Any] | None:
+    """Resolve the raw backend row/config referenced by a Lightning wallet.
+
+    Display helpers intentionally redact backend secrets before returning rows
+    to CLI/UI callers. Adapter calls need the real backend config instead:
+    local ``lightning_cli`` wrapper paths, socket hints, and commando tokens
+    are transport inputs, not presentation data. This helper keeps the lookup
+    small and shared across CLI + daemon surfaces without widening any
+    user-facing backend output.
+    """
+    backend_name = wallet.get("backend_name") if isinstance(wallet, dict) else None
+    if not backend_name:
+        return None
+    name = str(backend_name)
+    if runtime_config is not None:
+        try:
+            return dict(resolve_backend(runtime_config, name))
+        except AppError:
+            # Runtime config may be a minimal fixture, or a caller may have a
+            # stale env/bootstrap view while the canonical DB row exists.
+            # The DB lookup below produces the stable not_found if both miss.
+            pass
+        except (KeyError, TypeError, ValueError):
+            # Fall through to the canonical DB row lookup below. This keeps
+            # CLI tests with tiny runtime_config fixtures simple while still
+            # surfacing DB-level not_found errors deterministically.
+            pass
+    return get_db_backend(conn, name)

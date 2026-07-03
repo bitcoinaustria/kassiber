@@ -246,6 +246,12 @@ class NodeSnapshot:
     closed_channels: tuple[NodeChannel, ...] = field(default_factory=tuple)
     implementation_version: str | None = None
     block_height: int | None = None
+    invoice_count: int = 0
+    paid_invoice_count: int = 0
+    expired_invoice_count: int = 0
+    payment_count: int = 0
+    completed_payment_count: int = 0
+    failed_payment_count: int = 0
     routing: NodeRoutingSnapshot | None = None
     forwards: tuple[NodeForward, ...] = field(default_factory=tuple)
 
@@ -313,6 +319,12 @@ def snapshot_to_dict(snapshot: NodeSnapshot) -> dict[str, Any]:
         "implementationVersion": snapshot.implementation_version,
         "peerCount": snapshot.peer_count,
         "blockHeight": snapshot.block_height,
+        "invoiceCount": snapshot.invoice_count,
+        "paidInvoiceCount": snapshot.paid_invoice_count,
+        "expiredInvoiceCount": snapshot.expired_invoice_count,
+        "paymentCount": snapshot.payment_count,
+        "completedPaymentCount": snapshot.completed_payment_count,
+        "failedPaymentCount": snapshot.failed_payment_count,
         "onchainBalanceSat": snapshot.onchain_balance_sat,
         "totalLocalBalanceSat": snapshot.total_local_balance_sat,
         "totalRemoteBalanceSat": snapshot.total_remote_balance_sat,
@@ -339,7 +351,6 @@ def _channel_to_dict_for_ai(channel: NodeChannel) -> dict[str, Any]:
     answer "is this channel earning?" or "is this channel imbalanced?".
     """
     return {
-        "id": channel.id,
         "capacitySat": channel.capacity_sat,
         "localBalanceSat": channel.local_balance_sat,
         "remoteBalanceSat": channel.remote_balance_sat,
@@ -371,7 +382,6 @@ def _forward_to_dict_for_ai(forward: NodeForward) -> dict[str, Any]:
     bucket).
     """
     return {
-        "id": forward.id,
         "occurredAt": forward.occurred_at,
         "amountInMsat": forward.amount_in_msat,
         "amountOutMsat": forward.amount_out_msat,
@@ -407,6 +417,12 @@ def snapshot_to_dict_for_ai(snapshot: NodeSnapshot) -> dict[str, Any]:
         "implementationVersion": snapshot.implementation_version,
         "peerCount": snapshot.peer_count,
         "blockHeight": snapshot.block_height,
+        "invoiceCount": snapshot.invoice_count,
+        "paidInvoiceCount": snapshot.paid_invoice_count,
+        "expiredInvoiceCount": snapshot.expired_invoice_count,
+        "paymentCount": snapshot.payment_count,
+        "completedPaymentCount": snapshot.completed_payment_count,
+        "failedPaymentCount": snapshot.failed_payment_count,
         "onchainBalanceSat": snapshot.onchain_balance_sat,
         "totalLocalBalanceSat": snapshot.total_local_balance_sat,
         "totalRemoteBalanceSat": snapshot.total_remote_balance_sat,

@@ -658,7 +658,9 @@ def _channel_funding_outpoint(channel: Mapping[str, Any]) -> str | None:
 def _node_channel(channel: Mapping[str, Any], peer_alias_map: Mapping[str, str]) -> NodeChannel:
     is_private = _is_private_channel(channel)
     raw_peer = str_or_none(channel.get("peer_id"))
-    peer_alias = peer_alias_map.get(raw_peer or "") or (raw_peer or "")
+    peer_alias = peer_alias_map.get(raw_peer or "")
+    if not peer_alias:
+        peer_alias = "private peer" if is_private else (raw_peer or "")
     # Opsec: drop peer pubkey for private channels by default.
     peer_pubkey: str | None = None if is_private else raw_peer
     capacity_msat = _parse_msat(
@@ -855,6 +857,32 @@ def _per_channel_routing(snapshot: CoreLightningSnapshot) -> dict[str, int]:
     return {k: _msat_to_sat(v) for k, v in earned_per_channel.items()}
 
 
+def _invoice_counts(snapshot: CoreLightningSnapshot) -> tuple[int, int, int]:
+    invoice_count = len(snapshot.invoices)
+    paid = 0
+    expired = 0
+    for invoice in snapshot.invoices:
+        status = (str_or_none(invoice.get("status")) or "").lower()
+        if status == "paid":
+            paid += 1
+        elif status == "expired":
+            expired += 1
+    return invoice_count, paid, expired
+
+
+def _payment_counts(snapshot: CoreLightningSnapshot) -> tuple[int, int, int]:
+    payment_count = len(snapshot.pays)
+    complete = 0
+    failed = 0
+    for pay in snapshot.pays:
+        status = (str_or_none(pay.get("status")) or "").lower()
+        if status in {"complete", "completed", "paid"}:
+            complete += 1
+        elif status in {"failed", "error"}:
+            failed += 1
+    return payment_count, complete, failed
+
+
 def build_node_snapshot(
     snapshot: CoreLightningSnapshot, *, window_days: int
 ) -> NodeSnapshot:
@@ -890,6 +918,8 @@ def build_node_snapshot(
 
     routing = _routing_summary(snapshot, window_days)
     forwards = _build_forwards(snapshot, peer_alias_map)
+    invoice_count, paid_invoice_count, expired_invoice_count = _invoice_counts(snapshot)
+    payment_count, completed_payment_count, failed_payment_count = _payment_counts(snapshot)
 
     return NodeSnapshot(
         alias=snapshot.node_alias,
@@ -904,6 +934,12 @@ def build_node_snapshot(
         closed_channels=closed_channels,
         implementation_version=snapshot.implementation_version,
         block_height=snapshot.block_height,
+        invoice_count=invoice_count,
+        paid_invoice_count=paid_invoice_count,
+        expired_invoice_count=expired_invoice_count,
+        payment_count=payment_count,
+        completed_payment_count=completed_payment_count,
+        failed_payment_count=failed_payment_count,
         routing=routing,
         forwards=forwards,
     )
