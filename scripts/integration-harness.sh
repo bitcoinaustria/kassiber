@@ -11,7 +11,7 @@ STARTED_COMPOSE=0
 STARTED_BOLTZ=0
 BOLTZ_COMPOSE_FILE=""
 BOLTZ_COMPOSE_TEMP=""
-SUDO_DOCKER_ENV=KASSIBER_REGTEST_RPC_USER,KASSIBER_REGTEST_RPC_PASSWORD,KASSIBER_REGTEST_RPC_AUTH,KASSIBER_REGTEST_RPC_PORT,KASSIBER_REGTEST_ELEMENTS_RPC_PORT,KASSIBER_REGTEST_BITCOIND_IMAGE,KASSIBER_REGTEST_ELEMENTSD_IMAGE,KASSIBER_REGTEST_FULCRUM_IMAGE,KASSIBER_REGTEST_BACKEND_STACK_IMAGE,KASSIBER_REGTEST_BITCOIN_ELECTRUM_PORT,KASSIBER_REGTEST_BITCOIN_MEMPOOL_PORT,KASSIBER_REGTEST_LIQUID_ELECTRUM_PORT,KASSIBER_REGTEST_LIQUID_MEMPOOL_PORT
+SUDO_DOCKER_ENV=COMPOSE_PROFILES,KASSIBER_REGTEST_COMPOSE_PROFILES,KASSIBER_REGTEST_RPC_USER,KASSIBER_REGTEST_RPC_PASSWORD,KASSIBER_REGTEST_RPC_AUTH,KASSIBER_REGTEST_RPC_PORT,KASSIBER_REGTEST_ELEMENTS_RPC_PORT,KASSIBER_REGTEST_BITCOIND_IMAGE,KASSIBER_REGTEST_ELEMENTSD_IMAGE,KASSIBER_REGTEST_FULCRUM_IMAGE,KASSIBER_REGTEST_FRIGATE_IMAGE,KASSIBER_REGTEST_FRIGATE_VERSION,KASSIBER_REGTEST_FRIGATE_TARBALL_SHA256,KASSIBER_REGTEST_BACKEND_STACK_IMAGE,KASSIBER_REGTEST_BITCOIN_ELECTRUM_PORT,KASSIBER_REGTEST_BITCOIN_MEMPOOL_PORT,KASSIBER_REGTEST_LIQUID_ELECTRUM_PORT,KASSIBER_REGTEST_LIQUID_MEMPOOL_PORT,KASSIBER_REGTEST_FRIGATE_PORT
 SUDO_DOCKER=(sudo -n --preserve-env="$SUDO_DOCKER_ENV" docker)
 
 export PYTHONHASHSEED="${PYTHONHASHSEED:-0}"
@@ -71,11 +71,17 @@ docker_compose() {
       KASSIBER_REGTEST_BITCOIND_IMAGE="${KASSIBER_REGTEST_BITCOIND_IMAGE:-}" \
       KASSIBER_REGTEST_ELEMENTSD_IMAGE="${KASSIBER_REGTEST_ELEMENTSD_IMAGE:-}" \
       KASSIBER_REGTEST_FULCRUM_IMAGE="${KASSIBER_REGTEST_FULCRUM_IMAGE:-}" \
+      KASSIBER_REGTEST_FRIGATE_IMAGE="${KASSIBER_REGTEST_FRIGATE_IMAGE:-}" \
+      KASSIBER_REGTEST_FRIGATE_VERSION="${KASSIBER_REGTEST_FRIGATE_VERSION:-}" \
+      KASSIBER_REGTEST_FRIGATE_TARBALL_SHA256="${KASSIBER_REGTEST_FRIGATE_TARBALL_SHA256:-}" \
       KASSIBER_REGTEST_BACKEND_STACK_IMAGE="${KASSIBER_REGTEST_BACKEND_STACK_IMAGE:-}" \
       KASSIBER_REGTEST_BITCOIN_ELECTRUM_PORT="${KASSIBER_REGTEST_BITCOIN_ELECTRUM_PORT:-}" \
       KASSIBER_REGTEST_BITCOIN_MEMPOOL_PORT="${KASSIBER_REGTEST_BITCOIN_MEMPOOL_PORT:-}" \
       KASSIBER_REGTEST_LIQUID_ELECTRUM_PORT="${KASSIBER_REGTEST_LIQUID_ELECTRUM_PORT:-}" \
       KASSIBER_REGTEST_LIQUID_MEMPOOL_PORT="${KASSIBER_REGTEST_LIQUID_MEMPOOL_PORT:-}" \
+      KASSIBER_REGTEST_FRIGATE_PORT="${KASSIBER_REGTEST_FRIGATE_PORT:-}" \
+      KASSIBER_REGTEST_COMPOSE_PROFILES="${KASSIBER_REGTEST_COMPOSE_PROFILES:-}" \
+      COMPOSE_PROFILES="${COMPOSE_PROFILES:-}" \
       docker-compose "$@"
   else
     echo "Docker Compose is required for the slow regtest lane." >&2
@@ -149,8 +155,12 @@ run_with_bitcoin_core() {
   export KASSIBER_REGTEST_BITCOIN_MEMPOOL_PORT="${KASSIBER_REGTEST_BITCOIN_MEMPOOL_PORT:-$((KASSIBER_REGTEST_RPC_PORT + 101))}"
   export KASSIBER_REGTEST_LIQUID_ELECTRUM_PORT="${KASSIBER_REGTEST_LIQUID_ELECTRUM_PORT:-$((KASSIBER_REGTEST_RPC_PORT + 102))}"
   export KASSIBER_REGTEST_LIQUID_MEMPOOL_PORT="${KASSIBER_REGTEST_LIQUID_MEMPOOL_PORT:-$((KASSIBER_REGTEST_RPC_PORT + 103))}"
+  export KASSIBER_REGTEST_FRIGATE_PORT="${KASSIBER_REGTEST_FRIGATE_PORT:-$((KASSIBER_REGTEST_RPC_PORT + 105))}"
   export KASSIBER_REGTEST_CORE_URL="${KASSIBER_REGTEST_CORE_URL:-http://127.0.0.1:${KASSIBER_REGTEST_RPC_PORT}}"
   export KASSIBER_REGTEST_COMPOSE_PROJECT="${KASSIBER_REGTEST_COMPOSE_PROJECT:-$(py -c 'import hashlib, os; print("kassiber-regtest-" + hashlib.sha256(os.getcwd().encode()).hexdigest()[:12])')}"
+  if [ -n "${KASSIBER_REGTEST_COMPOSE_PROFILES:-}" ]; then
+    export COMPOSE_PROFILES="$KASSIBER_REGTEST_COMPOSE_PROFILES"
+  fi
 
   STARTED_COMPOSE=0
   cleanup() {
@@ -179,6 +189,122 @@ run_with_bitcoin_core() {
 
 run_bitcoin_core_smoke() {
   py -m unittest tests.integration.test_live_bitcoin_core_regtest -v
+}
+
+probe_frigate() {
+  py - <<'PY'
+import json
+import os
+import socket
+import sys
+
+port = int(os.environ.get("KASSIBER_REGTEST_FRIGATE_PORT", "18548"))
+
+def call(sock, ident, method, params=None):
+    payload = {"jsonrpc": "2.0", "id": ident, "method": method, "params": params or []}
+    sock.sendall(json.dumps(payload).encode("utf-8") + b"\n")
+    raw = b""
+    while not raw.endswith(b"\n"):
+        chunk = sock.recv(65536)
+        if not chunk:
+            raise RuntimeError("Frigate closed the Electrum connection")
+        raw += chunk
+    response = json.loads(raw.decode("utf-8"))
+    if response.get("error"):
+        raise RuntimeError(f"{method} failed: {response['error']}")
+    return response.get("result")
+
+try:
+    with socket.create_connection(("127.0.0.1", port), timeout=3) as sock:
+        call(sock, "version", "server.version", ["Kassiber regtest probe", "1.6"])
+        features = call(sock, "features", "server.features")
+except Exception as exc:
+    print(f"{type(exc).__name__}: {exc}", file=sys.stderr)
+    sys.exit(1)
+
+if not isinstance(features, dict) or 0 not in list(features.get("silent_payments") or []):
+    print(json.dumps(features, sort_keys=True), file=sys.stderr)
+    sys.exit(1)
+sys.exit(0)
+PY
+}
+
+seed_frigate_regtest_tip() {
+  py - <<'PY'
+import base64
+import json
+import os
+import sys
+from urllib import error, parse, request
+
+url = os.environ["KASSIBER_REGTEST_CORE_URL"].rstrip("/")
+user = os.environ["KASSIBER_REGTEST_RPC_USER"]
+password = os.environ["KASSIBER_REGTEST_RPC_PASSWORD"]
+wallet_name = os.environ.get("KASSIBER_REGTEST_FRIGATE_READY_WALLET", "kassiber-frigate-ready")
+
+
+class RpcError(RuntimeError):
+    def __init__(self, code, message):
+        super().__init__(message)
+        self.code = code
+
+
+def call(method, params=None, *, wallet=None):
+    endpoint = url
+    if wallet:
+        endpoint += "/wallet/" + parse.quote(wallet, safe="")
+    payload = json.dumps({"jsonrpc": "1.0", "id": "frigate-ready", "method": method, "params": params or []}).encode()
+    req = request.Request(endpoint, data=payload, headers={"Content-Type": "application/json"})
+    req.add_header("Authorization", "Basic " + base64.b64encode(f"{user}:{password}".encode()).decode())
+    try:
+        with request.urlopen(req, timeout=10) as response:
+            body = json.loads(response.read().decode())
+    except error.HTTPError as exc:
+        body = json.loads(exc.read().decode(errors="replace"))
+    if body.get("error"):
+        err = body["error"]
+        raise RpcError(err.get("code"), err.get("message") or method)
+    return body.get("result")
+
+
+info = call("getblockchaininfo")
+if not info.get("initialblockdownload") and int(info.get("blocks") or 0) > 0:
+    sys.exit(0)
+
+try:
+    call("createwallet", [wallet_name])
+except RpcError as exc:
+    if exc.code not in {-4, -35}:
+        raise
+    try:
+        call("loadwallet", [wallet_name])
+    except RpcError as load_exc:
+        if load_exc.code != -35:
+            raise
+
+address = call("getnewaddress", ["Frigate readiness", "bech32m"], wallet=wallet_name)
+call("generatetoaddress", [1, address])
+PY
+}
+
+wait_for_frigate() {
+  local deadline
+  deadline=$((SECONDS + ${KASSIBER_REGTEST_FRIGATE_WAIT_SECONDS:-600}))
+  until probe_frigate
+  do
+    if [ "$SECONDS" -ge "$deadline" ]; then
+      echo "Timed out waiting for Frigate Electrum Silent Payments support on port ${KASSIBER_REGTEST_FRIGATE_PORT}." >&2
+      docker_compose -p "$KASSIBER_REGTEST_COMPOSE_PROJECT" -f dev/regtest/compose.bitcoin.yml logs --tail=120 frigate || true
+      return 1
+    fi
+    sleep 3
+  done
+}
+
+run_silent_payments_smoke() {
+  seed_frigate_regtest_tip
+  wait_for_frigate
+  py -m unittest tests.test_silent_payments -v
 }
 
 run_demo_full() {
@@ -229,6 +355,7 @@ manifest = {
     "core_url": os.environ["KASSIBER_REGTEST_CORE_URL"],
     "elements_core_url": f"http://127.0.0.1:{os.environ['KASSIBER_REGTEST_ELEMENTS_RPC_PORT']}",
     "bitcoin_electrum_url": f"tcp://127.0.0.1:{os.environ['KASSIBER_REGTEST_BITCOIN_ELECTRUM_PORT']}",
+    "bitcoin_frigate_url": f"tcp://127.0.0.1:{os.environ['KASSIBER_REGTEST_FRIGATE_PORT']}",
     "bitcoin_mempool_url": f"http://127.0.0.1:{os.environ['KASSIBER_REGTEST_BITCOIN_MEMPOOL_PORT']}/api",
     "liquid_electrum_url": f"tcp://127.0.0.1:{os.environ['KASSIBER_REGTEST_LIQUID_ELECTRUM_PORT']}",
     "liquid_mempool_url": f"http://127.0.0.1:{os.environ['KASSIBER_REGTEST_LIQUID_MEMPOOL_PORT']}/api",
@@ -338,6 +465,7 @@ Demo environment is up.
   Core RPC:   $KASSIBER_REGTEST_CORE_URL (regtest; credentials in $DEMO_MANIFEST)
   Elements RPC: http://127.0.0.1:$KASSIBER_REGTEST_ELEMENTS_RPC_PORT (elementsregtest; same credentials)
   BTC Electrum: tcp://127.0.0.1:$KASSIBER_REGTEST_BITCOIN_ELECTRUM_PORT
+  BTC Frigate:  tcp://127.0.0.1:$KASSIBER_REGTEST_FRIGATE_PORT (Silent Payments Electrum)
   BTC mempool:  http://127.0.0.1:$KASSIBER_REGTEST_BITCOIN_MEMPOOL_PORT/api
   LBTC Electrum: tcp://127.0.0.1:$KASSIBER_REGTEST_LIQUID_ELECTRUM_PORT
   LBTC mempool:  http://127.0.0.1:$KASSIBER_REGTEST_LIQUID_MEMPOOL_PORT/api
@@ -358,6 +486,7 @@ run_demo_up() {
   # credentials so later demo-up runs still match the book's stored backend.
   export KASSIBER_REGTEST_COMPOSE_PROJECT="${KASSIBER_REGTEST_COMPOSE_PROJECT:-kassiber-regtest-demo}"
   export KASSIBER_REGTEST_KEEP=1
+  export KASSIBER_REGTEST_COMPOSE_PROFILES="${KASSIBER_REGTEST_COMPOSE_PROFILES:-silent-payments}"
   demo_load_rpc_env
   run_with_bitcoin_core demo_build_book
   demo_print_instructions
@@ -415,6 +544,11 @@ run_bitcoin_core() {
 
 run_regtest_demo_full() {
   run_with_bitcoin_core run_demo_full
+}
+
+run_silent_payments() {
+  export KASSIBER_REGTEST_COMPOSE_PROFILES="${KASSIBER_REGTEST_COMPOSE_PROFILES:-silent-payments}"
+  run_with_bitcoin_core run_silent_payments_smoke
 }
 
 boltz_regtest_dir() {
@@ -604,12 +738,15 @@ case "$MODE" in
   boltz-liquid)
     run_boltz_liquid
     ;;
+  silent-payments)
+    run_silent_payments
+    ;;
   all)
     run_fast
     run_with_bitcoin_core run_slow_suite
     ;;
   *)
-    echo "usage: $0 [fast|bitcoin-core|slow|demo|demo-full|demo-up|demo-tick [N]|demo-down [--purge]|boltz-liquid|all]" >&2
+    echo "usage: $0 [fast|bitcoin-core|slow|demo|demo-full|demo-up|demo-tick [N]|demo-down [--purge]|boltz-liquid|silent-payments|all]" >&2
     exit 2
     ;;
 esac

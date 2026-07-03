@@ -1044,32 +1044,16 @@ def _inputs_are_single_source_or_recorded_source(
     )
 
 
-def _outpoint_owned_matches(index: Any, outpoint: Any) -> list[Any]:
-    """Owned matches for an outpoint.
-
-    ``by_outpoint`` became a multimap when overlapping wallets were allowed to
-    inventory the same UTXO; tolerate the legacy single-match shape some test
-    fixtures still construct.
-    """
-    value = index.by_outpoint.get(outpoint)
-    if value is None:
-        return []
-    if isinstance(value, list):
-        return list(value)
-    return [value]
-
-
 def _input_owner_ids(index: Any, entry: Mapping[str, Any]) -> set[str]:
     """All owned-wallet ids for an input (outpoint inventory wins; else script).
 
-    Since address-list overlap was allowed, one UTXO can be inventoried by
-    several overlapping wallets, so the outpoint path returns the full set —
-    like the script fallback — and callers reason about ambiguity instead of
-    getting an arbitrary first match.
+    The outpoint inventory is unambiguous (one wallet per UTXO); only the
+    script fallback can map to several wallets, and we return the full set so
+    callers can reason about ambiguity instead of an arbitrary first match.
     """
     outpoint = entry.get("outpoint")
     if outpoint:
-        matches = _outpoint_owned_matches(index, outpoint)
+        matches = _lookup_outpoint(index, outpoint)
         if matches:
             return {str(match.wallet_id) for match in matches}
     return {str(match.wallet_id) for match in index.lookup_script(entry.get("script"))}
@@ -1117,13 +1101,22 @@ def _source_chain_network(
     for entry in inputs:
         outpoint = entry.get("outpoint")
         if outpoint:
-            for match in _outpoint_owned_matches(index, outpoint):
+            for match in _lookup_outpoint(index, outpoint):
                 if str(match.wallet_id) == source_wallet_id:
                     return _norm_chain_network(match.chain, match.network)
         for match in index.lookup_script(entry.get("script")):
             if str(match.wallet_id) == source_wallet_id:
                 return _norm_chain_network(match.chain, match.network)
     return None
+
+
+def _lookup_outpoint(index: Any, outpoint: Any) -> list[Any]:
+    if hasattr(index, "lookup_outpoint"):
+        return list(index.lookup_outpoint(outpoint))
+    value = getattr(index, "by_outpoint", {}).get(str(outpoint or "").lower())
+    if value is None:
+        return []
+    return value if isinstance(value, list) else [value]
 
 
 def _parse_onchain_tx(raw_json: Any) -> Optional[dict[str, Any]]:
