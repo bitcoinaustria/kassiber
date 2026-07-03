@@ -936,10 +936,14 @@ def _journal_quantity_deltas_by_day(
 ) -> dict[date, Decimal]:
     rows = conn.execute(
         """
-        SELECT occurred_at, entry_type, quantity
-        FROM journal_entries
-        WHERE profile_id = ? AND asset IN ('BTC', 'LBTC')
-        ORDER BY occurred_at ASC, created_at ASC, id ASC
+        SELECT
+            COALESCE(t.occurred_at, je.occurred_at) AS occurred_at,
+            je.entry_type,
+            je.quantity
+        FROM journal_entries je
+        LEFT JOIN transactions t ON t.id = je.transaction_id
+        WHERE je.profile_id = ? AND je.asset IN ('BTC', 'LBTC')
+        ORDER BY occurred_at ASC, je.created_at ASC, je.id ASC
         """,
         (profile_id,),
     ).fetchall()
@@ -1579,10 +1583,16 @@ def _portfolio_cost_basis_by_date(
 ) -> dict[str, float]:
     rows = conn.execute(
         """
-        SELECT occurred_at, entry_type, quantity, fiat_value, COALESCE(cost_basis, 0) AS cost_basis
-        FROM journal_entries
-        WHERE profile_id = ? AND asset IN ('BTC', 'LBTC')
-        ORDER BY occurred_at ASC, created_at ASC, id ASC
+        SELECT
+            COALESCE(t.occurred_at, je.occurred_at) AS occurred_at,
+            je.entry_type,
+            je.quantity,
+            je.fiat_value,
+            COALESCE(je.cost_basis, 0) AS cost_basis
+        FROM journal_entries je
+        LEFT JOIN transactions t ON t.id = je.transaction_id
+        WHERE je.profile_id = ? AND je.asset IN ('BTC', 'LBTC')
+        ORDER BY occurred_at ASC, je.created_at ASC, je.id ASC
         """,
         (profile_id,),
     ).fetchall()
