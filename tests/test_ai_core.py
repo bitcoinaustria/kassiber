@@ -1139,6 +1139,44 @@ class ProvidersCrudTest(unittest.TestCase):
             finally:
                 conn.close()
 
+    def test_update_clears_secret_when_base_url_changes_without_rotation(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-ai-origin-change-") as tmp:
+            conn = open_db(str(Path(tmp) / "data"))
+            try:
+                create_db_ai_provider(
+                    conn,
+                    "openrouter",
+                    "https://openrouter.ai/api/v1",
+                    api_key="sk-old",
+                    kind="remote",
+                )
+                updated = update_db_ai_provider(
+                    conn,
+                    "openrouter",
+                    {"base_url": "https://example.invalid/v1"},
+                )
+                self.assertEqual(updated["base_url"], "https://example.invalid/v1")
+                self.assertIsNone(updated["api_key"])
+                self.assertEqual(updated["secret_ref"], {
+                    "store_id": "sqlcipher_inline",
+                    "service": updated["secret_ref"]["service"],
+                    "account": "openrouter",
+                    "state": "missing",
+                    "created_at": updated["secret_ref"]["created_at"],
+                    "rotated_at": updated["secret_ref"]["rotated_at"],
+                })
+
+                rotated = update_db_ai_provider(
+                    conn,
+                    "openrouter",
+                    {"base_url": "https://api.openai.com/v1", "api_key": "sk-new"},
+                )
+                self.assertEqual(rotated["base_url"], "https://api.openai.com/v1")
+                self.assertEqual(rotated["api_key"], "sk-new")
+                self.assertEqual(rotated["secret_ref"]["state"], "ok")
+            finally:
+                conn.close()
+
     def test_narrow_set_api_key_updates_secret_ref_without_echo(self):
         with tempfile.TemporaryDirectory(prefix="kassiber-ai-secret-ref-") as tmp:
             conn = open_db(str(Path(tmp) / "data"))
