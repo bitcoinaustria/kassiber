@@ -61,6 +61,43 @@
         "vout": 0
       }
     ],
+    "{\"method\":\"gettransaction\",\"params\":[\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",true,true],\"transport\":\"bitcoinrpc\",\"wallet_name\":\"kassiber-wallet-1\"}": {
+      "blockhash": "33bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "blocktime": 1700000600,
+      "decoded": {
+        "txid": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "vin": [
+          {
+            "txid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "vout": 0,
+            "prevout": {
+              "value": 0.25,
+              "scriptPubKey": {
+                "hex": "001487a87e0e17a80a2d2bd65c421a1090df8ed6cc9a"
+              }
+            }
+          }
+        ],
+        "vout": [
+          {
+            "n": 0,
+            "value": 0.19999,
+            "scriptPubKey": {
+              "hex": "001487a87e0e17a80a2d2bd65c421a1090df8ed6cc9a"
+            }
+          },
+          {
+            "n": 1,
+            "value": 0.05,
+            "scriptPubKey": {
+              "hex": "0014ffffffffffffffffffffffffffffffffffffffff"
+            }
+          }
+        ]
+      },
+      "time": 1700000600,
+      "txid": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    },
     "{\"method\":\"gettransaction\",\"params\":[\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",true],\"transport\":\"bitcoinrpc\",\"wallet_name\":\"kassiber-wallet-1\"}": {
       "blockhash": "33bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
       "blocktime": 1700000600,

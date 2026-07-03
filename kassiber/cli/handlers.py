@@ -3765,6 +3765,12 @@ def _serialize_intra_audit(rows):
             "fee": float(dec(row["crypto_fee"])),
             "fee_msat": btc_to_msat(dec(row["crypto_fee"])),
             "spot_price": float(dec(row["spot_price"])),
+            "pairing_source": row.get("pairing_source"),
+            **(
+                {"transfer_group_id": row["transfer_group_id"]}
+                if row.get("transfer_group_id")
+                else {}
+            ),
         }
         for row in sorted(
             rows,

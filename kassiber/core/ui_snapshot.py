@@ -6,6 +6,7 @@ import json
 import sqlite3
 from collections import defaultdict
 from datetime import date, datetime, timezone
+from decimal import Decimal
 from typing import Any
 
 from ..backends import backend_value, redact_backend_for_output
@@ -825,6 +826,161 @@ def _transaction_wallet_balances(
     }
 
 
+def _book_quantity_delta(entry_type: str, quantity_msat: int | None) -> Decimal:
+    return report_builders._holdings_quantity_delta(
+        entry_type,
+        msat_to_btc(quantity_msat),
+    )
+
+
+def _balance_series_from_month_deltas(
+    by_month: dict[str, Decimal],
+) -> list[float]:
+    if not by_month:
+        return [0.0] * 12
+    months = set(sorted(by_month)[-12:])
+    cumulative = Decimal("0")
+    series = []
+    for month in sorted(by_month):
+        cumulative += by_month[month]
+        if month in months:
+            series.append(float(cumulative))
+    if len(series) < 12:
+        series = [series[0]] * (12 - len(series)) + series
+    return series[-12:]
+
+
+def _has_book_balance_state(freshness: dict[str, Any]) -> bool:
+    if freshness.get("needs_processing"):
+        return False
+    return bool(freshness.get("last_processed_at")) or int(
+        freshness.get("journal_entry_count") or 0,
+    ) > 0
+
+
+def _journal_wallet_holdings_balances(
+    conn: sqlite3.Connection,
+    profile_id: str,
+) -> dict[str, float] | None:
+    try:
+        rows = conn.execute(
+            """
+            SELECT wallet_id, SUM(quantity) AS quantity
+            FROM journal_wallet_holdings
+            WHERE profile_id = ? AND asset IN ('BTC', 'LBTC')
+            GROUP BY wallet_id
+            """,
+            (profile_id,),
+        ).fetchall()
+    except sqlite3.OperationalError:
+        rows = []
+    if rows:
+        return {
+            row["wallet_id"]: float(msat_to_btc(row["quantity"] or 0))
+            for row in rows
+        }
+    return None
+
+
+def _journal_entry_wallet_balances(
+    conn: sqlite3.Connection,
+    profile_id: str,
+) -> dict[str, float]:
+    rows = conn.execute(
+        """
+        SELECT wallet_id, entry_type, quantity
+        FROM journal_entries
+        WHERE profile_id = ? AND asset IN ('BTC', 'LBTC')
+        ORDER BY occurred_at ASC, created_at ASC, id ASC
+        """,
+        (profile_id,),
+    ).fetchall()
+    balances: dict[str, Decimal] = defaultdict(lambda: Decimal("0"))
+    for row in rows:
+        balances[row["wallet_id"]] += _book_quantity_delta(
+            row["entry_type"],
+            row["quantity"],
+        )
+    return {wallet_id: float(quantity) for wallet_id, quantity in balances.items()}
+
+
+def _journal_quantity_deltas_by_transaction(
+    conn: sqlite3.Connection,
+    profile_id: str,
+) -> dict[str, Decimal]:
+    rows = conn.execute(
+        """
+        SELECT transaction_id, entry_type, quantity
+        FROM journal_entries
+        WHERE profile_id = ? AND asset IN ('BTC', 'LBTC')
+        ORDER BY occurred_at ASC, created_at ASC, id ASC
+        """,
+        (profile_id,),
+    ).fetchall()
+    deltas: dict[str, Decimal] = defaultdict(lambda: Decimal("0"))
+    for row in rows:
+        transaction_id = row["transaction_id"]
+        if not transaction_id:
+            continue
+        deltas[str(transaction_id)] += _book_quantity_delta(
+            row["entry_type"],
+            row["quantity"],
+        )
+    return deltas
+
+
+def _journal_quantity_deltas_by_day(
+    conn: sqlite3.Connection,
+    profile_id: str,
+) -> dict[date, Decimal]:
+    rows = conn.execute(
+        """
+        SELECT occurred_at, entry_type, quantity
+        FROM journal_entries
+        WHERE profile_id = ? AND asset IN ('BTC', 'LBTC')
+        ORDER BY occurred_at ASC, created_at ASC, id ASC
+        """,
+        (profile_id,),
+    ).fetchall()
+    deltas: dict[date, Decimal] = defaultdict(lambda: Decimal("0"))
+    for row in rows:
+        day = _parse_day(row["occurred_at"])
+        if day is None:
+            continue
+        deltas[day] += _book_quantity_delta(row["entry_type"], row["quantity"])
+    return deltas
+
+
+def _journal_wallet_balances(
+    conn: sqlite3.Connection,
+    profile_id: str,
+    *,
+    has_book_state: bool,
+) -> dict[str, float] | None:
+    if not has_book_state:
+        return None
+    holdings_balances = _journal_wallet_holdings_balances(conn, profile_id)
+    if holdings_balances is not None:
+        return holdings_balances
+    return _journal_entry_wallet_balances(conn, profile_id)
+
+
+def _wallet_balances(
+    conn: sqlite3.Connection,
+    profile_id: str,
+    *,
+    has_book_state: bool,
+) -> dict[str, float]:
+    book_balances = _journal_wallet_balances(
+        conn,
+        profile_id,
+        has_book_state=has_book_state,
+    )
+    if book_balances is not None:
+        return book_balances
+    return _transaction_wallet_balances(conn, profile_id)
+
+
 def _connections(
     conn: sqlite3.Connection,
     profile_id: str,
@@ -945,7 +1101,12 @@ def _transactions(conn: sqlite3.Connection, profile_id: str) -> list[dict[str, A
     return output[:20]
 
 
-def _activity_transactions(conn: sqlite3.Connection, profile_id: str) -> list[dict[str, Any]]:
+def _activity_transactions(
+    conn: sqlite3.Connection,
+    profile_id: str,
+    *,
+    has_book_state: bool,
+) -> list[dict[str, Any]]:
     rows = conn.execute(
         """
         SELECT
@@ -983,19 +1144,37 @@ def _activity_transactions(conn: sqlite3.Connection, profile_id: str) -> list[di
         FROM transactions t
         JOIN wallets w ON w.id = t.wallet_id
         LEFT JOIN journal_quarantines jq ON jq.transaction_id = t.id
-        WHERE t.profile_id = ? AND t.asset IN ('BTC', 'LBTC')
+        WHERE t.profile_id = ?
+          AND t.asset IN ('BTC', 'LBTC')
+          AND COALESCE(t.excluded, 0) = 0
         ORDER BY t.occurred_at ASC, t.created_at ASC, t.id ASC
         """,
         (profile_id,),
     ).fetchall()
     activity_rows: list[dict[str, Any]] = []
     quantity_msat = 0
+    quantity_btc = Decimal("0")
+    book_deltas_by_transaction = (
+        _journal_quantity_deltas_by_transaction(conn, profile_id)
+        if has_book_state
+        else {}
+    )
     cost_basis_by_transaction = _portfolio_cost_basis_by_transaction(conn, profile_id)
     running_cost_basis = 0.0
     for row in rows:
         amount = int(row["amount"] or 0)
         fee = int(row["fee"] or 0)
-        quantity_msat += amount if row["direction"] == "inbound" else -amount - fee
+        if has_book_state:
+            quantity_btc += book_deltas_by_transaction.get(
+                str(row["id"]),
+                Decimal("0"),
+            )
+            running_balance_btc = float(quantity_btc)
+        else:
+            quantity_msat += (
+                amount if row["direction"] == "inbound" else -amount - fee
+            )
+            running_balance_btc = float(msat_to_btc(quantity_msat))
         running_cost_basis = cost_basis_by_transaction.get(
             str(row["id"]),
             running_cost_basis,
@@ -1003,7 +1182,7 @@ def _activity_transactions(conn: sqlite3.Connection, profile_id: str) -> list[di
         activity_rows.append(
             {
                 **dict(row),
-                "running_balance_btc": float(msat_to_btc(quantity_msat)),
+                "running_balance_btc": running_balance_btc,
                 "running_cost_basis_eur": running_cost_basis,
             }
         )
@@ -1316,7 +1495,36 @@ def _transaction_row_to_ui(
     return payload
 
 
-def _balance_series(conn: sqlite3.Connection, profile_id: str) -> list[float]:
+def _journal_balance_series(
+    conn: sqlite3.Connection,
+    profile_id: str,
+    *,
+    has_book_state: bool,
+) -> list[float] | None:
+    if not has_book_state:
+        return None
+    rows = conn.execute(
+        """
+        SELECT occurred_at, entry_type, quantity
+        FROM journal_entries
+        WHERE profile_id = ? AND asset IN ('BTC', 'LBTC')
+        ORDER BY occurred_at ASC, created_at ASC, id ASC
+        """,
+        (profile_id,),
+    ).fetchall()
+    by_month: dict[str, Decimal] = defaultdict(lambda: Decimal("0"))
+    for row in rows:
+        key = (row["occurred_at"] or "")[:7]
+        if not key:
+            continue
+        by_month[key] += _book_quantity_delta(row["entry_type"], row["quantity"])
+    return _balance_series_from_month_deltas(by_month)
+
+
+def _transaction_balance_series(
+    conn: sqlite3.Connection,
+    profile_id: str,
+) -> list[float]:
     rows = conn.execute(
         """
         SELECT occurred_at, direction, amount, fee
@@ -1326,26 +1534,32 @@ def _balance_series(conn: sqlite3.Connection, profile_id: str) -> list[float]:
         """,
         (profile_id,),
     ).fetchall()
-    if not rows:
-        return [0.0] * 12
-    by_month: dict[str, int] = defaultdict(int)
+    by_month: dict[str, Decimal] = defaultdict(lambda: Decimal("0"))
     for row in rows:
         key = (row["occurred_at"] or "")[:7]
         if not key:
             continue
         amount = int(row["amount"] or 0)
         fee = int(row["fee"] or 0)
-        by_month[key] += amount if row["direction"] == "inbound" else -amount - fee
-    months = sorted(by_month)[-12:]
-    cumulative = 0
-    series = []
-    for month in sorted(by_month):
-        cumulative += by_month[month]
-        if month in months:
-            series.append(float(msat_to_btc(cumulative)))
-    if len(series) < 12:
-        series = [series[0]] * (12 - len(series)) + series
-    return series[-12:]
+        delta = amount if row["direction"] == "inbound" else -amount - fee
+        by_month[key] += msat_to_btc(delta)
+    return _balance_series_from_month_deltas(by_month)
+
+
+def _balance_series(
+    conn: sqlite3.Connection,
+    profile_id: str,
+    *,
+    has_book_state: bool,
+) -> list[float]:
+    book_series = _journal_balance_series(
+        conn,
+        profile_id,
+        has_book_state=has_book_state,
+    )
+    if book_series is not None:
+        return book_series
+    return _transaction_balance_series(conn, profile_id)
 
 
 def _rate_from_transaction(row: sqlite3.Row) -> float | None:
@@ -1524,6 +1738,8 @@ def _portfolio_series(
     fallback_rate: float,
     final_balance_btc: float,
     final_value_eur: float,
+    *,
+    has_book_state: bool,
 ) -> list[dict[str, Any]]:
     rows = conn.execute(
         """
@@ -1538,18 +1754,29 @@ def _portfolio_series(
         return []
 
     cost_basis_by_date = _portfolio_cost_basis_by_date(conn, profile_id)
-    tx_deltas_by_day: dict[date, int] = defaultdict(int)
+    raw_tx_days: set[date] = set()
+    raw_rates_by_day: dict[date, float] = {}
+    raw_tx_deltas_by_day: dict[date, Decimal] = defaultdict(lambda: Decimal("0"))
     for row in rows:
         day = _parse_day(row["occurred_at"])
         if day is None:
             continue
+        raw_tx_days.add(day)
         amount = int(row["amount"] or 0)
         fee = int(row["fee"] or 0)
-        tx_deltas_by_day[day] += (
+        raw_tx_deltas_by_day[day] += msat_to_btc(
             amount if row["direction"] == "inbound" else -amount - fee
         )
+        row_rate = _rate_from_transaction(row)
+        if row_rate is not None:
+            raw_rates_by_day[day] = row_rate
 
-    sorted_tx_days = sorted(tx_deltas_by_day)
+    quantity_deltas_by_day = (
+        _journal_quantity_deltas_by_day(conn, profile_id)
+        if has_book_state
+        else raw_tx_deltas_by_day
+    )
+    sorted_tx_days = sorted(set(quantity_deltas_by_day) | raw_tx_days)
     if not sorted_tx_days:
         return []
 
@@ -1561,7 +1788,7 @@ def _portfolio_series(
             for raw_day, value in cost_basis_by_date.items()
             if (day := _parse_day(raw_day)) is not None
         )
-        quantity_msat = 0
+        quantity_btc = Decimal("0")
         tx_index = 0
         cost_basis_index = 0
         day_cost_basis = 0.0
@@ -1572,7 +1799,10 @@ def _portfolio_series(
             if rate_day is None:
                 continue
             while tx_index < len(sorted_tx_days) and sorted_tx_days[tx_index] <= rate_day:
-                quantity_msat += tx_deltas_by_day[sorted_tx_days[tx_index]]
+                quantity_btc += quantity_deltas_by_day.get(
+                    sorted_tx_days[tx_index],
+                    Decimal("0"),
+                )
                 tx_index += 1
             while (
                 cost_basis_index < len(cost_basis_items)
@@ -1581,7 +1811,7 @@ def _portfolio_series(
                 day_cost_basis = cost_basis_items[cost_basis_index][1]
                 cost_basis_index += 1
 
-            balance_btc = float(msat_to_btc(quantity_msat))
+            balance_btc = float(quantity_btc)
             price_eur = float(rate_row["rate"] or 0)
             day_key = rate_day.isoformat()
             output.append(
@@ -1601,7 +1831,10 @@ def _portfolio_series(
         last_output_day = _parse_day(output[-1]["date"]) if output else None
         if last_output_day is not None and last_tx_day > last_output_day:
             while tx_index < len(sorted_tx_days):
-                quantity_msat += tx_deltas_by_day[sorted_tx_days[tx_index]]
+                quantity_btc += quantity_deltas_by_day.get(
+                    sorted_tx_days[tx_index],
+                    Decimal("0"),
+                )
                 tx_index += 1
             while cost_basis_index < len(cost_basis_items):
                 day_cost_basis = cost_basis_items[cost_basis_index][1]
@@ -1615,7 +1848,7 @@ def _portfolio_series(
                     "valueEur": (
                         final_value_eur
                         if fallback_rate
-                        else float(msat_to_btc(quantity_msat)) * rate
+                        else float(quantity_btc) * rate
                     ),
                     "costBasisEur": day_cost_basis,
                     "priceEur": rate,
@@ -1624,44 +1857,27 @@ def _portfolio_series(
 
         return output
 
-    quantity_msat = 0
+    quantity_btc = Decimal("0")
     latest_rate = fallback_rate
     output: list[dict[str, Any]] = []
-    current_date = ""
     day_cost_basis = 0.0
 
-    for row in rows:
-        date_key = (row["occurred_at"] or "")[:10]
-        if not date_key:
-            continue
-        if current_date and date_key != current_date:
-            balance_btc = float(msat_to_btc(quantity_msat))
-            output.append(
-                {
-                    "date": current_date,
-                    "label": current_date,
-                    "balanceBtc": balance_btc,
-                    "valueEur": balance_btc * latest_rate,
-                    "costBasisEur": day_cost_basis,
-                }
-            )
-
-        current_date = date_key
-        amount = int(row["amount"] or 0)
-        fee = int(row["fee"] or 0)
-        quantity_msat += amount if row["direction"] == "inbound" else -amount - fee
-        row_rate = _rate_from_transaction(row)
-        if row_rate is not None:
-            latest_rate = row_rate
+    for day in sorted_tx_days:
+        date_key = day.isoformat()
+        quantity_btc += quantity_deltas_by_day.get(day, Decimal("0"))
+        if day in raw_rates_by_day:
+            latest_rate = raw_rates_by_day[day]
         day_cost_basis = cost_basis_by_date.get(date_key, day_cost_basis)
-
-    if current_date:
+        balance_btc = float(quantity_btc)
+        is_final = day == sorted_tx_days[-1]
         output.append(
             {
-                "date": current_date,
-                "label": current_date,
-                "balanceBtc": final_balance_btc,
-                "valueEur": final_value_eur,
+                "date": date_key,
+                "label": date_key,
+                "balanceBtc": final_balance_btc if is_final else balance_btc,
+                "valueEur": (
+                    final_value_eur if is_final else balance_btc * latest_rate
+                ),
                 "costBasisEur": day_cost_basis,
                 "priceEur": fallback_rate or latest_rate,
             }
@@ -1763,11 +1979,16 @@ def _build_profile_overview_snapshot(
             market_rate["fiatCurrency"],
         )
     )
-    # Connection tiles are a wallet/source status surface, not a tax-report
-    # surface. Use raw synced transactions so quarantined or partially
-    # processed journal rows do not make a wallet with imported funds look
-    # empty in the GUI.
-    balances = _transaction_wallet_balances(conn, profile["id"])
+    # Once book state exists, wallet balances must match the book/report
+    # balance, even when every transaction was quarantined and the journal entry
+    # table is empty. Raw synced transactions remain only the pre-processing
+    # fallback.
+    has_book_state = _has_book_balance_state(freshness)
+    balances = _wallet_balances(
+        conn,
+        profile["id"],
+        has_book_state=has_book_state,
+    )
     fiat = _fiat_snapshot(
         conn,
         profile["id"],
@@ -1781,8 +2002,16 @@ def _build_profile_overview_snapshot(
         "marketRate": market_rate,
         "connections": _connections(conn, profile["id"], balances),
         "txs": _transactions(conn, profile["id"]),
-        "activityTxs": _activity_transactions(conn, profile["id"]),
-        "balanceSeries": _balance_series(conn, profile["id"]),
+        "activityTxs": _activity_transactions(
+            conn,
+            profile["id"],
+            has_book_state=has_book_state,
+        ),
+        "balanceSeries": _balance_series(
+            conn,
+            profile["id"],
+            has_book_state=has_book_state,
+        ),
         "portfolioSeries": _portfolio_series(
             conn,
             profile["id"],
@@ -1790,6 +2019,7 @@ def _build_profile_overview_snapshot(
             book_fiat_rate,
             sum(balances.values()),
             fiat["eurBalance"],
+            has_book_state=has_book_state,
         ),
         "fiat": fiat,
         "status": {

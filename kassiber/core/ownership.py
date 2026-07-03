@@ -37,7 +37,7 @@ from dataclasses import dataclass, field
 from typing import Any, Callable, Iterable, Mapping, Sequence
 
 from ..errors import AppError
-from ..wallet_descriptors import derive_descriptor_targets
+from ..wallet_descriptors import derive_descriptor_targets, normalize_chain, normalize_network
 from .address_scripts import address_to_scriptpubkey
 from .wallets import (
     has_descriptor_sync_material,
@@ -252,6 +252,45 @@ def _wallet_labels_for_matches(matches: Sequence[OwnedMatch]) -> list[str]:
 
 def _outpoint_matches(index: OwnedIndex, outpoint: Any) -> list[OwnedMatch]:
     return index.lookup_outpoint(outpoint)
+
+
+def _normalize_chain_network_scope(chain: Any, network: Any) -> tuple[str, str] | None:
+    chain_text = str(chain or "").strip()
+    network_text = str(network or "").strip()
+    if not chain_text and not network_text:
+        return None
+    try:
+        canonical_chain = normalize_chain(chain_text or "bitcoin")
+        canonical_network = (
+            normalize_network(canonical_chain, network_text)
+            if network_text
+            else ""
+        )
+        return canonical_chain, canonical_network
+    except ValueError:
+        return chain_text.lower(), network_text.lower()
+
+
+def _filter_matches_to_scope(
+    matches: Sequence[OwnedMatch],
+    scope: tuple[str, str] | None,
+) -> list[OwnedMatch]:
+    ordered = _sorted_matches(matches)
+    if scope is None:
+        return ordered
+    scope_chain, scope_network = scope
+    filtered: list[OwnedMatch] = []
+    for match in ordered:
+        match_scope = _normalize_chain_network_scope(match.chain, match.network)
+        if match_scope is None:
+            continue
+        match_chain, match_network = match_scope
+        if match_chain != scope_chain:
+            continue
+        if scope_network and match_network != scope_network:
+            continue
+        filtered.append(match)
+    return filtered
 
 
 def classify_token_type(token: str) -> str:
@@ -804,6 +843,8 @@ def classify_txid(
         }
 
     chain = str(legs.get("chain") or token.get("chain") or "")
+    network = str(legs.get("network") or token.get("network") or "")
+    match_scope = _normalize_chain_network_scope(chain, network)
     source = str(legs.get("source") or "chain")
     in_legs: list[dict[str, Any]] = []
     owned_in = 0
@@ -811,11 +852,14 @@ def classify_txid(
     involved: set[str] = set()
     ambiguous_legs = 0
     for leg in legs.get("inputs", []):
-        matches = _outpoint_matches(index, leg.get("outpoint"))
+        matches = _filter_matches_to_scope(
+            _outpoint_matches(index, leg.get("outpoint")),
+            match_scope,
+        )
         if not matches:
             script = leg.get("script")
             script_matches = index.lookup_script(script)
-            matches = _sorted_matches(script_matches) if script_matches else []
+            matches = _filter_matches_to_scope(script_matches, match_scope)
             if not matches and script is None and source != "local_tx":
                 unresolved_inputs += 1
         owned = bool(matches)
@@ -847,7 +891,7 @@ def classify_txid(
             # outputs are provably unspendable. Neither is a recipient.
             continue
         script_matches = index.lookup_script(script)
-        matches = _sorted_matches(script_matches) if script_matches else []
+        matches = _filter_matches_to_scope(script_matches, match_scope)
         owned = bool(matches)
         owned_out += 1 if owned else 0
         primary = matches[0] if matches else None
@@ -890,6 +934,7 @@ def classify_txid(
         "input": txid,
         "type": "txid",
         "chain": chain,
+        "network": network,
         "status": status,
         "classification": classification,
         "ownership_ambiguous": ambiguous_legs > 0,
@@ -974,24 +1019,66 @@ def load_local_tx_legs(
     """Recover input/output scripts from a locally stored transaction.
 
     Only Bitcoin on-chain sync persists full ``vin``/``vout`` JSON in
-    ``raw_json``, in two shapes: esplora (``vout[].scriptpubkey``,
-    ``vin[].prevout.scriptpubkey``) and Electrum's decoded form
-    (``vout[].script_hex``, no inline prevout scripts). Both are handled.
-    Liquid (component context only) and all import paths carry no vin/vout, so
-    they return ``None`` and the caller falls back to on-chain verification.
+    ``raw_json``: esplora and normalized Bitcoin Core graphs use
+    ``vout[].scriptpubkey`` plus optional ``vin[].prevout.scriptpubkey``, while
+    Electrum's decoded form uses ``vout[].script_hex`` with no inline prevout
+    scripts. Liquid (component context only) and all import paths carry no
+    vin/vout, so they return ``None`` and the caller falls back to on-chain
+    verification.
     """
     rows = conn.execute(
-        "SELECT raw_json FROM transactions WHERE profile_id = ? AND external_id = ?",
+        """
+        SELECT t.raw_json, w.kind AS wallet_kind, w.config_json AS wallet_config_json
+        FROM transactions t
+        LEFT JOIN wallets w ON w.id = t.wallet_id
+        WHERE t.profile_id = ? AND t.external_id = ?
+        """,
         (profile_id, txid),
     ).fetchall()
     for row in rows:
-        legs = _legs_from_local_tx_json(row["raw_json"])
+        chain, network = _wallet_chain_network(
+            row["wallet_config_json"],
+            row["wallet_kind"],
+        )
+        legs = _legs_from_local_tx_json(
+            row["raw_json"],
+            chain=chain,
+            network=network,
+        )
         if legs is not None:
             return legs
     return None
 
 
-def _legs_from_local_tx_json(raw_json: Any) -> dict[str, Any] | None:
+def _wallet_chain_network(config_json: Any, wallet_kind: Any) -> tuple[str, str]:
+    try:
+        config = json.loads(config_json or "{}")
+    except (TypeError, ValueError, json.JSONDecodeError):
+        config = {}
+    if not isinstance(config, Mapping):
+        config = {}
+    chain = str(config.get("chain") or "bitcoin").lower()
+    network = str(config.get("network") or "main").lower()
+    kind = str(wallet_kind or "").lower()
+    if "liquid" in kind:
+        chain = "liquid"
+        if network in {"", "main", "mainnet"}:
+            network = "liquidv1"
+    elif chain in {"", "btc"}:
+        chain = "bitcoin"
+    try:
+        canonical_chain = normalize_chain(chain)
+        return canonical_chain, normalize_network(canonical_chain, network)
+    except ValueError:
+        return chain, network
+
+
+def _legs_from_local_tx_json(
+    raw_json: Any,
+    *,
+    chain: str = "bitcoin",
+    network: str = "",
+) -> dict[str, Any] | None:
     try:
         raw = json.loads(raw_json or "{}")
     except (TypeError, ValueError, json.JSONDecodeError):
@@ -1022,7 +1109,13 @@ def _legs_from_local_tx_json(raw_json: Any) -> dict[str, Any] | None:
         if script is None:
             script = entry.get("script_hex")
         outputs.append({"n": entry.get("n", position), "script": script})
-    return {"inputs": inputs, "outputs": outputs, "chain": "bitcoin", "source": "local_tx"}
+    return {
+        "inputs": inputs,
+        "outputs": outputs,
+        "chain": chain or "bitcoin",
+        "network": network,
+        "source": "local_tx",
+    }
 
 
 VerifyFetcher = Callable[[str, str], "dict[str, Any] | None"]
