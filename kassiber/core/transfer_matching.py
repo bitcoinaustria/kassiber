@@ -8,10 +8,9 @@ believes form one swap.
 Confidence ladder
 -----------------
 
-* **exact** — both legs share the same Lightning ``payment_hash``. The
-  matcher trusts this without further heuristics: the hash is the swap's
-  cryptographic identifier across asset boundaries. Surfaced via
-  ``method = "payment_hash"``.
+* **exact** — both legs share deterministic evidence: a Lightning
+  ``payment_hash``, a redacted provider/client ``swap_id``, or an
+  on-chain HTLC refund spend.
 * **strong** — different wallets, opposite directions, time delta within
   the configured window, and the implicit ``out_amount - in_amount``
   delta sits below the fee tolerance (``max(fee_pct_max * out, fee_sats_min)``).
@@ -52,6 +51,7 @@ existing pair / dismissal records and receive a list of frozen
 from __future__ import annotations
 
 import bisect
+import json
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Iterable, Mapping, Optional, Sequence
@@ -77,11 +77,16 @@ METHOD_HEURISTIC = "heuristic"
 # Deterministic link: an inbound refund's input spent the outbound's HTLC
 # funding output (recorded as transactions.swap_refund_funding_txid by sync).
 METHOD_HTLC_REFUND = "htlc_refund"
+# Deterministic imported/client evidence for cooperative Taproot v2 and other
+# provider-backed swaps where the chain spend itself is not identifying.
+METHOD_PROVIDER_SWAP_ID = "provider_swap_id"
 
 CONFIDENCE_EXACT = "exact"
 CONFIDENCE_STRONG = "strong"
 
 KIND_SUBMARINE_SWAP = "submarine-swap"
+KIND_REVERSE_SUBMARINE_SWAP = "reverse-submarine-swap"
+KIND_CHAIN_SWAP = "chain-swap"
 KIND_PEG_IN = "peg-in"
 KIND_PEG_OUT = "peg-out"
 KIND_SWAP_REFUND = "swap-refund"
@@ -127,6 +132,14 @@ class SwapCandidate:
     # ``> 1`` means this candidate needs manual disambiguation even when
     # its cluster siblings are hidden by a downstream filter.
     conflict_size: int = 1
+    evidence_provider: str = ""
+    evidence_id: str = ""
+    evidence_kind: str = ""
+    evidence_status: str = ""
+    evidence_version: str = ""
+    evidence_taproot: str = ""
+    evidence_cooperative: str = ""
+    evidence_spend_path: str = ""
 
 
 def suggest_swap_candidates(
@@ -196,6 +209,12 @@ def suggest_swap_candidates(
 
     consumed_out = {pair[0]["id"] for pair in exact_pairs}
     consumed_in = {pair[1]["id"] for pair in exact_pairs}
+    evidence_pairs = _match_by_provider_swap_id(
+        [row for row in out_rows if row["id"] not in consumed_out],
+        [row for row in in_rows if row["id"] not in consumed_in],
+    )
+    consumed_out |= {pair[0]["id"] for pair in evidence_pairs}
+    consumed_in |= {pair[1]["id"] for pair in evidence_pairs}
     refund_pairs = _match_by_refund_link(
         [row for row in out_rows if row["id"] not in consumed_out],
         [row for row in in_rows if row["id"] not in consumed_in],
@@ -220,6 +239,18 @@ def suggest_swap_candidates(
             confidence=CONFIDENCE_EXACT,
             method=METHOD_PAYMENT_HASH,
             tax_country=tax_country,
+        ))
+    for out_row, in_row, evidence in evidence_pairs:
+        if (out_row["id"], in_row["id"]) in dismissed_pairs:
+            continue
+        raw_candidates.append(_build_candidate(
+            out_row,
+            in_row,
+            confidence=CONFIDENCE_EXACT,
+            method=METHOD_PROVIDER_SWAP_ID,
+            tax_country=tax_country,
+            default_kind=evidence.kind or None,
+            evidence=evidence,
         ))
     for out_row, in_row in refund_pairs:
         if (out_row["id"], in_row["id"]) in dismissed_pairs:
@@ -256,16 +287,20 @@ def suggest_swap_candidates(
     return candidates
 
 
-def compute_swap_fee(out_amount_msat: int, in_amount_msat: int) -> tuple[int, str]:
+def compute_swap_fee(
+    out_amount_msat: int,
+    in_amount_msat: int,
+    out_fee_msat: int = 0,
+) -> tuple[int, str]:
     """Return ``(swap_fee_msat, swap_fee_kind)``.
 
-    Signed delta — positive when the principal shrank across the swap
-    (the common case), negative when the inbound exceeds the outbound
-    (anomaly, useful for "do not auto-pair" guards). The kind defaults
-    to ``"combined"``; future commits can split network vs service fee
-    when the data supports it.
+    Signed delta — positive when the principal plus outbound network fee
+    shrank across the swap (the common case), negative when the inbound
+    exceeds that total (anomaly, useful for "do not auto-pair" guards).
+    The kind defaults to ``"combined"``; future commits can split network
+    vs service fee when the data supports it.
     """
-    return out_amount_msat - in_amount_msat, "combined"
+    return out_amount_msat + out_fee_msat - in_amount_msat, "combined"
 
 
 def default_kind_for(
@@ -519,6 +554,229 @@ def _match_by_refund_link(
     return pairs
 
 
+@dataclass(frozen=True)
+class _ProviderSwapEvidence:
+    provider: str
+    swap_id: str
+    kind: str
+    flow: str
+    status: str = ""
+    send_txid: str = ""
+    receive_txid: str = ""
+    version: str = ""
+    taproot: str = ""
+    cooperative: str = ""
+    spend_path: str = ""
+
+
+def _match_by_provider_swap_id(
+    out_rows: Sequence[Mapping], in_rows: Sequence[Mapping]
+) -> list[tuple[Mapping, Mapping, _ProviderSwapEvidence]]:
+    """Pair rows carrying the same provider-scoped swap id.
+
+    This is the exact path for cooperative Taproot swaps: a key-path spend is
+    deliberately indistinguishable on-chain, so deterministic evidence has to
+    come from a redacted provider/client export, SDK regtest bridge, or other
+    local metadata import. The matcher requires a provider/source marker plus a
+    swap id; arbitrary raw ``id`` fields are intentionally ignored.
+    """
+    out_by_key: dict[tuple[str, str], list[tuple[Mapping, _ProviderSwapEvidence]]] = {}
+    for row in out_rows:
+        evidence = _provider_swap_evidence(row)
+        if evidence is None:
+            continue
+        out_by_key.setdefault((evidence.provider, evidence.swap_id), []).append(
+            (row, evidence)
+        )
+
+    pairs: list[tuple[Mapping, Mapping, _ProviderSwapEvidence]] = []
+    for in_row in in_rows:
+        in_evidence = _provider_swap_evidence(in_row)
+        if in_evidence is None:
+            continue
+        for out_row, out_evidence in out_by_key.get(
+            (in_evidence.provider, in_evidence.swap_id), []
+        ):
+            evidence = _merge_provider_evidence(out_evidence, in_evidence)
+            if not _provider_route_matches_row(evidence, out_row, side="out"):
+                continue
+            if not _provider_route_matches_row(evidence, in_row, side="in"):
+                continue
+            pairs.append((out_row, in_row, evidence))
+    return pairs
+
+
+def _provider_swap_evidence(row: Mapping) -> Optional[_ProviderSwapEvidence]:
+    payload = _raw_json_payload(row)
+    if not payload:
+        return None
+    provider = _normalize_evidence_provider(
+        _first_text(
+            payload,
+            "provider",
+            "source",
+            "source_format",
+            "service",
+            "counterparty",
+        )
+    )
+    if not provider:
+        return None
+    swap_id = _first_text(
+        payload,
+        "swap_id",
+        "swapId",
+        "swapID",
+        "provider_swap_id",
+        "boltz_id",
+        "boltzId",
+    )
+    if not swap_id and provider in {"boltz", "bullbitcoin"}:
+        swap_id = _first_text(payload, "id")
+    if not swap_id:
+        return None
+    flow = _first_text(
+        payload,
+        "flow",
+        "type",
+        "swap_type",
+        "swapType",
+        "kind",
+    )
+    status = _first_text(payload, "status", "state", "finality") or ""
+    kind = _kind_from_provider_status(status) or _kind_from_provider_flow(flow) or ""
+    send_txid = _first_text(
+        payload, "send_txid", "sendTxid", "lockup_txid", "lockupTxid"
+    )
+    receive_txid = _first_text(
+        payload,
+        "receive_txid",
+        "receiveTxid",
+        "claim_txid",
+        "claimTxid",
+        "refund_txid",
+        "refundTxid",
+    )
+    if not kind and not (send_txid or receive_txid):
+        return None
+    return _ProviderSwapEvidence(
+        provider=provider,
+        swap_id=str(swap_id),
+        kind=kind,
+        flow=_normalize_flow_text(flow),
+        status=status,
+        send_txid=send_txid or "",
+        receive_txid=receive_txid or "",
+        version=_first_text(payload, "version", "swap_version", "swapVersion") or "",
+        taproot=_first_text(payload, "taproot", "is_taproot", "isTaproot") or "",
+        cooperative=_first_text(payload, "cooperative", "cooperative_claim", "cooperativeClaim")
+        or "",
+        spend_path=_first_text(payload, "spend_path", "spendPath", "claim_path", "claimPath")
+        or "",
+    )
+
+
+def _raw_json_payload(row: Mapping) -> Optional[Mapping]:
+    raw_json = _record_get(row, "raw_json")
+    if not raw_json:
+        return None
+    if isinstance(raw_json, Mapping):
+        return raw_json
+    try:
+        payload = json.loads(str(raw_json))
+    except (TypeError, ValueError):
+        return None
+    return payload if isinstance(payload, Mapping) else None
+
+
+def _first_text(payload: Mapping, *keys: str) -> str:
+    for key in keys:
+        value = payload.get(key)
+        if value is None:
+            continue
+        text = str(value).strip()
+        if text:
+            return text
+    return ""
+
+
+def _normalize_evidence_provider(value: str) -> str:
+    text = (value or "").strip().lower().replace("-", "_")
+    if not text:
+        return ""
+    if "bullbitcoin" in text or text == "bull":
+        return "bullbitcoin"
+    if "boltz" in text:
+        return "boltz"
+    return text
+
+
+def _normalize_flow_text(value: str) -> str:
+    return (value or "").strip().lower().replace("_", "-").replace(" ", "-")
+
+
+def _kind_from_provider_flow(value: str) -> Optional[str]:
+    flow = _normalize_flow_text(value)
+    if not flow:
+        return None
+    if flow in {"chain", "chain-swap", "chainswap"}:
+        return KIND_CHAIN_SWAP
+    if flow in {"reverse", "reverse-swap", "reverse-submarine", "reverse-submarine-swap"}:
+        return KIND_REVERSE_SUBMARINE_SWAP
+    if flow in {"submarine", "submarine-swap"}:
+        return KIND_SUBMARINE_SWAP
+    if flow in {"refund", "swap-refund", "failed-swap-refund"}:
+        return KIND_SWAP_REFUND
+    return None
+
+
+def _kind_from_provider_status(value: str) -> Optional[str]:
+    status = _normalize_flow_text(value)
+    if "refund" in status:
+        return KIND_SWAP_REFUND
+    return None
+
+
+def _prefer_provider_kind(*kinds: str) -> str:
+    if KIND_SWAP_REFUND in kinds:
+        return KIND_SWAP_REFUND
+    return next((kind for kind in kinds if kind), "")
+
+
+def _merge_provider_evidence(
+    out_evidence: _ProviderSwapEvidence,
+    in_evidence: _ProviderSwapEvidence,
+) -> _ProviderSwapEvidence:
+    return _ProviderSwapEvidence(
+        provider=out_evidence.provider,
+        swap_id=out_evidence.swap_id,
+        kind=_prefer_provider_kind(out_evidence.kind, in_evidence.kind),
+        flow=out_evidence.flow or in_evidence.flow,
+        status=out_evidence.status or in_evidence.status,
+        send_txid=out_evidence.send_txid or in_evidence.send_txid,
+        receive_txid=out_evidence.receive_txid or in_evidence.receive_txid,
+        version=out_evidence.version or in_evidence.version,
+        taproot=out_evidence.taproot or in_evidence.taproot,
+        cooperative=out_evidence.cooperative or in_evidence.cooperative,
+        spend_path=out_evidence.spend_path or in_evidence.spend_path,
+    )
+
+
+def _provider_route_matches_row(
+    evidence: _ProviderSwapEvidence,
+    row: Mapping,
+    *,
+    side: str,
+) -> bool:
+    external_id = str(_record_get(row, "external_id") or "").strip()
+    if not external_id:
+        return True
+    expected = evidence.send_txid if side == "out" else evidence.receive_txid
+    if not expected:
+        return True
+    return external_id.lower() == str(expected).strip().lower()
+
+
 def _match_heuristic(
     out_rows: Sequence[Mapping],
     in_rows: Sequence[Mapping],
@@ -602,10 +860,15 @@ def _build_candidate(
     method: str,
     tax_country: Optional[str],
     default_kind: Optional[str] = None,
+    evidence: Optional[_ProviderSwapEvidence] = None,
 ) -> SwapCandidate:
     out_amount = int(_record_get(out_row, "amount") or 0)
     in_amount = int(_record_get(in_row, "amount") or 0)
-    swap_fee_msat, swap_fee_kind = compute_swap_fee(out_amount, in_amount)
+    swap_fee_msat, swap_fee_kind = compute_swap_fee(
+        out_amount,
+        in_amount,
+        _outbound_fee_component_msat(out_row),
+    )
     out_asset = str(_record_get(out_row, "asset") or "")
     in_asset = str(_record_get(in_row, "asset") or "")
     out_wallet_kind = str(_record_get(out_row, "wallet_kind") or "")
@@ -637,8 +900,25 @@ def _build_candidate(
         default_kind=default_kind
         or default_kind_for(out_asset, in_asset, out_wallet_kind, in_wallet_kind),
         default_policy=default_policy,
+        evidence_provider=evidence.provider if evidence else "",
+        evidence_id=evidence.swap_id if evidence else "",
+        evidence_kind=evidence.kind if evidence else "",
+        evidence_status=evidence.status if evidence else "",
+        evidence_version=evidence.version if evidence else "",
+        evidence_taproot=evidence.taproot if evidence else "",
+        evidence_cooperative=evidence.cooperative if evidence else "",
+        evidence_spend_path=evidence.spend_path if evidence else "",
         # conflict_set_id / conflict_size are filled in by _stamp_conflict_set_ids
     )
+
+
+def _outbound_fee_component_msat(row: Mapping) -> int:
+    if _record_get(row, "amount_includes_fee"):
+        return 0
+    try:
+        return max(0, int(_record_get(row, "fee") or 0))
+    except (TypeError, ValueError):
+        return 0
 
 
 def _stamp_conflict_set_ids(candidates: Sequence[SwapCandidate]) -> list[SwapCandidate]:

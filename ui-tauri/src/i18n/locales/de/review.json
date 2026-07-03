@@ -71,12 +71,13 @@
     },
     "confidence": {
       "any": "Beliebige Zuverlässigkeit",
-      "exact": "Exakt (payment_hash)",
+      "exact": "Exakter Nachweis",
       "strong": "Stark (heuristisch)"
     },
     "method": {
       "any": "Beliebige Methode",
       "paymentHash": "Payment Hash",
+      "providerSwapId": "Provider-Nachweis",
       "heuristic": "Zeit + Betrag",
       "htlcRefund": "Refund-Verknüpfung"
     },
@@ -149,6 +150,7 @@
       "candidateLabelLayerTransition": "Bitcoin-Swap-Kandidat",
       "candidateLabelSwap": "Swap-Kandidat",
       "matchedByPaymentHash": "Über Payment Hash zugeordnet.",
+      "matchedByProviderEvidence": "Über Provider-Nachweis zugeordnet.",
       "matchedByTimeAmount": "Über Zeit und Betrag zugeordnet.",
       "matchedByRefundLink": "Über HTLC-Refund-Verknüpfung zugeordnet.",
       "delta": "Differenz {{delta}} ({{percent}} %).",
@@ -158,6 +160,7 @@
       "policy": "Richtlinie",
       "matchRationale": "Treffer-Begründung",
       "rationalePaymentHash": "Beide Legs teilen denselben Lightning Payment Hash.",
+      "rationaleProviderEvidence": "Beide Legs teilen dieselbe redigierte Provider-Swap-ID.",
       "rationaleHeuristic": "Die Legs liegen nach Berücksichtigung der Gebührendifferenz nah in Zeit und Betrag.",
       "rationaleHtlcRefund": "Der eingehende Refund gibt den HTLC-Funding-Output des ausgehenden Legs aus, eine deterministische Verknüpfung auch innerhalb einer Wallet.",
       "autoPairRoute": "Auto-Paar-Route: {{rule}}",

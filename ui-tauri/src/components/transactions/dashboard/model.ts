@@ -111,8 +111,10 @@ export type SwapCandidateReference = {
 };
 
 const BITCOIN_LAYER_TRANSITION_PAIR_KINDS = new Set([
+  "chain-swap",
   "peg-in",
   "peg-out",
+  "reverse-submarine-swap",
   "submarine-swap",
   "swap-refund",
 ]);

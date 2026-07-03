@@ -29,6 +29,7 @@ from . import rates as core_rates
 from . import silent_payments
 from . import sync_backends as core_sync_backends
 from . import source_overlap as core_source_overlap
+from . import transfer_matching as core_transfer_matching
 from . import reports as report_builders
 from .samourai import samourai_metadata_from_wallet_config
 from . import transaction_history
@@ -4856,6 +4857,138 @@ def _silent_payment_report_blockers(conn: sqlite3.Connection, profile_id: str) -
     return blockers
 
 
+_REPORT_BLOCKING_SWAP_KINDS = frozenset(
+    {
+        core_transfer_matching.KIND_CHAIN_SWAP,
+        core_transfer_matching.KIND_PEG_IN,
+        core_transfer_matching.KIND_PEG_OUT,
+        core_transfer_matching.KIND_REVERSE_SUBMARINE_SWAP,
+        core_transfer_matching.KIND_SUBMARINE_SWAP,
+        core_transfer_matching.KIND_SWAP_REFUND,
+    }
+)
+
+
+def _load_swap_report_matcher_rows(
+    conn: sqlite3.Connection,
+    profile_id: str,
+) -> list[sqlite3.Row]:
+    return conn.execute(
+        """
+        SELECT
+            t.id, t.profile_id, t.wallet_id, t.external_id, t.payment_hash,
+            t.swap_refund_funding_txid,
+            t.occurred_at, t.direction, t.asset, t.amount, t.amount_includes_fee,
+            t.fee, t.kind, t.raw_json, t.excluded,
+            w.label AS wallet_label, w.kind AS wallet_kind
+        FROM transactions t
+        JOIN wallets w ON w.id = t.wallet_id
+        WHERE t.profile_id = ?
+        """,
+        (profile_id,),
+    ).fetchall()
+
+
+def _active_swap_review_refs(
+    conn: sqlite3.Connection,
+    profile_id: str,
+) -> list[sqlite3.Row]:
+    pair_records = conn.execute(
+        """
+        SELECT out_transaction_id, in_transaction_id, deleted_at
+        FROM transaction_pairs
+        WHERE profile_id = ?
+        """,
+        (profile_id,),
+    ).fetchall()
+    payout_records = conn.execute(
+        """
+        SELECT out_transaction_id, NULL AS in_transaction_id, deleted_at
+        FROM direct_swap_payouts
+        WHERE profile_id = ?
+        """,
+        (profile_id,),
+    ).fetchall()
+    return [*pair_records, *payout_records]
+
+
+def _swap_candidate_blocks_reports(
+    candidate: core_transfer_matching.SwapCandidate,
+) -> bool:
+    if candidate.default_kind in _REPORT_BLOCKING_SWAP_KINDS:
+        return True
+    if str(candidate.out_asset or "").upper() != str(candidate.in_asset or "").upper():
+        return True
+    return candidate.method in {
+        core_transfer_matching.METHOD_PAYMENT_HASH,
+        core_transfer_matching.METHOD_PROVIDER_SWAP_ID,
+        core_transfer_matching.METHOD_HTLC_REFUND,
+    }
+
+
+def _unreviewed_swap_candidate_blocker(
+    conn: sqlite3.Connection,
+    profile: sqlite3.Row,
+) -> dict[str, Any] | None:
+    rows = _load_swap_report_matcher_rows(conn, profile["id"])
+    pair_records = _active_swap_review_refs(conn, profile["id"])
+    dismissals = conn.execute(
+        """
+        SELECT out_transaction_id, in_transaction_id, expires_at
+        FROM transaction_pair_dismissals
+        WHERE profile_id = ?
+        """,
+        (profile["id"],),
+    ).fetchall()
+    candidates = [
+        candidate
+        for candidate in core_transfer_matching.suggest_swap_candidates(
+            rows,
+            pair_records=pair_records,
+            dismissals=dismissals,
+            tax_country=str(profile["tax_country"] or ""),
+        )
+        if _swap_candidate_blocks_reports(candidate)
+    ]
+    if not candidates:
+        return None
+    exact_count = sum(
+        1 for candidate in candidates
+        if candidate.confidence == core_transfer_matching.CONFIDENCE_EXACT
+    )
+    strong_count = sum(
+        1 for candidate in candidates
+        if candidate.confidence == core_transfer_matching.CONFIDENCE_STRONG
+    )
+    route_samples = [
+        {
+            "out_asset": candidate.out_asset,
+            "in_asset": candidate.in_asset,
+            "confidence": candidate.confidence,
+            "method": candidate.method,
+            "default_kind": candidate.default_kind,
+            "conflict_size": candidate.conflict_size,
+        }
+        for candidate in candidates[:5]
+    ]
+    return {
+        "id": "unreviewed_swap_candidates",
+        "severity": "blocking",
+        "title": "Unreviewed swap candidates",
+        "detail": (
+            f"{len(candidates)} swap-shaped candidate(s) need pairing, payout "
+            "review, or dismissal before final reports."
+        ),
+        "daemon_kind": "ui.transfers.suggest",
+        "counts": {
+            "total": len(candidates),
+            "exact": exact_count,
+            "strong": strong_count,
+        },
+        "routes": route_samples,
+    }
+
+
 def build_report_blockers_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
     health = build_workspace_health_snapshot(conn)
     rates_coverage = build_rates_coverage_snapshot(conn, {"limit": 10})
@@ -4954,6 +5087,9 @@ def build_report_blockers_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
                     "daemon_kind": "ui.journals.quarantine",
                 }
             )
+        swap_blocker = _unreviewed_swap_candidate_blocker(conn, health["profile"])
+        if swap_blocker is not None:
+            blockers.append(swap_blocker)
         missing_prices = rates_coverage["summary"]["missing_price_transactions"]
         if missing_prices:
             uncovered = rates_coverage["summary"]["cache_uncovered_missing"]

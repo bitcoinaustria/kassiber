@@ -288,6 +288,15 @@ def _swap_review_confidence_reason(candidate: Mapping[str, Any]) -> dict[str, An
             ),
             "needs_human_confirmation": False,
         }
+    if method == "provider_swap_id":
+        evidence = candidate.get("evidence") or {}
+        provider = evidence.get("provider") or "provider"
+        return {
+            "confidence": confidence,
+            "method": method,
+            "reason": f"both legs share redacted {provider} swap metadata",
+            "needs_human_confirmation": False,
+        }
     return {
         "confidence": confidence,
         "method": method,

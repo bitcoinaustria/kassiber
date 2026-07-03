@@ -746,13 +746,26 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
 - [ ] Widen the failed-swap refund link beyond freshly chain-synced Boltz
   v1 P2WSH refunds: backfill `swap_refund_funding_txid` from `raw_json`
   for rows synced before the column existed, and fold it into the
-  bitcoinrpc HTLC enrichment below. Boltz v2 Taproot cooperative refunds
-  reveal no witness, so they stay heuristic-only by physics.
+  bitcoinrpc HTLC enrichment below. Boltz v2 Taproot cooperative/key-path
+  refunds reveal no witness, so chain-only rows stay heuristic/manual by
+  physics; redacted provider/SDK metadata with a swap id + route txids is the
+  exact path for those cooperative spends.
+- [ ] Add native Boltz SDK/client import or regtest bridge for cooperative v2
+  swaps: persist only redacted provider id, flow, route txids, status/version,
+  and Taproot/cooperative spend hints so chain/reverse/refund swaps can be
+  audited without treating chain-only key-path spends as exact evidence.
+  Done in the deterministic regtest/demo environment: `full-accounting-v1`
+  imports Boltz v2 metadata JSON rows for chain, reverse, and refund cases and
+  asserts exact `provider_swap_id` candidates before bulk-pairing. Still open:
+  live SDK/client execution of those cooperative signing paths.
 - [ ] Daemon kind for ``detect_repeating_patterns`` + "Create rule from
   this pattern?" prompt in the swap review UI (pattern-detector helper
   already exists in `kassiber/core/swap_rules.py`).
 - [ ] Promote bitcoinrpc-synced wallets to opportunistic HTLC enrichment
-  via a per-tx `getrawtransaction` fetch when payment_hash is missing.
+  via a per-tx `getrawtransaction` fetch when payment_hash is missing. Keep the
+  script-path parser first-class for chain-sync-only/watch-only books: when no
+  provider CSV/SDK metadata exists, a v1/uncooperative HTLC witness may be the
+  only automated exact swap/refund signal available.
 - [ ] Revisit per-wallet basis attribution if a jurisdiction ever needs
   physical-lot answers
 - [ ] Adopt a per-project storage layout: one SQLite DB per project,
@@ -986,15 +999,16 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
     events and topologically orders same-timestamp transfers by wallet dependency;
     the gate and `IntraTransaction` insertion now share that order. Test:
     `test_rp2_ownership_transfers...test_same_timestamp_transfer_chain_books_funding_move_first`.
-  - [ ] **Swap-review fee omits out.fee (P2).** `compute_swap_fee = out.amount -
+  - [x] **Swap-review fee omits out.fee (P2).** `compute_swap_fee = out.amount -
     in.amount` (`transfer_matching.py:257`) ignores `out.fee`, so the review
     surface, the persisted `transaction_pairs.swap_fee_msat`, and the GUI
     "Transfer fee" line (`ui_snapshot.py:1085`) show 0 / "no_fee_detected" for a
     same-asset on-chain self-transfer whose journal books a real miner-fee
-    disposal. Tax math is correct; this is a display/persistence consistency
-    bug. Fix changes the semantics of a persisted column + 3 call sites
-    (`transfer_matching.py:593`, `handlers.py:507,632`) + GUI + tests, so do it
-    as a focused slice: `swap_fee_msat = out.amount + out.fee - in.amount`.
+    disposal. Fixed for matcher candidates plus pair/direct-payout persistence:
+    whole-transaction swaps use `swap_fee_msat = out.amount + out.fee -
+    in.amount` when the source stores fee separately, while reviewed split pairs
+    keep the existing reviewed-principal semantics until a separate fee
+    allocation is supplied.
   - [ ] **RBF dropped-import phantom disposal (P3).** An RBF-replaced outbound
     captured in the mempool before eviction has no matching inbound and falls
     through to a taxable disposal (`tax_events.py:877`). Gated behind the

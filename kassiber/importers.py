@@ -1116,7 +1116,7 @@ _BULLBITCOIN_WALLET_REQUIRED_COLUMNS = (
     "receive_txid",
 )
 
-_BULLBITCOIN_WALLET_SKIPPED_STATUSES = {"failed", "expired"}
+_BULLBITCOIN_WALLET_SKIPPED_STATUSES = {"failed", "expired", "refunded"}
 _BULLBITCOIN_WALLET_INBOUND_DIRECTIONS = {"incoming", "inbound", "received", "receive"}
 _BULLBITCOIN_WALLET_OUTBOUND_DIRECTIONS = {"outgoing", "outbound", "sent", "send"}
 
