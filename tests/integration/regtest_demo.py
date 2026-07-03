@@ -47,6 +47,10 @@ def _is_core_wallet_spec(wallet_spec: dict[str, Any]) -> bool:
     return _wallet_kind(wallet_spec) == "address" and _wallet_chain(wallet_spec) == "bitcoin"
 
 
+def _is_liquid_live_wallet_spec(wallet_spec: dict[str, Any]) -> bool:
+    return _wallet_kind(wallet_spec) == "descriptor" and _wallet_chain(wallet_spec) == "liquid"
+
+
 def _is_silent_payment_wallet_spec(wallet_spec: dict[str, Any]) -> bool:
     return _wallet_kind(wallet_spec) == core_silent_payments.WALLET_KIND
 
@@ -61,6 +65,10 @@ def _is_silent_payment_wallet(wallet: "DemoWallet") -> bool:
 
 def _is_liquid_ledger_wallet(wallet: "DemoWallet") -> bool:
     return wallet.chain == "liquid" and wallet.source_format == "generic_ledger"
+
+
+def _is_liquid_live_wallet(wallet: "DemoWallet") -> bool:
+    return wallet.chain == "liquid" and wallet.kind == "descriptor" and bool(wallet.core_wallet)
 
 
 def _deterministic_demo_txid(value: str) -> str:
@@ -86,6 +94,8 @@ class DemoWallet:
     sp_descriptor: str = ""
     sp_scan_start_height: int = 0
     sp_scan_file: str = ""
+    descriptor_file: str = ""
+    change_descriptor_file: str = ""
     kassiber_id: str | None = None
     watchonly_wallet: str | None = None
     receive_cursor: int = 0
@@ -147,7 +157,7 @@ def validate_scenario(scenario: dict[str, Any]) -> None:
         chain = _wallet_chain(wallet)
         if chain not in {"bitcoin", "liquid"}:
             raise ValueError(f"Scenario wallet {wallet['key']!r} has unsupported chain: {chain}")
-        if kind not in {"address", "custom", core_silent_payments.WALLET_KIND}:
+        if kind not in {"address", "custom", "descriptor", core_silent_payments.WALLET_KIND}:
             raise ValueError(f"Scenario wallet {wallet['key']!r} has unsupported kind: {kind}")
         if kind == core_silent_payments.WALLET_KIND:
             if chain != "bitcoin":
@@ -165,15 +175,15 @@ def validate_scenario(scenario: dict[str, Any]) -> None:
                 raise ValueError(
                     f"Scenario Silent Payments wallet {wallet['key']!r} has invalid sp_scan_start_height"
                 )
-        if chain == "liquid" and wallet.get("source_format") != "generic_ledger":
+        if chain == "liquid" and wallet.get("source_format") != "generic_ledger" and not _is_liquid_live_wallet_spec(wallet):
             raise ValueError(
-                f"Scenario Liquid wallet {wallet['key']!r} must use source_format generic_ledger"
+                f"Scenario Liquid wallet {wallet['key']!r} must use source_format generic_ledger or kind descriptor"
             )
         address_count = int(wallet.get("addresses") or 1)
         if address_count < 1 or address_count > 12:
             raise ValueError(f"Scenario wallet {wallet['key']!r} addresses must be between 1 and 12")
-        if address_count > 1 and not _is_core_wallet_spec(wallet):
-            raise ValueError(f"Scenario wallet {wallet['key']!r} only Core wallets rotate addresses")
+        if address_count > 1 and not (_is_core_wallet_spec(wallet) or _is_liquid_live_wallet_spec(wallet)):
+            raise ValueError(f"Scenario wallet {wallet['key']!r} only live wallets rotate addresses")
     def _validate_operation(operation: dict[str, Any], *, pending: bool = False) -> None:
         op_id = operation.get("id") or "<unnamed>"
         kind = operation.get("kind")
@@ -538,6 +548,51 @@ def _write_liquid_ledger_files(
         wallet.source_file = str(ledger_path)
 
 
+def _seed_live_liquid_wallets(
+    url: str,
+    username: str,
+    password: str,
+    scenario: dict[str, Any],
+    wallets: dict[str, DemoWallet],
+    *,
+    faucet_wallet: str,
+    mining_address: str,
+    external_address: str,
+    current_ts: int,
+    txids: dict[str, str],
+) -> int:
+    for wallet_spec in scenario["wallets"]:
+        if not _is_liquid_live_wallet_spec(wallet_spec):
+            continue
+        wallet = wallets[wallet_spec["key"]]
+        receipt_amount = _btc_or_zero(wallet_spec.get("live_receipt_btc") or "0")
+        spend_amount = _btc_or_zero(wallet_spec.get("live_spend_btc") or "0")
+        if receipt_amount <= 0:
+            continue
+        current_ts = _advance_time(url, username, password, current_ts)
+        txids[f"{wallet.key}_liquid_live_receive"] = rpc(
+            url,
+            username,
+            password,
+            "sendtoaddress",
+            [wallet.receive_address(), receipt_amount],
+            wallet=faucet_wallet,
+        )
+        rpc(url, username, password, "generatetoaddress", [1, mining_address])
+        if spend_amount > 0:
+            current_ts = _advance_time(url, username, password, current_ts)
+            txids[f"{wallet.key}_liquid_live_spend"] = rpc(
+                url,
+                username,
+                password,
+                "sendtoaddress",
+                [external_address, spend_amount],
+                wallet=wallet.core_wallet,
+            )
+            rpc(url, username, password, "generatetoaddress", [1, mining_address])
+    return current_ts
+
+
 def _write_silent_payment_scan_files(
     base_dir: Path,
     scenario: dict[str, Any],
@@ -666,6 +721,12 @@ def rpc(url: str, username: str, password: str, method: str, params=None, wallet
     return decoded.get("result")
 
 
+def _elements_url() -> str:
+    return os.environ.get("KASSIBER_REGTEST_ELEMENTS_URL") or (
+        f"http://127.0.0.1:{os.environ.get('KASSIBER_REGTEST_ELEMENTS_RPC_PORT', '18547')}"
+    )
+
+
 def run_cli(data_root: Path, *args: str, pass_fds: tuple[int, ...] = ()) -> dict[str, Any]:
     result = subprocess.run(
         [
@@ -777,7 +838,10 @@ def _ensure_wallet(url: str, username: str, password: str, wallet_name: str) -> 
         return
     except RuntimeError:
         pass
-    rpc(url, username, password, "createwallet", [wallet_name, False, False, "", False, True, True])
+    try:
+        rpc(url, username, password, "createwallet", [wallet_name, False, False, "", False, True, True])
+    except RuntimeError:
+        rpc(url, username, password, "createwallet", [wallet_name])
 
 
 def _unload_wallet(url: str, username: str, password: str, wallet_name: str) -> None:
@@ -788,6 +852,89 @@ def _unload_wallet(url: str, username: str, password: str, wallet_name: str) -> 
         # created (setup aborted early); an unload failure must not mask the
         # real error being unwound.
         pass
+
+
+def _unconfidential_address(
+    url: str,
+    username: str,
+    password: str,
+    wallet_name: str,
+    address: str,
+) -> str:
+    try:
+        info = rpc(url, username, password, "getaddressinfo", [address], wallet=wallet_name)
+    except RuntimeError:
+        return address
+    return str(info.get("unconfidential") or address)
+
+
+def _descriptor_without_checksum(value: str) -> str:
+    return str(value or "").split("#", 1)[0]
+
+
+def _active_descriptor(descriptors: list[dict[str, Any]], *, internal: bool) -> str:
+    candidates = [
+        row
+        for row in descriptors
+        if bool(row.get("active")) and bool(row.get("internal")) is internal and row.get("desc")
+    ]
+    if not candidates:
+        candidates = [
+            row
+            for row in descriptors
+            if bool(row.get("internal")) is internal and row.get("desc")
+        ]
+    if not candidates:
+        label = "change" if internal else "receive"
+        raise RuntimeError(f"Elements wallet did not expose an active {label} descriptor")
+    return _descriptor_without_checksum(str(candidates[0]["desc"]))
+
+
+def _blinded_liquid_descriptor(master_blinding_key: str, descriptor: str) -> str:
+    descriptor = _descriptor_without_checksum(descriptor)
+    if descriptor.startswith(("ct(", "blinded(")):
+        return descriptor
+    return f"ct(slip77({master_blinding_key}),{descriptor})"
+
+
+def _write_liquid_descriptor_files(
+    base_dir: Path,
+    *,
+    url: str,
+    username: str,
+    password: str,
+    wallet: DemoWallet,
+) -> None:
+    descriptor_dir = base_dir / "imports" / "liquid-descriptors"
+    descriptor_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        payload = rpc(url, username, password, "listdescriptors", [False], wallet=wallet.core_wallet)
+    except RuntimeError:
+        payload = rpc(url, username, password, "listdescriptors", [], wallet=wallet.core_wallet)
+    descriptors = payload.get("descriptors") if isinstance(payload, dict) else payload
+    if not isinstance(descriptors, list):
+        raise RuntimeError(f"Elements wallet {wallet.core_wallet} returned no descriptors")
+    master_blinding_key = str(rpc(url, username, password, "dumpmasterblindingkey", [], wallet=wallet.core_wallet))
+    receive = _blinded_liquid_descriptor(master_blinding_key, _active_descriptor(descriptors, internal=False))
+    change = _blinded_liquid_descriptor(master_blinding_key, _active_descriptor(descriptors, internal=True))
+    receive_path = descriptor_dir / f"{sanitize_wallet_segment(wallet.key)}-receive.txt"
+    change_path = descriptor_dir / f"{sanitize_wallet_segment(wallet.key)}-change.txt"
+    receive_path.write_text(receive + "\n", encoding="utf-8")
+    change_path.write_text(change + "\n", encoding="utf-8")
+    os.chmod(receive_path, 0o600)
+    os.chmod(change_path, 0o600)
+    wallet.descriptor_file = str(receive_path)
+    wallet.change_descriptor_file = str(change_path)
+
+
+def _elements_policy_asset_id(url: str, username: str, password: str) -> str:
+    try:
+        labels = rpc(url, username, password, "dumpassetlabels")
+    except RuntimeError:
+        return ""
+    if isinstance(labels, dict):
+        return str(labels.get("bitcoin") or labels.get("LBTC") or labels.get("lbtc") or "")
+    return ""
 
 
 def _advance_time(url: str, username: str, password: str, current_ts: int, *, seconds: int = 600) -> int:
@@ -1473,6 +1620,7 @@ def _create_kassiber_book(
     wallets: dict[str, DemoWallet],
     *,
     url: str,
+    elements_url: str,
     username: str,
     password: str,
     wallet_prefix: str,
@@ -1660,6 +1808,36 @@ def _create_kassiber_book(
                 "--sp-scan-start-height",
                 str(wallet.sp_scan_start_height),
             )["data"]
+        elif _is_liquid_live_wallet(wallet):
+            if not wallet.descriptor_file or not wallet.change_descriptor_file:
+                raise RuntimeError(f"Liquid live wallet {wallet.key} has no generated descriptor files")
+            policy_asset = _elements_policy_asset_id(elements_url, username, password)
+            args = [
+                "wallets",
+                "create",
+                *scope,
+                "--label",
+                wallet.label,
+                "--kind",
+                "descriptor",
+                "--account",
+                wallet.account,
+                "--backend",
+                "liquid-electrum-regtest",
+                "--chain",
+                "liquid",
+                "--network",
+                "elementsregtest",
+                "--descriptor-file",
+                wallet.descriptor_file,
+                "--change-descriptor-file",
+                wallet.change_descriptor_file,
+                "--gap-limit",
+                str(max(20, len(wallet.addresses) + 10)),
+            ]
+            if policy_asset:
+                args.extend(["--policy-asset", policy_asset])
+            created = run_cli(data_root, *args)["data"]
         else:
             wallet_config = {
                 "chain": wallet.chain,
@@ -2492,6 +2670,7 @@ def run_demo(
 ) -> dict[str, Any]:
     scenario = load_scenario(scenario_path)
     url = os.environ.get("KASSIBER_REGTEST_CORE_URL", "http://127.0.0.1:18443")
+    elements_url = _elements_url()
     username = os.environ.get("KASSIBER_REGTEST_RPC_USER", "kassiber")
     password = os.environ.get("KASSIBER_REGTEST_RPC_PASSWORD", "kassiber")
     run_id = run_id or os.environ.get("KASSIBER_REGTEST_DEMO_RUN_ID") or uuid.uuid4().hex[:12]
@@ -2507,10 +2686,14 @@ def run_demo(
     chain = rpc(url, username, password, "getblockchaininfo")
     if chain.get("chain") != "regtest":
         raise RuntimeError(f"Refusing to run against non-regtest Core node: {chain.get('chain')}")
+    elements_chain = rpc(elements_url, username, password, "getblockchaininfo")
+    if elements_chain.get("chain") != "elementsregtest":
+        raise RuntimeError(f"Refusing to run against non-elementsregtest node: {elements_chain.get('chain')}")
 
     manifest_ts = _parse_iso_to_ts(scenario["base_time"])
     chain_median_ts = int(chain.get("mediantime") or manifest_ts)
-    current_ts = max(manifest_ts, chain_median_ts + 7200)
+    elements_median_ts = int(elements_chain.get("mediantime") or manifest_ts)
+    current_ts = max(manifest_ts, chain_median_ts + 7200, elements_median_ts + 7200)
     latest_ts = _parse_iso_to_ts(scenario["latest_time"])
     estimated_end_ts = estimate_scenario_end_ts(scenario, start_ts=current_ts)
     if estimated_end_ts > latest_ts:
@@ -2521,20 +2704,57 @@ def run_demo(
             "or run demo-up after the managed rebuild resets the chain volume."
         )
     rpc(url, username, password, "setmocktime", [current_ts])
+    rpc(elements_url, username, password, "setmocktime", [current_ts])
     birthday_ts = current_ts - SECONDS_PER_DAY
 
     created_core_wallets: list[str] = []
+    created_elements_wallets: list[str] = []
     backend_wallet_prefix = f"{scenario['backend']['wallet_prefix']}-{run_id}"
     faucet_wallet = f"kassiber-demo-{run_id}-external"
+    liquid_faucet_wallet = f"kassiber-demo-{run_id}-liquid-external"
     wallets: dict[str, DemoWallet] = {}
     liquid_rows_by_wallet = _liquid_ledger_rows_from_manifest(scenario)
     txids: dict[str, str] = {}
     try:
         _ensure_wallet(url, username, password, faucet_wallet)
         created_core_wallets.append(faucet_wallet)
+        _ensure_wallet(elements_url, username, password, liquid_faucet_wallet)
+        created_elements_wallets.append(liquid_faucet_wallet)
         mining_address = rpc(url, username, password, "getnewaddress", ["mining", "bech32"], wallet=faucet_wallet)
         external_address = rpc(url, username, password, "getnewaddress", ["external", "bech32"], wallet=faucet_wallet)
+        liquid_mining_confidential = rpc(
+            elements_url,
+            username,
+            password,
+            "getnewaddress",
+            ["liquid mining"],
+            wallet=liquid_faucet_wallet,
+        )
+        liquid_mining_address = _unconfidential_address(
+            elements_url,
+            username,
+            password,
+            liquid_faucet_wallet,
+            liquid_mining_confidential,
+        )
+        liquid_external_address = rpc(
+            elements_url,
+            username,
+            password,
+            "getnewaddress",
+            ["liquid external"],
+            wallet=liquid_faucet_wallet,
+        )
         current_ts = _mine(url, username, password, faucet_wallet, mining_address, current_ts, blocks=101)
+        current_ts = _mine(
+            elements_url,
+            username,
+            password,
+            liquid_faucet_wallet,
+            liquid_mining_address,
+            current_ts,
+            blocks=101,
+        )
 
         for wallet_spec in scenario["wallets"]:
             if _is_core_wallet_spec(wallet_spec):
@@ -2548,6 +2768,21 @@ def run_demo(
                         password,
                         "getnewaddress",
                         [f"{wallet_spec['label']} receive {index}", "bech32"],
+                        wallet=core_wallet,
+                    )
+                    for index in range(1, int(wallet_spec.get("addresses") or 1) + 1)
+                ]
+            elif _is_liquid_live_wallet_spec(wallet_spec):
+                core_wallet = f"kassiber-demo-{run_id}-{sanitize_wallet_segment(wallet_spec['key'])}"
+                _ensure_wallet(elements_url, username, password, core_wallet)
+                created_elements_wallets.append(core_wallet)
+                addresses = [
+                    rpc(
+                        elements_url,
+                        username,
+                        password,
+                        "getnewaddress",
+                        [f"{wallet_spec['label']} receive {index}"],
                         wallet=core_wallet,
                     )
                     for index in range(1, int(wallet_spec.get("addresses") or 1) + 1)
@@ -2569,6 +2804,14 @@ def run_demo(
                 sp_descriptor=str(wallet_spec.get("sp_descriptor") or ""),
                 sp_scan_start_height=int(wallet_spec.get("sp_scan_start_height") or 0),
             )
+            if _is_liquid_live_wallet_spec(wallet_spec):
+                _write_liquid_descriptor_files(
+                    base_dir,
+                    url=elements_url,
+                    username=username,
+                    password=password,
+                    wallet=wallets[wallet_spec["key"]],
+                )
 
         # Seed each funded wallet across all of its watched addresses so the
         # book starts with a realistic spread of UTXOs instead of one coin.
@@ -2595,6 +2838,18 @@ def run_demo(
             wallet=faucet_wallet,
         )
         current_ts = _mine(url, username, password, faucet_wallet, mining_address, current_ts)
+        current_ts = _seed_live_liquid_wallets(
+            elements_url,
+            username,
+            password,
+            scenario,
+            wallets,
+            faucet_wallet=liquid_faucet_wallet,
+            mining_address=liquid_mining_address,
+            external_address=liquid_external_address,
+            current_ts=current_ts,
+            txids=txids,
+        )
 
         for operation in scenario["operations"]:
             kind = operation["kind"]
@@ -2708,6 +2963,7 @@ def run_demo(
             scenario,
             wallets,
             url=url,
+            elements_url=elements_url,
             username=username,
             password=password,
             wallet_prefix=backend_wallet_prefix,
@@ -2841,6 +3097,7 @@ def run_demo(
                 "data_root": str(data_root),
                 "export_dir": str(export_dir),
                 "core_url": url,
+                "elements_url": elements_url,
                 "base_time": datetime.fromtimestamp(current_ts, tz=timezone.utc).isoformat().replace("+00:00", "Z"),
                 "wallets": {
                     key: {
@@ -2849,6 +3106,7 @@ def run_demo(
                         "addresses": list(wallet.addresses),
                         "chain": wallet.chain,
                         "source_file": wallet.source_file,
+                        "descriptor_file": wallet.descriptor_file,
                         "sp_scan_file": wallet.sp_scan_file,
                         "kassiber_id": wallet.kassiber_id,
                     }
@@ -2916,10 +3174,17 @@ def run_demo(
             # Best-effort mocktime reset during teardown; if the node is already
             # gone this must not override the error (if any) being unwound.
             pass
+        try:
+            rpc(elements_url, username, password, "setmocktime", [0])
+        except RuntimeError:
+            pass
         if not keep_core_wallets:
             for wallet_name in reversed(created_core_wallets):
                 if wallet_name:
                     _unload_wallet(url, username, password, wallet_name)
+            for wallet_name in reversed(created_elements_wallets):
+                if wallet_name:
+                    _unload_wallet(elements_url, username, password, wallet_name)
 
 
 def main(argv: list[str] | None = None) -> int:

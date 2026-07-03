@@ -10,7 +10,7 @@ regtest infrastructure.
 | --- | --- | --- | --- |
 | FAST | `./scripts/integration-harness.sh fast` | no | Replays recorded regtest tapes through the real sync adapter, import, journal, report, and XLSX export path with `KASSIBER_NO_EGRESS=1`. Includes a baseline watch-only tape and an edge-case tape (multi-address wallet, immature vs. mature coinbase, dust, RBF-replaced conflict pair, same-wallet self-spend, mempool-pending receipt). |
 | SLOW | `./scripts/integration-harness.sh bitcoin-core` | yes, unless reusing a node | Starts or reuses the regtest Compose stack (Bitcoin Core, Elements, Bitcoin Fulcrum, plus local mempool/esplora-compatible loopback endpoints), creates real wallets and transactions (including coinbase maturity and a watched receive), then drives Kassiber sync, pricing, journal, report, and export. |
-| DEMO | `./scripts/integration-harness.sh demo-full` | yes, unless reusing a node | Builds the checked-in `full-accounting-v1` scenario: twelve Kassiber wallets including multi-address Bitcoin wallets, a Silent Payments wallet, rotation targets, a mining wallet, and deterministic elementsregtest/LBTC import wallets; real regtest acquisitions/disposals/transfers, operating-expense disposals with deterministic amount/fee variation, deprecated rotated-out wallets, batched, consolidation, dust, RBF-replacement, and mempool-pending edge cases, local Bitcoin/Liquid Electrum and mempool-compatible backend rows, a multi-year stress ledger, CoinJoin- and PayJoin-shaped collaborative transactions, swap/peg bridge pairs, loan marks, bundled real historical BTC/EUR pricing, journals, reports, and transaction exports. |
+| DEMO | `./scripts/integration-harness.sh demo-full` | yes, unless reusing a node | Builds the checked-in `full-accounting-v1` scenario: thirteen Kassiber wallets including multi-address Bitcoin wallets, a Silent Payments wallet, rotation targets, a mining wallet, deterministic historical elementsregtest/LBTC import wallets, and one descriptor-backed Liquid wallet synced from real `elementsd` transactions through the local Liquid Electrum endpoint; real regtest acquisitions/disposals/transfers, operating-expense disposals with deterministic amount/fee variation, deprecated rotated-out wallets, batched, consolidation, dust, RBF-replacement, and mempool-pending edge cases, local Bitcoin/Liquid Electrum and mempool-compatible backend rows, a multi-year stress ledger, CoinJoin- and PayJoin-shaped collaborative transactions, swap/peg bridge pairs, loan marks, bundled real historical BTC/EUR pricing, journals, reports, and transaction exports. |
 | SILENT PAYMENTS | `./scripts/integration-harness.sh silent-payments` | yes | Starts the regtest Compose stack with the `silent-payments` profile, which builds/runs Sparrow Frigate against Bitcoin Core v30 and Fulcrum, waits until Frigate advertises `silent_payments: [0]` through `server.features`, then runs Kassiber's Silent Payments sync tests. Override the cold-start wait with `KASSIBER_REGTEST_FRIGATE_WAIT_SECONDS` if the local Frigate index is slow. |
 | BOLTZ | `./scripts/integration-harness.sh boltz-liquid` | yes, upstream Boltz stack | Starts or reuses Boltz's official [`BoltzExchange/regtest`](https://github.com/BoltzExchange/regtest) Docker environment, probes the local Boltz API for Liquid-capable submarine, reverse, and BTC -> L-BTC chain-swap pairs, executes a Liquid on-chain payment plus an L-BTC -> BTC Lightning submarine swap, builds Kassiber import rows from the observed txids/hash/amounts, and verifies the swap pairs while the plain Liquid payment stays unpaired. |
 
@@ -38,11 +38,10 @@ and the four protocol endpoints used by the UI/backend health and graph paths:
 - `core-regtest` -> Bitcoin Core RPC, authoritative sync backend explicitly
   assigned to ordinary Bitcoin wallets
 - Elements Core runs as `elementsd` on `elementsregtest` to provision a local
-  Liquid daemon. Note: the current lanes do not yet sync a Kassiber Liquid
-  wallet from `elementsd` — Liquid demo data is file-source (`generic_ledger`)
-  and the Liquid Electrum/mempool rails below are deterministic local shims
-  serving synthetic LBTC data. Real `elementsd`-backed Liquid sync is a
-  follow-up slice (see Growth Path).
+  Liquid daemon. The demo includes a descriptor-backed Liquid wallet with
+  private blinding material stored inside the disposable test book; it receives
+  and spends real elementsregtest LBTC, then syncs through the local Liquid
+  Electrum service backed by `elementsd`.
 - `bitcoin-electrum-regtest` -> the `fulcrum` container's Electrum TCP port
 - `bitcoin-frigate-regtest` -> Sparrow Frigate's Electrum TCP port when
   `KASSIBER_REGTEST_COMPOSE_PROFILES=silent-payments` or the
@@ -284,10 +283,12 @@ The `fulcrum` container is provisioned and exposed as the
 `bitcoin-electrum-regtest` backend row, but the demo and harness currently
 sync Bitcoin wallets through Core RPC (`core-regtest`) only — no wallet syncs
 through Fulcrum yet, and there is no cross-backend (Core vs Electrum vs
-explorer HTTP) parity comparison. The Explorer API and Liquid Electrum rows are
-small deterministic local services that speak the mempool/esplora and Electrum
-calls Kassiber exercises in development and CI. That keeps the preview fast and
-repeatable while avoiding accidental public mainnet explorers in regtest mode.
+explorer HTTP) parity comparison. The Liquid Electrum and Liquid mempool rows
+are local services backed by `elementsd`; the demo's `liquid_live_sync` wallet
+uses the Electrum row for real descriptor-backed LBTC sync, while the older
+Liquid treasury/operations history remains deterministic `generic_ledger`
+fixture data. That keeps the preview repeatable while avoiding accidental
+public mainnet explorers in regtest mode.
 The stored default backend is `bitcoin-mempool-regtest`: wallet configs still
 pin their sync source (`core-regtest` for ordinary Bitcoin, `bitcoin-frigate-regtest`
 for the Silent Payments wallet), while graph-capable UI paths prefer the local
@@ -362,14 +363,13 @@ mode.
 The current checked-in slow lanes exercise Bitcoin Core RPC end to end (sync,
 pricing, journal, report, export) and a full accounting demo on Bitcoin
 regtest. They also provision Elements Core, Bitcoin Fulcrum, and local
-mempool/esplora-compatible endpoints, and create deterministic file-source
-elementsregtest/LBTC demo wallets — but those backends are not yet driven by a
-real Kassiber sync: no wallet syncs through Fulcrum/Electrum, explorer HTTP, or
-`elementsd`, and there is no cross-backend parity comparison. Wiring live
-multi-backend Bitcoin sync + parity, and real `elementsd`-backed Liquid sync
-(replacing the deterministic Explorer API and Liquid Electrum shims with
-upstream mempool web/electrs-style indexers), are the next parity targets and
-can be added without changing the contributor entrypoint.
+mempool/esplora-compatible endpoints, create deterministic file-source
+elementsregtest/LBTC demo wallets, and include one real `elementsd`-backed
+descriptor Liquid wallet through the local Electrum-compatible service. Remaining
+parity targets are broader cross-backend comparisons: Bitcoin Core vs Fulcrum vs
+explorer HTTP, and Liquid Electrum vs explorer HTTP/`elementsd` views across the
+larger historical fixture set. Those can be added without changing the
+contributor entrypoint.
 
 Lightning is the next planned slice: the concrete plan — Core Lightning
 regtest nodes in a Compose overlay, an idempotent channel-bootstrap step,

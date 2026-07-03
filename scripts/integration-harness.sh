@@ -125,6 +125,41 @@ sys.exit(0 if ok else 1)
 PY
 }
 
+probe_elements() {
+  local debug="${1:-0}"
+  KASSIBER_REGTEST_PROBE_DEBUG="$debug" py - <<'PY'
+import base64
+import json
+import os
+import sys
+from urllib import error, request
+
+url = os.environ["KASSIBER_REGTEST_ELEMENTS_URL"]
+user = os.environ["KASSIBER_REGTEST_RPC_USER"]
+password = os.environ["KASSIBER_REGTEST_RPC_PASSWORD"]
+debug = os.environ.get("KASSIBER_REGTEST_PROBE_DEBUG") == "1"
+payload = json.dumps({"jsonrpc": "1.0", "id": "probe-elements", "method": "getblockchaininfo", "params": []}).encode()
+req = request.Request(url, data=payload, headers={"Content-Type": "application/json"})
+req.add_header("Authorization", "Basic " + base64.b64encode(f"{user}:{password}".encode()).decode())
+try:
+    with request.urlopen(req, timeout=3) as response:
+        body = json.loads(response.read().decode())
+except error.HTTPError as exc:
+    body_text = exc.read().decode(errors="replace")
+    if debug:
+        print(f"HTTP {exc.code}: {body_text}", file=sys.stderr)
+    sys.exit(1)
+except Exception as exc:
+    if debug:
+        print(f"{type(exc).__name__}: {exc}", file=sys.stderr)
+    sys.exit(1)
+ok = body.get("result", {}).get("chain") == "elementsregtest"
+if debug and not ok:
+    print(json.dumps(body, sort_keys=True), file=sys.stderr)
+sys.exit(0 if ok else 1)
+PY
+}
+
 wait_for_core() {
   local deadline
   deadline=$((SECONDS + 90))
@@ -133,6 +168,20 @@ wait_for_core() {
     if [ "$SECONDS" -ge "$deadline" ]; then
       echo "Timed out waiting for bitcoind regtest RPC." >&2
       probe_core 1 || true
+      return 1
+    fi
+    sleep 2
+  done
+}
+
+wait_for_elements() {
+  local deadline
+  deadline=$((SECONDS + 90))
+  until probe_elements 0
+  do
+    if [ "$SECONDS" -ge "$deadline" ]; then
+      echo "Timed out waiting for elementsd regtest RPC." >&2
+      probe_elements 1 || true
       return 1
     fi
     sleep 2
@@ -157,6 +206,7 @@ run_with_bitcoin_core() {
   export KASSIBER_REGTEST_LIQUID_MEMPOOL_PORT="${KASSIBER_REGTEST_LIQUID_MEMPOOL_PORT:-$((KASSIBER_REGTEST_RPC_PORT + 103))}"
   export KASSIBER_REGTEST_FRIGATE_PORT="${KASSIBER_REGTEST_FRIGATE_PORT:-$((KASSIBER_REGTEST_RPC_PORT + 105))}"
   export KASSIBER_REGTEST_CORE_URL="${KASSIBER_REGTEST_CORE_URL:-http://127.0.0.1:${KASSIBER_REGTEST_RPC_PORT}}"
+  export KASSIBER_REGTEST_ELEMENTS_URL="${KASSIBER_REGTEST_ELEMENTS_URL:-http://127.0.0.1:${KASSIBER_REGTEST_ELEMENTS_RPC_PORT}}"
   export KASSIBER_REGTEST_COMPOSE_PROJECT="${KASSIBER_REGTEST_COMPOSE_PROJECT:-$(py -c 'import hashlib, os; print("kassiber-regtest-" + hashlib.sha256(os.getcwd().encode()).hexdigest()[:12])')}"
   if [ -n "${KASSIBER_REGTEST_COMPOSE_PROFILES:-}" ]; then
     export COMPOSE_PROFILES="$KASSIBER_REGTEST_COMPOSE_PROFILES"
@@ -184,6 +234,9 @@ run_with_bitcoin_core() {
   fi
 
   wait_for_core
+  if [ "$provided_core_url" -eq 0 ] || [ -n "${KASSIBER_REGTEST_REQUIRE_ELEMENTS:-}" ]; then
+    wait_for_elements
+  fi
   "$@"
 }
 
@@ -578,6 +631,7 @@ demo_build_book() {
     docker_compose -p "$KASSIBER_REGTEST_COMPOSE_PROJECT" -f dev/regtest/compose.bitcoin.yml down -v --remove-orphans
     docker_compose -p "$KASSIBER_REGTEST_COMPOSE_PROJECT" -f dev/regtest/compose.bitcoin.yml up -d
     wait_for_core
+    wait_for_elements
   fi
 
   demo_assert_safe_home rebuild
@@ -626,6 +680,7 @@ run_demo_up() {
   export KASSIBER_REGTEST_KEEP=1
   export KASSIBER_REGTEST_COMPOSE_PROFILES="${KASSIBER_REGTEST_COMPOSE_PROFILES:-silent-payments}"
   export COMPOSE_PROFILES="$KASSIBER_REGTEST_COMPOSE_PROFILES"
+  export KASSIBER_REGTEST_REQUIRE_ELEMENTS=1
   demo_load_rpc_env
   if demo_book_needs_rebuild && [ -z "${KASSIBER_REGTEST_REUSE_CORE:-}" ]; then
     echo "Removing the managed demo regtest chain before rebuilding the backdated book..."
@@ -688,6 +743,7 @@ run_bitcoin_core() {
 }
 
 run_regtest_demo_full() {
+  export KASSIBER_REGTEST_REQUIRE_ELEMENTS=1
   run_with_bitcoin_core run_demo_full
 }
 
