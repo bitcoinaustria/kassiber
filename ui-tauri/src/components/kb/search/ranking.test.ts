@@ -14,9 +14,14 @@ import type { OverviewSnapshot } from "@/mocks/seed";
 
 // vitest.setup initializes i18n to English, so EN titles resolve and the
 // existing English assertions below still hold. Dynamic, prefixed keys fall
-// outside the typed-key union, so adapt the fixed-T to a string→string fn.
+// outside the typed-key union, so adapt the fixed-T to the search builder's
+// small structural translator shape.
 const fixedT = i18n.getFixedT("en", null);
-const t = (key: string) => fixedT(key as never) as string;
+const t = (key: string, options?: Record<string, unknown>) =>
+  fixedT(key as never, options as never) as unknown;
+const fixedDeT = i18n.getFixedT("de", null);
+const deT = (key: string, options?: Record<string, unknown>) =>
+  fixedDeT(key as never, options as never) as unknown;
 
 const results: SearchResult[] = [
   {
@@ -319,6 +324,41 @@ describe("app search results", () => {
       id: "page:reports",
       category: "page",
       route: { to: "/reports" },
+    });
+  });
+
+  it("finds localized screen aliases", () => {
+    const ranked = buildAppSearchResults({
+      snapshot,
+      query: "Berichte Ansicht",
+      aiFeaturesEnabled: true,
+      developerToolsEnabled: true,
+      t: deT,
+    });
+
+    expect(ranked[0]).toMatchObject({
+      id: "page:reports",
+      category: "page",
+      route: { to: "/reports" },
+    });
+  });
+
+  it("finds localized wallet connection aliases", () => {
+    const ranked = buildAppSearchResults({
+      snapshot,
+      query: "Cold Storage Verbindung",
+      aiFeaturesEnabled: true,
+      developerToolsEnabled: true,
+      t: deT,
+    });
+
+    expect(ranked[0]).toMatchObject({
+      id: "wallet:wallet-1",
+      category: "wallet",
+      route: {
+        to: "/connections/$connectionId",
+        params: { connectionId: "wallet-1" },
+      },
     });
   });
 

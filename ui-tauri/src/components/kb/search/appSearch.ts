@@ -25,8 +25,8 @@ type BuildAppSearchOptions = {
   limit?: number;
   /**
    * Translator that can resolve `nav:`, `search:`, and `settings:` prefixed
-   * keys. Localizes result titles/subtitles so a German user's visible-term
-   * query (e.g. "Transaktionen") matches the localized title.
+   * keys. Localizes result titles/subtitles/alias arrays so a German user's
+   * visible-term query (e.g. "Transaktionen") matches the localized title.
    *
    * Typed structurally rather than as a namespace-branded `TFunction` so any
    * `useTranslation([...])` / `getFixedT` instance can be passed; result keys
@@ -36,9 +36,34 @@ type BuildAppSearchOptions = {
 };
 
 /** Minimal translator shape used by the localized builders. */
-type AppTranslate = (key: string) => string;
+type AppTranslate = (
+  key: string,
+  options?: Record<string, unknown>,
+) => unknown;
 
 const SEARCH_LIMIT = 8;
+const DEFAULT_PAGE_ALIAS_TEMPLATES = [
+  "{{title}} page",
+  "{{title}} screen",
+  "{{title}} view",
+  "open {{title}}",
+  "go to {{title}}",
+];
+const DEFAULT_CONNECTION_LABEL_ALIAS_TEMPLATES = [
+  "{{label}} wallet",
+  "{{label}} connection",
+  "{{label}} detail",
+  "{{label}} wallet detail",
+  "open {{label}}",
+  "open {{label}} wallet",
+  "open {{label}} detail",
+];
+const DEFAULT_CONNECTION_KIND_ALIAS_TEMPLATES = [
+  "{{kind}} wallet",
+  "{{kind}} connection",
+];
+const DEFAULT_CONNECTION_STATUS_ALIAS_TEMPLATES = ["{{status}} wallet"];
+const DEFAULT_CONNECTION_NETWORK_ALIAS_TEMPLATES = ["{{network}} wallet"];
 
 /**
  * Page id → existing `nav:book.*` title key, reused where the side-nav already
@@ -312,7 +337,7 @@ export function buildAppSearchResults({
       return true;
     }).map((result) => localizeActionResult(result, t)),
     ...settingsResults(t),
-    ...snapshotResults(snapshot, query),
+    ...snapshotResults(snapshot, query, t),
   ];
 
   const resolvedTransactionId = resolvedTransaction?.transaction?.id ?? null;
@@ -424,12 +449,70 @@ function withLocalizedKeyword(
   keywords: readonly string[] | undefined,
   localizedTitle: string,
 ): string[] {
-  const base = keywords ? [...keywords] : [];
-  const extra = localizedTitle.trim().toLowerCase();
-  if (extra && !base.some((kw) => kw.trim().toLowerCase() === extra)) {
-    base.push(localizedTitle);
+  return uniqueKeywords(keywords ?? [], [localizedTitle]);
+}
+
+function uniqueKeywords(
+  ...groups: Array<readonly string[] | undefined>
+): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const group of groups) {
+    for (const keyword of group ?? []) {
+      const normalized = keyword.trim().toLowerCase();
+      if (!normalized || seen.has(normalized)) continue;
+      out.push(keyword);
+      seen.add(normalized);
+    }
   }
-  return base;
+  return out;
+}
+
+function translatedString(t: AppTranslate, key: string): string {
+  const value = t(key);
+  return typeof value === "string" ? value : "";
+}
+
+function translatedStringList(
+  t: AppTranslate,
+  key: string,
+  variables: Record<string, string>,
+): string[] {
+  const value = t(key, { ...variables, returnObjects: true });
+  if (Array.isArray(value)) {
+    return value.filter((item): item is string => typeof item === "string");
+  }
+  if (typeof value === "string") {
+    return value
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean);
+  }
+  return [];
+}
+
+function renderSearchPhraseTemplates(
+  templates: readonly string[],
+  variables: Record<string, string>,
+): string[] {
+  return templates.map((template) =>
+    Object.entries(variables).reduce(
+      (phrase, [key, value]) => phrase.replaceAll(`{{${key}}}`, value),
+      template,
+    ),
+  );
+}
+
+function localizedAliasKeywords(
+  t: AppTranslate,
+  key: string,
+  variables: Record<string, string>,
+  fallbackTemplates: readonly string[],
+): string[] {
+  return uniqueKeywords(
+    renderSearchPhraseTemplates(fallbackTemplates, variables),
+    translatedStringList(t, key, variables),
+  );
 }
 
 function localizePageResult(
@@ -438,21 +521,22 @@ function localizePageResult(
 ): SearchResult {
   const id = bareId(result.id);
   const titleKey = PAGE_NAV_TITLE_KEYS[result.id] ?? `search:page.${id}.title`;
-  const title = t(titleKey);
-  const subtitle = t(`search:page.${id}.subtitle`);
+  const title = translatedString(t, titleKey);
+  const subtitle = translatedString(t, `search:page.${id}.subtitle`);
   return {
     ...result,
     title,
     subtitle,
-    keywords: [
-      ...(result.keywords ?? []),
-      title,
-      `${title} page`,
-      `${title} screen`,
-      `${title} view`,
-      `open ${title}`,
-      `go to ${title}`,
-    ],
+    keywords: uniqueKeywords(
+      result.keywords,
+      [title],
+      localizedAliasKeywords(
+        t,
+        "search:aliases.pagePhrases",
+        { title },
+        DEFAULT_PAGE_ALIAS_TEMPLATES,
+      ),
+    ),
   };
 }
 
@@ -461,8 +545,8 @@ function localizeActionResult(
   t: AppTranslate,
 ): SearchResult {
   const id = bareId(result.id);
-  const title = t(`search:action.${id}.title`);
-  const subtitle = t(`search:action.${id}.subtitle`);
+  const title = translatedString(t, `search:action.${id}.title`);
+  const subtitle = translatedString(t, `search:action.${id}.subtitle`);
   return {
     ...result,
     title,
@@ -472,11 +556,11 @@ function localizeActionResult(
 }
 
 function settingsResults(t: AppTranslate): SearchResult[] {
-  const groupPrefix = t("search:settings.groupPrefix");
+  const groupPrefix = translatedString(t, "search:settings.groupPrefix");
   return SETTINGS_SECTIONS.map((section) => {
-    const title = t(`settings:${section.labelKey}`);
+    const title = translatedString(t, `settings:${section.labelKey}`);
     const descKey = section.labelKey.replace(/\.label$/, ".description");
-    const description = t(`settings:${descKey}`);
+    const description = translatedString(t, `settings:${descKey}`);
     return {
       id: `setting:${section.id}`,
       category: "setting" as const,
@@ -507,9 +591,12 @@ function settingsResults(t: AppTranslate): SearchResult[] {
 function snapshotResults(
   snapshot: OverviewSnapshot | undefined,
   query: string,
+  t: AppTranslate,
 ): SearchResult[] {
   return [
-    ...(snapshot?.connections.map(connectionResult) ?? []),
+    ...(snapshot?.connections.map((connection) =>
+      connectionResult(t, connection),
+    ) ?? []),
     ...(snapshot?.txs.map((tx) => transactionResult(tx, query)) ?? []),
     ...(snapshot?.status?.needsJournals
       ? [
@@ -547,26 +634,41 @@ function snapshotResults(
 }
 
 function connectionResult(
+  t: AppTranslate,
   connection: OverviewSnapshot["connections"][number],
 ): SearchResult {
-  const chainNetwork = [connection.chain, connection.network].filter(Boolean).join(" ");
-  const searchTokens = [
-    connection.label,
-    `${connection.label} wallet`,
-    `${connection.label} connection`,
-    `${connection.label} detail`,
-    `${connection.label} wallet detail`,
-    `open ${connection.label}`,
-    `open ${connection.label} wallet`,
-    `open ${connection.label} detail`,
-    connection.kind,
-    `${connection.kind} wallet`,
-    `${connection.kind} connection`,
-    connection.status,
-    `${connection.status} wallet`,
-    chainNetwork,
-    chainNetwork ? `${chainNetwork} wallet` : "",
-  ].filter(Boolean);
+  const chainNetwork = [connection.chain, connection.network]
+    .filter(Boolean)
+    .join(" ");
+  const searchTokens = uniqueKeywords(
+    [connection.label, connection.kind, connection.status, chainNetwork],
+    localizedAliasKeywords(
+      t,
+      "search:aliases.connectionLabelPhrases",
+      { label: connection.label },
+      DEFAULT_CONNECTION_LABEL_ALIAS_TEMPLATES,
+    ),
+    localizedAliasKeywords(
+      t,
+      "search:aliases.connectionKindPhrases",
+      { kind: connection.kind },
+      DEFAULT_CONNECTION_KIND_ALIAS_TEMPLATES,
+    ),
+    localizedAliasKeywords(
+      t,
+      "search:aliases.connectionStatusPhrases",
+      { status: connection.status },
+      DEFAULT_CONNECTION_STATUS_ALIAS_TEMPLATES,
+    ),
+    chainNetwork
+      ? localizedAliasKeywords(
+          t,
+          "search:aliases.connectionNetworkPhrases",
+          { network: chainNetwork },
+          DEFAULT_CONNECTION_NETWORK_ALIAS_TEMPLATES,
+        )
+      : [],
+  );
   return {
     id: `wallet:${connection.id}`,
     category: "wallet",
@@ -579,7 +681,7 @@ function connectionResult(
     ]
       .filter(Boolean)
       .join(" · "),
-    keywords: [
+    keywords: uniqueKeywords([
       "connection",
       "connections",
       "wallet",
@@ -590,7 +692,7 @@ function connectionResult(
       connection.status,
       connection.chain ?? "",
       connection.network ?? "",
-    ],
+    ]),
     iconKey: "wallet",
     route: {
       to: "/connections/$connectionId",

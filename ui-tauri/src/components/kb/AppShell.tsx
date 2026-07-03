@@ -2170,8 +2170,9 @@ function AppDashboardHeader({
           shouldResolveTransaction &&
           (resolvedTransaction.isFetching || resolvedTransaction.isLoading),
         // Dynamic, prefixed keys fall outside the typed-key union; resolve via
-        // a thin string→string adapter over the namespace-branded translator.
-        t: (key: string) => t(key as never) as string,
+        // a thin structural adapter over the namespace-branded translator.
+        t: (key: string, options?: Record<string, unknown>) =>
+          t(key as never, options as never) as unknown,
       }),
     [
       snapshot,
