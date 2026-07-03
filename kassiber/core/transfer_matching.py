@@ -101,10 +101,11 @@ class SwapCandidate:
     """One candidate pairing of an outbound leg with an inbound leg.
 
     Two legs in opposite directions across different wallets, judged a
-    swap by either the exact ``payment_hash`` match or the time + amount
-    heuristic. Fee, default kind, default policy, and conflict cluster
-    are all computed once at match time so the review surface can render
-    without re-deriving them.
+    swap by deterministic evidence such as ``payment_hash``,
+    ``provider_swap_id``, or an HTLC refund funding link, or by the time
+    + amount heuristic. Fee, default kind, default policy, and conflict
+    cluster are all computed once at match time so the review surface can
+    render without re-deriving them.
     """
 
     out_id: str

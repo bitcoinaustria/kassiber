@@ -373,12 +373,16 @@ def _swap_review_suggested_action(
             ),
         }
     if candidate.get("confidence") == "exact":
-        reason = (
-            "the inbound refund deterministically spends the outbound's HTLC "
-            "funding output, and is non-conflicted"
-            if candidate.get("method") == "htlc_refund"
-            else "payment_hash identity is exact and non-conflicted"
-        )
+        method = candidate.get("method")
+        if method == "htlc_refund":
+            reason = (
+                "the inbound refund deterministically spends the outbound's HTLC "
+                "funding output, and is non-conflicted"
+            )
+        elif method == "provider_swap_id":
+            reason = "provider swap metadata is exact and non-conflicted"
+        else:
+            reason = "payment_hash identity is exact and non-conflicted"
         return {
             "action": "pair_exact_candidate",
             "daemon_kind": "ui.transfers.pair",
