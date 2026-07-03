@@ -186,6 +186,8 @@ class RegtestHarnessTest(unittest.TestCase):
         scenario = regtest_demo.load_scenario()
 
         self.assertEqual(scenario["id"], "full-accounting-v1")
+        self.assertEqual(scenario["backend"]["name"], "core-regtest")
+        self.assertEqual(scenario["backend"]["default"], "bitcoin-mempool-regtest")
         wallet_keys = {wallet["key"] for wallet in scenario["wallets"]}
         self.assertEqual(
             wallet_keys,
@@ -194,6 +196,7 @@ class RegtestHarnessTest(unittest.TestCase):
                 "cold",
                 "spending",
                 "merchant",
+                "silent_payments",
                 "miner",
                 "treasury_2020",
                 "merchant_2022",
@@ -210,10 +213,12 @@ class RegtestHarnessTest(unittest.TestCase):
             {"elementsregtest"},
         )
         local_backends = regtest_demo._local_backend_specs()
+        self.assertIn(scenario["backend"]["default"], {backend["name"] for backend in local_backends})
         self.assertEqual(
             {backend["name"] for backend in local_backends},
             {
                 "bitcoin-electrum-regtest",
+                "bitcoin-frigate-regtest",
                 "bitcoin-mempool-regtest",
                 "liquid-electrum-regtest",
                 "liquid-mempool-regtest",
@@ -255,6 +260,10 @@ class RegtestHarnessTest(unittest.TestCase):
         self.assertTrue(
             {"treasury", "cold", "spending", "merchant", "miner"}.issubset(multi_address_wallets)
         )
+        silent_payment_wallet = next(wallet for wallet in scenario["wallets"] if wallet["key"] == "silent_payments")
+        self.assertEqual(silent_payment_wallet["kind"], "silent-payment")
+        self.assertEqual(silent_payment_wallet["network"], "regtest")
+        self.assertTrue(str(silent_payment_wallet["sp_descriptor"]).startswith("sp(tspscan1q"))
         operation_kinds = {operation["kind"] for operation in scenario["operations"]}
         self.assertTrue(
             {
@@ -281,7 +290,7 @@ class RegtestHarnessTest(unittest.TestCase):
         self.assertTrue(any(amount < Decimal("0.00001") for amount in dust_amounts))
         pending = scenario["pending_operations"]
         self.assertEqual([op["kind"] for op in pending], ["external_receipt"])
-        self.assertEqual(scenario["expected"]["wallets"], 11)
+        self.assertEqual(scenario["expected"]["wallets"], 12)
         self.assertEqual(scenario["expected"]["deprecated_wallets"], 4)
         self.assertEqual(scenario["expected"]["assets"], ["BTC", "LBTC"])
         self.assertGreaterEqual(scenario["expected"]["min_transactions"], 845)
@@ -338,6 +347,13 @@ class RegtestHarnessTest(unittest.TestCase):
         self.assertIn("bitcoin-mempool:", compose)
         self.assertIn("liquid-electrum:", compose)
         self.assertIn("liquid-mempool:", compose)
+        self.assertIn("frigate:", compose)
+        self.assertIn("profiles:", compose)
+        self.assertIn("silent-payments", compose)
+        self.assertIn("bitcoin/bitcoin:30.0", compose)
+        self.assertIn("zmqpubsequence=tcp://0.0.0.0:28336", compose)
+        self.assertIn("Dockerfile.frigate", compose)
+        self.assertIn("backendElectrumServer = \"tcp://fulcrum:50001\"", compose)
         self.assertNotIn("backend-stack:", compose)
         self.assertIn("KASSIBER_REGTEST_ELEMENTSD_IMAGE", compose)
         self.assertIn("KASSIBER_REGTEST_FULCRUM_IMAGE", compose)
@@ -347,6 +363,7 @@ class RegtestHarnessTest(unittest.TestCase):
         self.assertIn("KASSIBER_REGTEST_BITCOIN_MEMPOOL_PORT", compose)
         self.assertIn("KASSIBER_REGTEST_LIQUID_ELECTRUM_PORT", compose)
         self.assertIn("KASSIBER_REGTEST_LIQUID_MEMPOOL_PORT", compose)
+        self.assertIn("KASSIBER_REGTEST_FRIGATE_PORT", compose)
 
     def test_local_backend_stack_exposes_mempool_price_api(self):
         backend_stack = (ROOT / "dev" / "regtest" / "backend_stack.py").read_text(encoding="utf-8")
@@ -369,6 +386,43 @@ class RegtestHarnessTest(unittest.TestCase):
 
         self.assertIn("--no-business-tick", harness)
         self.assertIn("demo_load_rpc_env", harness)
+        self.assertIn("KASSIBER_REGTEST_COMPOSE_PROFILES", harness)
+
+    def test_silent_payments_lane_probes_frigate(self):
+        harness = (ROOT / "scripts" / "integration-harness.sh").read_text(encoding="utf-8")
+
+        self.assertIn("run_silent_payments()", harness)
+        self.assertIn("wait_for_frigate", harness)
+        self.assertIn("seed_frigate_regtest_tip", harness)
+        self.assertIn("generatetoaddress", harness)
+        self.assertIn("server.features", harness)
+        self.assertIn("silent-payments", harness)
+        self.assertIn("KASSIBER_REGTEST_FRIGATE_PORT", harness)
+        self.assertIn("KASSIBER_REGTEST_FRIGATE_WAIT_SECONDS", harness)
+
+    def test_demo_purge_paths_are_guarded_by_safe_home_check(self):
+        harness = (ROOT / "scripts" / "integration-harness.sh").read_text(encoding="utf-8")
+
+        self.assertIn("demo_assert_safe_home()", harness)
+        self.assertIn("path is / or the user home", harness)
+        self.assertIn("path is too shallow", harness)
+        self.assertIn("missing Kassiber regtest demo manifest", harness)
+        self.assertLess(
+            harness.index("demo_assert_safe_home rebuild"),
+            harness.index('rm -rf "$DEMO_HOME/data"'),
+        )
+        self.assertLess(
+            harness.index("demo_assert_safe_home purge"),
+            harness.index('rm -rf "$DEMO_HOME"'),
+        )
+
+    def test_demo_manifest_writer_uses_private_atomic_replacement(self):
+        harness = (ROOT / "scripts" / "integration-harness.sh").read_text(encoding="utf-8")
+
+        self.assertIn("os.chmod(home, 0o700)", harness)
+        self.assertIn("os.open(candidate, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)", harness)
+        self.assertIn("os.replace(tmp_path, manifest_path)", harness)
+        self.assertNotIn('open(manifest_path, "w"', harness)
 
     def test_full_accounting_demo_manifest_validation_rejects_bad_edge_cases(self):
         scenario = regtest_demo.load_scenario()

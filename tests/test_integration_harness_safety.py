@@ -44,6 +44,7 @@ def _demo_manifest_env(tmp_path: Path, demo_home: Path) -> dict[str, str]:
         "KASSIBER_REGTEST_CORE_URL": "http://127.0.0.1:18443",
         "KASSIBER_REGTEST_ELEMENTS_RPC_PORT": "18884",
         "KASSIBER_REGTEST_BITCOIN_ELECTRUM_PORT": "50001",
+        "KASSIBER_REGTEST_FRIGATE_PORT": "18548",
         "KASSIBER_REGTEST_BITCOIN_MEMPOOL_PORT": "8080",
         "KASSIBER_REGTEST_LIQUID_ELECTRUM_PORT": "60001",
         "KASSIBER_REGTEST_LIQUID_MEMPOOL_PORT": "8081",
@@ -66,7 +67,7 @@ class IntegrationHarnessSafetyTest(unittest.TestCase):
             for unsafe in unsafe_paths:
                 result = _run_harness_snippet(
                     tmp_path,
-                    "demo_validate_demo_home rebuild",
+                    "demo_assert_safe_home rebuild",
                     {"HOME": str(home), "KASSIBER_REGTEST_DEMO_HOME": str(unsafe)},
                 )
                 self.assertNotEqual(result.returncode, 0, unsafe)
@@ -75,11 +76,11 @@ class IntegrationHarnessSafetyTest(unittest.TestCase):
             purge_home = tmp_path / "kassiber-regtest-demo"
             result = _run_harness_snippet(
                 tmp_path,
-                "demo_validate_demo_home purge",
+                "demo_assert_safe_home purge",
                 {"HOME": str(home), "KASSIBER_REGTEST_DEMO_HOME": str(purge_home)},
             )
             self.assertNotEqual(result.returncode, 0)
-            self.assertIn("valid Kassiber demo manifest", result.stderr)
+            self.assertIn("missing Kassiber regtest demo manifest", result.stderr)
 
     def test_demo_home_validation_allows_purge_with_valid_manifest_marker(self):
         with tempfile.TemporaryDirectory(prefix="kassiber-demo-safety-") as tmp:
@@ -100,7 +101,7 @@ class IntegrationHarnessSafetyTest(unittest.TestCase):
 
             result = _run_harness_snippet(
                 tmp_path,
-                "demo_validate_demo_home purge",
+                "demo_assert_safe_home purge",
                 _demo_manifest_env(tmp_path, demo_home),
             )
 
