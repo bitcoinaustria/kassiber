@@ -22,6 +22,7 @@ the first time the table is queried; it leaves a sentinel in `settings`
 from __future__ import annotations
 
 import hashlib
+import os
 from pathlib import Path
 from typing import Any, Callable, Iterable
 
@@ -466,7 +467,7 @@ def seed_default_ai_provider_if_empty(conn) -> None:
         """,
         (
             DEFAULT_BOOTSTRAP_PROVIDER["name"],
-            DEFAULT_BOOTSTRAP_PROVIDER["base_url"],
+            os.environ.get("KASSIBER_DEFAULT_AI_BASE_URL", DEFAULT_BOOTSTRAP_PROVIDER["base_url"]),
             DEFAULT_BOOTSTRAP_PROVIDER["api_key"],
             DEFAULT_BOOTSTRAP_PROVIDER["default_model"],
             DEFAULT_BOOTSTRAP_PROVIDER["kind"],

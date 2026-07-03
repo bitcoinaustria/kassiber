@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import io
 import json
+import os
 import socket
 import subprocess
 import tempfile
@@ -1041,6 +1042,17 @@ class ProvidersCrudTest(unittest.TestCase):
             self.assertEqual(providers[0]["base_url"], "http://localhost:11434/v1")
         finally:
             conn.close()
+
+    def test_seed_can_use_container_host_ollama_base_url(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-ai-seed-host-") as tmp:
+            conn = open_db(str(Path(tmp) / "data"))
+            try:
+                with patch.dict(os.environ, {"KASSIBER_DEFAULT_AI_BASE_URL": "http://host.docker.internal:11434/v1"}):
+                    seed_default_ai_provider_if_empty(conn)
+                providers = list_db_ai_providers(conn)
+                self.assertEqual(providers[0]["base_url"], "http://host.docker.internal:11434/v1")
+            finally:
+                conn.close()
 
     def test_seed_does_not_recreate_after_delete(self):
         # Use a fresh DB so the previous test's state doesn't bleed in.

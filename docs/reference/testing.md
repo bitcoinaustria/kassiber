@@ -57,6 +57,31 @@ and the four protocol endpoints used by the UI/backend health and graph paths:
 - `liquid-mempool-regtest` -> local Liquid mempool/esplora-compatible HTTP
   API for graph lookups on deterministic LBTC demo txids
 
+The HTTP explorer endpoints are host-loopback services and include regtest-only
+CORS headers so a host browser can inspect them from a web explorer or local
+tooling page. Use the manifest or `demo-up` output for the exact ports; by
+default they are:
+
+```text
+Bitcoin explorer API: http://127.0.0.1:18544/api
+Liquid explorer API:  http://127.0.0.1:18546/api
+```
+
+Set `KASSIBER_REGTEST_EXPLORER_CORS_ORIGIN` to a specific origin to narrow the
+default `*`, or to an empty value to disable these CORS headers. The services
+remain bound to host loopback and must stay regtest-only.
+
+The Compose stack also maps `host.docker.internal` to the Docker host. A
+containerized Kassiber process can use a host Ollama instance by seeding the
+default local provider with:
+
+```bash
+KASSIBER_DEFAULT_AI_BASE_URL=http://host.docker.internal:11434/v1
+```
+
+This only affects first-time AI provider seeding; existing books should update
+their `ollama` provider row to the host alias explicitly.
+
 Set `KASSIBER_REGTEST_KEEP=1` to keep the Docker volume for debugging; otherwise it is removed on exit.
 Fresh Compose runs use the scenario manifest's historical timestamp sequence,
 starting in January 2019 and covering activity into spring 2026. Reused Core

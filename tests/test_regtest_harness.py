@@ -364,6 +364,7 @@ class RegtestHarnessTest(unittest.TestCase):
         self.assertIn("KASSIBER_REGTEST_LIQUID_ELECTRUM_PORT", compose)
         self.assertIn("KASSIBER_REGTEST_LIQUID_MEMPOOL_PORT", compose)
         self.assertIn("KASSIBER_REGTEST_FRIGATE_PORT", compose)
+        self.assertIn("host.docker.internal:host-gateway", compose)
 
     def test_local_backend_stack_exposes_mempool_price_api(self):
         backend_stack = (ROOT / "dev" / "regtest" / "backend_stack.py").read_text(encoding="utf-8")
@@ -371,6 +372,9 @@ class RegtestHarnessTest(unittest.TestCase):
         self.assertIn("/api/v1/prices", backend_stack)
         self.assertIn("/api/v1/historical-price", backend_stack)
         self.assertIn("KASSIBER_REGTEST_BTC_EUR_PRICE", backend_stack)
+        self.assertIn("do_OPTIONS", backend_stack)
+        self.assertIn("Access-Control-Allow-Origin", backend_stack)
+        self.assertIn("KASSIBER_REGTEST_EXPLORER_CORS_ORIGIN", backend_stack)
 
     def test_demo_latest_rate_seed_does_not_change_book_provider(self):
         demo = (ROOT / "tests" / "integration" / "regtest_demo.py").read_text(encoding="utf-8")

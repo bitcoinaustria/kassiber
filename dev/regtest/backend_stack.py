@@ -314,6 +314,12 @@ def _price_payload(timestamp: int) -> dict[str, Any]:
 class ApiHandler(BaseHTTPRequestHandler):
     server_version = "KassiberRegtestBackend/1.0"
 
+    def do_OPTIONS(self) -> None:  # noqa: N802
+        self.send_response(204)
+        self._cors_headers()
+        self.send_header("Access-Control-Max-Age", "3600")
+        self.end_headers()
+
     def do_GET(self) -> None:  # noqa: N802
         parsed = urlparse(self.path)
         path = parsed.path.rstrip("/")
@@ -404,9 +410,18 @@ class ApiHandler(BaseHTTPRequestHandler):
         else:
             self._error(404, "not found")
 
+    def _cors_headers(self) -> None:
+        origin = os.environ.get("KASSIBER_REGTEST_EXPLORER_CORS_ORIGIN", "*").strip()
+        if not origin:
+            return
+        self.send_header("Access-Control-Allow-Origin", origin)
+        self.send_header("Access-Control-Allow-Methods", "GET, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
+
     def _json(self, payload: Any, status: int = 200) -> None:
         body = json.dumps(payload, sort_keys=True).encode("utf-8")
         self.send_response(status)
+        self._cors_headers()
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
@@ -415,6 +430,7 @@ class ApiHandler(BaseHTTPRequestHandler):
     def _text(self, payload: str, status: int = 200) -> None:
         body = payload.encode("utf-8")
         self.send_response(status)
+        self._cors_headers()
         self.send_header("Content-Type", "text/plain; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()

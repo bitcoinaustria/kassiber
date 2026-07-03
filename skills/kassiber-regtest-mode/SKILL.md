@@ -42,6 +42,83 @@ path needs new chain activity to import.
 7. After Docker-backed tests, verify cleanup with `docker ps` unless the lane
    intentionally keeps the node running (`demo-up` or `KASSIBER_REGTEST_KEEP=1`).
 
+## Multi-Agent Demo Backends
+
+The desired default is one persistent demo backend per worktree, not one
+machine-global demo singleton. Multiple Codex/Claude agents should be able to
+run `demo-up`, `demo-tick`, `demo-down`, and `pnpm dev:demo` concurrently from
+different worktrees without port, Compose project, data-root, or manifest
+collisions.
+
+When implementing this, prefer a deterministic namespace derived from the
+worktree path, for example:
+
+- `KASSIBER_REGTEST_DEMO_NAMESPACE`: explicit override for humans and CI.
+- `KASSIBER_REGTEST_COMPOSE_PROJECT`: default
+  `kassiber-regtest-demo-<hash>`.
+- `KASSIBER_REGTEST_DEMO_HOME`: default
+  `~/.kassiber/regtest-demo-<hash>`.
+- `KASSIBER_REGTEST_RPC_PORT`: default to a stable per-worktree port block.
+  The existing derived ports can continue to use offsets from that base.
+
+Keep `KASSIBER_REGTEST_SHARED_DEMO=1` (or an equivalently explicit opt-in) for
+the old single shared backend behavior. Do not make accidental sharing the
+default; it causes agents to stop, purge, tick, or mutate each other's books.
+
+The manifest should remain the source of truth after first startup. Persist the
+namespace, Compose project, data root, all loopback URLs, and generated RPC
+credentials there, then have `demo-tick`, `demo-down`, `dev:demo`, and helper
+scripts read the manifest before inventing defaults. If the manifest exists,
+reuse it even if the current default hash algorithm later changes.
+
+When reviewing or patching this area, check all of these together:
+
+- `scripts/integration-harness.sh`: namespace, port block, manifest read/write,
+  `demo-up`, `demo-tick`, `demo-down`.
+- `ui-tauri/package.json` and `ui-tauri/vite.config.ts`: `dev:demo` must point
+  at the same worktree-scoped demo home unless explicitly overridden.
+- `dev/regtest/bitcoin-cli.sh`: should pick the current worktree manifest or
+  accept the same namespace override before falling back to defaults.
+- `docs/reference/testing.md`: document shared mode as opt-in and name the
+  exact override knobs.
+
+For host-browser explorer inspection, the local mempool/esplora-compatible HTTP
+endpoints should stay bound to host loopback but answer browser preflight
+requests. Keep `KASSIBER_REGTEST_EXPLORER_CORS_ORIGIN` available for narrowing
+or disabling the default regtest-only CORS headers.
+
+For containerized Kassiber processes that need the host's Ollama instance, the
+regtest Compose stack should provide `host.docker.internal`, and the Kassiber
+AI provider seed can use
+`KASSIBER_DEFAULT_AI_BASE_URL=http://host.docker.internal:11434/v1`.
+
+## Faster Chat Startup
+
+For chat work, avoid treating `demo-up` as a mandatory cold build. The fast
+path should be:
+
+1. Look for the worktree-scoped `demo-manifest.json`.
+2. Probe the recorded Core RPC URL with the recorded credentials.
+3. If reachable and the scenario checksum still matches, skip Docker startup,
+   skip book rebuild, refresh live-rate cache only if requested, and print the
+   ready data root immediately.
+4. If the container exists but is stopped, run Compose `up -d` for the recorded
+   project and wait only for the probe.
+5. Rebuild the book only when the scenario checksum changed, the data root is
+   missing, or `KASSIBER_REGTEST_DEMO_REBUILD=1` is set.
+
+For even faster "start this chat on a real regtest book" flows, add or use a
+cheap status lane before doing expensive work:
+
+```bash
+./scripts/integration-harness.sh demo-status
+```
+
+`demo-status` should be read-only: print whether the manifest exists, whether
+the Compose project is running, whether RPC is reachable, the data root for
+`pnpm dev:demo`, and the exact next command (`demo-up`, `demo-tick`, or
+`demo-down`). It must not start Docker or mutate the book.
+
 ## Guardrails
 
 - Never use mainnet funds, real wallet files, production descriptors, or public
