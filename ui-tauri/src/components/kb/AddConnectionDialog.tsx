@@ -356,6 +356,9 @@ const CORE_DEFAULT_RPC_URLS: Record<string, string> = {
 };
 const DEFAULT_BTCPAY_PAYMENT_METHOD_ID = "BTC-CHAIN";
 const MAX_DESCRIPTOR_GAP_LIMIT = 5000;
+const CONNECTION_SOURCE_ALIASES: Record<string, string> = {
+  xpub: "descriptor",
+};
 type BullBitcoinWalletNetwork = "bitcoin" | "liquid" | "lightning";
 const BULLBITCOIN_WALLET_NETWORKS: Array<{
   id: BullBitcoinWalletNetwork;
@@ -860,7 +863,7 @@ export function AddConnectionDialog({
   const { startSyncNotice, clearSyncNotice } = useSyncProgressNotice();
   const [activeCategory, setActiveCategory] =
     React.useState<ConnectionCategory>("wallets");
-  const [selectedId, setSelectedId] = React.useState("xpub");
+  const [selectedId, setSelectedId] = React.useState("descriptor");
   const [sourceQuery, setSourceQuery] = React.useState("");
   const [step, setStep] = React.useState<DialogStep>("source");
   const [form, setForm] = React.useState(() =>
@@ -1136,12 +1139,16 @@ export function AddConnectionDialog({
 
   React.useEffect(() => {
     if (!open) return;
-    const source =
-      CONNECTION_SOURCES.find((candidate) => candidate.id === initialSourceId) ??
-      CONNECTION_SOURCES[0];
+    const resolvedSourceId = initialSourceId
+      ? CONNECTION_SOURCE_ALIASES[initialSourceId] ?? initialSourceId
+      : null;
+    const requestedSource = CONNECTION_SOURCES.find(
+      (candidate) => candidate.id === resolvedSourceId,
+    );
+    const source = requestedSource ?? CONNECTION_SOURCES[0];
     setActiveCategory(source.category);
     setSelectedId(source.id);
-    setStep(initialSourceId && source.status === "ready" ? "setup" : "source");
+    setStep(requestedSource && source.status === "ready" ? "setup" : "source");
     setSetupError(null);
     setLastImportResult(null);
     setGenericLedgerPreviewBlocksSubmit(false);
