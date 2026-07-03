@@ -222,10 +222,17 @@ class BitcoinIndex:
         height: int,
     ) -> None:
         txid = str(tx.get("txid") or "")
+        touched_scripts: set[str] = set()
         for entry in tx.get("vin") or []:
             if isinstance(entry, dict) and entry.get("txid") and entry.get("vout") is not None:
                 try:
-                    spent.add((str(entry["txid"]), int(entry["vout"])))
+                    prev_txid = str(entry["txid"])
+                    prev_vout = int(entry["vout"])
+                    spent.add((prev_txid, prev_vout))
+                    prevout = self._prevout(prev_txid, prev_vout)
+                    script_hex = (prevout or {}).get("scriptpubkey")
+                    if script_hex:
+                        touched_scripts.add(str(script_hex))
                 except Exception:
                     pass
         for output in tx.get("vout") or []:
@@ -234,7 +241,9 @@ class BitcoinIndex:
             script_hex = _script_payload(output).get("scriptpubkey")
             if not script_hex:
                 continue
-            key = electrum_scripthash(str(script_hex))
+            touched_scripts.add(str(script_hex))
+        for script_hex in sorted(touched_scripts):
+            key = electrum_scripthash(script_hex)
             history.setdefault(key, []).append({"tx_hash": txid, "height": height})
 
     def history(self, scripthash: str, *, mempool: bool | None = None) -> list[dict[str, Any]]:

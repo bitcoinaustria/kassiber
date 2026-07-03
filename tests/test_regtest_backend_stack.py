@@ -128,6 +128,83 @@ class RegtestBackendStackTest(unittest.TestCase):
         self.assertEqual(rows[1]["txid"], "tx-1")
         self.assertEqual(rows[1]["vout"], 0)
 
+    def test_index_history_includes_spends_by_prevout_script(self) -> None:
+        script_hex = "0014" + "22" * 20
+
+        class FakeRpc:
+            def call(self, method, params=None):
+                params = params or []
+                if method == "getblockcount":
+                    return 2
+                if method == "getblockhash":
+                    return f"block-{params[0]}"
+                if method == "getrawmempool":
+                    return []
+                if method == "getrawtransaction" and params[0] == "funding-tx":
+                    return {
+                        "txid": "funding-tx",
+                        "vout": [
+                            {
+                                "n": 0,
+                                "value": 0.001,
+                                "scriptPubKey": {
+                                    "hex": script_hex,
+                                    "type": "witness_v0_keyhash",
+                                },
+                            }
+                        ],
+                    }
+                if method == "getblock":
+                    height = int(str(params[0]).split("-", 1)[1])
+                    if height == 0:
+                        return {"tx": []}
+                    if height == 1:
+                        return {
+                            "tx": [
+                                {
+                                    "txid": "funding-tx",
+                                    "blockhash": params[0],
+                                    "time": 1_700_000_000,
+                                    "vout": [
+                                        {
+                                            "n": 0,
+                                            "value": 0.001,
+                                            "scriptPubKey": {
+                                                "hex": script_hex,
+                                                "type": "witness_v0_keyhash",
+                                            },
+                                        }
+                                    ],
+                                }
+                            ]
+                        }
+                    return {
+                        "tx": [
+                            {
+                                "txid": "spend-tx",
+                                "blockhash": params[0],
+                                "time": 1_700_000_600,
+                                "vin": [{"txid": "funding-tx", "vout": 0}],
+                                "vout": [
+                                    {
+                                        "n": 0,
+                                        "value": 0.0009,
+                                        "scriptPubKey": {
+                                            "hex": "0014" + "33" * 20,
+                                            "type": "witness_v0_keyhash",
+                                        },
+                                    }
+                                ],
+                            }
+                        ]
+                    }
+                raise AssertionError(f"unexpected RPC call: {method} {params}")
+
+        index = backend_stack.BitcoinIndex(FakeRpc())
+        rows = index.history(backend_stack.electrum_scripthash(script_hex))
+
+        self.assertEqual(rows, [{"tx_hash": "funding-tx", "height": 1}, {"tx_hash": "spend-tx", "height": 2}])
+
 
 if __name__ == "__main__":
     unittest.main()

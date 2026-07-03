@@ -9,7 +9,9 @@ regtest infrastructure.
 | Tier | Command | Docker | Purpose |
 | --- | --- | --- | --- |
 | FAST | `./scripts/integration-harness.sh fast` | no | Replays recorded regtest tapes through the real sync adapter, import, journal, report, and XLSX export path with `KASSIBER_NO_EGRESS=1`. Includes a baseline watch-only tape and an edge-case tape (multi-address wallet, immature vs. mature coinbase, dust, RBF-replaced conflict pair, same-wallet self-spend, mempool-pending receipt). |
-| SLOW | `./scripts/integration-harness.sh bitcoin-core` | yes, unless reusing a node | Starts or reuses the regtest Compose stack (Bitcoin Core, Elements, Bitcoin Fulcrum, plus local mempool/esplora-compatible loopback endpoints), creates real wallets and transactions (including coinbase maturity and a watched receive), then drives Kassiber sync, pricing, journal, report, and export. |
+| BITCOIN CORE | `./scripts/integration-harness.sh bitcoin-core` | yes, unless reusing a node | Starts or reuses the regtest Compose stack, creates real Bitcoin Core wallets and transactions, then drives Kassiber Core RPC sync, pricing, journal, report, and export. |
+| LIQUID BACKENDS | `./scripts/integration-harness.sh liquid-backends` | yes, unless reusing a node | Creates one real Elements descriptor wallet graph, syncs it through Liquid Electrum and Liquid Esplora/mempool-compatible backends into separate Kassiber books, and compares normalized transaction rows and UTXOs after confirmed receive/spend/self-fee activity, pending receipt import, confirmation update, and no-op sync. |
+| SLOW | `./scripts/integration-harness.sh slow` | yes, unless reusing a node | Runs the Bitcoin Core smoke, Liquid backend parity, and full accounting demo against the disposable regtest stack. |
 | DEMO | `./scripts/integration-harness.sh demo-full` | yes, unless reusing a node | Builds the checked-in `full-accounting-v1` scenario: thirteen Kassiber wallets including multi-address Bitcoin wallets, a Silent Payments wallet, rotation targets, a mining wallet, deterministic historical elementsregtest/LBTC import wallets, and one descriptor-backed Liquid wallet synced from real `elementsd` transactions through the local Liquid Electrum endpoint; real regtest acquisitions/disposals/transfers, operating-expense disposals with deterministic amount/fee variation, deprecated rotated-out wallets, batched, consolidation, dust, RBF-replacement, and mempool-pending edge cases, local Bitcoin/Liquid Electrum and mempool-compatible backend rows, a multi-year stress ledger, CoinJoin- and PayJoin-shaped collaborative transactions, swap/peg bridge pairs, loan marks, bundled real historical BTC/EUR pricing, journals, reports, and transaction exports. |
 | SILENT PAYMENTS | `./scripts/integration-harness.sh silent-payments` | yes | Starts the regtest Compose stack with the `silent-payments` profile, which builds/runs Sparrow Frigate against Bitcoin Core v30 and Fulcrum, waits until Frigate advertises `silent_payments: [0]` through `server.features`, then runs Kassiber's Silent Payments sync tests. Override the cold-start wait with `KASSIBER_REGTEST_FRIGATE_WAIT_SECONDS` if the local Frigate index is slow. |
 | BOLTZ | `./scripts/integration-harness.sh boltz-liquid` | yes, upstream Boltz stack | Starts or reuses Boltz's official [`BoltzExchange/regtest`](https://github.com/BoltzExchange/regtest) Docker environment, probes the local Boltz API for Liquid-capable submarine, reverse, and BTC -> L-BTC chain-swap pairs, executes a Liquid on-chain payment plus an L-BTC -> BTC Lightning submarine swap, builds Kassiber import rows from the observed txids/hash/amounts, and verifies the swap pairs while the plain Liquid payment stays unpaired. |
@@ -23,6 +25,8 @@ export KASSIBER_REGTEST_CORE_URL=http://127.0.0.1:18443
 export KASSIBER_REGTEST_RPC_USER=kassiber
 export KASSIBER_REGTEST_RPC_PASSWORD=...
 ./scripts/integration-harness.sh bitcoin-core
+# Or compare real Elements-backed Liquid Electrum vs Esplora sync:
+./scripts/integration-harness.sh liquid-backends
 ```
 
 The Compose lane generates disposable RPC credentials per run unless you set
@@ -293,9 +297,11 @@ The stored default backend is `bitcoin-mempool-regtest`: wallet configs still
 pin their sync source (`core-regtest` for ordinary Bitcoin, `bitcoin-frigate-regtest`
 for the Silent Payments wallet), while graph-capable UI paths prefer the local
 HTTP mempool/esplora endpoint.
-Actually syncing wallets through Fulcrum/Electrum and explorer HTTP, and
-comparing the resulting txids/amounts/fees/UTXOs across backends (issue #312's
-backend-parity acceptance check), remains a follow-up slice.
+Actually syncing demo Bitcoin wallets through Fulcrum/Electrum and explorer
+HTTP remains a follow-up slice. Liquid backend parity is covered separately by
+the `liquid-backends` lane, while the full demo still keeps its larger
+historical Liquid treasury/operations set as deterministic `generic_ledger`
+fixture data.
 
 `pnpm dev:demo` runs the Vite daemon bridge with
 `KASSIBER_DEV_DATA_ROOT` pointed at the demo book; the desktop preview then
@@ -361,13 +367,14 @@ mode.
 ## Growth Path
 
 The current checked-in slow lanes exercise Bitcoin Core RPC end to end (sync,
-pricing, journal, report, export) and a full accounting demo on Bitcoin
-regtest. They also provision Elements Core, Bitcoin Fulcrum, and local
+pricing, journal, report, export), Liquid Electrum vs Liquid Esplora backend
+parity for a real Elements descriptor wallet, and a full accounting demo on
+Bitcoin regtest. They also provision Elements Core, Bitcoin Fulcrum, and local
 mempool/esplora-compatible endpoints, create deterministic file-source
 elementsregtest/LBTC demo wallets, and include one real `elementsd`-backed
-descriptor Liquid wallet through the local Electrum-compatible service. Remaining
-parity targets are broader cross-backend comparisons: Bitcoin Core vs Fulcrum vs
-explorer HTTP, and Liquid Electrum vs explorer HTTP/`elementsd` views across the
+descriptor Liquid wallet through the local Electrum-compatible service.
+Remaining parity targets are broader cross-backend comparisons: Bitcoin Core vs
+Fulcrum vs explorer HTTP, and expanding the Liquid backend matrix across the
 larger historical fixture set. Those can be added without changing the
 contributor entrypoint.
 

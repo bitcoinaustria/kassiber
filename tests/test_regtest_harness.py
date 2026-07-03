@@ -420,6 +420,15 @@ class RegtestHarnessTest(unittest.TestCase):
         self.assertIn("KASSIBER_REGTEST_FRIGATE_PORT", harness)
         self.assertIn("KASSIBER_REGTEST_FRIGATE_WAIT_SECONDS", harness)
 
+    def test_liquid_backend_parity_lane_is_wired(self):
+        harness = (ROOT / "scripts" / "integration-harness.sh").read_text(encoding="utf-8")
+
+        self.assertIn("run_liquid_backend_parity_smoke()", harness)
+        self.assertIn("tests.integration.test_live_liquid_backend_parity", harness)
+        self.assertIn("run_liquid_backends()", harness)
+        self.assertIn("liquid-backends)", harness)
+        self.assertIn("KASSIBER_REGTEST_REQUIRE_ELEMENTS=1", harness)
+
     def test_demo_purge_paths_are_guarded_by_safe_home_check(self):
         harness = (ROOT / "scripts" / "integration-harness.sh").read_text(encoding="utf-8")
 

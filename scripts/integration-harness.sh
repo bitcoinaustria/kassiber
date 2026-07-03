@@ -244,6 +244,10 @@ run_bitcoin_core_smoke() {
   py -m unittest tests.integration.test_live_bitcoin_core_regtest -v
 }
 
+run_liquid_backend_parity_smoke() {
+  py -m unittest tests.integration.test_live_liquid_backend_parity -v
+}
+
 probe_frigate() {
   py - <<'PY'
 import json
@@ -735,6 +739,7 @@ run_demo_down() {
 
 run_slow_suite() {
   run_bitcoin_core_smoke
+  run_liquid_backend_parity_smoke
   run_demo_full
 }
 
@@ -742,9 +747,19 @@ run_bitcoin_core() {
   run_with_bitcoin_core run_bitcoin_core_smoke
 }
 
+run_slow() {
+  export KASSIBER_REGTEST_REQUIRE_ELEMENTS=1
+  run_with_bitcoin_core run_slow_suite
+}
+
 run_regtest_demo_full() {
   export KASSIBER_REGTEST_REQUIRE_ELEMENTS=1
   run_with_bitcoin_core run_demo_full
+}
+
+run_liquid_backends() {
+  export KASSIBER_REGTEST_REQUIRE_ELEMENTS=1
+  run_with_bitcoin_core run_liquid_backend_parity_smoke
 }
 
 run_silent_payments() {
@@ -921,11 +936,17 @@ case "$MODE" in
   fast)
     run_fast
     ;;
-  bitcoin-core|slow)
+  bitcoin-core)
     run_bitcoin_core
+    ;;
+  slow)
+    run_slow
     ;;
   demo|demo-full)
     run_regtest_demo_full
+    ;;
+  liquid-backends)
+    run_liquid_backends
     ;;
   demo-up)
     run_demo_up
@@ -944,10 +965,10 @@ case "$MODE" in
     ;;
   all)
     run_fast
-    run_with_bitcoin_core run_slow_suite
+    run_slow
     ;;
   *)
-    echo "usage: $0 [fast|bitcoin-core|slow|demo|demo-full|demo-up|demo-tick [N]|demo-down [--purge]|boltz-liquid|silent-payments|all]" >&2
+    echo "usage: $0 [fast|bitcoin-core|slow|liquid-backends|demo|demo-full|demo-up|demo-tick [N]|demo-down [--purge]|boltz-liquid|silent-payments|all]" >&2
     exit 2
     ;;
 esac
