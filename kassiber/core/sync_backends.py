@@ -2453,9 +2453,10 @@ def record_from_bitcoinrpc_details(txid, details, backend_name):
     else:
         direction = "outbound"
         gross_out = abs(amount_total)
-        amount = gross_out - fee_total
-        if amount < 0:
-            amount = Decimal("0")
+        # Core's `send` details already report the value paid to recipients; the
+        # transaction fee is carried separately in `fee`. When all value returns
+        # to the wallet, the net wallet delta can equal only the fee.
+        amount = Decimal("0") if fee_total > 0 and gross_out == fee_total else gross_out
         fee = fee_total
         kind = "withdrawal" if amount > 0 else "fee"
     return {

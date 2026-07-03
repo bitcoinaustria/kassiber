@@ -191,6 +191,15 @@ run_bitcoin_core_smoke() {
   py -m unittest tests.integration.test_live_bitcoin_core_regtest -v
 }
 
+run_bitcoin_electrum_parity_smoke() {
+  py -m unittest tests.integration.test_live_bitcoin_electrum_parity -v
+}
+
+run_bitcoin_backend_suite() {
+  run_bitcoin_core_smoke
+  run_bitcoin_electrum_parity_smoke
+}
+
 probe_frigate() {
   py - <<'PY'
 import json
@@ -614,12 +623,16 @@ run_demo_down() {
 }
 
 run_slow_suite() {
-  run_bitcoin_core_smoke
+  run_bitcoin_backend_suite
   run_demo_full
 }
 
 run_bitcoin_core() {
-  run_with_bitcoin_core run_bitcoin_core_smoke
+  run_with_bitcoin_core run_bitcoin_backend_suite
+}
+
+run_bitcoin_electrum() {
+  run_with_bitcoin_core run_bitcoin_electrum_parity_smoke
 }
 
 run_regtest_demo_full() {
@@ -803,6 +816,9 @@ case "$MODE" in
   bitcoin-core|slow)
     run_bitcoin_core
     ;;
+  bitcoin-electrum)
+    run_bitcoin_electrum
+    ;;
   demo|demo-full)
     run_regtest_demo_full
     ;;
@@ -826,7 +842,7 @@ case "$MODE" in
     run_with_bitcoin_core run_slow_suite
     ;;
   *)
-    echo "usage: $0 [fast|bitcoin-core|slow|demo|demo-full|demo-up|demo-tick [N]|demo-down [--purge]|boltz-liquid|silent-payments|all]" >&2
+    echo "usage: $0 [fast|bitcoin-core|bitcoin-electrum|slow|demo|demo-full|demo-up|demo-tick [N]|demo-down [--purge]|boltz-liquid|silent-payments|all]" >&2
     exit 2
     ;;
 esac
