@@ -1229,13 +1229,14 @@ def _transaction_row_to_ui(
                 if type_label != "Expense"
                 else (row["kind"] or row["direction"])
             ]
-        counter = (
-            row["counterparty"]
-            or row["description"]
-            or row["note"]
-            or row["external_id"]
-            or row["id"]
-        )
+        # Sync backends stamp "Synced from <backend>" into description as
+        # provenance boilerplate — that is not a counterparty. An empty
+        # counter means "none recorded"; each UI surface picks its own
+        # fallback (short txid in tables, hidden in the detail header).
+        description = row["description"] or ""
+        if description.startswith("Synced from "):
+            description = ""
+        counter = row["counterparty"] or description or row["note"] or ""
         account = row["wallet"]
         internal = (row["kind"] or "").lower() == "transfer"
         output_tags = metadata_tags

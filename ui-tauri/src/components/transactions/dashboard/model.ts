@@ -222,10 +222,9 @@ function toDashboardTransaction(
     excluded: tx.excluded,
     quarantineReason: tx.quarantineReason ?? null,
     pair: tx.pair,
-    counterparty:
-      tx.counter ||
-      tx.account ||
-      (t ? t("transactions:fallback.unassigned") : "Unassigned"),
+    // Empty = no counterparty recorded; surfaces fall back per context
+    // (short txid in tables, hidden segment in the detail header).
+    counterparty: tx.counter || "",
     counterpartyInitials: initials(tx.counter || tx.account || "TX"),
     direction,
     flow,

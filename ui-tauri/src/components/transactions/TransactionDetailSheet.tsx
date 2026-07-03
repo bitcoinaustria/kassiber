@@ -75,7 +75,6 @@ import { TransactionDetailRightRail } from "./TransactionDetailRightRail";
 import {
   TransactionClassifyTab,
   TransactionDetailsTab,
-  TransactionLedgerTab,
   TransactionLinkedTab,
   TransactionPricingTab,
   TransactionTaxTab,
@@ -83,6 +82,7 @@ import {
   type TransactionGraphPayload,
   type TransactionDetailTabContext,
 } from "./TransactionDetailSheetTabs";
+import type { LoanActionItem } from "./TransactionDetailTabContext";
 
 // ─── main component ────────────────────────────────────────────────────
 
@@ -189,7 +189,9 @@ export function TransactionDetailSheet({
   hasNext?: boolean;
 }) {
   const { t } = useTranslation(["transactions", "common"]);
-  const visibleInitialTab = initialTab === "graph" ? "details" : initialTab;
+  // "graph" and "ledger" folded into Details; remap old deep links.
+  const visibleInitialTab =
+    initialTab === "graph" || initialTab === "ledger" ? "details" : initialTab;
   const [activeTab, setActiveTab] = React.useState(visibleInitialTab);
   const [localDraft, setLocalDraft] =
     React.useState<TransactionEditDraft | null>(draft);
@@ -261,8 +263,8 @@ export function TransactionDetailSheet({
         return;
       }
       if (isTyping) return;
-      if (["1", "2", "3", "4", "5", "6"].includes(event.key)) {
-        const order = ["details", "classify", "pricing", "tax", "linked", "ledger"];
+      if (["1", "2", "3", "4", "5"].includes(event.key)) {
+        const order = ["details", "classify", "pricing", "tax", "linked"];
         const next = order[Number(event.key) - 1];
         if (next) setActiveTab(next);
         return;
@@ -286,6 +288,89 @@ export function TransactionDetailSheet({
   const flow = transactionFlow(transaction);
   const canMarkLoan = Boolean(onMarkLoan || onUnmarkLoan);
   const loanActionDisabled = Boolean(isSaving || isLoanMarking);
+
+  // Loan marking assigns an accounting role to the row, so the actions
+  // render in the Classify tab (via tab context), not next to Save/Cancel.
+  const loanMenuItems: LoanActionItem[] = [];
+  if (canMarkLoan && loanRole && onUnmarkLoan) {
+    if (
+      flow === "outgoing" &&
+      loanRole !== "loan_principal_repaid" &&
+      onMarkLoan
+    ) {
+      loanMenuItems.push({
+        key: "change-principal-repaid",
+        label: t("table.row.collateral.changePrincipalRepaid"),
+        icon: Coins,
+        onSelect: () => {
+          void onMarkLoan(transaction, "principal-repaid");
+        },
+      });
+    }
+    if (
+      flow === "incoming" &&
+      loanRole !== "loan_principal_received" &&
+      onMarkLoan
+    ) {
+      loanMenuItems.push({
+        key: "change-principal-received",
+        label: t("table.row.collateral.changePrincipalReceived"),
+        icon: Coins,
+        onSelect: () => {
+          void onMarkLoan(transaction, "principal-received");
+        },
+      });
+    }
+    loanMenuItems.push({
+      key: "unmark",
+      label: t("table.row.collateral.unmark"),
+      icon: Link2Off,
+      onSelect: () => {
+        void onUnmarkLoan(transaction);
+      },
+    });
+  } else if (canMarkLoan && !loanRole && onMarkLoan) {
+    if (flow === "incoming") {
+      loanMenuItems.push(
+        {
+          key: "mark-principal-received",
+          label: t("table.row.collateral.markPrincipalReceived"),
+          icon: Coins,
+          onSelect: () => {
+            void onMarkLoan(transaction, "principal-received");
+          },
+        },
+        {
+          key: "mark-returned",
+          label: t("table.row.collateral.markReturned"),
+          icon: Coins,
+          onSelect: () => {
+            void onMarkLoan(transaction, "returned");
+          },
+        },
+      );
+    }
+    if (flow === "outgoing") {
+      loanMenuItems.push(
+        {
+          key: "mark-principal-repaid",
+          label: t("table.row.collateral.markPrincipalRepaid"),
+          icon: Coins,
+          onSelect: () => {
+            void onMarkLoan(transaction, "principal-repaid");
+          },
+        },
+        {
+          key: "mark-collateral",
+          label: t("table.row.collateral.markCollateral"),
+          icon: Coins,
+          onSelect: () => {
+            void onMarkLoan(transaction, "collateral");
+          },
+        },
+      );
+    }
+  }
   const explorer = explorerForTransaction(transaction, explorerSettings);
   const transactionDisplayId = transaction.explorerId ?? transaction.txnId;
   const showSourceExternalId = shouldShowSourceExternalId(transaction);
@@ -309,6 +394,8 @@ export function TransactionDetailSheet({
       ? null
       : principalImpactEur + feeImpactEur;
   const pair = transaction.pair;
+  const linkedCount =
+    (pair ? 1 : 0) + (loanMark ? 1 : 0) + (linkedLoanMarks?.length ?? 0);
   const signedPrefix =
     flow === "incoming" ? "+" : flow === "outgoing" ? "-" : "";
   const tags = localDraft.tags;
@@ -407,6 +494,7 @@ export function TransactionDetailSheet({
       label: settlementLabel,
       done: transaction.status === "completed",
       current: transaction.status === "pending",
+      warn: transaction.status === "failed",
       hint:
         transaction.status === "completed"
           ? t("sheet.timeline.settledOnChain")
@@ -433,6 +521,7 @@ export function TransactionDetailSheet({
           ? t("sheet.timeline.pendingJournal")
           : t("sheet.timeline.journaled"),
       done: !localDraft.excluded && !hasJournalQuarantine && !isPricingMissing,
+      warn: !localDraft.excluded && (hasJournalQuarantine || isPricingMissing),
       hint: t("sheet.timeline.journaledHint"),
     },
   ];
@@ -709,6 +798,8 @@ export function TransactionDetailSheet({
     taxClassification,
     valueAtTimeEur,
     pair,
+    loanMenuItems,
+    loanActionsDisabled: loanActionDisabled,
     loanMark,
     linkedLoanMarks: linkedLoanMarks ?? [],
     loanLinkCandidates: loanLinkCandidates ?? [],
@@ -739,7 +830,7 @@ export function TransactionDetailSheet({
     <TooltipProvider delayDuration={150}>
       <Sheet open={Boolean(transaction)} onOpenChange={onOpenChange}>
         <SheetContent
-          className="w-[min(100vw,1120px)] overflow-hidden p-0 sm:max-w-none"
+          className="w-[min(100vw,1120px)] gap-0 overflow-hidden p-0 sm:max-w-none"
           showCloseButton={false}
         >
           <TransactionDetailHeader
@@ -787,7 +878,7 @@ export function TransactionDetailSheet({
                 ) : null}
 
                 <Tabs value={activeTab} onValueChange={setActiveTab}>
-                  <TabsList className="grid w-full grid-cols-6">
+                  <TabsList className="grid w-full grid-cols-5">
                     <TabsTrigger value="details">{t("sheet.tab.details")}</TabsTrigger>
                     <TabsTrigger value="classify">
                       {t("sheet.tab.classify")}
@@ -803,8 +894,14 @@ export function TransactionDetailSheet({
                       {t("sheet.tab.tax")}
                       {dirtyExcluded || dirtyReviewTax ? <DirtyDot active /> : null}
                     </TabsTrigger>
-                    <TabsTrigger value="linked">{t("sheet.tab.linked")}</TabsTrigger>
-                    <TabsTrigger value="ledger">{t("sheet.tab.ledger")}</TabsTrigger>
+                    <TabsTrigger value="linked">
+                      {t("sheet.tab.linked")}
+                      {linkedCount > 0 ? (
+                        <span className="rounded-full bg-muted px-1.5 text-[10px] tabular-nums text-muted-foreground">
+                          {linkedCount}
+                        </span>
+                      ) : null}
+                    </TabsTrigger>
                   </TabsList>
 
                   <TransactionDetailsTab ctx={tabContext} />
@@ -816,8 +913,6 @@ export function TransactionDetailSheet({
                   <TransactionTaxTab ctx={tabContext} />
 
                   <TransactionLinkedTab ctx={tabContext} />
-
-                  <TransactionLedgerTab ctx={tabContext} />
                 </Tabs>
               </div>
 
@@ -836,8 +931,6 @@ export function TransactionDetailSheet({
                 onOpenAttachment={onOpenAttachment}
                 onRenameAttachment={onRenameAttachment}
                 onRemoveAttachment={onRemoveAttachment}
-                tags={tags}
-                dirtyTags={dirtyTags}
                 historyEvents={historyEvents}
                 historyStale={historyStale}
                 historyLoading={historyLoading}
@@ -858,9 +951,9 @@ export function TransactionDetailSheet({
                   {t("sheet.footer.unsavedChanges", { count: dirtyCount })}
                 </span>
               ) : null}
-              <span className="hidden items-center gap-1.5 sm:inline-flex">
+              <span className="hidden items-center gap-1.5 whitespace-nowrap sm:inline-flex">
                 <kbd className="rounded border bg-muted px-1">⌘S</kbd> {t("sheet.footer.shortcutSave")} ·{" "}
-                <kbd className="rounded border bg-muted px-1">1-6</kbd> {t("sheet.footer.shortcutTabs")} ·{" "}
+                <kbd className="rounded border bg-muted px-1">1-5</kbd> {t("sheet.footer.shortcutTabs")} ·{" "}
                 <kbd className="rounded border bg-muted px-1">e</kbd> {t("sheet.footer.shortcutExclude")}
               </span>
               {saveError ? (
@@ -870,110 +963,6 @@ export function TransactionDetailSheet({
               ) : null}
             </div>
             <div className="flex flex-wrap justify-end gap-2">
-              {canMarkLoan && loanRole && onUnmarkLoan ? (
-                <>
-                  {flow === "outgoing" &&
-                  loanRole !== "loan_principal_repaid" &&
-                  onMarkLoan ? (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="gap-1.5"
-                      disabled={loanActionDisabled}
-                      onClick={() => {
-                        void onMarkLoan(transaction, "principal-repaid");
-                      }}
-                    >
-                      <Coins className="size-4" aria-hidden="true" />
-                      {t("table.row.collateral.changePrincipalRepaid")}
-                    </Button>
-                  ) : null}
-                  {flow === "incoming" &&
-                  loanRole !== "loan_principal_received" &&
-                  onMarkLoan ? (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="gap-1.5"
-                      disabled={loanActionDisabled}
-                      onClick={() => {
-                        void onMarkLoan(transaction, "principal-received");
-                      }}
-                    >
-                      <Coins className="size-4" aria-hidden="true" />
-                      {t("table.row.collateral.changePrincipalReceived")}
-                    </Button>
-                  ) : null}
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="gap-1.5"
-                    disabled={loanActionDisabled}
-                    onClick={() => {
-                      void onUnmarkLoan(transaction);
-                    }}
-                  >
-                    <Link2Off className="size-4" aria-hidden="true" />
-                    {t("table.row.collateral.unmark")}
-                  </Button>
-                </>
-              ) : null}
-              {canMarkLoan && !loanRole && flow === "incoming" && onMarkLoan ? (
-                <>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="gap-1.5"
-                    disabled={loanActionDisabled}
-                    onClick={() => {
-                      void onMarkLoan(transaction, "principal-received");
-                    }}
-                  >
-                    <Coins className="size-4" aria-hidden="true" />
-                    {t("table.row.collateral.markPrincipalReceived")}
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    className="gap-1.5"
-                    disabled={loanActionDisabled}
-                    onClick={() => {
-                      void onMarkLoan(transaction, "returned");
-                    }}
-                  >
-                    <Coins className="size-4" aria-hidden="true" />
-                    {t("table.row.collateral.markReturned")}
-                  </Button>
-                </>
-              ) : null}
-              {canMarkLoan && !loanRole && flow === "outgoing" && onMarkLoan ? (
-                <>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="gap-1.5"
-                    disabled={loanActionDisabled}
-                    onClick={() => {
-                      void onMarkLoan(transaction, "principal-repaid");
-                    }}
-                  >
-                    <Coins className="size-4" aria-hidden="true" />
-                    {t("table.row.collateral.markPrincipalRepaid")}
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    className="gap-1.5"
-                    disabled={loanActionDisabled}
-                    onClick={() => {
-                      void onMarkLoan(transaction, "collateral");
-                    }}
-                  >
-                    <Coins className="size-4" aria-hidden="true" />
-                    {t("table.row.collateral.markCollateral")}
-                  </Button>
-                </>
-              ) : null}
               <Button
                 type="button"
                 variant="outline"

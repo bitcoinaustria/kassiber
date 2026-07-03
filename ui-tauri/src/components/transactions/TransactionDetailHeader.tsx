@@ -174,10 +174,14 @@ export function TransactionDetailHeader({
             )}
           </SheetTitle>
           <SheetDescription className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-sm">
-            <span className="font-medium text-foreground">
-              {transaction.counterparty}
-            </span>
-            <span className="text-muted-foreground">·</span>
+            {transaction.counterparty ? (
+              <>
+                <span className="font-medium text-foreground">
+                  {transaction.counterparty}
+                </span>
+                <span className="text-muted-foreground">·</span>
+              </>
+            ) : null}
             <span className="text-muted-foreground">
               {transaction.wallet ?? t("detailHeader.unassignedWallet")}
             </span>

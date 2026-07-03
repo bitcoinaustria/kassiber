@@ -4,9 +4,7 @@ import { useTranslation } from "react-i18next";
 
 import { CurrencyToggleText } from "@/components/kb/CurrencyToggleText";
 import { Badge } from "@/components/ui/badge";
-import { Label } from "@/components/ui/label";
 import { TabsContent } from "@/components/ui/tabs";
-import { Textarea } from "@/components/ui/textarea";
 import { useDaemon } from "@/daemon/client";
 import { cn } from "@/lib/utils";
 import { useUiStore } from "@/store/ui";
@@ -17,6 +15,7 @@ import {
   LedgerRow,
   networkLabel,
 } from "./TransactionDetailSheetParts";
+import { TransactionLedgerSection } from "./TransactionLedgerSection";
 import { CommercialProvenancePanel } from "./TransactionDetailCommercialPanel";
 import {
   blurClass,
@@ -207,7 +206,6 @@ export function TransactionDetailsTab({ ctx }: { ctx: TransactionDetailTabContex
     commercialContext,
     commercialContextLoading,
     showSourceExternalId,
-    updateDraft,
     tags,
     currency,
     graphData,
@@ -392,27 +390,7 @@ export function TransactionDetailsTab({ ctx }: { ctx: TransactionDetailTabContex
                         hint={t("details.feeHint")}
                       />
                     </div>
-                    <div className="grid gap-2">
-                      <Label
-                        htmlFor="tx-detail-note"
-                        className="flex items-center gap-1.5"
-                      >
-                        {t("details.note")}
-                        <DirtyDot active={dirtyNote} />
-                      </Label>
-                      <Textarea
-                        id="tx-detail-note"
-                        value={localDraft.note}
-                        onChange={(event) =>
-                          updateDraft("note", event.target.value)
-                        }
-                        className={cn(
-                          "min-h-24 resize-none",
-                          blurClass(hideSensitive),
-                        )}
-                        placeholder={t("details.notePlaceholder")}
-                      />
-                    </div>
+                    <TransactionLedgerSection ctx={ctx} />
                     <div className="grid gap-3 lg:grid-cols-2">
                       <div className="overflow-hidden rounded-md border">
                         <div className="border-b bg-muted px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
@@ -430,7 +408,17 @@ export function TransactionDetailsTab({ ctx }: { ctx: TransactionDetailTabContex
                         />
                         <LedgerRow
                           label={t("details.counterparty")}
-                          value={transaction.counterparty}
+                          value={
+                            transaction.counterparty ? (
+                              <span className={blurClass(hideSensitive)}>
+                                {transaction.counterparty}
+                              </span>
+                            ) : (
+                              <span className="text-muted-foreground">
+                                {t("details.counterpartyNone")}
+                              </span>
+                            )
+                          }
                         />
                         {showSourceExternalId ? (
                           <LedgerRow
@@ -492,6 +480,29 @@ export function TransactionDetailsTab({ ctx }: { ctx: TransactionDetailTabContex
                               <DirtyDot active={dirtyExcluded} />
                             </span>
                           }
+                        />
+                        <LedgerRow
+                          label={t("details.note")}
+                          value={
+                            <span className="flex items-baseline gap-1.5">
+                              {localDraft.note ? (
+                                <span
+                                  className={cn(
+                                    "line-clamp-2 min-w-0 whitespace-pre-line",
+                                    blurClass(hideSensitive),
+                                  )}
+                                >
+                                  {localDraft.note}
+                                </span>
+                              ) : (
+                                <span className="text-muted-foreground">
+                                  {t("details.noteNone")}
+                                </span>
+                              )}
+                              <DirtyDot active={dirtyNote} />
+                            </span>
+                          }
+                          hint={t("details.noteHint")}
                         />
                       </div>
                     </div>

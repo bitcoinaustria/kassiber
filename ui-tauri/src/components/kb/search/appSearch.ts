@@ -565,7 +565,11 @@ function transactionResult(tx: Tx, query: string): SearchResult {
   return {
     id: `tx:recent:${tx.id}`,
     category: "transaction",
-    title: partialTxidMatch ? "Open partial transaction match" : `${tx.id} · ${tx.counter}`,
+    title: partialTxidMatch
+      ? "Open partial transaction match"
+      : tx.counter
+        ? `${tx.id} · ${tx.counter}`
+        : tx.id,
     subtitle: [
       partialTxidMatch ? "Partial txid match" : null,
       tx.account,

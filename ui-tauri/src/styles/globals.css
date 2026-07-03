@@ -41,6 +41,10 @@
 
 :root {
   --app-ui-scale: 0.9;
+  /* Bitcoin Austria red for hand-built accents. `--color-accent` from the
+     @theme block above is shadowed by the shadcn accent remap in the
+     `@theme inline` block below, so custom surfaces reference this alias. */
+  --kb-accent: #e3000f;
   --background: oklch(1 0 0);
   --app-chrome: oklch(0.985 0 0);
   --foreground: oklch(0.145 0 0);
@@ -74,6 +78,12 @@
 @layer base {
   * {
     border-color: var(--border);
+  }
+  /* Tailwind v4 preflight leaves buttons at `cursor: default`; restore the
+     pointer so interactive controls are recognizable as clickable. */
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]) {
+    cursor: pointer;
   }
   html,
   body {
@@ -175,6 +185,7 @@
  */
 
 .dark {
+  --kb-accent: #ff3341;
   --color-paper: #101010;
   --color-paper-2: #171717;
   --color-ink: #f4f4f5;
