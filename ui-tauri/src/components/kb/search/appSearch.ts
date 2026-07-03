@@ -444,7 +444,15 @@ function localizePageResult(
     ...result,
     title,
     subtitle,
-    keywords: withLocalizedKeyword(result.keywords, title),
+    keywords: [
+      ...(result.keywords ?? []),
+      title,
+      `${title} page`,
+      `${title} screen`,
+      `${title} view`,
+      `open ${title}`,
+      `go to ${title}`,
+    ],
   };
 }
 
@@ -501,29 +509,7 @@ function snapshotResults(
   query: string,
 ): SearchResult[] {
   return [
-    ...(snapshot?.connections.map((connection) => ({
-      id: `wallet:${connection.id}`,
-      category: "wallet" as const,
-      title: connection.label,
-      subtitle: `${connection.kind.toUpperCase()} · ${connection.status}`,
-      keywords: [
-        "connection",
-        "wallet",
-        "sync",
-        connection.kind,
-        connection.status,
-      ],
-      iconKey: "wallet",
-      route: {
-        to: "/connections/$connectionId" as const,
-        params: { connectionId: connection.id },
-      },
-      metadata: {
-        walletId: connection.id,
-        walletKind: connection.kind,
-      },
-      privacyTier: "local_metadata" as const,
-    })) ?? []),
+    ...(snapshot?.connections.map(connectionResult) ?? []),
     ...(snapshot?.txs.map((tx) => transactionResult(tx, query)) ?? []),
     ...(snapshot?.status?.needsJournals
       ? [
@@ -558,6 +544,66 @@ function snapshotResults(
         ]
       : []),
   ];
+}
+
+function connectionResult(
+  connection: OverviewSnapshot["connections"][number],
+): SearchResult {
+  const chainNetwork = [connection.chain, connection.network].filter(Boolean).join(" ");
+  const searchTokens = [
+    connection.label,
+    `${connection.label} wallet`,
+    `${connection.label} connection`,
+    `${connection.label} detail`,
+    `${connection.label} wallet detail`,
+    `open ${connection.label}`,
+    `open ${connection.label} wallet`,
+    `open ${connection.label} detail`,
+    connection.kind,
+    `${connection.kind} wallet`,
+    `${connection.kind} connection`,
+    connection.status,
+    `${connection.status} wallet`,
+    chainNetwork,
+    chainNetwork ? `${chainNetwork} wallet` : "",
+  ].filter(Boolean);
+  return {
+    id: `wallet:${connection.id}`,
+    category: "wallet",
+    title: connection.label,
+    subtitle: [
+      connection.kind.toUpperCase(),
+      connection.chain,
+      connection.network,
+      connection.status,
+    ]
+      .filter(Boolean)
+      .join(" · "),
+    keywords: [
+      "connection",
+      "connections",
+      "wallet",
+      "wallets",
+      "source",
+      "sync",
+      connection.kind,
+      connection.status,
+      connection.chain ?? "",
+      connection.network ?? "",
+    ],
+    iconKey: "wallet",
+    route: {
+      to: "/connections/$connectionId",
+      params: { connectionId: connection.id },
+    },
+    metadata: {
+      walletId: connection.id,
+      walletKind: connection.kind,
+      searchTokens,
+    },
+    privacyTier: "local_metadata",
+    ranking: { priority: 10 },
+  };
 }
 
 function transactionResult(tx: Tx, query: string): SearchResult {
@@ -627,13 +673,18 @@ function transactionLookupStatusResult({
   }
   if (transactionMatchCount === 1) return null;
   if (lookupState === "looking_up") {
+    const transactionRef = query.trim();
     return {
       id: "lookup:transaction:loading",
-      category: "review_item",
+      category: "transaction",
       title: "Looking up transaction",
-      subtitle: "Checking local transaction rows",
+      subtitle: "Open matching details when found",
       keywords: [query, "transaction", "txid", "lookup"],
       iconKey: "search",
+      route: { to: "/transactions", search: { tx: transactionRef } },
+      metadata: {
+        transactionId: transactionRef,
+      },
       privacyTier: "local_metadata",
       ranking: { priority: 70 },
     };

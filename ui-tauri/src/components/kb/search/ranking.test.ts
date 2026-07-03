@@ -235,6 +235,29 @@ describe("app search results", () => {
     });
   });
 
+  it("lets in-flight txid lookups open the transaction detail deep link", () => {
+    const unknownTxid =
+      "abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd";
+    const ranked = buildAppSearchResults({
+      snapshot: { ...snapshot, txs: [] },
+      query: unknownTxid,
+      aiFeaturesEnabled: true,
+      developerToolsEnabled: true,
+      isResolvingTransaction: true,
+      t,
+    });
+
+    expect(ranked[0]).toMatchObject({
+      id: "lookup:transaction:loading",
+      category: "transaction",
+      route: { to: "/transactions", search: { tx: unknownTxid } },
+    });
+    expect(searchResultForActivation(ranked, 0)).toMatchObject({
+      id: "lookup:transaction:loading",
+      route: { to: "/transactions", search: { tx: unknownTxid } },
+    });
+  });
+
   it("surfaces multiple partial transaction matches before the candidate rows", () => {
     const ranked = buildAppSearchResults({
       snapshot,
@@ -253,6 +276,49 @@ describe("app search results", () => {
     expect(searchResultForActivation(ranked, 0)).toMatchObject({
       id: "tx:recent:tx1",
       route: { to: "/transactions", search: { tx: "tx1" } },
+    });
+  });
+
+  it("finds wallet connection suggestions and opens the wallet detail route", () => {
+    const ranked = buildAppSearchResults({
+      snapshot,
+      query: "cold wallet",
+      aiFeaturesEnabled: true,
+      developerToolsEnabled: true,
+      t,
+    });
+
+    expect(ranked[0]).toMatchObject({
+      id: "wallet:wallet-1",
+      category: "wallet",
+      title: "Cold Storage",
+      route: {
+        to: "/connections/$connectionId",
+        params: { connectionId: "wallet-1" },
+      },
+    });
+    expect(searchResultForActivation(ranked, 0)).toMatchObject({
+      id: "wallet:wallet-1",
+      route: {
+        to: "/connections/$connectionId",
+        params: { connectionId: "wallet-1" },
+      },
+    });
+  });
+
+  it("finds screens with page and screen wording", () => {
+    const ranked = buildAppSearchResults({
+      snapshot,
+      query: "reports screen",
+      aiFeaturesEnabled: true,
+      developerToolsEnabled: true,
+      t,
+    });
+
+    expect(ranked[0]).toMatchObject({
+      id: "page:reports",
+      category: "page",
+      route: { to: "/reports" },
     });
   });
 
