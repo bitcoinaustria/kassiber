@@ -495,6 +495,9 @@ run_lightning_business() {
   export KASSIBER_REGTEST_CORE_URL="${KASSIBER_REGTEST_CORE_URL:-http://127.0.0.1:${KASSIBER_REGTEST_RPC_PORT}}"
   export KASSIBER_REGTEST_COMPOSE_PROJECT="${KASSIBER_REGTEST_COMPOSE_PROJECT:-$(py -c 'import hashlib, os; print("kassiber-regtest-" + hashlib.sha256(os.getcwd().encode()).hexdigest()[:12])')}"
   export KASSIBER_LIGHTNING_BUSINESS_HOME="${KASSIBER_LIGHTNING_BUSINESS_HOME:-${TMPDIR:-/tmp}/kassiber-lightning-business-${KASSIBER_REGTEST_COMPOSE_PROJECT}}"
+  export KASSIBER_LIGHTNING_BUSINESS_PLAN="${KASSIBER_LIGHTNING_BUSINESS_PLAN:-${KASSIBER_LIGHTNING_BUSINESS_HOME}/business-plan.json}"
+  export KASSIBER_REGTEST_LIGHTNING_SEED="${KASSIBER_REGTEST_LIGHTNING_SEED:-kassiber-lightning-business-v1}"
+  export KASSIBER_REGTEST_LIGHTNING_CAPACITY_MULTIPLIER="${KASSIBER_REGTEST_LIGHTNING_CAPACITY_MULTIPLIER:-0.35}"
 
   cleanup_lightning() {
     if [ "$STARTED_COMPOSE" -eq 1 ] && [ -z "${KASSIBER_REGTEST_KEEP:-}" ]; then
@@ -526,6 +529,7 @@ run_lightning_business() {
   fi
 
   wait_for_core
+  py dev/regtest/lightning-business-plan.py --output "$KASSIBER_LIGHTNING_BUSINESS_PLAN"
   ./dev/regtest/lightning-business-bootstrap.sh
   ./dev/regtest/lightning-business-scenario.sh
   py -m unittest tests.integration.test_live_lightning_business_regtest -v

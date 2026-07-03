@@ -13,6 +13,8 @@ COMPOSE_FILES=(
   -f "$ROOT/dev/regtest/compose.lightning.yml"
 )
 
+FAUCET_WALLET="${KASSIBER_REGTEST_LIGHTNING_FAUCET_WALLET:-kassiber-ln-faucet}"
+
 docker_compose() {
   if docker info >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
     docker compose "$@"
@@ -42,13 +44,65 @@ btc() {
     -regtest \
     -rpcuser="${KASSIBER_REGTEST_RPC_USER:?KASSIBER_REGTEST_RPC_USER is required}" \
     -rpcpassword="${KASSIBER_REGTEST_RPC_PASSWORD:?KASSIBER_REGTEST_RPC_PASSWORD is required}" \
-    "$@"
+    "$@" </dev/null
+}
+
+ensure_core_wallet() {
+  local wallet="$1"
+  if btc -rpcwallet="$wallet" getwalletinfo >/dev/null 2>&1; then
+    return 0
+  fi
+  if btc loadwallet "$wallet" >/dev/null 2>&1; then
+    return 0
+  fi
+  btc createwallet "$wallet" false false "" false true true >/dev/null
+}
+
+faucet_balance_ok() {
+  local balance="$1"
+  python3 -c 'import sys; sys.exit(0 if float(sys.argv[1]) >= 10 else 1)' "$balance"
+}
+
+mine_to_faucet() {
+  local blocks="$1"
+  local address
+  address="$(btc -rpcwallet="$FAUCET_WALLET" getnewaddress "kassiber lightning faucet" bech32)"
+  btc generatetoaddress "$blocks" "$address" >/dev/null
+}
+
+ensure_faucet_wallet() {
+  ensure_core_wallet "$FAUCET_WALLET"
+}
+
+ensure_faucet_funds() {
+  local blocks balance
+  ensure_faucet_wallet
+  blocks="$(btc getblockcount)"
+  if [ "$blocks" -lt 120 ]; then
+    mine_to_faucet "$((120 - blocks))"
+  fi
+  balance="$(btc -rpcwallet="$FAUCET_WALLET" getbalance)"
+  if ! faucet_balance_ok "$balance"; then
+    mine_to_faucet 120
+  fi
+}
+
+sat_to_btc() {
+  python3 -c 'from decimal import Decimal; import sys
+sat = Decimal(int(sys.argv[1]))
+print(f"{sat / Decimal(100000000):.8f}")' "$1"
+}
+
+wallet_balance_sat() {
+  local wallet="$1"
+  btc -rpcwallet="$wallet" getbalance | python3 -c 'from decimal import Decimal; import sys
+print(int(Decimal(sys.stdin.read().strip() or "0") * Decimal(100000000)))'
 }
 
 cln() {
   local service="$1"
   shift
-  compose exec -T "$service" lightning-cli --network=regtest "$@"
+  compose exec -T "$service" lightning-cli --network=regtest "$@" </dev/null
 }
 
 json_get() {

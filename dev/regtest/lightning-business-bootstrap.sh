@@ -3,7 +3,6 @@ set -euo pipefail
 
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lightning-common.sh"
 
-FAUCET_WALLET="${KASSIBER_REGTEST_LIGHTNING_FAUCET_WALLET:-kassiber-ln-faucet}"
 NODE_FUND_BTC="${KASSIBER_REGTEST_LIGHTNING_NODE_FUND_BTC:-2.0}"
 NODE_MIN_ONCHAIN_SAT="${KASSIBER_REGTEST_LIGHTNING_NODE_MIN_ONCHAIN_SAT:-50000000}"
 CHANNEL_CAPACITY_SAT="${KASSIBER_REGTEST_LIGHTNING_CHANNEL_CAPACITY_SAT:-5000000}"
@@ -21,40 +20,6 @@ wait_for_cln() {
     fi
     sleep 2
   done
-}
-
-ensure_faucet_wallet() {
-  if btc -rpcwallet="$FAUCET_WALLET" getwalletinfo >/dev/null 2>&1; then
-    return 0
-  fi
-  if btc loadwallet "$FAUCET_WALLET" >/dev/null 2>&1; then
-    return 0
-  fi
-  btc createwallet "$FAUCET_WALLET" false false "" false true true >/dev/null
-}
-
-faucet_balance_ok() {
-  local balance="$1"
-  python3 -c 'import sys; sys.exit(0 if float(sys.argv[1]) >= 10 else 1)' "$balance"
-}
-
-mine_to_faucet() {
-  local blocks="$1"
-  local address
-  address="$(btc -rpcwallet="$FAUCET_WALLET" getnewaddress "kassiber lightning faucet" bech32)"
-  btc generatetoaddress "$blocks" "$address" >/dev/null
-}
-
-ensure_faucet_funds() {
-  local blocks balance
-  blocks="$(btc getblockcount)"
-  if [ "$blocks" -lt 120 ]; then
-    mine_to_faucet "$((120 - blocks))"
-  fi
-  balance="$(btc -rpcwallet="$FAUCET_WALLET" getbalance)"
-  if ! faucet_balance_ok "$balance"; then
-    mine_to_faucet 120
-  fi
 }
 
 fund_node_if_needed() {

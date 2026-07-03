@@ -23,12 +23,17 @@ The default image is `elementsproject/lightningd:v25.05`; override with
 ## Files
 
 - `compose.lightning.yml` adds the four CLN services and named volumes.
+- `lightning-business-plan.py` generates the seeded business workload that the
+  shell scenario executes. It is inspired by sim-ln's capacity-multiplier and
+  defined-activity model, but remains deterministic and assertion-friendly.
 - `lightning-business-bootstrap.sh` idempotently funds nodes, connects peers,
   opens channels, mines confirmations, and waits for `CHANNELD_NORMAL`.
 - `lightning-business-scenario.sh` creates deterministic business activity:
   customer-paid merchant invoices, merchant-paid supplier invoices routed via
-  the router, third-party routed payments crossing the merchant, and one
-  intentionally expired merchant quote.
+  the router, third-party routed payments crossing the merchant, one
+  intentionally expired merchant quote, one intentionally failed oversized
+  payment, and real Bitcoin regtest mainchain top-ups/withdrawals around the
+  merchant CLN wallet.
 - `lightning-cli-merchant.sh` is the only `lightning-cli` wrapper stored in
   the Kassiber book. It always executes against `cln_merchant`.
 - `tests/integration/lightning_business_regtest.py` builds/syncs the Kassiber
@@ -44,6 +49,11 @@ cln_customer -- cln_merchant -- cln_router -- cln_supplier
 Channels are opened with balanced push amounts so both directions can pay on
 the first run. Re-running the bootstrap reuses existing channels and only funds
 nodes whose on-chain CLN wallet balance falls below the configured threshold.
+The scenario's business plan lives at
+`${KASSIBER_LIGHTNING_BUSINESS_PLAN:-$KASSIBER_LIGHTNING_BUSINESS_HOME/business-plan.json}`.
+Set `KASSIBER_REGTEST_LIGHTNING_SEED` for stable alternative traffic and
+`KASSIBER_REGTEST_LIGHTNING_CAPACITY_MULTIPLIER` to scale the plan against the
+configured channel capacity.
 
 ## Kassiber Invariants
 
@@ -55,7 +65,8 @@ The live assertion module verifies:
 - `wallets sync --wallet cln_merchant` imports merchant invoice rows through
   the CLN sync path and persists aggregate Lightning node records.
 - `ui.connections.node.snapshot` returns merchant alias/pubkey, balances,
-  channels, invoice/payment counts, routing summary, and forward rows.
+  on-chain balance, channels, invoice/payment counts, expired/failed cases,
+  routing summary, and forward rows.
 - `reports lightning-profitability` and
   `reports export-lightning-profitability-csv` include liquidity, routing
   revenue, payment costs, forwarding counts, and open-cost coverage fields.

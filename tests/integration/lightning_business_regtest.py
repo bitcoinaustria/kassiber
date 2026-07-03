@@ -258,6 +258,12 @@ def _assert_db_state(data_root: Path) -> dict[str, int]:
             raise AssertionError(f"expected exactly one LN wallet, got {ln_wallets}")
         if ln_wallets[0]["label"] != CONNECTION_LABEL:
             raise AssertionError(f"unexpected LN wallet: {ln_wallets[0]}")
+        all_wallets = [
+            dict(row)
+            for row in conn.execute("SELECT label, kind FROM wallets ORDER BY label")
+        ]
+        if all_wallets != [{"label": CONNECTION_LABEL, "kind": "coreln"}]:
+            raise AssertionError(f"expected only merchant wallet, got {all_wallets}")
         for forbidden in ("customer", "supplier", "router"):
             if forbidden in ln_wallets[0]["label"].lower():
                 raise AssertionError(
@@ -292,7 +298,7 @@ def _assert_db_state(data_root: Path) -> dict[str, int]:
         tx_count = conn.execute(
             "SELECT COUNT(*) AS count FROM transactions WHERE kind = 'cln_invoice'"
         ).fetchone()["count"]
-        if int(tx_count) < 3:
+        if int(tx_count) < 5:
             raise AssertionError(f"expected synced CLN invoice transactions, got {tx_count}")
 
         raw_leaks = conn.execute(
@@ -318,12 +324,18 @@ def _assert_snapshot(snapshot: dict[str, Any]) -> None:
         raise AssertionError("merchant local liquidity missing")
     if int(snapshot.get("totalRemoteBalanceSat") or 0) <= 0:
         raise AssertionError("merchant remote liquidity missing")
+    if int(snapshot.get("onchainBalanceSat") or 0) <= 0:
+        raise AssertionError("merchant on-chain balance missing after L1 scenario")
     if len(snapshot.get("channels") or []) < 2:
         raise AssertionError(f"expected merchant channels, got {snapshot.get('channels')}")
-    if int(snapshot.get("paidInvoiceCount") or 0) < 3:
+    if int(snapshot.get("paidInvoiceCount") or 0) < 5:
         raise AssertionError(f"merchant paid invoices missing from snapshot: {snapshot}")
     if int(snapshot.get("completedPaymentCount") or 0) < 2:
         raise AssertionError(f"merchant payments missing from snapshot: {snapshot}")
+    if int(snapshot.get("expiredInvoiceCount") or 0) < 1:
+        raise AssertionError(f"merchant expired invoice missing from snapshot: {snapshot}")
+    if int(snapshot.get("failedPaymentCount") or 0) < 1:
+        raise AssertionError(f"merchant failed payment missing from snapshot: {snapshot}")
     routing = snapshot.get("routing") or {}
     if int(routing.get("forwardCount") or 0) < 1:
         raise AssertionError(f"merchant routing summary missing forwards: {routing}")
@@ -450,12 +462,16 @@ def run() -> dict[str, Any]:
     return {
         "data_root": str(data_root),
         "csv_file": str(csv_file),
+        "business_plan": os.environ.get("KASSIBER_LIGHTNING_BUSINESS_PLAN"),
         "snapshot": {
             "alias": snapshot.get("alias"),
             "channels": len(snapshot.get("channels") or []),
             "forwards": len(snapshot.get("forwards") or []),
             "paid_invoices": snapshot.get("paidInvoiceCount"),
+            "expired_invoices": snapshot.get("expiredInvoiceCount"),
             "completed_payments": snapshot.get("completedPaymentCount"),
+            "failed_payments": snapshot.get("failedPaymentCount"),
+            "onchain_balance_sat": snapshot.get("onchainBalanceSat"),
         },
         "report_summary": report.get("summary"),
         "record_counts": counts,
