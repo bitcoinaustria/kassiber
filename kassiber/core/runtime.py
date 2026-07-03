@@ -28,6 +28,12 @@ from ..db import (
 )
 from ..envelope import SCHEMA_VERSION, _write_text, build_error_envelope
 from ..errors import AppError
+from ..projects import (
+    mark_project_opened,
+    project_metadata_for_data_root,
+    project_for_runtime,
+    validate_project_migration_after_unlock,
+)
 from ..secrets.credentials import scan_dotenv_for_secrets
 from ..secrets.prompt import prompt_passphrase, read_passphrase_from_fd
 from ..secrets.sqlcipher import looks_like_plaintext_sqlite
@@ -44,6 +50,9 @@ class RuntimePaths:
     exports_root: str
     attachments_root: str
     database: str
+    project_id: str | None = None
+    project_name: str | None = None
+    project_root: str | None = None
 
 
 @dataclass
@@ -64,8 +73,15 @@ def resolve_output_format(args):
     return args.format or "table"
 
 
-def resolve_runtime_paths(data_root=None, env_file=None):
-    effective_data_root = str(resolve_effective_data_root(data_root or DEFAULT_DATA_ROOT))
+def resolve_runtime_paths(data_root=None, env_file=None, project=None):
+    project_entry = None
+    project_metadata = None
+    if data_root is None:
+        project_entry = project_for_runtime(project_id=project)
+        effective_data_root = str(resolve_effective_data_root(project_entry.data_root))
+    else:
+        effective_data_root = str(resolve_effective_data_root(data_root))
+        project_metadata = project_metadata_for_data_root(effective_data_root)
     effective_env_file = str(resolve_effective_env_file(env_file, effective_data_root))
     return RuntimePaths(
         data_root=effective_data_root,
@@ -76,6 +92,27 @@ def resolve_runtime_paths(data_root=None, env_file=None):
         exports_root=str(resolve_exports_root(effective_data_root)),
         attachments_root=str(resolve_attachments_root(effective_data_root)),
         database=str(resolve_database_path(effective_data_root)),
+        project_id=(
+            project_entry.id
+            if project_entry is not None
+            else project_metadata.get("id")
+            if isinstance(project_metadata, dict)
+            else None
+        ),
+        project_name=(
+            project_entry.name
+            if project_entry is not None
+            else project_metadata.get("name")
+            if isinstance(project_metadata, dict)
+            else None
+        ),
+        project_root=(
+            str(project_entry.root)
+            if project_entry is not None
+            else project_metadata.get("path")
+            if isinstance(project_metadata, dict)
+            else None
+        ),
     )
 
 
@@ -145,10 +182,13 @@ def bootstrap_runtime(args, needs_db=True, persist_bootstrap=False):
         resolve_runtime_paths(
             getattr(args, "data_root", None),
             getattr(args, "env_file", None),
+            getattr(args, "project", None),
         )
     )
     args.data_root = paths.data_root
     args.env_file = paths.env_file
+    args.project_id = paths.project_id
+    args.project_root = paths.project_root
     args.runtime_config = load_runtime_config(paths.env_file)
 
     conn = None
@@ -161,12 +201,18 @@ def bootstrap_runtime(args, needs_db=True, persist_bootstrap=False):
                 passphrase,
                 allow_prompt=allow_prompt,
             )
+            validate_project_migration_after_unlock(paths.data_root, conn)
             if persist_bootstrap:
                 seed_db_backends(conn, args.runtime_config)
             merge_db_backends(conn, args.runtime_config)
             db_path = Path(paths.database)
             if db_path.exists() and not looks_like_plaintext_sqlite(db_path):
                 _warn_plaintext_secrets_once(paths.env_file)
+            if paths.project_id is not None:
+                mark_project_opened(
+                    paths.project_id,
+                    data_root=paths.data_root,
+                )
         return RuntimeState(paths=paths, runtime_config=args.runtime_config, conn=conn)
     except Exception:
         if conn is not None:
@@ -217,6 +263,7 @@ def build_status_payload(conn, data_root):
         "quarantines": conn.execute("SELECT COUNT(*) AS count FROM journal_quarantines").fetchone()["count"],
     }
     paths = resolve_runtime_paths(data_root=data_root)
+    project_metadata = project_metadata_for_data_root(paths.data_root)
     return {
         "version": __version__,
         "schema_version": SCHEMA_VERSION,
@@ -226,6 +273,15 @@ def build_status_payload(conn, data_root):
         "state_root": paths.state_root,
         "data_root": paths.data_root,
         "database": paths.database,
+        "project_id": (
+            project_metadata.get("id") if isinstance(project_metadata, dict) else paths.project_id
+        ),
+        "project_name": (
+            project_metadata.get("name") if isinstance(project_metadata, dict) else paths.project_name
+        ),
+        "project_root": (
+            project_metadata.get("path") if isinstance(project_metadata, dict) else paths.project_root
+        ),
         "config_root": paths.config_root,
         "settings_file": paths.settings_file,
         "exports_root": paths.exports_root,

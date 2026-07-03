@@ -5,8 +5,9 @@ archive):
 
     manifest.json
     kassiber.sqlite3            # SQLCipher copy of the live database
-    attachments/...             # mirror of <state_root>/attachments
-    config/backends.env         # mirror of <state_root>/config/backends.env
+    attachments/...             # mirror of the project-local attachments tree
+    config/backends.env         # optional project-local bootstrap dotenv
+    config/settings.json        # optional project-local plaintext settings
 
 The export uses `Connection.backup()` to take an in-place SQLCipher copy
 to a temp file, so writers can continue against the live DB while the
@@ -40,8 +41,11 @@ from ..db import (
     resolve_database_path,
     resolve_effective_data_root,
     resolve_effective_state_root,
+    resolve_exports_root,
+    resolve_settings_path,
 )
 from ..errors import AppError
+from ..projects import project_metadata_for_data_root
 from ..secrets.sqlcipher import (
     get_row_class,
     looks_like_plaintext_sqlite,
@@ -62,6 +66,7 @@ BACKUP_MANIFEST_NAME = "manifest.json"
 BACKUP_ATTACHMENTS_DIR = "attachments"
 BACKUP_CONFIG_DIR = "config"
 BACKUP_BACKENDS_ENV = f"{BACKUP_CONFIG_DIR}/backends.env"
+BACKUP_SETTINGS_JSON = f"{BACKUP_CONFIG_DIR}/settings.json"
 
 MANIFEST_SCHEMA_VERSION = 1
 SQLCIPHER_INLINE_SECRET_STORE = "sqlcipher_inline"
@@ -218,21 +223,33 @@ def _build_manifest(
     db_relpath: str,
     attachments_count: int,
     backends_env_present: bool,
+    settings_json_present: bool,
+    project: dict | None = None,
     ai_provider_secret_refs: Optional[list[dict]] = None,
 ) -> dict:
     return {
         "schema_version": MANIFEST_SCHEMA_VERSION,
         "kassiber_version": __version__,
         "created_at": _now_iso(),
+        "project": project,
         "paths": workspace_paths,
         "entries": {
             "database": db_relpath,
             "attachments_files": attachments_count,
             "backends_env": backends_env_present,
+            "settings_json": settings_json_present,
         },
         "notes": {
             "inner_db_encrypted": True,
             "inner_db_passphrase_required": True,
+            "scope": "single_project_container",
+            "plaintext_sidecars": [
+                "attachments",
+                "config/backends.env",
+                "config/settings.json",
+            ],
+            "exports_included": False,
+            "logs_included": False,
         },
         "secret_refs": {
             "ai_provider_refs": ai_provider_secret_refs or [],
@@ -299,6 +316,8 @@ def export_backup(
     db_path = Path(resolve_database_path(effective_data_root)).expanduser()
     attachments_root = Path(resolve_attachments_root(data_root)).expanduser()
     backends_env = Path(resolve_config_root(data_root)).expanduser() / "backends.env"
+    settings_json = Path(resolve_settings_path(data_root)).expanduser()
+    exports_root = Path(resolve_exports_root(data_root)).expanduser()
 
     if not db_path.exists():
         raise AppError(
@@ -321,6 +340,7 @@ def export_backup(
         tarball_path = staging / "bundle.tar"
         attachments_count = 0
         backends_env_present = backends_env.exists()
+        settings_json_present = settings_json.exists()
         with tarfile.open(tarball_path, "w") as tar:
             db_info = tar.gettarinfo(str(db_copy), arcname=BACKUP_DB_NAME)
             db_info.uid = db_info.gid = 0
@@ -339,6 +359,14 @@ def export_backup(
                 env_info.uname = env_info.gname = ""
                 with open(backends_env, "rb") as handle:
                     tar.addfile(env_info, fileobj=handle)
+            if settings_json_present:
+                settings_info = tar.gettarinfo(
+                    str(settings_json), arcname=BACKUP_SETTINGS_JSON
+                )
+                settings_info.uid = settings_info.gid = 0
+                settings_info.uname = settings_info.gname = ""
+                with open(settings_json, "rb") as handle:
+                    tar.addfile(settings_info, fileobj=handle)
 
             manifest = _build_manifest(
                 workspace_paths={
@@ -346,10 +374,14 @@ def export_backup(
                     "data_root": str(effective_data_root),
                     "attachments_root": str(attachments_root),
                     "backends_env": str(backends_env),
+                    "settings_json": str(settings_json),
+                    "exports_root": str(exports_root),
                 },
                 db_relpath=BACKUP_DB_NAME,
                 attachments_count=attachments_count,
                 backends_env_present=backends_env_present,
+                settings_json_present=settings_json_present,
+                project=project_metadata_for_data_root(effective_data_root),
                 ai_provider_secret_refs=ai_provider_secret_refs,
             )
             manifest_bytes = (
@@ -475,6 +507,14 @@ def import_backup(
                 code="invalid_backup",
                 retryable=False,
             )
+        if manifest_entries.get("settings_json") and not (
+            staging_dir / BACKUP_SETTINGS_JSON
+        ).exists():
+            raise AppError(
+                "manifest declares settings_json but the file is missing from the archive",
+                code="invalid_backup",
+                retryable=False,
+            )
         secret_ref_unavailable = _restore_unavailable_secret_refs(manifest)
 
         installed_root: Optional[Path] = None
@@ -500,6 +540,9 @@ def import_backup(
             target_env = (
                 target_state_root / DEFAULT_CONFIG_DIRNAME / "backends.env"
             )
+            target_settings = (
+                target_state_root / DEFAULT_CONFIG_DIRNAME / "settings.json"
+            )
 
             # Move any pre-existing live data into a sibling
             # `pre-restore-<timestamp>/` directory so an accidental
@@ -508,6 +551,7 @@ def import_backup(
                 target_db.exists()
                 or target_attachments.exists()
                 or target_env.exists()
+                or target_settings.exists()
             )
             if needs_backup:
                 backup_dir = target_state_root / (
@@ -525,6 +569,10 @@ def import_backup(
                     backup_env_dir = backup_dir / BACKUP_CONFIG_DIR
                     backup_env_dir.mkdir(parents=True, exist_ok=True)
                     shutil.move(str(target_env), str(backup_env_dir / "backends.env"))
+                if target_settings.exists():
+                    backup_settings_dir = backup_dir / BACKUP_CONFIG_DIR
+                    backup_settings_dir.mkdir(parents=True, exist_ok=True)
+                    shutil.move(str(target_settings), str(backup_settings_dir / "settings.json"))
 
             target_db.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(staging_dir / BACKUP_DB_NAME, target_db)
@@ -538,6 +586,10 @@ def import_backup(
             if staged_env.exists():
                 target_env.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(staged_env, target_env)
+            staged_settings = staging_dir / BACKUP_SETTINGS_JSON
+            if staged_settings.exists():
+                target_settings.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(staged_settings, target_settings)
 
             try:
                 shutil.rmtree(staging_parent)

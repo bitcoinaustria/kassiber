@@ -94,9 +94,14 @@ start or bundle Tor, so the user still needs an existing Tor service.
 
 ## Local storage
 
-- `~/.kassiber/data/kassiber.sqlite3` — default SQLite DB. Contains
-  descriptors, xpubs, addresses, transactions, metadata, rates cache,
-  backend definitions/defaults, and any stored backend credentials.
+- `~/.kassiber/config/projects.json` — global project catalog. Contains only
+  project id/name/path/encrypted status/last-opened metadata. It must never
+  contain passphrases, verifier hashes, wrapped keys, descriptors, xpubs,
+  backend tokens, accounting rows, or chat content.
+- `~/.kassiber/projects/<project>/data/kassiber.sqlite3` — project SQLite DB.
+  Contains the books/profiles in that project: descriptors, xpubs, addresses,
+  transactions, metadata, rates cache, backend definitions/defaults, and any
+  stored backend credentials.
 - Persisted AI chat sessions also live inside that database
   (`ai_chat_sessions` / `ai_chat_messages`) — never as separate plaintext
   files. The default `auto` policy persists only when the database is
@@ -106,14 +111,19 @@ start or bundle Tor, so the user still needs an existing Tor service.
   packages do not include chat content. The opt-in `kassiber chat
   --transcript <path>` file is the one plaintext chat artifact, written only
   where the user points it.
-- `~/.kassiber/config/backends.env` — default backend config file. May contain
-  Bitcoin Core RPC credentials and backend tokens.
-- `~/.kassiber/config/settings.json` — managed state manifest for the active
-  path layout. Not secret by itself, but it reveals where the rest of the
-  local state lives.
-- `~/.kassiber/attachments/` — managed attachment store for copied local files.
-  URL attachments are stored as literal references in the database and are not
-  fetched.
+- `~/.kassiber/projects/<project>/config/backends.env` — project-local backend
+  bootstrap file. It is plaintext. It may contain Bitcoin Core RPC credentials
+  and backend tokens until `kassiber secrets migrate-credentials` lifts them
+  into the encrypted project DB.
+- `~/.kassiber/projects/<project>/config/settings.json` — managed state
+  manifest for the project path layout. Not secret by itself, but it reveals
+  where the rest of that project lives.
+- `~/.kassiber/projects/<project>/attachments/` — managed attachment store for
+  copied local files. URL attachments are stored as literal references in the
+  database and are not fetched. Attachment files are plaintext unless the user
+  protects the project directory with OS or volume encryption.
+- `~/.kassiber/projects/<project>/exports/` — generated reports and handoff
+  artifacts. These are plaintext user outputs and are outside SQLCipher.
 - Liquid descriptor wallets embed **private SLIP77 blinding keys** in
   `wallets.config_json`. Anyone who can read the DB can unblind your
   confidential outputs.
@@ -134,28 +144,30 @@ start or bundle Tor, so the user still needs an existing Tor service.
 
 ### At-rest encryption — passphrase-gated SQLCipher (V4.1)
 
-The SQLite database is now optionally encrypted via SQLCipher 4. After
-running `kassiber secrets init`, every subsequent invocation needs a
-passphrase: type it interactively, or pass `--db-passphrase-fd <FD>`
-from a parent process.
+Each project database is optionally encrypted via SQLCipher 4, and each
+encrypted project has its own passphrase. After running `kassiber secrets init`
+for a selected project, every subsequent invocation against that project needs
+that project's passphrase: type it interactively, or pass
+`--db-passphrase-fd <FD>` from a parent process. Unlocking one project does not
+unlock any other project.
 
-- `~/.kassiber/data/kassiber.sqlite3` — when encrypted, contents are
+- `~/.kassiber/projects/<project>/data/kassiber.sqlite3` — when encrypted, contents are
   protected by SQLCipher 4 with stock PBKDF2-HMAC-SHA512
   (`kdf_iter = 256000`). Recoverable with the upstream `sqlcipher`
   binary using only the passphrase.
 - The pre-migration plaintext file is preserved as
   `kassiber.pre-encryption.sqlite3.bak` so `mv` rolls back the change.
   Kassiber refuses to overwrite an existing rollback backup at that path.
-- `~/.kassiber/config/backends.env` and `~/.kassiber/attachments/` are
-  **not** inside the SQLCipher boundary. They are outside the encrypted
-  database file and remain plaintext on disk. URLs, kinds, chain, and
-  network metadata are not secrets and may stay in the dotenv. Tokens,
-  passwords, auth headers, and basic-auth usernames must move into the
-  encrypted DB — use `kassiber secrets migrate-credentials` to lift any
-  pre-existing entries in `backends.env` into the encrypted `backends`
-  table, or seed new credentials directly with `--token-stdin` /
-  `--token-fd FD`. Until that runs, every Kassiber command warns to
-  stderr that the dotenv still carries plaintext secrets.
+- `projects.json`, `config/backends.env`, `config/settings.json`,
+  `attachments/`, and `exports/` are **not** inside the SQLCipher boundary.
+  They are outside the encrypted database file and remain plaintext on disk.
+  URLs, kinds, chain, and network metadata are not secrets and may stay in the
+  dotenv. Tokens, passwords, auth headers, and basic-auth usernames must move
+  into the encrypted DB — use `kassiber secrets migrate-credentials` to lift
+  any pre-existing entries in `backends.env` into the encrypted `backends`
+  table, or seed new credentials directly with `--token-stdin` / `--token-fd
+  FD`. Until that runs, every Kassiber command warns to stderr that the dotenv
+  still carries plaintext secrets.
 - A wrong passphrase produces the structured `unlock_failed` envelope
   rather than a partial open. The daemon refuses to start without a
   passphrase when the file is encrypted.
@@ -163,8 +175,13 @@ from a parent process.
   `PRAGMA rekey` and verifies with `cipher_integrity_check` when the
   bundled SQLCipher build supports it.
 - A `.kassiber` backup file does **not** recover a forgotten passphrase.
-  The DB inside the backup is encrypted under whatever passphrase was
+  The DB inside the backup is encrypted under whatever project passphrase was
   active when the backup was produced.
+
+Switching projects in the desktop daemon closes the current SQLite connection,
+stops background freshness workers, clears the in-memory passphrase, and then
+requires the selected project's passphrase before reads, AI tools, reports,
+exports, or backups can touch that project.
 
 **OS keychain is not the perimeter.** The SQLCipher passphrase is the
 perimeter. Pick a long passphrase from a password manager and treat

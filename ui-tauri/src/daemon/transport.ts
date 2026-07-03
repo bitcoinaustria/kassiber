@@ -663,6 +663,12 @@ export function isImportProjectActive(dataRoot: string): boolean {
   return activeImportProjectSelection?.dataRoot === dataRoot;
 }
 
+export function noteActiveImportProject(selection: ImportProjectSelection): void {
+  importProjectActivationGeneration += 1;
+  activeImportProjectActivation = null;
+  activeImportProjectSelection = selection;
+}
+
 export async function clearImportProject(): Promise<void> {
   if (DAEMON_MODE === "mock") {
     return;

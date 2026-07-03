@@ -53,6 +53,11 @@
       "releaseLabel": "Kassiber v{{version}}"
     }
   },
+  "projects": {
+    "menuLabel": "Book sets",
+    "switchFailedTitle": "Could not switch book set",
+    "switchFailedBody": "Kassiber could not open that project container."
+  },
   "routeMeta": {
     "activity": {
       "label": "Search activity",

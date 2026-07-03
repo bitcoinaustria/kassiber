@@ -45,14 +45,16 @@ carries a working Austrian (§ 27b EStG) plugin with E 1kv exports.
 - **No remote honeypot** — there is no Kassiber server holding your
   addresses, balances, and identity. Crypto tax SaaS providers have been
   breached; the dumps become targeting lists for phishing and physical
-  attacks. Kassiber's database is one file on your machine.
+  attacks. Kassiber stores each project/book-set in a local project
+  container on your machine.
 - **Wrench-attack resistant** — watch-only by design (no spending keys to
   coerce), and optional SQLCipher 4 at-rest encryption keyed by a
-  passphrase that lives only in your head. On a stolen, customs-seized, or
-  border-searched cold device, the encrypted database — descriptors,
-  xpubs, transactions, stored tokens — is unreadable. Attachments and a
-  couple of config files sit outside the SQLCipher boundary, so pair with
-  full-disk encryption for the full picture; the caveats are in
+  per-project passphrase that lives only in your head. On a stolen,
+  customs-seized, or border-searched cold device, the encrypted project
+  database — descriptors, xpubs, transactions, stored tokens — is
+  unreadable. Attachments, exports, the project catalog, and a couple of
+  config files sit outside the SQLCipher boundary, so pair with full-disk
+  encryption for the full picture; the caveats are in
   [SECURITY.md](SECURITY.md). The
   [jlopp/physical-bitcoin-attacks](https://github.com/jlopp/physical-bitcoin-attacks)
   catalog covers the threats this addresses.
@@ -89,9 +91,10 @@ carries a working Austrian (§ 27b EStG) plugin with E 1kv exports.
   auto-seeded bundled BTC-only offline history for daily values, backfilled to
   2011-01-01 with Coin Metrics + ECB-derived rows) and
   opt-in desktop background refresh for the latest BTC price.
-- **Sovereign storage** — SQLite system of record; optional SQLCipher 4
-  passphrase encryption; single-file `tar | age` backups recoverable with
-  stock `age` + `tar` + `sqlcipher` even if Kassiber disappears.
+- **Sovereign storage** — one SQLite system of record per project/book-set;
+  optional SQLCipher 4 passphrase encryption; single-project `tar | age`
+  backups recoverable with stock `age` + `tar` + `sqlcipher` even if
+  Kassiber disappears.
 - **Optional Touch ID unlock** — macOS desktop builds can save the database
   passphrase in Keychain behind local user presence. This is a convenience,
   not a recovery path or a replacement for the SQLCipher passphrase.

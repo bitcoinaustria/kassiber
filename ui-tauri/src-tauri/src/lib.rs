@@ -25,6 +25,8 @@ use tauri_plugin_deep_link::DeepLinkExt;
 
 const SCHEMA_VERSION: u8 = 1;
 const DEFAULT_STATE_DIR: &str = ".kassiber";
+const DEFAULT_PROJECTS_DIR: &str = "projects";
+const DEFAULT_PROJECT_ID: &str = "default";
 const DEFAULT_DATA_DIR: &str = "data";
 const DB_FILENAMES: &[&str] = &["kassiber.sqlite3", "satbooks.sqlite3"];
 const LEDGER_PREVIEW_EXTENSIONS: &[&str] = &["csv", "tsv", "xlsx", "xlsm"];
@@ -239,6 +241,9 @@ const ALLOWED_DAEMON_KINDS: &[&str] = &[
     "ui.workspace.create",
     "ui.workspace.rename",
     "ui.workspace.delete",
+    "ui.projects.list",
+    "ui.projects.create",
+    "ui.projects.select",
     "ui.secrets.init",
     "ui.secrets.change_passphrase",
     "ui.next_actions",
@@ -1222,8 +1227,18 @@ fn default_import_picker_root() -> PathBuf {
 
 fn default_state_data_root() -> PathBuf {
     home_dir()
-        .map(|home| home.join(DEFAULT_STATE_DIR).join(DEFAULT_DATA_DIR))
-        .unwrap_or_else(|| PathBuf::from(DEFAULT_STATE_DIR).join(DEFAULT_DATA_DIR))
+        .map(|home| {
+            home.join(DEFAULT_STATE_DIR)
+                .join(DEFAULT_PROJECTS_DIR)
+                .join(DEFAULT_PROJECT_ID)
+                .join(DEFAULT_DATA_DIR)
+        })
+        .unwrap_or_else(|| {
+            PathBuf::from(DEFAULT_STATE_DIR)
+                .join(DEFAULT_PROJECTS_DIR)
+                .join(DEFAULT_PROJECT_ID)
+                .join(DEFAULT_DATA_DIR)
+        })
 }
 
 fn terminal_command_paths() -> Result<TerminalCommandPaths, String> {

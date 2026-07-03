@@ -1,8 +1,9 @@
 # Storage Conventions
 
-**Status:** Target-state design. Current runtime still uses the app-wide
-`~/.kassiber/{data,config,exports,attachments}` layout described in README and
-AGENTS.md.
+**Status:** Project-container implementation in progress. New default runtime
+resolution uses `~/.kassiber/projects/<project>/...`; `--data-root` remains an
+explicit escape hatch for tests, scripts, and manually chosen project data
+roots.
 **Current source of truth:** `kassiber/db.py`, `kassiber/core/runtime.py`,
 README, and TODO.md.
 
@@ -12,16 +13,19 @@ Move toward one project bundle per bookkeeping scope:
 
 ```text
 ~/.kassiber/
-  app.json
+  config/projects.json       # non-secret project catalog
   projects/
     <project>/
-      kassiber.sqlite3
+      data/kassiber.sqlite3
+      config/settings.json
+      config/backends.env
+      attachments/
       exports/
-      logs/
-      blobs/          # only if copied project-local files remain needed
 ```
 
-A project is the unit of storage, backup, import/export, and deletion.
+A project is the unit of storage, unlock, backup, import/restore, and deletion.
+Books/profiles live inside a project; they are not separate cryptographic
+boundaries.
 
 Do not split one project across unrelated writable roots unless a later design
 explicitly requires it.
@@ -70,15 +74,25 @@ Current default state is:
 
 ```text
 ~/.kassiber/
-  data/kassiber.sqlite3
-  config/backends.env
-  config/settings.json
-  exports/
-  attachments/
+  config/projects.json
+  projects/default/
+    data/kassiber.sqlite3
+    config/backends.env
+    config/settings.json
+    exports/
+    attachments/
 ```
 
-Backend definitions are canonical in SQLite; dotenv remains a bootstrap and
-compatibility path.
+The global catalog contains only non-secret metadata: project id, name, path,
+encrypted status, and last-opened timestamp. It never stores passphrases,
+verifiers, wrapped keys, descriptors, backend tokens, xpubs, accounting rows,
+chat history, or AI provider secrets.
+
+Backend definitions are canonical in each project's SQLite database; the
+project-local dotenv remains a bootstrap and compatibility path. If
+`backends.env` contains token/password/auth-header/user entries, those are
+plaintext until `kassiber secrets migrate-credentials` lifts them into the
+encrypted project DB.
 
 ## SQLite Rules
 
@@ -125,27 +139,38 @@ Rules:
 - each migration runs in its own transaction
 - compatibility logic for older DBs stays reachable through `open_db()`
 
-## Project Migration Gap
+## Legacy App-Wide Migration
 
-The app-wide layout to project-bundle layout is a real migration. Before it
-lands, write a focused implementation plan covering:
+On first default startup without a project catalog, Kassiber discovers a legacy
+`~/.kassiber/data/kassiber.sqlite3` and stages a copy into
+`~/.kassiber/projects/default/`. The legacy source remains in place for manual
+rollback. Project-local `attachments/`, `exports/`, `config/backends.env`, and
+`config/settings.json` are copied or regenerated under the project; logs are not
+migrated because Kassiber's normal log ring is RAM-only.
 
-- discovery of existing `~/.kassiber/data/kassiber.sqlite3`
-- project naming / import-as-project behavior
-- movement or rebinding of exports, attachments, backend records, and settings
-- how `--data-root` continues to work
-- rollback/error behavior
-- CLI and desktop prompts
+Automatic migration is allowed only when the legacy DB is missing workspace
+state or clearly has zero/one workspace. A plaintext legacy DB with multiple
+workspaces fails before copying and writes a JSON report under
+`~/.kassiber/config/migration-reports/`. An encrypted legacy DB is copied first,
+then validated after unlock; if it contains multiple workspaces, Kassiber
+refuses to use it and writes the same staged split report. The split policy is
+explicit:
 
-Until that plan lands, do not partially move active accounting state into
-`projects/`.
+- workspace/profile-scoped tables filter by `workspace_id` / `profile_id`
+- relationship tables follow their parent transaction/session/attachment rows
+- `settings`, `backends`, rates caches, AI providers/secret refs, and graph
+  caches are project-shared and copied to each future split project
+- attachments are copied project-local and orphan cleanup may prune unused files
+- exports are generated plaintext artifacts and are copied only as convenience,
+  not treated as accounting source of truth
 
 ## Backup / Restore
 
-`kassiber backup export` now uses `Connection.backup()` to take a hot
-SQLCipher copy of the live DB while writers continue, tars the staging
-tree (DB + attachments + `backends.env`), and pipes the tarball through
-`age` (binary or `pyrage`) into a single `.kassiber` envelope. Recovery
+`kassiber backup export` is project-scoped. It uses `Connection.backup()` to
+take a hot SQLCipher copy of the selected project's DB while writers continue,
+tars the staging tree (DB + attachments + `backends.env` + `settings.json`),
+records that exports/logs are excluded, and pipes the tarball through `age`
+(binary or `pyrage`) into a single `.kassiber` envelope. Recovery
 without Kassiber is intentionally possible with stock `age` + `tar` +
 `sqlcipher`.
 
@@ -159,9 +184,11 @@ inspection. There is no hot in-place restore.
 
 ## Secrets
 
-The local SQLite file at `~/.kassiber/data/kassiber.sqlite3` is now
-optionally encrypted at rest under a user passphrase via SQLCipher 4
-(`kassiber secrets init`). Stock SQLCipher PRAGMA defaults
+Each project database at
+`~/.kassiber/projects/<project>/data/kassiber.sqlite3` may be encrypted at rest
+under that project's own SQLCipher passphrase (`kassiber secrets init` while
+that project is selected, or `--data-root` for explicit roots). Stock SQLCipher
+PRAGMA defaults
 (`kdf_iter = 256000`, `cipher_compatibility = 4`,
 `cipher_page_size = 4096`) are deliberate so a stranded user can recover
 with the upstream `sqlcipher` binary alone. The passphrase is the

@@ -755,7 +755,7 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
   via a per-tx `getrawtransaction` fetch when payment_hash is missing.
 - [ ] Revisit per-wallet basis attribution if a jurisdiction ever needs
   physical-lot answers
-- [ ] Adopt a per-project storage layout: one SQLite DB per project,
+- [x] Adopt a per-project storage layout: one SQLite DB per project,
   minimal global app state, and no active top-level wallet side tree
 - [ ] Add scoped handoff export/import flows on top of the per-project layout.
   Shipped: the book-scoped audit-package **export** and the
@@ -763,21 +763,22 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
   Remaining: (a) the **import** side (none exists); (b) extend audit-package
   scope from single-book to explicit selected-books packaging; (c) make the
   restricted technical-wallet-evidence path actionable (today a display-only
-  card with no daemon kind); (d) the per-project DB layout it depends on (item
-  above) is itself still unbuilt
-- [ ] When the per-project storage layout (item above) lands, migrate attachment
-  links **and** the managed-copy blobs into each project bundle rather than the
-  global state-root tree. (The link-only-by-default contingency is already
-  resolved: sha256 hash-and-copy managed storage with gc/verify shipped and is
-  used by the audit-evidence handoff — reuse that copy path, don't rebuild it.)
+  card with no daemon kind)
+- [x] When the per-project storage layout lands, migrate attachment links
+  **and** the managed-copy blobs into each project bundle rather than the
+  global state-root tree. New project roots use project-local `attachments/`,
+  backups include those files, and legacy single-project migration copies the
+  old managed tree into `projects/default/attachments/`. Multi-workspace legacy
+  DBs still require an explicit split plan/report before use.
 - [x] Keep backend definitions and default-backend selection canonical in
   SQLite; dotenv files now bootstrap older/new stores instead of serving as
   the long-term storage path
 - [x] Keep normal backend and wallet success output safe-to-record for
   secret-bearing config values by redacting raw credentials and raw descriptor
   material while preserving presence / state flags
-- [ ] Finish the project-local part of backend storage once the per-project
-  DB layout lands
+- [x] Finish the project-local part of backend storage once the per-project
+  DB layout lands: canonical backend rows live in the selected project DB and
+  the plaintext bootstrap dotenv resolves under that project's `config/`.
 - [x] Add public-safe diagnostics reports for bug reports, with aggregate
   state shape, sanitized error context, and optional `exports/diagnostics/`
   artifacts
@@ -814,6 +815,15 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
   passphrase, with `kassiber secrets {init,change-passphrase,verify,status,migrate-credentials}`,
   `kassiber backup {export,import}`, `--db-passphrase-fd` plumbing through the
   CLI and daemon, and a `tar | age` single-file backup format.
+- [x] Introduce first-class project/book-set containers with per-project
+  SQLCipher boundaries: the default runtime resolves to
+  `~/.kassiber/projects/<project>/data/kassiber.sqlite3`, the global
+  `projects.json` catalog stores only non-secret routing metadata, CLI/daemon
+  project create/list/select flows close the active DB before switching, and
+  backups are scoped to the selected project container. Legacy single-workspace
+  app-wide installs are copied into `projects/default` with rollback-safe source
+  preservation; multi-workspace legacy DBs are blocked with a staged split
+  report instead of pretending books/profiles are cryptographic boundaries.
 - [x] Move backend secrets (token, password, auth_header, basic-auth username
   + RPC aliases) out of the plaintext `config/backends.env` bootstrap and into
   the encrypted `backends` table. `kassiber secrets migrate-credentials` lifts

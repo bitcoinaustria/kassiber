@@ -159,6 +159,7 @@ from .backends import (
     merge_db_backends,
     redact_backend_url,
     resolve_backend,
+    resolve_effective_env_file,
     wallet_backend_references,
 )
 from .db import (
@@ -180,6 +181,15 @@ from .egress_ledger import (
 )
 from .envelope import build_envelope, build_error_envelope, json_ready
 from .errors import AppError
+from .projects import (
+    create_project,
+    get_project,
+    list_projects,
+    mark_project_opened,
+    refresh_project_metadata,
+    set_selected_project,
+    validate_project_migration_after_unlock,
+)
 from .proxy import onion_proxy_failure_hints, urlopen_with_proxy
 from .log_ring import (
     current_request_id,
@@ -217,7 +227,7 @@ from .daemon_freshness import (
 from .secrets.credentials import migrate_dotenv_credentials
 from .secrets.migration import create_empty_encrypted_database, migrate_plaintext_to_encrypted
 from .secrets.passphrase import change_database_passphrase
-from .secrets.sqlcipher import looks_like_plaintext_sqlite, open_encrypted, sqlcipher_available
+from .secrets.sqlcipher import looks_like_plaintext_sqlite, open_encrypted, require_sqlcipher, sqlcipher_available
 from .sync_btcpay import (
     discover_btcpay_wallet_sources,
     probe_btcpay_wallet,
@@ -402,6 +412,9 @@ SUPPORTED_KINDS = (
     "ui.workspace.rename",
     "ui.workspace.delete",
     "ui.profiles.reset_data",
+    "ui.projects.list",
+    "ui.projects.create",
+    "ui.projects.select",
     "ui.secrets.init",
     "ui.secrets.change_passphrase",
     "ui.next_actions",
@@ -773,6 +786,8 @@ class DaemonContext:
     deferred_input_lines: list[str]
     out: Any
     freshness_stop_event: threading.Event
+    project_id: str | None = None
+    project_root: str | None = None
     db_passphrase: str | None = None
     freshness_worker: threading.Thread | None = None
 
@@ -1306,7 +1321,11 @@ def _status_payload_from_parts(
 
 def _status_payload(ctx: DaemonContext) -> dict[str, Any]:
     conn = _require_conn(ctx)
-    return _status_payload_from_parts(conn, ctx.data_root, ctx.runtime_config)
+    payload = _status_payload_from_parts(conn, ctx.data_root, ctx.runtime_config)
+    if ctx.project_id is not None:
+        payload["project_id"] = ctx.project_id
+        payload["project_root"] = ctx.project_root
+    return payload
 
 
 def _require_conn(ctx: DaemonContext) -> sqlite3.Connection:
@@ -2548,8 +2567,15 @@ def _open_daemon_connection(
         passphrase=passphrase,
         require_existing_schema=require_existing_schema,
     )
-    merge_db_backends(conn, ctx.runtime_config)
+    try:
+        validate_project_migration_after_unlock(ctx.data_root, conn)
+        merge_db_backends(conn, ctx.runtime_config)
+    except Exception:
+        conn.close()
+        raise
     ctx.conn = conn
+    if ctx.project_id is not None:
+        mark_project_opened(ctx.project_id, data_root=ctx.data_root)
     _remember_unlocked_passphrase(ctx, passphrase)
     _start_freshness_background_worker(ctx, passphrase=passphrase)
     return conn
@@ -2574,6 +2600,128 @@ def _passphrase_from_auth(args: dict[str, Any]) -> str | None:
         return None
     passphrase = auth.get("passphrase_secret")
     return passphrase if isinstance(passphrase, str) and passphrase else None
+
+
+def _project_payload(entry) -> dict[str, Any]:
+    return {
+        "id": entry.id,
+        "name": entry.name,
+        "path": str(entry.root),
+        "data_root": str(entry.data_root),
+        "database": str(entry.database),
+        "encrypted": bool(entry.encrypted),
+        "last_opened_at": entry.last_opened_at,
+    }
+
+
+def _projects_list_payload(ctx: DaemonContext) -> dict[str, Any]:
+    projects = []
+    for entry in list_projects():
+        payload = _project_payload(entry)
+        payload["selected"] = entry.id == ctx.project_id
+        projects.append(payload)
+    return {"selected_project_id": ctx.project_id, "projects": projects}
+
+
+def _close_current_project_for_switch(ctx: DaemonContext) -> None:
+    _stop_freshness_background_worker(ctx, cancel_running=True)
+    if ctx.conn is not None:
+        ctx.conn.close()
+        ctx.conn = None
+    _clear_unlocked_passphrase(ctx)
+
+
+def _set_ctx_project(ctx: DaemonContext, entry) -> None:
+    ctx.project_id = entry.id
+    ctx.project_root = str(entry.root)
+    ctx.data_root = str(entry.data_root)
+    env_file = resolve_effective_env_file(None, ctx.data_root)
+    ctx.runtime_config = load_runtime_config(env_file)
+    ctx.auth_backoff = AuthAttemptBackoff(
+        str(resolve_config_root(ctx.data_root) / AUTH_BACKOFF_FILENAME)
+    )
+
+
+def _select_project_payload(
+    ctx: DaemonContext,
+    args: dict[str, Any],
+    request_id: object,
+) -> tuple[dict[str, Any], bool]:
+    project_id = args.get("project_id") or args.get("id")
+    if not isinstance(project_id, str) or not project_id.strip():
+        raise AppError(
+            "ui.projects.select requires project_id",
+            code="validation",
+            retryable=False,
+        )
+
+    entry = get_project(project_id)
+    switching = ctx.project_id != entry.id or Path(ctx.data_root).expanduser() != entry.data_root
+    if switching:
+        _close_current_project_for_switch(ctx)
+        entry = set_selected_project(entry.id)
+        _set_ctx_project(ctx, entry)
+    elif ctx.conn is not None:
+        entry = mark_project_opened(entry.id, data_root=ctx.data_root)
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.projects.select",
+                    {
+                        "project": _project_payload(entry),
+                        "status": _status_payload(ctx),
+                    },
+                ),
+                request_id,
+            ),
+            False,
+        )
+
+    passphrase = _passphrase_from_auth(args)
+    if _data_root_database_is_encrypted(ctx.data_root):
+        if not passphrase:
+            return (
+                _locked_envelope(
+                    "unlock_project",
+                    f"Enter the SQLCipher passphrase for project {entry.name!r}.",
+                    request_id,
+                ),
+                False,
+            )
+        if not _verify_passphrase_with_backoff(ctx, "unlock_project", passphrase):
+            return (
+                _error_envelope(
+                    "local_auth_denied",
+                    "passphrase verification failed",
+                    request_id=request_id,
+                    retryable=True,
+                ),
+                False,
+            )
+        _open_daemon_connection(
+            ctx,
+            passphrase=passphrase,
+            require_existing_schema=bool(args.get("require_existing_project")),
+        )
+    else:
+        _open_daemon_connection(
+            ctx,
+            require_existing_schema=bool(args.get("require_existing_project")),
+        )
+
+    return (
+        _with_request_id(
+            build_envelope(
+                "ui.projects.select",
+                {
+                    "project": _project_payload(mark_project_opened(entry.id, data_root=ctx.data_root)),
+                    "status": _status_payload(ctx),
+                },
+            ),
+            request_id,
+        ),
+        False,
+    )
 
 
 def _validate_new_database_passphrase(passphrase: str) -> None:
@@ -9231,6 +9379,78 @@ def handle_request(
             False,
         )
 
+    if kind == "ui.projects.list":
+        return (
+            _with_request_id(
+                build_envelope("ui.projects.list", _projects_list_payload(ctx)),
+                request_id,
+            ),
+            False,
+        )
+
+    if kind == "ui.projects.create":
+        args = _coerce_args_dict(request_id, request.get("args"))
+        name = args.get("name")
+        if not isinstance(name, str) or not name.strip():
+            raise AppError(
+                "ui.projects.create requires a non-empty name",
+                code="validation",
+                retryable=False,
+            )
+        project_id = args.get("project_id")
+        if project_id is not None and not isinstance(project_id, str):
+            raise AppError(
+                "ui.projects.create project_id must be a string",
+                code="validation",
+                retryable=False,
+            )
+        select_created = args.get("select", True) is not False
+        passphrase = _passphrase_from_auth(args)
+        if passphrase is not None:
+            require_sqlcipher()
+            _validate_new_database_passphrase(passphrase)
+        entry = create_project(
+            name,
+            project_id=project_id,
+            select=select_created,
+            replace_existing=False,
+            allow_existing_database=False,
+        )
+        if passphrase is not None:
+            create_empty_encrypted_database(entry.database, passphrase)
+            if select_created:
+                entry = mark_project_opened(entry.id, data_root=entry.data_root)
+            else:
+                entry = refresh_project_metadata(entry.id, data_root=entry.data_root)
+        if select_created:
+            _close_current_project_for_switch(ctx)
+            _set_ctx_project(ctx, entry)
+            if passphrase is not None:
+                _open_daemon_connection(ctx, passphrase=passphrase)
+            else:
+                _open_daemon_connection(ctx)
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.projects.create",
+                    {
+                        "project": _project_payload(entry),
+                        "selected_project_id": ctx.project_id,
+                        "unlocked": ctx.conn is not None and ctx.project_id == entry.id,
+                    },
+                ),
+                request_id,
+            ),
+            False,
+        )
+
+    if kind == "ui.projects.select":
+        return _select_project_payload(
+            ctx,
+            _coerce_args_dict(request_id, request.get("args")),
+            request_id,
+        )
+
     if ctx.conn is None:
         try:
             _open_daemon_connection(ctx)
@@ -11280,6 +11500,8 @@ def run(
     ctx = DaemonContext(
         conn=conn,
         data_root=args.data_root,
+        project_id=getattr(args, "project_id", None),
+        project_root=getattr(args, "project_root", None),
         runtime_config=args.runtime_config,
         active_ai_chats=ActiveAiChats(),
         main_thread_tasks=queue.Queue(),
