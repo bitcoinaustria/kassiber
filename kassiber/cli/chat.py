@@ -4,7 +4,9 @@ import json
 import os
 import subprocess
 import sys
+import threading
 import uuid
+from collections import deque
 from dataclasses import dataclass, field
 from typing import Any, Iterable, TextIO
 
@@ -74,6 +76,9 @@ class _DaemonChatClient:
         self._transcript = transcript
         self._pass_fds: tuple[int, ...] = ()
         self._duplicated_fd: int | None = None
+        self._stderr_tail: deque[str] = deque(maxlen=2000)
+        self._stderr_lock = threading.Lock()
+        self._stderr_thread: threading.Thread | None = None
         command = self._daemon_command(args)
         self._proc = subprocess.Popen(
             command,
@@ -85,6 +90,7 @@ class _DaemonChatClient:
             bufsize=1,
             pass_fds=self._pass_fds,
         )
+        self._start_stderr_drain()
         if self._duplicated_fd is not None:
             os.close(self._duplicated_fd)
             self._duplicated_fd = None
@@ -120,6 +126,29 @@ class _DaemonChatClient:
         command.append("daemon")
         return command
 
+    def _start_stderr_drain(self) -> None:
+        stderr = self._proc.stderr
+        if stderr is None:
+            return
+
+        def _drain() -> None:
+            while True:
+                try:
+                    chunk = stderr.read(1024)
+                except ValueError:
+                    return
+                if not chunk:
+                    return
+                with self._stderr_lock:
+                    self._stderr_tail.extend(chunk)
+
+        self._stderr_thread = threading.Thread(target=_drain, daemon=True)
+        self._stderr_thread.start()
+
+    def _stderr_tail_text(self) -> str:
+        with self._stderr_lock:
+            return "".join(self._stderr_tail)
+
     def send(self, payload: dict[str, Any]) -> None:
         if self._proc.stdin is None:
             raise AppError(
@@ -142,11 +171,10 @@ class _DaemonChatClient:
             )
         line = self._proc.stdout.readline()
         if line == "":
-            stderr = self._proc.stderr.read() if self._proc.stderr is not None else ""
             raise AppError(
                 "daemon exited before chat completed",
                 code="daemon_closed",
-                details={"stderr": stderr[-2000:]},
+                details={"stderr": self._stderr_tail_text()},
                 retryable=False,
             )
         if self._transcript is not None:
@@ -184,6 +212,8 @@ class _DaemonChatClient:
             self._proc.stdout.close()
         if self._proc.stderr is not None:
             self._proc.stderr.close()
+        if self._stderr_thread is not None:
+            self._stderr_thread.join(timeout=1)
 
 
 def _split_tool_names(values: Iterable[str] | None) -> set[str]:

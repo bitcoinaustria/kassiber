@@ -5,6 +5,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+import textwrap
 import unittest
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -157,6 +158,92 @@ def _seed_provider(data_root, base_url):
 
 
 class CliChatTest(unittest.TestCase):
+    def test_daemon_chat_client_drains_stderr_while_waiting_for_stdout(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-chat-stderr-") as tmp:
+            tmp_path = Path(tmp)
+            fake_daemon = tmp_path / "fake_daemon.py"
+            fake_daemon.write_text(
+                textwrap.dedent(
+                    """
+                    import json
+                    import sys
+
+                    sys.stderr.write("x" * 131072)
+                    sys.stderr.flush()
+                    sys.stdout.write(json.dumps({"kind": "daemon.ready", "data": {}}) + "\\n")
+                    sys.stdout.flush()
+                    for _line in sys.stdin:
+                        pass
+                    """
+                ),
+                encoding="utf-8",
+            )
+            probe = tmp_path / "probe.py"
+            probe.write_text(
+                textwrap.dedent(
+                    f"""
+                    import importlib.util
+                    import sys
+                    import types
+
+                    class AppError(Exception):
+                        pass
+
+                    sys.modules["kassiber"] = types.ModuleType("kassiber")
+                    sys.modules["kassiber.cli"] = types.ModuleType("kassiber.cli")
+                    sys.modules["kassiber.ai"] = types.ModuleType("kassiber.ai")
+                    ai_client = types.ModuleType("kassiber.ai.client")
+                    ai_client.CLI_DEFAULT_MODEL = "test-model"
+                    ai_client.is_cli_provider_locator = lambda _value: False
+                    sys.modules["kassiber.ai.client"] = ai_client
+                    ai_tools = types.ModuleType("kassiber.ai.tools")
+                    ai_tools.TOOL_CATALOG = []
+                    sys.modules["kassiber.ai.tools"] = ai_tools
+                    errors = types.ModuleType("kassiber.errors")
+                    errors.AppError = AppError
+                    sys.modules["kassiber.errors"] = errors
+                    termrender = types.ModuleType("kassiber.cli.termrender")
+                    termrender.MarkdownStreamRenderer = object
+                    termrender.render_envelope_table = lambda _envelope: None
+                    sys.modules["kassiber.cli.termrender"] = termrender
+
+                    spec = importlib.util.spec_from_file_location(
+                        "kassiber.cli.chat",
+                        {str(ROOT / "kassiber" / "cli" / "chat.py")!r},
+                    )
+                    chat = importlib.util.module_from_spec(spec)
+                    sys.modules["kassiber.cli.chat"] = chat
+                    assert spec.loader is not None
+                    spec.loader.exec_module(chat)
+
+
+                    class Client(chat._DaemonChatClient):
+                        def _daemon_command(self, args):
+                            return [sys.executable, {str(fake_daemon)!r}]
+
+
+                    client = Client(object())
+                    try:
+                        print("ready")
+                    finally:
+                        client.close()
+                    """
+                ),
+                encoding="utf-8",
+            )
+
+            result = subprocess.run(
+                [sys.executable, str(probe)],
+                cwd=ROOT,
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=5,
+            )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.strip(), "ready")
+
     def test_chat_runs_daemon_tool_loop(self):
         server = _start_tool_chat_server(
             [
