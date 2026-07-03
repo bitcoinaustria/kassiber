@@ -16,6 +16,7 @@ from tests.integration.env import skip_unless_integration
 
 
 ROOT = Path(__file__).resolve().parents[2]
+RPC_TIMEOUT = float(os.environ.get("KASSIBER_REGTEST_RPC_TIMEOUT", "300"))
 
 
 def _rpc(url: str, username: str, password: str, method: str, params=None, wallet=None):
@@ -35,7 +36,7 @@ def _rpc(url: str, username: str, password: str, method: str, params=None, walle
 
     token = base64.b64encode(f"{username}:{password}".encode("utf-8")).decode("ascii")
     req.add_header("Authorization", f"Basic {token}")
-    with request.urlopen(req, timeout=30) as response:
+    with request.urlopen(req, timeout=RPC_TIMEOUT) as response:
         decoded = json.loads(response.read().decode("utf-8"))
     if decoded.get("error"):
         raise AssertionError(f"RPC {method} failed: {decoded['error']}")

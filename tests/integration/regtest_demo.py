@@ -26,6 +26,7 @@ from kassiber.core import silent_payments as core_silent_payments
 from kassiber.core.sync_backends import sanitize_wallet_segment
 from kassiber.db import open_db
 from kassiber.importers import GENERIC_LEDGER_COLUMNS
+from kassiber.msat import btc_to_msat
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -116,6 +117,116 @@ class DemoWallet:
         chosen = self.addresses[self.change_cursor % len(self.addresses)]
         self.change_cursor += 1
         return chosen
+
+
+@dataclass
+class DemoTruth:
+    scenario_id: str
+    transaction_rows: list[dict[str, Any]] = field(default_factory=list)
+    transfer_pairs: list[dict[str, Any]] = field(default_factory=list)
+    skipped_txids: list[dict[str, str]] = field(default_factory=list)
+    core_utxos: dict[str, dict[str, Any]] = field(default_factory=dict)
+
+    def record_transaction(
+        self,
+        op_id: str,
+        txid: str,
+        wallet: DemoWallet,
+        direction: str,
+        *,
+        asset: str | None = None,
+        confirmed: bool = True,
+        confirmation_expected: bool = True,
+        source: str = "scenario",
+    ) -> None:
+        if direction not in {"inbound", "outbound"}:
+            raise RuntimeError(f"Unsupported expected transaction direction: {direction}")
+        self.transaction_rows.append(
+            {
+                "op_id": op_id,
+                "external_id": str(txid).lower(),
+                "wallet_key": wallet.key,
+                "wallet_label": wallet.label,
+                "wallet_id": wallet.kassiber_id,
+                "direction": direction,
+                "asset": (asset or ("LBTC" if wallet.chain == "liquid" else "BTC")).upper(),
+                "confirmed": bool(confirmed),
+                "confirmation_expected": bool(confirmation_expected),
+                "source": source,
+            }
+        )
+
+    def record_skipped_txid(self, op_id: str, txid: str, reason: str) -> None:
+        self.skipped_txids.append(
+            {"op_id": op_id, "external_id": str(txid).lower(), "reason": reason}
+        )
+
+    def record_transfer_pair(
+        self,
+        pair_id: str,
+        out_txid: str,
+        in_txid: str,
+        *,
+        kind: str,
+        policy: str,
+        note: str = "",
+    ) -> None:
+        self.transfer_pairs.append(
+            {
+                "id": pair_id,
+                "out_external_id": str(out_txid).lower(),
+                "in_external_id": str(in_txid).lower(),
+                "kind": kind,
+                "policy": policy,
+                "note": note,
+            }
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        transaction_rows = sorted(
+            self.transaction_rows,
+            key=lambda row: (
+                row["external_id"],
+                row["wallet_key"],
+                row["asset"],
+                row["direction"],
+                row["op_id"],
+            ),
+        )
+        transfer_pairs = sorted(
+            self.transfer_pairs,
+            key=lambda row: (
+                row["out_external_id"],
+                row["in_external_id"],
+                row["kind"],
+                row["policy"],
+            ),
+        )
+        by_asset = Counter(row["asset"] for row in transaction_rows)
+        by_wallet = Counter(row["wallet_label"] for row in transaction_rows)
+        by_direction = Counter(row["direction"] for row in transaction_rows)
+        return {
+            "schema_version": 1,
+            "scenario": self.scenario_id,
+            "transactions": {
+                "count": len(transaction_rows),
+                "confirmed": sum(1 for row in transaction_rows if row["confirmed"]),
+                "unconfirmed": sum(1 for row in transaction_rows if not row["confirmed"]),
+                "by_asset": dict(sorted(by_asset.items())),
+                "by_wallet": dict(sorted(by_wallet.items())),
+                "by_direction": dict(sorted(by_direction.items())),
+                "rows": transaction_rows,
+            },
+            "transfer_pairs": {
+                "count": len(transfer_pairs),
+                "rows": transfer_pairs,
+            },
+            "skipped_txids": sorted(
+                self.skipped_txids,
+                key=lambda row: (row["external_id"], row["op_id"], row["reason"]),
+            ),
+            "core_utxos": dict(sorted(self.core_utxos.items())),
+        }
 
 
 def load_scenario(path: Path = DEFAULT_SCENARIO) -> dict[str, Any]:
@@ -510,6 +621,104 @@ def _decimal_text(value: Any) -> str:
     return str(value)
 
 
+def _btc_to_msat_int(value: Any) -> int:
+    return int(btc_to_msat(Decimal(str(value)).quantize(SAT)))
+
+
+def _truth_transaction_key(row: dict[str, Any]) -> tuple[str, str, str, str]:
+    return (
+        str(row.get("external_id") or "").lower(),
+        str(row.get("wallet_label") or row.get("wallet") or ""),
+        str(row.get("asset") or "").upper(),
+        str(row.get("direction") or ""),
+    )
+
+
+def _truth_key_dict(key: tuple[str, str, str, str]) -> dict[str, str]:
+    txid, wallet, asset, direction = key
+    return {
+        "external_id": txid,
+        "wallet": wallet,
+        "asset": asset,
+        "direction": direction,
+    }
+
+
+def _pair_key(row: dict[str, Any]) -> tuple[str, str, str, str]:
+    return (
+        str(row.get("out_external_id") or row.get("out", {}).get("external_id") or "").lower(),
+        str(row.get("in_external_id") or row.get("in", {}).get("external_id") or "").lower(),
+        str(row.get("kind") or ""),
+        str(row.get("policy") or ""),
+    )
+
+
+def _pair_key_dict(key: tuple[str, str, str, str]) -> dict[str, str]:
+    out_txid, in_txid, kind, policy = key
+    return {
+        "out_external_id": out_txid,
+        "in_external_id": in_txid,
+        "kind": kind,
+        "policy": policy,
+    }
+
+
+def _counter_diff(
+    expected: Counter,
+    actual: Counter,
+    renderer,
+    *,
+    limit: int = 10,
+) -> dict[str, list[dict[str, str]]]:
+    missing = list((expected - actual).elements())[:limit]
+    extra = list((actual - expected).elements())[:limit]
+    return {
+        "missing": [renderer(key) for key in missing],
+        "extra": [renderer(key) for key in extra],
+    }
+
+
+def _liquid_ledger_direction(row: dict[str, Any]) -> str | None:
+    received_asset = str(row.get("received_asset") or row.get("asset") or "LBTC").upper()
+    sent_asset = str(row.get("sent_asset") or row.get("asset") or "LBTC").upper()
+    if row.get("received_amount") not in (None, "") and received_asset == "LBTC":
+        return "inbound"
+    if row.get("sent_amount") not in (None, "") and sent_asset == "LBTC":
+        return "outbound"
+    return None
+
+
+def _record_liquid_ledger_transactions(
+    truth: DemoTruth,
+    rows_by_wallet: dict[str, list[dict[str, Any]]],
+    wallets: dict[str, DemoWallet],
+) -> None:
+    for wallet_key, rows in rows_by_wallet.items():
+        wallet = wallets.get(wallet_key)
+        if wallet is None or not _is_liquid_ledger_wallet(wallet):
+            continue
+        for row in rows:
+            direction = _liquid_ledger_direction(row)
+            if direction is None:
+                continue
+            truth.record_transaction(
+                str(row.get("id") or row.get("txid") or f"{wallet_key}_liquid_ledger"),
+                str(row["txid"]),
+                wallet,
+                direction,
+                asset="LBTC",
+                confirmation_expected=False,
+                source="liquid_ledger",
+            )
+
+
+def _refresh_truth_wallet_ids(truth: DemoTruth, wallets: dict[str, DemoWallet]) -> None:
+    for row in truth.transaction_rows:
+        wallet = wallets.get(str(row.get("wallet_key") or ""))
+        if wallet is not None:
+            row["wallet_id"] = wallet.kassiber_id
+
+
 def _liquid_ledger_rows_from_manifest(scenario: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
     rows_by_wallet: dict[str, list[dict[str, Any]]] = {
         wallet["key"]: []
@@ -585,6 +794,7 @@ def _seed_live_liquid_wallets(
     external_address: str,
     current_ts: int,
     txids: dict[str, str],
+    truth: DemoTruth | None = None,
 ) -> int:
     for wallet_spec in scenario["wallets"]:
         if not _is_liquid_live_wallet_spec(wallet_spec):
@@ -595,7 +805,8 @@ def _seed_live_liquid_wallets(
         if receipt_amount <= 0:
             continue
         current_ts = _advance_time(url, username, password, current_ts)
-        txids[f"{wallet.key}_liquid_live_receive"] = rpc(
+        receive_key = f"{wallet.key}_liquid_live_receive"
+        txids[receive_key] = rpc(
             url,
             username,
             password,
@@ -603,10 +814,13 @@ def _seed_live_liquid_wallets(
             [wallet.receive_address(), receipt_amount],
             wallet=faucet_wallet,
         )
+        if truth is not None:
+            truth.record_transaction(receive_key, txids[receive_key], wallet, "inbound", asset="LBTC")
         rpc(url, username, password, "generatetoaddress", [1, mining_address])
         if spend_amount > 0:
             current_ts = _advance_time(url, username, password, current_ts)
-            txids[f"{wallet.key}_liquid_live_spend"] = rpc(
+            spend_key = f"{wallet.key}_liquid_live_spend"
+            txids[spend_key] = rpc(
                 url,
                 username,
                 password,
@@ -614,6 +828,8 @@ def _seed_live_liquid_wallets(
                 [external_address, spend_amount],
                 wallet=wallet.core_wallet,
             )
+            if truth is not None:
+                truth.record_transaction(spend_key, txids[spend_key], wallet, "outbound", asset="LBTC")
             rpc(url, username, password, "generatetoaddress", [1, mining_address])
     return current_ts
 
@@ -630,6 +846,7 @@ def _write_silent_payment_scan_files(
     mining_address: str,
     current_ts: int,
     txids: dict[str, str],
+    truth: DemoTruth | None = None,
 ) -> int:
     import_dir = base_dir / "imports" / "silent-payments"
     for wallet_spec in scenario["wallets"]:
@@ -655,6 +872,14 @@ def _write_silent_payment_scan_files(
             wallet=faucet_wallet,
         )
         txids[f"{wallet.key}_silent_payment_receive"] = txid
+        if truth is not None:
+            truth.record_transaction(
+                f"{wallet.key}_silent_payment_receive",
+                txid,
+                wallet,
+                "inbound",
+                source="silent_payment_scan",
+            )
         current_ts = _mine(url, username, password, faucet_wallet, mining_address, current_ts)
         tx = rpc(url, username, password, "getrawtransaction", [txid, True])
         block = rpc(url, username, password, "getblock", [tx["blockhash"]])
@@ -1155,6 +1380,7 @@ def _send_incoming_burst(
     faucet_wallet: str,
     operation: dict[str, Any],
     txids: dict[str, str],
+    truth: DemoTruth | None = None,
 ) -> None:
     count = int(operation["count"])
     amount = _btc(operation["amount_btc"])
@@ -1162,7 +1388,8 @@ def _send_incoming_burst(
         # Roughen each point-of-sale receipt by a few sats and rotate the
         # invoice address, like a merchant terminal handing out fresh invoices.
         ragged = amount + ((index * 137) % 89) * SAT
-        txids[f"{operation['id']}_{index:03d}"] = rpc(
+        op_key = f"{operation['id']}_{index:03d}"
+        txids[op_key] = rpc(
             url,
             username,
             password,
@@ -1170,6 +1397,8 @@ def _send_incoming_burst(
             [wallet.receive_address(), ragged],
             wallet=faucet_wallet,
         )
+        if truth is not None:
+            truth.record_transaction(op_key, txids[op_key], wallet, "inbound")
 
 
 def _send_many_input_consolidation(
@@ -1374,6 +1603,7 @@ def _generate_stress_history(
     external_address: str,
     current_ts: int,
     txids: dict[str, str],
+    truth: DemoTruth | None = None,
 ) -> tuple[int, dict[str, Any]]:
     stress = scenario.get("stress") or {}
     if not stress.get("enabled"):
@@ -1426,7 +1656,8 @@ def _generate_stress_history(
         for rotation in rotations_by_cycle.get(cycle_number, []):
             sender = wallets[rotation["from"]]
             receiver = wallets[rotation["to"]]
-            txids[f"{rotation['id']}_rotation"] = _send_from_wallet(
+            rotation_key = f"{rotation['id']}_rotation"
+            txids[rotation_key] = _send_from_wallet(
                 url,
                 username,
                 password,
@@ -1434,6 +1665,9 @@ def _generate_stress_history(
                 {receiver.receive_address(): _btc(rotation["amount_btc"])},
                 _btc(rotation.get("fee_btc") or stress["fee_btc"]),
             )
+            if truth is not None:
+                truth.record_transaction(rotation_key, txids[rotation_key], sender, "outbound")
+                truth.record_transaction(rotation_key, txids[rotation_key], receiver, "inbound")
             active_wallet_for[rotation["role"]] = rotation["to"]
             rotations_count += 1
             current_ts = _mine_at(
@@ -1445,18 +1679,27 @@ def _generate_stress_history(
                 cycle_ts - (2 * 60 * 60),
             )
 
-        receipt_outputs = {
-            active_wallet(key).receive_address(): _varied_amount(
-                amount,
-                cycle_number,
-                salt=0,
-                spread_bp=variation_bp,
-                ragged_sats=991,
-                scale=receipt_scale,
+        receipt_targets = [
+            (
+                key,
+                active_wallet(key),
+                _varied_amount(
+                    amount,
+                    cycle_number,
+                    salt=0,
+                    spread_bp=variation_bp,
+                    ragged_sats=991,
+                    scale=receipt_scale,
+                ),
             )
             for key, amount in receipt_plan.items()
+        ]
+        receipt_outputs = {
+            wallet.receive_address(): varied_amount
+            for _key, wallet, varied_amount in receipt_targets
         }
-        txids[f"stress_receipt_{cycle_number:03d}"] = rpc(
+        receipt_key = f"stress_receipt_{cycle_number:03d}"
+        txids[receipt_key] = rpc(
             url,
             username,
             password,
@@ -1464,6 +1707,9 @@ def _generate_stress_history(
             ["", receipt_outputs],
             wallet=faucet_wallet,
         )
+        if truth is not None:
+            for _key, wallet, _varied_amount_value in receipt_targets:
+                truth.record_transaction(receipt_key, txids[receipt_key], wallet, "inbound")
         current_ts = _mine_at(
             url,
             username,
@@ -1490,11 +1736,15 @@ def _generate_stress_history(
                 coinbase_txids = block.get("tx") or []
                 if not coinbase_txids:
                     raise RuntimeError(f"Mined block {block_hash} has no coinbase transaction")
-                txids[f"{event['id']}_{reward_index:02d}"] = coinbase_txids[0]
+                reward_key = f"{event['id']}_{reward_index:02d}"
+                txids[reward_key] = coinbase_txids[0]
+                if truth is not None:
+                    truth.record_transaction(reward_key, txids[reward_key], miner, "inbound")
                 mined_reward_count += 1
 
         payer_key, amount = payment_plan[cycle % len(payment_plan)]
-        txids[f"stress_payment_{cycle_number:03d}"] = _send_from_wallet(
+        payment_key = f"stress_payment_{cycle_number:03d}"
+        txids[payment_key] = _send_from_wallet(
             url,
             username,
             password,
@@ -1502,6 +1752,8 @@ def _generate_stress_history(
             {external_address: _varied_amount(amount, cycle_number, salt=0, spread_bp=variation_bp, scale=spend_scale)},
             _varied_amount(fee, cycle_number, salt=3, spread_bp=fee_spread_bp),
         )
+        if truth is not None:
+            truth.record_transaction(payment_key, txids[payment_key], active_wallet(payer_key), "outbound")
         current_ts = _mine_at(
             url,
             username,
@@ -1514,7 +1766,8 @@ def _generate_stress_history(
         if expenses.get("enabled") and expense_schedule and cycle % expense_every == 0:
             expense = expense_schedule[cycle % len(expense_schedule)]
             expense_id = str(expense.get("id") or expense.get("category") or f"expense_{cycle_number:03d}")
-            txids[f"business_expense_{cycle_number:03d}_{expense_id}"] = _send_from_wallet(
+            expense_key = f"business_expense_{cycle_number:03d}_{expense_id}"
+            txids[expense_key] = _send_from_wallet(
                 url,
                 username,
                 password,
@@ -1528,6 +1781,8 @@ def _generate_stress_history(
                 )},
                 _varied_amount(expense_fee, cycle_number, salt=5, spread_bp=fee_spread_bp),
             )
+            if truth is not None:
+                truth.record_transaction(expense_key, txids[expense_key], active_wallet(expense["role"]), "outbound")
             business_expense_count += 1
             current_ts = _mine_at(
                 url,
@@ -1553,6 +1808,8 @@ def _generate_stress_history(
                     {external_address: _btc(bridge["out_btc"])},
                     _btc(bridge.get("fee_btc") or stress["fee_btc"]),
                 )
+                if truth is not None:
+                    truth.record_transaction(f"{bridge_id}_out", txids[f"{bridge_id}_out"], source, "outbound")
                 current_ts = _mine_at(
                     url,
                     username,
@@ -1593,6 +1850,8 @@ def _generate_stress_history(
                     [target.receive_address(), _btc(bridge["in_btc"])],
                     wallet=faucet_wallet,
                 )
+                if truth is not None:
+                    truth.record_transaction(f"{bridge_id}_in", txids[f"{bridge_id}_in"], target, "inbound")
             elif _is_liquid_ledger_wallet(target):
                 in_external_id = _deterministic_demo_txid(
                     str(bridge.get("in_external_id") or f"{bridge_id}_lbtc_in")
@@ -2125,12 +2384,26 @@ def _assert_ownership_self_transfer_matching(
     }
 
 
-def _pair_transfers(data_root: Path, scenario: dict[str, Any], txids: dict[str, str]) -> list[dict[str, Any]]:
+def _pair_transfers(
+    data_root: Path,
+    scenario: dict[str, Any],
+    txids: dict[str, str],
+    truth: DemoTruth | None = None,
+) -> list[dict[str, Any]]:
     scope = _scope(scenario)
     paired = []
     for operation in scenario["operations"]:
         if operation["kind"] != "self_transfer":
             continue
+        if truth is not None:
+            truth.record_transfer_pair(
+                operation["id"],
+                txids[operation["id"]],
+                txids[operation["id"]],
+                kind="manual",
+                policy="carrying-value",
+                note=operation["note"],
+            )
         paired.append(
             run_cli(
                 data_root,
@@ -2151,6 +2424,15 @@ def _pair_transfers(data_root: Path, scenario: dict[str, Any], txids: dict[str, 
         )
     stress = scenario.get("stress") or {}
     for rotation in stress.get("wallet_rotations") or []:
+        if truth is not None:
+            truth.record_transfer_pair(
+                rotation["id"],
+                txids[f"{rotation['id']}_rotation"],
+                txids[f"{rotation['id']}_rotation"],
+                kind="manual",
+                policy="carrying-value",
+                note=rotation.get("note") or f"Wallet key rotation into {rotation['to']}.",
+            )
         paired.append(
             run_cli(
                 data_root,
@@ -2171,6 +2453,15 @@ def _pair_transfers(data_root: Path, scenario: dict[str, Any], txids: dict[str, 
         )
     for bridge in stress.get("swap_bridges") or []:
         bridge_id = bridge["id"]
+        if truth is not None:
+            truth.record_transfer_pair(
+                bridge_id,
+                txids[f"{bridge_id}_out"],
+                txids[f"{bridge_id}_in"],
+                kind=bridge.get("pair_kind") or "submarine-swap",
+                policy=bridge.get("pair_policy") or "taxable",
+                note=bridge.get("note") or f"{bridge_id} bridge pair.",
+            )
         paired.append(
             run_cli(
                 data_root,
@@ -2190,6 +2481,17 @@ def _pair_transfers(data_root: Path, scenario: dict[str, Any], txids: dict[str, 
             )["data"]
         )
     for pair in (scenario.get("liquid_ledger") or {}).get("transfer_pairs") or []:
+        out_txid = txids.get(pair["tx_out"], _deterministic_demo_txid(str(pair["tx_out"])))
+        in_txid = txids.get(pair["tx_in"], _deterministic_demo_txid(str(pair["tx_in"])))
+        if truth is not None:
+            truth.record_transfer_pair(
+                pair.get("id") or f"{pair['tx_out']}->{pair['tx_in']}",
+                out_txid,
+                in_txid,
+                kind=pair.get("kind") or "manual",
+                policy=pair.get("policy") or "carrying-value",
+                note=pair.get("note") or "Liquid wallet rotation.",
+            )
         paired.append(
             run_cli(
                 data_root,
@@ -2197,9 +2499,9 @@ def _pair_transfers(data_root: Path, scenario: dict[str, Any], txids: dict[str, 
                 "pair",
                 *scope,
                 "--tx-out",
-                txids.get(pair["tx_out"], _deterministic_demo_txid(str(pair["tx_out"]))),
+                out_txid,
                 "--tx-in",
-                txids.get(pair["tx_in"], _deterministic_demo_txid(str(pair["tx_in"]))),
+                in_txid,
                 "--kind",
                 pair.get("kind") or "manual",
                 "--policy",
@@ -2466,6 +2768,288 @@ def _assert_live_liquid_sync_rows(
                 raise RuntimeError(f"Liquid live sync outbound tx {txid} should include a positive fee")
             if not row.get("confirmed_at"):
                 raise RuntimeError(f"Liquid live sync tx {txid} should be confirmed")
+
+
+def _collect_core_utxo_truth(
+    truth: DemoTruth,
+    *,
+    url: str,
+    username: str,
+    password: str,
+    wallets: dict[str, DemoWallet],
+) -> None:
+    for wallet in wallets.values():
+        if not _is_core_wallet(wallet):
+            continue
+        utxos = []
+        for utxo in _wallet_utxos(url, username, password, wallet, min_confirmations=0):
+            confirmations = int(utxo.get("confirmations") or 0)
+            utxos.append(
+                {
+                    "txid": str(utxo["txid"]).lower(),
+                    "vout": int(utxo["vout"]),
+                    "amount_msat": _btc_to_msat_int(utxo["amount"]),
+                    "confirmation_status": "confirmed" if confirmations > 0 else "mempool",
+                    "confirmations": confirmations,
+                    "address": str(utxo.get("address") or ""),
+                }
+            )
+        utxos = sorted(
+            utxos,
+            key=lambda row: (row["txid"], row["vout"], row["amount_msat"], row["address"]),
+        )
+        truth.core_utxos[wallet.key] = {
+            "wallet_label": wallet.label,
+            "wallet_id": wallet.kassiber_id,
+            "asset": "BTC",
+            "balance_msat": sum(row["amount_msat"] for row in utxos),
+            "utxo_count": len(utxos),
+            "utxos": utxos,
+        }
+
+
+def _db_core_utxo_rows(data_root: Path, truth: DemoTruth) -> dict[str, list[dict[str, Any]]]:
+    wallet_ids = [
+        str(entry.get("wallet_id") or "")
+        for entry in truth.core_utxos.values()
+        if entry.get("wallet_id")
+    ]
+    if not wallet_ids:
+        return {}
+    placeholders = ", ".join("?" for _ in wallet_ids)
+    conn = open_db(data_root)
+    try:
+        rows = conn.execute(
+            f"""
+            SELECT
+                wallet_id,
+                txid,
+                vout,
+                amount,
+                confirmation_status,
+                COALESCE(address, '') AS address
+            FROM wallet_utxos
+            WHERE wallet_id IN ({placeholders}) AND spent_at IS NULL
+            ORDER BY wallet_id, txid, vout
+            """,
+            wallet_ids,
+        ).fetchall()
+    finally:
+        conn.close()
+    grouped: dict[str, list[dict[str, Any]]] = {wallet_id: [] for wallet_id in wallet_ids}
+    for row in rows:
+        grouped.setdefault(row["wallet_id"], []).append(
+            {
+                "txid": str(row["txid"]).lower(),
+                "vout": int(row["vout"]),
+                "amount_msat": int(row["amount"] or 0),
+                "confirmation_status": str(row["confirmation_status"] or ""),
+                "address": str(row["address"] or ""),
+            }
+        )
+    return grouped
+
+
+def _utxo_key(row: dict[str, Any]) -> tuple[str, int, int, str, str]:
+    return (
+        str(row.get("txid") or "").lower(),
+        int(row.get("vout") or 0),
+        int(row.get("amount_msat") or 0),
+        str(row.get("confirmation_status") or ""),
+        str(row.get("address") or ""),
+    )
+
+
+def _utxo_key_dict(key: tuple[str, int, int, str, str]) -> dict[str, Any]:
+    txid, vout, amount_msat, status, address = key
+    return {
+        "txid": txid,
+        "vout": vout,
+        "amount_msat": amount_msat,
+        "confirmation_status": status,
+        "address": address,
+    }
+
+
+def _read_transactions_csv_keys(path: Path) -> Counter:
+    with path.open("r", encoding="utf-8", newline="") as handle:
+        rows = list(csv.reader(handle))
+    header_index = None
+    required = {"Transaction ID", "Wallet", "Direction", "Asset"}
+    for index, row in enumerate(rows):
+        if required.issubset(set(row)):
+            header_index = index
+            break
+    if header_index is None:
+        raise RuntimeError(f"Transactions CSV export {path} is missing the transaction header")
+    headers = rows[header_index]
+    indexes = {name: headers.index(name) for name in required}
+    keys: Counter = Counter()
+    for row in rows[header_index + 1:]:
+        if not row or not any(cell.strip() for cell in row):
+            break
+        keys[
+            (
+                row[indexes["Transaction ID"]].strip().lower(),
+                row[indexes["Wallet"]].strip(),
+                row[indexes["Asset"]].strip().upper(),
+                row[indexes["Direction"]].strip(),
+            )
+        ] += 1
+    return keys
+
+
+def _write_generated_truth(path: Path, truth: DemoTruth) -> dict[str, Any]:
+    payload = truth.to_dict()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return {
+        "path": str(path),
+        "transactions": payload["transactions"]["count"],
+        "transfer_pairs": payload["transfer_pairs"]["count"],
+        "core_wallets": len(payload["core_utxos"]),
+    }
+
+
+def _assert_generated_truth(
+    data_root: Path,
+    truth: DemoTruth,
+    *,
+    transactions: list[dict[str, Any]],
+    transfers: dict[str, Any],
+    journal: dict[str, Any],
+    summary: dict[str, Any],
+    exports: dict[str, Any],
+) -> None:
+    expected_tx = Counter(_truth_transaction_key(row) for row in truth.transaction_rows)
+    actual_tx = Counter(
+        (
+            str(row.get("external_id") or "").lower(),
+            str(row.get("wallet") or ""),
+            str(row.get("asset") or "").upper(),
+            str(row.get("direction") or ""),
+        )
+        for row in transactions
+    )
+    if expected_tx != actual_tx:
+        rendered = json.dumps(_counter_diff(expected_tx, actual_tx, _truth_key_dict), indent=2, sort_keys=True)
+        raise RuntimeError(f"Generated demo transaction truth mismatch:\n{rendered}")
+
+    expected_unconfirmed = Counter(
+        _truth_transaction_key(row)
+        for row in truth.transaction_rows
+        if row.get("confirmation_expected", True) and not row.get("confirmed", True)
+    )
+    confirmation_asserted_keys = {
+        _truth_transaction_key(row)
+        for row in truth.transaction_rows
+        if row.get("confirmation_expected", True)
+    }
+    actual_unconfirmed = Counter(
+        (
+            str(row.get("external_id") or "").lower(),
+            str(row.get("wallet") or ""),
+            str(row.get("asset") or "").upper(),
+            str(row.get("direction") or ""),
+        )
+        for row in transactions
+        if not row.get("confirmed_at")
+        and (
+            str(row.get("external_id") or "").lower(),
+            str(row.get("wallet") or ""),
+            str(row.get("asset") or "").upper(),
+            str(row.get("direction") or ""),
+        )
+        in confirmation_asserted_keys
+    )
+    if expected_unconfirmed != actual_unconfirmed:
+        rendered = json.dumps(
+            _counter_diff(expected_unconfirmed, actual_unconfirmed, _truth_key_dict),
+            indent=2,
+            sort_keys=True,
+        )
+        raise RuntimeError(f"Generated demo pending-transaction truth mismatch:\n{rendered}")
+
+    skipped = {row["external_id"] for row in truth.skipped_txids}
+    imported_skipped = sorted(skipped.intersection({row["external_id"].lower() for row in transactions}))
+    if imported_skipped:
+        raise RuntimeError(f"Skipped generated txids were imported unexpectedly: {imported_skipped}")
+
+    expected_pairs = Counter(_pair_key(row) for row in truth.transfer_pairs)
+    actual_pairs = Counter(_pair_key(row) for row in transfers["pairs"])
+    if expected_pairs != actual_pairs:
+        rendered = json.dumps(_counter_diff(expected_pairs, actual_pairs, _pair_key_dict), indent=2, sort_keys=True)
+        raise RuntimeError(f"Generated demo transfer-pair truth mismatch:\n{rendered}")
+
+    expected_excluded = sum(
+        1 for row in truth.transaction_rows if row.get("source") == "collaborative_review"
+    )
+    expected_active = len(truth.transaction_rows) - expected_excluded
+    expected_export_tx = Counter(
+        _truth_transaction_key(row)
+        for row in truth.transaction_rows
+        if row.get("source") != "collaborative_review"
+    )
+    metrics = summary["metrics"]
+    if int(metrics.get("active_transactions") or 0) != expected_active:
+        raise RuntimeError(
+            f"Expected exactly {expected_active} active transactions from generated truth, "
+            f"got {metrics.get('active_transactions')}"
+        )
+    if int(metrics.get("excluded_transactions") or 0) != expected_excluded:
+        raise RuntimeError(
+            f"Expected exactly {expected_excluded} excluded transactions from generated truth, "
+            f"got {metrics.get('excluded_transactions')}"
+        )
+    if int(metrics.get("priced_transactions") or 0) != expected_active:
+        raise RuntimeError(
+            f"Expected exactly {expected_active} priced transactions from generated truth, "
+            f"got {metrics.get('priced_transactions')}"
+        )
+    if int(journal.get("processed_transactions") or 0) != expected_active:
+        raise RuntimeError(
+            f"Expected journal to process {expected_active} generated active transactions, "
+            f"got {journal.get('processed_transactions')}"
+        )
+
+    db_utxos = _db_core_utxo_rows(data_root, truth)
+    for wallet_key, expected in truth.core_utxos.items():
+        wallet_id = str(expected.get("wallet_id") or "")
+        actual_rows = db_utxos.get(wallet_id, [])
+        expected_counter = Counter(_utxo_key(row) for row in expected["utxos"])
+        actual_counter = Counter(_utxo_key(row) for row in actual_rows)
+        if expected_counter != actual_counter:
+            rendered = json.dumps(
+                _counter_diff(expected_counter, actual_counter, _utxo_key_dict),
+                indent=2,
+                sort_keys=True,
+            )
+            raise RuntimeError(
+                f"Generated UTXO truth mismatch for {wallet_key} ({expected['wallet_label']}):\n{rendered}"
+            )
+        actual_balance = sum(int(row["amount_msat"]) for row in actual_rows)
+        if actual_balance != int(expected["balance_msat"]):
+            raise RuntimeError(
+                f"Generated balance truth mismatch for {wallet_key}: "
+                f"expected {expected['balance_msat']} msat, got {actual_balance} msat"
+            )
+
+    transactions_csv = exports.get("transactions_csv") or {}
+    transactions_xlsx = exports.get("transactions_xlsx") or {}
+    if int(transactions_csv.get("rows") or -1) != expected_active:
+        raise RuntimeError(
+            f"Transactions CSV export reported {transactions_csv.get('rows')} rows, "
+            f"expected {expected_active}"
+        )
+    if int(transactions_xlsx.get("rows") or -1) != expected_active:
+        raise RuntimeError(
+            f"Transactions XLSX export reported {transactions_xlsx.get('rows')} rows, "
+            f"expected {expected_active}"
+        )
+    csv_keys = _read_transactions_csv_keys(Path(transactions_csv["path"]))
+    if csv_keys != expected_export_tx:
+        rendered = json.dumps(_counter_diff(expected_export_tx, csv_keys, _truth_key_dict), indent=2, sort_keys=True)
+        raise RuntimeError(f"Transactions CSV export content does not match generated truth:\n{rendered}")
 
 
 def _assert_expected(
@@ -2871,6 +3455,7 @@ def run_demo(
     wallets: dict[str, DemoWallet] = {}
     liquid_rows_by_wallet = _liquid_ledger_rows_from_manifest(scenario)
     txids: dict[str, str] = {}
+    truth = DemoTruth(scenario["id"])
     try:
         _ensure_wallet(url, username, password, faucet_wallet)
         created_core_wallets.append(faucet_wallet)
@@ -2972,6 +3557,7 @@ def run_demo(
         # Seed each funded wallet across all of its watched addresses so the
         # book starts with a realistic spread of UTXOs instead of one coin.
         funding_outputs: dict[str, Decimal] = {}
+        funded_wallet_keys: list[str] = []
         for wallet_spec in scenario["wallets"]:
             if not _is_core_wallet_spec(wallet_spec):
                 continue
@@ -2985,6 +3571,7 @@ def run_demo(
                 amount = share + (remainder if index == 0 else Decimal("0"))
                 if amount > 0:
                     funding_outputs[funding_address] = amount
+            funded_wallet_keys.append(wallet.key)
         txids["initial_funding"] = rpc(
             url,
             username,
@@ -2993,6 +3580,8 @@ def run_demo(
             ["", funding_outputs],
             wallet=faucet_wallet,
         )
+        for wallet_key in funded_wallet_keys:
+            truth.record_transaction("initial_funding", txids["initial_funding"], wallets[wallet_key], "inbound")
         current_ts = _mine(url, username, password, faucet_wallet, mining_address, current_ts)
         current_ts = _seed_live_liquid_wallets(
             elements_url,
@@ -3005,6 +3594,7 @@ def run_demo(
             external_address=liquid_external_address,
             current_ts=current_ts,
             txids=txids,
+            truth=truth,
         )
 
         for operation in scenario["operations"]:
@@ -3024,6 +3614,14 @@ def run_demo(
                     {to_address: _btc(operation["amount_btc"])},
                     _btc(operation["fee_btc"]),
                 )
+                truth.record_transaction(operation["id"], txids[operation["id"]], sender, "outbound")
+                if operation["to"] != "external":
+                    truth.record_transaction(
+                        operation["id"],
+                        txids[operation["id"]],
+                        wallets[operation["to"]],
+                        "inbound",
+                    )
             elif kind == "batched_payment":
                 txids[operation["id"]] = _send_batched_payment(
                     url,
@@ -3033,6 +3631,7 @@ def run_demo(
                     faucet_wallet,
                     operation,
                 )
+                truth.record_transaction(operation["id"], txids[operation["id"]], wallets[operation["from"]], "outbound")
             elif kind == "self_transfer_fanout":
                 txids[operation["id"]] = _send_self_transfer_fanout(
                     url,
@@ -3050,6 +3649,7 @@ def run_demo(
                     faucet_wallet,
                     operation,
                     txids,
+                    truth=truth,
                 )
             elif kind == "many_input_consolidation":
                 txids[operation["id"]] = _send_many_input_consolidation(
@@ -3059,6 +3659,7 @@ def run_demo(
                     wallets[operation["wallet"]],
                     operation,
                 )
+                truth.record_transaction(operation["id"], txids[operation["id"]], wallets[operation["wallet"]], "outbound")
             elif kind == "coinjoin_shape":
                 coinjoin_external = rpc(
                     url, username, password, "getnewaddress", ["coinjoin equal output", "bech32"], wallet=faucet_wallet
@@ -3066,8 +3667,37 @@ def run_demo(
                 txids[operation["id"]] = _send_coinjoin_shape(
                     url, username, password, wallets, operation, coinjoin_external
                 )
+                for signer_key in operation["signers"]:
+                    truth.record_transaction(
+                        operation["id"],
+                        txids[operation["id"]],
+                        wallets[signer_key],
+                        "outbound",
+                        source="collaborative_review",
+                    )
+                truth.record_transaction(
+                    operation["id"],
+                    txids[operation["id"]],
+                    wallets[operation["tracked_output_wallet"]],
+                    "inbound",
+                    source="collaborative_review",
+                )
             elif kind == "payjoin_shape":
                 txids[operation["id"]] = _send_payjoin_shape(url, username, password, wallets, operation)
+                truth.record_transaction(
+                    operation["id"],
+                    txids[operation["id"]],
+                    wallets[operation["payer"]],
+                    "outbound",
+                    source="collaborative_review",
+                )
+                truth.record_transaction(
+                    operation["id"],
+                    txids[operation["id"]],
+                    wallets[operation["merchant"]],
+                    "inbound",
+                    source="collaborative_review",
+                )
             elif kind == "rbf_replaced_payment":
                 txids[operation["id"]] = _send_rbf_replaced_payment(
                     url,
@@ -3077,6 +3707,12 @@ def run_demo(
                     external_address,
                     operation,
                     txids,
+                )
+                truth.record_transaction(operation["id"], txids[operation["id"]], wallets[operation["from"]], "outbound")
+                truth.record_skipped_txid(
+                    f"{operation['id']}_replaced",
+                    txids[f"{operation['id']}_replaced"],
+                    "rbf_conflicted_original",
                 )
             elif kind in {"loan_collateral_release", "loan_principal_received", "external_receipt"}:
                 receiver = wallets[operation["to"]]
@@ -3088,6 +3724,7 @@ def run_demo(
                     [receiver.receive_address(), _btc(operation["amount_btc"])],
                     wallet=faucet_wallet,
                 )
+                truth.record_transaction(operation["id"], txids[operation["id"]], receiver, "inbound")
             else:
                 raise RuntimeError(f"Unsupported scenario operation kind: {kind}")
             current_ts = _mine(url, username, password, faucet_wallet, mining_address, current_ts)
@@ -3104,6 +3741,7 @@ def run_demo(
             external_address=external_address,
             current_ts=current_ts,
             txids=txids,
+            truth=truth,
         )
         stress_result["liquid_ledger_rows"] = sum(len(rows) for rows in liquid_rows_by_wallet.values())
 
@@ -3118,7 +3756,9 @@ def run_demo(
             mining_address=mining_address,
             current_ts=current_ts,
             txids=txids,
+            truth=truth,
         )
+        _record_liquid_ledger_transactions(truth, liquid_rows_by_wallet, wallets)
         _write_liquid_ledger_files(base_dir, wallets, liquid_rows_by_wallet)
         birthday = datetime.fromtimestamp(birthday_ts, tz=timezone.utc)
         birthday_iso = birthday.isoformat().replace("+00:00", "Z")
@@ -3158,6 +3798,14 @@ def run_demo(
                     [receiver.receive_address(), _btc(operation["amount_btc"])],
                     wallet=faucet_wallet,
                 )
+                truth.record_transaction(
+                    operation["id"],
+                    txids[operation["id"]],
+                    receiver,
+                    "inbound",
+                    confirmed=False,
+                    source="pending_mempool",
+                )
                 _wait_for_watchonly_mempool_tx(
                     url,
                     username,
@@ -3179,7 +3827,7 @@ def run_demo(
         )["data"]
         collaborative_excluded = _exclude_collaborative_shapes(data_root, scenario, txids, transactions)
         ownership_matching = _assert_ownership_self_transfer_matching(data_root, scenario)
-        pairs = _pair_transfers(data_root, scenario, txids)
+        pairs = _pair_transfers(data_root, scenario, txids, truth=truth)
         loan_result = _mark_loans(data_root, scenario, txids)
         deprecated_wallets = _mark_deprecated_wallets(data_root, scenario, wallets)
         journal, transactions, rate_seed = _seed_rates_and_process(data_root, scenario)
@@ -3191,6 +3839,18 @@ def run_demo(
         quarantines = run_cli(data_root, "journals", "quarantined", *scope)["data"]
         summary = run_cli(data_root, "reports", "summary", *scope)["data"]
         exports = _export_reports(data_root, export_dir, scenario)
+        _refresh_truth_wallet_ids(truth, wallets)
+        _collect_core_utxo_truth(truth, url=url, username=username, password=password, wallets=wallets)
+        truth_export = _write_generated_truth(export_dir / "generated-truth.json", truth)
+        _assert_generated_truth(
+            data_root,
+            truth,
+            transactions=transactions,
+            transfers={"pairs": transfer_listing},
+            journal=journal,
+            summary=summary,
+            exports=exports,
+        )
         _assert_expected(
             scenario,
             transactions=transactions,
@@ -3319,6 +3979,7 @@ def run_demo(
                 "rates": rate_seed,
                 "summary_metrics": summary["metrics"],
                 "exports": exports,
+                "truth": truth_export,
             },
         }
         return result
@@ -3344,6 +4005,8 @@ def run_demo(
         try:
             rpc(elements_url, username, password, "setmocktime", [0])
         except RuntimeError:
+            # Best-effort Elements mocktime reset during teardown; if the node is
+            # already gone this must not override the error being unwound.
             pass
         if not keep_core_wallets:
             for wallet_name in reversed(created_core_wallets):

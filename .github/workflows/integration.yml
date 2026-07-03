@@ -4,9 +4,8 @@ name: integration
 #
 # This workflow is intentionally NOT triggered on pull_request or push, so it
 # never gates normal PR CI (that stays in ci.yml). The Docker-free fast replay
-# lane runs on a nightly schedule; the heavier Docker lanes (real regtest Bitcoin
-# Core node) run only on manual dispatch, since GitHub-hosted ubuntu runners ship
-# Docker and the lanes are slow.
+# lane runs nightly; the generated-truth demo lane runs weekly because it is the
+# broad oracle for issue #312. Other Docker lanes remain manual dispatch.
 on:
   workflow_dispatch:
     inputs:
@@ -18,17 +17,21 @@ on:
           - fast
           - bitcoin-core
           - bitcoin-electrum
+          - slow
           - demo-full
           - silent-payments
+          - all
   schedule:
     # Nightly Docker-free fast replay lane (arbitrary off-peak minute).
     - cron: "17 3 * * *"
+    # Weekly generated-truth demo oracle over disposable Bitcoin + Liquid regtest.
+    - cron: "47 3 * * 0"
 
 jobs:
   fast:
-    # Nightly schedule always runs the fast lane; on manual dispatch it runs only
+    # The nightly schedule runs the fast lane; on manual dispatch it runs only
     # when "fast" is chosen (the docker-lane job covers the heavier lanes).
-    if: github.event_name == 'schedule' || github.event.inputs.lane == 'fast'
+    if: (github.event_name == 'schedule' && github.event.schedule == '17 3 * * *') || github.event.inputs.lane == 'fast'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -46,6 +49,29 @@ jobs:
 
       - name: Fast replay lane (no Docker)
         run: ./scripts/integration-harness.sh fast
+
+  scheduled-demo-full:
+    # Weekly scheduled generated-truth oracle. Docker is preinstalled on
+    # ubuntu-latest; the harness starts disposable Bitcoin + Liquid regtest
+    # services and tears them down when the lane exits.
+    if: github.event_name == 'schedule' && github.event.schedule == '47 3 * * 0'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.11'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5
+
+      - name: Sync dependencies
+        run: uv sync --frozen
+
+      - name: Generated-truth demo oracle
+        run: ./scripts/integration-harness.sh demo-full
 
   docker-lane:
     # Heavy Docker lanes are manual-only. Docker is preinstalled on ubuntu-latest;

@@ -782,11 +782,6 @@ run_demo_down() {
   fi
 }
 
-run_slow_suite() {
-  run_bitcoin_backend_suite
-  run_demo_full
-}
-
 run_bitcoin_core() {
   run_with_bitcoin_core run_bitcoin_backend_suite
 }
@@ -1148,7 +1143,11 @@ case "$MODE" in
     ;;
   all)
     run_fast
-    run_with_bitcoin_core run_slow_suite
+    # Keep the generated-truth demo on a fresh chain. The backend parity tests
+    # mine enough blocks to push the backdated accounting scenario out of range
+    # if demo-full reuses the same disposable regtest volume.
+    ( run_bitcoin_core )
+    ( run_regtest_demo_full )
     ;;
   *)
     echo "usage: $0 [fast|bitcoin-core|bitcoin-electrum|slow|demo|demo-full|demo-up|demo-tick [N]|demo-down [--purge]|boltz-liquid|lightning-business|silent-payments|all]" >&2

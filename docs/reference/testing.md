@@ -320,6 +320,15 @@ the Core RPC backend, then verifies Kassiber behavior through the public CLI:
   override that provider, or `off` to keep only the historical cache.
 - journal processing, summary reporting, PDF/CSV/XLSX report export, and
   CSV/XLSX transaction export
+- a generated oracle artifact at `generated-truth.json` in the demo export
+  directory for the report/export build point (before the optional post-sync
+  business tick). The demo records expected transaction row identities,
+  reviewed transfer pairs, and active Bitcoin Core UTXOs/balances while it
+  creates the chain activity, then verifies Kassiber's synced rows, report
+  metrics, UTXO inventory, and transaction export contents against that
+  generated truth. Exact checks are used for the Core-controlled row/UTXO
+  surface; report file bytes remain intentionally unchecked because PDF/XLSX
+  metadata and writer ordering are not stable enough to be the source of truth.
 
 The scenario manifest lives at
 `dev/regtest/scenarios/full_accounting.json`; the runner lives at
@@ -449,6 +458,11 @@ mode.
   `TapeMiss`, while unused recorded interactions fail the replay test.
 - Export assertions are content-level. XLSX files are inspected for expected
   sheets and self-verification content rather than byte-compared.
+- The full demo's generated truth is the oracle for controlled regtest facts:
+  transaction row identities, transfer pair identities, Core wallet UTXOs, and
+  Core wallet balances must match exactly. Broader report/export checks stay
+  targeted where formatting, cached market data, or third-party writers make
+  byte-for-byte comparison noisy.
 - Docker infrastructure is contributor test tooling only. It must not add an
   app-facing shell/filesystem escape hatch or relax desktop daemon allowlists.
 - The demo runner prints regtest addresses and txids, but never prints RPC

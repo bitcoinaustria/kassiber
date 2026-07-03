@@ -82,6 +82,9 @@ run py -m unittest tests.test_silent_payments -v
 run py -m unittest tests.test_log_ring -v
 run py -m unittest tests.test_regtest_harness -v
 
+run py -m unittest discover -v
+run py -m pytest tests/test_proxy.py -q
+
 echo
 SMOKE_HOME="$(mktemp -d "${TMPDIR:-/tmp}/kassiber-quality-gate-home.XXXXXX")"
 trap 'rm -rf "$SMOKE_HOME"' EXIT

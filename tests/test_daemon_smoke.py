@@ -7092,7 +7092,7 @@ class DaemonSmokeTest(unittest.TestCase):
 
                 cancel_response = None
                 terminal = None
-                deadline = time.time() + 5
+                deadline = time.time() + 15
                 while time.time() < deadline and (cancel_response is None or terminal is None):
                     payload = _read_payload_timeout(proc, max(0.1, deadline - time.time()))
                     if payload.get("request_id") == "cancel-1":

@@ -415,6 +415,68 @@ class RegtestHarnessTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "operations"):
             regtest_demo.validate_scenario(scenario)
 
+    def test_demo_truth_records_rows_pairs_and_summaries(self):
+        wallet = regtest_demo.DemoWallet(
+            key="treasury",
+            label="Regtest Treasury",
+            account="treasury",
+            chain="bitcoin",
+            kassiber_id="wallet-1",
+        )
+        truth = regtest_demo.DemoTruth("unit-scenario")
+        truth.record_transaction("receipt", "AA" * 32, wallet, "inbound")
+        truth.record_transfer_pair(
+            "pair-1",
+            "BB" * 32,
+            "CC" * 32,
+            kind="manual",
+            policy="carrying-value",
+            note="unit pair",
+        )
+        truth.record_skipped_txid("replaced", "DD" * 32, "rbf_conflicted_original")
+
+        payload = truth.to_dict()
+
+        self.assertEqual(payload["transactions"]["count"], 1)
+        self.assertEqual(payload["transactions"]["confirmed"], 1)
+        self.assertEqual(payload["transactions"]["by_asset"], {"BTC": 1})
+        self.assertEqual(payload["transactions"]["by_wallet"], {"Regtest Treasury": 1})
+        self.assertEqual(payload["transactions"]["rows"][0]["external_id"], "aa" * 32)
+        self.assertEqual(payload["transactions"]["rows"][0]["wallet_id"], "wallet-1")
+        self.assertEqual(payload["transfer_pairs"]["count"], 1)
+        self.assertEqual(payload["transfer_pairs"]["rows"][0]["out_external_id"], "bb" * 32)
+        self.assertEqual(payload["skipped_txids"][0]["external_id"], "dd" * 32)
+
+    def test_demo_truth_records_liquid_ledger_rows_from_manifest(self):
+        scenario = regtest_demo.load_scenario()
+        rows_by_wallet = regtest_demo._liquid_ledger_rows_from_manifest(scenario)
+        wallets = {
+            wallet["key"]: regtest_demo.DemoWallet(
+                key=wallet["key"],
+                label=wallet["label"],
+                account=wallet["account"],
+                kind=regtest_demo._wallet_kind(wallet),
+                chain=regtest_demo._wallet_chain(wallet),
+                network=wallet.get("network") or "elementsregtest",
+                source_format=wallet.get("source_format") or "",
+            )
+            for wallet in scenario["wallets"]
+        }
+        truth = regtest_demo.DemoTruth(scenario["id"])
+
+        regtest_demo._record_liquid_ledger_transactions(truth, rows_by_wallet, wallets)
+
+        expected_rows = sum(
+            1
+            for rows in rows_by_wallet.values()
+            for row in rows
+            if regtest_demo._liquid_ledger_direction(row) is not None
+        )
+        self.assertEqual(len(truth.transaction_rows), expected_rows)
+        self.assertEqual({row["asset"] for row in truth.transaction_rows}, {"LBTC"})
+        self.assertIn("inbound", {row["direction"] for row in truth.transaction_rows})
+        self.assertIn("outbound", {row["direction"] for row in truth.transaction_rows})
+
     def test_compose_stack_includes_local_protocol_backends(self):
         compose = (ROOT / "dev" / "regtest" / "compose.bitcoin.yml").read_text(encoding="utf-8")
 
@@ -499,6 +561,15 @@ class RegtestHarnessTest(unittest.TestCase):
         self.assertIn("tests.integration.test_live_bitcoin_electrum_parity", harness)
         self.assertIn("run_bitcoin_backend_suite", harness)
         self.assertIn("bitcoin-electrum)", harness)
+
+    def test_all_lane_gives_demo_full_a_fresh_chain(self):
+        harness = (ROOT / "scripts" / "integration-harness.sh").read_text(encoding="utf-8")
+
+        all_case = harness[harness.index("  all)") : harness.index("  *)")]
+        self.assertIn("run_fast", all_case)
+        self.assertIn("( run_bitcoin_core )", all_case)
+        self.assertIn("( run_regtest_demo_full )", all_case)
+        self.assertNotIn("run_with_bitcoin_core run_slow_suite", all_case)
 
     def test_demo_purge_paths_are_guarded_by_safe_home_check(self):
         harness = (ROOT / "scripts" / "integration-harness.sh").read_text(encoding="utf-8")
