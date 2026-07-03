@@ -204,10 +204,14 @@ class RegtestHarnessTest(unittest.TestCase):
                 "liquid_treasury",
                 "liquid_operations",
                 "liquid_treasury_2024",
+                "liquid_live_sync",
             },
         )
         liquid_wallets = {wallet["key"] for wallet in scenario["wallets"] if wallet.get("chain") == "liquid"}
-        self.assertEqual(liquid_wallets, {"liquid_treasury", "liquid_operations", "liquid_treasury_2024"})
+        self.assertEqual(
+            liquid_wallets,
+            {"liquid_treasury", "liquid_operations", "liquid_treasury_2024", "liquid_live_sync"},
+        )
         self.assertEqual(
             {wallet["network"] for wallet in scenario["wallets"] if wallet.get("chain") == "liquid"},
             {"elementsregtest"},
@@ -290,11 +294,11 @@ class RegtestHarnessTest(unittest.TestCase):
         self.assertTrue(any(amount < Decimal("0.00001") for amount in dust_amounts))
         pending = scenario["pending_operations"]
         self.assertEqual([op["kind"] for op in pending], ["external_receipt"])
-        self.assertEqual(scenario["expected"]["wallets"], 12)
+        self.assertEqual(scenario["expected"]["wallets"], 13)
         self.assertEqual(scenario["expected"]["deprecated_wallets"], 4)
         self.assertEqual(scenario["expected"]["assets"], ["BTC", "LBTC"])
-        self.assertGreaterEqual(scenario["expected"]["min_transactions"], 845)
-        self.assertGreaterEqual(scenario["expected"]["min_active_transactions"], 840)
+        self.assertGreaterEqual(scenario["expected"]["min_transactions"], 847)
+        self.assertGreaterEqual(scenario["expected"]["min_active_transactions"], 842)
         self.assertEqual(scenario["expected"]["pending_transactions"], 1)
         base_time = datetime.fromisoformat(scenario["base_time"].replace("Z", "+00:00"))
         stress = scenario["stress"]
@@ -325,6 +329,12 @@ class RegtestHarnessTest(unittest.TestCase):
         liquid_rows = sum(len(rows) for rows in scenario["liquid_ledger"]["wallets"].values())
         self.assertGreaterEqual(liquid_rows, 9)
         self.assertEqual(len(scenario["liquid_ledger"]["transfer_pairs"]), 1)
+        liquid_live_wallets = [
+            wallet for wallet in scenario["wallets"]
+            if wallet.get("chain") == "liquid" and wallet.get("kind") == "descriptor"
+        ]
+        self.assertEqual([wallet["key"] for wallet in liquid_live_wallets], ["liquid_live_sync"])
+        self.assertGreater(Decimal(liquid_live_wallets[0]["live_receipt_btc"]), Decimal("0"))
         self.assertEqual(scenario["pricing"]["source"], "kraken-bundled")
         self.assertEqual(scenario["pricing"]["live_source"], "mempool")
         self.assertEqual(scenario["expected"]["pricing_source"], "kraken-csv")
@@ -405,6 +415,80 @@ class RegtestHarnessTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "operations"):
             regtest_demo.validate_scenario(scenario)
 
+    def test_demo_truth_records_rows_pairs_and_summaries(self):
+        wallet = regtest_demo.DemoWallet(
+            key="treasury",
+            label="Regtest Treasury",
+            account="treasury",
+            chain="bitcoin",
+            kassiber_id="wallet-1",
+        )
+        truth = regtest_demo.DemoTruth("unit-scenario")
+        truth.record_transaction("receipt", "AA" * 32, wallet, "inbound")
+        truth.record_transfer_pair(
+            "pair-1",
+            "BB" * 32,
+            "CC" * 32,
+            kind="manual",
+            policy="carrying-value",
+            note="unit pair",
+        )
+        truth.record_skipped_txid("replaced", "DD" * 32, "rbf_conflicted_original")
+
+        payload = truth.to_dict()
+
+        self.assertEqual(payload["transactions"]["count"], 1)
+        self.assertEqual(payload["transactions"]["confirmed"], 1)
+        self.assertEqual(payload["transactions"]["by_asset"], {"BTC": 1})
+        self.assertEqual(payload["transactions"]["by_wallet"], {"Regtest Treasury": 1})
+        self.assertEqual(payload["transactions"]["rows"][0]["external_id"], "aa" * 32)
+        self.assertEqual(payload["transactions"]["rows"][0]["wallet_id"], "wallet-1")
+        self.assertEqual(payload["transfer_pairs"]["count"], 1)
+        self.assertEqual(payload["transfer_pairs"]["rows"][0]["out_external_id"], "bb" * 32)
+        self.assertEqual(payload["skipped_txids"][0]["external_id"], "dd" * 32)
+
+    def test_demo_truth_records_liquid_ledger_rows_from_manifest(self):
+        scenario = regtest_demo.load_scenario()
+        rows_by_wallet = regtest_demo._liquid_ledger_rows_from_manifest(scenario)
+        wallets = {
+            wallet["key"]: regtest_demo.DemoWallet(
+                key=wallet["key"],
+                label=wallet["label"],
+                account=wallet["account"],
+                kind=regtest_demo._wallet_kind(wallet),
+                chain=regtest_demo._wallet_chain(wallet),
+                network=wallet.get("network") or "elementsregtest",
+                source_format=wallet.get("source_format") or "",
+            )
+            for wallet in scenario["wallets"]
+        }
+        truth = regtest_demo.DemoTruth(scenario["id"])
+
+        regtest_demo._record_liquid_ledger_transactions(truth, rows_by_wallet, wallets)
+
+        expected_rows = sum(
+            1
+            for rows in rows_by_wallet.values()
+            for row in rows
+            if regtest_demo._liquid_ledger_direction(row) is not None
+        )
+        self.assertEqual(len(truth.transaction_rows), expected_rows)
+        self.assertEqual({row["asset"] for row in truth.transaction_rows}, {"LBTC"})
+        self.assertIn("inbound", {row["direction"] for row in truth.transaction_rows})
+        self.assertIn("outbound", {row["direction"] for row in truth.transaction_rows})
+
+    def test_liquid_live_descriptor_selection_prefers_used_wpkh(self):
+        descriptors = [
+            {"desc": "pkh([abcd]tpub/0/*)#legacy", "active": True, "internal": False, "next": 0},
+            {"desc": "tr([abcd]tpub/0/*)#taproot", "active": True, "internal": False, "next": 0},
+            {"desc": "wpkh([abcd]tpub/0/*)#native", "active": True, "internal": False, "next": 2},
+        ]
+
+        self.assertEqual(
+            regtest_demo._active_descriptor(descriptors, internal=False),
+            "wpkh([abcd]tpub/0/*)",
+        )
+
     def test_compose_stack_includes_local_protocol_backends(self):
         compose = (ROOT / "dev" / "regtest" / "compose.bitcoin.yml").read_text(encoding="utf-8")
 
@@ -424,6 +508,7 @@ class RegtestHarnessTest(unittest.TestCase):
         self.assertIn("KASSIBER_REGTEST_ELEMENTSD_IMAGE", compose)
         self.assertIn("KASSIBER_REGTEST_FULCRUM_IMAGE", compose)
         self.assertIn("KASSIBER_REGTEST_ELEMENTS_RPC_PORT", compose)
+        self.assertIn("con_blocksubsidy=5000000000", compose)
         self.assertIn("backend_stack.py:/app/backend_stack.py:ro", compose)
         self.assertIn("KASSIBER_REGTEST_BITCOIN_ELECTRUM_PORT", compose)
         self.assertIn("KASSIBER_REGTEST_BITCOIN_MEMPOOL_PORT", compose)
@@ -481,6 +566,23 @@ class RegtestHarnessTest(unittest.TestCase):
         self.assertIn("silent-payments", harness)
         self.assertIn("KASSIBER_REGTEST_FRIGATE_PORT", harness)
         self.assertIn("KASSIBER_REGTEST_FRIGATE_WAIT_SECONDS", harness)
+
+    def test_bitcoin_electrum_parity_lane_is_wired(self):
+        harness = (ROOT / "scripts" / "integration-harness.sh").read_text(encoding="utf-8")
+
+        self.assertIn("run_bitcoin_electrum_parity_smoke()", harness)
+        self.assertIn("tests.integration.test_live_bitcoin_electrum_parity", harness)
+        self.assertIn("run_bitcoin_backend_suite", harness)
+        self.assertIn("bitcoin-electrum)", harness)
+
+    def test_all_lane_gives_demo_full_a_fresh_chain(self):
+        harness = (ROOT / "scripts" / "integration-harness.sh").read_text(encoding="utf-8")
+
+        all_case = harness[harness.index("  all)") : harness.index("  *)")]
+        self.assertIn("run_fast", all_case)
+        self.assertIn("( run_bitcoin_core )", all_case)
+        self.assertIn("( run_regtest_demo_full )", all_case)
+        self.assertNotIn("run_with_bitcoin_core run_slow_suite", all_case)
 
     def test_demo_purge_paths_are_guarded_by_safe_home_check(self):
         harness = (ROOT / "scripts" / "integration-harness.sh").read_text(encoding="utf-8")

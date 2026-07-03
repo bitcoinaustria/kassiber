@@ -377,6 +377,18 @@
       "initial_btc": "0.00000000"
     },
     {
+      "key": "liquid_live_sync",
+      "label": "Regtest Liquid Live Sync",
+      "account": "liquid_operations",
+      "kind": "descriptor",
+      "chain": "liquid",
+      "network": "elementsregtest",
+      "addresses": 2,
+      "initial_btc": "0.00000000",
+      "live_receipt_btc": "0.00750000",
+      "live_spend_btc": "0.00125000"
+    },
+    {
       "key": "liquid_treasury_2024",
       "label": "Regtest Liquid Treasury 2024 Rotation",
       "account": "liquid_treasury",
@@ -672,7 +684,7 @@
     }
   ],
   "expected": {
-    "wallets": 12,
+    "wallets": 13,
     "deprecated_wallets": 4,
     "assets": [
       "BTC",
@@ -683,8 +695,8 @@
       "BTC",
       "LBTC"
     ],
-    "min_transactions": 846,
-    "min_active_transactions": 841,
+    "min_transactions": 848,
+    "min_active_transactions": 843,
     "pending_transactions": 1,
     "collaborative_excluded": 5,
     "min_transfer_pairs": 9,

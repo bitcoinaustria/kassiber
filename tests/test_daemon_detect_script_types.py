@@ -69,7 +69,8 @@ class DetectScriptTypesTests(unittest.TestCase):
         }
         calls: list[str] = []
 
-        def fake_has_history(url, script_pubkey, timeout=30):
+        def fake_has_history(url, script_pubkey, timeout=30, proxy_url=None):
+            del proxy_url
             calls.append(script_pubkey)
             return script_pubkey in active
 

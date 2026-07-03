@@ -545,6 +545,7 @@ class LightningProfitabilityTest(unittest.TestCase):
 def _scoped_lightning_conn(
     rows: list[tuple[str, str, str, str, str]],
     *,
+    backends: list[tuple[str, str, str]] | None = None,
     workspaces: list[tuple[str, str]] | None = None,
     profiles: list[tuple[str, str, str]] | None = None,
     default_workspace: str = "ws-1",
@@ -581,6 +582,23 @@ def _scoped_lightning_conn(
         " config_json TEXT NOT NULL DEFAULT '{}',"
         " UNIQUE (profile_id, label))"
     )
+    conn.execute(
+        "CREATE TABLE backends ("
+        " name TEXT PRIMARY KEY,"
+        " kind TEXT NOT NULL,"
+        " chain TEXT,"
+        " network TEXT,"
+        " url TEXT NOT NULL,"
+        " auth_header TEXT,"
+        " token TEXT,"
+        " batch_size INTEGER,"
+        " timeout INTEGER,"
+        " tor_proxy TEXT,"
+        " config_json TEXT NOT NULL DEFAULT '{}',"
+        " notes TEXT,"
+        " created_at TEXT NOT NULL,"
+        " updated_at TEXT NOT NULL)"
+    )
     conn.executemany(
         "INSERT INTO workspaces (id, label) VALUES (?, ?)",
         workspaces or [("ws-1", "Workspace 1")],
@@ -594,6 +612,14 @@ def _scoped_lightning_conn(
         " VALUES (?, ?, ?, ?, ?)",
         rows,
     )
+    if backends:
+        conn.executemany(
+            "INSERT INTO backends ("
+            " name, kind, url, config_json, created_at, updated_at)"
+            " VALUES (?, ?, ?, '{}', '2026-01-01T00:00:00Z',"
+            " '2026-01-01T00:00:00Z')",
+            backends,
+        )
     conn.execute(
         "INSERT INTO settings (key, value) VALUES (?, ?)",
         ("context_workspace", default_workspace),
@@ -740,7 +766,8 @@ class ResolveLightningConnectionTest(unittest.TestCase):
 class LightningDaemonPayloadTest(unittest.TestCase):
     def _conn_with_lightning_wallet(self) -> sqlite3.Connection:
         return _scoped_lightning_conn(
-            [("w-1", "Home CLN", "coreln", "pf-1", '{"backend": "home-backend"}')]
+            [("w-1", "Home CLN", "coreln", "pf-1", '{"backend": "home-backend"}')],
+            backends=[("home-backend", "coreln", "cln://local")],
         )
 
     @contextmanager
