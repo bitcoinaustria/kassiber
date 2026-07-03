@@ -1393,6 +1393,186 @@ class SyncBackendsTest(unittest.TestCase):
         self.assertEqual(len(records), 1)
         self.assertEqual(records[0]["txid"], "44" * 32)
 
+    def test_bitcoinrpc_records_store_verbose_graph_for_outbound_rows(self):
+        target = {"address": "bc1qchange", "script_pubkey": "0014" + "ab" * 20}
+        sync_state = WalletSyncState(
+            chain="bitcoin",
+            network="bitcoin",
+            descriptor_plan=None,
+            policy_asset_id="",
+            targets=[target],
+            tracked_scripts={target["script_pubkey"]: target},
+            history_cache={},
+        )
+        txid = "55" * 32
+
+        def fake_bitcoinrpc_call(backend, method, params=None, wallet_name=None, timeout=None):
+            del backend, timeout
+            key = (method, tuple(params or ()), wallet_name)
+            if key == ("listtransactions", ("*", 1000, 0, True), "kassiber-wallet-1"):
+                return [
+                    {
+                        "txid": txid,
+                        "category": "send",
+                        "amount": -0.0375,
+                        "fee": -0.00001,
+                        "blocktime": 1_700_000_200,
+                    },
+                ]
+            if key == ("getbestblockhash", (), None):
+                return "bb" * 32
+            if key == ("gettransaction", (txid, True, True), "kassiber-wallet-1"):
+                return {
+                    "decoded": {
+                        "txid": txid,
+                        "vin": [
+                            {
+                                "txid": "44" * 32,
+                                "vout": 2,
+                                "prevout": {
+                                    "value": 1.0,
+                                    "scriptPubKey": {"hex": target["script_pubkey"]},
+                                },
+                            }
+                        ],
+                        "vout": [
+                            {
+                                "n": 0,
+                                "value": 0.0375,
+                                "scriptPubKey": {"hex": "0014" + "cd" * 20},
+                            },
+                            {
+                                "n": 1,
+                                "value": 0.96249,
+                                "scriptPubKey": {"hex": target["script_pubkey"]},
+                            },
+                        ],
+                    }
+                }
+            raise AssertionError(f"Unexpected RPC call: {key!r}")
+
+        with patch("kassiber.core.sync_backends.bitcoinrpc_call", side_effect=fake_bitcoinrpc_call):
+            records, meta = sb.bitcoinrpc_records_for_wallet(
+                {"name": "core", "kind": "bitcoinrpc", "url": "http://core.example"},
+                {"id": "wallet-1"},
+                ["bc1qchange"],
+                wallet_name="kassiber-wallet-1",
+                imported_count=0,
+                sync_state=sync_state,
+            )
+
+        self.assertEqual(meta["bitcoinrpc_last_block"], "bb" * 32)
+        self.assertEqual(len(records), 1)
+        self.assertEqual(records[0]["direction"], "outbound")
+        self.assertAlmostEqual(float(records[0]["amount"]), 0.0375, places=8)
+        self.assertAlmostEqual(float(records[0]["fee"]), 0.00001, places=8)
+        raw = json.loads(records[0]["raw_json"])
+        self.assertEqual(raw["source"], "bitcoinrpc_gettransaction")
+        self.assertEqual(raw["vin"][0]["txid"], "44" * 32)
+        self.assertEqual(raw["vout"][0]["scriptpubkey"], "0014" + "cd" * 20)
+        self.assertEqual(raw["vout"][1]["scriptpubkey"], target["script_pubkey"])
+
+    def test_bitcoinrpc_verbose_graph_cache_feeds_utxo_metadata(self):
+        target = {"address": "bc1qchange", "script_pubkey": "0014" + "ab" * 20}
+        sync_state = WalletSyncState(
+            chain="bitcoin",
+            network="bitcoin",
+            descriptor_plan=None,
+            policy_asset_id="",
+            targets=[target],
+            tracked_scripts={target["script_pubkey"]: target},
+            history_cache={},
+        )
+        txid = "58" * 32
+        calls = []
+
+        def fake_bitcoinrpc_call(backend, method, params=None, wallet_name=None, timeout=None):
+            del backend, timeout
+            key = (method, tuple(params or ()), wallet_name)
+            calls.append(key)
+            if key == ("listtransactions", ("*", 1000, 0, True), "kassiber-wallet-1"):
+                return [
+                    {
+                        "txid": txid,
+                        "category": "send",
+                        "amount": -0.0375,
+                        "fee": -0.00001,
+                        "blocktime": 1_700_000_200,
+                    },
+                ]
+            if key == ("getbestblockhash", (), None):
+                return "bb" * 32
+            if key == ("gettransaction", (txid, True, True), "kassiber-wallet-1"):
+                return {
+                    "blockhash": "cc" * 32,
+                    "blocktime": 1_700_000_200,
+                    "decoded": {
+                        "txid": txid,
+                        "vin": [
+                            {
+                                "txid": "44" * 32,
+                                "vout": 0,
+                                "prevout": {
+                                    "value": 0.03751,
+                                    "scriptPubKey": {"hex": target["script_pubkey"]},
+                                },
+                            }
+                        ],
+                        "vout": [
+                            {
+                                "n": 0,
+                                "value": 0.0375,
+                                "scriptPubKey": {"hex": "0014" + "cd" * 20},
+                            },
+                        ],
+                    },
+                }
+            if key == (
+                "listunspent",
+                (0, 9999999, ["bc1qchange"], True),
+                "kassiber-wallet-1",
+            ):
+                return [
+                    {
+                        "txid": txid,
+                        "vout": 1,
+                        "address": "bc1qchange",
+                        "amount": 0.001,
+                        "confirmations": 2,
+                    }
+                ]
+            if key == ("getblockheader", ("cc" * 32,), None):
+                return {"height": 321}
+            raise AssertionError(f"Unexpected RPC call: {key!r}")
+
+        with patch("kassiber.core.sync_backends.bitcoinrpc_call", side_effect=fake_bitcoinrpc_call):
+            records, meta = sb.bitcoinrpc_records_for_wallet(
+                {"name": "core", "kind": "bitcoinrpc", "url": "http://core.example"},
+                {"id": "wallet-1"},
+                ["bc1qchange"],
+                wallet_name="kassiber-wallet-1",
+                imported_count=0,
+                sync_state=sync_state,
+            )
+            utxos = sb.bitcoinrpc_utxos_for_wallet_name(
+                {"name": "core", "kind": "bitcoinrpc", "url": "http://core.example"},
+                "kassiber-wallet-1",
+                ["bc1qchange"],
+                sync_state,
+                tx_cache=meta["_bitcoinrpc_verbose_tx_cache"],
+            )
+
+        self.assertEqual(len(records), 1)
+        self.assertEqual(utxos[0]["block_height"], 321)
+        self.assertEqual(
+            [
+                call
+                for call in calls
+                if call[0] == "gettransaction"
+            ],
+            [("gettransaction", (txid, True, True), "kassiber-wallet-1")],
+        )
+
     def test_bitcoinrpc_sinceblock_immature_rows_keep_maturity_checkpoint(self):
         target = {"address": "bc1qcore", "script_pubkey": "0014core"}
         sync_state = WalletSyncState(
@@ -1995,12 +2175,213 @@ class SyncBackendsTest(unittest.TestCase):
                 {"category": "send", "amount": -0.3, "fee": -0.0001, "blocktime": 1_700_000_000},
             ],
             "core",
+            raw_graph={
+                "vin": [
+                    {
+                        "prevout": {
+                            "scriptpubkey": "0014" + "ef" * 20,
+                            "value": 80_010_000,
+                        }
+                    }
+                ],
+                "vout": [
+                    {"scriptpubkey": "0014" + "ab" * 20, "value": 50_000_000},
+                    {"scriptpubkey": "0014" + "cd" * 20, "value": 30_000_000},
+                ]
+            },
+            tracked_scripts={"0014" + "ef" * 20},
         )
         self.assertEqual(record["direction"], "outbound")
         # fee booked once (0.0001), not summed to 0.0002.
         self.assertAlmostEqual(float(record["fee"]), 0.0001, places=8)
-        # amount = gross_out (0.8) - fee (0.0001), not - 0.0002.
+        # With a decoded graph, the recipient amount remains 0.8 and the fee is
+        # a separate ledger component.
+        self.assertAlmostEqual(float(record["amount"]), 0.8, places=8)
+
+    def test_bitcoinrpc_multi_output_send_legacy_fallback_keeps_net_details_amount(self):
+        record = record_from_bitcoinrpc_details(
+            "66" * 32,
+            [
+                {"category": "send", "amount": -0.5, "fee": -0.0001, "blocktime": 1_700_000_000},
+                {"category": "send", "amount": -0.3, "fee": -0.0001, "blocktime": 1_700_000_000},
+            ],
+            "core",
+        )
+        self.assertEqual(record["direction"], "outbound")
+        self.assertAlmostEqual(float(record["fee"]), 0.0001, places=8)
         self.assertAlmostEqual(float(record["amount"]), 0.7999, places=8)
+
+    def test_bitcoinrpc_multi_source_graph_keeps_wallet_local_amount(self):
+        record = record_from_bitcoinrpc_details(
+            "66" * 32,
+            [
+                {"category": "send", "amount": -0.3, "fee": -0.0001, "blocktime": 1_700_000_000},
+            ],
+            "core",
+            raw_graph={
+                "vin": [
+                    {
+                        "prevout": {
+                            "scriptpubkey": "0014" + "ab" * 20,
+                            "value": 30_000_000,
+                        }
+                    },
+                    {
+                        "prevout": {
+                            "scriptpubkey": "0014" + "cd" * 20,
+                            "value": 70_000_000,
+                        }
+                    },
+                ],
+                "vout": [
+                    {"scriptpubkey": "0014" + "ef" * 20, "value": 99_990_000},
+                ],
+            },
+            tracked_scripts={"0014" + "ab" * 20},
+        )
+        self.assertEqual(record["direction"], "outbound")
+        self.assertAlmostEqual(float(record["amount"]), 0.2999, places=8)
+
+    def test_bitcoinrpc_mixed_input_graph_marks_privacy_boundary(self):
+        record = record_from_bitcoinrpc_details(
+            "66" * 32,
+            [
+                {"category": "send", "amount": -0.3, "fee": -0.0001, "blocktime": 1_700_000_000},
+            ],
+            "core",
+            raw_graph={
+                "vin": [
+                    {
+                        "prevout": {
+                            "scriptpubkey": "0014" + "ab" * 20,
+                            "value": 30_000_000,
+                        }
+                    },
+                    {
+                        "prevout": {
+                            "scriptpubkey": "0014" + "cd" * 20,
+                            "value": 70_000_000,
+                        }
+                    },
+                ],
+                "vout": [
+                    {"scriptpubkey": "0014" + "ef" * 20, "value": 99_990_000},
+                ],
+            },
+            tracked_scripts={"0014" + "ab" * 20},
+        )
+        self.assertEqual(record["privacy_boundary"], "payjoin")
+        raw_json = json.loads(record["raw_json"])
+        self.assertEqual(raw_json["privacy_boundary"], "payjoin")
+
+    def test_bitcoinrpc_verbose_transaction_graph_is_esplora_shaped(self):
+        graph = sb._bitcoinrpc_normalized_graph(
+            "66" * 32,
+            {
+                "decoded": {
+                    "txid": "66" * 32,
+                    "vin": [{"txid": "55" * 32, "vout": 1}],
+                    "vout": [
+                        {
+                            "n": 0,
+                            "value": 0.12345678,
+                            "scriptPubKey": {"hex": "0014" + "ab" * 20},
+                        }
+                    ],
+                }
+            },
+        )
+        self.assertEqual(graph["vin"][0]["txid"], "55" * 32)
+        self.assertEqual(graph["vin"][0]["vout"], 1)
+        self.assertEqual(graph["vout"][0]["scriptpubkey"], "0014" + "ab" * 20)
+        self.assertEqual(graph["vout"][0]["value"], 12_345_678)
+
+    def test_bitcoinrpc_graph_unavailable_keeps_sync_incomplete(self):
+        target = {"address": "bc1qchange", "script_pubkey": "0014" + "ab" * 20}
+        sync_state = WalletSyncState(
+            chain="bitcoin",
+            network="bitcoin",
+            descriptor_plan=None,
+            policy_asset_id="",
+            targets=[target],
+            tracked_scripts={target["script_pubkey"]: target},
+            history_cache={},
+        )
+        txid = "56" * 32
+
+        def fake_bitcoinrpc_call(backend, method, params=None, wallet_name=None, timeout=None):
+            del backend, timeout
+            key = (method, tuple(params or ()), wallet_name)
+            if key == ("listtransactions", ("*", 1000, 0, True), "kassiber-wallet-1"):
+                return [
+                    {
+                        "txid": txid,
+                        "category": "send",
+                        "amount": -0.3,
+                        "fee": -0.00001,
+                        "blocktime": 1_700_000_200,
+                    },
+                ]
+            if key == ("getbestblockhash", (), None):
+                return "bb" * 32
+            if key == ("gettransaction", (txid, True, True), "kassiber-wallet-1"):
+                raise AppError("temporary Core failure")
+            raise AssertionError(f"Unexpected RPC call: {key!r}")
+
+        with patch("kassiber.core.sync_backends.bitcoinrpc_call", side_effect=fake_bitcoinrpc_call):
+            records, meta = sb.bitcoinrpc_records_for_wallet(
+                {"name": "core", "kind": "bitcoinrpc", "url": "http://core.example"},
+                {"id": "wallet-1"},
+                ["bc1qchange"],
+                wallet_name="kassiber-wallet-1",
+                imported_count=0,
+                sync_state=sync_state,
+            )
+
+        self.assertEqual(len(records), 1)
+        self.assertEqual(meta["bitcoinrpc_graph_unavailable_txids"], [txid])
+        self.assertNotIn("bitcoinrpc_last_block", meta)
+
+    def test_bitcoinrpc_missing_verbose_graph_assertion_is_not_swallowed(self):
+        target = {"address": "bc1qchange", "script_pubkey": "0014" + "ab" * 20}
+        sync_state = WalletSyncState(
+            chain="bitcoin",
+            network="bitcoin",
+            descriptor_plan=None,
+            policy_asset_id="",
+            targets=[target],
+            tracked_scripts={target["script_pubkey"]: target},
+            history_cache={},
+        )
+        txid = "57" * 32
+
+        def fake_bitcoinrpc_call(backend, method, params=None, wallet_name=None, timeout=None):
+            del backend, timeout
+            key = (method, tuple(params or ()), wallet_name)
+            if key == ("listtransactions", ("*", 1000, 0, True), "kassiber-wallet-1"):
+                return [
+                    {
+                        "txid": txid,
+                        "category": "send",
+                        "amount": -0.3,
+                        "fee": -0.00001,
+                        "blocktime": 1_700_000_200,
+                    },
+                ]
+            if key == ("getbestblockhash", (), None):
+                return "bb" * 32
+            raise AssertionError(f"Unexpected RPC call: {key!r}")
+
+        with patch("kassiber.core.sync_backends.bitcoinrpc_call", side_effect=fake_bitcoinrpc_call):
+            with self.assertRaises(AssertionError):
+                sb.bitcoinrpc_records_for_wallet(
+                    {"name": "core", "kind": "bitcoinrpc", "url": "http://core.example"},
+                    {"id": "wallet-1"},
+                    ["bc1qchange"],
+                    wallet_name="kassiber-wallet-1",
+                    imported_count=0,
+                    sync_state=sync_state,
+                )
 
     def test_bitcoinrpc_conflicted_details_are_skipped(self):
         # An RBF-replaced original stays in the wallet with negative

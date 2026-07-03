@@ -64,10 +64,11 @@ def parse_vin_outpoints(raw_json: Any) -> list[tuple[str, int]]:
     """Extract input outpoints ``(prev_txid_lower, vout)`` from a stored tx.
 
     Handles the stored shapes that carry structured inputs: esplora's
-    upstream tx JSON, electrum's locally-decoded transaction, and Liquid
-    component records (all carry ``vin`` entries with ``txid`` + ``vout``).
-    Rows without chain structure (CSV imports, bitcoinrpc sync) yield an
-    empty list.
+    upstream tx JSON, Bitcoin Core's normalized decoded graph, electrum's
+    locally-decoded transaction, and Liquid component records (all carry
+    ``vin`` entries with ``txid`` + ``vout``). Rows without chain structure
+    (CSV imports or legacy bitcoinrpc rows without verbose graph data) yield
+    an empty list.
     """
     payload = _safe_json_loads(raw_json)
     if not isinstance(payload, dict):

@@ -1,4 +1,8 @@
-"""CLI entrypoints for kassiber."""
+"""CLI entrypoints for kassiber.
+
+Keep this package import light: daemon helpers import ``kassiber.cli.handlers``
+directly, and importing the full argparse entrypoint here creates daemon cycles.
+"""
 
 from __future__ import annotations
 

@@ -478,8 +478,8 @@ class OutputInventoryTest(unittest.TestCase):
         receive_txid = "aa" * 32
         change_txid = "bb" * 32
 
-        def fake_fetch(_base_url, script_pubkey, timeout=30):
-            del timeout
+        def fake_fetch(_base_url, script_pubkey, timeout=30, proxy_url=None):
+            del timeout, proxy_url
             if script_pubkey == target_receive["script_pubkey"]:
                 return [
                     {

@@ -184,6 +184,31 @@ def validate_scenario(scenario: dict[str, Any]) -> None:
         for amount_field in ("amount_btc", "fee_btc", "payment_btc", "equal_output_btc", "replacement_fee_btc"):
             if amount_field in operation:
                 _btc(operation[amount_field])
+        if kind == "self_transfer_fanout":
+            outputs = operation.get("outputs")
+            if not isinstance(outputs, list) or len(outputs) < 2:
+                raise ValueError(f"Scenario operation {op_id} must have at least two fan-out outputs")
+            destinations = []
+            for output_index, output in enumerate(outputs, start=1):
+                if not isinstance(output, dict):
+                    raise ValueError(f"Scenario operation {op_id} output {output_index} must be an object")
+                to_key = output.get("to")
+                if to_key not in wallet_key_set:
+                    raise ValueError(
+                        f"Scenario operation {op_id} output {output_index} references unknown wallet: {to_key}"
+                    )
+                if to_key not in core_wallet_keys:
+                    raise ValueError(
+                        f"Scenario operation {op_id} output {output_index} references non-Core wallet: {to_key}"
+                    )
+                if to_key == operation.get("from"):
+                    raise ValueError(
+                        f"Scenario operation {op_id} output {output_index} cannot pay the source wallet"
+                    )
+                _btc(output.get("amount_btc"))
+                destinations.append(to_key)
+            if len(set(destinations)) != len(destinations):
+                raise ValueError(f"Scenario operation {op_id} fan-out destinations must be unique")
         if kind == "rbf_replaced_payment":
             if "replacement_fee_btc" not in operation:
                 raise ValueError(f"Scenario operation {op_id} is missing replacement_fee_btc")
@@ -957,6 +982,22 @@ def _send_batched_payment(
         )
         outputs[address] = _btc(value)
     return _send_from_wallet(url, username, password, wallet, outputs, _btc(operation["fee_btc"]))
+
+
+def _send_self_transfer_fanout(
+    url: str,
+    username: str,
+    password: str,
+    wallets: dict[str, DemoWallet],
+    operation: dict[str, Any],
+) -> str:
+    sender = wallets[operation["from"]]
+    outputs: dict[str, Decimal] = {}
+    for output in operation["outputs"]:
+        receiver = wallets[output["to"]]
+        address = receiver.receive_address()
+        outputs[address] = outputs.get(address, Decimal("0")) + _btc(output["amount_btc"])
+    return _send_from_wallet(url, username, password, sender, outputs, _btc(operation["fee_btc"]))
 
 
 def _send_incoming_burst(
@@ -1838,6 +1879,74 @@ def _seed_rates_and_process(data_root: Path, scenario: dict[str, Any]) -> tuple[
     return journal, transactions, rate_seed
 
 
+def _expected_ownership_fanout_routes(scenario: dict[str, Any]) -> list[dict[str, Any]]:
+    labels = {wallet["key"]: wallet["label"] for wallet in scenario["wallets"]}
+    routes = []
+    for operation in scenario["operations"]:
+        if operation.get("kind") != "self_transfer_fanout":
+            continue
+        for output in operation.get("outputs") or []:
+            routes.append(
+                {
+                    "operation": operation["id"],
+                    "from_wallet": labels[operation["from"]],
+                    "to_wallet": labels[output["to"]],
+                    "received_msat": int(_btc(output["amount_btc"]) * Decimal("100000000000")),
+                }
+            )
+    return routes
+
+
+def _assert_ownership_self_transfer_matching(
+    data_root: Path,
+    scenario: dict[str, Any],
+) -> dict[str, Any]:
+    """Prove ownership-derived transfer matching before manual pairs hide it."""
+    scope = _scope(scenario)
+    existing_pairs = run_cli(data_root, "transfers", "list", *scope)["data"]
+    if existing_pairs:
+        raise RuntimeError(
+            "Ownership-derived regtest proof must run before manual transaction_pairs exist"
+        )
+    journal, _transactions, rate_seed = _seed_rates_and_process(data_root, scenario)
+    audit = run_cli(data_root, "journals", "transfers", "list", *scope)["data"]
+    expected_routes = _expected_ownership_fanout_routes(scenario)
+    observed_routes = [
+        {
+            "from_wallet": row.get("from_wallet"),
+            "to_wallet": row.get("to_wallet"),
+            "received_msat": int(row.get("received_msat") or 0),
+        }
+        for row in audit.get("same_asset_transfers") or []
+        if row.get("pairing_source") == "ownership_derived"
+    ]
+    missing = []
+    for route in expected_routes:
+        expected = {
+            "from_wallet": route["from_wallet"],
+            "to_wallet": route["to_wallet"],
+            "received_msat": route["received_msat"],
+        }
+        if expected not in observed_routes:
+            missing.append(route)
+    expected_count = int(
+        scenario.get("expected", {}).get("ownership_derived_transfer_pairs")
+        or len(expected_routes)
+    )
+    if len(observed_routes) != expected_count or missing:
+        raise RuntimeError(
+            "Ownership-derived self-transfer matching did not satisfy the regtest "
+            f"expectation: expected_count={expected_count}, "
+            f"observed={observed_routes}, missing={missing}"
+        )
+    return {
+        "journal": journal,
+        "rates": rate_seed,
+        "expected_routes": expected_routes,
+        "observed_routes": observed_routes,
+    }
+
+
 def _pair_transfers(data_root: Path, scenario: dict[str, Any], txids: dict[str, str]) -> list[dict[str, Any]]:
     scope = _scope(scenario)
     paired = []
@@ -2622,6 +2731,14 @@ def run_demo(
                     faucet_wallet,
                     operation,
                 )
+            elif kind == "self_transfer_fanout":
+                txids[operation["id"]] = _send_self_transfer_fanout(
+                    url,
+                    username,
+                    password,
+                    wallets,
+                    operation,
+                )
             elif kind == "incoming_burst":
                 _send_incoming_burst(
                     url,
@@ -2758,6 +2875,7 @@ def run_demo(
             "asc",
         )["data"]
         collaborative_excluded = _exclude_collaborative_shapes(data_root, scenario, txids, transactions)
+        ownership_matching = _assert_ownership_self_transfer_matching(data_root, scenario)
         pairs = _pair_transfers(data_root, scenario, txids)
         loan_result = _mark_loans(data_root, scenario, txids)
         deprecated_wallets = _mark_deprecated_wallets(data_root, scenario, wallets)
@@ -2881,6 +2999,7 @@ def run_demo(
                 "transfers": {
                     "paired": pairs,
                     "count": len(transfer_listing),
+                    "ownership_matching": ownership_matching,
                 },
                 "collaborative_excluded": collaborative_excluded,
                 "loans": {

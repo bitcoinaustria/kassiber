@@ -971,6 +971,469 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual(unknown_filter.exception.code, "validation")
         self.assertEqual(unknown_filter.exception.details, {"unknown": ["limit"]})
 
+    def test_overview_wallet_balance_prefers_processed_book_quantity(self):
+        conn = open_db(self.data_root)
+        self.addCleanup(conn.close)
+        now = "2026-01-01T00:00:00Z"
+        conn.execute(
+            "INSERT INTO workspaces(id, label, created_at) VALUES(?, ?, ?)",
+            ("ws-book-balance", "Book Balance Workspace", now),
+        )
+        conn.execute(
+            """
+            INSERT INTO profiles(
+                id, workspace_id, label, fiat_currency, tax_country,
+                tax_long_term_days, gains_algorithm, last_processed_at,
+                last_processed_tx_count, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "pf-book-balance",
+                "ws-book-balance",
+                "Book Balance Profile",
+                "EUR",
+                "generic",
+                365,
+                "FIFO",
+                "2026-01-02T00:00:00Z",
+                2,
+                now,
+            ),
+        )
+        conn.execute(
+            """
+            INSERT INTO wallets(
+                id, workspace_id, profile_id, label, kind, config_json, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "wal-book",
+                "ws-book-balance",
+                "pf-book-balance",
+                "Cold Wallet",
+                "address",
+                "{}",
+                now,
+            ),
+        )
+        conn.executemany(
+            """
+            INSERT INTO transactions(
+                id, workspace_id, profile_id, wallet_id, external_id, fingerprint,
+                occurred_at, confirmed_at, direction, asset, amount, fee,
+                fiat_currency, fiat_rate, fiat_value, fiat_price_source, kind,
+                description, counterparty, note, excluded, raw_json, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                (
+                    "tx-book-in",
+                    "ws-book-balance",
+                    "pf-book-balance",
+                    "wal-book",
+                    "book-in",
+                    "fp-book-in",
+                    "2026-01-01T10:00:00Z",
+                    "2026-01-01T10:10:00Z",
+                    "inbound",
+                    "BTC",
+                    btc_to_msat("1.0"),
+                    0,
+                    "EUR",
+                    50_000,
+                    50_000,
+                    "import",
+                    "transfer",
+                    "Initial funding",
+                    "Exchange",
+                    None,
+                    0,
+                    "{}",
+                    "2026-01-01T10:00:00Z",
+                ),
+                (
+                    "tx-book-review",
+                    "ws-book-balance",
+                    "pf-book-balance",
+                    "wal-book",
+                    "review-out",
+                    "fp-book-review",
+                    "2026-01-02T12:00:00Z",
+                    "2026-01-02T12:10:00Z",
+                    "outbound",
+                    "BTC",
+                    btc_to_msat("0.4"),
+                    btc_to_msat("0.001"),
+                    "EUR",
+                    50_000,
+                    20_000,
+                    "import",
+                    "payment",
+                    "Needs review",
+                    "Counterparty",
+                    None,
+                    0,
+                    "{}",
+                    "2026-01-02T12:00:00Z",
+                ),
+            ],
+        )
+        conn.execute(
+            """
+            INSERT INTO journal_entries(
+                id, workspace_id, profile_id, transaction_id, wallet_id,
+                occurred_at, entry_type, asset, quantity, fiat_value, unit_cost,
+                cost_basis, proceeds, gain_loss, description, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "je-book-in",
+                "ws-book-balance",
+                "pf-book-balance",
+                "tx-book-in",
+                "wal-book",
+                "2026-01-01T10:00:00Z",
+                "acquisition",
+                "BTC",
+                btc_to_msat("1.0"),
+                50_000,
+                50_000,
+                None,
+                None,
+                None,
+                "Initial funding",
+                "2026-01-01T10:00:00Z",
+            ),
+        )
+        conn.execute(
+            """
+            INSERT INTO journal_quarantines(
+                transaction_id, workspace_id, profile_id, reason, detail_json, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "tx-book-review",
+                "ws-book-balance",
+                "pf-book-balance",
+                "needs_review",
+                "{}",
+                now,
+            ),
+        )
+        conn.execute(
+            """
+            INSERT INTO rates_cache(pair, timestamp, rate, source, fetched_at)
+            VALUES(?, ?, ?, ?, ?)
+            """,
+            ("BTC-EUR", "2026-01-02T00:00:00Z", 50_000, "manual", now),
+        )
+        set_setting(conn, "context_workspace", "ws-book-balance")
+        set_setting(conn, "context_profile", "pf-book-balance")
+        conn.commit()
+
+        overview = build_overview_snapshot(conn)
+
+        # Raw imported activity is 0.599 BTC, but the processed book still holds
+        # 1.0 BTC because the outflow is quarantined. The wallet tile and fiat
+        # overview must follow the book/report quantity, not the raw import sum.
+        self.assertAlmostEqual(overview["connections"][0]["balance"], 1.0)
+        self.assertAlmostEqual(overview["balanceSeries"][-1], 1.0)
+        self.assertAlmostEqual(overview["fiat"]["eurBalance"], 50_000)
+        self.assertAlmostEqual(overview["portfolioSeries"][-1]["balanceBtc"], 1.0)
+        self.assertAlmostEqual(overview["portfolioSeries"][-1]["valueEur"], 50_000)
+        activity_by_id = {row["id"]: row for row in overview["activityTxs"]}
+        self.assertAlmostEqual(activity_by_id["tx-book-review"]["balanceBtc"], 1.0)
+
+    def test_overview_wallet_balance_uses_zero_book_when_all_rows_quarantined(self):
+        conn = open_db(self.data_root)
+        self.addCleanup(conn.close)
+        now = "2026-01-01T00:00:00Z"
+        conn.execute(
+            "INSERT INTO workspaces(id, label, created_at) VALUES(?, ?, ?)",
+            ("ws-all-quarantine", "All Quarantine Workspace", now),
+        )
+        conn.execute(
+            """
+            INSERT INTO profiles(
+                id, workspace_id, label, fiat_currency, tax_country,
+                tax_long_term_days, gains_algorithm, last_processed_at,
+                last_processed_tx_count, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "pf-all-quarantine",
+                "ws-all-quarantine",
+                "All Quarantine Profile",
+                "EUR",
+                "generic",
+                365,
+                "FIFO",
+                "2026-01-02T00:00:00Z",
+                1,
+                now,
+            ),
+        )
+        conn.execute(
+            """
+            INSERT INTO wallets(
+                id, workspace_id, profile_id, label, kind, config_json, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "wal-all-quarantine",
+                "ws-all-quarantine",
+                "pf-all-quarantine",
+                "Review Wallet",
+                "address",
+                "{}",
+                now,
+            ),
+        )
+        conn.execute(
+            """
+            INSERT INTO transactions(
+                id, workspace_id, profile_id, wallet_id, external_id, fingerprint,
+                occurred_at, confirmed_at, direction, asset, amount, fee,
+                fiat_currency, fiat_rate, fiat_value, fiat_price_source, kind,
+                description, counterparty, note, excluded, raw_json, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "tx-all-quarantine",
+                "ws-all-quarantine",
+                "pf-all-quarantine",
+                "wal-all-quarantine",
+                "all-quarantine-in",
+                "fp-all-quarantine",
+                "2026-01-01T10:00:00Z",
+                "2026-01-01T10:10:00Z",
+                "inbound",
+                "BTC",
+                btc_to_msat("0.25"),
+                0,
+                "EUR",
+                None,
+                None,
+                None,
+                "deposit",
+                "Needs review",
+                None,
+                None,
+                0,
+                "{}",
+                now,
+            ),
+        )
+        conn.execute(
+            """
+            INSERT INTO journal_quarantines(
+                transaction_id, workspace_id, profile_id, reason, detail_json, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "tx-all-quarantine",
+                "ws-all-quarantine",
+                "pf-all-quarantine",
+                "missing_spot_price",
+                "{}",
+                now,
+            ),
+        )
+        conn.execute(
+            """
+            INSERT INTO rates_cache(pair, timestamp, rate, source, fetched_at)
+            VALUES(?, ?, ?, ?, ?)
+            """,
+            ("BTC-EUR", "2026-01-02T00:00:00Z", 50_000, "manual", now),
+        )
+        set_setting(conn, "context_workspace", "ws-all-quarantine")
+        set_setting(conn, "context_profile", "pf-all-quarantine")
+        conn.commit()
+
+        overview = build_overview_snapshot(conn)
+
+        self.assertFalse(overview["status"]["needsJournals"])
+        self.assertEqual(overview["status"]["quarantines"], 1)
+        self.assertAlmostEqual(overview["connections"][0]["balance"], 0.0)
+        self.assertAlmostEqual(overview["balanceSeries"][-1], 0.0)
+        self.assertAlmostEqual(overview["fiat"]["eurBalance"], 0.0)
+        self.assertAlmostEqual(overview["portfolioSeries"][-1]["balanceBtc"], 0.0)
+        self.assertAlmostEqual(overview["portfolioSeries"][-1]["valueEur"], 0.0)
+        self.assertAlmostEqual(overview["activityTxs"][0]["balanceBtc"], 0.0)
+
+    def test_overview_wallet_balance_uses_raw_transactions_when_journals_are_stale(self):
+        conn = open_db(self.data_root)
+        self.addCleanup(conn.close)
+        now = "2026-01-01T00:00:00Z"
+        conn.execute(
+            "INSERT INTO workspaces(id, label, created_at) VALUES(?, ?, ?)",
+            ("ws-stale-book", "Stale Book Workspace", now),
+        )
+        conn.execute(
+            """
+            INSERT INTO profiles(
+                id, workspace_id, label, fiat_currency, tax_country,
+                tax_long_term_days, gains_algorithm, last_processed_at,
+                last_processed_tx_count, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "pf-stale-book",
+                "ws-stale-book",
+                "Stale Book Profile",
+                "EUR",
+                "generic",
+                365,
+                "FIFO",
+                "2026-01-02T00:00:00Z",
+                1,
+                now,
+            ),
+        )
+        conn.execute(
+            """
+            INSERT INTO wallets(
+                id, workspace_id, profile_id, label, kind, config_json, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?)
+            """,
+            ("wal-stale", "ws-stale-book", "pf-stale-book", "Stale Wallet", "address", "{}", now),
+        )
+        conn.executemany(
+            """
+            INSERT INTO transactions(
+                id, workspace_id, profile_id, wallet_id, external_id, fingerprint,
+                occurred_at, confirmed_at, direction, asset, amount, fee,
+                fiat_currency, fiat_rate, fiat_value, fiat_price_source, kind,
+                description, counterparty, note, excluded, raw_json, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                (
+                    "tx-stale-old",
+                    "ws-stale-book",
+                    "pf-stale-book",
+                    "wal-stale",
+                    "stale-old",
+                    "fp-stale-old",
+                    "2026-01-01T10:00:00Z",
+                    "2026-01-01T10:10:00Z",
+                    "inbound",
+                    "BTC",
+                    btc_to_msat("1.0"),
+                    0,
+                    "EUR",
+                    50_000,
+                    50_000,
+                    "import",
+                    "deposit",
+                    "Processed funding",
+                    None,
+                    None,
+                    0,
+                    "{}",
+                    now,
+                ),
+                (
+                    "tx-stale-new",
+                    "ws-stale-book",
+                    "pf-stale-book",
+                    "wal-stale",
+                    "stale-new",
+                    "fp-stale-new",
+                    "2026-01-02T10:00:00Z",
+                    "2026-01-02T10:10:00Z",
+                    "inbound",
+                    "BTC",
+                    btc_to_msat("0.25"),
+                    0,
+                    "EUR",
+                    50_000,
+                    12_500,
+                    "import",
+                    "deposit",
+                    "Unprocessed funding",
+                    None,
+                    None,
+                    0,
+                    "{}",
+                    now,
+                ),
+                (
+                    "tx-stale-excluded",
+                    "ws-stale-book",
+                    "pf-stale-book",
+                    "wal-stale",
+                    "stale-excluded",
+                    "fp-stale-excluded",
+                    "2026-01-02T11:00:00Z",
+                    "2026-01-02T11:10:00Z",
+                    "inbound",
+                    "BTC",
+                    btc_to_msat("0.5"),
+                    0,
+                    "EUR",
+                    50_000,
+                    25_000,
+                    "import",
+                    "deposit",
+                    "Excluded duplicate",
+                    None,
+                    None,
+                    1,
+                    "{}",
+                    now,
+                ),
+            ],
+        )
+        conn.execute(
+            """
+            INSERT INTO journal_entries(
+                id, workspace_id, profile_id, transaction_id, wallet_id,
+                occurred_at, entry_type, asset, quantity, fiat_value, unit_cost,
+                cost_basis, proceeds, gain_loss, description, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "je-stale-old",
+                "ws-stale-book",
+                "pf-stale-book",
+                "tx-stale-old",
+                "wal-stale",
+                "2026-01-01T10:00:00Z",
+                "acquisition",
+                "BTC",
+                btc_to_msat("1.0"),
+                50_000,
+                50_000,
+                None,
+                None,
+                None,
+                "Processed funding",
+                now,
+            ),
+        )
+        conn.execute(
+            "INSERT INTO rates_cache(pair, timestamp, rate, source, fetched_at) VALUES(?, ?, ?, ?, ?)",
+            ("BTC-EUR", "2026-01-02T00:00:00Z", 50_000, "manual", now),
+        )
+        set_setting(conn, "context_workspace", "ws-stale-book")
+        set_setting(conn, "context_profile", "pf-stale-book")
+        conn.commit()
+
+        overview = build_overview_snapshot(conn)
+
+        self.assertTrue(overview["status"]["needsJournals"])
+        self.assertAlmostEqual(overview["connections"][0]["balance"], 1.25)
+        self.assertAlmostEqual(overview["balanceSeries"][-1], 1.25)
+        self.assertAlmostEqual(overview["fiat"]["eurBalance"], 62_500)
+        self.assertAlmostEqual(overview["portfolioSeries"][-1]["balanceBtc"], 1.25)
+        self.assertAlmostEqual(overview["portfolioSeries"][-1]["valueEur"], 62_500)
+        self.assertAlmostEqual(overview["activityTxs"][-1]["balanceBtc"], 1.25)
+        self.assertNotIn(
+            "tx-stale-excluded",
+            {row["id"] for row in overview["activityTxs"]},
+        )
+
     def test_overview_market_rate_uses_active_book_fiat_currency(self):
         conn = open_db(self.data_root)
         self.addCleanup(conn.close)
@@ -1545,7 +2008,7 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertAlmostEqual(payment_activity[0]["balanceBtc"], 0.11413298)
         self.assertAlmostEqual(overview["fiat"]["eurBalance"], 7076.24476, places=4)
 
-    def test_overview_connection_balances_use_raw_wallet_transactions_when_journals_are_partial(self):
+    def test_overview_connection_balances_use_book_quantity_when_journals_are_partial(self):
         conn = open_db(self.data_root)
         self.addCleanup(conn.close)
         now = "2026-01-01T00:00:00Z"
@@ -1693,7 +2156,7 @@ class ReviewRegressionTest(unittest.TestCase):
         }
         self.assertFalse(overview["status"]["needsJournals"])
         self.assertEqual(overview["status"]["quarantines"], 1)
-        self.assertAlmostEqual(balances["Onchain"], 0.25)
+        self.assertAlmostEqual(balances["Onchain"], 0.0)
         self.assertAlmostEqual(balances["Other"], 0.10)
 
     def test_rates_coverage_ignores_zero_amount_rate_only_rows(self):

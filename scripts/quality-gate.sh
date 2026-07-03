@@ -11,6 +11,14 @@ run() {
   "$@"
 }
 
+run_in_dir() {
+  local dir="$1"
+  shift
+  echo
+  echo "> (cd $dir && $*)"
+  (cd "$dir" && "$@")
+}
+
 PYTHON_BIN="python3"
 RUNNER=()
 
@@ -135,11 +143,11 @@ if [ ! -d "$ROOT/ui-tauri/node_modules" ]; then
   echo "quality gate requires ui-tauri/node_modules for Vitest; run: pnpm --dir ui-tauri install --frozen-lockfile" >&2
   exit 2
 fi
-if ! command -v pnpm >/dev/null 2>&1; then
-  echo "quality gate requires pnpm on PATH to run Vitest" >&2
+if [ ! -x "$ROOT/ui-tauri/node_modules/.bin/vitest" ]; then
+  echo "quality gate requires ui-tauri/node_modules/.bin/vitest; run: pnpm --dir ui-tauri install --frozen-lockfile" >&2
   exit 2
 fi
-run pnpm --dir ui-tauri exec vitest run
+run_in_dir ui-tauri ./node_modules/.bin/vitest run
 
 echo
 echo "quality gate passed"

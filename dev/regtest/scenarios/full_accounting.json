@@ -2,7 +2,7 @@
   "schema_version": 1,
   "id": "full-accounting-v1",
   "title": "Full accounting regtest demo",
-  "description": "Disposable Bitcoin Core regtest scenario covering multi-address business wallets, regular fiat-expense disposals with deterministic amount/fee variation, self-transfers, wallet key rotations, deprecated old wallets, collaborative CoinJoin/PayJoin-shaped transactions, an RBF-replaced payment, halving-shrunk mining income, a dust deposit, a mempool-pending receipt at sync, Bitcoin-backed-loan marks, volatile pricing, local Electrum/mempool-compatible backend endpoints, and deterministic elementsregtest/LBTC bridge/import wallets.",
+  "description": "Disposable Bitcoin Core regtest scenario covering multi-address business wallets, regular fiat-expense disposals with deterministic amount/fee variation, self-transfers, ownership-derived fan-out transfers, wallet key rotations, deprecated old wallets, collaborative CoinJoin/PayJoin-shaped transactions, an RBF-replaced payment, halving-shrunk mining income, a dust deposit, a mempool-pending receipt at sync, Bitcoin-backed-loan marks, volatile pricing, local Electrum/mempool-compatible backend endpoints, and deterministic elementsregtest/LBTC bridge/import wallets.",
   "base_time": "2019-01-15T09:00:00Z",
   "latest_time": "2026-07-01T00:00:00Z",
   "workspace": "Regtest Demo",
@@ -520,6 +520,23 @@
       "note": "Cold storage consolidates a slice back to treasury."
     },
     {
+      "id": "treasury_ownership_fanout",
+      "kind": "self_transfer_fanout",
+      "from": "treasury",
+      "outputs": [
+        {
+          "to": "spending",
+          "amount_btc": "0.03750000"
+        },
+        {
+          "to": "merchant",
+          "amount_btc": "0.02340000"
+        }
+      ],
+      "fee_btc": "0.00001090",
+      "note": "Treasury funds two owned operational wallets in one transaction; same-txid row matching must skip the fan-out so ownership graph matching proves the MOVE legs."
+    },
+    {
       "id": "coinjoin_round",
       "kind": "coinjoin_shape",
       "signers": [
@@ -671,6 +688,7 @@
     "pending_transactions": 1,
     "collaborative_excluded": 5,
     "min_transfer_pairs": 9,
+    "ownership_derived_transfer_pairs": 2,
     "loan_marks": 4,
     "open_collateral_locks": 0,
     "export_files": [

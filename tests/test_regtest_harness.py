@@ -335,8 +335,68 @@ class RegtestHarnessTest(unittest.TestCase):
         self.assertNotEqual(rates, sorted(rates, reverse=True))
         self.assertEqual(scenario["expected"]["collaborative_excluded"], 5)
         self.assertEqual(scenario["expected"]["min_transfer_pairs"], 9)
+        self.assertEqual(scenario["expected"]["ownership_derived_transfer_pairs"], 2)
+        fanouts = [op for op in scenario["operations"] if op["kind"] == "self_transfer_fanout"]
+        self.assertEqual(len(fanouts), 1)
+        self.assertEqual(len(fanouts[0]["outputs"]), 2)
         self.assertEqual(scenario["expected"]["loan_marks"], 4)
         self.assertIn("full-report.xlsx", scenario["expected"]["export_files"])
+
+    def test_full_accounting_demo_ownership_proof_requires_derived_routes_before_manual_pairs(self):
+        scenario = regtest_demo.load_scenario()
+        expected_routes = regtest_demo._expected_ownership_fanout_routes(scenario)
+        observed_rows = [
+            {
+                "from_wallet": route["from_wallet"],
+                "to_wallet": route["to_wallet"],
+                "received_msat": route["received_msat"],
+                "pairing_source": "ownership_derived",
+            }
+            for route in expected_routes
+        ]
+        calls: list[tuple[str, ...]] = []
+
+        def fake_run_cli(_data_root, *args):
+            calls.append(tuple(args))
+            if args[:2] == ("transfers", "list"):
+                return {"data": []}
+            if args[:3] == ("journals", "transfers", "list"):
+                return {"data": {"same_asset_transfers": observed_rows}}
+            raise AssertionError(f"Unexpected CLI call: {args!r}")
+
+        with patch.object(regtest_demo, "run_cli", side_effect=fake_run_cli), patch.object(
+            regtest_demo,
+            "_seed_rates_and_process",
+            return_value=({"processed_transactions": 1}, [], {"seeded": True}),
+        ) as seed_and_process:
+            proof = regtest_demo._assert_ownership_self_transfer_matching(
+                Path("/tmp/kassiber-proof"),
+                scenario,
+            )
+
+        self.assertEqual(proof["observed_routes"], [
+            {
+                "from_wallet": route["from_wallet"],
+                "to_wallet": route["to_wallet"],
+                "received_msat": route["received_msat"],
+            }
+            for route in expected_routes
+        ])
+        seed_and_process.assert_called_once()
+        self.assertEqual(calls[0][:2], ("transfers", "list"))
+        self.assertEqual(calls[1][:3], ("journals", "transfers", "list"))
+
+        with patch.object(
+            regtest_demo,
+            "run_cli",
+            return_value={"data": [{"id": "manual-pair"}]},
+        ), patch.object(regtest_demo, "_seed_rates_and_process") as blocked_seed:
+            with self.assertRaisesRegex(RuntimeError, "before manual transaction_pairs"):
+                regtest_demo._assert_ownership_self_transfer_matching(
+                    Path("/tmp/kassiber-proof"),
+                    scenario,
+                )
+        blocked_seed.assert_not_called()
 
     def test_full_accounting_demo_manifest_validation_fails_closed(self):
         scenario = regtest_demo.load_scenario()
