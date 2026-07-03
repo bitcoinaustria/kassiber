@@ -17,6 +17,7 @@ on:
         options:
           - fast
           - bitcoin-core
+          - bitcoin-electrum
           - demo-full
           - silent-payments
   schedule:

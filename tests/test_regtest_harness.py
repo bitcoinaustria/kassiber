@@ -482,6 +482,14 @@ class RegtestHarnessTest(unittest.TestCase):
         self.assertIn("KASSIBER_REGTEST_FRIGATE_PORT", harness)
         self.assertIn("KASSIBER_REGTEST_FRIGATE_WAIT_SECONDS", harness)
 
+    def test_bitcoin_electrum_parity_lane_is_wired(self):
+        harness = (ROOT / "scripts" / "integration-harness.sh").read_text(encoding="utf-8")
+
+        self.assertIn("run_bitcoin_electrum_parity_smoke()", harness)
+        self.assertIn("tests.integration.test_live_bitcoin_electrum_parity", harness)
+        self.assertIn("run_bitcoin_backend_suite", harness)
+        self.assertIn("bitcoin-electrum)", harness)
+
     def test_demo_purge_paths_are_guarded_by_safe_home_check(self):
         harness = (ROOT / "scripts" / "integration-harness.sh").read_text(encoding="utf-8")
 
@@ -579,7 +587,7 @@ class RegtestHarnessTest(unittest.TestCase):
                     self.assertEqual(tx_rows[0]["direction"], "inbound")
                     self.assertEqual(tx_rows[0]["amount"], 25_000_000_000)
                     self.assertEqual(tx_rows[1]["direction"], "outbound")
-                    self.assertEqual(tx_rows[1]["amount"], 5_000_000_000)
+                    self.assertEqual(tx_rows[1]["amount"], 5_001_000_000)
                     self.assertEqual(tx_rows[1]["fee"], 1_000_000)
 
                     utxo = conn.execute(
@@ -619,7 +627,7 @@ class RegtestHarnessTest(unittest.TestCase):
                         ORDER BY occurred_at
                         """
                     ).fetchall()
-                    self.assertEqual([row["fiat_value"] for row in priced], [8750.0, 1800.0])
+                    self.assertEqual([row["fiat_value"] for row in priced], [8750.0, 1800.36])
                     self.assertEqual({row["pricing_source_kind"] for row in priced}, {"manual_rate_cache"})
                     self.assertEqual({row["pricing_quality"] for row in priced}, {"exact"})
 
@@ -635,18 +643,18 @@ class RegtestHarnessTest(unittest.TestCase):
                     self.assertEqual(journal_rows[0]["quantity"], 25_000_000_000)
                     self.assertEqual(journal_rows[0]["fiat_value"], 8750.0)
                     self.assertEqual(journal_rows[1]["entry_type"], "disposal")
-                    self.assertEqual(journal_rows[1]["quantity"], -5_001_000_000)
-                    self.assertEqual(journal_rows[1]["proceeds"], 1800.0)
-                    self.assertAlmostEqual(journal_rows[1]["cost_basis"], 1750.35, places=2)
-                    self.assertAlmostEqual(journal_rows[1]["gain_loss"], 49.65, places=2)
+                    self.assertEqual(journal_rows[1]["quantity"], -5_002_000_000)
+                    self.assertEqual(journal_rows[1]["proceeds"], 1800.36)
+                    self.assertAlmostEqual(journal_rows[1]["cost_basis"], 1750.70, places=2)
+                    self.assertAlmostEqual(journal_rows[1]["gain_loss"], 49.66, places=2)
 
                     summary = core_reports.report_summary(conn, workspace["id"], profile["id"], report_hooks)
                     self.assertEqual(summary["metrics"]["assets_in_scope"], 1)
                     self.assertEqual(summary["metrics"]["journal_entries"], 2)
                     self.assertEqual(summary["metrics"]["priced_transactions"], 2)
                     self.assertEqual(summary["metrics"]["quarantines"], 0)
-                    self.assertAlmostEqual(summary["holdings"]["cost_basis"], 6999.65, places=2)
-                    self.assertAlmostEqual(summary["realized"]["gain_loss"], 49.65, places=2)
+                    self.assertAlmostEqual(summary["holdings"]["cost_basis"], 6999.30, places=2)
+                    self.assertAlmostEqual(summary["realized"]["gain_loss"], 49.66, places=2)
 
                     export = core_reports.export_xlsx_report(
                         conn,
@@ -671,12 +679,12 @@ class RegtestHarnessTest(unittest.TestCase):
                     self.assertEqual(workbook["Acquisitions"]["F3"].value, 25_000_000_000)
                     self.assertEqual(workbook["Acquisitions"]["H3"].value, 8750)
                     self.assertEqual(workbook["Disposals"]["C3"].value, tx_rows[1]["external_id"])
-                    self.assertEqual(workbook["Disposals"]["F3"].value, 5_001_000_000)
-                    self.assertEqual(workbook["Disposals"]["K3"].value, 49.65)
+                    self.assertEqual(workbook["Disposals"]["F3"].value, 5_002_000_000)
+                    self.assertEqual(workbook["Disposals"]["K3"].value, 49.66)
                     self.assertIn('"OK"', workbook["Disposals"]["L3"].value)
                     self.assertEqual(workbook["Control"]["A3"].value, "BTC")
-                    self.assertEqual(workbook["Control"]["F3"].value, 0.19999)
-                    self.assertEqual(workbook["Control"]["I3"].value, 6999.65)
+                    self.assertEqual(workbook["Control"]["F3"].value, 0.19998)
+                    self.assertEqual(workbook["Control"]["I3"].value, 6999.30)
                     self.assertIn('"OK"', workbook["Control"]["G3"].value)
                     workbook.close()
 
@@ -760,7 +768,7 @@ class RegtestHarnessTest(unittest.TestCase):
 
                 replacement = rows["e2" * 32]
                 self.assertEqual(replacement["direction"], "outbound")
-                self.assertEqual(replacement["amount"], 29_988_000_000)
+                self.assertEqual(replacement["amount"], 30_000_000_000)
                 self.assertEqual(replacement["fee"], 12_000_000)
 
                 self_spend = rows["f1" * 32]

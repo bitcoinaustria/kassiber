@@ -2167,7 +2167,8 @@ class SyncBackendsTest(unittest.TestCase):
     def test_bitcoinrpc_multi_output_send_does_not_double_count_fee(self):
         # Bitcoin Core stamps the SAME whole-tx fee on every `send`-category
         # detail of one transaction. Summing per detail would double-count it for
-        # a multi-output send; the fee must be booked exactly once.
+        # a multi-output send; the fee must be booked exactly once and kept
+        # separate from Core's already fee-exclusive send amounts.
         record = record_from_bitcoinrpc_details(
             "66" * 32,
             [
@@ -2210,6 +2211,20 @@ class SyncBackendsTest(unittest.TestCase):
         self.assertEqual(record["direction"], "outbound")
         self.assertAlmostEqual(float(record["fee"]), 0.0001, places=8)
         self.assertAlmostEqual(float(record["amount"]), 0.7999, places=8)
+
+    def test_bitcoinrpc_fee_only_self_spend_keeps_zero_amount(self):
+        record = record_from_bitcoinrpc_details(
+            "67" * 32,
+            [
+                {"category": "send", "amount": -1.0, "fee": -0.0001, "blocktime": 1_700_000_000},
+                {"category": "receive", "amount": 1.0, "fee": 0, "blocktime": 1_700_000_000},
+            ],
+            "core",
+        )
+        self.assertEqual(record["direction"], "outbound")
+        self.assertEqual(record["kind"], "fee")
+        self.assertAlmostEqual(float(record["amount"]), 0.0, places=8)
+        self.assertAlmostEqual(float(record["fee"]), 0.0001, places=8)
 
     def test_bitcoinrpc_multi_source_graph_keeps_wallet_local_amount(self):
         record = record_from_bitcoinrpc_details(
