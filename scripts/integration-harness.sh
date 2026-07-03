@@ -189,6 +189,78 @@ DEMO_HOME="${KASSIBER_REGTEST_DEMO_HOME:-$HOME/.kassiber/regtest-demo}"
 DEMO_MANIFEST="$DEMO_HOME/demo-manifest.json"
 DEMO_SCENARIO="dev/regtest/scenarios/full_accounting.json"
 
+demo_validate_demo_home() {
+  local mode="$1"
+  KASSIBER_DEMO_HOME_DIR="$DEMO_HOME" \
+  KASSIBER_DEMO_MANIFEST="$DEMO_MANIFEST" \
+  KASSIBER_DEMO_MODE="$mode" \
+    py - <<'PY'
+import json
+import os
+import sys
+from pathlib import Path
+
+home = Path(os.environ["KASSIBER_DEMO_HOME_DIR"]).expanduser()
+manifest_path = Path(os.environ["KASSIBER_DEMO_MANIFEST"]).expanduser()
+mode = os.environ["KASSIBER_DEMO_MODE"]
+try:
+    resolved = home.resolve(strict=False)
+    user_home = Path.home().resolve(strict=True)
+except OSError as exc:
+    print(f"Refusing unsafe demo home {home}: {exc}", file=sys.stderr)
+    raise SystemExit(2)
+
+dangerous = {Path("/"), user_home, Path("/tmp"), Path("/var/tmp")}
+if resolved in dangerous or resolved.parent == Path("/"):
+    print(f"Refusing to {mode} unsafe demo home: {resolved}", file=sys.stderr)
+    raise SystemExit(2)
+
+default_home = user_home / ".kassiber" / "regtest-demo"
+name = resolved.name.lower()
+dedicated_name = name in {"regtest-demo", "kassiber-regtest-demo"} or name.startswith(
+    "kassiber-regtest-demo-"
+)
+
+manifest_ok = False
+if manifest_path.exists():
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError, json.JSONDecodeError):
+        manifest = {}
+    data_root = manifest.get("data_root")
+    export_dir = manifest.get("export_dir")
+    try:
+        data_root_path = Path(data_root).expanduser().resolve(strict=False) if data_root else None
+        export_dir_path = Path(export_dir).expanduser().resolve(strict=False) if export_dir else None
+        manifest_ok = (
+            manifest.get("schema_version") == 1
+            and manifest.get("scenario_id") == "full-accounting-v1"
+            and data_root_path is not None
+            and export_dir_path is not None
+            and data_root_path != resolved
+            and export_dir_path != resolved
+            and os.path.commonpath([str(resolved), str(data_root_path)]) == str(resolved)
+            and os.path.commonpath([str(resolved), str(export_dir_path)]) == str(resolved)
+        )
+    except (OSError, ValueError):
+        manifest_ok = False
+
+if mode == "purge":
+    if not manifest_ok:
+        print(
+            f"Refusing to purge {resolved}: missing a valid Kassiber demo manifest",
+            file=sys.stderr,
+        )
+        raise SystemExit(2)
+elif not (resolved == default_home or dedicated_name or manifest_ok):
+    print(
+        f"Refusing to rebuild unsafe demo home {resolved}: choose a dedicated regtest-demo path",
+        file=sys.stderr,
+    )
+    raise SystemExit(2)
+PY
+}
+
 demo_manifest_get() {
   KASSIBER_DEMO_MANIFEST="$DEMO_MANIFEST" KASSIBER_DEMO_KEY="$1" py - <<'PY'
 import json
@@ -216,9 +288,13 @@ demo_write_manifest() {
 import datetime
 import json
 import os
+import tempfile
 
 manifest_path = os.environ["KASSIBER_DEMO_MANIFEST"]
 home = os.environ["KASSIBER_DEMO_HOME_DIR"]
+manifest_dir = os.path.dirname(manifest_path)
+os.makedirs(manifest_dir, mode=0o700, exist_ok=True)
+os.chmod(manifest_dir, 0o700)
 manifest = {
     "schema_version": 1,
     "scenario_id": os.environ["KASSIBER_DEMO_SCENARIO_ID"],
@@ -236,10 +312,32 @@ manifest = {
     "rpc_user": os.environ["KASSIBER_REGTEST_RPC_USER"],
     "rpc_password": os.environ["KASSIBER_REGTEST_RPC_PASSWORD"],
 }
-with open(manifest_path, "w", encoding="utf-8") as handle:
-    json.dump(manifest, handle, indent=2, sort_keys=True)
-    handle.write("\n")
-os.chmod(manifest_path, 0o600)
+temp_path = None
+fd = None
+try:
+    fd, temp_path = tempfile.mkstemp(
+        prefix=".demo-manifest.",
+        suffix=".tmp",
+        dir=manifest_dir,
+        text=True,
+    )
+    os.fchmod(fd, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as handle:
+        fd = None
+        json.dump(manifest, handle, indent=2, sort_keys=True)
+        handle.write("\n")
+        handle.flush()
+        os.fsync(handle.fileno())
+    os.replace(temp_path, manifest_path)
+    os.chmod(manifest_path, 0o600)
+finally:
+    if fd is not None:
+        os.close(fd)
+    if temp_path:
+        try:
+            os.unlink(temp_path)
+        except FileNotFoundError:
+            pass
 PY
 }
 
@@ -307,6 +405,7 @@ PY
 demo_build_book() {
   local checksum
   checksum="$(demo_scenario_checksum)"
+  demo_validate_demo_home rebuild
   if [ -z "${KASSIBER_REGTEST_DEMO_REBUILD:-}" ] \
     && [ -d "$DEMO_HOME/data" ] \
     && [ "$(demo_manifest_get scenario_checksum)" = "$checksum" ]; then
@@ -395,6 +494,7 @@ run_demo_down() {
   project="${KASSIBER_REGTEST_COMPOSE_PROJECT:-${project:-kassiber-regtest-demo}}"
   demo_load_rpc_env
   if [ "$purge" = "--purge" ]; then
+    demo_validate_demo_home purge
     docker_compose -p "$project" -f dev/regtest/compose.bitcoin.yml down -v
     rm -rf "$DEMO_HOME"
     echo "Demo node, chain volume, and demo book removed."

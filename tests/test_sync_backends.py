@@ -2315,8 +2315,12 @@ class HttpRetryAndLimiterTest(unittest.TestCase):
 
         first = http_client.host_limiter("https://shared.example/a")
         again = http_client.host_limiter("https://shared.example/b?q=1")
+        with_userinfo = http_client.host_limiter("https://user:pass@SHARED.example/c")
+        other_port = http_client.host_limiter("https://shared.example:8443/d")
         other = http_client.host_limiter("https://other.example/a")
         self.assertIs(first, again)
+        self.assertIs(first, with_userinfo)
+        self.assertIs(first, other_port)
         self.assertIsNot(first, other)
 
     def test_http_get_json_recovers_from_real_429(self):

@@ -431,10 +431,22 @@ def update_wallet_output_inventory(
             UPDATE wallet_utxos
             SET spent_at = ?
             WHERE wallet_id = ?
+              AND COALESCE(backend_name, '') = ?
+              AND COALESCE(backend_kind, '') = ?
+              AND chain = ?
+              AND network = ?
               AND spent_at IS NULL
               AND outpoint NOT IN ({placeholders})
             """,
-            (timestamp, wallet["id"], *sorted(active_outpoints)),
+            (
+                timestamp,
+                wallet["id"],
+                backend_name,
+                backend_kind,
+                chain,
+                network,
+                *sorted(active_outpoints),
+            ),
         )
     else:
         spent_cursor = conn.execute(
@@ -442,9 +454,13 @@ def update_wallet_output_inventory(
             UPDATE wallet_utxos
             SET spent_at = ?
             WHERE wallet_id = ?
+              AND COALESCE(backend_name, '') = ?
+              AND COALESCE(backend_kind, '') = ?
+              AND chain = ?
+              AND network = ?
               AND spent_at IS NULL
             """,
-            (timestamp, wallet["id"]),
+            (timestamp, wallet["id"], backend_name, backend_kind, chain, network),
         )
     conn.execute(
         """

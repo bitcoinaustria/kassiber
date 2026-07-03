@@ -32,6 +32,14 @@ class HomebrewCaskRenderTest(unittest.TestCase):
         )
         self.assertIn('target: "kassiber"', cask)
 
+    def test_render_cask_zap_does_not_remove_primary_data_root(self):
+        renderer = load_renderer()
+        cask = renderer.render_cask("v0.22.9", "a" * 64)
+        zap_block = cask[cask.index("zap trash") :]
+
+        self.assertNotIn("~/.kassiber", zap_block)
+        self.assertIn("~/Library/Application Support/at.bitcoinaustria.kassiber", zap_block)
+
     def test_render_cask_validates_checksum(self):
         renderer = load_renderer()
 

@@ -42,7 +42,7 @@ class EgressAllowlistEntry:
     def matches(self, host: str, port: int | None, subsystem: str) -> bool:
         if self.host != _normalize_host(host):
             return False
-        if self.port is not None and port is not None and self.port != port:
+        if self.port is not None and self.port != port:
             return False
         if self.subsystem != "any" and subsystem != self.subsystem:
             return False

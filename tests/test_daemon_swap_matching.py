@@ -361,5 +361,38 @@ class DaemonSwapMatchingTest(unittest.TestCase):
         self._with_daemon(call)
 
 
+class SwapReviewSuggestedActionTest(unittest.TestCase):
+    def test_exact_candidate_action_pairs_only_the_reviewed_legs(self):
+        try:
+            from kassiber.daemon_swap_review import _swap_review_suggested_action
+        except ModuleNotFoundError as exc:
+            self.skipTest(f"project dependency unavailable: {exc}")
+
+        action = _swap_review_suggested_action(
+            {
+                "out_id": "tx-out-1",
+                "in_id": "tx-in-1",
+                "default_kind": "swap",
+                "default_policy": "carrying-value",
+                "confidence": "exact",
+                "method": "payment_hash",
+            },
+            conflict_size=1,
+            fee_assessment="normal",
+        )
+
+        self.assertEqual(action["daemon_kind"], "ui.transfers.pair")
+        self.assertEqual(
+            action["arguments"],
+            {
+                "tx_out": "tx-out-1",
+                "tx_in": "tx-in-1",
+                "kind": "swap",
+                "policy": "carrying-value",
+                "confidence_at_pair": "exact",
+            },
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

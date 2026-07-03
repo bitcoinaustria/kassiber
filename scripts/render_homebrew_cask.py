@@ -31,7 +31,6 @@ def render_cask(version: str, sha256: str) -> str:
          target: "kassiber"
 
   zap trash: [
-    "~/.kassiber",
     "~/Library/Application Support/at.bitcoinaustria.kassiber",
     "~/Library/Preferences/at.bitcoinaustria.kassiber.plist",
     "~/Library/Saved Application State/at.bitcoinaustria.kassiber.savedState",

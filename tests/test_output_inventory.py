@@ -12,7 +12,6 @@ from kassiber.core.output_inventory import (
     wallet_output_inventory_summary,
 )
 from kassiber.core.sync import WalletSyncState
-from kassiber.core.sync_backends import esplora_utxos_for_wallet
 from kassiber.db import open_db
 from kassiber.time_utils import timestamp_to_iso
 
@@ -63,7 +62,135 @@ def _seed_wallet(conn):
     return profile, wallet
 
 
+def _insert_wallet_utxo(
+    conn,
+    profile,
+    wallet,
+    *,
+    row_id,
+    txid,
+    backend_name,
+    backend_kind,
+    chain="bitcoin",
+    network="main",
+    amount=25_000_000,
+    spent_at=None,
+):
+    conn.execute(
+        """
+        INSERT INTO wallet_utxos(
+            id, workspace_id, profile_id, wallet_id, backend_name,
+            backend_kind, chain, network, asset, amount, txid, vout,
+            outpoint, confirmation_status, confirmations, block_height,
+            block_time, address, address_label, branch_label,
+            branch_index, address_index, first_seen_at, last_seen_at,
+            spent_at, raw_json
+        ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            row_id,
+            profile["workspace_id"],
+            profile["id"],
+            wallet["id"],
+            backend_name,
+            backend_kind,
+            chain,
+            network,
+            "BTC",
+            amount,
+            txid,
+            1,
+            f"{txid}:1",
+            "confirmed",
+            10,
+            809_000,
+            "2026-01-01T11:00:00Z",
+            "bc1qoldsource",
+            "receive #9",
+            "receive",
+            0,
+            9,
+            "2026-01-01T11:00:00Z",
+            "2026-01-01T11:00:00Z",
+            spent_at,
+            "{}",
+        ),
+    )
+
+
 class OutputInventoryTest(unittest.TestCase):
+    def test_refresh_marks_missing_outpoints_spent_only_for_same_source(self):
+        sync_state = WalletSyncState(
+            chain="bitcoin",
+            network="main",
+            descriptor_plan=None,
+            policy_asset_id="",
+            targets=[],
+            tracked_scripts={},
+            history_cache={},
+        )
+        old_txid = "aa" * 32
+        current_txid = "bb" * 32
+        with tempfile.TemporaryDirectory(prefix="kassiber-utxo-refresh-scope-") as tmp:
+            conn = open_db(Path(tmp) / "data")
+            try:
+                profile, wallet = _seed_wallet(conn)
+                _insert_wallet_utxo(
+                    conn,
+                    profile,
+                    wallet,
+                    row_id="old-source-active",
+                    txid=old_txid,
+                    backend_name="old-default",
+                    backend_kind="electrum",
+                )
+
+                result = update_wallet_output_inventory(
+                    conn,
+                    profile,
+                    wallet,
+                    {"name": "current-default", "kind": "esplora"},
+                    sync_state,
+                    [
+                        {
+                            "txid": current_txid,
+                            "vout": 0,
+                            "amount_sats": 50_000,
+                            "asset": "BTC",
+                            "confirmation_status": "confirmed",
+                            "block_height": 810_000,
+                        }
+                    ],
+                    seen_at="2026-01-01T12:00:00Z",
+                )
+
+                self.assertEqual(result["spent"], 0)
+                old_row = conn.execute(
+                    "SELECT spent_at FROM wallet_utxos WHERE id = ?",
+                    ("old-source-active",),
+                ).fetchone()
+                self.assertIsNone(old_row["spent_at"])
+                old_summary = wallet_output_inventory_summary(
+                    conn,
+                    wallet["id"],
+                    backend_name="old-default",
+                    backend_kind="electrum",
+                    chain="bitcoin",
+                    network="main",
+                )
+                self.assertEqual(old_summary["active_count"], 1)
+                current_summary = wallet_output_inventory_summary(
+                    conn,
+                    wallet["id"],
+                    backend_name="current-default",
+                    backend_kind="esplora",
+                    chain="bitcoin",
+                    network="main",
+                )
+                self.assertEqual(current_summary["active_count"], 1)
+            finally:
+                conn.close()
+
     def test_inventory_summary_and_rows_can_be_scoped_to_source(self):
         sync_state = WalletSyncState(
             chain="bitcoin",
@@ -316,6 +443,8 @@ class OutputInventoryTest(unittest.TestCase):
                 conn.close()
 
     def test_esplora_utxos_keep_derivation_metadata_and_spent_detection(self):
+        from kassiber.core.sync_backends import esplora_utxos_for_wallet
+
         target_receive = {
             "chain": "bitcoin",
             "network": "mainnet",
