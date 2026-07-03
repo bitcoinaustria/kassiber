@@ -315,6 +315,50 @@ DEMO_HOME="${KASSIBER_REGTEST_DEMO_HOME:-$HOME/.kassiber/regtest-demo}"
 DEMO_MANIFEST="$DEMO_HOME/demo-manifest.json"
 DEMO_SCENARIO="dev/regtest/scenarios/full_accounting.json"
 
+demo_assert_safe_home() {
+  local mode="$1"
+  KASSIBER_DEMO_HOME_DIR="$DEMO_HOME" \
+  KASSIBER_DEMO_MANIFEST="$DEMO_MANIFEST" \
+  KASSIBER_DEMO_PURGE_MODE="$mode" \
+    py - <<'PY'
+import json
+import os
+import sys
+from pathlib import Path
+
+home = Path(os.environ["KASSIBER_DEMO_HOME_DIR"]).expanduser().resolve(strict=False)
+user_home = Path.home().resolve(strict=False)
+manifest_path = Path(os.environ["KASSIBER_DEMO_MANIFEST"]).expanduser()
+mode = os.environ["KASSIBER_DEMO_PURGE_MODE"]
+
+def fail(reason: str) -> None:
+    print(f"Refusing to remove unsafe demo directory {home}: {reason}", file=sys.stderr)
+    sys.exit(2)
+
+def manifest_matches() -> bool:
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
+    return (
+        manifest.get("schema_version") == 1
+        and manifest.get("scenario_id") == "full-accounting-v1"
+        and Path(str(manifest.get("data_root") or "")).expanduser().resolve(strict=False) == home / "data"
+        and Path(str(manifest.get("export_dir") or "")).expanduser().resolve(strict=False) == home / "exports"
+    )
+
+if str(home) == "/" or home == user_home:
+    fail("path is / or the user home")
+if len(home.parts) < 4:
+    fail("path is too shallow")
+if mode == "purge":
+    if not manifest_matches():
+        fail("missing Kassiber regtest demo manifest")
+elif not manifest_matches() and home.name not in {"regtest-demo", "kassiber-regtest-demo"}:
+    fail("path does not look like a Kassiber regtest demo home")
+PY
+}
+
 demo_manifest_get() {
   KASSIBER_DEMO_MANIFEST="$DEMO_MANIFEST" KASSIBER_DEMO_KEY="$1" py - <<'PY'
 import json
@@ -443,6 +487,7 @@ demo_build_book() {
     return 0
   fi
 
+  demo_assert_safe_home rebuild
   rm -rf "$DEMO_HOME/data" "$DEMO_HOME/exports" "$DEMO_HOME/imports" \
     "$DEMO_HOME/demo-summary.json" "$DEMO_MANIFEST"
   mkdir -p "$DEMO_HOME"
@@ -524,6 +569,7 @@ run_demo_down() {
   project="${KASSIBER_REGTEST_COMPOSE_PROJECT:-${project:-kassiber-regtest-demo}}"
   demo_load_rpc_env
   if [ "$purge" = "--purge" ]; then
+    demo_assert_safe_home purge
     docker_compose -p "$project" -f dev/regtest/compose.bitcoin.yml down -v
     rm -rf "$DEMO_HOME"
     echo "Demo node, chain volume, and demo book removed."

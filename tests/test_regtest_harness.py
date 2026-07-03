@@ -400,6 +400,22 @@ class RegtestHarnessTest(unittest.TestCase):
         self.assertIn("KASSIBER_REGTEST_FRIGATE_PORT", harness)
         self.assertIn("KASSIBER_REGTEST_FRIGATE_WAIT_SECONDS", harness)
 
+    def test_demo_purge_paths_are_guarded_by_safe_home_check(self):
+        harness = (ROOT / "scripts" / "integration-harness.sh").read_text(encoding="utf-8")
+
+        self.assertIn("demo_assert_safe_home()", harness)
+        self.assertIn("path is / or the user home", harness)
+        self.assertIn("path is too shallow", harness)
+        self.assertIn("missing Kassiber regtest demo manifest", harness)
+        self.assertLess(
+            harness.index("demo_assert_safe_home rebuild"),
+            harness.index('rm -rf "$DEMO_HOME/data"'),
+        )
+        self.assertLess(
+            harness.index("demo_assert_safe_home purge"),
+            harness.index('rm -rf "$DEMO_HOME"'),
+        )
+
     def test_full_accounting_demo_manifest_validation_rejects_bad_edge_cases(self):
         scenario = regtest_demo.load_scenario()
         rbf = next(op for op in scenario["operations"] if op["kind"] == "rbf_replaced_payment")
