@@ -272,6 +272,7 @@ class ElectrumClient:
         self.socket = None
         self.reader = None
         self.request_id = 0
+        self.server_version = None
         self._egress_host = None
         self._egress_port = None
 
@@ -295,7 +296,7 @@ class ElectrumClient:
             raise AppError(f"Unsupported Electrum transport '{scheme}'")
         self.socket = raw_socket
         self.reader = raw_socket.makefile("r", encoding="utf-8", newline="\n")
-        self.call("server.version", ["Kassiber", "1.6"])
+        self.server_version = self.call("server.version", ["Kassiber", "1.6"])
         return self
 
     def __exit__(self, exc_type, exc, tb):
@@ -305,6 +306,7 @@ class ElectrumClient:
             self.socket.close()
         self.reader = None
         self.socket = None
+        self.server_version = None
         return False
 
     def _decode_message(self, line):

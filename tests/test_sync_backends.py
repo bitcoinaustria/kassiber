@@ -1239,8 +1239,12 @@ class SyncBackendsTest(unittest.TestCase):
             "kassiber.core.sync_backends._connect_backend_socket",
             return_value=socket,
         ):
-            with ElectrumClient({"name": "frigate", "url": "tcp://frigate.example:50001"}):
-                pass
+            with ElectrumClient(
+                {"name": "frigate", "url": "tcp://frigate.example:50001"}
+            ) as client:
+                self.assertEqual(client.server_version, ["Frigate 1.5.3", "1.6"])
+
+        self.assertIsNone(client.server_version)
 
         self.assertEqual(len(socket.sent), 1)
         request = json.loads(socket.sent[0].decode("utf-8"))

@@ -7738,8 +7738,8 @@ def _test_electrum_backend_payload(args: dict[str, Any]) -> dict[str, Any]:
     try:
         with ElectrumClient(backend) as client:
             logs.append("Connected.")
-            version = client.call("server.version", ["Kassiber", "1.4"])
-            logs.append(f"Server version: {version}")
+            if client.server_version is not None:
+                logs.append(f"Server version: {client.server_version}")
             try:
                 banner = client.call("server.banner")
             except Exception as exc:  # pragma: no cover - depends on server support

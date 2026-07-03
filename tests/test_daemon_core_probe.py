@@ -8,6 +8,44 @@ from kassiber import daemon
 from kassiber.errors import AppError
 
 
+class DaemonElectrumProbeTest(unittest.TestCase):
+    def test_electrum_probe_reuses_connection_handshake_version(self):
+        clients = []
+
+        class StrictElectrumClient:
+            def __init__(self, backend):
+                self.backend = backend
+                self.server_version = ["Fulcrum 1.11.0", "1.6"]
+                self.calls = []
+                clients.append(self)
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+            def call(self, method, params=None):
+                self.calls.append((method, params))
+                if method == "server.version":
+                    raise AppError(
+                        "Electrum call server.version failed (1): server.version already sent"
+                    )
+                if method == "server.banner":
+                    return "Fulcrum mainnet server"
+                raise AssertionError(f"Unexpected Electrum call: {method}")
+
+        with patch("kassiber.daemon.ElectrumClient", StrictElectrumClient):
+            payload = daemon._test_electrum_backend_payload(
+                {"url": "ssl://index.bitcoin-austria.at:50002"}
+            )
+
+        self.assertTrue(payload["ok"])
+        self.assertEqual(clients[0].calls, [("server.banner", None)])
+        self.assertIn("Server version: ['Fulcrum 1.11.0', '1.6']", payload["logs"])
+        self.assertIn("Server banner: Fulcrum mainnet server", payload["logs"])
+
+
 class DaemonBitcoinRpcProbeTest(unittest.TestCase):
     def test_bitcoinrpc_probe_success(self):
         ctx = SimpleNamespace(runtime_config={})
