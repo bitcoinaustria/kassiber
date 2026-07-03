@@ -219,6 +219,7 @@ import os
 
 manifest_path = os.environ["KASSIBER_DEMO_MANIFEST"]
 home = os.environ["KASSIBER_DEMO_HOME_DIR"]
+manifest_dir = os.path.dirname(manifest_path) or "."
 manifest = {
     "schema_version": 1,
     "scenario_id": os.environ["KASSIBER_DEMO_SCENARIO_ID"],
@@ -236,10 +237,43 @@ manifest = {
     "rpc_user": os.environ["KASSIBER_REGTEST_RPC_USER"],
     "rpc_password": os.environ["KASSIBER_REGTEST_RPC_PASSWORD"],
 }
-with open(manifest_path, "w", encoding="utf-8") as handle:
-    json.dump(manifest, handle, indent=2, sort_keys=True)
-    handle.write("\n")
-os.chmod(manifest_path, 0o600)
+os.makedirs(home, mode=0o700, exist_ok=True)
+os.chmod(home, 0o700)
+tmp_path = None
+for index in range(100):
+    candidate = os.path.join(manifest_dir, f".{os.path.basename(manifest_path)}.{os.getpid()}.{index}.tmp")
+    try:
+        fd = os.open(candidate, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    except FileExistsError:
+        continue
+    tmp_path = candidate
+    break
+else:
+    raise RuntimeError(f"could not create temporary manifest next to {manifest_path}")
+
+try:
+    with os.fdopen(fd, "w", encoding="utf-8") as handle:
+        json.dump(manifest, handle, indent=2, sort_keys=True)
+        handle.write("\n")
+        handle.flush()
+        os.fsync(handle.fileno())
+    os.replace(tmp_path, manifest_path)
+    os.chmod(manifest_path, 0o600)
+    try:
+        dir_fd = os.open(manifest_dir, os.O_RDONLY)
+    except OSError:
+        dir_fd = None
+    if dir_fd is not None:
+        try:
+            os.fsync(dir_fd)
+        finally:
+            os.close(dir_fd)
+finally:
+    if tmp_path is not None:
+        try:
+            os.unlink(tmp_path)
+        except FileNotFoundError:
+            pass
 PY
 }
 
