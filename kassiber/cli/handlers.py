@@ -346,8 +346,10 @@ def _journals_current_for_profile(conn, profile):
 
 
 BITCOIN_LAYER_TRANSITION_PAIR_KINDS = (
+    "chain-swap",
     "peg-in",
     "peg-out",
+    "reverse-submarine-swap",
     "submarine-swap",
     "swap-refund",
 )
@@ -527,12 +529,12 @@ def create_transaction_pair(
     # On a split pair only the swapped portion (`out_amount`) crosses to the
     # other asset, so the persisted swap fee must be measured against that, not
     # the full outbound (the remainder is a same-asset self-transfer).
-    swap_fee_out_msat = (
-        out_amount_msat if out_amount_msat is not None else int(out_row["amount"] or 0)
-    )
+    split_pair = out_amount_msat is not None
+    swap_fee_out_msat = out_amount_msat if split_pair else int(out_row["amount"] or 0)
     swap_fee_msat, swap_fee_kind = core_transfer_matching.compute_swap_fee(
         swap_fee_out_msat,
         int(in_row["amount"] or 0),
+        _outbound_pair_fee_component_msat(out_row, split_pair=split_pair),
     )
     pair_id = str(uuid.uuid4())
     conn.execute(
@@ -658,6 +660,10 @@ def create_direct_swap_payout(
     swap_fee_msat, swap_fee_kind = core_transfer_matching.compute_swap_fee(
         out_amount_msat if out_amount_msat is not None else int(out_row["amount"] or 0),
         payout_amount_msat,
+        _outbound_pair_fee_component_msat(
+            out_row,
+            split_pair=out_amount_msat is not None,
+        ),
     )
     payout_id = str(uuid.uuid4())
     conn.execute(
@@ -858,7 +864,35 @@ def _candidate_to_dict(candidate):
         "conflict_set_id": candidate.conflict_set_id,
         "conflict_size": candidate.conflict_size,
     }
+    if candidate.evidence_provider or candidate.evidence_id:
+        data["evidence"] = {
+            "provider": candidate.evidence_provider,
+            "id": candidate.evidence_id,
+            "kind": candidate.evidence_kind,
+            "status": candidate.evidence_status,
+            "version": candidate.evidence_version,
+            "taproot": candidate.evidence_taproot,
+            "cooperative": candidate.evidence_cooperative,
+            "spend_path": candidate.evidence_spend_path,
+        }
     return data
+
+
+def _outbound_pair_fee_component_msat(row, *, split_pair=False):
+    if split_pair:
+        # A reviewed split amount is only the portion that crossed rails. Without
+        # a reviewed fee allocation, charging the full transaction fee to that
+        # portion would overstate the swap fee.
+        return 0
+    try:
+        if row["amount_includes_fee"]:
+            return 0
+    except (IndexError, KeyError):
+        return 0
+    try:
+        return max(0, int(row["fee"] or 0))
+    except (TypeError, ValueError, IndexError, KeyError):
+        return 0
 
 
 def _load_transfer_rules(conn, profile_id):
@@ -903,7 +937,7 @@ def _load_matcher_rows(conn, profile_id):
             t.id, t.profile_id, t.wallet_id, t.external_id, t.payment_hash,
             t.swap_refund_funding_txid,
             t.occurred_at, t.direction, t.asset, t.amount, t.amount_includes_fee,
-            t.excluded,
+            t.fee, t.kind, t.raw_json, t.excluded,
             w.label AS wallet_label, w.kind AS wallet_kind
         FROM transactions t
         JOIN wallets w ON w.id = t.wallet_id
@@ -1027,7 +1061,8 @@ def suggest_transfer_candidates(
     ``OUT-IN`` shape (e.g. ``"LBTC-BTC"``); ``route_pair`` matches the
     rail-aware route shape (e.g. ``"LNBTC-BTC"``); ``candidate_type`` splits
     carrying-value Bitcoin movements from other cross-asset swaps; and ``method``
-    pins to ``payment_hash`` or ``heuristic``.
+    pins to a matcher method such as ``payment_hash``, ``provider_swap_id``,
+    ``htlc_refund``, or ``heuristic``.
     """
     _, profile = resolve_scope(conn, workspace_ref, profile_ref)
     rows = _load_matcher_rows(conn, profile["id"])
@@ -1096,7 +1131,7 @@ def bulk_pair_transfers(
     """Run the matcher and auto-pair every solo (non-conflicted) candidate
     whose confidence meets the threshold.
 
-    Defaults to ``confidence="exact"`` so only payment-hash matches
+    Defaults to ``confidence="exact"`` so only deterministic links
     auto-apply without further user review. Conflict clusters are
     always skipped — disambiguation stays manual.
     """

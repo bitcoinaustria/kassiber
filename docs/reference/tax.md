@@ -101,6 +101,13 @@ submarine swaps where both legs are yours, pair those legs before trusting
 payments or receipts; leave those one-sided or counterparty-owned flows unpaired
 so they keep their normal payment/receipt treatment.
 
+`transfers suggest` can surface exact matches from Lightning `payment_hash`,
+redacted provider/client `swap_id` metadata, or an on-chain HTLC refund spend.
+Boltz v2 cooperative Taproot key-path spends are intentionally not identifiable
+from chain data alone; without metadata they remain heuristic/manual candidates.
+Review blocking should stay scoped to swap-shaped unresolved flows, not ordinary
+unpaired outbounds that are real payments or disposals.
+
 When that signal is missing, you can pair them manually:
 
 ```bash

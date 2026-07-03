@@ -286,9 +286,13 @@ def validate_scenario(scenario: dict[str, Any]) -> None:
                 raise ValueError(
                     f"Scenario Silent Payments wallet {wallet['key']!r} has invalid sp_scan_start_height"
                 )
-        if chain == "liquid" and wallet.get("source_format") != "generic_ledger" and not _is_liquid_live_wallet_spec(wallet):
+        if (
+            chain == "liquid"
+            and wallet.get("source_format") not in {"generic_ledger", "json"}
+            and not _is_liquid_live_wallet_spec(wallet)
+        ):
             raise ValueError(
-                f"Scenario Liquid wallet {wallet['key']!r} must use source_format generic_ledger or kind descriptor"
+                f"Scenario Liquid wallet {wallet['key']!r} must use source_format generic_ledger/json or kind descriptor"
             )
         address_count = int(wallet.get("addresses") or 1)
         if address_count < 1 or address_count > 12:
@@ -441,8 +445,34 @@ def validate_scenario(scenario: dict[str, Any]) -> None:
             _btc(bridge.get("in_btc"))
             _btc(bridge.get("fee_btc") or stress["fee_btc"])
             pair_kind = bridge.get("pair_kind") or "submarine-swap"
-            if pair_kind not in {"peg-in", "peg-out", "submarine-swap", "swap-refund"}:
+            if pair_kind not in {"chain-swap", "peg-in", "peg-out", "reverse-submarine-swap", "submarine-swap", "swap-refund"}:
                 raise ValueError(f"Scenario stress.swap_bridges[{index}] has unsupported pair_kind: {pair_kind}")
+        for index, swap in enumerate(scenario.get("boltz_v2_metadata_swaps") or [], start=1):
+            for field in ("id", "flow", "out_wallet", "in_wallet", "out_asset", "in_asset", "out_date", "in_date"):
+                if not swap.get(field):
+                    raise ValueError(f"Scenario boltz_v2_metadata_swaps[{index}] is missing {field}")
+            for field in ("out_wallet", "in_wallet"):
+                if swap[field] not in wallet_key_set:
+                    raise ValueError(
+                        f"Scenario boltz_v2_metadata_swaps[{index}] references unknown {field}: {swap[field]}"
+                    )
+            if swap["flow"] not in {"chain", "chain-swap", "reverse-submarine", "refund"}:
+                raise ValueError(f"Scenario boltz_v2_metadata_swaps[{index}] has unsupported flow: {swap['flow']}")
+            pair_kind = swap.get("pair_kind") or ""
+            if pair_kind not in {"chain-swap", "reverse-submarine-swap", "swap-refund"}:
+                raise ValueError(
+                    f"Scenario boltz_v2_metadata_swaps[{index}] has unsupported pair_kind: {pair_kind}"
+                )
+            pair_policy = swap.get("pair_policy") or ""
+            if pair_policy not in {"taxable", "carrying-value"}:
+                raise ValueError(
+                    f"Scenario boltz_v2_metadata_swaps[{index}] has unsupported pair_policy: {pair_policy}"
+                )
+            _btc(swap.get("out_btc"))
+            _btc(swap.get("in_btc"))
+            _btc_or_zero(swap.get("fee_btc") or "0")
+            _parse_iso_to_ts(str(swap["out_date"]))
+            _parse_iso_to_ts(str(swap["in_date"]))
         variation_bp = int(stress.get("variation_bp") or 0)
         if variation_bp < 0 or variation_bp > 4000:
             raise ValueError("Scenario stress.variation_bp must be between 0 and 4000 basis points")
@@ -739,6 +769,98 @@ def _append_liquid_ledger_row(
     row: dict[str, Any],
 ) -> None:
     rows_by_wallet.setdefault(wallet_key, []).append(dict(row))
+
+
+def _boltz_v2_metadata_rows_from_manifest(
+    scenario: dict[str, Any],
+    txids: dict[str, str],
+) -> dict[str, list[dict[str, Any]]]:
+    rows_by_wallet: dict[str, list[dict[str, Any]]] = {}
+    for swap in scenario.get("boltz_v2_metadata_swaps") or []:
+        swap_id = str(swap["id"])
+        out_txid = _deterministic_demo_txid(f"{swap_id}:out")
+        in_txid = _deterministic_demo_txid(f"{swap_id}:in")
+        txids[f"{swap_id}_out"] = out_txid
+        txids[f"{swap_id}_in"] = in_txid
+        evidence = {
+            "provider": "boltz",
+            "id": swap_id,
+            "flow": swap["flow"],
+            "status": swap.get("status") or "completed",
+            "version": "2",
+            "taproot": True,
+            "cooperative": True,
+            "spend_path": swap.get("spend_path") or "key",
+            "send_txid": out_txid,
+            "receive_txid": in_txid,
+        }
+        rows_by_wallet.setdefault(str(swap["out_wallet"]), []).append(
+            {
+                "txid": out_txid,
+                "occurred_at": str(swap["out_date"]),
+                "direction": "outbound",
+                "asset": str(swap["out_asset"]).upper(),
+                "amount": _decimal_text(_btc(swap["out_btc"])),
+                "fee": _decimal_text(_btc_or_zero(swap.get("fee_btc") or "0")),
+                "description": swap.get("note") or f"{swap_id} outbound Boltz v2 metadata leg.",
+                "counterparty": "Boltz regtest metadata",
+                "raw_json": evidence,
+            }
+        )
+        rows_by_wallet.setdefault(str(swap["in_wallet"]), []).append(
+            {
+                "txid": in_txid,
+                "occurred_at": str(swap["in_date"]),
+                "direction": "inbound",
+                "asset": str(swap["in_asset"]).upper(),
+                "amount": _decimal_text(_btc(swap["in_btc"])),
+                "fee": "0",
+                "description": swap.get("note") or f"{swap_id} inbound Boltz v2 metadata leg.",
+                "counterparty": "Boltz regtest metadata",
+                "raw_json": evidence,
+            }
+        )
+    return rows_by_wallet
+
+
+def _record_json_source_transactions(
+    truth: DemoTruth,
+    rows_by_wallet: dict[str, list[dict[str, Any]]],
+    wallets: dict[str, DemoWallet],
+) -> None:
+    for wallet_key, rows in rows_by_wallet.items():
+        wallet = wallets.get(wallet_key)
+        if wallet is None:
+            continue
+        for row in rows:
+            truth.record_transaction(
+                str(row.get("txid") or f"{wallet_key}_json_source"),
+                str(row["txid"]),
+                wallet,
+                str(row["direction"]),
+                asset=str(row["asset"]).upper(),
+                confirmation_expected=False,
+                source="provider_metadata",
+            )
+
+
+def _write_json_source_files(
+    base_dir: Path,
+    wallets: dict[str, DemoWallet],
+    rows_by_wallet: dict[str, list[dict[str, Any]]],
+) -> None:
+    import_dir = base_dir / "imports" / "json"
+    import_dir.mkdir(parents=True, exist_ok=True)
+    for wallet_key, rows in rows_by_wallet.items():
+        wallet = wallets.get(wallet_key)
+        if wallet is None:
+            raise RuntimeError(f"Boltz v2 metadata references unknown wallet: {wallet_key}")
+        if wallet.source_format != "json":
+            raise RuntimeError(f"Boltz v2 metadata wallet {wallet_key} must use source_format=json")
+        source_path = import_dir / f"{sanitize_wallet_segment(wallet.key)}.json"
+        with source_path.open("w", encoding="utf-8") as handle:
+            json.dump(rows, handle, indent=2, sort_keys=True)
+        wallet.source_file = str(source_path)
 
 
 def _generic_ledger_csv_record(row: dict[str, Any]) -> dict[str, str]:
@@ -2398,6 +2520,56 @@ def _assert_ownership_self_transfer_matching(
     }
 
 
+def _assert_boltz_v2_metadata_candidates(
+    data_root: Path,
+    scenario: dict[str, Any],
+) -> dict[str, Any]:
+    swaps = scenario.get("boltz_v2_metadata_swaps") or []
+    if not swaps:
+        return {"count": 0, "ids": []}
+    scope = _scope(scenario)
+    payload = run_cli(
+        data_root,
+        "transfers",
+        "suggest",
+        *scope,
+        "--confidence",
+        "exact",
+        "--method",
+        "provider_swap_id",
+    )["data"]
+    candidates = payload["candidates"]
+    expected = {str(swap["id"]): swap for swap in swaps}
+    observed = {
+        str((candidate.get("evidence") or {}).get("id") or ""): candidate
+        for candidate in candidates
+        if (candidate.get("evidence") or {}).get("provider") == "boltz"
+    }
+    if set(observed) != set(expected):
+        raise RuntimeError(
+            "Boltz v2 provider metadata candidates did not match the regtest scenario: "
+            f"expected={sorted(expected)}, observed={candidates}"
+        )
+    for swap_id, swap in expected.items():
+        candidate = observed[swap_id]
+        evidence = candidate.get("evidence") or {}
+        if candidate.get("method") != "provider_swap_id" or candidate.get("confidence") != "exact":
+            raise RuntimeError(f"Boltz v2 candidate is not exact provider evidence: {candidate}")
+        if candidate.get("default_kind") != swap.get("pair_kind"):
+            raise RuntimeError(
+                f"Boltz v2 candidate kind mismatch for {swap_id}: "
+                f"expected {swap.get('pair_kind')}, got {candidate.get('default_kind')}"
+            )
+        if candidate.get("default_policy") != swap.get("pair_policy"):
+            raise RuntimeError(
+                f"Boltz v2 candidate policy mismatch for {swap_id}: "
+                f"expected {swap.get('pair_policy')}, got {candidate.get('default_policy')}"
+            )
+        if evidence.get("version") != "2" or evidence.get("taproot") != "True":
+            raise RuntimeError(f"Boltz v2 candidate lost Taproot evidence fields: {candidate}")
+    return {"count": len(observed), "ids": sorted(observed)}
+
+
 def _pair_transfers(
     data_root: Path,
     scenario: dict[str, Any],
@@ -2494,6 +2666,32 @@ def _pair_transfers(
                 bridge.get("note") or f"{bridge_id} bridge pair.",
             )["data"]
         )
+    metadata_swaps = scenario.get("boltz_v2_metadata_swaps") or []
+    if metadata_swaps:
+        for swap in metadata_swaps:
+            swap_id = str(swap["id"])
+            if truth is not None:
+                truth.record_transfer_pair(
+                    swap_id,
+                    txids[f"{swap_id}_out"],
+                    txids[f"{swap_id}_in"],
+                    kind=swap.get("pair_kind") or "chain-swap",
+                    policy=swap.get("pair_policy") or "taxable",
+                    note=swap.get("note") or f"{swap_id} Boltz v2 metadata pair.",
+                )
+        bulk = run_cli(
+            data_root,
+            "transfers",
+            "bulk-pair",
+            *scope,
+            "--confidence",
+            "exact",
+            "--method",
+            "provider_swap_id",
+        )["data"]
+        if int((bulk.get("summary") or {}).get("count") or 0) != len(metadata_swaps):
+            raise RuntimeError(f"Expected to bulk-pair {len(metadata_swaps)} Boltz v2 metadata swaps, got {bulk}")
+        paired.extend(bulk.get("applied") or [])
     for pair in (scenario.get("liquid_ledger") or {}).get("transfer_pairs") or []:
         out_txid = txids.get(pair["tx_out"], _deterministic_demo_txid(str(pair["tx_out"])))
         in_txid = txids.get(pair["tx_in"], _deterministic_demo_txid(str(pair["tx_in"])))
@@ -3774,6 +3972,9 @@ def run_demo(
         )
         _record_liquid_ledger_transactions(truth, liquid_rows_by_wallet, wallets)
         _write_liquid_ledger_files(base_dir, wallets, liquid_rows_by_wallet)
+        boltz_v2_rows_by_wallet = _boltz_v2_metadata_rows_from_manifest(scenario, txids)
+        _record_json_source_transactions(truth, boltz_v2_rows_by_wallet, wallets)
+        _write_json_source_files(base_dir, wallets, boltz_v2_rows_by_wallet)
         birthday = datetime.fromtimestamp(birthday_ts, tz=timezone.utc)
         birthday_iso = birthday.isoformat().replace("+00:00", "Z")
         _create_kassiber_book(
@@ -3840,6 +4041,7 @@ def run_demo(
             "asc",
         )["data"]
         collaborative_excluded = _exclude_collaborative_shapes(data_root, scenario, txids, transactions)
+        boltz_v2_metadata_matching = _assert_boltz_v2_metadata_candidates(data_root, scenario)
         ownership_matching = _assert_ownership_self_transfer_matching(data_root, scenario)
         pairs = _pair_transfers(data_root, scenario, txids, truth=truth)
         loan_result = _mark_loans(data_root, scenario, txids)
@@ -3980,6 +4182,7 @@ def run_demo(
                     "paired": pairs,
                     "count": len(transfer_listing),
                     "ownership_matching": ownership_matching,
+                    "boltz_v2_metadata_matching": boltz_v2_metadata_matching,
                 },
                 "collaborative_excluded": collaborative_excluded,
                 "loans": {

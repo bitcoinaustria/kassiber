@@ -10,9 +10,9 @@ regtest infrastructure.
 | --- | --- | --- | --- |
 | FAST | `./scripts/integration-harness.sh fast` | no | Replays recorded regtest tapes through the real sync adapter, import, journal, report, and XLSX export path with `KASSIBER_NO_EGRESS=1`. Includes a baseline watch-only tape and an edge-case tape (multi-address wallet, immature vs. mature coinbase, dust, RBF-replaced conflict pair, same-wallet self-spend, mempool-pending receipt). |
 | SLOW | `./scripts/integration-harness.sh bitcoin-core` | yes, unless reusing a node | Starts or reuses the regtest Compose stack (Bitcoin Core, Elements, Bitcoin Fulcrum, plus local mempool/esplora-compatible loopback endpoints), creates real wallets and transactions (including coinbase maturity and a watched receive), drives the Core RPC sync/pricing/journal/report/export smoke, and compares a real Fulcrum/Electrum address-wallet sync against Core RPC for receipt, spend, incremental, and no-op sync parity. |
-| DEMO | `./scripts/integration-harness.sh demo-full` | yes, unless reusing a node | Builds the checked-in `full-accounting-v1` scenario: thirteen Kassiber wallets including multi-address Bitcoin wallets, a Silent Payments wallet, rotation targets, a mining wallet, deterministic historical elementsregtest/LBTC import wallets, and one descriptor-backed Liquid wallet synced from real `elementsd` transactions through the local Liquid Electrum endpoint; real regtest acquisitions/disposals/transfers, ownership-derived fan-out self-transfer matching, operating-expense disposals with deterministic amount/fee variation, deprecated rotated-out wallets, batched, consolidation, dust, RBF-replacement, and mempool-pending edge cases, local Bitcoin/Liquid Electrum and mempool-compatible backend rows, a multi-year stress ledger, CoinJoin- and PayJoin-shaped collaborative transactions, swap/peg bridge pairs, loan marks, bundled real historical BTC/EUR pricing, journals, reports, and transaction exports. |
+| DEMO | `./scripts/integration-harness.sh demo-full` | yes, unless reusing a node | Builds the checked-in `full-accounting-v1` scenario: sixteen Kassiber wallets including multi-address Bitcoin wallets, a Silent Payments wallet, rotation targets, a mining wallet, deterministic historical elementsregtest/LBTC import wallets, Boltz v2 metadata import wallets, and one descriptor-backed Liquid wallet synced from real `elementsd` transactions through the local Liquid Electrum endpoint; real regtest acquisitions/disposals/transfers, ownership-derived fan-out self-transfer matching, operating-expense disposals with deterministic amount/fee variation, deprecated rotated-out wallets, batched, consolidation, dust, RBF-replacement, and mempool-pending edge cases, local Bitcoin/Liquid Electrum and mempool-compatible backend rows, a multi-year stress ledger, CoinJoin- and PayJoin-shaped collaborative transactions, swap/peg bridge pairs, loan marks, bundled real historical BTC/EUR pricing, journals, reports, and transaction exports. |
 | SILENT PAYMENTS | `./scripts/integration-harness.sh silent-payments` | yes | Starts the regtest Compose stack with the `silent-payments` profile, which builds/runs Sparrow Frigate against Bitcoin Core v30 and Fulcrum, waits until Frigate advertises `silent_payments: [0]` through `server.features`, then runs Kassiber's Silent Payments sync tests. Override the cold-start wait with `KASSIBER_REGTEST_FRIGATE_WAIT_SECONDS` if the local Frigate index is slow. |
-| BOLTZ | `./scripts/integration-harness.sh boltz-liquid` | yes, upstream Boltz stack | Starts or reuses Boltz's official [`BoltzExchange/regtest`](https://github.com/BoltzExchange/regtest) Docker environment, probes the local Boltz API for Liquid-capable submarine, reverse, and BTC -> L-BTC chain-swap pairs, executes a Liquid on-chain payment plus an L-BTC -> BTC Lightning submarine swap, builds Kassiber import rows from the observed txids/hash/amounts, and verifies the swap pairs while the plain Liquid payment stays unpaired. |
+| BOLTZ | `./scripts/integration-harness.sh boltz-liquid` | yes, upstream Boltz stack | Starts or reuses Boltz's official [`BoltzExchange/regtest`](https://github.com/BoltzExchange/regtest) Docker environment, probes the local Boltz API for Liquid-capable submarine, reverse, and BTC -> L-BTC chain-swap pairs, executes a Liquid on-chain payment plus an L-BTC -> BTC Lightning submarine swap, builds Kassiber import rows from the observed txids/hash/amounts, and verifies the swap pairs while the plain Liquid payment stays unpaired. Reverse, chain, and cooperative refund accounting are also covered with deterministic Boltz v2 provider-metadata JSON rows until the harness delegates client-side signing to Boltz's SDK/client. |
 | LIGHTNING | `./scripts/integration-harness.sh lightning-business` | yes, Kassiber stack + CLN overlay | Starts the existing regtest Compose stack plus `dev/regtest/compose.lightning.yml` with four pinned Core Lightning nodes. A seeded sim-ln-inspired business plan drives mainchain top-ups/withdrawals, merchant invoices, supplier payments, routed forwarding activity, an expired quote, and an intentionally failed oversized payment, then verifies Kassiber through `wallets sync`, `ui.connections.node.snapshot`, `reports lightning-profitability`, and `export-lightning-profitability-csv`. |
 
 The slow lane is opt-in with `KASSIBER_INTEGRATION=1`; normal unit gates do not
@@ -151,11 +151,19 @@ API for the low-signing happy path that Kassiber needs to account for today:
 - a temporary Kassiber book with a Liquid ledger import and Lightning import
   generated from the observed txids, payment hash, and amounts, followed by
   `transfers suggest` and `transfers bulk-pair` assertions.
+- deterministic JSON imports that mimic a redacted Boltz v2 SDK/client export
+  for BTC -> L-BTC chain swap, BTC -> L-BTC reverse swap, and same-asset failed
+  refund. These rows carry `provider=boltz`, a provider-scoped swap id, route
+  txids, and Taproot/cooperative metadata, and assert exact `provider_swap_id`
+  matching through the same Kassiber accounting book.
 
-The same lane still verifies reverse and BTC -> L-BTC chain-swap pair metadata
-because those flows require client-side claim/refund transaction construction.
-They should move from metadata coverage to executed fixtures once the harness
-delegates that signing/recovery state machine to Boltz's official client or SDK.
+The lane still only live-executes the L-BTC -> BTC submarine path because
+reverse, BTC -> L-BTC chain, and refund execution require client-side
+claim/refund transaction construction. Their current coverage is accounting
+metadata coverage, not proof that Kassiber can produce or sign those Boltz
+transactions. They should move from metadata fixtures to executed fixtures once
+the harness delegates that signing/recovery state machine to Boltz's official
+client or SDK.
 
 Boltz's upstream Compose file binds bitcoind RPC to host port `18443`, the same
 default used by Kassiber's own regtest lane. If that port is already occupied,
@@ -293,10 +301,14 @@ the Core RPC backend, then verifies Kassiber behavior through the public CLI:
   exist the demo runs `journals process` and `journals transfers list` to prove
   both MOVE legs are surfaced with `pairing_source=ownership_derived`
 - Liquid/on-chain-style bridge events (`peg-in`, a Boltz-marked
-  BTC -> L-BTC chain-swap-shaped bridge recorded under the existing
-  `submarine-swap` review kind, and `peg-out`) pair real Bitcoin Core txids
-  with deterministic LBTC ledger external IDs so the generic-tax demo
-  exercises taxable cross-asset swaps
+  BTC -> L-BTC `chain-swap`, and `peg-out`) pair real Bitcoin Core txids with
+  deterministic LBTC ledger external IDs so the generic-tax demo exercises
+  taxable cross-asset swaps
+- deterministic Boltz v2 provider-metadata JSON imports for cooperative
+  key-path BTC -> L-BTC chain swap, BTC -> L-BTC reverse swap, and same-asset
+  failed refund. The demo asserts they surface as exact `provider_swap_id`
+  candidates before pairing, then bulk-pairs them into the reportable book with
+  `chain-swap`, `reverse-submarine-swap`, and `swap-refund` kinds.
 - local backend rows for Bitcoin Core RPC, Bitcoin Electrum/Fulcrum-compatible
   TCP, Bitcoin mempool-compatible HTTP, Liquid Electrum-compatible TCP, and
   Liquid mempool-compatible HTTP; the demo deletes public/default backends and

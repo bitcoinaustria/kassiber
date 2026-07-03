@@ -309,13 +309,33 @@ class ToolCatalogPromptTest(unittest.TestCase):
             review_context_schema["properties"]["candidate_type"]["enum"],
             ["transfer", "swap"],
         )
+        self.assertIn(
+            "provider_swap_id",
+            review_context_schema["properties"]["method"]["enum"],
+        )
+        suggest_schema = get_tool("ui_transfers_suggest").parameters
+        self.assertIn(
+            "provider_swap_id",
+            suggest_schema["properties"]["method"]["enum"],
+        )
         self.assertIn("ui_wallets_sync", tool_names)
         self.assertIn("ui_journals_process", tool_names)
         self.assertIn("ui_maintenance_configure", tool_names)
         self.assertIn("ui_maintenance_run", tool_names)
         pair_schema = get_tool("ui_transfers_pair").parameters
         self.assertIn("coinjoin", pair_schema["properties"]["kind"]["enum"])
+        self.assertIn("chain-swap", pair_schema["properties"]["kind"]["enum"])
+        self.assertIn(
+            "reverse-submarine-swap",
+            pair_schema["properties"]["kind"]["enum"],
+        )
         self.assertIn("Coinjoin", get_tool("ui_transfers_pair").description)
+        bulk_pair_schema = get_tool("ui_transfers_bulk_pair").parameters
+        self.assertIn("method", bulk_pair_schema["properties"])
+        self.assertIn(
+            "provider_swap_id",
+            bulk_pair_schema["properties"]["method"]["enum"],
+        )
 
     def test_mutating_tool_preview_redacts_secret_like_arguments(self):
         tool = get_tool("ui.wallets.sync")

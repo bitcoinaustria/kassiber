@@ -71,12 +71,13 @@
     },
     "confidence": {
       "any": "Any confidence",
-      "exact": "Exact (payment_hash)",
+      "exact": "Exact evidence",
       "strong": "Strong (heuristic)"
     },
     "method": {
       "any": "Any method",
       "paymentHash": "Payment hash",
+      "providerSwapId": "Provider evidence",
       "heuristic": "Time + amount",
       "htlcRefund": "Refund link"
     },
@@ -149,6 +150,7 @@
       "candidateLabelLayerTransition": "Bitcoin swap candidate",
       "candidateLabelSwap": "Swap candidate",
       "matchedByPaymentHash": "Matched by payment hash.",
+      "matchedByProviderEvidence": "Matched by provider evidence.",
       "matchedByTimeAmount": "Matched by time and amount.",
       "matchedByRefundLink": "Matched by HTLC refund link.",
       "delta": "Delta {{delta}} ({{percent}}%).",
@@ -158,6 +160,7 @@
       "policy": "Policy",
       "matchRationale": "Match rationale",
       "rationalePaymentHash": "Both legs share the same Lightning payment hash.",
+      "rationaleProviderEvidence": "Both legs share the same redacted provider swap id.",
       "rationaleHeuristic": "The legs are close in time and amount after accounting for the fee delta.",
       "rationaleHtlcRefund": "The inbound refund spends the outbound's on-chain HTLC funding output, a deterministic link even within one wallet.",
       "autoPairRoute": "Auto-pair route: {{rule}}",

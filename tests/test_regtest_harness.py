@@ -205,12 +205,21 @@ class RegtestHarnessTest(unittest.TestCase):
                 "liquid_operations",
                 "liquid_treasury_2024",
                 "liquid_live_sync",
+                "boltz_v2_btc_metadata",
+                "boltz_v2_lightning_metadata",
+                "boltz_v2_liquid_metadata",
             },
         )
         liquid_wallets = {wallet["key"] for wallet in scenario["wallets"] if wallet.get("chain") == "liquid"}
         self.assertEqual(
             liquid_wallets,
-            {"liquid_treasury", "liquid_operations", "liquid_treasury_2024", "liquid_live_sync"},
+            {
+                "liquid_treasury",
+                "liquid_operations",
+                "liquid_treasury_2024",
+                "liquid_live_sync",
+                "boltz_v2_liquid_metadata",
+            },
         )
         self.assertEqual(
             {wallet["network"] for wallet in scenario["wallets"] if wallet.get("chain") == "liquid"},
@@ -244,10 +253,20 @@ class RegtestHarnessTest(unittest.TestCase):
                     bridge["boltz_api"],
                     bridge["boltz_from"],
                     bridge["boltz_to"],
+                    bridge["pair_kind"],
                 )
                 for bridge in boltz_bridges
             },
-            {("chain-swap", "/v2/swap/chain", "BTC", "L-BTC")},
+            {("chain-swap", "/v2/swap/chain", "BTC", "L-BTC", "chain-swap")},
+        )
+        boltz_v2_swaps = scenario["boltz_v2_metadata_swaps"]
+        self.assertEqual(
+            {(swap["flow"], swap["pair_kind"], swap["pair_policy"]) for swap in boltz_v2_swaps},
+            {
+                ("chain", "chain-swap", "taxable"),
+                ("reverse-submarine", "reverse-submarine-swap", "taxable"),
+                ("refund", "swap-refund", "carrying-value"),
+            },
         )
         self.assertEqual(
             scenario["deprecated_wallets"],
@@ -294,7 +313,7 @@ class RegtestHarnessTest(unittest.TestCase):
         self.assertTrue(any(amount < Decimal("0.00001") for amount in dust_amounts))
         pending = scenario["pending_operations"]
         self.assertEqual([op["kind"] for op in pending], ["external_receipt"])
-        self.assertEqual(scenario["expected"]["wallets"], 13)
+        self.assertEqual(scenario["expected"]["wallets"], 16)
         self.assertEqual(scenario["expected"]["deprecated_wallets"], 4)
         self.assertEqual(scenario["expected"]["assets"], ["BTC", "LBTC"])
         self.assertGreaterEqual(scenario["expected"]["min_transactions"], 847)
@@ -344,7 +363,7 @@ class RegtestHarnessTest(unittest.TestCase):
         self.assertNotEqual(rates, sorted(rates))
         self.assertNotEqual(rates, sorted(rates, reverse=True))
         self.assertEqual(scenario["expected"]["collaborative_excluded"], 5)
-        self.assertEqual(scenario["expected"]["min_transfer_pairs"], 9)
+        self.assertEqual(scenario["expected"]["min_transfer_pairs"], 12)
         self.assertEqual(scenario["expected"]["ownership_derived_transfer_pairs"], 2)
         fanouts = [op for op in scenario["operations"] if op["kind"] == "self_transfer_fanout"]
         self.assertEqual(len(fanouts), 1)

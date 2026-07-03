@@ -392,6 +392,35 @@ class SwapReviewSuggestedActionTest(unittest.TestCase):
                 "confidence_at_pair": "exact",
             },
         )
+        self.assertEqual(
+            action["reason"],
+            "payment_hash identity is exact and non-conflicted",
+        )
+
+    def test_provider_id_exact_candidate_reason_mentions_provider_metadata(self):
+        try:
+            from kassiber.daemon_swap_review import _swap_review_suggested_action
+        except ModuleNotFoundError as exc:
+            self.skipTest(f"project dependency unavailable: {exc}")
+
+        action = _swap_review_suggested_action(
+            {
+                "out_id": "tx-out-1",
+                "in_id": "tx-in-1",
+                "default_kind": "chain-swap",
+                "default_policy": "carrying-value",
+                "confidence": "exact",
+                "method": "provider_swap_id",
+            },
+            conflict_size=1,
+            fee_assessment="normal",
+        )
+
+        self.assertEqual(action["action"], "pair_exact_candidate")
+        self.assertEqual(
+            action["reason"],
+            "provider swap metadata is exact and non-conflicted",
+        )
 
 
 if __name__ == "__main__":

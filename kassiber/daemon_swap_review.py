@@ -288,6 +288,15 @@ def _swap_review_confidence_reason(candidate: Mapping[str, Any]) -> dict[str, An
             ),
             "needs_human_confirmation": False,
         }
+    if method == "provider_swap_id":
+        evidence = candidate.get("evidence") or {}
+        provider = evidence.get("provider") or "provider"
+        return {
+            "confidence": confidence,
+            "method": method,
+            "reason": f"both legs share redacted {provider} swap metadata",
+            "needs_human_confirmation": False,
+        }
     return {
         "confidence": confidence,
         "method": method,
@@ -364,12 +373,16 @@ def _swap_review_suggested_action(
             ),
         }
     if candidate.get("confidence") == "exact":
-        reason = (
-            "the inbound refund deterministically spends the outbound's HTLC "
-            "funding output, and is non-conflicted"
-            if candidate.get("method") == "htlc_refund"
-            else "payment_hash identity is exact and non-conflicted"
-        )
+        method = candidate.get("method")
+        if method == "htlc_refund":
+            reason = (
+                "the inbound refund deterministically spends the outbound's HTLC "
+                "funding output, and is non-conflicted"
+            )
+        elif method == "provider_swap_id":
+            reason = "provider swap metadata is exact and non-conflicted"
+        else:
+            reason = "payment_hash identity is exact and non-conflicted"
         return {
             "action": "pair_exact_candidate",
             "daemon_kind": "ui.transfers.pair",

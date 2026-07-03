@@ -832,11 +832,19 @@ Behavior:
 - Lightning rows derive Kassiber's `payment_hash` from a valid exported
   preimage, or fall back to a 64-hex `txid`, for exact swap-pair matching
 - chain-swap metadata such as `swap_id`, `send_network`, `receive_network`,
-  `send_txid`, and `receive_txid` is preserved in redacted raw metadata
+  `send_txid`, and `receive_txid` is preserved in redacted raw metadata and
+  feeds the exact `provider_swap_id` matcher for cooperative Taproot/key-path
+  flows where chain data alone is not identifying
 - `preimage` is not stored in raw metadata; the importer records that it was
   redacted
-- `direction=self` rows and `status=failed` / `status=expired` rows are skipped
-  because they are not standalone taxable wallet movements
+- `direction=self` rows and `status=failed` / `status=expired` /
+  `status=refunded` rows are skipped because they are not standalone taxable
+  wallet movements. Bull's CSV currently collapses a refunded chain swap to a
+  single canonical swap row and does not export the refund txid as its own leg,
+  so Bull CSV alone cannot prove or book the refund round trip. Use descriptor
+  chain sync (for script-path HTLC refund evidence) or provider/SDK metadata
+  that carries both the lockup and refund legs before pairing it as
+  `swap-refund`.
 
 If BTC and Liquid descriptors are already the book's source of wallet history,
 do not also import the same Bull wallet CSV rows into separate active wallets,

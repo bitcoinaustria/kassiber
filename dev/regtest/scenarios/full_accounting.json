@@ -218,7 +218,7 @@
         "out_btc": "0.03500000",
         "in_btc": "0.03410000",
         "fee_btc": "0.00001000",
-        "pair_kind": "submarine-swap",
+        "pair_kind": "chain-swap",
         "pair_policy": "taxable",
         "provider": "boltz",
         "boltz_flow": "chain-swap",
@@ -226,7 +226,7 @@
         "boltz_from": "BTC",
         "boltz_to": "L-BTC",
         "in_external_id": "submarine_rebalance_2022_lbtc_in",
-        "note": "A Boltz BTC to L-BTC chain-swap-shaped bridge rebalances operational funds through Liquid."
+        "note": "A Boltz BTC to L-BTC chain swap rebalances operational funds through Liquid."
       },
       {
         "id": "liquid_pegout_2024",
@@ -397,6 +397,36 @@
       "network": "elementsregtest",
       "source_format": "generic_ledger",
       "initial_btc": "0.00000000"
+    },
+    {
+      "key": "boltz_v2_btc_metadata",
+      "label": "Regtest Boltz V2 BTC Metadata",
+      "account": "treasury",
+      "kind": "custom",
+      "chain": "bitcoin",
+      "network": "regtest",
+      "source_format": "json",
+      "initial_btc": "0.00000000"
+    },
+    {
+      "key": "boltz_v2_lightning_metadata",
+      "label": "Regtest Boltz V2 Lightning Metadata",
+      "account": "spending",
+      "kind": "custom",
+      "chain": "bitcoin",
+      "network": "regtest",
+      "source_format": "json",
+      "initial_btc": "0.00000000"
+    },
+    {
+      "key": "boltz_v2_liquid_metadata",
+      "label": "Regtest Boltz V2 Liquid Metadata",
+      "account": "liquid_operations",
+      "kind": "custom",
+      "chain": "liquid",
+      "network": "elementsregtest",
+      "source_format": "json",
+      "initial_btc": "0.00000000"
     }
   ],
   "deprecated_wallets": [
@@ -503,6 +533,59 @@
       }
     ]
   },
+  "boltz_v2_metadata_swaps": [
+    {
+      "id": "boltz_v2_chain_2025",
+      "flow": "chain",
+      "status": "completed",
+      "out_wallet": "boltz_v2_btc_metadata",
+      "in_wallet": "boltz_v2_liquid_metadata",
+      "out_asset": "BTC",
+      "in_asset": "LBTC",
+      "out_btc": "0.01000000",
+      "in_btc": "0.00990000",
+      "fee_btc": "0.00000500",
+      "out_date": "2025-06-03T10:00:00Z",
+      "in_date": "2025-06-03T10:05:00Z",
+      "pair_kind": "chain-swap",
+      "pair_policy": "taxable",
+      "note": "Imported Boltz v2 cooperative BTC to L-BTC chain-swap evidence."
+    },
+    {
+      "id": "boltz_v2_reverse_2025",
+      "flow": "reverse-submarine",
+      "status": "invoice.settled",
+      "out_wallet": "boltz_v2_lightning_metadata",
+      "in_wallet": "boltz_v2_liquid_metadata",
+      "out_asset": "BTC",
+      "in_asset": "LBTC",
+      "out_btc": "0.02000000",
+      "in_btc": "0.01980000",
+      "fee_btc": "0.00000000",
+      "out_date": "2025-06-10T11:00:00Z",
+      "in_date": "2025-06-10T11:04:00Z",
+      "pair_kind": "reverse-submarine-swap",
+      "pair_policy": "taxable",
+      "note": "Imported Boltz v2 reverse swap evidence from Lightning into Liquid."
+    },
+    {
+      "id": "boltz_v2_refund_2025",
+      "flow": "refund",
+      "status": "transaction.refunded",
+      "out_wallet": "boltz_v2_btc_metadata",
+      "in_wallet": "boltz_v2_btc_metadata",
+      "out_asset": "BTC",
+      "in_asset": "BTC",
+      "out_btc": "0.00500000",
+      "in_btc": "0.00498000",
+      "fee_btc": "0.00000200",
+      "out_date": "2025-06-17T12:00:00Z",
+      "in_date": "2025-06-17T13:00:00Z",
+      "pair_kind": "swap-refund",
+      "pair_policy": "carrying-value",
+      "note": "Imported Boltz v2 cooperative refund evidence; the round trip books only the shortfall and network fee."
+    }
+  ],
   "operations": [
     {
       "id": "treasury_external_disposal",
@@ -684,7 +767,7 @@
     }
   ],
   "expected": {
-    "wallets": 13,
+    "wallets": 16,
     "deprecated_wallets": 4,
     "assets": [
       "BTC",
@@ -695,11 +778,11 @@
       "BTC",
       "LBTC"
     ],
-    "min_transactions": 848,
-    "min_active_transactions": 843,
+    "min_transactions": 854,
+    "min_active_transactions": 849,
     "pending_transactions": 1,
     "collaborative_excluded": 5,
-    "min_transfer_pairs": 9,
+    "min_transfer_pairs": 12,
     "ownership_derived_transfer_pairs": 2,
     "loan_marks": 4,
     "open_collateral_locks": 0,

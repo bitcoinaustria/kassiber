@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import tempfile
 import unittest
+from pathlib import Path
 
 from tests.integration import boltz_liquid_regtest
 from tests.integration.env import no_egress_guard, skip_unless_env
@@ -44,6 +46,40 @@ class BoltzLiquidRegtestTest(unittest.TestCase):
             {("chain-swap", "BTC", "L-BTC")},
         )
 
+    def test_accounting_builder_covers_metadata_only_v2_flows(self):
+        payment = {
+            "txid": "11" * 32,
+            "amount_sats": 77777,
+            "amount": "0.00077777",
+            "asset": "LBTC",
+        }
+        swap = {
+            "id": "unit-submarine",
+            "payment_hash": "ab" * 32,
+            "invoice_sats": 100000,
+            "expected_amount_sats": 101000,
+            "expected_amount": "0.00101000",
+            "lockup_txid": "22" * 32,
+            "status": "invoice.paid",
+        }
+
+        with tempfile.TemporaryDirectory(prefix="kassiber-boltz-accounting-") as tmp:
+            accounting = boltz_liquid_regtest._build_accounting_book(  # noqa: SLF001
+                Path(tmp) / "data",
+                payment=payment,
+                swap=swap,
+            )
+
+        self.assertEqual(accounting["metadata_pairs"]["count"], 3)
+        self.assertEqual(
+            accounting["metadata_pairs"]["kinds"],
+            ["chain-swap", "reverse-submarine-swap", "swap-refund"],
+        )
+        self.assertEqual(accounting["imports"]["metadata_json_rows"], 6)
+        self.assertEqual(accounting["candidate"]["method"], "payment_hash")
+        self.assertEqual(accounting["pair"]["kind"], "submarine-swap")
+        self.assertFalse(accounting["plain_payment"]["paired"])
+
     @skip_unless_env("KASSIBER_BOLTZ_REGTEST", "local Boltz regtest stack is opt-in")
     def test_live_boltz_liquid_execution_covers_swap_and_payment_accounting(self):
         with no_egress_guard(enabled=True):
@@ -70,6 +106,11 @@ class BoltzLiquidRegtestTest(unittest.TestCase):
         self.assertEqual(candidate["in_wallet_kind"], "lnd")
         self.assertEqual(candidate["default_kind"], "submarine-swap")
         self.assertEqual(candidate["candidate_type"], "transfer")
+        self.assertEqual(accounting["metadata_pairs"]["count"], 3)
+        self.assertEqual(
+            accounting["metadata_pairs"]["kinds"],
+            ["chain-swap", "reverse-submarine-swap", "swap-refund"],
+        )
 
         pair = accounting["pair"]
         self.assertEqual(pair["kind"], "submarine-swap")
