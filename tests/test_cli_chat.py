@@ -157,6 +157,80 @@ def _seed_provider(data_root, base_url):
 
 
 class CliChatTest(unittest.TestCase):
+    def test_daemon_chat_client_drains_large_stderr_before_ready(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-chat-stderr-") as tmp:
+            tmp_path = Path(tmp)
+            fake_daemon = tmp_path / "fake_daemon.py"
+            fake_daemon.write_text(
+                """
+import json
+import sys
+
+sys.stderr.write("daemon stderr fill\\n" * 20000)
+sys.stderr.flush()
+sys.stdout.write(json.dumps({"kind": "daemon.ready"}) + "\\n")
+sys.stdout.flush()
+for _line in sys.stdin:
+    pass
+""".lstrip(),
+                encoding="utf-8",
+            )
+            probe = tmp_path / "probe.py"
+            probe.write_text(
+                f"""
+import importlib.util
+import sys
+import types
+from pathlib import Path
+
+root = Path({str(ROOT)!r})
+sys.path.insert(0, str(root))
+cli_pkg = types.ModuleType("kassiber.cli")
+cli_pkg.__path__ = [str(root / "kassiber" / "cli")]
+sys.modules["kassiber.cli"] = cli_pkg
+
+spec = importlib.util.spec_from_file_location(
+    "kassiber.cli.chat",
+    root / "kassiber" / "cli" / "chat.py",
+)
+module = importlib.util.module_from_spec(spec)
+sys.modules[spec.name] = module
+spec.loader.exec_module(module)
+_DaemonChatClient = module._DaemonChatClient
+
+
+class Args:
+    data_root = {str(tmp_path / "data")!r}
+    env_file = None
+    db_passphrase_fd = None
+
+
+class Client(_DaemonChatClient):
+    def _daemon_command(self, args):
+        return [sys.executable, {str(fake_daemon)!r}]
+
+
+client = Client(Args())
+try:
+    print("ready")
+finally:
+    client.close()
+""".lstrip(),
+                encoding="utf-8",
+            )
+
+            result = subprocess.run(
+                [sys.executable, str(probe)],
+                cwd=ROOT,
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=10,
+            )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("ready", result.stdout)
+
     def test_chat_runs_daemon_tool_loop(self):
         server = _start_tool_chat_server(
             [

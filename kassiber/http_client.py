@@ -52,6 +52,27 @@ _HOST_LIMITERS: dict[str, threading.BoundedSemaphore] = {}
 _HOST_LIMITER_LOCK = threading.Lock()
 
 
+def _host_limiter_key(url: str) -> str:
+    raw = str(url or "").strip()
+    parsed = urlparse.urlsplit(raw if "://" in raw else f"//{raw}")
+    host = (parsed.hostname or "").strip().rstrip(".").lower()
+    if host:
+        return host
+    return "<unknown-host>"
+
+
+def _url_error_label(url: str) -> str:
+    raw = str(url or "").strip()
+    try:
+        parsed = urlparse.urlsplit(raw if "://" in raw else f"//{raw}")
+    except ValueError:
+        return "backend endpoint"
+    scheme = (parsed.scheme or "endpoint").lower()
+    if parsed.hostname:
+        return f"{scheme}://<redacted-host>"
+    return "backend endpoint"
+
+
 def host_limiter(url):
     """Return the shared per-host concurrency semaphore for ``url``.
 
@@ -59,7 +80,7 @@ def host_limiter(url):
     threads can never install two semaphores for one host (which would double
     the effective concurrency).
     """
-    host = urlparse.urlsplit(url).netloc.lower()
+    host = _host_limiter_key(url)
     limiter = _HOST_LIMITERS.get(host)
     if limiter is None:
         with _HOST_LIMITER_LOCK:
@@ -71,10 +92,11 @@ def host_limiter(url):
 
 
 def _rate_limited_error(url, exc, source_label):
+    target = _url_error_label(url)
     if exc.code == 429:
-        message = f"{source_label} rate limited the request for {url} (HTTP 429)"
+        message = f"{source_label} rate limited the request for {target} (HTTP 429)"
     else:
-        message = f"{source_label} is temporarily unavailable for {url} (HTTP {exc.code})"
+        message = f"{source_label} is temporarily unavailable for {target} (HTTP {exc.code})"
     return AppError(
         message,
         code="rate_limited",
@@ -121,12 +143,14 @@ def request_with_retry(
                 # line of defense).
                 detail = redact_operational_text(redact_secret_text(detail[:200]))
                 raise AppError(
-                    f"HTTP {exc.code} from backend for {url}: {detail}"
+                    f"HTTP {exc.code} from backend for {_url_error_label(url)}: {detail}"
                 ) from exc
             last_error = exc
             retry_after = retry_after_seconds_from_http_error(exc)
         except urlerror.URLError as exc:
-            raise AppError(f"Failed to reach backend {url}: {exc.reason}") from exc
+            raise AppError(
+                f"Failed to reach backend {_url_error_label(url)}: {exc.reason}"
+            ) from exc
         finally:
             limiter.release()
         # Only retryable statuses (429/503) reach here; the semaphore is released

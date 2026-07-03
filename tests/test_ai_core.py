@@ -40,6 +40,7 @@ from kassiber.ai.client import (
     OpenAICompatClient,
     ToolCallAccumulator,
     parse_sse_chunks,
+    _cli_failure,
     _http_error_app_error,
     _network_error_app_error,
     _resolve_cli_executable,
@@ -156,6 +157,24 @@ class ToolCatalogPromptTest(unittest.TestCase):
             ),
             {"mnemonic": "[redacted]", "seed_words": "[redacted]", "safe": "ok"},
         )
+
+    def test_cli_provider_failure_details_do_not_echo_stdout_or_stderr(self):
+        completed = subprocess.CompletedProcess(
+            args=["codex"],
+            returncode=1,
+            stdout="prompt fragment: explain my wallet sk-test-secret",
+            stderr="Authorization: Bearer sk-test-secret\nprompt fragment",
+        )
+
+        error = _cli_failure("codex", completed)
+
+        self.assertEqual(error.details["exit_code"], 1)
+        self.assertIn("stdout_bytes", error.details)
+        self.assertIn("stderr_bytes", error.details)
+        self.assertNotIn("stdout", error.details)
+        self.assertNotIn("stderr", error.details)
+        self.assertNotIn("prompt fragment", repr(error.details))
+        self.assertNotIn("sk-test-secret", repr(error.details))
 
     def test_tool_catalog_stability(self):
         expected_tool_names = {

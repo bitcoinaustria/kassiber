@@ -326,36 +326,65 @@ import os
 import sys
 from pathlib import Path
 
-home = Path(os.environ["KASSIBER_DEMO_HOME_DIR"]).expanduser().resolve(strict=False)
-user_home = Path.home().resolve(strict=False)
+home = Path(os.environ["KASSIBER_DEMO_HOME_DIR"]).expanduser()
 manifest_path = Path(os.environ["KASSIBER_DEMO_MANIFEST"]).expanduser()
 mode = os.environ["KASSIBER_DEMO_PURGE_MODE"]
+try:
+    resolved = home.resolve(strict=False)
+    user_home = Path.home().resolve(strict=False)
+except OSError as exc:
+    print(f"Refusing unsafe demo home {home}: {exc}", file=sys.stderr)
+    raise SystemExit(2)
 
 def fail(reason: str) -> None:
-    print(f"Refusing to remove unsafe demo directory {home}: {reason}", file=sys.stderr)
-    sys.exit(2)
+    print(f"Refusing to {mode} unsafe demo home {resolved}: {reason}", file=sys.stderr)
+    raise SystemExit(2)
 
 def manifest_matches() -> bool:
     try:
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError, json.JSONDecodeError):
+        return False
+    data_root = manifest.get("data_root")
+    export_dir = manifest.get("export_dir")
+    try:
+        data_root_path = (
+            Path(str(data_root)).expanduser().resolve(strict=False)
+            if data_root
+            else None
+        )
+        export_dir_path = (
+            Path(str(export_dir)).expanduser().resolve(strict=False)
+            if export_dir
+            else None
+        )
+        return (
+            manifest.get("schema_version") == 1
+            and manifest.get("scenario_id") == "full-accounting-v1"
+            and data_root_path == resolved / "data"
+            and export_dir_path == resolved / "exports"
+        )
     except (OSError, ValueError):
         return False
-    return (
-        manifest.get("schema_version") == 1
-        and manifest.get("scenario_id") == "full-accounting-v1"
-        and Path(str(manifest.get("data_root") or "")).expanduser().resolve(strict=False) == home / "data"
-        and Path(str(manifest.get("export_dir") or "")).expanduser().resolve(strict=False) == home / "exports"
-    )
 
-if str(home) == "/" or home == user_home:
-    fail("path is / or the user home")
-if len(home.parts) < 4:
+dangerous = {Path("/"), user_home, Path("/tmp"), Path("/var/tmp")}
+if resolved in dangerous or resolved.parent == Path("/"):
+    fail("path is root, user home, a temp root, or root-level")
+if len(resolved.parts) < 4:
     fail("path is too shallow")
+
+manifest_ok = manifest_matches()
 if mode == "purge":
-    if not manifest_matches():
+    if not manifest_ok:
         fail("missing Kassiber regtest demo manifest")
-elif not manifest_matches() and home.name not in {"regtest-demo", "kassiber-regtest-demo"}:
-    fail("path does not look like a Kassiber regtest demo home")
+else:
+    default_home = user_home / ".kassiber" / "regtest-demo"
+    name = resolved.name.lower()
+    dedicated_name = name in {"regtest-demo", "kassiber-regtest-demo"} or name.startswith(
+        "kassiber-regtest-demo-"
+    )
+    if not (resolved == default_home or dedicated_name or manifest_ok):
+        fail("path does not look like a Kassiber regtest demo home")
 PY
 }
 
@@ -386,6 +415,7 @@ demo_write_manifest() {
 import datetime
 import json
 import os
+import tempfile
 
 manifest_path = os.environ["KASSIBER_DEMO_MANIFEST"]
 home = os.environ["KASSIBER_DEMO_HOME_DIR"]
@@ -410,7 +440,10 @@ manifest = {
 }
 os.makedirs(home, mode=0o700, exist_ok=True)
 os.chmod(home, 0o700)
+os.makedirs(manifest_dir, mode=0o700, exist_ok=True)
+os.chmod(manifest_dir, 0o700)
 tmp_path = None
+fd = None
 for index in range(100):
     candidate = os.path.join(manifest_dir, f".{os.path.basename(manifest_path)}.{os.getpid()}.{index}.tmp")
     try:
@@ -424,6 +457,7 @@ else:
 
 try:
     with os.fdopen(fd, "w", encoding="utf-8") as handle:
+        fd = None
         json.dump(manifest, handle, indent=2, sort_keys=True)
         handle.write("\n")
         handle.flush()
@@ -440,6 +474,8 @@ try:
         finally:
             os.close(dir_fd)
 finally:
+    if fd is not None:
+        os.close(fd)
     if tmp_path is not None:
         try:
             os.unlink(tmp_path)
@@ -512,6 +548,7 @@ PY
 demo_build_book() {
   local checksum
   checksum="$(demo_scenario_checksum)"
+  demo_assert_safe_home rebuild
   if [ -z "${KASSIBER_REGTEST_DEMO_REBUILD:-}" ] \
     && [ -d "$DEMO_HOME/data" ] \
     && [ "$(demo_manifest_get scenario_checksum)" = "$checksum" ]; then
