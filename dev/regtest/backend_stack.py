@@ -194,6 +194,9 @@ class BitcoinIndex:
                     key = electrum_scripthash(str(script_hex))
                     utxos.setdefault(key, []).append(
                         {
+                            "tx_hash": txid,
+                            "tx_pos": n,
+                            "height": tx.get("blockheight") or 0,
                             "txid": txid,
                             "vout": n,
                             "value": _btc_to_sats(output.get("value")) or 0,

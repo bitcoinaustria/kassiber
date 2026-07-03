@@ -2312,6 +2312,43 @@ def _assert_chain_edge_rows(
             )
 
 
+def _assert_live_liquid_sync_rows(
+    scenario: dict[str, Any],
+    txids: dict[str, str],
+    transactions: list[dict[str, Any]],
+) -> None:
+    rows_by_external_id = {row["external_id"]: row for row in transactions}
+    for wallet_spec in scenario["wallets"]:
+        if not _is_liquid_live_wallet_spec(wallet_spec):
+            continue
+        wallet_key = wallet_spec["key"]
+        wallet_label = str(wallet_spec["label"])
+        expected = [
+            (f"{wallet_key}_liquid_live_receive", "inbound"),
+            (f"{wallet_key}_liquid_live_spend", "outbound"),
+        ]
+        for txid_key, direction in expected:
+            txid = txids.get(txid_key)
+            if not txid:
+                raise RuntimeError(f"Liquid live sync did not stage txid {txid_key}")
+            row = rows_by_external_id.get(txid)
+            if row is None:
+                raise RuntimeError(f"Liquid live sync tx {txid_key}={txid} was not imported")
+            if row.get("wallet") != wallet_label:
+                raise RuntimeError(
+                    f"Liquid live sync tx {txid} landed in wallet {row.get('wallet')!r}, "
+                    f"expected {wallet_label!r}"
+                )
+            if str(row.get("asset") or "").upper() != "LBTC":
+                raise RuntimeError(f"Liquid live sync tx {txid} has asset {row.get('asset')!r}, expected LBTC")
+            if row.get("direction") != direction:
+                raise RuntimeError(
+                    f"Liquid live sync tx {txid} has direction {row.get('direction')!r}, expected {direction!r}"
+                )
+            if not row.get("confirmed_at"):
+                raise RuntimeError(f"Liquid live sync tx {txid} should be confirmed")
+
+
 def _assert_expected(
     scenario: dict[str, Any],
     *,
@@ -3019,6 +3056,7 @@ def run_demo(
         deprecated_wallets = _mark_deprecated_wallets(data_root, scenario, wallets)
         journal, transactions, rate_seed = _seed_rates_and_process(data_root, scenario)
         _assert_chain_edge_rows(scenario, txids, transactions)
+        _assert_live_liquid_sync_rows(scenario, txids, transactions)
         wallet_listing = run_cli(data_root, "wallets", "list", *scope)["data"]
         backend_listing = run_cli(data_root, "backends", "list")["data"]
         transfer_listing = run_cli(data_root, "transfers", "list", *scope)["data"]
