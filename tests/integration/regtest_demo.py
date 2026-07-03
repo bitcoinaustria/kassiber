@@ -1137,7 +1137,21 @@ def _active_descriptor(descriptors: list[dict[str, Any]], *, internal: bool) -> 
     if not candidates:
         label = "change" if internal else "receive"
         raise RuntimeError(f"Elements wallet did not expose an active {label} descriptor")
-    return _descriptor_without_checksum(str(candidates[0]["desc"]))
+
+    def preference(row: dict[str, Any]) -> tuple[int, int, str]:
+        desc = _descriptor_without_checksum(str(row.get("desc") or ""))
+        if desc.startswith("wpkh("):
+            type_rank = 0
+        elif desc.startswith("sh(wpkh("):
+            type_rank = 1
+        elif desc.startswith("tr("):
+            type_rank = 2
+        else:
+            type_rank = 3
+        used_rank = 0 if int(row.get("next") or 0) > 0 else 1
+        return used_rank, type_rank, desc
+
+    return _descriptor_without_checksum(str(sorted(candidates, key=preference)[0]["desc"]))
 
 
 def _blinded_liquid_descriptor(master_blinding_key: str, descriptor: str) -> str:
@@ -3695,7 +3709,7 @@ def run_demo(
                     operation["id"],
                     txids[operation["id"]],
                     wallets[operation["merchant"]],
-                    "inbound",
+                    "outbound",
                     source="collaborative_review",
                 )
             elif kind == "rbf_replaced_payment":

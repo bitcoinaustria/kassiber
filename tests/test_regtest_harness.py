@@ -477,6 +477,18 @@ class RegtestHarnessTest(unittest.TestCase):
         self.assertIn("inbound", {row["direction"] for row in truth.transaction_rows})
         self.assertIn("outbound", {row["direction"] for row in truth.transaction_rows})
 
+    def test_liquid_live_descriptor_selection_prefers_used_wpkh(self):
+        descriptors = [
+            {"desc": "pkh([abcd]tpub/0/*)#legacy", "active": True, "internal": False, "next": 0},
+            {"desc": "tr([abcd]tpub/0/*)#taproot", "active": True, "internal": False, "next": 0},
+            {"desc": "wpkh([abcd]tpub/0/*)#native", "active": True, "internal": False, "next": 2},
+        ]
+
+        self.assertEqual(
+            regtest_demo._active_descriptor(descriptors, internal=False),
+            "wpkh([abcd]tpub/0/*)",
+        )
+
     def test_compose_stack_includes_local_protocol_backends(self):
         compose = (ROOT / "dev" / "regtest" / "compose.bitcoin.yml").read_text(encoding="utf-8")
 
@@ -496,6 +508,7 @@ class RegtestHarnessTest(unittest.TestCase):
         self.assertIn("KASSIBER_REGTEST_ELEMENTSD_IMAGE", compose)
         self.assertIn("KASSIBER_REGTEST_FULCRUM_IMAGE", compose)
         self.assertIn("KASSIBER_REGTEST_ELEMENTS_RPC_PORT", compose)
+        self.assertIn("con_blocksubsidy=5000000000", compose)
         self.assertIn("backend_stack.py:/app/backend_stack.py:ro", compose)
         self.assertIn("KASSIBER_REGTEST_BITCOIN_ELECTRUM_PORT", compose)
         self.assertIn("KASSIBER_REGTEST_BITCOIN_MEMPOOL_PORT", compose)
