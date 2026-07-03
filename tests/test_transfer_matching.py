@@ -385,6 +385,35 @@ class ProviderEvidenceExactMatchTests(unittest.TestCase):
 
         self.assertEqual(suggest_swap_candidates([out, inbound], tax_country="at"), [])
 
+    def test_free_text_provider_hint_with_generic_id_is_not_exact(self):
+        for field in ("counterparty", "service"):
+            with self.subTest(field=field):
+                raw = {field: "Boltz support", "id": "free-text-id", "flow": "chain"}
+                out = _row(
+                    id=f"o-{field}",
+                    wallet_id="custom-a",
+                    wallet_kind="custom",
+                    direction="outbound",
+                    asset="BTC",
+                    amount=100_000_000,
+                    raw_json=raw,
+                )
+                inbound = _row(
+                    id=f"i-{field}",
+                    wallet_id="custom-b",
+                    wallet_kind="custom",
+                    direction="inbound",
+                    asset="LBTC",
+                    amount=99_900_000,
+                    raw_json=raw,
+                    occurred_at="2026-03-14T17:32:00Z",
+                )
+
+                self.assertEqual(
+                    suggest_swap_candidates([out, inbound], tax_country="at"),
+                    [],
+                )
+
     def test_reverse_submarine_provider_evidence_sets_specific_kind(self):
         raw = {"provider": "boltz", "swap_id": "r1", "flow": "reverse-submarine"}
         out = _row(

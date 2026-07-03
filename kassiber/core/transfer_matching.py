@@ -578,8 +578,9 @@ def _match_by_provider_swap_id(
     This is the exact path for cooperative Taproot swaps: a key-path spend is
     deliberately indistinguishable on-chain, so deterministic evidence has to
     come from a redacted provider/client export, SDK regtest bridge, or other
-    local metadata import. The matcher requires a provider/source marker plus a
-    swap id; arbitrary raw ``id`` fields are intentionally ignored.
+    local metadata import. The matcher requires a structured provider/source
+    marker plus a swap id; arbitrary raw ``id`` fields and free-text
+    counterparty labels are intentionally ignored.
     """
     out_by_key: dict[tuple[str, str], list[tuple[Mapping, _ProviderSwapEvidence]]] = {}
     for row in out_rows:
@@ -598,6 +599,9 @@ def _match_by_provider_swap_id(
         for out_row, out_evidence in out_by_key.get(
             (in_evidence.provider, in_evidence.swap_id), []
         ):
+            # Failed-swap refunds can legitimately return to the same wallet that
+            # funded the lockup, so provider evidence intentionally does not apply
+            # the same-wallet skip used by payment-hash swap claims.
             evidence = _merge_provider_evidence(out_evidence, in_evidence)
             if not _provider_route_matches_row(evidence, out_row, side="out"):
                 continue
@@ -617,8 +621,6 @@ def _provider_swap_evidence(row: Mapping) -> Optional[_ProviderSwapEvidence]:
             "provider",
             "source",
             "source_format",
-            "service",
-            "counterparty",
         )
     )
     if not provider:
