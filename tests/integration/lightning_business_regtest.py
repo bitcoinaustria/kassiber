@@ -413,7 +413,11 @@ def run() -> dict[str, Any]:
     csv_file = exports / "lightning-profitability.csv"
     merchant_cli = ROOT / "dev" / "regtest" / "lightning-cli-merchant.sh"
 
-    if os.environ.get("KASSIBER_LIGHTNING_BUSINESS_REBUILD"):
+    reuse_book = bool(
+        os.environ.get("KASSIBER_LIGHTNING_BUSINESS_REUSE_BOOK")
+        or os.environ.get("KASSIBER_REGTEST_LIGHTNING_REUSE")
+    )
+    if os.environ.get("KASSIBER_LIGHTNING_BUSINESS_REBUILD") or not reuse_book:
         shutil.rmtree(data_root, ignore_errors=True)
         shutil.rmtree(exports, ignore_errors=True)
     exports.mkdir(parents=True, exist_ok=True)

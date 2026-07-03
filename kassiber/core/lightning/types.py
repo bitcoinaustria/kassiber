@@ -351,7 +351,6 @@ def _channel_to_dict_for_ai(channel: NodeChannel) -> dict[str, Any]:
     answer "is this channel earning?" or "is this channel imbalanced?".
     """
     return {
-        "id": channel.id,
         "capacitySat": channel.capacity_sat,
         "localBalanceSat": channel.local_balance_sat,
         "remoteBalanceSat": channel.remote_balance_sat,
@@ -383,7 +382,6 @@ def _forward_to_dict_for_ai(forward: NodeForward) -> dict[str, Any]:
     bucket).
     """
     return {
-        "id": forward.id,
         "occurredAt": forward.occurred_at,
         "amountInMsat": forward.amount_in_msat,
         "amountOutMsat": forward.amount_out_msat,

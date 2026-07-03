@@ -24,11 +24,16 @@ wait_for_cln() {
 
 fund_node_if_needed() {
   local service="$1"
-  local sat address
+  local sat any_sat address
   sat="$(cln_onchain_sat "$service" 2>/dev/null || printf '0')"
   if [ "$sat" -ge "$NODE_MIN_ONCHAIN_SAT" ]; then
     echo "$service already has on-chain CLN funds (${sat} sat)."
     return 1
+  fi
+  any_sat="$(cln_any_onchain_sat "$service" 2>/dev/null || printf '0')"
+  if [ "$any_sat" -ge "$NODE_MIN_ONCHAIN_SAT" ]; then
+    echo "$service has unconfirmed CLN funds (${any_sat} sat); mining confirmations."
+    return 0
   fi
   address="$(cln_new_address "$service")"
   if [ -z "$address" ]; then
@@ -90,9 +95,13 @@ ensure_channel() {
   local peer_id
   peer_id="$(cln_id "$to_service")"
   ensure_connected "$from_service" "$to_service" "$host"
-  if cln_has_channel_with_peer "$from_service" "$peer_id"; then
-    echo "$from_service already has a channel with $to_service."
+  if cln_has_normal_channel_with_peer "$from_service" "$peer_id"; then
+    echo "$from_service already has a normal channel with $to_service."
     return 1
+  fi
+  if cln_has_channel_with_peer "$from_service" "$peer_id"; then
+    echo "$from_service already has a pending channel with $to_service; mining confirmations."
+    return 0
   fi
   local result
   result="$(

@@ -294,6 +294,7 @@ class LightningAiPayloadTest(unittest.TestCase):
         # not be present at all (a `None` value is still a leak vector
         # because the test would silently pass).
         for channel in payload["channels"]:
+            self.assertNotIn("id", channel)
             self.assertNotIn("peerPubkey", channel)
             self.assertNotIn("shortChannelId", channel)
             self.assertNotIn("peerAlias", channel)
@@ -304,12 +305,14 @@ class LightningAiPayloadTest(unittest.TestCase):
             self.assertIn("localBalanceSat", channel)
             self.assertIn("state", channel)
         for channel in payload["closedChannels"]:
+            self.assertNotIn("id", channel)
             self.assertNotIn("peerPubkey", channel)
             self.assertNotIn("shortChannelId", channel)
             self.assertNotIn("peerAlias", channel)
             self.assertNotIn("fundingOutpoint", channel)
         # Forwards must drop both peer aliases and both short channel ids.
         for forward in payload["forwards"]:
+            self.assertNotIn("id", forward)
             self.assertNotIn("inPeerAlias", forward)
             self.assertNotIn("outPeerAlias", forward)
             self.assertNotIn("inShortChannelId", forward)

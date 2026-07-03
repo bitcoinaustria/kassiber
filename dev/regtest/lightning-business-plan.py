@@ -25,8 +25,6 @@ DEFAULT_CAPACITY_MULTIPLIER = "0.35"
 
 
 def _seed_int(seed: str) -> int:
-    if seed.isdigit():
-        return int(seed)
     return int.from_bytes(hashlib.sha256(seed.encode("utf-8")).digest()[:8], "big")
 
 
@@ -56,6 +54,39 @@ def _series(
         amount = int(base * rng.uniform(0.55, 1.45))
         values.append(_round_msat(_clamp(amount, minimum_msat, maximum_msat)))
     return values
+
+
+def _cap_groups_to_budget(
+    groups: list[list[int]],
+    *,
+    budget_msat: int,
+    minimum_msat: int,
+) -> bool:
+    """Scale mutable amount groups down to fit a shared liquidity budget."""
+    total = sum(sum(group) for group in groups)
+    if total <= budget_msat:
+        return False
+    flat = [(group_index, item_index, value) for group_index, group in enumerate(groups) for item_index, value in enumerate(group)]
+    minimum_total = minimum_msat * len(flat)
+    if not flat or minimum_total > budget_msat:
+        raise ValueError("business workload minimums exceed the channel liquidity budget")
+    adjustable = sum(max(0, value - minimum_msat) for _, _, value in flat)
+    factor = (budget_msat - minimum_total) / adjustable if adjustable else 0.0
+    for group_index, item_index, value in flat:
+        scaled = minimum_msat + int(max(0, value - minimum_msat) * factor)
+        groups[group_index][item_index] = _round_msat(scaled)
+    while sum(sum(group) for group in groups) > budget_msat:
+        largest_group = 0
+        largest_index = 0
+        largest_value = -1
+        for group_index, group in enumerate(groups):
+            for item_index, value in enumerate(group):
+                if value > largest_value and value > minimum_msat:
+                    largest_group = group_index
+                    largest_index = item_index
+                    largest_value = value
+        groups[largest_group][largest_index] -= 1_000
+    return True
 
 
 def _invoice_rows(
@@ -125,9 +156,26 @@ def build_plan(
         maximum_msat=max(110_000_000, expected_payment_msat),
     )
 
+    liquidity_budget_msat = max(300_000_000, int(channel_capacity_msat * 0.43))
+    customer_capped = _cap_groups_to_budget(
+        [merchant_amounts, customer_supplier_amounts],
+        budget_msat=liquidity_budget_msat,
+        minimum_msat=max(25_000_000, expected_payment_msat // 5),
+    )
+    merchant_router_capped = _cap_groups_to_budget(
+        [supplier_amounts, customer_supplier_amounts],
+        budget_msat=liquidity_budget_msat,
+        minimum_msat=max(35_000_000, expected_payment_msat // 4),
+    )
+    router_capped = _cap_groups_to_budget(
+        [router_customer_amounts],
+        budget_msat=liquidity_budget_msat,
+        minimum_msat=max(25_000_000, expected_payment_msat // 5),
+    )
+
     failed_amount_msat = max(channel_capacity_msat + 900_000_000, expected_payment_msat * 18)
 
-    return {
+    plan = {
         "schema_version": 1,
         "seed": seed,
         "traffic_model": {
@@ -137,6 +185,8 @@ def build_plan(
             "capacity_multiplier": capacity_multiplier,
             "channel_capacity_sat": channel_capacity_sat,
             "turnover_target_msat": turnover_msat,
+            "liquidity_budget_msat": liquidity_budget_msat,
+            "liquidity_capped": bool(customer_capped or merchant_router_capped or router_capped),
         },
         "lightning": {
             "merchant_invoices": _invoice_rows(
@@ -244,6 +294,9 @@ def build_plan(
             "actor_funding_confirmations": 1,
         },
     }
+    hash_payload = json.dumps(plan, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    plan["traffic_model"]["plan_hash"] = hashlib.sha256(hash_payload).hexdigest()
+    return plan
 
 
 def _env_int(name: str, default: int) -> int:

@@ -53,7 +53,9 @@ The scenario's business plan lives at
 `${KASSIBER_LIGHTNING_BUSINESS_PLAN:-$KASSIBER_LIGHTNING_BUSINESS_HOME/business-plan.json}`.
 Set `KASSIBER_REGTEST_LIGHTNING_SEED` for stable alternative traffic and
 `KASSIBER_REGTEST_LIGHTNING_CAPACITY_MULTIPLIER` to scale the plan against the
-configured channel capacity.
+configured channel capacity. `KASSIBER_REGTEST_LIGHTNING_EXPECTED_PAYMENT_MSAT`
+and `KASSIBER_REGTEST_LIGHTNING_CHANNEL_CAPACITY_SAT` also affect the generated
+plan hash.
 
 ## Kassiber Invariants
 
@@ -78,17 +80,24 @@ The live assertion module verifies:
 ## Keep/Reuse
 
 By default the lane removes Docker volumes and the throwaway book on success or
-failure. Set `KASSIBER_REGTEST_KEEP=1` to preserve both for inspection.
+failure. Set `KASSIBER_REGTEST_KEEP=1` to preserve the full Compose project
+(containers, ports, and volumes) plus the throwaway home for inspection.
 
 Set `KASSIBER_REGTEST_LIGHTNING_REUSE=1` to reuse an already-running compose
-project. The bootstrap and scenario scripts are safe to run repeatedly.
+project. The bootstrap and scenario scripts are safe to run repeatedly when the
+business plan hash is unchanged. Changing the seed, multiplier, expected
+payment, or channel capacity while reusing preserved state requires a fresh
+`KASSIBER_LIGHTNING_BUSINESS_HOME` or manual cleanup of the preserved state and
+volumes. The Kassiber assertion book is rebuilt by default; set
+`KASSIBER_LIGHTNING_BUSINESS_REUSE_BOOK=1` only when intentionally debugging an
+existing preserved book.
 
 Useful paths/commands while preserved:
 
 ```bash
 KASSIBER_REGTEST_KEEP=1 ./scripts/integration-harness.sh lightning-business
 ./dev/regtest/lightning-cli-merchant.sh getinfo
-python3 -m tests.integration.lightning_business_regtest
+uv run python -m tests.integration.lightning_business_regtest
 ```
 
 The assertion module writes its book under

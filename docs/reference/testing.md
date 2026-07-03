@@ -48,7 +48,9 @@ by the UI/backend health and graph paths:
 - `liquid-mempool-regtest` -> local Liquid mempool/esplora-compatible HTTP
   API for graph lookups on deterministic LBTC demo txids
 
-Set `KASSIBER_REGTEST_KEEP=1` to keep the Docker volume for debugging; otherwise it is removed on exit.
+Set `KASSIBER_REGTEST_KEEP=1` to keep the Docker Compose project running for
+debugging (containers, ports, and volumes); otherwise the stack is removed on
+exit.
 Fresh Compose runs use the scenario manifest's historical timestamp sequence,
 starting in January 2019 and covering activity into spring 2026. Reused Core
 nodes can only move forward from their existing regtest chain tip, so their
@@ -155,9 +157,11 @@ The plan borrows sim-ln's useful modeling knobs without making sim-ln a hard
 test dependency: defined activity remains deterministic for assertions, while
 `KASSIBER_REGTEST_LIGHTNING_SEED`,
 `KASSIBER_REGTEST_LIGHTNING_CAPACITY_MULTIPLIER`, and
-`KASSIBER_REGTEST_LIGHTNING_EXPECTED_PAYMENT_MSAT` control variation. The
-default multiplier is intentionally modest so the route directions stay liquid
-on the default 5,000,000 sat channels.
+`KASSIBER_REGTEST_LIGHTNING_EXPECTED_PAYMENT_MSAT` control variation; the
+channel-capacity input comes from
+`KASSIBER_REGTEST_LIGHTNING_CHANNEL_CAPACITY_SAT`. The default multiplier is
+intentionally modest so the route directions stay liquid on the default
+5,000,000 sat channels.
 
 Assertions happen in `tests/integration/lightning_business_regtest.py` and are
 against Kassiber output/state, not only `lightning-cli`: daemon snapshot,
@@ -168,10 +172,18 @@ and forwarding activity. Persisted Lightning records do not store raw RPC JSON,
 and AI-safe Lightning payloads omit sensitive route, peer, preimage,
 payment-secret, bolt11, funding-outpoint, and failure-source fields.
 
-Set `KASSIBER_REGTEST_KEEP=1` to leave Docker volumes and the throwaway book in
-place for inspection, or `KASSIBER_REGTEST_LIGHTNING_REUSE=1` to reuse an
-already-running project. The book lives under
+Set `KASSIBER_REGTEST_KEEP=1` to leave the full Docker Compose project running
+for inspection (containers, bound ports, and volumes), or
+`KASSIBER_REGTEST_LIGHTNING_REUSE=1` to reuse an already-running project. The
+book lives under
 `${KASSIBER_LIGHTNING_BUSINESS_HOME:-/tmp/kassiber-lightning-business-<project>}`.
+The assertion book is rebuilt by default so stale DB rows cannot satisfy a
+fresh run; set `KASSIBER_LIGHTNING_BUSINESS_REUSE_BOOK=1` only when debugging a
+preserved book intentionally. The scenario state records the generated plan
+hash, so changing seed, multiplier, expected-payment, or channel-capacity knobs
+while reusing preserved Lightning state requires a fresh
+`KASSIBER_LIGHTNING_BUSINESS_HOME` or manual cleanup of the preserved state and
+volumes.
 
 ## Full Accounting Demo
 
@@ -272,8 +284,17 @@ cd ui-tauri && pnpm dev:demo               # dev preview on that real book
 ```
 
 Prerequisites on any machine: Docker (Desktop or engine), `uv`, and `pnpm`.
-That is the whole setup — two commands from a fresh clone to a browser preview
-backed by the real Python daemon reading a multi-year regtest book.
+From a fresh clone, install the project/runtime dependencies once:
+
+```bash
+uv sync
+pnpm --dir ui-tauri install
+```
+
+After that, the two commands above take you to a browser preview backed by the
+real Python daemon reading a multi-year regtest book. The harness checks for
+core Python dependencies and fails with a setup hint instead of silently using
+an unprepared system interpreter.
 
 What `demo-up` does:
 
@@ -380,10 +401,9 @@ multi-backend Bitcoin sync + parity, and real `elementsd`-backed Liquid sync
 upstream mempool web/electrs-style indexers), are the next parity targets and
 can be added without changing the contributor entrypoint.
 
-Lightning is the next planned slice: the concrete plan — Core Lightning
-regtest nodes in a Compose overlay, an idempotent channel-bootstrap step,
-scenario-manifest extensions, a `lightning-cli` tape for the fast lane, and
-the assertions worth pinning — is written down in
-[`dev/regtest/LIGHTNING-TODO.md`](../../dev/regtest/LIGHTNING-TODO.md),
-based on how BTCPayServer's test stack orchestrates its
-merchant/customer Lightning nodes.
+Lightning now has an opt-in live merchant lane through
+`./scripts/integration-harness.sh lightning-business`. Remaining parity work is
+to add a fast recorded `lightning-cli` tape lane, broaden backend parity beyond
+Core Lightning/LND as new adapters land, and eventually compare live
+Lightning-derived accounting across multiple node implementations without
+changing the contributor entrypoint.

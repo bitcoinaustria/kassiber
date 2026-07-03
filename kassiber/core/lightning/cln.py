@@ -658,7 +658,9 @@ def _channel_funding_outpoint(channel: Mapping[str, Any]) -> str | None:
 def _node_channel(channel: Mapping[str, Any], peer_alias_map: Mapping[str, str]) -> NodeChannel:
     is_private = _is_private_channel(channel)
     raw_peer = str_or_none(channel.get("peer_id"))
-    peer_alias = peer_alias_map.get(raw_peer or "") or (raw_peer or "")
+    peer_alias = peer_alias_map.get(raw_peer or "")
+    if not peer_alias:
+        peer_alias = "private peer" if is_private else (raw_peer or "")
     # Opsec: drop peer pubkey for private channels by default.
     peer_pubkey: str | None = None if is_private else raw_peer
     capacity_msat = _parse_msat(

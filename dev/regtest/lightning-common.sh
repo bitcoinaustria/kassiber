@@ -126,6 +126,7 @@ else:
 
 json_msat_to_sat() {
   python3 -c 'import json, sys
+allowed_statuses = set(sys.argv[1:] or ["confirmed", "unconfirmed"])
 def parse_msat(value):
     if value in (None, ""):
         return 0
@@ -149,10 +150,11 @@ total = 0
 for output in data.get("outputs", []):
     if output.get("reserved_to_block"):
         continue
-    if output.get("status") not in (None, "confirmed", "unconfirmed"):
+    status = output.get("status")
+    if status not in allowed_statuses:
         continue
     total += parse_msat(output.get("amount_msat"))
-print(total // 1000)'
+print(total // 1000)' "$@"
 }
 
 cln_id() {
@@ -168,7 +170,11 @@ cln_new_address() {
 }
 
 cln_onchain_sat() {
-  cln "$1" listfunds | json_msat_to_sat
+  cln "$1" listfunds | json_msat_to_sat confirmed
+}
+
+cln_any_onchain_sat() {
+  cln "$1" listfunds | json_msat_to_sat confirmed unconfirmed
 }
 
 cln_has_channel_with_peer() {
@@ -184,6 +190,20 @@ for channel in data.get("channels", []):
     if "closing" in state or "closed" in state or "onchain" in state:
         continue
     sys.exit(0)
+sys.exit(1)' "$peer_id"
+}
+
+cln_has_normal_channel_with_peer() {
+  local service="$1"
+  local peer_id="$2"
+  cln "$service" listpeerchannels | python3 -c 'import json, sys
+peer_id = sys.argv[1]
+data = json.load(sys.stdin)
+for channel in data.get("channels", []):
+    if channel.get("peer_id") != peer_id:
+        continue
+    if str(channel.get("state") or "").lower() == "channeld_normal":
+        sys.exit(0)
 sys.exit(1)' "$peer_id"
 }
 

@@ -20,6 +20,7 @@ from kassiber.core import imports as core_imports
 from kassiber.core import wallets as core_wallets
 from kassiber.core.lightning import (
     NodeSnapshot,
+    build_profitability_report,
     register_adapter,
     resolve_adapter,
 )
@@ -237,6 +238,30 @@ class FetchNodeSnapshotTest(unittest.TestCase):
             channel for channel in snapshot.channels if not channel.is_private
         )
         self.assertEqual(public_channel.peer_pubkey, "02" + "ab" * 32)
+
+    def test_private_channel_without_alias_uses_neutral_label(self) -> None:
+        leaked_pubkey = "02" + "ef" * 32
+        payloads = _canned_payloads()
+        payloads["listpeerchannels"]["channels"][1].pop("peer_alias", None)
+
+        snapshot = self._snapshot(payloads)
+        private_channel = next(
+            channel for channel in snapshot.channels if channel.is_private
+        )
+
+        self.assertIsNone(private_channel.peer_pubkey)
+        self.assertEqual(private_channel.peer_alias, "private peer")
+        self.assertNotIn(leaked_pubkey, private_channel.peer_alias)
+
+        report = build_profitability_report(
+            connection_id="w-1",
+            connection_label="Merchant",
+            connection_kind="coreln",
+            snapshot=snapshot,
+        ).to_envelope_payload()
+        blob = str(report)
+        self.assertNotIn(leaked_pubkey, blob)
+        self.assertIn("private peer", blob)
 
     def test_preimages_bolt11_and_route_hops_never_reach_records(self) -> None:
         # Drive the persistence reshape so we can scan the full curated

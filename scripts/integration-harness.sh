@@ -35,8 +35,35 @@ py() {
   fi
 }
 
+ensure_python_runtime() {
+  if py - <<'PY' >/dev/null 2>&1
+import importlib.util
+import sys
+
+missing = [
+    name
+    for name in ("embit", "openpyxl")
+    if importlib.util.find_spec(name) is None
+]
+if missing:
+    print(",".join(missing), file=sys.stderr)
+    sys.exit(1)
+PY
+  then
+    return 0
+  fi
+  echo "Kassiber's Python dependencies are not available in this interpreter." >&2
+  echo "Install uv and rerun, or create/activate a repo virtualenv with 'python -m pip install -e .'." >&2
+  echo "Current Python: $PYTHON_BIN" >&2
+  exit 2
+}
+
 run_fast() {
-  KASSIBER_NO_EGRESS=1 py -m unittest tests.test_regtest_harness -v
+  ensure_python_runtime
+  KASSIBER_NO_EGRESS=1 py -m unittest \
+    tests.test_regtest_harness \
+    tests.test_lightning_business_plan \
+    -v
 }
 
 rpc_auth() {
@@ -139,6 +166,7 @@ wait_for_core() {
 }
 
 run_with_bitcoin_core() {
+  ensure_python_runtime
   local provided_core_url=0
   if [ -n "${KASSIBER_REGTEST_CORE_URL:-}" ]; then
     provided_core_url=1
@@ -187,6 +215,7 @@ run_bitcoin_core_smoke() {
 }
 
 run_demo_full() {
+  ensure_python_runtime
   py -m tests.integration.regtest_demo
 }
 
@@ -477,6 +506,7 @@ choose_lightning_base_port() {
 }
 
 run_lightning_business() {
+  ensure_python_runtime
   export KASSIBER_INTEGRATION=1
   export KASSIBER_LIGHTNING_BUSINESS=1
   export KASSIBER_REGTEST_RPC_USER="${KASSIBER_REGTEST_RPC_USER:-kassiber}"
