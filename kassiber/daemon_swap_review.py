@@ -371,9 +371,9 @@ def _swap_review_suggested_action(
             else "payment_hash identity is exact and non-conflicted"
         )
         return {
-            "action": "bulk_pair_exact_or_pair",
-            "daemon_kind": "ui.transfers.bulk_pair",
-            "arguments": {"confidence": "exact"},
+            "action": "pair_exact_candidate",
+            "daemon_kind": "ui.transfers.pair",
+            "arguments": base_args,
             "requires_consent": True,
             "reason": reason,
         }

@@ -4,6 +4,7 @@
   "title": "Full accounting regtest demo",
   "description": "Disposable Bitcoin Core regtest scenario covering multi-address business wallets, regular fiat-expense disposals with deterministic amount/fee variation, self-transfers, wallet key rotations, deprecated old wallets, collaborative CoinJoin/PayJoin-shaped transactions, an RBF-replaced payment, halving-shrunk mining income, a dust deposit, a mempool-pending receipt at sync, Bitcoin-backed-loan marks, volatile pricing, local Electrum/mempool-compatible backend endpoints, and deterministic elementsregtest/LBTC bridge/import wallets.",
   "base_time": "2019-01-15T09:00:00Z",
+  "latest_time": "2026-07-01T00:00:00Z",
   "workspace": "Regtest Demo",
   "profile": {
     "label": "Full Accounting",
@@ -13,6 +14,7 @@
   },
   "backend": {
     "name": "core-regtest",
+    "default": "bitcoin-mempool-regtest",
     "wallet_prefix": "kassiber-demo"
   },
   "pricing": {
@@ -313,6 +315,18 @@
       "account": "merchant",
       "addresses": 4,
       "initial_btc": "0.40166921"
+    },
+    {
+      "key": "silent_payments",
+      "label": "Regtest Silent Payments Wallet",
+      "account": "merchant",
+      "kind": "silent-payment",
+      "chain": "bitcoin",
+      "network": "regtest",
+      "sp_descriptor": "sp(tspscan1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq)",
+      "sp_scan_start_height": 0,
+      "detected_btc": "0.01234567",
+      "initial_btc": "0.00000000"
     },
     {
       "key": "miner",
@@ -641,7 +655,7 @@
     }
   ],
   "expected": {
-    "wallets": 11,
+    "wallets": 12,
     "deprecated_wallets": 4,
     "assets": [
       "BTC",
@@ -652,8 +666,8 @@
       "BTC",
       "LBTC"
     ],
-    "min_transactions": 845,
-    "min_active_transactions": 840,
+    "min_transactions": 846,
+    "min_active_transactions": 841,
     "pending_transactions": 1,
     "collaborative_excluded": 5,
     "min_transfer_pairs": 9,

@@ -404,13 +404,13 @@ def _codex_catalog_models(executable: str) -> list[dict[str, Any]]:
 
 
 def _cli_failure(command: str, completed: subprocess.CompletedProcess[str]) -> AppError:
-    stderr = (completed.stderr or "").strip()
-    stdout = (completed.stdout or "").strip()
+    stderr = completed.stderr or ""
+    stdout = completed.stdout or ""
     details: dict[str, Any] = {"exit_code": completed.returncode}
     if stderr:
-        details["stderr"] = stderr[-2048:]
+        details["stderr_bytes"] = len(stderr.encode("utf-8", errors="replace"))
     if stdout:
-        details["stdout"] = stdout[-2048:]
+        details["stdout_bytes"] = len(stdout.encode("utf-8", errors="replace"))
     return AppError(
         f"AI CLI provider '{command}' failed",
         code="ai_request_invalid",

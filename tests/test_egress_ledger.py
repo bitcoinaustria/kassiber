@@ -71,6 +71,26 @@ class EgressLedgerTest(unittest.TestCase):
         self.assertEqual(snapshot["summary"]["unexpected"], 1)
         self.assertEqual(snapshot["summary"]["by_subsystem"]["pricing"]["bytes_out"], 42)
 
+    def test_port_specific_allowlist_does_not_match_unknown_or_different_ports(self):
+        entry = EgressAllowlistEntry(
+            host="node.example",
+            port=50002,
+            subsystem="sync",
+            label="backend:node",
+        )
+
+        self.assertTrue(entry.matches("node.example", 50002, "sync"))
+        self.assertFalse(entry.matches("node.example", None, "sync"))
+        self.assertFalse(entry.matches("node.example", 50001, "sync"))
+        wildcard = EgressAllowlistEntry(
+            host="node.example",
+            port=None,
+            subsystem="sync",
+            label="backend:any-port",
+        )
+        self.assertTrue(wildcard.matches("node.example", None, "sync"))
+        self.assertTrue(wildcard.matches("node.example", 50002, "sync"))
+
     def test_db_header_proof_distinguishes_plaintext_sqlite_header(self):
         with tempfile.TemporaryDirectory(prefix="kassiber-egress-") as tmp:
             db_path = Path(tmp) / "plain.sqlite3"

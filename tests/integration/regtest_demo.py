@@ -22,6 +22,7 @@ from typing import Any
 from urllib import error, request
 
 from kassiber.core import rates as core_rates
+from kassiber.core import silent_payments as core_silent_payments
 from kassiber.core.sync_backends import sanitize_wallet_segment
 from kassiber.db import open_db
 from kassiber.importers import GENERIC_LEDGER_COLUMNS
@@ -46,8 +47,16 @@ def _is_core_wallet_spec(wallet_spec: dict[str, Any]) -> bool:
     return _wallet_kind(wallet_spec) == "address" and _wallet_chain(wallet_spec) == "bitcoin"
 
 
+def _is_silent_payment_wallet_spec(wallet_spec: dict[str, Any]) -> bool:
+    return _wallet_kind(wallet_spec) == core_silent_payments.WALLET_KIND
+
+
 def _is_core_wallet(wallet: "DemoWallet") -> bool:
     return wallet.chain == "bitcoin" and bool(wallet.address and wallet.core_wallet)
+
+
+def _is_silent_payment_wallet(wallet: "DemoWallet") -> bool:
+    return wallet.kind == core_silent_payments.WALLET_KIND
 
 
 def _is_liquid_ledger_wallet(wallet: "DemoWallet") -> bool:
@@ -74,6 +83,9 @@ class DemoWallet:
     addresses: list[str] = field(default_factory=list)
     source_file: str = ""
     source_format: str = ""
+    sp_descriptor: str = ""
+    sp_scan_start_height: int = 0
+    sp_scan_file: str = ""
     kassiber_id: str | None = None
     watchonly_wallet: str | None = None
     receive_cursor: int = 0
@@ -104,7 +116,17 @@ def load_scenario(path: Path = DEFAULT_SCENARIO) -> dict[str, Any]:
 
 
 def validate_scenario(scenario: dict[str, Any]) -> None:
-    required = {"schema_version", "id", "base_time", "workspace", "profile", "wallets", "operations", "expected"}
+    required = {
+        "schema_version",
+        "id",
+        "base_time",
+        "latest_time",
+        "workspace",
+        "profile",
+        "wallets",
+        "operations",
+        "expected",
+    }
     missing = sorted(required.difference(scenario))
     if missing:
         raise ValueError(f"Scenario manifest is missing: {', '.join(missing)}")
@@ -125,8 +147,24 @@ def validate_scenario(scenario: dict[str, Any]) -> None:
         chain = _wallet_chain(wallet)
         if chain not in {"bitcoin", "liquid"}:
             raise ValueError(f"Scenario wallet {wallet['key']!r} has unsupported chain: {chain}")
-        if kind not in {"address", "custom"}:
+        if kind not in {"address", "custom", core_silent_payments.WALLET_KIND}:
             raise ValueError(f"Scenario wallet {wallet['key']!r} has unsupported kind: {kind}")
+        if kind == core_silent_payments.WALLET_KIND:
+            if chain != "bitcoin":
+                raise ValueError(f"Scenario Silent Payments wallet {wallet['key']!r} must be Bitcoin")
+            descriptor = str(wallet.get("sp_descriptor") or "")
+            try:
+                core_silent_payments.validate_watch_only_descriptor(
+                    descriptor,
+                    chain=chain,
+                    network=wallet.get("network") or "regtest",
+                )
+            except Exception as exc:
+                raise ValueError(f"Scenario Silent Payments wallet {wallet['key']!r} has invalid material") from exc
+            if int(wallet.get("sp_scan_start_height") or 0) < 0:
+                raise ValueError(
+                    f"Scenario Silent Payments wallet {wallet['key']!r} has invalid sp_scan_start_height"
+                )
         if chain == "liquid" and wallet.get("source_format") != "generic_ledger":
             raise ValueError(
                 f"Scenario Liquid wallet {wallet['key']!r} must use source_format generic_ledger"
@@ -192,6 +230,17 @@ def validate_scenario(scenario: dict[str, Any]) -> None:
         if not stress.get("fee_btc"):
             raise ValueError("Scenario stress.fee_btc must be set")
         _btc(stress["fee_btc"])
+        base_ts = _parse_iso_to_ts(str(scenario["base_time"]))
+        latest_ts = _parse_iso_to_ts(str(scenario["latest_time"]))
+        estimated_end_ts = estimate_scenario_end_ts(scenario, start_ts=base_ts)
+        if latest_ts <= base_ts:
+            raise ValueError("Scenario latest_time must be after base_time")
+        if estimated_end_ts > latest_ts:
+            estimated = _iso_from_ts(estimated_end_ts)
+            latest = _iso_from_ts(latest_ts)
+            raise ValueError(
+                f"Scenario timeline ends at {estimated}, after latest_time {latest}"
+            )
         expenses = stress.get("business_expenses") or {}
         if expenses.get("enabled"):
             schedule = expenses.get("schedule")
@@ -489,6 +538,105 @@ def _write_liquid_ledger_files(
         wallet.source_file = str(ledger_path)
 
 
+def _write_silent_payment_scan_files(
+    base_dir: Path,
+    scenario: dict[str, Any],
+    wallets: dict[str, DemoWallet],
+    *,
+    url: str,
+    username: str,
+    password: str,
+    faucet_wallet: str,
+    mining_address: str,
+    current_ts: int,
+    txids: dict[str, str],
+) -> int:
+    import_dir = base_dir / "imports" / "silent-payments"
+    for wallet_spec in scenario["wallets"]:
+        if not _is_silent_payment_wallet_spec(wallet_spec):
+            continue
+        wallet = wallets[wallet_spec["key"]]
+        import_dir.mkdir(parents=True, exist_ok=True)
+        receive_address = rpc(
+            url,
+            username,
+            password,
+            "getnewaddress",
+            [f"{wallet.label} detected receive", "bech32m"],
+            wallet=faucet_wallet,
+        )
+        amount = _btc(wallet_spec.get("detected_btc") or "0.01234567")
+        txid = rpc(
+            url,
+            username,
+            password,
+            "sendtoaddress",
+            [receive_address, amount],
+            wallet=faucet_wallet,
+        )
+        txids[f"{wallet.key}_silent_payment_receive"] = txid
+        current_ts = _mine(url, username, password, faucet_wallet, mining_address, current_ts)
+        tx = rpc(url, username, password, "getrawtransaction", [txid, True])
+        block = rpc(url, username, password, "getblock", [tx["blockhash"]])
+        block_height = int(block["height"])
+        block_time = _iso_from_ts(int(block.get("time") or current_ts))
+        matched_output = None
+        for output in tx.get("vout") or []:
+            script = output.get("scriptPubKey") if isinstance(output, dict) else {}
+            if not isinstance(script, dict):
+                continue
+            if script.get("address") == receive_address:
+                matched_output = output
+                break
+        if matched_output is None:
+            raise RuntimeError(f"Unable to locate Silent Payments fixture output for {wallet.key}")
+        rpc(
+            url,
+            username,
+            password,
+            "lockunspent",
+            [False, [{"txid": txid, "vout": int(matched_output["n"])}]],
+            wallet=faucet_wallet,
+        )
+        script = matched_output.get("scriptPubKey") or {}
+        amount_sats = int((Decimal(str(matched_output["value"])) * Decimal("100000000")).to_integral_value())
+        output_row = {
+            "txid": txid,
+            "vout": int(matched_output["n"]),
+            "amount_sats": amount_sats,
+            "script_pubkey": script["hex"],
+            "silent_payment": True,
+            "block_height": block_height,
+            "block_time": block_time,
+            "confirmations": int(tx.get("confirmations") or 1),
+            "raw": {"fixture": "regtest-frigate-silent-payments"},
+        }
+        payload = {
+            "schema_version": 1,
+            "complete": True,
+            "descriptor_fingerprint": core_silent_payments.descriptor_fingerprint(wallet.sp_descriptor),
+            "range": {
+                "from_height": wallet.sp_scan_start_height,
+                "to_height": block_height,
+            },
+            "transactions": [
+                {
+                    "txid": txid,
+                    "block_height": block_height,
+                    "block_time": block_time,
+                    "confirmations": int(tx.get("confirmations") or 1),
+                    "outputs": [output_row],
+                }
+            ],
+            "utxos": [output_row],
+        }
+        scan_path = import_dir / f"{sanitize_wallet_segment(wallet.key)}-scan.json"
+        scan_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        os.chmod(scan_path, 0o600)
+        wallet.sp_scan_file = str(scan_path)
+    return current_ts
+
+
 def rpc(url: str, username: str, password: str, method: str, params=None, wallet: str | None = None):
     endpoint = url.rstrip("/")
     if wallet:
@@ -542,7 +690,7 @@ def run_cli(data_root: Path, *args: str, pass_fds: tuple[int, ...] = ()) -> dict
     return json.loads(result.stdout)
 
 
-def _local_backend_specs() -> list[dict[str, str]]:
+def _local_backend_specs(*, silent_payment_scan_file: str | None = None) -> list[dict[str, Any]]:
     return [
         {
             "name": "bitcoin-electrum-regtest",
@@ -551,6 +699,16 @@ def _local_backend_specs() -> list[dict[str, str]]:
             "chain": "bitcoin",
             "network": "regtest",
             "display_name": "Bitcoin Electrum Regtest",
+        },
+        {
+            "name": "bitcoin-frigate-regtest",
+            "kind": "electrum",
+            "url": f"tcp://127.0.0.1:{os.environ.get('KASSIBER_REGTEST_FRIGATE_PORT', '18548')}",
+            "chain": "bitcoin",
+            "network": "regtest",
+            "display_name": "Bitcoin Frigate Silent Payments Regtest",
+            "silent_payments": True,
+            **({"silent_payment_scan_file": silent_payment_scan_file} if silent_payment_scan_file else {}),
         },
         {
             "name": "bitcoin-mempool-regtest",
@@ -582,6 +740,32 @@ def _local_backend_specs() -> list[dict[str, str]]:
 def _parse_iso_to_ts(value: str) -> int:
     parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
     return int(parsed.astimezone(timezone.utc).timestamp())
+
+
+def estimate_scenario_end_ts(scenario: dict[str, Any], *, start_ts: int | None = None) -> int:
+    current_ts = start_ts if start_ts is not None else _parse_iso_to_ts(str(scenario["base_time"]))
+
+    # run_demo performs one maturity mine, one initial-funding mine, then one
+    # confirmation mine per hand-authored operation before the long stress run.
+    current_ts += 600
+    current_ts += 600
+    current_ts += len(scenario.get("operations") or []) * 600
+
+    stress = scenario.get("stress") or {}
+    if stress.get("enabled"):
+        cycles = int(stress.get("cycles") or 0)
+        days_between_cycles = int(stress.get("days_between_cycles") or 0)
+        if cycles > 0 and days_between_cycles > 0:
+            first_target_ts = current_ts + (2 * SECONDS_PER_DAY)
+            last_cycle_ts = first_target_ts + ((cycles - 1) * days_between_cycles * SECONDS_PER_DAY)
+            current_ts = max(current_ts, last_cycle_ts + (13 * 60 * 60))
+
+    silent_payment_wallets = [
+        wallet for wallet in scenario.get("wallets") or [] if _is_silent_payment_wallet_spec(wallet)
+    ]
+    current_ts += len(silent_payment_wallets) * 600
+    current_ts += len(scenario.get("pending_operations") or []) * 600
+    return current_ts
 
 
 def _ensure_wallet(url: str, username: str, password: str, wallet_name: str) -> None:
@@ -1341,9 +1525,13 @@ def _create_kassiber_book(
             "60",
             pass_fds=(username_fd.fileno(), password_fd.fileno()),
     )
-    for backend in _local_backend_specs():
-        run_cli(
-            data_root,
+    silent_payment_scan_file = next(
+        (wallet.sp_scan_file for wallet in wallets.values() if _is_silent_payment_wallet(wallet) and wallet.sp_scan_file),
+        None,
+    )
+    local_backend_specs = _local_backend_specs(silent_payment_scan_file=silent_payment_scan_file)
+    for backend in local_backend_specs:
+        backend_args = [
             "backends",
             "create",
             backend["name"],
@@ -1359,10 +1547,16 @@ def _create_kassiber_book(
             backend["display_name"],
             "--timeout",
             "10",
-        )
-    run_cli(data_root, "backends", "set-default", scenario["backend"]["name"])
+        ]
+        if backend.get("silent_payments"):
+            backend_args.append("--silent-payments")
+        if backend.get("silent_payment_scan_file"):
+            backend_args.extend(["--silent-payment-scan-file", str(backend["silent_payment_scan_file"])])
+        run_cli(data_root, *backend_args)
+    default_backend_name = str(scenario["backend"].get("default") or scenario["backend"]["name"])
+    run_cli(data_root, "backends", "set-default", default_backend_name)
     configured_backends = run_cli(data_root, "backends", "list")["data"]
-    allowed_backend_names = {scenario["backend"]["name"], *(backend["name"] for backend in _local_backend_specs())}
+    allowed_backend_names = {scenario["backend"]["name"], *(backend["name"] for backend in local_backend_specs)}
     for backend in configured_backends:
         name = str(backend.get("name") or "")
         if not name or name in allowed_backend_names:
@@ -1437,6 +1631,34 @@ def _create_kassiber_book(
                 *address_args,
                 "--birthday",
                 birthday,
+            )["data"]
+        elif _is_silent_payment_wallet(wallet):
+            if not wallet.sp_scan_file:
+                raise RuntimeError(f"Silent Payments wallet {wallet.key} has no generated scan file")
+            descriptor_path = Path(wallet.sp_scan_file).with_name(f"{sanitize_wallet_segment(wallet.key)}-descriptor.txt")
+            descriptor_path.write_text(wallet.sp_descriptor + "\n", encoding="utf-8")
+            os.chmod(descriptor_path, 0o600)
+            created = run_cli(
+                data_root,
+                "wallets",
+                "create",
+                *scope,
+                "--label",
+                wallet.label,
+                "--kind",
+                core_silent_payments.WALLET_KIND,
+                "--account",
+                wallet.account,
+                "--backend",
+                "bitcoin-frigate-regtest",
+                "--chain",
+                "bitcoin",
+                "--network",
+                "regtest",
+                "--sp-descriptor-file",
+                str(descriptor_path),
+                "--sp-scan-start-height",
+                str(wallet.sp_scan_start_height),
             )["data"]
         else:
             wallet_config = {
@@ -2174,6 +2396,9 @@ def reconstruct_wallets_from_summary(
             address=addresses[0] if addresses else "",
             addresses=addresses,
             source_format=str(wallet_spec.get("source_format") or ""),
+            sp_descriptor=str(wallet_spec.get("sp_descriptor") or ""),
+            sp_scan_start_height=int(wallet_spec.get("sp_scan_start_height") or 0),
+            sp_scan_file=str(entry.get("sp_scan_file") or ""),
             kassiber_id=entry.get("kassiber_id"),
         )
     return wallets
@@ -2286,6 +2511,15 @@ def run_demo(
     manifest_ts = _parse_iso_to_ts(scenario["base_time"])
     chain_median_ts = int(chain.get("mediantime") or manifest_ts)
     current_ts = max(manifest_ts, chain_median_ts + 7200)
+    latest_ts = _parse_iso_to_ts(scenario["latest_time"])
+    estimated_end_ts = estimate_scenario_end_ts(scenario, start_ts=current_ts)
+    if estimated_end_ts > latest_ts:
+        raise RuntimeError(
+            "Regtest demo chain tip is too far ahead for the backdated accounting scenario "
+            f"(estimated end {_iso_from_ts(estimated_end_ts)}, latest allowed {_iso_from_ts(latest_ts)}). "
+            "Reset the persistent demo chain with './scripts/integration-harness.sh demo-down --purge' "
+            "or run demo-up after the managed rebuild resets the chain volume."
+        )
     rpc(url, username, password, "setmocktime", [current_ts])
     birthday_ts = current_ts - SECONDS_PER_DAY
 
@@ -2332,6 +2566,8 @@ def run_demo(
                 address=addresses[0] if addresses else "",
                 addresses=addresses,
                 source_format=str(wallet_spec.get("source_format") or ""),
+                sp_descriptor=str(wallet_spec.get("sp_descriptor") or ""),
+                sp_scan_start_height=int(wallet_spec.get("sp_scan_start_height") or 0),
             )
 
         # Seed each funded wallet across all of its watched addresses so the
@@ -2452,6 +2688,18 @@ def run_demo(
         )
         stress_result["liquid_ledger_rows"] = sum(len(rows) for rows in liquid_rows_by_wallet.values())
 
+        current_ts = _write_silent_payment_scan_files(
+            base_dir,
+            scenario,
+            wallets,
+            url=url,
+            username=username,
+            password=password,
+            faucet_wallet=faucet_wallet,
+            mining_address=mining_address,
+            current_ts=current_ts,
+            txids=txids,
+        )
         _write_liquid_ledger_files(base_dir, wallets, liquid_rows_by_wallet)
         birthday = datetime.fromtimestamp(birthday_ts, tz=timezone.utc)
         birthday_iso = birthday.isoformat().replace("+00:00", "Z")
@@ -2601,6 +2849,7 @@ def run_demo(
                         "addresses": list(wallet.addresses),
                         "chain": wallet.chain,
                         "source_file": wallet.source_file,
+                        "sp_scan_file": wallet.sp_scan_file,
                         "kassiber_id": wallet.kassiber_id,
                     }
                     for key, wallet in wallets.items()

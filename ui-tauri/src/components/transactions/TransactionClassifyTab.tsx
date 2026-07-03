@@ -45,6 +45,8 @@ export function TransactionClassifyTab({ ctx }: { ctx: TransactionDetailTabConte
     addTag,
     removeTag,
     availableTagSuggestions,
+    loanMenuItems,
+    loanActionsDisabled,
   } = ctx;
   return (
     <>
@@ -229,6 +231,37 @@ export function TransactionClassifyTab({ ctx }: { ctx: TransactionDetailTabConte
                           placeholder={t("classify.notePlaceholder")}
                         />
                       </div>
+                      {loanMenuItems.length ? (
+                        <div className="grid gap-2 lg:col-span-2">
+                          <h3 className="flex items-center gap-1.5 text-sm font-medium">
+                            {t("classify.loanRole")}
+                            <InfoHint label={t("classify.loanRole")}>
+                              {t("classify.loanRoleHint")}
+                            </InfoHint>
+                          </h3>
+                          {/* Applies immediately — a role assignment, not part
+                              of the draft save. */}
+                          <div className="flex flex-wrap gap-2 rounded-md border bg-background p-3">
+                            {loanMenuItems.map((item) => (
+                              <Button
+                                key={item.key}
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="gap-1.5"
+                                disabled={loanActionsDisabled}
+                                onClick={item.onSelect}
+                              >
+                                <item.icon
+                                  className="size-3.5"
+                                  aria-hidden="true"
+                                />
+                                {item.label}
+                              </Button>
+                            ))}
+                          </div>
+                        </div>
+                      ) : null}
                     </div>
                   </TabsContent>
 

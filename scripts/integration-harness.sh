@@ -11,7 +11,7 @@ STARTED_COMPOSE=0
 STARTED_BOLTZ=0
 BOLTZ_COMPOSE_FILE=""
 BOLTZ_COMPOSE_TEMP=""
-SUDO_DOCKER_ENV=KASSIBER_REGTEST_RPC_USER,KASSIBER_REGTEST_RPC_PASSWORD,KASSIBER_REGTEST_RPC_AUTH,KASSIBER_REGTEST_RPC_PORT,KASSIBER_REGTEST_ELEMENTS_RPC_PORT,KASSIBER_REGTEST_BITCOIND_IMAGE,KASSIBER_REGTEST_ELEMENTSD_IMAGE,KASSIBER_REGTEST_FULCRUM_IMAGE,KASSIBER_REGTEST_BACKEND_STACK_IMAGE,KASSIBER_REGTEST_BITCOIN_ELECTRUM_PORT,KASSIBER_REGTEST_BITCOIN_MEMPOOL_PORT,KASSIBER_REGTEST_LIQUID_ELECTRUM_PORT,KASSIBER_REGTEST_LIQUID_MEMPOOL_PORT,KASSIBER_REGTEST_CLN_IMAGE,KASSIBER_REGTEST_CLN_MERCHANT_PORT,KASSIBER_REGTEST_CLN_CUSTOMER_PORT,KASSIBER_REGTEST_CLN_SUPPLIER_PORT,KASSIBER_REGTEST_CLN_ROUTER_PORT
+SUDO_DOCKER_ENV=COMPOSE_PROFILES,KASSIBER_REGTEST_COMPOSE_PROFILES,KASSIBER_REGTEST_RPC_USER,KASSIBER_REGTEST_RPC_PASSWORD,KASSIBER_REGTEST_RPC_AUTH,KASSIBER_REGTEST_RPC_PORT,KASSIBER_REGTEST_ELEMENTS_RPC_PORT,KASSIBER_REGTEST_BITCOIND_IMAGE,KASSIBER_REGTEST_ELEMENTSD_IMAGE,KASSIBER_REGTEST_FULCRUM_IMAGE,KASSIBER_REGTEST_FRIGATE_IMAGE,KASSIBER_REGTEST_FRIGATE_VERSION,KASSIBER_REGTEST_FRIGATE_TARBALL_SHA256,KASSIBER_REGTEST_BACKEND_STACK_IMAGE,KASSIBER_REGTEST_BITCOIN_ELECTRUM_PORT,KASSIBER_REGTEST_BITCOIN_MEMPOOL_PORT,KASSIBER_REGTEST_LIQUID_ELECTRUM_PORT,KASSIBER_REGTEST_LIQUID_MEMPOOL_PORT,KASSIBER_REGTEST_FRIGATE_PORT,KASSIBER_REGTEST_CLN_IMAGE,KASSIBER_REGTEST_CLN_MERCHANT_PORT,KASSIBER_REGTEST_CLN_CUSTOMER_PORT,KASSIBER_REGTEST_CLN_SUPPLIER_PORT,KASSIBER_REGTEST_CLN_ROUTER_PORT
 SUDO_DOCKER=(sudo -n --preserve-env="$SUDO_DOCKER_ENV" docker)
 
 export PYTHONHASHSEED="${PYTHONHASHSEED:-0}"
@@ -98,6 +98,9 @@ docker_compose() {
       KASSIBER_REGTEST_BITCOIND_IMAGE="${KASSIBER_REGTEST_BITCOIND_IMAGE:-}" \
       KASSIBER_REGTEST_ELEMENTSD_IMAGE="${KASSIBER_REGTEST_ELEMENTSD_IMAGE:-}" \
       KASSIBER_REGTEST_FULCRUM_IMAGE="${KASSIBER_REGTEST_FULCRUM_IMAGE:-}" \
+      KASSIBER_REGTEST_FRIGATE_IMAGE="${KASSIBER_REGTEST_FRIGATE_IMAGE:-}" \
+      KASSIBER_REGTEST_FRIGATE_VERSION="${KASSIBER_REGTEST_FRIGATE_VERSION:-}" \
+      KASSIBER_REGTEST_FRIGATE_TARBALL_SHA256="${KASSIBER_REGTEST_FRIGATE_TARBALL_SHA256:-}" \
       KASSIBER_REGTEST_BACKEND_STACK_IMAGE="${KASSIBER_REGTEST_BACKEND_STACK_IMAGE:-}" \
       KASSIBER_REGTEST_BITCOIN_ELECTRUM_PORT="${KASSIBER_REGTEST_BITCOIN_ELECTRUM_PORT:-}" \
       KASSIBER_REGTEST_BITCOIN_MEMPOOL_PORT="${KASSIBER_REGTEST_BITCOIN_MEMPOOL_PORT:-}" \
@@ -108,6 +111,9 @@ docker_compose() {
       KASSIBER_REGTEST_CLN_CUSTOMER_PORT="${KASSIBER_REGTEST_CLN_CUSTOMER_PORT:-}" \
       KASSIBER_REGTEST_CLN_SUPPLIER_PORT="${KASSIBER_REGTEST_CLN_SUPPLIER_PORT:-}" \
       KASSIBER_REGTEST_CLN_ROUTER_PORT="${KASSIBER_REGTEST_CLN_ROUTER_PORT:-}" \
+      KASSIBER_REGTEST_FRIGATE_PORT="${KASSIBER_REGTEST_FRIGATE_PORT:-}" \
+      KASSIBER_REGTEST_COMPOSE_PROFILES="${KASSIBER_REGTEST_COMPOSE_PROFILES:-}" \
+      COMPOSE_PROFILES="${COMPOSE_PROFILES:-}" \
       docker-compose "$@"
   else
     echo "Docker Compose is required for the slow regtest lane." >&2
@@ -182,8 +188,12 @@ run_with_bitcoin_core() {
   export KASSIBER_REGTEST_BITCOIN_MEMPOOL_PORT="${KASSIBER_REGTEST_BITCOIN_MEMPOOL_PORT:-$((KASSIBER_REGTEST_RPC_PORT + 101))}"
   export KASSIBER_REGTEST_LIQUID_ELECTRUM_PORT="${KASSIBER_REGTEST_LIQUID_ELECTRUM_PORT:-$((KASSIBER_REGTEST_RPC_PORT + 102))}"
   export KASSIBER_REGTEST_LIQUID_MEMPOOL_PORT="${KASSIBER_REGTEST_LIQUID_MEMPOOL_PORT:-$((KASSIBER_REGTEST_RPC_PORT + 103))}"
+  export KASSIBER_REGTEST_FRIGATE_PORT="${KASSIBER_REGTEST_FRIGATE_PORT:-$((KASSIBER_REGTEST_RPC_PORT + 105))}"
   export KASSIBER_REGTEST_CORE_URL="${KASSIBER_REGTEST_CORE_URL:-http://127.0.0.1:${KASSIBER_REGTEST_RPC_PORT}}"
   export KASSIBER_REGTEST_COMPOSE_PROJECT="${KASSIBER_REGTEST_COMPOSE_PROJECT:-$(py -c 'import hashlib, os; print("kassiber-regtest-" + hashlib.sha256(os.getcwd().encode()).hexdigest()[:12])')}"
+  if [ -n "${KASSIBER_REGTEST_COMPOSE_PROFILES:-}" ]; then
+    export COMPOSE_PROFILES="$KASSIBER_REGTEST_COMPOSE_PROFILES"
+  fi
 
   STARTED_COMPOSE=0
   cleanup() {
@@ -214,6 +224,122 @@ run_bitcoin_core_smoke() {
   py -m unittest tests.integration.test_live_bitcoin_core_regtest -v
 }
 
+probe_frigate() {
+  py - <<'PY'
+import json
+import os
+import socket
+import sys
+
+port = int(os.environ.get("KASSIBER_REGTEST_FRIGATE_PORT", "18548"))
+
+def call(sock, ident, method, params=None):
+    payload = {"jsonrpc": "2.0", "id": ident, "method": method, "params": params or []}
+    sock.sendall(json.dumps(payload).encode("utf-8") + b"\n")
+    raw = b""
+    while not raw.endswith(b"\n"):
+        chunk = sock.recv(65536)
+        if not chunk:
+            raise RuntimeError("Frigate closed the Electrum connection")
+        raw += chunk
+    response = json.loads(raw.decode("utf-8"))
+    if response.get("error"):
+        raise RuntimeError(f"{method} failed: {response['error']}")
+    return response.get("result")
+
+try:
+    with socket.create_connection(("127.0.0.1", port), timeout=3) as sock:
+        call(sock, "version", "server.version", ["Kassiber regtest probe", "1.6"])
+        features = call(sock, "features", "server.features")
+except Exception as exc:
+    print(f"{type(exc).__name__}: {exc}", file=sys.stderr)
+    sys.exit(1)
+
+if not isinstance(features, dict) or 0 not in list(features.get("silent_payments") or []):
+    print(json.dumps(features, sort_keys=True), file=sys.stderr)
+    sys.exit(1)
+sys.exit(0)
+PY
+}
+
+seed_frigate_regtest_tip() {
+  py - <<'PY'
+import base64
+import json
+import os
+import sys
+from urllib import error, parse, request
+
+url = os.environ["KASSIBER_REGTEST_CORE_URL"].rstrip("/")
+user = os.environ["KASSIBER_REGTEST_RPC_USER"]
+password = os.environ["KASSIBER_REGTEST_RPC_PASSWORD"]
+wallet_name = os.environ.get("KASSIBER_REGTEST_FRIGATE_READY_WALLET", "kassiber-frigate-ready")
+
+
+class RpcError(RuntimeError):
+    def __init__(self, code, message):
+        super().__init__(message)
+        self.code = code
+
+
+def call(method, params=None, *, wallet=None):
+    endpoint = url
+    if wallet:
+        endpoint += "/wallet/" + parse.quote(wallet, safe="")
+    payload = json.dumps({"jsonrpc": "1.0", "id": "frigate-ready", "method": method, "params": params or []}).encode()
+    req = request.Request(endpoint, data=payload, headers={"Content-Type": "application/json"})
+    req.add_header("Authorization", "Basic " + base64.b64encode(f"{user}:{password}".encode()).decode())
+    try:
+        with request.urlopen(req, timeout=10) as response:
+            body = json.loads(response.read().decode())
+    except error.HTTPError as exc:
+        body = json.loads(exc.read().decode(errors="replace"))
+    if body.get("error"):
+        err = body["error"]
+        raise RpcError(err.get("code"), err.get("message") or method)
+    return body.get("result")
+
+
+info = call("getblockchaininfo")
+if not info.get("initialblockdownload") and int(info.get("blocks") or 0) > 0:
+    sys.exit(0)
+
+try:
+    call("createwallet", [wallet_name])
+except RpcError as exc:
+    if exc.code not in {-4, -35}:
+        raise
+    try:
+        call("loadwallet", [wallet_name])
+    except RpcError as load_exc:
+        if load_exc.code != -35:
+            raise
+
+address = call("getnewaddress", ["Frigate readiness", "bech32m"], wallet=wallet_name)
+call("generatetoaddress", [1, address])
+PY
+}
+
+wait_for_frigate() {
+  local deadline
+  deadline=$((SECONDS + ${KASSIBER_REGTEST_FRIGATE_WAIT_SECONDS:-600}))
+  until probe_frigate
+  do
+    if [ "$SECONDS" -ge "$deadline" ]; then
+      echo "Timed out waiting for Frigate Electrum Silent Payments support on port ${KASSIBER_REGTEST_FRIGATE_PORT}." >&2
+      docker_compose -p "$KASSIBER_REGTEST_COMPOSE_PROJECT" -f dev/regtest/compose.bitcoin.yml logs --tail=120 frigate || true
+      return 1
+    fi
+    sleep 3
+  done
+}
+
+run_silent_payments_smoke() {
+  seed_frigate_regtest_tip
+  wait_for_frigate
+  py -m unittest tests.test_silent_payments -v
+}
+
 run_demo_full() {
   ensure_python_runtime
   py -m tests.integration.regtest_demo
@@ -222,6 +348,79 @@ run_demo_full() {
 DEMO_HOME="${KASSIBER_REGTEST_DEMO_HOME:-$HOME/.kassiber/regtest-demo}"
 DEMO_MANIFEST="$DEMO_HOME/demo-manifest.json"
 DEMO_SCENARIO="dev/regtest/scenarios/full_accounting.json"
+
+demo_assert_safe_home() {
+  local mode="$1"
+  KASSIBER_DEMO_HOME_DIR="$DEMO_HOME" \
+  KASSIBER_DEMO_MANIFEST="$DEMO_MANIFEST" \
+  KASSIBER_DEMO_PURGE_MODE="$mode" \
+    py - <<'PY'
+import json
+import os
+import sys
+from pathlib import Path
+
+home = Path(os.environ["KASSIBER_DEMO_HOME_DIR"]).expanduser()
+manifest_path = Path(os.environ["KASSIBER_DEMO_MANIFEST"]).expanduser()
+mode = os.environ["KASSIBER_DEMO_PURGE_MODE"]
+try:
+    resolved = home.resolve(strict=False)
+    user_home = Path.home().resolve(strict=False)
+except OSError as exc:
+    print(f"Refusing unsafe demo home {home}: {exc}", file=sys.stderr)
+    raise SystemExit(2)
+
+def fail(reason: str) -> None:
+    print(f"Refusing to {mode} unsafe demo home {resolved}: {reason}", file=sys.stderr)
+    raise SystemExit(2)
+
+def manifest_matches() -> bool:
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError, json.JSONDecodeError):
+        return False
+    data_root = manifest.get("data_root")
+    export_dir = manifest.get("export_dir")
+    try:
+        data_root_path = (
+            Path(str(data_root)).expanduser().resolve(strict=False)
+            if data_root
+            else None
+        )
+        export_dir_path = (
+            Path(str(export_dir)).expanduser().resolve(strict=False)
+            if export_dir
+            else None
+        )
+        return (
+            manifest.get("schema_version") == 1
+            and manifest.get("scenario_id") == "full-accounting-v1"
+            and data_root_path == resolved / "data"
+            and export_dir_path == resolved / "exports"
+        )
+    except (OSError, ValueError):
+        return False
+
+dangerous = {Path("/"), user_home, Path("/tmp"), Path("/var/tmp")}
+if resolved in dangerous or resolved.parent == Path("/"):
+    fail("path is root, user home, a temp root, or root-level")
+if len(resolved.parts) < 4:
+    fail("path is too shallow")
+
+manifest_ok = manifest_matches()
+if mode == "purge":
+    if not manifest_ok:
+        fail("missing Kassiber regtest demo manifest")
+else:
+    default_home = user_home / ".kassiber" / "regtest-demo"
+    name = resolved.name.lower()
+    dedicated_name = name in {"regtest-demo", "kassiber-regtest-demo"} or name.startswith(
+        "kassiber-regtest-demo-"
+    )
+    if not (resolved == default_home or dedicated_name or manifest_ok):
+        fail("path does not look like a Kassiber regtest demo home")
+PY
+}
 
 demo_manifest_get() {
   KASSIBER_DEMO_MANIFEST="$DEMO_MANIFEST" KASSIBER_DEMO_KEY="$1" py - <<'PY'
@@ -240,6 +439,19 @@ demo_scenario_checksum() {
   py -c 'import hashlib, sys; print(hashlib.sha256(open(sys.argv[1], "rb").read()).hexdigest())' "$DEMO_SCENARIO"
 }
 
+demo_book_needs_rebuild() {
+  local checksum
+  local current_checksum
+  checksum="$(demo_scenario_checksum)"
+  current_checksum="$(demo_manifest_get scenario_checksum)"
+  if [ -n "${KASSIBER_REGTEST_DEMO_REBUILD:-}" ] \
+    || [ ! -d "$DEMO_HOME/data" ] \
+    || [ "$current_checksum" != "$checksum" ]; then
+    return 0
+  fi
+  return 1
+}
+
 demo_write_manifest() {
   local checksum="$1"
   KASSIBER_DEMO_MANIFEST="$DEMO_MANIFEST" \
@@ -250,9 +462,11 @@ demo_write_manifest() {
 import datetime
 import json
 import os
+import tempfile
 
 manifest_path = os.environ["KASSIBER_DEMO_MANIFEST"]
 home = os.environ["KASSIBER_DEMO_HOME_DIR"]
+manifest_dir = os.path.dirname(manifest_path) or "."
 manifest = {
     "schema_version": 1,
     "scenario_id": os.environ["KASSIBER_DEMO_SCENARIO_ID"],
@@ -263,6 +477,7 @@ manifest = {
     "core_url": os.environ["KASSIBER_REGTEST_CORE_URL"],
     "elements_core_url": f"http://127.0.0.1:{os.environ['KASSIBER_REGTEST_ELEMENTS_RPC_PORT']}",
     "bitcoin_electrum_url": f"tcp://127.0.0.1:{os.environ['KASSIBER_REGTEST_BITCOIN_ELECTRUM_PORT']}",
+    "bitcoin_frigate_url": f"tcp://127.0.0.1:{os.environ['KASSIBER_REGTEST_FRIGATE_PORT']}",
     "bitcoin_mempool_url": f"http://127.0.0.1:{os.environ['KASSIBER_REGTEST_BITCOIN_MEMPOOL_PORT']}/api",
     "liquid_electrum_url": f"tcp://127.0.0.1:{os.environ['KASSIBER_REGTEST_LIQUID_ELECTRUM_PORT']}",
     "liquid_mempool_url": f"http://127.0.0.1:{os.environ['KASSIBER_REGTEST_LIQUID_MEMPOOL_PORT']}/api",
@@ -270,10 +485,49 @@ manifest = {
     "rpc_user": os.environ["KASSIBER_REGTEST_RPC_USER"],
     "rpc_password": os.environ["KASSIBER_REGTEST_RPC_PASSWORD"],
 }
-with open(manifest_path, "w", encoding="utf-8") as handle:
-    json.dump(manifest, handle, indent=2, sort_keys=True)
-    handle.write("\n")
-os.chmod(manifest_path, 0o600)
+os.makedirs(home, mode=0o700, exist_ok=True)
+os.chmod(home, 0o700)
+os.makedirs(manifest_dir, mode=0o700, exist_ok=True)
+os.chmod(manifest_dir, 0o700)
+tmp_path = None
+fd = None
+for index in range(100):
+    candidate = os.path.join(manifest_dir, f".{os.path.basename(manifest_path)}.{os.getpid()}.{index}.tmp")
+    try:
+        fd = os.open(candidate, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    except FileExistsError:
+        continue
+    tmp_path = candidate
+    break
+else:
+    raise RuntimeError(f"could not create temporary manifest next to {manifest_path}")
+
+try:
+    with os.fdopen(fd, "w", encoding="utf-8") as handle:
+        fd = None
+        json.dump(manifest, handle, indent=2, sort_keys=True)
+        handle.write("\n")
+        handle.flush()
+        os.fsync(handle.fileno())
+    os.replace(tmp_path, manifest_path)
+    os.chmod(manifest_path, 0o600)
+    try:
+        dir_fd = os.open(manifest_dir, os.O_RDONLY)
+    except OSError:
+        dir_fd = None
+    if dir_fd is not None:
+        try:
+            os.fsync(dir_fd)
+        finally:
+            os.close(dir_fd)
+finally:
+    if fd is not None:
+        os.close(fd)
+    if tmp_path is not None:
+        try:
+            os.unlink(tmp_path)
+        except FileNotFoundError:
+            pass
 PY
 }
 
@@ -340,16 +594,27 @@ PY
 
 demo_build_book() {
   local checksum
+  local current_checksum
   checksum="$(demo_scenario_checksum)"
+  current_checksum="$(demo_manifest_get scenario_checksum)"
+  demo_assert_safe_home rebuild
   if [ -z "${KASSIBER_REGTEST_DEMO_REBUILD:-}" ] \
     && [ -d "$DEMO_HOME/data" ] \
-    && [ "$(demo_manifest_get scenario_checksum)" = "$checksum" ]; then
+    && [ "$current_checksum" = "$checksum" ]; then
     demo_refresh_live_rate
     demo_write_manifest "$checksum"
     echo "Reusing existing demo book (scenario unchanged): $DEMO_HOME/data"
     return 0
   fi
 
+  if [ -z "${KASSIBER_REGTEST_REUSE_CORE:-}" ] && [ -z "${KASSIBER_REGTEST_DEMO_CHAIN_RESET_DONE:-}" ]; then
+    echo "Resetting the managed demo regtest chain for a backdated rebuild..."
+    docker_compose -p "$KASSIBER_REGTEST_COMPOSE_PROJECT" -f dev/regtest/compose.bitcoin.yml down -v --remove-orphans
+    docker_compose -p "$KASSIBER_REGTEST_COMPOSE_PROJECT" -f dev/regtest/compose.bitcoin.yml up -d
+    wait_for_core
+  fi
+
+  demo_assert_safe_home rebuild
   rm -rf "$DEMO_HOME/data" "$DEMO_HOME/exports" "$DEMO_HOME/imports" \
     "$DEMO_HOME/demo-summary.json" "$DEMO_MANIFEST"
   mkdir -p "$DEMO_HOME"
@@ -372,6 +637,7 @@ Demo environment is up.
   Core RPC:   $KASSIBER_REGTEST_CORE_URL (regtest; credentials in $DEMO_MANIFEST)
   Elements RPC: http://127.0.0.1:$KASSIBER_REGTEST_ELEMENTS_RPC_PORT (elementsregtest; same credentials)
   BTC Electrum: tcp://127.0.0.1:$KASSIBER_REGTEST_BITCOIN_ELECTRUM_PORT
+  BTC Frigate:  tcp://127.0.0.1:$KASSIBER_REGTEST_FRIGATE_PORT (Silent Payments Electrum)
   BTC mempool:  http://127.0.0.1:$KASSIBER_REGTEST_BITCOIN_MEMPOOL_PORT/api
   LBTC Electrum: tcp://127.0.0.1:$KASSIBER_REGTEST_LIQUID_ELECTRUM_PORT
   LBTC mempool:  http://127.0.0.1:$KASSIBER_REGTEST_LIQUID_MEMPOOL_PORT/api
@@ -392,7 +658,14 @@ run_demo_up() {
   # credentials so later demo-up runs still match the book's stored backend.
   export KASSIBER_REGTEST_COMPOSE_PROJECT="${KASSIBER_REGTEST_COMPOSE_PROJECT:-kassiber-regtest-demo}"
   export KASSIBER_REGTEST_KEEP=1
+  export KASSIBER_REGTEST_COMPOSE_PROFILES="${KASSIBER_REGTEST_COMPOSE_PROFILES:-silent-payments}"
+  export COMPOSE_PROFILES="$KASSIBER_REGTEST_COMPOSE_PROFILES"
   demo_load_rpc_env
+  if demo_book_needs_rebuild && [ -z "${KASSIBER_REGTEST_REUSE_CORE:-}" ]; then
+    echo "Removing the managed demo regtest chain before rebuilding the backdated book..."
+    docker_compose -p "$KASSIBER_REGTEST_COMPOSE_PROJECT" -f dev/regtest/compose.bitcoin.yml down -v --remove-orphans
+    export KASSIBER_REGTEST_DEMO_CHAIN_RESET_DONE=1
+  fi
   run_with_bitcoin_core demo_build_book
   demo_print_instructions
 }
@@ -429,6 +702,7 @@ run_demo_down() {
   project="${KASSIBER_REGTEST_COMPOSE_PROJECT:-${project:-kassiber-regtest-demo}}"
   demo_load_rpc_env
   if [ "$purge" = "--purge" ]; then
+    demo_assert_safe_home purge
     docker_compose -p "$project" -f dev/regtest/compose.bitcoin.yml down -v
     rm -rf "$DEMO_HOME"
     echo "Demo node, chain volume, and demo book removed."
@@ -563,6 +837,11 @@ run_lightning_business() {
   ./dev/regtest/lightning-business-bootstrap.sh
   ./dev/regtest/lightning-business-scenario.sh
   py -m unittest tests.integration.test_live_lightning_business_regtest -v
+}
+
+run_silent_payments() {
+  export KASSIBER_REGTEST_COMPOSE_PROFILES="${KASSIBER_REGTEST_COMPOSE_PROFILES:-silent-payments}"
+  run_with_bitcoin_core run_silent_payments_smoke
 }
 
 boltz_regtest_dir() {
@@ -755,12 +1034,15 @@ case "$MODE" in
   lightning-business)
     run_lightning_business
     ;;
+  silent-payments)
+    run_silent_payments
+    ;;
   all)
     run_fast
     run_with_bitcoin_core run_slow_suite
     ;;
   *)
-    echo "usage: $0 [fast|bitcoin-core|slow|demo|demo-full|demo-up|demo-tick [N]|demo-down [--purge]|boltz-liquid|lightning-business|all]" >&2
+    echo "usage: $0 [fast|bitcoin-core|slow|demo|demo-full|demo-up|demo-tick [N]|demo-down [--purge]|boltz-liquid|lightning-business|silent-payments|all]" >&2
     exit 2
     ;;
 esac

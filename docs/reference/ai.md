@@ -85,6 +85,16 @@ in-app assistant or CLI is invoked, Kassiber seeds a default `ollama` provider
 pointing at that endpoint. Run `ollama serve` (or have Ollama auto-start) and
 the assistant Just Works.
 
+If Kassiber itself is running inside a container and Ollama is running on the
+host, seed the provider with the Docker host alias instead:
+
+```bash
+KASSIBER_DEFAULT_AI_BASE_URL=http://host.docker.internal:11434/v1
+```
+
+This only affects first-time provider seeding. For an existing book, update the
+`ollama` provider's `base_url` instead.
+
 Example:
 
 ```bash

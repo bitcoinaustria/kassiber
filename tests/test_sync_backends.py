@@ -1216,6 +1216,37 @@ class SyncBackendsTest(unittest.TestCase):
         self.assertIn("Electrum-format JSON", str(raised.exception))
         self.assertEqual(raised.exception.details, {"response_type": "list"})
 
+    def test_electrum_client_negotiates_server_version_on_connect(self):
+        class HandshakeSocket(_DummySocket):
+            def makefile(self, *_args, **_kwargs):
+                return io.StringIO(
+                    json.dumps(
+                        {
+                            "jsonrpc": "2.0",
+                            "id": 1,
+                            "result": ["Frigate 1.5.3", "1.6"],
+                        }
+                    )
+                    + "\n"
+                )
+
+            def close(self):
+                pass
+
+        socket = HandshakeSocket()
+
+        with patch(
+            "kassiber.core.sync_backends._connect_backend_socket",
+            return_value=socket,
+        ):
+            with ElectrumClient({"name": "frigate", "url": "tcp://frigate.example:50001"}):
+                pass
+
+        self.assertEqual(len(socket.sent), 1)
+        request = json.loads(socket.sent[0].decode("utf-8"))
+        self.assertEqual(request["method"], "server.version")
+        self.assertEqual(request["params"], ["Kassiber", "1.6"])
+
     def test_bitcoinrpc_sync_adapter_returns_record_and_meta_shape(self):
         target = {"address": "bc1qcore", "script_pubkey": "0014core"}
         sync_state = WalletSyncState(
@@ -2315,8 +2346,12 @@ class HttpRetryAndLimiterTest(unittest.TestCase):
 
         first = http_client.host_limiter("https://shared.example/a")
         again = http_client.host_limiter("https://shared.example/b?q=1")
+        with_userinfo = http_client.host_limiter("https://user:pass@SHARED.example/c")
+        other_port = http_client.host_limiter("https://shared.example:8443/d")
         other = http_client.host_limiter("https://other.example/a")
         self.assertIs(first, again)
+        self.assertIs(first, with_userinfo)
+        self.assertIs(first, other_port)
         self.assertIsNot(first, other)
 
     def test_http_get_json_recovers_from_real_429(self):

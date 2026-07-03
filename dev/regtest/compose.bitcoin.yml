@@ -1,17 +1,22 @@
 x-regtest-api-base: &regtest-api-base
   image: ${KASSIBER_REGTEST_BACKEND_STACK_IMAGE:-python:3.12-slim}
   command: ["python", "/app/backend_stack.py"]
+  extra_hosts:
+    - "host.docker.internal:host-gateway"
   volumes:
     - ./backend_stack.py:/app/backend_stack.py:ro
 
 services:
   bitcoind:
-    image: ${KASSIBER_REGTEST_BITCOIND_IMAGE:-bitcoin/bitcoin:27.1}
+    image: ${KASSIBER_REGTEST_BITCOIND_IMAGE:-bitcoin/bitcoin:30.0}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     command:
       - "-printtoconsole"
       - "-regtest=1"
       - "-server=1"
       - "-txindex=1"
+      - "-zmqpubsequence=tcp://0.0.0.0:28336"
       - "-fallbackfee=0.0002"
       - "-rpcthreads=8"
       - "-rpcworkqueue=64"
@@ -28,6 +33,8 @@ services:
 
   elementsd:
     image: ${KASSIBER_REGTEST_ELEMENTSD_IMAGE:-blockstream/elementsd:23.3.3}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     command:
       - elementsd
       - "-printtoconsole"
@@ -51,6 +58,8 @@ services:
 
   fulcrum:
     image: ${KASSIBER_REGTEST_FULCRUM_IMAGE:-cculianu/fulcrum:v2.1.1}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       - bitcoind
     environment:
@@ -69,6 +78,59 @@ services:
       - "127.0.0.1:${KASSIBER_REGTEST_BITCOIN_ELECTRUM_PORT:-18543}:50001"
     volumes:
       - fulcrum-regtest:/data
+
+  frigate:
+    profiles:
+      - silent-payments
+    image: ${KASSIBER_REGTEST_FRIGATE_IMAGE:-kassiber/frigate-regtest:${KASSIBER_REGTEST_FRIGATE_VERSION:-1.5.3}}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    build:
+      context: ../..
+      dockerfile: dev/regtest/Dockerfile.frigate
+      args:
+        FRIGATE_VERSION: ${KASSIBER_REGTEST_FRIGATE_VERSION:-1.5.3}
+        FRIGATE_TARBALL_SHA256: ${KASSIBER_REGTEST_FRIGATE_TARBALL_SHA256:-}
+    depends_on:
+      - bitcoind
+      - fulcrum
+    environment:
+      KASSIBER_REGTEST_RPC_USER: ${KASSIBER_REGTEST_RPC_USER:-}
+      KASSIBER_REGTEST_RPC_PASSWORD: ${KASSIBER_REGTEST_RPC_PASSWORD:-}
+    entrypoint: ["/bin/sh", "-lc"]
+    command:
+      - |
+        mkdir -p /data/regtest
+        cat > /data/regtest/config.toml <<EOF
+        [core]
+        connect = true
+        server = "http://bitcoind:18443"
+        authType = "USERPASS"
+        auth = "$${KASSIBER_REGTEST_RPC_USER}:$${KASSIBER_REGTEST_RPC_PASSWORD}"
+        zmqSequenceEndpoint = "tcp://bitcoind:28336"
+        rpcRequestTimeoutSeconds = 60
+        rpcBatchSize = 20
+
+        [index]
+        startHeight = 0
+        cacheSize = "100K"
+
+        [scan]
+        computeBackend = "CPU"
+        dbThreads = 2
+        memoryLimit = "512MB"
+        metricsEnabled = false
+
+        [server]
+        tcp = "tcp://0.0.0.0:50001"
+        ssl = ""
+        backendElectrumServer = "tcp://fulcrum:50001"
+        EOF
+        exec /opt/frigate/bin/frigate -n regtest -d /data
+    ports:
+      - "127.0.0.1:${KASSIBER_REGTEST_FRIGATE_PORT:-18548}:50001"
+    volumes:
+      - frigate-regtest:/data
 
   bitcoin-mempool:
     <<: *regtest-api-base
@@ -113,3 +175,4 @@ volumes:
   bitcoind-regtest:
   elementsd-regtest:
   fulcrum-regtest:
+  frigate-regtest:

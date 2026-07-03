@@ -515,4 +515,21 @@ describe("transaction detail routing", () => {
       tab: "details",
     });
   });
+
+  it("falls back to details for the old ledger deep-link tab", () => {
+    vi.stubGlobal("window", {
+      location: {
+        search: "?tx=tx-ledger&tab=ledger",
+        pathname: "/transactions",
+      },
+      history: {
+        replaceState: vi.fn(),
+      },
+    });
+
+    expect(readTransactionDetailParams()).toEqual({
+      transactionId: "tx-ledger",
+      tab: "details",
+    });
+  });
 });

@@ -55,6 +55,15 @@ daily OHLCVT values used as local fallback pricing data.
 | --- | --- | --- | --- |
 | Kraken BTC daily OHLCVT history | `kassiber/data/rates/kraken/btc_daily/*.csv` | Offline fallback rates for `BTC-EUR` and `BTC-USD` | Unknown / not specified in the local export; review before public release redistribution |
 
+## Development and test infrastructure
+
+The regtest Docker harness can build a local Sparrow Frigate image for Silent
+Payments protocol testing. It is not a Kassiber runtime dependency.
+
+| Project | Files | Role | License |
+| --- | --- | --- | --- |
+| [Sparrow Frigate](https://github.com/sparrowwallet/frigate) | `dev/regtest/Dockerfile.frigate`, `dev/regtest/compose.bitcoin.yml` | Optional regtest Electrum server for BIP352 Silent Payments discovery | Apache-2.0 |
+
 ## Practical notes
 
 - Preserve upstream notices and license texts when redistributing Kassiber with bundled third-party code.

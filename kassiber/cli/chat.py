@@ -4,6 +4,7 @@ import json
 import os
 import subprocess
 import sys
+import threading
 import uuid
 from dataclasses import dataclass, field
 from typing import Any, Iterable, TextIO
@@ -17,6 +18,7 @@ from .termrender import MarkdownStreamRenderer, render_envelope_table
 _CONSENT_DECISIONS = {"allow_once", "allow_session", "deny"}
 _ANSI_DIM = "\x1b[2m"
 _ANSI_RESET = "\x1b[0m"
+_DAEMON_STDERR_TAIL_CHARS = 2000
 _FINISH_NOTICES = {
     "cancelled": "Cancelled.",
     "tool_loop_max_iterations": (
@@ -74,6 +76,9 @@ class _DaemonChatClient:
         self._transcript = transcript
         self._pass_fds: tuple[int, ...] = ()
         self._duplicated_fd: int | None = None
+        self._stderr_tail = ""
+        self._stderr_lock = threading.Lock()
+        self._stderr_thread: threading.Thread | None = None
         command = self._daemon_command(args)
         self._proc = subprocess.Popen(
             command,
@@ -85,6 +90,13 @@ class _DaemonChatClient:
             bufsize=1,
             pass_fds=self._pass_fds,
         )
+        if self._proc.stderr is not None:
+            self._stderr_thread = threading.Thread(
+                target=self._drain_stderr,
+                name="kassiber-daemon-stderr-drain",
+                daemon=True,
+            )
+            self._stderr_thread.start()
         if self._duplicated_fd is not None:
             os.close(self._duplicated_fd)
             self._duplicated_fd = None
@@ -120,6 +132,29 @@ class _DaemonChatClient:
         command.append("daemon")
         return command
 
+    def _append_stderr(self, chunk: str) -> None:
+        if not chunk:
+            return
+        with self._stderr_lock:
+            self._stderr_tail = (self._stderr_tail + chunk)[-_DAEMON_STDERR_TAIL_CHARS:]
+
+    def _drain_stderr(self) -> None:
+        stream = self._proc.stderr
+        if stream is None:
+            return
+        while True:
+            try:
+                chunk = stream.read(4096)
+            except ValueError:
+                return
+            if not chunk:
+                return
+            self._append_stderr(chunk)
+
+    def _stderr_snapshot(self) -> str:
+        with self._stderr_lock:
+            return self._stderr_tail
+
     def send(self, payload: dict[str, Any]) -> None:
         if self._proc.stdin is None:
             raise AppError(
@@ -142,11 +177,11 @@ class _DaemonChatClient:
             )
         line = self._proc.stdout.readline()
         if line == "":
-            stderr = self._proc.stderr.read() if self._proc.stderr is not None else ""
+            stderr = self._stderr_snapshot()
             raise AppError(
                 "daemon exited before chat completed",
                 code="daemon_closed",
-                details={"stderr": stderr[-2000:]},
+                details={"stderr": stderr} if stderr else {},
                 retryable=False,
             )
         if self._transcript is not None:
@@ -184,6 +219,8 @@ class _DaemonChatClient:
             self._proc.stdout.close()
         if self._proc.stderr is not None:
             self._proc.stderr.close()
+        if self._stderr_thread is not None:
+            self._stderr_thread.join(timeout=1)
 
 
 def _split_tool_names(values: Iterable[str] | None) -> set[str]:

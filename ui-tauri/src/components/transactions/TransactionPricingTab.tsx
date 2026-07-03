@@ -59,37 +59,65 @@ export function TransactionPricingTab({ ctx }: { ctx: TransactionDetailTabContex
                   {/* Pricing — single workstation for pricing source + manual override */}
                   <TabsContent value="pricing" className="mt-4">
                     <div className="grid gap-4">
-                      <div className="grid gap-3 md:grid-cols-4">
-                        {transactionPricingOptions.map((option) => (
-                          <button
-                            key={option.value}
-                            type="button"
-                            className={cn(
-                              "rounded-md border p-3 text-left transition-colors hover:bg-muted/50",
-                              pricingValue === option.value &&
-                                "border-primary bg-accent",
-                            )}
-                            onClick={() => {
-                              updateDraft(
-                                "pricingSourceKind",
-                                option.sourceKind,
-                              );
-                              updateDraft("pricingQuality", option.quality);
-                            }}
-                          >
-                            <div className="text-sm font-medium">
-                              {/* dynamic key */}
-                              {t(option.label as ParseKeys<["transactions"]>)}
-                            </div>
-                            <div className="mt-1 text-xs text-muted-foreground">
-                              {option.description
-                                ? // dynamic key
-                                  t(option.description as ParseKeys<["transactions"]>)
-                                : null}
-                            </div>
-                          </button>
-                        ))}
+                      <div
+                        role="radiogroup"
+                        aria-label={t("pricing.sourceAria")}
+                        className="grid gap-3 md:grid-cols-4"
+                      >
+                        {transactionPricingOptions.map((option) => {
+                          const selected = pricingValue === option.value;
+                          return (
+                            <button
+                              key={option.value}
+                              type="button"
+                              role="radio"
+                              aria-checked={selected}
+                              className={cn(
+                                "flex items-start gap-2.5 rounded-md border p-3 text-left transition-colors hover:bg-muted/50",
+                                selected && "border-primary bg-accent",
+                              )}
+                              onClick={() => {
+                                updateDraft(
+                                  "pricingSourceKind",
+                                  option.sourceKind,
+                                );
+                                updateDraft("pricingQuality", option.quality);
+                              }}
+                            >
+                              <span
+                                aria-hidden="true"
+                                className={cn(
+                                  "mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full border",
+                                  selected
+                                    ? "border-primary"
+                                    : "border-muted-foreground/40",
+                                )}
+                              >
+                                {selected ? (
+                                  <span className="size-2 rounded-full bg-primary" />
+                                ) : null}
+                              </span>
+                              <span className="min-w-0">
+                                <span className="block text-sm font-medium">
+                                  {/* dynamic key */}
+                                  {t(option.label as ParseKeys<["transactions"]>)}
+                                </span>
+                                <span className="mt-1 block text-xs text-muted-foreground">
+                                  {option.description
+                                    ? // dynamic key
+                                      t(option.description as ParseKeys<["transactions"]>)
+                                    : null}
+                                </span>
+                              </span>
+                            </button>
+                          );
+                        })}
                       </div>
+                      {/* The manual editor only makes sense once "Manual
+                          override" is the chosen source — showing an editable
+                          price box on FMV-priced rows invited accidental
+                          overrides. */}
+                      {localDraft.pricingSourceKind === "manual_override" ? (
                       <div className="grid gap-3 rounded-md border bg-muted/50 p-3">
                         <div className="flex flex-wrap items-center justify-between gap-2">
                           <div>
@@ -193,6 +221,7 @@ export function TransactionPricingTab({ ctx }: { ctx: TransactionDetailTabContex
                           </p>
                         </div>
                       </div>
+                      ) : null}
                       <div className="grid gap-3 sm:grid-cols-2">
                         <DetailField
                           label={t("pricing.importedPrice")}

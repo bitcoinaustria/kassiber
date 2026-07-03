@@ -105,6 +105,8 @@ def address_to_scriptpubkey(address: str) -> bytes:
         program = bytes(convertbits(data[1:], 5, 8, pad=False))
         if len(program) < 2 or len(program) > 40:
             raise AppError(f"Invalid segwit program length for address: {address}")
+        if version == 0 and len(program) not in {20, 32}:
+            raise AppError(f"Invalid segwit v0 program length for address: {address}")
         if version == 0 and spec != "bech32":
             raise AppError(f"Invalid bech32 checksum type for address: {address}")
         if version > 0 and spec != "bech32m":

@@ -1053,9 +1053,9 @@ def _input_owner_ids(index: Any, entry: Mapping[str, Any]) -> set[str]:
     """
     outpoint = entry.get("outpoint")
     if outpoint:
-        match = index.by_outpoint.get(outpoint)
-        if match is not None:
-            return {str(match.wallet_id)}
+        matches = _lookup_outpoint(index, outpoint)
+        if matches:
+            return {str(match.wallet_id) for match in matches}
     return {str(match.wallet_id) for match in index.lookup_script(entry.get("script"))}
 
 
@@ -1101,13 +1101,22 @@ def _source_chain_network(
     for entry in inputs:
         outpoint = entry.get("outpoint")
         if outpoint:
-            match = index.by_outpoint.get(outpoint)
-            if match is not None and str(match.wallet_id) == source_wallet_id:
-                return _norm_chain_network(match.chain, match.network)
+            for match in _lookup_outpoint(index, outpoint):
+                if str(match.wallet_id) == source_wallet_id:
+                    return _norm_chain_network(match.chain, match.network)
         for match in index.lookup_script(entry.get("script")):
             if str(match.wallet_id) == source_wallet_id:
                 return _norm_chain_network(match.chain, match.network)
     return None
+
+
+def _lookup_outpoint(index: Any, outpoint: Any) -> list[Any]:
+    if hasattr(index, "lookup_outpoint"):
+        return list(index.lookup_outpoint(outpoint))
+    value = getattr(index, "by_outpoint", {}).get(str(outpoint or "").lower())
+    if value is None:
+        return []
+    return value if isinstance(value, list) else [value]
 
 
 def _parse_onchain_tx(raw_json: Any) -> Optional[dict[str, Any]]:

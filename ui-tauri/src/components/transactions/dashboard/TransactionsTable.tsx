@@ -1778,10 +1778,11 @@ const TransactionsTable = ({
                             <span
                               className={cn(
                                 "truncate text-sm font-medium text-foreground",
+                                !txn.counterparty && "font-mono",
                                 blurClass(hideSensitive),
                               )}
                             >
-                              {txn.counterparty}
+                              {txn.counterparty || formatShortTxid(txn.txnId)}
                             </span>
                             {showPrimaryLabel ? (
                               <Badge variant="secondary" className="rounded-md">
@@ -1816,15 +1817,19 @@ const TransactionsTable = ({
                             </span>
                             <span aria-hidden="true">·</span>
                             <span>{txn.date}</span>
-                            <span aria-hidden="true">·</span>
-                            <span
-                              className={cn(
-                                "truncate font-mono",
-                                blurClass(hideSensitive),
-                              )}
-                            >
-                              {formatShortTxid(txn.txnId)}
-                            </span>
+                            {txn.counterparty ? (
+                              <>
+                                <span aria-hidden="true">·</span>
+                                <span
+                                  className={cn(
+                                    "truncate font-mono",
+                                    blurClass(hideSensitive),
+                                  )}
+                                >
+                                  {formatShortTxid(txn.txnId)}
+                                </span>
+                              </>
+                            ) : null}
                           </div>
                         </div>
                       </div>

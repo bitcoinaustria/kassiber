@@ -598,6 +598,72 @@ class TransactionGraphTest(unittest.TestCase):
         self.assertEqual(payload["outputs"][0]["valueSats"], 800_000)
         self.assertEqual(payload["fee"]["valueSats"], 2_000)
 
+    def test_graph_lookup_uses_silent_payment_backend_forwarding(self):
+        txid = "31" * 32
+        runtime_config = {
+            "default_backend": "bitcoin-frigate-regtest",
+            "backends": {
+                "bitcoin-frigate-regtest": {
+                    "kind": "electrum",
+                    "chain": "bitcoin",
+                    "network": "regtest",
+                    "url": "tcp://127.0.0.1:18548",
+                    "silent_payments": True,
+                    "silent_payment_scan_file": "/tmp/kassiber-sp-scan.json",
+                }
+            },
+        }
+        self.conn.execute(
+            "UPDATE wallets SET config_json = ? WHERE id = ?",
+            (json.dumps({"chain": "bitcoin", "network": "regtest"}), "wallet-a"),
+        )
+        self._tx(
+            "silent-payment-row",
+            "wallet-a",
+            "inbound",
+            1_234_567_000,
+            txid,
+            {"outputs": [{"amount_sats": 1_234_567, "silent_payment": True}]},
+            description="Silent Payment sync from bitcoin-frigate-regtest",
+        )
+        decoded = {
+            "version": 2,
+            "locktime": 0,
+            "vin": [],
+            "vout": [
+                {
+                    "n": 0,
+                    "value": 0.01234567,
+                    "scriptPubKey": {
+                        "hex": "5120" + "11" * 32,
+                        "type": "witness_v1_taproot",
+                    },
+                }
+            ],
+        }
+        _FakeElectrumClient.calls = []
+        _FakeElectrumClient.backends = []
+        _FakeElectrumClient.responses = {txid: "current-raw"}
+
+        with patch("kassiber.core.transaction_graph.ElectrumClient", _FakeElectrumClient), patch(
+            "kassiber.core.transaction_graph.decode_raw_transaction",
+            return_value=decoded,
+        ):
+            payload = self._graph(
+                "silent-payment-row",
+                allow_public_lookup=True,
+                runtime_config=runtime_config,
+            )
+
+        self.assertEqual(
+            _FakeElectrumClient.calls,
+            [("blockchain.transaction.get", (txid,))],
+        )
+        self.assertEqual(_FakeElectrumClient.backends[0]["name"], "bitcoin-frigate-regtest")
+        self.assertEqual(payload["supportLevel"], "full")
+        self.assertEqual(payload["transaction"]["inputCount"], 0)
+        self.assertEqual(payload["transaction"]["outputCount"], 1)
+
     def test_bitcoin_core_graph_dedups_shared_prevout_txid(self):
         # Two inputs spending different vouts of the SAME previous txid must
         # resolve with a single deduplicated getrawtransaction for that prev tx

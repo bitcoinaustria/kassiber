@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import io
 import json
+import os
 import socket
 import subprocess
 import tempfile
@@ -40,6 +41,7 @@ from kassiber.ai.client import (
     OpenAICompatClient,
     ToolCallAccumulator,
     parse_sse_chunks,
+    _cli_failure,
     _http_error_app_error,
     _network_error_app_error,
     _resolve_cli_executable,
@@ -156,6 +158,24 @@ class ToolCatalogPromptTest(unittest.TestCase):
             ),
             {"mnemonic": "[redacted]", "seed_words": "[redacted]", "safe": "ok"},
         )
+
+    def test_cli_provider_failure_details_do_not_echo_stdout_or_stderr(self):
+        completed = subprocess.CompletedProcess(
+            args=["codex"],
+            returncode=1,
+            stdout="prompt fragment: explain my wallet sk-test-secret",
+            stderr="Authorization: Bearer sk-test-secret\nprompt fragment",
+        )
+
+        error = _cli_failure("codex", completed)
+
+        self.assertEqual(error.details["exit_code"], 1)
+        self.assertIn("stdout_bytes", error.details)
+        self.assertIn("stderr_bytes", error.details)
+        self.assertNotIn("stdout", error.details)
+        self.assertNotIn("stderr", error.details)
+        self.assertNotIn("prompt fragment", repr(error.details))
+        self.assertNotIn("sk-test-secret", repr(error.details))
 
     def test_tool_catalog_stability(self):
         expected_tool_names = {
@@ -1022,6 +1042,17 @@ class ProvidersCrudTest(unittest.TestCase):
             self.assertEqual(providers[0]["base_url"], "http://localhost:11434/v1")
         finally:
             conn.close()
+
+    def test_seed_can_use_container_host_ollama_base_url(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-ai-seed-host-") as tmp:
+            conn = open_db(str(Path(tmp) / "data"))
+            try:
+                with patch.dict(os.environ, {"KASSIBER_DEFAULT_AI_BASE_URL": "http://host.docker.internal:11434/v1"}):
+                    seed_default_ai_provider_if_empty(conn)
+                providers = list_db_ai_providers(conn)
+                self.assertEqual(providers[0]["base_url"], "http://host.docker.internal:11434/v1")
+            finally:
+                conn.close()
 
     def test_seed_does_not_recreate_after_delete(self):
         # Use a fresh DB so the previous test's state doesn't bleed in.

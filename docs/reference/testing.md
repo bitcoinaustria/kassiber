@@ -10,7 +10,8 @@ regtest infrastructure.
 | --- | --- | --- | --- |
 | FAST | `./scripts/integration-harness.sh fast` | no | Replays recorded regtest tapes through the real sync adapter, import, journal, report, and XLSX export path with `KASSIBER_NO_EGRESS=1`. Includes a baseline watch-only tape and an edge-case tape (multi-address wallet, immature vs. mature coinbase, dust, RBF-replaced conflict pair, same-wallet self-spend, mempool-pending receipt). |
 | SLOW | `./scripts/integration-harness.sh bitcoin-core` | yes, unless reusing a node | Starts or reuses the regtest Compose stack (Bitcoin Core, Elements, Bitcoin Fulcrum, plus local mempool/esplora-compatible loopback endpoints), creates real wallets and transactions (including coinbase maturity and a watched receive), then drives Kassiber sync, pricing, journal, report, and export. |
-| DEMO | `./scripts/integration-harness.sh demo-full` | yes, unless reusing a node | Builds the checked-in `full-accounting-v1` scenario: eleven Kassiber wallets including multi-address Bitcoin wallets, rotation targets, a mining wallet, and deterministic elementsregtest/LBTC import wallets; real regtest acquisitions/disposals/transfers, operating-expense disposals with deterministic amount/fee variation, deprecated rotated-out wallets, batched, consolidation, dust, RBF-replacement, and mempool-pending edge cases, local Bitcoin/Liquid Electrum and mempool-compatible backend rows, a multi-year stress ledger, CoinJoin- and PayJoin-shaped collaborative transactions, swap/peg bridge pairs, loan marks, bundled real historical BTC/EUR pricing, journals, reports, and transaction exports. |
+| DEMO | `./scripts/integration-harness.sh demo-full` | yes, unless reusing a node | Builds the checked-in `full-accounting-v1` scenario: twelve Kassiber wallets including multi-address Bitcoin wallets, a Silent Payments wallet, rotation targets, a mining wallet, and deterministic elementsregtest/LBTC import wallets; real regtest acquisitions/disposals/transfers, operating-expense disposals with deterministic amount/fee variation, deprecated rotated-out wallets, batched, consolidation, dust, RBF-replacement, and mempool-pending edge cases, local Bitcoin/Liquid Electrum and mempool-compatible backend rows, a multi-year stress ledger, CoinJoin- and PayJoin-shaped collaborative transactions, swap/peg bridge pairs, loan marks, bundled real historical BTC/EUR pricing, journals, reports, and transaction exports. |
+| SILENT PAYMENTS | `./scripts/integration-harness.sh silent-payments` | yes | Starts the regtest Compose stack with the `silent-payments` profile, which builds/runs Sparrow Frigate against Bitcoin Core v30 and Fulcrum, waits until Frigate advertises `silent_payments: [0]` through `server.features`, then runs Kassiber's Silent Payments sync tests. Override the cold-start wait with `KASSIBER_REGTEST_FRIGATE_WAIT_SECONDS` if the local Frigate index is slow. |
 | BOLTZ | `./scripts/integration-harness.sh boltz-liquid` | yes, upstream Boltz stack | Starts or reuses Boltz's official [`BoltzExchange/regtest`](https://github.com/BoltzExchange/regtest) Docker environment, probes the local Boltz API for Liquid-capable submarine, reverse, and BTC -> L-BTC chain-swap pairs, executes a Liquid on-chain payment plus an L-BTC -> BTC Lightning submarine swap, builds Kassiber import rows from the observed txids/hash/amounts, and verifies the swap pairs while the plain Liquid payment stays unpaired. |
 | LIGHTNING | `./scripts/integration-harness.sh lightning-business` | yes, Kassiber stack + CLN overlay | Starts the existing regtest Compose stack plus `dev/regtest/compose.lightning.yml` with four pinned Core Lightning nodes. A seeded sim-ln-inspired business plan drives mainchain top-ups/withdrawals, merchant invoices, supplier payments, routed forwarding activity, an expired quote, and an intentionally failed oversized payment, then verifies Kassiber through `wallets sync`, `ui.connections.node.snapshot`, `reports lightning-profitability`, and `export-lightning-profitability-csv`. |
 
@@ -27,14 +28,16 @@ export KASSIBER_REGTEST_RPC_PASSWORD=...
 
 The Compose lane generates disposable RPC credentials per run unless you set
 them explicitly, passes only the `rpcauth` hash to bitcoind, publishes RPC on
-host loopback, and uses a per-worktree Compose project name so parallel runs do
+host loopback, and uses Bitcoin Core v30 by default. It also publishes Core's
+ZMQ `sequence` feed inside the Compose network for Frigate. The lane uses a
+per-worktree Compose project name so parallel runs do
 not share containers or volumes. It uses regtest only, no mainnet funds, no user
 wallet files, and no production descriptors. The Compose stack publishes only
-loopback ports: Core RPC, Elements RPC, and the four protocol endpoints used
-by the UI/backend health and graph paths:
+loopback ports: Core RPC, Elements RPC, the optional Frigate Electrum endpoint,
+and the four protocol endpoints used by the UI/backend health and graph paths:
 
-- `core-regtest` -> Bitcoin Core RPC, authoritative sync backend for Bitcoin
-  wallets
+- `core-regtest` -> Bitcoin Core RPC, authoritative sync backend explicitly
+  assigned to ordinary Bitcoin wallets
 - Elements Core runs as `elementsd` on `elementsregtest` to provision a local
   Liquid daemon. Note: the current lanes do not yet sync a Kassiber Liquid
   wallet from `elementsd` — Liquid demo data is file-source (`generic_ledger`)
@@ -42,20 +45,71 @@ by the UI/backend health and graph paths:
   serving synthetic LBTC data. Real `elementsd`-backed Liquid sync is a
   follow-up slice (see Growth Path).
 - `bitcoin-electrum-regtest` -> the `fulcrum` container's Electrum TCP port
-- `bitcoin-mempool-regtest` -> local mempool/esplora-compatible HTTP API
+- `bitcoin-frigate-regtest` -> Sparrow Frigate's Electrum TCP port when
+  `KASSIBER_REGTEST_COMPOSE_PROFILES=silent-payments` or the
+  `silent-payments` lane is used; Frigate proxies ordinary Electrum calls to
+  Fulcrum and handles Silent Payments discovery natively
+- `bitcoin-mempool-regtest` -> local mempool/esplora-compatible HTTP API and
+  the stored default backend, so transaction graph lookups and mempool-backed
+  market-price probes use the local graph-capable endpoint instead of public
+  infrastructure
 - `liquid-electrum-regtest` -> local Liquid Electrum-compatible
   health/scripthash endpoint for the elementsregtest demo rail
 - `liquid-mempool-regtest` -> local Liquid mempool/esplora-compatible HTTP
   API for graph lookups on deterministic LBTC demo txids
 
-Set `KASSIBER_REGTEST_KEEP=1` to keep the Docker Compose project running for
-debugging (containers, ports, and volumes); otherwise the stack is removed on
-exit.
+The HTTP explorer endpoints are host-loopback services and include regtest-only
+CORS headers so a host browser can inspect them from a web explorer or local
+tooling page. Use the manifest or `demo-up` output for the exact ports; by
+default they are:
+
+```text
+Bitcoin explorer API: http://127.0.0.1:18544/api
+Liquid explorer API:  http://127.0.0.1:18546/api
+```
+
+Set `KASSIBER_REGTEST_EXPLORER_CORS_ORIGIN` to a specific origin to narrow the
+default `*`, or to an empty value to disable these CORS headers. The services
+remain bound to host loopback and must stay regtest-only.
+
+The Compose stack also maps `host.docker.internal` to the Docker host. A
+containerized Kassiber process can use a host Ollama instance by seeding the
+default local provider with:
+
+```bash
+KASSIBER_DEFAULT_AI_BASE_URL=http://host.docker.internal:11434/v1
+```
+
+This only affects first-time AI provider seeding; existing books should update
+their `ollama` provider row to the host alias explicitly.
+
+Set `KASSIBER_REGTEST_KEEP=1` to keep the full Docker Compose project running
+for debugging (containers, bound ports, and volumes); otherwise the stack is
+removed on exit.
 Fresh Compose runs use the scenario manifest's historical timestamp sequence,
 starting in January 2019 and covering activity into spring 2026. Reused Core
 nodes can only move forward from their existing regtest chain tip, so their
 calendar dates may drift while preserving the same relative spacing and row
 shape.
+
+## Silent Payments Regtest
+
+The `silent-payments` lane exercises the infrastructure boundary for
+Sparrow Frigate, not a generic HTTP scanner. Frigate speaks Electrum protocol
+extensions (`blockchain.silentpayments.*`) and advertises support through
+`server.features`, so the harness starts it in a dedicated Compose profile and
+probes that Electrum capability before running Kassiber's SP sync coverage. On
+a fresh regtest volume the lane mines a disposable readiness block first, because
+the genesis-only tip still looks like initial block download to Fulcrum and keeps
+Frigate waiting for sync.
+
+The full demo book also includes a `silent-payment` wallet. Because Kassiber's
+current server-assisted SP adapter expects HTTP JSON while Frigate exposes
+Electrum JSON-RPC, the demo wallet syncs through the existing `local-index`
+mode: the builder creates a real regtest Taproot output, writes a private
+scanner JSON file bound to the wallet's descriptor fingerprint, and stores that
+path on the Frigate-marked backend. This keeps the accounting fixture honest
+without pretending the Frigate Electrum adapter exists yet.
 
 ## Boltz Liquid Regtest
 
@@ -299,9 +353,9 @@ an unprepared system interpreter.
 What `demo-up` does:
 
 - starts (or reuses) the regtest Compose stack under the fixed Compose project
-  `kassiber-regtest-demo`, separate from the per-worktree test projects, and
-  leaves Bitcoin Core, Elements, Fulcrum, and the local protocol API services
-  running;
+  `kassiber-regtest-demo`, separate from the per-worktree test projects, enables
+  the `silent-payments` profile, and leaves Bitcoin Core, Elements, Fulcrum,
+  Frigate, and the local protocol API services running;
 - builds the `full-accounting-v1` book once into
   `~/.kassiber/regtest-demo/data` (override with
   `KASSIBER_REGTEST_DEMO_HOME`) and reuses it on later runs while the
@@ -322,6 +376,10 @@ explorer HTTP) parity comparison. The Explorer API and Liquid Electrum rows are
 small deterministic local services that speak the mempool/esplora and Electrum
 calls Kassiber exercises in development and CI. That keeps the preview fast and
 repeatable while avoiding accidental public mainnet explorers in regtest mode.
+The stored default backend is `bitcoin-mempool-regtest`: wallet configs still
+pin their sync source (`core-regtest` for ordinary Bitcoin, `bitcoin-frigate-regtest`
+for the Silent Payments wallet), while graph-capable UI paths prefer the local
+HTTP mempool/esplora endpoint.
 Actually syncing wallets through Fulcrum/Electrum and explorer HTTP, and
 comparing the resulting txids/amounts/fees/UTXOs across backends (issue #312's
 backend-parity acceptance check), remains a follow-up slice.
