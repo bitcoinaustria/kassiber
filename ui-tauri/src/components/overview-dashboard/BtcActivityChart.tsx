@@ -568,6 +568,14 @@ export const BtcActivityChart = ({
     const chartStats = buildTreasuryChartStats(
       balancePoints.length ? balancePoints : selectedChartDisplayData,
     );
+    const highPointValue = chartStats
+      ? treasuryPrimaryValue(chartStats.highPoint)
+      : null;
+    const lowPointValue = chartStats
+      ? treasuryPrimaryValue(chartStats.lowPoint)
+      : null;
+    const isDrawableBtcAxisValue = (value: number | null) =>
+      value !== null && Number.isFinite(value) && (!yScaleLog || value > 0);
     // High/low live on the chart itself (TradingView-style annotations)
     // instead of as stat-card copy. Skipped when flat — both labels would
     // stack on the same line.
@@ -575,8 +583,7 @@ export const BtcActivityChart = ({
       chartStats !== null &&
       seriesVisible.primary &&
       !hideSensitive &&
-      treasuryPrimaryValue(chartStats.highPoint) !==
-        treasuryPrimaryValue(chartStats.lowPoint);
+      highPointValue !== lowPointValue;
     // Don't annotate an extreme whose value equals the current balance: the
     // last-value tag already labels that number on the axis. For a
     // monotonically growing balance the maximum IS the current value, so the
@@ -590,9 +597,15 @@ export const BtcActivityChart = ({
       lastBalanceRaw !== null &&
       treasuryPrimaryValue(point) === lastBalanceRaw;
     const showHighMark =
-      showHighLowMarks && !!chartStats && !coincidesWithLast(chartStats.highPoint);
+      showHighLowMarks &&
+      !!chartStats &&
+      isDrawableBtcAxisValue(highPointValue) &&
+      !coincidesWithLast(chartStats.highPoint);
     const showLowMark =
-      showHighLowMarks && !!chartStats && !coincidesWithLast(chartStats.lowPoint);
+      showHighLowMarks &&
+      !!chartStats &&
+      isDrawableBtcAxisValue(lowPointValue) &&
+      !coincidesWithLast(chartStats.lowPoint);
     const selectedPoint = expanded
       ? (selectedChartDisplayData.find(
           (point) => point.date === expandedPointDate,
@@ -1005,14 +1018,14 @@ export const BtcActivityChart = ({
                     <ReferenceDot
                       yAxisId="btc"
                       x={chartStats.highPoint.date}
-                      y={treasuryPrimaryValue(chartStats.highPoint)}
+                      y={highPointValue ?? undefined}
                       r={2.5}
                       fill={primaryColor}
                       stroke="var(--background)"
                       strokeWidth={1}
                       label={renderPointValueLabel({
                         text: formatBtc(
-                          treasuryPrimaryValue(chartStats.highPoint),
+                          highPointValue ?? 0,
                           { precision: 4 },
                         ),
                         side: "above",
@@ -1023,14 +1036,14 @@ export const BtcActivityChart = ({
                     <ReferenceDot
                       yAxisId="btc"
                       x={chartStats.lowPoint.date}
-                      y={treasuryPrimaryValue(chartStats.lowPoint)}
+                      y={lowPointValue ?? undefined}
                       r={2.5}
                       fill={primaryColor}
                       stroke="var(--background)"
                       strokeWidth={1}
                       label={renderPointValueLabel({
                         text: formatBtc(
-                          treasuryPrimaryValue(chartStats.lowPoint),
+                          lowPointValue ?? 0,
                           { precision: 4 },
                         ),
                         side: "below",
