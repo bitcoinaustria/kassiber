@@ -150,9 +150,9 @@ services:
     depends_on:
       - elementsd
     environment:
-      BITCOIN_RPC_URL: http://bitcoind:18443
-      BITCOIN_RPC_USER: ${KASSIBER_REGTEST_RPC_USER}
-      BITCOIN_RPC_PASSWORD: ${KASSIBER_REGTEST_RPC_PASSWORD}
+      ELEMENTS_RPC_URL: http://elementsd:7041
+      ELEMENTS_RPC_USER: ${KASSIBER_REGTEST_RPC_USER}
+      ELEMENTS_RPC_PASSWORD: ${KASSIBER_REGTEST_RPC_PASSWORD}
       LIQUID_ELECTRUM_PORT: "50011"
       KASSIBER_REGTEST_SERVICES: liquid-electrum
     ports:
@@ -163,9 +163,9 @@ services:
     depends_on:
       - elementsd
     environment:
-      BITCOIN_RPC_URL: http://bitcoind:18443
-      BITCOIN_RPC_USER: ${KASSIBER_REGTEST_RPC_USER}
-      BITCOIN_RPC_PASSWORD: ${KASSIBER_REGTEST_RPC_PASSWORD}
+      ELEMENTS_RPC_URL: http://elementsd:7041
+      ELEMENTS_RPC_USER: ${KASSIBER_REGTEST_RPC_USER}
+      ELEMENTS_RPC_PASSWORD: ${KASSIBER_REGTEST_RPC_PASSWORD}
       LIQUID_MEMPOOL_PORT: "8081"
       KASSIBER_REGTEST_SERVICES: liquid-mempool
     ports:

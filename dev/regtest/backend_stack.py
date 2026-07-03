@@ -29,10 +29,10 @@ def _env_int(name: str, default: int) -> int:
 
 
 class RpcClient:
-    def __init__(self) -> None:
-        self.url = os.environ.get("BITCOIN_RPC_URL", "http://bitcoind:18443").rstrip("/")
-        self.user = os.environ.get("BITCOIN_RPC_USER", "kassiber")
-        self.password = os.environ.get("BITCOIN_RPC_PASSWORD", "")
+    def __init__(self, *, env_prefix: str = "BITCOIN", default_url: str = "http://bitcoind:18443") -> None:
+        self.url = os.environ.get(f"{env_prefix}_RPC_URL", default_url).rstrip("/")
+        self.user = os.environ.get(f"{env_prefix}_RPC_USER") or os.environ.get("BITCOIN_RPC_USER", "kassiber")
+        self.password = os.environ.get(f"{env_prefix}_RPC_PASSWORD") or os.environ.get("BITCOIN_RPC_PASSWORD", "")
 
     def call(self, method: str, params: list[Any] | None = None) -> Any:
         payload = json.dumps(
@@ -89,6 +89,13 @@ class BitcoinIndex:
 
     def raw_hex(self, txid: str) -> str:
         return str(self.rpc.call("getrawtransaction", [txid, False]))
+
+    def block_header(self, height: int) -> str:
+        block_hash = str(self.rpc.call("getblockhash", [int(height)]))
+        return str(self.rpc.call("getblockheader", [block_hash, False]))
+
+    def tip_height(self) -> int:
+        return int(self.rpc.call("getblockcount"))
 
     def esplora_tx(self, txid: str) -> dict[str, Any]:
         tx = self.raw_tx(txid)
@@ -240,6 +247,31 @@ class BitcoinIndex:
         self._refresh()
         return list(self._utxos.get(scripthash, []))
 
+    def stats(self, scripthash: str) -> dict[str, Any]:
+        self._refresh()
+        history = self._history.get(scripthash, [])
+        confirmed = {row["tx_hash"] for row in history if int(row.get("height") or 0) > 0}
+        mempool = {row["tx_hash"] for row in history if int(row.get("height") or 0) <= 0}
+        utxos = self._utxos.get(scripthash, [])
+        confirmed_utxos = [row for row in utxos if int(((row.get("status") or {}).get("block_height")) or 0) > 0]
+        mempool_utxos = [row for row in utxos if int(((row.get("status") or {}).get("block_height")) or 0) <= 0]
+        return {
+            "chain_stats": {
+                "funded_txo_count": len(confirmed_utxos),
+                "funded_txo_sum": sum(int(row.get("value") or 0) for row in confirmed_utxos),
+                "spent_txo_count": max(0, len(confirmed) - len(confirmed_utxos)),
+                "spent_txo_sum": 0,
+                "tx_count": len(confirmed),
+            },
+            "mempool_stats": {
+                "funded_txo_count": len(mempool_utxos),
+                "funded_txo_sum": sum(int(row.get("value") or 0) for row in mempool_utxos),
+                "spent_txo_count": 0,
+                "spent_txo_sum": 0,
+                "tx_count": len(mempool),
+            },
+        }
+
 
 def electrum_scripthash(script_hex: str) -> str:
     try:
@@ -254,43 +286,6 @@ def electrum_status(history: list[dict[str, Any]]) -> str | None:
         return None
     text = "".join(f"{row['tx_hash']}:{row['height']}:" for row in history)
     return hashlib.sha256(text.encode("ascii")).hexdigest()
-
-
-def synthetic_liquid_graph(txid: str) -> dict[str, Any]:
-    prev = hashlib.sha256(f"prev:{txid}".encode("ascii")).hexdigest()
-    out_script = "0014" + hashlib.sha256(f"out:{txid}".encode("ascii")).hexdigest()[:40]
-    change_script = "0014" + hashlib.sha256(f"change:{txid}".encode("ascii")).hexdigest()[:40]
-    return {
-        "txid": txid.lower(),
-        "version": 2,
-        "locktime": 0,
-        "size": 420,
-        "vsize": 250,
-        "weight": 1000,
-        "vin": [
-            {
-                "txid": prev,
-                "vout": 0,
-                "prevout": {
-                    "scriptpubkey": out_script,
-                    "scriptpubkey_type": "v0_p2wpkh",
-                    "scriptpubkey_address": "el1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq",
-                    "value_state": "confidential",
-                },
-            }
-        ],
-        "vout": [
-            {
-                "n": 0,
-                "scriptpubkey": change_script,
-                "scriptpubkey_type": "v0_p2wpkh",
-                "scriptpubkey_address": "el1qtestregtestliquidreceiver0000000000000000000000000000000000",
-                "value_state": "confidential",
-            },
-            {"n": 1, "scriptpubkey_type": "fee", "value": 5000},
-        ],
-        "status": {"confirmed": True, "block_height": 1, "block_time": 0},
-    }
 
 
 def _env_decimal(name: str, default: Decimal) -> Decimal:
@@ -368,40 +363,33 @@ class ApiHandler(BaseHTTPRequestHandler):
             return
         if path == "/api/blocks/tip/height":
             try:
-                self._text(str(self.server.index.rpc.call("getblockcount")))
+                self._text(str(self.server.index.tip_height()))
             except Exception as exc:
                 self._error(503, str(exc))
             return
         self._error(404, "not found")
 
     def _tx_json(self, txid: str) -> None:
-        if self.server.chain == "liquid":
-            self._json(synthetic_liquid_graph(txid))
-            return
         try:
             self._json(self.server.index.esplora_tx(txid))
         except Exception as exc:
             self._error(404, str(exc))
 
     def _tx_hex(self, txid: str) -> None:
-        if self.server.chain == "liquid":
-            self._text("")
-            return
         try:
             self._text(self.server.index.raw_hex(txid))
         except Exception as exc:
             self._error(404, str(exc))
 
     def _scripthash(self, path: str) -> None:
-        if self.server.chain != "bitcoin":
-            self._json([])
-            return
         parts = path.split("/")
         if len(parts) < 4:
             self._error(404, "not found")
             return
         scripthash = parts[3]
-        if path.endswith("/txs/mempool"):
+        if len(parts) == 4:
+            self._json(self.server.index.stats(scripthash))
+        elif path.endswith("/txs/mempool"):
             self._json([self.server.index.esplora_tx(row["tx_hash"]) for row in self.server.index.history(scripthash, mempool=True)])
         elif "/txs/chain" in path:
             self._json([self.server.index.esplora_tx(row["tx_hash"]) for row in self.server.index.history(scripthash, mempool=False)])
@@ -473,28 +461,29 @@ class ElectrumHandler(socketserver.StreamRequestHandler):
 
     def _call(self, method: str, params: list[Any]) -> Any:
         if method == "server.version":
-            if self.server.chain == "bitcoin":
-                self.server.index.rpc.call("getblockchaininfo")
+            self.server.index.rpc.call("getblockchaininfo")
             return ["Kassiber regtest backend", "1.4"]
         if method == "server.banner":
             return f"{self.server.service_name} ({self.server.chain}/{self.server.network})"
         if method == "blockchain.headers.subscribe":
-            return {"height": 0, "hex": ""}
+            height = self.server.index.tip_height()
+            return {"height": height, "hex": self.server.index.block_header(height)}
         scripthash = str(params[0]) if params else ""
         if method == "blockchain.scripthash.subscribe":
-            return electrum_status(self.server.index.history(scripthash)) if self.server.chain == "bitcoin" else None
+            return electrum_status(self.server.index.history(scripthash))
         if method == "blockchain.scripthash.get_history":
-            return self.server.index.history(scripthash) if self.server.chain == "bitcoin" else []
+            return self.server.index.history(scripthash)
         if method == "blockchain.scripthash.listunspent":
-            return self.server.index.utxos(scripthash) if self.server.chain == "bitcoin" else []
+            return self.server.index.utxos(scripthash)
         if method == "blockchain.scripthash.get_balance":
-            utxos = self.server.index.utxos(scripthash) if self.server.chain == "bitcoin" else []
+            utxos = self.server.index.utxos(scripthash)
             return {"confirmed": sum(int(row.get("value") or 0) for row in utxos), "unconfirmed": 0}
         if method == "blockchain.transaction.get":
             txid = str(params[0]) if params else ""
-            if self.server.chain == "bitcoin":
-                return self.server.index.raw_hex(txid)
-            raise RuntimeError("Liquid fixture Electrum endpoint only supports health and scripthash probes")
+            return self.server.index.raw_hex(txid)
+        if method == "blockchain.block.header":
+            height = int(params[0]) if params else 0
+            return self.server.index.block_header(height)
         raise RuntimeError(f"unsupported method: {method}")
 
 
@@ -547,8 +536,10 @@ def _enabled_services() -> set[str]:
 
 
 def main() -> int:
-    rpc = RpcClient()
-    index = BitcoinIndex(rpc)
+    bitcoin_index = BitcoinIndex(RpcClient())
+    liquid_index = BitcoinIndex(
+        RpcClient(env_prefix="ELEMENTS", default_url="http://elementsd:7041")
+    )
     enabled = _enabled_services()
     services: list[Any] = []
     if "bitcoin-mempool" in enabled:
@@ -558,7 +549,7 @@ def main() -> int:
                 service_name="bitcoin-mempool-regtest",
                 chain="bitcoin",
                 network="regtest",
-                index=index,
+                index=bitcoin_index,
             )
         )
     if "bitcoin-electrum" in enabled:
@@ -568,7 +559,7 @@ def main() -> int:
                 service_name="bitcoin-electrum-regtest",
                 chain="bitcoin",
                 network="regtest",
-                index=index,
+                index=bitcoin_index,
             )
         )
     if "liquid-mempool" in enabled:
@@ -578,7 +569,7 @@ def main() -> int:
                 service_name="liquid-mempool-regtest",
                 chain="liquid",
                 network="elementsregtest",
-                index=index,
+                index=liquid_index,
             )
         )
     if "liquid-electrum" in enabled:
@@ -588,7 +579,7 @@ def main() -> int:
                 service_name="liquid-electrum-regtest",
                 chain="liquid",
                 network="elementsregtest",
-                index=index,
+                index=liquid_index,
             )
         )
     for service in services:

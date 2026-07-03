@@ -204,10 +204,14 @@ class RegtestHarnessTest(unittest.TestCase):
                 "liquid_treasury",
                 "liquid_operations",
                 "liquid_treasury_2024",
+                "liquid_live_sync",
             },
         )
         liquid_wallets = {wallet["key"] for wallet in scenario["wallets"] if wallet.get("chain") == "liquid"}
-        self.assertEqual(liquid_wallets, {"liquid_treasury", "liquid_operations", "liquid_treasury_2024"})
+        self.assertEqual(
+            liquid_wallets,
+            {"liquid_treasury", "liquid_operations", "liquid_treasury_2024", "liquid_live_sync"},
+        )
         self.assertEqual(
             {wallet["network"] for wallet in scenario["wallets"] if wallet.get("chain") == "liquid"},
             {"elementsregtest"},
@@ -290,11 +294,11 @@ class RegtestHarnessTest(unittest.TestCase):
         self.assertTrue(any(amount < Decimal("0.00001") for amount in dust_amounts))
         pending = scenario["pending_operations"]
         self.assertEqual([op["kind"] for op in pending], ["external_receipt"])
-        self.assertEqual(scenario["expected"]["wallets"], 12)
+        self.assertEqual(scenario["expected"]["wallets"], 13)
         self.assertEqual(scenario["expected"]["deprecated_wallets"], 4)
         self.assertEqual(scenario["expected"]["assets"], ["BTC", "LBTC"])
-        self.assertGreaterEqual(scenario["expected"]["min_transactions"], 845)
-        self.assertGreaterEqual(scenario["expected"]["min_active_transactions"], 840)
+        self.assertGreaterEqual(scenario["expected"]["min_transactions"], 847)
+        self.assertGreaterEqual(scenario["expected"]["min_active_transactions"], 842)
         self.assertEqual(scenario["expected"]["pending_transactions"], 1)
         base_time = datetime.fromisoformat(scenario["base_time"].replace("Z", "+00:00"))
         stress = scenario["stress"]
@@ -325,6 +329,12 @@ class RegtestHarnessTest(unittest.TestCase):
         liquid_rows = sum(len(rows) for rows in scenario["liquid_ledger"]["wallets"].values())
         self.assertGreaterEqual(liquid_rows, 9)
         self.assertEqual(len(scenario["liquid_ledger"]["transfer_pairs"]), 1)
+        liquid_live_wallets = [
+            wallet for wallet in scenario["wallets"]
+            if wallet.get("chain") == "liquid" and wallet.get("kind") == "descriptor"
+        ]
+        self.assertEqual([wallet["key"] for wallet in liquid_live_wallets], ["liquid_live_sync"])
+        self.assertGreater(Decimal(liquid_live_wallets[0]["live_receipt_btc"]), Decimal("0"))
         self.assertEqual(scenario["pricing"]["source"], "kraken-bundled")
         self.assertEqual(scenario["pricing"]["live_source"], "mempool")
         self.assertEqual(scenario["expected"]["pricing_source"], "kraken-csv")
