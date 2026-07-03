@@ -1927,9 +1927,11 @@ def _annotate_graph(
 def _input_matches(node: Mapping[str, Any], owned_index: Any) -> list[Any]:
     outpoint = node.get("outpoint")
     if outpoint:
-        match = owned_index.by_outpoint.get(str(outpoint).lower())
-        if match is not None:
-            return [match]
+        # ``by_outpoint`` is a multimap since overlapping wallets may
+        # inventory the same UTXO; tolerate the legacy single-match shape.
+        matches = owned_index.by_outpoint.get(str(outpoint).lower())
+        if matches:
+            return list(matches) if isinstance(matches, list) else [matches]
     return owned_index.lookup_script(node.get("_script"))
 
 
