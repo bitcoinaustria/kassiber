@@ -279,6 +279,7 @@
   "period": {
     "30days": "30 Tage",
     "3months": "3 Monate",
+    "6months": "6 Monate",
     "ytd": "Heuer",
     "1year": "1 Jahr",
     "5years": "5 Jahre",
@@ -286,6 +287,7 @@
     "short": {
       "30days": "30T",
       "3months": "3M",
+      "6months": "6M",
       "ytd": "Heuer",
       "1year": "1J",
       "5years": "5J",
@@ -319,13 +321,11 @@
     "priced": "bewertet {{time}}",
     "events_one": "{{count}} Ereignis",
     "events_other": "{{count}} Ereignisse",
-    "eventsLabel": "Ereignisse",
     "net": "netto",
     "in": "ein",
     "out": "aus",
     "swap": "Swap",
     "unrealized": "{{percent}} % unrealisiert ({{currency}})",
-    "toggleControls": "Diagramm-Steuerung umschalten",
     "expandChart": "BTC-Aktivitätsdiagramm vergrößern",
     "closeChart": "BTC-Aktivitätsdiagramm schließen",
     "expandedTitle": "Vergrößertes BTC-Aktivitätsdiagramm",
@@ -335,11 +335,6 @@
     "empty": {
       "title": "Noch nichts zum Darstellen",
       "body": "Verbinde eine Wallet oder importiere Transaktionen und aktualisiere dann, um hier dein Bitcoin-Guthaben und deine Aktivität zu sehen."
-    },
-    "stat": {
-      "changeInBalance": "Änderung des Bitcoin-Guthabens",
-      "highestPosition": "Höchste BTC-Position",
-      "lowestPosition": "Niedrigste BTC-Position"
     }
   },
   "tooltip": {
@@ -365,6 +360,16 @@
     "dotsVisible": "{{visible}} von {{total}} Aktivitätspunkten sichtbar",
     "close": "Diagramm-Steuerung schließen",
     "timeRange": "Zeitraum",
+    "scale": "Skala",
+    "logScale": "Logarithmische Skala",
+    "autoFitScale": "Auto (an Bildschirm anpassen)",
+    "lastValueLabel": "Letzten Wert an der Achse anzeigen",
+    "logChip": "log",
+    "autoChip": "auto",
+    "moreSettings": "Weitere Einstellungen …",
+    "scaleMenuAria": "Skaleneinstellungen",
+    "logScaleTitle": "Logarithmische Skala umschalten",
+    "autoFitTitle": "Werteachse an die sichtbaren Daten anpassen",
     "activityFlows": "Aktivitätsflüsse",
     "series": "Reihen",
     "showSeries": "{{label}} anzeigen",
@@ -379,14 +384,16 @@
     "customMinAria": "Eigene Marker-Mindestgröße in BTC"
   },
   "inspector": {
-    "selectedPoint": "Ausgewählter Punkt",
-    "noPointSelected": "Kein Punkt ausgewählt",
+    "position": "Position",
+    "noDateSelected": "Kein Datum ausgewählt",
     "value": "Wert",
     "btc": "BTC",
     "costBasis": "Anschaffungskosten",
     "unrealized": "Unrealisiert",
-    "sincePrevious": "Seit dem vorherigen Punkt",
-    "startOfRange": "Beginn des ausgewählten Zeitraums"
+    "sincePrevious": "Seit dem vorherigen Datum",
+    "startOfRange": "Beginn des ausgewählten Zeitraums",
+    "collapseAria": "Panel einklappen",
+    "expandAria": "Panel ausklappen"
   },
   "balanceChart": {
     "title": "Guthaben & Performance",

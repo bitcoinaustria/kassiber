@@ -265,3 +265,14 @@
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
 }
+
+/* WKWebView (macOS) draws the blue system focus ring as a native element
+   outline on click-focus. WebKit under Full Keyboard Access treats mouse
+   focus as :focus-visible, so Tailwind's `focus-visible:outline-none` does not
+   suppress it. Kill the native outline inside the treasury chart card; keyboard
+   users still get the box-shadow ring (`focus-visible:ring-*`) and activity
+   markers keep their scale-up focus affordance. */
+.treasury-chart-card :focus,
+.treasury-chart-card :focus-visible {
+  outline: none;
+}

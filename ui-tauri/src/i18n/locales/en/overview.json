@@ -279,6 +279,7 @@
   "period": {
     "30days": "30 Days",
     "3months": "3 Months",
+    "6months": "6 Months",
     "ytd": "YTD",
     "1year": "1 Year",
     "5years": "5 Years",
@@ -286,6 +287,7 @@
     "short": {
       "30days": "30D",
       "3months": "3M",
+      "6months": "6M",
       "ytd": "YTD",
       "1year": "1Y",
       "5years": "5Y",
@@ -319,13 +321,11 @@
     "priced": "priced {{time}}",
     "events_one": "{{count}} event",
     "events_other": "{{count}} events",
-    "eventsLabel": "events",
     "net": "net",
     "in": "in",
     "out": "out",
     "swap": "swap",
     "unrealized": "{{percent}}% unrealized ({{currency}})",
-    "toggleControls": "Toggle chart controls",
     "expandChart": "Expand BTC activity chart",
     "closeChart": "Close BTC activity chart",
     "expandedTitle": "Expanded BTC activity chart",
@@ -335,11 +335,6 @@
     "empty": {
       "title": "Nothing to chart yet",
       "body": "Connect a wallet or import transactions, then refresh to see your Bitcoin balance and activity here."
-    },
-    "stat": {
-      "changeInBalance": "Change in Bitcoin balance",
-      "highestPosition": "Highest BTC position",
-      "lowestPosition": "Lowest BTC position"
     }
   },
   "tooltip": {
@@ -365,6 +360,16 @@
     "dotsVisible": "{{visible}} of {{total}} activity dots visible",
     "close": "Close chart controls",
     "timeRange": "Time Range",
+    "scale": "Scale",
+    "logScale": "Logarithmic scale",
+    "autoFitScale": "Auto (fit data to screen)",
+    "lastValueLabel": "Show last value on the axis",
+    "logChip": "log",
+    "autoChip": "auto",
+    "moreSettings": "More settings…",
+    "scaleMenuAria": "Chart scale settings",
+    "logScaleTitle": "Toggle logarithmic scale",
+    "autoFitTitle": "Fit the value axis to the visible data",
     "activityFlows": "Activity flows",
     "series": "Series",
     "showSeries": "Show {{label}}",
@@ -379,14 +384,16 @@
     "customMinAria": "Custom marker minimum in BTC"
   },
   "inspector": {
-    "selectedPoint": "Selected point",
-    "noPointSelected": "No point selected",
+    "position": "Position",
+    "noDateSelected": "No date selected",
     "value": "Value",
     "btc": "BTC",
     "costBasis": "Cost basis",
     "unrealized": "Unrealized",
-    "sincePrevious": "Since previous point",
-    "startOfRange": "Start of selected range"
+    "sincePrevious": "Since previous date",
+    "startOfRange": "Start of selected range",
+    "collapseAria": "Collapse panel",
+    "expandAria": "Expand panel"
   },
   "balanceChart": {
     "title": "Balance & performance",
