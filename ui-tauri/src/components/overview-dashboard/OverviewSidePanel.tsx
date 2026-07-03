@@ -320,7 +320,9 @@ export const HoldingsBySourceChart = ({
             config={holdingsChartConfig}
             className="h-full w-full"
           >
-            <PieChart>
+            {/* No accessibility layer: it makes the <svg> click-focusable,
+                which draws a focus ring around the chart on plain clicks. */}
+            <PieChart accessibilityLayer={false}>
               <Pie
                 data={holdingsData}
                 cx="50%"

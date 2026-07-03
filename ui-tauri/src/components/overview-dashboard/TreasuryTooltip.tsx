@@ -4,13 +4,13 @@ import { formatBtc } from "@/lib/currency";
 import { cn } from "@/lib/utils";
 
 import {
-  activityFlowColors,
   activityFlowLabelKeys,
   blurClass,
   compactEventId,
   formatFiatPrice,
   formatPortfolioMoney,
   statusLabelKeys,
+  useActivityFlowColors,
   type TreasuryChartPoint,
 } from "./model";
 
@@ -42,6 +42,7 @@ export function TreasuryTooltip({
   fiatSeriesEnabled = true,
 }: TreasuryTooltipProps) {
   const { t } = useTranslation("overview");
+  const flowColors = useActivityFlowColors();
   if ((!active || !payload?.length) && !activityPointOverride) return null;
 
   const payloadPoint =
@@ -85,7 +86,7 @@ export function TreasuryTooltip({
             <div className="flex flex-wrap items-center gap-1.5">
               <span
                 className="size-2.5 rounded-full"
-                style={{ backgroundColor: activityFlowColors[eventFlow] }}
+                style={{ backgroundColor: flowColors[eventFlow] }}
                 aria-hidden="true"
               />
               <span className="font-semibold text-foreground">

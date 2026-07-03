@@ -6,19 +6,28 @@ import {
   activityMarkerView,
   activeMarketFiatCurrency,
   activeMarketFiatRate,
+  autoFitDomain,
   brushedActivityMarkers,
   buildBalanceRailItems,
   buildHoldingsBySource,
   enrichTreasuryChartData,
+  formatBtcAxisFitted,
   formatCompactDisplayMoney,
   formatMarketRateSource,
   formatMarketRateValue,
   formatRelativeMarketRateTime,
   getDataForPeriod,
+  isPointInPeriod,
+  lastTreasuryLineValue,
+  linearAxisTicks,
+  logAxisTicks,
+  logSafeTreasuryPoints,
   marketRateCompactLabel,
   marketRateDetailLabel,
   marketRateSyncLabel,
+  normalizeTimePeriodParam,
   overviewTransactions,
+  positiveLogDomain,
 } from "./model";
 
 describe("overview market rate display", () => {
@@ -425,5 +434,86 @@ describe("overview treasury chart", () => {
     expect(markerView.chartDisplayData.some((point) => point.isActivityEvent)).toBe(
       true,
     );
+  });
+});
+
+describe("chart scale helpers", () => {
+  it("recognizes 6-month period params and windows", () => {
+    expect(normalizeTimePeriodParam("6m")).toBe("6months");
+    expect(normalizeTimePeriodParam("6months")).toBe("6months");
+    expect(normalizeTimePeriodParam("6MO")).toBe("6months");
+    const latest = new Date("2026-07-01T00:00:00Z");
+    expect(isPointInPeriod("2026-02-01", latest, "6months")).toBe(true);
+    expect(isPointInPeriod("2025-12-01", latest, "6months")).toBe(false);
+  });
+
+  it("builds a positive multiplicative domain for log axes", () => {
+    expect(positiveLogDomain([0, null, undefined, 40, 50])).toEqual([
+      40 * 0.96,
+      50 * 1.04,
+    ]);
+    expect(positiveLogDomain([0, -5, null])).toBeNull();
+    expect(positiveLogDomain([7])).toEqual([7 * 0.9, 7 * 1.1]);
+  });
+
+  it("nulls non-positive values so log scales never see zero", () => {
+    const [point] = logSafeTreasuryPoints([
+      {
+        lineBalanceBtc: 0,
+        lineBitcoinPriceEur: 60_000,
+        lineAvgCostEur: -1,
+        brushBalanceBtc: 0,
+      } as never,
+    ]);
+    expect(point.lineBalanceBtc).toBeUndefined();
+    expect(point.lineBitcoinPriceEur).toBe(60_000);
+    expect(point.lineAvgCostEur).toBeNull();
+    expect(point.brushBalanceBtc).toBe(0);
+  });
+
+  it("spaces log ticks evenly in log space with adaptive precision", () => {
+    const wide = logAxisTicks([1, 100], 3);
+    expect(wide).toEqual([1, 10, 100]);
+    const narrow = logAxisTicks([40, 41], 3);
+    expect(narrow.length).toBeGreaterThan(1);
+    expect(new Set(narrow).size).toBe(narrow.length);
+  });
+
+  it("keeps edge ticks inside the domain instead of rounding them out", () => {
+    const logTicks = logAxisTicks([39.2, 42.484], 5);
+    expect(logTicks[0]).toBeCloseTo(39.2);
+    expect(logTicks.at(-1)).toBeLessThanOrEqual(42.484);
+    expect(logTicks.at(-1)).toBeGreaterThan(42);
+    const linear = linearAxisTicks([44_500, 87_400], 5);
+    expect(linear[0]).toBe(45_000);
+    expect(linear.at(-1)).toBe(85_000);
+    expect(linearAxisTicks([5, 5], 5)).toEqual([]);
+  });
+
+  it("fits a padded auto domain and never dips below zero", () => {
+    const domain = autoFitDomain([40.2, 40.8, null, undefined]);
+    expect(domain).not.toBeNull();
+    const [lo, hi] = domain as [number, number];
+    expect(lo).toBeLessThan(40.2);
+    expect(hi).toBeGreaterThan(40.8);
+    expect(autoFitDomain([0.01])?.[0]).toBeGreaterThanOrEqual(0);
+    expect(autoFitDomain([null, undefined])).toBeNull();
+  });
+
+  it("formats fitted axis ticks with enough precision to distinguish them", () => {
+    expect(formatBtcAxisFitted(40.83, [40.8, 40.9])).toBe("₿40.83");
+    expect(formatBtcAxisFitted(40.827, [40.82, 40.85])).toBe("₿40.827");
+    expect(formatBtcAxisFitted(40.8, [39, 43])).toBe("₿40.8");
+    expect(formatBtcAxisFitted(40.8, null)).toBe("₿41");
+  });
+
+  it("finds the latest drawable line value for the axis tag", () => {
+    const points = [
+      { lineBalanceBtc: 1 },
+      { lineBalanceBtc: 2 },
+      { lineBalanceBtc: undefined },
+    ] as never[];
+    expect(lastTreasuryLineValue(points, "lineBalanceBtc")).toBe(2);
+    expect(lastTreasuryLineValue([], "lineBalanceBtc")).toBeNull();
   });
 });
