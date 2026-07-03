@@ -22,7 +22,7 @@ import { screenShellClassName } from "@/lib/screen-layout";
 export function Imports() {
   const { t } = useTranslation("review");
   const navigate = useNavigate();
-  const [selectedId, setSelectedId] = useState("xpub");
+  const [selectedId, setSelectedId] = useState("descriptor");
   const [dialogSourceId, setDialogSourceId] = useState<string | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
 

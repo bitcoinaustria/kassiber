@@ -32,7 +32,7 @@ describe("connection display", () => {
   });
 
   it("shows concrete connection types instead of broad categories", () => {
-    expect(connectionTypeLabel({ kind: "descriptor" })).toBe("Wallet descriptor");
+    expect(connectionTypeLabel({ kind: "descriptor" })).toBe("Wallet export");
     expect(connectionTypeLabel({ kind: "address" })).toBe("Address list");
     expect(connectionTypeLabel({ kind: "core-ln" })).toBe("Core Lightning API");
     expect(connectionTypeLabel({ kind: "custom", syncMode: "btcpay" })).toBe(

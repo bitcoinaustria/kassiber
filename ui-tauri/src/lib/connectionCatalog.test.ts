@@ -58,6 +58,18 @@ describe("connection catalog", () => {
     );
   });
 
+  it("uses one wallet export source for descriptor and xpub material", () => {
+    const watchOnlyExportSources = CONNECTION_SOURCES.filter(
+      (source) => source.setupKind === "descriptor" && source.chain === "bitcoin",
+    );
+
+    expect(watchOnlyExportSources.map((source) => source.id)).toEqual([
+      "descriptor",
+    ]);
+    expect(watchOnlyExportSources[0]?.title).toBe("Wallet export");
+    expect(watchOnlyExportSources[0]?.formatLabel).toMatch(/xpub/i);
+  });
+
   it("describes Bitcoin Core as descriptor-capable", () => {
     const core = CONNECTION_SOURCES.find((source) => source.id === "bitcoin-core");
 
