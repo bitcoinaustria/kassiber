@@ -2,28 +2,24 @@ import {
   BookMarked,
   ExternalLink,
   Hash,
-  Tags,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
-import { Badge } from "@/components/ui/badge";
 import type {
   HistoryRevertTarget,
   TransactionHistoryEvent,
   TransactionHistoryStaleSummary,
 } from "@/lib/transactionHistory";
-import { cn } from "@/lib/utils";
 
 import { TransactionEditHistoryPanel } from "./TransactionEditHistoryPanel";
 import { AttachmentsPanel } from "./TransactionDetailAttachmentsPanel";
 import {
-  DirtyDot,
   ReviewChecklist,
   SourceRecordRow,
   type AttachmentItem,
   type ChecklistItem,
 } from "./TransactionDetailSheetParts";
-import { blurClass, type Transaction } from "./model";
+import { type Transaction } from "./model";
 
 type ExplorerSummary = {
   label: string;
@@ -44,8 +40,6 @@ export function TransactionDetailRightRail({
   onOpenAttachment,
   onRenameAttachment,
   onRemoveAttachment,
-  tags,
-  dirtyTags,
   historyEvents,
   historyStale,
   historyLoading,
@@ -72,8 +66,6 @@ export function TransactionDetailRightRail({
     label: string,
   ) => void | Promise<void>;
   onRemoveAttachment?: (item: AttachmentItem) => void;
-  tags: string[];
-  dirtyTags?: boolean;
   historyEvents?: TransactionHistoryEvent[];
   historyStale?: TransactionHistoryStaleSummary;
   historyLoading?: boolean;
@@ -150,34 +142,6 @@ export function TransactionDetailRightRail({
         onRename={onRenameAttachment}
         onRemove={onRemoveAttachment}
       />
-      {tags.length ? (
-        <div className="rounded-md border bg-card p-3">
-          <div className="mb-3 flex items-center justify-between gap-2 text-sm font-semibold">
-            <div className="flex items-center gap-2">
-              <Tags
-                className="size-4 text-muted-foreground"
-                aria-hidden="true"
-              />
-              Tags
-            </div>
-            <DirtyDot active={dirtyTags} />
-          </div>
-          <div className="flex min-h-8 flex-wrap gap-1.5">
-            {tags.map((tag) => (
-              <Badge
-                key={tag}
-                variant="secondary"
-                className={cn(
-                  "rounded-md",
-                  blurClass(hideSensitive),
-                )}
-              >
-                {tag}
-              </Badge>
-            ))}
-          </div>
-        </div>
-      ) : null}
       <TransactionEditHistoryPanel
         events={historyEvents}
         stale={historyStale}

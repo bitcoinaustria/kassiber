@@ -22,6 +22,16 @@ export type UpdateTransactionDraft = <K extends keyof TransactionEditDraft>(
   value: TransactionEditDraft[K],
 ) => void;
 
+// Contextual loan-role action (mark/change/unmark), built by the sheet from
+// the flow + current role and rendered in the Classify tab. Fires
+// immediately against the daemon — not part of the draft save.
+export type LoanActionItem = {
+  key: string;
+  label: string;
+  icon: React.ComponentType<React.SVGProps<SVGSVGElement>>;
+  onSelect: () => void;
+};
+
 export type TransactionDetailTabContext = {
   transaction: Transaction;
   localDraft: TransactionEditDraft;
@@ -70,6 +80,8 @@ export type TransactionDetailTabContext = {
   taxClassification: ReturnType<typeof austrianTaxClassificationFor>;
   valueAtTimeEur: number | null;
   pair: Transaction["pair"];
+  loanMenuItems: LoanActionItem[];
+  loanActionsDisabled: boolean;
   loanMark?: LoanMark | null;
   linkedLoanMarks: LoanMark[];
   loanLinkCandidates: LoanMark[];

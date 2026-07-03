@@ -596,7 +596,10 @@
     "weight": "Weight",
     "unknown": "Unbekannt",
     "note": "Notiz",
-    "notePlaceholder": "Quittung, Rechnung, Gegenpartei oder Prüfkontext"
+    "notePlaceholder": "Quittung, Rechnung, Gegenpartei oder Prüfkontext",
+    "noteNone": "Keine Notiz",
+    "noteHint": "Die Notiz bearbeitest du im Tab „Klassifizieren“.",
+    "counterpartyNone": "Nicht erfasst"
   },
   "graph": {
     "title": "Transaktionsgraph",
@@ -699,6 +702,7 @@
     }
   },
   "pricing": {
+    "sourceAria": "Bewertungsquelle",
     "manualOverride": "Manuelle Preisüberschreibung",
     "manualOverrideHint": "Speichert eine geprüfte Preisquelle sowie exakten manuellen Kurs/Wert in der Transaktionszeile. Journale nach dem Speichern erneut verarbeiten.",
     "calculatedFromAmount": "Berechnet aus dem festen Betrag: {{amount}}.",
@@ -793,7 +797,9 @@
     "addTagAria": "Tag hinzufügen",
     "suggestionPrefix": "+ {{tag}}",
     "note": "Notiz",
-    "notePlaceholder": "Quittung, Rechnung, Gegenpartei oder Prüfkontext"
+    "notePlaceholder": "Quittung, Rechnung, Gegenpartei oder Prüfkontext",
+    "loanRole": "Darlehensrolle",
+    "loanRoleHint": "Markiere diese Zeile als Teil eines BTC-Darlehens – Kapital oder Sicherheit. Gilt sofort; die zugehörigen Gegenstücke verknüpfst du im Tab „Verknüpft“."
   },
   "linked": {
     "pairedMovement": "Gepaarte Bewegung",
@@ -891,8 +897,7 @@
       "classify": "Klassifizieren",
       "pricing": "Bewertung",
       "tax": "Steuer",
-      "linked": "Verknüpft",
-      "ledger": "Hauptbuch"
+      "linked": "Verknüpft"
     },
     "banner": {
       "journalQuarantine": "Journal-Quarantäne",

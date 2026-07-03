@@ -577,7 +577,10 @@
     "weight": "Weight",
     "unknown": "Unknown",
     "note": "Note",
-    "notePlaceholder": "Receipt, invoice, counterparty, or review context"
+    "notePlaceholder": "Receipt, invoice, counterparty, or review context",
+    "noteNone": "No note",
+    "noteHint": "Edit the note in the Classify tab.",
+    "counterpartyNone": "Not recorded"
   },
   "graph": {
     "title": "Transaction graph",
@@ -680,6 +683,7 @@
     }
   },
   "pricing": {
+    "sourceAria": "Pricing source",
     "manualOverride": "Manual price override",
     "manualOverrideHint": "Saves a reviewed price source and exact manual rate/value to the transaction row. Reprocess journals after saving.",
     "calculatedFromAmount": "Calculated from the fixed amount: {{amount}}.",
@@ -774,7 +778,9 @@
     "addTagAria": "Add tag",
     "suggestionPrefix": "+ {{tag}}",
     "note": "Note",
-    "notePlaceholder": "Receipt, invoice, counterparty, or review context"
+    "notePlaceholder": "Receipt, invoice, counterparty, or review context",
+    "loanRole": "Loan role",
+    "loanRoleHint": "Mark this row as a leg of a BTC loan — principal or collateral. Applies immediately; link the matching legs in the Linked tab."
   },
   "linked": {
     "pairedMovement": "Paired movement",
@@ -891,8 +897,7 @@
       "classify": "Classify",
       "pricing": "Pricing",
       "tax": "Tax",
-      "linked": "Linked",
-      "ledger": "Ledger"
+      "linked": "Linked"
     },
     "banner": {
       "journalQuarantine": "Journal quarantine",

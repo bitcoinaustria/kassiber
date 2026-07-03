@@ -84,6 +84,12 @@
   * {
     border-color: var(--border);
   }
+  /* Tailwind v4 preflight leaves buttons at `cursor: default`; restore the
+     pointer so interactive controls are recognizable as clickable. */
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]) {
+    cursor: pointer;
+  }
   html,
   body {
     margin: 0;
