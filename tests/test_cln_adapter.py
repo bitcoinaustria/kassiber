@@ -220,6 +220,10 @@ class FetchNodeSnapshotTest(unittest.TestCase):
         self.assertEqual(snapshot.implementation_version, "v23.11")
         self.assertEqual(snapshot.block_height, 800_001)
         self.assertEqual(len(snapshot.channels), 2)
+        self.assertEqual(snapshot.invoice_count, 1)
+        self.assertEqual(snapshot.paid_invoice_count, 1)
+        self.assertEqual(snapshot.payment_count, 1)
+        self.assertEqual(snapshot.completed_payment_count, 1)
         self.assertIsNotNone(snapshot.routing)
         self.assertEqual(snapshot.routing.forward_count, 1)
 

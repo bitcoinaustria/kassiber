@@ -179,6 +179,12 @@ export interface NodeSnapshot {
   /** number of active peers */
   peerCount: number;
   blockHeight?: number;
+  invoiceCount?: number;
+  paidInvoiceCount?: number;
+  expiredInvoiceCount?: number;
+  paymentCount?: number;
+  completedPaymentCount?: number;
+  failedPaymentCount?: number;
   /** sats sittable on-chain that the node owns */
   onchainBalanceSat: number;
   /** sum of localBalanceSat across active + inactive channels (excludes closed and pending) */

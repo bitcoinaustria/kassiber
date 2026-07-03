@@ -319,6 +319,7 @@ def _cli_build_lightning_snapshot(
     ref: str,
     *,
     window_days: int,
+    runtime_config: dict[str, object] | None = None,
     workspace_ref: str | None = None,
     profile_ref: str | None = None,
 ) -> tuple[dict[str, Any], core_lightning.NodeSnapshot]:
@@ -337,7 +338,8 @@ def _cli_build_lightning_snapshot(
                 " Lightning sync (LND or Core Lightning)."
             ),
         )
-    snapshot = adapter.fetch_node_snapshot(connection, None, window_days=window_days)
+    backend = core_lightning.resolve_lightning_backend(conn, runtime_config, connection)
+    snapshot = adapter.fetch_node_snapshot(connection, backend, window_days=window_days)
     return connection, snapshot
 
 
@@ -346,6 +348,7 @@ def _cli_lightning_profitability_payload(
     ref: str,
     *,
     window_days: int,
+    runtime_config: dict[str, object] | None = None,
     workspace_ref: str | None = None,
     profile_ref: str | None = None,
 ) -> dict[str, Any]:
@@ -353,6 +356,7 @@ def _cli_lightning_profitability_payload(
         conn,
         ref,
         window_days=window_days,
+        runtime_config=runtime_config,
         workspace_ref=workspace_ref,
         profile_ref=profile_ref,
     )
@@ -371,6 +375,7 @@ def _cli_export_lightning_profitability_csv(
     file_path: str,
     *,
     window_days: int,
+    runtime_config: dict[str, object] | None = None,
     workspace_ref: str | None = None,
     profile_ref: str | None = None,
 ) -> dict[str, Any]:
@@ -378,6 +383,7 @@ def _cli_export_lightning_profitability_csv(
         conn,
         ref,
         window_days=window_days,
+        runtime_config=runtime_config,
         workspace_ref=workspace_ref,
         profile_ref=profile_ref,
     )
@@ -4045,6 +4051,7 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                     conn,
                     args.connection,
                     window_days=args.window_days,
+                    runtime_config=args.runtime_config,
                     workspace_ref=args.workspace,
                     profile_ref=args.profile,
                 ),
@@ -4057,6 +4064,7 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                     args.connection,
                     args.file,
                     window_days=args.window_days,
+                    runtime_config=args.runtime_config,
                     workspace_ref=args.workspace,
                     profile_ref=args.profile,
                 ),

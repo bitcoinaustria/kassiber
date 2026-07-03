@@ -6003,7 +6003,7 @@ def _lightning_node_snapshot_payload(
     window_days = _coerce_int(args.get("window_days"), default=30, minimum=1, maximum=365)
     snapshot = adapter.fetch_node_snapshot(
         connection,
-        _resolve_backend_row(runtime_config, connection),
+        _resolve_backend_row(conn, runtime_config, connection),
         window_days=window_days,
     )
     payload = core_lightning.snapshot_to_dict(snapshot)
@@ -6040,7 +6040,7 @@ def _lightning_node_snapshot_payload_for_ai(
     window_days = _coerce_int(args.get("window_days"), default=30, minimum=1, maximum=365)
     snapshot = adapter.fetch_node_snapshot(
         connection,
-        _resolve_backend_row(runtime_config, connection),
+        _resolve_backend_row(conn, runtime_config, connection),
         window_days=window_days,
     )
     payload = core_lightning.snapshot_to_dict_for_ai(snapshot)
@@ -6067,7 +6067,7 @@ def _lightning_profitability_payload(
     window_days = _coerce_int(args.get("window_days"), default=30, minimum=1, maximum=365)
     snapshot = adapter.fetch_node_snapshot(
         connection,
-        _resolve_backend_row(runtime_config, connection),
+        _resolve_backend_row(conn, runtime_config, connection),
         window_days=window_days,
     )
     report = core_lightning.build_profitability_report(
@@ -6103,7 +6103,7 @@ def _lightning_profitability_payload_for_ai(
     window_days = _coerce_int(args.get("window_days"), default=30, minimum=1, maximum=365)
     snapshot = adapter.fetch_node_snapshot(
         connection,
-        _resolve_backend_row(runtime_config, connection),
+        _resolve_backend_row(conn, runtime_config, connection),
         window_days=window_days,
     )
     report = core_lightning.build_profitability_report(
@@ -6116,24 +6116,11 @@ def _lightning_profitability_payload_for_ai(
 
 
 def _resolve_backend_row(
-    runtime_config: dict[str, object], wallet: dict[str, Any]
+    conn: sqlite3.Connection,
+    runtime_config: dict[str, object],
+    wallet: dict[str, Any],
 ) -> dict[str, Any] | None:
-    backend_name = wallet.get("backend_name") if isinstance(wallet, dict) else None
-    if not backend_name:
-        return None
-    try:
-        backends = core_accounts.list_backends(runtime_config)
-    except (KeyError, TypeError, ValueError, sqlite3.Error):
-        # Backend listing is best-effort here: the adapter only needs the
-        # backend row when it talks to a configured node, and the request
-        # path can still fall through with `backend=None` if config lookup
-        # fails. We narrow rather than catch `Exception` so genuine bugs
-        # (e.g. typos, attribute errors) still bubble up.
-        return None
-    for backend in backends:
-        if str(backend.get("name") or "") == str(backend_name):
-            return dict(backend)
-    return None
+    return core_lightning.resolve_lightning_backend(conn, runtime_config, wallet)
 
 
 def _coerce_int(

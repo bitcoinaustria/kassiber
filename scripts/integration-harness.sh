@@ -11,7 +11,7 @@ STARTED_COMPOSE=0
 STARTED_BOLTZ=0
 BOLTZ_COMPOSE_FILE=""
 BOLTZ_COMPOSE_TEMP=""
-SUDO_DOCKER_ENV=KASSIBER_REGTEST_RPC_USER,KASSIBER_REGTEST_RPC_PASSWORD,KASSIBER_REGTEST_RPC_AUTH,KASSIBER_REGTEST_RPC_PORT,KASSIBER_REGTEST_ELEMENTS_RPC_PORT,KASSIBER_REGTEST_BITCOIND_IMAGE,KASSIBER_REGTEST_ELEMENTSD_IMAGE,KASSIBER_REGTEST_FULCRUM_IMAGE,KASSIBER_REGTEST_BACKEND_STACK_IMAGE,KASSIBER_REGTEST_BITCOIN_ELECTRUM_PORT,KASSIBER_REGTEST_BITCOIN_MEMPOOL_PORT,KASSIBER_REGTEST_LIQUID_ELECTRUM_PORT,KASSIBER_REGTEST_LIQUID_MEMPOOL_PORT
+SUDO_DOCKER_ENV=KASSIBER_REGTEST_RPC_USER,KASSIBER_REGTEST_RPC_PASSWORD,KASSIBER_REGTEST_RPC_AUTH,KASSIBER_REGTEST_RPC_PORT,KASSIBER_REGTEST_ELEMENTS_RPC_PORT,KASSIBER_REGTEST_BITCOIND_IMAGE,KASSIBER_REGTEST_ELEMENTSD_IMAGE,KASSIBER_REGTEST_FULCRUM_IMAGE,KASSIBER_REGTEST_BACKEND_STACK_IMAGE,KASSIBER_REGTEST_BITCOIN_ELECTRUM_PORT,KASSIBER_REGTEST_BITCOIN_MEMPOOL_PORT,KASSIBER_REGTEST_LIQUID_ELECTRUM_PORT,KASSIBER_REGTEST_LIQUID_MEMPOOL_PORT,KASSIBER_REGTEST_CLN_IMAGE,KASSIBER_REGTEST_CLN_MERCHANT_PORT,KASSIBER_REGTEST_CLN_CUSTOMER_PORT,KASSIBER_REGTEST_CLN_SUPPLIER_PORT,KASSIBER_REGTEST_CLN_ROUTER_PORT
 SUDO_DOCKER=(sudo -n --preserve-env="$SUDO_DOCKER_ENV" docker)
 
 export PYTHONHASHSEED="${PYTHONHASHSEED:-0}"
@@ -76,6 +76,11 @@ docker_compose() {
       KASSIBER_REGTEST_BITCOIN_MEMPOOL_PORT="${KASSIBER_REGTEST_BITCOIN_MEMPOOL_PORT:-}" \
       KASSIBER_REGTEST_LIQUID_ELECTRUM_PORT="${KASSIBER_REGTEST_LIQUID_ELECTRUM_PORT:-}" \
       KASSIBER_REGTEST_LIQUID_MEMPOOL_PORT="${KASSIBER_REGTEST_LIQUID_MEMPOOL_PORT:-}" \
+      KASSIBER_REGTEST_CLN_IMAGE="${KASSIBER_REGTEST_CLN_IMAGE:-}" \
+      KASSIBER_REGTEST_CLN_MERCHANT_PORT="${KASSIBER_REGTEST_CLN_MERCHANT_PORT:-}" \
+      KASSIBER_REGTEST_CLN_CUSTOMER_PORT="${KASSIBER_REGTEST_CLN_CUSTOMER_PORT:-}" \
+      KASSIBER_REGTEST_CLN_SUPPLIER_PORT="${KASSIBER_REGTEST_CLN_SUPPLIER_PORT:-}" \
+      KASSIBER_REGTEST_CLN_ROUTER_PORT="${KASSIBER_REGTEST_CLN_ROUTER_PORT:-}" \
       docker-compose "$@"
   else
     echo "Docker Compose is required for the slow regtest lane." >&2
@@ -417,6 +422,115 @@ run_regtest_demo_full() {
   run_with_bitcoin_core run_demo_full
 }
 
+port_is_free() {
+  KASSIBER_CANDIDATE_PORT="$1" py - <<'PY'
+import os
+import socket
+import sys
+
+port = int(os.environ["KASSIBER_CANDIDATE_PORT"])
+sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+try:
+    sock.bind(("127.0.0.1", port))
+except OSError:
+    sys.exit(1)
+finally:
+    sock.close()
+sys.exit(0)
+PY
+}
+
+lightning_ports_available() {
+  local base="$1"
+  local ports=(
+    "$base"
+    "$((base + 100))"
+    "$((base + 101))"
+    "$((base + 102))"
+    "$((base + 103))"
+    "$((base + 104))"
+    "$((base + 1292))"
+    "$((base + 1293))"
+    "$((base + 1294))"
+    "$((base + 1295))"
+  )
+  local port
+  for port in "${ports[@]}"; do
+    if ! port_is_free "$port"; then
+      return 1
+    fi
+  done
+  return 0
+}
+
+choose_lightning_base_port() {
+  local candidate
+  for candidate in 18443 19443 20443 21443 22443; do
+    if lightning_ports_available "$candidate"; then
+      printf '%s\n' "$candidate"
+      return 0
+    fi
+  done
+  echo "No free regtest port family found for the Lightning business lane." >&2
+  echo "Set KASSIBER_REGTEST_RPC_PORT to an available base port and rerun." >&2
+  exit 2
+}
+
+run_lightning_business() {
+  export KASSIBER_INTEGRATION=1
+  export KASSIBER_LIGHTNING_BUSINESS=1
+  export KASSIBER_REGTEST_RPC_USER="${KASSIBER_REGTEST_RPC_USER:-kassiber}"
+  export KASSIBER_REGTEST_RPC_PASSWORD="${KASSIBER_REGTEST_RPC_PASSWORD:-$(py -c 'import secrets; print(secrets.token_urlsafe(24))')}"
+  export KASSIBER_REGTEST_RPC_AUTH="${KASSIBER_REGTEST_RPC_AUTH:-$(rpc_auth)}"
+  export KASSIBER_REGTEST_RPC_PORT="${KASSIBER_REGTEST_RPC_PORT:-$(choose_lightning_base_port)}"
+  export KASSIBER_REGTEST_ELEMENTS_RPC_PORT="${KASSIBER_REGTEST_ELEMENTS_RPC_PORT:-$((KASSIBER_REGTEST_RPC_PORT + 104))}"
+  export KASSIBER_REGTEST_BITCOIN_ELECTRUM_PORT="${KASSIBER_REGTEST_BITCOIN_ELECTRUM_PORT:-$((KASSIBER_REGTEST_RPC_PORT + 100))}"
+  export KASSIBER_REGTEST_BITCOIN_MEMPOOL_PORT="${KASSIBER_REGTEST_BITCOIN_MEMPOOL_PORT:-$((KASSIBER_REGTEST_RPC_PORT + 101))}"
+  export KASSIBER_REGTEST_LIQUID_ELECTRUM_PORT="${KASSIBER_REGTEST_LIQUID_ELECTRUM_PORT:-$((KASSIBER_REGTEST_RPC_PORT + 102))}"
+  export KASSIBER_REGTEST_LIQUID_MEMPOOL_PORT="${KASSIBER_REGTEST_LIQUID_MEMPOOL_PORT:-$((KASSIBER_REGTEST_RPC_PORT + 103))}"
+  export KASSIBER_REGTEST_CLN_MERCHANT_PORT="${KASSIBER_REGTEST_CLN_MERCHANT_PORT:-$((KASSIBER_REGTEST_RPC_PORT + 1292))}"
+  export KASSIBER_REGTEST_CLN_CUSTOMER_PORT="${KASSIBER_REGTEST_CLN_CUSTOMER_PORT:-$((KASSIBER_REGTEST_RPC_PORT + 1293))}"
+  export KASSIBER_REGTEST_CLN_SUPPLIER_PORT="${KASSIBER_REGTEST_CLN_SUPPLIER_PORT:-$((KASSIBER_REGTEST_RPC_PORT + 1294))}"
+  export KASSIBER_REGTEST_CLN_ROUTER_PORT="${KASSIBER_REGTEST_CLN_ROUTER_PORT:-$((KASSIBER_REGTEST_RPC_PORT + 1295))}"
+  export KASSIBER_REGTEST_CORE_URL="${KASSIBER_REGTEST_CORE_URL:-http://127.0.0.1:${KASSIBER_REGTEST_RPC_PORT}}"
+  export KASSIBER_REGTEST_COMPOSE_PROJECT="${KASSIBER_REGTEST_COMPOSE_PROJECT:-$(py -c 'import hashlib, os; print("kassiber-regtest-" + hashlib.sha256(os.getcwd().encode()).hexdigest()[:12])')}"
+  export KASSIBER_LIGHTNING_BUSINESS_HOME="${KASSIBER_LIGHTNING_BUSINESS_HOME:-${TMPDIR:-/tmp}/kassiber-lightning-business-${KASSIBER_REGTEST_COMPOSE_PROJECT}}"
+
+  cleanup_lightning() {
+    if [ "$STARTED_COMPOSE" -eq 1 ] && [ -z "${KASSIBER_REGTEST_KEEP:-}" ]; then
+      docker_compose -p "$KASSIBER_REGTEST_COMPOSE_PROJECT" \
+        -f dev/regtest/compose.bitcoin.yml \
+        -f dev/regtest/compose.lightning.yml \
+        down -v
+      rm -rf "$KASSIBER_LIGHTNING_BUSINESS_HOME"
+    fi
+  }
+  trap cleanup_lightning EXIT
+
+  if [ -z "${KASSIBER_REGTEST_KEEP:-}" ] && [ -z "${KASSIBER_REGTEST_LIGHTNING_REUSE:-}" ]; then
+    rm -rf "$KASSIBER_LIGHTNING_BUSINESS_HOME"
+  fi
+
+  STARTED_COMPOSE=0
+  if [ -z "${KASSIBER_REGTEST_LIGHTNING_REUSE:-}" ]; then
+    STARTED_COMPOSE=1
+    if ! docker_compose -p "$KASSIBER_REGTEST_COMPOSE_PROJECT" \
+      -f dev/regtest/compose.bitcoin.yml \
+      -f dev/regtest/compose.lightning.yml \
+      up -d; then
+      echo "Failed to start the regtest Bitcoin + Core Lightning stack." >&2
+      echo "If a host port is already taken, set KASSIBER_REGTEST_RPC_PORT or" >&2
+      echo "the KASSIBER_REGTEST_CLN_*_PORT variables before rerunning." >&2
+      exit 1
+    fi
+  fi
+
+  wait_for_core
+  ./dev/regtest/lightning-business-bootstrap.sh
+  ./dev/regtest/lightning-business-scenario.sh
+  py -m unittest tests.integration.test_live_lightning_business_regtest -v
+}
+
 boltz_regtest_dir() {
   if [ -n "${KASSIBER_BOLTZ_REGTEST_DIR:-}" ]; then
     printf '%s\n' "$KASSIBER_BOLTZ_REGTEST_DIR"
@@ -604,12 +718,15 @@ case "$MODE" in
   boltz-liquid)
     run_boltz_liquid
     ;;
+  lightning-business)
+    run_lightning_business
+    ;;
   all)
     run_fast
     run_with_bitcoin_core run_slow_suite
     ;;
   *)
-    echo "usage: $0 [fast|bitcoin-core|slow|demo|demo-full|demo-up|demo-tick [N]|demo-down [--purge]|boltz-liquid|all]" >&2
+    echo "usage: $0 [fast|bitcoin-core|slow|demo|demo-full|demo-up|demo-tick [N]|demo-down [--purge]|boltz-liquid|lightning-business|all]" >&2
     exit 2
     ;;
 esac
