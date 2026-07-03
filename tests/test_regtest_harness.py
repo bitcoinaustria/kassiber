@@ -458,6 +458,18 @@ class RegtestHarnessTest(unittest.TestCase):
         self.assertIn("demo_load_rpc_env", harness)
         self.assertIn("KASSIBER_REGTEST_COMPOSE_PROFILES", harness)
 
+    def test_regtest_lanes_auto_select_free_port_family(self):
+        harness = (ROOT / "scripts" / "integration-harness.sh").read_text(encoding="utf-8")
+
+        self.assertIn("choose_regtest_base_port()", harness)
+        self.assertIn("regtest_ports_available()", harness)
+        self.assertIn('export KASSIBER_REGTEST_RPC_PORT="$(choose_regtest_base_port)"', harness)
+        self.assertIn("for candidate in 18443 19443 20443 21443 22443", harness)
+        self.assertLess(
+            harness.index('export KASSIBER_REGTEST_RPC_PORT="$(choose_regtest_base_port)"'),
+            harness.index('docker_compose -p "$KASSIBER_REGTEST_COMPOSE_PROJECT"'),
+        )
+
     def test_silent_payments_lane_probes_frigate(self):
         harness = (ROOT / "scripts" / "integration-harness.sh").read_text(encoding="utf-8")
 

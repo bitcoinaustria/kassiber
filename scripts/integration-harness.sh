@@ -182,7 +182,13 @@ run_with_bitcoin_core() {
   export KASSIBER_REGTEST_RPC_USER="${KASSIBER_REGTEST_RPC_USER:-kassiber}"
   export KASSIBER_REGTEST_RPC_PASSWORD="${KASSIBER_REGTEST_RPC_PASSWORD:-$(py -c 'import secrets; print(secrets.token_urlsafe(24))')}"
   export KASSIBER_REGTEST_RPC_AUTH="${KASSIBER_REGTEST_RPC_AUTH:-$(rpc_auth)}"
-  export KASSIBER_REGTEST_RPC_PORT="${KASSIBER_REGTEST_RPC_PORT:-18443}"
+  if [ -z "${KASSIBER_REGTEST_RPC_PORT:-}" ] \
+    && [ -z "${KASSIBER_REGTEST_REUSE_CORE:-}" ] \
+    && [ "$provided_core_url" -eq 0 ]; then
+    export KASSIBER_REGTEST_RPC_PORT="$(choose_regtest_base_port)"
+  else
+    export KASSIBER_REGTEST_RPC_PORT="${KASSIBER_REGTEST_RPC_PORT:-18443}"
+  fi
   export KASSIBER_REGTEST_ELEMENTS_RPC_PORT="${KASSIBER_REGTEST_ELEMENTS_RPC_PORT:-$((KASSIBER_REGTEST_RPC_PORT + 104))}"
   export KASSIBER_REGTEST_BITCOIN_ELECTRUM_PORT="${KASSIBER_REGTEST_BITCOIN_ELECTRUM_PORT:-$((KASSIBER_REGTEST_RPC_PORT + 100))}"
   export KASSIBER_REGTEST_BITCOIN_MEMPOOL_PORT="${KASSIBER_REGTEST_BITCOIN_MEMPOOL_PORT:-$((KASSIBER_REGTEST_RPC_PORT + 101))}"
@@ -743,7 +749,7 @@ sys.exit(0)
 PY
 }
 
-lightning_ports_available() {
+regtest_ports_available() {
   local base="$1"
   local ports=(
     "$base"
@@ -752,6 +758,37 @@ lightning_ports_available() {
     "$((base + 102))"
     "$((base + 103))"
     "$((base + 104))"
+    "$((base + 105))"
+  )
+  local port
+  for port in "${ports[@]}"; do
+    if ! port_is_free "$port"; then
+      return 1
+    fi
+  done
+  return 0
+}
+
+choose_regtest_base_port() {
+  local candidate
+  for candidate in 18443 19443 20443 21443 22443; do
+    if regtest_ports_available "$candidate"; then
+      printf '%s\n' "$candidate"
+      return 0
+    fi
+  done
+  echo "No free regtest port family found." >&2
+  echo "Set KASSIBER_REGTEST_RPC_PORT to an available base port and rerun." >&2
+  exit 2
+}
+
+lightning_ports_available() {
+  local base="$1"
+  if ! regtest_ports_available "$base"; then
+    return 1
+  fi
+
+  local ports=(
     "$((base + 1292))"
     "$((base + 1293))"
     "$((base + 1294))"
