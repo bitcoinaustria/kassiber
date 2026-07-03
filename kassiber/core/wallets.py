@@ -852,6 +852,20 @@ def wallet_descriptor_material(config):
     )
 
 
+def reveal_wallet_descriptor_material(conn, workspace_ref, profile_ref, wallet_ref):
+    """Return only pasteable descriptor material for the desktop copy flow."""
+
+    _, profile = resolve_scope(conn, workspace_ref, profile_ref)
+    wallet = resolve_wallet(conn, profile["id"], wallet_ref)
+    config = json.loads(wallet["config_json"]) if wallet["config_json"] else {}
+    return {
+        "id": wallet["id"],
+        "label": wallet["label"],
+        "kind": wallet["kind"],
+        "wallet_material": wallet_descriptor_material(config),
+    }
+
+
 def reveal_wallet_secrets(conn, workspace_ref, profile_ref, wallet_ref):
     """Return the raw descriptor / blinding-key material of a wallet.
 
@@ -1000,6 +1014,7 @@ __all__ = [
     "wallet_btcpay_provenance_config",
     "wallet_btcpay_sync_config",
     "wallet_descriptor_material",
+    "reveal_wallet_descriptor_material",
     "wallet_live_chain_config",
     "wallet_policy_asset_id",
     "wallet_row_to_dict",

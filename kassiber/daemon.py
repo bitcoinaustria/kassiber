@@ -11241,7 +11241,9 @@ def _handle_reveal_request(
     else:
         workspace = args.get("workspace")
         profile = args.get("profile")
-        payload = core_wallets.reveal_wallet_secrets(ctx.conn, workspace, profile, target)
+        payload = core_wallets.reveal_wallet_descriptor_material(
+            ctx.conn, workspace, profile, target
+        )
 
     return (
         _with_request_id(
