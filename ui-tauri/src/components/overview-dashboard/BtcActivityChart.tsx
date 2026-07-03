@@ -577,6 +577,22 @@ export const BtcActivityChart = ({
       !hideSensitive &&
       treasuryPrimaryValue(chartStats.highPoint) !==
         treasuryPrimaryValue(chartStats.lowPoint);
+    // Don't annotate an extreme whose value equals the current balance: the
+    // last-value tag already labels that number on the axis. For a
+    // monotonically growing balance the maximum IS the current value, so the
+    // high annotation would just repeat the tag right next to it.
+    const lastBalancePoint = balancePoints.at(-1);
+    const lastBalanceRaw = lastBalancePoint
+      ? treasuryPrimaryValue(lastBalancePoint)
+      : null;
+    const coincidesWithLast = (point: TreasuryChartPoint) =>
+      lastBalanceValue !== null &&
+      lastBalanceRaw !== null &&
+      treasuryPrimaryValue(point) === lastBalanceRaw;
+    const showHighMark =
+      showHighLowMarks && !!chartStats && !coincidesWithLast(chartStats.highPoint);
+    const showLowMark =
+      showHighLowMarks && !!chartStats && !coincidesWithLast(chartStats.lowPoint);
     const selectedPoint = expanded
       ? (selectedChartDisplayData.find(
           (point) => point.date === expandedPointDate,
@@ -985,7 +1001,7 @@ export const BtcActivityChart = ({
                       })}
                     />
                   )}
-                  {showHighLowMarks && chartStats && (
+                  {showHighMark && chartStats && (
                     <ReferenceDot
                       yAxisId="btc"
                       x={chartStats.highPoint.date}
@@ -1003,7 +1019,7 @@ export const BtcActivityChart = ({
                       })}
                     />
                   )}
-                  {showHighLowMarks && chartStats && (
+                  {showLowMark && chartStats && (
                     <ReferenceDot
                       yAxisId="btc"
                       x={chartStats.lowPoint.date}
