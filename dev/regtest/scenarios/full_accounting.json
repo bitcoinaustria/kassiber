@@ -4,6 +4,7 @@
   "title": "Full accounting regtest demo",
   "description": "Disposable Bitcoin Core regtest scenario covering multi-address business wallets, regular fiat-expense disposals with deterministic amount/fee variation, self-transfers, wallet key rotations, deprecated old wallets, collaborative CoinJoin/PayJoin-shaped transactions, an RBF-replaced payment, halving-shrunk mining income, a dust deposit, a mempool-pending receipt at sync, Bitcoin-backed-loan marks, volatile pricing, local Electrum/mempool-compatible backend endpoints, and deterministic elementsregtest/LBTC bridge/import wallets.",
   "base_time": "2019-01-15T09:00:00Z",
+  "latest_time": "2026-07-01T00:00:00Z",
   "workspace": "Regtest Demo",
   "profile": {
     "label": "Full Accounting",

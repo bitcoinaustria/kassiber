@@ -5,7 +5,7 @@ import random
 import socket
 import tempfile
 import unittest
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from decimal import Decimal
 from pathlib import Path
 from unittest.mock import patch
@@ -303,7 +303,13 @@ class RegtestHarnessTest(unittest.TestCase):
         stress_span_days = stress["cycles"] * stress["days_between_cycles"]
         self.assertGreaterEqual(stress_span_days, 365 * 7)
         self.assertLess(base_time, datetime(2020, 1, 1, tzinfo=timezone.utc))
-        self.assertLess(base_time + timedelta(days=stress_span_days), datetime(2026, 7, 1, tzinfo=timezone.utc))
+        latest_time = datetime.fromisoformat(scenario["latest_time"].replace("Z", "+00:00"))
+        estimated_end = datetime.fromtimestamp(
+            regtest_demo.estimate_scenario_end_ts(scenario),
+            tz=timezone.utc,
+        )
+        self.assertLessEqual(estimated_end, latest_time)
+        self.assertLess(latest_time, datetime(2026, 7, 3, tzinfo=timezone.utc))
         self.assertTrue(stress["business_expenses"]["enabled"])
         self.assertGreaterEqual(len(stress["business_expenses"]["schedule"]), 6)
         self.assertEqual(len(stress["wallet_rotations"]), 3)
@@ -408,7 +414,7 @@ class RegtestHarnessTest(unittest.TestCase):
         harness = (ROOT / "scripts" / "integration-harness.sh").read_text(encoding="utf-8")
 
         self.assertIn("demo_assert_safe_home()", harness)
-        self.assertIn("path is / or the user home", harness)
+        self.assertIn("path is root, user home, a temp root, or root-level", harness)
         self.assertIn("path is too shallow", harness)
         self.assertIn("missing Kassiber regtest demo manifest", harness)
         self.assertLess(
