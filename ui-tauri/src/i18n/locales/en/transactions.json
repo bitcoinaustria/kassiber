@@ -644,6 +644,23 @@
     "copyOutput": "Copy output reference",
     "copyFee": "Copy fee reference",
     "legAria": "{{role}} graph leg",
+    "inputsOutputs": {
+      "title": "Inputs & outputs",
+      "counts": "{{inputs}} inputs · {{outputs}} outputs",
+      "inputs": "Inputs",
+      "outputs": "Outputs",
+      "spentInput": "Spent input",
+      "createdOutput": "Created output",
+      "unknownReference": "Unknown reference",
+      "unknownAmount": "Unknown amount",
+      "total": "Total",
+      "knownTotal": "Known total",
+      "index": "#{{index}}",
+      "more": "+{{count}} more",
+      "showAll": "Show all {{count}} more",
+      "showFewer": "Show fewer",
+      "openExplorer": "Open {{reference}} in {{explorer}}"
+    },
     "roles": {
       "input": "Input",
       "output": "Output",

@@ -1441,6 +1441,78 @@ class TransactionGraphTest(unittest.TestCase):
         self.assertIs(_FakeElectrumClient.backends[0]["insecure"], True)
         self.assertEqual(payload["supportLevel"], "full")
 
+    def test_runtime_bitcoinrpc_graph_lookup_preserves_top_level_db_config_fields(self):
+        txid = "26" * 32
+        prev_txid = "27" * 32
+        runtime_config = {
+            "default_backend": "runtime-core",
+            "backends": {
+                "runtime-core": {
+                    "kind": "bitcoinrpc",
+                    "chain": "bitcoin",
+                    "network": "main",
+                    "url": "http://127.0.0.1:18443",
+                    "timeout": 5,
+                    "username": "rpc-user",
+                    "password": "rpc-password",
+                    "walletprefix": "demo-book",
+                }
+            },
+        }
+        decoded_current = {
+            "txid": txid,
+            "version": 2,
+            "locktime": 0,
+            "size": 191,
+            "vsize": 110,
+            "weight": 437,
+            "vin": [
+                {
+                    "txid": prev_txid,
+                    "vout": 0,
+                    "sequence": 0xFFFFFFFD,
+                    "prevout": {
+                        "n": 0,
+                        "value": 0.001,
+                        "scriptPubKey": {
+                            "hex": SCRIPT_A,
+                            "type": "witness_v0_keyhash",
+                            "address": ADDR_A,
+                        },
+                    },
+                }
+            ],
+            "vout": [
+                {
+                    "n": 0,
+                    "value": 0.0009,
+                    "scriptPubKey": {
+                        "hex": SCRIPT_B,
+                        "type": "witness_v0_keyhash",
+                        "address": ADDR_B,
+                    },
+                }
+            ],
+        }
+        self._tx("runtime-core-row", "wallet-a", "outbound", 90_000_000, txid, "{}")
+
+        with patch(
+            "kassiber.core.transaction_graph.bitcoinrpc_call",
+            return_value=decoded_current,
+        ) as rpc_call:
+            payload = self._graph(
+                "runtime-core-row",
+                allow_public_lookup=True,
+                runtime_config=runtime_config,
+            )
+
+        rpc_call.assert_called_once()
+        backend = rpc_call.call_args.args[0]
+        self.assertEqual(backend["username"], "rpc-user")
+        self.assertEqual(backend["password"], "rpc-password")
+        self.assertEqual(backend["walletprefix"], "demo-book")
+        self.assertEqual(payload["supportLevel"], "full")
+
     def test_liquid_lookup_skips_implicit_builtin_runtime_backends(self):
         txid = "25" * 32
         runtime_config = {

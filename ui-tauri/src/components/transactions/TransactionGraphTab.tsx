@@ -2,6 +2,9 @@ import {
   AlertTriangle,
   ArrowRight,
   ArrowRightLeft,
+  ChevronDown,
+  ChevronUp,
+  ExternalLink,
   Info,
   Maximize2,
 } from "lucide-react";
@@ -17,8 +20,17 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { openExternalUrl } from "@/daemon/transport";
 import { formatBtc } from "@/lib/currency";
+import {
+  explorerTargetForAddress,
+  explorerTargetForTransaction,
+  type ExplorerNetwork,
+  type ExplorerSettings,
+  type ExplorerTarget,
+} from "@/lib/explorer";
 import { cn } from "@/lib/utils";
+import { useUiStore } from "@/store/ui";
 
 import { copyText, formatShortTxid } from "./model";
 
@@ -112,6 +124,7 @@ export type TransactionGraphPayload = {
     vsize?: number | null;
     weight?: number | null;
     feeRateSatVb?: number | null;
+    network?: string | null;
   } | null;
   supportLevel: "full" | "partial" | "graphless" | "unsupported";
   unsupportedReason?: string | null;
@@ -147,6 +160,7 @@ const MAX_COMPACT_ROWS = 24;
 // The expanded dialog shows far more strands, but still caps so a fan-out
 // transaction cannot render thousands of paths. Matches the backend node cap.
 const MAX_EXPANDED_ROWS = 250;
+const MAX_DETAIL_COLLAPSED_ROWS = 8;
 
 export function compactGraphRows(
   nodes: TransactionGraphNode[],
@@ -256,6 +270,431 @@ function ownershipBoundaryLabel(node: TransactionGraphNode, t: TFunction<"transa
   if (node.ownership === "unspendable") return t("graph.ownership.unspendable");
   if (node.ownership === "overflow") return t("graph.ownership.aggregated");
   return t("graph.ownership.unknown");
+}
+
+function nodeReference(node: TransactionGraphNode) {
+  return node.address || node.outpoint || node.txid || node.label || "";
+}
+
+function txidFromOutpoint(outpoint: string | undefined) {
+  const [txid] = outpoint?.split(":") ?? [];
+  return txid && /^[0-9a-f]{64}$/i.test(txid) ? txid : undefined;
+}
+
+function looksLiquidAddress(address: string | undefined) {
+  const normalized = address?.trim().toLowerCase();
+  if (!normalized) return false;
+  return (
+    normalized.startsWith("lq1") ||
+    normalized.startsWith("ex1") ||
+    normalized.startsWith("el1") ||
+    normalized.startsWith("ert1") ||
+    normalized.startsWith("tex1") ||
+    normalized.startsWith("tlq1")
+  );
+}
+
+function inferExplorerNetwork(
+  graph: TransactionGraphPayload,
+  node: TransactionGraphNode,
+): ExplorerNetwork {
+  const hints = [
+    graph.transaction?.network,
+    graph.transaction?.asset,
+    node.address,
+    node.scriptType,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+  if (
+    hints.includes("liquid") ||
+    hints.includes("l-btc") ||
+    hints.includes("lbtc") ||
+    looksLiquidAddress(node.address)
+  ) {
+    return "liquid";
+  }
+  return "bitcoin";
+}
+
+function explorerTargetForGraphNode({
+  graph,
+  node,
+  settings,
+}: {
+  graph: TransactionGraphPayload;
+  node: TransactionGraphNode;
+  settings: ExplorerSettings;
+}) {
+  const network = inferExplorerNetwork(graph, node);
+  if (node.address) {
+    return explorerTargetForAddress({
+      address: node.address,
+      network,
+      settings,
+    });
+  }
+  return explorerTargetForTransaction({
+    txid: node.txid || txidFromOutpoint(node.outpoint),
+    network,
+    settings,
+  });
+}
+
+function nodeDetailReference(
+  node: TransactionGraphNode,
+  hidden: boolean,
+  t: TFunction<"transactions">,
+) {
+  const reference = nodeReference(node);
+  if (!reference) return t("graph.inputsOutputs.unknownReference");
+  return sensitiveGraphText(formatShortTxid(reference), hidden, t("graph.hidden"));
+}
+
+function conciseScriptType(scriptType: string | undefined) {
+  if (!scriptType) return "";
+  const normalized = scriptType.replace(/[_-]/g, " ").replace(/\s+/g, " ").trim();
+  const lower = normalized.toLowerCase();
+  if (lower.includes("taproot")) return "taproot";
+  if (lower.includes("witness v0") && lower.includes("keyhash")) return "segwit v0";
+  if (lower.includes("witness v0") && lower.includes("scripthash")) return "segwit script";
+  return normalized;
+}
+
+function nodeDetailMeta(
+  node: TransactionGraphNode,
+  side: "input" | "output",
+  hidden: boolean,
+  t: TFunction<"transactions">,
+) {
+  const parts = [];
+  if (node.role && node.role !== side) {
+    parts.push(roleLabel(node.role, t));
+  }
+  parts.push(ownershipBoundaryLabel(node, t));
+  const scriptType = conciseScriptType(node.scriptType);
+  if (scriptType) parts.push(scriptType);
+  if (typeof node.index === "number") {
+    parts.push(t("graph.inputsOutputs.index", { index: node.index }));
+  }
+  if (!hidden && node.address && node.outpoint) {
+    parts.push(formatShortTxid(node.outpoint));
+  }
+  return parts;
+}
+
+function amountSummary(nodes: TransactionGraphNode[]) {
+  return nodes.reduce(
+    (summary, node) => {
+      if (node.valueState === "confidential") {
+        summary.confidentialCount += 1;
+      } else if (typeof node.valueSats === "number") {
+        summary.knownCount += 1;
+        summary.knownSats += node.valueSats;
+      } else {
+        summary.unknownCount += 1;
+      }
+      return summary;
+    },
+    {
+      knownSats: 0,
+      knownCount: 0,
+      unknownCount: 0,
+      confidentialCount: 0,
+    },
+  );
+}
+
+function hasCompleteTotal(nodes: TransactionGraphNode[]) {
+  if (!nodes.length) return true;
+  return nodes.every(
+    (node) =>
+      node.valueState !== "confidential" &&
+      typeof node.valueSats === "number",
+  );
+}
+
+function formatTotal(nodes: TransactionGraphNode[], t: TFunction<"transactions">) {
+  const summary = amountSummary(nodes);
+  if (summary.knownCount > 0) return formatBtc(summary.knownSats / 100_000_000);
+  if (summary.confidentialCount > 0) {
+    return t("graph.confidentialAmount");
+  }
+  return t("graph.inputsOutputs.unknownAmount");
+}
+
+function TransactionIoMarker({
+  side,
+}: {
+  side: "input" | "output";
+}) {
+  const { t } = useTranslation("transactions");
+  const isInput = side === "input";
+  return (
+    <span
+      role="img"
+      aria-label={
+        isInput
+          ? t("graph.inputsOutputs.spentInput")
+          : t("graph.inputsOutputs.createdOutput")
+      }
+      className={cn(
+        "mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full border",
+        isInput
+          ? "border-red-500/30 bg-red-500/10 text-red-600 dark:text-red-400"
+          : "border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
+      )}
+    >
+      <ArrowRight className="size-3" aria-hidden="true" />
+    </span>
+  );
+}
+
+function TransactionIoRow({
+  node,
+  side,
+  hideSensitive,
+  explorerTarget,
+  onOpenExplorer,
+}: {
+  node: TransactionGraphNode;
+  side: "input" | "output";
+  hideSensitive: boolean;
+  explorerTarget: ExplorerTarget | null;
+  onOpenExplorer: (target: ExplorerTarget) => void;
+}) {
+  const { t } = useTranslation("transactions");
+  const amount =
+    formatNodeAmount(node, hideSensitive, t) ||
+    t("graph.inputsOutputs.unknownAmount");
+  const canOpenExplorer = Boolean(explorerTarget && !hideSensitive && !node.overflow);
+  const content = (
+    <>
+      <TransactionIoMarker side={side} />
+      <div className="min-w-0">
+        <div
+          className={cn(
+            "truncate font-mono text-xs font-medium",
+            hideSensitive && "sensitive",
+          )}
+        >
+          {nodeDetailReference(node, hideSensitive, t)}
+        </div>
+        <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-muted-foreground">
+          {nodeDetailMeta(node, side, hideSensitive, t).map((part, index) => (
+            <span
+              key={`${node.id}-${part}-${index}`}
+              className={cn(index > 3 && "hidden sm:inline")}
+            >
+              {part}
+            </span>
+          ))}
+        </div>
+      </div>
+      <div
+        className={cn(
+          "flex shrink-0 items-start gap-1 self-start pt-0.5 text-right text-xs font-medium tabular-nums",
+          hideSensitive && "sensitive",
+        )}
+      >
+        <span>{amount}</span>
+        {canOpenExplorer ? (
+          <ExternalLink className="mt-0.5 size-3 text-muted-foreground" aria-hidden="true" />
+        ) : null}
+      </div>
+    </>
+  );
+  if (canOpenExplorer && explorerTarget) {
+    return (
+      <button
+        type="button"
+        className="grid w-full min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] gap-2 border-t py-2 text-left first:border-t-0 hover:bg-muted/35 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        aria-label={t("graph.inputsOutputs.openExplorer", {
+          explorer: explorerTarget.label,
+          reference: nodeDetailReference(node, false, t),
+        })}
+        title={t("graph.inputsOutputs.openExplorer", {
+          explorer: explorerTarget.label,
+          reference: nodeDetailReference(node, false, t),
+        })}
+        onClick={() => onOpenExplorer(explorerTarget)}
+      >
+        {content}
+      </button>
+    );
+  }
+  return (
+    <div className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] gap-2 border-t py-2 first:border-t-0">
+      {content}
+    </div>
+  );
+}
+
+function TransactionIoColumn({
+  title,
+  nodes,
+  side,
+  hideSensitive,
+  expanded,
+  onToggleExpanded,
+  explorerSettings,
+  graph,
+  onOpenExplorer,
+}: {
+  title: string;
+  nodes: TransactionGraphNode[];
+  side: "input" | "output";
+  hideSensitive: boolean;
+  expanded: boolean;
+  onToggleExpanded: () => void;
+  explorerSettings: ExplorerSettings;
+  graph: TransactionGraphPayload;
+  onOpenExplorer: (target: ExplorerTarget) => void;
+}) {
+  const { t } = useTranslation("transactions");
+  const visibleNodes = expanded ? nodes : nodes.slice(0, MAX_DETAIL_COLLAPSED_ROWS);
+  const hiddenCount = Math.max(0, nodes.length - visibleNodes.length);
+  return (
+    <div className="min-w-0">
+      <div className="flex items-center justify-between gap-2 border-b pb-1.5">
+        <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+          {title}
+        </div>
+        <div className="text-[10px] text-muted-foreground">
+          {nodes.length.toLocaleString("de-AT")}
+        </div>
+      </div>
+      <div className={cn("overflow-auto pr-1", expanded ? "max-h-[520px]" : "max-h-[360px]")}>
+        {visibleNodes.map((node) => (
+          <TransactionIoRow
+            key={`${side}-${node.id}`}
+            node={node}
+            side={side}
+            hideSensitive={hideSensitive}
+            explorerTarget={
+              hideSensitive
+                ? null
+                : explorerTargetForGraphNode({ graph, node, settings: explorerSettings })
+            }
+            onOpenExplorer={onOpenExplorer}
+          />
+        ))}
+        {nodes.length > MAX_DETAIL_COLLAPSED_ROWS ? (
+          <button
+            type="button"
+            className="flex w-full items-center gap-1 border-t py-2 text-left text-xs text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            onClick={onToggleExpanded}
+          >
+            {expanded ? (
+              <ChevronUp className="size-3.5" aria-hidden="true" />
+            ) : (
+              <ChevronDown className="size-3.5" aria-hidden="true" />
+            )}
+            {expanded
+              ? t("graph.inputsOutputs.showFewer")
+              : t("graph.inputsOutputs.showAll", { count: hiddenCount })}
+          </button>
+        ) : null}
+      </div>
+      <div className="mt-1.5 flex items-center justify-between gap-2 border-t pt-1.5 text-xs">
+        <span className="text-muted-foreground">
+          {t(
+            hasCompleteTotal(nodes)
+              ? "graph.inputsOutputs.total"
+              : "graph.inputsOutputs.knownTotal",
+          )}
+        </span>
+        <span
+          className={cn(
+            "font-medium tabular-nums",
+            hideSensitive && "sensitive",
+          )}
+        >
+          {hideSensitive
+            ? t("graph.hidden")
+            : formatTotal(nodes, t)}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+export function TransactionInputsOutputsPanel({
+  graph,
+  hideSensitive,
+}: {
+  graph: TransactionGraphPayload;
+  hideSensitive: boolean;
+}) {
+  const { t } = useTranslation("transactions");
+  const explorerSettings = useUiStore((state) => state.explorerSettings);
+  const [expandedColumns, setExpandedColumns] = useState({
+    input: false,
+    output: false,
+  });
+  const handleOpenExplorer = (target: ExplorerTarget) => {
+    void openExternalUrl(target.url).catch((error) => {
+      console.warn("Failed to open explorer URL", error);
+    });
+  };
+  if (!graph.inputs.length && !graph.outputs.length) return null;
+  return (
+    <section className="border-t pt-3" data-testid="transaction-inputs-outputs-panel">
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <div className="text-sm font-medium">
+            {t("graph.inputsOutputs.title")}
+          </div>
+          <div className="text-xs text-muted-foreground">
+            {t("graph.inputsOutputs.counts", {
+              inputs: graph.transaction?.inputCount ?? graph.inputs.length,
+              outputs: graph.transaction?.outputCount ?? graph.outputs.length,
+            })}
+          </div>
+        </div>
+        {graph.transaction?.asset ? (
+          <Badge variant="secondary" className="rounded-md">
+            {graph.transaction.asset}
+          </Badge>
+        ) : null}
+      </div>
+      <div className="grid gap-4 md:grid-cols-2">
+        <TransactionIoColumn
+          title={t("graph.inputsOutputs.inputs")}
+          nodes={graph.inputs}
+          side="input"
+          hideSensitive={hideSensitive}
+          expanded={expandedColumns.input}
+          onToggleExpanded={() =>
+            setExpandedColumns((current) => ({
+              ...current,
+              input: !current.input,
+            }))
+          }
+          explorerSettings={explorerSettings}
+          graph={graph}
+          onOpenExplorer={handleOpenExplorer}
+        />
+        <TransactionIoColumn
+          title={t("graph.inputsOutputs.outputs")}
+          nodes={graph.outputs}
+          side="output"
+          hideSensitive={hideSensitive}
+          expanded={expandedColumns.output}
+          onToggleExpanded={() =>
+            setExpandedColumns((current) => ({
+              ...current,
+              output: !current.output,
+            }))
+          }
+          explorerSettings={explorerSettings}
+          graph={graph}
+          onOpenExplorer={handleOpenExplorer}
+        />
+      </div>
+    </section>
+  );
 }
 
 type DrawableGraphRow = GraphRow & {
@@ -1267,6 +1706,7 @@ export function TransactionGraphPanel({
           />
           <AnnotationStrip annotations={graph.annotations} hideSensitive={hideSensitive} />
           <TransactionFlowDiagram graph={graph} hideSensitive={hideSensitive} />
+          <TransactionInputsOutputsPanel graph={graph} hideSensitive={hideSensitive} />
           {alertWarnings.length ? (
             <div className="space-y-2">
               {alertWarnings.map((warning) => (

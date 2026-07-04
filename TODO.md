@@ -754,10 +754,13 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
   swaps: persist only redacted provider id, flow, route txids, status/version,
   and Taproot/cooperative spend hints so chain/reverse/refund swaps can be
   audited without treating chain-only key-path spends as exact evidence.
-  Done in the deterministic regtest/demo environment: `full-accounting-v1`
-  imports Boltz v2 metadata JSON rows for chain, reverse, and refund cases and
-  asserts exact `provider_swap_id` candidates before bulk-pairing. Still open:
-  live SDK/client execution of those cooperative signing paths.
+  Shipped in the Boltz regtest lane: optional `KASSIBER_BOLTZ_V2_EVIDENCE`
+  / `--v2-evidence` ingestion for real wallet/client/provider evidence, with
+  placeholder-looking ids rejected and exact `provider_swap_id` pairing
+  asserted in a temporary Kassiber book. If those facts are missing, Kassiber
+  should stay on heuristic/manual swap suggestions. Still open: drive the
+  cooperative signing paths directly through Boltz's official client/SDK inside
+  the harness.
 - [ ] Daemon kind for ``detect_repeating_patterns`` + "Create rule from
   this pattern?" prompt in the swap review UI (pattern-detector helper
   already exists in `kassiber/core/swap_rules.py`).
