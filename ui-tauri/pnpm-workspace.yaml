@@ -1,0 +1,11 @@
+packages:
+  - .
+
+allowBuilds:
+  esbuild: true
+
+overrides:
+  '@babel/runtime': 7.29.2
+
+onlyBuiltDependencies:
+  - esbuild

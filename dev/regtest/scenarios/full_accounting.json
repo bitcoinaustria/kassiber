@@ -613,6 +613,7 @@
     "open_collateral_locks": 0,
     "export_files": [
       "full-report.pdf",
+      "wallet-summary.pdf",
       "full-report.csv",
       "full-report.xlsx",
       "transactions.csv",

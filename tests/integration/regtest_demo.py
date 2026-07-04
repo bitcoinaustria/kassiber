@@ -13,7 +13,7 @@ import sys
 import tempfile
 import time
 import uuid
-from collections import Counter
+from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from decimal import Decimal
@@ -26,7 +26,7 @@ from kassiber.core import silent_payments as core_silent_payments
 from kassiber.core.sync_backends import sanitize_wallet_segment
 from kassiber.db import open_db
 from kassiber.importers import GENERIC_LEDGER_COLUMNS
-from kassiber.msat import btc_to_msat
+from kassiber.msat import btc_to_msat, dec
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -2514,6 +2514,7 @@ def _export_reports(data_root: Path, export_dir: Path, scenario: dict[str, Any])
     export_dir.mkdir(parents=True, exist_ok=True)
     exports = {
         "report_pdf": export_dir / "full-report.pdf",
+        "summary_pdf": export_dir / "wallet-summary.pdf",
         "report_csv": export_dir / "full-report.csv",
         "report_xlsx": export_dir / "full-report.xlsx",
         "transactions_csv": export_dir / "transactions.csv",
@@ -2523,6 +2524,19 @@ def _export_reports(data_root: Path, export_dir: Path, scenario: dict[str, Any])
         "report_pdf": run_cli(data_root, "reports", "export-pdf", *scope, "--file", str(exports["report_pdf"]))[
             "data"
         ],
+        "summary_pdf": run_cli(
+            data_root,
+            "reports",
+            "export-summary-pdf",
+            *scope,
+            "--start",
+            str(scenario["base_time"]),
+            "--end",
+            str(scenario["latest_time"]),
+            "--include-snapshot",
+            "--file",
+            str(exports["summary_pdf"]),
+        )["data"],
         "report_csv": run_cli(data_root, "reports", "export-csv", *scope, "--file", str(exports["report_csv"]))[
             "data"
         ],
@@ -2555,6 +2569,10 @@ def _export_reports(data_root: Path, export_dir: Path, scenario: dict[str, Any])
         raise RuntimeError(f"Missing or empty export files: {', '.join(missing)}")
     if not results["report_xlsx"].get("verified"):
         raise RuntimeError("XLSX export did not include the self-verification sheets")
+    _assert_summary_pdf_wallet_snapshot(
+        run_cli(data_root, "reports", "portfolio-summary", *scope)["data"],
+        results["summary_pdf"],
+    )
     try:
         import openpyxl
     except ImportError:
@@ -2569,6 +2587,108 @@ def _export_reports(data_root: Path, export_dir: Path, scenario: dict[str, Any])
         finally:
             workbook.close()
     return {name: {"path": str(exports[name]), **results[name]} for name in exports}
+
+
+def _assert_summary_pdf_wallet_snapshot(
+    portfolio_rows: list[dict[str, Any]],
+    summary_pdf: dict[str, Any],
+) -> None:
+    holdings_totals = summary_pdf.get("holdings_totals") or {}
+    metrics = summary_pdf.get("metrics") or {}
+    history_rows = summary_pdf.get("balance_history") or []
+    if history_rows:
+        final_history = history_rows[-1]
+        total_quantity = dec(holdings_totals.get("total_quantity"))
+        total_market_value = dec(holdings_totals.get("total_market_value"))
+        history_quantity = dec(final_history.get("quantity"))
+        history_market_value = dec(final_history.get("market_value"))
+        period_end_value = dec(metrics.get("period_end_value"))
+        btc_stack_end = dec(metrics.get("btc_stack_end"))
+        if (
+            abs(total_quantity - history_quantity) > Decimal("0.00000001")
+            or abs(total_market_value - history_market_value) > Decimal("0.01")
+            or abs(total_market_value - period_end_value) > Decimal("0.01")
+            or abs(total_quantity - btc_stack_end) > Decimal("0.00000001")
+        ):
+            raise RuntimeError(
+                "Wallet summary PDF period-end totals disagree with balance history:\n"
+                + json.dumps(
+                    {
+                        "holdings_totals": {
+                            "total_quantity": float(total_quantity),
+                            "total_market_value": float(total_market_value),
+                        },
+                        "final_balance_history": {
+                            "quantity": float(history_quantity),
+                            "market_value": float(history_market_value),
+                        },
+                        "metrics": {
+                            "period_end_value": float(period_end_value),
+                            "btc_stack_end": float(btc_stack_end),
+                        },
+                    },
+                    indent=2,
+                    sort_keys=True,
+                )
+            )
+
+    if not summary_pdf.get("snapshot"):
+        raise RuntimeError("Wallet summary PDF export did not include the current snapshot")
+    selected_wallets = {str(row.get("label") or "") for row in summary_pdf.get("wallets") or []}
+    snapshot_rows = summary_pdf.get("snapshot_wallets") or []
+    snapshot_wallets = {str(row.get("wallet") or "") for row in snapshot_rows}
+    if selected_wallets != snapshot_wallets:
+        rendered = json.dumps(
+            {
+                "missing": sorted(selected_wallets.difference(snapshot_wallets)),
+                "extra": sorted(snapshot_wallets.difference(selected_wallets)),
+            },
+            indent=2,
+            sort_keys=True,
+        )
+        raise RuntimeError(f"Wallet summary PDF snapshot did not cover every wallet:\n{rendered}")
+
+    expected: dict[str, dict[str, Decimal]] = defaultdict(
+        lambda: {"quantity": Decimal("0"), "market_value": Decimal("0")}
+    )
+    for row in portfolio_rows:
+        bucket = expected[str(row.get("wallet") or "")]
+        bucket["quantity"] += dec(row.get("quantity"))
+        bucket["market_value"] += dec(row.get("market_value"))
+    observed = {
+        str(row.get("wallet") or ""): {
+            "quantity": dec(row.get("quantity")),
+            "market_value": dec(row.get("market_value")),
+        }
+        for row in snapshot_rows
+    }
+    mismatches = []
+    for wallet, values in sorted(expected.items()):
+        row = observed.get(wallet)
+        if row is None:
+            mismatches.append({"wallet": wallet, "reason": "missing"})
+            continue
+        if abs(row["quantity"] - values["quantity"]) > Decimal("0.00000001") or abs(
+            row["market_value"] - values["market_value"]
+        ) > Decimal("0.01"):
+            mismatches.append(
+                {
+                    "wallet": wallet,
+                    "expected": {
+                        "quantity": float(values["quantity"]),
+                        "market_value": float(values["market_value"]),
+                    },
+                    "observed": {
+                        "quantity": float(row["quantity"]),
+                        "market_value": float(row["market_value"]),
+                    },
+                }
+            )
+    if mismatches:
+        raise RuntimeError(
+            "Wallet summary PDF snapshot disagrees with portfolio-summary:\n"
+            + json.dumps(mismatches, indent=2, sort_keys=True)
+        )
 
 
 def _assert_chain_edge_rows(
@@ -3527,7 +3647,12 @@ def run_demo(
                     wallets,
                     operation,
                 )
-                truth.record_transaction(operation["id"], txids[operation["id"]], wallets[operation["from"]], "outbound")
+                truth.record_transaction(
+                    operation["id"],
+                    txids[operation["id"]],
+                    wallets[operation["from"]],
+                    "outbound",
+                )
                 for output in operation.get("outputs") or []:
                     truth.record_transaction(
                         operation["id"],

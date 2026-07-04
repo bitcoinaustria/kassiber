@@ -2470,11 +2470,11 @@ def record_from_bitcoinrpc_details(
             # scripts, with the network fee kept separately.
             amount = graph_amount
         else:
-            # Legacy fallback for older Core/tapes with only wallet details.
-            # Some Core detail shapes include the fee in the net send amount.
-            amount = gross_out - fee_total
-            if amount < 0:
-                amount = Decimal("0")
+            # Legacy fallback for older Core/tapes with only wallet details:
+            # Core send details already report recipient value separately from
+            # the fee. Keep that amount intact so downstream accounting consumes
+            # recipient value plus the explicit fee exactly once.
+            amount = gross_out
         fee = fee_total
         kind = "withdrawal" if amount > 0 else "fee"
         if _bitcoinrpc_graph_has_foreign_inputs(raw_graph, tracked_scripts):

@@ -45,6 +45,7 @@ from kassiber.core.reports import (
     _holdings_quantity_delta,
     latest_transaction_rates_for_profile,
     report_austrian_e1kv,
+    report_balance_history,
     report_balance_sheet,
     report_portfolio_summary,
     report_tax_summary,
@@ -10842,6 +10843,27 @@ class ReviewRegressionTest(unittest.TestCase):
         # the CLI) must agree with the live BalanceSet path: Cold 0.499, Hot 0.5.
         conn = open_db(self.data_root)
         self.addCleanup(conn.close)
+        core_rates.upsert_rate(
+            conn,
+            "BTC-USD",
+            "2026-12-31T00:00:00Z",
+            "70000",
+            "manual",
+            fetched_at="2026-12-31T00:00:01Z",
+            granularity="manual",
+            method="regression",
+        )
+        core_rates.upsert_rate(
+            conn,
+            "BTC-USD",
+            "2026-12-31T00:00:00Z",
+            "65000",
+            "coinbase-exchange",
+            fetched_at="2026-12-31T00:00:02Z",
+            granularity="manual",
+            method="regression-provider",
+        )
+        conn.commit()
         as_of_rows = {
             row["wallet"]: row
             for row in report_portfolio_summary(
@@ -10856,6 +10878,27 @@ class ReviewRegressionTest(unittest.TestCase):
         }
         self.assertAlmostEqual(as_of_rows["Cold"]["quantity"], 0.499, places=8)
         self.assertAlmostEqual(as_of_rows["Hot"]["quantity"], 0.5, places=8)
+        # Historical/as-of market value is the summary-PDF holdings path. It
+        # must use the cached market rate at the as-of timestamp, not the last
+        # transaction import price.
+        self.assertAlmostEqual(as_of_rows["Cold"]["market_value"], 34930.0, places=4)
+        self.assertAlmostEqual(as_of_rows["Hot"]["market_value"], 35000.0, places=4)
+        december_history = [
+            row
+            for row in report_balance_history(
+                conn,
+                "Main",
+                "FixtureTransfer",
+                _report_hooks(),
+                interval="month",
+                start="2026-12-01T00:00:00Z",
+                end="2026-12-31T23:59:59Z",
+            )
+            if row["asset"] == "BTC"
+        ]
+        self.assertEqual(len(december_history), 1)
+        self.assertAlmostEqual(december_history[0]["quantity"], 0.999, places=8)
+        self.assertAlmostEqual(december_history[0]["market_value"], 69930.0, places=4)
 
         # Per-wallet basis is allocated from the asset's pooled average (matching
         # the live report), so the moved basis follows the coins to Hot instead

@@ -1635,6 +1635,51 @@ def latest_market_rates_for_profile(conn, profile, *, assets=None, fallback_rate
     return market_rates
 
 
+def market_rates_for_profile_at_or_before(conn, profile, as_of, *, assets=None, fallback_rates=None):
+    """Return market rates at ``as_of``, falling back to transaction prices.
+
+    Historical portfolio views are "as of the selected report date", so cached
+    market rates at or before that date take precedence over the latest
+    transaction-specific import price. Transaction prices remain a fallback for
+    books without a usable rate cache.
+    """
+    profile_id = profile["id"]
+    fiat_currency = profile["fiat_currency"]
+    fallback = dict(fallback_rates or latest_transaction_rates_for_profile(conn, profile_id))
+    if assets is None:
+        asset_list = _profile_market_rate_assets(conn, profile_id)
+        if not asset_list:
+            asset_list = sorted(fallback)
+    else:
+        asset_list = sorted(
+            {str(asset or "").strip().upper() for asset in assets if str(asset or "").strip()}
+        )
+
+    market_rates = {}
+    for asset in asset_list:
+        pair = core_rates.transaction_rate_pair(asset, fiat_currency)
+        rate = None
+        if pair is not None:
+            try:
+                cached_rate = core_rates.get_cached_rate_at_or_before(conn, pair, as_of)
+            except sqlite3.OperationalError:
+                cached_rate = None
+            except AppError as exc:
+                if exc.code != "not_found":
+                    raise
+                cached_rate = None
+            if cached_rate is not None:
+                rate = pricing.decimal_from_exact(cached_rate.get("rate_exact"), cached_rate.get("rate"))
+        if rate is None:
+            rate = fallback.get(asset)
+        if rate is not None:
+            market_rates[asset] = rate
+
+    for asset, rate in fallback.items():
+        market_rates.setdefault(asset, rate)
+    return market_rates
+
+
 def _profile_has_journal_entries(conn, profile_id):
     row = conn.execute(
         "SELECT 1 FROM journal_entries WHERE profile_id = ? LIMIT 1",
@@ -1786,7 +1831,7 @@ def _historical_portfolio_summary(conn, profile, hooks: ReportHooks, as_of_dt, *
             "cost_basis": Decimal("0"),
         }
     )
-    latest_rates = {}
+    fallback_rates = {}
     for row in rate_rows:
         rate = None
         if row["fiat_rate"] is not None:
@@ -1794,7 +1839,7 @@ def _historical_portfolio_summary(conn, profile, hooks: ReportHooks, as_of_dt, *
         elif row["fiat_value"] is not None and row["amount"]:
             rate = dec(row["fiat_value"]) / msat_to_btc(row["amount"])
         if rate is not None:
-            latest_rates[row["asset"]] = rate
+            fallback_rates[row["asset"]] = rate
 
     for row in rows:
         quantity = msat_to_btc(row["quantity"])
@@ -1823,6 +1868,13 @@ def _historical_portfolio_summary(conn, profile, hooks: ReportHooks, as_of_dt, *
         else Decimal("0")
         for pool_asset in pool_quantity
     }
+    latest_rates = market_rates_for_profile_at_or_before(
+        conn,
+        profile,
+        hooks.iso_z(as_of_dt),
+        assets=pool_quantity,
+        fallback_rates=fallback_rates,
+    )
 
     results = []
     for (wallet_id, wallet_label, account_code, asset), value in sorted(
@@ -2135,6 +2187,39 @@ def report_balance_history(
     if range_start > range_end:
         return []
 
+    rate_assets = {event[1] for event in events}
+    if asset:
+        rate_assets.add(asset)
+    cached_rate_events = []
+    for rate_asset in sorted(rate_assets):
+        pair = core_rates.transaction_rate_pair(rate_asset, profile["fiat_currency"])
+        if pair is None:
+            continue
+        try:
+            rate_cache_rows = conn.execute(
+                """
+                SELECT timestamp, rate, rate_exact
+                FROM rates_cache
+                WHERE pair = ?
+                  AND timestamp <= ?
+                ORDER BY timestamp ASC,
+                         CASE WHEN source = 'manual' THEN 1 ELSE 0 END ASC,
+                         fetched_at ASC,
+                         source DESC
+                """,
+                (pair, hooks.iso_z(range_end)),
+            ).fetchall()
+        except sqlite3.OperationalError:
+            rate_cache_rows = []
+        for row in rate_cache_rows:
+            rate = pricing.decimal_from_exact(row["rate_exact"], row["rate"])
+            if rate is None:
+                continue
+            cached_rate_events.append(
+                (hooks.parse_iso_datetime(row["timestamp"], "rate_timestamp"), rate_asset, rate)
+            )
+    cached_rate_events.sort(key=lambda item: item[0])
+
     cumulative = defaultdict(lambda: Decimal("0"))
     cumulative_fiat = defaultdict(lambda: Decimal("0"))
     pool_quantity = defaultdict(lambda: Decimal("0"))
@@ -2142,7 +2227,9 @@ def report_balance_history(
     event_idx = 0
     pool_event_idx = 0
     rate_idx = 0
+    cached_rate_idx = 0
     current_rates = {}
+    cached_rates = {}
     bucket_start = _floor_to_interval(range_start, interval)
     end_cap = _floor_to_interval(range_end, interval)
 
@@ -2173,12 +2260,16 @@ def report_balance_history(
             _, rate_asset, rate = rate_events[rate_idx]
             current_rates[rate_asset] = rate
             rate_idx += 1
+        while cached_rate_idx < len(cached_rate_events) and cached_rate_events[cached_rate_idx][0] < bucket_end:
+            _, rate_asset, rate = cached_rate_events[cached_rate_idx]
+            cached_rates[rate_asset] = rate
+            cached_rate_idx += 1
         emitted_assets = set(cumulative.keys()) if asset is None else {asset}
         for ev_asset in sorted(emitted_assets):
             qty = cumulative.get(ev_asset, Decimal("0"))
             if qty == 0 and asset is None:
                 continue
-            rate = current_rates.get(ev_asset, Decimal("0"))
+            rate = cached_rates.get(ev_asset, current_rates.get(ev_asset, Decimal("0")))
             if scoped_basis_allocation:
                 pool_qty = pool_quantity.get(ev_asset, Decimal("0"))
                 if pool_qty > 0:
@@ -2944,6 +3035,7 @@ def _summary_pdf_wallet_holdings_from_portfolio(wallets, portfolio_rows, tx_coun
             "wallet": row["label"],
             "scope": f"{row['kind']} / {row['chain'] or 'chain'}",
             "assets": set(),
+            "asset_quantities": defaultdict(lambda: Decimal("0")),
             "quantity": Decimal("0"),
             "cost_basis": Decimal("0"),
             "market_value": Decimal("0"),
@@ -2956,7 +3048,9 @@ def _summary_pdf_wallet_holdings_from_portfolio(wallets, portfolio_rows, tx_coun
         if bucket is None:
             continue
         bucket["assets"].add(row["asset"])
-        bucket["quantity"] += dec(row["quantity"])
+        quantity = dec(row["quantity"])
+        bucket["asset_quantities"][row["asset"]] += quantity
+        bucket["quantity"] += quantity
         bucket["cost_basis"] += dec(row["cost_basis"])
         bucket["market_value"] += dec(row["market_value"])
     results = []
@@ -2968,6 +3062,11 @@ def _summary_pdf_wallet_holdings_from_portfolio(wallets, portfolio_rows, tx_coun
                 "wallet": bucket["wallet"],
                 "scope": bucket["scope"],
                 "assets": sorted(bucket["assets"]),
+                "asset_quantities": [
+                    {"asset": asset, "quantity": float(quantity)}
+                    for asset, quantity in sorted(bucket["asset_quantities"].items())
+                    if quantity
+                ],
                 "quantity": float(bucket["quantity"]),
                 "cost_basis": float(bucket["cost_basis"]),
                 "market_value": float(bucket["market_value"]),
@@ -3045,6 +3144,20 @@ def _summary_pdf_total_market_value_from_holdings(rows):
 
 def _summary_pdf_total_quantity_from_holdings(rows):
     return float(sum(dec(row["quantity"]) for row in rows))
+
+
+def _summary_pdf_total_asset_quantities_from_holdings(rows):
+    totals = defaultdict(lambda: Decimal("0"))
+    for row in rows:
+        for item in row.get("asset_quantities") or []:
+            asset = str(item.get("asset") or "").strip().upper()
+            if asset:
+                totals[asset] += dec(item.get("quantity"))
+    return [
+        {"asset": asset, "quantity": float(quantity)}
+        for asset, quantity in sorted(totals.items())
+        if quantity
+    ]
 
 
 def _summary_pdf_int(value):
@@ -3435,6 +3548,7 @@ def build_summary_pdf_report_data(
     wallet_holdings = _summary_pdf_wallet_holdings_from_portfolio(wallets, portfolio_rows, tx_counts)
     holdings_totals = {
         "total_quantity": _summary_pdf_total_quantity_from_holdings(wallet_holdings),
+        "asset_quantities": _summary_pdf_total_asset_quantities_from_holdings(wallet_holdings),
         "total_market_value": _summary_pdf_total_market_value_from_holdings(wallet_holdings),
     }
     history_rows = _summary_pdf_balance_history_from_report(conn, workspace["id"], profile["id"], wallets, hooks, start_dt, end_dt)
@@ -3458,12 +3572,14 @@ def build_summary_pdf_report_data(
         snapshot_holdings = _summary_pdf_wallet_holdings_from_portfolio(wallets, snapshot_rows, tx_counts)
         snapshot_totals = {
             "total_quantity": _summary_pdf_total_quantity_from_holdings(snapshot_holdings),
+            "asset_quantities": _summary_pdf_total_asset_quantities_from_holdings(snapshot_holdings),
             "total_market_value": _summary_pdf_total_market_value_from_holdings(snapshot_holdings),
         }
         snapshot = {
             "as_of": generated_at,
             "wallets": snapshot_holdings,
             "total_quantity": snapshot_totals["total_quantity"],
+            "asset_quantities": snapshot_totals["asset_quantities"],
             "total_market_value": snapshot_totals["total_market_value"],
         }
     return {
@@ -3505,6 +3621,8 @@ def build_summary_pdf_report_data(
                 "wallet": row["wallet"],
                 "scope": row["scope"],
                 "tx_count": row["tx_count"],
+                "assets": row["assets"],
+                "asset_quantities": row["asset_quantities"],
                 "end_quantity": row["quantity"],
                 "end_market_value": row["market_value"],
             }
@@ -6757,6 +6875,7 @@ def export_summary_pdf_report(
             "snapshot_totals": (
                 {
                     "total_quantity": report["snapshot"]["total_quantity"],
+                    "asset_quantities": report["snapshot"]["asset_quantities"],
                     "total_market_value": report["snapshot"]["total_market_value"],
                 }
                 if report.get("snapshot")

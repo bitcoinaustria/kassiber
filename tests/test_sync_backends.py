@@ -2199,7 +2199,7 @@ class SyncBackendsTest(unittest.TestCase):
         # a separate ledger component.
         self.assertAlmostEqual(float(record["amount"]), 0.8, places=8)
 
-    def test_bitcoinrpc_multi_output_send_legacy_fallback_keeps_net_details_amount(self):
+    def test_bitcoinrpc_multi_output_send_legacy_fallback_keeps_fee_separate(self):
         record = record_from_bitcoinrpc_details(
             "66" * 32,
             [
@@ -2210,7 +2210,10 @@ class SyncBackendsTest(unittest.TestCase):
         )
         self.assertEqual(record["direction"], "outbound")
         self.assertAlmostEqual(float(record["fee"]), 0.0001, places=8)
-        self.assertAlmostEqual(float(record["amount"]), 0.7999, places=8)
+        # Core detail amounts are recipient value; the network fee is already
+        # carried separately. Subtracting it here underreports wallet/book
+        # balances and breaks ownership-derived fan-out matching.
+        self.assertAlmostEqual(float(record["amount"]), 0.8, places=8)
 
     def test_bitcoinrpc_fee_only_self_spend_keeps_zero_amount(self):
         record = record_from_bitcoinrpc_details(
