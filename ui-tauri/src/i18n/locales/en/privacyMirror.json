@@ -1,0 +1,119 @@
+{
+  "title": "Privacy Mirror",
+  "subtitle": "Local linkage, adversary, coverage, and future-spend privacy evidence for the active book.",
+  "refresh": "Refresh Privacy Mirror",
+  "yes": "Yes",
+  "bounded": "Bounded",
+  "guardrail": {
+    "local": "Local only",
+    "advisory": "Advisory",
+    "degraded": "Degraded"
+  },
+  "evidence": {
+    "exact": "Exact",
+    "derived": "Derived",
+    "unknown": "Unknown"
+  },
+  "metric": {
+    "linkageScore": "Linkage score",
+    "clusters": "Linkable clusters",
+    "adversaries": "Adversaries",
+    "utxos": "UTXOs",
+    "unknowns": "Unknowns",
+    "wallets": "Wallets",
+    "transactionTells": "Transaction tells",
+    "findings": "Findings"
+  },
+  "worst": {
+    "title": "Worst privacy risk",
+    "fallback": "No finding selected",
+    "empty": "The reduced local model did not return a stronger finding."
+  },
+  "tab": {
+    "overview": "Overview",
+    "adversaries": "Adversaries",
+    "wallets": "Wallets",
+    "transactions": "Transactions",
+    "utxos": "UTXOs",
+    "timeline": "Timeline",
+    "evidence": "Evidence",
+    "psbt": "PSBT"
+  },
+  "exposure": {
+    "title": "Exposure summary"
+  },
+  "coverage": {
+    "title": "Coverage",
+    "known": "Known source-proximity coins",
+    "unknown": "Unknown source-proximity coins",
+    "degraded": "Degraded state visible"
+  },
+  "unknowns": {
+    "title": "Unknowns and degraded states",
+    "empty": "No unknown coverage row was emitted by the reduced local model."
+  },
+  "adversary": {
+    "unknown": "Unknown adversary",
+    "clusters": "Clusters",
+    "wallets": "Wallets"
+  },
+  "table": {
+    "wallet": "Wallet",
+    "transaction": "Transaction",
+    "coin": "Coin",
+    "coins": "Coins",
+    "amount": "Amount",
+    "edges": "Edges",
+    "tells": "Tells",
+    "kinds": "Kinds",
+    "penalties": "Penalties",
+    "role": "Role",
+    "proximity": "Proximity",
+    "event": "Event",
+    "category": "Category",
+    "detail": "Detail",
+    "section": "Section",
+    "item": "Item",
+    "kind": "Kind",
+    "evidence": "Evidence",
+    "empty": "No rows in this reduced view."
+  },
+  "timeline": {
+    "newLinkage": "New linkage"
+  },
+  "psbt": {
+    "title": "PSBT and what-if",
+    "placeholder": "Paste base64 PSBT text for local pre-broadcast analysis",
+    "inputAria": "PSBT text",
+    "analyze": "Analyze locally",
+    "whatIf": "What-if scenarios",
+    "empty": "No PSBT analysis yet.",
+    "metric": {
+      "merge": "Cluster merges",
+      "unknown": "Unknown inputs",
+      "blast": "Blast radius"
+    }
+  },
+  "detail": {
+    "walletTitle": "Privacy Mirror for this wallet",
+    "transactionTitle": "Privacy Mirror for this transaction",
+    "source": "Same redacted local facts as the Privacy Mirror page.",
+    "loading": "Reading local privacy evidence...",
+    "degraded": "No matching redacted Privacy Mirror row is available for this local record.",
+    "queryError": "Privacy Mirror could not be read: {{message}}",
+    "none": "None",
+    "walletCoins": "Coins",
+    "walletAmount": "Amount",
+    "walletEdges": "Linkage edges",
+    "walletUnknown": "Unknown-role coins",
+    "walletMatched": "Matched redacted wallet row {{id}}. Advisory-only; it does not select coins or change accounting data.",
+    "transactionTells": "Tells",
+    "transactionKinds": "Tell kinds",
+    "transactionPenalties": "Wallet penalties",
+    "transactionMatched": "Matched redacted transaction row {{id}}. Advisory-only; it does not sign, broadcast, or mutate accounting data."
+  },
+  "unavailable": {
+    "title": "Privacy Mirror unavailable",
+    "body": "The local daemon did not return a Privacy Mirror payload."
+  }
+}

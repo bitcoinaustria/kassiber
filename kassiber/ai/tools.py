@@ -591,6 +591,38 @@ TOOL_CATALOG: tuple[ToolEntry, ...] = (
         summary_template="Read balance history",
     ),
     ToolEntry(
+        name="ui.reports.privacy_hygiene",
+        description=(
+            "Read the active profile's redacted privacy-hygiene payload: local-only "
+            "counts, endpoint/AI posture, storage and wallet metadata findings, "
+            "limitations, and evidence_level on each finding. The payload omits "
+            "addresses, scripts, descriptors, xpubs, backend URLs/tokens, wallet "
+            "config, raw_json, branch/index values, and derivation paths."
+        ),
+        parameters=_EMPTY_OBJECT_SCHEMA,
+        kind_class="read_only",
+        wire_name="ui_reports_privacy_hygiene",
+        daemon_kind="ui.reports.privacy_hygiene",
+        summary_template="Read privacy hygiene",
+    ),
+    ToolEntry(
+        name="ui.reports.privacy_mirror",
+        description=(
+            "Read the active profile's redacted Privacy Mirror payload and its "
+            "precomputed worst-risk answer. Use this for questions such as what "
+            "is linkable, who can infer it, what proves it, what is unknown, or "
+            "what future PSBT/what-if analysis would worsen. The payload is "
+            "local-only, advisory-only, read-only, and omits addresses, scripts, "
+            "descriptors, xpubs, backend URLs/tokens, wallet config, raw_json, "
+            "branch/index values, derivation paths, and raw PSBT bytes."
+        ),
+        parameters=_EMPTY_OBJECT_SCHEMA,
+        kind_class="read_only",
+        wire_name="ui_reports_privacy_mirror",
+        daemon_kind="ui.reports.privacy_mirror",
+        summary_template="Read Privacy Mirror",
+    ),
+    ToolEntry(
         name="ui.journals.snapshot",
         description=(
             "Read journal processing status, recent journal rows, quarantine "
@@ -1718,6 +1750,7 @@ ui.journals.transfers.list, ui.transfers.review_context, ui.rates.summary,
 ui.rates.coverage, ui.report.blockers, ui.audit.changes_since_last_answer,
 ui.maintenance.settings, ui.reports.summary, ui.reports.balance_sheet,
 ui.reports.portfolio_summary, ui.reports.tax_summary, ui.reports.balance_history,
+ui.reports.privacy_hygiene, ui.reports.privacy_mirror,
 ui.source_funds.sources.list, ui.source_funds.links.list,
 ui.source_funds.preview, and report snapshots. Use
 ui.reports.summary for exact all-time inflow/outflow rollups,
@@ -1727,7 +1760,10 @@ ui.reports.portfolio_summary for current wallet holdings,
 ui.transactions.extremes for largest/smallest transactions, and
 ui.transactions.search for specific notes, counterparties, tags, ids, or txids.
 Use ui.report.blockers before saying reports are ready, ui.rates.coverage for
-missing-price questions, and ui.audit.changes_since_last_answer when checking
+missing-price questions, ui.reports.privacy_mirror for what is linkable, who can
+infer it, unknown coverage, and worst privacy risk questions,
+ui.reports.privacy_hygiene for privacy posture configuration questions, and
+ui.audit.changes_since_last_answer when checking
 whether a previous answer is still current. Do not invent calculations when
 Kassiber can read program-derived output.
 For Boltz/submarine swap, peg, and Bitcoin rail questions, read

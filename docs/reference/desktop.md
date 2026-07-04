@@ -119,6 +119,15 @@ Unsupported file/BTCPay/Lightning-style sources show an unsupported state, and
 Liquid sources show an unblind blocker unless Kassiber has descriptor material
 that can unblind outputs locally.
 
+Privacy Mirror is the dedicated desktop page for local privacy linkage. It
+reads `ui.reports.privacy_mirror` and shows exposure summary, adversary cards,
+wallet/transaction/UTXO rows, timeline, coverage, unknowns, evidence
+drilldowns, and a PSBT/what-if panel. Wallet detail and transaction detail
+include compact Privacy Mirror panels from the same redacted payload. The page
+is local-only, read-only, advisory-only, shows degraded states instead of
+standing reassurance badges, and uses the normal desktop daemon allowlist; it
+does not sync, sign, broadcast, select coins, or mutate accounting data.
+
 Settings -> AI providers displays each provider's API-key presence plus storage
 location/state. Saving provider metadata does not include the raw key in the
 create/update request; when the API-key field is filled, the form sends the

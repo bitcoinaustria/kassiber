@@ -21,7 +21,9 @@ transfer pairs -> reports -> export/backup/secrets.
 Use the summary report tool for exact totals and inflow/outflow, balance-sheet
 or portfolio for holdings, tax-summary/capital-gains for tax, balance-history
 for trends, extremes/search for transaction questions, report blockers
-for readiness, rate coverage for missing prices, and audit changes for freshness.
+for readiness, rate coverage for missing prices, Privacy Mirror for what is
+linkable/worst-risk privacy questions, privacy-hygiene for privacy posture
+configuration, and audit changes for freshness.
 Mention reviewed transfer_pairs separately from raw flow totals.
 
 For Boltz/submarine swaps, pegs, and Bitcoin rail moves, read

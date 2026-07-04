@@ -309,6 +309,9 @@ SUPPORTED_KINDS = (
     "ui.reports.portfolio_summary",
     "ui.reports.tax_summary",
     "ui.reports.balance_history",
+    "ui.reports.privacy_hygiene",
+    "ui.reports.privacy_mirror",
+    "ui.reports.psbt_privacy",
     "ui.reports.exit_tax_preview",
     "ui.reports.export_pdf",
     "ui.reports.export_summary_pdf",
@@ -3373,6 +3376,68 @@ def _reports_balance_history_payload(
     }
 
 
+def _reports_privacy_hygiene_payload(
+    conn: sqlite3.Connection,
+    raw_args: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    args = raw_args or {}
+    unknown = sorted(set(args))
+    if unknown:
+        raise AppError(
+            "ui.reports.privacy_hygiene received unsupported arguments",
+            code="validation",
+            details={"unknown": unknown},
+            retryable=False,
+        )
+    return core_reports.report_privacy_hygiene(conn, None, None, _report_hooks())
+
+
+def _reports_privacy_mirror_payload(
+    conn: sqlite3.Connection,
+    raw_args: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    args = raw_args or {}
+    unknown = sorted(set(args))
+    if unknown:
+        raise AppError(
+            "ui.reports.privacy_mirror received unsupported arguments",
+            code="validation",
+            details={"unknown": unknown},
+            retryable=False,
+        )
+    return core_reports.report_privacy_mirror(conn, None, None, _report_hooks())
+
+
+def _reports_psbt_privacy_payload(
+    conn: sqlite3.Connection,
+    raw_args: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    args = raw_args or {}
+    unknown = sorted(set(args) - {"psbt"})
+    if unknown:
+        raise AppError(
+            "ui.reports.psbt_privacy received unsupported arguments",
+            code="validation",
+            details={"unknown": unknown},
+            retryable=False,
+        )
+    psbt_text = args.get("psbt")
+    if not isinstance(psbt_text, str) or not psbt_text.strip():
+        raise AppError(
+            "ui.reports.psbt_privacy requires psbt text",
+            code="validation",
+            details={"required": ["psbt"]},
+            retryable=False,
+        )
+    return core_reports.report_psbt_privacy(
+        conn,
+        None,
+        None,
+        _report_hooks(),
+        psbt_text=psbt_text,
+    )
+
+
 def _coerce_positive_int(raw: Any, label: str, *, maximum: int) -> int:
     try:
         value = int(raw)
@@ -3532,6 +3597,12 @@ def _execute_read_only_ai_tool(call: ParsedAiToolCall, runtime: AiToolRuntime) -
                 payload = _reports_tax_summary_payload(conn, call.arguments)
             elif entry.daemon_kind == "ui.reports.balance_history":
                 payload = _reports_balance_history_payload(conn, call.arguments)
+            elif entry.daemon_kind == "ui.reports.privacy_hygiene":
+                payload = _reports_privacy_hygiene_payload(conn, call.arguments)
+            elif entry.daemon_kind == "ui.reports.privacy_mirror":
+                payload = _reports_privacy_mirror_payload(conn, call.arguments)
+            elif entry.daemon_kind == "ui.reports.psbt_privacy":
+                payload = _reports_psbt_privacy_payload(conn, call.arguments)
             elif entry.daemon_kind == "ui.reports.lightning_profitability":
                 # AI surface: aggregate-only profitability (no connection
                 # identifiers, no per-channel rows). See Tier-3 policy in
@@ -4128,6 +4199,27 @@ def _planned_auto_read_tools(validated: dict[str, Any]) -> list[AutoReadToolCall
         "source",
     ):
         add("ui.backends.list")
+
+    if _message_has_any(
+        text,
+        "privacy",
+        "redaction",
+        "redacted",
+        "hygiene",
+        "local-only",
+        "local only",
+        "addresses exposed",
+        "third-party",
+        "third party",
+        "tor",
+        "proxy",
+        "egress",
+        "privatsphäre",
+        "privatsphaere",
+        "datenschutz",
+    ):
+        add("ui.reports.privacy_hygiene")
+        add("ui.reports.privacy_mirror")
 
     transaction_extreme_context = _message_has_any(
         text,
@@ -9759,6 +9851,51 @@ def handle_request(
                 build_envelope(
                     "ui.reports.balance_history",
                     _reports_balance_history_payload(
+                        ctx.conn,
+                        _coerce_args_dict(request_id, request.get("args")),
+                    ),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
+    if kind == "ui.reports.privacy_hygiene":
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.reports.privacy_hygiene",
+                    _reports_privacy_hygiene_payload(
+                        ctx.conn,
+                        _coerce_args_dict(request_id, request.get("args")),
+                    ),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
+    if kind == "ui.reports.privacy_mirror":
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.reports.privacy_mirror",
+                    _reports_privacy_mirror_payload(
+                        ctx.conn,
+                        _coerce_args_dict(request_id, request.get("args")),
+                    ),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
+    if kind == "ui.reports.psbt_privacy":
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.reports.psbt_privacy",
+                    _reports_psbt_privacy_payload(
                         ctx.conn,
                         _coerce_args_dict(request_id, request.get("args")),
                     ),

@@ -187,6 +187,9 @@ const ALLOWED_DAEMON_KINDS: &[&str] = &[
     "ui.reports.portfolio_summary",
     "ui.reports.balance_history",
     "ui.reports.tax_summary",
+    "ui.reports.privacy_hygiene",
+    "ui.reports.privacy_mirror",
+    "ui.reports.psbt_privacy",
     "ui.reports.exit_tax_preview",
     "ui.reports.export_exit_tax_pdf",
     "ui.reports.export_exit_tax_xlsx",
@@ -2907,6 +2910,9 @@ mod tests {
             "ui.reports.portfolio_summary",
             "ui.reports.balance_history",
             "ui.reports.tax_summary",
+            "ui.reports.privacy_hygiene",
+            "ui.reports.privacy_mirror",
+            "ui.reports.psbt_privacy",
             "ui.reports.lightning_profitability",
         ];
         for kind in required {

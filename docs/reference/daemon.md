@@ -142,6 +142,34 @@ will pass through. Reveal kinds (see below) are included in the list but still
 require their own passphrase round-trip before the daemon returns raw secret
 material.
 
+`ui.reports.privacy_hygiene` is a local-only, read-only privacy facts payload
+shared by Settings -> Privacy, `kassiber reports privacy-hygiene`, and the
+assistant read tool `ui_reports_privacy_hygiene`. It performs no network probe,
+does not sync wallets, and does not refresh or mutate journals. Findings carry
+`evidence_level` (`exact`, `derived`, or `unknown`) plus count-only evidence.
+The payload is AI/export-safe by construction: it omits addresses, scripts,
+descriptors, xpubs, backend URLs/tokens, wallet config JSON, raw importer JSON,
+branch/index values, and derivation paths. The desktop Settings screen may
+still show operator-facing endpoint rows through the existing first-party
+backend-settings permission; that richer local UI view is separate from the
+privacy-hygiene payload and is not what the AI tool receives.
+
+`ui.reports.privacy_mirror` is the north-star local privacy report behind the
+Privacy Mirror page, wallet/transaction detail privacy panels,
+`kassiber reports privacy-mirror`, and the assistant read tool
+`ui_reports_privacy_mirror`. It composes the redacted linkage graph and
+privacy-hygiene facts into exposure summary, adversary cards, wallet,
+transaction, UTXO, timeline, coverage, unknown, evidence-drilldown, and
+worst-risk rows. It is local-only, read-only, advisory-only, and carries
+`evidence_level` on every result. The payload uses the same AI/export redaction
+rules as privacy hygiene: no addresses, scripts, descriptors, xpubs, backend
+URLs/tokens, wallet config JSON, raw JSON, branch/index values, or derivation
+paths. `ui.reports.psbt_privacy` is a desktop/CLI local preflight path for raw
+unsigned PSBT text; it is not in the assistant tool catalog, and raw PSBT
+contents must not be exposed to AI. See
+[`privacy-mirror.md`](privacy-mirror.md) for methodology, degraded states,
+redaction, and non-goals.
+
 `ui.transactions.resolve` is the narrow local lookup used by deep links and
 global search: it accepts a Kassiber transaction id or external transaction id
 scoped to the active profile and returns at most one safe transaction display

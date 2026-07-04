@@ -22,6 +22,7 @@ import deJournals from "./locales/de/journals.json";
 import deNav from "./locales/de/nav.json";
 import deOnboarding from "./locales/de/onboarding.json";
 import deOverview from "./locales/de/overview.json";
+import dePrivacyMirror from "./locales/de/privacyMirror.json";
 import deReview from "./locales/de/review.json";
 import deSearch from "./locales/de/search.json";
 import deSettings from "./locales/de/settings.json";
@@ -35,6 +36,7 @@ import enJournals from "./locales/en/journals.json";
 import enNav from "./locales/en/nav.json";
 import enOnboarding from "./locales/en/onboarding.json";
 import enOverview from "./locales/en/overview.json";
+import enPrivacyMirror from "./locales/en/privacyMirror.json";
 import enReview from "./locales/en/review.json";
 import enSearch from "./locales/en/search.json";
 import enSettings from "./locales/en/settings.json";
@@ -51,6 +53,7 @@ export const resources = {
     chrome: enChrome,
     settings: enSettings,
     overview: enOverview,
+    privacyMirror: enPrivacyMirror,
     transactions: enTransactions,
     connections: enConnections,
     journals: enJournals,
@@ -66,6 +69,7 @@ export const resources = {
     chrome: deChrome,
     settings: deSettings,
     overview: deOverview,
+    privacyMirror: dePrivacyMirror,
     transactions: deTransactions,
     connections: deConnections,
     journals: deJournals,

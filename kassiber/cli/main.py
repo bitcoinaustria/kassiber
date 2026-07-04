@@ -2047,12 +2047,18 @@ def build_parser() -> argparse.ArgumentParser:
 
     reports = sub.add_parser("reports")
     reports_sub = reports.add_subparsers(dest="reports_command", required=True)
-    for report_name in ["summary", "tax-summary", "balance-sheet", "portfolio-summary", "capital-gains", "journal-entries"]:
+    for report_name in ["summary", "tax-summary", "balance-sheet", "portfolio-summary", "capital-gains", "journal-entries", "privacy-hygiene", "privacy-mirror"]:
         report = reports_sub.add_parser(report_name)
         report.add_argument("--workspace")
         report.add_argument("--profile")
         if report_name == "summary":
             report.add_argument("--wallet")
+    psbt_privacy = reports_sub.add_parser("psbt-privacy")
+    psbt_privacy.add_argument("--workspace")
+    psbt_privacy.add_argument("--profile")
+    psbt_source = psbt_privacy.add_mutually_exclusive_group(required=True)
+    psbt_source.add_argument("--psbt", help="Base64 PSBT text to analyze locally.")
+    psbt_source.add_argument("--psbt-file", help="Local file containing base64 PSBT text.")
 
     for report_name in ("austrian-e1kv", "austrian-tax-summary"):
         _add_austrian_e1kv_report_args(reports_sub.add_parser(report_name))
@@ -3973,6 +3979,52 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                     conn, args.workspace, args.profile, report_hooks
                 ),
             )
+        if args.reports_command == "privacy-hygiene":
+            payload = core_reports.report_privacy_hygiene(
+                conn,
+                args.workspace,
+                args.profile,
+                report_hooks,
+            )
+            if args.format in {"table", "plain", "csv"}:
+                return emit(
+                    args,
+                    core_reports.privacy_hygiene_table_rows(payload),
+                    kind="reports.privacy-hygiene",
+                )
+            return emit(args, payload)
+        if args.reports_command == "privacy-mirror":
+            payload = core_reports.report_privacy_mirror(
+                conn,
+                args.workspace,
+                args.profile,
+                report_hooks,
+            )
+            if args.format in {"table", "plain", "csv"}:
+                return emit(
+                    args,
+                    core_reports.privacy_mirror_table_rows(payload),
+                    kind="reports.privacy-mirror",
+                )
+            return emit(args, payload, kind="reports.privacy-mirror")
+        if args.reports_command == "psbt-privacy":
+            psbt_text = args.psbt
+            if psbt_text is None:
+                psbt_text = _read_optional_text_file(args.psbt_file, "PSBT")
+            payload = core_reports.report_psbt_privacy(
+                conn,
+                args.workspace,
+                args.profile,
+                report_hooks,
+                psbt_text=psbt_text or "",
+            )
+            if args.format in {"table", "plain", "csv"}:
+                return emit(
+                    args,
+                    core_reports.psbt_privacy_table_rows(payload),
+                    kind="reports.psbt-privacy",
+                )
+            return emit(args, payload, kind="reports.psbt-privacy")
         if args.reports_command == "balance-history":
             return emit(
                 args,

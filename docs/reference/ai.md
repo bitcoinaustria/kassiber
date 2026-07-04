@@ -441,6 +441,23 @@ surfaces:
 - `ui_reports_balance_history` maps to daemon kind
   `ui.reports.balance_history`; it returns processed balance-history buckets
   for trend questions
+- `ui_reports_privacy_hygiene` maps to daemon kind
+  `ui.reports.privacy_hygiene`; it returns the same redacted local-only
+  privacy facts shown by Settings -> Privacy and `kassiber reports
+  privacy-hygiene`, with `evidence_level` on findings and no addresses,
+  scripts, descriptors, xpubs, backend URLs/tokens, wallet config, raw JSON,
+  branch/index values, or derivation paths. The GUI may separately show
+  operator-facing endpoint rows through backend settings permissions; the AI
+  tool receives only this redacted payload.
+- `ui_reports_privacy_mirror` maps to daemon kind
+  `ui.reports.privacy_mirror`; it returns the redacted Privacy Mirror payload
+  used by the dedicated page and `kassiber reports privacy-mirror`, including
+  exposure summary, adversary cards, wallet/transaction/UTXO views, timeline,
+  coverage, unknowns, evidence drilldowns, and the computed worst local privacy
+  risk. It is read-only, local-only, advisory-only, and every result carries
+  `evidence_level`. The AI tool does not receive raw PSBT text; PSBT preflight
+  is reduced locally in the GUI/CLI before any assistant-facing summary can be
+  discussed. See [`privacy-mirror.md`](privacy-mirror.md).
 - `ui_journals_snapshot` maps to daemon kind `ui.journals.snapshot`; recent
   rows include reviewed pair context for swap/peg journal rows when available
 - `ui_journals_quarantine` maps to daemon kind `ui.journals.quarantine`

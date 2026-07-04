@@ -228,6 +228,15 @@ descriptors, private keys, recovery phrases, API keys, passwords, and bearer
 tokens. Report security-impacting issues to the maintainer privately, not in
 the public tracker.
 
+For the north-star local privacy view, open Privacy Mirror or run
+`kassiber reports privacy-mirror`. It shows what is linkable, who can infer it,
+what proves it, what is unknown, and what a future spend would worsen. The
+posture-only snapshot remains available with `kassiber reports privacy-hygiene`
+and Settings -> Privacy. GUI, CLI, and assistant read tools share redacted facts
+with `evidence_level`, without addresses, scripts, descriptors, xpubs, backend
+URLs/tokens, wallet config, raw JSON, branch/index values, or derivation paths.
+See [Privacy Mirror](docs/reference/privacy-mirror.md).
+
 ## Contributing & license
 
 Read [CONTRIBUTING.md](CONTRIBUTING.md); run `./scripts/quality-gate.sh`
