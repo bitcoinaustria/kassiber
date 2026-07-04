@@ -334,6 +334,166 @@
     "offerBiometricDescription": "Merke dir die Präferenz für biometrisches Entsperren dieses Geräts zwischen den Sitzungen."
   },
   "privacy": {
+    "scoreHeading": "Privacy-Signale",
+    "scoreDescription": "Lokale, beratende Signale aus synchronisierten Transaktionsformen und Wallet-UTXOs. Keine öffentliche Abfrage, Entity-Abfrage oder Buchhaltungsänderung.",
+    "scoreLoading": "Lokale Privacy-Signale werden geprüft...",
+    "scoreUnavailable": "Privacy-Signale sind nicht verfügbar.",
+    "scoreLocalOnly": "Nur lokal",
+    "scoreSummary": "{{wallets}} Wallets · {{transactions}} Transaktionen nur mit lokalen Daten geprüft",
+    "scoreTopFindings": "Signale und Unbekanntes",
+    "scoreNoFindings": "Noch keine lokalen Signale in den verfügbaren Daten.",
+    "scoreWallets": "Wallet-Rollup",
+    "scoreTransactions": "Transaktionen zum Prüfen",
+    "scoreNoWallets": "In diesem Buch gibt es noch keine Wallets.",
+    "scoreNoTransactions": "In diesem Buch gibt es noch keine Transaktionen.",
+    "scoreWalletMeta": "{{txs}} Tx · {{utxos}} aktive UTXOs",
+    "scoreReuse": "{{count}} wiederverwendete Adressen",
+    "scoreDust": "{{count}} Dust-UTXOs",
+    "unknownCount": "{{count}} Unbekannte",
+    "summaryRisks": "Risikosignale",
+    "summaryUnknowns": "Unbekannt",
+    "summaryWallets": "Wallets",
+    "riskLevel": {
+      "none": "Keine lokalen Risikosignale",
+      "low": "Niedrige Risikosignale",
+      "medium": "Mittlere Risikosignale",
+      "high": "Hohe Risikosignale",
+      "critical": "Kritische Risikosignale"
+    },
+    "evidence": {
+      "ground_truth": "Fakt",
+      "reviewed": "Geprüft",
+      "imported": "Importiert",
+      "heuristic": "Heuristik",
+      "unavailable": "Nicht verfügbar"
+    },
+    "scoreState": {
+      "full": "Volle lokale Abdeckung",
+      "partial": "Teilweise lokale Abdeckung",
+      "address_only": "Nur Adressebene",
+      "not_analysable": "Nicht analysierbar",
+      "not_enough_data": "Nicht genug Daten",
+      "no_wallets": "Keine Wallets",
+      "no_active_profile": "Kein aktives Buch"
+    },
+    "coverage": {
+      "full": "Volle Tx-Scans",
+      "partial": "Teilweise Tx-Scans",
+      "notAnalysable": "Nicht analysierbar",
+      "activeUtxos": "Aktive UTXOs"
+    },
+    "findings": {
+      "address_reuse": {
+        "title": "Adresswiederverwendung",
+        "detail": "{{count}} wiederverwendete Adressgruppen gefunden.",
+        "remediation": "Prüfe den Empfangsadress-Kontext und halte betroffene Zeilen beschriftet; Kassiber ändert aus diesem Signal keinen Wallet-Zustand."
+      },
+      "change_position_fingerprint": {
+        "title": "Change-Positionsmuster",
+        "detail": "{{count}} Transaktion hat eigene Change an einer vorhersehbaren Kante.",
+        "remediation": "Behandle dies als beratenden Change-Kontext und bestätige die Absicht über First-Party-Wallet-Unterlagen."
+      },
+      "change_type_fingerprint": {
+        "title": "Change-Typ-Mismatch",
+        "detail": "{{count}} Transaktion verrät wahrscheinliche Change über den Script-Typ.",
+        "remediation": "Prüfe den Script-Typ-Mismatch nur als Kontext; Steuer-, Saldo- oder Transferzustand wird nicht geändert."
+      },
+      "coin_anonymity_evidence": {
+        "title": "Importierter Anonymitätsnachweis",
+        "detail": "{{count}} UTXOs tragen importierte Anonymitätsnachweise.",
+        "remediation": "Halte den importierten Wallet-Nachweis fest und behandle ihn als Grenzkontext, nicht als Beweis für einen vollständigen Privacy-Graphen."
+      },
+      "coinjoin_pattern": {
+        "title": "CoinJoin-Muster",
+        "detail": "{{count}} Equal-Output-Teilnehmer oder importierter CoinJoin-Nachweis.",
+        "remediation": "Dokumentiere die CoinJoin-Grenze lokal und leite daraus kein Eigentum fremder Teilnehmer ab."
+      },
+      "common_input_ownership": {
+        "title": "Common-Input-Link",
+        "detail": "{{count}} Inputs werden durch die Transaktion verknüpft.",
+        "remediation": "Nutze dies nur als beratendes Common-Input-Signal; bestätige Eigentum mit First-Party-Wallet-Nachweisen, bevor du dich darauf stützt."
+      },
+      "dust_utxo_exposure": {
+        "title": "Dust-UTXOs",
+        "detail": "{{count}} aktive Dust-Outputs erhöhen Review-Rauschen.",
+        "remediation": "Beschrifte oder prüfe die Herkunft kleiner Outputs, wenn sie relevant ist; Kassiber lässt Salden und UTXO-Zustand unverändert."
+      },
+      "large_utxo_set": {
+        "title": "Großes UTXO-Set",
+        "detail": "{{count}} aktive UTXOs sind im lokalen Inventar sichtbar.",
+        "remediation": "Nutze die Anzahl als Review-Kontext für das Wallet-Inventar; daraus folgt keine Spending- oder Konsolidierungsberatung."
+      },
+      "legacy_address_type": {
+        "title": "Legacy-Script-Typ",
+        "detail": "{{count}} Outputs nutzen ältere Adresstypen.",
+        "remediation": "Halte dies als ältere Script-Typ-Beobachtung fest; es ist weder eine Buchhaltungsaktion noch ein Privacy-Urteil."
+      },
+      "op_return_metadata": {
+        "title": "OP_RETURN-Metadaten",
+        "detail": "{{count}} Outputs veröffentlichen permanente Metadaten.",
+        "remediation": "Prüfe den Transaktionskontext mit dem Wissen, dass permanente Metadaten existieren; Kassiber untersucht oder ergänzt keine externen Entities."
+      },
+      "payjoin_boundary": {
+        "title": "PayJoin-Grenze",
+        "detail": "{{count}} importierte oder geprüfte PayJoin-Grenze bricht einfache Input-Zuordnung.",
+        "remediation": "Halte die PayJoin-Grenze lokal dokumentiert; Kassiber überschreitet sie nicht und leitet keinen Counterparty-Graphen ab."
+      },
+      "rbf_signal": {
+        "title": "RBF-Signal",
+        "detail": "{{count}} Inputs nutzen Replace-by-Fee-Signaling.",
+        "remediation": "Behandle Replace-by-Fee-Signaling nur als Transaktionsform-Kontext."
+      },
+      "round_fee_rate": {
+        "title": "Runde Fee-Rate",
+        "detail": "{{count}} Transaktion nutzt einen runden Fee-Rate-Fingerabdruck.",
+        "remediation": "Behandle die gerundete Fee-Rate als schwaches Wallet-Form-Signal und prüfe First-Party-Unterlagen, falls es relevant ist."
+      },
+      "round_output_amount": {
+        "title": "Runder Output-Betrag",
+        "detail": "{{count}} Outputs sehen wie manuell eingegebene Zahlungsbeträge aus.",
+        "remediation": "Halte den runden Betrag als Zahlungsform-Kontext fest; füge Rechnung oder Counterparty-Unterlagen hinzu, wenn die Unterscheidung relevant ist."
+      },
+      "script_type_mix": {
+        "title": "Gemischte Script-Typen",
+        "detail": "{{count}} Script-Familien erscheinen in einer Transaktion.",
+        "remediation": "Prüfe gemischte Script-Familien als lokales Transaktionsform-Signal, nicht als Eigentumsbeweis."
+      },
+      "taproot_usage": {
+        "title": "Taproot-Nutzung",
+        "detail": "{{count}} Taproot-Outputs sind in den lokalen Daten sichtbar.",
+        "remediation": "Behandle Taproot-Nutzung als lokale Script-Typ-Beobachtung; sie ist keine dauerhafte Privacy-Garantie."
+      },
+      "transaction_coverage_gap": {
+        "title": "Abdeckungslücke",
+        "detail": "{{count}} Transaktionen haben keine lokalen vin/vout-Details.",
+        "remediation": "Importiere oder synchronisiere lokale vin/vout-Details, wenn du diese Transaktion analysieren willst; sonst bleibt die Lücke explizit."
+      },
+      "transaction_not_analysable": {
+        "title": "Kein lokaler Tx-Graph",
+        "detail": "{{count}} Transaktion hat keinen lokalen vin/vout-Graphen für die Analyse.",
+        "remediation": "Lass diese Transaktion unbekannt, sofern keine lokalen First-Party-Transaktionsgraphdaten importiert oder synchronisiert werden."
+      },
+      "unnecessary_input_heuristic": {
+        "title": "Unnecessary-Input-Signal",
+        "detail": "{{count}} Outputs hätten ohne jeden Input finanziert werden können.",
+        "remediation": "Behandle dies als beratendes Input-Form-Signal und prüfe den Source-Wallet-Datensatz, bevor du dich darauf stützt."
+      },
+      "wallet_fingerprint_locktime": {
+        "title": "nLockTime-Fingerabdruck",
+        "detail": "{{count}} Transaktion trägt eine wallet-typische Locktime.",
+        "remediation": "Nutze das Locktime-Muster nur als schwachen Wallet-Fingerprint-Kontext."
+      },
+      "wallet_fingerprint_version": {
+        "title": "Versions-Fingerabdruck",
+        "detail": "{{count}} Transaktion nutzt eine ungewöhnliche Version.",
+        "remediation": "Nutze das Versionsmuster nur als schwachen Wallet-Fingerprint-Kontext."
+      },
+      "wallet_fingerprint_witness": {
+        "title": "Witness-Fingerabdruck",
+        "detail": "{{count}} Inputs teilen dieselbe Witness-Form.",
+        "remediation": "Nutze das Witness-Form-Muster nur als schwachen Wallet-Fingerprint-Kontext."
+      }
+    },
     "exposure": {
       "firstParty": "Eigen",
       "firstPartyHint": "Auf deinem Gerät oder einer Infrastruktur, die du betreibst",

@@ -6,6 +6,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import {
   TransactionFlowDiagram,
   TransactionGraphPanel,
+  TransactionInputsOutputsPanel,
   compactGraphRows,
   nodeTooltipTitle,
   sensitiveGraphText,
@@ -31,6 +32,7 @@ const graph: TransactionGraphPayload = {
     wallet: "Cold Storage",
     ownership: "owned",
     role: "input",
+    scriptType: index === 0 ? "witness_v1_taproot" : undefined,
     annotations: [{ code: "owned_input", label: "Owned wallet" }],
   })),
   outputs: [
@@ -445,8 +447,9 @@ describe("TransactionFlowDiagram", () => {
     expect(html).not.toContain("Value not stored");
     expect(html).not.toContain("FEE RATE");
     expect(html).not.toContain("SIZE");
-    expect(html).not.toContain("Inputs</div>");
-    expect(html).not.toContain("Outputs</div>");
+    expect(html).toContain("Inputs &amp; outputs");
+    expect(html).toContain("Inputs");
+    expect(html).toContain("Outputs");
   });
 
   it("renders unknown and confidential values as bowtie strands", () => {
@@ -523,7 +526,107 @@ describe("TransactionFlowDiagram", () => {
   });
 });
 
+describe("TransactionInputsOutputsPanel", () => {
+  it("renders detailed inputs and outputs with spending indicators", () => {
+    const html = renderToStaticMarkup(
+      <TooltipProvider>
+        <TransactionInputsOutputsPanel graph={graph} hideSensitive={false} />
+      </TooltipProvider>,
+    );
+
+    expect(html).toContain('data-testid="transaction-inputs-outputs-panel"');
+    expect(html).toContain("Inputs &amp; outputs");
+    expect(html).toContain('aria-label="Spent input"');
+    expect(html).toContain('aria-label="Created output"');
+    expect(html).toContain("bc1qrecipi...000000");
+    expect(html).toContain("Total");
+    expect(html).not.toContain("Known total");
+    expect(html).toContain("taproot");
+    expect(html).not.toContain("witness v1 taproot");
+    expect(html).toContain("Open bc1qrecipi...000000 in mempool.bitcoin-austria.at");
+  });
+
+  it("collapses large input and output lists behind an expandable control", () => {
+    const largeGraph: TransactionGraphPayload = {
+      ...graph,
+      outputs: Array.from({ length: 10 }, (_, index) => ({
+        id: `out-${index}`,
+        outpoint: `${"a".repeat(64)}:${index}`,
+        address: `bc1qrecipient${index
+          .toString()
+          .padStart(2, "0")}0000000000000000${index.toString().padStart(6, "0")}`,
+        valueSats: 10_000,
+        valueBtc: 0.0001,
+        ownership: "external",
+        role: "external_recipient",
+      })),
+    };
+    const html = renderToStaticMarkup(
+      <TooltipProvider>
+        <TransactionInputsOutputsPanel graph={largeGraph} hideSensitive={false} />
+      </TooltipProvider>,
+    );
+
+    expect(html).toContain("Show all 2 more");
+    expect(html).toContain("bc1qrecipi...000000");
+    expect(html).not.toContain("bc1qrecipi...000009");
+  });
+
+  it("uses a known total label only when some values are unavailable", () => {
+    const partial: TransactionGraphPayload = {
+      ...graph,
+      outputs: [
+        ...graph.outputs,
+        {
+          id: "out-missing",
+          address: "bc1qmissing000000000000000000000000000000",
+          valueSats: null,
+          valueBtc: null,
+          valueState: "missing",
+          role: "external_recipient",
+          ownership: "external",
+        },
+      ],
+    };
+    const html = renderToStaticMarkup(
+      <TooltipProvider>
+        <TransactionInputsOutputsPanel graph={partial} hideSensitive={false} />
+      </TooltipProvider>,
+    );
+
+    expect(html).toContain("Known total");
+  });
+
+  it("redacts input and output references in hidden-sensitive mode", () => {
+    const html = renderToStaticMarkup(
+      <TooltipProvider>
+        <TransactionInputsOutputsPanel graph={graph} hideSensitive />
+      </TooltipProvider>,
+    );
+
+    expect(html).toContain("Hidden");
+    expect(html).toContain("sensitive");
+    expect(html).not.toContain("bc1qrecipient");
+    expect(html).not.toContain("abcdef0123456789abcdef");
+    expect(html).not.toContain("Cold Storage");
+  });
+});
+
 describe("TransactionGraphPanel", () => {
+  it("places the inputs and outputs detail below the flow diagram", () => {
+    const html = renderToStaticMarkup(
+      <TooltipProvider>
+        <TransactionGraphPanel graph={graph} hideSensitive={false} />
+      </TooltipProvider>,
+    );
+
+    expect(html.indexOf('data-testid="transaction-flow-diagram"')).toBeGreaterThan(-1);
+    expect(html.indexOf('data-testid="transaction-inputs-outputs-panel"')).toBeGreaterThan(-1);
+    expect(html.indexOf('data-testid="transaction-inputs-outputs-panel"')).toBeGreaterThan(
+      html.indexOf('data-testid="transaction-flow-diagram"'),
+    );
+  });
+
   it("renders paired swap route context above the single transaction graph", () => {
     const withRoute: TransactionGraphPayload = {
       ...graph,

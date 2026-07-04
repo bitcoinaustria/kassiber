@@ -248,6 +248,35 @@ class OwnershipDeriverTests(unittest.TestCase):
         self.assertEqual({p["in"]["id"] for p in result.derived_pairs}, {"b-in", "c-in"})
         self.assertEqual(result.dropped_out_ids, {"a-out"})
 
+    def test_fanout_net_of_fee_core_row_uses_total_outflow_capacity(self):
+        # Bitcoin Core wallet details can record the outbound amount net of the
+        # fee while the decoded graph still shows the full owned outputs. The
+        # deriver must compare against amount + fee, then avoid assigning a
+        # second fee that would over-debit the source row.
+        out = _outbound(
+            row_id="a-out",
+            wallet_id="A",
+            amount_sats=79_998_000,
+            fee_sats=2_000,
+            txid="real-txid",
+            input_scripts=[SCRIPT["A"]],
+            outputs=[(SCRIPT["B"], 50_000_000), (SCRIPT["C"], 30_000_000)],
+        )
+        b_in = _inbound(row_id="b-in", wallet_id="B", amount_sats=50_000_000, txid="real-txid")
+        c_in = _inbound(row_id="c-in", wallet_id="C", amount_sats=30_000_000, txid="real-txid")
+        result = self._run(
+            [out, b_in, c_in],
+            {SCRIPT["A"]: ("A", "A"), SCRIPT["B"]: ("B", "B"), SCRIPT["C"]: ("C", "C")},
+            _refs("B", "C"),
+        )
+        self.assertEqual(len(result.derived_pairs), 2)
+        self.assertEqual(sorted(pair["out"]["fee"] for pair in result.derived_pairs), [0, 0])
+        self.assertEqual(
+            sum(pair["out"]["amount"] + pair["out"]["fee"] for pair in result.derived_pairs),
+            (79_998_000 + 2_000) * SATS,
+        )
+        self.assertEqual(result.dropped_out_ids, {"a-out"})
+
     def test_multiple_outputs_to_same_wallet_aggregate_to_one_leg(self):
         # A wallet that receives two outputs in one tx records a single inbound
         # row of their combined value, so the deriver must aggregate per dest.

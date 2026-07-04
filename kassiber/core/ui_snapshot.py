@@ -1328,6 +1328,83 @@ def _transaction_pair_display_meta(
         }
         pair_meta[pair["out_transaction_id"]] = {**base, "role": "out"}
         pair_meta[pair["in_transaction_id"]] = {**base, "role": "in"}
+    for transaction_id, meta in _journal_transfer_display_meta(conn, rows).items():
+        pair_meta.setdefault(transaction_id, meta)
+    return pair_meta
+
+
+def _journal_transfer_display_meta(
+    conn: sqlite3.Connection,
+    rows: list[sqlite3.Row],
+) -> dict[str, dict[str, Any]]:
+    ids = [row["id"] for row in rows]
+    if not ids:
+        return {}
+    placeholders = ", ".join("?" for _ in ids)
+    transfer_rows = conn.execute(
+        f"""
+        SELECT
+            jin.id AS in_entry_id,
+            jout.id AS out_entry_id,
+            jin.transaction_id AS in_transaction_id,
+            jout.transaction_id AS out_transaction_id,
+            jin.asset AS asset,
+            ABS(jout.quantity) AS out_amount,
+            ABS(jin.quantity) AS in_amount,
+            tin.fiat_rate AS in_fiat_rate,
+            tout.fiat_rate AS out_fiat_rate,
+            win.label AS in_wallet,
+            wout.label AS out_wallet
+        FROM journal_entries jin
+        JOIN journal_entries jout
+          ON jout.profile_id = jin.profile_id
+         AND jout.entry_type = 'transfer_out'
+         AND jout.occurred_at = jin.occurred_at
+         AND jout.asset = jin.asset
+         AND jout.description = jin.description
+         AND ABS(jout.quantity) = ABS(jin.quantity)
+        JOIN wallets win ON win.id = jin.wallet_id
+        JOIN wallets wout ON wout.id = jout.wallet_id
+        LEFT JOIN transactions tin ON tin.id = jin.transaction_id
+        LEFT JOIN transactions tout ON tout.id = jout.transaction_id
+        WHERE jin.entry_type = 'transfer_in'
+          AND jin.transaction_id IN ({placeholders})
+        ORDER BY jin.occurred_at ASC, jin.id ASC
+        """,
+        ids,
+    ).fetchall()
+    pair_meta: dict[str, dict[str, Any]] = {}
+    for pair in transfer_rows:
+        in_transaction_id = str(pair["in_transaction_id"])
+        if in_transaction_id in pair_meta:
+            continue
+        raw_display_rate = (
+            pair["out_fiat_rate"]
+            if pair["out_fiat_rate"] is not None
+            else pair["in_fiat_rate"]
+        )
+        pair_meta[in_transaction_id] = {
+            "pair_id": f"journal-transfer:{pair['out_entry_id']}:{pair['in_entry_id']}",
+            "out_transaction_id": pair["out_transaction_id"],
+            "in_transaction_id": pair["in_transaction_id"],
+            "pair_type": "transfer",
+            "kind": "journal-derived",
+            "policy": "carrying-value",
+            "label": "Transfer",
+            "counter": f"Transfer {pair['out_wallet']} -> {pair['in_wallet']}",
+            "account": f"{pair['out_wallet']} -> {pair['in_wallet']}",
+            "fee_msat": 0,
+            "fee_kind": None,
+            "out_asset": pair["asset"],
+            "out_amount_msat": int(pair["out_amount"] or 0),
+            "out_wallet": pair["out_wallet"],
+            "in_asset": pair["asset"],
+            "in_amount_msat": int(pair["in_amount"] or 0),
+            "in_wallet": pair["in_wallet"],
+            "tag": "Transfer",
+            "display_rate": _positive_float_or_none(raw_display_rate),
+            "role": "in",
+        }
     return pair_meta
 
 

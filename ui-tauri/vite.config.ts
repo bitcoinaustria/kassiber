@@ -140,6 +140,7 @@ const ALLOWED_BRIDGE_KINDS = new Set([
   "ui.next_actions",
   "ui.review.badges",
   "ui.wallets.utxos",
+  "ui.privacy_hygiene.snapshot",
   "ui.loans.list",
   "ui.loans.link",
   "ui.loans.mark",

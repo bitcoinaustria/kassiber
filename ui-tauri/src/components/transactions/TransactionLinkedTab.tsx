@@ -40,6 +40,7 @@ export function TransactionLinkedTab({ ctx }: { ctx: TransactionDetailTabContext
     journalEvents,
     hideSensitive,
   } = ctx;
+  const canUnpairPair = Boolean(onUnpair) && pair?.kind !== "journal-derived";
   return (
     <>
                   {/* Linked — pairs, source-of-funds, journal entries */}
@@ -62,16 +63,18 @@ export function TransactionLinkedTab({ ctx }: { ctx: TransactionDetailTabContext
                               </Badge>
                             ) : null}
                           </div>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            className="h-7 px-2 text-xs text-muted-foreground"
-                            disabled={!onUnpair || isUnpairing}
-                            onClick={() => onUnpair?.(pair.id)}
-                          >
-                            {isUnpairing ? t("linked.unpairing") : t("linked.unpair")}
-                          </Button>
+                          {canUnpairPair ? (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 px-2 text-xs text-muted-foreground"
+                              disabled={isUnpairing}
+                              onClick={() => onUnpair?.(pair.id)}
+                            >
+                              {isUnpairing ? t("linked.unpairing") : t("linked.unpair")}
+                            </Button>
+                          ) : null}
                         </div>
                         <LedgerRow
                           label={t("linked.outWallet")}

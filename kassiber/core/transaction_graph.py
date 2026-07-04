@@ -14,6 +14,7 @@ from collections import defaultdict
 from typing import Any, Mapping, NamedTuple, Sequence
 
 from ..backends import (
+    BACKEND_CONFIG_FIELDS,
     DEFAULT_BACKEND_SETTING,
     DEFAULT_BACKENDS,
     _http_url_base,
@@ -1227,6 +1228,9 @@ def _graph_backend_from_mapping(name: str, backend: Mapping[str, Any]) -> dict[s
         "certificate": backend.get("certificate"),
         "insecure": backend.get("insecure"),
     }
+    for key in BACKEND_CONFIG_FIELDS:
+        if key in backend and backend.get(key) is not None:
+            candidate[key] = backend.get(key)
     if isinstance(config, Mapping):
         candidate.update(config)
     return candidate
