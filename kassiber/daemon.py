@@ -114,6 +114,7 @@ from .core import imports as core_imports
 from . import importers as importers_module
 from .core import maintenance as core_maintenance
 from .core import metadata as core_metadata
+from .core import privacy_hygiene as core_privacy_hygiene
 from .core import rates as core_rates
 from .core import wallets as core_wallets
 from .core.repo import current_context_snapshot, resolve_wallet as core_resolve_wallet
@@ -283,6 +284,7 @@ SUPPORTED_KINDS = (
     "ui.attachments.open",
     "ui.wallets.list",
     "ui.wallets.utxos",
+    "ui.privacy_hygiene.snapshot",
     "ui.wallets.identify",
     "ui.wallets.identify_onchain",
     "ui.loans.list",
@@ -9466,6 +9468,21 @@ def handle_request(
                     build_wallet_utxos_snapshot(
                         ctx.conn,
                         ctx.runtime_config,
+                        request.get("args"),
+                    ),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
+    if kind == "ui.privacy_hygiene.snapshot":
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.privacy_hygiene.snapshot",
+                    core_privacy_hygiene.build_privacy_hygiene_snapshot(
+                        ctx.conn,
                         request.get("args"),
                     ),
                 ),

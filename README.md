@@ -211,6 +211,10 @@ overview.
 Before pointing Kassiber at real wallets, read [SECURITY.md](SECURITY.md) —
 it covers built-in backend trust, the SQLCipher boundary, AI provider
 tiers, and the incomplete Tor story.
+The desktop Privacy & security panel also includes local privacy tells for
+synced wallets and transactions. It uses already-stored transaction and UTXO
+data, reports risks and unknowns as advisory context, and does not query public
+explorers or mutate accounting state from privacy heuristics.
 
 For public bug reports, run `kassiber diagnostics collect` (or
 `--diagnostics-out auto` on a failing command) — the output is safe to
