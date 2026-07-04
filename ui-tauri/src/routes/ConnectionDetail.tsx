@@ -179,7 +179,8 @@ const PLAINTEXT_DELETE_ACK = "DELETE LOCAL DATA";
 const PLAINTEXT_REVEAL_ACK = "COPY LOCAL SECRET";
 const CLEAR_BACKEND_SELECTION = "__kassiber_clear_backend__";
 const DESCRIPTOR_REVEAL_KIND = "wallets.reveal_descriptor";
-const RECENT_TRANSACTION_PREVIEW_LIMIT = 12;
+const RECENT_TRANSACTION_PREVIEW_LIMIT = 100;
+const RECENT_TRANSACTION_SKELETON_COUNT = 12;
 
 interface UpdateWalletResult {
   wallet: {
@@ -1822,20 +1823,13 @@ function ConnectionDetailView({
 
       <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1.35fr)_minmax(360px,0.85fr)]">
         <Card>
-          <CardHeader className="border-b px-4 pb-3">
+          <CardHeader className="border-b px-4 py-2.5">
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0">
                 <CardTitle className="flex items-center gap-2 text-sm sm:text-base">
                   {t("detail.recentTransactions.title")}
                   <CountBadge>{txCount.toLocaleString("en-US")}</CountBadge>
                 </CardTitle>
-                <CardDescription>
-                  {txCount > txsForConnection.length
-                    ? t("detail.recentTransactions.showingRecent", {
-                        count: txsForConnection.length,
-                      })
-                    : t("detail.recentTransactions.recent")}
-                </CardDescription>
               </div>
               {txCount > 0 ? (
                 <Button
@@ -1861,7 +1855,7 @@ function ConnectionDetailView({
             {walletTransactionsLoading ? (
               <div className="divide-y">
                 {Array.from(
-                  { length: RECENT_TRANSACTION_PREVIEW_LIMIT },
+                  { length: RECENT_TRANSACTION_SKELETON_COUNT },
                   (_, index) => (
                     <div
                       key={index}
@@ -1881,7 +1875,7 @@ function ConnectionDetailView({
                 )}
               </div>
             ) : txsForConnection.length ? (
-              <div className="divide-y">
+              <div className="max-h-[560px] min-h-0 overflow-auto divide-y">
                 {txsForConnection.map((tx) => (
                   <ConnectionTransactionRow
                     key={tx.id}

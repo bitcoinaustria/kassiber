@@ -613,15 +613,6 @@ export const BtcActivityChart = ({
         selectedChartDisplayData.at(-1) ??
         null)
       : null;
-    const selectedPointIndex = selectedPoint
-      ? selectedChartDisplayData.findIndex(
-          (point) => point.date === selectedPoint.date,
-        )
-      : -1;
-    const previousPoint =
-      selectedPointIndex > 0
-        ? selectedChartDisplayData[selectedPointIndex - 1]
-        : null;
     const handleExpandedChartMove = (state: PortfolioChartMouseState) => {
       if (!expanded) return;
       const point = state.activePayload?.find((item) => item.payload)?.payload;
@@ -693,7 +684,7 @@ export const BtcActivityChart = ({
         />
         <div className="flex flex-wrap items-start justify-between gap-2">
           <div
-            className="min-w-0"
+            className="min-w-[220px]"
             aria-label={t("treasury.chartLabel")}
           >
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
@@ -795,7 +786,12 @@ export const BtcActivityChart = ({
             )}
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
+          <div
+            className={cn(
+              "flex min-w-0 flex-wrap items-start justify-end gap-2",
+              expanded && "flex-1",
+            )}
+          >
             {!expanded && (
               <DialogTrigger asChild>
                 <Button
@@ -809,16 +805,26 @@ export const BtcActivityChart = ({
               </DialogTrigger>
             )}
             {expanded && (
-              <DialogClose asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="size-8"
-                  aria-label={t("treasury.closeChart")}
-                >
-                  <X className="size-4" aria-hidden="true" />
-                </Button>
-              </DialogClose>
+              <>
+                <PortfolioInspector
+                  point={selectedPoint}
+                  hideSensitive={hideSensitive}
+                  priceEur={fiatRate}
+                  fiatCurrency={fiatCurrency}
+                  variant="header"
+                  className="max-w-[calc(100vw-5.5rem)] xl:max-w-[920px]"
+                />
+                <DialogClose asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="size-8 shrink-0"
+                    aria-label={t("treasury.closeChart")}
+                  >
+                    <X className="size-4" aria-hidden="true" />
+                  </Button>
+                </DialogClose>
+              </>
             )}
           </div>
         </div>
@@ -1004,16 +1010,6 @@ export const BtcActivityChart = ({
                     dataKey="eventSize"
                     range={[80, expanded ? 620 : 480]}
                   />
-                  {expanded && selectedPoint && (
-                    <ReferenceLine
-                      yAxisId="btc"
-                      x={selectedPoint.date}
-                      stroke={chartColors.focus}
-                      strokeDasharray="2 3"
-                      strokeOpacity={0.5}
-                      strokeWidth={1.5}
-                    />
-                  )}
                   {lastBalanceValue !== null && (
                     <ReferenceLine
                       yAxisId="btc"
@@ -1286,20 +1282,6 @@ export const BtcActivityChart = ({
               onOpenMoreSettings={() => setControlsOpen(true)}
             />
           </div>
-          {expanded && (
-            // Floats over the chart top-right (TradingView-style panel) on
-            // wide screens; stacks below the chart where it would obstruct.
-            <div className="min-h-0 xl:absolute xl:top-0 xl:right-0 xl:z-20 xl:max-h-full xl:w-[300px]">
-              <PortfolioInspector
-                point={selectedPoint}
-                previousPoint={previousPoint}
-                hideSensitive={hideSensitive}
-                priceEur={fiatRate}
-                fiatCurrency={fiatCurrency}
-                chartCurrency={currency}
-              />
-            </div>
-          )}
             </div>
           </>
         ) : (

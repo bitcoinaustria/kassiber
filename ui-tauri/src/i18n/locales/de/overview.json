@@ -252,10 +252,7 @@
     "filterByStatus": "Nach Status filtern",
     "allStatuses": "Alle Status",
     "empty": "Keine Transaktionen gefunden.",
-    "unassigned": "Nicht zugeordnet",
-    "rangeOfTotal": "{{start}}-{{end}} von {{total}}",
-    "previousPage": "Zur vorherigen Seite",
-    "nextPage": "Zur nächsten Seite"
+    "unassigned": "Nicht zugeordnet"
   },
   "txStatus": {
     "confirmed": "Bestätigt",
@@ -311,7 +308,7 @@
     "series": {
       "bitcoinBalance": "Bitcoin-Guthaben",
       "btcPrice": "BTC-Kurs",
-      "avgBasis": "Ø Anschaffungskosten",
+      "avgBasis": "Ø Kosten / BTC",
       "activity": "Aktivität"
     },
     "chartLabel": "BTC-Aktivitätsdiagramm",
@@ -344,13 +341,13 @@
     "btcPrice": "BTC-Kurs",
     "fee": "Gebühr",
     "positionAfter": "Position danach",
-    "avgBasisAfter": "Ø Anschaffungskosten danach",
+    "avgBasisAfter": "Ø Kosten / BTC danach",
     "status": "Status",
     "confirmations_one": "{{count}} Bestätigung",
     "confirmations_other": "{{count}} Bestätigungen",
     "unknown": "Unbekannt",
     "btcBalance": "BTC-Guthaben",
-    "avgBasis": "Ø Anschaffungskosten",
+    "avgBasis": "Ø Kosten / BTC",
     "unrealized": "Unrealisiert",
     "volume": "{{value}} Volumen"
   },
@@ -388,10 +385,8 @@
     "noDateSelected": "Kein Datum ausgewählt",
     "value": "Wert",
     "btc": "BTC",
-    "costBasis": "Anschaffungskosten",
+    "costBasis": "Gesamtkostenbasis",
     "unrealized": "Unrealisiert",
-    "sincePrevious": "Seit dem vorherigen Datum",
-    "startOfRange": "Beginn des ausgewählten Zeitraums",
     "collapseAria": "Panel einklappen",
     "expandAria": "Panel ausklappen"
   },

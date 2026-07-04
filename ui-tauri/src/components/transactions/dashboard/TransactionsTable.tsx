@@ -1073,6 +1073,7 @@ const TransactionsTable = ({
         const previousCardRect =
           tableHost?.previousElementSibling?.getBoundingClientRect();
         const dashboardShell = tableHost?.parentElement;
+        const dashboardShellRect = dashboardShell?.getBoundingClientRect();
         const appMainRect = appMain.getBoundingClientRect();
         const appMainStyle = window.getComputedStyle(appMain);
         const appMainPaddingBottom =
@@ -1084,15 +1085,19 @@ const TransactionsTable = ({
           ? Math.max(0, tableRect.top - previousCardRect.bottom)
           : 12;
         const bottomGap = isExpanded
-          ? stackGap
+          ? 8
           : stackGap - dashboardShellPaddingBottom;
         const minHeight = Math.floor(window.innerHeight * 0.8);
         // In normal mode AppShell reserves scrollable bottom padding for the
         // assistant dock. Pull the card edge through that padding so the page
         // does not end in blank canvas below the table; expanded mode
         // suppresses the dock at the shell level.
+        const availableBottom =
+          isExpanded && dashboardShellRect
+            ? dashboardShellRect.bottom - dashboardShellPaddingBottom
+            : appMainRect.bottom;
         const availableHeight = Math.floor(
-          appMainRect.bottom - tableRect.top - bottomGap,
+          availableBottom - tableRect.top - bottomGap,
         );
         const nextHeight = Math.max(minHeight, availableHeight);
         const nextMarginBottom = isExpanded

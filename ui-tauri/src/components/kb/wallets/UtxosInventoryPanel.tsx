@@ -4,6 +4,7 @@ import {
   useState,
   type KeyboardEvent,
   type ReactNode,
+  type UIEvent,
 } from "react";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
@@ -28,7 +29,6 @@ import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
@@ -147,9 +147,8 @@ type UtxoSortValue =
   | "outpoint-desc";
 type SortableUtxoColumn = "outpoint" | "amount" | "status" | "confirmed";
 
-// Render in pages so wallets with hundreds of coins stay responsive — the
-// header total stays accurate (it sums the full set server-side) regardless of
-// how many rows are currently revealed.
+// Reveal rows incrementally so wallets with hundreds of coins stay responsive;
+// the header total stays accurate because the server reports the full set.
 export const UTXO_PAGE_SIZE = 50;
 
 const UTXO_COLUMN_SORTS: Record<
@@ -677,7 +676,6 @@ export function UtxosInventoryPanel({
   const totalCount = inventory?.summary?.count ?? inventory?.freshness.active_count ?? rows.length;
   const returnedCount = inventory?.summary?.returned_count ?? rows.length;
   const serverTruncated = Boolean(inventory?.summary?.truncated);
-  const rowLimit = inventory?.summary?.row_limit ?? null;
   const [sort, setSort] = useState<UtxoSortValue>("default");
   const [explorerRow, setExplorerRow] = useState<WalletUtxoRow | null>(null);
   const [visibleCount, setVisibleCount] = useState(UTXO_PAGE_SIZE);
@@ -708,8 +706,19 @@ export function UtxosInventoryPanel({
     event.preventDefault();
     openRowTransaction(row, explorer);
   };
+  const revealMoreRows = () => {
+    setVisibleCount((count) =>
+      Math.min(sortedRows.length, count + UTXO_PAGE_SIZE),
+    );
+  };
+  const handleRowsScroll = (event: UIEvent<HTMLDivElement>) => {
+    if (visibleCount >= sortedRows.length) return;
+    const target = event.currentTarget;
+    const distanceFromBottom =
+      target.scrollHeight - target.scrollTop - target.clientHeight;
+    if (distanceFromBottom < 96) revealMoreRows();
+  };
   const visibleRows = sortedRows.slice(0, visibleCount);
-  const hiddenCount = sortedRows.length - visibleRows.length;
   const explorerTarget = explorerRow
     ? explorerTargetForUtxo(explorerRow, explorerSettings)
     : null;
@@ -725,7 +734,7 @@ export function UtxosInventoryPanel({
 
   return (
     <Card>
-      <CardHeader className="border-b px-4 pb-3">
+      <CardHeader className="border-b px-4 py-2.5">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="min-w-0">
             <CardTitle className="flex items-center gap-2 text-sm sm:text-base">
@@ -737,23 +746,9 @@ export function UtxosInventoryPanel({
                       returned: returnedCount.toLocaleString("en-US"),
                       total: totalCount.toLocaleString("en-US"),
                     })
-                  : totalCount.toLocaleString("en-US")}
+                : totalCount.toLocaleString("en-US")}
               </CountBadge>
             </CardTitle>
-            <CardDescription className="mt-1">
-              {serverTruncated
-                ? t("utxos.descriptionTruncated", {
-                    value: returnedCount.toLocaleString("en-US"),
-                  })
-                : t("utxos.description")}
-            </CardDescription>
-            {serverTruncated && rowLimit ? (
-              <p className="mt-1 text-xs text-muted-foreground">
-                {t("utxos.truncatedNote", {
-                  limit: rowLimit.toLocaleString("en-US"),
-                })}
-              </p>
-            ) : null}
           </div>
         </div>
       </CardHeader>
@@ -798,205 +793,211 @@ export function UtxosInventoryPanel({
           />
         ) : (
           <>
-            {stale ? (
-              <div className="flex items-start gap-2 border-b bg-amber-50 px-4 py-2.5 text-xs text-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
-                <AlertTriangle className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
-                <span>
-                  {lastSyncedLabel
-                    ? t("utxos.staleWithDate", { date: lastSyncedLabel })
-                    : t("utxos.stale")}
-                </span>
-              </div>
-            ) : null}
-            {/* Desktop: dense columnar table for scanning amounts/confirmations. */}
-            <div className="hidden sm:block">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <SortableTableHead
-                      column="outpoint"
-                      sort={sort}
-                      onSort={handleSort}
-                    >
-                      {t("utxos.column.outpoint")}
-                    </SortableTableHead>
-                    <SortableTableHead
-                      column="amount"
-                      sort={sort}
-                      onSort={handleSort}
-                    >
-                      {t("utxos.column.amount")}
-                    </SortableTableHead>
-                    <SortableTableHead
-                      column="status"
-                      sort={sort}
-                      onSort={handleSort}
-                    >
-                      {t("utxos.column.status")}
-                    </SortableTableHead>
-                    <TableHead>{t("utxos.column.address")}</TableHead>
-                    <SortableTableHead
-                      column="confirmed"
-                      sort={sort}
-                      onSort={handleSort}
-                      className="text-right"
-                    >
-                      {t("utxos.column.confirmed")}
-                    </SortableTableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {visibleRows.map((row) => {
-                    const explorer = explorerTargetForUtxo(row, explorerSettings);
-                    return (
-                      <TableRow
-                        key={row.id || row.outpoint}
-                        role="button"
-                        tabIndex={0}
-                        className={cn(
-                          "cursor-pointer hover:bg-muted/35 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
-                          isMempool(row) && "bg-muted/20",
-                        )}
-                        onClick={() => openRowTransaction(row, explorer)}
-                        onKeyDown={(event) =>
-                          openRowOnKeyboard(event, row, explorer)
-                        }
+            <div
+              className="max-h-[560px] min-h-0 overflow-auto"
+              onScroll={handleRowsScroll}
+            >
+              {stale ? (
+                <div className="flex items-start gap-2 border-b bg-amber-50 px-4 py-2.5 text-xs text-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
+                  <AlertTriangle
+                    className="mt-0.5 size-3.5 shrink-0"
+                    aria-hidden="true"
+                  />
+                  <span>
+                    {lastSyncedLabel
+                      ? t("utxos.staleWithDate", { date: lastSyncedLabel })
+                      : t("utxos.stale")}
+                  </span>
+                </div>
+              ) : null}
+              {/* Desktop: dense columnar table for scanning amounts/confirmations. */}
+              <div className="hidden sm:block">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <SortableTableHead
+                        column="outpoint"
+                        sort={sort}
+                        onSort={handleSort}
                       >
-                        <TableCell>
-                          <div className="flex items-center gap-1">
-                            <OutpointButton
-                              row={row}
-                              explorer={explorer}
+                        {t("utxos.column.outpoint")}
+                      </SortableTableHead>
+                      <SortableTableHead
+                        column="amount"
+                        sort={sort}
+                        onSort={handleSort}
+                      >
+                        {t("utxos.column.amount")}
+                      </SortableTableHead>
+                      <SortableTableHead
+                        column="status"
+                        sort={sort}
+                        onSort={handleSort}
+                      >
+                        {t("utxos.column.status")}
+                      </SortableTableHead>
+                      <TableHead>{t("utxos.column.address")}</TableHead>
+                      <SortableTableHead
+                        column="confirmed"
+                        sort={sort}
+                        onSort={handleSort}
+                        className="text-right"
+                      >
+                        {t("utxos.column.confirmed")}
+                      </SortableTableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {visibleRows.map((row) => {
+                      const explorer = explorerTargetForUtxo(
+                        row,
+                        explorerSettings,
+                      );
+                      return (
+                        <TableRow
+                          key={row.id || row.outpoint}
+                          role="button"
+                          tabIndex={0}
+                          className={cn(
+                            "cursor-pointer hover:bg-muted/35 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
+                            isMempool(row) && "bg-muted/20",
+                          )}
+                          onClick={() => openRowTransaction(row, explorer)}
+                          onKeyDown={(event) =>
+                            openRowOnKeyboard(event, row, explorer)
+                          }
+                        >
+                          <TableCell>
+                            <div className="flex items-center gap-1">
+                              <OutpointButton
+                                row={row}
+                                explorer={explorer}
+                                hideSensitive={hideSensitive}
+                                onOpen={setExplorerRow}
+                                onOpenTransaction={onOpenTransaction}
+                                t={t}
+                              />
+                              <span
+                                onClick={(event) => event.stopPropagation()}
+                                onKeyDown={(event) => event.stopPropagation()}
+                              >
+                                <CopyButton
+                                  value={row.outpoint}
+                                  ariaLabel={t("utxos.copyOutpoint")}
+                                  variant="ghost"
+                                  className="size-5 shrink-0 text-muted-foreground"
+                                />
+                              </span>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <AmountDisplay
+                              value={row.amount}
+                              asset={row.asset}
                               hideSensitive={hideSensitive}
-                              onOpen={setExplorerRow}
-                              onOpenTransaction={onOpenTransaction}
+                              className="font-medium"
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <Badge
+                              variant={
+                                row.confirmation_status === "confirmed"
+                                  ? "secondary"
+                                  : "outline"
+                              }
+                            >
+                              {statusLabel(row, t)}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="max-w-[220px]">
+                            <LocationBlock
+                              row={row}
+                              hideSensitive={hideSensitive}
                               t={t}
                             />
-                            <span
-                              onClick={(event) => event.stopPropagation()}
-                              onKeyDown={(event) => event.stopPropagation()}
-                            >
-                              <CopyButton
-                                value={row.outpoint}
-                                ariaLabel={t("utxos.copyOutpoint")}
-                                variant="ghost"
-                                className="size-5 shrink-0 text-muted-foreground"
-                              />
-                            </span>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <AmountDisplay
-                            value={row.amount}
-                            asset={row.asset}
+                          </TableCell>
+                          <TableCell className="text-right font-mono text-xs text-muted-foreground">
+                            {primaryDateLabel(row) ?? "—"}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+              {/* Mobile: stacked rows, matching the Recent transactions layout. */}
+              <div className="divide-y sm:hidden">
+                {visibleRows.map((row) => {
+                  const explorer = explorerTargetForUtxo(row, explorerSettings);
+                  return (
+                    <div
+                      key={row.id || row.outpoint}
+                      className={cn(
+                        "flex cursor-pointer flex-col gap-2 px-4 py-3 hover:bg-muted/35 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
+                        isMempool(row) && "bg-muted/20",
+                      )}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => openRowTransaction(row, explorer)}
+                      onKeyDown={(event) =>
+                        openRowOnKeyboard(event, row, explorer)
+                      }
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex min-w-0 items-center gap-1">
+                          <OutpointButton
+                            row={row}
+                            explorer={explorer}
                             hideSensitive={hideSensitive}
-                            className="font-medium"
+                            onOpen={setExplorerRow}
+                            onOpenTransaction={onOpenTransaction}
+                            t={t}
                           />
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant={row.confirmation_status === "confirmed" ? "secondary" : "outline"}>
-                            {statusLabel(row, t)}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="max-w-[220px]">
-                          <LocationBlock row={row} hideSensitive={hideSensitive} t={t} />
-                        </TableCell>
-                        <TableCell className="text-right font-mono text-xs text-muted-foreground">
-                          {primaryDateLabel(row) ?? "—"}
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            </div>
-            {/* Mobile: stacked rows, matching the Recent transactions layout. */}
-            <div className="divide-y sm:hidden">
-              {visibleRows.map((row) => {
-                const explorer = explorerTargetForUtxo(row, explorerSettings);
-                return (
-                  <div
-                    key={row.id || row.outpoint}
-                    className={cn(
-                      "flex cursor-pointer flex-col gap-2 px-4 py-3 hover:bg-muted/35 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
-                      isMempool(row) && "bg-muted/20",
-                    )}
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => openRowTransaction(row, explorer)}
-                    onKeyDown={(event) =>
-                      openRowOnKeyboard(event, row, explorer)
-                    }
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="flex min-w-0 items-center gap-1">
-                        <OutpointButton
-                          row={row}
-                          explorer={explorer}
-                          hideSensitive={hideSensitive}
-                          onOpen={setExplorerRow}
-                          onOpenTransaction={onOpenTransaction}
-                          t={t}
-                        />
-                        <span
-                          onClick={(event) => event.stopPropagation()}
-                          onKeyDown={(event) => event.stopPropagation()}
+                          <span
+                            onClick={(event) => event.stopPropagation()}
+                            onKeyDown={(event) => event.stopPropagation()}
+                          >
+                            <CopyButton
+                              value={row.outpoint}
+                              ariaLabel={t("utxos.copyOutpoint")}
+                              variant="ghost"
+                              className="size-5 shrink-0 text-muted-foreground"
+                            />
+                          </span>
+                        </div>
+                        <Badge
+                          variant={
+                            row.confirmation_status === "confirmed"
+                              ? "secondary"
+                              : "outline"
+                          }
+                          className="shrink-0"
                         >
-                          <CopyButton
-                            value={row.outpoint}
-                            ariaLabel={t("utxos.copyOutpoint")}
-                            variant="ghost"
-                            className="size-5 shrink-0 text-muted-foreground"
-                          />
+                          {statusLabel(row, t)}
+                        </Badge>
+                      </div>
+                      <div className="flex items-baseline justify-between gap-3">
+                        <AmountDisplay
+                          value={row.amount}
+                          asset={row.asset}
+                          hideSensitive={hideSensitive}
+                          className="text-sm font-medium"
+                        />
+                        <span className="shrink-0 font-mono text-xs text-muted-foreground">
+                          {primaryDateLabel(row) ?? "—"}
                         </span>
                       </div>
-                      <Badge
-                        variant={row.confirmation_status === "confirmed" ? "secondary" : "outline"}
-                        className="shrink-0"
-                      >
-                        {statusLabel(row, t)}
-                      </Badge>
-                    </div>
-                    <div className="flex items-baseline justify-between gap-3">
-                      <AmountDisplay
-                        value={row.amount}
-                        asset={row.asset}
+                      <LocationBlock
+                        row={row}
                         hideSensitive={hideSensitive}
-                        className="text-sm font-medium"
+                        t={t}
                       />
-                      <span className="shrink-0 font-mono text-xs text-muted-foreground">
-                        {primaryDateLabel(row) ?? "—"}
-                      </span>
                     </div>
-                    <LocationBlock row={row} hideSensitive={hideSensitive} t={t} />
-                  </div>
-                );
-              })}
-            </div>
-            {hiddenCount > 0 ? (
-              <div className="flex flex-wrap items-center justify-between gap-2 border-t px-4 py-2.5 text-xs text-muted-foreground">
-                <span>
-                  {t("utxos.showingOf", {
-                    shown: visibleRows.length.toLocaleString("en-US"),
-                    total: sortedRows.length.toLocaleString("en-US"),
-                  })}
-                </span>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() =>
-                    setVisibleCount((count) => count + UTXO_PAGE_SIZE)
-                  }
-                >
-                  {t("utxos.showMore", {
-                    value: Math.min(UTXO_PAGE_SIZE, hiddenCount).toLocaleString(
-                      "en-US",
-                    ),
-                  })}
-                </Button>
+                  );
+                })}
               </div>
-            ) : serverTruncated ? (
+            </div>
+            {serverTruncated ? (
               <div className="border-t px-4 py-2.5 text-xs text-muted-foreground">
                 {t("utxos.transportedRows", {
                   returned: returnedCount.toLocaleString("en-US"),

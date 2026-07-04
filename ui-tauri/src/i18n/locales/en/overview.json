@@ -252,10 +252,7 @@
     "filterByStatus": "Filter by Status",
     "allStatuses": "All Statuses",
     "empty": "No transactions found.",
-    "unassigned": "Unassigned",
-    "rangeOfTotal": "{{start}}-{{end}} of {{total}}",
-    "previousPage": "Go to previous page",
-    "nextPage": "Go to next page"
+    "unassigned": "Unassigned"
   },
   "txStatus": {
     "confirmed": "Confirmed",
@@ -311,7 +308,7 @@
     "series": {
       "bitcoinBalance": "Bitcoin Balance",
       "btcPrice": "BTC Price",
-      "avgBasis": "Avg Basis",
+      "avgBasis": "Avg cost / BTC",
       "activity": "Activity"
     },
     "chartLabel": "BTC activity chart",
@@ -344,13 +341,13 @@
     "btcPrice": "BTC price",
     "fee": "Fee",
     "positionAfter": "Position after",
-    "avgBasisAfter": "Avg basis after",
+    "avgBasisAfter": "Avg cost / BTC after",
     "status": "Status",
     "confirmations_one": "{{count}} confirmation",
     "confirmations_other": "{{count}} confirmations",
     "unknown": "Unknown",
     "btcBalance": "BTC balance",
-    "avgBasis": "Avg basis",
+    "avgBasis": "Avg cost / BTC",
     "unrealized": "Unrealized",
     "volume": "{{value}} volume"
   },
@@ -388,10 +385,8 @@
     "noDateSelected": "No date selected",
     "value": "Value",
     "btc": "BTC",
-    "costBasis": "Cost basis",
+    "costBasis": "Total basis",
     "unrealized": "Unrealized",
-    "sincePrevious": "Since previous date",
-    "startOfRange": "Start of selected range",
     "collapseAria": "Collapse panel",
     "expandAria": "Expand panel"
   },

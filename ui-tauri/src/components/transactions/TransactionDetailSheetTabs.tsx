@@ -2,10 +2,8 @@ export type {
   TransactionDetailTabContext,
   UpdateTransactionDraft,
 } from "./TransactionDetailTabContext";
-export {
-  TransactionDetailsTab,
-  transactionGraphLookupArgs,
-} from "./TransactionDetailsTab";
+export { transactionGraphLookupArgs } from "./TransactionGraphLookup";
+export { TransactionDetailsTab } from "./TransactionDetailsTab";
 export { TransactionClassifyTab } from "./TransactionClassifyTab";
 export { TransactionPricingTab } from "./TransactionPricingTab";
 export { TransactionTaxTab } from "./TransactionTaxTab";

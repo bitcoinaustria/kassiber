@@ -107,8 +107,6 @@
     },
     "recentTransactions": {
       "title": "Letzte Transaktionen",
-      "showingRecent": "Es werden die {{count}} neuesten für diese Wallet-Quelle angezeigt.",
-      "recent": "Letzte Transaktionen für diese Wallet-Quelle.",
       "showAll": "Alle anzeigen",
       "empty": "Für diese Wallet wurden noch keine Transaktionen importiert.",
       "refreshNow": "Jetzt aktualisieren",
@@ -407,9 +405,6 @@
   "utxos": {
     "title": "UTXOs",
     "countOf": "{{returned}} von {{total}}",
-    "descriptionTruncated": "Es werden die ersten {{value}} von dieser Quelle gelieferten UTXOs angezeigt.",
-    "description": "Derzeit unspent Transaction Outputs, die aus dieser Quelle bekannt sind.",
-    "truncatedNote": "Die Gesamtsummen bleiben aktuell; die Tabellenantwort ist für die Preview-Performance auf {{limit}} Zeilen begrenzt.",
     "couldNotLoadTitle": "UTXO-Bestand konnte nicht geladen werden",
     "unavailableTitle": "UTXO-Bestand nicht verfügbar",
     "liquidNeedsUnblinding": "Liquid-UTXOs müssen unblinded werden",
@@ -434,8 +429,6 @@
     "mempool": "Mempool",
     "openLocalTransaction": "Lokale Transaktionsdetails für {{outpoint}} öffnen",
     "openExplorer": "UTXO-Transaktion auf {{explorer}} öffnen",
-    "showingOf": "{{shown}} von {{total}} werden angezeigt",
-    "showMore": "{{value}} weitere anzeigen",
     "transportedRows": "{{returned}} übertragene Zeilen von insgesamt {{total}} aktiven UTXOs werden angezeigt.",
     "refresh": "Aktualisieren",
     "refreshing": "Wird aktualisiert",
