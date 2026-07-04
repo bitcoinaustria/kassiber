@@ -663,6 +663,23 @@
     "copyOutput": "Output-Referenz kopieren",
     "copyFee": "Gebührenreferenz kopieren",
     "legAria": "{{role}}-Graph-Strang",
+    "inputsOutputs": {
+      "title": "Inputs & Outputs",
+      "counts": "{{inputs}} Inputs · {{outputs}} Outputs",
+      "inputs": "Inputs",
+      "outputs": "Outputs",
+      "spentInput": "Ausgegebener Input",
+      "createdOutput": "Erzeugter Output",
+      "unknownReference": "Unbekannte Referenz",
+      "unknownAmount": "Unbekannter Betrag",
+      "total": "Summe",
+      "knownTotal": "Bekannte Summe",
+      "index": "#{{index}}",
+      "more": "+{{count}} weitere",
+      "showAll": "Alle {{count}} weiteren anzeigen",
+      "showFewer": "Weniger anzeigen",
+      "openExplorer": "{{reference}} in {{explorer}} öffnen"
+    },
     "roles": {
       "input": "Input",
       "output": "Output",

@@ -1396,10 +1396,144 @@ const TransactionsTable = ({
           onClick={handleTableToolbarClick}
           onDoubleClick={handleTableToolbarDoubleClick}
         >
-          <div className="flex flex-1 items-center gap-2">
-            <span className="text-sm font-medium sm:text-base">
-              {t("table.title")}
-            </span>
+          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+            <span className="text-sm font-medium sm:text-base">{t("table.title")}</span>
+            {hasActiveFilters && (
+              <div className="flex min-w-0 flex-wrap items-center gap-2">
+                <span className="text-[10px] text-muted-foreground sm:text-xs">
+                  {t("table.filters")}
+                </span>
+                {chartSelection && (
+                  <button
+                    type="button"
+                    className={filterChipClassName}
+                    onClick={() => onChartSelectionChange(null)}
+                    aria-label={t("table.chip.clearChart", {
+                      // loose translator
+                      label: flowChartSelectionLabel(
+                        chartSelection,
+                        t as (key: string, opts?: Record<string, unknown>) => string,
+                      ),
+                    })}
+                  >
+                    {t("table.chip.chartPrefix", {
+                      // loose translator
+                      label: flowChartSelectionLabel(
+                        chartSelection,
+                        t as (key: string, opts?: Record<string, unknown>) => string,
+                      ),
+                    })}
+                    <X className="size-2.5 sm:size-3" aria-hidden="true" />
+                  </button>
+                )}
+                {quickFilter && (
+                  <button
+                    type="button"
+                    className={filterChipClassName}
+                    onClick={() => onQuickFilterChange(null)}
+                    aria-label={t("table.chip.clearQuick", {
+                      // loose translator
+                      label: (t as (key: string) => string)(
+                        quickFilterLabel(quickFilter),
+                      ),
+                    })}
+                  >
+                    {/* loose translator */}
+                    {(t as (key: string) => string)(quickFilterLabel(quickFilter))}
+                    <X className="size-2.5 sm:size-3" aria-hidden="true" />
+                  </button>
+                )}
+                {breakdownSelection && (
+                  <button
+                    type="button"
+                    className={filterChipClassName}
+                    onClick={() => onBreakdownSelectionChange(null)}
+                    aria-label={t("table.chip.clearBreakdown", {
+                      // loose translator
+                      label: breakdownSelectionLabel(
+                        breakdownSelection,
+                        t as (key: string, opts?: Record<string, unknown>) => string,
+                      ),
+                    })}
+                  >
+                    {/* loose translator */}
+                    {breakdownSelectionLabel(
+                      breakdownSelection,
+                      t as (key: string, opts?: Record<string, unknown>) => string,
+                    )}
+                    <X className="size-2.5 sm:size-3" aria-hidden="true" />
+                  </button>
+                )}
+                {statusFilter !== "all" && (
+                  <button
+                    type="button"
+                    className={filterChipClassName}
+                    onClick={() => setStatusFilter("all")}
+                    aria-label={t("table.chip.clearStatus", {
+                      // loose translator
+                      label: (t as (key: string) => string)(
+                        transactionStatusLabels[statusFilter as TransactionStatus],
+                      ),
+                    })}
+                  >
+                    {/* loose translator */}
+                    {(t as (key: string) => string)(
+                      transactionStatusLabels[statusFilter as TransactionStatus],
+                    )}
+                    <X className="size-2.5 sm:size-3" aria-hidden="true" />
+                  </button>
+                )}
+                {flowFilter !== "all" && (
+                  <button
+                    type="button"
+                    className={filterChipClassName}
+                    onClick={() => setFlowFilter("all")}
+                    aria-label={t("table.chip.clearFlow", {
+                      // loose translator
+                      label: (t as (key: string) => string)(
+                        transactionFlowLabels[flowFilter as TransactionFlow],
+                      ),
+                    })}
+                  >
+                    {/* loose translator */}
+                    {(t as (key: string) => string)(
+                      transactionFlowLabels[flowFilter as TransactionFlow],
+                    )}
+                    <X className="size-2.5 sm:size-3" aria-hidden="true" />
+                  </button>
+                )}
+                {paymentMethodFilter !== "all" && (
+                  <button
+                    type="button"
+                    className={filterChipClassName}
+                    onClick={() => setPaymentMethodFilter("all")}
+                    aria-label={t("table.chip.clearPayment", {
+                      label: paymentMethodFilter,
+                    })}
+                  >
+                    {paymentMethodFilter}
+                    <X className="size-2.5 sm:size-3" aria-hidden="true" />
+                  </button>
+                )}
+                {feeFilter === "with-fees" && (
+                  <button
+                    type="button"
+                    className={filterChipClassName}
+                    onClick={() => setFeeFilter("all")}
+                    aria-label={t("table.chip.clearWithFees")}
+                  >
+                    {t("table.withFees")}
+                    <X className="size-2.5 sm:size-3" aria-hidden="true" />
+                  </button>
+                )}
+                <button
+                  onClick={clearFilters}
+                  className="text-[10px] text-destructive hover:underline sm:text-xs"
+                >
+                  {t("table.clearAll")}
+                </button>
+              </div>
+            )}
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
@@ -1523,143 +1657,6 @@ const TransactionsTable = ({
             ) : null}
           </div>
         </div>
-
-      {hasActiveFilters && (
-        <div className="flex flex-wrap items-center gap-2 px-3 pb-3 sm:px-6">
-          <span className="text-[10px] text-muted-foreground sm:text-xs">
-            {t("table.filters")}
-          </span>
-          {chartSelection && (
-            <button
-              type="button"
-              className={filterChipClassName}
-              onClick={() => onChartSelectionChange(null)}
-              aria-label={t("table.chip.clearChart", {
-                // loose translator
-                label: flowChartSelectionLabel(
-                  chartSelection,
-                  t as (key: string, opts?: Record<string, unknown>) => string,
-                ),
-              })}
-            >
-              {t("table.chip.chartPrefix", {
-                // loose translator
-                label: flowChartSelectionLabel(
-                  chartSelection,
-                  t as (key: string, opts?: Record<string, unknown>) => string,
-                ),
-              })}
-              <X className="size-2.5 sm:size-3" aria-hidden="true" />
-            </button>
-          )}
-          {quickFilter && (
-            <button
-              type="button"
-              className={filterChipClassName}
-              onClick={() => onQuickFilterChange(null)}
-              aria-label={t("table.chip.clearQuick", {
-                // loose translator
-                label: (t as (key: string) => string)(
-                  quickFilterLabel(quickFilter),
-                ),
-              })}
-            >
-              {/* loose translator */}
-              {(t as (key: string) => string)(quickFilterLabel(quickFilter))}
-              <X className="size-2.5 sm:size-3" aria-hidden="true" />
-            </button>
-          )}
-          {breakdownSelection && (
-            <button
-              type="button"
-              className={filterChipClassName}
-              onClick={() => onBreakdownSelectionChange(null)}
-              aria-label={t("table.chip.clearBreakdown", {
-                // loose translator
-                label: breakdownSelectionLabel(
-                  breakdownSelection,
-                  t as (key: string, opts?: Record<string, unknown>) => string,
-                ),
-              })}
-            >
-              {/* loose translator */}
-              {breakdownSelectionLabel(
-                breakdownSelection,
-                t as (key: string, opts?: Record<string, unknown>) => string,
-              )}
-              <X className="size-2.5 sm:size-3" aria-hidden="true" />
-            </button>
-          )}
-          {statusFilter !== "all" && (
-            <button
-              type="button"
-              className={filterChipClassName}
-              onClick={() => setStatusFilter("all")}
-              aria-label={t("table.chip.clearStatus", {
-                // loose translator
-                label: (t as (key: string) => string)(
-                  transactionStatusLabels[statusFilter as TransactionStatus],
-                ),
-              })}
-            >
-              {/* loose translator */}
-              {(t as (key: string) => string)(
-                transactionStatusLabels[statusFilter as TransactionStatus],
-              )}
-              <X className="size-2.5 sm:size-3" aria-hidden="true" />
-            </button>
-          )}
-          {flowFilter !== "all" && (
-            <button
-              type="button"
-              className={filterChipClassName}
-              onClick={() => setFlowFilter("all")}
-              aria-label={t("table.chip.clearFlow", {
-                // loose translator
-                label: (t as (key: string) => string)(
-                  transactionFlowLabels[flowFilter as TransactionFlow],
-                ),
-              })}
-            >
-              {/* loose translator */}
-              {(t as (key: string) => string)(
-                transactionFlowLabels[flowFilter as TransactionFlow],
-              )}
-              <X className="size-2.5 sm:size-3" aria-hidden="true" />
-            </button>
-          )}
-          {paymentMethodFilter !== "all" && (
-            <button
-              type="button"
-              className={filterChipClassName}
-              onClick={() => setPaymentMethodFilter("all")}
-              aria-label={t("table.chip.clearPayment", {
-                label: paymentMethodFilter,
-              })}
-            >
-              {paymentMethodFilter}
-              <X className="size-2.5 sm:size-3" aria-hidden="true" />
-            </button>
-          )}
-          {feeFilter === "with-fees" && (
-            <button
-              type="button"
-              className={filterChipClassName}
-              onClick={() => setFeeFilter("all")}
-              aria-label={t("table.chip.clearWithFees")}
-            >
-              {t("table.withFees")}
-              <X className="size-2.5 sm:size-3" aria-hidden="true" />
-            </button>
-          )}
-          <button
-            onClick={clearFilters}
-            className="text-[10px] text-destructive hover:underline sm:text-xs"
-          >
-            {t("table.clearAll")}
-          </button>
-        </div>
-      )}
 
       <div
         ref={tableScrollRef}

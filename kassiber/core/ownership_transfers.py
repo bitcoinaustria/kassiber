@@ -39,11 +39,12 @@ existing ``transfer_fee_implausible`` quarantine (a safe review flag, not a
 mis-booking). Fully-recorded fan-outs (1-out/N-in, which ``detect_intra``
 skips) and fully sync-gapped ones are decomposed normally.
 
-Amount model (from ``record_from_bitcoin_esplora_tx``): an outbound row's
-``amount`` is the sum of its non-change output values (change-to-self and the
-miner fee are both excluded), and ``fee`` is the miner fee. So for every
-derived pair ``out_leg.amount == in_leg.amount`` by construction, which keeps
-each leg under the journal pipeline's implausible-fee guard.
+Amount model: an outbound row's spend capacity is ``amount + fee`` unless
+``amount_includes_fee`` is set. Esplora-style rows usually have ``amount`` as
+the sum of non-change output values and ``fee`` as the miner fee, while some
+Core wallet shapes report ``amount`` net of the fee. The deriver therefore
+matches owned outputs against total capacity and assigns only the fee still
+available after those outputs are covered.
 
 Pure-ish: no SQLite. The caller builds the :class:`OwnedIndex` once and passes
 it in alongside the already-fetched rows; raw transaction JSON is read from the
@@ -233,11 +234,16 @@ def derive_ownership_transfers(
             continue
 
         source_amount_msat = int(_get(row, "amount") or 0)
+        source_fee_msat = int(_get(row, "fee") or 0)
+        source_total_msat = source_amount_msat
+        if not _get(row, "amount_includes_fee"):
+            source_total_msat += source_fee_msat
         legs_value_msat = sum(slot["value_sats"] * SATS_TO_MSAT for slot in by_dest.values())
-        # The owned legs cannot exceed what the row says left the wallet; a
-        # mismatch means the parsed graph and the recorded amount disagree
-        # (re-org/RBF stale json, odd sync) — decline rather than guess.
-        if legs_value_msat > source_amount_msat:
+        # The owned legs cannot exceed what the row says left the wallet. Some
+        # Core rows carry a net amount (owned outputs minus fee) plus a fee
+        # column; comparing against amount alone would falsely reject pure
+        # fan-outs where amount + fee exactly equals the owned outputs.
+        if legs_value_msat > source_total_msat:
             _block_source(
                 result,
                 row,
@@ -248,6 +254,7 @@ def derive_ownership_transfers(
                     "asset": _get(row, "asset"),
                     "external_id": _get(row, "external_id"),
                     "row_amount_msat": source_amount_msat,
+                    "row_total_outflow_msat": source_total_msat,
                     "owned_outputs_msat": legs_value_msat,
                 },
             )
@@ -255,7 +262,10 @@ def derive_ownership_transfers(
 
         txid = str(parsed.get("txid") or _get(row, "external_id") or source_id)
         transfer_group_id = f"owned-derive:{txid}" if len(by_dest) > 1 else None
-        source_fee_msat = int(_get(row, "fee") or 0)
+        fee_budget_msat = min(
+            source_fee_msat,
+            max(0, source_total_msat - legs_value_msat),
+        )
         legs = sorted(by_dest.items(), key=lambda item: (item[1]["min_n"], item[0]))
         leg_pairs: list[dict[str, Any]] = []
         leg_synthetic_rows: list[dict[str, Any]] = []
@@ -267,7 +277,7 @@ def derive_ownership_transfers(
             if leg_msat <= 0:
                 ok = False
                 break
-            fee_for_leg = source_fee_msat if position == 0 else 0
+            fee_for_leg = fee_budget_msat if position == 0 else 0
             out_leg = _clone_row(
                 row,
                 amount=leg_msat,
@@ -348,10 +358,10 @@ def derive_ownership_transfers(
 
         result.derived_pairs.extend(leg_pairs)
         result.synthetic_rows.extend(leg_synthetic_rows)
-        residual_msat = source_amount_msat - legs_value_msat
+        residual_msat = source_total_msat - legs_value_msat - fee_budget_msat
         if residual_msat > 0:
             # The spend also paid a real external recipient; keep the residual
-            # portion as a disposal of the source row. The whole miner fee is
+            # portion as a disposal of the source row. Any available miner fee is
             # already attributed to the first MOVE leg above, so the residual
             # disposal must carry fee=0 — otherwise the fee leaves the source
             # pool twice (phantom fee disposal + a spurious over-sell).

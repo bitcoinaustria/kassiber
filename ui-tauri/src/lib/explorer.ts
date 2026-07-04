@@ -38,11 +38,12 @@ function labelForExplorerUrl(url: string, fallback: string) {
   }
 }
 
-function transactionUrl(baseUrl: string, txid: string) {
-  const encoded = encodeURIComponent(txid);
-  const url = baseUrl.includes("{txid}")
-    ? baseUrl.replaceAll("{txid}", encoded)
-    : `${normalizeExplorerBaseUrl(baseUrl)}/tx/${encoded}`;
+function explorerUrl(baseUrl: string, segment: "address" | "tx", value: string) {
+  const encoded = encodeURIComponent(value);
+  const placeholder = segment === "tx" ? "{txid}" : "{address}";
+  const url = baseUrl.includes(placeholder)
+    ? baseUrl.replaceAll(placeholder, encoded)
+    : `${normalizeExplorerBaseUrl(baseUrl)}/${segment}/${encoded}`;
   try {
     const parsed = new URL(url);
     if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
@@ -54,6 +55,36 @@ function transactionUrl(baseUrl: string, txid: string) {
   }
 }
 
+function targetForExplorerValue({
+  value,
+  network,
+  settings,
+  segment,
+}: {
+  value: string | undefined;
+  network: ExplorerNetwork;
+  settings?: ExplorerSettings;
+  segment: "address" | "tx";
+}): ExplorerTarget | null {
+  const id = value?.trim();
+  if (!id) return null;
+
+  const configuredBase =
+    network === "liquid" ? settings?.liquidBaseUrl : settings?.bitcoinBaseUrl;
+  const configured = Boolean(configuredBase?.trim());
+  const fallback = PUBLIC_EXPLORERS[network];
+  if (!configured && settings?.publicFallbacks === false) return null;
+  const baseUrl = configured ? configuredBase?.trim() ?? "" : fallback.baseUrl;
+  const url = explorerUrl(baseUrl, segment, id);
+  if (!url) return null;
+
+  return {
+    label: configured ? labelForExplorerUrl(url, "Configured explorer") : fallback.label,
+    url,
+    configured,
+  };
+}
+
 export function explorerTargetForTransaction({
   txid,
   network,
@@ -63,21 +94,27 @@ export function explorerTargetForTransaction({
   network: ExplorerNetwork;
   settings?: ExplorerSettings;
 }): ExplorerTarget | null {
-  const id = txid?.trim();
-  if (!id) return null;
+  return targetForExplorerValue({
+    value: txid,
+    network,
+    settings,
+    segment: "tx",
+  });
+}
 
-  const configuredBase =
-    network === "liquid" ? settings?.liquidBaseUrl : settings?.bitcoinBaseUrl;
-  const configured = Boolean(configuredBase?.trim());
-  const fallback = PUBLIC_EXPLORERS[network];
-  if (!configured && settings?.publicFallbacks === false) return null;
-  const baseUrl = configured ? configuredBase?.trim() ?? "" : fallback.baseUrl;
-  const url = transactionUrl(baseUrl, id);
-  if (!url) return null;
-
-  return {
-    label: configured ? labelForExplorerUrl(url, "Configured explorer") : fallback.label,
-    url,
-    configured,
-  };
+export function explorerTargetForAddress({
+  address,
+  network,
+  settings,
+}: {
+  address: string | undefined;
+  network: ExplorerNetwork;
+  settings?: ExplorerSettings;
+}): ExplorerTarget | null {
+  return targetForExplorerValue({
+    value: address,
+    network,
+    settings,
+    segment: "address",
+  });
 }
