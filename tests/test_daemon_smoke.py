@@ -2945,6 +2945,10 @@ class DaemonSmokeTest(unittest.TestCase):
                     descriptor_revealed["data"]["wallet_material"],
                     receive_descriptor,
                 )
+                self.assertEqual(
+                    set(descriptor_revealed["data"]),
+                    {"id", "label", "kind", "wallet_material"},
+                )
 
                 _write_payload(
                     proc,
