@@ -343,6 +343,22 @@ describe("app search results", () => {
     });
   });
 
+  it("keeps English page-title aliases under a localized UI", () => {
+    const ranked = buildAppSearchResults({
+      snapshot,
+      query: "reports screen",
+      aiFeaturesEnabled: true,
+      developerToolsEnabled: true,
+      t: deT,
+    });
+
+    expect(ranked[0]).toMatchObject({
+      id: "page:reports",
+      category: "page",
+      route: { to: "/reports" },
+    });
+  });
+
   it("finds localized wallet connection aliases", () => {
     const ranked = buildAppSearchResults({
       snapshot,

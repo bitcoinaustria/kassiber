@@ -520,22 +520,40 @@ function localizePageResult(
   t: AppTranslate,
 ): SearchResult {
   const id = bareId(result.id);
+  const defaultTitle = result.title;
   const titleKey = PAGE_NAV_TITLE_KEYS[result.id] ?? `search:page.${id}.title`;
   const title = translatedString(t, titleKey);
   const subtitle = translatedString(t, `search:page.${id}.subtitle`);
+  const titleAliases =
+    defaultTitle.trim().toLowerCase() === title.trim().toLowerCase()
+      ? localizedAliasKeywords(
+          t,
+          "search:aliases.pagePhrases",
+          { title },
+          DEFAULT_PAGE_ALIAS_TEMPLATES,
+        )
+      : uniqueKeywords(
+          localizedAliasKeywords(
+            t,
+            "search:aliases.pagePhrases",
+            { title: defaultTitle },
+            DEFAULT_PAGE_ALIAS_TEMPLATES,
+          ),
+          localizedAliasKeywords(
+            t,
+            "search:aliases.pagePhrases",
+            { title },
+            DEFAULT_PAGE_ALIAS_TEMPLATES,
+          ),
+        );
   return {
     ...result,
     title,
     subtitle,
     keywords: uniqueKeywords(
       result.keywords,
-      [title],
-      localizedAliasKeywords(
-        t,
-        "search:aliases.pagePhrases",
-        { title },
-        DEFAULT_PAGE_ALIAS_TEMPLATES,
-      ),
+      [defaultTitle, title],
+      titleAliases,
     ),
   };
 }
