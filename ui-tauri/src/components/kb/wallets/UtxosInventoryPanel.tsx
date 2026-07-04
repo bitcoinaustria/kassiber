@@ -16,7 +16,6 @@ import {
   ArrowUp,
   ArrowUpDown,
   Coins,
-  ExternalLink,
   RefreshCw,
   ShieldAlert,
 } from "lucide-react";
@@ -232,6 +231,10 @@ function formatOutpoint(value: string) {
   return `${txid.slice(0, 8)}…${txid.slice(-6)}:${vout ?? "?"}`;
 }
 
+function formatAddressPreview(value: string) {
+  return value.length <= 24 ? value : `${value.slice(0, 12)}…${value.slice(-8)}`;
+}
+
 function formatLocation(
   row: WalletUtxoRow,
   t: TFunction<"connections">,
@@ -437,10 +440,6 @@ function OutpointButton({
       }}
     >
       <span className="truncate">{formatOutpoint(row.outpoint)}</span>
-      <ExternalLink
-        className="size-3 shrink-0 text-muted-foreground"
-        aria-hidden="true"
-      />
     </button>
   );
 }
@@ -465,7 +464,7 @@ function LocationBlock({
               hideSensitive && "sensitive",
             )}
           >
-            {row.address}
+            {formatAddressPreview(row.address)}
           </span>
           <span
             onClick={(event) => event.stopPropagation()}
@@ -600,7 +599,6 @@ function UtxoExplorerOpenDialog({
               disabled={!target || opening}
               onClick={() => void openExplorer()}
             >
-              <ExternalLink className="size-4" aria-hidden="true" />
               {opening ? t("utxos.dialog.opening") : t("utxos.dialog.openExplorer")}
             </Button>
           </DialogFooter>
@@ -750,6 +748,21 @@ export function UtxosInventoryPanel({
               </CountBadge>
             </CardTitle>
           </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="icon-xs"
+            className="shrink-0 self-start"
+            disabled={isRefreshing}
+            aria-label={isRefreshing ? t("utxos.refreshing") : t("utxos.refresh")}
+            title={isRefreshing ? t("utxos.refreshing") : t("utxos.refresh")}
+            onClick={onRefresh}
+          >
+            <RefreshCw
+              className={cn("size-3", isRefreshing && "animate-spin")}
+              aria-hidden="true"
+            />
+          </Button>
         </div>
       </CardHeader>
       <CardContent className="p-0">
@@ -836,7 +849,7 @@ export function UtxosInventoryPanel({
                       >
                         {t("utxos.column.status")}
                       </SortableTableHead>
-                      <TableHead>{t("utxos.column.address")}</TableHead>
+                      <TableHead>{t("utxos.column.location")}</TableHead>
                       <SortableTableHead
                         column="confirmed"
                         sort={sort}
@@ -997,11 +1010,17 @@ export function UtxosInventoryPanel({
                 })}
               </div>
             </div>
-            {serverTruncated ? (
+            {visibleRows.length < sortedRows.length || serverTruncated ? (
               <div className="border-t px-4 py-2.5 text-xs text-muted-foreground">
-                {t("utxos.transportedRows", {
-                  returned: returnedCount.toLocaleString("en-US"),
-                  total: totalCount.toLocaleString("en-US"),
+                {t("utxos.loadedRows", {
+                  loaded: (serverTruncated
+                    ? returnedCount
+                    : visibleRows.length
+                  ).toLocaleString("en-US"),
+                  total: (serverTruncated
+                    ? totalCount
+                    : sortedRows.length
+                  ).toLocaleString("en-US"),
                 })}
               </div>
             ) : null}

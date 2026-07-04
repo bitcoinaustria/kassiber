@@ -346,6 +346,6 @@ describe("UtxosInventoryPanel", () => {
     });
 
     expect(html).toContain("500 of 1,234");
-    expect(html).toContain("Showing 500 transported rows of 1,234 total active UTXOs.");
+    expect(html).toContain("Loaded 500 of 1,234 active UTXOs.");
   });
 });

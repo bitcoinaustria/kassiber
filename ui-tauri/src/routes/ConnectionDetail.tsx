@@ -159,7 +159,7 @@ const fmtEur = (value: number | null) =>
 const fmtSatSigned = (amountSat: number) =>
   `${amountSat >= 0 ? "+ " : "- "}${Math.abs(amountSat).toLocaleString(
     "en-US",
-  )}`;
+  )} sat`;
 const fmtEurSigned = (amountEur: number | null) =>
   amountEur === null
     ? MISSING_FIAT_LABEL
@@ -2627,45 +2627,47 @@ function ConnectionTransactionRow({
       : flow === "outgoing"
         ? "border-red-600/20 bg-red-500/10 text-red-700 dark:text-red-300"
         : "border-sky-600/20 bg-sky-500/10 text-sky-700 dark:text-sky-300";
+  const primaryLabel = tx.counter || tx.type;
+  const showTypeBadge = Boolean(tx.counter && tx.counter !== tx.type);
 
   return (
     <Link
       to="/transactions"
       search={{ tx: tx.id }}
-      className="flex min-w-0 items-start gap-3 px-5 py-3 transition-colors hover:bg-muted/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      className="flex min-w-0 items-start gap-3 px-4 py-2.5 transition-colors hover:bg-muted/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
     >
       <span
         className={cn(
-          "mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md border",
+          "mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-md border",
           tone,
         )}
         aria-hidden="true"
       >
-        <Icon className="size-4" />
+        <Icon className="size-3.5" />
       </span>
       <span className="min-w-0 flex-1">
-        <span className="flex min-w-0 items-center gap-1.5">
-          <span className="min-w-0 flex-1 truncate text-sm font-medium">
-            {tx.counter || tx.type}
-          </span>
-          <Badge variant="outline" className="rounded-md whitespace-nowrap">
-            {tx.type}
-          </Badge>
-          {tx.conf > 0 ? null : (
-            <Badge
-              variant="outline"
-              className="rounded-md whitespace-nowrap text-amber-700 ring-amber-600/20 dark:text-amber-300"
-            >
-              {t("detail.recentTransactions.pending")}
-            </Badge>
-          )}
+        <span className="block min-w-0 truncate text-sm font-medium">
+          {primaryLabel}
         </span>
-        <span className="mt-1 flex min-w-0 items-center gap-1.5 text-[10px] text-muted-foreground sm:text-xs">
+        <span className="mt-1 flex min-w-0 flex-wrap items-center gap-1.5 text-[10px] text-muted-foreground sm:text-xs">
           <span className="shrink-0">{tx.date}</span>
           <span aria-hidden="true">·</span>
           <span className={cn("truncate font-mono", blurClass(hideSensitive))}>
             {fmtShortTxid(tx.externalId ?? tx.id)}
           </span>
+          {showTypeBadge ? (
+            <Badge variant="outline" className="h-5 rounded-md px-1.5 text-[10px]">
+              {tx.type}
+            </Badge>
+          ) : null}
+          {tx.conf > 0 ? null : (
+            <Badge
+              variant="outline"
+              className="h-5 rounded-md px-1.5 text-[10px] text-amber-700 ring-amber-600/20 dark:text-amber-300"
+            >
+              {t("detail.recentTransactions.pending")}
+            </Badge>
+          )}
         </span>
       </span>
       <span className="shrink-0 text-right">

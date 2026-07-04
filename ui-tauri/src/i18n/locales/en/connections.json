@@ -418,6 +418,7 @@
       "amount": "Amount",
       "status": "Status",
       "address": "Address",
+      "location": "Location",
       "confirmed": "Confirmed"
     },
     "copyOutpoint": "Copy outpoint",
@@ -430,6 +431,7 @@
     "openLocalTransaction": "Open local transaction details for {{outpoint}}",
     "openExplorer": "Open UTXO transaction on {{explorer}}",
     "transportedRows": "Showing {{returned}} transported rows of {{total}} total active UTXOs.",
+    "loadedRows": "Loaded {{loaded}} of {{total}} active UTXOs.",
     "refresh": "Refresh",
     "refreshing": "Refreshing",
     "dialog": {
