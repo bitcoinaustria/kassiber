@@ -360,13 +360,18 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
       ) => {
         const envelope = await transport.invoke({ kind, args });
         if (envelope.kind === "error" || envelope.error) {
-          throw new Error(envelope.error?.message ?? t("shell.finishError"));
+          const error = new Error(envelope.error?.message ?? t("shell.finishError"));
+          Object.assign(error, { code: envelope.error?.code });
+          throw error;
         }
         return envelope;
       };
       try {
         await invokeProvider("ai.providers.create", providerArgs);
-      } catch {
+      } catch (error) {
+        if ((error as { code?: string }).code !== "conflict") {
+          throw error;
+        }
         await invokeProvider("ai.providers.update", providerArgs);
       }
       await invokeProvider("ai.providers.set_default", { name: providerName });

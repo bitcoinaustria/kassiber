@@ -123,6 +123,7 @@ def _insert_journal_entry(
     *,
     quantity_btc: str,
     fiat_value: float,
+    occurred_at: str | None = None,
 ) -> None:
     conn.execute(
         """
@@ -138,7 +139,7 @@ def _insert_journal_entry(
             profile_id,
             tx_id,
             wallet_id,
-            NOW,
+            occurred_at or NOW,
             btc_to_msat(quantity_btc),
             fiat_value,
             fiat_value,
@@ -218,6 +219,7 @@ class WorkspaceOverviewSnapshotTest(unittest.TestCase):
             "tx-a",
             quantity_btc="1.0",
             fiat_value=50_000,
+            occurred_at="2026-06-01T08:00:00Z",
         )
         _insert_quarantine(conn, "ws", "pf-b", "tx-b")
         set_setting(conn, "context_workspace", "active-ws")

@@ -656,6 +656,13 @@ def update_db_ai_provider(conn, name: str, updates: dict) -> dict:
     if new_kind == "local" and not new_acknowledged_at:
         new_acknowledged_at = now_iso()
 
+    base_url_changed = new_base_url is not None and new_base_url != row["base_url"]
+    if base_url_changed and updates.get("api_key") is None:
+        # API keys are origin-bound secrets. If a metadata-only update retargets
+        # the provider URL, drop any inline/native secret ref so the next request
+        # cannot silently send an existing bearer token to the new endpoint.
+        clear_fields.add("api_key")
+
     merged = {
         "base_url": new_base_url if new_base_url is not None else row["base_url"],
         "api_key": resolved("api_key", row["api_key"]),
