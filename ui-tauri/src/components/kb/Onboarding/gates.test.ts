@@ -101,6 +101,19 @@ describe("aiStepComplete", () => {
       ),
     ).toBe(false);
   });
+
+  it("blocks off-device URLs in local AI mode", () => {
+    expect(
+      aiStepComplete(
+        form({
+          aiSetupMode: "local",
+          aiProviderKind: "local",
+          aiBaseUrl: "https://api.example/v1",
+          aiRemoteAcknowledged: false,
+        }),
+      ),
+    ).toBe(false);
+  });
 });
 
 describe("securityStepComplete", () => {

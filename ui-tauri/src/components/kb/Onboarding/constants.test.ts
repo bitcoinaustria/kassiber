@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   aiBaseUrlHint,
   backendEndpointHint,
+  localAiBaseUrlHint,
   databasePassphraseHint,
   electrumEndpointUrl,
   GAINS_ALGORITHM_DEFAULTS,
@@ -35,9 +36,15 @@ describe("onboarding tax long-term day parsing", () => {
 
 describe("onboarding endpoint validation", () => {
   it("accepts backend endpoint formats by kind", () => {
-    expect(backendEndpointHint("esplora", "https://node.example/api")).toBeNull();
-    expect(backendEndpointHint("liquid-esplora", "https://liquid.example/api")).toBeNull();
-    expect(backendEndpointHint("electrum", "ssl://node.example:50002")).toBeNull();
+    expect(
+      backendEndpointHint("esplora", "https://node.example/api"),
+    ).toBeNull();
+    expect(
+      backendEndpointHint("liquid-esplora", "https://liquid.example/api"),
+    ).toBeNull();
+    expect(
+      backendEndpointHint("electrum", "ssl://node.example:50002"),
+    ).toBeNull();
     expect(backendEndpointHint("electrum", "node.example:50002")).toBeNull();
   });
 
@@ -67,11 +74,14 @@ describe("onboarding endpoint validation", () => {
     );
     expect(backendEndpointHint("bitcoinrpc", "")).toBe("Endpoint is required.");
     expect(
-      backendEndpointHint("bitcoinrpc", "http://rpcuser:rpcpass@127.0.0.1:8332"),
+      backendEndpointHint(
+        "bitcoinrpc",
+        "http://rpcuser:rpcpass@127.0.0.1:8332",
+      ),
     ).toBe("Do not include usernames or passwords in the endpoint.");
-    expect(backendEndpointHint("electrum", "ssl://user@node.example:50002")).toBe(
-      "Do not include usernames or passwords in the endpoint.",
-    );
+    expect(
+      backendEndpointHint("electrum", "ssl://user@node.example:50002"),
+    ).toBe("Do not include usernames or passwords in the endpoint.");
   });
 
   it("validates OpenAI-compatible base URLs", () => {
@@ -85,6 +95,18 @@ describe("onboarding endpoint validation", () => {
     );
     expect(aiBaseUrlHint("https://sk-secret@example.test/v1")).toBe(
       "Do not include usernames or passwords in the endpoint.",
+    );
+  });
+
+  it("requires loopback endpoints for local AI mode", () => {
+    expect(localAiBaseUrlHint("http://localhost:11434/v1")).toBeNull();
+    expect(localAiBaseUrlHint("http://127.0.0.1:11434/v1")).toBeNull();
+    expect(localAiBaseUrlHint("http://[::1]:11434/v1")).toBeNull();
+    expect(localAiBaseUrlHint("https://api.example/v1")).toBe(
+      "Local AI providers must use http://localhost, http://127.0.0.1, or http://[::1]. Use remote mode for off-device endpoints.",
+    );
+    expect(localAiBaseUrlHint("claude-cli://default")).toBe(
+      "Local AI providers must use http://localhost, http://127.0.0.1, or http://[::1]. Use remote mode for off-device endpoints.",
     );
   });
 });

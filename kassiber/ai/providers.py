@@ -22,9 +22,11 @@ the first time the table is queried; it leaves a sentinel in `settings`
 from __future__ import annotations
 
 import hashlib
+import ipaddress
 import os
 from pathlib import Path
 from typing import Any, Callable, Iterable
+from urllib.parse import urlparse
 
 from ..db import get_setting, set_setting
 from ..errors import AppError
@@ -113,14 +115,41 @@ def _normalize_secret_state(value: Any) -> str:
     return state
 
 
+def _is_loopback_ai_http_url(base_url: str) -> bool:
+    if not (base_url.startswith("http://") or base_url.startswith("https://")):
+        return False
+    try:
+        parsed = urlparse(base_url)
+    except ValueError:
+        return False
+    host = (parsed.hostname or "").strip().lower()
+    if host == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return False
+
+
 def _validate_locator_kind(base_url: str, kind: str) -> None:
-    if is_cli_provider_locator(base_url) and kind == "local":
+    if kind != "local":
+        return
+    if is_cli_provider_locator(base_url):
         raise AppError(
             "Claude/Codex CLI providers cannot be marked local",
             code="validation",
             hint=(
                 "Use --kind remote (or tee if your configured CLI path has documented "
                 "confidential inference). These CLIs may send prompts to external model providers."
+            ),
+        )
+    if not _is_loopback_ai_http_url(base_url):
+        raise AppError(
+            "Local AI providers must use a loopback HTTP endpoint",
+            code="validation",
+            hint=(
+                "Use http://localhost, http://127.0.0.1, or http://[::1] for "
+                "local providers. Mark off-device endpoints as remote and acknowledge remote use."
             ),
         )
 

@@ -5,6 +5,7 @@ import {
   DEFAULT_AI_BASE_URL,
   DEFAULT_AI_PROVIDER_NAME,
   aiBaseUrlHint,
+  localAiBaseUrlHint,
 } from "./constants";
 import { CheckRow, ChoiceCard, SelectField, TextField } from "./fields";
 import type { AiProviderKind, OnboardingForm } from "./types";
@@ -29,7 +30,11 @@ export const AiFields = ({ form, update }: AiFieldsProps) => {
   const localSelected = form.aiSetupMode === "local";
   const remoteSelected = form.aiSetupMode === "remote";
   const disabledSelected = form.aiSetupMode === "disabled";
-  const endpointHint = disabledSelected ? null : aiBaseUrlHint(form.aiBaseUrl);
+  const endpointHint = disabledSelected
+    ? null
+    : localSelected
+      ? localAiBaseUrlHint(form.aiBaseUrl)
+      : aiBaseUrlHint(form.aiBaseUrl);
 
   return (
     <div className="space-y-5">
