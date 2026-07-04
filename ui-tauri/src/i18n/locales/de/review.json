@@ -365,6 +365,21 @@
       "proxy": "via Proxy",
       "noRows": "Keine Zeilen passen zu diesen Filtern"
     },
+    "details": {
+      "toggle": "Egress-Details für {{destination}} anzeigen",
+      "capturedMetadata": "Erfasste Metadaten",
+      "storedRecord": "Gespeicherter Datensatz",
+      "recordId": "Datensatz",
+      "fullTime": "Zeitstempel",
+      "scheme": "Schema",
+      "proxy": "Proxy",
+      "yes": "Ja",
+      "no": "Nein",
+      "none": "kein",
+      "allowlist": "Allowlist",
+      "notCaptured": "Nicht erfasst",
+      "notCapturedValue": "Pfad, Query-Werte, Request-Body, Header, Zugangsdaten, Deskriptoren und AI-Prompts werden vor dem RAM-Puffer verworfen."
+    },
     "status": {
       "user": "Benutzer",
       "builtIn": "Eingebaut",

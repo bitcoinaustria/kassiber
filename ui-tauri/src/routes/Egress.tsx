@@ -1,11 +1,13 @@
 import {
   AlertTriangle,
+  ChevronRight,
   CheckCircle2,
   Database,
   LockKeyhole,
   Plane,
   RefreshCw,
 } from "lucide-react";
+import type { TFunction } from "i18next";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
 
@@ -18,7 +20,7 @@ import { cn } from "@/lib/utils";
 
 type EgressAllowlistStatus = "expected" | "unexpected" | "unknown";
 
-interface EgressRecord {
+export interface EgressRecord {
   id: number;
   ts: string;
   subsystem: string;
@@ -67,6 +69,9 @@ const EMPTY_RECORDS: EgressRecord[] = [];
 export function Egress() {
   const { t } = useTranslation(["review", "common"]);
   const [query, setQuery] = React.useState("");
+  const [expandedRecords, setExpandedRecords] = React.useState<Set<number>>(
+    new Set(),
+  );
   const snapshotQuery = useDaemon<EgressSnapshot>(
     "ui.egress.snapshot",
     SNAPSHOT_ARGS,
@@ -85,6 +90,14 @@ export function Egress() {
     () => filterRecords(records, query),
     [records, query],
   );
+  const toggleRecord = React.useCallback((recordId: number) => {
+    setExpandedRecords((current) => {
+      const next = new Set(current);
+      if (next.has(recordId)) next.delete(recordId);
+      else next.add(recordId);
+      return next;
+    });
+  }, []);
   const db = snapshot?.db_header ?? {};
   const dbTone = db.sqlite_plaintext_header
     ? "bad"
@@ -205,7 +218,12 @@ export function Egress() {
                   </tr>
                 ) : (
                   filteredRecords.map((record) => (
-                    <EgressRow key={record.id} record={record} />
+                    <EgressRow
+                      key={record.id}
+                      record={record}
+                      expanded={expandedRecords.has(record.id)}
+                      onToggle={() => toggleRecord(record.id)}
+                    />
                   ))
                 )}
               </tbody>
@@ -267,50 +285,153 @@ export function Egress() {
   );
 }
 
-function EgressRow({ record }: { record: EgressRecord }) {
+export function EgressRow({
+  record,
+  expanded = false,
+  onToggle = () => {},
+}: {
+  record: EgressRecord;
+  expanded?: boolean;
+  onToggle?: () => void;
+}) {
   const { t } = useTranslation("review");
+  const destination = formatDestination(record);
   return (
-    <tr
-      className={cn(
-        "border-b last:border-b-0",
-        record.allowlist_status === "unexpected" &&
-          "bg-destructive/10 text-destructive",
-      )}
-    >
-      <td className="whitespace-nowrap px-3 py-2 font-mono text-xs text-muted-foreground">
-        {formatTime(record.ts)}
-      </td>
-      <td className="px-3 py-2">
-        <Badge variant="outline" className="capitalize">
-          {t(`egress.subsystem.${record.subsystem}`, {
-            defaultValue: record.subsystem,
-          })}
-        </Badge>
-      </td>
-      <td className="px-3 py-2 font-mono text-xs">
-        {record.host}
-        {record.port ? `:${record.port}` : ""}
-        {record.via_proxy ? (
-          <span className="ml-2 text-muted-foreground">
-            {t("egress.table.proxy")}
-          </span>
-        ) : null}
-      </td>
-      <td className="px-3 py-2">
-        <span className="font-mono text-xs">{record.operation}</span>
-        {record.method ? (
-          <span className="ml-2 text-xs text-muted-foreground">
-            {record.method}
-          </span>
-        ) : null}
-      </td>
-      <td className="px-3 py-2 text-right font-mono text-xs">
-        {formatBytes(record.bytes_out)}
-      </td>
-      <td className="px-3 py-2">
-        <StatusBadge record={record} />
-      </td>
-    </tr>
+    <React.Fragment>
+      <tr
+        className={cn(
+          "border-b last:border-b-0",
+          record.allowlist_status === "unexpected" &&
+            "bg-destructive/10 text-destructive",
+        )}
+      >
+        <td className="whitespace-nowrap px-3 py-2 font-mono text-xs text-muted-foreground">
+          <button
+            type="button"
+            aria-expanded={expanded}
+            aria-label={t("egress.details.toggle", { destination })}
+            title={t("egress.details.toggle", { destination })}
+            className="inline-flex h-6 items-center gap-1 rounded-sm px-1 text-left transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            onClick={onToggle}
+          >
+            <ChevronRight
+              className={cn(
+                "size-3.5 shrink-0 transition-transform",
+                expanded && "rotate-90",
+              )}
+              aria-hidden="true"
+            />
+            <span>{formatTime(record.ts)}</span>
+          </button>
+        </td>
+        <td className="px-3 py-2">
+          <Badge variant="outline" className="capitalize">
+            {t(`egress.subsystem.${record.subsystem}`, {
+              defaultValue: record.subsystem,
+            })}
+          </Badge>
+        </td>
+        <td className="px-3 py-2 font-mono text-xs">
+          {destination}
+          {record.via_proxy ? (
+            <span className="ml-2 text-muted-foreground">
+              {t("egress.table.proxy")}
+            </span>
+          ) : null}
+        </td>
+        <td className="px-3 py-2">
+          <span className="font-mono text-xs">{record.operation}</span>
+          {record.method ? (
+            <span className="ml-2 text-xs text-muted-foreground">
+              {record.method}
+            </span>
+          ) : null}
+        </td>
+        <td className="px-3 py-2 text-right font-mono text-xs">
+          {formatBytes(record.bytes_out)}
+        </td>
+        <td className="px-3 py-2">
+          <StatusBadge record={record} />
+        </td>
+      </tr>
+      {expanded ? (
+        <tr className="border-b bg-muted/20">
+          <td colSpan={6} className="px-3 py-3">
+            <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(300px,0.9fr)]">
+              <section className="min-w-0 rounded-md border bg-background/70 p-3">
+                <h2 className="mb-3 text-xs font-semibold uppercase text-muted-foreground">
+                  {t("egress.details.capturedMetadata")}
+                </h2>
+                <dl className="space-y-2 text-sm">
+                  <DetailRow
+                    label={t("egress.details.recordId")}
+                    value={`#${record.id}`}
+                    mono
+                  />
+                  <DetailRow
+                    label={t("egress.details.fullTime")}
+                    value={record.ts}
+                    mono
+                  />
+                  <DetailRow
+                    label={t("egress.table.destination")}
+                    value={destination}
+                    mono
+                  />
+                  <DetailRow
+                    label={t("egress.table.subsystem")}
+                    value={t(`egress.subsystem.${record.subsystem}`, {
+                      defaultValue: record.subsystem,
+                    })}
+                  />
+                  <DetailRow
+                    label={t("egress.table.operation")}
+                    value={operationLabel(record)}
+                    mono
+                  />
+                  <DetailRow
+                    label={t("egress.details.scheme")}
+                    value={record.scheme || t("egress.details.none")}
+                    mono
+                  />
+                  <DetailRow
+                    label={t("egress.table.bytesOut")}
+                    value={formatBytes(record.bytes_out)}
+                    mono
+                  />
+                  <DetailRow
+                    label={t("egress.details.proxy")}
+                    value={
+                      record.via_proxy
+                        ? t("egress.details.yes")
+                        : t("egress.details.no")
+                    }
+                  />
+                  <DetailRow
+                    label={t("egress.details.allowlist")}
+                    value={allowlistDetail(record, t)}
+                  />
+                </dl>
+              </section>
+              <section className="min-w-0 rounded-md border bg-background/70 p-3">
+                <h2 className="mb-3 text-xs font-semibold uppercase text-muted-foreground">
+                  {t("egress.details.storedRecord")}
+                </h2>
+                <pre className="max-h-80 overflow-auto rounded-md bg-muted/60 p-3 font-mono text-xs text-foreground">
+                  {JSON.stringify(record, null, 2)}
+                </pre>
+              </section>
+              <section className="rounded-md border border-dashed bg-background/70 p-3 lg:col-span-2">
+                <DetailRow
+                  label={t("egress.details.notCaptured")}
+                  value={t("egress.details.notCapturedValue")}
+                />
+              </section>
+            </div>
+          </td>
+        </tr>
+      ) : null}
+    </React.Fragment>
   );
 }
 
@@ -396,7 +517,9 @@ function filterRecords(records: EgressRecord[], query: string) {
   if (!needle) return records;
   return records.filter((record) =>
     [
+      String(record.id),
       record.host,
+      record.port,
       record.subsystem,
       record.operation,
       record.method,
@@ -406,6 +529,30 @@ function filterRecords(records: EgressRecord[], query: string) {
       .filter(Boolean)
       .some((value) => String(value).toLowerCase().includes(needle)),
   );
+}
+
+function formatDestination(record: EgressRecord) {
+  return `${record.host}${record.port ? `:${record.port}` : ""}`;
+}
+
+function operationLabel(record: EgressRecord) {
+  return record.method ? `${record.operation} ${record.method}` : record.operation;
+}
+
+function allowlistDetail(
+  record: EgressRecord,
+  t: TFunction<"review">,
+) {
+  const status =
+    record.allowlist_status === "expected"
+      ? record.user_allowlisted
+        ? t("egress.status.user")
+        : t("egress.status.builtIn")
+      : t(`egress.status.${record.allowlist_status}`);
+  const parts = [status, record.allowlist_label, record.allowlist_source].filter(
+    Boolean,
+  );
+  return parts.join(" · ");
 }
 
 function formatBytes(bytes: number) {
