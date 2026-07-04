@@ -184,6 +184,7 @@ def _disable_rp2_disk_logger(
                 try:
                     Path(log_file).unlink()
                 except OSError:
+                    # Best-effort cleanup: a stale RP2 log file must not block reports.
                     pass
     if not any(isinstance(handler, logging.NullHandler) for handler in logger.handlers):
         logger.addHandler(logging.NullHandler())
@@ -192,6 +193,7 @@ def _disable_rp2_disk_logger(
         try:
             root.rmdir()
         except OSError:
+            # Best-effort cleanup: non-empty or already-removed scratch dirs are harmless.
             pass
 
 
