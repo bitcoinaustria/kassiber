@@ -14,6 +14,7 @@ export type ConnectionKind =
   | "xpub"
   | "address"
   | "descriptor"
+  | "silent-payment"
   | "samourai"
   | "core-ln"
   | "lnd"
@@ -31,11 +32,13 @@ export type ConnectionKind =
   | "phoenix"
   | "custom"
   | "csv"
-  | "bip329";
+  | "bip329"
+  | "backend";
 
 export interface Connection {
   id: string;
   kind: ConnectionKind;
+  role?: "wallet" | "backend";
   /** Wallet chain ("bitcoin" | "liquid") from the daemon snapshot. */
   chain?: string | null;
   label: string;
@@ -53,6 +56,12 @@ export interface Connection {
   syncSource?: string;
   sourceFormat?: string;
   deprecated?: boolean;
+  backendId?: string;
+  backendKind?: string | null;
+  endpoint?: string | null;
+  isDefaultBackend?: boolean;
+  settingsHash?: string;
+  walletRefs?: string[];
   transactionCount?: number;
   addresses?: number;
   gap?: number;
@@ -170,6 +179,12 @@ export interface NodeSnapshot {
   /** number of active peers */
   peerCount: number;
   blockHeight?: number;
+  invoiceCount?: number;
+  paidInvoiceCount?: number;
+  expiredInvoiceCount?: number;
+  paymentCount?: number;
+  completedPaymentCount?: number;
+  failedPaymentCount?: number;
   /** sats sittable on-chain that the node owns */
   onchainBalanceSat: number;
   /** sum of localBalanceSat across active + inactive channels (excludes closed and pending) */

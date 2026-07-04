@@ -8,12 +8,16 @@ written and reviewed independently.
 from __future__ import annotations
 
 import sqlite3
+import tempfile
 import unittest
 from contextlib import contextmanager
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Iterator
 
+from kassiber.core import accounts as core_accounts
 from kassiber.core import lightning as core_lightning
+from kassiber.core import wallets as core_wallets
 from kassiber.core.lightning import (
     NodeChannel,
     NodeForward,
@@ -24,11 +28,13 @@ from kassiber.core.lightning import (
     register_adapter,
     registered_kinds,
     resolve_adapter,
+    resolve_lightning_backend,
     resolve_lightning_connection,
     snapshot_to_dict,
     snapshot_to_dict_for_ai,
     unregister_adapter,
 )
+from kassiber.db import open_db
 from kassiber.errors import AppError
 
 
@@ -288,6 +294,7 @@ class LightningAiPayloadTest(unittest.TestCase):
         # not be present at all (a `None` value is still a leak vector
         # because the test would silently pass).
         for channel in payload["channels"]:
+            self.assertNotIn("id", channel)
             self.assertNotIn("peerPubkey", channel)
             self.assertNotIn("shortChannelId", channel)
             self.assertNotIn("peerAlias", channel)
@@ -298,12 +305,14 @@ class LightningAiPayloadTest(unittest.TestCase):
             self.assertIn("localBalanceSat", channel)
             self.assertIn("state", channel)
         for channel in payload["closedChannels"]:
+            self.assertNotIn("id", channel)
             self.assertNotIn("peerPubkey", channel)
             self.assertNotIn("shortChannelId", channel)
             self.assertNotIn("peerAlias", channel)
             self.assertNotIn("fundingOutpoint", channel)
         # Forwards must drop both peer aliases and both short channel ids.
         for forward in payload["forwards"]:
+            self.assertNotIn("id", forward)
             self.assertNotIn("inPeerAlias", forward)
             self.assertNotIn("outPeerAlias", forward)
             self.assertNotIn("inShortChannelId", forward)
@@ -536,6 +545,7 @@ class LightningProfitabilityTest(unittest.TestCase):
 def _scoped_lightning_conn(
     rows: list[tuple[str, str, str, str, str]],
     *,
+    backends: list[tuple[str, str, str]] | None = None,
     workspaces: list[tuple[str, str]] | None = None,
     profiles: list[tuple[str, str, str]] | None = None,
     default_workspace: str = "ws-1",
@@ -572,6 +582,23 @@ def _scoped_lightning_conn(
         " config_json TEXT NOT NULL DEFAULT '{}',"
         " UNIQUE (profile_id, label))"
     )
+    conn.execute(
+        "CREATE TABLE backends ("
+        " name TEXT PRIMARY KEY,"
+        " kind TEXT NOT NULL,"
+        " chain TEXT,"
+        " network TEXT,"
+        " url TEXT NOT NULL,"
+        " auth_header TEXT,"
+        " token TEXT,"
+        " batch_size INTEGER,"
+        " timeout INTEGER,"
+        " tor_proxy TEXT,"
+        " config_json TEXT NOT NULL DEFAULT '{}',"
+        " notes TEXT,"
+        " created_at TEXT NOT NULL,"
+        " updated_at TEXT NOT NULL)"
+    )
     conn.executemany(
         "INSERT INTO workspaces (id, label) VALUES (?, ?)",
         workspaces or [("ws-1", "Workspace 1")],
@@ -585,6 +612,14 @@ def _scoped_lightning_conn(
         " VALUES (?, ?, ?, ?, ?)",
         rows,
     )
+    if backends:
+        conn.executemany(
+            "INSERT INTO backends ("
+            " name, kind, url, config_json, created_at, updated_at)"
+            " VALUES (?, ?, ?, '{}', '2026-01-01T00:00:00Z',"
+            " '2026-01-01T00:00:00Z')",
+            backends,
+        )
     conn.execute(
         "INSERT INTO settings (key, value) VALUES (?, ?)",
         ("context_workspace", default_workspace),
@@ -681,11 +716,58 @@ class ResolveLightningConnectionTest(unittest.TestCase):
         self.assertEqual(row["config"], {})
         self.assertIsNone(row["backend_name"])
 
+    def test_backend_resolver_returns_raw_db_backend_for_adapter_use(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            conn = open_db(Path(tmp) / "data")
+            workspace = core_accounts.create_workspace(conn, "Personal")
+            profile = core_accounts.create_profile(
+                conn,
+                workspace["id"],
+                "Main",
+                "USD",
+                "FIFO",
+                "generic",
+                365,
+            )
+            core_accounts.create_backend(
+                conn,
+                "merchant-cln",
+                "coreln",
+                "cln://local",
+                token="readonly-rune",
+                config={
+                    "commando_peer_id": "02" + "ab" * 32,
+                    "lightning_cli": "/tmp/merchant-lightning-cli",
+                },
+            )
+            core_wallets.create_wallet(
+                conn,
+                workspace["id"],
+                profile["id"],
+                "Merchant CLN",
+                "coreln",
+                config={"backend": "merchant-cln"},
+            )
+            wallet = resolve_lightning_connection(conn, "Merchant CLN")
+            backend = resolve_lightning_backend(
+                conn,
+                {"env_file": "", "default_backend": "", "backends": {}},
+                wallet,
+            )
+            self.assertIsNotNone(backend)
+            self.assertEqual(backend["name"], "merchant-cln")
+            self.assertEqual(backend["token"], "readonly-rune")
+            self.assertEqual(
+                backend["lightning_cli"],
+                "/tmp/merchant-lightning-cli",
+            )
+
 
 class LightningDaemonPayloadTest(unittest.TestCase):
     def _conn_with_lightning_wallet(self) -> sqlite3.Connection:
         return _scoped_lightning_conn(
-            [("w-1", "Home CLN", "coreln", "pf-1", '{"backend": "home-backend"}')]
+            [("w-1", "Home CLN", "coreln", "pf-1", '{"backend": "home-backend"}')],
+            backends=[("home-backend", "coreln", "cln://local")],
         )
 
     @contextmanager
@@ -764,6 +846,71 @@ class LightningDaemonPayloadTest(unittest.TestCase):
         self.assertEqual(payload["summary"]["netProfitSat"], 3_280)
         self.assertGreaterEqual(len(payload["channels"]), 1)
 
+    def test_cli_profitability_payload_passes_configured_backend_to_adapter(
+        self,
+    ) -> None:
+        from kassiber.cli.main import _cli_lightning_profitability_payload
+
+        class _RecordingAdapter:
+            kind = "coreln"
+
+            def __init__(self) -> None:
+                self.backend: dict[str, Any] | None = None
+
+            def fetch_node_snapshot(
+                self,
+                connection: dict[str, Any],
+                backend: dict[str, Any] | None,
+                *,
+                window_days: int = 30,
+            ) -> NodeSnapshot:
+                self.backend = backend
+                return _snapshot_with_routing()
+
+        with tempfile.TemporaryDirectory() as tmp:
+            conn = open_db(Path(tmp) / "data")
+            workspace = core_accounts.create_workspace(conn, "Personal")
+            profile = core_accounts.create_profile(
+                conn,
+                workspace["id"],
+                "Main",
+                "USD",
+                "FIFO",
+                "generic",
+                365,
+            )
+            core_accounts.create_backend(
+                conn,
+                "merchant-cln",
+                "coreln",
+                "cln://local",
+                token="readonly-rune",
+                config={
+                    "commando_peer_id": "02" + "ab" * 32,
+                    "lightning_cli": "/tmp/merchant-lightning-cli",
+                },
+            )
+            core_wallets.create_wallet(
+                conn,
+                workspace["id"],
+                profile["id"],
+                "Merchant CLN",
+                "coreln",
+                config={"backend": "merchant-cln"},
+            )
+            adapter = _RecordingAdapter()
+            with _adapter_registered("coreln", adapter):
+                payload = _cli_lightning_profitability_payload(
+                    conn,
+                    "Merchant CLN",
+                    window_days=30,
+                    runtime_config={"env_file": "", "default_backend": "", "backends": {}},
+                )
+            self.assertEqual(payload["connection"]["label"], "Merchant CLN")
+            self.assertIsNotNone(adapter.backend)
+            self.assertEqual(adapter.backend["name"], "merchant-cln")
+            self.assertEqual(adapter.backend["token"], "readonly-rune")
+
 
 class LightningModuleExportsTest(unittest.TestCase):
     def test_top_level_exports_match_public_api(self) -> None:
@@ -785,6 +932,7 @@ class LightningModuleExportsTest(unittest.TestCase):
             "register_adapter",
             "registered_kinds",
             "resolve_adapter",
+            "resolve_lightning_backend",
             "resolve_lightning_connection",
             "snapshot_to_dict",
             "snapshot_to_dict_for_ai",

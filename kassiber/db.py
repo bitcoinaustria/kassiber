@@ -171,6 +171,20 @@ CREATE TABLE IF NOT EXISTS transactions (
     created_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS transaction_graph_cache (
+    schema_version INTEGER NOT NULL,
+    chain TEXT NOT NULL,
+    network TEXT NOT NULL,
+    txid TEXT NOT NULL,
+    payload_json TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (schema_version, chain, network, txid)
+);
+
+CREATE INDEX IF NOT EXISTS idx_transaction_graph_cache_updated
+    ON transaction_graph_cache(updated_at DESC);
+
 CREATE TABLE IF NOT EXISTS tags (
     id TEXT PRIMARY KEY,
     workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
@@ -1174,6 +1188,16 @@ def _configure_connection_pragmas(conn, *, encrypted=False):
     conn.execute("PRAGMA foreign_keys = ON")
 
 
+def _preflight_schema_index_columns(conn):
+    """Add legacy-missing columns referenced by indexes in ``SCHEMA``."""
+    columns = {
+        row["name"]
+        for row in conn.execute("PRAGMA table_info(journal_tax_summary)").fetchall()
+    }
+    if columns and "capital_gains_type" not in columns:
+        conn.execute("ALTER TABLE journal_tax_summary ADD COLUMN capital_gains_type TEXT")
+
+
 def open_db(data_root, *, passphrase=None, require_existing_schema=False):
     """Open (and lazily migrate) the SQLite store rooted at `data_root`.
 
@@ -1224,6 +1248,7 @@ def open_db(data_root, *, passphrase=None, require_existing_schema=False):
                     retryable=False,
                 )
             _configure_connection_pragmas(conn)
+            _preflight_schema_index_columns(conn)
             conn.executescript(SCHEMA)
             ensure_schema_compat(conn)
             return conn
@@ -1255,6 +1280,7 @@ def open_db(data_root, *, passphrase=None, require_existing_schema=False):
                 retryable=False,
             )
         _configure_connection_pragmas(conn, encrypted=True)
+        _preflight_schema_index_columns(conn)
         conn.executescript(SCHEMA)
         ensure_schema_compat(conn)
         return conn
@@ -1350,6 +1376,7 @@ def ensure_schema_compat(conn):
     ensure_column(conn, "journal_entries", "gain_loss_exact", "TEXT")
     ensure_column(conn, "journal_entries", "pricing_source_kind", "TEXT")
     ensure_column(conn, "journal_entries", "pricing_quality", "TEXT")
+    ensure_column(conn, "journal_tax_summary", "capital_gains_type", "TEXT")
     ensure_column(conn, "rates_cache", "rate_exact", "TEXT")
     ensure_column(conn, "rates_cache", "granularity", "TEXT")
     ensure_column(conn, "rates_cache", "method", "TEXT")
@@ -1379,6 +1406,7 @@ def ensure_schema_compat(conn):
     ensure_column(conn, "wallet_utxos", "anon_history_json", "TEXT NOT NULL DEFAULT '[]'")
     ensure_column(conn, "loan_legs", "loan_id", "TEXT")
     _ensure_ai_provider_secret_refs_schema(conn)
+    _ensure_bip329_wallet_agnostic_schema(conn)
     _drop_legacy_source_funds_recipients_unique(conn)
     _migrate_msat_columns(conn)
     # Added after the msat rebuild, whose fixed column list would otherwise drop
@@ -1392,6 +1420,89 @@ def ensure_schema_compat(conn):
     _ensure_direct_swap_payout_schema(conn)
     _ensure_commercial_reconciliation_schema(conn)
     _ensure_freshness_schema(conn)
+    _ensure_transaction_graph_cache_schema(conn)
+
+
+def _decode_json_object(raw_json):
+    try:
+        payload = json.loads(raw_json or "{}")
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _ensure_bip329_wallet_agnostic_schema(conn):
+    groups = conn.execute(
+        """
+        SELECT profile_id, record_type, ref
+        FROM bip329_labels
+        GROUP BY profile_id, record_type, ref
+        HAVING COUNT(*) > 1
+        """
+    ).fetchall()
+    for group in groups:
+        rows = conn.execute(
+            """
+            SELECT *
+            FROM bip329_labels
+            WHERE profile_id = ?
+              AND record_type = ?
+              AND ref = ?
+            ORDER BY created_at ASC, id ASC
+            """,
+            (group["profile_id"], group["record_type"], group["ref"]),
+        ).fetchall()
+        if not rows:
+            continue
+        label = None
+        origin = None
+        spendable = None
+        data = {}
+        for row in rows:
+            if row["label"] is not None:
+                label = row["label"]
+            if row["origin"] is not None:
+                origin = row["origin"]
+            if row["spendable"] is not None:
+                spendable = row["spendable"]
+            data.update(_decode_json_object(row["data_json"]))
+        canonical = rows[-1]
+        conn.execute(
+            """
+            UPDATE bip329_labels
+            SET wallet_id = NULL,
+                label = ?,
+                origin = ?,
+                spendable = ?,
+                data_json = ?
+            WHERE id = ?
+            """,
+            (label, origin, spendable, json.dumps(data, sort_keys=True), canonical["id"]),
+        )
+        conn.execute(
+            """
+            DELETE FROM bip329_labels
+            WHERE profile_id = ?
+              AND record_type = ?
+              AND ref = ?
+              AND id != ?
+            """,
+            (group["profile_id"], group["record_type"], group["ref"], canonical["id"]),
+        )
+    conn.execute("UPDATE bip329_labels SET wallet_id = NULL WHERE wallet_id IS NOT NULL")
+    conn.execute(
+        """
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_bip329_labels_profile_object
+            ON bip329_labels(profile_id, record_type, ref)
+        """
+    )
+    conn.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_bip329_labels_profile_created
+            ON bip329_labels(profile_id, created_at DESC, id DESC)
+        """
+    )
+    conn.commit()
 
 
 def _ensure_ai_provider_secret_refs_schema(conn):
@@ -1491,6 +1602,29 @@ def _ensure_freshness_schema(conn):
             ("updated_at", "TEXT NOT NULL DEFAULT ''"),
         ):
             ensure_column(conn, table, column, definition)
+
+
+def _ensure_transaction_graph_cache_schema(conn):
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS transaction_graph_cache (
+            schema_version INTEGER NOT NULL,
+            chain TEXT NOT NULL,
+            network TEXT NOT NULL,
+            txid TEXT NOT NULL,
+            payload_json TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            PRIMARY KEY (schema_version, chain, network, txid)
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_transaction_graph_cache_updated
+            ON transaction_graph_cache(updated_at DESC)
+        """
+    )
 
 
 def _ensure_commercial_reconciliation_schema(conn):
@@ -2166,16 +2300,77 @@ def _column_is_real(conn, table_name, column_name):
     return False
 
 
+def _recreate_msat_migration_indexes(conn):
+    """Restore indexes dropped by SQLite table rebuild migrations."""
+    conn.executescript(
+        """
+        CREATE INDEX IF NOT EXISTS idx_transactions_profile_external_id
+            ON transactions(profile_id, external_id) WHERE external_id IS NOT NULL;
+
+        CREATE INDEX IF NOT EXISTS idx_transactions_profile_active_time
+            ON transactions(profile_id, excluded, occurred_at, created_at, id);
+
+        CREATE INDEX IF NOT EXISTS idx_transactions_wallet_external_match
+            ON transactions(wallet_id, external_id, direction, asset, amount, fee, created_at)
+            WHERE external_id IS NOT NULL;
+
+        CREATE INDEX IF NOT EXISTS idx_transactions_profile_economic_match
+            ON transactions(profile_id, direction, asset, amount, occurred_at, created_at);
+
+        CREATE INDEX IF NOT EXISTS idx_transactions_wallet_pricing_ref
+            ON transactions(wallet_id, pricing_external_ref, direction, asset, amount, created_at)
+            WHERE pricing_external_ref IS NOT NULL;
+
+        CREATE INDEX IF NOT EXISTS idx_journal_entries_profile_time
+            ON journal_entries(profile_id, occurred_at, created_at, id);
+
+        CREATE INDEX IF NOT EXISTS idx_journal_entries_profile_type_time
+            ON journal_entries(profile_id, entry_type, occurred_at, created_at, id);
+
+        CREATE INDEX IF NOT EXISTS idx_journal_entries_profile_wallet_time
+            ON journal_entries(profile_id, wallet_id, occurred_at, created_at, id);
+
+        CREATE INDEX IF NOT EXISTS idx_journal_entries_profile_account_time
+            ON journal_entries(profile_id, account_id, occurred_at, created_at, id);
+
+        CREATE INDEX IF NOT EXISTS idx_journal_entries_transaction
+            ON journal_entries(transaction_id);
+
+        CREATE INDEX IF NOT EXISTS idx_journal_tax_summary_profile_year
+            ON journal_tax_summary(profile_id, year, asset, transaction_type, capital_gains_type);
+
+        CREATE INDEX IF NOT EXISTS idx_journal_account_holdings_profile_asset
+            ON journal_account_holdings(profile_id, asset, account_code, id);
+
+        CREATE INDEX IF NOT EXISTS idx_journal_wallet_holdings_profile_asset
+            ON journal_wallet_holdings(profile_id, asset, wallet_label, id);
+        """
+    )
+
+
 def _migrate_msat_columns(conn):
-    """Rebuild transactions / journal_entries tables to store amounts as INTEGER msat.
+    """Rebuild BTC-denominated tables to store amounts as INTEGER msat.
 
     Safe on fresh databases (columns are already INTEGER -> no-op) and on
     pre-migration databases created with REAL amount/fee/quantity columns.
     Existing float BTC values are multiplied into msat with ROUND_HALF_UP.
     """
-    migrate_transactions = _column_is_real(conn, "transactions", "amount") or _column_is_real(conn, "transactions", "fee")
+    migrate_transactions = _column_is_real(
+        conn, "transactions", "amount"
+    ) or _column_is_real(conn, "transactions", "fee")
     migrate_journal_entries = _column_is_real(conn, "journal_entries", "quantity")
-    if not migrate_transactions and not migrate_journal_entries:
+    migrate_journal_tax_summary = _column_is_real(conn, "journal_tax_summary", "quantity")
+    migrate_journal_account_holdings = _column_is_real(conn, "journal_account_holdings", "quantity")
+    migrate_journal_wallet_holdings = _column_is_real(conn, "journal_wallet_holdings", "quantity")
+    if not any(
+        (
+            migrate_transactions,
+            migrate_journal_entries,
+            migrate_journal_tax_summary,
+            migrate_journal_account_holdings,
+            migrate_journal_wallet_holdings,
+        )
+    ):
         return
 
     conn.commit()
@@ -2287,6 +2482,90 @@ def _migrate_msat_columns(conn):
                 COMMIT;
                 """
             )
+        if migrate_journal_tax_summary:
+            conn.executescript(
+                """
+                BEGIN;
+                CREATE TABLE journal_tax_summary__msat_new (
+                    id TEXT PRIMARY KEY,
+                    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+                    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+                    year INTEGER NOT NULL,
+                    asset TEXT NOT NULL,
+                    transaction_type TEXT NOT NULL,
+                    capital_gains_type TEXT,
+                    quantity INTEGER NOT NULL,
+                    proceeds REAL NOT NULL DEFAULT 0,
+                    cost_basis REAL NOT NULL DEFAULT 0,
+                    gain_loss REAL NOT NULL DEFAULT 0,
+                    created_at TEXT NOT NULL
+                );
+                INSERT INTO journal_tax_summary__msat_new SELECT
+                    id, workspace_id, profile_id, year, asset, transaction_type,
+                    capital_gains_type,
+                    CAST(ROUND(quantity * 100000000000.0) AS INTEGER),
+                    proceeds, cost_basis, gain_loss, created_at
+                FROM journal_tax_summary;
+                DROP TABLE journal_tax_summary;
+                ALTER TABLE journal_tax_summary__msat_new RENAME TO journal_tax_summary;
+                COMMIT;
+                """
+            )
+        if migrate_journal_account_holdings:
+            conn.executescript(
+                """
+                BEGIN;
+                CREATE TABLE journal_account_holdings__msat_new (
+                    id TEXT PRIMARY KEY,
+                    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+                    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+                    account_id TEXT REFERENCES accounts(id) ON DELETE SET NULL,
+                    account_code TEXT,
+                    account_label TEXT,
+                    asset TEXT NOT NULL,
+                    quantity INTEGER NOT NULL,
+                    cost_basis REAL NOT NULL DEFAULT 0,
+                    created_at TEXT NOT NULL
+                );
+                INSERT INTO journal_account_holdings__msat_new SELECT
+                    id, workspace_id, profile_id, account_id, account_code, account_label,
+                    asset,
+                    CAST(ROUND(quantity * 100000000000.0) AS INTEGER),
+                    cost_basis, created_at
+                FROM journal_account_holdings;
+                DROP TABLE journal_account_holdings;
+                ALTER TABLE journal_account_holdings__msat_new RENAME TO journal_account_holdings;
+                COMMIT;
+                """
+            )
+        if migrate_journal_wallet_holdings:
+            conn.executescript(
+                """
+                BEGIN;
+                CREATE TABLE journal_wallet_holdings__msat_new (
+                    id TEXT PRIMARY KEY,
+                    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+                    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+                    wallet_id TEXT REFERENCES wallets(id) ON DELETE CASCADE,
+                    wallet_label TEXT,
+                    account_code TEXT,
+                    asset TEXT NOT NULL,
+                    quantity INTEGER NOT NULL,
+                    cost_basis REAL NOT NULL DEFAULT 0,
+                    created_at TEXT NOT NULL
+                );
+                INSERT INTO journal_wallet_holdings__msat_new SELECT
+                    id, workspace_id, profile_id, wallet_id, wallet_label, account_code,
+                    asset,
+                    CAST(ROUND(quantity * 100000000000.0) AS INTEGER),
+                    cost_basis, created_at
+                FROM journal_wallet_holdings;
+                DROP TABLE journal_wallet_holdings;
+                ALTER TABLE journal_wallet_holdings__msat_new RENAME TO journal_wallet_holdings;
+                COMMIT;
+                """
+            )
+        _recreate_msat_migration_indexes(conn)
     except Exception:
         conn.rollback()
         raise

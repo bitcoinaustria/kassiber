@@ -6874,11 +6874,11 @@ class DaemonSmokeTest(unittest.TestCase):
             ai_payload = json.dumps(results[0]["envelope"]["data"], sort_keys=True)
             self.assertIn(f"{'77' * 32}:1", ai_payload)
             self.assertNotIn(f"{'99' * 32}:2", ai_payload)
-            self.assertIn('"branch_label": "receive"', ai_payload)
             self.assertNotIn(f"{'66' * 32}:0", ai_payload)
             self.assertNotIn("bc1qobservedcoin", ai_payload)
             self.assertNotIn("bc1qrenamedbackendcoin", ai_payload)
             self.assertNotIn("address_label", ai_payload)
+            self.assertNotIn("branch_label", ai_payload)
             self.assertNotIn("address_index", ai_payload)
             self.assertNotIn("branch_index", ai_payload)
             self.assertNotIn("private-node.local", ai_payload)
@@ -7092,7 +7092,7 @@ class DaemonSmokeTest(unittest.TestCase):
 
                 cancel_response = None
                 terminal = None
-                deadline = time.time() + 5
+                deadline = time.time() + 15
                 while time.time() < deadline and (cancel_response is None or terminal is None):
                     payload = _read_payload_timeout(proc, max(0.1, deadline - time.time()))
                     if payload.get("request_id") == "cancel-1":
@@ -8691,6 +8691,15 @@ class DaemonSmokeTest(unittest.TestCase):
             self.assertEqual(first["request_id"], "logs-0")
             self.assertEqual(first["data"]["records"], [])
             self.assertIn("started_at", first["data"])
+
+            _write_payload(proc, {"request_id": "egress-0", "kind": "ui.egress.snapshot"})
+            egress = _read_payload(proc)
+            self.assertEqual(egress["kind"], "ui.egress.snapshot")
+            self.assertEqual(egress["request_id"], "egress-0")
+            self.assertEqual(egress["data"]["records"], [])
+            self.assertEqual(egress["data"]["summary"]["update"], 0)
+            self.assertIn("db_header", egress["data"])
+            self.assertFalse(egress["data"]["allowlist_complete"])
 
             _write_payload(proc, {"request_id": "status-1", "kind": "status"})
             self.assertEqual(_read_payload(proc)["request_id"], "status-1")

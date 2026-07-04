@@ -11,7 +11,7 @@ import {
 // a one-place change; the store type follows it.
 type Lang = LanguageCode;
 type Currency = "btc" | "eur";
-export type DataMode = "mock" | "real";
+export type DataMode = "mock" | "real" | "regtest";
 export type ThemePreference = "system" | "light" | "dark";
 export type NotificationTone = "info" | "success" | "warning" | "error";
 
@@ -19,6 +19,10 @@ export const DEFAULT_APP_SCALE = 0.9;
 export const MIN_APP_SCALE = 0.8;
 export const MAX_APP_SCALE = 1.2;
 export const APP_SCALE_STEP = 0.05;
+
+export function isDaemonDataMode(dataMode: DataMode) {
+  return dataMode === "real" || dataMode === "regtest";
+}
 
 export interface NotificationProgress {
   value?: number;
@@ -255,6 +259,26 @@ function normalizeIdentity(identity: Identity | null): Identity | null {
   };
 }
 
+function isRegtestIdentity(identity: Identity | null): boolean {
+  if (!identity) return false;
+  const workspace = identity.workspace?.trim().toLowerCase();
+  const dataRoot = identity.importedProject?.dataRoot?.trim().toLowerCase();
+  return (
+    workspace === "regtest demo" ||
+    Boolean(dataRoot && dataRoot.includes("regtest-demo"))
+  );
+}
+
+function normalizeStoredDataMode(
+  dataMode: DataMode | undefined,
+  identity: Identity | null,
+): DataMode {
+  if (dataMode === "mock") {
+    return isRegtestIdentity(identity) ? "regtest" : "real";
+  }
+  return dataMode ?? "real";
+}
+
 /**
  * Stable key for the active book, used to remember whether its initial sync has
  * happened. An imported project is keyed by its database path; an
@@ -294,7 +318,7 @@ export function uiStatePartialForStorage(state: UiState) {
   return {
     lang: state.lang,
     currency: state.currency,
-    dataMode: state.dataMode,
+    dataMode: normalizeStoredDataMode(state.dataMode, state.identity),
     theme: state.theme,
     hideSensitive: state.hideSensitive,
     clearClipboard: state.clearClipboard,
@@ -336,7 +360,10 @@ export const useUiStore = create<UiState>()(
       sourceFundsDrafts: {},
       setLang: (lang) => set({ lang }),
       setCurrency: (currency) => set({ currency }),
-      setDataMode: (dataMode) => set({ dataMode }),
+      setDataMode: (dataMode) =>
+        set((state) => ({
+          dataMode: normalizeStoredDataMode(dataMode, state.identity),
+        })),
       setTheme: (theme) => set({ theme }),
       setAppScale: (appScale) =>
         set({ appScale: normalizeAppScale(appScale) }),
@@ -486,6 +513,10 @@ export const useUiStore = create<UiState>()(
       merge: (persisted, current) => {
         const restored = persisted as Partial<UiState>;
         const identity = normalizeIdentity(restored.identity ?? current.identity);
+        const dataMode = normalizeStoredDataMode(
+          restored.dataMode,
+          identity ?? current.identity,
+        );
         const aiFeaturesEnabled =
           restored.aiFeaturesEnabled ??
           (identity?.aiSetupMode === "disabled"
@@ -494,6 +525,7 @@ export const useUiStore = create<UiState>()(
         return {
           ...current,
           ...restored,
+          dataMode,
           appScale: normalizeAppScale(restored.appScale ?? current.appScale),
           clearClipboard: restored.clearClipboard ?? current.clearClipboard,
           explorerSettings: {

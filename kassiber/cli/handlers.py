@@ -35,6 +35,7 @@ from ..backends import (
 from ..core import accounts as core_accounts
 from ..core import attachments as core_attachments
 from ..core import commercial as core_commercial
+from ..core import freshness as core_freshness
 from ..core import imports as core_imports
 from ..core.lightning import cln as core_lightning_cln
 from ..core import loans as core_loans
@@ -345,8 +346,10 @@ def _journals_current_for_profile(conn, profile):
 
 
 BITCOIN_LAYER_TRANSITION_PAIR_KINDS = (
+    "chain-swap",
     "peg-in",
     "peg-out",
+    "reverse-submarine-swap",
     "submarine-swap",
     "swap-refund",
 )
@@ -526,12 +529,12 @@ def create_transaction_pair(
     # On a split pair only the swapped portion (`out_amount`) crosses to the
     # other asset, so the persisted swap fee must be measured against that, not
     # the full outbound (the remainder is a same-asset self-transfer).
-    swap_fee_out_msat = (
-        out_amount_msat if out_amount_msat is not None else int(out_row["amount"] or 0)
-    )
+    split_pair = out_amount_msat is not None
+    swap_fee_out_msat = out_amount_msat if split_pair else int(out_row["amount"] or 0)
     swap_fee_msat, swap_fee_kind = core_transfer_matching.compute_swap_fee(
         swap_fee_out_msat,
         int(in_row["amount"] or 0),
+        _outbound_pair_fee_component_msat(out_row, split_pair=split_pair),
     )
     pair_id = str(uuid.uuid4())
     conn.execute(
@@ -657,6 +660,10 @@ def create_direct_swap_payout(
     swap_fee_msat, swap_fee_kind = core_transfer_matching.compute_swap_fee(
         out_amount_msat if out_amount_msat is not None else int(out_row["amount"] or 0),
         payout_amount_msat,
+        _outbound_pair_fee_component_msat(
+            out_row,
+            split_pair=out_amount_msat is not None,
+        ),
     )
     payout_id = str(uuid.uuid4())
     conn.execute(
@@ -857,7 +864,35 @@ def _candidate_to_dict(candidate):
         "conflict_set_id": candidate.conflict_set_id,
         "conflict_size": candidate.conflict_size,
     }
+    if candidate.evidence_provider or candidate.evidence_id:
+        data["evidence"] = {
+            "provider": candidate.evidence_provider,
+            "id": candidate.evidence_id,
+            "kind": candidate.evidence_kind,
+            "status": candidate.evidence_status,
+            "version": candidate.evidence_version,
+            "taproot": candidate.evidence_taproot,
+            "cooperative": candidate.evidence_cooperative,
+            "spend_path": candidate.evidence_spend_path,
+        }
     return data
+
+
+def _outbound_pair_fee_component_msat(row, *, split_pair=False):
+    if split_pair:
+        # A reviewed split amount is only the portion that crossed rails. Without
+        # a reviewed fee allocation, charging the full transaction fee to that
+        # portion would overstate the swap fee.
+        return 0
+    try:
+        if row["amount_includes_fee"]:
+            return 0
+    except (IndexError, KeyError):
+        return 0
+    try:
+        return max(0, int(row["fee"] or 0))
+    except (TypeError, ValueError, IndexError, KeyError):
+        return 0
 
 
 def _load_transfer_rules(conn, profile_id):
@@ -902,7 +937,7 @@ def _load_matcher_rows(conn, profile_id):
             t.id, t.profile_id, t.wallet_id, t.external_id, t.payment_hash,
             t.swap_refund_funding_txid,
             t.occurred_at, t.direction, t.asset, t.amount, t.amount_includes_fee,
-            t.excluded,
+            t.fee, t.kind, t.raw_json, t.excluded,
             w.label AS wallet_label, w.kind AS wallet_kind
         FROM transactions t
         JOIN wallets w ON w.id = t.wallet_id
@@ -1026,7 +1061,8 @@ def suggest_transfer_candidates(
     ``OUT-IN`` shape (e.g. ``"LBTC-BTC"``); ``route_pair`` matches the
     rail-aware route shape (e.g. ``"LNBTC-BTC"``); ``candidate_type`` splits
     carrying-value Bitcoin movements from other cross-asset swaps; and ``method``
-    pins to ``payment_hash`` or ``heuristic``.
+    pins to a matcher method such as ``payment_hash``, ``provider_swap_id``,
+    ``htlc_refund``, or ``heuristic``.
     """
     _, profile = resolve_scope(conn, workspace_ref, profile_ref)
     rows = _load_matcher_rows(conn, profile["id"])
@@ -1095,7 +1131,7 @@ def bulk_pair_transfers(
     """Run the matcher and auto-pair every solo (non-conflicted) candidate
     whose confidence meets the threshold.
 
-    Defaults to ``confidence="exact"`` so only payment-hash matches
+    Defaults to ``confidence="exact"`` so only deterministic links
     auto-apply without further user review. Conflict clusters are
     always skipped — disambiguation stays manual.
     """
@@ -2091,6 +2127,18 @@ def _insert_records_for_sync(conn, profile, wallet, records, source_label, *, co
     )
 
 
+def _retract_records_for_sync(conn, profile, wallet, external_ids, source_label, *, commit=True):
+    return core_imports.retract_wallet_records(
+        conn,
+        profile,
+        wallet,
+        external_ids,
+        source_label,
+        _import_coordinator_hooks(),
+        commit=commit,
+    )
+
+
 def _wallet_sync_hooks(commit=True):
     return core_sync.WalletSyncHooks(
         import_file=lambda conn, profile, wallet, file_path, input_format: _import_file_for_sync(
@@ -2108,6 +2156,14 @@ def _wallet_sync_hooks(commit=True):
             records,
             source_label,
             commit=commit,
+        ),
+        retract_records=lambda conn, profile, wallet, external_ids, source_label: _retract_records_for_sync(
+            conn,
+            profile,
+            wallet,
+            external_ids,
+            source_label,
+            commit=False,
         ),
         resolve_backend=resolve_backend,
         resolve_sync_state=core_sync_backends.resolve_wallet_sync_targets,
@@ -2170,7 +2226,32 @@ def _mark_wallet_synced(conn, wallet, synced_at=None):
 
 def _mark_wallet_synced_from_results(conn, wallet, results):
     if any(result.get("status") == "synced" for result in results):
-        _mark_wallet_synced(conn, wallet)
+        synced_at = _mark_wallet_synced(conn, wallet)
+        for result in results:
+            checkpoint = result.get("freshness_checkpoint")
+            if not isinstance(checkpoint, dict):
+                continue
+            blocking_reports = bool(result.get("blocking_reports"))
+            core_freshness.upsert_source_state(
+                conn,
+                profile_id=wallet["profile_id"],
+                source_key=core_freshness.source_key(core_freshness.SOURCE_ONCHAIN, wallet["id"]),
+                source_type=core_freshness.SOURCE_ONCHAIN,
+                source_label=wallet["label"],
+                status=(
+                    core_freshness.STATUS_PARTIALLY_STALE
+                    if result.get("partial_success")
+                    else core_freshness.STATUS_FRESH
+                ),
+                stale_reason=result.get("silent_payment_degraded_reason")
+                if result.get("partial_success")
+                else None,
+                blocking_reports=blocking_reports,
+                last_success_at=synced_at,
+                last_phase=core_freshness.PHASE_DONE,
+                progress={"phase": core_freshness.PHASE_DONE},
+                checkpoint=checkpoint,
+            )
 
 
 def sync_wallet_from_backend(
@@ -2238,7 +2319,7 @@ def sync_wallet(
             checkpoints=freshness_checkpoints,
             force_full=force_full,
             source_overlap_preflight=(
-                lambda wallet, sync_state: core_source_overlap.raise_for_sync_source_overlap(
+                lambda wallet, sync_state: core_source_overlap.filter_sync_state_for_canonical_owner(
                     conn,
                     profile,
                     wallet,
@@ -3719,6 +3800,12 @@ def _serialize_intra_audit(rows):
             "fee": float(dec(row["crypto_fee"])),
             "fee_msat": btc_to_msat(dec(row["crypto_fee"])),
             "spot_price": float(dec(row["spot_price"])),
+            "pairing_source": row.get("pairing_source"),
+            **(
+                {"transfer_group_id": row["transfer_group_id"]}
+                if row.get("transfer_group_id")
+                else {}
+            ),
         }
         for row in sorted(
             rows,

@@ -11,12 +11,13 @@
  */
 
 import { mockDaemon, mockStream } from "./mock";
-import { useUiStore, type DataMode } from "@/store/ui";
+import { isDaemonDataMode, useUiStore, type DataMode } from "@/store/ui";
 import {
   emitAppLog,
   type AppLogField,
   type AppLogLevel,
 } from "@/lib/appLogs";
+import { safeTauriUnlisten } from "@/lib/tauriUnlisten";
 
 export type DaemonMode = "mock" | "bridge" | "tauri";
 
@@ -684,6 +685,57 @@ export function canImportProjects(): boolean {
   return DAEMON_MODE === "tauri" || DAEMON_MODE === "bridge";
 }
 
+const RESET_REGTEST_BRIDGE_PATH = "/__kassiber__/reset-regtest";
+
+function normalizeDataRootForCompare(dataRoot: string | null | undefined): string {
+  return (dataRoot ?? "").trim().replace(/[\\/]+$/, "");
+}
+
+export function regtestDemoDataRoot(): string {
+  const configuredRoot =
+    typeof __REGTEST_DEMO_DATA_ROOT__ === "string"
+      ? __REGTEST_DEMO_DATA_ROOT__
+      : "";
+  return DAEMON_MODE === "bridge"
+    ? normalizeDataRootForCompare(configuredRoot)
+    : "";
+}
+
+export function isRegtestDemoDataRoot(dataRoot: string | null | undefined): boolean {
+  const demoRoot = regtestDemoDataRoot();
+  return Boolean(demoRoot) && normalizeDataRootForCompare(dataRoot) === demoRoot;
+}
+
+// The full regtest reset shells out to Docker + the harness, which only exists
+// behind the dev Vite bridge. It is deliberately unavailable in the shipped
+// Tauri app so the production daemon never gains a Docker/shell escape hatch.
+export function canResetRegtestDemo(dataRoot?: string | null): boolean {
+  if (DAEMON_MODE !== "bridge") return false;
+  return dataRoot === undefined || isRegtestDemoDataRoot(dataRoot);
+}
+
+export async function resetRegtestDemo(): Promise<{ dataRoot: string }> {
+  if (!canResetRegtestDemo()) {
+    throw new Error("Resetting the regtest demo is only available in the dev bridge.");
+  }
+  const response = await fetch(RESET_REGTEST_BRIDGE_PATH, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ action: "reset" }),
+  });
+  const payload = (await response.json()) as Record<string, unknown>;
+  const error =
+    payload.error && typeof payload.error === "object"
+      ? (payload.error as { message?: string | null })
+      : null;
+  if (!response.ok || payload.kind === "error" || error) {
+    throw new Error(error?.message || `Regtest reset failed with HTTP ${response.status}`);
+  }
+  // Fresh chain + book: re-point every query at the rebuilt daemon session.
+  useUiStore.getState().bumpDaemonSession();
+  return { dataRoot: String(payload.dataRoot ?? "") };
+}
+
 export function canUseTouchIdPassphraseUnlock(): boolean {
   if (DAEMON_MODE !== "tauri" || typeof navigator === "undefined") {
     return false;
@@ -810,9 +862,13 @@ export async function subscribeDaemonEvents<T = unknown>(
     return () => {};
   }
   const { listen } = await import("@tauri-apps/api/event");
-  return listen<DaemonEventRecord<T>>("daemon://event", (event) => {
-    onEvent(event.payload);
-  });
+  const unlisten = await listen<DaemonEventRecord<T>>(
+    "daemon://event",
+    (event) => {
+      onEvent(event.payload);
+    },
+  );
+  return () => safeTauriUnlisten(unlisten);
 }
 
 const tauriDaemon: DaemonTransport = {
@@ -850,7 +906,7 @@ const tauriDaemon: DaemonTransport = {
         request: { ...req, request_id: requestId },
       });
     } finally {
-      unlisten();
+      safeTauriUnlisten(unlisten);
     }
   },
 };
@@ -886,7 +942,7 @@ const bridgeDaemon: DaemonTransport = {
 };
 
 export function getTransport(dataMode?: DataMode): DaemonTransport {
-  if ((dataMode ?? useUiStore.getState().dataMode) === "mock") {
+  if (!isDaemonDataMode(dataMode ?? useUiStore.getState().dataMode)) {
     return withDaemonLogging(
       { invoke: mockDaemon.invoke, stream: mockStream },
       "daemon:mock",

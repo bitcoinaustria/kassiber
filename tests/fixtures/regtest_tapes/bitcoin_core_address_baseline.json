@@ -1,0 +1,112 @@
+{
+  "provenance": {
+    "scenario": "bitcoin-core-address-baseline",
+    "recorded_from": "synthetic (hand-authored fixture, not a live capture)",
+    "backend_kind": "bitcoinrpc",
+    "chain": "bitcoin",
+    "network": "regtest",
+    "regtest_genesis": "0f9188f13cb7b2c71f2a335e3a4fc328bf5beb436012afca590b1a11466e2206",
+    "tip_hash": "regtest-fixture-tip",
+    "kassiber_issue": 312
+  },
+  "interactions": {
+    "{\"method\":\"listwallets\",\"params\":[],\"transport\":\"bitcoinrpc\",\"wallet_name\":\"\"}": [
+      "kassiber-wallet-1"
+    ],
+    "{\"method\":\"getaddressinfo\",\"params\":[\"bcrt1qs758ursh4q9z627kt3pp5yysm78ddny6txaqgw\"],\"transport\":\"bitcoinrpc\",\"wallet_name\":\"kassiber-wallet-1\"}": {
+      "address": "bcrt1qs758ursh4q9z627kt3pp5yysm78ddny6txaqgw",
+      "iswatchonly": true,
+      "ismine": false
+    },
+    "{\"method\":\"listtransactions\",\"params\":[\"*\",1000,0,true],\"transport\":\"bitcoinrpc\",\"wallet_name\":\"kassiber-wallet-1\"}": [
+      {
+        "address": "bcrt1qs758ursh4q9z627kt3pp5yysm78ddny6txaqgw",
+        "amount": 0.25,
+        "blockhash": "22aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "blockheight": 101,
+        "blocktime": 1700000000,
+        "category": "receive",
+        "confirmations": 1,
+        "time": 1700000000,
+        "txid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "vout": 0
+      },
+      {
+        "amount": -0.05001,
+        "blockhash": "33bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "blockheight": 102,
+        "blocktime": 1700000600,
+        "category": "send",
+        "confirmations": 1,
+        "fee": -0.00001,
+        "time": 1700000600,
+        "txid": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "vout": 1
+      }
+    ],
+    "{\"method\":\"listsinceblock\",\"params\":[\"44cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",1,true,true],\"transport\":\"bitcoinrpc\",\"wallet_name\":\"kassiber-wallet-1\"}": {
+      "transactions": [],
+      "removed": [],
+      "lastblock": "44cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+    },
+    "{\"method\":\"getbestblockhash\",\"params\":[],\"transport\":\"bitcoinrpc\",\"wallet_name\":\"\"}": "44cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "{\"method\":\"listunspent\",\"params\":[0,9999999,[\"bcrt1qs758ursh4q9z627kt3pp5yysm78ddny6txaqgw\"],true],\"transport\":\"bitcoinrpc\",\"wallet_name\":\"kassiber-wallet-1\"}": [
+      {
+        "address": "bcrt1qs758ursh4q9z627kt3pp5yysm78ddny6txaqgw",
+        "amount": 0.19999,
+        "confirmations": 1,
+        "safe": true,
+        "scriptPubKey": "001487a87e0e17a80a2d2bd65c421a1090df8ed6cc9a",
+        "txid": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "vout": 0
+      }
+    ],
+    "{\"method\":\"gettransaction\",\"params\":[\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",true,true],\"transport\":\"bitcoinrpc\",\"wallet_name\":\"kassiber-wallet-1\"}": {
+      "blockhash": "33bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "blocktime": 1700000600,
+      "decoded": {
+        "txid": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "vin": [
+          {
+            "txid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "vout": 0,
+            "prevout": {
+              "value": 0.25,
+              "scriptPubKey": {
+                "hex": "001487a87e0e17a80a2d2bd65c421a1090df8ed6cc9a"
+              }
+            }
+          }
+        ],
+        "vout": [
+          {
+            "n": 0,
+            "value": 0.19999,
+            "scriptPubKey": {
+              "hex": "001487a87e0e17a80a2d2bd65c421a1090df8ed6cc9a"
+            }
+          },
+          {
+            "n": 1,
+            "value": 0.05,
+            "scriptPubKey": {
+              "hex": "0014ffffffffffffffffffffffffffffffffffffffff"
+            }
+          }
+        ]
+      },
+      "time": 1700000600,
+      "txid": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    },
+    "{\"method\":\"gettransaction\",\"params\":[\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",true],\"transport\":\"bitcoinrpc\",\"wallet_name\":\"kassiber-wallet-1\"}": {
+      "blockhash": "33bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "blocktime": 1700000600,
+      "time": 1700000600,
+      "txid": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    },
+    "{\"method\":\"getblockheader\",\"params\":[\"33bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"],\"transport\":\"bitcoinrpc\",\"wallet_name\":\"\"}": {
+      "height": 102,
+      "time": 1700000600
+    }
+  }
+}

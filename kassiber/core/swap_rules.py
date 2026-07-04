@@ -17,8 +17,8 @@ Boundaries:
   fields wins. Ties are broken by ``id`` so the result is deterministic.
 * ``min_confidence`` gates whether a rule applies to heuristic
   candidates. Default ``"strong"`` covers both exact and heuristic;
-  ``"exact"`` restricts auto-pairing to payment-hash matches only — the
-  conservative choice for noisy environments.
+  ``"exact"`` restricts auto-pairing to deterministic links, such as
+  payment hashes, provider swap metadata, or refund funding links.
 
 The auto-pair output is *suggestions*, not writes. The caller decides
 whether to commit them — typically through the consent flow on the

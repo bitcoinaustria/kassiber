@@ -1,13 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
 
-import { CurrencyToggleText } from "@/components/kb/CurrencyToggleText";
 import { Badge } from "@/components/ui/badge";
-import { Label } from "@/components/ui/label";
 import { TabsContent } from "@/components/ui/tabs";
-import { Textarea } from "@/components/ui/textarea";
 import { useDaemon } from "@/daemon/client";
 import { cn } from "@/lib/utils";
+import { useUiStore } from "@/store/ui";
 
 import {
   DetailField,
@@ -15,12 +14,12 @@ import {
   LedgerRow,
   networkLabel,
 } from "./TransactionDetailSheetParts";
+import { TransactionLedgerSection } from "./TransactionLedgerSection";
 import { CommercialProvenancePanel } from "./TransactionDetailCommercialPanel";
 import {
   blurClass,
   currencyFormatter,
   formatBtcAmount,
-  formatFee,
   formatShortTxid,
   SATS_PER_BTC,
 } from "./model";
@@ -28,6 +27,7 @@ import type { TransactionDetailTabContext } from "./TransactionDetailTabContext"
 import {
   TransactionGraphPanel,
   type TransactionGraphPayload,
+  type TransactionGraphIssueTarget,
   type TransactionSwapRoute,
   type TransactionSwapRouteLegKey,
 } from "./TransactionGraphTab";
@@ -156,8 +156,41 @@ export function preloadableSwapLegGraphReference(
   return reference;
 }
 
+function looksLikeTxid(value: string | null | undefined) {
+  return /^[0-9a-f]{64}$/i.test(value?.trim() ?? "");
+}
+
+function hasPublicGraphLookupReference(
+  transaction: TransactionDetailTabContext["transaction"] | null | undefined,
+) {
+  if (!transaction || !looksLikeTxid(transaction.explorerId)) return false;
+  return transaction.paymentMethod === "On-chain" || transaction.paymentMethod === "Liquid";
+}
+
+export function transactionGraphLookupArgs(
+  transaction: TransactionDetailTabContext["transaction"] | null | undefined,
+) {
+  return {
+    transaction: transaction?.id ?? "",
+    allowPublicLookup: hasPublicGraphLookupReference(transaction),
+  };
+}
+
+export function transactionGraphLookupReferenceArgs(
+  transactionRef: string | null | undefined,
+) {
+  return {
+    transaction: transactionRef ?? "",
+    allowPublicLookup: false,
+  };
+}
+
 export function TransactionDetailsTab({ ctx }: { ctx: TransactionDetailTabContext }) {
   const { t } = useTranslation("transactions");
+  const navigate = useNavigate();
+  const setDeferredConnectionSetup = useUiStore(
+    (state) => state.setDeferredConnectionSetup,
+  );
   const {
     transaction,
     localDraft,
@@ -167,13 +200,10 @@ export function TransactionDetailsTab({ ctx }: { ctx: TransactionDetailTabContex
     dirtyExcluded,
     transactionDisplayId,
     hideSensitive,
-    feeBtc,
     commercialContext,
     commercialContextLoading,
     showSourceExternalId,
-    updateDraft,
     tags,
-    currency,
     graphData,
     graphLoading,
     graphError,
@@ -213,12 +243,12 @@ export function TransactionDetailsTab({ ctx }: { ctx: TransactionDetailTabContex
   );
   const swapOutGraphQuery = useDaemon<TransactionGraphPayload>(
     "ui.transactions.graph",
-    { transaction: swapOutTransactionRef ?? "" },
+    transactionGraphLookupReferenceArgs(swapOutTransactionRef),
     { enabled: Boolean(swapOutTransactionRef) },
   );
   const swapInGraphQuery = useDaemon<TransactionGraphPayload>(
     "ui.transactions.graph",
-    { transaction: swapInTransactionRef ?? "" },
+    transactionGraphLookupReferenceArgs(swapInTransactionRef),
     { enabled: Boolean(swapInTransactionRef) },
   );
   const activeSwapGraphQuery =
@@ -233,6 +263,17 @@ export function TransactionDetailsTab({ ctx }: { ctx: TransactionDetailTabContex
       : activeSwapLeg === "in"
         ? swapInGraphQuery.data?.data
         : undefined;
+  const resolveGraphIssue = (target: TransactionGraphIssueTarget) => {
+    setDeferredConnectionSetup({
+      sourceId: target,
+      reason:
+        target === "liquid"
+          ? t("graph.backendSettingsReasonLiquid")
+          : t("graph.backendSettingsReasonBitcoin"),
+      backendKind: target,
+    });
+    void navigate({ to: "/settings", hash: target });
+  };
   const activeSwapTransactionRef =
     activeSwapLeg === "out"
       ? swapOutTransactionRef
@@ -294,7 +335,7 @@ export function TransactionDetailsTab({ ctx }: { ctx: TransactionDetailTabContex
     <>
                   {/* Details — read-only source-of-record + book metadata */}
                   <TabsContent value="details" className="mt-4 space-y-4">
-                    <div className="grid gap-3 sm:grid-cols-3">
+                    <div className="grid gap-3 sm:grid-cols-2">
                       <DetailField
                         label={t("details.transactionId")}
                         value={formatShortTxid(transactionDisplayId)}
@@ -320,52 +361,8 @@ export function TransactionDetailsTab({ ctx }: { ctx: TransactionDetailTabContex
                         hidden={hideSensitive}
                         hint={t("details.priceAtTimeHint")}
                       />
-                      <DetailField
-                        label={t("details.fee")}
-                        value={
-                          feeBtc ? (
-                            <CurrencyToggleText
-                              className={blurClass(hideSensitive)}
-                            >
-                              {formatFee(transaction, currency)}
-                            </CurrencyToggleText>
-                          ) : graphNetworkFeeBtc ? (
-                            <CurrencyToggleText
-                              className={blurClass(hideSensitive)}
-                            >
-                              {t("details.senderPaidNetworkFee", {
-                                value: formatBtcAmount(graphNetworkFeeBtc),
-                              })}
-                            </CurrencyToggleText>
-                          ) : (
-                            t("details.feeNone")
-                          )
-                        }
-                        hidden={hideSensitive}
-                        hint={t("details.feeHint")}
-                      />
                     </div>
-                    <div className="grid gap-2">
-                      <Label
-                        htmlFor="tx-detail-note"
-                        className="flex items-center gap-1.5"
-                      >
-                        {t("details.note")}
-                        <DirtyDot active={dirtyNote} />
-                      </Label>
-                      <Textarea
-                        id="tx-detail-note"
-                        value={localDraft.note}
-                        onChange={(event) =>
-                          updateDraft("note", event.target.value)
-                        }
-                        className={cn(
-                          "min-h-24 resize-none",
-                          blurClass(hideSensitive),
-                        )}
-                        placeholder={t("details.notePlaceholder")}
-                      />
-                    </div>
+                    <TransactionLedgerSection ctx={ctx} />
                     <div className="grid gap-3 lg:grid-cols-2">
                       <div className="overflow-hidden rounded-md border">
                         <div className="border-b bg-muted px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
@@ -383,7 +380,17 @@ export function TransactionDetailsTab({ ctx }: { ctx: TransactionDetailTabContex
                         />
                         <LedgerRow
                           label={t("details.counterparty")}
-                          value={transaction.counterparty}
+                          value={
+                            transaction.counterparty ? (
+                              <span className={blurClass(hideSensitive)}>
+                                {transaction.counterparty}
+                              </span>
+                            ) : (
+                              <span className="text-muted-foreground">
+                                {t("details.counterpartyNone")}
+                              </span>
+                            )
+                          }
                         />
                         {showSourceExternalId ? (
                           <LedgerRow
@@ -446,6 +453,29 @@ export function TransactionDetailsTab({ ctx }: { ctx: TransactionDetailTabContex
                             </span>
                           }
                         />
+                        <LedgerRow
+                          label={t("details.note")}
+                          value={
+                            <span className="flex items-baseline gap-1.5">
+                              {localDraft.note ? (
+                                <span
+                                  className={cn(
+                                    "line-clamp-2 min-w-0 whitespace-pre-line",
+                                    blurClass(hideSensitive),
+                                  )}
+                                >
+                                  {localDraft.note}
+                                </span>
+                              ) : (
+                                <span className="text-muted-foreground">
+                                  {t("details.noteNone")}
+                                </span>
+                              )}
+                              <DirtyDot active={dirtyNote} />
+                            </span>
+                          }
+                          hint={t("details.noteHint")}
+                        />
                       </div>
                     </div>
                     <div className="overflow-hidden rounded-md border">
@@ -460,6 +490,7 @@ export function TransactionDetailsTab({ ctx }: { ctx: TransactionDetailTabContex
                           hideSensitive={hideSensitive}
                           selectedSwapLeg={activeSwapLeg}
                           onSelectSwapLeg={setSelectedSwapLeg}
+                          onResolveIssue={resolveGraphIssue}
                         />
                       </div>
                     </div>

@@ -14,9 +14,11 @@ from typing import Any, Callable, Mapping, MutableMapping, Sequence
 from ..backends import redact_backend_text, redact_backend_url
 from ..errors import AppError
 from ..util import str_or_none
+from ..wallet_descriptors import DEFAULT_DESCRIPTOR_GAP_LIMIT, MAX_DESCRIPTOR_GAP_LIMIT
 from . import source_overlap
 from .wallets import (
     has_descriptor_sync_material,
+    has_silent_payment_sync_material,
     wallet_btcpay_provenance_config,
     wallet_btcpay_sync_config,
     wallet_bullbitcoin_wallet_export_config,
@@ -33,6 +35,7 @@ HistoryCache = MutableMapping[str, Sequence[HistoryEntry]]
 ProgressCallback = Callable[[Mapping[str, Any]], None]
 ImportFile = Callable[[sqlite3.Connection, ProfileRow, WalletRow, str, str], SyncOutcome]
 InsertRecords = Callable[[sqlite3.Connection, ProfileRow, WalletRow, Sequence[BackendRecord], str], SyncOutcome]
+RetractRecords = Callable[[sqlite3.Connection, ProfileRow, WalletRow, Sequence[str], str], SyncOutcome]
 ResolveBackend = Callable[[RuntimeConfig, str | None], Mapping[str, Any]]
 ResolveSyncState = Callable[[Mapping[str, Any], WalletRow], "WalletSyncState"]
 NormalizeAddresses = Callable[[Any], Sequence[str]]
@@ -67,7 +70,7 @@ UpdateOutputInventory = Callable[
     ],
     Mapping[str, Any],
 ]
-SourceOverlapPreflight = Callable[[WalletRow, "WalletSyncState"], None]
+SourceOverlapPreflight = Callable[[WalletRow, "WalletSyncState"], "WalletSyncState | None"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -90,6 +93,7 @@ class WalletSyncHooks:
     resolve_sync_state: ResolveSyncState
     normalize_addresses: NormalizeAddresses
     backend_adapters: Mapping[str, BackendAdapter]
+    retract_records: RetractRecords | None = None
     sync_btcpay_wallet: SyncBTCPayWallet | None = None
     enrich_btcpay_wallet: EnrichBTCPayWallet | None = None
     enrich_bullbitcoin_wallet: EnrichBullBitcoinWallet | None = None
@@ -132,6 +136,11 @@ class WalletBackendDiscovery:
 # bounds network concurrency against any single host, so this only limits total
 # thread count for the common case of a handful of distinct backends.
 WALLET_FETCH_FANOUT = 4
+
+# A negative running wallet balance means the local ledger is missing earlier
+# inbound history. One repair refresh widens descriptor discovery enough to find
+# common high-index receive/change gaps without permanently mutating the wallet.
+NEGATIVE_BALANCE_RESCAN_MIN_GAP_LIMIT = 500
 
 
 # Contextvar threaded by the daemon when it wants long-running source refreshes
@@ -196,6 +205,66 @@ def _backend_sync_failure_error(
         details=details,
         retryable=True,
     )
+
+
+def _overlap_filtered_skip_outcome(
+    wallet: WalletRow,
+    *,
+    started: float,
+    force_full: bool,
+    original_target_count: int,
+) -> Mapping[str, Any]:
+    filtered_count = max(0, int(original_target_count or 0))
+    return {
+        "wallet": _wallet_label(wallet),
+        "status": "skipped",
+        "reason": "all sync targets are already covered by canonical wallet sources",
+        "target_count": 0,
+        "filtered_overlap_targets": filtered_count,
+        "elapsed_ms": int((time.monotonic() - started) * 1000),
+        **({"force_full": True} if force_full else {}),
+    }
+
+
+def _apply_source_overlap_preflight(
+    wallet: WalletRow,
+    discovery: WalletBackendDiscovery,
+    source_overlap_preflight: SourceOverlapPreflight | None,
+) -> WalletBackendDiscovery:
+    if (
+        source_overlap_preflight is None
+        or discovery.skip_outcome is not None
+        or discovery.sync_state is None
+    ):
+        return discovery
+    original_target_count = len(discovery.sync_state.targets)
+    filtered_state = source_overlap_preflight(wallet, discovery.sync_state)
+    if filtered_state is None:
+        filtered_state = discovery.sync_state
+    if filtered_state is not discovery.sync_state:
+        discovery = replace(discovery, sync_state=filtered_state)
+    if not filtered_state.targets:
+        return replace(
+            discovery,
+            sync_state=None,
+            kind=discovery.kind,
+            skip_outcome=_overlap_filtered_skip_outcome(
+                wallet,
+                started=discovery.started,
+                force_full=discovery.force_full,
+                original_target_count=original_target_count,
+            ),
+        )
+    return discovery
+
+
+def _prefetched_overlap_payload_present(
+    normalized_records: Sequence[BackendRecord],
+    adapter_meta: Mapping[str, Any],
+) -> bool:
+    if normalized_records:
+        return True
+    return bool(adapter_meta)
 
 
 def _emit_wallet_sync_progress(wallet: WalletRow, payload: Mapping[str, Any]) -> None:
@@ -279,6 +348,23 @@ def normalize_backend_kind(kind: Any) -> str:
         "liquid-esplora": "esplora",
     }
     return aliases.get(value, value)
+
+
+def _string_list(value: Any) -> list[str]:
+    if not isinstance(value, Sequence) or isinstance(value, (str, bytes, bytearray)):
+        return []
+    seen: set[str] = set()
+    output: list[str] = []
+    for item in value:
+        text = str_or_none(item)
+        if text is None:
+            continue
+        normalized = text.strip().lower()
+        if not normalized or normalized in seen:
+            continue
+        seen.add(normalized)
+        output.append(normalized)
+    return output
 
 
 def discover_wallet_backend(
@@ -431,7 +517,11 @@ def fetch_wallet_backend(
         and discovery.skip_outcome is None
         and discovery.sync_state is not None
     ):
-        source_overlap_preflight(wallet, discovery.sync_state)
+        discovery = _apply_source_overlap_preflight(
+            wallet,
+            discovery,
+            source_overlap_preflight,
+        )
     return fetch_wallet_backend_from_discovery(wallet, hooks, discovery)
 
 
@@ -445,13 +535,14 @@ def sync_wallet_from_backend(
     *,
     force_full: bool = False,
     prefetched: "WalletBackendFetch | BaseException | None" = None,
+    _allow_negative_balance_rescan: bool = True,
 ) -> SyncOutcome:
     # `prefetched` lets the caller run the network fetch ahead of time (e.g. in
     # parallel across wallets). When omitted, fetch inline as before. A captured
     # AppError is re-raised here so it surfaces under this wallet's own savepoint.
     if prefetched is None:
         preflight = (
-            (lambda preflight_wallet, sync_state: source_overlap.raise_for_sync_source_overlap(
+            (lambda preflight_wallet, sync_state: source_overlap.filter_sync_state_for_canonical_owner(
                 conn,
                 profile,
                 preflight_wallet,
@@ -481,9 +572,47 @@ def sync_wallet_from_backend(
     normalized_records = fetch.normalized_records
     kind = fetch.kind
     adapter_meta = dict(fetch.adapter_meta or {})
+    if conn is not None and sync_state is not None:
+        filtered_sync_state = source_overlap.filter_sync_state_for_canonical_owner(
+            conn,
+            profile,
+            wallet,
+            sync_state,
+        )
+        if filtered_sync_state is not sync_state:
+            if _prefetched_overlap_payload_present(normalized_records, adapter_meta):
+                raise AppError(
+                    f"Wallet source overlap changed during refresh for {_wallet_label(wallet)}",
+                    code="source_overlap_retry",
+                    hint=(
+                        "Retry refresh so Kassiber can filter overlapping sync targets before "
+                        "contacting the backend and importing history."
+                    ),
+                    retryable=True,
+                )
+            if not filtered_sync_state.targets:
+                return dict(
+                    _overlap_filtered_skip_outcome(
+                        wallet,
+                        started=started,
+                        force_full=force_full,
+                        original_target_count=len(sync_state.targets),
+                    )
+                )
+            sync_state = filtered_sync_state
     observed_utxos = adapter_meta.pop("utxos", None)
-    if conn is not None:
-        source_overlap.raise_for_sync_source_overlap(conn, profile, wallet, sync_state)
+    retracted_external_ids = _string_list(
+        adapter_meta.pop("bitcoinrpc_retracted_txids", [])
+    )
+    retraction_outcome: SyncOutcome | None = None
+    if retracted_external_ids and hooks.retract_records is not None:
+        retraction_outcome = hooks.retract_records(
+            conn,
+            profile,
+            wallet,
+            retracted_external_ids,
+            f"backend:{backend['name']}",
+        )
     outcome = hooks.insert_records(
         conn,
         profile,
@@ -507,14 +636,28 @@ def sync_wallet_from_backend(
     outcome["backend_url"] = redact_backend_url(backend["url"])
     outcome["chain"] = sync_state.chain
     outcome["network"] = sync_state.network
-    outcome["sync_mode"] = "descriptor" if sync_state.descriptor_plan else "addresses"
+    if getattr(sync_state.descriptor_plan, "kind", None) == "silent-payment":
+        outcome["sync_mode"] = "silent_payment"
+    else:
+        outcome["sync_mode"] = "descriptor" if sync_state.descriptor_plan else "addresses"
     outcome["target_count"] = len(sync_state.targets)
     outcome["records_fetched"] = len(normalized_records)
     if "updated" not in outcome and isinstance(outcome.get("updated_records"), list):
         outcome["updated"] = len(outcome["updated_records"])
+    if retracted_external_ids:
+        outcome["bitcoinrpc_retracted_txids"] = retracted_external_ids
+    if retraction_outcome is not None:
+        outcome["retracted"] = int(retraction_outcome.get("retracted") or 0)
+        outcome["retracted_records"] = list(
+            retraction_outcome.get("retracted_records") or []
+        )
+        outcome["journal_invalidated"] = bool(
+            outcome.get("journal_invalidated")
+            or retraction_outcome.get("journal_invalidated")
+        )
     if force_full:
         outcome["force_full"] = True
-    if sync_state.descriptor_plan:
+    if sync_state.descriptor_plan and getattr(sync_state.descriptor_plan, "kind", None) != "silent-payment":
         outcome["gap_limit"] = sync_state.descriptor_plan.gap_limit
     else:
         outcome["addresses"] = ",".join(
@@ -529,7 +672,109 @@ def sync_wallet_from_backend(
         outcome["scripts_checked"] = scripts_changed + scripts_unchanged
     outcome["utxos_refreshed"] = observed_utxos is not None
     outcome["elapsed_ms"] = int((time.monotonic() - started) * 1000)
+    if _allow_negative_balance_rescan and conn is not None:
+        negative_events = _wallet_negative_balance_events(
+            conn,
+            str(profile["id"]),
+            str(wallet["id"]),
+        )
+        if negative_events:
+            rescan_gap_limit = _negative_balance_rescan_gap_limit(sync_state)
+            repair_wallet = _wallet_with_temporary_gap_limit(wallet, rescan_gap_limit)
+            repair_outcome = sync_wallet_from_backend(
+                conn,
+                runtime_config,
+                profile,
+                repair_wallet,
+                hooks,
+                checkpoint={},
+                force_full=True,
+                _allow_negative_balance_rescan=False,
+            )
+            remaining_events = _wallet_negative_balance_events(
+                conn,
+                str(profile["id"]),
+                str(wallet["id"]),
+            )
+            repair_outcome["negative_balance_rescan"] = {
+                "triggered": True,
+                "resolved": not remaining_events,
+                "initial_negative_events": negative_events,
+                "remaining_negative_events": remaining_events,
+                "original_gap_limit": (
+                    getattr(sync_state.descriptor_plan, "gap_limit", None)
+                    if sync_state.descriptor_plan is not None
+                    else None
+                ),
+                "rescan_gap_limit": rescan_gap_limit,
+            }
+            return repair_outcome
     return outcome
+
+
+def _wallet_negative_balance_events(
+    conn: sqlite3.Connection | None,
+    profile_id: str,
+    wallet_id: str,
+) -> list[dict[str, Any]]:
+    if conn is None:
+        return []
+    rows = conn.execute(
+        """
+        SELECT id, external_id, occurred_at, direction, asset, amount, fee, created_at
+        FROM transactions
+        WHERE profile_id = ? AND wallet_id = ? AND excluded = 0
+        ORDER BY occurred_at ASC, created_at ASC, id ASC
+        """,
+        (profile_id, wallet_id),
+    ).fetchall()
+    balances: dict[str, int] = {}
+    first_negative_by_asset: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        asset = str(row["asset"] or "")
+        amount = int(row["amount"] or 0)
+        fee = int(row["fee"] or 0)
+        if row["direction"] == "inbound":
+            delta = amount
+        elif row["direction"] == "outbound":
+            delta = -amount - fee
+        else:
+            delta = 0
+        next_balance = balances.get(asset, 0) + delta
+        balances[asset] = next_balance
+        if next_balance < 0 and asset not in first_negative_by_asset:
+            first_negative_by_asset[asset] = {
+                "asset": asset,
+                "transaction_id": row["id"],
+                "external_id": row["external_id"],
+                "occurred_at": row["occurred_at"],
+                "delta_msat": delta,
+                "running_balance_msat": next_balance,
+            }
+    return list(first_negative_by_asset.values())
+
+
+def _negative_balance_rescan_gap_limit(sync_state: WalletSyncState) -> int | None:
+    plan = sync_state.descriptor_plan
+    if plan is None:
+        return None
+    try:
+        current = int(getattr(plan, "gap_limit", 0) or 0)
+    except (TypeError, ValueError):
+        current = DEFAULT_DESCRIPTOR_GAP_LIMIT
+    current = max(current, DEFAULT_DESCRIPTOR_GAP_LIMIT)
+    return min(
+        MAX_DESCRIPTOR_GAP_LIMIT,
+        max(NEGATIVE_BALANCE_RESCAN_MIN_GAP_LIMIT, current * 2),
+    )
+
+
+def _wallet_with_temporary_gap_limit(wallet: WalletRow, gap_limit: int | None) -> WalletRow:
+    if gap_limit is None:
+        return wallet
+    config = json.loads(wallet["config_json"] or "{}")
+    config["gap_limit"] = int(gap_limit)
+    return {**dict(wallet), "config_json": json.dumps(config, sort_keys=True)}
 
 
 def classify_wallet_sync(wallet: WalletRow, normalize_addresses: NormalizeAddresses) -> str:
@@ -546,7 +791,7 @@ def classify_wallet_sync(wallet: WalletRow, normalize_addresses: NormalizeAddres
     if config.get("source_file") and config.get("source_format"):
         return "file"
     addresses = normalize_addresses(config.get("addresses"))
-    if addresses or has_descriptor_sync_material(config):
+    if addresses or has_descriptor_sync_material(config) or has_silent_payment_sync_material(config):
         return "backend"
     return "none"
 
@@ -617,7 +862,11 @@ def prefetch_wallets_backend(
             ):
                 continue
             try:
-                source_overlap_preflight(wallet, discovery.sync_state)
+                discoveries[wallet_id] = _apply_source_overlap_preflight(
+                    wallet,
+                    discovery,
+                    source_overlap_preflight,
+                )
             except AppError as exc:
                 discoveries[wallet_id] = exc
 
@@ -660,6 +909,7 @@ def sync_wallets(
         source_format = config.get("source_format")
         addresses = hooks.normalize_addresses(config.get("addresses"))
         has_descriptor = has_descriptor_sync_material(config)
+        has_silent_payment = has_silent_payment_sync_material(config)
         if btcpay_config:
             if hooks.sync_btcpay_wallet is None:
                 raise AppError("BTCPay source refresh is not configured for this runtime")
@@ -712,7 +962,7 @@ def sync_wallets(
             )
             results.append({"wallet": sync_wallet["label"], "status": "synced", **outcome})
             continue
-        if addresses or has_descriptor:
+        if addresses or has_descriptor or has_silent_payment:
             checkpoint = {} if force_full else (checkpoints or {}).get(str(wallet["id"]))
             outcome = sync_wallet_from_backend(
                 conn,

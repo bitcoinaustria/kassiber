@@ -218,10 +218,14 @@ Use a Greenfield API key with wallet-history permissions for
 BTCPay payment into authoritative `btcpay_payment` pricing or a commercial
 transaction kind.
 
-Note: `bitcoinrpc` support is currently partial. Kassiber can use it for
-Bitcoin address-based wallets, including the read-only UTXO inventory,
-but descriptor- and xpub-backed source refresh still require Esplora or
-Electrum.
+`bitcoinrpc` supports Bitcoin descriptor/xpub/address wallet refresh. For
+descriptor/xpub wallets Kassiber imports ranged watch-only descriptors into a
+dedicated Core wallet; that import is a backend mutation and may trigger Core's
+blocking rescan. Use a wallet `--birthday` date to bound the rescan when known.
+The desktop Core detector reads default cookie locations and local
+`bitcoin.conf` RPC settings, then probes reachability, peer/sync state, wallet
+RPC support, and BIP158 block-filter availability. Block filters are reported
+for operator visibility; descriptor sync does not require `blockfilterindex=1`.
 
 The backend CLI now accepts the common backend-specific knobs directly:
 
@@ -368,8 +372,14 @@ your Tor service running separately.
 
 Use this when you run your own node.
 
-- today this path is for Bitcoin address-based refresh; descriptor/xpub refresh is not implemented on `bitcoinrpc` yet
+- supports Bitcoin descriptor/xpub/address refresh from your own node
 - Kassiber creates or reuses a dedicated watch-only Core wallet per Kassiber wallet
+- descriptor imports are ranged per receive/change branch; repeated refreshes
+  widen the range from observed transaction history / UTXOs and otherwise use
+  `listsinceblock`
+- local desktop detection understands default cookie files plus `bitcoin.conf`
+  RPC auth/ports, and the health probe reports peers, sync state, wallet RPC
+  support, pruning, IBD, and BIP158 filter-index availability
 - this keeps refresh state isolated instead of mixing unrelated watch-only imports together
 - plain `http://` is only safe on localhost or over a trusted tunnel
 
@@ -380,7 +390,13 @@ through an Esplora- or Electrum-backed backend. They accept output descriptors,
 common descriptor exports, and plaintext BSMS descriptor records. Source refresh
 also updates the durable local UTXO inventory shown in the desktop wallet
 detail view.
-The default gap limit is 40 unused addresses per branch, and Kassiber caps the configured gap limit at 5,000 to avoid accidental runaway scans.
+The default gap limit is 100 unused addresses per branch, and Kassiber caps the
+configured gap limit at 5,000 to avoid accidental runaway scans. If a
+backend-synced wallet's active transaction history ever produces a negative
+running balance, Kassiber runs one full repair refresh; descriptor/xpub wallets
+use a temporary widened gap limit for that repair so missed high-index receive
+or change addresses can be discovered without permanently changing the stored
+wallet config.
 
 Example Bitcoin descriptor wallet:
 
@@ -391,7 +407,7 @@ bash -c 'python3 -m kassiber wallets create \
   --backend mempool \
   --descriptor-fd 3 \
   --change-descriptor-fd 4 \
-  --gap-limit 40' \
+  --gap-limit 100' \
   3< <(printf '%s\n' 'wpkh([fingerprint/84h/0h/0h]xpub.../0/*)') \
   4< <(printf '%s\n' 'wpkh([fingerprint/84h/0h/0h]xpub.../1/*)')
 
@@ -410,7 +426,7 @@ bash -c 'python3 -m kassiber wallets create \
   --network liquidv1 \
   --descriptor-fd 3 \
   --change-descriptor-fd 4 \
-  --gap-limit 40' \
+  --gap-limit 100' \
   3< <(printf '%s\n' 'ct(slip77(...),elwpkh(.../0/*))') \
   4< <(printf '%s\n' 'ct(slip77(...),elwpkh(.../1/*))')
 ```

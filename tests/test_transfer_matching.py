@@ -13,14 +13,17 @@ from kassiber.core.transfer_matching import (
     _deterministic_self_transfer_ids,
     CONFIDENCE_EXACT,
     CONFIDENCE_STRONG,
+    KIND_CHAIN_SWAP,
     KIND_MANUAL,
     KIND_PEG_IN,
     KIND_PEG_OUT,
+    KIND_REVERSE_SUBMARINE_SWAP,
     KIND_SUBMARINE_SWAP,
     KIND_SWAP_REFUND,
     METHOD_HEURISTIC,
     METHOD_HTLC_REFUND,
     METHOD_PAYMENT_HASH,
+    METHOD_PROVIDER_SWAP_ID,
     POLICY_CARRYING_VALUE,
     POLICY_TAXABLE,
     compute_swap_fee,
@@ -40,10 +43,14 @@ def _row(**overrides):
         "wallet_kind": "descriptor",
         "external_id": "",
         "payment_hash": None,
+        "raw_json": "{}",
         "occurred_at": "2026-03-14T17:30:00Z",
         "direction": "outbound",
         "asset": "BTC",
         "amount": 100_000_000_000,  # 1 BTC in msat
+        "fee": 0,
+        "amount_includes_fee": 0,
+        "kind": "",
         "excluded": 0,
     }
     base.update(overrides)
@@ -85,6 +92,11 @@ class ComputeSwapFeeTests(unittest.TestCase):
     def test_negative_fee_when_inbound_exceeds_outbound(self):
         msat, _ = compute_swap_fee(80, 100)
         self.assertEqual(msat, -20)
+
+    def test_outbound_fee_component_included_when_separate(self):
+        msat, kind = compute_swap_fee(100, 80, 3)
+        self.assertEqual(msat, 23)
+        self.assertEqual(kind, "combined")
 
 
 class DefaultKindTests(unittest.TestCase):
@@ -146,6 +158,58 @@ class PaymentHashExactMatchTests(unittest.TestCase):
         self.assertEqual(candidate.default_policy, POLICY_CARRYING_VALUE)
         self.assertEqual(candidate.swap_fee_msat, 500_000)
 
+    def test_liquid_to_lightning_boltz_submarine_pair_via_payment_hash(self):
+        lockup = _row(
+            id="boltz-liquid-lockup",
+            external_id="liquid-lockup-txid",
+            wallet_id="liquid",
+            wallet_label="Liquid on-chain",
+            wallet_kind="custom",
+            payment_hash=_PAY_HASH,
+            direction="outbound",
+            asset="LBTC",
+            occurred_at="2026-03-14T17:30:00Z",
+            amount=100_000_000,
+        )
+        invoice = _row(
+            id="boltz-ln-settlement",
+            external_id="phoenix-invoice-id",
+            wallet_id="phoenix",
+            wallet_label="Phoenix",
+            wallet_kind="phoenix",
+            payment_hash=_PAY_HASH,
+            direction="inbound",
+            asset="BTC",
+            occurred_at="2026-03-14T17:32:00Z",
+            amount=99_000_000,
+        )
+        ordinary_payment = _row(
+            id="ordinary-liquid-payment",
+            external_id="liquid-payment-txid",
+            wallet_id="liquid",
+            wallet_label="Liquid on-chain",
+            wallet_kind="custom",
+            payment_hash=None,
+            direction="outbound",
+            asset="LBTC",
+            occurred_at="2026-03-14T17:31:00Z",
+            amount=42_000_000,
+        )
+
+        candidates = suggest_swap_candidates(
+            [lockup, invoice, ordinary_payment],
+            tax_country="at",
+        )
+
+        self.assertEqual(len(candidates), 1)
+        candidate = candidates[0]
+        self.assertEqual(candidate.confidence, CONFIDENCE_EXACT)
+        self.assertEqual(candidate.method, METHOD_PAYMENT_HASH)
+        self.assertEqual(candidate.out_id, "boltz-liquid-lockup")
+        self.assertEqual(candidate.in_id, "boltz-ln-settlement")
+        self.assertEqual(candidate.default_kind, KIND_SUBMARINE_SWAP)
+        self.assertEqual(candidate.swap_fee_msat, 1_000_000)
+
     def test_same_wallet_payment_hash_pair_skipped(self):
         out = _row(id="a", wallet_id="w", payment_hash=_PAY_HASH, direction="outbound")
         inbound = _row(id="b", wallet_id="w", payment_hash=_PAY_HASH, direction="inbound")
@@ -172,6 +236,246 @@ class PaymentHashExactMatchTests(unittest.TestCase):
         candidates = suggest_swap_candidates([out, inbound], tax_country="generic")
         self.assertEqual(len(candidates), 1)
         self.assertEqual(candidates[0].default_policy, POLICY_CARRYING_VALUE)
+
+
+class ProviderEvidenceExactMatchTests(unittest.TestCase):
+    def test_bull_chain_swap_pairs_by_redacted_swap_id(self):
+        raw = {
+            "source": "bullbitcoin_wallet_csv",
+            "type": "chain_swap",
+            "status": "completed",
+            "swap_id": "swap-chain",
+            "send_network": "bitcoin",
+            "receive_network": "liquid",
+            "send_txid": "bull-chain-send",
+            "receive_txid": "bull-chain-recv",
+        }
+        out = _row(
+            id="btc-out",
+            external_id="bull-chain-send",
+            wallet_id="bull-btc",
+            wallet_kind="bullbitcoin",
+            direction="outbound",
+            asset="BTC",
+            amount=1_000_000_000,
+            fee=500_000,
+            raw_json=raw,
+        )
+        inbound = _row(
+            id="lbtc-in",
+            external_id="bull-chain-recv",
+            wallet_id="bull-liquid",
+            wallet_kind="bullbitcoin",
+            direction="inbound",
+            asset="LBTC",
+            amount=990_000_000,
+            raw_json=raw,
+        )
+
+        candidates = suggest_swap_candidates([out, inbound], tax_country="at")
+
+        self.assertEqual(len(candidates), 1)
+        candidate = candidates[0]
+        self.assertEqual(candidate.confidence, CONFIDENCE_EXACT)
+        self.assertEqual(candidate.method, METHOD_PROVIDER_SWAP_ID)
+        self.assertEqual(candidate.default_kind, KIND_CHAIN_SWAP)
+        self.assertEqual(candidate.default_policy, POLICY_CARRYING_VALUE)
+        self.assertEqual(candidate.swap_fee_msat, 10_500_000)
+        self.assertEqual(candidate.evidence_provider, "bullbitcoin")
+        self.assertEqual(candidate.evidence_id, "swap-chain")
+        self.assertEqual(candidate.evidence_status, "completed")
+
+    def test_provider_evidence_route_txids_must_match_when_present(self):
+        out = _row(
+            id="btc-out",
+            external_id="unrelated-send",
+            wallet_id="bull-btc",
+            wallet_kind="bullbitcoin",
+            direction="outbound",
+            asset="BTC",
+            raw_json={
+                "source": "bullbitcoin_wallet_csv",
+                "type": "chain_swap",
+                "swap_id": "swap-chain",
+                "send_txid": "bull-chain-send",
+                "receive_txid": "bull-chain-recv",
+            },
+        )
+        inbound = _row(
+            id="lbtc-in",
+            external_id="bull-chain-recv",
+            wallet_id="bull-liquid",
+            wallet_kind="bullbitcoin",
+            direction="inbound",
+            asset="LBTC",
+            amount=99_900_000_000,
+            raw_json={
+                "source": "bullbitcoin_wallet_csv",
+                "type": "chain_swap",
+                "swap_id": "swap-chain",
+                "send_txid": "bull-chain-send",
+                "receive_txid": "bull-chain-recv",
+            },
+        )
+
+        self.assertEqual(suggest_swap_candidates([out, inbound], tax_country="at"), [])
+
+    def test_refunded_provider_status_overrides_chain_swap_flow(self):
+        raw = {
+            "source": "bullbitcoin_wallet_csv",
+            "type": "chain_swap",
+            "status": "refunded",
+            "swap_id": "swap-refund",
+            "send_txid": "bull-refund-lockup",
+            "receive_txid": "bull-refund-return",
+        }
+        out = _row(
+            id="btc-out",
+            external_id="bull-refund-lockup",
+            wallet_id="bull-btc",
+            wallet_kind="bullbitcoin",
+            direction="outbound",
+            asset="BTC",
+            amount=1_000_000_000,
+            fee=500_000,
+            raw_json=raw,
+        )
+        inbound = _row(
+            id="btc-in",
+            external_id="bull-refund-return",
+            wallet_id="bull-btc",
+            wallet_kind="bullbitcoin",
+            direction="inbound",
+            asset="BTC",
+            amount=998_000_000,
+            raw_json=raw,
+        )
+
+        candidates = suggest_swap_candidates([out, inbound], tax_country="generic")
+
+        self.assertEqual(len(candidates), 1)
+        candidate = candidates[0]
+        self.assertEqual(candidate.method, METHOD_PROVIDER_SWAP_ID)
+        self.assertEqual(candidate.confidence, CONFIDENCE_EXACT)
+        self.assertEqual(candidate.default_kind, KIND_SWAP_REFUND)
+        self.assertEqual(candidate.default_policy, POLICY_CARRYING_VALUE)
+        self.assertEqual(candidate.evidence_provider, "bullbitcoin")
+        self.assertEqual(candidate.evidence_id, "swap-refund")
+
+    def test_provider_id_without_source_marker_is_not_exact(self):
+        out = _row(
+            id="o",
+            wallet_id="custom-a",
+            wallet_kind="custom",
+            direction="outbound",
+            asset="BTC",
+            amount=100_000_000,
+            raw_json={"swap_id": "ambiguous"},
+        )
+        inbound = _row(
+            id="i",
+            wallet_id="custom-b",
+            wallet_kind="custom",
+            direction="inbound",
+            asset="LBTC",
+            amount=99_900_000,
+            raw_json={"swap_id": "ambiguous"},
+            occurred_at="2026-03-14T17:32:00Z",
+        )
+
+        self.assertEqual(suggest_swap_candidates([out, inbound], tax_country="at"), [])
+
+    def test_free_text_provider_hint_with_generic_id_is_not_exact(self):
+        for field in ("counterparty", "service"):
+            with self.subTest(field=field):
+                raw = {field: "Boltz support", "id": "free-text-id", "flow": "chain"}
+                out = _row(
+                    id=f"o-{field}",
+                    wallet_id="custom-a",
+                    wallet_kind="custom",
+                    direction="outbound",
+                    asset="BTC",
+                    amount=100_000_000,
+                    raw_json=raw,
+                )
+                inbound = _row(
+                    id=f"i-{field}",
+                    wallet_id="custom-b",
+                    wallet_kind="custom",
+                    direction="inbound",
+                    asset="LBTC",
+                    amount=99_900_000,
+                    raw_json=raw,
+                    occurred_at="2026-03-14T17:32:00Z",
+                )
+
+                self.assertEqual(
+                    suggest_swap_candidates([out, inbound], tax_country="at"),
+                    [],
+                )
+
+    def test_reverse_submarine_provider_evidence_sets_specific_kind(self):
+        raw = {"provider": "boltz", "swap_id": "r1", "flow": "reverse-submarine"}
+        out = _row(
+            id="ln-out",
+            wallet_id="phoenix",
+            wallet_kind="phoenix",
+            direction="outbound",
+            asset="BTC",
+            amount=50_000_000,
+            raw_json=raw,
+        )
+        inbound = _row(
+            id="lbtc-in",
+            wallet_id="liquid",
+            wallet_kind="descriptor",
+            direction="inbound",
+            asset="LBTC",
+            amount=49_500_000,
+            raw_json=raw,
+        )
+        candidates = suggest_swap_candidates([out, inbound], tax_country="at")
+        self.assertEqual(len(candidates), 1)
+        self.assertEqual(candidates[0].method, METHOD_PROVIDER_SWAP_ID)
+        self.assertEqual(candidates[0].default_kind, KIND_REVERSE_SUBMARINE_SWAP)
+
+    def test_boltz_native_id_field_is_allowed_with_provider_marker(self):
+        raw = {
+            "provider": "boltz",
+            "id": "boltz-chain-id",
+            "flow": "chain",
+            "version": "2",
+            "taproot": True,
+            "cooperative": True,
+            "spend_path": "key",
+        }
+        out = _row(
+            id="btc-out",
+            wallet_id="btc",
+            wallet_kind="descriptor",
+            direction="outbound",
+            asset="BTC",
+            amount=100_000_000,
+            raw_json=raw,
+        )
+        inbound = _row(
+            id="lbtc-in",
+            wallet_id="liquid",
+            wallet_kind="descriptor",
+            direction="inbound",
+            asset="LBTC",
+            amount=99_500_000,
+            raw_json=raw,
+        )
+        candidates = suggest_swap_candidates([out, inbound], tax_country="at")
+        self.assertEqual(len(candidates), 1)
+        self.assertEqual(candidates[0].method, METHOD_PROVIDER_SWAP_ID)
+        self.assertEqual(candidates[0].default_kind, KIND_CHAIN_SWAP)
+        self.assertEqual(candidates[0].evidence_id, "boltz-chain-id")
+        self.assertEqual(candidates[0].evidence_version, "2")
+        self.assertEqual(candidates[0].evidence_taproot, "True")
+        self.assertEqual(candidates[0].evidence_cooperative, "True")
+        self.assertEqual(candidates[0].evidence_spend_path, "key")
 
 
 class HeuristicMatchTests(unittest.TestCase):

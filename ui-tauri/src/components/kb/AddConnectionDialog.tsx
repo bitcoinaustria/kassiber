@@ -56,6 +56,14 @@ import {
   detectWalletMaterial,
   scriptTypesFromDetectionPayload,
 } from "@/lib/walletMaterialFormat";
+import {
+  regtestBackendConnections,
+} from "@/components/kb/backendConnectionRows";
+import { PENDING_SETTINGS_BACKEND_EDIT_KEY } from "./settingsSections";
+import {
+  backendRowToSettingsBackend,
+  type BackendSettingsData,
+} from "./settings/SettingsModel";
 
 
 async function fileToBase64(file: File): Promise<string> {
@@ -84,6 +92,14 @@ interface AddConnectionDialogProps {
 interface SetupFormState {
   label: string;
   backend: string;
+  birthday: string;
+  coreRpcUrl: string;
+  coreRpcAuthMode: "cookiefile" | "basic";
+  coreRpcCookiefile: string;
+  coreRpcUsername: string;
+  coreRpcPassword: string;
+  coreRpcCredentialRef: string;
+  coreRpcNetwork: string;
   btcpayInstanceMode: "saved" | "new";
   btcpaySetupMode: "wallet_sources" | "existing_wallets";
   bullWalletSetupMode: "wallet_sources" | "existing_wallets";
@@ -94,6 +110,13 @@ interface SetupFormState {
   btcpayApiKey: string;
   walletMaterial: string;
   descriptorScriptType: string;
+  spDescriptor: string;
+  spScanMode: "local_index" | "server_assisted";
+  spScanStartHeight: string;
+  spScanStartDate: string;
+  spFullHistory: boolean;
+  spAcknowledgeFullHistoryWarning: boolean;
+  spAcknowledgeServerWarning: boolean;
   addressList: string;
   gapLimit: string;
   targetWallet: string;
@@ -161,6 +184,7 @@ interface BackendOption {
   chain?: string;
   network?: string;
   is_default?: boolean;
+  silent_payments?: boolean;
 }
 
 interface BackendOptionsData {
@@ -176,9 +200,70 @@ interface BackendOptionsData {
   }>;
 }
 
+interface CoreDetectionCandidate {
+  url: string;
+  chain?: string | null;
+  network?: string | null;
+  auth_source?: string | null;
+  credential_source?: string | null;
+  credential_ref?: string | null;
+  cookiefile?: string | null;
+  blocks?: number | null;
+  headers?: number | null;
+  peers?: number | null;
+  status?: string | null;
+  pruned?: boolean | null;
+  ibd?: boolean | null;
+  wallet_rpc?: CoreCapabilityPayload | null;
+  block_filters?: CoreCapabilityPayload | null;
+  warnings?: string[];
+}
+
+interface CoreDetectData {
+  candidates: CoreDetectionCandidate[];
+}
+
+interface CoreCapabilityPayload {
+  available?: boolean;
+  error?: {
+    message?: string;
+    hint?: string;
+  };
+}
+
+interface CoreProbeData {
+  reachable: boolean;
+  chain?: string | null;
+  network?: string | null;
+  blocks?: number | null;
+  headers?: number | null;
+  peers?: number | null;
+  status?: string | null;
+  pruned?: boolean | null;
+  pruneheight?: number | null;
+  version?: number | null;
+  ibd?: boolean | null;
+  wallet_rpc?: CoreCapabilityPayload | null;
+  block_filters?: CoreCapabilityPayload | null;
+  warnings?: string[];
+  error?: {
+    message?: string;
+    hint?: string;
+  };
+}
+
 function backendOptionLabel(backend: BackendOption): string {
   const label = backend.display_name?.trim() || backend.name;
   return label === backend.name ? label : `${label} (${backend.name})`;
+}
+
+function backendNameFromLabel(label: string) {
+  const slug = label
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9._-]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return slug || "bitcoin-core";
 }
 
 interface BtcpayDiscoveryData {
@@ -257,14 +342,23 @@ interface SamouraiImportResult {
 }
 
 type DialogStep = "source" | "setup";
-const DESCRIPTOR_BACKEND_KINDS = new Set(["esplora", "electrum"]);
+const DESCRIPTOR_BACKEND_KINDS = new Set(["esplora", "electrum", "bitcoinrpc"]);
 const ADDRESS_BACKEND_KINDS = new Set([
   "esplora",
   "electrum",
   "bitcoinrpc",
 ]);
+const CORE_DEFAULT_RPC_URLS: Record<string, string> = {
+  main: "http://127.0.0.1:8332",
+  test: "http://127.0.0.1:18332",
+  signet: "http://127.0.0.1:38332",
+  regtest: "http://127.0.0.1:18443",
+};
 const DEFAULT_BTCPAY_PAYMENT_METHOD_ID = "BTC-CHAIN";
 const MAX_DESCRIPTOR_GAP_LIMIT = 5000;
+const CONNECTION_SOURCE_ALIASES: Record<string, string> = {
+  xpub: "descriptor",
+};
 type BullBitcoinWalletNetwork = "bitcoin" | "liquid" | "lightning";
 const BULLBITCOIN_WALLET_NETWORKS: Array<{
   id: BullBitcoinWalletNetwork;
@@ -440,6 +534,14 @@ const formDefaultsFor = (
   return {
     label: defaultLabel,
     backend: "",
+    birthday: "",
+    coreRpcUrl: CORE_DEFAULT_RPC_URLS.main,
+    coreRpcAuthMode: "cookiefile",
+    coreRpcCookiefile: "",
+    coreRpcUsername: "",
+    coreRpcPassword: "",
+    coreRpcCredentialRef: "",
+    coreRpcNetwork: source.network ?? "main",
     btcpayInstanceMode: "new",
     btcpaySetupMode: "wallet_sources",
     bullWalletSetupMode: "wallet_sources",
@@ -454,6 +556,13 @@ const formDefaultsFor = (
     btcpayApiKey: "",
     walletMaterial: "",
     descriptorScriptType: "",
+    spDescriptor: "",
+    spScanMode: "local_index",
+    spScanStartHeight: "",
+    spScanStartDate: "",
+    spFullHistory: false,
+    spAcknowledgeFullHistoryWarning: false,
+    spAcknowledgeServerWarning: false,
     addressList: "",
     gapLimit: "40",
     targetWallet: "",
@@ -510,6 +619,91 @@ function renderSetupHelper(helper: React.ReactNode) {
     return <p className="text-xs text-muted-foreground">{helper}</p>;
   }
   return <div className="text-xs text-muted-foreground">{helper}</div>;
+}
+
+function coreNodeStatusKey(status?: string | null) {
+  switch (status) {
+    case "synchronized":
+    case "synchronizing":
+    case "connecting":
+    case "unresponsive":
+      return status;
+    default:
+      return "unknown";
+  }
+}
+
+function coreCandidateAuthLabel(
+  candidate: CoreDetectionCandidate,
+  t: TFunction<readonly ["connections", "common"]>,
+) {
+  if (
+    candidate.auth_source === "basic" &&
+    candidate.credential_source === "bitcoin.conf"
+  ) {
+    return t("connections:add.core.authBasicBitcoinConf");
+  }
+  if (candidate.auth_source === "basic") {
+    return t("connections:add.core.authBasic");
+  }
+  if (candidate.credential_source === "bitcoin.conf") {
+    return t("connections:add.core.authCookiefileBitcoinConf");
+  }
+  if (candidate.auth_source === "cookiefile") {
+    return t("connections:add.core.authCookiefile");
+  }
+  return t("connections:add.core.credentialUnknown");
+}
+
+function applyCoreCandidateToForm(
+  current: SetupFormState,
+  candidate: CoreDetectionCandidate,
+): SetupFormState {
+  const authMode =
+    candidate.auth_source === "basic"
+      ? "basic"
+      : candidate.auth_source === "cookiefile"
+        ? "cookiefile"
+        : current.coreRpcAuthMode;
+  return {
+    ...current,
+    coreRpcUrl: candidate.url || current.coreRpcUrl,
+    coreRpcNetwork: candidate.network || current.coreRpcNetwork,
+    coreRpcAuthMode: authMode,
+    coreRpcCookiefile: candidate.cookiefile || current.coreRpcCookiefile,
+    coreRpcUsername:
+      candidate.auth_source === "basic" ? "" : current.coreRpcUsername,
+    coreRpcPassword:
+      candidate.auth_source === "basic" ? "" : current.coreRpcPassword,
+    coreRpcCredentialRef: candidate.credential_ref || "",
+  };
+}
+
+function coreReadinessMessages(
+  payload: CoreDetectionCandidate | CoreProbeData,
+  t: TFunction<readonly ["connections", "common"]>,
+) {
+  const messages: string[] = [];
+  if (payload.pruned) {
+    messages.push(t("connections:add.core.prunedWarning"));
+  }
+  if (payload.ibd) {
+    messages.push(t("connections:add.core.initialBlockDownloadWarning"));
+  }
+  if (payload.wallet_rpc?.available === false) {
+    messages.push(
+      payload.wallet_rpc.error?.hint ??
+        payload.wallet_rpc.error?.message ??
+        t("connections:add.core.walletRpcUnavailable"),
+    );
+  }
+  if (payload.block_filters?.available === false) {
+    messages.push(
+      payload.block_filters.error?.hint ??
+        t("connections:add.core.blockFiltersUnavailable"),
+    );
+  }
+  return messages;
 }
 
 function InlineCode({ children }: { children?: React.ReactNode }) {
@@ -572,9 +766,15 @@ export function AddConnectionDialog({
     (state) => state.setDeferredConnectionSetup,
   );
   const backendOptions = useDaemon<BackendOptionsData>("ui.backends.options");
+  const backendSettingsQuery = useDaemon<BackendSettingsData>(
+    "ui.backends.settings.list",
+  );
   const walletsList = useDaemon<WalletListData>("ui.wallets.list");
   const createWallet =
     useDaemonMutation<{ wallet: { label: string } }>("ui.wallets.create");
+  const createBackend = useDaemonMutation<{ name: string }>(
+    "ui.backends.create",
+  );
   const importFile =
     useDaemonMutation<ImportFileResult>("ui.wallets.import_file");
   const ledgerTemplate = useDaemonMutation<{
@@ -628,6 +828,10 @@ export function AddConnectionDialog({
     payment_method_id: string;
     ok: boolean;
   }>("ui.connections.btcpay.test");
+  const detectCore = useDaemonMutation<CoreDetectData>("ui.backends.detect_core");
+  const testCore = useDaemonMutation<CoreProbeData>(
+    "ui.backends.bitcoinrpc.test",
+  );
   const [syncProgress, setSyncProgress] = React.useState<{
     wallet: string;
     processed: number;
@@ -659,7 +863,7 @@ export function AddConnectionDialog({
   const { startSyncNotice, clearSyncNotice } = useSyncProgressNotice();
   const [activeCategory, setActiveCategory] =
     React.useState<ConnectionCategory>("wallets");
-  const [selectedId, setSelectedId] = React.useState("xpub");
+  const [selectedId, setSelectedId] = React.useState("descriptor");
   const [sourceQuery, setSourceQuery] = React.useState("");
   const [step, setStep] = React.useState<DialogStep>("source");
   const [form, setForm] = React.useState(() =>
@@ -698,6 +902,13 @@ export function AddConnectionDialog({
   >(null);
   const [btcpayDiscovery, setBtcpayDiscovery] =
     React.useState<BtcpayDiscoveryData | null>(null);
+  const [coreDetection, setCoreDetection] =
+    React.useState<CoreDetectData | null>(null);
+  const [coreTestStatus, setCoreTestStatus] = React.useState<
+    | ({ ok: true } & CoreProbeData)
+    | { ok: false; message: string; hint?: string | null }
+    | null
+  >(null);
   const [copiedAddress, setCopiedAddress] = React.useState<string | null>(null);
   const copyAddress = React.useCallback(async (address: string) => {
     try {
@@ -740,6 +951,12 @@ export function AddConnectionDialog({
       supportsAddressListSync(backend) &&
       (!backend.chain || backend.chain === "bitcoin"),
   );
+  const silentPaymentBackendOptions = allBackends.filter(
+    (backend) =>
+      backend.silent_payments === true &&
+      (!backend.chain || backend.chain === "bitcoin") &&
+      (form.spScanMode !== "server_assisted" || backend.kind !== "electrum"),
+  );
   const liquidBackends = allBackends.filter(
     (backend) =>
       supportsDescriptorSync(backend) &&
@@ -753,7 +970,26 @@ export function AddConnectionDialog({
   const addressBackendOptions =
     selected.chain === "bitcoin" ? bitcoinAddressBackends : descriptorBackendOptions;
   const selectedBackendOptions =
-    setupKind === "address-list" ? addressBackendOptions : descriptorBackendOptions;
+    setupKind === "address-list"
+      ? addressBackendOptions
+      : setupKind === "silent-payment"
+        ? silentPaymentBackendOptions
+        : descriptorBackendOptions;
+  const selectedBackend = selectedBackendOptions.find(
+    (backend) => backend.name === form.backend,
+  );
+  const configuredLocalBackends = React.useMemo(
+    () =>
+      regtestBackendConnections(
+        backendSettingsQuery.data?.data?.backends.map(
+          backendRowToSettingsBackend,
+        ) ?? [],
+      ),
+    [backendSettingsQuery.data?.data?.backends],
+  );
+  const selectedBackendOptionKey = selectedBackendOptions
+    .map((backend) => backend.name)
+    .join("\0");
   const defaultBackendName =
     selectedBackendOptions.find((backend) => backend.is_default)?.name ??
     selectedBackendOptions[0]?.name ??
@@ -840,18 +1076,22 @@ export function AddConnectionDialog({
     createWallet.isPending ||
     importFile.isPending ||
     importSamourai.isPending ||
+    createBackend.isPending ||
     createBtcpay.isPending ||
     createBullBitcoinWallet.isPending ||
     discoverBtcpay.isPending ||
+    detectCore.isPending ||
+    testCore.isPending ||
     importBip329.isPending ||
     syncWallet.isPending;
   const requiresBackend =
     setupKind === "descriptor" ||
     setupKind === "samourai" ||
+    setupKind === "silent-payment" ||
     setupKind === "address-list";
   const missingBackend = requiresBackend && selectedBackendOptions.length === 0;
   const submitLabel =
-    setupKind === "backend-settings"
+    setupKind === "backend-settings" && selected.id !== "bitcoin-core"
       ? t("add.submit.openBackendSettings")
       : syncWallet.isPending
         ? t("add.submit.refreshing")
@@ -891,18 +1131,24 @@ export function AddConnectionDialog({
     setPreviewError(null);
     setBtcpayTestStatus(null);
     setBtcpayDiscovery(null);
+    setCoreDetection(null);
+    setCoreTestStatus(null);
     setSyncProgress(null);
     setPurgedKeys(null);
   }, [selected, t]);
 
   React.useEffect(() => {
     if (!open) return;
-    const source =
-      CONNECTION_SOURCES.find((candidate) => candidate.id === initialSourceId) ??
-      CONNECTION_SOURCES[0];
+    const resolvedSourceId = initialSourceId
+      ? CONNECTION_SOURCE_ALIASES[initialSourceId] ?? initialSourceId
+      : null;
+    const requestedSource = CONNECTION_SOURCES.find(
+      (candidate) => candidate.id === resolvedSourceId,
+    );
+    const source = requestedSource ?? CONNECTION_SOURCES[0];
     setActiveCategory(source.category);
     setSelectedId(source.id);
-    setStep(initialSourceId && source.status === "ready" ? "setup" : "source");
+    setStep(requestedSource && source.status === "ready" ? "setup" : "source");
     setSetupError(null);
     setLastImportResult(null);
     setGenericLedgerPreviewBlocksSubmit(false);
@@ -929,13 +1175,24 @@ export function AddConnectionDialog({
     if (
       setupKind !== "descriptor" &&
       setupKind !== "samourai" &&
-      setupKind !== "address-list"
+      setupKind !== "address-list" &&
+      setupKind !== "silent-payment"
     )
       return;
-    setForm((current) =>
-      current.backend ? current : { ...current, backend: defaultBackendName },
-    );
-  }, [defaultBackendName, setupKind]);
+    setForm((current) => {
+      if (setupKind !== "silent-payment") {
+        return current.backend
+          ? current
+          : { ...current, backend: defaultBackendName };
+      }
+      const backendStillAvailable = selectedBackendOptions.some(
+        (backend) => backend.name === current.backend,
+      );
+      return backendStillAvailable
+        ? current
+        : { ...current, backend: defaultBackendName };
+    });
+  }, [defaultBackendName, selectedBackendOptionKey, setupKind]);
 
   React.useEffect(() => {
     if (setupKind !== "btcpay") return;
@@ -1062,6 +1319,15 @@ export function AddConnectionDialog({
     void navigate({ to: "/settings", hash: "backends" });
   };
 
+  const openConfiguredBackendSettings = (
+    backendId: string,
+    settingsHash?: string,
+  ) => {
+    window.sessionStorage.setItem(PENDING_SETTINGS_BACKEND_EDIT_KEY, backendId);
+    onOpenChange(false);
+    void navigate({ to: "/settings", hash: settingsHash ?? "bitcoin" });
+  };
+
   const btcpayInstanceArgs = () => {
     if (form.btcpayInstanceMode === "saved") {
       return { backend: form.backend.trim() };
@@ -1073,15 +1339,73 @@ export function AddConnectionDialog({
     };
   };
 
+  const coreRpcConfig = () => {
+    const config: Record<string, string> = {
+      display_name: form.label.trim(),
+    };
+    if (form.coreRpcAuthMode === "cookiefile") {
+      config.cookiefile = form.coreRpcCookiefile.trim();
+    } else {
+      config.username = form.coreRpcUsername.trim();
+      config.password = form.coreRpcPassword;
+    }
+    return config;
+  };
+
+  const updateCoreForm = <K extends keyof SetupFormState>(
+    key: K,
+    value: SetupFormState[K],
+  ) => {
+    setForm((current) => ({
+      ...current,
+      [key]: value,
+      coreRpcCredentialRef: "",
+    }));
+    setCoreTestStatus(null);
+    setFieldErrors((current) => {
+      if (!(key in current)) return current;
+      const next = { ...current };
+      delete next[key];
+      return next;
+    });
+  };
+
+  const coreRpcBackendArgs = () => {
+    const args: Record<string, unknown> = {
+      name: backendNameFromLabel(form.label),
+      kind: "bitcoinrpc",
+      url: form.coreRpcUrl.trim(),
+      chain: "bitcoin",
+      network: form.coreRpcNetwork || "main",
+      config: coreRpcConfig(),
+    };
+    if (form.coreRpcCredentialRef) {
+      args.credential_ref = form.coreRpcCredentialRef;
+    }
+    return args;
+  };
+
+  const coreRpcProbeArgs = () =>
+    form.coreRpcCredentialRef
+      ? { credential_ref: form.coreRpcCredentialRef, timeout: 10 }
+      : {
+          url: form.coreRpcUrl.trim(),
+          network: form.coreRpcNetwork || "main",
+          config: coreRpcConfig(),
+          timeout: 10,
+        };
+
   const validateSetupForm = (): Partial<Record<keyof SetupFormState, string>> => {
     const errors: Partial<Record<keyof SetupFormState, string>> = {};
     if (
       setupKind === "descriptor" ||
+      setupKind === "silent-payment" ||
       setupKind === "address-list" ||
       setupKind === "file-wallet" ||
       setupKind === "samourai" ||
       setupKind === "btcpay" ||
-      setupKind === "bullbitcoin-wallet"
+      setupKind === "bullbitcoin-wallet" ||
+      (setupKind === "backend-settings" && selected.id === "bitcoin-core")
     ) {
       if (!form.label.trim()) {
         errors.label = t("add.validation.labelRequired");
@@ -1116,6 +1440,71 @@ export function AddConnectionDialog({
       }
       if (descriptorBackendOptions.length > 0 && !form.backend.trim()) {
         errors.backend = t("add.validation.chooseBackend");
+      }
+      if (form.birthday && Number.isNaN(Date.parse(form.birthday))) {
+        errors.birthday = t("add.validation.birthdayInvalid");
+      }
+    }
+    if (setupKind === "backend-settings" && selected.id === "bitcoin-core") {
+      if (!form.coreRpcUrl.trim()) {
+        errors.coreRpcUrl = t("add.core.errorUrl");
+      }
+      if (
+        form.coreRpcAuthMode === "cookiefile" &&
+        !form.coreRpcCookiefile.trim() &&
+        !form.coreRpcCredentialRef
+      ) {
+        errors.coreRpcCookiefile = t("add.core.errorCookiefile");
+      }
+      if (form.coreRpcAuthMode === "basic" && !form.coreRpcCredentialRef) {
+        if (!form.coreRpcUsername.trim()) {
+          errors.coreRpcUsername = t("add.core.errorUsername");
+        }
+        if (!form.coreRpcPassword.trim()) {
+          errors.coreRpcPassword = t("add.core.errorPassword");
+        }
+      }
+    }
+    if (setupKind === "silent-payment") {
+      if (!form.spDescriptor.trim()) {
+        errors.spDescriptor = t("add.silentPayments.errorMaterial");
+      }
+      if (!form.backend.trim()) {
+        errors.backend = t("add.validation.chooseBackend");
+      }
+      const startHeightText = form.spScanStartHeight.trim();
+      const hasStartHeight = startHeightText.length > 0;
+      const hasStartDate = form.spScanStartDate.trim().length > 0;
+      if (hasStartHeight) {
+        const startHeight = Number.parseInt(startHeightText, 10);
+        if (
+          !Number.isFinite(startHeight) ||
+          startHeight < 0 ||
+          String(startHeight) !== startHeightText
+        ) {
+          errors.spScanStartHeight = t(
+            "add.silentPayments.errorStartHeight",
+          );
+        }
+      }
+      if (!hasStartHeight && !hasStartDate && !form.spFullHistory) {
+        errors.spScanStartHeight = t("add.silentPayments.errorStartPoint");
+      }
+      if (
+        form.spFullHistory &&
+        !form.spAcknowledgeFullHistoryWarning
+      ) {
+        errors.spAcknowledgeFullHistoryWarning = t(
+          "add.silentPayments.errorFullHistoryAck",
+        );
+      }
+      if (
+        form.spScanMode === "server_assisted" &&
+        !form.spAcknowledgeServerWarning
+      ) {
+        errors.spAcknowledgeServerWarning = t(
+          "add.silentPayments.errorServerAck",
+        );
       }
     }
     if (setupKind === "samourai") {
@@ -1263,11 +1652,32 @@ export function AddConnectionDialog({
     if (Object.keys(errors).length > 0) return;
     const label = form.label.trim();
     try {
-      if (setupKind === "backend-settings") {
+      if (setupKind === "backend-settings" && selected.id === "bitcoin-core") {
+        const backendArgs = coreRpcBackendArgs();
+        const testEnvelope = await testCore.mutateAsync(coreRpcProbeArgs());
+        const probe = testEnvelope.data;
+        if (!probe?.reachable) {
+          throw new Error(
+            probe?.error?.message ?? t("add.core.testFailed"),
+          );
+        }
+        if (probe.wallet_rpc?.available === false) {
+          throw new Error(
+            probe.wallet_rpc.error?.hint ??
+              probe.wallet_rpc.error?.message ??
+              t("add.core.walletRpcUnavailable"),
+          );
+        }
+        await createBackend.mutateAsync(backendArgs);
+        addNotification({
+          title: t("add.added.title"),
+          body: t("add.core.addedBody", { label }),
+          tone: "success",
+        });
+      } else if (setupKind === "backend-settings") {
         openBackendSettings();
         return;
-      }
-      if (setupKind === "descriptor") {
+      } else if (setupKind === "descriptor") {
         const gapLimit = Number.parseInt(form.gapLimit, 10);
         const isBareXpub =
           detectWalletMaterial(form.walletMaterial).kind === "bare-xpub";
@@ -1297,6 +1707,7 @@ export function AddConnectionDialog({
           wallet_material: form.walletMaterial.trim(),
           script_types: scriptTypes,
           gap_limit: Number.isFinite(gapLimit) ? gapLimit : undefined,
+          birthday: form.birthday || undefined,
         });
         if (form.syncAfterCreate) {
           startSyncNotice(
@@ -1337,6 +1748,39 @@ export function AddConnectionDialog({
             label,
             count: parsed.valid.length,
           }),
+          tone: "success",
+        });
+      } else if (setupKind === "silent-payment") {
+        const startHeight = Number.parseInt(form.spScanStartHeight.trim(), 10);
+        const fullHistory = form.spFullHistory;
+        await createWallet.mutateAsync({
+          label,
+          kind: "silent-payment",
+          backend: form.backend.trim() || undefined,
+          chain: "bitcoin",
+          network: selected.network,
+          sp_descriptor: form.spDescriptor.trim(),
+          sp_scan_mode: form.spScanMode,
+          sp_scan_start_height: !fullHistory && Number.isFinite(startHeight)
+            ? startHeight
+            : undefined,
+          sp_scan_start_date: !fullHistory
+            ? form.spScanStartDate.trim() || undefined
+            : undefined,
+          sp_full_history: fullHistory,
+          sp_acknowledge_full_history_warning:
+            form.spAcknowledgeFullHistoryWarning,
+          sp_acknowledge_server_warning: form.spAcknowledgeServerWarning,
+        });
+        startSyncNotice(t("add.silentPayments.stillScanning", { label }));
+        try {
+          await syncWallet.mutateAsync({ wallet: label });
+        } finally {
+          clearSyncNotice();
+        }
+        addNotification({
+          title: t("add.added.title"),
+          body: t("add.silentPayments.addedBodyScanning", { label }),
           tone: "success",
         });
       } else if (setupKind === "samourai") {
@@ -1644,7 +2088,6 @@ export function AddConnectionDialog({
       } else if (setupKind === "bip329") {
         const envelope = await importBip329.mutateAsync({
           file: form.bip329File.trim(),
-          wallet: form.bip329Wallet.trim() || undefined,
         });
         addNotification({
           title: t("add.bip329.labelsImportedTitle"),
@@ -1671,8 +2114,9 @@ export function AddConnectionDialog({
     id: string,
     label: string,
     options: BackendOption[],
+    helper?: React.ReactNode,
   ) => (
-    <SetupField id={id} label={label} error={fieldErrors.backend}>
+    <SetupField id={id} label={label} error={fieldErrors.backend} helper={helper}>
       {options.length ? (
         <select
           id={id}
@@ -2092,6 +2536,23 @@ export function AddConnectionDialog({
               onChange={(event) => updateForm("gapLimit", event.target.value)}
             />
           </SetupField>
+          <SetupField
+            id="connection-birthday"
+            label={t("add.descriptor.birthday")}
+            error={fieldErrors.birthday}
+            helper={
+              selectedBackend?.kind === "bitcoinrpc"
+                ? t("add.descriptor.birthdayHelperCore")
+                : t("add.descriptor.birthdayHelper")
+            }
+          >
+            <Input
+              id="connection-birthday"
+              type="date"
+              value={form.birthday}
+              onChange={(event) => updateForm("birthday", event.target.value)}
+            />
+          </SetupField>
           <div className="flex items-center gap-2">
             <Button
               type="button"
@@ -2240,6 +2701,143 @@ export function AddConnectionDialog({
             ) : null}
           </SetupField>
           {renderSyncAfterCreate(t("add.addressList.scanAfter"))}
+        </>
+      );
+    }
+
+    if (setupKind === "silent-payment") {
+      return (
+        <>
+          {renderConnectionLabelField()}
+          {renderBackendSelect(
+            "connection-backend",
+            t("add.silentPayments.backend"),
+            silentPaymentBackendOptions,
+            t("add.silentPayments.backendHelper"),
+          )}
+          <SetupField
+            id="connection-sp-descriptor"
+            label={t("add.silentPayments.material")}
+            error={fieldErrors.spDescriptor}
+            helper={t("add.silentPayments.materialHelper")}
+          >
+            <Textarea
+              id="connection-sp-descriptor"
+              className="min-h-28 font-mono text-xs"
+              value={form.spDescriptor}
+              onChange={(event) =>
+                updateForm("spDescriptor", event.target.value)
+              }
+              placeholder="sp(spscan1q...)"
+              required
+            />
+          </SetupField>
+          <SetupField
+            id="connection-sp-scan-mode"
+            label={t("add.silentPayments.scanMode")}
+            helper={t("add.silentPayments.scanModeHelper")}
+          >
+            <select
+              id="connection-sp-scan-mode"
+              className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+              value={form.spScanMode}
+              onChange={(event) =>
+                updateForm(
+                  "spScanMode",
+                  event.target.value as SetupFormState["spScanMode"],
+                )
+              }
+            >
+              <option value="local_index">
+                {t("add.silentPayments.scanModeLocal")}
+              </option>
+              <option value="server_assisted">
+                {t("add.silentPayments.scanModeServer")}
+              </option>
+            </select>
+          </SetupField>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <SetupField
+              id="connection-sp-start-height"
+              label={t("add.silentPayments.startHeight")}
+              error={fieldErrors.spScanStartHeight}
+            >
+              <Input
+                id="connection-sp-start-height"
+                type="number"
+                min={0}
+                value={form.spScanStartHeight}
+                onChange={(event) =>
+                  updateForm("spScanStartHeight", event.target.value)
+                }
+                disabled={form.spFullHistory}
+              />
+            </SetupField>
+            <SetupField
+              id="connection-sp-start-date"
+              label={t("add.silentPayments.startDate")}
+              error={fieldErrors.spScanStartDate}
+              helper={t("add.silentPayments.startDateHelper")}
+            >
+              <Input
+                id="connection-sp-start-date"
+                type="date"
+                value={form.spScanStartDate}
+                onChange={(event) =>
+                  updateForm("spScanStartDate", event.target.value)
+                }
+                disabled={form.spFullHistory}
+              />
+            </SetupField>
+          </div>
+          <div className="space-y-2 rounded-md border bg-background p-3">
+            <label className="flex items-start gap-2 text-sm">
+              <Checkbox
+                checked={form.spFullHistory}
+                onCheckedChange={(checked) =>
+                  updateForm("spFullHistory", checked === true)
+                }
+              />
+              <span>{t("add.silentPayments.fullHistory")}</span>
+            </label>
+            {form.spFullHistory ? (
+              <label className="flex items-start gap-2 text-sm">
+                <Checkbox
+                  checked={form.spAcknowledgeFullHistoryWarning}
+                  onCheckedChange={(checked) =>
+                    updateForm(
+                      "spAcknowledgeFullHistoryWarning",
+                      checked === true,
+                    )
+                  }
+                />
+                <span>{t("add.silentPayments.fullHistoryAck")}</span>
+              </label>
+            ) : null}
+            {fieldErrors.spAcknowledgeFullHistoryWarning ? (
+              <p className="text-xs text-destructive">
+                {fieldErrors.spAcknowledgeFullHistoryWarning}
+              </p>
+            ) : null}
+          </div>
+          {form.spScanMode === "server_assisted" ? (
+            <div className="space-y-2 rounded-md border border-amber-500/30 bg-amber-500/10 p-3">
+              <label className="flex items-start gap-2 text-sm">
+                <Checkbox
+                  checked={form.spAcknowledgeServerWarning}
+                  onCheckedChange={(checked) =>
+                    updateForm("spAcknowledgeServerWarning", checked === true)
+                  }
+                />
+                <span>{t("add.silentPayments.serverAck")}</span>
+              </label>
+              {fieldErrors.spAcknowledgeServerWarning ? (
+                <p className="text-xs text-destructive">
+                  {fieldErrors.spAcknowledgeServerWarning}
+                </p>
+              ) : null}
+            </div>
+          ) : null}
         </>
       );
     }
@@ -3364,26 +3962,349 @@ export function AddConnectionDialog({
               ) : null}
             </div>
           </SetupField>
+        </>
+      );
+    }
+
+    if (setupKind === "backend-settings" && selected.id === "bitcoin-core") {
+      const candidates = coreDetection?.candidates ?? [];
+      return (
+        <>
+          {renderConnectionLabelField()}
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={detectCore.isPending}
+              onClick={async () => {
+                setCoreTestStatus(null);
+                try {
+                  const envelope = await detectCore.mutateAsync({});
+                  const data = envelope.data ?? { candidates: [] };
+                  setCoreDetection(data);
+                  const first = data.candidates[0];
+                  if (first) {
+                    setForm((current) =>
+                      applyCoreCandidateToForm(current, first),
+                    );
+                  }
+                } catch (error) {
+                  setCoreDetection({ candidates: [] });
+                  setCoreTestStatus({
+                    ok: false,
+                    message:
+                      error instanceof Error
+                        ? error.message
+                        : t("add.core.detectFailed"),
+                  });
+                }
+              }}
+            >
+              {detectCore.isPending ? (
+                <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+              ) : null}
+              {t("add.core.detect")}
+            </Button>
+            {coreDetection && candidates.length === 0 ? (
+              <span className="text-xs text-muted-foreground">
+                {t("add.core.noneDetected")}
+              </span>
+            ) : null}
+          </div>
+          {candidates.length > 0 ? (
+            <div className="space-y-2 rounded-md border border-border/70 p-3">
+              <p className="text-xs font-medium text-muted-foreground">
+                {t("add.core.detectedNodes")}
+              </p>
+              <div className="grid gap-2">
+                {candidates.map((candidate) => {
+                  const candidateKey = [
+                    candidate.url,
+                    candidate.network ?? "",
+                    candidate.auth_source ?? "",
+                    candidate.credential_source ?? "",
+                    candidate.cookiefile ?? candidate.credential_ref ?? "",
+                  ].join("|");
+                  const readinessMessages = coreReadinessMessages(candidate, t);
+                  return (
+                    <Button
+                      key={candidateKey}
+                      type="button"
+                      variant="outline"
+                      className="h-auto justify-start text-left"
+                      onClick={() => {
+                        setForm((current) =>
+                          applyCoreCandidateToForm(current, candidate),
+                        );
+                        setCoreTestStatus(null);
+                      }}
+                    >
+                      <span className="min-w-0">
+                        <span className="block truncate">
+                          {candidate.network || "main"} · {candidate.url}
+                        </span>
+                        <span className="block truncate text-[11px] font-normal text-muted-foreground">
+                          {t("add.core.candidateMeta", {
+                            status: t(
+                              `add.core.status.${coreNodeStatusKey(candidate.status)}`,
+                            ),
+                            blocks: candidate.blocks ?? "n/a",
+                            headers: candidate.headers ?? "n/a",
+                            peers: candidate.peers ?? "n/a",
+                            auth: coreCandidateAuthLabel(candidate, t),
+                          })}
+                        </span>
+                        {readinessMessages.length > 0 ? (
+                          <span className="block whitespace-normal text-[11px] font-normal text-amber-700 dark:text-amber-300">
+                            {readinessMessages.join(" ")}
+                          </span>
+                        ) : null}
+                      </span>
+                    </Button>
+                  );
+                })}
+              </div>
+            </div>
+          ) : null}
+          <div className="grid gap-3 md:grid-cols-[minmax(0,1.4fr)_minmax(0,0.7fr)]">
+            <SetupField
+              id="connection-core-url"
+              label={t("add.core.url")}
+              error={fieldErrors.coreRpcUrl}
+            >
+              <Input
+                id="connection-core-url"
+                value={form.coreRpcUrl}
+                onChange={(event) => {
+                  updateCoreForm("coreRpcUrl", event.target.value);
+                }}
+              />
+            </SetupField>
+            <SetupField
+              id="connection-core-network"
+              label={t("add.core.network")}
+            >
+              <select
+                id="connection-core-network"
+                className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                value={form.coreRpcNetwork}
+                onChange={(event) => {
+                  const network = event.target.value;
+                  setForm((current) => ({
+                    ...current,
+                    coreRpcNetwork: network,
+                    coreRpcUrl: Object.values(CORE_DEFAULT_RPC_URLS).includes(
+                      current.coreRpcUrl.trim(),
+                    )
+                      ? CORE_DEFAULT_RPC_URLS[network]
+                      : current.coreRpcUrl,
+                    coreRpcCredentialRef: "",
+                  }));
+                  setCoreTestStatus(null);
+                }}
+              >
+                <option value="main">{t("add.core.networkMain")}</option>
+                <option value="test">{t("add.core.networkTest")}</option>
+                <option value="signet">{t("add.core.networkSignet")}</option>
+                <option value="regtest">{t("add.core.networkRegtest")}</option>
+              </select>
+            </SetupField>
+          </div>
           <SetupField
-            id="connection-bip329-wallet"
-            label={t("add.bip329.targetWalletLabel")}
-            helper={t("add.bip329.targetWalletHelper")}
+            id="connection-core-auth"
+            label={t("add.core.authMode")}
           >
-            <Input
-              id="connection-bip329-wallet"
-              value={form.bip329Wallet}
-              onChange={(event) => updateForm("bip329Wallet", event.target.value)}
-            />
+            <select
+              id="connection-core-auth"
+              className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+              value={form.coreRpcAuthMode}
+              onChange={(event) => {
+                updateCoreForm(
+                  "coreRpcAuthMode",
+                  event.target.value === "basic" ? "basic" : "cookiefile",
+                );
+              }}
+            >
+              <option value="cookiefile">{t("add.core.authCookiefile")}</option>
+              <option value="basic">{t("add.core.authBasic")}</option>
+            </select>
           </SetupField>
+          {form.coreRpcAuthMode === "cookiefile" ? (
+            <SetupField
+              id="connection-core-cookiefile"
+              label={t("add.core.cookiefile")}
+              error={fieldErrors.coreRpcCookiefile}
+            >
+              <Input
+                id="connection-core-cookiefile"
+                value={form.coreRpcCookiefile}
+                onChange={(event) => {
+                  updateCoreForm("coreRpcCookiefile", event.target.value);
+                }}
+              />
+            </SetupField>
+          ) : (
+            <div className="grid gap-3 md:grid-cols-2">
+              <SetupField
+                id="connection-core-username"
+                label={t("add.core.username")}
+                error={fieldErrors.coreRpcUsername}
+              >
+                <Input
+                  id="connection-core-username"
+                  value={form.coreRpcUsername}
+                  onChange={(event) => {
+                    updateCoreForm("coreRpcUsername", event.target.value);
+                  }}
+                />
+              </SetupField>
+              <SetupField
+                id="connection-core-password"
+                label={t("add.core.password")}
+                error={fieldErrors.coreRpcPassword}
+              >
+                <Input
+                  id="connection-core-password"
+                  type="password"
+                  value={form.coreRpcPassword}
+                  onChange={(event) => {
+                    updateCoreForm("coreRpcPassword", event.target.value);
+                  }}
+                />
+              </SetupField>
+            </div>
+          )}
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={testCore.isPending || !form.coreRpcUrl.trim()}
+              onClick={async () => {
+                setCoreTestStatus(null);
+                try {
+                  const envelope = await testCore.mutateAsync(coreRpcProbeArgs());
+                  const payload = envelope.data;
+                  setCoreTestStatus(
+                    payload?.reachable
+                      ? {
+                          ok: true,
+                          ...payload,
+                        }
+                      : {
+                          ok: false,
+                          message:
+                            payload?.error?.message ??
+                            t("add.core.testFailed"),
+                          hint: payload?.error?.hint,
+                        },
+                  );
+                } catch (error) {
+                  setCoreTestStatus({
+                    ok: false,
+                    message:
+                      error instanceof Error
+                        ? error.message
+                        : t("add.core.testFailed"),
+                  });
+                }
+              }}
+            >
+              {testCore.isPending ? (
+                <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+              ) : null}
+              {t("add.core.test")}
+            </Button>
+            {coreTestStatus?.ok ? (
+              <div className="space-y-1 text-xs">
+                <p className="text-emerald-700 dark:text-emerald-300">
+                  {t("add.core.testOkDetailed", {
+                    network: coreTestStatus.network || form.coreRpcNetwork,
+                    status: t(
+                      `add.core.status.${coreNodeStatusKey(coreTestStatus.status)}`,
+                    ),
+                    blocks: coreTestStatus.blocks ?? "n/a",
+                    headers: coreTestStatus.headers ?? "n/a",
+                    peers: coreTestStatus.peers ?? "n/a",
+                  })}
+                </p>
+                {coreTestStatus.pruned ? (
+                  <p className="text-amber-700 dark:text-amber-300">
+                    {t("add.core.prunedWarning")}
+                  </p>
+                ) : null}
+                {coreTestStatus.ibd ? (
+                  <p className="text-amber-700 dark:text-amber-300">
+                    {t("add.core.initialBlockDownloadWarning")}
+                  </p>
+                ) : null}
+                {coreTestStatus.wallet_rpc?.available === false ? (
+                  <p className="text-destructive">
+                    {coreTestStatus.wallet_rpc.error?.hint ??
+                      coreTestStatus.wallet_rpc.error?.message ??
+                      t("add.core.walletRpcUnavailable")}
+                  </p>
+                ) : null}
+                {coreTestStatus.block_filters?.available === false ? (
+                  <p className="text-muted-foreground">
+                    {coreTestStatus.block_filters.error?.hint ??
+                      t("add.core.blockFiltersUnavailable")}
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
+            {coreTestStatus && !coreTestStatus.ok ? (
+              <span className="text-xs text-destructive">
+                {coreTestStatus.hint ?? coreTestStatus.message}
+              </span>
+            ) : null}
+          </div>
         </>
       );
     }
 
     if (setupKind === "backend-settings") {
       return (
-        <div className="space-y-2 rounded-md border bg-background p-3 text-sm text-muted-foreground">
+        <div className="space-y-3 rounded-md border bg-background p-3 text-sm text-muted-foreground">
           <p>{t("add.backendSettings.line1")}</p>
           <p>{t("add.backendSettings.line2")}</p>
+          {backendSettingsQuery.isLoading ? (
+            <p className="text-xs">{t("add.backendSettings.loading")}</p>
+          ) : configuredLocalBackends.length > 0 ? (
+            <div className="space-y-2">
+              <p className="text-xs font-medium text-foreground">
+                {t("add.backendSettings.localTitle")}
+              </p>
+              <div className="grid gap-1.5">
+                {configuredLocalBackends.map((backend) => (
+                  <button
+                    key={backend.id}
+                    type="button"
+                    className="flex min-w-0 items-center justify-between gap-3 rounded-md border bg-muted/30 px-3 py-2 text-left hover:bg-muted/55 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                    onClick={() =>
+                      openConfiguredBackendSettings(
+                        backend.backendId ?? backend.id,
+                        backend.settingsHash,
+                      )
+                    }
+                  >
+                    <span className="min-w-0">
+                      <span className="block truncate text-sm font-medium text-foreground">
+                        {backend.label}
+                      </span>
+                      <span className="block truncate font-mono text-xs text-muted-foreground">
+                        {backend.endpoint}
+                      </span>
+                    </span>
+                    <span className="shrink-0 text-xs text-muted-foreground">
+                      {backend.syncSource}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : null}
         </div>
       );
     }

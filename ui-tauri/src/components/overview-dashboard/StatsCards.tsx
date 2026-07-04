@@ -78,7 +78,7 @@ export const StatsCards = ({
   const marketRateDetail = marketRateDetailLabel(snapshot, to);
   return (
     <div
-      className="rounded-xl border bg-card"
+      className="overflow-hidden rounded-lg border bg-card"
       role={isRefreshing ? "status" : undefined}
       aria-live={isRefreshing ? "polite" : undefined}
     >
@@ -92,10 +92,10 @@ export const StatsCards = ({
           disabled={
             !onRefreshMarketRate || isRefreshing || isMarketRateRefreshing
           }
-          className="group relative isolate w-full overflow-hidden p-3 text-left transition-colors before:absolute before:inset-0 before:z-0 before:origin-left before:scale-x-0 before:bg-muted/60 before:content-[''] before:transition-transform before:duration-200 before:ease-out hover:before:scale-x-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-within:before:scale-x-100 disabled:cursor-default enabled:cursor-pointer sm:p-4"
+          className="group relative isolate w-full overflow-hidden p-3 text-left transition-colors before:absolute before:inset-0 before:z-0 before:origin-left before:scale-x-0 before:bg-muted/45 before:content-[''] before:transition-transform before:duration-200 before:ease-out hover:before:scale-x-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-within:before:scale-x-100 disabled:cursor-default enabled:cursor-pointer"
           aria-label={t("stats.refreshBtcPrice")}
         >
-          <div className="relative z-20 space-y-2">
+          <div className="relative z-20 space-y-1.5">
             <div className="flex items-center justify-between gap-2 text-muted-foreground">
               <span className="text-xs font-medium">{t("stats.btcPrice")}</span>
               {isMarketRateRefreshing ? (
@@ -104,7 +104,7 @@ export const StatsCards = ({
                 </span>
               ) : null}
             </div>
-            <p className="text-xl font-semibold tracking-tight">
+            <p className="text-lg font-semibold tracking-tight sm:text-xl">
               {formatMarketRateValue(snapshot, to)}
             </p>
             <p
@@ -123,13 +123,19 @@ export const StatsCards = ({
         {stats.map((stat) => {
           const formatter =
             stat.format === "currency" ? currencyFormatter : numberFormatter;
-          const hasComparison = stat.previousValue > 0;
           const isBitcoinPortfolio =
             currency === "btc" && stat.id === "portfolioValue";
           const statusKey = statStatusKey(stat, isBitcoinPortfolio);
           const statusText = statusKey
             ? t(statusKey)
             : `${stat.isPositive ? "+" : "-"}${stat.changePercent.toFixed(1)}%`;
+          const showComparisonLabel =
+            !statusKey ||
+            ![
+              "stats.status.current",
+              "stats.status.loaded",
+              "stats.status.configured",
+            ].includes(statusKey);
           const statTitle = isBitcoinPortfolio
             ? t("stats.bitcoinBalance")
             : // dynamic key
@@ -138,7 +144,7 @@ export const StatsCards = ({
           return (
             <div
               key={stat.id}
-              className="group relative isolate overflow-hidden p-3 transition-colors before:absolute before:inset-0 before:z-0 before:origin-left before:scale-x-0 before:bg-muted/60 before:content-[''] before:transition-transform before:duration-200 before:ease-out hover:before:scale-x-100 focus-within:before:scale-x-100 sm:p-4"
+              className="group relative isolate overflow-hidden p-3 transition-colors before:absolute before:inset-0 before:z-0 before:origin-left before:scale-x-0 before:bg-muted/45 before:content-[''] before:transition-transform before:duration-200 before:ease-out hover:before:scale-x-100 focus-within:before:scale-x-100"
             >
               <>
                 <Link
@@ -146,7 +152,7 @@ export const StatsCards = ({
                   className="absolute inset-0 z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   aria-label={t("stats.openStat", { title: statTitle })}
                 />
-                <div className="pointer-events-none relative z-20 space-y-2">
+                <div className="pointer-events-none relative z-20 space-y-1.5">
                   <div className="text-muted-foreground">
                     <span className="text-xs font-medium">
                       {statTitle}
@@ -154,7 +160,7 @@ export const StatsCards = ({
                   </div>
                   <p
                     className={cn(
-                      "text-xl font-semibold tracking-tight",
+                      "text-lg font-semibold tracking-tight sm:text-xl",
                       blurClass(hideSensitive),
                     )}
                   >
@@ -177,10 +183,10 @@ export const StatsCards = ({
                       formatter.format(stat.value)
                     )}
                   </p>
-                  <div className="flex flex-wrap items-center gap-2 text-[10px] sm:text-xs xl:flex-nowrap">
+                  <div className="flex min-w-0 items-center gap-1.5 text-[10px] sm:text-xs">
                     <span
                       className={cn(
-                        "font-medium",
+                        "shrink-0 font-medium",
                         stat.isPositive
                           ? "text-emerald-600 dark:text-emerald-400"
                           : "text-red-600 dark:text-red-400",
@@ -188,30 +194,13 @@ export const StatsCards = ({
                       )}
                     >
                       {statusText}
-                      {hasComparison && (
-                        <span className="hidden sm:inline">
-                          (
-                          {stat.format === "currency"
-                            ? formatCompactDisplayMoney(
-                                Math.abs(stat.value - stat.previousValue),
-                                fiatRate,
-                                currency,
-                                fiatCurrency,
-                              )
-                            : formatter.format(
-                                Math.abs(stat.value - stat.previousValue),
-                              )}
-                          )
-                        </span>
-                      )}
                     </span>
-                    <span className="hidden items-center gap-2 text-muted-foreground sm:inline-flex">
-                      <span className="size-1 rounded-full bg-muted-foreground" />
-                      <span className="xl:whitespace-nowrap">
+                    {showComparisonLabel ? (
+                      <span className="min-w-0 truncate text-muted-foreground">
                         {/* dynamic key */}
                         {t(stat.comparisonLabelKey as never)}
                       </span>
-                    </span>
+                    ) : null}
                   </div>
                 </div>
               </>

@@ -1,0 +1,797 @@
+{
+  "schema_version": 1,
+  "id": "full-accounting-v1",
+  "title": "Full accounting regtest demo",
+  "description": "Disposable Bitcoin Core regtest scenario covering multi-address business wallets, regular fiat-expense disposals with deterministic amount/fee variation, self-transfers, ownership-derived fan-out transfers, wallet key rotations, deprecated old wallets, collaborative CoinJoin/PayJoin-shaped transactions, an RBF-replaced payment, halving-shrunk mining income, a dust deposit, a mempool-pending receipt at sync, Bitcoin-backed-loan marks, volatile pricing, local Electrum/mempool-compatible backend endpoints, and deterministic elementsregtest/LBTC bridge/import wallets.",
+  "base_time": "2019-01-15T09:00:00Z",
+  "latest_time": "2026-07-01T00:00:00Z",
+  "workspace": "Regtest Demo",
+  "profile": {
+    "label": "Full Accounting",
+    "fiat_currency": "EUR",
+    "tax_country": "generic",
+    "gains_algorithm": "FIFO"
+  },
+  "backend": {
+    "name": "core-regtest",
+    "default": "bitcoin-mempool-regtest",
+    "wallet_prefix": "kassiber-demo"
+  },
+  "pricing": {
+    "pair": "BTC-EUR",
+    "source": "kraken-bundled",
+    "live_source": "mempool",
+    "live_source_env": "KASSIBER_REGTEST_DEMO_LIVE_RATES",
+    "description": "Seed Kassiber's bundled Kraken BTC-EUR daily history and let transaction auto-pricing use the cached real Bitcoin price at or before each backdated transaction. LBTC rows use Kassiber's LBTC->BTC rate-pair alias.",
+    "fallback": {
+      "base_rate": "42000",
+      "step_rate": "25",
+      "trend_rate": "40",
+      "rate_sequence": [
+        "42000",
+        "31500",
+        "48600",
+        "37100",
+        "61200",
+        "44800",
+        "33800",
+        "57400",
+        "40200",
+        "68900",
+        "51900",
+        "46300"
+      ]
+    }
+  },
+  "stress": {
+    "enabled": true,
+    "cycles": 132,
+    "days_between_cycles": 20,
+    "variation_bp": 2200,
+    "economic_regimes": [
+      {
+        "label": "2019 steady start",
+        "cycles": 18,
+        "receipt_scale": "1.00",
+        "spend_scale": "1.00",
+        "note": "Balanced trading; slight net accumulation."
+      },
+      {
+        "label": "2020 shock drawdown",
+        "cycles": 12,
+        "receipt_scale": "0.45",
+        "spend_scale": "1.80",
+        "note": "Revenue collapses while fixed costs continue; the treasury draws down."
+      },
+      {
+        "label": "2021 boom",
+        "cycles": 28,
+        "receipt_scale": "1.75",
+        "spend_scale": "0.70",
+        "note": "Strong revenue and lean spend; balances climb hard."
+      },
+      {
+        "label": "2022 bear market",
+        "cycles": 24,
+        "receipt_scale": "0.45",
+        "spend_scale": "1.95",
+        "note": "Prolonged downturn; sustained net outflow eats into holdings."
+      },
+      {
+        "label": "2023-24 recovery",
+        "cycles": 22,
+        "receipt_scale": "1.45",
+        "spend_scale": "0.85",
+        "note": "Business recovers and rebuilds reserves."
+      },
+      {
+        "label": "2025 consolidation",
+        "cycles": 28,
+        "receipt_scale": "0.90",
+        "spend_scale": "1.15",
+        "note": "Mature, slightly cash-negative steady state; gentle drawdown."
+      }
+    ],
+    "receipt_btc": {
+      "treasury": "0.00181337",
+      "cold": "0.00079210",
+      "spending": "0.00091450",
+      "merchant": "0.00142180"
+    },
+    "payment_btc": {
+      "treasury": "0.00119320",
+      "cold": "0.00069115",
+      "spending": "0.00088740",
+      "merchant": "0.00108420"
+    },
+    "fee_btc": "0.00001000",
+    "mining_events": [
+      {
+        "id": "mining_reward_2021",
+        "cycle": 40,
+        "role": "miner",
+        "blocks": 1,
+        "note": "The office mining rig finds a block; the reward lands in the mining wallet."
+      },
+      {
+        "id": "mining_reward_2024",
+        "cycle": 96,
+        "role": "miner",
+        "blocks": 1,
+        "note": "A later block reward, visibly smaller after regtest halvings."
+      }
+    ],
+    "business_expenses": {
+      "enabled": true,
+      "every_cycles": 1,
+      "fee_btc": "0.00001000",
+      "schedule": [
+        {
+          "id": "payroll",
+          "role": "treasury",
+          "amount_btc": "0.00360000",
+          "note": "Recurring fiat payroll paid from treasury."
+        },
+        {
+          "id": "rent",
+          "role": "merchant",
+          "amount_btc": "0.00240000",
+          "note": "Monthly rent and point-of-sale service bill."
+        },
+        {
+          "id": "cloud",
+          "role": "spending",
+          "amount_btc": "0.00110000",
+          "note": "SaaS, hosting, and monitoring subscriptions."
+        },
+        {
+          "id": "tax_prep",
+          "role": "treasury",
+          "amount_btc": "0.00450000",
+          "note": "Quarterly accounting and tax-preparation invoice."
+        },
+        {
+          "id": "contractor",
+          "role": "merchant",
+          "amount_btc": "0.00280000",
+          "note": "Contractor payout for merchant operations."
+        },
+        {
+          "id": "equipment",
+          "role": "treasury",
+          "amount_btc": "0.00620000",
+          "note": "Irregular hardware and security-device purchase."
+        }
+      ]
+    },
+    "wallet_rotations": [
+      {
+        "id": "treasury_rotation_2020",
+        "cycle": 32,
+        "role": "treasury",
+        "from": "treasury",
+        "to": "treasury_2020",
+        "amount_btc": "0.45000000",
+        "fee_btc": "0.00001000",
+        "note": "Treasury rotates from the original descriptor to the upgraded 2020 key set."
+      },
+      {
+        "id": "merchant_rotation_2022",
+        "cycle": 68,
+        "role": "merchant",
+        "from": "merchant",
+        "to": "merchant_2022",
+        "amount_btc": "0.18000000",
+        "fee_btc": "0.00001000",
+        "note": "Merchant hot wallet rotates after a security review."
+      },
+      {
+        "id": "cold_rotation_2024",
+        "cycle": 104,
+        "role": "cold",
+        "from": "cold",
+        "to": "cold_2024",
+        "amount_btc": "0.50000000",
+        "fee_btc": "0.00001000",
+        "note": "Cold storage is moved to a newer custody policy."
+      }
+    ],
+    "swap_bridges": [
+      {
+        "id": "liquid_bridge_2020",
+        "cycle": 24,
+        "from_role": "treasury",
+        "to_role": "liquid_treasury",
+        "out_btc": "0.06000000",
+        "in_btc": "0.05850000",
+        "fee_btc": "0.00001000",
+        "pair_kind": "peg-in",
+        "pair_policy": "taxable",
+        "in_external_id": "liquid_bridge_2020_lbtc_in",
+        "note": "Treasury moves funds through a simulated Liquid peg-in path."
+      },
+      {
+        "id": "submarine_rebalance_2022",
+        "cycle": 72,
+        "from_role": "spending",
+        "to_role": "liquid_operations",
+        "out_btc": "0.03500000",
+        "in_btc": "0.03410000",
+        "fee_btc": "0.00001000",
+        "pair_kind": "chain-swap",
+        "pair_policy": "taxable",
+        "provider": "boltz",
+        "boltz_flow": "chain-swap",
+        "boltz_api": "/v2/swap/chain",
+        "boltz_from": "BTC",
+        "boltz_to": "L-BTC",
+        "in_external_id": "submarine_rebalance_2022_lbtc_in",
+        "note": "A Boltz BTC to L-BTC chain swap rebalances operational funds through Liquid."
+      },
+      {
+        "id": "liquid_pegout_2024",
+        "cycle": 108,
+        "from_role": "liquid_treasury_2024",
+        "to_role": "treasury",
+        "out_btc": "0.04200000",
+        "in_btc": "0.04080000",
+        "fee_btc": "0.00001000",
+        "pair_kind": "peg-out",
+        "pair_policy": "taxable",
+        "out_external_id": "liquid_pegout_2024_lbtc_out",
+        "note": "Liquid treasury liquidity is pegged back out to on-chain treasury."
+      }
+    ]
+  },
+  "accounts": [
+    {
+      "code": "treasury",
+      "label": "Treasury",
+      "type": "asset",
+      "asset": "BTC"
+    },
+    {
+      "code": "cold",
+      "label": "Cold Storage",
+      "type": "asset",
+      "asset": "BTC"
+    },
+    {
+      "code": "spending",
+      "label": "Spending Wallet",
+      "type": "asset",
+      "asset": "BTC"
+    },
+    {
+      "code": "merchant",
+      "label": "Merchant Wallet",
+      "type": "asset",
+      "asset": "BTC"
+    },
+    {
+      "code": "liquid_treasury",
+      "label": "Liquid Treasury",
+      "type": "asset",
+      "asset": "LBTC"
+    },
+    {
+      "code": "liquid_operations",
+      "label": "Liquid Operations",
+      "type": "asset",
+      "asset": "LBTC"
+    },
+    {
+      "code": "mining",
+      "label": "Mining Income",
+      "type": "asset",
+      "asset": "BTC"
+    }
+  ],
+  "wallets": [
+    {
+      "key": "treasury",
+      "label": "Regtest Treasury",
+      "account": "treasury",
+      "addresses": 3,
+      "initial_btc": "1.19874203"
+    },
+    {
+      "key": "cold",
+      "label": "Regtest Cold Storage",
+      "account": "cold",
+      "addresses": 2,
+      "initial_btc": "0.90211376"
+    },
+    {
+      "key": "spending",
+      "label": "Regtest Spending Wallet",
+      "account": "spending",
+      "addresses": 3,
+      "initial_btc": "0.29938147"
+    },
+    {
+      "key": "merchant",
+      "label": "Regtest Merchant Wallet",
+      "account": "merchant",
+      "addresses": 4,
+      "initial_btc": "0.40166921"
+    },
+    {
+      "key": "silent_payments",
+      "label": "Regtest Silent Payments Wallet",
+      "account": "merchant",
+      "kind": "silent-payment",
+      "chain": "bitcoin",
+      "network": "regtest",
+      "sp_descriptor": "sp(tspscan1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq)",
+      "sp_scan_start_height": 0,
+      "detected_btc": "0.01234567",
+      "initial_btc": "0.00000000"
+    },
+    {
+      "key": "miner",
+      "label": "Regtest Mining Rig",
+      "account": "mining",
+      "addresses": 2,
+      "initial_btc": "0.00000000"
+    },
+    {
+      "key": "treasury_2020",
+      "label": "Regtest Treasury 2020 Rotation",
+      "account": "treasury",
+      "addresses": 3,
+      "initial_btc": "0.00000000"
+    },
+    {
+      "key": "merchant_2022",
+      "label": "Regtest Merchant 2022 Rotation",
+      "account": "merchant",
+      "addresses": 3,
+      "initial_btc": "0.00000000"
+    },
+    {
+      "key": "cold_2024",
+      "label": "Regtest Cold Storage 2024 Rotation",
+      "account": "cold",
+      "addresses": 2,
+      "initial_btc": "0.00000000"
+    },
+    {
+      "key": "liquid_treasury",
+      "label": "Regtest Liquid Treasury",
+      "account": "liquid_treasury",
+      "kind": "custom",
+      "chain": "liquid",
+      "network": "elementsregtest",
+      "source_format": "generic_ledger",
+      "initial_btc": "0.00000000"
+    },
+    {
+      "key": "liquid_operations",
+      "label": "Regtest Liquid Operations",
+      "account": "liquid_operations",
+      "kind": "custom",
+      "chain": "liquid",
+      "network": "elementsregtest",
+      "source_format": "generic_ledger",
+      "initial_btc": "0.00000000"
+    },
+    {
+      "key": "liquid_live_sync",
+      "label": "Regtest Liquid Live Sync",
+      "account": "liquid_operations",
+      "kind": "descriptor",
+      "chain": "liquid",
+      "network": "elementsregtest",
+      "addresses": 2,
+      "initial_btc": "0.00000000",
+      "live_receipt_btc": "0.00750000",
+      "live_spend_btc": "0.00125000"
+    },
+    {
+      "key": "liquid_treasury_2024",
+      "label": "Regtest Liquid Treasury 2024 Rotation",
+      "account": "liquid_treasury",
+      "kind": "custom",
+      "chain": "liquid",
+      "network": "elementsregtest",
+      "source_format": "generic_ledger",
+      "initial_btc": "0.00000000"
+    },
+    {
+      "key": "boltz_v2_btc_metadata",
+      "label": "Regtest Boltz V2 BTC Metadata",
+      "account": "treasury",
+      "kind": "custom",
+      "chain": "bitcoin",
+      "network": "regtest",
+      "source_format": "json",
+      "initial_btc": "0.00000000"
+    },
+    {
+      "key": "boltz_v2_lightning_metadata",
+      "label": "Regtest Boltz V2 Lightning Metadata",
+      "account": "spending",
+      "kind": "custom",
+      "chain": "bitcoin",
+      "network": "regtest",
+      "source_format": "json",
+      "initial_btc": "0.00000000"
+    },
+    {
+      "key": "boltz_v2_liquid_metadata",
+      "label": "Regtest Boltz V2 Liquid Metadata",
+      "account": "liquid_operations",
+      "kind": "custom",
+      "chain": "liquid",
+      "network": "elementsregtest",
+      "source_format": "json",
+      "initial_btc": "0.00000000"
+    }
+  ],
+  "deprecated_wallets": [
+    "treasury",
+    "merchant",
+    "cold",
+    "liquid_treasury"
+  ],
+  "liquid_ledger": {
+    "wallets": {
+      "liquid_treasury": [
+        {
+          "type": "Buy",
+          "date": "2019-06-10T09:00:00Z",
+          "received_amount": "0.08000000",
+          "sent_amount": "3000.00",
+          "sent_asset": "EUR",
+          "fee_amount": "7.50",
+          "fee_asset": "EUR",
+          "counterparty": "SideSwap Test Desk",
+          "note": "Initial LBTC acquisition for treasury testing.",
+          "txid": "liquid_treasury_buy_2019"
+        },
+        {
+          "type": "Spend",
+          "date": "2020-03-12T14:00:00Z",
+          "sent_amount": "0.01050000",
+          "counterparty": "Liquid service vendor",
+          "note": "Liquid-hosted service invoice.",
+          "txid": "liquid_treasury_vendor_2020"
+        },
+        {
+          "type": "Income",
+          "date": "2021-08-01T12:30:00Z",
+          "received_amount": "0.01200000",
+          "counterparty": "Liquid customer",
+          "note": "Customer paid an LBTC invoice.",
+          "txid": "liquid_treasury_income_2021"
+        },
+        {
+          "type": "Withdrawal",
+          "date": "2024-09-01T10:00:00Z",
+          "sent_amount": "0.04500000",
+          "fee_amount": "0.00005000",
+          "fee_asset": "LBTC",
+          "counterparty": "Internal key ceremony",
+          "note": "Liquid treasury rotates to the 2024 key set.",
+          "txid": "liquid_rotation_2024_out"
+        }
+      ],
+      "liquid_operations": [
+        {
+          "type": "Deposit",
+          "date": "2021-11-20T10:00:00Z",
+          "received_amount": "0.02000000",
+          "counterparty": "Operations top-up",
+          "note": "Operations receives LBTC working capital.",
+          "txid": "liquid_operations_topup_2021"
+        },
+        {
+          "type": "Spend",
+          "date": "2022-07-05T15:00:00Z",
+          "sent_amount": "0.00600000",
+          "counterparty": "Liquid SaaS vendor",
+          "note": "Operations pays a Liquid-denominated SaaS invoice.",
+          "txid": "liquid_operations_saas_2022"
+        }
+      ],
+      "liquid_treasury_2024": [
+        {
+          "type": "Deposit",
+          "date": "2024-09-01T11:00:00Z",
+          "received_amount": "0.04495000",
+          "counterparty": "Internal key ceremony",
+          "note": "Rotated Liquid treasury funds land in the upgraded wallet.",
+          "txid": "liquid_rotation_2024_in"
+        },
+        {
+          "type": "Interest",
+          "date": "2025-04-15T08:00:00Z",
+          "received_amount": "0.00300000",
+          "counterparty": "Liquid yield test desk",
+          "note": "Small LBTC interest credit for report coverage.",
+          "txid": "liquid_treasury_interest_2025"
+        },
+        {
+          "type": "Spend",
+          "date": "2025-12-10T16:00:00Z",
+          "sent_amount": "0.00400000",
+          "counterparty": "Security vendor",
+          "note": "Hardware wallet and key ceremony supplies paid over Liquid.",
+          "txid": "liquid_treasury_security_2025"
+        }
+      ]
+    },
+    "transfer_pairs": [
+      {
+        "id": "liquid_rotation_2024",
+        "tx_out": "liquid_rotation_2024_out",
+        "tx_in": "liquid_rotation_2024_in",
+        "kind": "manual",
+        "policy": "carrying-value",
+        "note": "Liquid treasury rotates to the upgraded 2024 wallet."
+      }
+    ]
+  },
+  "boltz_v2_metadata_swaps": [
+    {
+      "id": "boltz_v2_chain_2025",
+      "flow": "chain",
+      "status": "completed",
+      "out_wallet": "boltz_v2_btc_metadata",
+      "in_wallet": "boltz_v2_liquid_metadata",
+      "out_asset": "BTC",
+      "in_asset": "LBTC",
+      "out_btc": "0.01000000",
+      "in_btc": "0.00990000",
+      "fee_btc": "0.00000500",
+      "out_date": "2025-06-03T10:00:00Z",
+      "in_date": "2025-06-03T10:05:00Z",
+      "pair_kind": "chain-swap",
+      "pair_policy": "taxable",
+      "note": "Imported Boltz v2 cooperative BTC to L-BTC chain-swap evidence."
+    },
+    {
+      "id": "boltz_v2_reverse_2025",
+      "flow": "reverse-submarine",
+      "status": "invoice.settled",
+      "out_wallet": "boltz_v2_lightning_metadata",
+      "in_wallet": "boltz_v2_liquid_metadata",
+      "out_asset": "BTC",
+      "in_asset": "LBTC",
+      "out_btc": "0.02000000",
+      "in_btc": "0.01980000",
+      "fee_btc": "0.00000000",
+      "out_date": "2025-06-10T11:00:00Z",
+      "in_date": "2025-06-10T11:04:00Z",
+      "pair_kind": "reverse-submarine-swap",
+      "pair_policy": "taxable",
+      "note": "Imported Boltz v2 reverse swap evidence from Lightning into Liquid."
+    },
+    {
+      "id": "boltz_v2_refund_2025",
+      "flow": "refund",
+      "status": "transaction.refunded",
+      "out_wallet": "boltz_v2_btc_metadata",
+      "in_wallet": "boltz_v2_btc_metadata",
+      "out_asset": "BTC",
+      "in_asset": "BTC",
+      "out_btc": "0.00500000",
+      "in_btc": "0.00498000",
+      "fee_btc": "0.00000200",
+      "out_date": "2025-06-17T12:00:00Z",
+      "in_date": "2025-06-17T13:00:00Z",
+      "pair_kind": "swap-refund",
+      "pair_policy": "carrying-value",
+      "note": "Imported Boltz v2 cooperative refund evidence; the round trip books only the shortfall and network fee."
+    }
+  ],
+  "operations": [
+    {
+      "id": "treasury_external_disposal",
+      "kind": "payment",
+      "from": "treasury",
+      "to": "external",
+      "amount_btc": "0.11987340",
+      "fee_btc": "0.00000970",
+      "note": "Treasury pays an external supplier."
+    },
+    {
+      "id": "treasury_to_spending",
+      "kind": "self_transfer",
+      "from": "treasury",
+      "to": "spending",
+      "amount_btc": "0.19983215",
+      "fee_btc": "0.00001120",
+      "note": "Treasury funds the spending wallet."
+    },
+    {
+      "id": "cold_to_treasury",
+      "kind": "self_transfer",
+      "from": "cold",
+      "to": "treasury",
+      "amount_btc": "0.10971800",
+      "fee_btc": "0.00000860",
+      "note": "Cold storage consolidates a slice back to treasury."
+    },
+    {
+      "id": "treasury_ownership_fanout",
+      "kind": "self_transfer_fanout",
+      "from": "treasury",
+      "outputs": [
+        {
+          "to": "spending",
+          "amount_btc": "0.03750000"
+        },
+        {
+          "to": "merchant",
+          "amount_btc": "0.02340000"
+        }
+      ],
+      "fee_btc": "0.00001090",
+      "note": "Treasury funds two owned operational wallets in one transaction; same-txid row matching must skip the fan-out so ownership graph matching proves the MOVE legs."
+    },
+    {
+      "id": "coinjoin_round",
+      "kind": "coinjoin_shape",
+      "signers": [
+        "treasury",
+        "cold"
+      ],
+      "equal_output_btc": "0.05000000",
+      "fee_btc": "0.00002000",
+      "tracked_output_wallet": "spending",
+      "note": "Two owned inputs, equal-sized external/tracked outputs, and explicit change outputs."
+    },
+    {
+      "id": "payjoin_purchase",
+      "kind": "payjoin_shape",
+      "payer": "spending",
+      "merchant": "merchant",
+      "payment_btc": "0.03964120",
+      "fee_btc": "0.00002310",
+      "note": "Payer and merchant both contribute inputs; merchant receives net payment plus its own change."
+    },
+    {
+      "id": "spending_rbf_replaced_payment",
+      "kind": "rbf_replaced_payment",
+      "from": "spending",
+      "to": "external",
+      "amount_btc": "0.01984650",
+      "fee_btc": "0.00000990",
+      "replacement_fee_btc": "0.00013450",
+      "note": "A stuck supplier payment is fee-bumped via RBF; only the replacement confirms and the conflicted original must not be booked."
+    },
+    {
+      "id": "merchant_settlement",
+      "kind": "payment",
+      "from": "merchant",
+      "to": "external",
+      "amount_btc": "0.02991475",
+      "fee_btc": "0.00001040",
+      "note": "Merchant settles part of the balance externally."
+    },
+    {
+      "id": "cold_large_receipt",
+      "kind": "external_receipt",
+      "from": "external",
+      "to": "cold",
+      "amount_btc": "0.64821053",
+      "note": "A single large custody acquisition arrives into cold storage."
+    },
+    {
+      "id": "treasury_batched_payout",
+      "kind": "batched_payment",
+      "from": "treasury",
+      "to": "external",
+      "outputs_btc": [
+        "0.02487219",
+        "0.01743860",
+        "0.01259443"
+      ],
+      "fee_btc": "0.00001680",
+      "note": "Treasury pays three external recipients in one batched transaction."
+    },
+    {
+      "id": "merchant_pos_deposit_burst",
+      "kind": "incoming_burst",
+      "from": "external",
+      "to": "merchant",
+      "amount_btc": "0.00024700",
+      "count": 14,
+      "note": "Point-of-sale receipts arrive as many small ragged deposits in the same block."
+    },
+    {
+      "id": "merchant_many_input_consolidation",
+      "kind": "many_input_consolidation",
+      "wallet": "merchant",
+      "count": 10,
+      "fee_btc": "0.00001250",
+      "note": "Merchant consolidates small POS UTXOs back into one wallet output, creating a fee-only accounting row."
+    },
+    {
+      "id": "merchant_dust_attack",
+      "kind": "external_receipt",
+      "from": "external",
+      "to": "merchant",
+      "amount_btc": "0.00000600",
+      "note": "An unsolicited dust output lands in the merchant wallet and lingers unspent in the UTXO inventory."
+    },
+    {
+      "id": "collateral_lock",
+      "kind": "loan_collateral_lock",
+      "from": "cold",
+      "to": "external",
+      "amount_btc": "0.12000000",
+      "fee_btc": "0.00001000",
+      "loan_id": "regtest-loan-1",
+      "note": "BTC collateral posted for a fiat loan."
+    },
+    {
+      "id": "collateral_release",
+      "kind": "loan_collateral_release",
+      "from": "external",
+      "to": "cold",
+      "amount_btc": "0.11900000",
+      "loan_id": "regtest-loan-1",
+      "note": "Collateral returned by the lender."
+    },
+    {
+      "id": "loan_principal_received",
+      "kind": "loan_principal_received",
+      "from": "external",
+      "to": "treasury",
+      "amount_btc": "0.07000000",
+      "loan_id": "regtest-loan-1",
+      "note": "Borrowed BTC principal received."
+    },
+    {
+      "id": "loan_principal_repaid",
+      "kind": "loan_principal_repaid",
+      "from": "treasury",
+      "to": "external",
+      "amount_btc": "0.07050000",
+      "fee_btc": "0.00001000",
+      "loan_id": "regtest-loan-1",
+      "note": "Borrowed BTC principal repaid."
+    }
+  ],
+  "pending_operations": [
+    {
+      "id": "spending_pending_invoice",
+      "kind": "external_receipt",
+      "from": "external",
+      "to": "spending",
+      "amount_btc": "0.00534123",
+      "note": "A customer invoice is paid moments before the books are pulled and is still unconfirmed in the mempool."
+    }
+  ],
+  "expected": {
+    "wallets": 16,
+    "deprecated_wallets": 4,
+    "assets": [
+      "BTC",
+      "LBTC"
+    ],
+    "pricing_source": "kraken-csv",
+    "require_pricing_provider_assets": [
+      "BTC",
+      "LBTC"
+    ],
+    "min_transactions": 854,
+    "min_active_transactions": 849,
+    "pending_transactions": 1,
+    "collaborative_excluded": 5,
+    "min_transfer_pairs": 12,
+    "ownership_derived_transfer_pairs": 2,
+    "loan_marks": 4,
+    "open_collateral_locks": 0,
+    "export_files": [
+      "full-report.pdf",
+      "full-report.csv",
+      "full-report.xlsx",
+      "transactions.csv",
+      "transactions.xlsx"
+    ]
+  }
+}

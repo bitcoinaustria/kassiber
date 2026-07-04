@@ -111,15 +111,17 @@ export type SwapCandidateReference = {
 };
 
 const BITCOIN_LAYER_TRANSITION_PAIR_KINDS = new Set([
+  "chain-swap",
   "peg-in",
   "peg-out",
+  "reverse-submarine-swap",
   "submarine-swap",
   "swap-refund",
 ]);
 
 const flowColors: Record<TransactionFlow, string> = {
   incoming: "oklch(0.56 0.16 150)",
-  outgoing: "var(--color-accent)",
+  outgoing: "var(--kb-accent)",
   transfer: "oklch(0.56 0.04 260)",
   swap: "oklch(0.62 0.16 246)",
   "layer-transition": "oklch(0.65 0.11 185)",
@@ -222,10 +224,9 @@ function toDashboardTransaction(
     excluded: tx.excluded,
     quarantineReason: tx.quarantineReason ?? null,
     pair: tx.pair,
-    counterparty:
-      tx.counter ||
-      tx.account ||
-      (t ? t("transactions:fallback.unassigned") : "Unassigned"),
+    // Empty = no counterparty recorded; surfaces fall back per context
+    // (short txid in tables, hidden segment in the detail header).
+    counterparty: tx.counter || "",
     counterpartyInitials: initials(tx.counter || tx.account || "TX"),
     direction,
     flow,
@@ -1174,7 +1175,6 @@ const detailTabValues = [
   "pricing",
   "tax",
   "linked",
-  "ledger",
 ] as const;
 
 function readTransactionDetailParams(): {

@@ -145,6 +145,8 @@ export const INCOMING_MARKER_MIN_PARAM = "incomingMinBtc";
 export const OUTGOING_MARKER_MIN_PARAM = "outgoingMinBtc";
 export const LEGACY_INCOMING_MARKER_MIN_PARAM = "incomingMin";
 export const LEGACY_OUTGOING_MARKER_MIN_PARAM = "outgoingMin";
+export const Y_SCALE_PARAM = "scale";
+export const Y_AUTO_FIT_PARAM = "fit";
 export const TREASURY_BRUSH_MIN_WINDOW_MS = (7 * 24 * 60 * 60 * 1000) / 3;
 export const TREASURY_BRUSH_MIN_INDEX_SPAN = 2;
 
@@ -206,6 +208,9 @@ export type ActivityScatterDotProps = {
   size?: number;
   payload?: TreasuryChartPoint;
   activeSeries: TreasuryChartSeriesKey | null;
+  // Resolved per theme once in the chart — dots render per marker, so they
+  // take the palette as a prop instead of subscribing to the theme store.
+  flowColors: Record<ActivityFlow, string>;
   onOpenTransactionDetail?: (transactionId: string) => void;
   onHoverActivityPoint?: (point: TreasuryChartPoint | null) => void;
 };
@@ -511,9 +516,9 @@ export const mixBase = "var(--background)";
 export const palette = {
   primary: "var(--primary)",
   risk: {
-    main: "var(--color-accent)",
-    soft: `color-mix(in oklch, var(--color-accent) 16%, transparent)`,
-    light: `color-mix(in oklch, var(--color-accent) 70%, ${mixBase})`,
+    main: "var(--kb-accent)",
+    soft: `color-mix(in oklch, var(--kb-accent) 16%, transparent)`,
+    light: `color-mix(in oklch, var(--kb-accent) 70%, ${mixBase})`,
   },
   secondary: {
     light: `color-mix(in oklch, var(--primary) 75%, ${mixBase})`,
@@ -536,6 +541,8 @@ export const portfolioChartColors = {
     focus: "#2f2f33",
     risk: "#e3000f",
     riskSoft: "rgba(227, 0, 15, 0.16)",
+    // slate-500: slate-400 only clears ~2.9:1 on a white card
+    price: "#64748b",
   },
   dark: {
     value: "#f6a21a",
@@ -543,6 +550,7 @@ export const portfolioChartColors = {
     focus: "#e8e8ec",
     risk: "#ff3341",
     riskSoft: "rgba(255, 51, 65, 0.18)",
+    price: "#94a3b8",
   },
 } as const;
 
@@ -690,12 +698,20 @@ export function buildStatsData(
   ];
 }
 
-export type TimePeriod = "30days" | "3months" | "ytd" | "1year" | "5years" | "all";
+export type TimePeriod =
+  | "30days"
+  | "3months"
+  | "6months"
+  | "ytd"
+  | "1year"
+  | "5years"
+  | "all";
 
 // i18n keys in the `overview` namespace, resolved via `t()` at the call site.
 export const periodLabelKeys = {
   "30days": "period.30days",
   "3months": "period.3months",
+  "6months": "period.6months",
   ytd: "period.ytd",
   "1year": "period.1year",
   "5years": "period.5years",
@@ -705,6 +721,7 @@ export const periodLabelKeys = {
 export const periodShortLabelKeys = {
   "30days": "period.short.30days",
   "3months": "period.short.3months",
+  "6months": "period.short.6months",
   ytd: "period.short.ytd",
   "1year": "period.short.1year",
   "5years": "period.short.5years",
@@ -714,6 +731,7 @@ export const periodShortLabelKeys = {
 export const periodKeys: TimePeriod[] = [
   "30days",
   "3months",
+  "6months",
   "ytd",
   "1year",
   "5years",
@@ -734,6 +752,15 @@ export function normalizeTimePeriodParam(value: string | null): TimePeriod | nul
     normalized === "3m"
   ) {
     return "3months";
+  }
+  if (
+    normalized === "6months" ||
+    normalized === "6month" ||
+    normalized === "6mos" ||
+    normalized === "6mo" ||
+    normalized === "6m"
+  ) {
+    return "6months";
   }
   if (normalized === "ytd") return "ytd";
   if (
@@ -761,6 +788,168 @@ export function initialTimePeriodFromUrl(): TimePeriod {
   if (typeof window === "undefined") return "ytd";
   const params = new URLSearchParams(window.location.search);
   return normalizeTimePeriodParam(params.get("period")) ?? "ytd";
+}
+
+export function initialYScaleLogFromUrl(): boolean {
+  if (typeof window === "undefined") return false;
+  const params = new URLSearchParams(window.location.search);
+  return params.get(Y_SCALE_PARAM)?.toLowerCase() === "log";
+}
+
+export function initialYAutoFitFromUrl(): boolean {
+  if (typeof window === "undefined") return false;
+  const params = new URLSearchParams(window.location.search);
+  const value = params.get(Y_AUTO_FIT_PARAM)?.toLowerCase();
+  return value === "auto" || value === "1";
+}
+
+// A log scale has no place for zero: before the first funding the balance
+// line sits at 0, which d3's log scale maps to -Infinity and breaks the SVG
+// path. Null those values out instead — the lines already `connectNulls`, so
+// the pre-funding stretch simply isn't drawn (TradingView behaves the same).
+export function logSafeTreasuryPoints(
+  points: TreasuryChartPoint[],
+): TreasuryChartPoint[] {
+  const positive = (value: number | null | undefined) =>
+    typeof value === "number" && Number.isFinite(value) && value > 0
+      ? value
+      : undefined;
+  return points.map((point) => ({
+    ...point,
+    lineBalanceBtc: positive(point.lineBalanceBtc),
+    lineBitcoinPriceEur: positive(point.lineBitcoinPriceEur),
+    lineAvgCostEur: positive(point.lineAvgCostEur) ?? null,
+  }));
+}
+
+export function logSafeActivityMarkers(
+  points: TreasuryChartPoint[],
+): TreasuryChartPoint[] {
+  return points.filter((point) => (point.markerBalanceBtc ?? 0) > 0);
+}
+
+// Explicit domain for a log axis. Recharts' `auto` nices a log domain to full
+// powers of ten, which pads a 58k–84k window out to 10k–100k and flattens the
+// chart; a small multiplicative margin keeps the data filling the plot.
+export function positiveLogDomain(
+  values: Array<number | null | undefined>,
+): [number, number] | null {
+  let min = Number.POSITIVE_INFINITY;
+  let max = 0;
+  for (const value of values) {
+    if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
+      continue;
+    }
+    if (value < min) min = value;
+    if (value > max) max = value;
+  }
+  if (!(max > 0)) return null;
+  if (min === max) return [min * 0.9, max * 1.1];
+  return [min * 0.96, max * 1.04];
+}
+
+// Snap `raw` onto a `grid`-sized step. Edge ticks round INWARD (ceil at the
+// bottom of the domain, floor at the top) so the first and last labels never
+// round themselves out of the domain and vanish — that left the plot's top
+// and bottom stretches unlabeled. The 1e9 quantization kills float noise
+// (39.2/0.1 === 392.0000000000001 must not ceil to 39.3).
+function snapAxisTick(
+  raw: number,
+  grid: number,
+  edge: "low" | "high" | "mid",
+): number {
+  const quotient = Math.round((raw / grid) * 1e9) / 1e9;
+  const snapped =
+    edge === "low"
+      ? Math.ceil(quotient)
+      : edge === "high"
+        ? Math.floor(quotient)
+        : Math.round(quotient);
+  return snapped * grid;
+}
+
+// Evenly spaced ticks in log space, rounded to significant digits — the same
+// visual rhythm TradingView's log price scale uses. Narrow domains (a balance
+// that barely moves) need extra digits or the rounded ticks collapse into one.
+export function logAxisTicks(
+  [lo, hi]: [number, number],
+  count = 5,
+): number[] {
+  if (!(lo > 0) || !(hi > lo) || count < 2) return [];
+  const ratio = hi / lo;
+  const significantDigits = ratio >= 1.5 ? 2 : ratio >= 1.05 ? 3 : 4;
+  const logLo = Math.log10(lo);
+  const logHi = Math.log10(hi);
+  const ticks = new Set<number>();
+  for (let index = 0; index < count; index += 1) {
+    const raw = Math.pow(10, logLo + ((logHi - logLo) * index) / (count - 1));
+    const grid = Math.pow(
+      10,
+      Math.floor(Math.log10(raw)) - (significantDigits - 1),
+    );
+    const edge = index === 0 ? "low" : index === count - 1 ? "high" : "mid";
+    const rounded = snapAxisTick(raw, grid, edge);
+    if (rounded >= lo && rounded <= hi) ticks.add(rounded);
+  }
+  return [...ticks].sort((a, b) => a - b);
+}
+
+// Evenly spaced ticks for a linear auto-fit domain. Recharts' own nice ticks
+// start at the nearest round number INSIDE the domain, which can leave the
+// bottom ~15% of a fitted axis unlabeled (exactly where the cost-basis line
+// tends to sit). A half-magnitude grid keeps labels round while covering
+// both edges.
+export function linearAxisTicks(
+  [lo, hi]: [number, number],
+  count = 5,
+): number[] {
+  if (!Number.isFinite(lo) || !(hi > lo) || count < 2) return [];
+  const step = (hi - lo) / (count - 1);
+  const grid = Math.pow(10, Math.floor(Math.log10(step))) / 2;
+  const ticks = new Set<number>();
+  for (let index = 0; index < count; index += 1) {
+    const raw = lo + step * index;
+    const edge = index === 0 ? "low" : index === count - 1 ? "high" : "mid";
+    const rounded = snapAxisTick(raw, grid, edge);
+    if (rounded >= lo && rounded <= hi) ticks.add(rounded);
+  }
+  return [...ticks].sort((a, b) => a - b);
+}
+
+// Explicit domain for a linear auto-fit axis (TradingView's "Auto"): the
+// visible data's extent plus a small margin, clamped at zero. Computing it
+// client-side keeps the tick formatter's precision in sync with what the
+// axis actually shows.
+export function autoFitDomain(
+  values: Array<number | null | undefined>,
+): [number, number] | null {
+  let min = Number.POSITIVE_INFINITY;
+  let max = Number.NEGATIVE_INFINITY;
+  for (const value of values) {
+    if (typeof value !== "number" || !Number.isFinite(value)) continue;
+    if (value < min) min = value;
+    if (value > max) max = value;
+  }
+  if (!(max >= min)) return null;
+  if (min === max) {
+    const pad = Math.abs(min) * 0.05 || 1;
+    return [Math.max(0, min - pad), max + pad];
+  }
+  const pad = (max - min) * 0.06;
+  return [Math.max(0, min - pad), max + pad];
+}
+
+// Latest drawable value of a line series within the visible window, used for
+// the TradingView-style last-value tag on the axis.
+export function lastTreasuryLineValue(
+  points: TreasuryChartPoint[],
+  key: "lineBalanceBtc" | "lineBitcoinPriceEur" | "lineAvgCostEur",
+): number | null {
+  for (let index = points.length - 1; index >= 0; index -= 1) {
+    const value = points[index][key];
+    if (typeof value === "number" && Number.isFinite(value)) return value;
+  }
+  return null;
 }
 
 export function clampActivityMarkerMinimum(value: number) {
@@ -885,6 +1074,7 @@ export function getDataForPeriod(
   });
   if (period === "30days") return points.slice(-4);
   if (period === "3months") return points.slice(-3);
+  if (period === "6months") return points.slice(-6);
   if (period === "ytd") {
     return points.slice(0, Math.max(1, new Date().getMonth() + 1));
   }
@@ -940,6 +1130,8 @@ export function isPointInPeriod(
     start.setUTCDate(start.getUTCDate() - 30);
   } else if (period === "3months") {
     start.setUTCMonth(start.getUTCMonth() - 3);
+  } else if (period === "6months") {
+    start.setUTCMonth(start.getUTCMonth() - 6);
   } else if (period === "1year") {
     start.setUTCFullYear(start.getUTCFullYear() - 1);
   } else if (period === "5years") {
@@ -1245,6 +1437,24 @@ export function formatBtcAxis(value: number) {
   return formatBtc(value, { precision }).replace("₿ ", "₿");
 }
 
+// Axis formatter for fitted (log / auto-fit) domains. A fitted window can be
+// far narrower than the value's magnitude — a balance hovering at ₿40.8 needs
+// a decimal or every tick rounds to "₿41". Precision follows both the tick
+// step and the value's own magnitude, whichever demands more digits.
+export function formatBtcAxisFitted(
+  value: number,
+  domain: [number, number] | null,
+) {
+  if (!domain || !(domain[1] > domain[0]) || !(Math.abs(value) > 0)) {
+    return formatBtcAxis(value);
+  }
+  const step = (domain[1] - domain[0]) / 4;
+  const stepDecimals = step > 0 ? Math.ceil(-Math.log10(step)) : 0;
+  const valueDecimals = 2 - Math.floor(Math.log10(Math.abs(value)));
+  const precision = Math.min(6, Math.max(0, stepDecimals, valueDecimals));
+  return formatBtc(value, { precision }).replace("₿ ", "₿");
+}
+
 export function activityMarkerSliderValue(value: number) {
   const clamped = Math.min(
     clampActivityMarkerMinimum(value),
@@ -1300,13 +1510,32 @@ export const activityFlowLabels: Record<ActivityFlow, string> = {
   fee: "Fee",
 };
 
-export const activityFlowColors: Record<ActivityFlow, string> = {
-  incoming: "#34d399",
-  outgoing: "#f87171",
-  swap: "#38bdf8",
-  transfer: "#f59e0b",
-  fee: "#a1a1aa",
+// Marker colors need different weights per theme: the airy 400-tier hues read
+// well on the dark card but wash out on white, so light mode steps down to
+// the 600-tier of the same hues (fee: zinc-500).
+export const activityFlowPalettes: Record<
+  "light" | "dark",
+  Record<ActivityFlow, string>
+> = {
+  light: {
+    incoming: "#059669",
+    outgoing: "#dc2626",
+    swap: "#0284c7",
+    transfer: "#d97706",
+    fee: "#71717a",
+  },
+  dark: {
+    incoming: "#34d399",
+    outgoing: "#f87171",
+    swap: "#38bdf8",
+    transfer: "#f59e0b",
+    fee: "#a1a1aa",
+  },
 };
+
+export function useActivityFlowColors() {
+  return activityFlowPalettes[useResolvedColorMode()];
+}
 
 export const activityFlowKeys: ActivityFlow[] = [
   "incoming",
@@ -1383,6 +1612,8 @@ export function isActivityInTreasuryPeriod(
     start.setUTCDate(start.getUTCDate() - 30);
   } else if (period === "3months") {
     start.setUTCMonth(start.getUTCMonth() - 3);
+  } else if (period === "6months") {
+    start.setUTCMonth(start.getUTCMonth() - 6);
   } else if (period === "1year") {
     start.setUTCFullYear(start.getUTCFullYear() - 1);
   } else if (period === "5years") {

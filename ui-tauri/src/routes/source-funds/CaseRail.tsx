@@ -113,7 +113,7 @@ export function CaseRail({ state }: { state: SourceFundsCaseState }) {
                     done
                       ? "border-emerald-600/40 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300"
                       : active
-                        ? "border-[var(--color-accent)] text-[var(--color-accent)]"
+                        ? "border-[var(--kb-accent)] text-[var(--kb-accent)]"
                         : "border-border text-muted-foreground",
                   ].join(" ")}
                 >

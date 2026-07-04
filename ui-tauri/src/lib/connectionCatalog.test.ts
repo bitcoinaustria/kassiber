@@ -21,6 +21,7 @@ describe("connection catalog", () => {
     const implementedSetupKinds = new Set([
       "descriptor",
       "address-list",
+      "silent-payment",
       "file-wallet",
       "file-enrichment",
       "btcpay",
@@ -41,6 +42,7 @@ describe("connection catalog", () => {
     expect(CONNECTION_SOURCES.map((source) => source.id)).toEqual(
       expect.arrayContaining([
         "address-list",
+        "silent-payment",
         "bitcoin-core",
         "electrum",
         "esplora",
@@ -56,6 +58,25 @@ describe("connection catalog", () => {
     );
   });
 
+  it("uses one wallet export source for descriptor and xpub material", () => {
+    const watchOnlyExportSources = CONNECTION_SOURCES.filter(
+      (source) => source.setupKind === "descriptor" && source.chain === "bitcoin",
+    );
+
+    expect(watchOnlyExportSources.map((source) => source.id)).toEqual([
+      "descriptor",
+    ]);
+    expect(watchOnlyExportSources[0]?.title).toBe("Wallet export");
+    expect(watchOnlyExportSources[0]?.formatLabel).toMatch(/xpub/i);
+  });
+
+  it("describes Bitcoin Core as descriptor-capable", () => {
+    const core = CONNECTION_SOURCES.find((source) => source.id === "bitcoin-core");
+
+    expect(core?.description).toMatch(/descriptor/i);
+    expect(JSON.stringify(core)).not.toMatch(/address-based sync only|not implemented/i);
+  });
+
   it("keeps the Samourai Whirlpool setup watch-only in the catalog", () => {
     const samouraiSources = CONNECTION_SOURCES.filter(
       (source) => source.setupKind === "samourai",
@@ -66,6 +87,19 @@ describe("connection catalog", () => {
     expect(JSON.stringify(samouraiSources)).not.toMatch(
       /backup|mnemonic|seed|passphrase|recovery/i,
     );
+  });
+
+  it("keeps Silent Payments setup watch-only in the catalog", () => {
+    const source = CONNECTION_SOURCES.find(
+      (candidate) => candidate.id === "silent-payment",
+    );
+
+    expect(source?.setupKind).toBe("silent-payment");
+    expect(source?.walletKind).toBe("silent-payment");
+    expect(`${source?.description} ${source?.details.join(" ")}`).toMatch(
+      /watch-only/i,
+    );
+    expect(JSON.stringify(source)).not.toMatch(/spspend|private key|seed/i);
   });
 
   it("uses bundled official artwork for privacy-wallet imports", () => {

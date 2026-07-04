@@ -5,8 +5,11 @@ import type { Connection, ConnectionKind, ConnectionStatus } from "@/mocks/seed"
  * descriptor wallet reads "Liquid", not "On-chain".
  */
 export function connectionCategoryLabel(
-  connection: Pick<Connection, "kind" | "chain">,
+  connection: Pick<Connection, "kind" | "chain" | "role">,
 ): string {
+  if (connection.role === "backend" || connection.kind === "backend") {
+    return "Infrastructure";
+  }
   if (connection.chain === "liquid") return "Liquid";
   return connectionKindCategoryLabels[connection.kind];
 }
@@ -15,6 +18,7 @@ export const connectionKindCategoryLabels: Record<ConnectionKind, string> = {
   xpub: "On-chain",
   address: "On-chain",
   descriptor: "On-chain",
+  "silent-payment": "On-chain",
   samourai: "On-chain",
   "core-ln": "Lightning",
   lnd: "Lightning",
@@ -33,12 +37,14 @@ export const connectionKindCategoryLabels: Record<ConnectionKind, string> = {
   custom: "Custom",
   csv: "CSV",
   bip329: "BIP329",
+  backend: "Infrastructure",
 };
 
 export const connectionKindLabels: Record<ConnectionKind, string> = {
-  xpub: "XPUB",
+  xpub: "Wallet export",
   address: "Address",
-  descriptor: "Descriptor",
+  descriptor: "Wallet export",
+  "silent-payment": "Silent Payments",
   samourai: "Samourai",
   "core-ln": "Core Lightning",
   lnd: "LND",
@@ -57,10 +63,16 @@ export const connectionKindLabels: Record<ConnectionKind, string> = {
   custom: "Custom",
   csv: "CSV",
   bip329: "BIP329",
+  backend: "Backend",
 };
 
 export type ConnectionTypeInput = Pick<Connection, "kind"> &
-  Partial<Pick<Connection, "paymentMethodId" | "sourceFormat" | "syncMode" | "syncSource">>;
+  Partial<
+    Pick<
+      Connection,
+      "paymentMethodId" | "sourceFormat" | "syncMode" | "syncSource" | "role"
+    >
+  >;
 
 const sourceFormatLabels: Record<string, string> = {
   csv: "Generic CSV",
@@ -77,6 +89,9 @@ const sourceFormatLabels: Record<string, string> = {
 };
 
 export function connectionTypeLabel(connection: ConnectionTypeInput): string {
+  if (connection.role === "backend" || connection.kind === "backend") {
+    return connection.syncSource?.trim() || "Backend endpoint";
+  }
   const sourceFormat = connection.sourceFormat?.trim();
   if (sourceFormat) {
     return sourceFormatLabels[sourceFormat] ?? sourceFormat;
@@ -89,7 +104,9 @@ export function connectionTypeLabel(connection: ConnectionTypeInput): string {
   switch (connection.kind) {
     case "xpub":
     case "descriptor":
-      return "Wallet descriptor";
+      return "Wallet export";
+    case "silent-payment":
+      return "Silent Payments watch-only";
     case "address":
       return "Address list";
     case "samourai":

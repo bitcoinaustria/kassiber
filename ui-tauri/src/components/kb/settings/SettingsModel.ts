@@ -47,6 +47,9 @@ export interface Backend {
   urlSafeForHttpProbe?: boolean;
   infrastructureOwner?: InfrastructureOwnership;
   certificate?: string;
+  silentPayments?: boolean;
+  silentPaymentScanFile?: string;
+  silentPaymentScanPath?: string;
   proxy?: {
     host: string;
     port: string;
@@ -69,6 +72,7 @@ export interface BackendSettingsRow {
   has_auth_header?: boolean;
   has_token?: boolean;
   has_certificate?: boolean;
+  has_cookiefile?: boolean;
   has_username?: boolean;
   has_password?: boolean;
   has_commando_peer_id?: boolean;
@@ -78,6 +82,7 @@ export interface BackendSettingsRow {
   insecure?: boolean;
   tor_proxy?: string;
   infrastructure_owner?: string;
+  silent_payments?: boolean;
   wallet_refs?: string[];
 }
 
@@ -558,6 +563,7 @@ export function backendRowToSettingsBackend(row: BackendSettingsRow): Backend {
     infrastructureOwner: normalizeInfrastructureOwnership(
       row.infrastructure_owner,
     ),
+    silentPayments: row.silent_payments === true,
     walletRefs: Array.isArray(row.wallet_refs) ? row.wallet_refs : [],
   };
 }
@@ -586,6 +592,16 @@ export function backendPayload(backend: Backend): Record<string, unknown> {
   }
   if (backend.certificate) {
     config.certificate = backend.certificate;
+  }
+  if (typeof backend.silentPayments === "boolean") {
+    config.silent_payments = backend.silentPayments;
+  }
+  const silentPaymentReplacementsEnabled = backend.silentPayments !== false;
+  if (silentPaymentReplacementsEnabled && backend.silentPaymentScanFile?.trim()) {
+    config.silent_payment_scan_file = backend.silentPaymentScanFile.trim();
+  }
+  if (silentPaymentReplacementsEnabled && backend.silentPaymentScanPath?.trim()) {
+    config.silent_payment_scan_path = backend.silentPaymentScanPath.trim();
   }
   if (backend.commandoPeerId) {
     config.commando_peer_id = backend.commandoPeerId;
@@ -762,16 +778,25 @@ export function backendExplorerBaseUrl(backend: Backend): string | null {
 // Transaction-explorer links are derived from the configured Explorer-API
 // backends rather than stored separately, so this stays the single source of
 // truth: recompute it from the full backend list after any add/edit/delete.
-// An empty base falls back to the public default (see `@/lib/explorer`).
+// Non-regtest books may fall back to public explorers (see `@/lib/explorer`);
+// regtest books must only expose configured local/private explorer endpoints.
 export function deriveExplorerSettings(backends: Backend[]): ExplorerSettings {
   const baseForNet = (net: Net) =>
     backends
       .filter((backend) => backend.net === net)
       .map(backendExplorerBaseUrl)
       .find((value): value is string => Boolean(value)) ?? "";
+  const activeRegtestBackend = backends.some(
+    (backend) =>
+      backend.isDefault &&
+      ["regtest", "elementsregtest"].includes(
+        String(backend.network ?? "").toLowerCase(),
+      ),
+  );
   return {
     bitcoinBaseUrl: baseForNet("BTC"),
     liquidBaseUrl: baseForNet("LIQUID"),
+    publicFallbacks: !activeRegtestBackend,
   };
 }
 

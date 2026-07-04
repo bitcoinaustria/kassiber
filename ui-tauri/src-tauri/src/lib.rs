@@ -144,6 +144,7 @@ const DEEP_LINK_SETTINGS_SECTIONS: &[&str] = &[
 
 const ALLOWED_DAEMON_KINDS: &[&str] = &[
     "status",
+    "ui.egress.snapshot",
     "ui.overview.snapshot",
     "ui.workspace.overview.snapshot",
     "ui.transactions.list",
@@ -169,6 +170,8 @@ const ALLOWED_DAEMON_KINDS: &[&str] = &[
     "ui.backends.update",
     "ui.backends.delete",
     "ui.backends.set_default",
+    "ui.backends.bitcoinrpc.test",
+    "ui.backends.detect_core",
     "ui.backends.electrum.test",
     "ui.backends.http.test",
     "ui.profiles.snapshot",

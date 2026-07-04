@@ -1151,6 +1151,79 @@ def insert_wallet_records(
     return outcome
 
 
+def retract_wallet_records(
+    conn: sqlite3.Connection,
+    profile: Mapping[str, Any],
+    wallet: Mapping[str, Any],
+    external_ids: Sequence[str],
+    source_label: str,
+    hooks: ImportCoordinatorHooks,
+    *,
+    commit: bool = True,
+) -> dict[str, Any]:
+    """Delete wallet rows that the authoritative backend has retracted."""
+    candidates = []
+    seen_candidates: set[str] = set()
+    for external_id in external_ids:
+        text = str_or_none(external_id)
+        if text is None:
+            continue
+        normalized = text.strip().lower()
+        if not normalized or normalized in seen_candidates:
+            continue
+        seen_candidates.add(normalized)
+        candidates.append(normalized)
+    candidates.sort()
+    retracted_records: list[dict[str, Any]] = []
+    if candidates:
+        for start in range(0, len(candidates), 500):
+            chunk = candidates[start : start + 500]
+            placeholders = ", ".join("?" for _ in chunk)
+            rows = conn.execute(
+                f"""
+                SELECT id, external_id, occurred_at, direction, asset, amount, fee
+                  FROM transactions
+                 WHERE profile_id = ?
+                   AND wallet_id = ?
+                   AND external_id IN ({placeholders})
+                """,
+                (profile["id"], wallet["id"], *chunk),
+            ).fetchall()
+            if not rows:
+                continue
+            ids = [row["id"] for row in rows]
+            id_placeholders = ", ".join("?" for _ in ids)
+            conn.execute(
+                f"DELETE FROM transactions WHERE id IN ({id_placeholders})",
+                tuple(ids),
+            )
+            for row in rows:
+                retracted_records.append(
+                    {
+                        "transaction_id": row["id"],
+                        "wallet": wallet["label"],
+                        "external_id": row["external_id"],
+                        "occurred_at": row["occurred_at"],
+                        "direction": row["direction"],
+                        "asset": row["asset"],
+                        "amount": row["amount"],
+                        "fee": row["fee"],
+                    }
+                )
+    journal_invalidated = bool(retracted_records)
+    if journal_invalidated:
+        hooks.invalidate_journals(conn, profile["id"])
+    if commit:
+        conn.commit()
+    return {
+        "wallet": wallet["label"],
+        "source": source_label,
+        "retracted": len(retracted_records),
+        "journal_invalidated": journal_invalidated,
+        "retracted_records": retracted_records,
+    }
+
+
 def enrich_profile_records(
     conn: sqlite3.Connection,
     profile: Mapping[str, Any],
@@ -1958,4 +2031,5 @@ __all__ = [
     "make_transaction_fingerprint",
     "normalize_import_direction",
     "normalize_import_record",
+    "retract_wallet_records",
 ]

@@ -623,8 +623,8 @@ def _freshness_handlers(runtime_config: dict[str, object]) -> Mapping[str, core_
             outcome = sync_wallet_from_backend(
                 conn,
                 runtime_config,
-                None,
-                None,
+                profile["workspace_id"],
+                profile["id"],
                 wallet_with_checkpoint,
                 checkpoint=checkpoint,
                 force_full=force_full,

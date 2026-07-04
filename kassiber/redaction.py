@@ -22,6 +22,15 @@ SENSITIVE_KEY_PARTS = (
     "recovery",
     "secret",
     "seed",
+    "scan_key",
+    "scankey",
+    "scan_private",
+    "scanprivate",
+    "silent_payment",
+    "silentpayment",
+    "sp_descriptor",
+    "spscan",
+    "spspend",
     "token",
     "xprv",
 )
@@ -29,11 +38,16 @@ SENSITIVE_KEY_PARTS = (
 _PRIVATE_KEY_RE = re.compile(r"\b(?:xprv|tprv|yprv|zprv|uprv|vprv)[1-9A-HJ-NP-Za-km-z]{20,}\b")
 _EXTENDED_KEY_RE = re.compile(r"\b(?:xpub|tpub|ypub|zpub|upub|vpub)[1-9A-HJ-NP-Za-km-z]{20,}\b")
 _DESCRIPTOR_RE = re.compile(r"\b(?:wpkh|sh|wsh|tr|pkh|combo)\([^)\n]{16,}\)", re.IGNORECASE)
+_SP_DESCRIPTOR_RE = re.compile(r"\bsp\([^)\n]{8,}\)", re.IGNORECASE)
+_SP_KEY_RE = re.compile(r"\b(?:t?spscan|t?spspend)1q[023456789acdefghjklmnpqrstuvwxyz]{8,}\b", re.IGNORECASE)
+_SP_ADDRESS_RE = re.compile(r"\b(?:t?sp)1q[023456789acdefghjklmnpqrstuvwxyz]{20,}\b", re.IGNORECASE)
 _BEARER_RE = re.compile(r"\b[Bb]earer\s+[A-Za-z0-9._~+/-]+=*")
 _SK_SECRET_RE = re.compile(r"\bsk-[A-Za-z0-9._~+/-]{6,}\b")
 _ASSIGNED_SECRET_RE = re.compile(
     r"(?P<key>\b(?:api[_-]?key|auth[_-]?header|cookie|descriptor|mnemonic|"
-    r"passphrase|password|recovery[_-]?phrase|secret|seed(?:[_-]?(?:phrase|words))?|token)\b)"
+    r"passphrase|password|recovery[_-]?phrase|scan[_-]?key|secret|"
+    r"seed(?:[_-]?(?:phrase|words))?|silent[_-]?payment[_-]?scan[_-]?key|"
+    r"sp[_-]?descriptor|spscan|spspend|token)\b)"
     r"(?P<sep>\s*[:=]\s*)"
     r"(?P<quote>['\"]?)"
     r"(?P<value>[^'\"\s,;}{]+)",
@@ -41,7 +55,9 @@ _ASSIGNED_SECRET_RE = re.compile(
 )
 _JSON_SECRET_RE = re.compile(
     r"(?P<prefix>['\"](?:api[_-]?key|auth[_-]?header|cookie|descriptor|mnemonic|"
-    r"passphrase|password|recovery[_-]?phrase|secret|seed(?:[_-]?(?:phrase|words))?|token)"
+    r"passphrase|password|recovery[_-]?phrase|scan[_-]?key|secret|"
+    r"seed(?:[_-]?(?:phrase|words))?|silent[_-]?payment[_-]?scan[_-]?key|"
+    r"sp[_-]?descriptor|spscan|spspend|token)"
     r"['\"]\s*:\s*['\"])"
     r"(?P<value>[^'\"]+)",
     re.IGNORECASE,
@@ -181,6 +197,9 @@ def redact_secret_text(value: str) -> str:
     text = _RECOVERY_ASSIGNMENT_RE.sub(r"\g<key>\g<sep>\g<quote>[redacted]", value)
     text = _PRIVATE_KEY_RE.sub("[redacted-private-key]", text)
     text = _EXTENDED_KEY_RE.sub("[redacted-extended-key]", text)
+    text = _SP_DESCRIPTOR_RE.sub("[redacted-silent-payment-descriptor]", text)
+    text = _SP_KEY_RE.sub("[redacted-silent-payment-key]", text)
+    text = _SP_ADDRESS_RE.sub("[redacted-silent-payment-address]", text)
     text = _DESCRIPTOR_RE.sub("[redacted-descriptor]", text)
     text = _BEARER_RE.sub("Bearer [redacted]", text)
     text = _JSON_SECRET_RE.sub(r"\g<prefix>[redacted]", text)

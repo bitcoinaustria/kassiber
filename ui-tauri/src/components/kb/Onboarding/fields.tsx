@@ -63,7 +63,7 @@ export const TextField = ({
       {showHint && (
         <p
           id={`${name}-hint`}
-          className="m-0 font-mono text-[10px] uppercase tracking-[0.08em] text-accent"
+          className="m-0 font-mono text-[10px] uppercase tracking-[0.08em] text-[var(--kb-accent)]"
         >
           {hint}
         </p>
@@ -116,7 +116,7 @@ export const NumberField = ({
       {showHint && (
         <p
           id={`${name}-hint`}
-          className="m-0 font-mono text-[10px] uppercase tracking-[0.08em] text-accent"
+          className="m-0 font-mono text-[10px] uppercase tracking-[0.08em] text-[var(--kb-accent)]"
         >
           {hint}
         </p>
@@ -187,7 +187,7 @@ export const ChoiceCard = ({
         "flex min-h-[84px] cursor-pointer items-start gap-3 rounded-lg border p-3.5 text-left text-sm transition",
         active
           ? tone === "warning"
-            ? "border-accent bg-[rgba(227,0,15,0.04)]"
+            ? "border-[var(--kb-accent)] bg-[rgba(227,0,15,0.04)]"
             : "border-ink bg-paper"
           : "border-line hover:bg-paper-2",
       )}

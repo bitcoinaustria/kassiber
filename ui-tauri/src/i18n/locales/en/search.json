@@ -73,5 +73,33 @@
   },
   "settings": {
     "groupPrefix": "Settings"
+  },
+  "aliases": {
+    "pagePhrases": [
+      "{{title}} page",
+      "{{title}} screen",
+      "{{title}} view",
+      "open {{title}}",
+      "go to {{title}}"
+    ],
+    "connectionLabelPhrases": [
+      "{{label}} wallet",
+      "{{label}} connection",
+      "{{label}} detail",
+      "{{label}} wallet detail",
+      "open {{label}}",
+      "open {{label}} wallet",
+      "open {{label}} detail"
+    ],
+    "connectionKindPhrases": [
+      "{{kind}} wallet",
+      "{{kind}} connection"
+    ],
+    "connectionStatusPhrases": [
+      "{{status}} wallet"
+    ],
+    "connectionNetworkPhrases": [
+      "{{network}} wallet"
+    ]
   }
 }

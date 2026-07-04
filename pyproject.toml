@@ -21,6 +21,7 @@ dependencies = [
   "sqlcipher3>=0.6.2,<1",
   "pyrage>=1.3,<2",
   "certifi>=2024.7.4",
+  "pytest>=8,<9",
 ]
 
 [project.scripts]

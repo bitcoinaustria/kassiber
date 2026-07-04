@@ -1007,7 +1007,7 @@ export function GateRow({
         {onAction && action && actionLabel && (
           <button
             type="button"
-            className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-[var(--color-accent)] hover:underline"
+            className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-[var(--kb-accent)] hover:underline"
             onClick={() => onAction(action, finding)}
           >
             <ArrowRight className="size-3.5" aria-hidden="true" />
@@ -1017,7 +1017,7 @@ export function GateRow({
         {onOpenTransaction && (
           <button
             type="button"
-            className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-[var(--color-accent)] hover:underline"
+            className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-[var(--kb-accent)] hover:underline"
             onClick={onOpenTransaction}
           >
             <Eye className="size-3.5" aria-hidden="true" />

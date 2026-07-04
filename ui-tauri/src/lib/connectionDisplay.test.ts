@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   connectionAssetIconKind,
   connectionAssetLabel,
+  connectionCategoryLabel,
   connectionTypeLabel,
 } from "./connectionDisplay";
 
@@ -31,7 +32,7 @@ describe("connection display", () => {
   });
 
   it("shows concrete connection types instead of broad categories", () => {
-    expect(connectionTypeLabel({ kind: "descriptor" })).toBe("Wallet descriptor");
+    expect(connectionTypeLabel({ kind: "descriptor" })).toBe("Wallet export");
     expect(connectionTypeLabel({ kind: "address" })).toBe("Address list");
     expect(connectionTypeLabel({ kind: "core-ln" })).toBe("Core Lightning API");
     expect(connectionTypeLabel({ kind: "custom", syncMode: "btcpay" })).toBe(
@@ -50,5 +51,19 @@ describe("connection display", () => {
         sourceFormat: "bullbitcoin_wallet_csv",
       }),
     ).toBe("Bull Bitcoin Wallet CSV");
+    expect(
+      connectionTypeLabel({
+        kind: "backend",
+        role: "backend",
+        syncSource: "Electrum / Fulcrum",
+      }),
+    ).toBe("Electrum / Fulcrum");
+    expect(
+      connectionCategoryLabel({
+        kind: "backend",
+        role: "backend",
+        chain: "liquid",
+      }),
+    ).toBe("Infrastructure");
   });
 });

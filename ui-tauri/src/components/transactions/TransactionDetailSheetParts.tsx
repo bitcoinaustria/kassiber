@@ -124,7 +124,7 @@ export function InfoHint({
       <TooltipTrigger asChild>
         <button
           type="button"
-          className="inline-flex size-4 items-center justify-center rounded text-current opacity-60 hover:opacity-100"
+          className="inline-flex size-4 cursor-help items-center justify-center rounded text-current opacity-60 hover:opacity-100"
           aria-label={label || t("infoHint.moreInfo")}
           tabIndex={-1}
         >
@@ -323,6 +323,7 @@ export type TimelineStep = {
   label: string;
   done: boolean;
   current?: boolean;
+  warn?: boolean;
   hint?: string;
 };
 
@@ -337,13 +338,17 @@ export function StatusTimeline({ steps }: { steps: TimelineStep[] }) {
               "flex size-4 shrink-0 items-center justify-center rounded-full border text-[10px]",
               step.done
                 ? "border-emerald-500/40 bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
-                : step.current
-                  ? "border-blue-500/40 bg-blue-500/15 text-blue-600 dark:text-blue-400"
-                  : "border-border bg-muted/40 text-muted-foreground",
+                : step.warn
+                  ? "border-amber-500/40 bg-amber-500/15 text-amber-600 dark:text-amber-400"
+                  : step.current
+                    ? "border-blue-500/40 bg-blue-500/15 text-blue-600 dark:text-blue-400"
+                    : "border-border bg-muted/40 text-muted-foreground",
             )}
           >
             {step.done ? (
               <Check className="size-2.5" aria-hidden="true" />
+            ) : step.warn ? (
+              <AlertTriangle className="size-2.5" aria-hidden="true" />
             ) : (
               idx + 1
             )}
@@ -351,11 +356,14 @@ export function StatusTimeline({ steps }: { steps: TimelineStep[] }) {
           <span
             className={cn(
               "whitespace-nowrap text-xs",
+              step.hint && "cursor-help",
               step.done
                 ? "text-foreground"
-                : step.current
-                  ? "text-foreground"
-                  : "text-muted-foreground",
+                : step.warn
+                  ? "text-amber-700 dark:text-amber-300"
+                  : step.current
+                    ? "text-foreground"
+                    : "text-muted-foreground",
             )}
             title={step.hint}
           >
@@ -482,8 +490,9 @@ export function ReviewChecklist({
                     : undefined
                 }
                 className={cn(
-                  "flex w-full items-start gap-2 rounded text-left text-sm",
-                  interactive && "hover:text-foreground",
+                  "flex w-full items-start gap-2 rounded-md text-left text-sm",
+                  interactive &&
+                    "group -mx-1.5 w-[calc(100%+0.75rem)] px-1.5 py-1 transition-colors hover:bg-muted/60",
                 )}
                 title={item.hint}
               >
@@ -512,6 +521,12 @@ export function ReviewChecklist({
                 >
                   {item.label}
                 </span>
+                {interactive ? (
+                  <ChevronRight
+                    aria-hidden="true"
+                    className="mt-0.5 size-3.5 shrink-0 text-muted-foreground/50 transition-colors group-hover:text-foreground"
+                  />
+                ) : null}
               </Tag>
             </li>
           );

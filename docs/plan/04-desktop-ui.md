@@ -63,9 +63,8 @@ malicious page could appear there.
   sees a hand-maintained type file that has drifted.
 - **HMR end-to-end.** Vite for the web layer; daemon hot-reload via watch
   mode in dev so backend handler tweaks don't require a full rebuild.
-- **Mock daemon for offline UI work.** Generated from the same JSON Schema
-  with fixture responses, so screen iteration doesn't require a live DB or
-  a real wallet.
+- **Fixture transport for tests only.** Generated from the same JSON Schema
+  with fixture responses; interactive development uses the regtest demo book.
 - **Stack picks match v0/Lovable/Artifacts defaults** (React + TS +
   Tailwind + shadcn/ui + TanStack). Any AI-generated screen drops in with
   minimal reshaping.
@@ -424,10 +423,9 @@ ever compromised.
 
 The frontend ships in three runtime modes, all sharing the same React app:
 
-1. **Mock daemon, plain browser.** `pnpm dev` runs Vite at
-   `http://localhost:5173`. A `VITE_DAEMON=mock` env var swaps the daemon
-   client for one that returns fixture responses generated from the same
-   JSON Schema as the real types. Any browser-driven tool — Codex's
+1. **Regtest bridge, plain browser.** `pnpm dev:browser` runs Vite against
+   the daemon bridge pointed at the generated regtest demo book. Any
+   browser-driven tool — Codex's
    in-app browser, Claude in Chrome, Claude Preview MCP, browser-MCP
    automations, design-review screenshotters — can drive the full UI
    without a Python install. **This is the default dev mode** for layout,
@@ -477,9 +475,10 @@ The frontend ships in three runtime modes, all sharing the same React app:
    CLI sidecar before falling back to developer Python.
 
 A dev script (`pnpm dev:browser`, `pnpm dev:bridge`, `pnpm dev:shell`)
-selects the mode. The Vite config rejects `VITE_DAEMON` values other
-than `mock` / `bridge` / `tauri` so production builds can't accidentally
-ship the bridge transport.
+selects the mode. `pnpm dev:browser` is regtest-backed; the fixture transport
+is kept as internal plumbing for UI tests. The Vite config rejects unsupported
+daemon transport tokens so production builds can't accidentally ship the bridge
+transport.
 
 ### 2.7 Verification gates for Phase 2
 
@@ -763,7 +762,7 @@ These should stay green so AI-assisted iteration stays smooth.
 - [ ] HMR round-trip from a `*.tsx` save to visible change ≤ 2 s.
 - [ ] A new screen prompt to AI ("add a sortable column for X") drops in
       with no manual type fix-ups.
-- [ ] Mock-daemon mode gives a working UI without a Python install.
+- [ ] Regtest browser mode gives a working UI against a generated local book.
 - [ ] Designer asset pipeline: a Figma export → Tailwind classes → screen
       lands within an afternoon for a typical card layout.
 - [ ] `shadcn/ui` components are added via the CLI, kept in

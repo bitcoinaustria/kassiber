@@ -114,6 +114,14 @@ describe("daemon mutation key", () => {
     expect(daemonMutationKey("mock", "ui.wallets.sync")).not.toEqual(
       daemonMutationKey("real", "ui.wallets.sync"),
     );
+    expect(daemonMutationKey("regtest", "ui.wallets.sync")).toEqual([
+      "daemon-mutation",
+      "regtest",
+      "ui.wallets.sync",
+    ]);
+    expect(daemonMutationKey("regtest", "ui.wallets.sync")).not.toEqual(
+      daemonMutationKey("real", "ui.wallets.sync"),
+    );
     expect(daemonMutationKey("real", "ui.journals.process")).not.toEqual(
       daemonMutationKey("real", "ui.wallets.sync"),
     );
@@ -167,6 +175,12 @@ describe("daemon mutation invalidation scope", () => {
     ).toEqual([]);
     expect(
       invalidatedDaemonQueryKindsForMutation("ui.backends.http.test"),
+    ).toEqual([]);
+    expect(
+      invalidatedDaemonQueryKindsForMutation("ui.backends.bitcoinrpc.test"),
+    ).toEqual([]);
+    expect(
+      invalidatedDaemonQueryKindsForMutation("ui.backends.detect_core"),
     ).toEqual([]);
   });
 

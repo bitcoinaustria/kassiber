@@ -70,6 +70,10 @@ _BULLBITCOIN_WALLET_CSV = """date,type,direction,amount_sats,amount_btc,fee_sats
 2026-04-07T09:20:00Z,onchain,outgoing,10000,0.00010000,120,failed,bull-failed,bitcoin,bc1qfailed,,,,,,,
 """
 
+_BULLBITCOIN_WALLET_REFUND_CSV = """date,type,direction,amount_sats,amount_btc,fee_sats,status,txid,network,address,swap_id,preimage,total_swap_fees_sats,send_network,receive_network,send_txid,receive_txid
+2026-04-08T09:15:00Z,chain_swap,outgoing,1000000,0.01000000,500,refunded,bull-refund-lockup,bitcoin,bc1qrefund,swap-refund,,2500,bitcoin,bitcoin,bull-refund-lockup,
+"""
+
 _COINFINITY_EXISTING_CSV = """date,txid,direction,asset,amount,fee,fiat_value,fiat_rate,kind,description,counterparty
 2026-05-11T13:19:36Z,coinfinity-buy-tx,inbound,BTC,0.00147403,0,100.00,68872.40,deposit,Synced from self custody wallet,Synced from node
 """
@@ -3687,6 +3691,26 @@ class AccountBucketBehaviorTest(unittest.TestCase):
         finally:
             conn.close()
 
+        payload = self._cli(
+            "transfers", "suggest",
+            "--workspace", "Buckets",
+            "--profile", "Default",
+            "--method", "provider_swap_id",
+        )
+        candidates = payload["data"]["candidates"]
+        self.assertEqual(len(candidates), 1)
+        candidate = candidates[0]
+        self.assertEqual(candidate["method"], "provider_swap_id")
+        self.assertEqual(candidate["confidence"], "exact")
+        self.assertEqual(candidate["default_kind"], "chain-swap")
+        self.assertEqual(candidate["out_asset"], "BTC")
+        self.assertEqual(candidate["in_asset"], "LBTC")
+        self.assertEqual(candidate["out_wallet_label"], "Bull Wallet - Bitcoin")
+        self.assertEqual(candidate["in_wallet_label"], "Bull Wallet - Liquid")
+        self.assertEqual(candidate["swap_fee_msat"], 10_500_000)
+        self.assertEqual(candidate["evidence"]["provider"], "bullbitcoin")
+        self.assertEqual(candidate["evidence"]["id"], "swap-chain")
+
         existing_btc_csv = Path(self._tmp.name) / "bull-existing-btc.csv"
         existing_btc_csv.write_text(
             "date,txid,direction,asset,amount,fee\n"
@@ -3775,6 +3799,43 @@ class AccountBucketBehaviorTest(unittest.TestCase):
             self.assertEqual(fees_by_external_id["bull-chain-recv"], 0)
         finally:
             conn.close()
+
+    def test_z_bullbitcoin_wallet_csv_refunded_swap_skipped_without_refund_leg(self):
+        bull_wallet_csv = Path(self._tmp.name) / "bull-wallet-refund-transactions.csv"
+        bull_wallet_csv.write_text(_BULLBITCOIN_WALLET_REFUND_CSV, encoding="utf-8")
+
+        payload = self._cli(
+            "wallets", "create",
+            "--workspace", "Buckets",
+            "--profile", "Default",
+            "--label", "Bull Refund Wallet",
+            "--kind", "bullbitcoin",
+            "--source-file", str(bull_wallet_csv),
+            "--source-format", "bullbitcoin_wallet_csv",
+            "--config", json.dumps({"bullbitcoin_wallet_network": "bitcoin"}),
+        )
+        self.assertEqual(payload["kind"], "wallets.create")
+
+        payload = self._cli(
+            "wallets", "sync",
+            "--workspace", "Buckets",
+            "--profile", "Default",
+            "--wallet", "Bull Refund Wallet",
+        )
+        sync = payload["data"][0]
+        self.assertEqual(sync["input_format"], "bullbitcoin_wallet_csv")
+        self.assertEqual(sync["bullbitcoin_wallet_rows"], 0)
+        self.assertEqual(sync["bullbitcoin_wallet_rows_total"], 0)
+        self.assertEqual(sync["imported"], 0)
+        self.assertEqual(sync["skipped"], 0)
+
+        payload = self._cli(
+            "transfers", "suggest",
+            "--workspace", "Buckets",
+            "--profile", "Default",
+            "--method", "provider_swap_id",
+        )
+        self.assertEqual(payload["data"]["candidates"], [])
 
     def test_z_bullbitcoin_csv_enriches_existing_wallet_transaction(self):
         existing_csv = Path(self._tmp.name) / "bull-existing-wallet.csv"
@@ -5178,6 +5239,35 @@ class GenericLedgerImportTest(unittest.TestCase):
         row = self._records_by_external_id()["sats-fee-1"]
         self.assertEqual(row["amount_msat"], 250_000_000)  # 250k sats = 0.0025 BTC
         self.assertEqual(row["fee_msat"], 500_000)  # 500 sats, not 500 BTC
+
+    def test_csv_import_preserves_swap_linkage_columns(self):
+        ledger = Path(self._tmp.name) / "swap-linkage.csv"
+        payment_hash = "AA" * 32
+        refund_funding_txid = "bb" * 32
+        ledger.write_text(
+            "Type,Date,Sent Amount,Sent Asset,Tx-ID,Payment Hash,Payment Hash Source,Swap Refund Funding Tx-ID\n"
+            f"Withdrawal,2026-04-01,0.00100000,LBTC,boltz-lockup-1,{payment_hash},boltz-regtest,{refund_funding_txid}\n",
+            encoding="utf-8",
+        )
+        self._import(ledger)
+
+        conn = sqlite3.connect(self.data_root / "kassiber.sqlite3")
+        conn.row_factory = sqlite3.Row
+        try:
+            row = conn.execute(
+                """
+                SELECT asset, payment_hash, payment_hash_source, swap_refund_funding_txid
+                FROM transactions
+                WHERE external_id = 'boltz-lockup-1'
+                """
+            ).fetchone()
+        finally:
+            conn.close()
+        self.assertIsNotNone(row)
+        self.assertEqual(row["asset"], "LBTC")
+        self.assertEqual(row["payment_hash"], payment_hash.lower())
+        self.assertEqual(row["payment_hash_source"], "boltz-regtest")
+        self.assertEqual(row["swap_refund_funding_txid"], refund_funding_txid)
 
     def test_reimport_is_idempotent(self):
         ledger = Path(self._tmp.name) / "ledger.csv"

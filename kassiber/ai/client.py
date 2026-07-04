@@ -32,6 +32,7 @@ from typing import Any, Iterable, Iterator
 import urllib.error
 import urllib.request
 
+from ..egress_ledger import get_egress_ledger, http_request_bytes_out
 from ..errors import AppError
 from ..redaction import provider_error_body_preview
 
@@ -403,13 +404,13 @@ def _codex_catalog_models(executable: str) -> list[dict[str, Any]]:
 
 
 def _cli_failure(command: str, completed: subprocess.CompletedProcess[str]) -> AppError:
-    stderr = (completed.stderr or "").strip()
-    stdout = (completed.stdout or "").strip()
+    stderr = completed.stderr or ""
+    stdout = completed.stdout or ""
     details: dict[str, Any] = {"exit_code": completed.returncode}
     if stderr:
-        details["stderr"] = stderr[-2048:]
+        details["stderr_bytes"] = len(stderr.encode("utf-8", errors="replace"))
     if stdout:
-        details["stdout"] = stdout[-2048:]
+        details["stdout_bytes"] = len(stdout.encode("utf-8", errors="replace"))
     return AppError(
         f"AI CLI provider '{command}' failed",
         code="ai_request_invalid",
@@ -525,6 +526,13 @@ class OpenAICompatClient:
             data=body,
             method=method,
             headers=self._headers(json_body=body is not None, accept_sse=accept_sse),
+        )
+        get_egress_ledger().record_url(
+            url,
+            subsystem="ai",
+            operation="http.request",
+            method=method,
+            bytes_out=http_request_bytes_out(request, method),
         )
         try:
             return urllib.request.urlopen(

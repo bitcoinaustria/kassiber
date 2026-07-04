@@ -48,6 +48,7 @@ export type ConnectionCategory =
 export type SetupKind =
   | "descriptor"
   | "address-list"
+  | "silent-payment"
   | "file-wallet"
   | "file-enrichment"
   | "samourai"
@@ -124,7 +125,7 @@ export const connectionCategoryLabel = (category: ConnectionCategory) =>
 
 export const CONNECTION_SOURCES: ConnectionSource[] = [
   {
-    id: "xpub",
+    id: "descriptor",
     title: "Wallet export",
     description: "Descriptor, BSMS, xpub-family, or wallet export import.",
     category: "wallets",
@@ -139,24 +140,8 @@ export const CONNECTION_SOURCES: ConnectionSource[] = [
     details: [
       "Mainnet by default",
       "Uses a configured Bitcoin backend",
-      "ypub/zpub/upub/vpub keys and BSMS records are converted to descriptors",
-    ],
-  },
-  {
-    id: "descriptor",
-    title: "Descriptor",
-    description: "Multisig, BSMS, or descriptor wallet discovery.",
-    category: "wallets",
-    image: bitcoinIcon,
-    imageClassName: "size-9",
-    status: "ready",
-    pathLabel: "Watch-only wallet",
-    formatLabel: "output descriptor/BSMS",
-    setupKind: "descriptor",
-    walletKind: "descriptor",
-    chain: "bitcoin",
-    details: [
       "Paste one common wallet export or descriptor",
+      "ypub/zpub/upub/vpub keys and BSMS records are converted to descriptors",
       "Kassiber stores receive/change branches when present",
     ],
   },
@@ -182,15 +167,37 @@ export const CONNECTION_SOURCES: ConnectionSource[] = [
     ],
   },
   {
+    id: "silent-payment",
+    title: "Silent Payments",
+    description:
+      "Watch-only BIP352 receiving/accounting from BIP392 sp() material.",
+    category: "wallets",
+    image: bitcoinIcon,
+    imageClassName: "size-9",
+    status: "ready",
+    pathLabel: "Watch-only wallet",
+    formatLabel: "BIP352 / BIP392 sp()",
+    setupKind: "silent-payment",
+    walletKind: "silent-payment",
+    chain: "bitcoin",
+    network: "main",
+    details: [
+      "Accepts watch-only scan material and public spend material",
+      "Requires a BIP352-capable backend or local scanner selected explicitly",
+      "Needs a scan start height/date, or an acknowledged full-history scan",
+      "No spending, signing, PSBTs, or sender contact book",
+    ],
+  },
+  {
     id: "liquid-descriptor",
-    title: "Liquid descriptor",
-    description: "Liquid watch-only wallet or Elements descriptor.",
+    title: "Liquid wallet export",
+    description: "Liquid watch-only wallet export or Elements descriptor.",
     category: "wallets",
     image: liquidIcon,
     imageClassName: "size-10",
     status: "ready",
     pathLabel: "Watch-only wallet",
-    formatLabel: "Liquid descriptor",
+    formatLabel: "Liquid descriptor/export",
     setupKind: "descriptor",
     walletKind: "descriptor",
     chain: "liquid",
@@ -246,7 +253,7 @@ export const CONNECTION_SOURCES: ConnectionSource[] = [
   {
     id: "bitcoin-core",
     title: "Bitcoin Core",
-    description: "Your own full node over JSON-RPC. Address-based sync only; no transaction links.",
+    description: "Your own full node over JSON-RPC for descriptor, xpub, and address sync.",
     category: "nodes",
     image: bitcoinIcon,
     imageClassName: "size-9",
@@ -255,8 +262,8 @@ export const CONNECTION_SOURCES: ConnectionSource[] = [
     formatLabel: "bitcoinrpc",
     setupKind: "backend-settings",
     details: [
-      "Configured in Settings as a Bitcoin Core RPC backend",
-      "Descriptor-backed RPC scanning is not implemented yet",
+      "Detects a local node when the default cookie is available",
+      "Imports watch-only descriptors into a Kassiber Core wallet",
     ],
   },
   {
@@ -301,7 +308,7 @@ export const CONNECTION_SOURCES: ConnectionSource[] = [
     status: "planned",
     pathLabel: "Wallet export",
     formatLabel: "descriptor/xpub",
-    details: ["Use the Descriptor connection for exported descriptors today"],
+    details: ["Use the Wallet export connection for exported descriptors today"],
   },
   {
     id: "specter",
@@ -312,7 +319,7 @@ export const CONNECTION_SOURCES: ConnectionSource[] = [
     status: "planned",
     pathLabel: "Wallet export",
     formatLabel: "descriptor",
-    details: ["Use the Descriptor connection for exported descriptors today"],
+    details: ["Use the Wallet export connection for exported descriptors today"],
   },
   {
     id: "bluewallet",
@@ -336,7 +343,7 @@ export const CONNECTION_SOURCES: ConnectionSource[] = [
     pathLabel: "Wallet export",
     formatLabel: "descriptor/xpub",
     details: [
-      "Use Descriptor or Liquid descriptor when you have an exported descriptor",
+      "Use Wallet export or Liquid wallet export when you have an exported descriptor",
     ],
   },
   {
@@ -349,7 +356,7 @@ export const CONNECTION_SOURCES: ConnectionSource[] = [
     status: "planned",
     pathLabel: "Wallet export",
     formatLabel: "descriptor",
-    details: ["Use the Descriptor connection for exported descriptors today"],
+    details: ["Use the Wallet export connection for exported descriptors today"],
   },
   {
     id: "nunchuk",
@@ -360,7 +367,7 @@ export const CONNECTION_SOURCES: ConnectionSource[] = [
     imageClassName: "size-9",
     status: "planned",
     pathLabel: "Wallet export",
-    details: ["Use the Descriptor connection for exported descriptors today"],
+    details: ["Use the Wallet export connection for exported descriptors today"],
   },
   {
     id: "bitbox",
@@ -372,7 +379,7 @@ export const CONNECTION_SOURCES: ConnectionSource[] = [
     imageClassName: hardwareWalletIconClassName,
     status: "planned",
     pathLabel: "Wallet export",
-    details: ["Use the Descriptor connection for exported descriptors today"],
+    details: ["Use the Wallet export connection for exported descriptors today"],
   },
   {
     id: "trezor",
@@ -384,7 +391,7 @@ export const CONNECTION_SOURCES: ConnectionSource[] = [
     imageClassName: hardwareWalletIconClassName,
     status: "planned",
     pathLabel: "Wallet export",
-    details: ["Use the Descriptor connection for exported descriptors today"],
+    details: ["Use the Wallet export connection for exported descriptors today"],
   },
   {
     id: "coldcard",
@@ -397,7 +404,7 @@ export const CONNECTION_SOURCES: ConnectionSource[] = [
     status: "planned",
     pathLabel: "Wallet export",
     formatLabel: "skeleton/descriptor",
-    details: ["Use the Descriptor connection for exported descriptors today"],
+    details: ["Use the Wallet export connection for exported descriptors today"],
   },
   {
     id: "ledger",
@@ -421,7 +428,7 @@ export const CONNECTION_SOURCES: ConnectionSource[] = [
     imageClassName: hardwareWalletIconClassName,
     status: "planned",
     pathLabel: "Wallet export",
-    details: ["Use the Descriptor connection for exported descriptors today"],
+    details: ["Use the Wallet export connection for exported descriptors today"],
   },
   {
     id: "core-ln",

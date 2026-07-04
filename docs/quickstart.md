@@ -109,8 +109,8 @@ automatically. Lightning, Liquid peg-in/peg-out, and submarine-swap legs need
 review before reports are trusted.
 
 ```bash
-# Surface unpaired candidates (exact via Lightning payment_hash, strong via
-# time + amount):
+# Surface unpaired candidates (exact via Lightning payment_hash, redacted
+# provider swap id, or HTLC refund link; strong via time + amount):
 python3 -m kassiber transfers suggest
 
 # Auto-apply every solo exact match without further review:
@@ -132,6 +132,11 @@ send as a sale and the refund as a fresh acquisition. When the refund is swept
 on-chain through a Boltz HTLC, chain sync links it to its funding send
 automatically and `transfers suggest` surfaces it as an exact `swap-refund`
 candidate — even within a single wallet.
+
+Boltz v2 cooperative Taproot key-path spends do not reveal swap scripts or
+preimages on-chain. Kassiber treats them as exact only when imported
+provider/client metadata links both legs by a redacted swap id; chain-only
+rows stay in the heuristic/manual review lane.
 
 For a direct swap payout where the provider pays an external recipient and
 no owned inbound leg exists:

@@ -5,12 +5,15 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+import os
 import socket
 import ssl
+import stat
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from contextvars import copy_context
+from dataclasses import replace
 from decimal import Decimal
 from pathlib import Path
 from types import MappingProxyType
@@ -21,6 +24,7 @@ from .. import __version__
 from .. import http_client
 from ..backends import backend_batch_size, backend_timeout, backend_value, resolve_backend
 from ..db import APP_NAME
+from ..egress_ledger import get_egress_ledger
 from ..envelope import json_ready
 from ..errors import AppError
 from ..msat import SATS_PER_BTC, dec
@@ -31,9 +35,11 @@ from ..proxy import (
 )
 from ..redaction import redact_operational_text
 from ..time_utils import UNKNOWN_OCCURRED_AT, parse_iso_datetime_or_none, timestamp_to_iso
+from ..time_utils import iso_to_unix
 from ..util import normalize_chain_value, normalize_network_value, parse_bool, parse_int
 from ..wallet_descriptors import (
     SCRIPT_TYPE_BRANCH_BASE,
+    branch_descriptor,
     branch_limits,
     decode_liquid_transaction,
     derive_descriptor_target,
@@ -43,6 +49,7 @@ from ..wallet_descriptors import (
     liquid_plan_can_unblind,
 )
 from . import htlc_parser
+from . import silent_payments
 from .address_scripts import address_to_scriptpubkey
 from .sync import WalletSyncState, emit_sync_progress, normalize_backend_kind
 from .wallets import (
@@ -216,6 +223,14 @@ def parse_socket_backend_url(url, default_scheme="ssl", default_ports=None):
 def _connect_backend_socket(backend, host, port):
     timeout = backend_timeout(backend)
     proxy = backend_value(backend, "tor_proxy", "proxy")
+    get_egress_ledger().record(
+        subsystem="sync",
+        host=host,
+        port=port,
+        scheme="electrum",
+        operation="socket.connect",
+        via_proxy=bool(proxy),
+    )
     if proxy:
         return _connect_via_socks5(proxy, host, port, timeout)
     if is_onion_endpoint(host):
@@ -257,6 +272,9 @@ class ElectrumClient:
         self.socket = None
         self.reader = None
         self.request_id = 0
+        self.server_version = None
+        self._egress_host = None
+        self._egress_port = None
 
     def __enter__(self):
         scheme, host, port = parse_socket_backend_url(
@@ -265,6 +283,8 @@ class ElectrumClient:
             default_ports={"ssl": 50002, "tcp": 50001},
         )
         raw_socket = _connect_backend_socket(self.backend, host, port)
+        self._egress_host = host
+        self._egress_port = port
         if scheme in {"ssl", "tls"}:
             certificate = backend_value(self.backend, "certificate")
             context = ssl.create_default_context(cafile=certificate)
@@ -276,6 +296,7 @@ class ElectrumClient:
             raise AppError(f"Unsupported Electrum transport '{scheme}'")
         self.socket = raw_socket
         self.reader = raw_socket.makefile("r", encoding="utf-8", newline="\n")
+        self.server_version = self.call("server.version", ["Kassiber", "1.6"])
         return self
 
     def __exit__(self, exc_type, exc, tb):
@@ -285,6 +306,7 @@ class ElectrumClient:
             self.socket.close()
         self.reader = None
         self.socket = None
+        self.server_version = None
         return False
 
     def _decode_message(self, line):
@@ -322,6 +344,15 @@ class ElectrumClient:
             }
         ).encode("utf-8") + b"\n"
         self.socket.sendall(payload)
+        get_egress_ledger().record(
+            subsystem="sync",
+            host=self._egress_host,
+            port=self._egress_port,
+            scheme="electrum",
+            operation="socket.write",
+            method=method,
+            bytes_out=len(payload),
+        )
         while True:
             line = self.reader.readline()
             if not line:
@@ -362,7 +393,17 @@ class ElectrumClient:
                     }
                 )
             )
-        self.socket.sendall(("\n".join(payload_lines) + "\n").encode("utf-8"))
+        payload = ("\n".join(payload_lines) + "\n").encode("utf-8")
+        self.socket.sendall(payload)
+        get_egress_ledger().record(
+            subsystem="sync",
+            host=self._egress_host,
+            port=self._egress_port,
+            scheme="electrum",
+            operation="socket.write",
+            method="batch",
+            bytes_out=len(payload),
+        )
         results = [None] * len(requests)
         remaining = len(requests)
         while remaining:
@@ -506,8 +547,6 @@ def validate_backend_for_wallet(backend, chain, network, has_descriptor=False):
             )
     if chain == "liquid" and kind not in {"esplora", "electrum"}:
         raise AppError("Liquid live refresh currently requires an Esplora-compatible or Electrum backend")
-    if has_descriptor and kind == "bitcoinrpc":
-        raise AppError("Descriptor-backed refresh is not implemented for bitcoinrpc yet; use Esplora or Electrum")
     if chain != "bitcoin" and kind == "bitcoinrpc":
         raise AppError(f"Backend kind '{kind}' does not support {chain} wallets")
     return kind
@@ -789,12 +828,33 @@ def discover_descriptor_targets(backend, plan, kind, checkpoint=None):
                 ),
                 "history_cache": history_cache,
             }
+    if kind == "bitcoinrpc":
+        checkpoint = checkpoint if isinstance(checkpoint, dict) else {}
+        return {
+            "targets": _bitcoinrpc_descriptor_targets_for_checkpoint(plan, checkpoint),
+            "history_cache": {},
+        }
     raise AppError(f"Descriptor-backed sync is not implemented for backend kind '{kind}'")
 
 
 def resolve_wallet_sync_targets(backend, wallet):
     config = json.loads(wallet["config_json"] or "{}")
     checkpoint = _mapping_get(wallet, "_freshness_checkpoint", {}) or {}
+    if silent_payments.has_silent_payment_sync_material(config):
+        plan = silent_payments.build_plan(config)
+        kind = validate_backend_for_wallet(backend, plan.chain, plan.network, has_descriptor=False)
+        silent_payments.validate_backend_capability(backend, plan, kind=kind)
+        targets = [silent_payments.sync_target(plan)]
+        return WalletSyncState(
+            chain=plan.chain,
+            network=plan.network,
+            descriptor_plan=plan,
+            policy_asset_id="",
+            targets=targets,
+            tracked_scripts={},
+            history_cache={},
+            checkpoint=checkpoint,
+        )
     descriptor_plan = (
         load_wallet_descriptor_plan_from_config(config)
         if (config.get("descriptor") or config.get("xpub"))
@@ -830,7 +890,11 @@ def resolve_wallet_sync_targets(backend, wallet):
             raise AppError("Liquid live refresh currently requires descriptor-backed wallets so outputs can be unblinded locally")
         validate_backend_for_wallet(backend, chain, network, has_descriptor=False)
         targets = [sync_target_from_address(address, chain, network, index) for index, address in enumerate(addresses)]
-    tracked_scripts = {target["script_pubkey"]: target for target in targets}
+    tracked_scripts = {
+        target["script_pubkey"]: target
+        for target in targets
+        if target.get("script_pubkey")
+    }
     return WalletSyncState(
         chain=chain,
         network=network,
@@ -1303,6 +1367,129 @@ def _backend_identity(backend, sync_state: WalletSyncState):
         "network": sync_state.network,
         "batch_size": backend_batch_size(backend),
     }
+
+
+def _raise_silent_payment_scan_file_read_error(exc: OSError):
+    raise AppError(
+        "Silent Payments local scanner output could not be read",
+        code="silent_payment_scanner_unavailable",
+        hint=(
+            "Check the backend's silent_payment_scan_file path and keep it as "
+            "a private regular JSON file."
+        ),
+        retryable=True,
+    ) from exc
+
+
+def _validate_private_silent_payment_scan_file(file_stat):
+    if os.name != "posix":
+        return
+    if not stat.S_ISREG(file_stat.st_mode):
+        raise AppError(
+            "Silent Payments local scanner output must be a regular file",
+            code="silent_payment_scanner_unavailable",
+            hint="Point silent_payment_scan_file at a private regular JSON file.",
+            retryable=False,
+        )
+    current_uid = os.getuid()
+    if file_stat.st_uid != current_uid:
+        raise AppError(
+            "Silent Payments local scanner output must be owned by the current OS user",
+            code="silent_payment_scanner_unavailable",
+            hint="Move the scanner JSON to a file owned by the user running Kassiber.",
+            retryable=False,
+        )
+    if file_stat.st_mode & 0o077:
+        raise AppError(
+            "Silent Payments local scanner output is readable or writable by other users",
+            code="silent_payment_scanner_unavailable",
+            hint="Set the scanner JSON file permissions to 0600 before syncing.",
+            details={"mode": oct(stat.S_IMODE(file_stat.st_mode))},
+            retryable=False,
+        )
+
+
+def _open_private_silent_payment_scan_file(path: Path):
+    if os.name != "posix":
+        return path.open("r", encoding="utf-8")
+    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+    try:
+        fd = os.open(path, flags)
+    except OSError as exc:
+        _raise_silent_payment_scan_file_read_error(exc)
+    try:
+        _validate_private_silent_payment_scan_file(os.fstat(fd))
+        return os.fdopen(fd, "r", encoding="utf-8")
+    except Exception:
+        os.close(fd)
+        raise
+
+
+def _silent_payment_scan_payload(backend, wallet, plan: silent_payments.SilentPaymentPlan):
+    config = json.loads(wallet["config_json"] or "{}")
+    scan_file = backend_value(backend, *silent_payments.BACKEND_SCAN_FILE_FIELDS)
+    scan_path = backend_value(backend, *silent_payments.BACKEND_SCAN_PATH_FIELDS)
+    if plan.scan_mode == silent_payments.SCAN_MODE_SERVER:
+        if not scan_path:
+            raise AppError(
+                "Silent Payments server-assisted scanner is not configured for this backend",
+                code="silent_payment_scanner_unavailable",
+                hint="Configure silent_payment_scan_path on the selected SP-capable backend.",
+                retryable=False,
+            )
+        payload = {
+            "descriptor": config.get(silent_payments.CONFIG_DESCRIPTOR),
+            "chain": plan.chain,
+            "network": plan.network,
+            "start_height": plan.start_height,
+            "start_date": plan.start_date,
+            "full_history": plan.full_history,
+        }
+        return http_post_json(
+            append_url_path(backend["url"], scan_path),
+            payload,
+            timeout=backend_timeout(backend),
+            proxy_url=_backend_proxy_url(backend),
+        )
+    if scan_file:
+        path = Path(scan_file).expanduser()
+        try:
+            with _open_private_silent_payment_scan_file(path) as handle:
+                return json.load(handle)
+        except OSError as exc:
+            _raise_silent_payment_scan_file_read_error(exc)
+        except json.JSONDecodeError as exc:
+            raise AppError(
+                "Silent Payments local scanner output is not valid JSON",
+                code="silent_payment_scanner_invalid",
+                retryable=False,
+            ) from exc
+    raise AppError(
+        "Silent Payments scanner is not configured for this backend",
+        code="silent_payment_scanner_unavailable",
+        hint=(
+            "Configure a local scanner output file or an explicit server-assisted "
+            "scan path on an SP-capable backend."
+        ),
+        retryable=False,
+    )
+
+
+def _silent_payment_sync_adapter(backend, wallet, sync_state: WalletSyncState):
+    plan = sync_state.descriptor_plan
+    if not silent_payments.is_silent_payment_plan(plan):
+        raise AppError("Wallet sync state is not for Silent Payments", code="validation")
+    kind = normalize_backend_kind(backend.get("kind"))
+    payload = _silent_payment_scan_payload(backend, wallet, plan)
+    return silent_payments.normalize_scan_payload(
+        payload,
+        backend_name=str(backend.get("name") or ""),
+        backend_kind=kind,
+        plan=plan,
+        checkpoint=_checkpoint_mapping(sync_state),
+        wallet_id=str(wallet["id"]) if "id" in wallet.keys() else None,
+        wallet_label=str(wallet["label"]) if "label" in wallet.keys() else None,
+    )
 
 
 def _skip_unchanged_utxo_refresh(meta, sync_state: WalletSyncState):
@@ -1858,7 +2045,8 @@ def esplora_records_for_wallet(backend, sync_state: WalletSyncState):
 
 
 def esplora_sync_adapter(backend, wallet, sync_state):
-    del wallet
+    if silent_payments.is_silent_payment_plan(sync_state.descriptor_plan):
+        return _silent_payment_sync_adapter(backend, wallet, sync_state)
     records, meta = esplora_records_for_wallet(backend, sync_state)
     if _skip_unchanged_utxo_refresh(meta, sync_state):
         meta["utxos_skipped_unchanged"] = True
@@ -1889,7 +2077,7 @@ def bitcoinrpc_url(backend, wallet_name=None):
     return backend["url"]
 
 
-def bitcoinrpc_call(backend, method, params=None, wallet_name=None):
+def bitcoinrpc_call(backend, method, params=None, wallet_name=None, timeout=None):
     payload = {
         "jsonrpc": "1.0",
         "id": f"{APP_NAME}-{method}",
@@ -1900,7 +2088,7 @@ def bitcoinrpc_call(backend, method, params=None, wallet_name=None):
         bitcoinrpc_url(backend, wallet_name=wallet_name),
         payload,
         headers=bitcoinrpc_auth_headers(backend),
-        timeout=backend_timeout(backend),
+        timeout=backend_timeout(backend) if timeout is None else timeout,
         proxy_url=_backend_proxy_url(backend),
     )
     if response.get("error"):
@@ -1910,6 +2098,10 @@ def bitcoinrpc_call(backend, method, params=None, wallet_name=None):
             f" ({error.get('code', 'unknown')}): {error.get('message', error)}"
         )
     return response.get("result")
+
+
+def bitcoinrpc_import_timeout(backend):
+    return max(backend_timeout(backend), 1800)
 
 
 def bitcoinrpc_wallet_name(backend, wallet):
@@ -1946,7 +2138,7 @@ def bitcoinrpc_ensure_watchonly_wallet(backend, wallet):
         ) from load_error
 
 
-def bitcoinrpc_import_addresses(backend, wallet_name, wallet, addresses):
+def bitcoinrpc_import_addresses(backend, wallet_name, wallet, addresses, birthday_ts=0):
     label = f"{APP_NAME}:{wallet['id']}"
     missing_addresses = []
     descriptors = []
@@ -1955,12 +2147,20 @@ def bitcoinrpc_import_addresses(backend, wallet_name, wallet, addresses):
         if info.get("iswatchonly") or info.get("ismine"):
             continue
         descriptor = bitcoinrpc_call(backend, "getdescriptorinfo", [f"addr({address})"])
-        descriptors.append({"desc": descriptor["descriptor"], "timestamp": 0, "label": label})
+        descriptors.append(
+            {"desc": descriptor["descriptor"], "timestamp": birthday_ts, "label": label}
+        )
         missing_addresses.append(address)
     if not missing_addresses:
         return 0
     try:
-        results = bitcoinrpc_call(backend, "importdescriptors", [descriptors], wallet_name=wallet_name)
+        results = bitcoinrpc_call(
+            backend,
+            "importdescriptors",
+            [descriptors],
+            wallet_name=wallet_name,
+            timeout=bitcoinrpc_import_timeout(backend),
+        )
         failures = [result for result in results if not result.get("success")]
         if failures:
             raise AppError(f"descriptor import failed: {failures[0]}")
@@ -1968,18 +2168,138 @@ def bitcoinrpc_import_addresses(backend, wallet_name, wallet, addresses):
         requests = [
             {
                 "scriptPubKey": {"address": address},
-                "timestamp": 0,
+                "timestamp": birthday_ts,
                 "watchonly": True,
                 "label": label,
             }
             for address in missing_addresses
         ]
         options = {"rescan": True}
-        results = bitcoinrpc_call(backend, "importmulti", [requests, options], wallet_name=wallet_name)
+        results = bitcoinrpc_call(
+            backend,
+            "importmulti",
+            [requests, options],
+            wallet_name=wallet_name,
+            timeout=bitcoinrpc_import_timeout(backend),
+        )
         failures = [result for result in results if not result.get("success")]
         if failures:
             raise AppError(f"address import failed: {failures[0]}")
     return len(missing_addresses)
+
+
+def _int_mapping(value):
+    if not isinstance(value, dict):
+        return {}
+    output = {}
+    for key, raw in value.items():
+        try:
+            parsed = int(raw)
+        except (TypeError, ValueError):
+            continue
+        if parsed >= 0:
+            output[str(key)] = parsed
+    return output
+
+
+def _bitcoinrpc_descriptor_end(plan, branch, highest_used, previous_end=None):
+    descriptor = branch_descriptor(branch)
+    if not getattr(descriptor, "is_wildcard", False):
+        return 0
+    known_highest = _highest_used_branch_index(highest_used, branch.branch_index)
+    if known_highest is None:
+        previous = int(previous_end) if previous_end is not None else -1
+        return max(0, previous, plan.gap_limit - 1)
+    previous = int(previous_end) if previous_end is not None else -1
+    return max(0, previous, known_highest + plan.gap_limit)
+
+
+def _bitcoinrpc_descriptor_targets_for_range_ends(plan, range_ends):
+    range_ends = _int_mapping(range_ends)
+    targets = []
+    for branch in plan.branches:
+        end = range_ends.get(str(branch.branch_index), 0)
+        if end <= 0:
+            targets.append(
+                sync_target_from_derived(
+                    derive_descriptor_target(plan, branch.branch_index, 0)
+                )
+            )
+            continue
+        targets.extend(
+            sync_target_from_derived(target)
+            for target in derive_descriptor_targets(
+                plan,
+                branch_index=branch.branch_index,
+                start=0,
+                end=end + 1,
+            )
+        )
+    return targets
+
+
+def _bitcoinrpc_descriptor_targets_for_checkpoint(plan, checkpoint):
+    checkpoint = checkpoint if isinstance(checkpoint, dict) else {}
+    previous_ends = _int_mapping(checkpoint.get("bitcoinrpc_descriptor_range_ends"))
+    highest_used = checkpoint.get("highest_used")
+    range_ends = {}
+    for branch in plan.branches:
+        branch_key = str(branch.branch_index)
+        range_ends[branch_key] = _bitcoinrpc_descriptor_end(
+            plan,
+            branch,
+            highest_used,
+            previous_ends.get(branch_key),
+        )
+    return _bitcoinrpc_descriptor_targets_for_range_ends(plan, range_ends)
+
+
+def bitcoinrpc_ranged_descriptor(backend, branch, end, birthday_ts):
+    descriptor_template = branch_descriptor(branch)
+    raw_descriptor = descriptor_template.to_string()
+    descriptor = bitcoinrpc_call(backend, "getdescriptorinfo", [raw_descriptor])
+    request = {
+        "desc": descriptor["descriptor"],
+        "timestamp": birthday_ts,
+        "internal": branch.branch_index % 2 == 1,
+        "active": False,
+    }
+    if getattr(descriptor_template, "is_wildcard", False):
+        request["range"] = [0, int(end)]
+    return request
+
+
+def bitcoinrpc_import_ranged_descriptors(backend, wallet_name, plan, checkpoint, birthday_ts):
+    checkpoint = checkpoint if isinstance(checkpoint, dict) else {}
+    highest_used = checkpoint.get("highest_used")
+    previous_ends = _int_mapping(checkpoint.get("bitcoinrpc_descriptor_range_ends"))
+    next_ends = dict(previous_ends)
+    descriptors = []
+    for branch in plan.branches:
+        branch_key = str(branch.branch_index)
+        end = _bitcoinrpc_descriptor_end(
+            plan,
+            branch,
+            highest_used,
+            previous_ends.get(branch_key),
+        )
+        next_ends[branch_key] = max(int(next_ends.get(branch_key, -1)), end)
+        if end <= int(previous_ends.get(branch_key, -1)):
+            continue
+        descriptors.append(bitcoinrpc_ranged_descriptor(backend, branch, end, birthday_ts))
+    if not descriptors:
+        return 0, next_ends
+    results = bitcoinrpc_call(
+        backend,
+        "importdescriptors",
+        [descriptors],
+        wallet_name=wallet_name,
+        timeout=bitcoinrpc_import_timeout(backend),
+    )
+    failures = [result for result in results if not result.get("success")]
+    if failures:
+        raise AppError(f"ranged descriptor import failed: {failures[0]}")
+    return len(descriptors), next_ends
 
 
 def _bitcoinrpc_checkpoint_block(checkpoint):
@@ -1991,9 +2311,53 @@ def _bitcoinrpc_checkpoint_block(checkpoint):
     return None
 
 
+def _bitcoinrpc_txids_from_details(details):
+    txids = set()
+    for detail in details or []:
+        if not isinstance(detail, dict):
+            continue
+        txid = str(detail.get("txid") or "").strip().lower()
+        if txid:
+            txids.add(txid)
+    return txids
+
+
+def _bitcoinrpc_detail_category(detail):
+    return str(detail.get("category") or "").lower()
+
+
+def _bitcoinrpc_detail_is_retracted(detail):
+    if _bitcoinrpc_detail_category(detail) == "orphan":
+        return True
+    return int(detail.get("confirmations") or 0) < 0
+
+
+def _bitcoinrpc_retracted_txids(details):
+    return {
+        str(detail.get("txid") or "").strip().lower()
+        for detail in details or []
+        if isinstance(detail, dict)
+        and detail.get("txid")
+        and _bitcoinrpc_detail_is_retracted(detail)
+    }
+
+
+def _bitcoinrpc_has_immature_details(details):
+    return any(
+        isinstance(detail, dict)
+        and _bitcoinrpc_detail_category(detail) == "immature"
+        for detail in details or []
+    )
+
+
 def fetch_bitcoinrpc_wallet_transactions(backend, wallet_name, page_size=1000, checkpoint=None):
-    last_block = _bitcoinrpc_checkpoint_block(checkpoint)
+    checkpoint = checkpoint if isinstance(checkpoint, dict) else {}
+    pending_maturity = bool(checkpoint.get("bitcoinrpc_pending_maturity"))
+    last_block = None if pending_maturity else _bitcoinrpc_checkpoint_block(checkpoint)
     fallback_reason = None
+    removed_txids = set()
+    if pending_maturity:
+        fallback_reason = "Bitcoin Core wallet has immature transactions awaiting maturity"
     if last_block:
         try:
             payload = bitcoinrpc_call(
@@ -2015,12 +2379,22 @@ def fetch_bitcoinrpc_wallet_transactions(backend, wallet_name, page_size=1000, c
                 if not isinstance(transactions, list):
                     fallback_reason = "Bitcoin Core RPC listsinceblock returned unexpected transactions"
                 elif removed:
+                    removed_txids = _bitcoinrpc_txids_from_details(removed)
                     fallback_reason = "Bitcoin Core RPC listsinceblock reported removed transactions"
                 else:
+                    retracted_txids = _bitcoinrpc_retracted_txids(transactions)
                     return list(transactions), {
                         "bitcoinrpc_sync_mode": "sinceblock",
                         "bitcoinrpc_last_block": payload.get("lastblock") or last_block,
                         "bitcoinrpc_removed": 0,
+                        "bitcoinrpc_pending_maturity": _bitcoinrpc_has_immature_details(
+                            transactions
+                        ),
+                        **(
+                            {"bitcoinrpc_retracted_txids": sorted(retracted_txids)}
+                            if retracted_txids
+                            else {}
+                        ),
                     }
 
     transactions = []
@@ -2033,7 +2407,13 @@ def fetch_bitcoinrpc_wallet_transactions(backend, wallet_name, page_size=1000, c
         if len(page) < page_size:
             break
         skip += page_size
-    meta = {"bitcoinrpc_sync_mode": "full_scan"}
+    retracted_txids = removed_txids | _bitcoinrpc_retracted_txids(transactions)
+    meta = {
+        "bitcoinrpc_sync_mode": "full_scan",
+        "bitcoinrpc_pending_maturity": _bitcoinrpc_has_immature_details(transactions),
+    }
+    if retracted_txids:
+        meta["bitcoinrpc_retracted_txids"] = sorted(retracted_txids)
     if fallback_reason:
         meta["bitcoinrpc_sinceblock_fallback"] = fallback_reason
     try:
@@ -2045,14 +2425,20 @@ def fetch_bitcoinrpc_wallet_transactions(backend, wallet_name, page_size=1000, c
     return transactions, meta
 
 
-def record_from_bitcoinrpc_details(txid, details, backend_name):
+def record_from_bitcoinrpc_details(
+    txid,
+    details,
+    backend_name,
+    raw_graph=None,
+    tracked_scripts=None,
+):
     amount_total = Decimal("0")
     fee_total = Decimal("0")
     occurred_at = UNKNOWN_OCCURRED_AT
     confirmed_at = None
     for detail in details:
-        category = str(detail.get("category") or "").lower()
-        if category in {"orphan", "immature"}:
+        category = _bitcoinrpc_detail_category(detail)
+        if category == "immature" or _bitcoinrpc_detail_is_retracted(detail):
             continue
         amount_total += dec(detail.get("amount"), "0")
         # Bitcoin Core stamps the SAME whole-tx fee on every `send`-category
@@ -2068,6 +2454,7 @@ def record_from_bitcoinrpc_details(txid, details, backend_name):
         occurred_at = timestamp_to_iso(detail.get("blocktime") or detail.get("time"), default=occurred_at)
     if amount_total == 0 and fee_total == 0:
         return None
+    privacy_boundary = None
     if amount_total > 0:
         direction = "inbound"
         amount = amount_total
@@ -2076,12 +2463,26 @@ def record_from_bitcoinrpc_details(txid, details, backend_name):
     else:
         direction = "outbound"
         gross_out = abs(amount_total)
-        amount = gross_out - fee_total
-        if amount < 0:
-            amount = Decimal("0")
+        graph_amount = _bitcoinrpc_graph_outbound_amount(raw_graph, tracked_scripts, fee_total)
+        if graph_amount is not None:
+            # Decode-backed Core sync can use the same amount model as the
+            # Esplora adapter: sum outputs not paying this wallet's tracked
+            # scripts, with the network fee kept separately.
+            amount = graph_amount
+        else:
+            # Legacy fallback for older Core/tapes with only wallet details.
+            # Some Core detail shapes include the fee in the net send amount.
+            amount = gross_out - fee_total
+            if amount < 0:
+                amount = Decimal("0")
         fee = fee_total
         kind = "withdrawal" if amount > 0 else "fee"
-    return {
+        if _bitcoinrpc_graph_has_foreign_inputs(raw_graph, tracked_scripts):
+            privacy_boundary = "payjoin"
+    raw_payload = raw_graph if raw_graph is not None else details
+    if privacy_boundary and isinstance(raw_payload, dict):
+        raw_payload = {**raw_payload, "privacy_boundary": privacy_boundary}
+    record = {
         "txid": txid,
         "occurred_at": occurred_at,
         "confirmed_at": confirmed_at,
@@ -2094,8 +2495,207 @@ def record_from_bitcoinrpc_details(txid, details, backend_name):
         "kind": kind,
         "description": f"Synced from {backend_name}",
         "counterparty": None,
-        "raw_json": json.dumps(details, sort_keys=True),
+        "raw_json": json.dumps(json_ready(raw_payload), sort_keys=True),
     }
+    if privacy_boundary:
+        record["privacy_boundary"] = privacy_boundary
+    return record
+
+
+def _bitcoinrpc_script_hex_from_vout(vout):
+    script = vout.get("scriptpubkey") or vout.get("script_hex")
+    script_pubkey = vout.get("scriptPubKey")
+    if not script and isinstance(script_pubkey, dict):
+        script = script_pubkey.get("hex") or script_pubkey.get("scriptpubkey")
+    return str(script).lower() if script else None
+
+
+def _bitcoinrpc_value_sats_from_vout(vout):
+    if vout.get("value_sats") is not None:
+        return int(vout["value_sats"])
+    value = vout.get("value")
+    if value is None:
+        return None
+    return int((dec(value, "0") * SATS_PER_BTC).to_integral_value())
+
+
+def _bitcoinrpc_prevout_from_vin(vin):
+    prevout = vin.get("prevout")
+    if not isinstance(prevout, dict):
+        return {}
+    script = _bitcoinrpc_script_hex_from_vout(prevout)
+    value_sats = _bitcoinrpc_value_sats_from_vout(prevout)
+    result = {}
+    if script:
+        result["scriptpubkey"] = script
+    if value_sats is not None:
+        result["value"] = value_sats
+    return result
+
+
+def _bitcoinrpc_graph_outbound_amount(raw_graph, tracked_scripts, fee_btc):
+    if not isinstance(raw_graph, dict):
+        return None
+    tracked = {str(script).lower() for script in (tracked_scripts or set()) if script}
+    if not tracked:
+        return None
+    outputs = raw_graph.get("vout")
+    if not isinstance(outputs, list):
+        return None
+    received_sats = 0
+    external_sats = 0
+    for output in outputs:
+        if not isinstance(output, dict):
+            return None
+        script = output.get("scriptpubkey")
+        if not script:
+            return None
+        if str(script).lower() in tracked:
+            try:
+                received_sats += int(output.get("value"))
+            except (TypeError, ValueError):
+                return None
+            continue
+        try:
+            external_sats += int(output.get("value"))
+        except (TypeError, ValueError):
+            return None
+    inputs = raw_graph.get("vin")
+    sent_sats = 0
+    if isinstance(inputs, list):
+        for item in inputs:
+            if not isinstance(item, dict):
+                continue
+            prevout = item.get("prevout")
+            if not isinstance(prevout, dict):
+                continue
+            script = prevout.get("scriptpubkey")
+            if not script or str(script).lower() not in tracked:
+                continue
+            try:
+                sent_sats += int(prevout.get("value"))
+            except (TypeError, ValueError):
+                return None
+    if sent_sats > 0:
+        fee_sats = int((dec(fee_btc, "0") * SATS_PER_BTC).to_integral_value())
+        return sats_to_btc(max(sent_sats - received_sats - fee_sats, 0))
+    return None
+
+
+def _bitcoinrpc_graph_has_foreign_inputs(raw_graph, tracked_scripts) -> bool:
+    if not isinstance(raw_graph, dict):
+        return False
+    tracked = {str(script).lower() for script in (tracked_scripts or set()) if script}
+    if not tracked:
+        return False
+    inputs = raw_graph.get("vin")
+    if not isinstance(inputs, list):
+        return False
+    has_tracked = False
+    has_foreign = False
+    for item in inputs:
+        if not isinstance(item, dict):
+            continue
+        prevout = item.get("prevout")
+        if not isinstance(prevout, dict):
+            continue
+        script = prevout.get("scriptpubkey")
+        if not script:
+            continue
+        if str(script).lower() in tracked:
+            has_tracked = True
+        else:
+            has_foreign = True
+    return has_tracked and has_foreign
+
+
+def _bitcoinrpc_normalized_graph(txid, payload):
+    decoded = payload.get("decoded") if isinstance(payload, dict) else None
+    if not isinstance(decoded, dict):
+        return None
+    vin = decoded.get("vin")
+    vout = decoded.get("vout")
+    if not isinstance(vin, list) or not isinstance(vout, list):
+        return None
+    normalized_vin = []
+    for entry in vin:
+        if not isinstance(entry, dict):
+            continue
+        item = {}
+        if entry.get("txid") is not None:
+            item["txid"] = str(entry.get("txid")).lower()
+        if entry.get("vout") is not None:
+            try:
+                item["vout"] = int(entry.get("vout"))
+            except (TypeError, ValueError):
+                # Ignore malformed prevout index from backend payload and
+                # continue best-effort normalization without a `vout` field.
+                item.pop("vout", None)
+        prevout = _bitcoinrpc_prevout_from_vin(entry)
+        if prevout:
+            item["prevout"] = prevout
+        normalized_vin.append(item)
+    normalized_vout = []
+    for position, entry in enumerate(vout):
+        if not isinstance(entry, dict):
+            continue
+        value_sats = _bitcoinrpc_value_sats_from_vout(entry)
+        script = _bitcoinrpc_script_hex_from_vout(entry)
+        if value_sats is None or not script:
+            continue
+        try:
+            output_index = int(entry.get("n", position))
+        except (TypeError, ValueError):
+            output_index = position
+        normalized_vout.append(
+            {"n": output_index, "scriptpubkey": script, "value": value_sats}
+        )
+    if not normalized_vin or not normalized_vout:
+        return None
+    return {
+        "txid": str((decoded.get("txid") or txid)).lower(),
+        "vin": normalized_vin,
+        "vout": normalized_vout,
+        "source": "bitcoinrpc_gettransaction",
+    }
+
+
+def _bitcoinrpc_fetch_normalized_graph(backend, wallet_name, txid, tx_cache=None):
+    try:
+        cache_key = str(txid)
+        payload = tx_cache.get(cache_key) if tx_cache is not None else None
+        if not isinstance(payload, dict) or not isinstance(payload.get("decoded"), dict):
+            payload = bitcoinrpc_call(
+                backend,
+                "gettransaction",
+                [txid, True, True],
+                wallet_name=wallet_name,
+            )
+            if tx_cache is not None:
+                tx_cache[cache_key] = payload
+    except AppError:
+        return None
+    return _bitcoinrpc_normalized_graph(txid, payload)
+
+
+def _bitcoinrpc_highest_used_from_details(details, sync_state: WalletSyncState | None):
+    if sync_state is None:
+        return {}
+    target_by_address = {
+        target.get("address"): target
+        for target in sync_state.targets
+        if target.get("address")
+    }
+    highest_used = {}
+    for detail in details:
+        category = _bitcoinrpc_detail_category(detail)
+        if category == "immature" or _bitcoinrpc_detail_is_retracted(detail):
+            continue
+        target = target_by_address.get(detail.get("address"))
+        if target is None:
+            continue
+        highest_used = _merge_highest_used(highest_used, target, True)
+    return highest_used
 
 
 def bitcoinrpc_records_for_wallet(
@@ -2105,6 +2705,7 @@ def bitcoinrpc_records_for_wallet(
     wallet_name=None,
     imported_count=None,
     checkpoint=None,
+    sync_state: WalletSyncState | None = None,
 ):
     wallet_name = wallet_name or bitcoinrpc_ensure_watchonly_wallet(backend, wallet)
     if imported_count is None:
@@ -2121,6 +2722,8 @@ def bitcoinrpc_records_for_wallet(
         if txid:
             grouped[txid].append(detail)
     records = []
+    verbose_tx_cache = {}
+    graph_unavailable_txids = []
     for txid, tx_details in sorted(
         grouped.items(),
         key=lambda item: (
@@ -2129,18 +2732,57 @@ def bitcoinrpc_records_for_wallet(
         ),
     ):
         normalized = record_from_bitcoinrpc_details(txid, tx_details, backend["name"])
+        if normalized and normalized["direction"] == "outbound":
+            raw_graph = _bitcoinrpc_fetch_normalized_graph(
+                backend,
+                wallet_name,
+                txid,
+                verbose_tx_cache,
+            )
+            if raw_graph is not None:
+                tracked_scripts = set((sync_state.tracked_scripts or {}).keys()) if sync_state else set()
+                normalized = record_from_bitcoinrpc_details(
+                    txid,
+                    tx_details,
+                    backend["name"],
+                    raw_graph=raw_graph,
+                    tracked_scripts=tracked_scripts,
+                )
+            elif sync_state and (sync_state.tracked_scripts or {}):
+                graph_unavailable_txids.append(str(txid).lower())
         if normalized:
             records.append(normalized)
+    if graph_unavailable_txids:
+        fetch_meta["bitcoinrpc_graph_unavailable_txids"] = sorted(
+            set(graph_unavailable_txids)
+        )
+        fetch_meta.pop("bitcoinrpc_last_block", None)
+    retracted_txids = set(fetch_meta.get("bitcoinrpc_retracted_txids") or [])
+    if retracted_txids:
+        active_txids = {str(record.get("txid") or "").lower() for record in records}
+        fetch_meta["bitcoinrpc_retracted_txids"] = sorted(retracted_txids - active_txids)
+        if not fetch_meta["bitcoinrpc_retracted_txids"]:
+            fetch_meta.pop("bitcoinrpc_retracted_txids", None)
     return records, {
         "core_wallet": wallet_name,
         "imported_addresses": imported_count,
+        "bitcoinrpc_highest_used": _bitcoinrpc_highest_used_from_details(
+            details,
+            sync_state,
+        ),
         **fetch_meta,
+        "_bitcoinrpc_verbose_tx_cache": verbose_tx_cache,
     }
 
 
-def _bitcoinrpc_transaction_metadata(backend, wallet_name, txid):
+def _bitcoinrpc_transaction_metadata(backend, wallet_name, txid, tx_cache=None):
     try:
-        tx = bitcoinrpc_call(backend, "gettransaction", [txid, True], wallet_name=wallet_name)
+        cache_key = str(txid)
+        tx = tx_cache.get(cache_key) if tx_cache is not None else None
+        if not isinstance(tx, dict):
+            tx = bitcoinrpc_call(backend, "gettransaction", [txid, True], wallet_name=wallet_name)
+            if tx_cache is not None:
+                tx_cache[cache_key] = tx
     except AppError:
         return {"block_height": None, "block_time": None}
     block_time = timestamp_to_iso(tx.get("blocktime") or tx.get("time"), default=None)
@@ -2155,7 +2797,13 @@ def _bitcoinrpc_transaction_metadata(backend, wallet_name, txid):
     return {"block_height": block_height, "block_time": block_time}
 
 
-def bitcoinrpc_utxos_for_wallet_name(backend, wallet_name, addresses, sync_state: WalletSyncState):
+def bitcoinrpc_utxos_for_wallet_name(
+    backend,
+    wallet_name,
+    addresses,
+    sync_state: WalletSyncState,
+    tx_cache=None,
+):
     target_by_address = {
         target["address"]: target
         for target in sync_state.targets
@@ -2183,7 +2831,12 @@ def bitcoinrpc_utxos_for_wallet_name(backend, wallet_name, addresses, sync_state
         txid = raw_utxo.get("txid")
         confirmations = int(raw_utxo.get("confirmations") or 0)
         if txid not in metadata_cache:
-            metadata_cache[txid] = _bitcoinrpc_transaction_metadata(backend, wallet_name, txid)
+            metadata_cache[txid] = _bitcoinrpc_transaction_metadata(
+                backend,
+                wallet_name,
+                txid,
+                tx_cache,
+            )
         metadata = metadata_cache[txid]
         amount_sats = int((dec(raw_utxo.get("amount"), "0") * SATS_PER_BTC).to_integral_value())
         outputs.append(
@@ -2210,10 +2863,53 @@ def bitcoinrpc_utxos_for_wallet_name(backend, wallet_name, addresses, sync_state
 
 
 def bitcoinrpc_sync_adapter(backend, wallet, sync_state: WalletSyncState):
-    addresses = [target["address"] for target in sync_state.targets if target.get("address")]
+    if silent_payments.is_silent_payment_plan(sync_state.descriptor_plan):
+        return _silent_payment_sync_adapter(backend, wallet, sync_state)
     wallet_name = bitcoinrpc_ensure_watchonly_wallet(backend, wallet)
-    imported_count = bitcoinrpc_import_addresses(backend, wallet_name, wallet, addresses)
     checkpoint = _checkpoint_mapping(sync_state)
+    config = json.loads(_mapping_get(wallet, "config_json", "{}") or "{}")
+    birthday_ts = iso_to_unix(config.get("birthday"))
+    descriptor_range_ends = None
+    effective_sync_state = sync_state
+    if sync_state.descriptor_plan is not None:
+        imported_count, descriptor_range_ends = bitcoinrpc_import_ranged_descriptors(
+            backend,
+            wallet_name,
+            sync_state.descriptor_plan,
+            checkpoint,
+            birthday_ts,
+        )
+        expanded_targets = _bitcoinrpc_descriptor_targets_for_range_ends(
+            sync_state.descriptor_plan,
+            descriptor_range_ends,
+        )
+        effective_sync_state = replace(
+            sync_state,
+            targets=expanded_targets,
+            tracked_scripts={
+                target["script_pubkey"]: target
+                for target in expanded_targets
+                if target.get("script_pubkey")
+            },
+        )
+    else:
+        addresses = [
+            target["address"]
+            for target in effective_sync_state.targets
+            if target.get("address")
+        ]
+        imported_count = bitcoinrpc_import_addresses(
+            backend,
+            wallet_name,
+            wallet,
+            addresses,
+            birthday_ts=birthday_ts,
+        )
+    addresses = [
+        target["address"]
+        for target in effective_sync_state.targets
+        if target.get("address")
+    ]
     records, meta = bitcoinrpc_records_for_wallet(
         backend,
         wallet,
@@ -2221,22 +2917,42 @@ def bitcoinrpc_sync_adapter(backend, wallet, sync_state: WalletSyncState):
         wallet_name=wallet_name,
         imported_count=imported_count,
         checkpoint=checkpoint,
+        sync_state=effective_sync_state,
     )
-    if meta.get("bitcoinrpc_last_block"):
-        next_checkpoint = dict(checkpoint)
-        next_checkpoint.update(
-            {
-                "backend": _backend_identity(backend, sync_state),
-                "bitcoinrpc_last_block": meta["bitcoinrpc_last_block"],
-            }
-        )
-        meta["freshness_checkpoint"] = next_checkpoint
-    meta["utxos"] = bitcoinrpc_utxos_for_wallet_name(
+    utxos = bitcoinrpc_utxos_for_wallet_name(
         backend,
         wallet_name,
         addresses,
-        sync_state,
+        effective_sync_state,
+        tx_cache=meta.get("_bitcoinrpc_verbose_tx_cache"),
     )
+    meta["utxos"] = utxos
+    meta.pop("_bitcoinrpc_verbose_tx_cache", None)
+    if sync_state.descriptor_plan is not None:
+        highest_used = dict(checkpoint.get("highest_used") or {})
+        for branch, index in (meta.get("bitcoinrpc_highest_used") or {}).items():
+            previous = _highest_used_branch_index(highest_used, branch)
+            if previous is None or int(index) > previous:
+                highest_used[str(branch)] = int(index)
+        for utxo in utxos:
+            highest_used = _merge_highest_used(highest_used, utxo, True)
+        meta["imported_descriptors"] = imported_count
+    meta.pop("bitcoinrpc_highest_used", None)
+    if meta.get("bitcoinrpc_last_block") or descriptor_range_ends is not None:
+        next_checkpoint = dict(checkpoint)
+        next_checkpoint["backend"] = _backend_identity(backend, sync_state)
+        if meta.get("bitcoinrpc_last_block"):
+            next_checkpoint["bitcoinrpc_last_block"] = meta["bitcoinrpc_last_block"]
+        if meta.get("bitcoinrpc_pending_maturity"):
+            next_checkpoint["bitcoinrpc_pending_maturity"] = True
+        else:
+            next_checkpoint.pop("bitcoinrpc_pending_maturity", None)
+        if descriptor_range_ends is not None:
+            next_checkpoint["bitcoinrpc_descriptor_range_ends"] = dict(
+                sorted(descriptor_range_ends.items())
+            )
+            next_checkpoint["highest_used"] = dict(sorted(highest_used.items()))
+        meta["freshness_checkpoint"] = next_checkpoint
     return records, meta
 
 
@@ -2836,7 +3552,8 @@ def electrum_records_for_wallet(backend, sync_state: WalletSyncState):
 
 
 def electrum_sync_adapter(backend, wallet, sync_state):
-    del wallet
+    if silent_payments.is_silent_payment_plan(sync_state.descriptor_plan):
+        return _silent_payment_sync_adapter(backend, wallet, sync_state)
     records, meta = electrum_records_for_wallet(backend, sync_state)
     if _skip_unchanged_utxo_refresh(meta, sync_state):
         meta["utxos_skipped_unchanged"] = True
@@ -2845,11 +3562,22 @@ def electrum_sync_adapter(backend, wallet, sync_state):
     return records, meta
 
 
+def custom_sync_adapter(backend, wallet, sync_state):
+    if silent_payments.is_silent_payment_plan(sync_state.descriptor_plan):
+        return _silent_payment_sync_adapter(backend, wallet, sync_state)
+    raise AppError(
+        "Custom backends can only sync wallets through an explicit Silent Payments scanner",
+        code="validation",
+        retryable=False,
+    )
+
+
 SYNC_BACKEND_ADAPTERS = MappingProxyType(
     {
         "esplora": esplora_sync_adapter,
         "electrum": electrum_sync_adapter,
         "bitcoinrpc": bitcoinrpc_sync_adapter,
+        "custom": custom_sync_adapter,
     }
 )
 
@@ -2859,6 +3587,7 @@ __all__ = [
     "address_to_scriptpubkey",
     "bitcoinrpc_sync_adapter",
     "bitcoinrpc_utxos_for_wallet_name",
+    "custom_sync_adapter",
     "decode_raw_transaction",
     "electrum_sync_adapter",
     "electrum_utxos_for_wallet",

@@ -14,7 +14,6 @@ import {
 import { cn } from "@/lib/utils";
 
 import {
-  activityFlowColors,
   activityFlowKeys,
   activityFlowLabelKeys,
   ACTIVITY_MARKER_INPUT_STEP_BTC,
@@ -28,6 +27,7 @@ import {
   periodKeys,
   periodLabelKeys,
   serializeActivityMarkerMinimum,
+  useActivityFlowColors,
   type TimePeriod,
   type TreasuryChartSeriesKey,
   type TreasuryLegendItem,
@@ -114,6 +114,7 @@ export type ActivityMarkerValueEditorProps = {
 
 export function ActivityFlowKey() {
   const { t } = useTranslation("overview");
+  const activityFlowColors = useActivityFlowColors();
   return (
     <div className="rounded-md border p-3">
       <p className="text-xs font-medium text-muted-foreground">
@@ -136,6 +137,7 @@ export function ActivityFlowKey() {
 }
 
 export function ActivityLegendSwatch({ muted = false }: { muted?: boolean }) {
+  const activityFlowColors = useActivityFlowColors();
   return (
     <span
       className={cn(
@@ -180,6 +182,7 @@ export function ChartControlsSheet({
   hideSensitive,
 }: ChartControlsSheetProps) {
   const { t } = useTranslation(["overview", "common"]);
+  const activityFlowColors = useActivityFlowColors();
   const markerMinimumsAtDefault =
     incomingMarkerMinimumBtc === DEFAULT_INCOMING_MARKER_MIN_BTC &&
     outgoingMarkerMinimumBtc === DEFAULT_OUTGOING_MARKER_MIN_BTC;

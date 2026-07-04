@@ -26,9 +26,9 @@
     },
     "searchNoMatches": "Keine Treffer",
     "dataMode": {
-      "real": "Echte Daten",
-      "mock": "Mock-Daten",
-      "toggle": "Modus für echte Daten umschalten"
+      "real": "Live-Daten",
+      "regtest": "Regtest",
+      "toggle": "Datenquelle umschalten"
     },
     "support": {
       "title": "Support",
@@ -85,6 +85,10 @@
       "title": "Importe",
       "label": "Importe durchsuchen",
       "placeholder": "Wallets, Dateiformate suchen…"
+    },
+    "egress": {
+      "label": "Egress durchsuchen",
+      "placeholder": "Hosts, Subsysteme suchen…"
     },
     "logs": {
       "label": "Protokoll durchsuchen",
@@ -255,7 +259,11 @@
     },
     "unsupportedTitle": "Gespeicherte HTTP-Explorer-Endpunkte werden hier aufgeführt, aber nicht aktiv aus der Shell geprüft. Die Verbindungsprüfung testet Electrum-/Fulcrum-Backends und freigegebene reine Anzeige-HTTP-Prüfungen.",
     "checkPassed": "Verbindungsprüfung erfolgreich.",
-    "checkFailed": "Verbindungsprüfung fehlgeschlagen."
+    "checkFailed": "Verbindungsprüfung fehlgeschlagen.",
+    "coreReachable": "Bitcoin Core erreichbar.",
+    "coreWalletRpcUnavailable": "Bitcoin-Core-Wallet-RPC ist nicht verfügbar.",
+    "coreInitialBlockDownload": "Bitcoin Core ist noch im Initial Block Download.",
+    "corePruned": "Bitcoin Core ist erreichbar, aber gepruned."
   },
   "bookSwitcher": {
     "title": "Bücher wechseln",

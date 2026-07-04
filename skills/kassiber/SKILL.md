@@ -27,6 +27,10 @@ Use these without opening extra references when the request clearly matches:
 | Smallest inbound transactions | `kassiber --machine transactions list --direction inbound --sort amount --order asc --limit 10` |
 | Smallest outbound transactions | `kassiber --machine transactions list --direction outbound --sort amount --order asc --limit 10` |
 | Ask the in-product assistant with tools | `kassiber chat "<question>"` |
+| Run the fast local regtest harness | `./scripts/integration-harness.sh fast` |
+| Run the live Bitcoin Core smoke harness | `./scripts/integration-harness.sh bitcoin-core` |
+| Build the disposable full regtest accounting demo | `./scripts/integration-harness.sh demo-full` |
+| Start/reuse the persistent regtest demo book | `./scripts/integration-harness.sh demo-up` |
 
 If a fast-path command returns a structured error, inspect the envelope and take the hinted next step. For example, stale reports usually mean running `kassiber --machine journals process` once, then retrying the same report.
 
@@ -73,6 +77,7 @@ If a fast-path command returns a structured error, inspect the envelope and take
 39. Use `kassiber chat` for the daemon-backed assistant when the user wants tool-aware AI help from the CLI. It is the only chat command and uses the same `ai.chat` / `ai.tool_call.consent` loop as the GUI. `kassiber chat --no-tools` covers provider-only exchanges; `kassiber chat --stream-json "<prompt>"` emits the raw daemon stream records as NDJSON for scripting; `kassiber chat -` reads the one-shot prompt from stdin; `--transcript <path>` appends the session's daemon records as a plaintext NDJSON audit log. Piped stdout carries only the answer text — progress and tool chrome go to stderr.
 40. For scripted `kassiber chat` runs, prefer `--allow-tool <daemon-tool-name>` over broad `--yes`. Machine (`--machine`) and `--stream-json` runs never prompt for consent even on a TTY; there, and without a TTY in rendered mode, unapproved mutating tool requests are denied and fed back to the model as `user_denied`.
 41. Chat history persists inside the SQLCipher database under the `auto` policy only when the DB is encrypted (`kassiber chats config --history auto|on|off`). `kassiber chat --continue` resumes the latest session, `--session <id>` a specific one, `--incognito` skips persistence once. Manage stored sessions with `kassiber chats {list,show,delete,clear}`. Machine chat envelopes carry `session_id` (null when nothing persisted).
+42. For local regtest harness work, use `scripts/integration-harness.sh` from the repo root. `fast` is the no-Docker replay lane; `bitcoin-core` starts a disposable Core/Elements/Fulcrum/local-backend Compose stack; `demo-full` builds a throwaway full accounting book and proves the post-sync refresh path; `demo-up` keeps a persistent demo node/book and must leave reports immediately readable; `demo-tick [N]` adds fresh confirmed business activity to that persistent book; `demo-down [--purge]` stops or removes it.
 
 ## Gotchas
 
@@ -129,6 +134,7 @@ Related notes:
 - For quick state checks and smoke validation, read [references/verification.md](references/verification.md) and use `scripts/verify-state.sh` when helpful.
 - For common failure modes and path confusion, read [references/troubleshooting.md](references/troubleshooting.md).
 - For SQLCipher encryption (`kassiber secrets ...`), `tar | age` backups (`kassiber backup ...`), passphrase entry, and the `--*-stdin` / `--*-fd` secret-input channels, read [references/secrets-and-backup.md](references/secrets-and-backup.md).
+- For the local regtest integration harness and persistent demo book, read [../../docs/reference/testing.md](../../docs/reference/testing.md).
 
 ## Report Selection
 

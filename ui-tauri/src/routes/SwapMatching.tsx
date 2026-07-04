@@ -114,8 +114,10 @@ import { useUiStore } from "@/store/ui";
 const PAIR_KIND_OPTIONS = [
   "manual",
   "coinjoin",
+  "chain-swap",
   "peg-in",
   "peg-out",
+  "reverse-submarine-swap",
   "submarine-swap",
   "swap-refund",
 ] as const;
@@ -130,11 +132,12 @@ const CONFIDENCE_OPTIONS = [
 const METHOD_OPTIONS = [
   { value: "all", labelKey: "swap.method.any" },
   { value: "payment_hash", labelKey: "swap.method.paymentHash" },
+  { value: "provider_swap_id", labelKey: "swap.method.providerSwapId" },
   { value: "heuristic", labelKey: "swap.method.heuristic" },
   { value: "htlc_refund", labelKey: "swap.method.htlcRefund" },
 ] as const;
 
-type CandidateMethod = "payment_hash" | "heuristic" | "htlc_refund";
+type CandidateMethod = "payment_hash" | "provider_swap_id" | "heuristic" | "htlc_refund";
 // Per-method i18n keys for the two render sites (the status-cell tooltip and the
 // detail sheet). The Record forces every method (including any future one) to
 // define both labels, so the type checker flags a missing translation instead
@@ -143,6 +146,10 @@ const METHOD_LABEL_KEYS = {
   payment_hash: {
     matched: "swap.detail.matchedByPaymentHash",
     rationale: "swap.detail.rationalePaymentHash",
+  },
+  provider_swap_id: {
+    matched: "swap.detail.matchedByProviderEvidence",
+    rationale: "swap.detail.rationaleProviderEvidence",
   },
   heuristic: {
     matched: "swap.detail.matchedByTimeAmount",
@@ -170,8 +177,10 @@ type PairKind = (typeof PAIR_KIND_OPTIONS)[number];
 type PairPolicy = (typeof PAIR_POLICY_OPTIONS)[number];
 type SwapRail = "onchain" | "lightning" | "liquid";
 const BITCOIN_LAYER_TRANSITION_KINDS = new Set<PairKind>([
+  "chain-swap",
   "peg-in",
   "peg-out",
+  "reverse-submarine-swap",
   "submarine-swap",
   "swap-refund",
 ]);

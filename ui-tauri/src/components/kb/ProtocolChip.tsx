@@ -9,6 +9,7 @@ const PROTOCOL_LABEL_KEYS: Record<ConnectionKind, string> = {
   xpub: "onChain",
   address: "onChain",
   descriptor: "onChain",
+  "silent-payment": "onChain",
   samourai: "onChain",
   "core-ln": "lightning",
   lnd: "lightning",
@@ -27,6 +28,7 @@ const PROTOCOL_LABEL_KEYS: Record<ConnectionKind, string> = {
   custom: "custom",
   csv: "file",
   bip329: "labels",
+  backend: "custom",
 };
 
 export function ProtocolChip({ kind }: { kind: ConnectionKind }) {

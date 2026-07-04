@@ -278,6 +278,12 @@ class LndAdapterFetchSnapshotTest(unittest.TestCase):
         self.assertEqual(len(snapshot.channels), 2)
         self.assertEqual(len(snapshot.closed_channels), 0)
         self.assertEqual(len(snapshot.forwards), 1)
+        self.assertEqual(snapshot.invoice_count, 1)
+        self.assertEqual(snapshot.paid_invoice_count, 1)
+        self.assertEqual(snapshot.expired_invoice_count, 0)
+        self.assertEqual(snapshot.payment_count, 1)
+        self.assertEqual(snapshot.completed_payment_count, 1)
+        self.assertEqual(snapshot.failed_payment_count, 0)
         self.assertIsNotNone(snapshot.routing)
         self.assertEqual(snapshot.routing.routing_revenue_sat, 10)  # 10000 msat
         self.assertEqual(snapshot.routing.payment_count, 1)

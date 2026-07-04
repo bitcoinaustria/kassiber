@@ -1,6 +1,7 @@
 import * as React from "react";
 import {
   CheckCircle2,
+  ChevronRight,
   RefreshCw,
   Server,
   Trash2,
@@ -500,6 +501,9 @@ export function SyncBackendSettingsModal({
   const [infrastructureOwner, setInfrastructureOwner] =
     React.useState<InfrastructureOwnership>("third_party");
   const [certificate, setCertificate] = React.useState("");
+  const [silentPayments, setSilentPayments] = React.useState(false);
+  const [silentPaymentScanFile, setSilentPaymentScanFile] = React.useState("");
+  const [silentPaymentScanPath, setSilentPaymentScanPath] = React.useState("");
   const [useProxy, setUseProxy] = React.useState(false);
   const [proxyHost, setProxyHost] = React.useState("");
   const [proxyPort, setProxyPort] = React.useState("");
@@ -692,6 +696,9 @@ export function SyncBackendSettingsModal({
           inferredInfrastructureOwnership(initial.url),
       );
       setCertificate(initial.certificate ?? "");
+      setSilentPayments(Boolean(initial.silentPayments));
+      setSilentPaymentScanFile("");
+      setSilentPaymentScanPath("");
       setUseProxy(Boolean(initial.proxy));
       setProxyHost(initial.proxy?.host ?? "");
       setProxyPort(initial.proxy?.port ?? "");
@@ -729,6 +736,9 @@ export function SyncBackendSettingsModal({
       inferredInfrastructureOwnership(nextPreset?.url ?? DEFAULT_BACKEND_URL),
     );
     setCertificate("");
+    setSilentPayments(false);
+    setSilentPaymentScanFile("");
+    setSilentPaymentScanPath("");
     setUseProxy(false);
     setProxyHost("");
     setProxyPort("");
@@ -779,6 +789,9 @@ export function SyncBackendSettingsModal({
     setLightningCli("");
     setLightningDir("");
     setRpcFile("");
+    setSilentPayments(false);
+    setSilentPaymentScanFile("");
+    setSilentPaymentScanPath("");
     setTestState("idle");
     setTestLog("");
   }, [backendSource, initial, open, preset, presetId, t, type]);
@@ -952,6 +965,15 @@ export function SyncBackendSettingsModal({
           ((showElectrumEndpointParts && electrumUseSsl && !trustSsl) || isLnd) &&
           certificate.trim()
             ? certificate.trim()
+            : undefined,
+        silentPayments: type.net === "BTC" ? silentPayments : undefined,
+        silentPaymentScanFile:
+          type.net === "BTC" && silentPayments && silentPaymentScanFile.trim()
+            ? silentPaymentScanFile.trim()
+            : undefined,
+        silentPaymentScanPath:
+          type.net === "BTC" && silentPayments && silentPaymentScanPath.trim()
+            ? silentPaymentScanPath.trim()
             : undefined,
         proxy: proxyCapable
           ? proxyValue
@@ -1218,6 +1240,69 @@ export function SyncBackendSettingsModal({
               </div>
             ) : null}
 
+            {type.net === "BTC" ? (
+              <label className="flex items-center justify-between gap-3 rounded-md border p-3 text-sm">
+                <span>
+                  <span className="block font-medium">
+                    {t("backendModal.silentPaymentsLabel")}
+                  </span>
+                  <span className="text-muted-foreground">
+                    {t("backendModal.silentPaymentsHint")}
+                  </span>
+                </span>
+                <Switch
+                  checked={silentPayments}
+                  onCheckedChange={(checked) => {
+                    setSilentPayments(checked);
+                    setTestState("idle");
+                    setTestLog("");
+                  }}
+                />
+              </label>
+            ) : null}
+
+            {type.net === "BTC" && silentPayments ? (
+              <section className="space-y-3 rounded-md border p-3">
+                <p className="text-xs leading-relaxed text-muted-foreground">
+                  {t("backendModal.silentPaymentsScannerConfigHint")}
+                </p>
+                <div className="space-y-2">
+                  <Label htmlFor="backend-silent-payment-scan-file">
+                    {t("backendModal.silentPaymentsScanFileLabel")}
+                  </Label>
+                  <Input
+                    id="backend-silent-payment-scan-file"
+                    value={silentPaymentScanFile}
+                    onChange={(event) => {
+                      setSilentPaymentScanFile(event.target.value);
+                      setTestState("idle");
+                      setTestLog("");
+                    }}
+                    placeholder={t(
+                      "backendModal.silentPaymentsScanFilePlaceholder",
+                    )}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="backend-silent-payment-scan-path">
+                    {t("backendModal.silentPaymentsScanPathLabel")}
+                  </Label>
+                  <Input
+                    id="backend-silent-payment-scan-path"
+                    value={silentPaymentScanPath}
+                    onChange={(event) => {
+                      setSilentPaymentScanPath(event.target.value);
+                      setTestState("idle");
+                      setTestLog("");
+                    }}
+                    placeholder={t(
+                      "backendModal.silentPaymentsScanPathPlaceholder",
+                    )}
+                  />
+                </div>
+              </section>
+            ) : null}
+
             {type.net !== "LN" ? (
               <section className="space-y-3 rounded-md border p-3">
                 <div
@@ -1363,10 +1448,18 @@ export function SyncBackendSettingsModal({
                   undefined
                 }
               >
-                <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2 text-sm font-medium">
-                  <span>{t("backendModal.advancedLabel")}</span>
-                  <span className="text-xs text-muted-foreground">
-                    {t("backendModal.advancedHint")}
+                <summary className="flex min-h-12 cursor-pointer list-none items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                  <ChevronRight
+                    className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-90"
+                    aria-hidden="true"
+                  />
+                  <span className="min-w-0 flex-1">
+                    <span className="block font-medium">
+                      {t("backendModal.advancedLabel")}
+                    </span>
+                    <span className="block text-xs text-muted-foreground">
+                      {t("backendModal.advancedHint")}
+                    </span>
                   </span>
                 </summary>
                 <section className="grid gap-3 border-t p-3 sm:grid-cols-2">

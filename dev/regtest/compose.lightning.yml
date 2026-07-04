@@ -1,0 +1,90 @@
+services:
+  cln_merchant:
+    image: ${KASSIBER_REGTEST_CLN_IMAGE:-elementsproject/lightningd:v25.05}
+    depends_on:
+      - bitcoind
+    environment:
+      LIGHTNINGD_NETWORK: regtest
+    command:
+      - "--alias=kassiber-merchant"
+      - "--rgb=02aa7f"
+      - "--addr=0.0.0.0:9735"
+      - "--bitcoin-rpcconnect=bitcoind"
+      - "--bitcoin-rpcport=18443"
+      - "--bitcoin-rpcuser=${KASSIBER_REGTEST_RPC_USER}"
+      - "--bitcoin-rpcpassword=${KASSIBER_REGTEST_RPC_PASSWORD}"
+      - "--funding-confirms=1"
+      - "--log-level=debug"
+    ports:
+      - "127.0.0.1:${KASSIBER_REGTEST_CLN_MERCHANT_PORT:-19735}:9735"
+    volumes:
+      - cln-merchant-regtest:/root/.lightning
+
+  cln_customer:
+    image: ${KASSIBER_REGTEST_CLN_IMAGE:-elementsproject/lightningd:v25.05}
+    depends_on:
+      - bitcoind
+    environment:
+      LIGHTNINGD_NETWORK: regtest
+    command:
+      - "--alias=kassiber-customer"
+      - "--rgb=3772ff"
+      - "--addr=0.0.0.0:9735"
+      - "--bitcoin-rpcconnect=bitcoind"
+      - "--bitcoin-rpcport=18443"
+      - "--bitcoin-rpcuser=${KASSIBER_REGTEST_RPC_USER}"
+      - "--bitcoin-rpcpassword=${KASSIBER_REGTEST_RPC_PASSWORD}"
+      - "--funding-confirms=1"
+      - "--log-level=debug"
+    ports:
+      - "127.0.0.1:${KASSIBER_REGTEST_CLN_CUSTOMER_PORT:-19736}:9735"
+    volumes:
+      - cln-customer-regtest:/root/.lightning
+
+  cln_supplier:
+    image: ${KASSIBER_REGTEST_CLN_IMAGE:-elementsproject/lightningd:v25.05}
+    depends_on:
+      - bitcoind
+    environment:
+      LIGHTNINGD_NETWORK: regtest
+    command:
+      - "--alias=kassiber-supplier"
+      - "--rgb=25a55f"
+      - "--addr=0.0.0.0:9735"
+      - "--bitcoin-rpcconnect=bitcoind"
+      - "--bitcoin-rpcport=18443"
+      - "--bitcoin-rpcuser=${KASSIBER_REGTEST_RPC_USER}"
+      - "--bitcoin-rpcpassword=${KASSIBER_REGTEST_RPC_PASSWORD}"
+      - "--funding-confirms=1"
+      - "--log-level=debug"
+    ports:
+      - "127.0.0.1:${KASSIBER_REGTEST_CLN_SUPPLIER_PORT:-19737}:9735"
+    volumes:
+      - cln-supplier-regtest:/root/.lightning
+
+  cln_router:
+    image: ${KASSIBER_REGTEST_CLN_IMAGE:-elementsproject/lightningd:v25.05}
+    depends_on:
+      - bitcoind
+    environment:
+      LIGHTNINGD_NETWORK: regtest
+    command:
+      - "--alias=kassiber-router"
+      - "--rgb=ff9f1c"
+      - "--addr=0.0.0.0:9735"
+      - "--bitcoin-rpcconnect=bitcoind"
+      - "--bitcoin-rpcport=18443"
+      - "--bitcoin-rpcuser=${KASSIBER_REGTEST_RPC_USER}"
+      - "--bitcoin-rpcpassword=${KASSIBER_REGTEST_RPC_PASSWORD}"
+      - "--funding-confirms=1"
+      - "--log-level=debug"
+    ports:
+      - "127.0.0.1:${KASSIBER_REGTEST_CLN_ROUTER_PORT:-19738}:9735"
+    volumes:
+      - cln-router-regtest:/root/.lightning
+
+volumes:
+  cln-merchant-regtest:
+  cln-customer-regtest:
+  cln-supplier-regtest:
+  cln-router-regtest:

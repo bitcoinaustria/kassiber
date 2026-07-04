@@ -38,7 +38,6 @@ import {
   type TransactionFlow,
 } from "@/components/transactions";
 import {
-  buildBreakdown,
   buildFlowChartRows,
   buildSwapCandidates,
   buildTransferCandidates,
@@ -182,7 +181,6 @@ const TransactionWorkbench = ({
   onBreakdownSelectionChange,
   onTableFiltersReset,
   chartSelection,
-  breakdownSelection,
   swapCandidateRefs,
   swapCandidateTotal,
   isRefreshing,
@@ -196,7 +194,6 @@ const TransactionWorkbench = ({
   onBreakdownSelectionChange: (selection: BreakdownSelection | null) => void;
   onTableFiltersReset: () => void;
   chartSelection: FlowChartSelection | null;
-  breakdownSelection: BreakdownSelection | null;
   swapCandidateRefs?: SwapCandidateReference[];
   swapCandidateTotal?: number | null;
   isRefreshing?: boolean;
@@ -269,8 +266,6 @@ const TransactionWorkbench = ({
       ? swapCandidateTotals.count
       : swapCandidateTotal;
   const swapCandidateCountForTotal = knownSwapCandidateCount ?? 0;
-  const pairingCandidateTotal =
-    swapCandidateTotals.count + transferCandidateTotals.count;
   const swaps = {
     count: markedSwaps.count + swapCandidateCountForTotal,
     eur: markedSwaps.eur + swapCandidateTotals.eur,
@@ -281,8 +276,6 @@ const TransactionWorkbench = ({
   const reviewCount = records.filter((txn) => txn.status === "review").length;
   const pendingCount = records.filter((txn) => txn.status === "pending").length;
   const failedCount = records.filter((txn) => txn.status === "failed").length;
-  const withoutExplorer = records.filter((txn) => !txn.explorerId).length;
-  const missingPriceCount = records.filter((txn) => !txn.rate).length;
   const chartRecords =
     chartMode === "external"
       ? externalRecords.filter(
@@ -457,20 +450,6 @@ const TransactionWorkbench = ({
     onQuickFilterChange,
     onTableFiltersReset,
   ]);
-  const handleQualityFilterClick = React.useCallback(
-    (filter: TableQuickFilter) => {
-      onFlowSelectionChange(null);
-      onBreakdownSelectionChange(null);
-      onTableFiltersReset();
-      onQuickFilterChange(filter);
-    },
-    [
-      onBreakdownSelectionChange,
-      onFlowSelectionChange,
-      onQuickFilterChange,
-      onTableFiltersReset,
-    ],
-  );
   const openSwapWorkflow = React.useCallback(() => {
     void navigate({ to: "/swaps" });
   }, [navigate]);
@@ -496,24 +475,6 @@ const TransactionWorkbench = ({
       openSwapWorkflow,
     ],
   );
-  const handleBreakdownClick = React.useCallback(
-    (dimension: BreakdownSelection["dimension"], key: string) => {
-      onFlowSelectionChange(null);
-      onQuickFilterChange(null);
-      onTableFiltersReset();
-      onBreakdownSelectionChange({ dimension, key });
-    },
-    [
-      onBreakdownSelectionChange,
-      onFlowSelectionChange,
-      onQuickFilterChange,
-      onTableFiltersReset,
-    ],
-  );
-  const networkRows = buildBreakdown(records, (txn) => txn.paymentMethod);
-  const walletRows = buildBreakdown(records, (txn) => txn.wallet ?? "Unassigned");
-  const maxNetworkValue = Math.max(...networkRows.map((row) => row.eur), 1);
-  const maxWalletValue = Math.max(...walletRows.map((row) => row.eur), 1);
   const metricCards = [
     {
       label: t("workbench.metric.incoming"),
@@ -606,7 +567,7 @@ const TransactionWorkbench = ({
   return (
     <>
       <section
-        className="grid grid-cols-2 overflow-hidden rounded-xl border bg-card md:grid-cols-3 xl:grid-cols-6"
+        className="relative z-20 grid grid-cols-2 overflow-visible rounded-xl border bg-card md:grid-cols-3 xl:grid-cols-6"
         role={isRefreshing ? "status" : undefined}
         aria-live={isRefreshing ? "polite" : undefined}
       >
@@ -678,7 +639,7 @@ const TransactionWorkbench = ({
           );
         })}
 
-        <div className="col-span-2 flex min-h-[360px] flex-col border-b p-3 sm:p-4 md:col-span-3 xl:col-span-4 xl:min-h-0 xl:border-b-0">
+        <div className="relative z-40 col-span-2 flex min-h-[360px] flex-col p-3 sm:p-4 md:col-span-3 xl:col-span-6 xl:min-h-0">
           <div className="mb-3 flex shrink-0 items-start justify-between gap-3">
             <div>
               <h2 className="text-sm font-semibold">
@@ -776,7 +737,7 @@ const TransactionWorkbench = ({
               </div>
             </div>
           </div>
-          <div className="min-h-[280px] min-w-0 flex-1">
+          <div className="relative min-h-[280px] min-w-0 flex-1 overflow-visible">
             {isRefreshing ? (
               <div className="flex h-full min-h-[280px] items-end gap-3 border-b border-l border-border/60 px-3 pb-4">
                 {[42, 64, 36, 78, 52, 88, 48, 70].map((height, index) => (
@@ -790,7 +751,7 @@ const TransactionWorkbench = ({
             ) : (
               <ChartContainer
                 config={flowChartConfig}
-                className="h-full w-full overflow-visible [&_.recharts-tooltip-wrapper]:!z-30 [&_.recharts-wrapper]:!overflow-visible"
+                className="aspect-auto h-full w-full overflow-visible [&_.recharts-responsive-container]:!overflow-visible [&_.recharts-tooltip-wrapper]:!z-[80] [&_.recharts-wrapper]:!overflow-visible"
               >
                 <BarChart
                   data={visibleChartRows}
@@ -843,7 +804,7 @@ const TransactionWorkbench = ({
                   offset={32}
                   wrapperStyle={{
                     pointerEvents: "none",
-                    zIndex: 30,
+                    zIndex: 80,
                   }}
                 />
                 <FlowBucketClickAreas
@@ -958,100 +919,6 @@ const TransactionWorkbench = ({
           </div>
         </div>
 
-        <div className="col-span-2 grid gap-0 sm:grid-cols-2 md:col-span-3 xl:col-span-2 xl:grid-cols-1 xl:border-l">
-          <BreakdownPanel
-            title={t("workbench.breakdown.networkTitle")}
-            description={t("workbench.breakdown.networkDescription")}
-            isWalletPanel={false}
-            rows={networkRows}
-            maxValue={maxNetworkValue}
-            currency={currency}
-            hideSensitive={hideSensitive}
-            isRefreshing={isRefreshing}
-            selectedKey={
-              breakdownSelection?.dimension === "network"
-                ? breakdownSelection.key
-                : null
-            }
-            onSelect={(key) => handleBreakdownClick("network", key)}
-          />
-          <BreakdownPanel
-            title={t("workbench.breakdown.walletTitle")}
-            description={t("workbench.breakdown.walletDescription")}
-            isWalletPanel
-            rows={walletRows.slice(0, 4)}
-            maxValue={maxWalletValue}
-            currency={currency}
-            hideSensitive={hideSensitive}
-            isRefreshing={isRefreshing}
-            selectedKey={
-              breakdownSelection?.dimension === "wallet"
-                ? breakdownSelection.key
-                : null
-            }
-            onSelect={(key) => handleBreakdownClick("wallet", key)}
-          />
-          <div className="border-t p-3 sm:col-span-2 lg:col-span-1 sm:p-4">
-            <h3 className="mb-2 text-sm font-semibold">{t("workbench.quality.title")}</h3>
-            {isRefreshing ? (
-              <div className="space-y-3 py-1">
-                {Array.from({ length: 4 }).map((_, index) => (
-                  <div
-                    key={index}
-                    className="grid grid-cols-[minmax(0,1fr)_48px] items-center gap-3"
-                  >
-                    <Skeleton className="h-3 w-full" />
-                    <Skeleton className="h-4 w-8 justify-self-end" />
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="divide-y text-xs">
-                {withoutExplorer > 0 ? (
-                  <QualityRow
-                    label={t("workbench.quality.missingExplorerLink")}
-                    value={withoutExplorer}
-                    onClick={() => handleQualityFilterClick("no_explorer_id")}
-                  />
-                ) : null}
-                {missingPriceCount > 0 ? (
-                  <QualityRow
-                    label={t("workbench.quality.missingPrice")}
-                    value={missingPriceCount}
-                    onClick={() => handleQualityFilterClick("missing_price")}
-                  />
-                ) : null}
-                {failedCount > 0 ? (
-                  <QualityRow
-                    label={t("workbench.quality.failedImport")}
-                    value={failedCount}
-                    onClick={() => handleQualityFilterClick("failed_import")}
-                  />
-                ) : null}
-                {pairingCandidateTotal > 0 ? (
-                  <QualityRow
-                    label={t("workbench.quality.pairingCandidates")}
-                    value={pairingCandidateTotal}
-                    onClick={openSwapWorkflow}
-                  />
-                ) : null}
-                {withoutExplorer === 0 &&
-                missingPriceCount === 0 &&
-                failedCount === 0 &&
-                pairingCandidateTotal === 0 ? (
-                  <div className="-mx-1 grid min-h-8 w-[calc(100%+0.5rem)] grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-md px-1 py-1.5 text-left">
-                    <span className="min-w-0 truncate text-muted-foreground">
-                      {t("workbench.quality.none")}
-                    </span>
-                    <span className="shrink-0 font-semibold leading-none text-emerald-600">
-                      0
-                    </span>
-                  </div>
-                ) : null}
-              </div>
-            )}
-          </div>
-        </div>
       </section>
 
     </>
@@ -1157,7 +1024,7 @@ function FlowTooltip({
                         </span>
                       )}
                       {stats.failed > 0 && (
-                        <span className="rounded bg-[var(--color-accent)]/10 px-1.5 py-0.5 text-[var(--color-accent)]">
+                        <span className="rounded bg-[var(--kb-accent)]/10 px-1.5 py-0.5 text-[var(--kb-accent)]">
                           {t("workbench.tooltip.failed", { count: stats.failed })}
                         </span>
                       )}
@@ -1170,134 +1037,6 @@ function FlowTooltip({
         })}
       </div>
     </div>
-  );
-}
-
-function BreakdownPanel({
-  title,
-  description,
-  isWalletPanel,
-  rows,
-  maxValue,
-  currency,
-  hideSensitive,
-  isRefreshing,
-  selectedKey,
-  onSelect,
-}: {
-  title: string;
-  description?: string;
-  isWalletPanel?: boolean;
-  rows: Array<{ key: string; count: number; eur: number; btc: number }>;
-  maxValue: number;
-  currency: Currency;
-  hideSensitive: boolean;
-  isRefreshing?: boolean;
-  selectedKey?: string | null;
-  onSelect?: (key: string) => void;
-}) {
-  const { t } = useTranslation("transactions");
-  return (
-    <div className="border-t p-3 first:border-t-0 sm:p-4">
-      <div className="mb-3 space-y-0.5">
-        <h3 className="text-sm font-semibold">{title}</h3>
-        {description ? (
-          <p className="text-[11px] leading-snug text-muted-foreground">
-            {description}
-          </p>
-        ) : null}
-      </div>
-      {isRefreshing ? (
-        <div className="space-y-3">
-          {Array.from({ length: isWalletPanel ? 4 : 2 }).map(
-            (_, index) => (
-              <div key={index} className="space-y-2">
-                <div className="flex items-center justify-between gap-3">
-                  <Skeleton className="h-3 w-28" />
-                  <Skeleton className="h-3 w-16" />
-                </div>
-                <Skeleton className="h-1.5 w-full rounded-full" />
-              </div>
-            ),
-          )}
-        </div>
-      ) : (
-        <div className="space-y-2.5">
-          {rows.map((row) => {
-          const selected = selectedKey === row.key;
-          const content = (
-            <>
-            <div className="flex items-center justify-between gap-2 text-xs">
-              <span className="truncate font-medium">{row.key}</span>
-              <span className="shrink-0 text-muted-foreground">
-                {t("workbench.meta.txCount", { count: row.count })} ·{" "}
-                <CurrencyToggleText className={blurClass(hideSensitive)}>
-                  {formatDisplayMoney(row.eur, row.btc, currency)}
-                </CurrencyToggleText>
-              </span>
-            </div>
-            <div className="h-1.5 overflow-hidden rounded-full bg-muted">
-              <div
-                className="h-full rounded-full bg-primary"
-                style={{ width: `${Math.max(6, (row.eur / maxValue) * 100)}%` }}
-              />
-            </div>
-            </>
-          );
-          return onSelect ? (
-            <button
-              key={row.key}
-              type="button"
-              className={cn(
-                "-mx-1.5 block w-[calc(100%+0.75rem)] space-y-1 rounded-md px-1.5 py-1.5 text-left transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                selected && "bg-muted/70",
-              )}
-              onClick={() => onSelect(row.key)}
-              aria-pressed={selected}
-            >
-              {content}
-            </button>
-          ) : (
-            <div key={row.key} className="space-y-1">
-              {content}
-            </div>
-          );
-        })}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function QualityRow({
-  label,
-  value,
-  onClick,
-}: {
-  label: string;
-  value: number;
-  onClick?: () => void;
-}) {
-  const tone = value > 0 ? "text-amber-600" : "text-emerald-600";
-  const className = cn(
-    "-mx-1 grid min-h-8 w-[calc(100%+0.5rem)] grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-md px-1 py-1.5 text-left",
-    onClick &&
-      "cursor-pointer transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-  );
-  const content = (
-    <>
-      <span className="min-w-0 truncate text-muted-foreground">{label}</span>
-      <span className={cn("shrink-0 font-semibold leading-none tabular-nums", tone)}>
-        {value}
-      </span>
-    </>
-  );
-  return onClick ? (
-    <button type="button" className={className} onClick={onClick}>
-      {content}
-    </button>
-  ) : (
-    <div className={className}>{content}</div>
   );
 }
 

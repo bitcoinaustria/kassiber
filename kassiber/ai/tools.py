@@ -111,6 +111,22 @@ _SOURCE_FUNDS_CONFIDENCE_LEVELS = ("exact", "strong", "weak", "unknown")
 _SOURCE_FUNDS_ALLOCATION_POLICIES = ("explicit", "heuristic", "unknown")
 _SOURCE_FUNDS_REVEAL_MODES = ("labels_only", "minimal", "standard", "full")
 _SOURCE_FUNDS_REPORT_PURPOSES = ("existing_transaction", "planned_exchange_sale")
+_TRANSFER_MATCH_METHODS = (
+    "payment_hash",
+    "provider_swap_id",
+    "heuristic",
+    "htlc_refund",
+)
+_TRANSFER_PAIR_KINDS = (
+    "manual",
+    "coinjoin",
+    "chain-swap",
+    "peg-in",
+    "peg-out",
+    "reverse-submarine-swap",
+    "submarine-swap",
+    "swap-refund",
+)
 
 
 TOOL_CATALOG: tuple[ToolEntry, ...] = (
@@ -1216,9 +1232,9 @@ TOOL_CATALOG: tuple[ToolEntry, ...] = (
         name="ui.transfers.suggest",
         description=(
             "Read transfer/swap candidate pairings the matcher infers from unpaired "
-            "transactions. Surfaces exact (payment_hash) and strong (time + "
-            "amount heuristic) candidates with computed fee deltas and "
-            "conflict cluster ids. No DB writes."
+            "transactions. Surfaces exact deterministic candidates (payment_hash, "
+            "provider_swap_id, htlc_refund) and strong time + amount heuristic "
+            "candidates with computed fee deltas and conflict cluster ids. No DB writes."
         ),
         parameters={
             "type": "object",
@@ -1231,7 +1247,7 @@ TOOL_CATALOG: tuple[ToolEntry, ...] = (
                 },
                 "method": {
                     "type": "string",
-                    "enum": ["payment_hash", "heuristic", "htlc_refund"],
+                    "enum": list(_TRANSFER_MATCH_METHODS),
                     "description": "Optional filter pinning to one match method.",
                 },
                 "asset_pair": {
@@ -1275,7 +1291,7 @@ TOOL_CATALOG: tuple[ToolEntry, ...] = (
                 },
                 "method": {
                     "type": "string",
-                    "enum": ["payment_hash", "heuristic", "htlc_refund"],
+                    "enum": list(_TRANSFER_MATCH_METHODS),
                     "description": "Optional filter pinning to one match method.",
                 },
                 "asset_pair": {
@@ -1361,14 +1377,7 @@ TOOL_CATALOG: tuple[ToolEntry, ...] = (
                 "tx_in": {"type": "string", "description": "Inbound transaction id."},
                 "kind": {
                     "type": "string",
-                    "enum": [
-                        "manual",
-                        "coinjoin",
-                        "peg-in",
-                        "peg-out",
-                        "submarine-swap",
-                        "swap-refund",
-                    ],
+                    "enum": list(_TRANSFER_PAIR_KINDS),
                 },
                 "policy": {
                     "type": "string",
@@ -1414,7 +1423,7 @@ TOOL_CATALOG: tuple[ToolEntry, ...] = (
         description=(
             "Auto-pair every solo (non-conflicted) candidate at or above the "
             "chosen confidence after explicit consent. Defaults to 'exact' "
-            "so only payment-hash matches auto-apply without further review."
+            "so only deterministic links auto-apply without further review."
         ),
         parameters={
             "type": "object",
@@ -1429,6 +1438,11 @@ TOOL_CATALOG: tuple[ToolEntry, ...] = (
                     "type": "string",
                     "enum": ["transfer", "swap"],
                     "description": "Optional filter for Bitcoin movements or other cross-asset swaps.",
+                },
+                "method": {
+                    "type": "string",
+                    "enum": list(_TRANSFER_MATCH_METHODS),
+                    "description": "Optional filter pinning to one match method.",
                 },
             },
         },
@@ -1481,7 +1495,7 @@ TOOL_CATALOG: tuple[ToolEntry, ...] = (
                 "predicate": {"type": "object"},
                 "kind": {
                     "type": "string",
-                    "enum": ["manual", "peg-in", "peg-out", "submarine-swap", "swap-refund"],
+                    "enum": list(_TRANSFER_PAIR_KINDS),
                 },
                 "policy": {
                     "type": "string",

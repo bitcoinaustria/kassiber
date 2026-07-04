@@ -11,6 +11,14 @@ run() {
   "$@"
 }
 
+run_in_dir() {
+  local dir="$1"
+  shift
+  echo
+  echo "> (cd $dir && $*)"
+  (cd "$dir" && "$@")
+}
+
 PYTHON_BIN="python3"
 RUNNER=()
 
@@ -70,7 +78,12 @@ run py -m unittest tests.test_sync_htlc_enrichment -v
 run py -m unittest tests.test_sync_btcpay_incremental -v
 run py -m unittest tests.test_freshness -v
 run py -m unittest tests.test_liquid_electrum_sync -v
+run py -m unittest tests.test_silent_payments -v
 run py -m unittest tests.test_log_ring -v
+run py -m unittest tests.test_regtest_harness -v
+
+run py -m unittest discover -v
+run py -m pytest tests/test_proxy.py -q
 
 echo
 SMOKE_HOME="$(mktemp -d "${TMPDIR:-/tmp}/kassiber-quality-gate-home.XXXXXX")"
@@ -133,11 +146,11 @@ if [ ! -d "$ROOT/ui-tauri/node_modules" ]; then
   echo "quality gate requires ui-tauri/node_modules for Vitest; run: pnpm --dir ui-tauri install --frozen-lockfile" >&2
   exit 2
 fi
-if ! command -v pnpm >/dev/null 2>&1; then
-  echo "quality gate requires pnpm on PATH to run Vitest" >&2
+if [ ! -x "$ROOT/ui-tauri/node_modules/.bin/vitest" ]; then
+  echo "quality gate requires ui-tauri/node_modules/.bin/vitest; run: pnpm --dir ui-tauri install --frozen-lockfile" >&2
   exit 2
 fi
-run pnpm --dir ui-tauri exec vitest run
+run_in_dir ui-tauri ./node_modules/.bin/vitest run
 
 echo
 echo "quality gate passed"

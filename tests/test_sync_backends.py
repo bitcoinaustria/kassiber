@@ -1,16 +1,22 @@
 import io
 import json
 import random
+import sqlite3
+import tempfile
 import unittest
 from email.message import Message
+from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 from urllib import error as urlerror
 
 from kassiber.core import sync_backends as sb
+from kassiber.core import wallets as core_wallets
 from kassiber.core.sync import (
     WalletBackendFetch,
     WalletSyncHooks,
     WalletSyncState,
+    NEGATIVE_BALANCE_RESCAN_MIN_GAP_LIMIT,
     classify_wallet_sync,
     emit_sync_progress,
     fetch_wallet_backend,
@@ -23,6 +29,7 @@ from kassiber.core.sync_backends import (
     ElectrumClient,
     _connect_backend_socket,
     _emit_backend_progress,
+    bitcoinrpc_import_ranged_descriptors,
     bitcoinrpc_sync_adapter,
     discover_descriptor_targets,
     electrum_sync_adapter,
@@ -33,10 +40,18 @@ from kassiber.core.sync_backends import (
     scan_descriptor_targets,
     scriptpubkey_scripthash,
 )
+from kassiber.core import imports as core_imports
+from kassiber.core.imports import ImportCoordinatorHooks
+from kassiber.db import open_db
 from kassiber.errors import AppError
 from kassiber.proxy import _connect_via_socks5, _read_exact, _socks5_address
-from kassiber.time_utils import timestamp_to_iso
-from kassiber.wallet_descriptors import DescriptorBranch, DescriptorPlan, DerivedTarget
+from kassiber.time_utils import iso_to_unix, timestamp_to_iso
+from kassiber.wallet_descriptors import (
+    DEFAULT_DESCRIPTOR_GAP_LIMIT,
+    DescriptorBranch,
+    DescriptorPlan,
+    DerivedTarget,
+)
 
 
 def _header_hex(timestamp):
@@ -162,6 +177,75 @@ class SyncBackendsTest(unittest.TestCase):
         self.assertIn("backend_fetch", [item.get("phase") for item in progress])
         self.assertEqual({item.get("wallet") for item in progress}, {"Cold"})
         self.assertEqual(progress[-1]["known_txids"], 2)
+
+    def test_sync_wallet_from_backend_applies_backend_retractions(self):
+        wallet = {"id": "wallet-1", "label": "Cold", "config_json": "{}"}
+        profile = {"id": "profile-1", "workspace_id": "workspace-1"}
+        target = {"address": "bc1qwatch", "script_pubkey": "0014watch"}
+        sync_state = WalletSyncState(
+            chain="bitcoin",
+            network="regtest",
+            descriptor_plan=None,
+            policy_asset_id="",
+            targets=[target],
+            tracked_scripts={target["script_pubkey"]: target},
+            history_cache={},
+        )
+        retracted = []
+        inserted_after_retract = []
+
+        def retract_records(conn, profile, wallet, external_ids, source_label):
+            del conn, profile, wallet
+            retracted.append((source_label, list(external_ids)))
+            return {
+                "retracted": 1,
+                "journal_invalidated": True,
+                "retracted_records": [{"transaction_id": "stale"}],
+            }
+
+        def insert_records(conn, profile, wallet, records, source_label):
+            del conn, profile, wallet
+            inserted_after_retract.append((source_label, bool(retracted), list(records)))
+            return {"imported": 0, "skipped": 0, "journal_invalidated": False}
+
+        hooks = WalletSyncHooks(
+            import_file=lambda *args, **kwargs: {},
+            insert_records=insert_records,
+            retract_records=retract_records,
+            resolve_backend=lambda runtime_config, backend_name: {},
+            resolve_sync_state=lambda backend, wallet: sync_state,
+            normalize_addresses=lambda values: list(values or []),
+            backend_adapters={},
+        )
+        fetch = WalletBackendFetch(
+            backend={
+                "name": "core-regtest",
+                "kind": "bitcoinrpc",
+                "url": "http://127.0.0.1:18443",
+            },
+            sync_state=sync_state,
+            normalized_records=[],
+            adapter_meta={"bitcoinrpc_retracted_txids": ["AA" * 32, "aa" * 32]},
+            kind="bitcoinrpc",
+            started=0.0,
+            force_full=False,
+        )
+
+        outcome = sync_wallet_from_backend(
+            None,
+            {},
+            profile,
+            wallet,
+            hooks,
+            prefetched=fetch,
+        )
+
+        self.assertEqual(retracted, [("backend:core-regtest", ["aa" * 32])])
+        self.assertEqual(inserted_after_retract[0][0], "backend:core-regtest")
+        self.assertTrue(inserted_after_retract[0][1])
+        self.assertEqual(outcome["retracted"], 1)
+        self.assertTrue(outcome["journal_invalidated"])
+        self.assertEqual(outcome["bitcoinrpc_retracted_txids"], ["aa" * 32])
 
     def test_backend_progress_reuses_known_counters_for_ui_progress(self):
         progress = []
@@ -324,6 +408,168 @@ class SyncBackendsTest(unittest.TestCase):
         self.assertEqual(checkpoints_seen, [{}])
         self.assertTrue(results[0]["force_full"])
         self.assertTrue(results[0]["utxos_refreshed"])
+
+    def test_sync_wallet_from_backend_repairs_negative_running_balance_with_widened_rescan(self):
+        conn = sqlite3.connect(":memory:")
+        conn.row_factory = sqlite3.Row
+        conn.execute(
+            """
+            CREATE TABLE transactions (
+                id TEXT PRIMARY KEY,
+                profile_id TEXT NOT NULL,
+                wallet_id TEXT NOT NULL,
+                external_id TEXT,
+                occurred_at TEXT NOT NULL,
+                direction TEXT NOT NULL,
+                asset TEXT NOT NULL,
+                amount INTEGER NOT NULL,
+                fee INTEGER NOT NULL DEFAULT 0,
+                excluded INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL
+            )
+            """
+        )
+        wallet = {
+            "id": "wallet-1",
+            "kind": "descriptor",
+            "label": "Vault",
+            "config_json": json.dumps({"backend": "default", "descriptor": "dummy"}),
+        }
+        profile = {"id": "profile-1"}
+        target = {
+            "address": "bc1qwatch",
+            "script_pubkey": "0014watch",
+            "branch_index": 0,
+            "address_index": 0,
+        }
+        adapter_gaps = []
+        checkpoints_seen = []
+
+        def resolve_sync_state(backend, wallet_row):
+            config = json.loads(wallet_row["config_json"] or "{}")
+            gap_limit = int(config.get("gap_limit") or DEFAULT_DESCRIPTOR_GAP_LIMIT)
+            checkpoints_seen.append(wallet_row.get("_freshness_checkpoint"))
+            return WalletSyncState(
+                chain="bitcoin",
+                network="main",
+                descriptor_plan=SimpleNamespace(gap_limit=gap_limit),
+                policy_asset_id="",
+                targets=[target],
+                tracked_scripts={target["script_pubkey"]: target},
+                history_cache={},
+                checkpoint=wallet_row.get("_freshness_checkpoint"),
+            )
+
+        def adapter(backend, wallet_row, sync_state):
+            adapter_gaps.append(sync_state.descriptor_plan.gap_limit)
+            return (
+                [{"pass": len(adapter_gaps)}],
+                {"freshness_checkpoint": {"pass": len(adapter_gaps)}},
+            )
+
+        def insert_records(conn, profile, wallet_row, records, source_label):
+            pass_number = records[0]["pass"]
+            if pass_number == 1:
+                conn.execute(
+                    """
+                    INSERT OR IGNORE INTO transactions(
+                        id, profile_id, wallet_id, external_id, occurred_at,
+                        direction, asset, amount, fee, excluded, created_at
+                    ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)
+                    """,
+                    (
+                        "out-1",
+                        profile["id"],
+                        wallet_row["id"],
+                        "tx-out",
+                        "2026-01-02T00:00:00Z",
+                        "outbound",
+                        "BTC",
+                        1000,
+                        0,
+                        "2026-01-02T00:00:01Z",
+                    ),
+                )
+            else:
+                conn.executemany(
+                    """
+                    INSERT OR IGNORE INTO transactions(
+                        id, profile_id, wallet_id, external_id, occurred_at,
+                        direction, asset, amount, fee, excluded, created_at
+                    ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)
+                    """,
+                    [
+                        (
+                            "in-1",
+                            profile["id"],
+                            wallet_row["id"],
+                            "tx-in",
+                            "2026-01-01T00:00:00Z",
+                            "inbound",
+                            "BTC",
+                            1000,
+                            0,
+                            "2026-01-01T00:00:01Z",
+                        ),
+                        (
+                            "out-1",
+                            profile["id"],
+                            wallet_row["id"],
+                            "tx-out",
+                            "2026-01-02T00:00:00Z",
+                            "outbound",
+                            "BTC",
+                            1000,
+                            0,
+                            "2026-01-02T00:00:01Z",
+                        ),
+                    ],
+                )
+            return {"imported": 1, "skipped": 0, "unchanged": 0}
+
+        hooks = WalletSyncHooks(
+            import_file=lambda *args, **kwargs: {},
+            insert_records=insert_records,
+            resolve_backend=lambda runtime_config, backend_name: {
+                "name": "default",
+                "kind": "esplora",
+                "url": "https://example.invalid",
+            },
+            resolve_sync_state=resolve_sync_state,
+            normalize_addresses=lambda values: list(values or []),
+            backend_adapters={"esplora": adapter},
+        )
+
+        with patch("kassiber.core.sync.source_overlap.raise_for_sync_source_overlap"):
+            outcome = sync_wallet_from_backend(conn, {}, profile, wallet, hooks)
+
+        self.assertEqual(
+            adapter_gaps,
+            [DEFAULT_DESCRIPTOR_GAP_LIMIT, NEGATIVE_BALANCE_RESCAN_MIN_GAP_LIMIT],
+        )
+        self.assertIsNone(checkpoints_seen[0])
+        self.assertEqual(checkpoints_seen[1], {})
+        self.assertTrue(outcome["force_full"])
+        self.assertEqual(outcome["gap_limit"], NEGATIVE_BALANCE_RESCAN_MIN_GAP_LIMIT)
+        self.assertEqual(
+            outcome["negative_balance_rescan"]["original_gap_limit"],
+            DEFAULT_DESCRIPTOR_GAP_LIMIT,
+        )
+        self.assertEqual(
+            outcome["negative_balance_rescan"]["rescan_gap_limit"],
+            NEGATIVE_BALANCE_RESCAN_MIN_GAP_LIMIT,
+        )
+        self.assertTrue(outcome["negative_balance_rescan"]["resolved"])
+        self.assertEqual(
+            outcome["negative_balance_rescan"]["initial_negative_events"][0][
+                "transaction_id"
+            ],
+            "out-1",
+        )
+        self.assertEqual(
+            outcome["negative_balance_rescan"]["remaining_negative_events"],
+            [],
+        )
 
     def test_esplora_sync_adapter_returns_record_shape(self):
         target = {"address": "bc1qesplora", "script_pubkey": "0014" + "11" * 20}
@@ -491,7 +737,10 @@ class SyncBackendsTest(unittest.TestCase):
             "kind": "esplora",
             "url": "https://esplora.example",
         }
-        wallet = {"id": "wallet-1"}
+        wallet = {
+            "id": "wallet-1",
+            "config_json": '{"birthday": "2024-01-01T00:00:00Z"}',
+        }
 
         def make_state(checkpoint=None):
             return WalletSyncState(
@@ -967,6 +1216,41 @@ class SyncBackendsTest(unittest.TestCase):
         self.assertIn("Electrum-format JSON", str(raised.exception))
         self.assertEqual(raised.exception.details, {"response_type": "list"})
 
+    def test_electrum_client_negotiates_server_version_on_connect(self):
+        class HandshakeSocket(_DummySocket):
+            def makefile(self, *_args, **_kwargs):
+                return io.StringIO(
+                    json.dumps(
+                        {
+                            "jsonrpc": "2.0",
+                            "id": 1,
+                            "result": ["Frigate 1.5.3", "1.6"],
+                        }
+                    )
+                    + "\n"
+                )
+
+            def close(self):
+                pass
+
+        socket = HandshakeSocket()
+
+        with patch(
+            "kassiber.core.sync_backends._connect_backend_socket",
+            return_value=socket,
+        ):
+            with ElectrumClient(
+                {"name": "frigate", "url": "tcp://frigate.example:50001"}
+            ) as client:
+                self.assertEqual(client.server_version, ["Frigate 1.5.3", "1.6"])
+
+        self.assertIsNone(client.server_version)
+
+        self.assertEqual(len(socket.sent), 1)
+        request = json.loads(socket.sent[0].decode("utf-8"))
+        self.assertEqual(request["method"], "server.version")
+        self.assertEqual(request["params"], ["Kassiber", "1.6"])
+
     def test_bitcoinrpc_sync_adapter_returns_record_and_meta_shape(self):
         target = {"address": "bc1qcore", "script_pubkey": "0014core"}
         sync_state = WalletSyncState(
@@ -978,9 +1262,12 @@ class SyncBackendsTest(unittest.TestCase):
             tracked_scripts={target["script_pubkey"]: target},
             history_cache={},
         )
-        wallet = {"id": "wallet-1"}
+        wallet = {
+            "id": "wallet-1",
+            "config_json": '{"birthday": "2024-01-01T00:00:00Z"}',
+        }
 
-        def fake_bitcoinrpc_call(backend, method, params=None, wallet_name=None):
+        def fake_bitcoinrpc_call(backend, method, params=None, wallet_name=None, timeout=None):
             del backend
             key = (method, tuple(params or ()), wallet_name)
             if key == ("listwallets", (), None):
@@ -994,9 +1281,18 @@ class SyncBackendsTest(unittest.TestCase):
             if key == ("getdescriptorinfo", ("addr(bc1qcore)",), None):
                 return {"descriptor": "addr(bc1qcore)#abcd"}
             if method == "importdescriptors" and wallet_name == "kassiber-wallet-1":
+                self.assertEqual(timeout, 1800)
                 self.assertEqual(
                     params,
-                    [[{"desc": "addr(bc1qcore)#abcd", "timestamp": 0, "label": "kassiber:wallet-1"}]],
+                    [
+                        [
+                            {
+                                "desc": "addr(bc1qcore)#abcd",
+                                "timestamp": iso_to_unix("2024-01-01T00:00:00Z"),
+                                "label": "kassiber:wallet-1",
+                            }
+                        ]
+                    ],
                 )
                 return [{"success": True}]
             if key == ("listtransactions", ("*", 1000, 0, True), "kassiber-wallet-1"):
@@ -1097,6 +1393,755 @@ class SyncBackendsTest(unittest.TestCase):
         self.assertEqual(len(records), 1)
         self.assertEqual(records[0]["txid"], "44" * 32)
 
+    def test_bitcoinrpc_records_store_verbose_graph_for_outbound_rows(self):
+        target = {"address": "bc1qchange", "script_pubkey": "0014" + "ab" * 20}
+        sync_state = WalletSyncState(
+            chain="bitcoin",
+            network="bitcoin",
+            descriptor_plan=None,
+            policy_asset_id="",
+            targets=[target],
+            tracked_scripts={target["script_pubkey"]: target},
+            history_cache={},
+        )
+        txid = "55" * 32
+
+        def fake_bitcoinrpc_call(backend, method, params=None, wallet_name=None, timeout=None):
+            del backend, timeout
+            key = (method, tuple(params or ()), wallet_name)
+            if key == ("listtransactions", ("*", 1000, 0, True), "kassiber-wallet-1"):
+                return [
+                    {
+                        "txid": txid,
+                        "category": "send",
+                        "amount": -0.0375,
+                        "fee": -0.00001,
+                        "blocktime": 1_700_000_200,
+                    },
+                ]
+            if key == ("getbestblockhash", (), None):
+                return "bb" * 32
+            if key == ("gettransaction", (txid, True, True), "kassiber-wallet-1"):
+                return {
+                    "decoded": {
+                        "txid": txid,
+                        "vin": [
+                            {
+                                "txid": "44" * 32,
+                                "vout": 2,
+                                "prevout": {
+                                    "value": 1.0,
+                                    "scriptPubKey": {"hex": target["script_pubkey"]},
+                                },
+                            }
+                        ],
+                        "vout": [
+                            {
+                                "n": 0,
+                                "value": 0.0375,
+                                "scriptPubKey": {"hex": "0014" + "cd" * 20},
+                            },
+                            {
+                                "n": 1,
+                                "value": 0.96249,
+                                "scriptPubKey": {"hex": target["script_pubkey"]},
+                            },
+                        ],
+                    }
+                }
+            raise AssertionError(f"Unexpected RPC call: {key!r}")
+
+        with patch("kassiber.core.sync_backends.bitcoinrpc_call", side_effect=fake_bitcoinrpc_call):
+            records, meta = sb.bitcoinrpc_records_for_wallet(
+                {"name": "core", "kind": "bitcoinrpc", "url": "http://core.example"},
+                {"id": "wallet-1"},
+                ["bc1qchange"],
+                wallet_name="kassiber-wallet-1",
+                imported_count=0,
+                sync_state=sync_state,
+            )
+
+        self.assertEqual(meta["bitcoinrpc_last_block"], "bb" * 32)
+        self.assertEqual(len(records), 1)
+        self.assertEqual(records[0]["direction"], "outbound")
+        self.assertAlmostEqual(float(records[0]["amount"]), 0.0375, places=8)
+        self.assertAlmostEqual(float(records[0]["fee"]), 0.00001, places=8)
+        raw = json.loads(records[0]["raw_json"])
+        self.assertEqual(raw["source"], "bitcoinrpc_gettransaction")
+        self.assertEqual(raw["vin"][0]["txid"], "44" * 32)
+        self.assertEqual(raw["vout"][0]["scriptpubkey"], "0014" + "cd" * 20)
+        self.assertEqual(raw["vout"][1]["scriptpubkey"], target["script_pubkey"])
+
+    def test_bitcoinrpc_verbose_graph_cache_feeds_utxo_metadata(self):
+        target = {"address": "bc1qchange", "script_pubkey": "0014" + "ab" * 20}
+        sync_state = WalletSyncState(
+            chain="bitcoin",
+            network="bitcoin",
+            descriptor_plan=None,
+            policy_asset_id="",
+            targets=[target],
+            tracked_scripts={target["script_pubkey"]: target},
+            history_cache={},
+        )
+        txid = "58" * 32
+        calls = []
+
+        def fake_bitcoinrpc_call(backend, method, params=None, wallet_name=None, timeout=None):
+            del backend, timeout
+            key = (method, tuple(params or ()), wallet_name)
+            calls.append(key)
+            if key == ("listtransactions", ("*", 1000, 0, True), "kassiber-wallet-1"):
+                return [
+                    {
+                        "txid": txid,
+                        "category": "send",
+                        "amount": -0.0375,
+                        "fee": -0.00001,
+                        "blocktime": 1_700_000_200,
+                    },
+                ]
+            if key == ("getbestblockhash", (), None):
+                return "bb" * 32
+            if key == ("gettransaction", (txid, True, True), "kassiber-wallet-1"):
+                return {
+                    "blockhash": "cc" * 32,
+                    "blocktime": 1_700_000_200,
+                    "decoded": {
+                        "txid": txid,
+                        "vin": [
+                            {
+                                "txid": "44" * 32,
+                                "vout": 0,
+                                "prevout": {
+                                    "value": 0.03751,
+                                    "scriptPubKey": {"hex": target["script_pubkey"]},
+                                },
+                            }
+                        ],
+                        "vout": [
+                            {
+                                "n": 0,
+                                "value": 0.0375,
+                                "scriptPubKey": {"hex": "0014" + "cd" * 20},
+                            },
+                        ],
+                    },
+                }
+            if key == (
+                "listunspent",
+                (0, 9999999, ["bc1qchange"], True),
+                "kassiber-wallet-1",
+            ):
+                return [
+                    {
+                        "txid": txid,
+                        "vout": 1,
+                        "address": "bc1qchange",
+                        "amount": 0.001,
+                        "confirmations": 2,
+                    }
+                ]
+            if key == ("getblockheader", ("cc" * 32,), None):
+                return {"height": 321}
+            raise AssertionError(f"Unexpected RPC call: {key!r}")
+
+        with patch("kassiber.core.sync_backends.bitcoinrpc_call", side_effect=fake_bitcoinrpc_call):
+            records, meta = sb.bitcoinrpc_records_for_wallet(
+                {"name": "core", "kind": "bitcoinrpc", "url": "http://core.example"},
+                {"id": "wallet-1"},
+                ["bc1qchange"],
+                wallet_name="kassiber-wallet-1",
+                imported_count=0,
+                sync_state=sync_state,
+            )
+            utxos = sb.bitcoinrpc_utxos_for_wallet_name(
+                {"name": "core", "kind": "bitcoinrpc", "url": "http://core.example"},
+                "kassiber-wallet-1",
+                ["bc1qchange"],
+                sync_state,
+                tx_cache=meta["_bitcoinrpc_verbose_tx_cache"],
+            )
+
+        self.assertEqual(len(records), 1)
+        self.assertEqual(utxos[0]["block_height"], 321)
+        self.assertEqual(
+            [
+                call
+                for call in calls
+                if call[0] == "gettransaction"
+            ],
+            [("gettransaction", (txid, True, True), "kassiber-wallet-1")],
+        )
+
+    def test_bitcoinrpc_sinceblock_immature_rows_keep_maturity_checkpoint(self):
+        target = {"address": "bc1qcore", "script_pubkey": "0014core"}
+        sync_state = WalletSyncState(
+            chain="bitcoin",
+            network="bitcoin",
+            descriptor_plan=None,
+            policy_asset_id="",
+            targets=[target],
+            tracked_scripts={target["script_pubkey"]: target},
+            history_cache={},
+            checkpoint={"bitcoinrpc_last_block": "aa" * 32},
+        )
+        wallet = {"id": "wallet-1"}
+        calls = []
+
+        def fake_bitcoinrpc_call(backend, method, params=None, wallet_name=None):
+            del backend
+            key = (method, tuple(params or ()), wallet_name)
+            calls.append(method)
+            if key == ("listwallets", (), None):
+                return ["kassiber-wallet-1"]
+            if key == ("getaddressinfo", ("bc1qcore",), "kassiber-wallet-1"):
+                return {"iswatchonly": True, "ismine": False}
+            if key == ("listsinceblock", ("aa" * 32, 1, True, True), "kassiber-wallet-1"):
+                return {
+                    "transactions": [
+                        {
+                            "txid": "45" * 32,
+                            "category": "immature",
+                            "amount": 50,
+                            "confirmations": 10,
+                            "blocktime": 1_700_000_100,
+                        }
+                    ],
+                    "lastblock": "bb" * 32,
+                    "removed": [],
+                }
+            if key == (
+                "listunspent",
+                (0, 9999999, ["bc1qcore"], True),
+                "kassiber-wallet-1",
+            ):
+                return []
+            raise AssertionError(f"Unexpected RPC call: {key!r}")
+
+        with patch("kassiber.core.sync_backends.bitcoinrpc_call", side_effect=fake_bitcoinrpc_call):
+            records, meta = bitcoinrpc_sync_adapter(
+                {"name": "core", "kind": "bitcoinrpc", "url": "http://core.example"},
+                wallet,
+                sync_state,
+            )
+
+        self.assertNotIn("listtransactions", calls)
+        self.assertEqual(records, [])
+        self.assertTrue(meta["bitcoinrpc_pending_maturity"])
+        self.assertTrue(meta["freshness_checkpoint"]["bitcoinrpc_pending_maturity"])
+
+    def test_bitcoinrpc_pending_maturity_checkpoint_forces_full_scan_until_mature(self):
+        target = {"address": "bc1qcore", "script_pubkey": "0014core"}
+        sync_state = WalletSyncState(
+            chain="bitcoin",
+            network="bitcoin",
+            descriptor_plan=None,
+            policy_asset_id="",
+            targets=[target],
+            tracked_scripts={target["script_pubkey"]: target},
+            history_cache={},
+            checkpoint={
+                "bitcoinrpc_last_block": "aa" * 32,
+                "bitcoinrpc_pending_maturity": True,
+            },
+        )
+        wallet = {"id": "wallet-1"}
+        calls = []
+
+        def fake_bitcoinrpc_call(backend, method, params=None, wallet_name=None):
+            del backend
+            key = (method, tuple(params or ()), wallet_name)
+            calls.append(method)
+            if key == ("listwallets", (), None):
+                return ["kassiber-wallet-1"]
+            if key == ("getaddressinfo", ("bc1qcore",), "kassiber-wallet-1"):
+                return {"iswatchonly": True, "ismine": False}
+            if key == ("listtransactions", ("*", 1000, 0, True), "kassiber-wallet-1"):
+                return [
+                    {
+                        "txid": "45" * 32,
+                        "category": "generate",
+                        "amount": 50,
+                        "confirmations": 101,
+                        "blocktime": 1_700_000_100,
+                    }
+                ]
+            if key == ("getbestblockhash", (), None):
+                return "bb" * 32
+            if key == (
+                "listunspent",
+                (0, 9999999, ["bc1qcore"], True),
+                "kassiber-wallet-1",
+            ):
+                return []
+            raise AssertionError(f"Unexpected RPC call: {key!r}")
+
+        with patch("kassiber.core.sync_backends.bitcoinrpc_call", side_effect=fake_bitcoinrpc_call):
+            records, meta = bitcoinrpc_sync_adapter(
+                {"name": "core", "kind": "bitcoinrpc", "url": "http://core.example"},
+                wallet,
+                sync_state,
+            )
+
+        self.assertNotIn("listsinceblock", calls)
+        self.assertEqual(meta["bitcoinrpc_sync_mode"], "full_scan")
+        self.assertFalse(meta["bitcoinrpc_pending_maturity"])
+        self.assertNotIn("bitcoinrpc_pending_maturity", meta["freshness_checkpoint"])
+        self.assertEqual(len(records), 1)
+        self.assertEqual(records[0]["txid"], "45" * 32)
+
+    def test_bitcoinrpc_descriptor_discovery_is_read_only(self):
+        class FakeDescriptor:
+            is_wildcard = True
+
+        plan = DescriptorPlan(
+            chain="bitcoin",
+            network="bitcoin",
+            gap_limit=2,
+            descriptor_fingerprint="fp",
+            branches=(DescriptorBranch(6, "p2tr receive", FakeDescriptor()),),
+        )
+        target = {"address": "bc1qcore", "script_pubkey": "0014core"}
+
+        with patch(
+            "kassiber.core.sync_backends.bitcoinrpc_call",
+            side_effect=AssertionError("discovery must not call Core"),
+        ), patch(
+            "kassiber.core.sync_backends._bitcoinrpc_descriptor_targets_for_checkpoint",
+            return_value=[target],
+        ) as derive_targets:
+            discovery = discover_descriptor_targets(
+                {"name": "core", "kind": "bitcoinrpc", "url": "http://core.example"},
+                plan,
+                "bitcoinrpc",
+                checkpoint={"highest_used": {"6": 4}},
+            )
+
+        self.assertEqual(discovery, {"targets": [target], "history_cache": {}})
+        derive_targets.assert_called_once_with(
+            plan,
+            {"highest_used": {"6": 4}},
+        )
+
+    def test_bitcoinrpc_descriptor_sync_imports_ranged_descriptors_and_checkpoint(self):
+        class FakeDescriptor:
+            is_wildcard = True
+
+            def __init__(self, raw):
+                self.raw = raw
+
+            def to_string(self):
+                return self.raw
+
+        plan = DescriptorPlan(
+            chain="bitcoin",
+            network="bitcoin",
+            gap_limit=3,
+            descriptor_fingerprint="fp",
+            branches=(
+                DescriptorBranch(6, "p2tr receive", FakeDescriptor("tr(xpub/0/*)")),
+                DescriptorBranch(7, "p2tr change", FakeDescriptor("tr(xpub/1/*)")),
+            ),
+        )
+        targets = [
+            {
+                "address": "bc1preceive2",
+                "script_pubkey": "5120" + "11" * 32,
+                "branch_index": 6,
+                "branch_label": "p2tr receive",
+                "address_index": 2,
+            },
+            {
+                "address": "bc1pchange0",
+                "script_pubkey": "5120" + "22" * 32,
+                "branch_index": 7,
+                "branch_label": "p2tr change",
+                "address_index": 0,
+            },
+        ]
+        sync_state = WalletSyncState(
+            chain="bitcoin",
+            network="bitcoin",
+            descriptor_plan=plan,
+            policy_asset_id="",
+            targets=targets,
+            tracked_scripts={target["script_pubkey"]: target for target in targets},
+            history_cache={},
+        )
+        wallet = {
+            "id": "wallet-1",
+            "config_json": '{"birthday": "2024-01-01T00:00:00Z"}',
+        }
+        calls = []
+
+        def fake_bitcoinrpc_call(backend, method, params=None, wallet_name=None, timeout=None):
+            del backend
+            calls.append((method, params, wallet_name, timeout))
+            if method == "listwallets":
+                return ["kassiber-wallet-1"]
+            if method == "getdescriptorinfo":
+                return {"descriptor": f"{params[0]}#core"}
+            if method == "importdescriptors":
+                descriptors = params[0]
+                self.assertEqual(wallet_name, "kassiber-wallet-1")
+                self.assertEqual(timeout, 1800)
+                self.assertEqual(
+                    descriptors,
+                    [
+                        {
+                            "desc": "tr(xpub/0/*)#core",
+                            "timestamp": iso_to_unix("2024-01-01T00:00:00Z"),
+                            "range": [0, 2],
+                            "internal": False,
+                            "active": False,
+                        },
+                        {
+                            "desc": "tr(xpub/1/*)#core",
+                            "timestamp": iso_to_unix("2024-01-01T00:00:00Z"),
+                            "range": [0, 2],
+                            "internal": True,
+                            "active": False,
+                        },
+                    ],
+                )
+                return [{"success": True}, {"success": True}]
+            if method == "listtransactions":
+                return [
+                    {
+                        "txid": "77" * 32,
+                        "category": "receive",
+                        "amount": 0.003,
+                        "fee": 0,
+                        "blocktime": 1_700_000_200,
+                    }
+                ]
+            if method == "getbestblockhash":
+                return "cc" * 32
+            if method == "listunspent":
+                self.assertEqual(params, [0, 9999999, ["bc1preceive2", "bc1pchange0"], True])
+                return [
+                    {
+                        "txid": "88" * 32,
+                        "vout": 0,
+                        "address": "bc1preceive2",
+                        "amount": 0.004,
+                        "confirmations": 4,
+                    }
+                ]
+            if method == "gettransaction":
+                return {"blockhash": "dd" * 32, "blocktime": 1_700_000_300}
+            if method == "getblockheader":
+                return {"height": 123}
+            raise AssertionError(f"Unexpected RPC call: {(method, params, wallet_name)!r}")
+
+        with patch("kassiber.core.sync_backends.bitcoinrpc_call", side_effect=fake_bitcoinrpc_call), patch(
+            "kassiber.core.sync_backends._bitcoinrpc_descriptor_targets_for_range_ends",
+            return_value=targets,
+        ):
+            records, meta = bitcoinrpc_sync_adapter(
+                {"name": "core", "kind": "bitcoinrpc", "url": "http://core.example"},
+                wallet,
+                sync_state,
+            )
+
+        self.assertEqual(meta["imported_descriptors"], 2)
+        self.assertEqual(meta["bitcoinrpc_sync_mode"], "full_scan")
+        self.assertEqual(
+            meta["freshness_checkpoint"]["bitcoinrpc_descriptor_range_ends"],
+            {"6": 2, "7": 2},
+        )
+        self.assertEqual(meta["freshness_checkpoint"]["highest_used"], {"6": 2})
+        self.assertEqual(len(meta["utxos"]), 1)
+        self.assertEqual(meta["utxos"][0]["branch_index"], 6)
+        self.assertEqual(len(records), 1)
+        self.assertNotIn("scantxoutset", [call[0] for call in calls])
+
+    def test_bitcoinrpc_fixed_descriptor_import_omits_range(self):
+        class FakeDescriptor:
+            is_wildcard = False
+
+            def to_string(self):
+                return "wpkh(xpub/0/5)"
+
+        plan = DescriptorPlan(
+            chain="bitcoin",
+            network="bitcoin",
+            gap_limit=3,
+            descriptor_fingerprint="fp",
+            branches=(DescriptorBranch(0, "receive", FakeDescriptor()),),
+        )
+
+        def fake_bitcoinrpc_call(backend, method, params=None, wallet_name=None, timeout=None):
+            del backend, timeout
+            if method == "getdescriptorinfo":
+                return {"descriptor": "wpkh(xpub/0/5)#core"}
+            if method == "importdescriptors":
+                self.assertEqual(wallet_name, "kassiber-wallet-1")
+                self.assertEqual(
+                    params,
+                    [
+                        [
+                            {
+                                "desc": "wpkh(xpub/0/5)#core",
+                                "timestamp": 0,
+                                "internal": False,
+                                "active": False,
+                            }
+                        ]
+                    ],
+                )
+                return [{"success": True}]
+            raise AssertionError(f"Unexpected RPC call: {(method, params, wallet_name)!r}")
+
+        with patch("kassiber.core.sync_backends.bitcoinrpc_call", side_effect=fake_bitcoinrpc_call):
+            imported_count, range_ends = bitcoinrpc_import_ranged_descriptors(
+                {"name": "core", "kind": "bitcoinrpc", "url": "http://core.example"},
+                "kassiber-wallet-1",
+                plan,
+                {},
+                0,
+            )
+
+        self.assertEqual(imported_count, 1)
+        self.assertEqual(range_ends, {"0": 0})
+
+    def test_bitcoinrpc_descriptor_sync_uses_listsinceblock_when_range_unchanged(self):
+        class FakeDescriptor:
+            is_wildcard = True
+
+            def __init__(self, raw):
+                self.raw = raw
+
+            def to_string(self):
+                return self.raw
+
+        plan = DescriptorPlan(
+            chain="bitcoin",
+            network="bitcoin",
+            gap_limit=3,
+            descriptor_fingerprint="fp",
+            branches=(DescriptorBranch(6, "p2tr receive", FakeDescriptor("tr(xpub/0/*)")),),
+        )
+        target = {
+            "address": "bc1preceive2",
+            "script_pubkey": "5120" + "11" * 32,
+            "branch_index": 6,
+            "branch_label": "p2tr receive",
+            "address_index": 2,
+        }
+        sync_state = WalletSyncState(
+            chain="bitcoin",
+            network="bitcoin",
+            descriptor_plan=plan,
+            policy_asset_id="",
+            targets=[target],
+            tracked_scripts={target["script_pubkey"]: target},
+            history_cache={},
+            checkpoint={
+                "bitcoinrpc_last_block": "aa" * 32,
+                "bitcoinrpc_descriptor_range_ends": {"6": 5},
+                "highest_used": {"6": 2},
+            },
+        )
+        calls = []
+
+        def fake_bitcoinrpc_call(backend, method, params=None, wallet_name=None, timeout=None):
+            del backend, timeout
+            calls.append((method, params, wallet_name))
+            if method == "listwallets":
+                return ["kassiber-wallet-1"]
+            if method == "listsinceblock":
+                return {
+                    "transactions": [],
+                    "lastblock": "bb" * 32,
+                    "removed": [],
+                }
+            if method == "listunspent":
+                return []
+            raise AssertionError(f"Unexpected RPC call: {(method, params, wallet_name)!r}")
+
+        with patch("kassiber.core.sync_backends.bitcoinrpc_call", side_effect=fake_bitcoinrpc_call), patch(
+            "kassiber.core.sync_backends._bitcoinrpc_descriptor_targets_for_range_ends",
+            return_value=[target],
+        ):
+            records, meta = bitcoinrpc_sync_adapter(
+                {"name": "core", "kind": "bitcoinrpc", "url": "http://core.example"},
+                {"id": "wallet-1", "config_json": "{}"},
+                sync_state,
+            )
+
+        self.assertEqual(records, [])
+        self.assertEqual(meta["imported_descriptors"], 0)
+        self.assertEqual(meta["bitcoinrpc_sync_mode"], "sinceblock")
+        self.assertEqual(
+            [method for method, _params, _wallet in calls],
+            ["listwallets", "listsinceblock", "listunspent"],
+        )
+
+    def test_bitcoinrpc_descriptor_sync_learns_highest_used_from_history(self):
+        class FakeDescriptor:
+            is_wildcard = True
+
+            def __init__(self, raw):
+                self.raw = raw
+
+            def to_string(self):
+                return self.raw
+
+        plan = DescriptorPlan(
+            chain="bitcoin",
+            network="bitcoin",
+            gap_limit=3,
+            descriptor_fingerprint="fp",
+            branches=(DescriptorBranch(6, "p2tr receive", FakeDescriptor("tr(xpub/0/*)")),),
+        )
+        target = {
+            "address": "bc1preceive2",
+            "script_pubkey": "5120" + "11" * 32,
+            "branch_index": 6,
+            "branch_label": "p2tr receive",
+            "address_index": 2,
+        }
+        sync_state = WalletSyncState(
+            chain="bitcoin",
+            network="bitcoin",
+            descriptor_plan=plan,
+            policy_asset_id="",
+            targets=[target],
+            tracked_scripts={target["script_pubkey"]: target},
+            history_cache={},
+        )
+
+        def fake_bitcoinrpc_call(backend, method, params=None, wallet_name=None, timeout=None):
+            del backend
+            if method == "listwallets":
+                return ["kassiber-wallet-1"]
+            if method == "getdescriptorinfo":
+                return {"descriptor": f"{params[0]}#core"}
+            if method == "importdescriptors":
+                self.assertEqual(timeout, 1800)
+                self.assertEqual(params[0][0]["range"], [0, 2])
+                return [{"success": True}]
+            if method == "listtransactions":
+                return [
+                    {
+                        "txid": "55" * 32,
+                        "category": "receive",
+                        "address": "bc1preceive2",
+                        "amount": 0.001,
+                        "fee": 0,
+                        "blocktime": 1_700_000_000,
+                    }
+                ]
+            if method == "getbestblockhash":
+                return "bb" * 32
+            if method == "listunspent":
+                return []
+            raise AssertionError(f"Unexpected RPC call: {(method, params, wallet_name)!r}")
+
+        with patch("kassiber.core.sync_backends.bitcoinrpc_call", side_effect=fake_bitcoinrpc_call), patch(
+            "kassiber.core.sync_backends._bitcoinrpc_descriptor_targets_for_range_ends",
+            return_value=[target],
+        ):
+            records, meta = bitcoinrpc_sync_adapter(
+                {"name": "core", "kind": "bitcoinrpc", "url": "http://core.example"},
+                {"id": "wallet-1", "config_json": "{}"},
+                sync_state,
+            )
+
+        self.assertEqual(len(records), 1)
+        self.assertEqual(meta["freshness_checkpoint"]["highest_used"], {"6": 2})
+
+    def test_bitcoinrpc_descriptor_sync_widens_from_history_highest_used(self):
+        class FakeDescriptor:
+            is_wildcard = True
+
+            def __init__(self, raw):
+                self.raw = raw
+
+            def to_string(self):
+                return self.raw
+
+        plan = DescriptorPlan(
+            chain="bitcoin",
+            network="bitcoin",
+            gap_limit=3,
+            descriptor_fingerprint="fp",
+            branches=(DescriptorBranch(6, "p2tr receive", FakeDescriptor("tr(xpub/0/*)")),),
+        )
+        target = {
+            "address": "bc1preceive2",
+            "script_pubkey": "5120" + "11" * 32,
+            "branch_index": 6,
+            "branch_label": "p2tr receive",
+            "address_index": 2,
+        }
+        sync_state = WalletSyncState(
+            chain="bitcoin",
+            network="bitcoin",
+            descriptor_plan=plan,
+            policy_asset_id="",
+            targets=[target],
+            tracked_scripts={target["script_pubkey"]: target},
+            history_cache={},
+            checkpoint={
+                "bitcoinrpc_last_block": "aa" * 32,
+                "bitcoinrpc_descriptor_range_ends": {"6": 2},
+                "highest_used": {"6": 2},
+            },
+        )
+
+        def fake_bitcoinrpc_call(backend, method, params=None, wallet_name=None, timeout=None):
+            del backend
+            if method == "listwallets":
+                return ["kassiber-wallet-1"]
+            if method == "getdescriptorinfo":
+                return {"descriptor": f"{params[0]}#core"}
+            if method == "importdescriptors":
+                self.assertEqual(wallet_name, "kassiber-wallet-1")
+                self.assertEqual(timeout, 1800)
+                self.assertEqual(params[0][0]["range"], [0, 5])
+                return [{"success": True}]
+            if method == "listtransactions":
+                return []
+            if method == "getbestblockhash":
+                return "bb" * 32
+            if method == "listunspent":
+                return []
+            raise AssertionError(f"Unexpected RPC call: {(method, params, wallet_name)!r}")
+
+        with patch("kassiber.core.sync_backends.bitcoinrpc_call", side_effect=fake_bitcoinrpc_call), patch(
+            "kassiber.core.sync_backends._bitcoinrpc_descriptor_targets_for_range_ends",
+            return_value=[target],
+        ):
+            records, meta = bitcoinrpc_sync_adapter(
+                {"name": "core", "kind": "bitcoinrpc", "url": "http://core.example"},
+                {"id": "wallet-1", "config_json": "{}"},
+                sync_state,
+            )
+
+        self.assertEqual(records, [])
+        self.assertEqual(meta["imported_descriptors"], 1)
+        self.assertEqual(
+            meta["freshness_checkpoint"]["bitcoinrpc_descriptor_range_ends"],
+            {"6": 5},
+        )
+
+    def test_wallet_birthday_validation_and_unix_conversion(self):
+        config = core_wallets._validated_wallet_config(
+            "descriptor",
+            {"source_file": "/tmp/wallet.json", "birthday": "2024-01-02"},
+        )
+
+        self.assertEqual(config["birthday"], "2024-01-02T00:00:00Z")
+        self.assertEqual(iso_to_unix(config["birthday"]), 1_704_153_600)
+        self.assertEqual(iso_to_unix(None), 0)
+        with self.assertRaises(AppError):
+            core_wallets._validated_wallet_config(
+                "descriptor",
+                {"source_file": "/tmp/wallet.json", "birthday": "not-a-date"},
+            )
+
     def test_esplora_mempool_record_leaves_confirmed_at_empty(self):
         tracked_script = "0014watch"
         tx = {
@@ -1122,7 +2167,39 @@ class SyncBackendsTest(unittest.TestCase):
     def test_bitcoinrpc_multi_output_send_does_not_double_count_fee(self):
         # Bitcoin Core stamps the SAME whole-tx fee on every `send`-category
         # detail of one transaction. Summing per detail would double-count it for
-        # a multi-output send; the fee must be booked exactly once.
+        # a multi-output send; the fee must be booked exactly once and kept
+        # separate from Core's already fee-exclusive send amounts.
+        record = record_from_bitcoinrpc_details(
+            "66" * 32,
+            [
+                {"category": "send", "amount": -0.5, "fee": -0.0001, "blocktime": 1_700_000_000},
+                {"category": "send", "amount": -0.3, "fee": -0.0001, "blocktime": 1_700_000_000},
+            ],
+            "core",
+            raw_graph={
+                "vin": [
+                    {
+                        "prevout": {
+                            "scriptpubkey": "0014" + "ef" * 20,
+                            "value": 80_010_000,
+                        }
+                    }
+                ],
+                "vout": [
+                    {"scriptpubkey": "0014" + "ab" * 20, "value": 50_000_000},
+                    {"scriptpubkey": "0014" + "cd" * 20, "value": 30_000_000},
+                ]
+            },
+            tracked_scripts={"0014" + "ef" * 20},
+        )
+        self.assertEqual(record["direction"], "outbound")
+        # fee booked once (0.0001), not summed to 0.0002.
+        self.assertAlmostEqual(float(record["fee"]), 0.0001, places=8)
+        # With a decoded graph, the recipient amount remains 0.8 and the fee is
+        # a separate ledger component.
+        self.assertAlmostEqual(float(record["amount"]), 0.8, places=8)
+
+    def test_bitcoinrpc_multi_output_send_legacy_fallback_keeps_net_details_amount(self):
         record = record_from_bitcoinrpc_details(
             "66" * 32,
             [
@@ -1132,10 +2209,231 @@ class SyncBackendsTest(unittest.TestCase):
             "core",
         )
         self.assertEqual(record["direction"], "outbound")
-        # fee booked once (0.0001), not summed to 0.0002.
         self.assertAlmostEqual(float(record["fee"]), 0.0001, places=8)
-        # amount = gross_out (0.8) - fee (0.0001), not - 0.0002.
         self.assertAlmostEqual(float(record["amount"]), 0.7999, places=8)
+
+    def test_bitcoinrpc_fee_only_self_spend_keeps_zero_amount(self):
+        record = record_from_bitcoinrpc_details(
+            "67" * 32,
+            [
+                {"category": "send", "amount": -1.0, "fee": -0.0001, "blocktime": 1_700_000_000},
+                {"category": "receive", "amount": 1.0, "fee": 0, "blocktime": 1_700_000_000},
+            ],
+            "core",
+        )
+        self.assertEqual(record["direction"], "outbound")
+        self.assertEqual(record["kind"], "fee")
+        self.assertAlmostEqual(float(record["amount"]), 0.0, places=8)
+        self.assertAlmostEqual(float(record["fee"]), 0.0001, places=8)
+
+    def test_bitcoinrpc_multi_source_graph_keeps_wallet_local_amount(self):
+        record = record_from_bitcoinrpc_details(
+            "66" * 32,
+            [
+                {"category": "send", "amount": -0.3, "fee": -0.0001, "blocktime": 1_700_000_000},
+            ],
+            "core",
+            raw_graph={
+                "vin": [
+                    {
+                        "prevout": {
+                            "scriptpubkey": "0014" + "ab" * 20,
+                            "value": 30_000_000,
+                        }
+                    },
+                    {
+                        "prevout": {
+                            "scriptpubkey": "0014" + "cd" * 20,
+                            "value": 70_000_000,
+                        }
+                    },
+                ],
+                "vout": [
+                    {"scriptpubkey": "0014" + "ef" * 20, "value": 99_990_000},
+                ],
+            },
+            tracked_scripts={"0014" + "ab" * 20},
+        )
+        self.assertEqual(record["direction"], "outbound")
+        self.assertAlmostEqual(float(record["amount"]), 0.2999, places=8)
+
+    def test_bitcoinrpc_mixed_input_graph_marks_privacy_boundary(self):
+        record = record_from_bitcoinrpc_details(
+            "66" * 32,
+            [
+                {"category": "send", "amount": -0.3, "fee": -0.0001, "blocktime": 1_700_000_000},
+            ],
+            "core",
+            raw_graph={
+                "vin": [
+                    {
+                        "prevout": {
+                            "scriptpubkey": "0014" + "ab" * 20,
+                            "value": 30_000_000,
+                        }
+                    },
+                    {
+                        "prevout": {
+                            "scriptpubkey": "0014" + "cd" * 20,
+                            "value": 70_000_000,
+                        }
+                    },
+                ],
+                "vout": [
+                    {"scriptpubkey": "0014" + "ef" * 20, "value": 99_990_000},
+                ],
+            },
+            tracked_scripts={"0014" + "ab" * 20},
+        )
+        self.assertEqual(record["privacy_boundary"], "payjoin")
+        raw_json = json.loads(record["raw_json"])
+        self.assertEqual(raw_json["privacy_boundary"], "payjoin")
+
+    def test_bitcoinrpc_verbose_transaction_graph_is_esplora_shaped(self):
+        graph = sb._bitcoinrpc_normalized_graph(
+            "66" * 32,
+            {
+                "decoded": {
+                    "txid": "66" * 32,
+                    "vin": [{"txid": "55" * 32, "vout": 1}],
+                    "vout": [
+                        {
+                            "n": 0,
+                            "value": 0.12345678,
+                            "scriptPubKey": {"hex": "0014" + "ab" * 20},
+                        }
+                    ],
+                }
+            },
+        )
+        self.assertEqual(graph["vin"][0]["txid"], "55" * 32)
+        self.assertEqual(graph["vin"][0]["vout"], 1)
+        self.assertEqual(graph["vout"][0]["scriptpubkey"], "0014" + "ab" * 20)
+        self.assertEqual(graph["vout"][0]["value"], 12_345_678)
+
+    def test_bitcoinrpc_graph_unavailable_keeps_sync_incomplete(self):
+        target = {"address": "bc1qchange", "script_pubkey": "0014" + "ab" * 20}
+        sync_state = WalletSyncState(
+            chain="bitcoin",
+            network="bitcoin",
+            descriptor_plan=None,
+            policy_asset_id="",
+            targets=[target],
+            tracked_scripts={target["script_pubkey"]: target},
+            history_cache={},
+        )
+        txid = "56" * 32
+
+        def fake_bitcoinrpc_call(backend, method, params=None, wallet_name=None, timeout=None):
+            del backend, timeout
+            key = (method, tuple(params or ()), wallet_name)
+            if key == ("listtransactions", ("*", 1000, 0, True), "kassiber-wallet-1"):
+                return [
+                    {
+                        "txid": txid,
+                        "category": "send",
+                        "amount": -0.3,
+                        "fee": -0.00001,
+                        "blocktime": 1_700_000_200,
+                    },
+                ]
+            if key == ("getbestblockhash", (), None):
+                return "bb" * 32
+            if key == ("gettransaction", (txid, True, True), "kassiber-wallet-1"):
+                raise AppError("temporary Core failure")
+            raise AssertionError(f"Unexpected RPC call: {key!r}")
+
+        with patch("kassiber.core.sync_backends.bitcoinrpc_call", side_effect=fake_bitcoinrpc_call):
+            records, meta = sb.bitcoinrpc_records_for_wallet(
+                {"name": "core", "kind": "bitcoinrpc", "url": "http://core.example"},
+                {"id": "wallet-1"},
+                ["bc1qchange"],
+                wallet_name="kassiber-wallet-1",
+                imported_count=0,
+                sync_state=sync_state,
+            )
+
+        self.assertEqual(len(records), 1)
+        self.assertEqual(meta["bitcoinrpc_graph_unavailable_txids"], [txid])
+        self.assertNotIn("bitcoinrpc_last_block", meta)
+
+    def test_bitcoinrpc_missing_verbose_graph_assertion_is_not_swallowed(self):
+        target = {"address": "bc1qchange", "script_pubkey": "0014" + "ab" * 20}
+        sync_state = WalletSyncState(
+            chain="bitcoin",
+            network="bitcoin",
+            descriptor_plan=None,
+            policy_asset_id="",
+            targets=[target],
+            tracked_scripts={target["script_pubkey"]: target},
+            history_cache={},
+        )
+        txid = "57" * 32
+
+        def fake_bitcoinrpc_call(backend, method, params=None, wallet_name=None, timeout=None):
+            del backend, timeout
+            key = (method, tuple(params or ()), wallet_name)
+            if key == ("listtransactions", ("*", 1000, 0, True), "kassiber-wallet-1"):
+                return [
+                    {
+                        "txid": txid,
+                        "category": "send",
+                        "amount": -0.3,
+                        "fee": -0.00001,
+                        "blocktime": 1_700_000_200,
+                    },
+                ]
+            if key == ("getbestblockhash", (), None):
+                return "bb" * 32
+            raise AssertionError(f"Unexpected RPC call: {key!r}")
+
+        with patch("kassiber.core.sync_backends.bitcoinrpc_call", side_effect=fake_bitcoinrpc_call):
+            with self.assertRaises(AssertionError):
+                sb.bitcoinrpc_records_for_wallet(
+                    {"name": "core", "kind": "bitcoinrpc", "url": "http://core.example"},
+                    {"id": "wallet-1"},
+                    ["bc1qchange"],
+                    wallet_name="kassiber-wallet-1",
+                    imported_count=0,
+                    sync_state=sync_state,
+                )
+
+    def test_bitcoinrpc_conflicted_details_are_skipped(self):
+        # An RBF-replaced original stays in the wallet with negative
+        # confirmations next to its confirmed replacement; booking it would
+        # double-count the disposal.
+        record = record_from_bitcoinrpc_details(
+            "77" * 32,
+            [
+                {
+                    "category": "send",
+                    "amount": -0.2,
+                    "fee": -0.00001,
+                    "confirmations": -2,
+                    "time": 1_700_000_000,
+                    "walletconflicts": ["88" * 32],
+                }
+            ],
+            "core",
+        )
+        self.assertIsNone(record)
+
+    def test_bitcoinrpc_mature_coinbase_imports_as_deposit(self):
+        record = record_from_bitcoinrpc_details(
+            "99" * 32,
+            [
+                {
+                    "category": "generate",
+                    "amount": 50.0,
+                    "confirmations": 120,
+                    "blocktime": 1_700_000_000,
+                }
+            ],
+            "core",
+        )
+        self.assertEqual(record["direction"], "inbound")
+        self.assertEqual(record["kind"], "deposit")
+        self.assertAlmostEqual(float(record["amount"]), 50.0, places=8)
 
 
 class _FakeSocket:
@@ -1448,8 +2746,12 @@ class HttpRetryAndLimiterTest(unittest.TestCase):
 
         first = http_client.host_limiter("https://shared.example/a")
         again = http_client.host_limiter("https://shared.example/b?q=1")
+        with_userinfo = http_client.host_limiter("https://user:pass@SHARED.example/c")
+        other_port = http_client.host_limiter("https://shared.example:8443/d")
         other = http_client.host_limiter("https://other.example/a")
         self.assertIs(first, again)
+        self.assertIs(first, with_userinfo)
+        self.assertIs(first, other_port)
         self.assertIsNot(first, other)
 
     def test_http_get_json_recovers_from_real_429(self):
@@ -1698,6 +3000,67 @@ class CrossWalletPrefetchTest(unittest.TestCase):
         self.assertEqual(prefetched["w-bad"].code, "source_overlap")
         self.assertEqual(adapter_calls, ["w-good"])
 
+    def test_prefetch_uses_sync_state_returned_by_preflight(self):
+        wallet = _backend_sync_wallet("w-filter", "Filtered", "bc1qfilter")
+        targets = [
+            {"address": "bc1qoverlap", "script_pubkey": "0014" + "11" * 20},
+            {"address": "bc1qunique", "script_pubkey": "0014" + "22" * 20},
+        ]
+        adapter_target_counts = []
+
+        def resolve_sync_state(_backend, _wallet):
+            return WalletSyncState(
+                chain="bitcoin",
+                network="bitcoin",
+                descriptor_plan=None,
+                policy_asset_id="",
+                targets=targets,
+                tracked_scripts={target["script_pubkey"]: target for target in targets},
+                history_cache={},
+            )
+
+        def preflight(_wallet, sync_state):
+            kept = [sync_state.targets[1]]
+            return WalletSyncState(
+                chain=sync_state.chain,
+                network=sync_state.network,
+                descriptor_plan=sync_state.descriptor_plan,
+                policy_asset_id=sync_state.policy_asset_id,
+                targets=kept,
+                tracked_scripts={kept[0]["script_pubkey"]: kept[0]},
+                history_cache=sync_state.history_cache,
+                checkpoint=sync_state.checkpoint,
+            )
+
+        def adapter(_backend, _wallet, sync_state):
+            adapter_target_counts.append(len(sync_state.targets))
+            return [], {}
+
+        hooks = WalletSyncHooks(
+            import_file=lambda *a, **k: {},
+            insert_records=lambda *a, **k: {"imported": 0, "skipped": 0},
+            resolve_backend=lambda runtime_config, backend_name: {
+                "name": "default",
+                "kind": "esplora",
+                "url": "https://esplora.example",
+            },
+            resolve_sync_state=resolve_sync_state,
+            normalize_addresses=lambda values: list(values or []),
+            backend_adapters={"esplora": adapter},
+        )
+
+        prefetched = prefetch_wallets_backend(
+            {},
+            {},
+            [wallet],
+            hooks,
+            source_overlap_preflight=preflight,
+        )
+
+        self.assertIsInstance(prefetched["w-filter"], WalletBackendFetch)
+        self.assertEqual(adapter_target_counts, [1])
+        self.assertEqual(prefetched["w-filter"].sync_state.targets[0]["address"], "bc1qunique")
+
     def test_sync_wallets_applies_prefetch_and_reraises_captured_error(self):
         hooks = self._hooks()
         good = _backend_sync_wallet("w-good", "Good", "bc1qgood")
@@ -1715,6 +3078,129 @@ class CrossWalletPrefetchTest(unittest.TestCase):
                 None, {}, {}, [bad], hooks, prefetched={"w-bad": AppError("boom", code="x")}
             )
         self.assertEqual(ctx.exception.code, "x")
+
+
+_RETRACT_NOW = "2026-01-01T00:00:00Z"
+
+
+class RetractWalletRecordsDbTest(unittest.TestCase):
+    """End-to-end DB coverage for imports.retract_wallet_records.
+
+    The sync-layer tests stub retract_records; this exercises the real DELETE +
+    journal-invalidation path — the branch that removes already-booked rows when
+    an authoritative backend reports RBF-replaced / orphaned txids.
+    """
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory(prefix="kassiber-retract-")
+        self.conn = open_db(Path(self.tmp.name) / "data")
+        self.invalidated: list[str] = []
+        self.hooks = ImportCoordinatorHooks(
+            ensure_tag_row=lambda *args, **kwargs: None,
+            invalidate_journals=lambda conn, profile_id: self.invalidated.append(
+                profile_id
+            ),
+        )
+        self._seed()
+
+    def tearDown(self):
+        self.conn.close()
+        self.tmp.cleanup()
+
+    def _seed(self):
+        conn = self.conn
+        conn.execute(
+            "INSERT INTO workspaces(id, label, created_at) VALUES(?, ?, ?)",
+            ("ws-1", "Main", _RETRACT_NOW),
+        )
+        conn.execute(
+            """
+            INSERT INTO profiles(
+                id, workspace_id, label, fiat_currency, tax_country,
+                tax_long_term_days, gains_algorithm, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            ("profile-1", "ws-1", "Default", "EUR", "generic", 365, "FIFO", _RETRACT_NOW),
+        )
+        conn.execute(
+            """
+            INSERT INTO accounts(
+                id, workspace_id, profile_id, code, label, account_type, asset, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            ("acct-1", "ws-1", "profile-1", "treasury", "Treasury", "asset", "BTC", _RETRACT_NOW),
+        )
+        conn.execute(
+            """
+            INSERT INTO wallets(id, workspace_id, profile_id, account_id, label, kind, config_json, created_at)
+            VALUES(?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            ("wallet-a", "ws-1", "profile-1", "acct-1", "Cold", "custom", "{}", _RETRACT_NOW),
+        )
+        for tx_id, external_id, direction in (
+            ("tx-keep", "kept-txid", "inbound"),
+            ("tx-rbf-1", "rbf-original-1", "outbound"),
+            ("tx-rbf-2", "rbf-original-2", "outbound"),
+        ):
+            conn.execute(
+                """
+                INSERT INTO transactions(
+                    id, workspace_id, profile_id, wallet_id, external_id, fingerprint,
+                    occurred_at, direction, asset, amount, fee, fiat_currency,
+                    fiat_rate, fiat_value, kind, description, counterparty, raw_json, created_at
+                ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    tx_id, "ws-1", "profile-1", "wallet-a", external_id, f"fp-{tx_id}",
+                    _RETRACT_NOW, direction, "BTC", 100_000_000, 0, "EUR",
+                    40_000.0, None,
+                    "deposit" if direction == "inbound" else "withdrawal",
+                    None, None, "{}", _RETRACT_NOW,
+                ),
+            )
+        conn.commit()
+
+    def _external_ids(self):
+        return [
+            row["external_id"]
+            for row in self.conn.execute(
+                "SELECT external_id FROM transactions ORDER BY external_id"
+            ).fetchall()
+        ]
+
+    def test_retract_deletes_matching_rows_and_invalidates_journals(self):
+        result = core_imports.retract_wallet_records(
+            self.conn,
+            {"id": "profile-1"},
+            {"id": "wallet-a", "label": "Cold"},
+            # An unknown id plus a case-different duplicate prove normalization
+            # and that only genuine matches are deleted.
+            ["rbf-original-1", "RBF-ORIGINAL-2", "never-seen-txid"],
+            "bitcoinrpc",
+            self.hooks,
+        )
+        self.assertEqual(result["retracted"], 2)
+        self.assertTrue(result["journal_invalidated"])
+        self.assertEqual(len(result["retracted_records"]), 2)
+        self.assertEqual(self._external_ids(), ["kept-txid"])
+        self.assertEqual(self.invalidated, ["profile-1"])
+
+    def test_retract_with_no_matches_is_a_noop(self):
+        result = core_imports.retract_wallet_records(
+            self.conn,
+            {"id": "profile-1"},
+            {"id": "wallet-a", "label": "Cold"},
+            ["not-here", "also-absent"],
+            "bitcoinrpc",
+            self.hooks,
+        )
+        self.assertEqual(result["retracted"], 0)
+        self.assertFalse(result["journal_invalidated"])
+        self.assertEqual(
+            self._external_ids(),
+            ["kept-txid", "rbf-original-1", "rbf-original-2"],
+        )
+        self.assertEqual(self.invalidated, [])
 
 
 if __name__ == "__main__":

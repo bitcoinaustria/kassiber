@@ -63,9 +63,9 @@ Depending on what you send, prompts may contain:
 
 Normal Kassiber `backends ...` and `wallets ...` output is intentionally
 narrowed for secret-bearing config values, but that is not a general privacy
-guarantee. Do not paste raw credentials, raw private descriptors, wallet
-exports, or other sensitive material into a remote model unless that is
-acceptable for your threat model.
+guarantee. Do not paste raw credentials, raw private descriptors, Silent
+Payments `sp()` / `spscan` scan material, wallet exports, or other sensitive
+material into a remote model unless that is acceptable for your threat model.
 
 If in doubt, keep inference local.
 
@@ -84,6 +84,16 @@ an OpenAI-compatible API at `http://localhost:11434/v1`. The first time the
 in-app assistant or CLI is invoked, Kassiber seeds a default `ollama` provider
 pointing at that endpoint. Run `ollama serve` (or have Ollama auto-start) and
 the assistant Just Works.
+
+If Kassiber itself is running inside a container and Ollama is running on the
+host, seed the provider with the Docker host alias instead:
+
+```bash
+KASSIBER_DEFAULT_AI_BASE_URL=http://host.docker.internal:11434/v1
+```
+
+This only affects first-time provider seeding. For an existing book, update the
+`ollama` provider's `base_url` instead.
 
 Example:
 
@@ -409,8 +419,9 @@ surfaces:
 - `ui_wallets_list` maps to daemon kind `ui.wallets.list`
 - `ui_wallets_utxos` maps to daemon kind `ui.wallets.utxos`; it returns one
   wallet's redacted watch-only UTXO inventory and source freshness, without
-  wallet addresses, derivation indices, descriptors, xpubs, blinding keys,
-  backend URLs/tokens, raw wallet config, or raw wallet files
+  wallet addresses, scriptPubKeys, branch labels, derivation indices,
+  descriptors, xpubs, Silent Payments scan material, blinding keys, backend
+  URLs/tokens, raw wallet config, or raw wallet files
 - `ui_backends_list` maps to daemon kind `ui.backends.list`; it is scoped to
   backends referenced by the active books/profile and returns URL presence
   metadata, not exact endpoint URLs

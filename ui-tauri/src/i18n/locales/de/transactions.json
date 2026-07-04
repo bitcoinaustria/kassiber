@@ -291,10 +291,16 @@
     }
   },
   "table": {
-    "title": "Transaktionen",
+    "title": "Buchtransaktionen",
     "filters": "Filter:",
     "clearAll": "Alle zurücksetzen",
     "withFees": "Mit Gebühren",
+    "expand": {
+      "expand": "Erweitern",
+      "collapse": "Zurück",
+      "expandAria": "Transaktionstabelle erweitern",
+      "collapseAria": "Transaktionstabelle zurücksetzen"
+    },
     "column": {
       "transaction": "Transaktion",
       "amount": "Betrag",
@@ -596,7 +602,10 @@
     "weight": "Weight",
     "unknown": "Unbekannt",
     "note": "Notiz",
-    "notePlaceholder": "Quittung, Rechnung, Gegenpartei oder Prüfkontext"
+    "notePlaceholder": "Quittung, Rechnung, Gegenpartei oder Prüfkontext",
+    "noteNone": "Keine Notiz",
+    "noteHint": "Die Notiz bearbeitest du im Tab „Klassifizieren“.",
+    "counterpartyNone": "Nicht erfasst"
   },
   "graph": {
     "title": "Transaktionsgraph",
@@ -614,8 +623,13 @@
     "graphless": "Kein Graph für diese Quelle",
     "liquidGraphless": "Liquid-Graph nicht lokal gespeichert",
     "graphlessBody": "Diese Zeile wurde ohne bewertete Bitcoin-vin/vout-Daten importiert; Kassiber kann die Buchungszeile, aber kein Flussdiagramm anzeigen.",
-    "liquidBody": "Kassiber hat lokal nur die importierte Liquid-Zeile. Die öffentlichen Inputs und Outputs können im Liquid Network geprüft werden; vertrauliche Beträge bleiben möglicherweise verborgen.",
-    "openLiquidNetwork": "Liquid Network öffnen",
+    "liquidBody": "Kassiber hat für diese Zeile noch keine öffentlichen Liquid-Input-/Output-Referenzen. Richte ein Liquid-Backend ein oder aktualisiere es, damit der Graph generische vertrauliche Stränge verwenden kann.",
+    "addBitcoinBackend": "Bitcoin-Backend hinzufügen",
+    "reviewBitcoinBackend": "Bitcoin-Backend prüfen",
+    "addLiquidBackend": "Liquid-Backend hinzufügen",
+    "reviewLiquidBackend": "Liquid-Backend prüfen",
+    "backendSettingsReasonBitcoin": "Der Transaktionsgraph benötigt ein Bitcoin-Backend",
+    "backendSettingsReasonLiquid": "Der Transaktionsgraph benötigt ein Liquid-Backend",
     "inputCount": "Inputs",
     "outputCount": "Outputs",
     "feeRate": "Gebührensatz",
@@ -694,6 +708,7 @@
     }
   },
   "pricing": {
+    "sourceAria": "Bewertungsquelle",
     "manualOverride": "Manuelle Preisüberschreibung",
     "manualOverrideHint": "Speichert eine geprüfte Preisquelle sowie exakten manuellen Kurs/Wert in der Transaktionszeile. Journale nach dem Speichern erneut verarbeiten.",
     "calculatedFromAmount": "Berechnet aus dem festen Betrag: {{amount}}.",
@@ -788,7 +803,9 @@
     "addTagAria": "Tag hinzufügen",
     "suggestionPrefix": "+ {{tag}}",
     "note": "Notiz",
-    "notePlaceholder": "Quittung, Rechnung, Gegenpartei oder Prüfkontext"
+    "notePlaceholder": "Quittung, Rechnung, Gegenpartei oder Prüfkontext",
+    "loanRole": "Darlehensrolle",
+    "loanRoleHint": "Markiere diese Zeile als Teil eines BTC-Darlehens – Kapital oder Sicherheit. Gilt sofort; die zugehörigen Gegenstücke verknüpfst du im Tab „Verknüpft“."
   },
   "linked": {
     "pairedMovement": "Gepaarte Bewegung",
@@ -886,8 +903,7 @@
       "classify": "Klassifizieren",
       "pricing": "Bewertung",
       "tax": "Steuer",
-      "linked": "Verknüpft",
-      "ledger": "Hauptbuch"
+      "linked": "Verknüpft"
     },
     "banner": {
       "journalQuarantine": "Journal-Quarantäne",

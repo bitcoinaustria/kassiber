@@ -71,12 +71,13 @@
     },
     "confidence": {
       "any": "Beliebige Zuverlässigkeit",
-      "exact": "Exakt (payment_hash)",
+      "exact": "Exakter Nachweis",
       "strong": "Stark (heuristisch)"
     },
     "method": {
       "any": "Beliebige Methode",
       "paymentHash": "Payment Hash",
+      "providerSwapId": "Provider-Nachweis",
       "heuristic": "Zeit + Betrag",
       "htlcRefund": "Refund-Verknüpfung"
     },
@@ -149,6 +150,7 @@
       "candidateLabelLayerTransition": "Bitcoin-Swap-Kandidat",
       "candidateLabelSwap": "Swap-Kandidat",
       "matchedByPaymentHash": "Über Payment Hash zugeordnet.",
+      "matchedByProviderEvidence": "Über Provider-Nachweis zugeordnet.",
       "matchedByTimeAmount": "Über Zeit und Betrag zugeordnet.",
       "matchedByRefundLink": "Über HTLC-Refund-Verknüpfung zugeordnet.",
       "delta": "Differenz {{delta}} ({{percent}} %).",
@@ -158,6 +160,7 @@
       "policy": "Richtlinie",
       "matchRationale": "Treffer-Begründung",
       "rationalePaymentHash": "Beide Legs teilen denselben Lightning Payment Hash.",
+      "rationaleProviderEvidence": "Beide Legs teilen dieselbe redigierte Provider-Swap-ID.",
       "rationaleHeuristic": "Die Legs liegen nach Berücksichtigung der Gebührendifferenz nah in Zeit und Betrag.",
       "rationaleHtlcRefund": "Der eingehende Refund gibt den HTLC-Funding-Output des ausgehenden Legs aus, eine deterministische Verknüpfung auch innerhalb einer Wallet.",
       "autoPairRoute": "Auto-Paar-Route: {{rule}}",
@@ -324,6 +327,60 @@
       "reasonEvent": "Aktivitäts-Ereignis zurückgesetzt",
       "title": "Bearbeitung zurückgesetzt",
       "body": "Kassiber hat einen neuen Eintrag in der Bearbeitungshistorie mit dem zurückgesetzten Wert geschrieben."
+    }
+  },
+  "egress": {
+    "title": "Egress-Auditor",
+    "subtitle": "Live-RAM-Ledger für ausgehende Verbindungen",
+    "refresh": "Aktualisieren",
+    "loadFailed": "Egress-Ledger konnte nicht geladen werden: {{error}}",
+    "empty": "Kein ausgehender Egress erfasst",
+    "gap": "Ältere Zeilen verworfen",
+    "queryPlaceholder": "Host, Subsystem, Label filtern",
+    "metric": {
+      "total": "Erfasst",
+      "unexpected": "Unerwartet",
+      "update": "Update",
+      "dbHeader": "DB-Header"
+    },
+    "db": {
+      "title": "SQLCipher-Header",
+      "classification": "Status",
+      "prefix": "Prefix",
+      "none": "kein",
+      "ciphertextLike": "Ciphertext-artig",
+      "plaintext": "Plaintext-SQLite",
+      "missing": "Fehlt",
+      "unreadable": "Nicht lesbar",
+      "unknown": "Unbekannt",
+      "incompleteAllowlist": "Allowlist unvollständig"
+    },
+    "table": {
+      "time": "Zeit",
+      "subsystem": "Subsystem",
+      "destination": "Ziel",
+      "operation": "Operation",
+      "bytesOut": "Bytes raus",
+      "allowlist": "Allowlist",
+      "proxy": "via Proxy",
+      "noRows": "Keine Zeilen passen zu diesen Filtern"
+    },
+    "status": {
+      "user": "Benutzer",
+      "builtIn": "Eingebaut",
+      "unexpected": "Unerwartet",
+      "unknown": "Gesperrt"
+    },
+    "subsystems": {
+      "title": "Subsysteme",
+      "empty": "Kein Subsystem-Traffic"
+    },
+    "subsystem": {
+      "sync": "Sync",
+      "pricing": "Bewertung",
+      "ai": "AI",
+      "update": "Update",
+      "unknown": "Unbekannt"
     }
   },
   "logs": {

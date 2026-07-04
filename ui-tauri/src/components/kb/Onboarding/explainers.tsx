@@ -67,7 +67,7 @@ const ExplainerShell = ({
                 className={cn(
                   "flex gap-3 rounded-lg border p-3.5 transition-colors",
                   active
-                    ? "border-[var(--color-accent)] bg-paper-2"
+                    ? "border-[var(--kb-accent)] bg-paper-2"
                     : "border-line bg-paper opacity-70",
                 )}
               >
@@ -83,7 +83,7 @@ const ExplainerShell = ({
                   <p className="m-0 text-sm font-semibold text-ink">
                     {optTitle}
                     {active && (
-                      <span className="ml-2 font-mono text-[9px] font-medium uppercase tracking-[0.12em] text-[var(--color-accent)]">
+                      <span className="ml-2 font-mono text-[9px] font-medium uppercase tracking-[0.12em] text-[var(--kb-accent)]">
                         {t("explainer.selected")}
                       </span>
                     )}

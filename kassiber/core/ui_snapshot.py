@@ -6,11 +6,12 @@ import json
 import sqlite3
 from collections import defaultdict
 from datetime import date, datetime, timezone
+from decimal import Decimal
 from typing import Any
 
 from ..backends import backend_value, redact_backend_for_output
 from ..errors import AppError
-from ..msat import msat_to_btc
+from ..msat import dec, msat_to_btc
 from ..time_utils import _iso_z, _parse_iso_datetime
 from ..wallet_descriptors import (
     BITCOIN_NETWORK_ALIASES,
@@ -23,9 +24,12 @@ from ..wallet_descriptors import (
 )
 from . import output_inventory as core_output_inventory
 from . import ownership as core_ownership
+from . import freshness as core_freshness
 from . import rates as core_rates
+from . import silent_payments
 from . import sync_backends as core_sync_backends
 from . import source_overlap as core_source_overlap
+from . import transfer_matching as core_transfer_matching
 from . import reports as report_builders
 from .samourai import samourai_metadata_from_wallet_config
 from . import transaction_history
@@ -33,6 +37,7 @@ from .repo import current_context_snapshot
 from .sync import normalize_backend_kind
 from .wallets import (
     has_descriptor_sync_material,
+    has_silent_payment_sync_material,
     load_wallet_descriptor_plan_from_config,
     wallet_btcpay_provenance_config,
     wallet_is_deprecated,
@@ -379,6 +384,7 @@ def _wallet_backend_summary(
     source_format = _string_or_empty(config.get("source_format"))
     sync_source = _string_or_empty(config.get("sync_source"))
     has_descriptor = has_descriptor_sync_material(config)
+    has_silent_payment = has_silent_payment_sync_material(config)
     has_addresses = bool(config.get("addresses"))
     backend_name = explicit_backend
     backend_source = "explicit" if explicit_backend else "none"
@@ -388,6 +394,8 @@ def _wallet_backend_summary(
         sync_mode = "btcpay"
     elif source_file and source_format:
         sync_mode = "file_import"
+    elif has_silent_payment and kind == "silent-payment":
+        sync_mode = "backend_silent_payment"
     elif has_descriptor and kind in {"descriptor", "xpub", "address"}:
         sync_mode = "backend_descriptor"
         if not backend_name and default_backend_name:
@@ -819,6 +827,165 @@ def _transaction_wallet_balances(
     }
 
 
+def _book_quantity_delta(entry_type: str, quantity_msat: int | None) -> Decimal:
+    return report_builders._holdings_quantity_delta(
+        entry_type,
+        msat_to_btc(quantity_msat),
+    )
+
+
+def _balance_series_from_month_deltas(
+    by_month: dict[str, Decimal],
+) -> list[float]:
+    if not by_month:
+        return [0.0] * 12
+    months = set(sorted(by_month)[-12:])
+    cumulative = Decimal("0")
+    series = []
+    for month in sorted(by_month):
+        cumulative += by_month[month]
+        if month in months:
+            series.append(float(cumulative))
+    if len(series) < 12:
+        series = [series[0]] * (12 - len(series)) + series
+    return series[-12:]
+
+
+def _has_book_balance_state(freshness: dict[str, Any]) -> bool:
+    if freshness.get("needs_processing"):
+        return False
+    return bool(freshness.get("last_processed_at")) or int(
+        freshness.get("journal_entry_count") or 0,
+    ) > 0
+
+
+def _journal_wallet_holdings_balances(
+    conn: sqlite3.Connection,
+    profile_id: str,
+) -> dict[str, float] | None:
+    try:
+        rows = conn.execute(
+            """
+            SELECT wallet_id, SUM(quantity) AS quantity
+            FROM journal_wallet_holdings
+            WHERE profile_id = ? AND asset IN ('BTC', 'LBTC')
+            GROUP BY wallet_id
+            """,
+            (profile_id,),
+        ).fetchall()
+    except sqlite3.OperationalError:
+        rows = []
+    if rows:
+        return {
+            row["wallet_id"]: float(msat_to_btc(row["quantity"] or 0))
+            for row in rows
+        }
+    return None
+
+
+def _journal_entry_wallet_balances(
+    conn: sqlite3.Connection,
+    profile_id: str,
+) -> dict[str, float]:
+    rows = conn.execute(
+        """
+        SELECT wallet_id, entry_type, quantity
+        FROM journal_entries
+        WHERE profile_id = ? AND asset IN ('BTC', 'LBTC')
+        ORDER BY occurred_at ASC, created_at ASC, id ASC
+        """,
+        (profile_id,),
+    ).fetchall()
+    balances: dict[str, Decimal] = defaultdict(lambda: Decimal("0"))
+    for row in rows:
+        balances[row["wallet_id"]] += _book_quantity_delta(
+            row["entry_type"],
+            row["quantity"],
+        )
+    return {wallet_id: float(quantity) for wallet_id, quantity in balances.items()}
+
+
+def _journal_quantity_deltas_by_transaction(
+    conn: sqlite3.Connection,
+    profile_id: str,
+) -> dict[str, Decimal]:
+    rows = conn.execute(
+        """
+        SELECT transaction_id, entry_type, quantity
+        FROM journal_entries
+        WHERE profile_id = ? AND asset IN ('BTC', 'LBTC')
+        ORDER BY occurred_at ASC, created_at ASC, id ASC
+        """,
+        (profile_id,),
+    ).fetchall()
+    deltas: dict[str, Decimal] = defaultdict(lambda: Decimal("0"))
+    for row in rows:
+        transaction_id = row["transaction_id"]
+        if not transaction_id:
+            continue
+        deltas[str(transaction_id)] += _book_quantity_delta(
+            row["entry_type"],
+            row["quantity"],
+        )
+    return deltas
+
+
+def _journal_quantity_deltas_by_day(
+    conn: sqlite3.Connection,
+    profile_id: str,
+) -> dict[date, Decimal]:
+    rows = conn.execute(
+        """
+        SELECT
+            COALESCE(t.occurred_at, je.occurred_at) AS occurred_at,
+            je.entry_type,
+            je.quantity
+        FROM journal_entries je
+        LEFT JOIN transactions t ON t.id = je.transaction_id
+        WHERE je.profile_id = ? AND je.asset IN ('BTC', 'LBTC')
+        ORDER BY occurred_at ASC, je.created_at ASC, je.id ASC
+        """,
+        (profile_id,),
+    ).fetchall()
+    deltas: dict[date, Decimal] = defaultdict(lambda: Decimal("0"))
+    for row in rows:
+        day = _parse_day(row["occurred_at"])
+        if day is None:
+            continue
+        deltas[day] += _book_quantity_delta(row["entry_type"], row["quantity"])
+    return deltas
+
+
+def _journal_wallet_balances(
+    conn: sqlite3.Connection,
+    profile_id: str,
+    *,
+    has_book_state: bool,
+) -> dict[str, float] | None:
+    if not has_book_state:
+        return None
+    holdings_balances = _journal_wallet_holdings_balances(conn, profile_id)
+    if holdings_balances is not None:
+        return holdings_balances
+    return _journal_entry_wallet_balances(conn, profile_id)
+
+
+def _wallet_balances(
+    conn: sqlite3.Connection,
+    profile_id: str,
+    *,
+    has_book_state: bool,
+) -> dict[str, float]:
+    book_balances = _journal_wallet_balances(
+        conn,
+        profile_id,
+        has_book_state=has_book_state,
+    )
+    if book_balances is not None:
+        return book_balances
+    return _transaction_wallet_balances(conn, profile_id)
+
+
 def _connections(
     conn: sqlite3.Connection,
     profile_id: str,
@@ -939,7 +1106,12 @@ def _transactions(conn: sqlite3.Connection, profile_id: str) -> list[dict[str, A
     return output[:20]
 
 
-def _activity_transactions(conn: sqlite3.Connection, profile_id: str) -> list[dict[str, Any]]:
+def _activity_transactions(
+    conn: sqlite3.Connection,
+    profile_id: str,
+    *,
+    has_book_state: bool,
+) -> list[dict[str, Any]]:
     rows = conn.execute(
         """
         SELECT
@@ -977,19 +1149,37 @@ def _activity_transactions(conn: sqlite3.Connection, profile_id: str) -> list[di
         FROM transactions t
         JOIN wallets w ON w.id = t.wallet_id
         LEFT JOIN journal_quarantines jq ON jq.transaction_id = t.id
-        WHERE t.profile_id = ? AND t.asset IN ('BTC', 'LBTC')
+        WHERE t.profile_id = ?
+          AND t.asset IN ('BTC', 'LBTC')
+          AND COALESCE(t.excluded, 0) = 0
         ORDER BY t.occurred_at ASC, t.created_at ASC, t.id ASC
         """,
         (profile_id,),
     ).fetchall()
     activity_rows: list[dict[str, Any]] = []
     quantity_msat = 0
+    quantity_btc = Decimal("0")
+    book_deltas_by_transaction = (
+        _journal_quantity_deltas_by_transaction(conn, profile_id)
+        if has_book_state
+        else {}
+    )
     cost_basis_by_transaction = _portfolio_cost_basis_by_transaction(conn, profile_id)
     running_cost_basis = 0.0
     for row in rows:
         amount = int(row["amount"] or 0)
         fee = int(row["fee"] or 0)
-        quantity_msat += amount if row["direction"] == "inbound" else -amount - fee
+        if has_book_state:
+            quantity_btc += book_deltas_by_transaction.get(
+                str(row["id"]),
+                Decimal("0"),
+            )
+            running_balance_btc = float(quantity_btc)
+        else:
+            quantity_msat += (
+                amount if row["direction"] == "inbound" else -amount - fee
+            )
+            running_balance_btc = float(msat_to_btc(quantity_msat))
         running_cost_basis = cost_basis_by_transaction.get(
             str(row["id"]),
             running_cost_basis,
@@ -997,7 +1187,7 @@ def _activity_transactions(conn: sqlite3.Connection, profile_id: str) -> list[di
         activity_rows.append(
             {
                 **dict(row),
-                "running_balance_btc": float(msat_to_btc(quantity_msat)),
+                "running_balance_btc": running_balance_btc,
                 "running_cost_basis_eur": running_cost_basis,
             }
         )
@@ -1223,13 +1413,16 @@ def _transaction_row_to_ui(
                 if type_label != "Expense"
                 else (row["kind"] or row["direction"])
             ]
-        counter = (
-            row["counterparty"]
-            or row["description"]
-            or row["note"]
-            or row["external_id"]
-            or row["id"]
-        )
+        # Sync backends stamp provenance boilerplate into description; that is
+        # not a counterparty. An empty counter means "none recorded"; each UI
+        # surface picks its own fallback (short txid in tables, hidden in the
+        # detail header).
+        description = row["description"] or ""
+        if description.startswith("Synced from ") or description.startswith(
+            "Silent Payment sync from "
+        ):
+            description = ""
+        counter = row["counterparty"] or description or row["note"] or ""
         account = row["wallet"]
         internal = (row["kind"] or "").lower() == "transfer"
         output_tags = metadata_tags
@@ -1307,7 +1500,36 @@ def _transaction_row_to_ui(
     return payload
 
 
-def _balance_series(conn: sqlite3.Connection, profile_id: str) -> list[float]:
+def _journal_balance_series(
+    conn: sqlite3.Connection,
+    profile_id: str,
+    *,
+    has_book_state: bool,
+) -> list[float] | None:
+    if not has_book_state:
+        return None
+    rows = conn.execute(
+        """
+        SELECT occurred_at, entry_type, quantity
+        FROM journal_entries
+        WHERE profile_id = ? AND asset IN ('BTC', 'LBTC')
+        ORDER BY occurred_at ASC, created_at ASC, id ASC
+        """,
+        (profile_id,),
+    ).fetchall()
+    by_month: dict[str, Decimal] = defaultdict(lambda: Decimal("0"))
+    for row in rows:
+        key = (row["occurred_at"] or "")[:7]
+        if not key:
+            continue
+        by_month[key] += _book_quantity_delta(row["entry_type"], row["quantity"])
+    return _balance_series_from_month_deltas(by_month)
+
+
+def _transaction_balance_series(
+    conn: sqlite3.Connection,
+    profile_id: str,
+) -> list[float]:
     rows = conn.execute(
         """
         SELECT occurred_at, direction, amount, fee
@@ -1317,26 +1539,32 @@ def _balance_series(conn: sqlite3.Connection, profile_id: str) -> list[float]:
         """,
         (profile_id,),
     ).fetchall()
-    if not rows:
-        return [0.0] * 12
-    by_month: dict[str, int] = defaultdict(int)
+    by_month: dict[str, Decimal] = defaultdict(lambda: Decimal("0"))
     for row in rows:
         key = (row["occurred_at"] or "")[:7]
         if not key:
             continue
         amount = int(row["amount"] or 0)
         fee = int(row["fee"] or 0)
-        by_month[key] += amount if row["direction"] == "inbound" else -amount - fee
-    months = sorted(by_month)[-12:]
-    cumulative = 0
-    series = []
-    for month in sorted(by_month):
-        cumulative += by_month[month]
-        if month in months:
-            series.append(float(msat_to_btc(cumulative)))
-    if len(series) < 12:
-        series = [series[0]] * (12 - len(series)) + series
-    return series[-12:]
+        delta = amount if row["direction"] == "inbound" else -amount - fee
+        by_month[key] += msat_to_btc(delta)
+    return _balance_series_from_month_deltas(by_month)
+
+
+def _balance_series(
+    conn: sqlite3.Connection,
+    profile_id: str,
+    *,
+    has_book_state: bool,
+) -> list[float]:
+    book_series = _journal_balance_series(
+        conn,
+        profile_id,
+        has_book_state=has_book_state,
+    )
+    if book_series is not None:
+        return book_series
+    return _transaction_balance_series(conn, profile_id)
 
 
 def _rate_from_transaction(row: sqlite3.Row) -> float | None:
@@ -1355,10 +1583,16 @@ def _portfolio_cost_basis_by_date(
 ) -> dict[str, float]:
     rows = conn.execute(
         """
-        SELECT occurred_at, quantity, fiat_value, COALESCE(cost_basis, 0) AS cost_basis
-        FROM journal_entries
-        WHERE profile_id = ? AND asset IN ('BTC', 'LBTC')
-        ORDER BY occurred_at ASC, created_at ASC, id ASC
+        SELECT
+            COALESCE(t.occurred_at, je.occurred_at) AS occurred_at,
+            je.entry_type,
+            je.quantity,
+            je.fiat_value,
+            COALESCE(je.cost_basis, 0) AS cost_basis
+        FROM journal_entries je
+        LEFT JOIN transactions t ON t.id = je.transaction_id
+        WHERE je.profile_id = ? AND je.asset IN ('BTC', 'LBTC')
+        ORDER BY occurred_at ASC, je.created_at ASC, je.id ASC
         """,
         (profile_id,),
     ).fetchall()
@@ -1368,11 +1602,14 @@ def _portfolio_cost_basis_by_date(
         date_key = (row["occurred_at"] or "")[:10]
         if not date_key:
             continue
-        quantity = int(row["quantity"] or 0)
-        if quantity >= 0:
-            cost_basis += float(row["fiat_value"] or 0)
-        else:
-            cost_basis -= float(row["cost_basis"] or 0)
+        cost_basis += float(
+            report_builders._holdings_basis_delta(
+                row["entry_type"],
+                msat_to_btc(row["quantity"]),
+                dec(row["fiat_value"]),
+                dec(row["cost_basis"]),
+            )
+        )
         by_date[date_key] = cost_basis
     return by_date
 
@@ -1395,9 +1632,28 @@ def _daily_rate_rows(
         return []
     return conn.execute(
         """
-        WITH ranked AS (
+        WITH keyed AS (
             SELECT
-                substr(timestamp, 1, 10) AS rate_day,
+                CASE
+                    WHEN source = 'kraken-csv'
+                         AND granularity = 'daily'
+                         AND method = 'ohlcvt_csv'
+                    THEN date(timestamp, '-1 day')
+                    ELSE substr(timestamp, 1, 10)
+                END AS rate_day,
+                timestamp,
+                rate,
+                source,
+                fetched_at,
+                granularity,
+                method
+            FROM rates_cache
+            WHERE pair = ?
+              AND timestamp >= ?
+        ),
+        ranked AS (
+            SELECT
+                rate_day,
                 timestamp,
                 rate,
                 source,
@@ -1405,7 +1661,7 @@ def _daily_rate_rows(
                 granularity,
                 method,
                 ROW_NUMBER() OVER (
-                    PARTITION BY substr(timestamp, 1, 10)
+                    PARTITION BY rate_day
                     ORDER BY CASE
                                  WHEN source = 'manual'
                                       AND timestamp LIKE substr(timestamp, 1, 10) || 'T00:00:00%'
@@ -1418,9 +1674,7 @@ def _daily_rate_rows(
                              fetched_at DESC,
                              source ASC
                 ) AS rn
-            FROM rates_cache
-            WHERE pair = ?
-              AND timestamp >= ?
+            FROM keyed
         )
         SELECT rate_day, timestamp, rate, source, fetched_at, granularity, method
         FROM ranked
@@ -1437,7 +1691,7 @@ def _portfolio_cost_basis_by_transaction(
 ) -> dict[str, float]:
     rows = conn.execute(
         """
-        SELECT transaction_id, quantity, fiat_value, cost_basis
+        SELECT transaction_id, entry_type, quantity, fiat_value, cost_basis
         FROM journal_entries
         WHERE profile_id = ? AND asset IN ('BTC', 'LBTC')
         ORDER BY occurred_at ASC, created_at ASC, id ASC
@@ -1450,11 +1704,14 @@ def _portfolio_cost_basis_by_transaction(
         transaction_id = row["transaction_id"]
         if not transaction_id:
             continue
-        quantity = int(row["quantity"] or 0)
-        if quantity >= 0:
-            cost_basis += float(row["fiat_value"] or 0)
-        else:
-            cost_basis -= float(row["cost_basis"] or 0)
+        cost_basis += float(
+            report_builders._holdings_basis_delta(
+                row["entry_type"],
+                msat_to_btc(row["quantity"]),
+                dec(row["fiat_value"]),
+                dec(row["cost_basis"]),
+            )
+        )
         by_transaction[str(transaction_id)] = cost_basis
     return by_transaction
 
@@ -1465,7 +1722,7 @@ def _current_portfolio_cost_basis(
 ) -> float:
     rows = conn.execute(
         """
-        SELECT quantity, fiat_value, cost_basis
+        SELECT entry_type, quantity, fiat_value, cost_basis
         FROM journal_entries
         WHERE profile_id = ? AND asset IN ('BTC', 'LBTC')
         ORDER BY occurred_at ASC, created_at ASC, id ASC
@@ -1474,11 +1731,14 @@ def _current_portfolio_cost_basis(
     ).fetchall()
     cost_basis = 0.0
     for row in rows:
-        quantity = int(row["quantity"] or 0)
-        if quantity >= 0:
-            cost_basis += float(row["fiat_value"] or 0)
-        else:
-            cost_basis -= float(row["cost_basis"] or 0)
+        cost_basis += float(
+            report_builders._holdings_basis_delta(
+                row["entry_type"],
+                msat_to_btc(row["quantity"]),
+                dec(row["fiat_value"]),
+                dec(row["cost_basis"]),
+            )
+        )
     return cost_basis
 
 
@@ -1489,6 +1749,8 @@ def _portfolio_series(
     fallback_rate: float,
     final_balance_btc: float,
     final_value_eur: float,
+    *,
+    has_book_state: bool,
 ) -> list[dict[str, Any]]:
     rows = conn.execute(
         """
@@ -1503,18 +1765,29 @@ def _portfolio_series(
         return []
 
     cost_basis_by_date = _portfolio_cost_basis_by_date(conn, profile_id)
-    tx_deltas_by_day: dict[date, int] = defaultdict(int)
+    raw_tx_days: set[date] = set()
+    raw_rates_by_day: dict[date, float] = {}
+    raw_tx_deltas_by_day: dict[date, Decimal] = defaultdict(lambda: Decimal("0"))
     for row in rows:
         day = _parse_day(row["occurred_at"])
         if day is None:
             continue
+        raw_tx_days.add(day)
         amount = int(row["amount"] or 0)
         fee = int(row["fee"] or 0)
-        tx_deltas_by_day[day] += (
+        raw_tx_deltas_by_day[day] += msat_to_btc(
             amount if row["direction"] == "inbound" else -amount - fee
         )
+        row_rate = _rate_from_transaction(row)
+        if row_rate is not None:
+            raw_rates_by_day[day] = row_rate
 
-    sorted_tx_days = sorted(tx_deltas_by_day)
+    quantity_deltas_by_day = (
+        _journal_quantity_deltas_by_day(conn, profile_id)
+        if has_book_state
+        else raw_tx_deltas_by_day
+    )
+    sorted_tx_days = sorted(set(quantity_deltas_by_day) | raw_tx_days)
     if not sorted_tx_days:
         return []
 
@@ -1526,7 +1799,7 @@ def _portfolio_series(
             for raw_day, value in cost_basis_by_date.items()
             if (day := _parse_day(raw_day)) is not None
         )
-        quantity_msat = 0
+        quantity_btc = Decimal("0")
         tx_index = 0
         cost_basis_index = 0
         day_cost_basis = 0.0
@@ -1537,7 +1810,10 @@ def _portfolio_series(
             if rate_day is None:
                 continue
             while tx_index < len(sorted_tx_days) and sorted_tx_days[tx_index] <= rate_day:
-                quantity_msat += tx_deltas_by_day[sorted_tx_days[tx_index]]
+                quantity_btc += quantity_deltas_by_day.get(
+                    sorted_tx_days[tx_index],
+                    Decimal("0"),
+                )
                 tx_index += 1
             while (
                 cost_basis_index < len(cost_basis_items)
@@ -1546,7 +1822,7 @@ def _portfolio_series(
                 day_cost_basis = cost_basis_items[cost_basis_index][1]
                 cost_basis_index += 1
 
-            balance_btc = float(msat_to_btc(quantity_msat))
+            balance_btc = float(quantity_btc)
             price_eur = float(rate_row["rate"] or 0)
             day_key = rate_day.isoformat()
             output.append(
@@ -1566,7 +1842,10 @@ def _portfolio_series(
         last_output_day = _parse_day(output[-1]["date"]) if output else None
         if last_output_day is not None and last_tx_day > last_output_day:
             while tx_index < len(sorted_tx_days):
-                quantity_msat += tx_deltas_by_day[sorted_tx_days[tx_index]]
+                quantity_btc += quantity_deltas_by_day.get(
+                    sorted_tx_days[tx_index],
+                    Decimal("0"),
+                )
                 tx_index += 1
             while cost_basis_index < len(cost_basis_items):
                 day_cost_basis = cost_basis_items[cost_basis_index][1]
@@ -1580,7 +1859,7 @@ def _portfolio_series(
                     "valueEur": (
                         final_value_eur
                         if fallback_rate
-                        else float(msat_to_btc(quantity_msat)) * rate
+                        else float(quantity_btc) * rate
                     ),
                     "costBasisEur": day_cost_basis,
                     "priceEur": rate,
@@ -1589,44 +1868,27 @@ def _portfolio_series(
 
         return output
 
-    quantity_msat = 0
+    quantity_btc = Decimal("0")
     latest_rate = fallback_rate
     output: list[dict[str, Any]] = []
-    current_date = ""
     day_cost_basis = 0.0
 
-    for row in rows:
-        date_key = (row["occurred_at"] or "")[:10]
-        if not date_key:
-            continue
-        if current_date and date_key != current_date:
-            balance_btc = float(msat_to_btc(quantity_msat))
-            output.append(
-                {
-                    "date": current_date,
-                    "label": current_date,
-                    "balanceBtc": balance_btc,
-                    "valueEur": balance_btc * latest_rate,
-                    "costBasisEur": day_cost_basis,
-                }
-            )
-
-        current_date = date_key
-        amount = int(row["amount"] or 0)
-        fee = int(row["fee"] or 0)
-        quantity_msat += amount if row["direction"] == "inbound" else -amount - fee
-        row_rate = _rate_from_transaction(row)
-        if row_rate is not None:
-            latest_rate = row_rate
+    for day in sorted_tx_days:
+        date_key = day.isoformat()
+        quantity_btc += quantity_deltas_by_day.get(day, Decimal("0"))
+        if day in raw_rates_by_day:
+            latest_rate = raw_rates_by_day[day]
         day_cost_basis = cost_basis_by_date.get(date_key, day_cost_basis)
-
-    if current_date:
+        balance_btc = float(quantity_btc)
+        is_final = day == sorted_tx_days[-1]
         output.append(
             {
-                "date": current_date,
-                "label": current_date,
-                "balanceBtc": final_balance_btc,
-                "valueEur": final_value_eur,
+                "date": date_key,
+                "label": date_key,
+                "balanceBtc": final_balance_btc if is_final else balance_btc,
+                "valueEur": (
+                    final_value_eur if is_final else balance_btc * latest_rate
+                ),
                 "costBasisEur": day_cost_basis,
                 "priceEur": fallback_rate or latest_rate,
             }
@@ -1728,11 +1990,16 @@ def _build_profile_overview_snapshot(
             market_rate["fiatCurrency"],
         )
     )
-    # Connection tiles are a wallet/source status surface, not a tax-report
-    # surface. Use raw synced transactions so quarantined or partially
-    # processed journal rows do not make a wallet with imported funds look
-    # empty in the GUI.
-    balances = _transaction_wallet_balances(conn, profile["id"])
+    # Once book state exists, wallet balances must match the book/report
+    # balance, even when every transaction was quarantined and the journal entry
+    # table is empty. Raw synced transactions remain only the pre-processing
+    # fallback.
+    has_book_state = _has_book_balance_state(freshness)
+    balances = _wallet_balances(
+        conn,
+        profile["id"],
+        has_book_state=has_book_state,
+    )
     fiat = _fiat_snapshot(
         conn,
         profile["id"],
@@ -1746,8 +2013,16 @@ def _build_profile_overview_snapshot(
         "marketRate": market_rate,
         "connections": _connections(conn, profile["id"], balances),
         "txs": _transactions(conn, profile["id"]),
-        "activityTxs": _activity_transactions(conn, profile["id"]),
-        "balanceSeries": _balance_series(conn, profile["id"]),
+        "activityTxs": _activity_transactions(
+            conn,
+            profile["id"],
+            has_book_state=has_book_state,
+        ),
+        "balanceSeries": _balance_series(
+            conn,
+            profile["id"],
+            has_book_state=has_book_state,
+        ),
         "portfolioSeries": _portfolio_series(
             conn,
             profile["id"],
@@ -1755,6 +2030,7 @@ def _build_profile_overview_snapshot(
             book_fiat_rate,
             sum(balances.values()),
             fiat["eurBalance"],
+            has_book_state=has_book_state,
         ),
         "fiat": fiat,
         "status": {
@@ -3456,6 +3732,14 @@ def build_wallets_list_snapshot(
                 "network": str(config.get("network") or ""),
                 "descriptor": bool(config.get("descriptor")),
                 "change_descriptor": bool(config.get("change_descriptor")),
+                "silent_payment": {
+                    "configured": has_silent_payment_sync_material(config),
+                    "material_format": str(config.get(silent_payments.CONFIG_MATERIAL_FORMAT) or ""),
+                    "scan_mode": str(config.get(silent_payments.CONFIG_SCAN_MODE) or ""),
+                    "scan_start_height": config.get(silent_payments.CONFIG_SCAN_START_HEIGHT),
+                    "scan_start_date": str(config.get(silent_payments.CONFIG_SCAN_START_DATE) or ""),
+                    "full_history": bool(config.get(silent_payments.CONFIG_FULL_HISTORY)),
+                },
                 "sync_mode": backend_summary["sync_mode"],
                 "sync_source": str(config.get("sync_source") or config.get("source_format") or ""),
                 "transaction_count": tx_count,
@@ -3556,7 +3840,7 @@ def _wallet_utxo_support(
             "reason": "wasabi_import",
             "message": "",
         }
-    if sync_mode not in {"backend_descriptor", "backend_addresses"}:
+    if sync_mode not in {"backend_descriptor", "backend_addresses", "backend_silent_payment"}:
         return {
             "supported": False,
             "status": "unsupported_source",
@@ -3568,9 +3852,30 @@ def _wallet_utxo_support(
             "supported": False,
             "status": "unsupported_source",
             "reason": "backend_missing",
-            "message": "This wallet needs a configured Esplora, Electrum, or Bitcoin Core backend before UTXO inventory can refresh.",
+            "message": "This wallet needs a configured chain backend or local scanner before UTXO inventory can refresh.",
         }
     backend_kind = normalize_backend_kind(backend.get("kind"))
+    if sync_mode == "backend_silent_payment":
+        if backend_kind not in {"esplora", "electrum", "bitcoinrpc", "custom"}:
+            return {
+                "supported": False,
+                "status": "silent_payment_backend_unsupported",
+                "reason": "backend_kind",
+                "message": f"Silent Payments scanning is not implemented for {backend_kind or 'this backend'} sources.",
+            }
+        if not silent_payments.backend_supports_silent_payments(backend):
+            return {
+                "supported": False,
+                "status": "silent_payment_backend_unsupported",
+                "reason": "missing_sp_capability",
+                "message": "This backend is not marked Silent Payments capable; ordinary scripthash sync cannot discover BIP352 outputs.",
+            }
+        return {
+            "supported": True,
+            "status": "supported",
+            "reason": "",
+            "message": "",
+        }
     if backend_kind not in {"esplora", "electrum", "bitcoinrpc"}:
         return {
             "supported": False,
@@ -3579,13 +3884,6 @@ def _wallet_utxo_support(
             "message": f"UTXO inventory is not implemented for {backend_kind or 'this backend'} sources yet.",
         }
     chain = str(config.get("chain") or "bitcoin").strip().lower() or "bitcoin"
-    if has_descriptor and backend_kind == "bitcoinrpc":
-        return {
-            "supported": False,
-            "status": "unsupported_source",
-            "reason": "bitcoinrpc_descriptor",
-            "message": "Bitcoin Core UTXO inventory is available for address-backed wallets only.",
-        }
     if chain == "liquid":
         if not has_descriptor:
             return {
@@ -3752,8 +4050,12 @@ def _wallet_utxo_row_for_ai(row: dict[str, Any]) -> dict[str, Any]:
     redacted = dict(row)
     redacted.pop("address", None)
     redacted.pop("address_label", None)
+    redacted.pop("script_pubkey", None)
+    redacted.pop("branch_label", None)
     redacted.pop("branch_index", None)
     redacted.pop("address_index", None)
+    redacted.pop("derivation_path", None)
+    redacted.pop("derivation_paths", None)
     redacted.pop("anon_history", None)
     return redacted
 
@@ -4504,6 +4806,199 @@ def build_workspace_health_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
     }
 
 
+def _silent_payment_report_blockers(conn: sqlite3.Connection, profile_id: str) -> list[dict[str, Any]]:
+    rows = conn.execute(
+        """
+        SELECT id, label, config_json
+        FROM wallets
+        WHERE profile_id = ?
+          AND kind = 'silent-payment'
+        ORDER BY label ASC
+        """,
+        (profile_id,),
+    ).fetchall()
+    blockers: list[dict[str, Any]] = []
+    for wallet in rows:
+        config = _json_config(wallet["config_json"])
+        if not has_silent_payment_sync_material(config):
+            continue
+        source_key = core_freshness.source_key(core_freshness.SOURCE_ONCHAIN, wallet["id"])
+        state = conn.execute(
+            """
+            SELECT status, stale_reason, blocking_reports, checkpoint_json
+            FROM freshness_source_states
+            WHERE profile_id = ? AND source_key = ?
+            """,
+            (profile_id, source_key),
+        ).fetchone()
+        if state is None:
+            blockers.append(
+                {
+                    "id": f"silent_payment_scan_pending:{wallet['id']}",
+                    "code": "silent_payment_scan_pending",
+                    "severity": "blocking",
+                    "title": "Silent Payments scan pending",
+                    "detail": f"{wallet['label']} has not completed its configured BIP352 scan range yet.",
+                    "daemon_kind": "ui.wallets.sync",
+                }
+            )
+            continue
+        try:
+            checkpoint = json.loads(state["checkpoint_json"] or "{}")
+        except (TypeError, ValueError, json.JSONDecodeError):
+            checkpoint = {}
+        sp_state = checkpoint.get("silent_payment") if isinstance(checkpoint, dict) else None
+        sp_state = sp_state if isinstance(sp_state, dict) else {}
+        scan_complete = bool(sp_state.get("scan_complete"))
+        degraded = bool(sp_state.get("degraded")) or bool(state["blocking_reports"])
+        if scan_complete and not degraded:
+            continue
+        reason = str(sp_state.get("degraded_reason") or state["stale_reason"] or "scan_incomplete")
+        blockers.append(
+            {
+                "id": f"silent_payment_scan_degraded:{wallet['id']}",
+                "code": "silent_payment_scan_incomplete",
+                "severity": "blocking",
+                "title": "Silent Payments scan incomplete",
+                "detail": f"{wallet['label']} has incomplete BIP352 scan coverage ({reason}).",
+                "daemon_kind": "ui.wallets.sync",
+            }
+        )
+    return blockers
+
+
+_REPORT_BLOCKING_SWAP_KINDS = frozenset(
+    {
+        core_transfer_matching.KIND_CHAIN_SWAP,
+        core_transfer_matching.KIND_PEG_IN,
+        core_transfer_matching.KIND_PEG_OUT,
+        core_transfer_matching.KIND_REVERSE_SUBMARINE_SWAP,
+        core_transfer_matching.KIND_SUBMARINE_SWAP,
+        core_transfer_matching.KIND_SWAP_REFUND,
+    }
+)
+
+
+def _load_swap_report_matcher_rows(
+    conn: sqlite3.Connection,
+    profile_id: str,
+) -> list[sqlite3.Row]:
+    return conn.execute(
+        """
+        SELECT
+            t.id, t.profile_id, t.wallet_id, t.external_id, t.payment_hash,
+            t.swap_refund_funding_txid,
+            t.occurred_at, t.direction, t.asset, t.amount, t.amount_includes_fee,
+            t.fee, t.kind, t.raw_json, t.excluded,
+            w.label AS wallet_label, w.kind AS wallet_kind
+        FROM transactions t
+        JOIN wallets w ON w.id = t.wallet_id
+        WHERE t.profile_id = ?
+        """,
+        (profile_id,),
+    ).fetchall()
+
+
+def _active_swap_review_refs(
+    conn: sqlite3.Connection,
+    profile_id: str,
+) -> list[sqlite3.Row]:
+    pair_records = conn.execute(
+        """
+        SELECT out_transaction_id, in_transaction_id, deleted_at
+        FROM transaction_pairs
+        WHERE profile_id = ?
+        """,
+        (profile_id,),
+    ).fetchall()
+    payout_records = conn.execute(
+        """
+        SELECT out_transaction_id, NULL AS in_transaction_id, deleted_at
+        FROM direct_swap_payouts
+        WHERE profile_id = ?
+        """,
+        (profile_id,),
+    ).fetchall()
+    return [*pair_records, *payout_records]
+
+
+def _swap_candidate_blocks_reports(
+    candidate: core_transfer_matching.SwapCandidate,
+) -> bool:
+    if candidate.default_kind in _REPORT_BLOCKING_SWAP_KINDS:
+        return True
+    if str(candidate.out_asset or "").upper() != str(candidate.in_asset or "").upper():
+        return True
+    return candidate.method in {
+        core_transfer_matching.METHOD_PAYMENT_HASH,
+        core_transfer_matching.METHOD_PROVIDER_SWAP_ID,
+        core_transfer_matching.METHOD_HTLC_REFUND,
+    }
+
+
+def _unreviewed_swap_candidate_blocker(
+    conn: sqlite3.Connection,
+    profile: sqlite3.Row,
+) -> dict[str, Any] | None:
+    rows = _load_swap_report_matcher_rows(conn, profile["id"])
+    pair_records = _active_swap_review_refs(conn, profile["id"])
+    dismissals = conn.execute(
+        """
+        SELECT out_transaction_id, in_transaction_id, expires_at
+        FROM transaction_pair_dismissals
+        WHERE profile_id = ?
+        """,
+        (profile["id"],),
+    ).fetchall()
+    candidates = [
+        candidate
+        for candidate in core_transfer_matching.suggest_swap_candidates(
+            rows,
+            pair_records=pair_records,
+            dismissals=dismissals,
+            tax_country=str(profile["tax_country"] or ""),
+        )
+        if _swap_candidate_blocks_reports(candidate)
+    ]
+    if not candidates:
+        return None
+    exact_count = sum(
+        1 for candidate in candidates
+        if candidate.confidence == core_transfer_matching.CONFIDENCE_EXACT
+    )
+    strong_count = sum(
+        1 for candidate in candidates
+        if candidate.confidence == core_transfer_matching.CONFIDENCE_STRONG
+    )
+    route_samples = [
+        {
+            "out_asset": candidate.out_asset,
+            "in_asset": candidate.in_asset,
+            "confidence": candidate.confidence,
+            "method": candidate.method,
+            "default_kind": candidate.default_kind,
+            "conflict_size": candidate.conflict_size,
+        }
+        for candidate in candidates[:5]
+    ]
+    return {
+        "id": "unreviewed_swap_candidates",
+        "severity": "blocking",
+        "title": "Unreviewed swap candidates",
+        "detail": (
+            f"{len(candidates)} swap-shaped candidate(s) need pairing, payout "
+            "review, or dismissal before final reports."
+        ),
+        "daemon_kind": "ui.transfers.suggest",
+        "counts": {
+            "total": len(candidates),
+            "exact": exact_count,
+            "strong": strong_count,
+        },
+        "routes": route_samples,
+    }
+
+
 def build_report_blockers_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
     health = build_workspace_health_snapshot(conn)
     rates_coverage = build_rates_coverage_snapshot(conn, {"limit": 10})
@@ -4547,6 +5042,7 @@ def build_report_blockers_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
                     "daemon_kind": "ui.wallets.sync",
                 }
             )
+        blockers.extend(_silent_payment_report_blockers(conn, health["profile"]["id"]))
         overlap = core_source_overlap.detect_profile_source_overlaps(
             conn,
             health["profile"]["id"],
@@ -4601,6 +5097,9 @@ def build_report_blockers_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
                     "daemon_kind": "ui.journals.quarantine",
                 }
             )
+        swap_blocker = _unreviewed_swap_candidate_blocker(conn, health["profile"])
+        if swap_blocker is not None:
+            blockers.append(swap_blocker)
         missing_prices = rates_coverage["summary"]["missing_price_transactions"]
         if missing_prices:
             uncovered = rates_coverage["summary"]["cache_uncovered_missing"]

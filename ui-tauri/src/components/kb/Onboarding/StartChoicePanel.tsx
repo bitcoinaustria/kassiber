@@ -4,6 +4,7 @@ import {
   Database,
   FolderOpen,
   LockKeyhole,
+  Server,
   ShieldCheck,
   type LucideIcon,
 } from "lucide-react";
@@ -20,9 +21,12 @@ import {
 interface StartChoicePanelProps {
   importAvailable: boolean;
   importing: boolean;
+  openingRegtest?: boolean;
   onSetup: () => void;
   onImport: () => void;
   onQuickStart: () => void;
+  onOpenRegtest?: () => void;
+  regtestAvailable?: boolean;
 }
 
 const START_HIGHLIGHTS: Array<{
@@ -37,9 +41,12 @@ const START_HIGHLIGHTS: Array<{
 export function StartChoicePanel({
   importAvailable,
   importing,
+  openingRegtest = false,
   onSetup,
   onImport,
   onQuickStart,
+  onOpenRegtest,
+  regtestAvailable = false,
 }: StartChoicePanelProps) {
   const { t } = useTranslation("onboarding");
   return (
@@ -52,6 +59,33 @@ export function StartChoicePanel({
       >
         <div className="flex h-full flex-col justify-between gap-6 py-4">
           <div className="space-y-3">
+            {regtestAvailable ? (
+              <button
+                type="button"
+                disabled={openingRegtest}
+                onClick={onOpenRegtest}
+                className="group flex min-h-[112px] w-full items-start gap-4 rounded-lg border border-emerald-500/35 bg-emerald-500/10 p-4 text-left text-ink transition hover:bg-emerald-500/15 disabled:cursor-wait disabled:opacity-80 dark:border-emerald-400/30 dark:bg-emerald-400/10"
+              >
+                <span className="flex size-10 shrink-0 items-center justify-center rounded-md border border-emerald-500/25 bg-emerald-500 text-white">
+                  <Server className="size-5" aria-hidden="true" />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-base font-semibold">
+                    {openingRegtest
+                      ? t("start.regtest.titleOpening")
+                      : t("start.regtest.title")}
+                  </span>
+                  <span className="mt-2 block text-sm leading-6 text-ink-2">
+                    {t("start.regtest.body")}
+                  </span>
+                </span>
+                <ArrowRight
+                  className="mt-1 size-5 shrink-0 transition-transform group-hover:translate-x-0.5"
+                  aria-hidden="true"
+                />
+              </button>
+            ) : null}
+
             <button
               type="button"
               onClick={onSetup}

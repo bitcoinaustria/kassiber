@@ -42,6 +42,7 @@ from urllib import request as urlrequest
 from ... import __version__
 from ...backends import backend_timeout, backend_value
 from ...db import APP_NAME
+from ...egress_ledger import get_egress_ledger, http_request_bytes_out
 from ...errors import AppError
 from ...time_utils import timestamp_to_iso
 from .registry import register_adapter
@@ -202,6 +203,13 @@ class LndRestClient:
                 "Grpc-Metadata-macaroon": self.macaroon,
                 "User-Agent": f"{APP_NAME}/{__version__}",
             },
+        )
+        get_egress_ledger().record_url(
+            request.full_url,
+            subsystem="sync",
+            operation="http.request",
+            method=method,
+            bytes_out=http_request_bytes_out(request, method),
         )
         try:
             with urlrequest.urlopen(
@@ -542,6 +550,30 @@ def _sanitize_payment(row: Mapping[str, Any]) -> dict[str, Any]:
     return cleaned
 
 
+def _invoice_counts(invoices: list[dict[str, Any]]) -> tuple[int, int, int]:
+    paid = 0
+    expired = 0
+    for invoice in invoices:
+        state = str(invoice.get("state") or "").upper()
+        if _is_truthy(invoice.get("settled")) or state == "SETTLED":
+            paid += 1
+        elif state == "EXPIRED":
+            expired += 1
+    return len(invoices), paid, expired
+
+
+def _payment_counts(payments: list[dict[str, Any]]) -> tuple[int, int, int]:
+    completed = 0
+    failed = 0
+    for payment in payments:
+        status = str(payment.get("status") or "").upper()
+        if status in {"SUCCEEDED", "SUCCESS", "COMPLETE"}:
+            completed += 1
+        elif status in {"FAILED", "FAILURE"}:
+            failed += 1
+    return len(payments), completed, failed
+
+
 # ---------------------------------------------------------------------------
 # Adapter
 # ---------------------------------------------------------------------------
@@ -673,16 +705,19 @@ class LndAdapter:
                 or _int(row.get("creation_date")) >= start_ts
             ]
 
-        # Invoices: sanitize but don't currently surface to NodeSnapshot.
-        # Pre-sanitization here keeps the call symmetric with payments so
-        # an audit reading the code can see the discard policy applied.
+        # Invoices: sanitize before counting so the discard policy is the
+        # single boundary for every payload that contributes to the snapshot.
         invoices_payload = client.get(
             "/v1/invoices",
             params={"num_max_invoices": LND_MAX_PAGE_SIZE},
         )
-        for row in invoices_payload.get("invoices") or []:
-            if isinstance(row, dict):
-                _sanitize_invoice(row)
+        invoices_clean = [
+            _sanitize_invoice(row)
+            for row in (invoices_payload.get("invoices") or [])
+            if isinstance(row, dict)
+        ]
+        invoice_count, paid_invoice_count, expired_invoice_count = _invoice_counts(invoices_clean)
+        payment_count, completed_payment_count, failed_payment_count = _payment_counts(payments_clean)
 
         # Per-channel forward aggregates (used for break-even view).
         forwards_per_channel = _forwards_per_channel(forwards)
@@ -738,6 +773,12 @@ class LndAdapter:
             total_capacity_sat=sum(channel.capacity_sat for channel in channels),
             channels=channels,
             closed_channels=closed_channels,
+            invoice_count=invoice_count,
+            paid_invoice_count=paid_invoice_count,
+            expired_invoice_count=expired_invoice_count,
+            payment_count=payment_count,
+            completed_payment_count=completed_payment_count,
+            failed_payment_count=failed_payment_count,
             routing=routing,
             forwards=tuple(_map_forward(row) for row in forwards),
         )

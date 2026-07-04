@@ -11,6 +11,7 @@ from urllib import error as urlerror
 from urllib import parse as urlparse
 from urllib import request as urlrequest
 
+from .egress_ledger import get_egress_ledger, http_request_bytes_out
 from .errors import AppError
 
 
@@ -258,8 +259,22 @@ def urlopen_with_proxy(
     source_label="backend",
 ):
     proxy = str(proxy_url or "").strip()
+    target_url = url or request.full_url
+    source = str(source_label or "").strip().lower()
+    if "rate" in source or "price" in source:
+        subsystem = "pricing"
+    else:
+        subsystem = "sync"
+    get_egress_ledger().record_url(
+        target_url,
+        subsystem=subsystem,
+        operation="http.request",
+        method=request.get_method(),
+        bytes_out=http_request_bytes_out(request),
+        via_proxy=bool(proxy),
+    )
     if not proxy:
-        if is_onion_endpoint(url or request.full_url):
+        if is_onion_endpoint(target_url):
             raise AppError(
                 f".onion {source_label} URLs require a Tor/SOCKS proxy",
                 code="network_proxy_required",

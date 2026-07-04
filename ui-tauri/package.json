@@ -7,8 +7,9 @@
   "packageManager": "pnpm@10.33.0",
   "scripts": {
     "dev": "vite",
-    "dev:browser": "VITE_DAEMON=mock vite",
+    "dev:browser": "VITE_DAEMON=bridge KASSIBER_DEV_DATA_ROOT=\"${KASSIBER_REGTEST_DEMO_HOME:-$HOME/.kassiber/regtest-demo}/data\" vite",
     "dev:bridge": "VITE_DAEMON=bridge vite",
+    "dev:demo": "VITE_DAEMON=bridge KASSIBER_DEV_DATA_ROOT=\"${KASSIBER_REGTEST_DEMO_HOME:-$HOME/.kassiber/regtest-demo}/data\" vite",
     "dev:shell": "tauri dev",
     "build": "tsc -b && vite build",
     "tauri": "tauri",

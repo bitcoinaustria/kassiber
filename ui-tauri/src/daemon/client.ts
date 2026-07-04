@@ -283,6 +283,8 @@ const TARGETED_DAEMON_QUERY_INVALIDATIONS: Record<string, readonly string[]> = {
     "ui.backends.public_defaults",
     "ui.backends.settings.list",
   ],
+  "ui.backends.bitcoinrpc.test": [],
+  "ui.backends.detect_core": [],
   "ui.backends.electrum.test": [],
   "ui.backends.http.test": [],
   "wallets.reveal_descriptor": [],

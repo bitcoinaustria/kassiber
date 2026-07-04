@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  canResetRegtestDemo,
   envelopeLogLevel,
+  isRegtestDemoDataRoot,
   normalizeExternalBrowserUrl,
   readBridgeNdjsonStream,
+  regtestDemoDataRoot,
   summarizeEnvelopeFields,
   type DaemonStreamRecord,
 } from "./transport";
@@ -171,5 +174,17 @@ describe("external URL opener validation", () => {
     ]) {
       expect(() => normalizeExternalBrowserUrl(url), url).toThrow();
     }
+  });
+});
+
+describe("regtest demo reset bridge gating", () => {
+  it("only enables reset for the configured demo data root", () => {
+    const demoRoot = regtestDemoDataRoot();
+
+    expect(demoRoot).toContain("regtest-demo");
+    expect(canResetRegtestDemo(demoRoot)).toBe(true);
+    expect(canResetRegtestDemo(`${demoRoot}/`)).toBe(true);
+    expect(isRegtestDemoDataRoot(`${demoRoot}///`)).toBe(true);
+    expect(canResetRegtestDemo("/tmp/other-regtest-book/data")).toBe(false);
   });
 });

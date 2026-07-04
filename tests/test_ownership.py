@@ -44,6 +44,7 @@ def _match(label="Vault", branch="receive", index=0, source="derived", **kw):
         address_index=index,
         derivation_path=kw.get("derivation_path", f"m/84'/0'/0'/0/{index}"),
         source=source,
+        wallet_kind=kw.get("wallet_kind", ""),
     )
 
 
@@ -119,7 +120,38 @@ class ClassifyAddressTests(unittest.TestCase):
             {"input": "bc1qshared", "type": "address", "chain": "bitcoin"}, index
         )
         self.assertEqual(result["status"], "owned")
+        self.assertTrue(result["ownership_ambiguous"])
         self.assertIn("Also matches", result["note"])
+
+    def test_descriptor_match_is_canonical_over_address_list(self):
+        index = OwnedIndex()
+        index.add_address(
+            "bc1qshared",
+            _match(
+                label="Address list",
+                wallet_id="addr",
+                source="address_list",
+                wallet_kind="address",
+            ),
+        )
+        index.add_address(
+            "bc1qshared",
+            _match(
+                label="Trezor",
+                wallet_id="trezor",
+                source="derived",
+                wallet_kind="xpub",
+            ),
+        )
+
+        result = ownership.classify_address(
+            {"input": "bc1qshared", "type": "address", "chain": "bitcoin"}, index
+        )
+
+        self.assertEqual(result["canonical_wallet"], "Trezor")
+        self.assertEqual(result["canonical_wallet_id"], "trezor")
+        self.assertEqual(result["matches"][0]["wallet"], "Trezor")
+        self.assertTrue(result["ownership_ambiguous"])
 
 
 class ClassifyTxidTests(unittest.TestCase):
@@ -175,6 +207,46 @@ class ClassifyTxidTests(unittest.TestCase):
         self.assertEqual(result["classification"], "inbound_receipt")
         self.assertEqual(result["owned_inputs"], 0)
 
+    def test_ambiguous_output_counts_once_and_names_canonical_wallet(self):
+        index = OwnedIndex()
+        shared_script = "00146f6e656473637269707400000000000000000000"
+        index.add_script(
+            shared_script,
+            _match(
+                label="Address list",
+                wallet_id="addr",
+                source="address_list",
+                wallet_kind="address",
+            ),
+        )
+        index.add_script(
+            shared_script,
+            _match(
+                label="Trezor",
+                wallet_id="trezor",
+                source="derived",
+                wallet_kind="xpub",
+            ),
+        )
+        legs = {
+            "inputs": [{"outpoint": "ff" * 32 + ":9", "script": "0014external"}],
+            "outputs": [{"n": 0, "script": shared_script}],
+            "chain": "bitcoin",
+            "source": "chain",
+        }
+
+        result = ownership.classify_txid(
+            {"input": "bb" * 32, "normalized": "bb" * 32, "type": "txid"}, index, legs
+        )
+
+        self.assertEqual(result["classification"], "inbound_receipt")
+        self.assertEqual(result["owned_outputs"], 1)
+        self.assertTrue(result["ownership_ambiguous"])
+        self.assertEqual(result["ambiguous_legs"], 1)
+        output_leg = result["legs"][1]
+        self.assertEqual(output_leg["wallet"], "Trezor")
+        self.assertEqual(output_leg["wallets"], ["Trezor", "Address list"])
+
     def test_external_transaction(self):
         index = self._index()
         legs = {
@@ -188,6 +260,28 @@ class ClassifyTxidTests(unittest.TestCase):
         )
         self.assertEqual(result["status"], "external")
         self.assertEqual(result["classification"], "external")
+
+    def test_script_matches_are_scoped_to_local_tx_network(self):
+        index = OwnedIndex()
+        script = "00146f6e656473637269707400000000000000000000"
+        index.add_script(script, _match(label="Main Wallet", network="main"))
+        index.add_script(script, _match(label="Regtest Wallet", network="regtest"))
+        legs = {
+            "inputs": [{"outpoint": "ff" * 32 + ":9", "script": "0014external"}],
+            "outputs": [{"n": 0, "script": script}],
+            "chain": "bitcoin",
+            "network": "regtest",
+            "source": "local_tx",
+        }
+
+        result = ownership.classify_txid(
+            {"input": "bb" * 32, "normalized": "bb" * 32, "type": "txid"}, index, legs
+        )
+
+        self.assertEqual(result["classification"], "inbound_receipt")
+        self.assertEqual(result["wallets"], ["Regtest Wallet"])
+        output_leg = result["legs"][1]
+        self.assertEqual(output_leg["wallets"], ["Regtest Wallet"])
 
     def test_no_legs_but_local_txid(self):
         index = OwnedIndex()
@@ -247,6 +341,37 @@ class LocalTxLegsTests(unittest.TestCase):
         self.assertEqual(result["classification"], "inbound_receipt")
         self.assertEqual(result["owned_outputs"], 1)
 
+    def test_local_tx_legs_include_wallet_network(self):
+        conn = _engine_conn()
+        conn.execute(
+            "INSERT INTO wallets(id, profile_id, label, kind, config_json, account_id) "
+            "VALUES(?,?,?,?,?,?)",
+            (
+                "w1",
+                "p1",
+                "Regtest Wallet",
+                "address",
+                '{"chain":"bitcoin","network":"regtest"}',
+                None,
+            ),
+        )
+        conn.execute(
+            "INSERT INTO transactions(profile_id, wallet_id, external_id, raw_json) "
+            "VALUES(?,?,?,?)",
+            (
+                "p1",
+                "w1",
+                "aa" * 32,
+                '{"vin":[{"txid":"BB","vout":0}],"vout":[{"n":0,"script_hex":"0014bb"}]}',
+            ),
+        )
+
+        legs = ownership.load_local_tx_legs(conn, "p1", "aa" * 32)
+
+        self.assertIsNotNone(legs)
+        self.assertEqual(legs["chain"], "bitcoin")
+        self.assertEqual(legs["network"], "regtest")
+
     def test_legs_from_non_tx_returns_none(self):
         self.assertIsNone(ownership._legs_from_local_tx_json('{"component": {}}'))
         self.assertIsNone(ownership._legs_from_local_tx_json("not json"))
@@ -257,8 +382,11 @@ class LegEdgeCaseTests(unittest.TestCase):
         # The Liquid fee output carries an empty scriptPubKey; it must not count
         # as an external recipient and flip a self-transfer to outbound payment.
         index = OwnedIndex()
-        index.by_outpoint["aa" * 32 + ":0"] = _match()
-        index.add_script("0014owned00000000000000000000000000000000", _match(branch="change"))
+        index.by_outpoint["aa" * 32 + ":0"] = _match(chain="liquid", network="liquidv1")
+        index.add_script(
+            "0014owned00000000000000000000000000000000",
+            _match(branch="change", chain="liquid", network="liquidv1"),
+        )
         legs = {
             "inputs": [{"outpoint": "aa" * 32 + ":0", "script": None}],
             "outputs": [

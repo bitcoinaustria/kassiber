@@ -291,10 +291,16 @@
     }
   },
   "table": {
-    "title": "Transactions",
+    "title": "Book transactions",
     "filters": "Filters:",
     "clearAll": "Clear all",
     "withFees": "With fees",
+    "expand": {
+      "expand": "Expand",
+      "collapse": "Restore",
+      "expandAria": "Expand transaction table",
+      "collapseAria": "Restore transaction table"
+    },
     "column": {
       "transaction": "Transaction",
       "amount": "Amount",
@@ -577,7 +583,10 @@
     "weight": "Weight",
     "unknown": "Unknown",
     "note": "Note",
-    "notePlaceholder": "Receipt, invoice, counterparty, or review context"
+    "notePlaceholder": "Receipt, invoice, counterparty, or review context",
+    "noteNone": "No note",
+    "noteHint": "Edit the note in the Classify tab.",
+    "counterpartyNone": "Not recorded"
   },
   "graph": {
     "title": "Transaction graph",
@@ -595,8 +604,13 @@
     "graphless": "No graph for this source",
     "liquidGraphless": "Liquid graph not stored locally",
     "graphlessBody": "This row was imported without valued Bitcoin vin/vout data, so Kassiber can show the accounting row but not a flow diagram.",
-    "liquidBody": "Kassiber only has the imported Liquid row locally. The public inputs and outputs can be inspected on Liquid Network; confidential amounts may remain hidden.",
-    "openLiquidNetwork": "Open Liquid Network",
+    "liquidBody": "Kassiber does not have public Liquid input/output references for this row yet. Configure or refresh a Liquid backend so the graph can use generic confidential strands.",
+    "addBitcoinBackend": "Add Bitcoin backend",
+    "reviewBitcoinBackend": "Review Bitcoin backend",
+    "addLiquidBackend": "Add Liquid backend",
+    "reviewLiquidBackend": "Review Liquid backend",
+    "backendSettingsReasonBitcoin": "Transaction graph needs a Bitcoin backend",
+    "backendSettingsReasonLiquid": "Transaction graph needs a Liquid backend",
     "inputCount": "Inputs",
     "outputCount": "Outputs",
     "feeRate": "Fee rate",
@@ -675,6 +689,7 @@
     }
   },
   "pricing": {
+    "sourceAria": "Pricing source",
     "manualOverride": "Manual price override",
     "manualOverrideHint": "Saves a reviewed price source and exact manual rate/value to the transaction row. Reprocess journals after saving.",
     "calculatedFromAmount": "Calculated from the fixed amount: {{amount}}.",
@@ -769,7 +784,9 @@
     "addTagAria": "Add tag",
     "suggestionPrefix": "+ {{tag}}",
     "note": "Note",
-    "notePlaceholder": "Receipt, invoice, counterparty, or review context"
+    "notePlaceholder": "Receipt, invoice, counterparty, or review context",
+    "loanRole": "Loan role",
+    "loanRoleHint": "Mark this row as a leg of a BTC loan — principal or collateral. Applies immediately; link the matching legs in the Linked tab."
   },
   "linked": {
     "pairedMovement": "Paired movement",
@@ -886,8 +903,7 @@
       "classify": "Classify",
       "pricing": "Pricing",
       "tax": "Tax",
-      "linked": "Linked",
-      "ledger": "Ledger"
+      "linked": "Linked"
     },
     "banner": {
       "journalQuarantine": "Journal quarantine",

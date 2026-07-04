@@ -22,7 +22,11 @@ to put that data so adapters cannot leak it by accident.
 """
 
 from .adapter import LightningAdapter
-from .connections import LIGHTNING_ADAPTER_KINDS, resolve_lightning_connection
+from .connections import (
+    LIGHTNING_ADAPTER_KINDS,
+    resolve_lightning_backend,
+    resolve_lightning_connection,
+)
 from .profitability import (
     DEFAULT_OPEN_COST_SAT,
     ChannelOpenCostCheck,
@@ -71,6 +75,7 @@ __all__ = [
     "register_adapter",
     "registered_kinds",
     "resolve_adapter",
+    "resolve_lightning_backend",
     "resolve_lightning_connection",
     "snapshot_to_dict",
     "snapshot_to_dict_for_ai",

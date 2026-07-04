@@ -1116,7 +1116,7 @@ _BULLBITCOIN_WALLET_REQUIRED_COLUMNS = (
     "receive_txid",
 )
 
-_BULLBITCOIN_WALLET_SKIPPED_STATUSES = {"failed", "expired"}
+_BULLBITCOIN_WALLET_SKIPPED_STATUSES = {"failed", "expired", "refunded"}
 _BULLBITCOIN_WALLET_INBOUND_DIRECTIONS = {"incoming", "inbound", "received", "receive"}
 _BULLBITCOIN_WALLET_OUTBOUND_DIRECTIONS = {"outgoing", "outbound", "sent", "send"}
 
@@ -2253,6 +2253,9 @@ GENERIC_LEDGER_COLUMNS = (
     "Counterparty",
     "Note",
     "Tx-ID",
+    "Payment Hash",
+    "Payment Hash Source",
+    "Swap Refund Funding Tx-ID",
 )
 
 # Asset codes (normalized via `normalize_asset_code`) treated as the Bitcoin
@@ -2604,6 +2607,33 @@ def normalize_generic_ledger_record(record, index=0):
     external_id = txid or ""
     note = str_or_none(_get_cell(sanitized, "Note", "Comment", "Description"))
     counterparty = str_or_none(_get_cell(sanitized, "Counterparty", "Exchange", "Platform"))
+    payment_hash = str_or_none(
+        _get_cell(
+            sanitized,
+            "Payment Hash",
+            "PaymentHash",
+            "Lightning Payment Hash",
+            "LN Payment Hash",
+        )
+    )
+    payment_hash_source = str_or_none(
+        _get_cell(
+            sanitized,
+            "Payment Hash Source",
+            "PaymentHash Source",
+            "Payment Hash Origin",
+        )
+    )
+    swap_refund_funding_txid = str_or_none(
+        _get_cell(
+            sanitized,
+            "Swap Refund Funding Tx-ID",
+            "Swap Refund Funding TxID",
+            "Refund Funding Tx-ID",
+            "Refund Funding TxID",
+            "HTLC Funding TxID",
+        )
+    )
 
     return {
         "txid": external_id,
@@ -2624,6 +2654,9 @@ def normalize_generic_ledger_record(record, index=0):
         "kind": kind,
         "description": note,
         "counterparty": counterparty,
+        "payment_hash": payment_hash,
+        "payment_hash_source": payment_hash_source or ("generic_ledger" if payment_hash else None),
+        "swap_refund_funding_txid": swap_refund_funding_txid,
         "raw_json": json.dumps(json_ready(sanitized), sort_keys=True),
     }
 
@@ -2742,6 +2775,18 @@ _BYO_FIAT_VALUE = {_normalized_column_key(n) for n in ("Fiat Value", "Total", "T
 _BYO_FIAT_RATE = {_normalized_column_key(n) for n in ("Price", "Rate", "Unit Price", "Price Per BTC", "BTC Price", "Spot", "Kurs", "Preis")}
 _BYO_NOTE = {_normalized_column_key(n) for n in ("Note", "Notes", "Description", "Memo", "Label", "Comment", "Notiz", "Beschreibung")}
 _BYO_TXID = {_normalized_column_key(n) for n in ("Tx-ID", "TxID", "Txid", "Transaction ID", "Tx Hash", "Hash", "Reference", "Ref")}
+_BYO_PAYMENT_HASH = {_normalized_column_key(n) for n in ("Payment Hash", "PaymentHash", "Lightning Payment Hash", "LN Payment Hash")}
+_BYO_PAYMENT_HASH_SOURCE = {_normalized_column_key(n) for n in ("Payment Hash Source", "PaymentHash Source", "Payment Hash Origin")}
+_BYO_SWAP_REFUND_FUNDING_TXID = {
+    _normalized_column_key(n)
+    for n in (
+        "Swap Refund Funding Tx-ID",
+        "Swap Refund Funding TxID",
+        "Refund Funding Tx-ID",
+        "Refund Funding TxID",
+        "HTLC Funding TxID",
+    )
+}
 _BYO_COUNTERPARTY = {_normalized_column_key(n) for n in ("Counterparty", "Exchange", "Platform", "Payee", "Gegenpartei")}
 
 _BYO_TYPE_VALUE_MAP = {
@@ -2885,6 +2930,9 @@ def infer_ledger_columns(header):
     fiat_rate = take(_BYO_FIAT_RATE, "fiat_rate")
     note = take(_BYO_NOTE, "description")
     txid = take(_BYO_TXID, "txid")
+    payment_hash = take(_BYO_PAYMENT_HASH, "payment_hash")
+    payment_hash_source = take(_BYO_PAYMENT_HASH_SOURCE, "payment_hash_source")
+    swap_refund_funding_txid = take(_BYO_SWAP_REFUND_FUNDING_TXID, "swap_refund_funding_txid")
     counterparty = take(_BYO_COUNTERPARTY, "counterparty")
 
     plan = {
@@ -2894,6 +2942,8 @@ def infer_ledger_columns(header):
         "asset": asset, "fee": fee, "fee_asset": fee_asset,
         "fiat_currency": fiat_currency, "fiat_value": fiat_value,
         "fiat_rate": fiat_rate, "note": note, "txid": txid, "counterparty": counterparty,
+        "payment_hash": payment_hash, "payment_hash_source": payment_hash_source,
+        "swap_refund_funding_txid": swap_refund_funding_txid,
         "received_header_asset": _byo_asset_from_header(received),
         "sent_header_asset": _byo_asset_from_header(sent),
         "amount_header_asset": _byo_asset_from_header(amount),
@@ -3035,6 +3085,12 @@ def _remap_byo_row_to_ledger(row, plan):
 def _byo_passthrough(out, row, plan):
     if plan.get("txid"):
         out["Tx-ID"] = str_or_none(row.get(plan["txid"]))
+    if plan.get("payment_hash"):
+        out["Payment Hash"] = str_or_none(row.get(plan["payment_hash"]))
+    if plan.get("payment_hash_source"):
+        out["Payment Hash Source"] = str_or_none(row.get(plan["payment_hash_source"]))
+    if plan.get("swap_refund_funding_txid"):
+        out["Swap Refund Funding Tx-ID"] = str_or_none(row.get(plan["swap_refund_funding_txid"]))
     if plan.get("note"):
         out["Note"] = str_or_none(row.get(plan["note"]))
     if plan.get("counterparty"):

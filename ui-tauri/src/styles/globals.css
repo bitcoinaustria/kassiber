@@ -41,6 +41,15 @@
 
 :root {
   --app-ui-scale: 0.9;
+  /*
+   * Bitcoin Austria brand red, theme-aware. The `@theme inline` block at
+   * the bottom remaps --color-accent to shadcn's neutral --accent, which
+   * shadows the brand value from the first @theme block at runtime — so
+   * neither `var(--color-accent)` nor bare `accent` utilities render red.
+   * Use var(--kb-accent) (or bg-[var(--kb-accent)] etc.) wherever the
+   * brand red is intended.
+   */
+  --kb-accent: #e3000f;
   --background: oklch(1 0 0);
   --app-chrome: oklch(0.985 0 0);
   --foreground: oklch(0.145 0 0);
@@ -74,6 +83,12 @@
 @layer base {
   * {
     border-color: var(--border);
+  }
+  /* Tailwind v4 preflight leaves buttons at `cursor: default`; restore the
+     pointer so interactive controls are recognizable as clickable. */
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]) {
+    cursor: pointer;
   }
   html,
   body {
@@ -185,6 +200,8 @@
   --color-accent: #ff3341;
   --color-accent-2: #ff6a73;
 
+  --kb-accent: #ff3341;
+
   --background: oklch(0.145 0 0);
   --app-chrome: oklch(0.18 0 0);
   --foreground: oklch(0.985 0 0);
@@ -247,4 +264,15 @@
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
+}
+
+/* WKWebView (macOS) draws the blue system focus ring as a native element
+   outline on click-focus. WebKit under Full Keyboard Access treats mouse
+   focus as :focus-visible, so Tailwind's `focus-visible:outline-none` does not
+   suppress it. Kill the native outline inside the treasury chart card; keyboard
+   users still get the box-shadow ring (`focus-visible:ring-*`) and activity
+   markers keep their scale-up focus affordance. */
+.treasury-chart-card :focus,
+.treasury-chart-card :focus-visible {
+  outline: none;
 }

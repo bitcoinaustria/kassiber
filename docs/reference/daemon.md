@@ -154,9 +154,17 @@ annotations, and reviewed paired-route context. Bitcoin transactions with
 stored valued vin/vout can render a proportional flow graph; records with only
 safe references render a reference/amountless graph; graphless imports return a
 typed empty state. Liquid confidential transactions may expose public
-references while keeping confidential amounts unsized or hidden. The payload
-never returns descriptors, xpubs, backend URLs/tokens, wallet config, raw
-files, raw JSON blobs, or other secret-bearing material.
+references while keeping confidential amounts unsized or hidden. When the user
+allows a configured public backend lookup, the daemon caches only the sanitized
+reference graph inside the local DB/SQLCipher boundary, keyed by schema version,
+chain, network, and txid, so reopening the same transaction does not refetch the
+same public tx/prevtx material. Kassiber deliberately does not persist raw
+serialized transactions for this graph cache: the graph endpoint needs only the
+normalized refs, prevout values/scripts, and size metadata required to rebuild a
+complete current-transaction graph, not witnesses, arbitrary script payloads, or
+backend response shape. The payload never returns descriptors, xpubs, backend
+URLs/tokens, wallet config, raw files, raw JSON blobs, or other secret-bearing
+material.
 
 `ui.wallets.utxos` accepts `{"wallet":"<wallet id or label>"}` and returns the
 active local UTXO inventory for one wallet. Rows include outpoint, txid, vout,
@@ -241,6 +249,28 @@ require `DELETE LOCAL DATA`.
 `ui.backends.options` returns safe backend setup choices for desktop forms. It
 lists configured backend names, kinds, chain/network metadata, presence flags,
 and default state, but does not expose exact endpoint URLs or tokens.
+`ui.backends.create` / `ui.backends.update` can mark a backend with
+`silent_payments=true` and store either `silent_payment_scan_file` for a local
+scanner result or `silent_payment_scan_path` for an explicitly selected
+server-assisted scanner API. The file/path values are backend config, not
+normal safe output fields. Desktop forms may send replacement values, but
+`ui.backends.list` / `ui.backends.options` expose only the safe capability bit
+and presence-style metadata, never the saved scanner path itself.
+`ui.backends.detect_core` probes common local Bitcoin Core RPC endpoints with
+default cookie-file locations plus local `bitcoin.conf` RPC settings and
+returns candidate URL/network/auth-source metadata without cookie contents.
+When `bitcoin.conf` contains `rpcuser`/`rpcpassword`, the daemon may use those
+credentials internally to prove reachability, but the response does not include
+the username or password. Cookie-file candidates include a bounded
+`credential_ref` for immediate local probing; renderer-supplied cookiefile
+probes and desktop-created Bitcoin Core cookiefile backends are constrained to
+default `~/.bitcoin/**/.cookie` paths and loopback RPC URLs. Users who want to
+save basic auth still enter it explicitly. `ui.backends.bitcoinrpc.test` probes
+a saved or inline Core RPC backend with `getblockchaininfo`, `getnetworkinfo`,
+wallet RPC, and `getblockfilter`; it reports reachability, peer/sync state,
+pruning/IBD, wallet-RPC availability, and BIP158 filter-index availability.
+Both endpoints are desktop mutating kinds because they touch local RPC/cookie
+state and are not AI tools.
 
 `ui.wallets.create` is the desktop connection setup path for local/imported
 wallet sources. It accepts `label`, `kind`, and the same wallet config fields
@@ -250,6 +280,14 @@ etc.) and returns the redacted wallet row. Desktop callers can pass
 `wallet_material` instead of separate descriptor fields; the daemon recognizes
 common descriptor export shapes, including plaintext BSMS descriptor records,
 and stores receive/change descriptors when the material contains both.
+For `kind="silent-payment"`, callers pass `sp_descriptor` plus one scan
+birthday field (`sp_scan_start_height` or `sp_scan_start_date`) or explicit
+full-history acknowledgement (`sp_full_history` with
+`sp_acknowledge_full_history_warning`). Server-assisted scan mode also requires
+`sp_acknowledge_server_warning`. The stored `sp_descriptor` is secret-bearing
+watch-only privacy material and never appears in normal list/get/UI/AI payloads;
+the redacted wallet row exposes only safe state such as material format, scan
+mode, start point, and full-history flag.
 
 `ui.wallets.import_samourai` is the desktop Samourai/Whirlpool watch-only path.
 It accepts `label`, optional `backend`, `network`, and `gap_limit`, plus exactly
@@ -375,9 +413,10 @@ BTCPay invoice JSON, rejected matches, payment hashes, destination addresses,
 full origin URLs, payment-method configuration, descriptors, xpubs, or API
 tokens.
 
-`ui.metadata.bip329.import` accepts `file` and optional `wallet`, then imports
-BIP329 JSONL labels into the active profile and bridges transaction labels to
-matching local transactions.
+`ui.metadata.bip329.import` accepts `file`, then imports BIP329 JSONL labels
+into the active profile. Labels are deduplicated by record type and reference;
+transaction labels are bridged to matching local transactions across the active
+profile.
 
 `ui.transactions.metadata.update` accepts
 `{"transaction":"...","note":"...","tags":["Reviewed"],"excluded":false}` for
@@ -583,9 +622,9 @@ The daemon resolves the wallet, looks up the registered
 [`LightningAdapter`](../../kassiber/core/lightning/adapter.py) for the wallet
 kind (`lnd`, `coreln`, `nwc`), and dispatches the read. LND ships an
 adapter ([`kassiber/core/lightning/lnd.py`](../../kassiber/core/lightning/lnd.py))
-that the daemon imports at startup. Without a registered adapter the
-daemon returns an `lightning_adapter_unavailable` error envelope so the
-desktop can fall back to mock data.
+that the daemon imports at startup. Without a registered adapter the daemon
+returns an `lightning_adapter_unavailable` error envelope so the desktop can
+surface the unavailable-adapter state without inventing data.
 
 ## Encrypted database
 

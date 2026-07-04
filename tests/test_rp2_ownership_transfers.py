@@ -1022,6 +1022,15 @@ class OwnershipDeriverHandlerTest(unittest.TestCase):
             }
             for r in rows:
                 self.assertIn(r["transaction_id"], real_ids)
+            audit = handlers.inspect_transfer_audit(conn, "Main", "Default")
+            derived = [
+                row
+                for row in audit["same_asset_transfers"]
+                if row.get("pairing_source") == "ownership_derived"
+            ]
+            self.assertEqual(len(derived), 1)
+            self.assertEqual(derived[0]["from_wallet"], "Cold")
+            self.assertEqual(derived[0]["to_wallet"], "Hot")
 
 
 class DuplicateWalletLabelGuardTest(unittest.TestCase):

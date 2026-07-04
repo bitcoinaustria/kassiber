@@ -2,11 +2,16 @@ import { describe, expect, it } from "vitest";
 
 import {
   backendPayload,
+  backendTrust,
   backendRowToSettingsBackend,
+  deriveExplorerSettings,
   marketRateBackends,
   type Backend,
 } from "./SettingsModel";
-import { backendTypeIdForSettingsBackend } from "./SyncBackendSettingsModel";
+import {
+  backendTypeIdForConnectionSetup,
+  backendTypeIdForSettingsBackend,
+} from "./SyncBackendSettingsModel";
 
 describe("backend settings model", () => {
   it("keeps the stable backend id separate from the editable display name", () => {
@@ -39,6 +44,52 @@ describe("backend settings model", () => {
     });
 
     expect(backend.urlSafeForHttpProbe).toBe(true);
+  });
+
+  it("serializes Silent Payments capability and scanner replacements", () => {
+    const backend = backendRowToSettingsBackend({
+      name: "sp-local",
+      display_name: "SP scanner",
+      kind: "custom",
+      chain: "bitcoin",
+      network: "main",
+      url: "local://silent-payments",
+      has_url: true,
+      silent_payments: true,
+    });
+
+    expect(backend.silentPayments).toBe(true);
+    expect(backend).not.toHaveProperty("silentPaymentScanFile");
+    expect(backend).not.toHaveProperty("silentPaymentScanPath");
+
+    const payload = backendPayload({
+      ...backend,
+      silentPaymentScanFile: "/tmp/sp-scan.json",
+      silentPaymentScanPath: "/silent-payments/scan",
+    });
+
+    expect(payload.config).toMatchObject({
+      silent_payments: true,
+      silent_payment_scan_file: "/tmp/sp-scan.json",
+      silent_payment_scan_path: "/silent-payments/scan",
+    });
+
+    const disabledPayload = backendPayload({
+      ...backend,
+      silentPayments: false,
+      silentPaymentScanFile: "/tmp/kept-hidden.json",
+      silentPaymentScanPath: "/silent-payments/disabled",
+    });
+
+    expect(disabledPayload.config).toMatchObject({
+      silent_payments: false,
+    });
+    expect(disabledPayload.config).not.toHaveProperty(
+      "silent_payment_scan_file",
+    );
+    expect(disabledPayload.config).not.toHaveProperty(
+      "silent_payment_scan_path",
+    );
   });
 
   it("updates display_name without renaming the backend key", () => {
@@ -113,6 +164,23 @@ describe("backend settings model", () => {
     expect(backendTypeIdForSettingsBackend(backend)).toBe("liquid");
   });
 
+  it("opens graph backend diagnostics in the matching network setup path", () => {
+    expect(
+      backendTypeIdForConnectionSetup({
+        sourceId: "liquid",
+        reason: "Transaction graph needs a Liquid backend",
+        backendKind: "liquid",
+      }),
+    ).toBe("liquid");
+    expect(
+      backendTypeIdForConnectionSetup({
+        sourceId: "bitcoin",
+        reason: "Transaction graph needs a Bitcoin backend",
+        backendKind: "bitcoin",
+      }),
+    ).toBe("bitcoin");
+  });
+
   it("preserves redacted proxy credentials when saving unrelated backend edits", () => {
     const backend = backendRowToSettingsBackend({
       name: "mempool",
@@ -146,6 +214,30 @@ describe("backend settings model", () => {
     });
 
     expect(backendTypeIdForSettingsBackend(backend)).toBe("liquid");
+  });
+
+  it("only treats proxy settings as shielding for transports that use them", () => {
+    const electrum = backendRowToSettingsBackend({
+      name: "fulcrum",
+      kind: "electrum",
+      chain: "bitcoin",
+      network: "main",
+      url: "ssl://fulcrum.example:50002",
+      has_url: true,
+      tor_proxy: "127.0.0.1:9050",
+    });
+    const lnd = backendRowToSettingsBackend({
+      name: "lnd",
+      kind: "lnd",
+      chain: "lightning",
+      network: "main",
+      url: "https://lnd.example",
+      has_url: true,
+      tor_proxy: "127.0.0.1:9050",
+    });
+
+    expect(backendTrust(electrum).posture).toBe("shielded");
+    expect(backendTrust(lnd).posture).toBe("remote");
   });
 
   it("shows the local mempool backend as the active market-price endpoint", () => {
@@ -185,5 +277,45 @@ describe("backend settings model", () => {
     expect(marketBackend.health).toBe("via desk-mempool");
     expect(marketBackend.infrastructureOwner).toBe("self");
     expect(marketBackend.on).toBe(true);
+  });
+
+  it("disables public explorer fallbacks when the active backend is regtest", () => {
+    const settings = deriveExplorerSettings([
+      backendRowToSettingsBackend({
+        name: "core-regtest",
+        kind: "bitcoinrpc",
+        chain: "bitcoin",
+        network: "regtest",
+        url: "http://127.0.0.1:18456",
+        is_default: true,
+        has_url: true,
+      }),
+    ]);
+
+    expect(settings).toEqual({
+      bitcoinBaseUrl: "",
+      liquidBaseUrl: "",
+      publicFallbacks: false,
+    });
+  });
+
+  it("disables public explorer fallbacks when the active backend is elementsregtest", () => {
+    const settings = deriveExplorerSettings([
+      backendRowToSettingsBackend({
+        name: "liquid-mempool-regtest",
+        kind: "liquid-esplora",
+        chain: "liquid",
+        network: "elementsregtest",
+        url: "http://127.0.0.1:18560/api",
+        is_default: true,
+        has_url: true,
+      }),
+    ]);
+
+    expect(settings).toEqual({
+      bitcoinBaseUrl: "",
+      liquidBaseUrl: "http://127.0.0.1:18560",
+      publicFallbacks: false,
+    });
   });
 });

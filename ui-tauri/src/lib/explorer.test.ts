@@ -24,6 +24,7 @@ describe("explorerTargetForTransaction", () => {
         settings: {
           bitcoinBaseUrl: "https://example.test/api",
           liquidBaseUrl: "",
+          publicFallbacks: true,
         },
       }),
     ).toEqual({
@@ -31,5 +32,19 @@ describe("explorerTargetForTransaction", () => {
       url: "https://example.test/tx/abc123",
       configured: true,
     });
+  });
+
+  it("returns no target when public fallbacks are disabled and no explorer is configured", () => {
+    expect(
+      explorerTargetForTransaction({
+        txid: "abc123",
+        network: "liquid",
+        settings: {
+          bitcoinBaseUrl: "",
+          liquidBaseUrl: "",
+          publicFallbacks: false,
+        },
+      }),
+    ).toBeNull();
   });
 });

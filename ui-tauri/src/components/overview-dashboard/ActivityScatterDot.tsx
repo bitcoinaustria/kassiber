@@ -2,7 +2,6 @@ import { useNavigate } from "@tanstack/react-router";
 import * as React from "react";
 
 import {
-  activityFlowColors,
   activityFlowLabels,
   transactionDetailHref,
   type ActivityScatterDotProps,
@@ -14,6 +13,7 @@ export function ActivityScatterDot({
   size,
   payload,
   activeSeries,
+  flowColors,
   onOpenTransactionDetail,
   onHoverActivityPoint,
 }: ActivityScatterDotProps) {
@@ -103,7 +103,7 @@ export function ActivityScatterDot({
         cx={cx}
         cy={cy}
         r={radius}
-        fill={activityFlowColors[payload.eventFlow]}
+        fill={flowColors[payload.eventFlow]}
         fillOpacity={
           activeSeries === null || activeSeries === "events" ? 0.92 : 0.28
         }

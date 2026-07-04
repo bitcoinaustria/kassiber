@@ -75,6 +75,10 @@ export function TransactionDetailHeader({
 }) {
   const { t } = useTranslation(["transactions"]);
   const StatusIcon = transactionStatusIcons[reviewStatus];
+  const confirmations = transaction.confirmations ?? 0;
+  const showReviewStatusChip =
+    reviewStatus !== "completed" &&
+    !(reviewStatus === "pending" && confirmations <= 0);
 
   return (
     <SheetHeader className="border-b p-0">
@@ -103,7 +107,7 @@ export function TransactionDetailHeader({
                 {confLabel}
               </HeaderChip>
             ) : null}
-            {reviewStatus !== "completed" ? (
+            {showReviewStatusChip ? (
               <HeaderChip
                 icon={
                   <StatusIcon className="size-3" aria-hidden="true" />
@@ -174,10 +178,14 @@ export function TransactionDetailHeader({
             )}
           </SheetTitle>
           <SheetDescription className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-sm">
-            <span className="font-medium text-foreground">
-              {transaction.counterparty}
-            </span>
-            <span className="text-muted-foreground">·</span>
+            {transaction.counterparty ? (
+              <>
+                <span className="font-medium text-foreground">
+                  {transaction.counterparty}
+                </span>
+                <span className="text-muted-foreground">·</span>
+              </>
+            ) : null}
             <span className="text-muted-foreground">
               {transaction.wallet ?? t("detailHeader.unassignedWallet")}
             </span>

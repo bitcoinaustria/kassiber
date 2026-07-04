@@ -93,7 +93,7 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { bookIdentityKey, useUiStore } from "@/store/ui";
+import { bookIdentityKey, isDaemonDataMode, useUiStore } from "@/store/ui";
 import type { AppNotification, ThemePreference } from "@/store/ui";
 import { BOOK_REFRESH_PROGRESS_ID } from "@/lib/syncProgress";
 import {
@@ -129,6 +129,7 @@ import {
 } from "@/store/sessionLock";
 import type { OverviewSnapshot } from "@/mocks/seed";
 import type { ProfilesSnapshot } from "@/mocks/profiles";
+import type { BackendSettingsData } from "@/components/kb/settings/SettingsModel";
 import { AssistantSessionProvider } from "@/components/ai/AssistantSessionProvider";
 import type { AssistantReturnPath } from "@/components/ai/assistantSession";
 import kLedgerMarkUrl from "@/assets/k-ledger-mark-transparent.svg";
@@ -138,10 +139,16 @@ import {
   startDaemonLogBridge,
   stopDaemonLogBridge,
 } from "@/lib/daemonLogBridge";
+import { safeTauriUnlisten } from "@/lib/tauriUnlisten";
+import {
+  dataModeForActiveBackend,
+  dataModeLabelKey,
+} from "@/components/kb/dataMode";
 import { isTypingTarget } from "@/lib/keymap";
 import { FirstSyncCard } from "./FirstSyncCard";
 import { AssistantDock } from "./AssistantDock";
 import { PreAlphaBanner } from "./PreAlphaBanner";
+import { nextAssistantDockCollapsed } from "./assistantDockLayout";
 import { useJournalProcessingAction } from "@/hooks/useJournalProcessingAction";
 import { useWalletSyncAction } from "@/hooks/useWalletSyncAction";
 import { BookSwitcherPopover } from "./BookSwitcherPopover";
@@ -168,6 +175,7 @@ import {
   type NativeMenuPayload,
 } from "./menuIntent";
 import { notificationTarget } from "./notificationRouting";
+import { shouldHideNotificationProgressLabel } from "./notificationDisplay";
 import { planHeaderRefresh } from "./headerRefresh";
 
 // `labelKey` indexes the `nav` namespace (book.*); keep `href` as the stable id.
@@ -267,6 +275,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { labelKey: "book.quarantine", icon: ShieldAlert, href: "/quarantine" },
       { labelKey: "book.reconcile", icon: Fingerprint, href: "/reconcile" },
+      { labelKey: "book.egress", icon: Plane, href: "/egress" },
       { labelKey: "book.sourceFunds", icon: BadgeCheck, href: "/source-of-funds" },
       { labelKey: "book.swaps", icon: ArrowLeftRight, href: "/swaps" },
       { labelKey: "book.ledger", icon: BookOpen, href: "/journals" },
@@ -332,6 +341,14 @@ const ROUTE_META: Array<[string, RouteMeta]> = [
       titleKey: "routeMeta.imports.title",
       icon: WalletCards,
       searchKey: "routeMeta.imports",
+    },
+  ],
+  [
+    "/egress",
+    {
+      titleKey: "nav:book.egress",
+      icon: Plane,
+      searchKey: "routeMeta.egress",
     },
   ],
   [
@@ -557,6 +574,8 @@ export function AppShell() {
   });
   const daemonFetchCount = useIsFetching({ queryKey: ["daemon"] });
   const [assistantCollapsed, setAssistantCollapsed] = React.useState(false);
+  const [assistantDockSuppressed, setAssistantDockSuppressed] =
+    React.useState(false);
   const [locked, setLocked] = React.useState(
     () => lockEncryptedWorkspaceOnLaunch,
   );
@@ -627,7 +646,8 @@ export function AppShell() {
   const isAssistantRoute = pathname === "/assistant";
   // Routes that suppress the bottom-docked assistant chat: the full-page
   // assistant (which already hosts chat) and the focused ManySats calculator.
-  const hideDockedAssistant = isAssistantRoute || pathname === "/manysats";
+  const hideDockedAssistant =
+    isAssistantRoute || assistantDockSuppressed || pathname === "/manysats";
   const routeMeta =
     ROUTE_META.find(([prefix]) => pathname.startsWith(prefix))?.[1] ?? {
       titleKey: "shell.fallbackTitle",
@@ -1033,7 +1053,7 @@ export function AppShell() {
   // workspace; if not, drop the stale identity and bounce back to onboarding
   // instead of stranding the user on /overview with no data.
   React.useEffect(() => {
-    if (dataMode !== "real") return;
+    if (!isDaemonDataMode(dataMode)) return;
     if (!daemonEnabled) return;
     if (identity?.importedProject) return;
     if (!identity) return;
@@ -1200,7 +1220,7 @@ export function AppShell() {
   }, [appLockPolicy.lockOnWindowClose, encryptedWorkspace, lockApp]);
 
   React.useEffect(() => {
-    const bridgeable = daemonEnabled && dataMode === "real";
+    const bridgeable = daemonEnabled && isDaemonDataMode(dataMode);
     if (!bridgeable) return;
     startDaemonLogBridge({ isEnabled: () => bridgeable });
     return () => stopDaemonLogBridge();
@@ -1211,6 +1231,24 @@ export function AppShell() {
       setAssistantReturnPath(assistantReturnPathFor(pathname));
     }
   }, [isAssistantRoute, pathname]);
+
+  React.useEffect(() => {
+    const handleAssistantDockSuppressed = (event: Event) => {
+      const detail = (event as CustomEvent<{ suppressed?: boolean }>).detail;
+      setAssistantDockSuppressed(Boolean(detail?.suppressed));
+    };
+
+    window.addEventListener(
+      "kassiber:assistant-dock-suppressed",
+      handleAssistantDockSuppressed,
+    );
+    return () => {
+      window.removeEventListener(
+        "kassiber:assistant-dock-suppressed",
+        handleAssistantDockSuppressed,
+      );
+    };
+  }, []);
 
   React.useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -1278,7 +1316,7 @@ export function AppShell() {
       )
       .then((nextUnlisten) => {
         if (disposed) {
-          nextUnlisten();
+          safeTauriUnlisten(nextUnlisten);
           return;
         }
         unlisten = nextUnlisten;
@@ -1289,7 +1327,7 @@ export function AppShell() {
 
     return () => {
       disposed = true;
-      unlisten?.();
+      safeTauriUnlisten(unlisten);
     };
   }, [
     lockApp,
@@ -1344,9 +1382,14 @@ export function AppShell() {
     }
 
     const syncAssistantState = () => {
-      const scrollableHeight = Math.max(1, main.scrollHeight - main.clientHeight);
-      const scrolledProgress = main.scrollTop / scrollableHeight;
-      setAssistantCollapsed(main.scrollTop > 96 && scrolledProgress > 0.04);
+      setAssistantCollapsed((collapsed) =>
+        nextAssistantDockCollapsed({
+          collapsed,
+          scrollTop: main.scrollTop,
+          scrollHeight: main.scrollHeight,
+          clientHeight: main.clientHeight,
+        }),
+      );
     };
 
     syncAssistantState();
@@ -1653,7 +1696,64 @@ function SidebarActions({
   const { t } = useTranslation(["chrome", "nav"]);
   const dataMode = useUiStore((state) => state.dataMode);
   const setDataMode = useUiStore((state) => state.setDataMode);
-  const isRealData = dataMode === "real";
+  const explorerPublicFallbacks = useUiStore(
+    (state) => state.explorerSettings.publicFallbacks,
+  );
+  const setExplorerSettings = useUiStore((state) => state.setExplorerSettings);
+  const backendSettingsQuery = useDaemon<BackendSettingsData>(
+    "ui.backends.settings.list",
+    undefined,
+    {
+      staleTime: 15_000,
+      refetchOnWindowFocus: false,
+    },
+  );
+  const defaultBackendName =
+    backendSettingsQuery.data?.data?.summary.default_backend ?? null;
+  const defaultBackend =
+    backendSettingsQuery.data?.data?.backends.find(
+      (backend) => backend.name === defaultBackendName || backend.is_default,
+    ) ?? null;
+  const activeRegtestBackend = ["regtest", "elementsregtest"].includes(
+    String(defaultBackend?.network ?? "").toLowerCase(),
+  );
+  // Until the backends query resolves, activeRegtestBackend is a placeholder
+  // false; coercing on it would bounce a persisted regtest mode through "real"
+  // and re-key every daemon query on launch.
+  const backendSettingsLoaded = backendSettingsQuery.isSuccess;
+  const normalizedDataMode = backendSettingsLoaded
+    ? dataModeForActiveBackend(dataMode, activeRegtestBackend)
+    : dataMode;
+
+  React.useEffect(() => {
+    if (!backendSettingsLoaded) return;
+    if (normalizedDataMode !== dataMode) {
+      setDataMode(normalizedDataMode);
+    }
+  }, [backendSettingsLoaded, dataMode, normalizedDataMode, setDataMode]);
+
+  // Keep public-explorer fallbacks disabled whenever a regtest/elementsregtest
+  // book is active, without waiting for the Settings screen to mount. Otherwise
+  // the store default (publicFallbacks: true) leaves a freshly-launched or
+  // onboarding-opened regtest book handing regtest txids to a public explorer
+  // until Settings is visited. Mirrors deriveExplorerSettings' publicFallbacks
+  // rule so the two writers never disagree; base URLs stay owned by Settings.
+  React.useEffect(() => {
+    if (!backendSettingsLoaded) return;
+    const allowPublicFallbacks = !activeRegtestBackend;
+    if (explorerPublicFallbacks !== allowPublicFallbacks) {
+      setExplorerSettings({ publicFallbacks: allowPublicFallbacks });
+    }
+  }, [
+    backendSettingsLoaded,
+    activeRegtestBackend,
+    explorerPublicFallbacks,
+    setExplorerSettings,
+  ]);
+
+  const dataModeLabel = t(
+    `shell.dataMode.${dataModeLabelKey(normalizedDataMode)}`,
+  );
   const supportActive = pathname === "/diagnostics";
   const manySatsActive = pathname === "/manysats";
   const extrasActive = manySatsActive || pathname === "/exit-tax";
@@ -1691,16 +1791,9 @@ function SidebarActions({
           <div className="flex min-h-8 w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0">
             <Server className="size-4 shrink-0" aria-hidden="true" />
             <span className="min-w-0 flex-1 truncate group-data-[collapsible=icon]:hidden">
-              {isRealData ? t("shell.dataMode.real") : t("shell.dataMode.mock")}
+              {dataModeLabel}
             </span>
-            <Switch
-              checked={isRealData}
-              aria-label={t("shell.dataMode.toggle")}
-              onCheckedChange={(checked) =>
-                setDataMode(checked ? "real" : "mock")
-              }
-              className="group-data-[collapsible=icon]:hidden"
-            />
+            <span className="size-2 rounded-full bg-emerald-500 group-data-[collapsible=icon]:hidden" />
           </div>
         </SidebarMenuItem>
       ) : null}
@@ -2104,8 +2197,9 @@ function AppDashboardHeader({
           shouldResolveTransaction &&
           (resolvedTransaction.isFetching || resolvedTransaction.isLoading),
         // Dynamic, prefixed keys fall outside the typed-key union; resolve via
-        // a thin string→string adapter over the namespace-branded translator.
-        t: (key: string) => t(key as never) as string,
+        // a thin structural adapter over the namespace-branded translator.
+        t: (key: string, options?: Record<string, unknown>) =>
+          t(key as never, options as never) as unknown,
       }),
     [
       snapshot,
@@ -2593,86 +2687,96 @@ function AppDashboardHeader({
               </Button>
             </div>
             <DropdownMenuSeparator />
-            {notificationItems.map((item) => (
-              <div key={item.id} className="px-1 py-1">
-                <DropdownMenuItem
-                  className="flex cursor-pointer items-start justify-between gap-3 whitespace-normal rounded-md"
-                  onSelect={(event) => {
-                    // An in-progress book refresh minimized via "Continue in
-                    // background" re-opens the full-screen sync card (rather than
-                    // navigating); letting the menu close on select reveals it.
-                    // A live `progress` means a refresh is active, so this covers
-                    // first sync AND later incremental refreshes.
-                    if (
-                      item.dedupeKey === "book-refresh" &&
-                      item.progress &&
-                      headerBookKey !== null
-                    ) {
-                      reopenFirstSyncCard(headerBookKey);
-                      return;
-                    }
-                    if (!item.to) return;
-                    event.preventDefault();
-                    void navigate({ to: item.to });
-                  }}
-                >
-                  <span className="min-w-0">
-                    <span className="block font-medium">{item.title}</span>
-                    <span className="block text-xs text-muted-foreground">
-                      {item.body}
-                    </span>
-                  </span>
-                  {item.to ? (
-                    <ChevronRight
-                      className="mt-1 size-4 shrink-0 text-muted-foreground"
-                      aria-hidden="true"
-                    />
-                  ) : null}
-                </DropdownMenuItem>
-                {item.progress ? (
-                  <div className="px-2 pb-1">
-                    <div className="h-1.5 overflow-hidden rounded-full bg-muted">
-                      <div
-                        className={cn(
-                          "h-full rounded-full bg-primary transition-[width] duration-300",
-                          item.progress.indeterminate &&
-                            "w-1/2 will-change-transform motion-safe:animate-[route-progress_0.9s_ease-in-out_infinite] motion-reduce:w-full motion-reduce:will-change-auto",
-                        )}
-                        style={
-                          item.progress.indeterminate
-                            ? undefined
-                            : {
-                                width: `${notificationProgressValue(item.progress.value)}%`,
-                              }
-                        }
-                      />
-                    </div>
-                    {item.progress.label ? (
-                      <div className="mt-1 text-[11px] text-muted-foreground">
-                        {item.progress.label}
-                      </div>
-                    ) : null}
-                  </div>
-                ) : null}
-                {item.action === "process-journals" ? (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="mt-1 h-7 w-full justify-center text-xs"
-                    disabled={isProcessingJournals}
-                    onClick={(event) => {
+            {notificationItems.map((item) => {
+              const progressLabel =
+                item.progress?.label &&
+                !shouldHideNotificationProgressLabel(
+                  item.body,
+                  item.progress.label,
+                )
+                  ? item.progress.label
+                  : null;
+              return (
+                <div key={item.id} className="px-1 py-1">
+                  <DropdownMenuItem
+                    className="flex cursor-pointer items-start justify-between gap-3 whitespace-normal rounded-md"
+                    onSelect={(event) => {
+                      // An in-progress book refresh minimized via "Continue in
+                      // background" re-opens the full-screen sync card (rather than
+                      // navigating); letting the menu close on select reveals it.
+                      // A live `progress` means a refresh is active, so this covers
+                      // first sync AND later incremental refreshes.
+                      if (
+                        item.dedupeKey === "book-refresh" &&
+                        item.progress &&
+                        headerBookKey !== null
+                      ) {
+                        reopenFirstSyncCard(headerBookKey);
+                        return;
+                      }
+                      if (!item.to) return;
                       event.preventDefault();
-                      runJournalProcessing();
+                      void navigate({ to: item.to });
                     }}
                   >
-                    {isProcessingJournals
-                      ? t("notifications.processing")
-                      : item.actionLabel}
-                  </Button>
-                ) : null}
-              </div>
-            ))}
+                    <span className="min-w-0">
+                      <span className="block font-medium">{item.title}</span>
+                      <span className="block text-xs text-muted-foreground">
+                        {item.body}
+                      </span>
+                    </span>
+                    {item.to ? (
+                      <ChevronRight
+                        className="mt-1 size-4 shrink-0 text-muted-foreground"
+                        aria-hidden="true"
+                      />
+                    ) : null}
+                  </DropdownMenuItem>
+                  {item.progress ? (
+                    <div className="px-2 pb-1">
+                      <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+                        <div
+                          className={cn(
+                            "h-full rounded-full bg-primary transition-[width] duration-300",
+                            item.progress.indeterminate &&
+                              "w-1/2 will-change-transform motion-safe:animate-[route-progress_0.9s_ease-in-out_infinite] motion-reduce:w-full motion-reduce:will-change-auto",
+                          )}
+                          style={
+                            item.progress.indeterminate
+                              ? undefined
+                              : {
+                                  width: `${notificationProgressValue(item.progress.value)}%`,
+                                }
+                          }
+                        />
+                      </div>
+                      {progressLabel ? (
+                        <div className="mt-1 text-[11px] text-muted-foreground">
+                          {progressLabel}
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
+                  {item.action === "process-journals" ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="mt-1 h-7 w-full justify-center text-xs"
+                      disabled={isProcessingJournals}
+                      onClick={(event) => {
+                        event.preventDefault();
+                        runJournalProcessing();
+                      }}
+                    >
+                      {isProcessingJournals
+                        ? t("notifications.processing")
+                        : item.actionLabel}
+                    </Button>
+                  ) : null}
+                </div>
+              );
+            })}
           </DropdownMenuContent>
         </DropdownMenu>
         <CurrencyToggle />
