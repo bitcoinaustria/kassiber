@@ -181,6 +181,8 @@ const CLEAR_BACKEND_SELECTION = "__kassiber_clear_backend__";
 const DESCRIPTOR_REVEAL_KIND = "wallets.reveal_descriptor";
 const RECENT_TRANSACTION_PREVIEW_LIMIT = 100;
 const RECENT_TRANSACTION_SKELETON_COUNT = 12;
+const WALLET_TABLE_VIEWPORT_CLASS =
+  "max-h-[clamp(18rem,36dvh,28rem)] min-h-0 overflow-auto";
 
 interface UpdateWalletResult {
   wallet: {
@@ -1875,7 +1877,7 @@ function ConnectionDetailView({
                 )}
               </div>
             ) : txsForConnection.length ? (
-              <div className="max-h-[560px] min-h-0 overflow-auto divide-y">
+              <div className={cn(WALLET_TABLE_VIEWPORT_CLASS, "divide-y")}>
                 {txsForConnection.map((tx) => (
                   <ConnectionTransactionRow
                     key={tx.id}

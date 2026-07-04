@@ -149,6 +149,8 @@ type SortableUtxoColumn = "outpoint" | "amount" | "status" | "confirmed";
 // Reveal rows incrementally so wallets with hundreds of coins stay responsive;
 // the header total stays accurate because the server reports the full set.
 export const UTXO_PAGE_SIZE = 50;
+const WALLET_TABLE_VIEWPORT_CLASS =
+  "max-h-[clamp(18rem,36dvh,28rem)] min-h-0 overflow-auto";
 
 const UTXO_COLUMN_SORTS: Record<
   SortableUtxoColumn,
@@ -806,10 +808,7 @@ export function UtxosInventoryPanel({
           />
         ) : (
           <>
-            <div
-              className="max-h-[560px] min-h-0 overflow-auto"
-              onScroll={handleRowsScroll}
-            >
+            <div className={WALLET_TABLE_VIEWPORT_CLASS} onScroll={handleRowsScroll}>
               {stale ? (
                 <div className="flex items-start gap-2 border-b bg-amber-50 px-4 py-2.5 text-xs text-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
                   <AlertTriangle
