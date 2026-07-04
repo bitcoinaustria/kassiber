@@ -372,7 +372,83 @@
     "assistantDescription": "Prompt content — which can include book data — leaves only if you enable a remote or CLI provider.",
     "assistantEnabled": "Enabled. Local providers keep prompts on this machine; remote and CLI providers can see prompt content.",
     "assistantDisabled": "Disabled. Provider settings stay saved without sending prompts.",
-    "reviewAi": "Review AI providers"
+    "reviewAi": "Review AI providers",
+    "hygieneHeading": "Privacy hygiene",
+    "hygieneDescription": "A local, read-only snapshot of privacy-relevant facts. The assistant sees the same redacted payload.",
+    "hygieneRefresh": "Refresh privacy hygiene",
+    "hygieneLoading": "Reading privacy hygiene…",
+    "hygieneError": "Could not load privacy hygiene: {{error}}",
+    "hygieneNoFindings": "No reportable findings in the redacted local payload.",
+    "metric": {
+      "findings": "Findings",
+      "database": "Database",
+      "remoteBackends": "Remote backends",
+      "offDeviceAi": "Off-device AI"
+    },
+    "severity": {
+      "none": "none",
+      "info": "info",
+      "warning": "warning",
+      "alert": "alert"
+    },
+    "evidence": {
+      "exact": "exact evidence",
+      "derived": "derived evidence",
+      "unknown": "unknown evidence"
+    },
+    "database": {
+      "plaintext": "plaintext",
+      "encrypted_like": "encrypted-like",
+      "missing_or_empty": "empty",
+      "unknown": "unknown"
+    },
+    "limitation": {
+      "local_only_no_probe": "No network request was made; endpoint posture is inferred from local configuration only.",
+      "redacted_payload": "Addresses, scripts, descriptors, xpubs, backend URLs/tokens, wallet config, raw JSON, branch/index values, and derivation paths are omitted from this payload.",
+      "unknown": "A limitation was reported without a recognized code."
+    },
+    "finding": {
+      "database_plaintext": {
+        "title": "Database file is plaintext SQLite",
+        "detail": "The active database header is plaintext SQLite; SQLCipher encryption is not active for this data root."
+      },
+      "database_encryption_unknown": {
+        "title": "Database encryption status is unknown",
+        "detail": "Kassiber could not classify the active database header from the local file."
+      },
+      "remote_backend_endpoints": {
+        "title": "Third-party backend endpoints are configured",
+        "detail": "{{remote_backend_count}} configured backend endpoint(s) are inferred as third-party and can observe wallet/indexer queries."
+      },
+      "unacknowledged_off_device_ai_provider": {
+        "title": "Off-device AI provider needs acknowledgement",
+        "detail": "{{unacknowledged_off_device_provider_count}} off-device AI provider(s) lack an acknowledgement timestamp."
+      },
+      "off_device_ai_provider_configured": {
+        "title": "Off-device AI providers are configured",
+        "detail": "{{off_device_ai_provider_count}} configured AI provider(s) may send prompt content outside this machine when selected."
+      },
+      "watch_only_wallet_material_present": {
+        "title": "Watch-only wallet material is stored locally",
+        "detail": "{{watch_only_material_wallet_count}} wallet(s) have watch-only material in the local database."
+      },
+      "privacy_boundary_transactions_present": {
+        "title": "Privacy-boundary transaction markers are present",
+        "detail": "{{privacy_boundary_transaction_count}} transaction(s) carry a privacy-boundary marker; provenance across those hops remains opaque unless reviewed with stronger evidence."
+      },
+      "import_raw_json_present": {
+        "title": "Imported raw metadata is present",
+        "detail": "{{transaction_raw_json_count}} transaction(s) retain importer raw JSON inside the local database; this payload reports only the count."
+      },
+      "local_utxo_location_metadata_present": {
+        "title": "Local UTXO location metadata is present",
+        "detail": "The local output inventory contains address, script, or derivation metadata; this payload reports counts only."
+      },
+      "privacy_quarantines_present": {
+        "title": "Privacy-related journal quarantines are present",
+        "detail": "{{privacy_quarantine_count}} journal quarantine(s) are privacy-related and need review before derived reports are complete."
+      }
+    }
   },
   "data": {
     "importHeading": "Import data",

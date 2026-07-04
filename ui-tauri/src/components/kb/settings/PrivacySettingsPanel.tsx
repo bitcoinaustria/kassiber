@@ -1,7 +1,12 @@
 import * as React from "react";
+import type { TFunction } from "i18next";
 import {
+  AlertTriangle,
+  Database,
+  Loader2,
   Network,
   Pencil,
+  RefreshCw,
   ShieldCheck,
   ShieldOff,
   type LucideIcon,
@@ -9,6 +14,7 @@ import {
 import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
+import { useDaemon } from "@/daemon/client";
 import { cn } from "@/lib/utils";
 import { SettingsSwitchRow } from "./SettingsControls";
 import {
@@ -18,6 +24,37 @@ import {
   type Backend,
   type Net,
 } from "./SettingsModel";
+
+type PrivacyFindingSeverity = "info" | "warning" | "alert";
+
+interface PrivacyHygieneFinding {
+  id: string;
+  category: string;
+  severity: PrivacyFindingSeverity;
+  title?: string;
+  detail?: string;
+  evidence_level: string;
+  evidence?: Record<string, unknown>;
+}
+
+interface PrivacyHygienePayload {
+  summary: {
+    finding_count?: number;
+    highest_severity?: string;
+    remote_backend_count?: number;
+    off_device_ai_provider_count?: number;
+    watch_only_material_wallet_count?: number;
+  };
+  facts?: {
+    database?: { status?: string; evidence_level?: string };
+  };
+  findings?: PrivacyHygieneFinding[];
+  limitations?: Array<{
+    code?: string;
+    message?: string;
+    evidence_level?: string;
+  }>;
+}
 
 export type ExposureFilter = "first" | "shielded" | "remote";
 
@@ -221,6 +258,218 @@ export function ExposureEndpointRow({
   );
 }
 
+function findingText(
+  t: TFunction<"settings">,
+  finding: PrivacyHygieneFinding,
+  field: "title" | "detail",
+) {
+  return t(`privacy.finding.${finding.id}.${field}` as never, {
+    defaultValue: finding[field] ?? finding.id,
+    ...(finding.evidence ?? {}),
+  });
+}
+
+function limitationText(
+  t: TFunction<"settings">,
+  code: string | undefined,
+  fallback: string | undefined,
+) {
+  return t(`privacy.limitation.${code || "unknown"}` as never, {
+    defaultValue: fallback ?? code ?? "Unknown limitation",
+  });
+}
+
+function evidenceLabel(
+  t: TFunction<"settings">,
+  evidenceLevel: string | undefined,
+) {
+  const key = evidenceLevel || "unknown";
+  return t(`privacy.evidence.${key}` as never, {
+    defaultValue: key,
+  });
+}
+
+function severityLabel(
+  t: TFunction<"settings">,
+  severity: string | undefined,
+) {
+  const key = severity || "none";
+  return t(`privacy.severity.${key}` as never, {
+    defaultValue: key,
+  });
+}
+
+function databaseStatusLabel(
+  t: TFunction<"settings">,
+  status: string | undefined,
+) {
+  const key = status || "unknown";
+  return t(`privacy.database.${key}` as never, {
+    defaultValue: key,
+  });
+}
+
+function HygieneMetric({
+  label,
+  value,
+}: {
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="rounded-md border bg-background p-3">
+      <p className="text-xs text-muted-foreground">{label}</p>
+      <p className="mt-1 truncate font-mono text-lg tabular-nums">{value}</p>
+    </div>
+  );
+}
+
+function PrivacyHygienePanel() {
+  const { t } = useTranslation("settings");
+  const hygieneQuery = useDaemon<PrivacyHygienePayload>(
+    "ui.reports.privacy_hygiene",
+    undefined,
+    { refetchOnMount: "always" },
+  );
+  const payload = hygieneQuery.data?.data;
+  const findings = payload?.findings ?? [];
+  const limitations = payload?.limitations ?? [];
+  const summary: PrivacyHygienePayload["summary"] = payload?.summary ?? {};
+  const databaseStatus = payload?.facts?.database?.status;
+  const highestSeverity = summary.highest_severity ?? "none";
+
+  return (
+    <section className="space-y-3">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h3 className="text-sm font-semibold">
+            {t("privacy.hygieneHeading")}
+          </h3>
+          <p className="text-sm text-muted-foreground">
+            {t("privacy.hygieneDescription")}
+          </p>
+        </div>
+        <Button
+          type="button"
+          size="icon-sm"
+          variant="ghost"
+          aria-label={t("privacy.hygieneRefresh")}
+          onClick={() => void hygieneQuery.refetch()}
+          disabled={hygieneQuery.isFetching}
+        >
+          <RefreshCw
+            className={cn("size-3.5", hygieneQuery.isFetching && "animate-spin")}
+            aria-hidden="true"
+          />
+        </Button>
+      </div>
+
+      {hygieneQuery.isLoading ? (
+        <div className="flex items-center gap-2 rounded-md border bg-background p-3 text-sm text-muted-foreground">
+          <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+          {t("privacy.hygieneLoading")}
+        </div>
+      ) : hygieneQuery.error ? (
+        <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
+          {t("privacy.hygieneError", {
+            error:
+              hygieneQuery.error instanceof Error
+                ? hygieneQuery.error.message
+                : String(hygieneQuery.error),
+          })}
+        </div>
+      ) : payload ? (
+        <>
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+            <HygieneMetric
+              label={t("privacy.metric.findings")}
+              value={`${summary.finding_count ?? findings.length} · ${severityLabel(
+                t,
+                highestSeverity,
+              )}`}
+            />
+            <HygieneMetric
+              label={t("privacy.metric.database")}
+              value={databaseStatusLabel(t, databaseStatus)}
+            />
+            <HygieneMetric
+              label={t("privacy.metric.remoteBackends")}
+              value={String(summary.remote_backend_count ?? 0)}
+            />
+            <HygieneMetric
+              label={t("privacy.metric.offDeviceAi")}
+              value={String(summary.off_device_ai_provider_count ?? 0)}
+            />
+          </div>
+
+          {findings.length > 0 ? (
+            <div className="grid gap-2">
+              {findings.map((finding) => (
+                <div
+                  key={finding.id}
+                  className={cn(
+                    "rounded-md border bg-background p-3",
+                    finding.severity === "alert" &&
+                      "border-destructive/30 bg-destructive/10",
+                    finding.severity === "warning" &&
+                      "border-amber-500/30 bg-amber-500/10",
+                  )}
+                >
+                  <div className="flex items-start gap-2">
+                    {finding.category === "storage" ? (
+                      <Database
+                        className="mt-0.5 size-4 shrink-0 text-muted-foreground"
+                        aria-hidden="true"
+                      />
+                    ) : finding.severity === "info" ? (
+                      <ShieldCheck
+                        className="mt-0.5 size-4 shrink-0 text-muted-foreground"
+                        aria-hidden="true"
+                      />
+                    ) : (
+                      <AlertTriangle
+                        className="mt-0.5 size-4 shrink-0 text-amber-600 dark:text-amber-400"
+                        aria-hidden="true"
+                      />
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <p className="text-sm font-medium">
+                          {findingText(t, finding, "title")}
+                        </p>
+                        <span className="rounded-md border px-1.5 py-0.5 text-[11px] text-muted-foreground">
+                          {evidenceLabel(t, finding.evidence_level)}
+                        </span>
+                      </div>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {findingText(t, finding, "detail")}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="rounded-md border border-dashed bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
+              {t("privacy.hygieneNoFindings")}
+            </p>
+          )}
+
+          {limitations.length > 0 ? (
+            <div className="space-y-1 text-xs text-muted-foreground">
+              {limitations.map((limitation) => (
+                <p key={limitation.code || limitation.message}>
+                  {limitationText(t, limitation.code, limitation.message)}
+                </p>
+              ))}
+            </div>
+          ) : null}
+        </>
+      ) : null}
+    </section>
+  );
+}
+
 export function PrivacySettingsPanel({
   hideSensitive,
   setHideSensitive,
@@ -390,6 +639,8 @@ export function PrivacySettingsPanel({
             </div>
           );
         })}
+
+        <PrivacyHygienePanel />
 
         <div className="space-y-2">
           <div>

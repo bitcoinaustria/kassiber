@@ -267,6 +267,7 @@ const NAV_GROUPS: NavGroup[] = [
       { labelKey: "book.transactions", icon: ClipboardList, href: "/transactions" },
       { labelKey: "book.wallets", icon: WalletCards, href: "/connections" },
       { labelKey: "book.reports", icon: BarChart3, href: "/reports" },
+      { labelKey: "book.privacyMirror", icon: Eye, href: "/privacy-mirror" },
       { labelKey: "book.assistant", icon: MessageSquareText, href: "/assistant" },
     ],
   },
@@ -373,6 +374,14 @@ const ROUTE_META: Array<[string, RouteMeta]> = [
       titleKey: "nav:book.reports",
       icon: BarChart3,
       searchKey: "routeMeta.reports",
+    },
+  ],
+  [
+    "/privacy-mirror",
+    {
+      titleKey: "nav:book.privacyMirror",
+      icon: Eye,
+      searchKey: "routeMeta.privacyMirror",
     },
   ],
   [

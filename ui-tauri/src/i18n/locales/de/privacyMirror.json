@@ -1,0 +1,119 @@
+{
+  "title": "Privacy Mirror",
+  "subtitle": "Lokale Linkage-, Gegner-, Coverage- und Future-Spend-Privatsphäre-Evidenz für das aktive Buch.",
+  "refresh": "Privacy Mirror aktualisieren",
+  "yes": "Ja",
+  "bounded": "Begrenzt",
+  "guardrail": {
+    "local": "Nur lokal",
+    "advisory": "Hinweis",
+    "degraded": "Eingeschränkt"
+  },
+  "evidence": {
+    "exact": "Exakt",
+    "derived": "Abgeleitet",
+    "unknown": "Unbekannt"
+  },
+  "metric": {
+    "linkageScore": "Linkage-Score",
+    "clusters": "Verknüpfbare Cluster",
+    "adversaries": "Gegner",
+    "utxos": "UTXOs",
+    "unknowns": "Unbekannt",
+    "wallets": "Wallets",
+    "transactionTells": "Transaktionsmerkmale",
+    "findings": "Befunde"
+  },
+  "worst": {
+    "title": "Größtes Privatsphäre-Risiko",
+    "fallback": "Kein Befund ausgewählt",
+    "empty": "Das reduzierte lokale Modell hat keinen stärkeren Befund zurückgegeben."
+  },
+  "tab": {
+    "overview": "Übersicht",
+    "adversaries": "Gegner",
+    "wallets": "Wallets",
+    "transactions": "Transaktionen",
+    "utxos": "UTXOs",
+    "timeline": "Timeline",
+    "evidence": "Evidenz",
+    "psbt": "PSBT"
+  },
+  "exposure": {
+    "title": "Exposure-Zusammenfassung"
+  },
+  "coverage": {
+    "title": "Coverage",
+    "known": "Coins mit bekannter Quellen-Nähe",
+    "unknown": "Coins mit unbekannter Quellen-Nähe",
+    "degraded": "Eingeschränkter Zustand sichtbar"
+  },
+  "unknowns": {
+    "title": "Unbekannte und eingeschränkte Zustände",
+    "empty": "Das reduzierte lokale Modell hat keine unbekannte Coverage-Zeile ausgegeben."
+  },
+  "adversary": {
+    "unknown": "Unbekannter Gegner",
+    "clusters": "Cluster",
+    "wallets": "Wallets"
+  },
+  "table": {
+    "wallet": "Wallet",
+    "transaction": "Transaktion",
+    "coin": "Coin",
+    "coins": "Coins",
+    "amount": "Betrag",
+    "edges": "Kanten",
+    "tells": "Merkmale",
+    "kinds": "Arten",
+    "penalties": "Penalties",
+    "role": "Rolle",
+    "proximity": "Nähe",
+    "event": "Ereignis",
+    "category": "Kategorie",
+    "detail": "Detail",
+    "section": "Abschnitt",
+    "item": "Eintrag",
+    "kind": "Art",
+    "evidence": "Evidenz",
+    "empty": "Keine Zeilen in dieser reduzierten Ansicht."
+  },
+  "timeline": {
+    "newLinkage": "Neue Verknüpfung"
+  },
+  "psbt": {
+    "title": "PSBT und What-if",
+    "placeholder": "Base64-PSBT für lokale Pre-Broadcast-Analyse einfügen",
+    "inputAria": "PSBT-Text",
+    "analyze": "Lokal analysieren",
+    "whatIf": "What-if-Szenarien",
+    "empty": "Noch keine PSBT-Analyse.",
+    "metric": {
+      "merge": "Cluster-Merges",
+      "unknown": "Unbekannte Inputs",
+      "blast": "Blast Radius"
+    }
+  },
+  "detail": {
+    "walletTitle": "Privacy Mirror für dieses Wallet",
+    "transactionTitle": "Privacy Mirror für diese Transaktion",
+    "source": "Dieselben redigierten lokalen Fakten wie auf der Privacy-Mirror-Seite.",
+    "loading": "Lokale Privatsphäre-Evidenz wird gelesen...",
+    "degraded": "Für diesen lokalen Datensatz ist keine passende redigierte Privacy-Mirror-Zeile verfügbar.",
+    "queryError": "Privacy Mirror konnte nicht gelesen werden: {{message}}",
+    "none": "Keine",
+    "walletCoins": "Coins",
+    "walletAmount": "Betrag",
+    "walletEdges": "Linkage-Kanten",
+    "walletUnknown": "Coins mit unbekannter Rolle",
+    "walletMatched": "Redigierte Wallet-Zeile {{id}} gefunden. Nur hinweisend; es wählt keine Coins und ändert keine Accounting-Daten.",
+    "transactionTells": "Merkmale",
+    "transactionKinds": "Merkmalsarten",
+    "transactionPenalties": "Wallet-Penalties",
+    "transactionMatched": "Redigierte Transaktionszeile {{id}} gefunden. Nur hinweisend; es signiert nicht, sendet nicht und ändert keine Accounting-Daten."
+  },
+  "unavailable": {
+    "title": "Privacy Mirror nicht verfügbar",
+    "body": "Der lokale Daemon hat keinen Privacy-Mirror-Payload zurückgegeben."
+  }
+}

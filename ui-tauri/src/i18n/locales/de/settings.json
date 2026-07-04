@@ -372,7 +372,83 @@
     "assistantDescription": "Prompt-Inhalte — die Buchdaten enthalten können — verlassen das Gerät nur, wenn du einen entfernten oder CLI-Provider aktivierst.",
     "assistantEnabled": "Aktiviert. Lokale Provider halten Prompts auf diesem Gerät; entfernte und CLI-Provider können Prompt-Inhalte sehen.",
     "assistantDisabled": "Deaktiviert. Provider-Einstellungen bleiben gespeichert, ohne Prompts zu senden.",
-    "reviewAi": "AI-Provider prüfen"
+    "reviewAi": "AI-Provider prüfen",
+    "hygieneHeading": "Privatsphäre-Hygiene",
+    "hygieneDescription": "Ein lokaler, read-only Schnappschuss privatsphärerelevanter Fakten. Der Assistent sieht dieselbe redigierte Nutzlast.",
+    "hygieneRefresh": "Privatsphäre-Hygiene aktualisieren",
+    "hygieneLoading": "Privatsphäre-Hygiene wird gelesen …",
+    "hygieneError": "Privatsphäre-Hygiene konnte nicht geladen werden: {{error}}",
+    "hygieneNoFindings": "Keine berichtbaren Befunde in der redigierten lokalen Nutzlast.",
+    "metric": {
+      "findings": "Befunde",
+      "database": "Datenbank",
+      "remoteBackends": "Entfernte Backends",
+      "offDeviceAi": "AI außerhalb"
+    },
+    "severity": {
+      "none": "keine",
+      "info": "Info",
+      "warning": "Warnung",
+      "alert": "Alarm"
+    },
+    "evidence": {
+      "exact": "exakter Nachweis",
+      "derived": "abgeleiteter Nachweis",
+      "unknown": "unbekannter Nachweis"
+    },
+    "database": {
+      "plaintext": "Klartext",
+      "encrypted_like": "verschlüsselt wirkend",
+      "missing_or_empty": "leer",
+      "unknown": "unbekannt"
+    },
+    "limitation": {
+      "local_only_no_probe": "Es wurde keine Netzwerkanfrage ausgeführt; die Endpunkt-Haltung wird nur aus lokaler Konfiguration abgeleitet.",
+      "redacted_payload": "Adressen, Skripte, Deskriptoren, Xpubs, Backend-URLs/-Tokens, Wallet-Konfiguration, Raw JSON, Branch-/Index-Werte und Ableitungspfade fehlen in dieser Nutzlast.",
+      "unknown": "Eine Einschränkung wurde ohne bekannten Code gemeldet."
+    },
+    "finding": {
+      "database_plaintext": {
+        "title": "Datenbankdatei ist Klartext-SQLite",
+        "detail": "Der aktive Datenbank-Header ist Klartext-SQLite; SQLCipher-Verschlüsselung ist für dieses Datenverzeichnis nicht aktiv."
+      },
+      "database_encryption_unknown": {
+        "title": "Verschlüsselungsstatus der Datenbank ist unbekannt",
+        "detail": "Kassiber konnte den aktiven Datenbank-Header nicht aus der lokalen Datei einordnen."
+      },
+      "remote_backend_endpoints": {
+        "title": "Drittanbieter-Backend-Endpunkte sind konfiguriert",
+        "detail": "{{remote_backend_count}} konfigurierte Backend-Endpunkt(e) werden als Drittanbieter eingeordnet und können Wallet-/Indexer-Abfragen beobachten."
+      },
+      "unacknowledged_off_device_ai_provider": {
+        "title": "AI-Provider außerhalb des Geräts braucht Bestätigung",
+        "detail": "{{unacknowledged_off_device_provider_count}} AI-Provider außerhalb des Geräts haben keinen Bestätigungszeitpunkt."
+      },
+      "off_device_ai_provider_configured": {
+        "title": "AI-Provider außerhalb des Geräts sind konfiguriert",
+        "detail": "{{off_device_ai_provider_count}} konfigurierte AI-Provider können Prompt-Inhalte außerhalb dieses Geräts senden, wenn sie ausgewählt werden."
+      },
+      "watch_only_wallet_material_present": {
+        "title": "Watch-only-Wallet-Material ist lokal gespeichert",
+        "detail": "{{watch_only_material_wallet_count}} Wallet(s) haben Watch-only-Material in der lokalen Datenbank."
+      },
+      "privacy_boundary_transactions_present": {
+        "title": "Transaktionsmarker für Privatsphäre-Grenzen sind vorhanden",
+        "detail": "{{privacy_boundary_transaction_count}} Transaktion(en) tragen einen Marker für eine Privatsphäre-Grenze; Herkunft über diese Hops bleibt undurchsichtig, solange sie nicht mit stärkerem Nachweis geprüft wurde."
+      },
+      "import_raw_json_present": {
+        "title": "Importierte Rohmetadaten sind vorhanden",
+        "detail": "{{transaction_raw_json_count}} Transaktion(en) behalten importiertes Raw JSON in der lokalen Datenbank; diese Nutzlast meldet nur die Anzahl."
+      },
+      "local_utxo_location_metadata_present": {
+        "title": "Lokale UTXO-Positionsmetadaten sind vorhanden",
+        "detail": "Das lokale Output-Inventar enthält Adress-, Skript- oder Ableitungsmetadaten; diese Nutzlast meldet nur Anzahlen."
+      },
+      "privacy_quarantines_present": {
+        "title": "Privatsphärebezogene Journal-Quarantänen sind vorhanden",
+        "detail": "{{privacy_quarantine_count}} Journal-Quarantäne(n) sind privatsphärebezogen und brauchen Prüfung, bevor abgeleitete Berichte vollständig sind."
+      }
+    }
   },
   "data": {
     "importHeading": "Daten importieren",

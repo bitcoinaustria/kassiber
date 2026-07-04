@@ -102,6 +102,10 @@
       "label": "Search reports",
       "placeholder": "Search reports, exports..."
     },
+    "privacyMirror": {
+      "label": "Search Privacy Mirror",
+      "placeholder": "Search linkage, adversaries, evidence..."
+    },
     "exitTax": {
       "label": "Search exit tax",
       "placeholder": "Search departure date, destination..."

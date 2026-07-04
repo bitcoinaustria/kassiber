@@ -102,6 +102,10 @@
       "label": "Berichte durchsuchen",
       "placeholder": "Berichte, Exporte suchen…"
     },
+    "privacyMirror": {
+      "label": "Privacy Mirror durchsuchen",
+      "placeholder": "Linkage, Gegner, Evidenz suchen…"
+    },
     "exitTax": {
       "label": "Wegzugsbesteuerung durchsuchen",
       "placeholder": "Wegzugsdatum, Zielort suchen…"
