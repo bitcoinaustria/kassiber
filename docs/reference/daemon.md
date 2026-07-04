@@ -185,21 +185,29 @@ and index details. Unsupported sources return
 `support.status="liquid_unblind_blocked"` unless their descriptor material can
 unblind and account for outputs locally.
 
-`ui.privacy_hygiene.snapshot` is the read-only Phase-1 privacy-hygiene score.
+`ui.privacy_hygiene.snapshot` is the read-only Phase-1 privacy-tells surface.
 It accepts optional `{"wallet":"<wallet id or label>", "transaction":"<id or
-txid>", "limit": 50}` arguments and returns the active book's 0-100 / A+-F
-rollup, wallet rollups, worst transaction tells, and coverage counts. The
-engine is local-only over already stored `transactions.raw_json` plus
-`wallet_utxos`: it never fetches missing prevouts or widens exposure through a
-public backend. Bitcoin rows with local `vin`/`vout` get single-transaction
-heuristics such as common-input, round amount, fee/RBF, script-type mix,
-change, wallet-fingerprint, OP_RETURN, and CoinJoin/PayJoin boundary evidence.
-Graphless imports, current Bitcoin Core detail rows, and confidential/incomplete
-shapes degrade to address-level coverage or `not_analysable`; the daemon does
-not return raw JSON, addresses, scriptPubKeys, descriptors, xpubs, backend URLs,
-tokens, or wallet config. Cross-wallet adversary reconstruction, peel chains,
-Boltzmann entropy, coin-selection fingerprinting, and PSBT pre-broadcast checks
-remain out of this Phase-1 surface.
+txid>", "limit": 50}` arguments and returns advisory privacy tells, risk
+counts, unknown counts, wallet rollups, transaction rows to review, and coverage
+counts. Every finding carries `evidence_level` (`ground_truth`, `reviewed`,
+`imported`, `heuristic`, or `unavailable`), remediation text, and attribution
+(`user_wallet`, `counterparty`, or `local_data`). Inbound counterparty-side
+tells remain visible as context but do not increase the receiving wallet's risk
+weight. The engine is local-only over already stored `transactions.raw_json`
+plus `wallet_utxos`: it never fetches missing prevouts, calls explorer/entity
+APIs, or widens exposure through a public backend. Bitcoin rows with local
+`vin`/`vout` get single-transaction heuristics such as common-input, round
+amount, fee/RBF, script-type mix, change, wallet-fingerprint, OP_RETURN, and
+CoinJoin/PayJoin boundary evidence. Graphless imports, current Bitcoin Core
+detail rows, and confidential/incomplete shapes degrade to address-level
+coverage or `not_analysable`; missing transaction refs return explicit
+`not_found`. The daemon does not return raw JSON, addresses, scriptPubKeys,
+descriptors, xpubs, backend URLs, tokens, wallet config, branch/index details,
+or derivation paths. Privacy heuristics are advisory only and never mutate tax
+lots, exclusions, balances, transfer pairs, or source-funds state. Cross-wallet
+adversary reconstruction, peel chains, Boltzmann entropy, coin-selection advice
+or fingerprinting, and PSBT pre-broadcast checks remain out of this Phase-1
+surface.
 
 `ui.transactions.history` and `ui.activity.history` read redacted,
 append-only metadata edit events from the same local database as transactions.

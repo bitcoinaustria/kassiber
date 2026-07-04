@@ -12,6 +12,23 @@ from .repo import current_context_snapshot
 BASE_SCORE = 70
 MAX_RETURNED_TRANSACTIONS = 200
 DEFAULT_RETURNED_TRANSACTIONS = 50
+EVIDENCE_LEVELS = {"ground_truth", "reviewed", "imported", "heuristic", "unavailable"}
+USER_ATTRIBUTION = "user_wallet"
+COUNTERPARTY_ATTRIBUTION = "counterparty"
+LOCAL_DATA_ATTRIBUTION = "local_data"
+INBOUND_COUNTERPARTY_FINDINGS = {
+    "change_position_fingerprint",
+    "change_type_fingerprint",
+    "common_input_ownership",
+    "rbf_signal",
+    "round_fee_rate",
+    "round_output_amount",
+    "script_type_mix",
+    "unnecessary_input_heuristic",
+    "wallet_fingerprint_locktime",
+    "wallet_fingerprint_version",
+    "wallet_fingerprint_witness",
+}
 ROUND_BTC_DENOMINATIONS_SATS = {
     100_000,
     200_000,
@@ -36,6 +53,96 @@ FINDING_SEVERITY_RANK = {
     "medium": 3,
     "high": 4,
     "critical": 5,
+}
+FINDING_METADATA = {
+    "address_reuse": {
+        "evidence_level": "ground_truth",
+        "remediation": "Review the reused receive-address context and keep the affected rows labelled; Kassiber does not change wallet state from this tell.",
+    },
+    "change_position_fingerprint": {
+        "evidence_level": "heuristic",
+        "remediation": "Treat this as an advisory change-shape tell and confirm intent from first-party wallet records before drawing conclusions.",
+    },
+    "change_type_fingerprint": {
+        "evidence_level": "heuristic",
+        "remediation": "Review the script-type mismatch as context only; no tax, balance, or transfer state is changed.",
+    },
+    "coin_anonymity_evidence": {
+        "evidence_level": "imported",
+        "remediation": "Keep the imported wallet evidence attached and treat it as boundary context, not proof of a complete privacy graph.",
+    },
+    "coinjoin_pattern": {
+        "evidence_level": "heuristic",
+        "remediation": "Document the CoinJoin boundary locally and do not infer unrelated participant ownership from this tell.",
+    },
+    "common_input_ownership": {
+        "evidence_level": "heuristic",
+        "remediation": "Use this as an advisory common-input tell only; confirm ownership with first-party wallet evidence before relying on it.",
+    },
+    "dust_utxo_exposure": {
+        "evidence_level": "ground_truth",
+        "remediation": "Label or review small-output provenance when it matters; Kassiber leaves balances and UTXO state untouched.",
+    },
+    "large_utxo_set": {
+        "evidence_level": "ground_truth",
+        "remediation": "Use the count as review context for the wallet inventory; no spending or consolidation advice is implied.",
+    },
+    "legacy_address_type": {
+        "evidence_level": "ground_truth",
+        "remediation": "Record this as an older script-type observation; it is not an accounting action or a privacy verdict.",
+    },
+    "op_return_metadata": {
+        "evidence_level": "ground_truth",
+        "remediation": "Review the transaction context knowing permanent metadata exists; Kassiber does not inspect or enrich external entities.",
+    },
+    "payjoin_boundary": {
+        "evidence_level": "imported",
+        "remediation": "Keep the PayJoin boundary documented locally; Kassiber does not cross it or infer the counterparty graph.",
+    },
+    "rbf_signal": {
+        "evidence_level": "ground_truth",
+        "remediation": "Treat replace-by-fee signalling as transaction-shape context only.",
+    },
+    "round_fee_rate": {
+        "evidence_level": "heuristic",
+        "remediation": "Treat the rounded fee rate as a weak wallet-shape tell and verify with first-party records if it matters.",
+    },
+    "round_output_amount": {
+        "evidence_level": "heuristic",
+        "remediation": "Keep the round amount as payment-shape context; attach invoice or counterparty records if the distinction matters.",
+    },
+    "script_type_mix": {
+        "evidence_level": "heuristic",
+        "remediation": "Review mixed script families as a local transaction-shape tell, not as proof of ownership.",
+    },
+    "taproot_usage": {
+        "evidence_level": "ground_truth",
+        "remediation": "Treat Taproot usage as a local script-type observation; it is not a standing privacy guarantee.",
+    },
+    "transaction_coverage_gap": {
+        "evidence_level": "unavailable",
+        "remediation": "Import or sync local vin/vout detail if you need this transaction analysed; otherwise keep the gap explicit.",
+    },
+    "transaction_not_analysable": {
+        "evidence_level": "unavailable",
+        "remediation": "Leave this transaction as unknown unless local first-party transaction graph data is imported or synced.",
+    },
+    "unnecessary_input_heuristic": {
+        "evidence_level": "heuristic",
+        "remediation": "Treat this as an advisory input-shape tell and review the source-wallet record before relying on it.",
+    },
+    "wallet_fingerprint_locktime": {
+        "evidence_level": "heuristic",
+        "remediation": "Use the locktime pattern as weak wallet-fingerprint context only.",
+    },
+    "wallet_fingerprint_version": {
+        "evidence_level": "heuristic",
+        "remediation": "Use the version pattern as weak wallet-fingerprint context only.",
+    },
+    "wallet_fingerprint_witness": {
+        "evidence_level": "heuristic",
+        "remediation": "Use the witness-shape pattern as weak wallet-fingerprint context only.",
+    },
 }
 
 
@@ -86,6 +193,13 @@ def build_privacy_hygiene_snapshot(
         wallet_id=wallet_id,
         transaction_ref=transaction_ref,
     )
+    if transaction_ref is not None and not transactions:
+        raise AppError(
+            "Transaction not found for privacy-hygiene scan",
+            code="not_found",
+            details={"transaction": transaction_ref},
+            retryable=False,
+        )
 
     tx_results = [
         _score_transaction(row, inventory_index)
@@ -139,11 +253,13 @@ def _empty_snapshot(context: Mapping[str, Any]) -> dict[str, Any]:
         "profile": None,
         "scope": {"wallet": None, "transaction": None},
         "summary": {
-            "score": None,
-            "grade": None,
             "state": "no_active_profile",
             "wallet_count": 0,
             "transaction_count": 0,
+            "risk_weight": 0,
+            "risk_count": 0,
+            "unknown_count": 0,
+            "risk_level": "none",
             "finding_counts": _empty_finding_counts(),
             "top_findings": [],
         },
@@ -379,7 +495,7 @@ def _score_transaction(
                 details={"reason": parsed["reason"]},
             )
         ]
-        return _transaction_result(row, None, None, "not_analysable", parsed, findings)
+        return _transaction_result(row, None, "not_analysable", parsed, findings)
 
     findings: list[dict[str, Any]] = []
     coinjoin = _coinjoin_signal(row, raw, parsed)
@@ -392,6 +508,8 @@ def _score_transaction(
                 scope="transaction",
                 count=coinjoin["participant_count"],
                 details={"pattern": coinjoin["pattern"]},
+                evidence_level=coinjoin["evidence_level"],
+                attribution=LOCAL_DATA_ATTRIBUTION,
             )
         )
 
@@ -404,6 +522,8 @@ def _score_transaction(
                 scope="transaction",
                 count=1,
                 details={},
+                evidence_level=_privacy_boundary_evidence_level(row),
+                attribution=LOCAL_DATA_ATTRIBUTION,
             )
         )
 
@@ -418,17 +538,16 @@ def _score_transaction(
     findings.extend(_wallet_fingerprint_findings(parsed))
     findings.extend(_metadata_findings(parsed))
     findings.extend(_taproot_findings(parsed))
+    findings = _apply_direction_attribution(row, findings)
 
     score = _score_from_findings(findings)
-    grade = grade_for_score(score)
     state = "full" if parsed["support"] == "full" else "partial"
-    return _transaction_result(row, score, grade, state, parsed, findings)
+    return _transaction_result(row, score, state, parsed, findings)
 
 
 def _transaction_result(
     row: sqlite3.Row,
     score: int | None,
-    grade: str | None,
     state: str,
     parsed: Mapping[str, Any],
     findings: list[dict[str, Any]],
@@ -442,7 +561,6 @@ def _transaction_result(
         "direction": row["direction"],
         "asset": row["asset"],
         "score": score,
-        "grade": grade,
         "state": state,
         "support": {
             "level": parsed["support"],
@@ -608,24 +726,63 @@ def _coinjoin_signal(
             "pattern": "reviewed_or_imported_coinjoin",
             "participant_count": max(most_common_count, 1),
             "impact": 24 if most_common_count >= 5 else 18,
+            "evidence_level": (
+                _privacy_boundary_evidence_level(row)
+                if boundary == "coinjoin"
+                else "imported"
+            ),
         }
     if 5 <= len(outputs) <= 12 and most_common_count >= 5:
         return {
             "pattern": "equal_output_coinjoin",
             "participant_count": most_common_count,
             "impact": 18,
+            "evidence_level": "heuristic",
         }
     if parsed["input_count"] >= 20 and len(outputs) >= 20 and most_common_count >= 5:
         return {
             "pattern": "large_equal_output_coinjoin",
             "participant_count": most_common_count,
             "impact": 20,
+            "evidence_level": "heuristic",
         }
     return None
 
 
 def _payjoin_boundary(row: sqlite3.Row) -> bool:
     return str(row["privacy_boundary"] or "").strip().lower() == "payjoin"
+
+
+def _privacy_boundary_evidence_level(row: sqlite3.Row) -> str:
+    status = str(row["review_status"] or "").strip().lower()
+    if status in {"accepted", "completed", "reviewed"}:
+        return "reviewed"
+    return "imported"
+
+
+def _apply_direction_attribution(
+    row: sqlite3.Row,
+    findings: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    direction = str(row["direction"] or "").strip().lower()
+    if direction != "inbound":
+        return findings
+    adjusted: list[dict[str, Any]] = []
+    for finding in findings:
+        if (
+            finding["code"] in INBOUND_COUNTERPARTY_FINDINGS
+            and int(finding.get("impact") or 0) < 0
+        ):
+            item = dict(finding)
+            item["attribution"] = COUNTERPARTY_ATTRIBUTION
+            item["impact"] = 0
+            item["remediation"] = (
+                "This tell is on the inbound payer side; keep it as context and do not lower the receiving wallet's risk from it."
+            )
+            adjusted.append(item)
+        else:
+            adjusted.append(finding)
+    return adjusted
 
 
 def _common_input_findings(parsed: Mapping[str, Any]) -> list[dict[str, Any]]:
@@ -919,6 +1076,11 @@ def _score_wallets(
         wallet_inventory = inventory_by_wallet.get(wallet["id"], [])
         wallet_transactions = tx_by_wallet.get(wallet["id"], [])
         address_findings = _address_level_findings(wallet_inventory)
+        transaction_findings = [
+            finding
+            for tx in wallet_transactions
+            for finding in tx["findings"]
+        ]
         tx_scores = [
             tx["score"] for tx in wallet_transactions if tx["score"] is not None
         ]
@@ -932,8 +1094,17 @@ def _score_wallets(
         else:
             score = None
             state = "not_enough_data"
+        wallet_findings = address_findings + _wallet_transaction_findings(wallet_transactions)
         findings = sorted(
-            address_findings + _wallet_transaction_findings(wallet_transactions),
+            wallet_findings,
+            key=lambda item: (
+                -FINDING_SEVERITY_RANK.get(item["severity"], 0),
+                item["impact"],
+                item["code"],
+            ),
+        )
+        risk_findings = sorted(
+            wallet_findings + transaction_findings,
             key=lambda item: (
                 -FINDING_SEVERITY_RANK.get(item["severity"], 0),
                 item["impact"],
@@ -946,7 +1117,6 @@ def _score_wallets(
                 "label": wallet["label"],
                 "kind": wallet["kind"],
                 "score": score,
-                "grade": grade_for_score(score) if score is not None else None,
                 "state": state,
                 "transaction_count": len(wallet_transactions),
                 "scored_transaction_count": len(tx_scores),
@@ -955,6 +1125,7 @@ def _score_wallets(
                     1 for row in wallet_inventory if not _string_or_none(row["spent_at"])
                 ),
                 "findings": findings,
+                "risk_findings": risk_findings,
                 "address": _address_summary(wallet_inventory),
             }
         )
@@ -1127,7 +1298,6 @@ def _summary(
     aggregate_findings: list[dict[str, Any]],
 ) -> dict[str, Any]:
     scores = [wallet["score"] for wallet in wallet_results if wallet["score"] is not None]
-    score = round(sum(scores) / len(scores)) if scores else None
     if not wallet_results:
         state = "no_wallets"
     elif not scores:
@@ -1139,12 +1309,15 @@ def _summary(
     all_findings = [
         finding for wallet in wallet_results for finding in wallet["findings"]
     ] + [finding for tx in tx_results for finding in tx["findings"]]
+    risk_weight = _risk_weight(all_findings)
     return {
-        "score": score,
-        "grade": grade_for_score(score) if score is not None else None,
         "state": state,
         "wallet_count": len(wallet_results),
         "transaction_count": len(tx_results),
+        "risk_weight": risk_weight,
+        "risk_count": _risk_count(all_findings),
+        "unknown_count": _unknown_count(all_findings),
+        "risk_level": _risk_level(risk_weight),
         "finding_counts": _finding_counts(all_findings),
         "top_findings": aggregate_findings[:5],
     }
@@ -1180,7 +1353,13 @@ def _returned_transactions(
         key=lambda tx: (
             tx["score"] is None,
             tx["score"] if tx["score"] is not None else 101,
-            -max(FINDING_SEVERITY_RANK.get(item["severity"], 0) for item in tx["findings"]),
+            -max(
+                (
+                    FINDING_SEVERITY_RANK.get(item["severity"], 0)
+                    for item in tx["findings"]
+                ),
+                default=0,
+            ),
             tx["occurred_at"],
         ),
     )
@@ -1188,20 +1367,24 @@ def _returned_transactions(
 
 
 def _public_wallet_result(row: Mapping[str, Any]) -> dict[str, Any]:
+    risk_findings = list(row.get("risk_findings") or row["findings"])
+    risk_weight = _risk_weight(risk_findings)
     return {
         "id": row["id"],
         "label": row["label"],
         "kind": row["kind"],
-        "score": row["score"],
-        "grade": row["grade"],
         "state": row["state"],
         "transaction_count": row["transaction_count"],
         "scored_transaction_count": row["scored_transaction_count"],
         "inventory_output_count": row["inventory_output_count"],
         "active_utxo_count": row["active_utxo_count"],
         "address": row["address"],
-        "finding_counts": _finding_counts(row["findings"]),
-        "top_findings": _aggregate_findings(row["findings"])[:5],
+        "risk_weight": risk_weight,
+        "risk_count": _risk_count(risk_findings),
+        "unknown_count": _unknown_count(risk_findings),
+        "risk_level": _risk_level(risk_weight),
+        "finding_counts": _finding_counts(risk_findings),
+        "top_findings": _aggregate_findings(risk_findings)[:5],
     }
 
 
@@ -1214,10 +1397,12 @@ def _public_transaction_result(tx: Mapping[str, Any]) -> dict[str, Any]:
         "occurred_at": tx["occurred_at"],
         "direction": tx["direction"],
         "asset": tx["asset"],
-        "score": tx["score"],
-        "grade": tx["grade"],
         "state": tx["state"],
         "support": tx["support"],
+        "risk_weight": _risk_weight(tx["findings"]),
+        "risk_count": _risk_count(tx["findings"]),
+        "unknown_count": _unknown_count(tx["findings"]),
+        "risk_level": _risk_level(_risk_weight(tx["findings"])),
         "finding_counts": tx["finding_counts"],
         "top_findings": _aggregate_findings(tx["findings"])[:8],
     }
@@ -1236,14 +1421,22 @@ def _aggregate_findings(findings: list[Mapping[str, Any]]) -> list[dict[str, Any
                 "count": 0,
                 "impact": 0,
                 "occurrences": 0,
+                "evidence_level": finding["evidence_level"],
+                "remediation": finding["remediation"],
+                "attribution": finding["attribution"],
                 "details": {},
             },
         )
         current["count"] += int(finding.get("count") or 0)
         current["impact"] += int(finding.get("impact") or 0)
         current["occurrences"] += 1
-        if FINDING_SEVERITY_RANK.get(str(finding["severity"]), 0) > FINDING_SEVERITY_RANK.get(str(current["severity"]), 0):
+        if FINDING_SEVERITY_RANK.get(
+            str(finding["severity"]), 0
+        ) > FINDING_SEVERITY_RANK.get(str(current["severity"]), 0):
             current["severity"] = finding["severity"]
+            current["evidence_level"] = finding["evidence_level"]
+            current["remediation"] = finding["remediation"]
+            current["attribution"] = finding["attribution"]
         if not current["details"]:
             current["details"] = dict(finding.get("details") or {})
     return sorted(
@@ -1265,15 +1458,64 @@ def _finding(
     scope: str,
     count: int,
     details: Mapping[str, Any],
+    evidence_level: str | None = None,
+    remediation: str | None = None,
+    attribution: str = USER_ATTRIBUTION,
 ) -> dict[str, Any]:
+    metadata = FINDING_METADATA.get(code, {})
+    resolved_evidence = evidence_level or str(
+        metadata.get("evidence_level") or "heuristic"
+    )
+    if resolved_evidence not in EVIDENCE_LEVELS:
+        resolved_evidence = "heuristic"
+    resolved_remediation = remediation or str(
+        metadata.get("remediation")
+        or "Review this local tell manually; Kassiber does not mutate accounting state from privacy heuristics."
+    )
     return {
         "code": code,
         "severity": severity,
         "impact": impact,
         "scope": scope,
         "count": count,
+        "evidence_level": resolved_evidence,
+        "remediation": resolved_remediation,
+        "attribution": attribution,
         "details": dict(details),
     }
+
+
+def _risk_weight(findings: list[Mapping[str, Any]]) -> int:
+    return sum(
+        max(0, -int(finding.get("impact") or 0))
+        for finding in findings
+        if finding.get("attribution") == USER_ATTRIBUTION
+    )
+
+
+def _risk_count(findings: list[Mapping[str, Any]]) -> int:
+    return sum(
+        1
+        for finding in findings
+        if finding.get("attribution") == USER_ATTRIBUTION
+        and int(finding.get("impact") or 0) < 0
+    )
+
+
+def _unknown_count(findings: list[Mapping[str, Any]]) -> int:
+    return sum(1 for finding in findings if finding.get("evidence_level") == "unavailable")
+
+
+def _risk_level(risk_weight: int) -> str:
+    if risk_weight >= 45:
+        return "critical"
+    if risk_weight >= 25:
+        return "high"
+    if risk_weight >= 10:
+        return "medium"
+    if risk_weight > 0:
+        return "low"
+    return "none"
 
 
 def _finding_counts(findings: list[Mapping[str, Any]]) -> dict[str, int]:
@@ -1303,20 +1545,6 @@ def _score_from_findings(findings: list[Mapping[str, Any]]) -> int:
 
 def _clamp_score(score: int) -> int:
     return max(0, min(100, int(round(score))))
-
-
-def grade_for_score(score: int | None) -> str | None:
-    if score is None:
-        return None
-    if score >= 90:
-        return "A+"
-    if score >= 75:
-        return "B"
-    if score >= 50:
-        return "C"
-    if score >= 25:
-        return "D"
-    return "F"
 
 
 def _fee_sats(

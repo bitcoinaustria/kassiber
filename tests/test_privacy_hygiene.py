@@ -3,6 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from kassiber.errors import AppError
 from kassiber.core.privacy_hygiene import build_privacy_hygiene_snapshot
 from kassiber.db import open_db, set_setting
 
@@ -141,6 +142,14 @@ class PrivacyHygieneTests(unittest.TestCase):
             ),
         )
 
+    def _assert_finding_contract(self, finding: dict):
+        self.assertIn(
+            finding["evidence_level"],
+            {"ground_truth", "reviewed", "imported", "heuristic", "unavailable"},
+        )
+        self.assertIsInstance(finding["remediation"], str)
+        self.assertTrue(finding["remediation"].strip())
+
     def test_phase1_transaction_tells_are_scored_without_leaking_addresses(self):
         input_a = "a" * 64
         input_b = "b" * 64
@@ -229,14 +238,16 @@ class PrivacyHygieneTests(unittest.TestCase):
 
         snapshot = build_privacy_hygiene_snapshot(self.conn, {"limit": 5})
 
-        self.assertLess(snapshot["summary"]["score"], 50)
+        self.assertGreater(snapshot["summary"]["risk_weight"], 0)
         tx = snapshot["transactions"][0]
         self.assertEqual(tx["state"], "full")
-        self.assertLess(tx["score"], 50)
+        self.assertGreater(tx["risk_weight"], 0)
         codes = {finding["code"] for finding in tx["top_findings"]}
         self.assertIn("common_input_ownership", codes)
         self.assertIn("op_return_metadata", codes)
         self.assertIn("round_output_amount", codes)
+        for finding in tx["top_findings"] + snapshot["findings"]:
+            self._assert_finding_contract(finding)
         self.assertEqual(snapshot["coverage"]["transaction_full"], 1)
         self.assertEqual(snapshot["wallets"][0]["address"]["reused_address_count"], 1)
 
@@ -255,15 +266,16 @@ class PrivacyHygieneTests(unittest.TestCase):
 
         snapshot = build_privacy_hygiene_snapshot(self.conn)
 
-        self.assertIsNone(snapshot["transactions"][0]["score"])
         self.assertEqual(snapshot["transactions"][0]["state"], "not_analysable")
+        self.assertEqual(snapshot["transactions"][0]["risk_weight"], 0)
+        self.assertEqual(snapshot["transactions"][0]["unknown_count"], 1)
         self.assertEqual(snapshot["coverage"]["transaction_not_analysable"], 1)
-        self.assertEqual(
-            snapshot["transactions"][0]["top_findings"][0]["code"],
-            "transaction_not_analysable",
-        )
+        finding = snapshot["transactions"][0]["top_findings"][0]
+        self.assertEqual(finding["code"], "transaction_not_analysable")
+        self.assertEqual(finding["evidence_level"], "unavailable")
+        self._assert_finding_contract(finding)
 
-    def test_coinjoin_evidence_raises_score_and_suppresses_cioh(self):
+    def test_coinjoin_evidence_is_observational_and_suppresses_cioh(self):
         txid = "d" * 64
         vin = []
         for index in range(6):
@@ -303,10 +315,114 @@ class PrivacyHygieneTests(unittest.TestCase):
         snapshot = build_privacy_hygiene_snapshot(self.conn)
 
         tx = snapshot["transactions"][0]
-        self.assertGreaterEqual(tx["score"], 90)
         codes = {finding["code"] for finding in tx["top_findings"]}
         self.assertIn("coinjoin_pattern", codes)
         self.assertNotIn("common_input_ownership", codes)
+        coinjoin = next(
+            finding for finding in tx["top_findings"] if finding["code"] == "coinjoin_pattern"
+        )
+        self.assertEqual(coinjoin["evidence_level"], "imported")
+        self.assertEqual(coinjoin["attribution"], "local_data")
+        self._assert_finding_contract(coinjoin)
+
+    def test_clean_transaction_with_no_findings_does_not_crash_return_sort(self):
+        txid = "e" * 64
+        self._insert_transaction(
+            tx_id="clean",
+            external_id=txid,
+            raw_json={
+                "txid": txid,
+                "version": 2,
+                "locktime": 0,
+                "fee": 1235,
+                "vsize": 137,
+                "vin": [
+                    {
+                        "txid": "f" * 64,
+                        "vout": 0,
+                        "sequence": 0xFFFFFFFF,
+                        "prevout": {
+                            "value": 123_457,
+                            "scriptpubkey": P2WPKH_SCRIPT,
+                        },
+                    }
+                ],
+                "vout": [
+                    {
+                        "n": 0,
+                        "value": 122_222,
+                        "scriptpubkey": P2WPKH_SCRIPT_2,
+                    }
+                ],
+            },
+        )
+
+        snapshot = build_privacy_hygiene_snapshot(self.conn)
+
+        tx = snapshot["transactions"][0]
+        self.assertEqual(tx["id"], "clean")
+        self.assertEqual(tx["state"], "full")
+        self.assertEqual(tx["risk_weight"], 0)
+        self.assertEqual(tx["risk_level"], "none")
+        self.assertEqual(tx["top_findings"], [])
+
+    def test_inbound_counterparty_tells_do_not_raise_wallet_risk(self):
+        txid = "1" * 64
+        self._insert_transaction(
+            tx_id="incoming",
+            external_id=txid,
+            direction="inbound",
+            raw_json={
+                "txid": txid,
+                "version": 2,
+                "locktime": 0,
+                "vin": [
+                    {
+                        "txid": "2" * 64,
+                        "vout": 0,
+                        "sequence": 0xFFFFFFFD,
+                        "prevout": {
+                            "value": 70_000,
+                            "scriptpubkey": P2WPKH_SCRIPT,
+                        },
+                    },
+                    {
+                        "txid": "3" * 64,
+                        "vout": 1,
+                        "sequence": 0xFFFFFFFD,
+                        "prevout": {
+                            "value": 60_000,
+                            "scriptpubkey": P2WPKH_SCRIPT,
+                        },
+                    },
+                ],
+                "vout": [
+                    {
+                        "n": 0,
+                        "value": 128_765,
+                        "scriptpubkey": P2WPKH_SCRIPT_2,
+                    }
+                ],
+            },
+        )
+
+        snapshot = build_privacy_hygiene_snapshot(self.conn)
+
+        tx = snapshot["transactions"][0]
+        common_input = next(
+            finding for finding in tx["top_findings"] if finding["code"] == "common_input_ownership"
+        )
+        self.assertEqual(common_input["attribution"], "counterparty")
+        self.assertEqual(common_input["impact"], 0)
+        self.assertEqual(tx["risk_weight"], 0)
+        self.assertEqual(snapshot["wallets"][0]["risk_weight"], 0)
+
+    def test_missing_transaction_ref_is_explicit_not_found(self):
+        with self.assertRaises(AppError) as caught:
+            build_privacy_hygiene_snapshot(self.conn, {"transaction": "missing-tx"})
+
+        self.assertEqual(caught.exception.code, "not_found")
+        self.assertEqual(caught.exception.details["transaction"], "missing-tx")
 
 
 if __name__ == "__main__":

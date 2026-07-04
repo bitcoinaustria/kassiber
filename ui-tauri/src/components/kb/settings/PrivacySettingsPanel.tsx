@@ -2,7 +2,6 @@ import * as React from "react";
 import {
   AlertTriangle,
   CheckCircle2,
-  Gauge,
   Info,
   Loader2,
   Network,
@@ -85,6 +84,13 @@ type PrivacySeverity =
   | "medium"
   | "high"
   | "critical";
+type PrivacyRiskLevel = "none" | "low" | "medium" | "high" | "critical";
+type PrivacyEvidenceLevel =
+  | "ground_truth"
+  | "reviewed"
+  | "imported"
+  | "heuristic"
+  | "unavailable";
 
 interface PrivacyFinding {
   code: string;
@@ -92,15 +98,20 @@ interface PrivacyFinding {
   scope: "wallet" | "transaction";
   count: number;
   impact: number;
+  evidence_level: PrivacyEvidenceLevel;
+  remediation: string;
+  attribution: "user_wallet" | "counterparty" | "local_data";
   occurrences?: number;
 }
 
 interface PrivacyScoreSummary {
-  score: number | null;
-  grade: string | null;
   state: string;
   wallet_count: number;
   transaction_count: number;
+  risk_weight: number;
+  risk_count: number;
+  unknown_count: number;
+  risk_level: PrivacyRiskLevel;
   finding_counts: Record<PrivacySeverity, number>;
   top_findings: PrivacyFinding[];
 }
@@ -121,8 +132,6 @@ interface PrivacyWalletScore {
   id: string;
   label: string;
   kind: string;
-  score: number | null;
-  grade: string | null;
   state: string;
   transaction_count: number;
   scored_transaction_count: number;
@@ -135,6 +144,10 @@ interface PrivacyWalletScore {
     dust_utxo_count: number;
     script_type_counts: Record<string, number>;
   };
+  risk_weight: number;
+  risk_count: number;
+  unknown_count: number;
+  risk_level: PrivacyRiskLevel;
   finding_counts: Record<PrivacySeverity, number>;
   top_findings: PrivacyFinding[];
 }
@@ -147,8 +160,6 @@ interface PrivacyTransactionScore {
   occurred_at: string;
   direction: string;
   asset: string;
-  score: number | null;
-  grade: string | null;
   state: string;
   support: {
     level: string;
@@ -158,6 +169,10 @@ interface PrivacyTransactionScore {
     known_input_values: number;
     known_output_values: number;
   };
+  risk_weight: number;
+  risk_count: number;
+  unknown_count: number;
+  risk_level: PrivacyRiskLevel;
   finding_counts: Record<PrivacySeverity, number>;
   top_findings: PrivacyFinding[];
 }
@@ -327,29 +342,10 @@ export function ExposureEndpointRow({
   );
 }
 
-function scoreColor(score: number | null): string {
-  if (score == null) return "#94a3b8";
-  if (score >= 75) return "#10b981";
-  if (score >= 50) return "#f59e0b";
-  if (score >= 25) return "#f97316";
-  return "#ef4444";
-}
-
-function scoreBadgeClass(score: number | null): string {
-  if (score == null) return "border-muted-foreground/20 text-muted-foreground";
-  if (score >= 75) {
-    return "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300";
-  }
-  if (score >= 50) {
-    return "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300";
-  }
-  return "border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-300";
-}
-
 function severityClass(severity: PrivacySeverity): string {
   switch (severity) {
     case "positive":
-      return "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300";
+      return "border-sky-500/30 bg-sky-500/10 text-sky-700 dark:text-sky-300";
     case "critical":
     case "high":
       return "border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-300";
@@ -358,6 +354,21 @@ function severityClass(severity: PrivacySeverity): string {
     case "low":
       return "border-sky-500/30 bg-sky-500/10 text-sky-700 dark:text-sky-300";
     case "info":
+    default:
+      return "border-muted-foreground/20 text-muted-foreground";
+  }
+}
+
+function riskClass(level: PrivacyRiskLevel): string {
+  switch (level) {
+    case "critical":
+    case "high":
+      return "border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-300";
+    case "medium":
+      return "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300";
+    case "low":
+      return "border-sky-500/30 bg-sky-500/10 text-sky-700 dark:text-sky-300";
+    case "none":
     default:
       return "border-muted-foreground/20 text-muted-foreground";
   }
@@ -376,11 +387,6 @@ function SeverityIcon({ severity }: { severity: PrivacySeverity }) {
   return <Info className="size-3.5" aria-hidden="true" />;
 }
 
-function formatImpact(impact: number): string {
-  if (impact > 0) return `+${impact}`;
-  return `${impact}`;
-}
-
 function shortTransactionRef(value: string): string {
   if (/^[0-9a-f]{64}$/i.test(value)) {
     return `${value.slice(0, 10)}...${value.slice(-6)}`;
@@ -388,56 +394,24 @@ function shortTransactionRef(value: string): string {
   return value || "--";
 }
 
-function ScoreBadge({
-  score,
-  grade,
+function RiskBadge({
+  level,
+  weight,
 }: {
-  score: number | null;
-  grade: string | null;
+  level: PrivacyRiskLevel;
+  weight: number;
 }) {
+  const { t } = useTranslation("settings");
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1 rounded-md border px-2 py-0.5 font-mono text-xs font-semibold tabular-nums",
-        scoreBadgeClass(score),
+        "inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-xs font-semibold",
+        riskClass(level),
       )}
     >
-      <span>{grade ?? "--"}</span>
-      <span>{score == null ? "--" : score}</span>
+      <span>{t(`privacy.riskLevel.${level}` as never)}</span>
+      {weight > 0 ? <span className="font-mono tabular-nums">{weight}</span> : null}
     </span>
-  );
-}
-
-function ScoreDonut({
-  score,
-  grade,
-  label,
-}: {
-  score: number | null;
-  grade: string | null;
-  label: string;
-}) {
-  const value = score ?? 0;
-  return (
-    <div
-      className="grid size-32 shrink-0 place-items-center rounded-full p-2"
-      style={{
-        background: `conic-gradient(${scoreColor(score)} ${value}%, hsl(var(--muted)) 0)`,
-      }}
-      role="img"
-      aria-label={label}
-    >
-      <div className="grid size-full place-items-center rounded-full bg-background text-center">
-        <div>
-          <div className="font-mono text-3xl font-semibold tabular-nums">
-            {score == null ? "--" : score}
-          </div>
-          <div className="text-xs font-medium text-muted-foreground">
-            {grade ?? "--"}
-          </div>
-        </div>
-      </div>
-    </div>
   );
 }
 
@@ -458,14 +432,19 @@ function FindingPill({ finding }: { finding: PrivacyFinding }) {
           <p className="text-sm font-medium">
             {t(`privacy.findings.${finding.code}.title` as never)}
           </p>
-          <span className="font-mono text-xs text-muted-foreground">
-            {formatImpact(finding.impact)}
+          <span className="rounded-md border px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">
+            {t(`privacy.evidence.${finding.evidence_level}` as never)}
           </span>
         </div>
         <p className="text-xs text-muted-foreground">
           {t(`privacy.findings.${finding.code}.detail` as never, {
             count: finding.count,
             occurrences: finding.occurrences ?? finding.count,
+          })}
+        </p>
+        <p className="mt-1 text-xs text-muted-foreground">
+          {t(`privacy.findings.${finding.code}.remediation` as never, {
+            defaultValue: finding.remediation,
           })}
         </p>
       </div>
@@ -518,7 +497,7 @@ function CoverageTile({
 
 function WalletScoreRow({ wallet }: { wallet: PrivacyWalletScore }) {
   const { t } = useTranslation("settings");
-  const progress = Math.max(0, Math.min(100, wallet.score ?? 0));
+  const firstFinding = wallet.top_findings[0];
   return (
     <div className="rounded-md border bg-background p-3">
       <div className="flex flex-wrap items-start justify-between gap-2">
@@ -531,16 +510,7 @@ function WalletScoreRow({ wallet }: { wallet: PrivacyWalletScore }) {
             })}
           </p>
         </div>
-        <ScoreBadge score={wallet.score} grade={wallet.grade} />
-      </div>
-      <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-muted">
-        <div
-          className="h-full rounded-full"
-          style={{
-            width: `${progress}%`,
-            backgroundColor: scoreColor(wallet.score),
-          }}
-        />
+        <RiskBadge level={wallet.risk_level} weight={wallet.risk_weight} />
       </div>
       <div className="mt-2 flex flex-wrap gap-2 text-xs text-muted-foreground">
         <span>
@@ -553,7 +523,25 @@ function WalletScoreRow({ wallet }: { wallet: PrivacyWalletScore }) {
             count: wallet.address.dust_utxo_count,
           })}
         </span>
+        {wallet.unknown_count > 0 ? (
+          <span>{t("privacy.unknownCount", { count: wallet.unknown_count })}</span>
+        ) : null}
       </div>
+      {firstFinding ? (
+        <div className="mt-2 flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
+          <span
+            className={cn(
+              "inline-flex size-5 shrink-0 items-center justify-center rounded-md border",
+              severityClass(firstFinding.severity),
+            )}
+          >
+            <SeverityIcon severity={firstFinding.severity} />
+          </span>
+          <span className="min-w-0 truncate">
+            {t(`privacy.findings.${firstFinding.code}.title` as never)}
+          </span>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -572,7 +560,7 @@ function TransactionTellRow({ tx }: { tx: PrivacyTransactionScore }) {
             {tx.wallet_label} · {t(`privacy.scoreState.${tx.state}` as never)}
           </p>
         </div>
-        <ScoreBadge score={tx.score} grade={tx.grade} />
+        <RiskBadge level={tx.risk_level} weight={tx.risk_weight} />
       </div>
       {firstFinding ? (
         <div className="mt-2 flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
@@ -609,7 +597,12 @@ function PrivacyHygieneSection() {
   const topWallets = React.useMemo(
     () =>
       [...(hygiene?.wallets ?? [])]
-        .sort((a, b) => (a.score ?? 101) - (b.score ?? 101))
+        .sort(
+          (a, b) =>
+            b.risk_weight - a.risk_weight ||
+            b.unknown_count - a.unknown_count ||
+            a.label.localeCompare(b.label),
+        )
         .slice(0, 4),
     [hygiene?.wallets],
   );
@@ -639,34 +632,42 @@ function PrivacyHygieneSection() {
         </div>
       ) : summary ? (
         <>
-          <div className="grid gap-3 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
-            <div className="flex flex-col gap-4 rounded-md border bg-background p-4 sm:flex-row sm:items-center">
-              <ScoreDonut
-                score={summary.score}
-                grade={summary.grade}
-                label={t("privacy.scoreAria", {
-                  score: summary.score ?? 0,
-                  grade: summary.grade ?? "",
-                })}
-              />
-              <div className="min-w-0 space-y-2">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-xs font-medium text-muted-foreground">
-                    <Gauge className="size-3.5" aria-hidden="true" />
-                    {t(`privacy.scoreState.${summary.state}` as never)}
-                  </span>
-                  <span className="inline-flex items-center gap-1 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-xs font-medium text-emerald-700 dark:text-emerald-300">
-                    <ShieldCheck className="size-3.5" aria-hidden="true" />
-                    {t("privacy.scoreLocalOnly")}
-                  </span>
-                </div>
-                <p className="text-sm text-muted-foreground">
-                  {t("privacy.scoreSummary", {
-                    wallets: summary.wallet_count,
-                    transactions: summary.transaction_count,
-                  })}
-                </p>
+          <div className="grid gap-3 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
+            <div className="rounded-md border bg-background p-4">
+              <div className="flex flex-wrap items-center gap-2">
+                <RiskBadge
+                  level={summary.risk_level}
+                  weight={summary.risk_weight}
+                />
+                <span className="inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-xs font-medium text-muted-foreground">
+                  <Info className="size-3.5" aria-hidden="true" />
+                  {t(`privacy.scoreState.${summary.state}` as never)}
+                </span>
+                <span className="inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-xs font-medium text-muted-foreground">
+                  <ShieldCheck className="size-3.5" aria-hidden="true" />
+                  {t("privacy.scoreLocalOnly")}
+                </span>
               </div>
+              <div className="mt-3 grid gap-2 sm:grid-cols-3">
+                <CoverageTile
+                  label={t("privacy.summaryRisks")}
+                  value={summary.risk_count}
+                />
+                <CoverageTile
+                  label={t("privacy.summaryUnknowns")}
+                  value={summary.unknown_count}
+                />
+                <CoverageTile
+                  label={t("privacy.summaryWallets")}
+                  value={summary.wallet_count}
+                />
+              </div>
+              <p className="mt-3 text-sm text-muted-foreground">
+                {t("privacy.scoreSummary", {
+                  wallets: summary.wallet_count,
+                  transactions: summary.transaction_count,
+                })}
+              </p>
             </div>
             <div className="space-y-2">
               <p className="text-sm font-medium">{t("privacy.scoreTopFindings")}</p>

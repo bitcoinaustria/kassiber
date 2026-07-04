@@ -334,22 +334,39 @@
     "offerBiometricDescription": "Remember this device's biometric unlock preference between sessions."
   },
   "privacy": {
-    "scoreHeading": "Privacy hygiene",
-    "scoreDescription": "Local score from synced transaction shapes and wallet UTXOs. No public lookup.",
+    "scoreHeading": "Privacy tells",
+    "scoreDescription": "Local advisory tells from synced transaction shapes and wallet UTXOs. No public lookup, entity lookup, or accounting mutation.",
     "scoreLoading": "Scanning local privacy tells...",
-    "scoreUnavailable": "Privacy hygiene is unavailable.",
-    "scoreAria": "Privacy hygiene score {{score}}, grade {{grade}}",
+    "scoreUnavailable": "Privacy tells are unavailable.",
     "scoreLocalOnly": "Local only",
-    "scoreSummary": "{{wallets}} wallets · {{transactions}} transactions checked",
-    "scoreTopFindings": "Strongest tells",
-    "scoreNoFindings": "No scored tells in the local data yet.",
+    "scoreSummary": "{{wallets}} wallets · {{transactions}} transactions checked with local data only",
+    "scoreTopFindings": "Tells and unknowns",
+    "scoreNoFindings": "No local tells in the available data yet.",
     "scoreWallets": "Wallet rollup",
-    "scoreTransactions": "Worst transactions",
+    "scoreTransactions": "Transactions to review",
     "scoreNoWallets": "No wallets in this book yet.",
     "scoreNoTransactions": "No transactions in this book yet.",
     "scoreWalletMeta": "{{txs}} txs · {{utxos}} active UTXOs",
     "scoreReuse": "{{count}} reused addresses",
     "scoreDust": "{{count}} dust UTXOs",
+    "unknownCount": "{{count}} unknowns",
+    "summaryRisks": "Risk tells",
+    "summaryUnknowns": "Unknowns",
+    "summaryWallets": "Wallets",
+    "riskLevel": {
+      "none": "No local risk tells",
+      "low": "Low risk tells",
+      "medium": "Medium risk tells",
+      "high": "High risk tells",
+      "critical": "Critical risk tells"
+    },
+    "evidence": {
+      "ground_truth": "Ground truth",
+      "reviewed": "Reviewed",
+      "imported": "Imported",
+      "heuristic": "Heuristic",
+      "unavailable": "Unavailable"
+    },
     "scoreState": {
       "full": "Full local coverage",
       "partial": "Partial local coverage",
@@ -368,91 +385,113 @@
     "findings": {
       "address_reuse": {
         "title": "Address reuse",
-        "detail": "{{count}} reused address groups found."
+        "detail": "{{count}} reused address groups found.",
+        "remediation": "Review the receive-address context and keep affected rows labelled; Kassiber does not change wallet state from this tell."
       },
       "change_position_fingerprint": {
         "title": "Change position pattern",
-        "detail": "{{count}} transaction has owned change at a predictable edge."
+        "detail": "{{count}} transaction has owned change at a predictable edge.",
+        "remediation": "Treat this as advisory change-shape context and confirm intent from first-party wallet records."
       },
       "change_type_fingerprint": {
         "title": "Change type mismatch",
-        "detail": "{{count}} transaction reveals likely change by script type."
+        "detail": "{{count}} transaction reveals likely change by script type.",
+        "remediation": "Review the script-type mismatch as context only; no tax, balance, or transfer state is changed."
       },
       "coin_anonymity_evidence": {
-        "title": "Coin anonymity evidence",
-        "detail": "{{count}} UTXOs carry positive anonymity evidence."
+        "title": "Imported anonymity evidence",
+        "detail": "{{count}} UTXOs carry imported anonymity evidence.",
+        "remediation": "Keep the imported wallet evidence attached and treat it as boundary context, not proof of a complete privacy graph."
       },
       "coinjoin_pattern": {
         "title": "CoinJoin pattern",
-        "detail": "{{count}} equal-output participants or imported CoinJoin evidence."
+        "detail": "{{count}} equal-output participants or imported CoinJoin evidence.",
+        "remediation": "Document the CoinJoin boundary locally and do not infer unrelated participant ownership from this tell."
       },
       "common_input_ownership": {
         "title": "Common-input link",
-        "detail": "{{count}} inputs are linked by the transaction."
+        "detail": "{{count}} inputs are linked by the transaction.",
+        "remediation": "Use this as an advisory common-input tell only; confirm ownership with first-party wallet evidence before relying on it."
       },
       "dust_utxo_exposure": {
         "title": "Dust UTXOs",
-        "detail": "{{count}} active dust outputs increase review noise."
+        "detail": "{{count}} active dust outputs increase review noise.",
+        "remediation": "Label or review small-output provenance when it matters; Kassiber leaves balances and UTXO state untouched."
       },
       "large_utxo_set": {
         "title": "Large UTXO set",
-        "detail": "{{count}} active UTXOs raise consolidation pressure."
+        "detail": "{{count}} active UTXOs are visible in the local inventory.",
+        "remediation": "Use the count as review context for the wallet inventory; no spending or consolidation advice is implied."
       },
       "legacy_address_type": {
         "title": "Legacy script type",
-        "detail": "{{count}} outputs use older address types."
+        "detail": "{{count}} outputs use older address types.",
+        "remediation": "Record this as an older script-type observation; it is not an accounting action or a privacy verdict."
       },
       "op_return_metadata": {
         "title": "OP_RETURN metadata",
-        "detail": "{{count}} outputs publish permanent metadata."
+        "detail": "{{count}} outputs publish permanent metadata.",
+        "remediation": "Review the transaction context knowing permanent metadata exists; Kassiber does not inspect or enrich external entities."
       },
       "payjoin_boundary": {
         "title": "PayJoin boundary",
-        "detail": "{{count}} reviewed PayJoin boundary breaks simple input ownership."
+        "detail": "{{count}} imported or reviewed PayJoin boundary breaks simple input ownership.",
+        "remediation": "Keep the PayJoin boundary documented locally; Kassiber does not cross it or infer the counterparty graph."
       },
       "rbf_signal": {
         "title": "RBF signal",
-        "detail": "{{count}} inputs use replace-by-fee signaling."
+        "detail": "{{count}} inputs use replace-by-fee signaling.",
+        "remediation": "Treat replace-by-fee signalling as transaction-shape context only."
       },
       "round_fee_rate": {
         "title": "Round fee rate",
-        "detail": "{{count}} transaction uses a round fee-rate fingerprint."
+        "detail": "{{count}} transaction uses a round fee-rate fingerprint.",
+        "remediation": "Treat the rounded fee rate as a weak wallet-shape tell and verify with first-party records if it matters."
       },
       "round_output_amount": {
         "title": "Round output amount",
-        "detail": "{{count}} outputs look like human-entered payment amounts."
+        "detail": "{{count}} outputs look like human-entered payment amounts.",
+        "remediation": "Keep the round amount as payment-shape context; attach invoice or counterparty records if the distinction matters."
       },
       "script_type_mix": {
         "title": "Mixed script types",
-        "detail": "{{count}} script families appear in one transaction."
+        "detail": "{{count}} script families appear in one transaction.",
+        "remediation": "Review mixed script families as a local transaction-shape tell, not as proof of ownership."
       },
       "taproot_usage": {
         "title": "Taproot usage",
-        "detail": "{{count}} Taproot outputs improve the local hygiene score."
+        "detail": "{{count}} Taproot outputs are visible in the local data.",
+        "remediation": "Treat Taproot usage as a local script-type observation; it is not a standing privacy guarantee."
       },
       "transaction_coverage_gap": {
         "title": "Coverage gap",
-        "detail": "{{count}} transactions lack local vin/vout detail."
+        "detail": "{{count}} transactions lack local vin/vout detail.",
+        "remediation": "Import or sync local vin/vout detail if you need this transaction analysed; otherwise keep the gap explicit."
       },
       "transaction_not_analysable": {
         "title": "No local tx graph",
-        "detail": "{{count}} transaction has no local vin/vout to score."
+        "detail": "{{count}} transaction has no local vin/vout graph to analyse.",
+        "remediation": "Leave this transaction as unknown unless local first-party transaction graph data is imported or synced."
       },
       "unnecessary_input_heuristic": {
         "title": "Unnecessary input tell",
-        "detail": "{{count}} outputs could have been funded without every input."
+        "detail": "{{count}} outputs could have been funded without every input.",
+        "remediation": "Treat this as an advisory input-shape tell and review the source-wallet record before relying on it."
       },
       "wallet_fingerprint_locktime": {
         "title": "nLockTime fingerprint",
-        "detail": "{{count}} transaction carries a wallet-style locktime."
+        "detail": "{{count}} transaction carries a wallet-style locktime.",
+        "remediation": "Use the locktime pattern as weak wallet-fingerprint context only."
       },
       "wallet_fingerprint_version": {
         "title": "Version fingerprint",
-        "detail": "{{count}} transaction uses an unusual version."
+        "detail": "{{count}} transaction uses an unusual version.",
+        "remediation": "Use the version pattern as weak wallet-fingerprint context only."
       },
       "wallet_fingerprint_witness": {
         "title": "Witness fingerprint",
-        "detail": "{{count}} inputs share the same witness shape."
+        "detail": "{{count}} inputs share the same witness shape.",
+        "remediation": "Use the witness-shape pattern as weak wallet-fingerprint context only."
       }
     },
     "exposure": {
