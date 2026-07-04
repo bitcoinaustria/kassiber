@@ -8,6 +8,7 @@ import kassiber.core.transaction_graph as tg
 from kassiber.backends import DEFAULT_BACKENDS, create_db_backend
 from kassiber.core.sync_backends import address_to_scriptpubkey
 from kassiber.db import ensure_schema_compat, open_db, set_setting
+from kassiber.errors import AppError
 
 
 NOW = "2026-01-01T00:00:00Z"
@@ -1100,6 +1101,77 @@ class TransactionGraphTest(unittest.TestCase):
         fetch.assert_not_called()
         self.assertEqual(payload["supportLevel"], "graphless")
         self.assertEqual(payload["unsupportedReason"], "graphless_import")
+
+    def test_public_lookup_string_false_does_not_fetch_graphless_row(self):
+        txid = "12" * 32
+        create_db_backend(
+            self.conn,
+            "graph-mempool",
+            "mempool",
+            "https://mempool.example/api",
+            chain="bitcoin",
+            network="main",
+            timeout=5,
+            commit=False,
+        )
+        self._tx("string-false-lookup-row", "wallet-a", "outbound", 800_000_000, txid, "{}")
+
+        with patch("kassiber.core.transaction_graph.fetch_esplora_transaction") as fetch:
+            payload = self._graph("string-false-lookup-row", allow_public_lookup="false")
+
+        fetch.assert_not_called()
+        self.assertEqual(payload["supportLevel"], "graphless")
+        self.assertEqual(payload["unsupportedReason"], "graphless_import")
+
+    def test_public_lookup_string_true_fetches_graphless_row(self):
+        txid = "13" * 32
+        fetched = {
+            "txid": txid,
+            "version": 2,
+            "locktime": 0,
+            "vsize": 141,
+            "vin": [
+                {
+                    "txid": "99" * 32,
+                    "vout": 1,
+                    "prevout": {
+                        "scriptpubkey": SCRIPT_A,
+                        "scriptpubkey_type": "v0_p2wpkh",
+                        "scriptpubkey_address": ADDR_A,
+                        "value": 1_000_000,
+                    },
+                }
+            ],
+            "vout": [{"n": 0, "scriptpubkey": SCRIPT_B, "value": 900_000}],
+        }
+        create_db_backend(
+            self.conn,
+            "graph-mempool",
+            "mempool",
+            "https://mempool.example/api",
+            chain="bitcoin",
+            network="main",
+            timeout=5,
+            commit=False,
+        )
+        self._tx("string-true-lookup-row", "wallet-a", "outbound", 900_000_000, txid, "{}")
+
+        with patch(
+            "kassiber.core.transaction_graph.fetch_esplora_transaction",
+            return_value=fetched,
+        ) as fetch:
+            payload = self._graph("string-true-lookup-row", allow_public_lookup="true")
+
+        fetch.assert_called_once_with("https://mempool.example/api", txid, timeout=5)
+        self.assertEqual(payload["supportLevel"], "full")
+
+    def test_public_lookup_rejects_ambiguous_string(self):
+        self._tx("bad-lookup-flag-row", "wallet-a", "outbound", 800_000_000, "14" * 32, "{}")
+
+        with self.assertRaises(AppError) as raised:
+            self._graph("bad-lookup-flag-row", allow_public_lookup="no")
+
+        self.assertEqual(raised.exception.code, "validation")
 
     def test_public_lookup_warning_does_not_leak_backend_url(self):
         txid = "13" * 32

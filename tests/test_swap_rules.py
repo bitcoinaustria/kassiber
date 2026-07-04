@@ -86,6 +86,26 @@ class LoadRuleTests(unittest.TestCase):
         record = {"id": "r1", "predicate_json": "{}", "kind": "manual", "policy": "taxable", "enabled": 0}
         self.assertFalse(load_rule(record).enabled)
 
+    def test_string_disabled_records(self):
+        for enabled in ("0", "false", "no", "off"):
+            with self.subTest(enabled=enabled):
+                record = {
+                    "id": "r1",
+                    "predicate_json": "{}",
+                    "kind": "manual",
+                    "policy": "taxable",
+                    "enabled": enabled,
+                }
+                self.assertFalse(load_rule(record).enabled)
+
+    def test_string_enabled_record(self):
+        record = {"id": "r1", "predicate_json": "{}", "kind": "manual", "policy": "taxable", "enabled": "true"}
+        self.assertTrue(load_rule(record).enabled)
+
+    def test_missing_enabled_defaults_to_enabled(self):
+        record = {"id": "r1", "predicate_json": "{}", "kind": "manual", "policy": "taxable"}
+        self.assertTrue(load_rule(record).enabled)
+
 
 class PredicateMatchesTests(unittest.TestCase):
     def test_empty_predicate_matches_everything(self):
@@ -142,6 +162,22 @@ class ApplyRulesTests(unittest.TestCase):
         candidates = [_candidate()]
         rules = [_rule(enabled=False)]
         auto, remaining = apply_rules(candidates, rules)
+        self.assertEqual(auto, [])
+        self.assertEqual(remaining, candidates)
+
+    def test_loaded_string_disabled_rule_skipped(self):
+        candidates = [_candidate()]
+        loaded_rule = load_rule(
+            {
+                "id": "rule-1",
+                "profile_id": "prof",
+                "predicate_json": "{}",
+                "kind": "submarine-swap",
+                "policy": "carrying-value",
+                "enabled": "false",
+            }
+        )
+        auto, remaining = apply_rules(candidates, [loaded_rule])
         self.assertEqual(auto, [])
         self.assertEqual(remaining, candidates)
 

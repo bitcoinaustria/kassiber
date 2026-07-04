@@ -1082,6 +1082,52 @@ class CredentialMigrationTests(unittest.TestCase):
                 env_file.read_text(encoding="utf-8"),
             )
 
+    def test_migration_rejects_duplicate_secret_entries_without_rewrite(self):
+        from kassiber.backends import get_db_backend
+        from kassiber.secrets.credentials import migrate_dotenv_credentials
+
+        with tempfile.TemporaryDirectory() as root:
+            data_root = Path(root) / "data"
+            data_root.mkdir()
+            seed = open_db(str(data_root))
+            seed.close()
+            migrate_plaintext_to_encrypted(
+                data_root / "kassiber.sqlite3", "tracer-pass-12345"
+            )
+            self._seed_backend(
+                data_root, "main", "btcpay", "https://btcpay.example.com"
+            )
+
+            env_file = Path(root) / "backends.env"
+            original = "\n".join(
+                [
+                    "KASSIBER_BACKEND_MAIN_TOKEN=first-token",
+                    "KASSIBER_BACKEND_MAIN_TOKEN=second-token",
+                    "KASSIBER_BACKEND_MAIN_URL=https://btcpay.example.com",
+                    "",
+                ]
+            )
+            env_file.write_text(original, encoding="utf-8")
+
+            conn = open_db(str(data_root), passphrase="tracer-pass-12345")
+            try:
+                with self.assertRaises(AppError) as raised:
+                    migrate_dotenv_credentials(conn, env_file)
+                row = get_db_backend(conn, "main")
+            finally:
+                conn.close()
+
+            self.assertEqual(raised.exception.code, "validation")
+            self.assertEqual(
+                raised.exception.details["duplicates"][0]["entries"],
+                [
+                    {"env_key": "KASSIBER_BACKEND_MAIN_TOKEN", "lineno": 1},
+                    {"env_key": "KASSIBER_BACKEND_MAIN_TOKEN", "lineno": 2},
+                ],
+            )
+            self.assertEqual(env_file.read_text(encoding="utf-8"), original)
+            self.assertEqual(row["token"], "")
+
     def test_username_and_password_lift_into_config_json(self):
         from kassiber.backends import get_db_backend
         from kassiber.secrets.credentials import migrate_dotenv_credentials

@@ -59,6 +59,8 @@ COINBASE_PREVOUT_VOUT = 0xFFFFFFFF
 MAX_GRAPH_NODES_PER_SIDE = 250
 MAX_ELECTRUM_GRAPH_PREVTX_LOOKUPS = MAX_GRAPH_NODES_PER_SIDE
 
+_MISSING = object()
+
 
 class _ProfileSemantics(NamedTuple):
     """Profile-scoped graph inputs that are independent of the focused tx.
@@ -114,9 +116,7 @@ def build_transaction_graph_snapshot(
     owned_index = bundle.owned_index
     semantics = bundle.semantics
     raw = _json_obj(_row_get(row, "raw_json"))
-    allow_public_lookup = bool(
-        raw_args.get("allowPublicLookup") or raw_args.get("allow_public_lookup")
-    )
+    allow_public_lookup = _parse_public_lookup_arg(raw_args)
     graph = _parse_graph(
         row,
         _enrich_graph_raw(
@@ -165,6 +165,38 @@ def build_transaction_graph_snapshot(
         },
         "swapRoute": swap_route,
     }
+
+
+def _parse_public_lookup_arg(args: Mapping[str, Any]) -> bool:
+    camel = args.get("allowPublicLookup", _MISSING)
+    snake = args.get("allow_public_lookup", _MISSING)
+    if camel is not _MISSING and snake is not _MISSING and camel != snake:
+        raise AppError(
+            "ui.transactions.graph received conflicting public lookup flags",
+            code="validation",
+            details={
+                "allowPublicLookup": camel,
+                "allow_public_lookup": snake,
+            },
+            retryable=False,
+        )
+    value = camel if camel is not _MISSING else snake
+    if value is _MISSING or value is None:
+        return False
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized == "true":
+            return True
+        if normalized == "false":
+            return False
+    raise AppError(
+        "ui.transactions.graph allowPublicLookup must be a boolean",
+        code="validation",
+        details={"allowPublicLookup": value},
+        retryable=False,
+    )
 
 
 def _empty_payload(transaction_ref: str, reason: str) -> dict[str, Any]:

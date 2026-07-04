@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 import sys
 import tempfile
@@ -89,6 +90,9 @@ _NON_SALE_DISPOSAL_KIND_TOKENS = (
     "stolen",
     "theft",
 )
+_RP2_CONFIG_FORBIDDEN_CHARACTERS = frozenset(
+    {",", "\n", "\r", "[", "]", "=", ":", "#", ";"}
+)
 
 
 def _kind_has_token(kind: str, tokens: tuple[str, ...]) -> bool:
@@ -143,6 +147,7 @@ def _prime_rp2_logger() -> None:
     # parallelized, gate this behind a lock or move the chdir to daemon
     # startup.
     if "rp2.logger" in sys.modules:
+        _disable_rp2_disk_logger(sys.modules["rp2.logger"])
         return
     scratch = Path(tempfile.gettempdir()) / "kassiber-rp2-logs"
     scratch.mkdir(parents=True, exist_ok=True)
@@ -153,13 +158,43 @@ def _prime_rp2_logger() -> None:
         previous_cwd = None
     try:
         os.chdir(scratch)
-        import_module("rp2.logger")
+        logger_module = import_module("rp2.logger")
     finally:
         if previous_cwd is not None:
             try:
                 os.chdir(previous_cwd)
             except OSError:
                 os.chdir(tempfile.gettempdir())
+    _disable_rp2_disk_logger(logger_module, cleanup_roots=(scratch / "log", scratch))
+
+
+def _disable_rp2_disk_logger(
+    logger_module: Any,
+    *,
+    cleanup_roots: Sequence[Path] = (),
+) -> None:
+    logger = getattr(logger_module, "LOGGER", logging.getLogger("rp2"))
+    for handler in list(logger.handlers):
+        log_file = getattr(handler, "baseFilename", None)
+        logger.removeHandler(handler)
+        try:
+            handler.close()
+        finally:
+            if log_file:
+                try:
+                    Path(log_file).unlink()
+                except OSError:
+                    # Best-effort cleanup: a stale RP2 log file must not block reports.
+                    pass
+    if not any(isinstance(handler, logging.NullHandler) for handler in logger.handlers):
+        logger.addHandler(logging.NullHandler())
+    logger.propagate = False
+    for root in cleanup_roots:
+        try:
+            root.rmdir()
+        except OSError:
+            # Best-effort cleanup: non-empty or already-removed scratch dirs are harmless.
+            pass
 
 
 def _get_rp2_modules() -> dict[str, Any]:
@@ -261,6 +296,30 @@ def _profile_str(profile: Mapping[str, Any], key: str) -> str:
     return ""
 
 
+def _rp2_config_token(value: Any, field: str) -> str:
+    text = str(value or "").strip()
+    if not text:
+        raise AppError(
+            "RP2 configuration value is required",
+            code="validation",
+            details={"field": field},
+            retryable=False,
+        )
+    forbidden = sorted(char for char in _RP2_CONFIG_FORBIDDEN_CHARACTERS if char in text)
+    if forbidden:
+        raise AppError(
+            f"RP2 configuration {field} contains unsupported characters",
+            code="validation",
+            hint=(
+                "Rename the wallet, profile, or asset label to remove commas, "
+                "newlines, brackets, comments, or key delimiters before processing reports."
+            ),
+            details={"field": field, "value": text, "characters": forbidden},
+            retryable=False,
+        )
+    return text
+
+
 def _normalized_event_kind(event: Any) -> str:
     raw_row = getattr(event, "raw_row", None) or {}
     kind = raw_row["kind"] if hasattr(raw_row, "keys") and "kind" in raw_row.keys() else None
@@ -360,8 +419,11 @@ def _rp2_configuration(
     assets: Iterable[str],
 ) -> Iterator[Any]:
     Configuration = _get_rp2_modules()["Configuration"]
-    sorted_wallet_labels = sorted(wallet_labels)
-    sorted_assets = sorted(assets)
+    sorted_wallet_labels = sorted(
+        _rp2_config_token(wallet_label, "wallet_label") for wallet_label in wallet_labels
+    )
+    sorted_assets = sorted(_rp2_config_token(asset, "asset") for asset in assets)
+    holder_label = _rp2_config_token(_profile_str(profile, "label"), "profile_label")
     if not sorted_wallet_labels:
         raise AppError("RP2 configuration requires at least one wallet")
     if not sorted_assets:
@@ -371,7 +433,7 @@ def _rp2_configuration(
             "[general]",
             f"assets = {', '.join(sorted_assets)}",
             f"exchanges = {', '.join(sorted_wallet_labels)}",
-            f"holders = {profile['label']}",
+            f"holders = {holder_label}",
             "",
             "[in_header]",
             "timestamp = 0",
