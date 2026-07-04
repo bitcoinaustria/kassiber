@@ -13,6 +13,7 @@ one-shot migration that lifts the secret entries into the encrypted
 from __future__ import annotations
 
 import shutil
+from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterable, Optional
@@ -111,18 +112,12 @@ def _parse_dotenv_lines(lines: Iterable[str]) -> list[dict]:
     return parsed
 
 
-def scan_dotenv_for_secrets(path: Path) -> list[dict]:
-    """List every secret-shaped backend entry in the dotenv file.
-
-    Each result row is `{backend, field, env_key, lineno}`. Returns
-    `[]` for a missing or empty file.
-    """
-
+def _secret_dotenv_entries(path: Path) -> list[dict]:
     target = Path(path).expanduser()
     if not target.exists():
         return []
     text = target.read_text(encoding="utf-8")
-    findings: list[dict] = []
+    entries: list[dict] = []
     for entry in _parse_dotenv_lines(text.splitlines()):
         key = entry["key"]
         if not key:
@@ -133,19 +128,55 @@ def scan_dotenv_for_secrets(path: Path) -> list[dict]:
         backend, field = split
         if field not in SECRET_BACKEND_FIELDS:
             continue
-        findings.append(
+        entries.append(
             {
                 "backend": backend,
                 "field": field,
                 "env_key": key,
                 "lineno": entry["lineno"],
+                "value": entry["value"],
             }
         )
-    return findings
+    return entries
 
 
-def _rewrite_dotenv_without(path: Path, drop_keys: set[str]) -> str:
-    """Rewrite the dotenv file in place, dropping `drop_keys` entries.
+def scan_dotenv_for_secrets(path: Path) -> list[dict]:
+    """List every secret-shaped backend entry in the dotenv file.
+
+    Each result row is `{backend, field, env_key, lineno}`. Returns
+    `[]` for a missing or empty file. Secret values are intentionally not
+    returned to callers.
+    """
+
+    return [
+        {key: value for key, value in entry.items() if key != "value"}
+        for entry in _secret_dotenv_entries(path)
+    ]
+
+
+def _duplicate_secret_targets(entries: Iterable[dict]) -> list[dict]:
+    grouped: dict[tuple[str, str], list[dict]] = defaultdict(list)
+    for entry in entries:
+        grouped[(entry["backend"], entry["field"])].append(entry)
+    duplicates: list[dict] = []
+    for (backend, field), members in sorted(grouped.items()):
+        if len(members) <= 1:
+            continue
+        duplicates.append(
+            {
+                "backend": backend,
+                "field": field,
+                "entries": [
+                    {"env_key": member["env_key"], "lineno": member["lineno"]}
+                    for member in members
+                ],
+            }
+        )
+    return duplicates
+
+
+def _rewrite_dotenv_without(path: Path, drop_linenos: set[int]) -> str:
+    """Rewrite the dotenv file in place, dropping migrated line numbers.
 
     Returns the new file body so callers can show a diff. Comments and
     non-key lines are preserved verbatim.
@@ -155,8 +186,7 @@ def _rewrite_dotenv_without(path: Path, drop_keys: set[str]) -> str:
     text = target.read_text(encoding="utf-8")
     out_lines: list[str] = []
     for entry in _parse_dotenv_lines(text.splitlines()):
-        key = entry["key"]
-        if key and key in drop_keys:
+        if entry["lineno"] in drop_linenos:
             continue
         out_lines.append(entry["raw"])
     new_body = "\n".join(out_lines)
@@ -203,7 +233,7 @@ def migrate_dotenv_credentials(
             "rewritten": False,
         }
 
-    findings = scan_dotenv_for_secrets(target)
+    findings = _secret_dotenv_entries(target)
     if not findings:
         return {
             "dotenv_path": str(target),
@@ -212,25 +242,36 @@ def migrate_dotenv_credentials(
             "backup_path": None,
             "rewritten": False,
         }
+    duplicate_targets = _duplicate_secret_targets(findings)
+    if duplicate_targets:
+        raise AppError(
+            "Duplicate backend credential dotenv entries must be resolved before migration",
+            code="validation",
+            hint=(
+                "Keep exactly one secret env entry per backend credential field, "
+                "then rerun `kassiber secrets migrate-credentials`."
+            ),
+            details={"duplicates": duplicate_targets},
+            retryable=False,
+        )
 
     migrated: list[dict] = []
     skipped: list[dict] = []
-    drop_keys: set[str] = set()
-
-    text = target.read_text(encoding="utf-8")
-    parsed = _parse_dotenv_lines(text.splitlines())
-    raw_values: dict[str, str] = {}
-    for entry in parsed:
-        if entry["key"]:
-            raw_values[entry["key"]] = entry["value"]
+    drop_linenos: set[int] = set()
 
     for finding in findings:
         backend_name = finding["backend"]
         field = finding["field"]
-        env_key = finding["env_key"]
-        value = raw_values.get(env_key)
+        value = finding.get("value")
         if value is None:
-            skipped.append({**finding, "reason": "value_missing"})
+            skipped.append(
+                {
+                    key: entry_value
+                    for key, entry_value in finding.items()
+                    if key != "value"
+                }
+                | {"reason": "value_missing"}
+            )
             continue
 
         try:
@@ -257,17 +298,22 @@ def migrate_dotenv_credentials(
             updates = {field: value}
 
         update_db_backend(conn, backend_name, updates)
-        migrated.append({**finding, "applied": True})
-        drop_keys.add(env_key)
+        public_finding = {
+            key: entry_value
+            for key, entry_value in finding.items()
+            if key != "value"
+        }
+        migrated.append({**public_finding, "applied": True})
+        drop_linenos.add(finding["lineno"])
 
     backup_path: Optional[Path] = None
     rewritten = False
-    if drop_keys:
+    if drop_linenos:
         backup_path = target.with_name(
             f"{target.name}.pre-credentials-migration-{_now_stamp()}.bak"
         )
         shutil.copy2(target, backup_path)
-        _rewrite_dotenv_without(target, drop_keys)
+        _rewrite_dotenv_without(target, drop_linenos)
         rewritten = True
 
     return {

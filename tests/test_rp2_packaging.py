@@ -22,6 +22,8 @@ import textwrap
 import unittest
 from pathlib import Path
 
+from kassiber.errors import AppError
+
 
 _ROOT = Path(__file__).resolve().parents[1]
 
@@ -63,6 +65,65 @@ class Rp2ReadOnlyCwdImportTest(unittest.TestCase):
         finally:
             os.chmod(scratch, stat.S_IRWXU)
             shutil.rmtree(scratch, ignore_errors=True)
+
+    def test_get_rp2_modules_leaves_no_file_logger_or_log_file(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="kassiber-rp2-log-test-") as tmp:
+            script = textwrap.dedent(
+                f"""
+                import logging
+                import pathlib
+                import tempfile
+
+                tempfile.tempdir = {str(tmp)!r}
+
+                from kassiber.core.engines.rp2 import _get_rp2_modules
+
+                modules = _get_rp2_modules()
+                assert "InTransaction" in modules, modules.keys()
+                root = pathlib.Path(tempfile.gettempdir()) / "kassiber-rp2-logs"
+                log_files = list(root.rglob("rp2_*.log")) if root.exists() else []
+                handlers = logging.getLogger("rp2").handlers
+                assert not log_files, [str(path) for path in log_files]
+                assert not any(isinstance(handler, logging.FileHandler) for handler in handlers), handlers
+                assert any(isinstance(handler, logging.NullHandler) for handler in handlers), handlers
+                print("ok")
+                """
+            ).strip()
+            env = {**os.environ, "PYTHONPATH": str(_ROOT)}
+            result = subprocess.run(
+                [sys.executable, "-c", script],
+                env=env,
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=60,
+            )
+            self.assertEqual(
+                result.returncode,
+                0,
+                msg=(
+                    "rp2 import should leave no disk logger; "
+                    f"stdout={result.stdout!r} stderr={result.stderr!r}"
+                ),
+            )
+            self.assertIn("ok", result.stdout)
+
+    def test_rp2_configuration_rejects_delimited_tokens(self) -> None:
+        from kassiber.core.engines.rp2 import _rp2_configuration
+
+        cases = [
+            ("wallet_label", {"label": "Default"}, ["Cold, Savings"], ["BTC"]),
+            ("profile_label", {"label": "Alice\nBob"}, ["Cold"], ["BTC"]),
+            ("asset", {"label": "Default"}, ["Cold"], ["BTC=USD"]),
+        ]
+        for field, profile, wallet_labels, assets in cases:
+            with self.subTest(field=field):
+                with self.assertRaises(AppError) as raised:
+                    with _rp2_configuration(profile, wallet_labels, assets):
+                        pass
+
+                self.assertEqual(raised.exception.code, "validation")
+                self.assertEqual(raised.exception.details["field"], field)
 
 
 if __name__ == "__main__":

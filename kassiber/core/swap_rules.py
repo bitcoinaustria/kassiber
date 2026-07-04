@@ -32,6 +32,7 @@ import json
 from dataclasses import dataclass
 from typing import Iterable, Mapping, Optional, Sequence
 
+from ..util import parse_bool
 from .transfer_matching import (
     CONFIDENCE_EXACT,
     CONFIDENCE_STRONG,
@@ -123,6 +124,7 @@ def load_rule(record: Mapping) -> SwapMatchingRule:
         predicate = {}
     if not isinstance(predicate, dict):
         predicate = {}
+    raw_enabled = _record_get(record, "enabled")
     return SwapMatchingRule(
         id=str(_record_get(record, "id") or ""),
         profile_id=str(_record_get(record, "profile_id") or ""),
@@ -130,7 +132,7 @@ def load_rule(record: Mapping) -> SwapMatchingRule:
         predicate=predicate,
         kind=str(_record_get(record, "kind") or "manual"),
         policy=str(_record_get(record, "policy") or "carrying-value"),
-        enabled=bool(_record_get(record, "enabled") if _record_get(record, "enabled") is not None else 1),
+        enabled=parse_bool(raw_enabled, default=True),
     )
 
 
