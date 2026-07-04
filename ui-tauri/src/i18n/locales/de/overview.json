@@ -169,8 +169,8 @@
     "noSources": "Keine Quellen verbunden"
   },
   "health": {
-    "title": "Bücher-Zustand",
-    "subtitle": "Was vor den Berichten Aufmerksamkeit braucht",
+    "title": "Buch-Bereitschaft",
+    "subtitle": "Berichte, Prüfung und Quellen",
     "panelAria": "Bücher-Zustand",
     "journals": {
       "title": "Journalstand",

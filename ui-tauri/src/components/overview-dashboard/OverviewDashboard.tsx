@@ -61,7 +61,7 @@ export const OverviewDashboard = ({
   });
   const transactions = React.useMemo(
     () => overviewTransactions(snapshot),
-    [snapshot.txs],
+    [snapshot],
   );
   const fiatCurrency = activeMarketFiatCurrency(snapshot);
   const fiatRate = activeMarketFiatRate(snapshot);
@@ -187,8 +187,8 @@ export const OverviewDashboard = ({
           isMarketRateRefreshing={refreshMarketRate.isPending}
           onRefreshMarketRate={refreshMarketRateState}
         />
-        <div className="grid grid-cols-1 items-start gap-3 2xl:grid-cols-[minmax(0,1fr)_380px]">
-          <div className="grid min-w-0 gap-3">
+        <div className="grid grid-cols-1 items-start gap-2.5 2xl:grid-cols-[minmax(0,1fr)_348px]">
+          <div className="grid min-w-0 gap-2.5">
             <BtcActivityChart
               snapshot={snapshot}
               hideSensitive={hideSensitive}
@@ -206,7 +206,7 @@ export const OverviewDashboard = ({
               fiatCurrency={fiatCurrency}
             />
           </div>
-          <div className="grid min-w-0 gap-3">
+          <div className="grid min-w-0 gap-2.5">
             <OverviewSidePanel
               snapshot={snapshot}
               hideSensitive={hideSensitive}

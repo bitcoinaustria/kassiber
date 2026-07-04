@@ -1,8 +1,7 @@
 import { Link } from "@tanstack/react-router";
-import { CheckCircle2, FileText } from "lucide-react";
+import { CheckCircle2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
-import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { OverviewSnapshot } from "@/mocks/seed";
 
@@ -33,24 +32,22 @@ export const BooksHealthPanel = ({
   onProcessJournals: () => void;
   isProcessingJournals: boolean;
 }) => {
-  const { t } = useTranslation(["overview", "nav"]);
+  const { t } = useTranslation("overview");
   const healthItems = buildOverviewHealthItems(snapshot);
   const primaryAction = buildPrimaryOverviewAction(snapshot);
   const PrimaryIcon = primaryAction?.icon;
   const needsJournals = Boolean(snapshot.status?.needsJournals);
 
   return (
-    <div className={cn("rounded-xl border bg-card", className)}>
+    <div className={cn("overflow-hidden rounded-lg border bg-card", className)}>
       <div className="flex items-center justify-between gap-3 px-3 pt-3 sm:px-4">
         <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="icon"
-            className="size-7 shrink-0 sm:size-8"
-            aria-label={t("health.panelAria")}
+          <span
+            className="flex size-7 shrink-0 items-center justify-center rounded-md border bg-background text-muted-foreground sm:size-8"
+            aria-hidden="true"
           >
             <CheckCircle2 className="size-4 text-muted-foreground sm:size-[18px]" />
-          </Button>
+          </span>
           <div>
             <span className="text-sm font-medium">
               {t("health.title")}
@@ -148,13 +145,6 @@ export const BooksHealthPanel = ({
             );
           })}
         </div>
-
-        <Button asChild variant="ghost" size="sm" className="h-8 w-full">
-          <Link to="/reports">
-            <FileText className="size-4" aria-hidden="true" />
-            {t("nav:book.reports")}
-          </Link>
-        </Button>
       </div>
     </div>
   );

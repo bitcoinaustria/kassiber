@@ -661,7 +661,7 @@ export const BtcActivityChart = ({
     return (
       <div
         className={cn(
-          "treasury-chart-card relative z-10 flex min-w-0 flex-1 flex-col gap-4 rounded-xl border bg-card p-3 sm:p-4",
+          "treasury-chart-card relative z-10 flex min-w-0 flex-1 flex-col gap-3 rounded-lg border bg-card p-3",
           expanded
             ? "h-full overflow-y-auto rounded-none border-0 xl:overflow-visible"
             : "overflow-visible",
@@ -691,7 +691,7 @@ export const BtcActivityChart = ({
           onResetMarkerMinimums={resetActivityMarkerMinimums}
           hideSensitive={hideSensitive}
         />
-        <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex flex-wrap items-start justify-between gap-2">
           <div
             className="min-w-0"
             aria-label={t("treasury.chartLabel")}
@@ -705,7 +705,7 @@ export const BtcActivityChart = ({
                   {t("treasury.asOf", { date: detailDate })}
                 </span>
               )}
-              {priceSyncLabel && (
+              {expanded && priceSyncLabel && (
                 <span
                   className="text-[10px] text-muted-foreground"
                   title={priceSyncDetail}
@@ -715,59 +715,83 @@ export const BtcActivityChart = ({
               )}
             </div>
             {hasChartData && (
-            <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-              <span>
-                {t("treasury.net")}{" "}
-                <span
-                  className={cn(
-                    "font-semibold",
-                    netBtc >= 0
-                      ? "text-emerald-600 dark:text-emerald-400"
-                      : "text-[var(--kb-accent)]",
-                    blurClass(hideSensitive),
-                  )}
-                >
-                  {formatBtc(netBtc, { precision: 4, sign: true })}
-                </span>
-              </span>
-              <span>
-                {t("treasury.in")}{" "}
-                <span className={cn("font-semibold text-foreground", blurClass(hideSensitive))}>
-                  {formatBtc(receivedBtc, { precision: 4 })}
-                </span>
-              </span>
-              <span>
-                {t("treasury.out")}{" "}
-                <span className={cn("font-semibold text-foreground", blurClass(hideSensitive))}>
-                  {formatBtc(spentBtc, { precision: 4 })}
-                </span>
-              </span>
-              {swapBtc > 0 && (
+              <div className="mt-1.5 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[11px] text-muted-foreground sm:text-xs">
                 <span>
-                  {t("treasury.swap")}{" "}
-                  <span className={cn("font-semibold text-foreground", blurClass(hideSensitive))}>
-                    {formatBtc(swapBtc, { precision: 4 })}
+                  {t("treasury.net")}{" "}
+                  <span
+                    className={cn(
+                      "font-semibold",
+                      netBtc >= 0
+                        ? "text-emerald-600 dark:text-emerald-400"
+                        : "text-[var(--kb-accent)]",
+                      blurClass(hideSensitive),
+                    )}
+                  >
+                    {formatBtc(netBtc, { precision: 4, sign: true })}
                   </span>
                 </span>
-              )}
-              {gainPct !== null && (
-                <span
-                  className={cn(
-                    "font-semibold",
-                    gainEur >= 0
-                      ? "text-emerald-600 dark:text-emerald-400"
-                      : "text-[var(--kb-accent)]",
-                    blurClass(hideSensitive),
-                  )}
-                >
-                  {gainEur >= 0 ? "+ " : "- "}
-                  {t("treasury.unrealized", {
-                    percent: Math.abs(gainPct).toFixed(2),
-                    currency: fiatCurrency,
+                <span>
+                  {t("treasury.events", {
+                    count: visibleActivityMarkers.length,
                   })}
                 </span>
-              )}
-            </div>
+                {expanded && (
+                  <span>
+                    {t("treasury.in")}{" "}
+                    <span
+                      className={cn(
+                        "font-semibold text-foreground",
+                        blurClass(hideSensitive),
+                      )}
+                    >
+                      {formatBtc(receivedBtc, { precision: 4 })}
+                    </span>
+                  </span>
+                )}
+                {expanded && (
+                  <span>
+                    {t("treasury.out")}{" "}
+                    <span
+                      className={cn(
+                        "font-semibold text-foreground",
+                        blurClass(hideSensitive),
+                      )}
+                    >
+                      {formatBtc(spentBtc, { precision: 4 })}
+                    </span>
+                  </span>
+                )}
+                {expanded && swapBtc > 0 && (
+                  <span>
+                    {t("treasury.swap")}{" "}
+                    <span
+                      className={cn(
+                        "font-semibold text-foreground",
+                        blurClass(hideSensitive),
+                      )}
+                    >
+                      {formatBtc(swapBtc, { precision: 4 })}
+                    </span>
+                  </span>
+                )}
+                {gainPct !== null && (
+                  <span
+                    className={cn(
+                      "font-semibold",
+                      gainEur >= 0
+                        ? "text-emerald-600 dark:text-emerald-400"
+                        : "text-[var(--kb-accent)]",
+                      blurClass(hideSensitive),
+                    )}
+                  >
+                    {gainEur >= 0 ? "+ " : "- "}
+                    {t("treasury.unrealized", {
+                      percent: Math.abs(gainPct).toFixed(2),
+                      currency: fiatCurrency,
+                    })}
+                  </span>
+                )}
+              </div>
             )}
           </div>
 
@@ -801,73 +825,82 @@ export const BtcActivityChart = ({
 
         {hasChartData ? (
           <>
-        <div className="mt-1 flex select-none flex-wrap items-center justify-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
-          {legendItems.map((item) => (
-            <button
-              key={item.key}
-              type="button"
-              aria-label={t("treasury.seriesToggle", {
-                action: seriesVisible[item.key]
-                  ? t("common:actions.hide")
-                  : t("common:actions.show"),
-                label: item.label,
-              })}
-              aria-pressed={seriesVisible[item.key]}
-              className={cn(
-                "inline-flex items-center gap-1.5 rounded px-1.5 py-0.5 text-current transition-[background-color,opacity] duration-200 hover:bg-muted/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none",
-                !seriesVisible[item.key] && "opacity-30",
-                activeSeries !== null &&
-                  activeSeries !== item.key &&
-                  "opacity-40",
-              )}
-              onClick={() => toggleSeries(item.key)}
-              // Don't take focus on click: macOS Full Keyboard Access draws a
-              // native focus ring that ignores CSS. Tab focus still works.
-              onMouseDown={(event) => event.preventDefault()}
-              onMouseEnter={() => handleHover(item.key)}
-              onMouseLeave={() => handleHover(null)}
-            >
-              {item.key === "events" ? (
-                <ActivityLegendSwatch muted={!seriesVisible.events} />
-              ) : (
-                <span
+            <div className="flex select-none flex-wrap items-center justify-start gap-x-2 gap-y-1 text-[11px] text-muted-foreground sm:text-xs">
+              {legendItems.map((item) => (
+                <button
+                  key={item.key}
+                  type="button"
+                  aria-label={t("treasury.seriesToggle", {
+                    action: seriesVisible[item.key]
+                      ? t("common:actions.hide")
+                      : t("common:actions.show"),
+                    label: item.label,
+                  })}
+                  aria-pressed={seriesVisible[item.key]}
                   className={cn(
-                    "h-0.5 w-5 rounded-full",
-                    item.dashed && "border-t border-dashed bg-transparent",
+                    "inline-flex items-center gap-1.5 rounded px-1.5 py-0.5 text-current transition-[background-color,opacity] duration-200 hover:bg-muted/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none",
+                    !seriesVisible[item.key] && "opacity-30",
+                    activeSeries !== null &&
+                      activeSeries !== item.key &&
+                      "opacity-40",
                   )}
-                  style={{
-                    backgroundColor: item.dashed ? "transparent" : item.color,
-                    borderColor: item.color,
-                  }}
-                />
-              )}
-              <span>{item.label}</span>
-            </button>
-          ))}
-        </div>
+                  onClick={() => toggleSeries(item.key)}
+                  // Don't take focus on click: macOS Full Keyboard Access draws a
+                  // native focus ring that ignores CSS. Tab focus still works.
+                  onMouseDown={(event) => event.preventDefault()}
+                  onMouseEnter={() => handleHover(item.key)}
+                  onMouseLeave={() => handleHover(null)}
+                >
+                  {item.key === "events" ? (
+                    <ActivityLegendSwatch muted={!seriesVisible.events} />
+                  ) : (
+                    <span
+                      className={cn(
+                        "h-0.5 w-5 rounded-full",
+                        item.dashed && "border-t border-dashed bg-transparent",
+                      )}
+                      style={{
+                        backgroundColor: item.dashed ? "transparent" : item.color,
+                        borderColor: item.color,
+                      }}
+                    />
+                  )}
+                  <span>{item.label}</span>
+                </button>
+              ))}
+            </div>
 
-        <div
-          className={cn(
-            "min-w-0",
-            expanded
-              ? "relative flex min-h-0 flex-1 flex-col gap-3"
-              : "relative",
-          )}
-        >
+            <div
+              className={cn(
+                "min-w-0",
+                expanded
+                  ? "relative flex min-h-0 flex-1 flex-col gap-3"
+                  : "relative",
+              )}
+            >
           <div
             className={cn(
               "relative flex w-full min-w-0 select-none flex-col",
               expanded
                 ? "h-[min(66vh,648px)] xl:h-auto xl:min-h-0 xl:flex-1"
-                : "h-[408px] sm:h-[484px]",
+                : "h-[352px] sm:h-[420px]",
             )}
           >
-            <div className="grid min-h-0 flex-1 grid-cols-[18px_minmax(0,1fr)_20px]">
-              <div className="pointer-events-none flex items-center justify-center">
-                <span className="-rotate-90 whitespace-nowrap text-[10px] font-semibold text-muted-foreground">
-                  {t("treasury.series.bitcoinBalance")}
-                </span>
-              </div>
+            <div
+              className={cn(
+                "grid min-h-0 flex-1",
+                expanded
+                  ? "grid-cols-[18px_minmax(0,1fr)_20px]"
+                  : "grid-cols-1",
+              )}
+            >
+              {expanded && (
+                <div className="pointer-events-none flex items-center justify-center">
+                  <span className="-rotate-90 whitespace-nowrap text-[10px] font-semibold text-muted-foreground">
+                    {t("treasury.series.bitcoinBalance")}
+                  </span>
+                </div>
+              )}
               <div
                 className="flex h-full min-h-0 w-full flex-col overflow-visible"
                 onClickCapture={handleChartClick}
@@ -1154,7 +1187,7 @@ export const BtcActivityChart = ({
                     config={chartConfig}
                     className={cn(
                       "w-full overflow-visible",
-                      expanded ? "h-[60px]" : "h-[74px]",
+                      expanded ? "h-[60px]" : "h-[54px]",
                     )}
                     title={t("treasury.dragHint")}
                   >
@@ -1177,7 +1210,7 @@ export const BtcActivityChart = ({
                         dataKey="date"
                         endIndex={effectiveBrushRange.endIndex}
                         fill="color-mix(in oklch, var(--muted) 70%, var(--background))"
-                        height={expanded ? 60 : 74}
+                        height={expanded ? 60 : 54}
                         onClick={handleChartClick}
                         onDoubleClick={handleChartDoubleClick}
                         onMouseDownCapture={handleChartMouseDown}
@@ -1231,13 +1264,15 @@ export const BtcActivityChart = ({
                   </ChartContainer>
                 )}
               </div>
-              <div className="pointer-events-none flex items-center justify-center">
-                {fiatSeriesEnabled ? (
-                  <span className="rotate-90 whitespace-nowrap text-[10px] font-semibold text-muted-foreground">
-                    {t("treasury.btcPriceAxis", { currency: fiatCurrency })}
-                  </span>
-                ) : null}
-              </div>
+              {expanded && (
+                <div className="pointer-events-none flex items-center justify-center">
+                  {fiatSeriesEnabled ? (
+                    <span className="rotate-90 whitespace-nowrap text-[10px] font-semibold text-muted-foreground">
+                      {t("treasury.btcPriceAxis", { currency: fiatCurrency })}
+                    </span>
+                  ) : null}
+                </div>
+              )}
             </div>
             <ChartRangeToolbar
               period={period}
@@ -1265,13 +1300,13 @@ export const BtcActivityChart = ({
               />
             </div>
           )}
-        </div>
-        </>
+            </div>
+          </>
         ) : (
           <div
             className={cn(
               "flex w-full min-w-0 flex-col items-center justify-center gap-3 rounded-lg border border-dashed bg-background/40 px-6 text-center",
-              expanded ? "min-h-0 flex-1" : "h-[380px] sm:h-[456px]",
+              expanded ? "min-h-0 flex-1" : "h-[320px] sm:h-[388px]",
             )}
           >
             <LineChart

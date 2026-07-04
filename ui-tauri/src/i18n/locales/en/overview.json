@@ -169,8 +169,8 @@
     "noSources": "No sources connected"
   },
   "health": {
-    "title": "Books Health",
-    "subtitle": "What needs attention before reports",
+    "title": "Book readiness",
+    "subtitle": "Reports, review, and sources",
     "panelAria": "Books health",
     "journals": {
       "title": "Journal state",

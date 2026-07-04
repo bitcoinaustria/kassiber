@@ -72,7 +72,7 @@ export const RecentTransactionsTable = ({
   >("all");
   const [currentPage, setCurrentPage] = React.useState(1);
   const [isHydrated, setIsHydrated] = React.useState(false);
-  const pageSize = 6;
+  const pageSize = 5;
 
   React.useEffect(() => {
     if (typeof window === "undefined") return;
@@ -142,13 +142,13 @@ export const RecentTransactionsTable = ({
 
   return (
     <>
-      <div className={cn("rounded-xl border bg-card", className)}>
+      <div className={cn("overflow-hidden rounded-lg border bg-card", className)}>
       <div className="flex items-center justify-between gap-3 px-3 pt-3 sm:px-4">
         <div className="flex items-center gap-2">
           <span className="text-sm font-medium">
             {resolvedTitle}
           </span>
-          <span className="ml-1 inline-flex items-center rounded-md bg-gray-50 px-2 py-1 text-[10px] font-medium text-gray-600 ring-1 ring-gray-500/10 ring-inset sm:text-xs dark:bg-gray-800/50 dark:text-gray-400 dark:ring-gray-400/20">
+          <span className="text-xs tabular-nums text-muted-foreground">
             {filteredTransactions.length}
           </span>
         </div>
@@ -198,7 +198,7 @@ export const RecentTransactionsTable = ({
             {t("recentTx.empty")}
           </div>
         ) : (
-          <div className="divide-y rounded-lg border bg-background/50">
+          <div className="divide-y rounded-md border bg-background">
             {paginatedTransactions.map((tx) => {
               const flow = tx.flow ?? "incoming";
               const FlowIcon =
@@ -234,7 +234,7 @@ export const RecentTransactionsTable = ({
               const primaryTag = tx.tags[0] ?? flowLabel;
               const extraTags = Math.max(0, tx.tags.length - 1);
               const rowClassName =
-                "group flex min-w-0 items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+                "group flex min-w-0 items-center gap-3 px-3 py-2 text-left transition-colors hover:bg-muted/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
               const rowContent = (
                 <>
                   <span
@@ -290,14 +290,6 @@ export const RecentTransactionsTable = ({
                           {tx.scopeLabel}
                         </span>
                       ) : null}
-                    </span>
-                    <span
-                      className={cn(
-                        "mt-1 hidden truncate font-mono text-[10px] text-muted-foreground sm:block",
-                        blurClass(hideSensitive),
-                      )}
-                    >
-                      {flowLabel} · {tx.txid}
                     </span>
                   </span>
                   <span className="ml-auto flex shrink-0 flex-col items-end gap-0.5 pl-2 text-right">

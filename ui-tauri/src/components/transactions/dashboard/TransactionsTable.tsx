@@ -11,6 +11,8 @@ import {
   Eye,
   Filter,
   Link2Off,
+  Maximize2,
+  Minimize2,
   MoreHorizontal,
   Pencil,
   X,
@@ -206,6 +208,8 @@ const TransactionsTable = ({
   onLoadMoreRecords,
   deepLinkedTransactionId,
   deepLinkedTransactionTab = "details",
+  isExpanded = false,
+  onExpandedChange,
 }: {
   records: Transaction[];
   hideSensitive: boolean;
@@ -226,6 +230,8 @@ const TransactionsTable = ({
   onLoadMoreRecords?: () => void;
   deepLinkedTransactionId?: string | null;
   deepLinkedTransactionTab?: string;
+  isExpanded?: boolean;
+  onExpandedChange?: (expanded: boolean) => void;
 }) => {
   const { t } = useTranslation("transactions");
   const navigate = useNavigate();
@@ -253,6 +259,11 @@ const TransactionsTable = ({
   const tableRef = React.useRef<HTMLDivElement>(null);
   const tableScrollRef = React.useRef<HTMLDivElement>(null);
   const lastAutoLoadRowCountRef = React.useRef<number | null>(null);
+  const tableToolbarClickTimerRef = React.useRef<number | null>(null);
+  const [tableCardFrame, setTableCardFrame] = React.useState<{
+    height: number;
+    marginBottom: number;
+  } | null>(null);
   const [drafts, setDrafts] = React.useState<Record<string, TransactionEditDraft>>(
     {},
   );
@@ -845,9 +856,54 @@ const TransactionsTable = ({
       ) {
         return;
       }
-      scrollTableIntoView();
+      if (typeof window === "undefined") {
+        scrollTableIntoView();
+        return;
+      }
+      if (tableToolbarClickTimerRef.current !== null) {
+        window.clearTimeout(tableToolbarClickTimerRef.current);
+      }
+      tableToolbarClickTimerRef.current = window.setTimeout(() => {
+        tableToolbarClickTimerRef.current = null;
+        scrollTableIntoView();
+      }, 220);
     },
     [scrollTableIntoView],
+  );
+  const handleTableToolbarDoubleClick = React.useCallback(
+    (event: React.MouseEvent<HTMLDivElement>) => {
+      if (!onExpandedChange) return;
+      const target = event.target;
+      if (!(target instanceof HTMLElement)) return;
+      if (
+        target.closest(
+          'button, a, input, select, textarea, [role="button"], [role="menuitem"], [data-radix-collection-item]',
+        )
+      ) {
+        return;
+      }
+      if (
+        typeof window !== "undefined" &&
+        tableToolbarClickTimerRef.current !== null
+      ) {
+        window.clearTimeout(tableToolbarClickTimerRef.current);
+        tableToolbarClickTimerRef.current = null;
+      }
+      onExpandedChange(!isExpanded);
+    },
+    [isExpanded, onExpandedChange],
+  );
+
+  React.useEffect(
+    () => () => {
+      if (
+        typeof window !== "undefined" &&
+        tableToolbarClickTimerRef.current !== null
+      ) {
+        window.clearTimeout(tableToolbarClickTimerRef.current);
+      }
+    },
+    [],
   );
 
   const filteredTransactions = React.useMemo(() => {
@@ -1001,6 +1057,83 @@ const TransactionsTable = ({
   const loadedRecordCount = filteredTransactions.length;
   const isCompleteRecordSet = !hasMoreRecords;
 
+  React.useLayoutEffect(() => {
+    if (typeof window === "undefined") return;
+
+    let frame = 0;
+    const measureTableCardHeight = () => {
+      window.cancelAnimationFrame(frame);
+      frame = window.requestAnimationFrame(() => {
+        const table = tableRef.current;
+        const appMain = document.getElementById("app-main");
+        if (!table || !appMain) return;
+
+        const tableRect = table.getBoundingClientRect();
+        const tableHost = table.parentElement;
+        const previousCardRect =
+          tableHost?.previousElementSibling?.getBoundingClientRect();
+        const dashboardShell = tableHost?.parentElement;
+        const appMainRect = appMain.getBoundingClientRect();
+        const appMainStyle = window.getComputedStyle(appMain);
+        const appMainPaddingBottom =
+          Number.parseFloat(appMainStyle.paddingBottom) || 0;
+        const dashboardShellPaddingBottom = dashboardShell
+          ? Number.parseFloat(window.getComputedStyle(dashboardShell).paddingBottom) || 0
+          : 0;
+        const stackGap = previousCardRect
+          ? Math.max(0, tableRect.top - previousCardRect.bottom)
+          : 12;
+        const bottomGap = isExpanded
+          ? stackGap
+          : stackGap - dashboardShellPaddingBottom;
+        const minHeight = Math.floor(window.innerHeight * 0.8);
+        // In normal mode AppShell reserves scrollable bottom padding for the
+        // assistant dock. Pull the card edge through that padding so the page
+        // does not end in blank canvas below the table; expanded mode
+        // suppresses the dock at the shell level.
+        const availableHeight = Math.floor(
+          appMainRect.bottom - tableRect.top - bottomGap,
+        );
+        const nextHeight = Math.max(minHeight, availableHeight);
+        const nextMarginBottom = isExpanded
+          ? 0
+          : -Math.max(0, appMainPaddingBottom - bottomGap);
+
+        setTableCardFrame((current) => {
+          if (
+            current !== null &&
+            Math.abs(current.height - nextHeight) < 2 &&
+            Math.abs(current.marginBottom - nextMarginBottom) < 2
+          ) {
+            return current;
+          }
+          return { height: nextHeight, marginBottom: nextMarginBottom };
+        });
+      });
+    };
+
+    measureTableCardHeight();
+    window.addEventListener("resize", measureTableCardHeight);
+
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.removeEventListener("resize", measureTableCardHeight);
+    };
+  }, [
+    chartSelection,
+    quickFilter,
+    breakdownSelection,
+    statusFilter,
+    flowFilter,
+    paymentMethodFilter,
+    feeFilter,
+    tableSort,
+    isRefreshing,
+    filteredTransactions.length,
+    hasMoreRecords,
+    isExpanded,
+  ]);
+
   React.useEffect(() => {
     tableScrollRef.current?.scrollTo({ top: 0 });
   }, [
@@ -1013,6 +1146,11 @@ const TransactionsTable = ({
     feeFilter,
     tableSort,
   ]);
+
+  React.useEffect(() => {
+    if (!isExpanded) return;
+    tableScrollRef.current?.scrollTo({ top: 0 });
+  }, [isExpanded]);
 
   React.useEffect(() => {
     if (isRefreshing) return;
@@ -1241,104 +1379,150 @@ const TransactionsTable = ({
     <>
       <div
         ref={tableRef}
-        className="scroll-mt-24 rounded-xl border bg-card"
+        className="flex scroll-mt-24 flex-col overflow-hidden rounded-xl border bg-card"
+        style={
+          tableCardFrame === null
+            ? undefined
+            : {
+                height: tableCardFrame.height,
+                marginBottom: tableCardFrame.marginBottom,
+              }
+        }
         role={isRefreshing ? "status" : undefined}
         aria-live={isRefreshing ? "polite" : undefined}
       >
-      <div
-        className="flex flex-col gap-3 p-3 sm:flex-row sm:items-center sm:gap-4 sm:px-6 sm:py-3.5"
-        onClick={handleTableToolbarClick}
-      >
-        <div className="flex flex-1 items-center gap-2">
-          <span className="text-sm font-medium sm:text-base">{t("table.title")}</span>
-        </div>
+        <div
+          className="flex flex-col gap-3 p-3 sm:flex-row sm:items-center sm:gap-4 sm:px-6 sm:py-3.5"
+          onClick={handleTableToolbarClick}
+          onDoubleClick={handleTableToolbarDoubleClick}
+        >
+          <div className="flex flex-1 items-center gap-2">
+            <span className="text-sm font-medium sm:text-base">
+              {t("table.title")}
+            </span>
+          </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
+          <div className="flex flex-wrap items-center gap-2">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className={cn(
+                    "h-8 gap-1.5 sm:h-9 sm:gap-2",
+                    activeFilterCount > 0 && "border-primary",
+                  )}
+                  aria-label={t("table.filter.menuAria")}
+                >
+                  <Filter className="size-3.5 sm:size-4" aria-hidden="true" />
+                  <span>{t("table.filter.menuTrigger")}</span>
+                  {activeFilterCount > 0 ? (
+                    <span className="grid min-w-4 place-items-center rounded-full bg-primary px-1 text-[10px] font-semibold leading-4 text-primary-foreground">
+                      {activeFilterCount}
+                    </span>
+                  ) : null}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-[220px]">
+                <DropdownMenuLabel>
+                  {t("table.filter.menuLabel")}
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuSub>
+                  <DropdownMenuSubTrigger>
+                    <span>{t("table.filter.statusTrigger")}</span>
+                    {statusFilter !== "all" ? (
+                      <span className="ml-1 size-1.5 rounded-full bg-primary" />
+                    ) : null}
+                  </DropdownMenuSubTrigger>
+                  <DropdownMenuSubContent className="w-[180px]">
+                    {renderStatusFilterItems()}
+                  </DropdownMenuSubContent>
+                </DropdownMenuSub>
+                <DropdownMenuSub>
+                  <DropdownMenuSubTrigger>
+                    <span>{t("table.filter.flowTrigger")}</span>
+                    {flowFilter !== "all" ? (
+                      <span className="ml-1 size-1.5 rounded-full bg-primary" />
+                    ) : null}
+                  </DropdownMenuSubTrigger>
+                  <DropdownMenuSubContent className="w-[190px]">
+                    {renderFlowFilterItems()}
+                  </DropdownMenuSubContent>
+                </DropdownMenuSub>
+                <DropdownMenuSub>
+                  <DropdownMenuSubTrigger>
+                    <span>{t("table.filter.networkTrigger")}</span>
+                    {paymentMethodFilter !== "all" ? (
+                      <span className="ml-1 size-1.5 rounded-full bg-primary" />
+                    ) : null}
+                  </DropdownMenuSubTrigger>
+                  <DropdownMenuSubContent className="w-[200px]">
+                    {renderNetworkFilterItems()}
+                  </DropdownMenuSubContent>
+                </DropdownMenuSub>
+                <DropdownMenuSub>
+                  <DropdownMenuSubTrigger disabled={walletOptions.length === 0}>
+                    <span>{t("table.filter.walletTrigger")}</span>
+                    {walletFilterActive ? (
+                      <span className="ml-1 size-1.5 rounded-full bg-primary" />
+                    ) : null}
+                  </DropdownMenuSubTrigger>
+                  <DropdownMenuSubContent className="max-h-[320px] w-[220px] overflow-y-auto">
+                    {renderWalletFilterItems()}
+                  </DropdownMenuSubContent>
+                </DropdownMenuSub>
+                <DropdownMenuSub>
+                  <DropdownMenuSubTrigger>
+                    <span>{t("table.filter.feesTrigger")}</span>
+                    {feeFilter !== "all" ? (
+                      <span className="ml-1 size-1.5 rounded-full bg-primary" />
+                    ) : null}
+                  </DropdownMenuSubTrigger>
+                  <DropdownMenuSubContent className="w-[180px]">
+                    {renderFeeFilterItems()}
+                  </DropdownMenuSubContent>
+                </DropdownMenuSub>
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            {onExpandedChange ? (
               <Button
                 variant="outline"
                 size="sm"
-                className={cn(
-                  "h-8 gap-1.5 sm:h-9 sm:gap-2",
-                  activeFilterCount > 0 && "border-primary",
-                )}
-                aria-label={t("table.filter.menuAria")}
+                className="h-8 w-8 p-0 sm:h-9 sm:w-9"
+                aria-label={
+                  isExpanded
+                    ? t("table.expand.collapseAria")
+                    : t("table.expand.expandAria")
+                }
+                title={
+                  isExpanded
+                    ? t("table.expand.collapseAria")
+                    : t("table.expand.expandAria")
+                }
+                onClick={() => onExpandedChange(!isExpanded)}
               >
-                <Filter className="size-3.5 sm:size-4" aria-hidden="true" />
-                <span>{t("table.filter.menuTrigger")}</span>
-                {activeFilterCount > 0 ? (
-                  <span className="grid min-w-4 place-items-center rounded-full bg-primary px-1 text-[10px] font-semibold leading-4 text-primary-foreground">
-                    {activeFilterCount}
-                  </span>
-                ) : null}
+                {isExpanded ? (
+                  <Minimize2
+                    className="size-3.5 sm:size-4"
+                    aria-hidden="true"
+                  />
+                ) : (
+                  <Maximize2
+                    className="size-3.5 sm:size-4"
+                    aria-hidden="true"
+                  />
+                )}
+                <span className="sr-only">
+                  {isExpanded
+                    ? t("table.expand.collapse")
+                    : t("table.expand.expand")}
+                </span>
               </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent
-              align="end"
-              className="w-[220px]"
-            >
-              <DropdownMenuLabel>{t("table.filter.menuLabel")}</DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <DropdownMenuSub>
-                <DropdownMenuSubTrigger>
-                  <span>{t("table.filter.statusTrigger")}</span>
-                  {statusFilter !== "all" ? (
-                    <span className="ml-1 size-1.5 rounded-full bg-primary" />
-                  ) : null}
-                </DropdownMenuSubTrigger>
-                <DropdownMenuSubContent className="w-[180px]">
-                  {renderStatusFilterItems()}
-                </DropdownMenuSubContent>
-              </DropdownMenuSub>
-              <DropdownMenuSub>
-                <DropdownMenuSubTrigger>
-                  <span>{t("table.filter.flowTrigger")}</span>
-                  {flowFilter !== "all" ? (
-                    <span className="ml-1 size-1.5 rounded-full bg-primary" />
-                  ) : null}
-                </DropdownMenuSubTrigger>
-                <DropdownMenuSubContent className="w-[190px]">
-                  {renderFlowFilterItems()}
-                </DropdownMenuSubContent>
-              </DropdownMenuSub>
-              <DropdownMenuSub>
-                <DropdownMenuSubTrigger>
-                  <span>{t("table.filter.networkTrigger")}</span>
-                  {paymentMethodFilter !== "all" ? (
-                    <span className="ml-1 size-1.5 rounded-full bg-primary" />
-                  ) : null}
-                </DropdownMenuSubTrigger>
-                <DropdownMenuSubContent className="w-[200px]">
-                  {renderNetworkFilterItems()}
-                </DropdownMenuSubContent>
-              </DropdownMenuSub>
-              <DropdownMenuSub>
-                <DropdownMenuSubTrigger disabled={walletOptions.length === 0}>
-                  <span>{t("table.filter.walletTrigger")}</span>
-                  {walletFilterActive ? (
-                    <span className="ml-1 size-1.5 rounded-full bg-primary" />
-                  ) : null}
-                </DropdownMenuSubTrigger>
-                <DropdownMenuSubContent className="max-h-[320px] w-[220px] overflow-y-auto">
-                  {renderWalletFilterItems()}
-                </DropdownMenuSubContent>
-              </DropdownMenuSub>
-              <DropdownMenuSub>
-                <DropdownMenuSubTrigger>
-                  <span>{t("table.filter.feesTrigger")}</span>
-                  {feeFilter !== "all" ? (
-                    <span className="ml-1 size-1.5 rounded-full bg-primary" />
-                  ) : null}
-                </DropdownMenuSubTrigger>
-                <DropdownMenuSubContent className="w-[180px]">
-                  {renderFeeFilterItems()}
-                </DropdownMenuSubContent>
-              </DropdownMenuSub>
-            </DropdownMenuContent>
-          </DropdownMenu>
+            ) : null}
+          </div>
         </div>
-      </div>
 
       {hasActiveFilters && (
         <div className="flex flex-wrap items-center gap-2 px-3 pb-3 sm:px-6">
@@ -1479,11 +1663,10 @@ const TransactionsTable = ({
 
       <div
         ref={tableScrollRef}
-        className="overflow-auto px-3 pb-3 sm:px-6 sm:pb-4"
+        className="min-h-0 flex-1 overflow-auto px-3 pb-3 sm:px-6 sm:pb-4"
         role="region"
         aria-label={t("table.virtual.scrollRegion")}
         tabIndex={0}
-        style={{ maxHeight: "clamp(560px, calc(100vh - 18rem), 1120px)" }}
       >
         <table
           data-slot="table"

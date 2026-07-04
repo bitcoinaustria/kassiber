@@ -291,10 +291,16 @@
     }
   },
   "table": {
-    "title": "Transaktionen",
+    "title": "Buchtransaktionen",
     "filters": "Filter:",
     "clearAll": "Alle zurücksetzen",
     "withFees": "Mit Gebühren",
+    "expand": {
+      "expand": "Erweitern",
+      "collapse": "Zurück",
+      "expandAria": "Transaktionstabelle erweitern",
+      "collapseAria": "Transaktionstabelle zurücksetzen"
+    },
     "column": {
       "transaction": "Transaktion",
       "amount": "Betrag",

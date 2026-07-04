@@ -104,6 +104,7 @@ const TransactionsDashboard = ({
         ? { dimension: "wallet", key: deepLinkedWallet, match: "leg" }
         : null,
     );
+  const [tableExpanded, setTableExpanded] = React.useState(false);
   const [resetTableFiltersToken, setResetTableFiltersToken] = React.useState(0);
   const [newTransactionDraft, setNewTransactionDraft] =
     React.useState<NewTransactionDraft>(createNewTransactionDraft);
@@ -343,13 +344,42 @@ const TransactionsDashboard = ({
     window.history.replaceState(null, "", nextUrl);
   }, [period]);
 
+  React.useLayoutEffect(() => {
+    if (!tableExpanded || typeof window === "undefined") return;
+    const appMain = document.getElementById("app-main");
+    if (!appMain) return;
+
+    window.dispatchEvent(
+      new CustomEvent("kassiber:assistant-dock-suppressed", {
+        detail: { suppressed: true },
+      }),
+    );
+    const previousOverflowY = appMain.style.overflowY;
+    appMain.scrollTo({ top: 0 });
+    appMain.style.overflowY = "hidden";
+
+    return () => {
+      window.dispatchEvent(
+        new CustomEvent("kassiber:assistant-dock-suppressed", {
+          detail: { suppressed: false },
+        }),
+      );
+      appMain.style.overflowY = previousOverflowY;
+    };
+  }, [tableExpanded]);
+
   // Note: scrolling the table into view on a "Show all" deep link is handled by
   // TransactionsTable's own scroll-on-active-filter effect (the deep link seeds
   // breakdownSelection at mount), so no separate scroll is needed here.
 
   return (
     <div
-      className={cn(screenShellClassName, "relative", className)}
+      className={cn(
+        screenShellClassName,
+        tableExpanded && "flex h-full min-h-0 flex-col overflow-hidden",
+        "relative",
+        className,
+      )}
       aria-busy={showRefreshSkeleton}
     >
       <div
@@ -361,68 +391,79 @@ const TransactionsDashboard = ({
           onPeriodChange={handlePeriodChange}
           periodOptions={availablePeriods}
         />
-        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-8 gap-2 sm:h-9"
-                aria-label={t("dashboard.export.label")}
-                disabled={isExporting}
-              >
-                <Download className="size-4" aria-hidden="true" />
-                <span className="hidden sm:inline">
-                  {t("dashboard.export.label")}
-                </span>
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem
-                onSelect={() => handleExportTransactions("xlsx")}
-              >
-                {t("dashboard.export.xlsx")}
-              </DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => handleExportTransactions("csv")}>
-                {t("dashboard.export.csv")}
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-          <NewTransactionDialog
-            open={newTxnOpen}
-            draft={newTransactionDraft}
-            walletSourceOptions={
-              dataMode === "mock"
-                ? mockNewTransactionWalletSourceOptions
-                : realWalletSourceOptions
-            }
-            movementCandidates={dataMode === "mock" ? undefined : []}
-            onOpenChange={setNewTxnOpen}
-            onDraftChange={setNewTransactionDraft}
-            onSaveDraft={() => {
-              setNewTxnOpen(false);
-            }}
-          />
-        </div>
+        {!tableExpanded && (
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 gap-2 sm:h-9"
+                  aria-label={t("dashboard.export.label")}
+                  disabled={isExporting}
+                >
+                  <Download className="size-4" aria-hidden="true" />
+                  <span className="hidden sm:inline">
+                    {t("dashboard.export.label")}
+                  </span>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem
+                  onSelect={() => handleExportTransactions("xlsx")}
+                >
+                  {t("dashboard.export.xlsx")}
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onSelect={() => handleExportTransactions("csv")}
+                >
+                  {t("dashboard.export.csv")}
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <NewTransactionDialog
+              open={newTxnOpen}
+              draft={newTransactionDraft}
+              walletSourceOptions={
+                dataMode === "mock"
+                  ? mockNewTransactionWalletSourceOptions
+                  : realWalletSourceOptions
+              }
+              movementCandidates={dataMode === "mock" ? undefined : []}
+              onOpenChange={setNewTxnOpen}
+              onDraftChange={setNewTransactionDraft}
+              onSaveDraft={() => {
+                setNewTxnOpen(false);
+              }}
+            />
+          </div>
+        )}
       </div>
 
-      <TransactionWorkbench
-        period={period}
-        records={periodRecords}
-        hideSensitive={hideSensitive}
-        currency={currency}
-        onFlowSelectionChange={setFlowChartSelection}
-        onQuickFilterChange={setQuickFilter}
-        onBreakdownSelectionChange={setBreakdownSelection}
-        onTableFiltersReset={resetTableFilters}
-        chartSelection={flowChartSelection}
-        breakdownSelection={breakdownSelection}
-        swapCandidateRefs={swapCandidates}
-        swapCandidateTotal={swapCandidateTotal}
-        isRefreshing={showRefreshSkeleton}
-      />
+      {!tableExpanded && (
+        <TransactionWorkbench
+          period={period}
+          records={periodRecords}
+          hideSensitive={hideSensitive}
+          currency={currency}
+          onFlowSelectionChange={setFlowChartSelection}
+          onQuickFilterChange={setQuickFilter}
+          onBreakdownSelectionChange={setBreakdownSelection}
+          onTableFiltersReset={resetTableFilters}
+          chartSelection={flowChartSelection}
+          swapCandidateRefs={swapCandidates}
+          swapCandidateTotal={swapCandidateTotal}
+          isRefreshing={showRefreshSkeleton}
+        />
+      )}
 
-      <div id="transactions-table" className="scroll-mt-4">
+      <div
+        id="transactions-table"
+        className={cn(
+          "scroll-mt-4",
+          tableExpanded && "min-h-0 flex-1 overflow-hidden pt-3",
+        )}
+      >
         <TransactionsTable
           records={visibleTableRecords}
           hideSensitive={hideSensitive}
@@ -443,6 +484,8 @@ const TransactionsDashboard = ({
           onLoadMoreRecords={onLoadMoreTransactions}
           deepLinkedTransactionId={deepLinkedTransactionId}
           deepLinkedTransactionTab={deepLinkedTransactionTab}
+          isExpanded={tableExpanded}
+          onExpandedChange={setTableExpanded}
         />
       </div>
     </div>

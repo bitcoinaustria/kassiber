@@ -574,6 +574,8 @@ export function AppShell() {
   });
   const daemonFetchCount = useIsFetching({ queryKey: ["daemon"] });
   const [assistantCollapsed, setAssistantCollapsed] = React.useState(false);
+  const [assistantDockSuppressed, setAssistantDockSuppressed] =
+    React.useState(false);
   const [locked, setLocked] = React.useState(
     () => lockEncryptedWorkspaceOnLaunch,
   );
@@ -1227,6 +1229,24 @@ export function AppShell() {
   }, [isAssistantRoute, pathname]);
 
   React.useEffect(() => {
+    const handleAssistantDockSuppressed = (event: Event) => {
+      const detail = (event as CustomEvent<{ suppressed?: boolean }>).detail;
+      setAssistantDockSuppressed(Boolean(detail?.suppressed));
+    };
+
+    window.addEventListener(
+      "kassiber:assistant-dock-suppressed",
+      handleAssistantDockSuppressed,
+    );
+    return () => {
+      window.removeEventListener(
+        "kassiber:assistant-dock-suppressed",
+        handleAssistantDockSuppressed,
+      );
+    };
+  }, []);
+
+  React.useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key.toLowerCase() !== "l") return;
       if (!(event.metaKey || event.ctrlKey)) return;
@@ -1451,7 +1471,7 @@ export function AppShell() {
                           appMainClassName,
                           // Reserve dock space only while the dock is
                           // expanded; the collapsed pill needs a sliver.
-                          isAssistantRoute
+                          isAssistantRoute || assistantDockSuppressed
                             ? "pb-0"
                             : assistantCollapsed
                               ? "pb-16"
@@ -1460,7 +1480,7 @@ export function AppShell() {
                       >
                         <Outlet />
                       </main>
-                      {isAssistantRoute ? null : (
+                      {isAssistantRoute || assistantDockSuppressed ? null : (
                         <AssistantDock
                           collapsed={assistantCollapsed}
                           className="absolute inset-x-0 bottom-0 z-20"

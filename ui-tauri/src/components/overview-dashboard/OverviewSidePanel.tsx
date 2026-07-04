@@ -2,14 +2,12 @@ import { Link } from "@tanstack/react-router";
 import {
   ArrowLeftRight,
   ArrowUpRight,
-  MoreHorizontal,
   PieChartIcon,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Cell, Pie, PieChart } from "recharts";
 
 import { CurrencyToggleText } from "@/components/kb/CurrencyToggleText";
-import { Button } from "@/components/ui/button";
 import { ChartContainer } from "@/components/ui/chart";
 import { type Currency } from "@/lib/currency";
 import { cn } from "@/lib/utils";
@@ -54,17 +52,15 @@ export const BalanceDriversCard = ({
         : "text-muted-foreground";
 
   return (
-    <div className="flex flex-col gap-3 rounded-xl border bg-card p-3 sm:p-4">
+    <div className="flex flex-col gap-3 rounded-lg border bg-card p-3">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2 sm:gap-2.5">
-          <Button
-            variant="outline"
-            size="icon"
-            className="size-7 sm:size-8"
-            aria-label={t("drivers.aria")}
+          <span
+            className="flex size-7 shrink-0 items-center justify-center rounded-md border bg-background text-muted-foreground sm:size-8"
+            aria-hidden="true"
           >
             <ArrowLeftRight className="size-4 text-muted-foreground sm:size-[18px]" />
-          </Button>
+          </span>
           <div>
             <span className="text-sm font-medium">{t("drivers.title")}</span>
             <p
@@ -189,17 +185,15 @@ export const HoldingsBySourceChart = ({
   const singleHolding = holdingsData.length === 1 ? holdingsData[0] : null;
 
   return (
-    <div className="flex flex-1 flex-col gap-3 rounded-xl border bg-card p-3 sm:p-4">
+    <div className="flex flex-1 flex-col gap-3 rounded-lg border bg-card p-3">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2 sm:gap-2.5">
-          <Button
-            variant="outline"
-            size="icon"
-            className="size-7 sm:size-8"
-            aria-label={t("holdings.aria")}
+          <span
+            className="flex size-7 shrink-0 items-center justify-center rounded-md border bg-background text-muted-foreground sm:size-8"
+            aria-hidden="true"
           >
             <PieChartIcon className="size-4 text-muted-foreground sm:size-[18px]" />
-          </Button>
+          </span>
           <div className="min-w-0">
             <span className="text-sm font-medium">
               {t("holdings.title")}
@@ -235,14 +229,6 @@ export const HoldingsBySourceChart = ({
             )}
           </div>
         </div>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="size-7 sm:size-8"
-          aria-label={t("holdings.moreOptions")}
-        >
-          <MoreHorizontal className="size-4 text-muted-foreground" />
-        </Button>
       </div>
 
       {balanceRailItems.length > 1 ? (
@@ -250,7 +236,7 @@ export const HoldingsBySourceChart = ({
           {balanceRailItems.map((item) => (
             <span
               key={item.key}
-              className="inline-flex items-center gap-1 rounded-md border bg-background/55 px-1.5 py-0.5 text-[10px] text-muted-foreground"
+              className="inline-flex items-center gap-1 rounded-md border bg-background px-1.5 py-0.5 text-[10px] text-muted-foreground"
             >
               <span
                 className="size-1.5 rounded-full"

@@ -291,10 +291,16 @@
     }
   },
   "table": {
-    "title": "Transactions",
+    "title": "Book transactions",
     "filters": "Filters:",
     "clearAll": "Clear all",
     "withFees": "With fees",
+    "expand": {
+      "expand": "Expand",
+      "collapse": "Restore",
+      "expandAria": "Expand transaction table",
+      "collapseAria": "Restore transaction table"
+    },
     "column": {
       "transaction": "Transaction",
       "amount": "Amount",
