@@ -1823,7 +1823,7 @@ function ConnectionDetailView({
         </Card>
       ) : null}
 
-      <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1.35fr)_minmax(360px,0.85fr)]">
+      <div className="grid grid-cols-1 items-start gap-3 xl:grid-cols-[minmax(0,1.35fr)_minmax(360px,0.85fr)]">
         <Card>
           <CardHeader className="border-b px-4 py-2.5">
             <div className="flex items-start justify-between gap-2">
