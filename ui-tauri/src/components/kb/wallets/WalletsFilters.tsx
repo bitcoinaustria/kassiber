@@ -8,6 +8,10 @@ import {
   DropdownMenuLabel,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
+  DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { connectionKindCategoryLabels } from "@/lib/connectionDisplay";
@@ -48,6 +52,9 @@ export function WalletsFilters({
   statusFilter,
 }: WalletsFiltersProps) {
   const { t } = useTranslation(["connections", "chrome"]);
+  const activeFilterCount =
+    (statusFilter !== "all" ? 1 : 0) + (kindFilter !== "all" ? 1 : 0);
+
   return (
     <>
       <div className="flex flex-col gap-3 p-3 sm:flex-row sm:items-center sm:gap-4 sm:px-6 sm:py-3.5">
@@ -68,70 +75,70 @@ export function WalletsFilters({
                 size="sm"
                 className={cn(
                   "h-8 gap-1.5 sm:h-9 sm:gap-2",
-                  statusFilter !== "all" && "border-primary",
+                  activeFilterCount > 0 && "border-primary",
                 )}
-                aria-label={t("filters.filterByStatus")}
+                aria-label={t("filters.menu")}
               >
                 <SlidersHorizontal className="size-3.5 sm:size-4" aria-hidden="true" />
-                <span className="hidden sm:inline">{t("filters.status")}</span>
-                {statusFilter !== "all" && (
-                  <span className="size-1.5 rounded-full bg-primary sm:size-2" />
-                )}
+                <span className="hidden sm:inline">{t("filters.menu")}</span>
+                {activeFilterCount > 0 ? (
+                  <span className="grid min-w-4 place-items-center rounded-full bg-primary px-1 text-[10px] font-semibold leading-4 text-primary-foreground">
+                    {activeFilterCount}
+                  </span>
+                ) : null}
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-[180px]">
-              <DropdownMenuLabel>{t("filters.filterByStatus")}</DropdownMenuLabel>
-              <DropdownMenuRadioGroup
-                value={statusFilter}
-                onValueChange={(value) =>
-                  onStatusFilterChange(value as ConnectionStatus | "all")
-                }
-              >
-                <DropdownMenuRadioItem value="all">
-                  {t("filters.allStatuses")}
-                </DropdownMenuRadioItem>
-                {statusFilterOptions.map((status) => (
-                  <DropdownMenuRadioItem key={status} value={status}>
-                    {t(`chrome:connectionStatus.${status}`)}
-                  </DropdownMenuRadioItem>
-                ))}
-              </DropdownMenuRadioGroup>
-            </DropdownMenuContent>
-          </DropdownMenu>
-
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant="outline"
-                size="sm"
-                className={cn(
-                  "h-8 gap-1.5 sm:h-9 sm:gap-2",
-                  kindFilter !== "all" && "border-primary",
-                )}
-                aria-label={t("filters.filterByKind")}
-              >
-                <SlidersHorizontal className="size-3.5 sm:size-4" aria-hidden="true" />
-                <span className="hidden sm:inline">{t("filters.kind")}</span>
-                {kindFilter !== "all" && (
-                  <span className="size-1.5 rounded-full bg-primary sm:size-2" />
-                )}
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-[200px]">
-              <DropdownMenuLabel>{t("filters.filterByKind")}</DropdownMenuLabel>
-              <DropdownMenuRadioGroup
-                value={kindFilter}
-                onValueChange={onKindFilterChange}
-              >
-                <DropdownMenuRadioItem value="all">
-                  {t("filters.allKinds")}
-                </DropdownMenuRadioItem>
-                {kindFilterOptions.map((kind) => (
-                  <DropdownMenuRadioItem key={kind} value={kind}>
-                    {kind}
-                  </DropdownMenuRadioItem>
-                ))}
-              </DropdownMenuRadioGroup>
+            <DropdownMenuContent align="end" className="w-[220px]">
+              <DropdownMenuLabel>{t("filters.menu")}</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuSub>
+                <DropdownMenuSubTrigger>
+                  <span>{t("filters.status")}</span>
+                  {statusFilter !== "all" ? (
+                    <span className="ml-1 size-1.5 rounded-full bg-primary" />
+                  ) : null}
+                </DropdownMenuSubTrigger>
+                <DropdownMenuSubContent className="w-[180px]">
+                  <DropdownMenuRadioGroup
+                    value={statusFilter}
+                    onValueChange={(value) =>
+                      onStatusFilterChange(value as ConnectionStatus | "all")
+                    }
+                  >
+                    <DropdownMenuRadioItem value="all">
+                      {t("filters.allStatuses")}
+                    </DropdownMenuRadioItem>
+                    {statusFilterOptions.map((status) => (
+                      <DropdownMenuRadioItem key={status} value={status}>
+                        {t(`chrome:connectionStatus.${status}`)}
+                      </DropdownMenuRadioItem>
+                    ))}
+                  </DropdownMenuRadioGroup>
+                </DropdownMenuSubContent>
+              </DropdownMenuSub>
+              <DropdownMenuSub>
+                <DropdownMenuSubTrigger>
+                  <span>{t("filters.kind")}</span>
+                  {kindFilter !== "all" ? (
+                    <span className="ml-1 size-1.5 rounded-full bg-primary" />
+                  ) : null}
+                </DropdownMenuSubTrigger>
+                <DropdownMenuSubContent className="w-[200px]">
+                  <DropdownMenuRadioGroup
+                    value={kindFilter}
+                    onValueChange={onKindFilterChange}
+                  >
+                    <DropdownMenuRadioItem value="all">
+                      {t("filters.allKinds")}
+                    </DropdownMenuRadioItem>
+                    {kindFilterOptions.map((kind) => (
+                      <DropdownMenuRadioItem key={kind} value={kind}>
+                        {kind}
+                      </DropdownMenuRadioItem>
+                    ))}
+                  </DropdownMenuRadioGroup>
+                </DropdownMenuSubContent>
+              </DropdownMenuSub>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>

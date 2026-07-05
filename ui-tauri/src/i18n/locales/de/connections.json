@@ -20,6 +20,7 @@
   },
   "filters": {
     "heading": "Wallets und Quellen",
+    "menu": "Filter",
     "filterByStatus": "Nach Status filtern",
     "filterByKind": "Nach Typ filtern",
     "status": "Status",
