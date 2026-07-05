@@ -316,7 +316,9 @@ def build_flow_drawing(
             continue
         fx, fy, fw, fh = from_box
         tx, ty, _tw, th = to_box
-        if tx <= fx:
+        if fx == tx:
+            # Same column (e.g. clustered/omitted synthetic nodes) — there is
+            # no meaningful horizontal connector to draw.
             continue
         link_type = edge.get("link_type")
         if link_type in _SWAP_LINK_TYPES:
@@ -329,25 +331,38 @@ def build_flow_drawing(
         except (TypeError, ValueError):
             share = 0.0
         stroke_w = max(0.6, min(4.0, 0.6 + share * 4.0))
-        x1, y1 = fx + fw, fy + fh / 2
-        x2, y2 = tx, ty + th / 2
-        end_x = max(x1 + 6, x2 - 4)
+        # Levels run target (left) -> root sources (right), and each edge points
+        # from a parent (``from``) to the child it funds (``to``) one hop closer
+        # to the target. The parent is therefore normally to the RIGHT of the
+        # child, so connect the two inner edges and land the arrowhead on the
+        # child regardless of column order (the old ``tx <= fx`` guard skipped
+        # every edge, leaving the diagram with no connectors at all).
+        from_mid_y = fy + fh / 2
+        to_mid_y = ty + th / 2
+        if fx > tx:
+            start_x = fx          # parent inner (left) edge
+            tip_x = tx + _tw      # child inner (right) edge; arrow points left
+            barb_dx = 5
+        else:
+            start_x = fx + fw     # parent inner (right) edge
+            tip_x = tx            # child inner (left) edge; arrow points right
+            barb_dx = -5
         drawing.add(
             Line(
-                x1 + 2,
-                y1,
-                end_x,
-                y2,
+                start_x,
+                from_mid_y,
+                tip_x,
+                to_mid_y,
                 strokeColor=_hex(colors, color),
                 strokeWidth=stroke_w,
                 strokeDashArray=[2, 2] if deferred else None,
             )
         )
-        drawing.add(Line(end_x, y2, end_x - 5, y2 + 3, strokeColor=_hex(colors, color), strokeWidth=stroke_w))
-        drawing.add(Line(end_x, y2, end_x - 5, y2 - 3, strokeColor=_hex(colors, color), strokeWidth=stroke_w))
+        drawing.add(Line(tip_x, to_mid_y, tip_x + barb_dx, to_mid_y + 3, strokeColor=_hex(colors, color), strokeWidth=stroke_w))
+        drawing.add(Line(tip_x, to_mid_y, tip_x + barb_dx, to_mid_y - 3, strokeColor=_hex(colors, color), strokeWidth=stroke_w))
         pct_text = _pct(percent)
         if pct_text:
-            edge_labels.append(((x1 + end_x) / 2, (y1 + y2) / 2, pct_text, color))
+            edge_labels.append(((start_x + tip_x) / 2, (from_mid_y + to_mid_y) / 2, pct_text, color))
 
     # Role headers + node boxes.
     for col, level in enumerate(levels):
