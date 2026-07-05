@@ -6,6 +6,8 @@
   },
   "metrics": {
     "totalBalance": "Total balance",
+    "totalTransactions": "Total transactions",
+    "totalTransactionsDetail": "Imported across wallets",
     "upToDate": "Up to date",
     "upToDateAllSources": "All configured sources",
     "upToDateRefreshingNow": "{{count}} refreshing now",

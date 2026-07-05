@@ -6,6 +6,8 @@
   },
   "metrics": {
     "totalBalance": "Gesamtguthaben",
+    "totalTransactions": "Transaktionen gesamt",
+    "totalTransactionsDetail": "Über Wallets importiert",
     "upToDate": "Aktuell",
     "upToDateAllSources": "Alle konfigurierten Quellen",
     "upToDateRefreshingNow": "{{count}} werden gerade aktualisiert",
