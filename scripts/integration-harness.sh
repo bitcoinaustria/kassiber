@@ -11,7 +11,7 @@ STARTED_COMPOSE=0
 STARTED_BOLTZ=0
 BOLTZ_COMPOSE_FILE=""
 BOLTZ_COMPOSE_TEMP=""
-SUDO_DOCKER_ENV=COMPOSE_PROFILES,KASSIBER_REGTEST_COMPOSE_PROFILES,KASSIBER_REGTEST_RPC_USER,KASSIBER_REGTEST_RPC_PASSWORD,KASSIBER_REGTEST_RPC_AUTH,KASSIBER_REGTEST_RPC_PORT,KASSIBER_REGTEST_ELEMENTS_RPC_PORT,KASSIBER_REGTEST_BITCOIND_IMAGE,KASSIBER_REGTEST_ELEMENTSD_IMAGE,KASSIBER_REGTEST_FULCRUM_IMAGE,KASSIBER_REGTEST_FRIGATE_IMAGE,KASSIBER_REGTEST_FRIGATE_VERSION,KASSIBER_REGTEST_FRIGATE_TARBALL_SHA256,KASSIBER_REGTEST_BACKEND_STACK_IMAGE,KASSIBER_REGTEST_BITCOIN_ELECTRUM_PORT,KASSIBER_REGTEST_BITCOIN_MEMPOOL_PORT,KASSIBER_REGTEST_LIQUID_ELECTRUM_PORT,KASSIBER_REGTEST_LIQUID_MEMPOOL_PORT,KASSIBER_REGTEST_FRIGATE_PORT,KASSIBER_REGTEST_CLN_IMAGE,KASSIBER_REGTEST_CLN_MERCHANT_PORT,KASSIBER_REGTEST_CLN_CUSTOMER_PORT,KASSIBER_REGTEST_CLN_SUPPLIER_PORT,KASSIBER_REGTEST_CLN_ROUTER_PORT
+SUDO_DOCKER_ENV=COMPOSE_PROFILES,KASSIBER_REGTEST_COMPOSE_PROFILES,KASSIBER_REGTEST_RPC_USER,KASSIBER_REGTEST_RPC_PASSWORD,KASSIBER_REGTEST_RPC_AUTH,KASSIBER_REGTEST_RPC_PORT,KASSIBER_REGTEST_ELEMENTS_RPC_PORT,KASSIBER_REGTEST_BITCOIND_IMAGE,KASSIBER_REGTEST_ELEMENTSD_IMAGE,KASSIBER_REGTEST_FULCRUM_IMAGE,KASSIBER_REGTEST_FRIGATE_IMAGE,KASSIBER_REGTEST_FRIGATE_VERSION,KASSIBER_REGTEST_FRIGATE_TARBALL_SHA256,KASSIBER_REGTEST_BACKEND_STACK_IMAGE,KASSIBER_REGTEST_BITCOIN_ELECTRUM_PORT,KASSIBER_REGTEST_BITCOIN_MEMPOOL_PORT,KASSIBER_REGTEST_LIQUID_ELECTRUM_PORT,KASSIBER_REGTEST_LIQUID_MEMPOOL_PORT,KASSIBER_REGTEST_FRIGATE_PORT,KASSIBER_REGTEST_CLN_IMAGE,KASSIBER_REGTEST_CLN_MERCHANT_PORT,KASSIBER_REGTEST_CLN_CUSTOMER_PORT,KASSIBER_REGTEST_CLN_SUPPLIER_PORT,KASSIBER_REGTEST_CLN_ROUTER_PORT,KASSIBER_REGTEST_LND_IMAGE,KASSIBER_REGTEST_LND_BACKUP_P2P_PORT,KASSIBER_REGTEST_LND_BACKUP_REST_PORT,KASSIBER_REGTEST_LND_BACKUP_RPC_PORT
 SUDO_DOCKER=(sudo -n --preserve-env="$SUDO_DOCKER_ENV" docker)
 
 export PYTHONHASHSEED="${PYTHONHASHSEED:-0}"
@@ -111,6 +111,10 @@ docker_compose() {
       KASSIBER_REGTEST_CLN_CUSTOMER_PORT="${KASSIBER_REGTEST_CLN_CUSTOMER_PORT:-}" \
       KASSIBER_REGTEST_CLN_SUPPLIER_PORT="${KASSIBER_REGTEST_CLN_SUPPLIER_PORT:-}" \
       KASSIBER_REGTEST_CLN_ROUTER_PORT="${KASSIBER_REGTEST_CLN_ROUTER_PORT:-}" \
+      KASSIBER_REGTEST_LND_IMAGE="${KASSIBER_REGTEST_LND_IMAGE:-}" \
+      KASSIBER_REGTEST_LND_BACKUP_P2P_PORT="${KASSIBER_REGTEST_LND_BACKUP_P2P_PORT:-}" \
+      KASSIBER_REGTEST_LND_BACKUP_REST_PORT="${KASSIBER_REGTEST_LND_BACKUP_REST_PORT:-}" \
+      KASSIBER_REGTEST_LND_BACKUP_RPC_PORT="${KASSIBER_REGTEST_LND_BACKUP_RPC_PORT:-}" \
       KASSIBER_REGTEST_FRIGATE_PORT="${KASSIBER_REGTEST_FRIGATE_PORT:-}" \
       KASSIBER_REGTEST_COMPOSE_PROFILES="${KASSIBER_REGTEST_COMPOSE_PROFILES:-}" \
       COMPOSE_PROFILES="${COMPOSE_PROFILES:-}" \
@@ -120,6 +124,24 @@ docker_compose() {
     echo "Install Docker or set KASSIBER_REGTEST_CORE_URL with matching RPC credentials for an already-running regtest node." >&2
     exit 2
   fi
+}
+
+configure_lightning_ports() {
+  export KASSIBER_REGTEST_CLN_MERCHANT_PORT="${KASSIBER_REGTEST_CLN_MERCHANT_PORT:-$((KASSIBER_REGTEST_RPC_PORT + 1292))}"
+  export KASSIBER_REGTEST_CLN_CUSTOMER_PORT="${KASSIBER_REGTEST_CLN_CUSTOMER_PORT:-$((KASSIBER_REGTEST_RPC_PORT + 1293))}"
+  export KASSIBER_REGTEST_CLN_SUPPLIER_PORT="${KASSIBER_REGTEST_CLN_SUPPLIER_PORT:-$((KASSIBER_REGTEST_RPC_PORT + 1294))}"
+  export KASSIBER_REGTEST_CLN_ROUTER_PORT="${KASSIBER_REGTEST_CLN_ROUTER_PORT:-$((KASSIBER_REGTEST_RPC_PORT + 1295))}"
+  export KASSIBER_REGTEST_LND_BACKUP_P2P_PORT="${KASSIBER_REGTEST_LND_BACKUP_P2P_PORT:-$((KASSIBER_REGTEST_RPC_PORT + 1296))}"
+  export KASSIBER_REGTEST_LND_BACKUP_REST_PORT="${KASSIBER_REGTEST_LND_BACKUP_REST_PORT:-$((KASSIBER_REGTEST_RPC_PORT + 1297))}"
+  export KASSIBER_REGTEST_LND_BACKUP_RPC_PORT="${KASSIBER_REGTEST_LND_BACKUP_RPC_PORT:-$((KASSIBER_REGTEST_RPC_PORT + 1298))}"
+}
+
+docker_compose_regtest() {
+  local files=(-f dev/regtest/compose.bitcoin.yml)
+  if [ -n "${KASSIBER_REGTEST_USE_LIGHTNING_COMPOSE:-}" ]; then
+    files+=(-f dev/regtest/compose.lightning.yml)
+  fi
+  docker_compose -p "$KASSIBER_REGTEST_COMPOSE_PROJECT" "${files[@]}" "$@"
 }
 
 probe_core() {
@@ -247,6 +269,9 @@ run_with_bitcoin_core() {
   export KASSIBER_REGTEST_CORE_URL="${KASSIBER_REGTEST_CORE_URL:-http://127.0.0.1:${KASSIBER_REGTEST_RPC_PORT}}"
   export KASSIBER_REGTEST_ELEMENTS_URL="${KASSIBER_REGTEST_ELEMENTS_URL:-http://127.0.0.1:${KASSIBER_REGTEST_ELEMENTS_RPC_PORT}}"
   export KASSIBER_REGTEST_COMPOSE_PROJECT="${KASSIBER_REGTEST_COMPOSE_PROJECT:-$(py -c 'import hashlib, os; print("kassiber-regtest-" + hashlib.sha256(os.getcwd().encode()).hexdigest()[:12])')}"
+  if [ -n "${KASSIBER_REGTEST_USE_LIGHTNING_COMPOSE:-}" ]; then
+    configure_lightning_ports
+  fi
   if [ -n "${KASSIBER_REGTEST_COMPOSE_PROFILES:-}" ]; then
     export COMPOSE_PROFILES="$KASSIBER_REGTEST_COMPOSE_PROFILES"
   fi
@@ -254,7 +279,7 @@ run_with_bitcoin_core() {
   STARTED_COMPOSE=0
   cleanup() {
     if [ "$STARTED_COMPOSE" -eq 1 ] && [ -z "${KASSIBER_REGTEST_KEEP:-}" ]; then
-      docker_compose -p "$KASSIBER_REGTEST_COMPOSE_PROJECT" -f dev/regtest/compose.bitcoin.yml down -v
+      docker_compose_regtest down -v
     fi
   }
   trap cleanup EXIT
@@ -263,7 +288,7 @@ run_with_bitcoin_core() {
     # Mark before `up` so the EXIT trap also removes a half-created project
     # (network/volume/container) when startup fails, e.g. on a port collision.
     STARTED_COMPOSE=1
-    if ! docker_compose -p "$KASSIBER_REGTEST_COMPOSE_PROJECT" -f dev/regtest/compose.bitcoin.yml up -d; then
+    if ! docker_compose_regtest up -d; then
       echo "Failed to start the regtest bitcoind container." >&2
       echo "If port ${KASSIBER_REGTEST_RPC_PORT} is already taken (e.g. by the demo-up node)," >&2
       echo "stop it with './scripts/integration-harness.sh demo-down' or pick another port" >&2
@@ -503,6 +528,20 @@ except (OSError, ValueError):
 PY
 }
 
+demo_manifest_url_port() {
+  KASSIBER_DEMO_URL="$(demo_manifest_get "$1")" py - <<'PY'
+import os
+from urllib.parse import urlsplit
+
+value = os.environ.get("KASSIBER_DEMO_URL") or ""
+if value:
+    try:
+        print(urlsplit(value).port or "")
+    except ValueError:
+        print("")
+PY
+}
+
 demo_scenario_checksum() {
   py -c 'import hashlib, sys; print(hashlib.sha256(open(sys.argv[1], "rb").read()).hexdigest())' "$DEMO_SCENARIO"
 }
@@ -518,6 +557,30 @@ demo_book_needs_rebuild() {
     return 0
   fi
   return 1
+}
+
+demo_lightning_enabled() {
+  case "${KASSIBER_REGTEST_DEMO_LIGHTNING:-1}" in
+    0|false|FALSE|False|no|NO|No|off|OFF|Off)
+      return 1
+      ;;
+    *)
+      return 0
+      ;;
+  esac
+}
+
+demo_configure_lightning() {
+  if demo_lightning_enabled; then
+    export KASSIBER_REGTEST_USE_LIGHTNING_COMPOSE=1
+    export KASSIBER_REGTEST_DEMO_LIGHTNING_ENABLED=1
+    if [ -n "${KASSIBER_REGTEST_RPC_PORT:-}" ]; then
+      configure_lightning_ports
+    fi
+  else
+    unset KASSIBER_REGTEST_USE_LIGHTNING_COMPOSE
+    export KASSIBER_REGTEST_DEMO_LIGHTNING_ENABLED=0
+  fi
 }
 
 demo_write_manifest() {
@@ -549,10 +612,28 @@ manifest = {
     "bitcoin_mempool_url": f"http://127.0.0.1:{os.environ['KASSIBER_REGTEST_BITCOIN_MEMPOOL_PORT']}/api",
     "liquid_electrum_url": f"tcp://127.0.0.1:{os.environ['KASSIBER_REGTEST_LIQUID_ELECTRUM_PORT']}",
     "liquid_mempool_url": f"http://127.0.0.1:{os.environ['KASSIBER_REGTEST_LIQUID_MEMPOOL_PORT']}/api",
+    "lightning_enabled": os.environ.get("KASSIBER_REGTEST_DEMO_LIGHTNING_ENABLED") == "1",
     "compose_project": os.environ.get("KASSIBER_REGTEST_COMPOSE_PROJECT", ""),
     "rpc_user": os.environ["KASSIBER_REGTEST_RPC_USER"],
     "rpc_password": os.environ["KASSIBER_REGTEST_RPC_PASSWORD"],
 }
+if manifest["lightning_enabled"]:
+    manifest.update(
+        {
+            "cln_merchant_port": int(os.environ["KASSIBER_REGTEST_CLN_MERCHANT_PORT"]),
+            "cln_customer_port": int(os.environ["KASSIBER_REGTEST_CLN_CUSTOMER_PORT"]),
+            "cln_supplier_port": int(os.environ["KASSIBER_REGTEST_CLN_SUPPLIER_PORT"]),
+            "cln_router_port": int(os.environ["KASSIBER_REGTEST_CLN_ROUTER_PORT"]),
+            "lnd_backup_p2p_port": int(os.environ["KASSIBER_REGTEST_LND_BACKUP_P2P_PORT"]),
+            "lnd_backup_rest_port": int(os.environ["KASSIBER_REGTEST_LND_BACKUP_REST_PORT"]),
+            "lnd_backup_rpc_port": int(os.environ["KASSIBER_REGTEST_LND_BACKUP_RPC_PORT"]),
+            "lnd_backup_url": f"https://127.0.0.1:{os.environ['KASSIBER_REGTEST_LND_BACKUP_REST_PORT']}",
+            "lightning_wallet": "cln_merchant",
+            "lightning_backend": "cln-merchant",
+            "lightning_backup_wallet": "lnd_merchant_backup",
+            "lightning_backup_backend": "lnd-merchant-backup",
+        }
+    )
 os.makedirs(home, mode=0o700, exist_ok=True)
 os.chmod(home, 0o700)
 os.makedirs(manifest_dir, mode=0o700, exist_ok=True)
@@ -600,6 +681,10 @@ PY
 }
 
 demo_load_rpc_env() {
+  if [ -z "${KASSIBER_REGTEST_RPC_PORT:-}" ]; then
+    KASSIBER_REGTEST_RPC_PORT="$(demo_manifest_url_port core_url)"
+    [ -n "$KASSIBER_REGTEST_RPC_PORT" ] && export KASSIBER_REGTEST_RPC_PORT
+  fi
   if [ -z "${KASSIBER_REGTEST_RPC_USER:-}" ]; then
     KASSIBER_REGTEST_RPC_USER="$(demo_manifest_get rpc_user)"
     [ -n "$KASSIBER_REGTEST_RPC_USER" ] && export KASSIBER_REGTEST_RPC_USER
@@ -622,9 +707,11 @@ demo_refresh_live_rate() {
     py - <<'PY'
 import json
 import os
+import time
 
 from kassiber.core import rates as core_rates
 from kassiber.db import open_db
+from kassiber.errors import AppError
 
 scenario_path = os.environ["KASSIBER_DEMO_SCENARIO"]
 data_root = os.environ["KASSIBER_DEMO_DATA_ROOT"]
@@ -649,7 +736,15 @@ try:
         conn.commit()
     else:
         normalized = core_rates.normalize_market_rate_provider(live_source)
-        core_rates.sync_latest_rates(conn, pair=pair, source=normalized, commit=True)
+        deadline = time.monotonic() + 60
+        while True:
+            try:
+                core_rates.sync_latest_rates(conn, pair=pair, source=normalized, commit=True)
+                break
+            except AppError:
+                if time.monotonic() >= deadline:
+                    raise
+                time.sleep(2)
         conn.execute(
             "DELETE FROM settings WHERE key = ? AND value = ?",
             (core_rates.MARKET_RATE_PROVIDER_SETTING, core_rates.RATE_SOURCE_MEMPOOL),
@@ -658,6 +753,82 @@ try:
 finally:
     conn.close()
 PY
+}
+
+demo_write_lightning_cli_wrapper() {
+  mkdir -p "$DEMO_HOME/lightning"
+  local wrapper="$DEMO_HOME/lightning/lightning-cli-merchant-demo.sh"
+  KASSIBER_DEMO_LIGHTNING_CLI_WRAPPER="$wrapper" \
+  KASSIBER_DEMO_REPO_ROOT="$(pwd)" \
+  KASSIBER_DEMO_COMPOSE_PROJECT="$KASSIBER_REGTEST_COMPOSE_PROJECT" \
+    py - <<'PY'
+import os
+from pathlib import Path
+
+wrapper = Path(os.environ["KASSIBER_DEMO_LIGHTNING_CLI_WRAPPER"])
+repo_root = os.environ["KASSIBER_DEMO_REPO_ROOT"]
+compose_project = os.environ["KASSIBER_DEMO_COMPOSE_PROJECT"]
+target = Path(repo_root) / "dev" / "regtest" / "lightning-cli-merchant.sh"
+content = f"""#!/usr/bin/env bash
+set -euo pipefail
+export KASSIBER_REGTEST_COMPOSE_PROJECT="${{KASSIBER_REGTEST_COMPOSE_PROJECT:-{compose_project}}}"
+exec {target} "$@"
+"""
+tmp = wrapper.with_suffix(wrapper.suffix + ".tmp")
+tmp.write_text(content, encoding="utf-8")
+tmp.chmod(0o700)
+os.replace(tmp, wrapper)
+wrapper.chmod(0o700)
+print(wrapper)
+PY
+}
+
+demo_lnd_readonly_macaroon_hex() {
+  docker_compose_regtest exec -T lnd_merchant_backup \
+    cat /root/.lnd/data/chain/bitcoin/regtest/readonly.macaroon \
+    | od -An -tx1 -v | tr -d ' \n'
+  printf '\n'
+}
+
+demo_seed_lightning() {
+  if ! demo_lightning_enabled; then
+    echo "Lightning demo disabled via KASSIBER_REGTEST_DEMO_LIGHTNING=0."
+    return 0
+  fi
+  demo_configure_lightning
+  local merchant_cli
+  merchant_cli="$(demo_write_lightning_cli_wrapper)"
+  export KASSIBER_LIGHTNING_BUSINESS=1
+  export KASSIBER_LIGHTNING_BUSINESS_HOME="${KASSIBER_LIGHTNING_BUSINESS_HOME:-$DEMO_HOME/lightning}"
+  export KASSIBER_LIGHTNING_BUSINESS_DATA_ROOT="$DEMO_HOME/data"
+  export KASSIBER_LIGHTNING_BUSINESS_WORKSPACE="Regtest Demo"
+  export KASSIBER_LIGHTNING_BUSINESS_PROFILE="Full Accounting"
+  export KASSIBER_LIGHTNING_BUSINESS_CONNECTION_LABEL="${KASSIBER_LIGHTNING_BUSINESS_CONNECTION_LABEL:-cln_merchant}"
+  export KASSIBER_LIGHTNING_BUSINESS_BACKEND_NAME="${KASSIBER_LIGHTNING_BUSINESS_BACKEND_NAME:-cln-merchant}"
+  export KASSIBER_LIGHTNING_BUSINESS_EMBEDDED=1
+  export KASSIBER_LIGHTNING_BUSINESS_REUSE_BOOK=1
+  export KASSIBER_LIGHTNING_BUSINESS_PLAN="${KASSIBER_LIGHTNING_BUSINESS_PLAN:-$KASSIBER_LIGHTNING_BUSINESS_HOME/business-plan.json}"
+  export KASSIBER_LIGHTNING_BUSINESS_MERCHANT_CLI="$merchant_cli"
+  ./dev/regtest/lightning-business-bootstrap.sh
+  export KASSIBER_LIGHTNING_BUSINESS_BACKUP_LND_URL="https://127.0.0.1:$KASSIBER_REGTEST_LND_BACKUP_REST_PORT"
+  export KASSIBER_LIGHTNING_BUSINESS_BACKUP_LND_MACAROON_HEX
+  KASSIBER_LIGHTNING_BUSINESS_BACKUP_LND_MACAROON_HEX="$(demo_lnd_readonly_macaroon_hex)"
+  ./dev/regtest/lightning-business-scenario.sh
+  py -m tests.integration.lightning_business_regtest >/dev/null
+  # Real lightningd/lnd stamp settle times at wall-clock "now"; spread the
+  # imported Lightning history across the on-chain scenario window so the demo
+  # ledger shows years of activity instead of a single burst. Demo-only, and it
+  # must run AFTER sync but BEFORE journals process so journals re-derive over
+  # the backdated timestamps. Node channels/balances stay "now" (live snapshot).
+  export KASSIBER_DEMO_BACKDATE_SCENARIO="$DEMO_SCENARIO"
+  export KASSIBER_DEMO_BACKDATE_SEED="${KASSIBER_DEMO_BACKDATE_SEED:-0}"
+  py -m tests.integration.lightning_demo_backdate >/dev/null
+  py -m kassiber \
+    --data-root "$DEMO_HOME/data" \
+    --machine \
+    journals process \
+    --workspace "Regtest Demo" \
+    --profile "Full Accounting" >/dev/null
 }
 
 demo_build_book() {
@@ -670,6 +841,7 @@ demo_build_book() {
     && [ -d "$DEMO_HOME/data" ] \
     && [ "$current_checksum" = "$checksum" ]; then
     demo_refresh_live_rate
+    demo_seed_lightning
     demo_write_manifest "$checksum"
     echo "Reusing existing demo book (scenario unchanged): $DEMO_HOME/data"
     return 0
@@ -677,14 +849,14 @@ demo_build_book() {
 
   if [ -z "${KASSIBER_REGTEST_REUSE_CORE:-}" ] && [ -z "${KASSIBER_REGTEST_DEMO_CHAIN_RESET_DONE:-}" ]; then
     echo "Resetting the managed demo regtest chain for a backdated rebuild..."
-    docker_compose -p "$KASSIBER_REGTEST_COMPOSE_PROJECT" -f dev/regtest/compose.bitcoin.yml down -v --remove-orphans
-    docker_compose -p "$KASSIBER_REGTEST_COMPOSE_PROJECT" -f dev/regtest/compose.bitcoin.yml up -d
+    docker_compose_regtest down -v --remove-orphans
+    docker_compose_regtest up -d
     wait_for_core
     wait_for_elements
   fi
 
   demo_assert_safe_home rebuild
-  rm -rf "$DEMO_HOME/data" "$DEMO_HOME/exports" "$DEMO_HOME/imports" \
+  rm -rf "$DEMO_HOME/data" "$DEMO_HOME/exports" "$DEMO_HOME/imports" "$DEMO_HOME/lightning" \
     "$DEMO_HOME/demo-summary.json" "$DEMO_MANIFEST"
   mkdir -p "$DEMO_HOME"
   echo "Building the demo book (a few minutes of regtest history)..."
@@ -694,6 +866,7 @@ demo_build_book() {
     --json-output "$DEMO_HOME/demo-summary.json" >/dev/null
 
   demo_refresh_live_rate
+  demo_seed_lightning
   demo_write_manifest "$checksum"
 }
 
@@ -710,6 +883,15 @@ Demo environment is up.
   BTC mempool:  http://127.0.0.1:$KASSIBER_REGTEST_BITCOIN_MEMPOOL_PORT/api
   LBTC Electrum: tcp://127.0.0.1:$KASSIBER_REGTEST_LIQUID_ELECTRUM_PORT
   LBTC mempool:  http://127.0.0.1:$KASSIBER_REGTEST_LIQUID_MEMPOOL_PORT/api
+$(if demo_lightning_enabled; then cat <<EOF_LIGHTNING
+  CLN merchant: cln_merchant (Core Lightning; port $KASSIBER_REGTEST_CLN_MERCHANT_PORT)
+  LND backup:   lnd_merchant_backup (LND; REST https://127.0.0.1:$KASSIBER_REGTEST_LND_BACKUP_REST_PORT)
+  CLN peers:    cln_customer, cln_supplier, cln_router
+EOF_LIGHTNING
+else cat <<EOF_LIGHTNING_DISABLED
+  Lightning:    disabled (KASSIBER_REGTEST_DEMO_LIGHTNING=0)
+EOF_LIGHTNING_DISABLED
+fi)
 
 Next steps:
   cd ui-tauri && pnpm dev:demo                       # dev preview on the real demo book
@@ -730,10 +912,11 @@ run_demo_up() {
   export KASSIBER_REGTEST_COMPOSE_PROFILES="${KASSIBER_REGTEST_COMPOSE_PROFILES:-silent-payments}"
   export COMPOSE_PROFILES="$KASSIBER_REGTEST_COMPOSE_PROFILES"
   export KASSIBER_REGTEST_REQUIRE_ELEMENTS=1
+  demo_configure_lightning
   demo_load_rpc_env
   if demo_book_needs_rebuild && [ -z "${KASSIBER_REGTEST_REUSE_CORE:-}" ]; then
     echo "Removing the managed demo regtest chain before rebuilding the backdated book..."
-    docker_compose -p "$KASSIBER_REGTEST_COMPOSE_PROJECT" -f dev/regtest/compose.bitcoin.yml down -v --remove-orphans
+    docker_compose_regtest down -v --remove-orphans
     export KASSIBER_REGTEST_DEMO_CHAIN_RESET_DONE=1
   fi
   run_with_bitcoin_core demo_build_book
@@ -770,14 +953,17 @@ run_demo_down() {
   local project
   project="$(demo_manifest_get compose_project)"
   project="${KASSIBER_REGTEST_COMPOSE_PROJECT:-${project:-kassiber-regtest-demo}}"
+  export KASSIBER_REGTEST_COMPOSE_PROJECT="$project"
+  export KASSIBER_REGTEST_COMPOSE_PROFILES="${KASSIBER_REGTEST_COMPOSE_PROFILES:-silent-payments}"
+  export COMPOSE_PROFILES="$KASSIBER_REGTEST_COMPOSE_PROFILES"
   demo_load_rpc_env
   if [ "$purge" = "--purge" ]; then
     demo_assert_safe_home purge
-    docker_compose -p "$project" -f dev/regtest/compose.bitcoin.yml down -v
+    KASSIBER_REGTEST_USE_LIGHTNING_COMPOSE=1 docker_compose_regtest down -v
     rm -rf "$DEMO_HOME"
     echo "Demo node, chain volume, and demo book removed."
   else
-    docker_compose -p "$project" -f dev/regtest/compose.bitcoin.yml down
+    KASSIBER_REGTEST_USE_LIGHTNING_COMPOSE=1 docker_compose_regtest down
     echo "Demo node stopped. Chain volume and demo book kept; 'demo-up' resumes them."
   fi
 }
@@ -857,6 +1043,9 @@ lightning_ports_available() {
     "$((base + 1293))"
     "$((base + 1294))"
     "$((base + 1295))"
+    "$((base + 1296))"
+    "$((base + 1297))"
+    "$((base + 1298))"
   )
   local port
   for port in "${ports[@]}"; do
@@ -884,6 +1073,7 @@ run_lightning_business() {
   ensure_python_runtime
   export KASSIBER_INTEGRATION=1
   export KASSIBER_LIGHTNING_BUSINESS=1
+  export KASSIBER_REGTEST_USE_LIGHTNING_COMPOSE=1
   export KASSIBER_REGTEST_RPC_USER="${KASSIBER_REGTEST_RPC_USER:-kassiber}"
   export KASSIBER_REGTEST_RPC_PASSWORD="${KASSIBER_REGTEST_RPC_PASSWORD:-$(py -c 'import secrets; print(secrets.token_urlsafe(24))')}"
   export KASSIBER_REGTEST_RPC_AUTH="${KASSIBER_REGTEST_RPC_AUTH:-$(rpc_auth)}"
@@ -893,10 +1083,7 @@ run_lightning_business() {
   export KASSIBER_REGTEST_BITCOIN_MEMPOOL_PORT="${KASSIBER_REGTEST_BITCOIN_MEMPOOL_PORT:-$((KASSIBER_REGTEST_RPC_PORT + 101))}"
   export KASSIBER_REGTEST_LIQUID_ELECTRUM_PORT="${KASSIBER_REGTEST_LIQUID_ELECTRUM_PORT:-$((KASSIBER_REGTEST_RPC_PORT + 102))}"
   export KASSIBER_REGTEST_LIQUID_MEMPOOL_PORT="${KASSIBER_REGTEST_LIQUID_MEMPOOL_PORT:-$((KASSIBER_REGTEST_RPC_PORT + 103))}"
-  export KASSIBER_REGTEST_CLN_MERCHANT_PORT="${KASSIBER_REGTEST_CLN_MERCHANT_PORT:-$((KASSIBER_REGTEST_RPC_PORT + 1292))}"
-  export KASSIBER_REGTEST_CLN_CUSTOMER_PORT="${KASSIBER_REGTEST_CLN_CUSTOMER_PORT:-$((KASSIBER_REGTEST_RPC_PORT + 1293))}"
-  export KASSIBER_REGTEST_CLN_SUPPLIER_PORT="${KASSIBER_REGTEST_CLN_SUPPLIER_PORT:-$((KASSIBER_REGTEST_RPC_PORT + 1294))}"
-  export KASSIBER_REGTEST_CLN_ROUTER_PORT="${KASSIBER_REGTEST_CLN_ROUTER_PORT:-$((KASSIBER_REGTEST_RPC_PORT + 1295))}"
+  configure_lightning_ports
   export KASSIBER_REGTEST_CORE_URL="${KASSIBER_REGTEST_CORE_URL:-http://127.0.0.1:${KASSIBER_REGTEST_RPC_PORT}}"
   export KASSIBER_REGTEST_COMPOSE_PROJECT="${KASSIBER_REGTEST_COMPOSE_PROJECT:-$(py -c 'import hashlib, os; print("kassiber-regtest-" + hashlib.sha256(os.getcwd().encode()).hexdigest()[:12])')}"
   export KASSIBER_LIGHTNING_BUSINESS_HOME="${KASSIBER_LIGHTNING_BUSINESS_HOME:-${TMPDIR:-/tmp}/kassiber-lightning-business-${KASSIBER_REGTEST_COMPOSE_PROJECT}}"
@@ -936,6 +1123,9 @@ run_lightning_business() {
   wait_for_core
   py dev/regtest/lightning-business-plan.py --output "$KASSIBER_LIGHTNING_BUSINESS_PLAN"
   ./dev/regtest/lightning-business-bootstrap.sh
+  export KASSIBER_LIGHTNING_BUSINESS_BACKUP_LND_URL="https://127.0.0.1:$KASSIBER_REGTEST_LND_BACKUP_REST_PORT"
+  export KASSIBER_LIGHTNING_BUSINESS_BACKUP_LND_MACAROON_HEX
+  KASSIBER_LIGHTNING_BUSINESS_BACKUP_LND_MACAROON_HEX="$(demo_lnd_readonly_macaroon_hex)"
   ./dev/regtest/lightning-business-scenario.sh
   py -m unittest tests.integration.test_live_lightning_business_regtest -v
 }

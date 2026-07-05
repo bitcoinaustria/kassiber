@@ -67,26 +67,29 @@ describe("app lock decisions", () => {
     });
   });
 
-  it("does not proactively lock encrypted books on launch unless the user enabled it", () => {
+  it("locks encrypted books on launch until this daemon session is unlocked", () => {
     expect(
       shouldLockEncryptedWorkspaceOnLaunch({
         encryptedWorkspace: true,
-        requirePassphraseOnLaunch: false,
-        hasSessionUnlock: false,
-      }),
-    ).toBe(false);
-    expect(
-      shouldLockEncryptedWorkspaceOnLaunch({
-        encryptedWorkspace: true,
-        requirePassphraseOnLaunch: true,
         hasSessionUnlock: false,
       }),
     ).toBe(true);
     expect(
       shouldLockEncryptedWorkspaceOnLaunch({
         encryptedWorkspace: true,
-        requirePassphraseOnLaunch: true,
+        hasSessionUnlock: false,
+      }),
+    ).toBe(true);
+    expect(
+      shouldLockEncryptedWorkspaceOnLaunch({
+        encryptedWorkspace: true,
         hasSessionUnlock: true,
+      }),
+    ).toBe(false);
+    expect(
+      shouldLockEncryptedWorkspaceOnLaunch({
+        encryptedWorkspace: false,
+        hasSessionUnlock: false,
       }),
     ).toBe(false);
   });

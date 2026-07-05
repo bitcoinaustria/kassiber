@@ -1064,15 +1064,50 @@ Behavior:
 
 Kassiber stores imported BIP329 records once per active profile, deduplicated by
 record type and reference. Re-importing the same reference updates the stored
-label metadata instead of creating a second wallet-scoped copy, and transaction
-labels are bridged into Kassiber tags for matching local transactions across the
-profile.
+label metadata instead of creating a second wallet-scoped copy. The importer
+accepts `tx`, `addr`, `pubkey`, `input`, `output`, `xpub`, and `spscan`
+records, preserves unknown JSONL fields, and adds a small
+`kassiber.wallet_match` extension so exact/ambiguous/unmatched ownership
+decisions can round-trip.
+
+Preview before applying:
+
+```bash
+python3 -m kassiber metadata bip329 preview --file /path/to/labels.jsonl
+```
+
+The preview reports exact matches, ambiguous matches, unmatched records,
+duplicates, conflicts with existing BIP329 rows, and transaction-tag effects.
+Import remains profile-wide and stores every valid BIP329 record, but only exact
+transaction matches are projected into Kassiber tags by default. Ambiguous
+transaction labels are preserved for export/review and skipped unless the CLI
+caller explicitly opts in:
 
 ```bash
 python3 -m kassiber metadata bip329 import --file /path/to/labels.jsonl
+python3 -m kassiber metadata bip329 import --file /path/to/labels.jsonl --apply-ambiguous
 python3 -m kassiber metadata bip329 list
-python3 -m kassiber metadata bip329 export --file /path/to/export.jsonl
 ```
+
+Exports can replay stored BIP329 rows, synthesize wallet-readable transaction
+labels from Kassiber metadata, or combine both. Profile-wide export includes all
+stored rows. Wallet-scoped export includes only rows Kassiber can tie to the
+chosen wallet with deterministic ownership; ambiguous and unmatched stored rows
+are excluded rather than guessed.
+
+```bash
+python3 -m kassiber metadata bip329 export --mode stored --file /path/to/export.jsonl
+python3 -m kassiber metadata bip329 export --mode synthesized --wallet coldcard --file /path/to/coldcard-labels.jsonl
+python3 -m kassiber metadata bip329 export --mode all --file /path/to/book-labels.jsonl
+```
+
+Synthesized labels are human-readable wallet context first. Kassiber may include
+standard optional BIP329 fields such as `time`, `value`, `fee`, and `rate` when
+they come from local transaction metadata, plus a namespaced `kassiber` object
+for Kassiber-aware round trips. Third-party wallets can ignore unknown fields
+and still ingest the JSONL as normal BIP329 labels. BIP329 files are sensitive:
+they can expose txids, addresses, xpub/silent-payment scan material, labels, and
+intent.
 
 ## Metadata and attachments after import
 

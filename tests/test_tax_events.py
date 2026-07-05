@@ -23,6 +23,8 @@ def _row(
     raw_json=None,
     privacy_boundary=None,
     amount_includes_fee=False,
+    payment_hash=None,
+    kind=None,
 ):
     return {
         "id": tx_id,
@@ -35,10 +37,11 @@ def _row(
         "amount_includes_fee": amount_includes_fee,
         "fiat_rate": fiat_rate,
         "fiat_value": fiat_value,
-        "kind": "deposit" if direction == "inbound" else "withdrawal",
+        "kind": kind or ("deposit" if direction == "inbound" else "withdrawal"),
         "description": tx_id,
         "note": None,
         "external_id": external_id or tx_id,
+        "payment_hash": payment_hash,
         "privacy_boundary": privacy_boundary,
         "raw_json": raw_json or "{}",
     }
@@ -331,6 +334,62 @@ class NormalizeTaxAssetInputsTest(unittest.TestCase):
         self.assertFalse(
             any(q["reason"] == "owned_fanout_unresolved" for q in inputs.quarantines)
         )
+
+    def test_detect_intra_transfers_pairs_lightning_by_payment_hash(self):
+        # An own-node LN payment (LND pays a CLN invoice) shares a payment_hash
+        # across two owned wallets but has distinct external_ids, so the txid
+        # grouping never pairs it. The payment_hash pass must recognize it as a
+        # self-transfer so the inbound is not booked as phantom income.
+        from kassiber.transfers import detect_intra_transfers
+
+        payment_hash = "ab" * 32
+        out_row = _row(
+            "lnd:pay:x", "wallet-lnd", "outbound", 1_000_000_000,
+            fee=2_000_000, external_id="lnd:pay:x", payment_hash=payment_hash,
+            kind="lnd_pay",
+        )
+        in_row = _row(
+            "cln:income:y", "wallet-cln", "inbound", 1_000_000_000,
+            external_id="cln:income:y", payment_hash=payment_hash,
+            kind="cln_invoice",
+        )
+        pairs, matched = detect_intra_transfers([out_row, in_row])
+        self.assertEqual(len(pairs), 1)
+        self.assertEqual(pairs[0]["out"]["id"], "lnd:pay:x")
+        self.assertEqual(pairs[0]["in"]["id"], "cln:income:y")
+        self.assertEqual(matched, {"lnd:pay:x", "cln:income:y"})
+
+    def test_lightning_payment_hash_no_owned_receiver_stays_unpaired(self):
+        # A payment to an EXTERNAL node has only an outbound leg; no inbound row
+        # shares the hash, so it must NOT pair and stays a real disposal.
+        from kassiber.transfers import detect_intra_transfers
+
+        out_row = _row(
+            "cln:pay:ext", "wallet-cln", "outbound", 500_000_000,
+            fee=1_000_000, external_id="cln:pay:ext", payment_hash="cd" * 32,
+            kind="cln_pay",
+        )
+        pairs, matched = detect_intra_transfers([out_row])
+        self.assertEqual(pairs, [])
+        self.assertEqual(matched, set())
+
+    def test_lightning_same_wallet_payment_hash_not_paired(self):
+        # Defensive: an out and in on the SAME wallet sharing a hash (e.g. a
+        # self-circular route) must not be treated as a cross-wallet transfer.
+        from kassiber.transfers import detect_intra_transfers
+
+        payment_hash = "ef" * 32
+        out_row = _row(
+            "p:out", "wallet-x", "outbound", 100_000_000,
+            external_id="p:out", payment_hash=payment_hash, kind="cln_pay",
+        )
+        in_row = _row(
+            "p:in", "wallet-x", "inbound", 100_000_000,
+            external_id="p:in", payment_hash=payment_hash, kind="cln_invoice",
+        )
+        pairs, matched = detect_intra_transfers([out_row, in_row])
+        self.assertEqual(pairs, [])
+        self.assertEqual(matched, set())
 
     def test_detect_intra_transfers_folds_mixed_case_txid(self):
         # A txid recorded uppercase in one wallet and lowercase in another is the

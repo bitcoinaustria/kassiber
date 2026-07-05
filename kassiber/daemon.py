@@ -313,6 +313,7 @@ SUPPORTED_KINDS = (
     "ui.backends.detect_core",
     "ui.backends.electrum.test",
     "ui.backends.http.test",
+    "ui.backends.lightning.test",
     "ui.reports.capital_gains",
     "ui.reports.summary",
     "ui.reports.balance_sheet",
@@ -437,7 +438,9 @@ SUPPORTED_KINDS = (
     "ui.connections.btcpay.test",
     "ui.connections.node.snapshot",
     "ui.reports.lightning_profitability",
+    "ui.metadata.bip329.preview",
     "ui.metadata.bip329.import",
+    "ui.metadata.bip329.export",
     "ui.wallets.update",
     "ui.wallets.delete",
     "ui.wallets.sync",
@@ -7609,13 +7612,67 @@ def _import_bip329_payload(
             hint="Choose an existing local JSONL label export.",
             retryable=False,
         )
+    apply_ambiguous = _optional_bool_arg(args, "apply_ambiguous", False)
     return core_metadata.import_bip329_labels(
         conn,
         None,
         None,
         str(path.resolve()),
         _metadata_hooks(),
+        apply_ambiguous=apply_ambiguous,
+        source="gui",
     )
+
+
+def _preview_bip329_payload(
+    conn: sqlite3.Connection,
+    args: dict[str, Any],
+) -> dict[str, Any]:
+    file_path = _required_str_arg(args, "file", "BIP329 label file")
+    path = Path(file_path).expanduser()
+    if not path.exists():
+        raise AppError(
+            f"BIP329 label file not found: {file_path}",
+            code="not_found",
+            hint="Choose an existing local JSONL label export.",
+            retryable=False,
+        )
+    return core_metadata.preview_bip329_import(
+        conn,
+        None,
+        None,
+        str(path.resolve()),
+        _metadata_hooks(),
+    )
+
+
+def _export_bip329_payload(
+    ctx: DaemonContext,
+    args: dict[str, Any],
+) -> dict[str, Any]:
+    conn = _require_conn(ctx)
+    mode = (_optional_str_arg(args, "mode") or "stored").strip().lower()
+    wallet = _optional_str_arg(args, "wallet")
+    path = _managed_report_export_path(ctx.data_root, "kassiber-bip329-labels", ".jsonl")
+    payload = dict(
+        core_metadata.export_bip329_labels(
+            conn,
+            None,
+            None,
+            str(path),
+            _metadata_hooks(),
+            wallet_ref=wallet,
+            mode=mode,
+        )
+    )
+    payload.update(
+        {
+            "format": "jsonl",
+            "scope": "bip329",
+            "filename": Path(payload["file"]).name,
+        }
+    )
+    return payload
 
 
 def _handle_transaction_metadata_update(
@@ -8144,6 +8201,83 @@ def _test_http_backend_payload(args: dict[str, Any]) -> dict[str, Any]:
         "ok": 200 <= status < 400,
         "url": url,
         "status": status,
+        "logs": logs,
+    }
+
+
+def _test_lightning_backend_payload(
+    ctx: "DaemonContext",
+    args: dict[str, Any],
+) -> dict[str, Any]:
+    backend_ref = _required_str_arg(args, "backend", "Lightning backend")
+    backend = dict(resolve_backend(ctx.runtime_config, backend_ref))
+    backend_name = str(backend.get("name") or backend_ref).strip() or backend_ref
+    kind = str(backend.get("kind") or "").lower()
+    logs = [f"Opening Lightning connection to backend '{backend_name}'"]
+    if kind not in {"coreln", "lnd"}:
+        return {
+            "ok": False,
+            "backend": backend_name,
+            "kind": kind or None,
+            "logs": logs
+            + [
+                f"Backend kind '{kind or 'unknown'}' is not a Lightning node backend.",
+            ],
+        }
+    adapter = core_lightning.resolve_adapter(kind)
+    if adapter is None:
+        error = _lightning_adapter_unavailable_error(kind)
+        return {
+            "ok": False,
+            "backend": backend_name,
+            "kind": kind,
+            "logs": logs + [error.hint or str(error)],
+            "error": {
+                "code": error.code,
+                "message": str(error),
+                "hint": error.hint,
+            },
+        }
+    try:
+        snapshot = adapter.fetch_node_snapshot(
+            {
+                "id": backend_name,
+                "label": backend_name,
+                "kind": kind,
+            },
+            backend,
+            window_days=1,
+        )
+    except Exception as exc:  # pragma: no cover - transport-specific boundary
+        logs.append(f"Connection failed: {exc}")
+        return {
+            "ok": False,
+            "backend": backend_name,
+            "kind": kind,
+            "logs": logs,
+            "error": {
+                "message": str(exc),
+            },
+        }
+    channel_count = len(snapshot.channels)
+    peer_count = snapshot.peer_count
+    logs.append(
+        (
+            f"Connected to {snapshot.alias or backend_name}: "
+            f"{channel_count} channels, {peer_count} peers"
+        )
+    )
+    if snapshot.block_height is not None:
+        logs.append(f"Block height: {snapshot.block_height}")
+    return {
+        "ok": True,
+        "backend": backend_name,
+        "kind": kind,
+        "alias": snapshot.alias,
+        "network": snapshot.network,
+        "block_height": snapshot.block_height,
+        "peer_count": peer_count,
+        "channel_count": channel_count,
         "logs": logs,
     }
 
@@ -10066,6 +10200,21 @@ def handle_request(
             False,
         )
 
+    if kind == "ui.backends.lightning.test":
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.backends.lightning.test",
+                    _test_lightning_backend_payload(
+                        ctx,
+                        _coerce_args_dict(request_id, request.get("args")),
+                    ),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
     direct_maintenance_metadata: dict[str, Any] = {}
     if kind in _DIRECT_AUTO_JOURNAL_REFRESH_KINDS:
         direct_maintenance_metadata = _auto_maintain_for_read(
@@ -11117,6 +11266,21 @@ def handle_request(
             False,
         )
 
+    if kind == "ui.metadata.bip329.preview":
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.metadata.bip329.preview",
+                    _preview_bip329_payload(
+                        ctx.conn,
+                        _coerce_args_dict(request_id, request.get("args")),
+                    ),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
     if kind == "ui.metadata.bip329.import":
         return (
             _with_request_id(
@@ -11124,6 +11288,21 @@ def handle_request(
                     "ui.metadata.bip329.import",
                     _import_bip329_payload(
                         ctx.conn,
+                        _coerce_args_dict(request_id, request.get("args")),
+                    ),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
+    if kind == "ui.metadata.bip329.export":
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.metadata.bip329.export",
+                    _export_bip329_payload(
+                        ctx,
                         _coerce_args_dict(request_id, request.get("args")),
                     ),
                 ),

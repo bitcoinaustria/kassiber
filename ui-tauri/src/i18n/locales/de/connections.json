@@ -277,18 +277,75 @@
     },
     "noSnapshot": {
       "title": "Noch kein Node-Snapshot",
-      "description": "Der Lightning-Node-Sync hat für diese Verbindung noch keinen Snapshot erzeugt. Führe eine Aktualisierung aus, um Channels, Guthaben und die Routing-Zusammenfassung abzurufen."
+      "description": "Der Lightning-Node-Sync hat für diese Verbindung noch keinen Snapshot erzeugt. Führe eine Aktualisierung aus, um Channels, Guthaben und die Routing-Zusammenfassung abzurufen.",
+      "errorDescription": "Kassiber konnte keinen Node-Snapshot laden: {{message}}"
+    },
+    "loadingSnapshot": {
+      "title": "Node-Snapshot wird geladen",
+      "description": "Kassiber ruft Channels, Liquidität und Routing-Aktivität von diesem Lightning-Node ab."
+    },
+    "tabs": {
+      "overview": "Überblick",
+      "channels": "Channels",
+      "activity": "Aktivität",
+      "profitability": "Rentabilität",
+      "accounting": "Buchhaltung"
+    },
+    "hero": {
+      "operatorView": "Operator-Ansicht",
+      "snapshotLine": "{{channels}} aktive Channels · {{forwards}} Forwards · {{peers}} Peers",
+      "canSend": "Sendbar",
+      "canReceive": "Empfangbar",
+      "onchainReserve": "On-chain-Reserve",
+      "netRouting": "30-Tage Routing netto",
+      "remoteCapacity": "Remote-Channel-Guthaben",
+      "localShare": "Sendeseite",
+      "remoteShare": "Empfangsseite",
+      "capacity": "{{value}} Kapazität",
+      "liquidityAria": "{{local}} sat sendbar und {{remote}} sat empfangbar",
+      "viewTransactions": "Aktivität ansehen",
+      "openReports": "Berichte",
+      "signal": {
+        "balanced": "Ausgeglichene Liquidität",
+        "lowReceive": "Niedrige Empfangskapazität",
+        "lowSend": "Niedriges Sendeguthaben",
+        "noActiveChannels": "Keine aktiven Channels"
+      }
     },
     "metrics": {
-      "localBalance": "Lokales Guthaben",
+      "localBalance": "Sendbar",
       "localBalanceDetail": "{{sat}} sat · {{eur}}",
-      "inboundLiquidity": "Eingehende Liquidität",
+      "inboundLiquidity": "Empfangbar",
       "totalCapacity": "Gesamtkapazität {{capacity}}",
       "channels": "Channels",
       "channelsDetail": "{{peers}} Peers · {{closed}} geschlossen",
-      "onChain": "On-chain",
+      "onChain": "On-chain-Reserve",
       "localInChannels": "{{percent}} % lokal in Channels",
       "noChannelLiquidity": "Keine Channel-Liquidität"
+    },
+    "activity": {
+      "title": "Lightning-Aktivität",
+      "description": "Invoices, Zahlungen und geroutete Forwards aus diesem Node-Snapshot.",
+      "invoices": "Invoices",
+      "paid": "bezahlt",
+      "payments": "Zahlungen",
+      "completed": "abgeschlossen",
+      "forwards": "Forwards",
+      "snapshotWindow": "Snapshot-Fenster",
+      "exceptions": "Ausnahmen",
+      "failedExpired": "fehlgeschlagen oder abgelaufen"
+    },
+    "accounting": {
+      "title": "Buchhaltungsstatus",
+      "description": "Wie der Node-Snapshot in Kassibers Transaktions- und Journalflächen abgebildet ist.",
+      "imported": "Importiert",
+      "transactions": "Transaktionen",
+      "bookedInvoices": "Gebuchte Invoices",
+      "finalized": "settled und final",
+      "nodeEvents": "Node-Ereignisse",
+      "auditTrail": "Aktivitätsnachweis",
+      "viewTransactions": "Transaktionen ansehen",
+      "openJournals": "Journale"
     },
     "routing": {
       "title": "Routing-Zusammenfassung",
@@ -298,6 +355,18 @@
       "rebalanceFees": "Rebalance-Gebühren",
       "onChainCosts": "On-chain-Kosten",
       "netProfit": "Nettogewinn"
+    },
+    "channelEconomics": {
+      "title": "Channel-Ökonomie",
+      "description": "Verdientes Routing pro Channel verglichen mit der Standardannahme von {{cost}} sat Öffnungskosten.",
+      "peer": "Peer",
+      "forwards": "Forwards",
+      "earned": "Verdient",
+      "openCost": "Öffnungskosten",
+      "state": "Zustand",
+      "covered": "Gedeckt",
+      "notYet": "Noch nicht",
+      "empty": "Keine Channel-Ökonomie gemeldet."
     },
     "channels": {
       "title": "Channels",
@@ -314,6 +383,7 @@
       "private": "Privat",
       "remoteOpened": "Remote geöffnet",
       "privatePeer": "privater Peer",
+      "unannouncedPeer": "unangekündigter Channel",
       "balanceAria": "{{local}} sat lokal von {{capacity}} sat Kapazität",
       "localLabel": "lokal",
       "remoteLabel": "remote",
@@ -331,6 +401,11 @@
       "closed": "Geschlossen",
       "forceClosed": "Zwangsgeschlossen"
     },
+    "closeKind": {
+      "cooperative": "Kooperative Schließung",
+      "force": "Erzwungene Schließung",
+      "breach": "Breach-Schließung"
+    },
     "channelDetail": {
       "locallyInitiated": "Lokal initiiert",
       "remoteOpened": "Remote geöffnet",
@@ -342,7 +417,9 @@
       "peer": "Peer",
       "alias": "Alias",
       "publicKey": "Public Key",
-      "publicKeyHidden": "Verborgen — privater Channel",
+      "publicKeyHidden": "Verborgen für unangekündigten Channel",
+      "visibility": "Sichtbarkeit",
+      "privateVisibility": "Privat / unangekündigt. Der verbundene Peer wird als Alias angezeigt; der Public Key bleibt in dieser UI-Oberfläche verborgen.",
       "channel": "Channel",
       "shortChannelId": "Short Channel ID",
       "shortChannelIdPending": "Bestätigung ausstehend",
@@ -398,12 +475,13 @@
     },
     "sync": {
       "alreadyRunningTitle": "Node-Aktualisierung läuft bereits",
-      "alreadyRunningBody": "{{label}} scannt bereits. Kassiber aktualisiert diese Seite, sobald der Daemon fertig ist.",
+      "alreadyRunningBody": "{{label}} ruft bereits Node-Daten ab. Kassiber aktualisiert diese Seite, sobald der Daemon fertig ist.",
       "startedTitle": "Node-Aktualisierung gestartet",
       "startedBody": "{{label}} ruft Channel- und Routing-Daten im Read-only-Modus ab.",
-      "stillScanning": "{{label}} scannt noch. Große Channel-Historien können einen Moment dauern; Kassiber aktualisiert, sobald der Daemon antwortet.",
+      "stillScanning": "{{label}} ruft noch Node-Daten ab. Große Channel-Historien können einen Moment dauern; Kassiber aktualisiert, sobald der Daemon antwortet.",
       "failedTitle": "Node-Aktualisierung fehlgeschlagen",
       "finishedTitle": "Node-Aktualisierung abgeschlossen",
+      "finishedBody": "Der Node-Snapshot von {{label}} ist aktuell.",
       "failedFallback": "Node-Aktualisierung fehlgeschlagen."
     }
   },
@@ -504,6 +582,8 @@
       "refreshing": "Wird aktualisiert…",
       "importingSamourai": "Samourai wird importiert…",
       "importing": "Wird importiert…",
+      "previewingLabels": "Labels werden geprüft…",
+      "previewLabels": "Labels prüfen",
       "importingLabels": "Labels werden importiert…",
       "saving": "Wird gespeichert…",
       "saveWalletMapping": "Wallet-Zuordnung speichern",
@@ -863,8 +943,31 @@
       "selectLabelFileTitle": "BIP329-Label-Datei auswählen",
       "labelFileFilter": "BIP329 JSONL",
       "errorPickFile": "Wähle die BIP329-Label-Datei.",
+      "previewReadyTitle": "BIP329-Vorschau bereit",
+      "previewReadyBody": "{{count}} Datensätze geprüft: {{exact}} eindeutig, {{ambiguous}} mehrdeutig.",
       "labelsImportedTitle": "Labels importiert",
-      "labelsImportedBody": "{{count}} Label-Datensätze verarbeitet."
+      "labelsImportedBody": "{{count}} Label-Datensätze verarbeitet. {{added}} Transaktions-Tags hinzugefügt; {{skipped}} mehrdeutige Tag-Projektionen übersprungen.",
+      "exportModeLabel": "Exportmodus",
+      "exportModeStored": "Gespeicherte Labels",
+      "exportModeSynthesized": "Kassiber-Labels",
+      "exportModeAll": "Gespeicherte + Kassiber-Labels",
+      "exportWalletLabel": "Exportumfang",
+      "exportWalletProfile": "Gesamtes Profil",
+      "exportButton": "Labels exportieren",
+      "exporting": "Labels werden exportiert...",
+      "exportSaveTitle": "BIP329-Labels speichern",
+      "exportReadyTitle": "Labels exportiert",
+      "exportReadyBody": "{{count}} Label-Datensätze nach {{path}} geschrieben.",
+      "preview": {
+        "exact": "Eindeutig",
+        "ambiguous": "Mehrdeutig",
+        "unmatched": "Ohne Treffer",
+        "preserved": "Bewahrt",
+        "conflicts": "{{count}} Konflikte",
+        "duplicates": "{{count}} Duplikate",
+        "tagAdditions": "{{count}} Tags",
+        "ambiguousSkipped": "{{count}} übersprungen"
+      }
     },
     "backendSettings": {
       "line1": "Diese Verbindung ist als Backend-Endpunkt in den Einstellungen konfiguriert.",
