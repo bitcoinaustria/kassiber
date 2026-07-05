@@ -289,6 +289,9 @@ const TransactionsDashboard = ({
     deepLinkedTransactionIds.length > 0 ||
     (quickFilter !== null && workbenchBackedQuickFilters.has(quickFilter));
   const visibleTableRecords = React.useMemo(() => {
+    if (deepLinkedTransactionIds.length > 0) {
+      return allPeriodRecords;
+    }
     if (!useWorkbenchRowsForTable) return tableRecords;
     if (
       !focusedRecord ||
@@ -297,7 +300,14 @@ const TransactionsDashboard = ({
       return periodRecords;
     }
     return [focusedRecord, ...periodRecords];
-  }, [focusedRecord, periodRecords, tableRecords, useWorkbenchRowsForTable]);
+  }, [
+    deepLinkedTransactionIds.length,
+    allPeriodRecords,
+    focusedRecord,
+    periodRecords,
+    tableRecords,
+    useWorkbenchRowsForTable,
+  ]);
   const tableSwapCandidateIds = React.useMemo(
     () =>
       new Set(

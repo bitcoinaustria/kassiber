@@ -943,7 +943,10 @@ const TransactionsTable = ({
     const filtered = records.filter((txn) => {
       const draft = getDraft(txn);
       const matchesTransactionIds =
-        selectedTransactionIds.size === 0 || selectedTransactionIds.has(txn.id);
+        selectedTransactionIds.size === 0 ||
+        selectedTransactionIds.has(txn.id) ||
+        selectedTransactionIds.has(txn.txnId) ||
+        (txn.explorerId ? selectedTransactionIds.has(txn.explorerId) : false);
       const matchesStatus =
         statusFilter === "all" || draft.reviewStatus === statusFilter;
 
