@@ -227,8 +227,8 @@
     "couldNotOpen": "Der ausgewählte Ordner mit lokalen Büchern konnte nicht geöffnet werden."
   },
   "preAlpha": {
-    "label": "Warnung: Pre-Alpha-Software",
-    "message": "Pre-Alpha-Software: bestenfalls unzuverlässig. Prüfe alles, bevor du dich auf Berichte oder Exporte verlässt."
+    "label": "Warnung: Alpha-Software",
+    "message": "Alpha-Software: bestenfalls unzuverlässig. Prüfe alles, bevor du dich auf Berichte oder Exporte verlässt."
   },
   "network": {
     "outboundConnections": "Ausgehende Verbindungen",
