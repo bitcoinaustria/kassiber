@@ -473,6 +473,7 @@ function isExchangeEvidenceFormat(sourceFormat?: string) {
   return (
     sourceFormat === "bullbitcoin_csv" ||
     sourceFormat === "coinfinity_csv" ||
+    sourceFormat === "pocketbitcoin_csv" ||
     sourceFormat === "21bitcoin_csv"
   );
 }
@@ -527,6 +528,9 @@ function sourceFileFilters(
   }
   if (source.sourceFormat === "coinfinity_csv") {
     return [{ name: t("add.fileFilter.coinfinityCsv"), extensions: ["csv"] }];
+  }
+  if (source.sourceFormat === "pocketbitcoin_csv") {
+    return [{ name: t("add.fileFilter.pocketbitcoinCsv"), extensions: ["csv"] }];
   }
   if (source.sourceFormat === "21bitcoin_csv") {
     return [
@@ -1958,10 +1962,10 @@ export function AddConnectionDialog({
           throw new Error(t("add.enrichment.errorNoFormat"));
         }
         const isBookWideImport = isExchangeEvidenceFormat(sourceFormat);
-        const isFullBullImport =
+        const isFullBookImport =
           isBookWideImport && form.bullImportMode === "full";
         startSyncNotice(
-          isFullBullImport
+          isFullBookImport
             ? t("add.enrichment.matchingFull", { title: selected.title })
             : isBookWideImport
             ? t("add.enrichment.matchingBook", { title: selected.title })

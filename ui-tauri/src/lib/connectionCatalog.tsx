@@ -29,6 +29,7 @@ import lianaIcon from "@/assets/integrations/liana.svg";
 import liquidIcon from "@/assets/integrations/liquid.svg";
 import mempoolIcon from "@/assets/integrations/mempool-space.svg";
 import nunchukIcon from "@/assets/integrations/nunchuk.svg";
+import pocketBitcoinIcon from "@/assets/integrations/pocket-bitcoin.svg";
 import relaiIcon from "@/assets/integrations/relai.svg";
 import samouraiIcon from "@/assets/integrations/samourai.png";
 import sparrowIcon from "@/assets/integrations/sparrow.png";
@@ -67,6 +68,7 @@ export type ConnectionSourceFormat =
   | "bullbitcoin_wallet_csv"
   | "coinfinity_csv"
   | "21bitcoin_csv"
+  | "pocketbitcoin_csv"
   | "strike_csv"
   | "wasabi_bundle"
   | "generic_ledger";
@@ -586,12 +588,21 @@ export const CONNECTION_SOURCES: ConnectionSource[] = [
   {
     id: "pocket-bitcoin",
     title: "Pocket Bitcoin",
-    description: "Bitcoin-only broker activity import.",
+    description: "Account CSV import for exact buy execution pricing.",
     category: "exchanges",
-    image: sourceIcon("PKT", "#facc15", "#111827"),
-    status: "planned",
+    image: pocketBitcoinIcon,
+    imageClassName: "size-9 rounded-md",
+    status: "ready",
     pathLabel: "CSV import",
-    details: ["Dedicated parser is not wired yet"],
+    formatLabel: "pocketbitcoin_csv",
+    docsHref: "https://pocketbitcoin.com/",
+    setupKind: "file-enrichment",
+    walletKind: "pocketbitcoin",
+    sourceFormat: "pocketbitcoin_csv",
+    details: [
+      "Account exports preserve exact Pocket Bitcoin execution pricing",
+      "Book-wide imports can enrich relevant wallet rows or keep the full export as reconciliation evidence",
+    ],
   },
   {
     id: "swan-bitcoin",

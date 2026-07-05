@@ -110,6 +110,7 @@ const sourceFormatLabels: Record<string, string> = {
   bullbitcoin_csv: "Bull Bitcoin CSV",
   bullbitcoin_wallet_csv: "Bull Bitcoin Wallet CSV",
   coinfinity_csv: "Coinfinity CSV",
+  pocketbitcoin_csv: "Pocket Bitcoin CSV",
   "21bitcoin_csv": "21bitcoin CSV",
   strike_csv: "Strike CSV",
   wasabi_bundle: "Wasabi export",
