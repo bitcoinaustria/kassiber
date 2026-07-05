@@ -192,7 +192,7 @@ export function Journals() {
         </div>
 
         <TabsContent value="state" className="mt-0 space-y-3">
-          <div className="rounded-xl border bg-card">
+          <div className="overflow-hidden rounded-lg border bg-card">
             <div className="grid grid-cols-2 divide-x-0 divide-y divide-border sm:grid-cols-4 sm:divide-x sm:divide-y-0">
               <JournalMetric
                 label={t("ledger.metric.status")}
@@ -468,19 +468,26 @@ function JournalMetric({
   tone: JournalTone;
 }) {
   return (
-    <div className="space-y-2 p-3 sm:p-4">
-      <p className="text-xs font-medium text-muted-foreground">
-        {label}
-      </p>
-      <p
-        className={cn(
-          "text-xl font-semibold tabular-nums",
-          toneTextStyles[tone],
-        )}
-      >
-        {value}
-      </p>
-      <p className="text-xs text-muted-foreground">{sub}</p>
+    <div className="group relative isolate overflow-hidden p-3 transition-colors before:absolute before:inset-0 before:z-0 before:origin-left before:scale-x-0 before:bg-muted/45 before:content-[''] before:transition-transform before:duration-200 before:ease-out hover:before:scale-x-100 focus-within:before:scale-x-100">
+      <div className="relative z-20 space-y-1.5">
+        <p className="text-xs font-medium text-muted-foreground">
+          {label}
+        </p>
+        <p
+          className={cn(
+            "text-lg font-semibold tracking-tight tabular-nums sm:text-xl",
+            toneTextStyles[tone],
+          )}
+        >
+          {value}
+        </p>
+        <p
+          className="truncate text-[10px] font-medium leading-tight text-muted-foreground sm:text-xs"
+          title={sub}
+        >
+          {sub}
+        </p>
+      </div>
     </div>
   );
 }
