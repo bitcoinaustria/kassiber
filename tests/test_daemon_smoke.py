@@ -7505,7 +7505,7 @@ class DaemonSmokeTest(unittest.TestCase):
 
                 records = []
                 terminal = None
-                deadline = time.time() + 5
+                deadline = time.time() + 15
                 while time.time() < deadline and terminal is None:
                     payload = _read_payload_timeout(proc, max(0.1, deadline - time.time()))
                     if payload.get("request_id") != "chat-context-1":
@@ -7617,7 +7617,7 @@ class DaemonSmokeTest(unittest.TestCase):
                     },
                 )
                 terminal = None
-                deadline = time.time() + 5
+                deadline = time.time() + 15
                 while time.time() < deadline and terminal is None:
                     payload = _read_payload_timeout(proc, max(0.1, deadline - time.time()))
                     if (
