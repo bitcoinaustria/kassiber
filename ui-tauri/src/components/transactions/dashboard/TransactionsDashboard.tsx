@@ -404,7 +404,7 @@ const TransactionsDashboard = ({
                 <Button
                   variant="outline"
                   size="sm"
-                  className="h-8 gap-2 sm:h-9"
+                  className="h-8 gap-2"
                   aria-label={t("dashboard.export.label")}
                   disabled={isExporting}
                 >
