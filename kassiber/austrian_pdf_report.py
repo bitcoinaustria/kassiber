@@ -8,10 +8,11 @@ from typing import Any, Iterable, Sequence
 from ._pdf_common import (
     BRAND_ACCENT,
     BRAND_ACCENT_SOFT,
-    BRAND_INK,
     BRAND_LINE,
-    BRAND_MUTED,
     BRAND_SOFT,
+    build_report_styles,
+    build_report_table,
+    scale_widths,
     decimal_value as _decimal,
     draw_page_header,
     escape_paragraph_text as _escape,
@@ -86,74 +87,7 @@ class _AustrianReportBuilder:
         self.styles = self._styles()
 
     def _styles(self) -> dict[str, Any]:
-        ParagraphStyle = self.rl["ParagraphStyle"]
-        return {
-            "cover_title": ParagraphStyle(
-                "KassiberCoverTitle",
-                fontName=self.fonts["bold"],
-                fontSize=28,
-                leading=32,
-                textColor=BRAND_INK,
-                spaceAfter=10,
-            ),
-            "cover_subtitle": ParagraphStyle(
-                "KassiberCoverSubtitle",
-                fontName=self.fonts["regular"],
-                fontSize=15,
-                leading=19,
-                textColor=BRAND_MUTED,
-                spaceAfter=18,
-            ),
-            "h1": ParagraphStyle(
-                "KassiberH1",
-                fontName=self.fonts["bold"],
-                fontSize=17,
-                leading=21,
-                textColor=BRAND_INK,
-                spaceBefore=4,
-                spaceAfter=8,
-            ),
-            "h2": ParagraphStyle(
-                "KassiberH2",
-                fontName=self.fonts["bold"],
-                fontSize=12.5,
-                leading=15,
-                textColor=BRAND_INK,
-                spaceBefore=8,
-                spaceAfter=6,
-            ),
-            "h3": ParagraphStyle(
-                "KassiberH3",
-                fontName=self.fonts["bold"],
-                fontSize=10.5,
-                leading=13,
-                textColor=BRAND_INK,
-                spaceBefore=6,
-                spaceAfter=4,
-            ),
-            "body": ParagraphStyle(
-                "KassiberBody",
-                fontName=self.fonts["regular"],
-                fontSize=8.8,
-                leading=11.5,
-                textColor=BRAND_INK,
-                spaceAfter=5,
-            ),
-            "small": ParagraphStyle(
-                "KassiberSmall",
-                fontName=self.fonts["regular"],
-                fontSize=7.4,
-                leading=9.4,
-                textColor=BRAND_MUTED,
-            ),
-            "mono": ParagraphStyle(
-                "KassiberMono",
-                fontName=self.fonts["mono"],
-                fontSize=7.3,
-                leading=9,
-                textColor=BRAND_INK,
-            ),
-        }
+        return build_report_styles(self.rl, self.fonts, prefix="Kassiber")
 
     def p(self, text: Any, style: str = "body") -> Any:
         Paragraph = self.rl["Paragraph"]
@@ -173,57 +107,17 @@ class _AustrianReportBuilder:
         right_columns: Iterable[int] = (),
         style: str = "body",
     ) -> Any:
-        Table = self.rl["Table"]
-        TableStyle = self.rl["TableStyle"]
-        colors = self.rl["colors"]
-        mm = self.rl["mm"]
-        data = [
-            [
-                cell if hasattr(cell, "wrap") else self.p(cell, "small" if compact else style)
-                for cell in row
-            ]
-            for row in rows
-        ]
-        col_widths = [width * mm for width in widths] if widths else None
-        table = Table(
-            data,
-            colWidths=col_widths,
-            repeatRows=1 if header and repeat else 0,
-            hAlign="LEFT",
-            splitByRow=True,
+        return build_report_table(
+            self.rl,
+            self.styles,
+            rows,
+            widths=widths,
+            header=header,
+            repeat=repeat,
+            compact=compact,
+            right_columns=right_columns,
+            body_style=style,
         )
-        commands: list[tuple[Any, ...]] = [
-            ("BOX", (0, 0), (-1, -1), 0.4, colors.HexColor(BRAND_LINE)),
-            ("INNERGRID", (0, 0), (-1, -1), 0.25, colors.HexColor(BRAND_LINE)),
-            ("VALIGN", (0, 0), (-1, -1), "TOP"),
-            ("LEFTPADDING", (0, 0), (-1, -1), 4),
-            ("RIGHTPADDING", (0, 0), (-1, -1), 4),
-            ("TOPPADDING", (0, 0), (-1, -1), 3 if compact else 4),
-            ("BOTTOMPADDING", (0, 0), (-1, -1), 3 if compact else 4),
-        ]
-        if header and rows:
-            commands.extend(
-                [
-                    ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor(BRAND_SOFT)),
-                    ("TEXTCOLOR", (0, 0), (-1, 0), colors.HexColor(BRAND_INK)),
-                    ("FONTNAME", (0, 0), (-1, 0), self.fonts["bold"]),
-                    ("LINEBELOW", (0, 0), (-1, 0), 0.7, colors.HexColor(BRAND_INK)),
-                ]
-            )
-        for row_index in range(1 if header else 0, len(rows)):
-            if row_index % 2 == 0:
-                commands.append(
-                    (
-                        "BACKGROUND",
-                        (0, row_index),
-                        (-1, row_index),
-                        colors.HexColor("#fbfbfb"),
-                    )
-                )
-        for column in right_columns:
-            commands.append(("ALIGN", (column, 0), (column, -1), "RIGHT"))
-        table.setStyle(TableStyle(commands))
-        return table
 
     def kv_table(self, rows: Sequence[tuple[str, Any]], *, widths=(42, 58)) -> Any:
         return self.table(
@@ -431,6 +325,9 @@ class _AustrianReportBuilder:
         ]
         for spec in self.section_specs[4:]:
             story.extend(self.section_spec(spec))
+        # The Bestandsübersicht that follows carries two wide 8-column tables;
+        # render it as a landscape island (restored to portrait at its end).
+        story.append(self.rl["NextPageTemplate"]("landscape"))
         story.append(self.rl["PageBreak"]())
         return story
 
@@ -541,10 +438,11 @@ class _AustrianReportBuilder:
                 "und Gebühren werden für das ausgewählte Steuerjahr aus den importierten Transaktionen "
                 "pro Wallet und Asset verdichtet.",
             ),
-            self.table(rows, widths=(27, 22, 14, 25, 22, 24, 24, 24), compact=True, right_columns={3, 4, 5, 6, 7}),
+            self.table(rows, widths=scale_widths((27, 22, 14, 25, 22, 24, 24, 24)), compact=True, right_columns={3, 4, 5, 6, 7}),
             self.spacer(7),
             self.p("Bestandsveränderungen", "h2"),
-            self.table(flow_rows, widths=(30, 14, 13, 13, 13, 27, 27, 27), compact=True, right_columns={2, 3, 4, 5, 6, 7}),
+            self.table(flow_rows, widths=scale_widths((30, 14, 13, 13, 13, 27, 27, 27)), compact=True, right_columns={2, 3, 4, 5, 6, 7}),
+            self.rl["NextPageTemplate"]("portrait"),
             self.rl["PageBreak"](),
         ]
 
@@ -790,6 +688,9 @@ def write_austrian_e1kv_pdf(
     mm = rl["mm"]
 
     title = f"Kassiber Steuerbericht {report['tax_year']} Österreich"
+    # The page masthead already prints "Kassiber"; keep the running header
+    # title free of the brand word so it is not duplicated on every page.
+    running_title = f"Steuerbericht {report['tax_year']} Österreich"
     doc = BaseDocTemplate(
         str(path),
         pagesize=A4,
@@ -811,13 +712,13 @@ def write_austrian_e1kv_pdf(
                 id="portrait",
                 frames=[portrait_frame],
                 pagesize=A4,
-                onPage=lambda canvas, document: _on_page(canvas, document, title=title, fonts=fonts, rl=rl),
+                onPage=lambda canvas, document: _on_page(canvas, document, title=running_title, fonts=fonts, rl=rl),
             ),
             PageTemplate(
                 id="landscape",
                 frames=[landscape_frame],
                 pagesize=landscape_size,
-                onPage=lambda canvas, document: _on_page(canvas, document, title=title, fonts=fonts, rl=rl),
+                onPage=lambda canvas, document: _on_page(canvas, document, title=running_title, fonts=fonts, rl=rl),
             ),
         ]
     )
