@@ -1377,7 +1377,7 @@ const TransactionsTable = ({
     <div
       className={cn(
         "flex min-w-0 flex-wrap items-center gap-2",
-        isExpanded && "justify-end",
+        isExpanded && "mr-3 justify-end sm:mr-4",
       )}
     >
       <span className="text-[10px] text-muted-foreground sm:text-xs">
