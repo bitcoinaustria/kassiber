@@ -111,6 +111,20 @@ type BitcoinRpcProbeEnvelope = {
   };
 };
 
+type LightningProbeEnvelope = {
+  ok: boolean;
+  alias?: string | null;
+  network?: string | null;
+  block_height?: number | null;
+  peer_count?: number | null;
+  channel_count?: number | null;
+  logs?: string[];
+  error?: {
+    message?: string;
+    hint?: string;
+  };
+};
+
 function bitcoinRpcHealth(
   payload: BitcoinRpcProbeEnvelope | undefined,
   t: TFunction<"chrome">,
@@ -367,6 +381,9 @@ export function NetworkStatusIndicator({
   const testBitcoinRpc = useDaemonMutation<BitcoinRpcProbeEnvelope>(
     "ui.backends.bitcoinrpc.test",
   );
+  const testLightning = useDaemonMutation<LightningProbeEnvelope>(
+    "ui.backends.lightning.test",
+  );
   const savedBackends = React.useMemo(
     () =>
       (backendSettingsQuery.data?.data?.backends ?? []).map(
@@ -457,6 +474,11 @@ export function NetworkStatusIndicator({
                       url: row.backendId ? undefined : row.rawUrl,
                       timeout: 5,
                     })
+                  : row.probeKind === "lightning"
+                    ? await testLightning.mutateAsync({
+                        backend: row.backendId,
+                        timeout: 5,
+                      })
                 : await testHttp.mutateAsync({
                     url: row.rawUrl,
                     proxy: row.proxy,
@@ -477,6 +499,7 @@ export function NetworkStatusIndicator({
                 status: ok ? "healthy" : "unhealthy",
                 message:
                   coreHealth?.message ??
+                  (payload as LightningProbeEnvelope | undefined)?.logs?.at(-1) ??
                   (payload as BackendProbeEnvelope | undefined)?.logs?.at(-1) ??
                   (ok
                     ? t("network.checkPassed")
@@ -516,6 +539,7 @@ export function NetworkStatusIndicator({
     testBitcoinRpc,
     testElectrum,
     testHttp,
+    testLightning,
   ]);
 
   React.useEffect(() => {

@@ -176,6 +176,7 @@ const ALLOWED_DAEMON_KINDS: &[&str] = &[
     "ui.backends.detect_core",
     "ui.backends.electrum.test",
     "ui.backends.http.test",
+    "ui.backends.lightning.test",
     "ui.profiles.snapshot",
     "ui.onboarding.complete",
     "ui.profiles.create",
