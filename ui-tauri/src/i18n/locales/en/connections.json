@@ -575,6 +575,7 @@
     "searchPlaceholder": "Search sources (e.g. river, descriptor, btcpay)…",
     "noSearchMatch": "No sources match that search.",
     "noFilterMatch": "No sources match this filter.",
+    "trademarkDisclaimer": "Third-party marks belong to their owners; shown to identify sources, with no affiliation implied.",
     "continue": "Continue",
     "back": "Back",
     "submit": {

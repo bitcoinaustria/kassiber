@@ -29,6 +29,7 @@ export const WelcomeSection = ({
   // dynamic key
   const readinessTitle = t(readiness.title.key as never, readiness.title.params);
   const needsJournals = Boolean(snapshot.status?.needsJournals);
+  const hideReadinessPill = readiness.title.key === "readiness.connectSource.title";
   const readinessClassName = cn(
     "inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md border px-2 text-xs font-medium",
     readinessToneStyles[readiness.tone],
@@ -37,7 +38,7 @@ export const WelcomeSection = ({
   return (
     <div className={pageHeaderClassName}>
       <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
-        {needsJournals ? (
+        {hideReadinessPill ? null : needsJournals ? (
           <button
             type="button"
             className={cn(

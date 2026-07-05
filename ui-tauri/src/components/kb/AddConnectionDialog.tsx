@@ -4642,6 +4642,10 @@ export function AddConnectionDialog({
           </li>
         ))}
       </ul>
+
+      <p className="border-t pt-3 text-[11px] leading-4 text-muted-foreground">
+        {t("add.trademarkDisclaimer")}
+      </p>
     </div>
   );
 
