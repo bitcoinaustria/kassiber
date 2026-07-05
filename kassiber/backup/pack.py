@@ -22,6 +22,7 @@ staging tree into place.
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import tarfile
 import tempfile
@@ -400,14 +401,30 @@ def export_backup(
             manifest_info.mode = 0o600
             tar.addfile(manifest_info, fileobj=BytesIO(manifest_bytes))
 
-        with open(tarball_path, "rb") as src, open(output_path, "wb") as dst:
-            encrypt_age_stream(
-                src,
-                dst,
-                passphrase=backup_passphrase,
-                recipients=list(recipients) if recipients else None,
-                backend=backend,
-            )
+        tmp_output_path: Path | None = None
+        try:
+            with open(tarball_path, "rb") as src, tempfile.NamedTemporaryFile(
+                "wb",
+                dir=output_path.parent,
+                prefix=f".{output_path.name}.",
+                suffix=".tmp",
+                delete=False,
+            ) as dst:
+                tmp_output_path = Path(dst.name)
+                encrypt_age_stream(
+                    src,
+                    dst,
+                    passphrase=backup_passphrase,
+                    recipients=list(recipients) if recipients else None,
+                    backend=backend,
+                )
+                dst.flush()
+                os.fsync(dst.fileno())
+            os.replace(tmp_output_path, output_path)
+            tmp_output_path = None
+        finally:
+            if tmp_output_path is not None:
+                tmp_output_path.unlink(missing_ok=True)
 
     return BackupExportResult(
         output_path=output_path,

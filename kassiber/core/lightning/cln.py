@@ -225,13 +225,7 @@ def _base_command(backend: Mapping[str, Any], method: str, args: Sequence[str] |
 def _commando_invocation(
     backend: Mapping[str, Any], base_command: Sequence[str]
 ) -> tuple[list[str], dict[str, str], str | None, str | None]:
-    """Decide whether the call needs commando and how to pass the rune.
-
-    Returns ``(command, env, stdin_payload, redacted_marker)`` so the caller
-    can reuse a single ``subprocess.run`` code path. The rune is passed via
-    the ``LIGHTNING_RUNE`` environment variable instead of argv so it does
-    not appear in ``/proc/<pid>/cmdline`` on Linux.
-    """
+    """Decide whether the call needs commando and how to pass the rune."""
     peer_id = backend_value(backend, "commando_peer_id")
     rune = backend_value(backend, "token")
     wants_commando = (
@@ -247,25 +241,23 @@ def _commando_invocation(
             code="validation",
             hint="Pipe a restricted rune through --token-stdin or --token-fd FD.",
         )
-    # `lightning-cli --commando-peer=<id> --commando-rune=$LIGHTNING_RUNE` is
-    # supported by Core Lightning since 23.05; passing the rune via an env
-    # variable keeps it out of argv. Older builds that only accept
-    # `--commando=<peer>:<rune>` will refuse the env path, in which case the
-    # operator must use the local RPC socket instead.
     command = list(base_command)
     insert_at = 3  # after [binary, "--json", "--raw"]
     command[insert_at:insert_at] = [
         f"--commando-peer={peer_id}",
-        "--commando-rune=${LIGHTNING_RUNE}",
+        f"--commando-rune={rune}",
     ]
-    env = {"LIGHTNING_RUNE": str(rune)}
-    return command, env, None, "<commando rune redacted>"
+    return command, {}, None, "<commando rune redacted>"
 
 
 def _redacted_command(command: Sequence[str]) -> list[str]:
     return [
         "<commando rune redacted>"
-        if "${LIGHTNING_RUNE}" in part or part.startswith("--commando=")
+        if (
+            "${LIGHTNING_RUNE}" in part
+            or part.startswith("--commando-rune=")
+            or part.startswith("--commando=")
+        )
         else part
         for part in command
     ]

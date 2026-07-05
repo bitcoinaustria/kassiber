@@ -104,6 +104,7 @@ class PrivacyHygieneTests(unittest.TestCase):
         sats: int,
         address: str,
         script: str,
+        wallet_id: str = "wal",
         spent_at: str | None = None,
         anonymity_score: int | None = None,
     ):
@@ -119,7 +120,7 @@ class PrivacyHygieneTests(unittest.TestCase):
                 first_seen_at, last_seen_at, spent_at, raw_json
             )
             VALUES(
-                ?, 'ws', 'pf', 'wal', 'mempool',
+                ?, 'ws', 'pf', ?, 'mempool',
                 'esplora', 'bitcoin', 'main', 'BTC', ?, ?, ?,
                 ?, 'confirmed', 12, 880000,
                 ?, ?, ?, '', '', NULL, NULL, ?,
@@ -128,6 +129,7 @@ class PrivacyHygieneTests(unittest.TestCase):
             """,
             (
                 utxo_id,
+                wallet_id,
                 sats * 1000,
                 txid,
                 vout,
@@ -255,6 +257,72 @@ class PrivacyHygieneTests(unittest.TestCase):
         self.assertNotIn("bc1qinputreused", encoded)
         self.assertNotIn(P2WPKH_SCRIPT, encoded)
         self.assertNotIn(P2PKH_SCRIPT, encoded)
+
+    def test_script_fallback_does_not_assign_ambiguous_cross_wallet_owner(self):
+        self.conn.execute(
+            """
+            INSERT INTO wallets(
+                id, workspace_id, profile_id, account_id, label, kind,
+                config_json, created_at
+            )
+            VALUES(?, 'ws', 'pf', NULL, ?, 'descriptor', '{}', ?)
+            """,
+            ("wal-2", "Savings", NOW),
+        )
+        shared_script = "0014" + ("44" * 20)
+        self._insert_utxo(
+            utxo_id="shared-a",
+            txid="1" * 64,
+            vout=0,
+            sats=50_000,
+            address="bc1qshared0000000000000000000000000000000000",
+            script=shared_script,
+            wallet_id="wal",
+        )
+        self._insert_utxo(
+            utxo_id="shared-b",
+            txid="2" * 64,
+            vout=1,
+            sats=50_000,
+            address="bc1qshared0000000000000000000000000000000000",
+            script=shared_script,
+            wallet_id="wal-2",
+        )
+        self._insert_transaction(
+            tx_id="script-fallback",
+            external_id="3" * 64,
+            raw_json={
+                "txid": "3" * 64,
+                "vin": [
+                    {
+                        "txid": "4" * 64,
+                        "vout": 0,
+                        "prevout": {
+                            "value": 60_000,
+                            "scriptpubkey": P2WPKH_SCRIPT,
+                        },
+                    }
+                ],
+                "vout": [
+                    {
+                        "n": 0,
+                        "value": 59_000,
+                        "scriptpubkey": shared_script,
+                    }
+                ],
+            },
+        )
+
+        snapshot = build_privacy_hygiene_snapshot(
+            self.conn,
+            {"transaction": "script-fallback"},
+        )
+
+        tx = snapshot["transactions"][0]
+        self.assertEqual(tx["state"], "partial")
+        self.assertEqual(tx["support"]["reason"], "ambiguous_inventory_owner")
+        self.assertEqual(snapshot["coverage"]["transaction_partial"], 1)
+        self.assertNotIn("change_position_fingerprint", tx["finding_counts"])
 
     def test_graphless_import_is_explicitly_not_analysable(self):
         self._insert_transaction(

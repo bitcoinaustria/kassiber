@@ -193,30 +193,76 @@ def resolve_workspace(conn, ref=None):
     ref = ref or get_setting(conn, "context_workspace")
     if not ref:
         raise AppError("No workspace selected. Create one or run `kassiber context set --workspace ...`.")
+    ref = str(ref).strip()
+    if not ref:
+        raise AppError("No workspace selected. Create one or run `kassiber context set --workspace ...`.")
     row = conn.execute(
-        "SELECT * FROM workspaces WHERE id = ? OR lower(label) = lower(?) LIMIT 1",
-        (ref, ref),
+        "SELECT * FROM workspaces WHERE id = ? LIMIT 1",
+        (ref,),
     ).fetchone()
-    if not row:
-        raise AppError(f"Workspace '{ref}' not found")
-    return row
+    if row:
+        return row
+    rows = conn.execute(
+        "SELECT * FROM workspaces WHERE lower(label) = lower(?) ORDER BY label ASC, id ASC",
+        (ref,),
+    ).fetchall()
+    if len(rows) == 1:
+        return rows[0]
+    if len(rows) > 1:
+        raise AppError(
+            f"Workspace label '{ref}' is ambiguous",
+            code="validation",
+            hint="Use the workspace id instead of the non-unique label.",
+            details={
+                "matches": [
+                    {"id": row["id"], "label": row["label"]}
+                    for row in rows
+                ]
+            },
+        )
+    raise AppError(f"Workspace '{ref}' not found", code="not_found")
 
 
 def resolve_profile(conn, workspace_id, ref=None):
     ref = ref or get_setting(conn, "context_profile")
     if not ref:
         raise AppError("No profile selected. Create one or run `kassiber context set --profile ...`.")
+    ref = str(ref).strip()
+    if not ref:
+        raise AppError("No profile selected. Create one or run `kassiber context set --profile ...`.")
     row = conn.execute(
         """
         SELECT * FROM profiles
-        WHERE workspace_id = ? AND (id = ? OR lower(label) = lower(?))
+        WHERE workspace_id = ? AND id = ?
         LIMIT 1
         """,
-        (workspace_id, ref, ref),
+        (workspace_id, ref),
     ).fetchone()
-    if not row:
-        raise AppError(f"Profile '{ref}' not found in the selected workspace")
-    return row
+    if row:
+        return row
+    rows = conn.execute(
+        """
+        SELECT * FROM profiles
+        WHERE workspace_id = ? AND lower(label) = lower(?)
+        ORDER BY label ASC, id ASC
+        """,
+        (workspace_id, ref),
+    ).fetchall()
+    if len(rows) == 1:
+        return rows[0]
+    if len(rows) > 1:
+        raise AppError(
+            f"Profile label '{ref}' is ambiguous in the selected workspace",
+            code="validation",
+            hint="Use the profile id instead of the non-unique label.",
+            details={
+                "matches": [
+                    {"id": row["id"], "label": row["label"]}
+                    for row in rows
+                ]
+            },
+        )
+    raise AppError(f"Profile '{ref}' not found in the selected workspace", code="not_found")
 
 
 def resolve_scope(conn, workspace_ref=None, profile_ref=None):
@@ -240,19 +286,48 @@ def cache_swap_candidate_count(conn, workspace_ref, profile_ref, total):
 
 
 def resolve_wallet(conn, profile_id, ref):
+    normalized_ref = str(ref).strip()
     row = conn.execute(
         """
         SELECT w.*, a.code AS account_code, a.label AS account_label
         FROM wallets w
         LEFT JOIN accounts a ON a.id = w.account_id
-        WHERE w.profile_id = ? AND (w.id = ? OR lower(w.label) = lower(?))
+        WHERE w.profile_id = ? AND w.id = ?
         LIMIT 1
         """,
-        (profile_id, ref, ref),
+        (profile_id, normalized_ref),
     ).fetchone()
-    if not row:
-        raise AppError(f"Wallet '{ref}' not found")
-    return row
+    if row:
+        return row
+    rows = conn.execute(
+        """
+        SELECT w.*, a.code AS account_code, a.label AS account_label
+        FROM wallets w
+        LEFT JOIN accounts a ON a.id = w.account_id
+        WHERE w.profile_id = ? AND lower(w.label) = lower(?)
+        ORDER BY w.label ASC, w.id ASC
+        """,
+        (profile_id, normalized_ref),
+    ).fetchall()
+    if len(rows) == 1:
+        return rows[0]
+    if len(rows) > 1:
+        raise AppError(
+            f"Wallet label '{ref}' is ambiguous",
+            code="validation",
+            hint="Use the wallet id instead of the non-unique label.",
+            details={
+                "matches": [
+                    {
+                        "id": row["id"],
+                        "label": row["label"],
+                        "account_code": row["account_code"],
+                    }
+                    for row in rows
+                ]
+            },
+        )
+    raise AppError(f"Wallet '{ref}' not found", code="not_found")
 
 
 def resolve_transaction(conn, profile_id, ref, direction=None):

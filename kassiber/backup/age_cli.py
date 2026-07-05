@@ -63,6 +63,14 @@ def select_age_backend(
             located = shutil.which(binary)
             if located:
                 return AgeBackend(flavor=binary, binary_path=located)
+    if mode == "recipient":
+        raise AgeUnavailableError(
+            "recipient-mode backups require an age or rage binary",
+            hint=(
+                "Install `age` or `rage` on PATH, or use passphrase-mode"
+                " backups with pyrage installed."
+            ),
+        )
     try:
         import pyrage  # noqa: F401  - import probe only
     except ModuleNotFoundError:
