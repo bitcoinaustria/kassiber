@@ -184,7 +184,7 @@ export function NewTransactionDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger asChild>
-        <Button size="sm" className="h-8 gap-2 sm:h-9" aria-label={t("newDialog.triggerAria")}>
+        <Button size="sm" className="h-8 gap-2" aria-label={t("newDialog.triggerAria")}>
           <Plus className="size-4" aria-hidden="true" />
           <span className="hidden sm:inline">{t("newDialog.trigger")}</span>
         </Button>
