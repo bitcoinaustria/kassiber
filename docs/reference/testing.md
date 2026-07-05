@@ -407,11 +407,11 @@ BTCPayServer's `docker-compose up dev` + launch-profile workflow:
 cd ui-tauri && pnpm dev:demo               # dev preview on that real book
 ```
 
-Prerequisites on any machine: Docker (Desktop or engine), `uv`, and `pnpm`.
+Prerequisites on any machine: Docker (Desktop or engine), Python 3, and `pnpm`.
 From a fresh clone, install the project/runtime dependencies once:
 
 ```bash
-uv sync
+./scripts/bootstrap-dev-env.sh
 pnpm --dir ui-tauri install
 ```
 
