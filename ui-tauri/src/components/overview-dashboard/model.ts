@@ -232,6 +232,10 @@ export type ActivityMarkerView = {
   visibleActivityMarkers: TreasuryChartPoint[];
 };
 
+export type ActivityMarkerClusterOptions = {
+  maxVisibleMarkers?: number;
+};
+
 export type TreasuryActivityEvent = {
   tx: OverviewSnapshot["txs"][number];
   btc: number;
@@ -1982,8 +1986,10 @@ export function activityMarkerView(
   };
 }
 
+const DEFAULT_ACTIVITY_MARKER_CLUSTER_TARGET = 36;
+
 function markerGroupToleranceBtc(balanceBtc: number) {
-  return Math.max(Math.abs(balanceBtc) * 0.002, 0.00001);
+  return Math.max(Math.abs(balanceBtc) * 0.006, 0.00005);
 }
 
 function dominantActivityFlow(points: TreasuryChartPoint[]): ActivityFlow {
@@ -2014,61 +2020,69 @@ function representativeActivityPoint(points: TreasuryChartPoint[]) {
 
 export function clusterActivityMarkers(
   markers: TreasuryChartPoint[],
+  options: ActivityMarkerClusterOptions = {},
 ): TreasuryChartPoint[] {
   if (markers.length < 2) return markers;
-  const byDate = new Map<string, TreasuryChartPoint[]>();
-  for (const marker of markers) {
-    const date = String(marker.date);
-    byDate.set(date, [...(byDate.get(date) ?? []), marker]);
+  const target = options.maxVisibleMarkers ?? DEFAULT_ACTIVITY_MARKER_CLUSTER_TARGET;
+  const ordered = [...markers].sort((a, b) => {
+    const timeDelta = a.sortTimeMs - b.sortTimeMs;
+    if (timeDelta !== 0) return timeDelta;
+    return (a.markerBalanceBtc ?? 0) - (b.markerBalanceBtc ?? 0);
+  });
+  const firstTime = ordered[0]?.sortTimeMs ?? 0;
+  const lastTime = ordered.at(-1)?.sortTimeMs ?? firstTime;
+  const densityBucketMs =
+    markers.length > target && lastTime > firstTime
+      ? Math.max((lastTime - firstTime) / target, 60 * 60 * 1000)
+      : 0;
+  const groups: TreasuryChartPoint[][] = [];
+
+  for (const marker of ordered) {
+    const markerBalance = marker.markerBalanceBtc ?? marker.balanceBtc;
+    const markerTime = marker.sortTimeMs;
+    const group = groups.find((candidate) => {
+      const anchor = candidate[0];
+      if (!anchor) return false;
+      const anchorBalance = anchor.markerBalanceBtc ?? anchor.balanceBtc;
+      const sameAnchor = String(anchor.date) === String(marker.date);
+      const nearbyDenseTime =
+        densityBucketMs > 0 && Math.abs(markerTime - anchor.sortTimeMs) <= densityBucketMs;
+      return (
+        (sameAnchor || nearbyDenseTime) &&
+        Math.abs(markerBalance - anchorBalance) <=
+          markerGroupToleranceBtc(anchorBalance)
+      );
+    });
+    if (group) {
+      group.push(marker);
+    } else {
+      groups.push([marker]);
+    }
   }
 
   const clustered: TreasuryChartPoint[] = [];
-  for (const dateMarkers of byDate.values()) {
-    const ordered = [...dateMarkers].sort(
-      (a, b) => (a.markerBalanceBtc ?? 0) - (b.markerBalanceBtc ?? 0),
+  for (const group of groups) {
+    if (group.length === 1) {
+      clustered.push(group[0]);
+      continue;
+    }
+    const representative = representativeActivityPoint(group);
+    const eventFlow = dominantActivityFlow(group);
+    const eventSize = Math.max(
+      ...group.map((point) => point.eventSize || point.activityBtc || 0),
     );
-    const groups: TreasuryChartPoint[][] = [];
-    for (const marker of ordered) {
-      const markerBalance = marker.markerBalanceBtc ?? marker.balanceBtc;
-      const group = groups.find((candidate) => {
-        const anchor = candidate[0];
-        if (!anchor) return false;
-        const anchorBalance = anchor.markerBalanceBtc ?? anchor.balanceBtc;
-        return (
-          Math.abs(markerBalance - anchorBalance) <=
-          markerGroupToleranceBtc(anchorBalance)
-        );
-      });
-      if (group) {
-        group.push(marker);
-      } else {
-        groups.push([marker]);
-      }
-    }
-
-    for (const group of groups) {
-      if (group.length === 1) {
-        clustered.push(group[0]);
-        continue;
-      }
-      const representative = representativeActivityPoint(group);
-      const eventFlow = dominantActivityFlow(group);
-      const eventSize = Math.max(
-        ...group.map((point) => point.eventSize || point.activityBtc || 0),
-      );
-      const flowCount = new Set(group.map((point) => point.eventFlow).filter(Boolean))
-        .size;
-      clustered.push({
-        ...representative,
-        eventFlow,
-        eventSize: eventSize * (1 + Math.min(group.length - 1, 8) * 0.12),
-        markerCount: group.length,
-        markerGroupedPoints: group,
-        markerMixedFlows: flowCount > 1,
-        eventId: undefined,
-        eventTransactionId: undefined,
-      });
-    }
+    const flowCount = new Set(group.map((point) => point.eventFlow).filter(Boolean))
+      .size;
+    clustered.push({
+      ...representative,
+      eventFlow,
+      eventSize: eventSize * (1 + Math.min(group.length - 1, 8) * 0.12),
+      markerCount: group.length,
+      markerGroupedPoints: group,
+      markerMixedFlows: flowCount > 1,
+      eventId: undefined,
+      eventTransactionId: undefined,
+    });
   }
 
   return clustered.sort((a, b) => a.sortTimeMs - b.sortTimeMs);

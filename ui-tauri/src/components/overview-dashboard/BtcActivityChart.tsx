@@ -483,7 +483,9 @@ export const BtcActivityChart = ({
       selectedChartDisplayData,
     );
     const selectedClusteredActivityMarkers = groupActivityMarkers
-      ? clusterActivityMarkers(selectedActivityMarkers)
+      ? clusterActivityMarkers(selectedActivityMarkers, {
+          maxVisibleMarkers: expanded ? 56 : 32,
+        })
       : selectedActivityMarkers;
     const plotData = yScaleLog
       ? logSafeTreasuryPoints(selectedChartDisplayData)

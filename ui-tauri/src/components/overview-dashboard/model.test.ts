@@ -30,6 +30,7 @@ import {
   overviewTransactions,
   positiveLogDomain,
   resolveAutoTimePeriod,
+  type TreasuryChartPoint,
 } from "./model";
 
 describe("overview market rate display", () => {
@@ -563,6 +564,44 @@ describe("overview treasury chart", () => {
     expect(clustered[0]?.markerCount).toBe(2);
     expect(clustered[0]?.markerGroupedPoints?.map((point) => point.eventTransactionId))
       .toEqual(["tx-one", "tx-two"]);
+  });
+
+  it("density-clusters long near-horizontal marker runs", () => {
+    const baseTime = Date.parse("2026-01-01T00:00:00Z");
+    const markers = Array.from({ length: 64 }, (_, index) => ({
+      date: new Date(baseTime + index * 60 * 60 * 1000).toISOString(),
+      month: "Jan",
+      detailLabel: "Jan",
+      thisYear: 100_000,
+      balanceBtc: 28 + (index % 2) * 0.00002,
+      valueEur: 100_000,
+      costBasisEur: 80_000,
+      unrealizedEur: 20_000,
+      bitcoinPriceEur: 100_000,
+      avgCostEur: 80_000,
+      brushBalanceBtc: 28,
+      reserveValueEur: 100_000,
+      activityBtc: 0.01,
+      activityCount: 1,
+      activityValueEur: 1_000,
+      eventSize: 0.01,
+      eventFlow: index % 3 === 0 ? "incoming" : "outgoing",
+      eventTransactionId: `tx-${index}`,
+      markerBalanceBtc: 28 + (index % 2) * 0.00002,
+      sortTimeMs: baseTime + index * 60 * 60 * 1000,
+      isActivityEvent: true,
+    })) satisfies TreasuryChartPoint[];
+
+    const clustered = clusterActivityMarkers(markers, { maxVisibleMarkers: 16 });
+
+    expect(clustered.length).toBeLessThanOrEqual(16);
+    expect(
+      clustered.flatMap((point) =>
+        (point.markerGroupedPoints ?? [point])
+          .map((groupedPoint) => groupedPoint.eventTransactionId)
+          .filter(Boolean),
+      ),
+    ).toHaveLength(64);
   });
 });
 
