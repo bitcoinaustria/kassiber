@@ -116,7 +116,8 @@ SmartScreen first-launch handling lives in
 **From source** (CLI use or development, Python `>=3.10`):
 
 ```bash
-uv sync                       # or: python3 -m venv .venv && pip install -e .
+./scripts/bootstrap-dev-env.sh
+export KASSIBER_PYTHON="$PWD/.venv/bin/python"
 ```
 
 ## Quick start

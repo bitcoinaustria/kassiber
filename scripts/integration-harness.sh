@@ -53,7 +53,7 @@ PY
     return 0
   fi
   echo "Kassiber's Python dependencies are not available in this interpreter." >&2
-  echo "Install uv and rerun, or create/activate a repo virtualenv with 'python -m pip install -e .'." >&2
+  echo "Run ./scripts/bootstrap-dev-env.sh, activate a prepared virtualenv, or install uv and rerun." >&2
   echo "Current Python: $PYTHON_BIN" >&2
   exit 2
 }

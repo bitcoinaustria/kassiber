@@ -4,6 +4,22 @@ Kassiber's default gate stays fast and hermetic, while issue #312 adds opt-in
 real-node lanes for proving wallet sync and demo books against disposable
 regtest infrastructure.
 
+## Dev Environment
+
+Use the repo-managed virtualenv for local tests and daemon-backed desktop
+development:
+
+```bash
+./scripts/bootstrap-dev-env.sh
+export KASSIBER_PYTHON="$PWD/.venv/bin/python"
+.venv/bin/python -m unittest tests.test_wallet_descriptors
+```
+
+The bootstrap script installs the dependencies declared in `pyproject.toml` and
+verifies imports for the packages that most often go missing in ad-hoc shells
+(`embit` and `sqlcipher3`). On Debian/Ubuntu it fails early with the required
+SQLCipher system package command if the development headers are not available.
+
 ## Tiers
 
 | Tier | Command | Docker | Purpose |
@@ -401,11 +417,11 @@ BTCPayServer's `docker-compose up dev` + launch-profile workflow:
 cd ui-tauri && pnpm dev:demo               # dev preview on that real book
 ```
 
-Prerequisites on any machine: Docker (Desktop or engine), `uv`, and `pnpm`.
+Prerequisites on any machine: Docker (Desktop or engine), Python 3, and `pnpm`.
 From a fresh clone, install the project/runtime dependencies once:
 
 ```bash
-uv sync
+./scripts/bootstrap-dev-env.sh
 pnpm --dir ui-tauri install
 ```
 
