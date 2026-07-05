@@ -94,14 +94,14 @@ const PeriodTabs = ({
 }) => {
   const { t } = useTranslation("transactions");
   return (
-    <div className="flex items-center gap-1 rounded-lg bg-muted p-1">
+    <div className="flex h-8 items-center gap-1 rounded-lg bg-muted p-0.5">
       {periodOptions.map((key) => (
         <button
           key={key}
           type="button"
           onClick={() => onPeriodChange(key)}
           className={cn(
-            "rounded-md px-3 py-1.5 text-xs font-medium transition-all sm:text-sm",
+            "h-7 rounded-md px-2.5 text-xs font-medium transition-all sm:px-3 sm:text-sm",
             activePeriod === key
               ? "bg-card text-foreground shadow-sm"
               : "text-muted-foreground hover:text-foreground",
