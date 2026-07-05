@@ -36,6 +36,7 @@ from ..db import (
     DEFAULT_ATTACHMENTS_DIRNAME,
     DEFAULT_CONFIG_DIRNAME,
     DEFAULT_DATA_DIRNAME,
+    DEFAULT_EXPORTS_DIRNAME,
     resolve_attachments_root,
     resolve_config_root,
     resolve_database_path,
@@ -290,6 +291,12 @@ def _add_directory_to_tar(
     return file_count
 
 
+def _count_regular_files(root: Path) -> int:
+    if not root.exists():
+        return 0
+    return sum(1 for entry in root.rglob("*") if entry.is_file())
+
+
 def export_backup(
     data_root: str,
     output_path: Path,
@@ -515,6 +522,24 @@ def import_backup(
                 code="invalid_backup",
                 retryable=False,
             )
+        attachments_declared = manifest_entries.get("attachments_files")
+        if type(attachments_declared) is not int or attachments_declared < 0:
+            raise AppError(
+                "manifest declares an invalid attachments_files count",
+                code="invalid_backup",
+                retryable=False,
+            )
+        attachments_actual = _count_regular_files(staging_dir / BACKUP_ATTACHMENTS_DIR)
+        if attachments_actual != attachments_declared:
+            raise AppError(
+                "manifest attachments_files count does not match the restored archive",
+                code="invalid_backup",
+                details={
+                    "declared": attachments_declared,
+                    "actual": attachments_actual,
+                },
+                retryable=False,
+            )
         secret_ref_unavailable = _restore_unavailable_secret_refs(manifest)
 
         installed_root: Optional[Path] = None
@@ -543,6 +568,7 @@ def import_backup(
             target_settings = (
                 target_state_root / DEFAULT_CONFIG_DIRNAME / "settings.json"
             )
+            target_exports = target_state_root / DEFAULT_EXPORTS_DIRNAME
 
             # Move any pre-existing live data into a sibling
             # `pre-restore-<timestamp>/` directory so an accidental
@@ -552,6 +578,7 @@ def import_backup(
                 or target_attachments.exists()
                 or target_env.exists()
                 or target_settings.exists()
+                or target_exports.exists()
             )
             if needs_backup:
                 backup_dir = target_state_root / (
@@ -573,6 +600,11 @@ def import_backup(
                     backup_settings_dir = backup_dir / BACKUP_CONFIG_DIR
                     backup_settings_dir.mkdir(parents=True, exist_ok=True)
                     shutil.move(str(target_settings), str(backup_settings_dir / "settings.json"))
+                if target_exports.exists():
+                    shutil.move(
+                        str(target_exports),
+                        str(backup_dir / DEFAULT_EXPORTS_DIRNAME),
+                    )
 
             target_db.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(staging_dir / BACKUP_DB_NAME, target_db)

@@ -2648,6 +2648,29 @@ def _set_ctx_project(ctx: DaemonContext, entry) -> None:
     )
 
 
+def _open_project_connection_for_switch(
+    entry: Any,
+    *,
+    passphrase: str | None,
+    require_existing_schema: bool,
+) -> tuple[sqlite3.Connection, dict[str, object]]:
+    data_root = str(entry.data_root)
+    env_file = resolve_effective_env_file(None, data_root)
+    runtime_config = load_runtime_config(env_file)
+    conn = open_db(
+        data_root,
+        passphrase=passphrase,
+        require_existing_schema=require_existing_schema,
+    )
+    try:
+        validate_project_migration_after_unlock(data_root, conn)
+        merge_db_backends(conn, runtime_config)
+    except Exception:
+        conn.close()
+        raise
+    return conn, runtime_config
+
+
 def _select_project_payload(
     ctx: DaemonContext,
     args: dict[str, Any],
@@ -2714,21 +2737,34 @@ def _select_project_payload(
                 False,
             )
 
+    require_existing_schema = bool(args.get("require_existing_project"))
     if switching:
+        target_conn, target_runtime_config = _open_project_connection_for_switch(
+            entry,
+            passphrase=passphrase if target_encrypted else None,
+            require_existing_schema=require_existing_schema,
+        )
+        try:
+            entry = set_selected_project(entry.id, last_opened_at=_utc_now_iso())
+        except Exception:
+            target_conn.close()
+            raise
         _close_current_project_for_switch(ctx)
-        entry = set_selected_project(entry.id)
         _set_ctx_project(ctx, entry)
-
-    if target_encrypted:
+        ctx.runtime_config = target_runtime_config
+        ctx.conn = target_conn
+        _remember_unlocked_passphrase(ctx, passphrase)
+        _start_freshness_background_worker(ctx, passphrase=passphrase)
+    elif target_encrypted:
         _open_daemon_connection(
             ctx,
             passphrase=passphrase,
-            require_existing_schema=bool(args.get("require_existing_project")),
+            require_existing_schema=require_existing_schema,
         )
     else:
         _open_daemon_connection(
             ctx,
-            require_existing_schema=bool(args.get("require_existing_project")),
+            require_existing_schema=require_existing_schema,
         )
 
     return (
@@ -11560,6 +11596,10 @@ def run(
         freshness_stop_event=threading.Event(),
     )
     if conn is not None:
+        _remember_unlocked_passphrase(
+            ctx,
+            getattr(args, "_db_passphrase_cached", None),
+        )
         _start_freshness_background_worker(ctx)
 
     out.write(

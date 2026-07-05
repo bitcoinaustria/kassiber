@@ -328,6 +328,90 @@ class LegacyProjectMigrationTests(unittest.TestCase):
 
 
 class DaemonProjectSwitchTests(unittest.TestCase):
+    def test_switch_keeps_current_project_if_target_open_fails(self):
+        try:
+            from kassiber import daemon as daemon_runtime
+        except ModuleNotFoundError as exc:
+            if exc.name == "embit":
+                self.skipTest("embit is not installed")
+            raise
+        from kassiber import projects as projects_module
+
+        with tempfile.TemporaryDirectory() as root:
+            state_root = Path(root) / ".kassiber"
+            old_state = projects_module.DEFAULT_STATE_ROOT
+            old_data = projects_module.DEFAULT_DATA_ROOT
+            try:
+                projects_module.DEFAULT_STATE_ROOT = str(state_root)
+                projects_module.DEFAULT_DATA_ROOT = str(state_root / "data")
+                alpha = create_project("Alpha", project_id="alpha")
+                beta = create_project("Beta", project_id="beta", select=False)
+                beta.database.parent.mkdir(parents=True, exist_ok=True)
+                beta_conn = sqlite3.connect(beta.database)
+                try:
+                    beta_conn.execute("CREATE TABLE not_kassiber(id TEXT)")
+                    beta_conn.commit()
+                finally:
+                    beta_conn.close()
+
+                alpha_conn = open_db(str(alpha.data_root))
+                alpha_conn.execute(
+                    "INSERT INTO settings(key, value) VALUES('project', 'alpha')"
+                )
+                alpha_conn.commit()
+
+                ctx = daemon_runtime.DaemonContext(
+                    conn=alpha_conn,
+                    data_root=str(alpha.data_root),
+                    runtime_config={
+                        "env_file": str(alpha.root / "config" / "backends.env"),
+                        "default_backend": None,
+                        "backends": {},
+                    },
+                    active_ai_chats=daemon_runtime.ActiveAiChats(),
+                    main_thread_tasks=queue.Queue(),
+                    auth_backoff=daemon_runtime.AuthAttemptBackoff(None),
+                    input_lines=queue.Queue(),
+                    deferred_input_lines=[],
+                    out=object(),
+                    freshness_stop_event=threading.Event(),
+                    project_id="alpha",
+                    project_root=str(alpha.root),
+                )
+
+                with self.assertRaises(AppError) as raised:
+                    daemon_runtime.handle_request(
+                        ctx,
+                        {
+                            "kind": "ui.projects.select",
+                            "request_id": "switch",
+                            "args": {
+                                "project_id": "beta",
+                                "require_existing_project": True,
+                            },
+                        },
+                        out=None,  # type: ignore[arg-type]
+                    )
+
+                self.assertEqual(raised.exception.code, "invalid_project_database")
+                self.assertIs(ctx.conn, alpha_conn)
+                self.assertEqual(ctx.project_id, "alpha")
+                self.assertEqual(
+                    alpha_conn.execute(
+                        "SELECT value FROM settings WHERE key='project'"
+                    ).fetchone()[0],
+                    "alpha",
+                )
+                self.assertEqual(
+                    load_catalog(catalog_path(state_root))["selected_project_id"],
+                    "alpha",
+                )
+            finally:
+                projects_module.DEFAULT_STATE_ROOT = old_state
+                projects_module.DEFAULT_DATA_ROOT = old_data
+                if "ctx" in locals() and ctx.conn is not None:
+                    ctx.conn.close()
+
     def test_switch_keeps_current_project_open_until_next_passphrase_succeeds(self):
         if not sqlcipher_available():
             self.skipTest("SQLCipher driver is not installed")
