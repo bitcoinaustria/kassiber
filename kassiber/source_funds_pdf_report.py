@@ -5,10 +5,10 @@ from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
 
 from ._pdf_common import (
-    BRAND_INK,
-    BRAND_LINE,
-    BRAND_MUTED,
-    BRAND_SOFT,
+    BRAND_LINK,
+    build_report_styles,
+    build_report_table,
+    scale_widths,
     decimal_value as _decimal,
     draw_page_header,
     escape_paragraph_text as _escape,
@@ -81,6 +81,14 @@ _PROVENANCE_SHORT = {
     "manual_import": "manual",
 }
 
+# The wide detail tables (up to 9 columns) are a contiguous block near the
+# end of the report; they are rendered as a single landscape island so the
+# reader rotates the page once, not per section.
+_LANDSCAPE_SECTION_KEYS = frozenset(
+    {"flow_levels", "transaction_details", "flow_links", "graph_nodes"}
+)
+
+
 # Reviewer-facing fallback wording when a reviewed link has no free-text
 # explanation (or the reveal mode redacts it).
 _LINK_TYPE_EXPLANATIONS = {
@@ -149,72 +157,7 @@ class _SourceFundsPdfBuilder:
         return f"{_btc(value)}{suffix}"
 
     def _styles(self) -> dict[str, Any]:
-        ParagraphStyle = self.rl["ParagraphStyle"]
-        return {
-            "cover_title": ParagraphStyle(
-                "KassiberSourceFundsCoverTitle",
-                fontName=self.fonts["bold"],
-                fontSize=27,
-                leading=32,
-                textColor=BRAND_INK,
-                spaceAfter=9,
-            ),
-            "cover_subtitle": ParagraphStyle(
-                "KassiberSourceFundsCoverSubtitle",
-                fontName=self.fonts["regular"],
-                fontSize=14,
-                leading=18,
-                textColor=BRAND_MUTED,
-                spaceAfter=17,
-            ),
-            "h1": ParagraphStyle(
-                "KassiberSourceFundsH1",
-                fontName=self.fonts["bold"],
-                fontSize=16,
-                leading=20,
-                textColor=BRAND_INK,
-                spaceBefore=4,
-                spaceAfter=8,
-            ),
-            "h2": ParagraphStyle(
-                "KassiberSourceFundsH2",
-                fontName=self.fonts["bold"],
-                fontSize=11.5,
-                leading=14,
-                textColor=BRAND_INK,
-                spaceBefore=8,
-                spaceAfter=5,
-            ),
-            "body": ParagraphStyle(
-                "KassiberSourceFundsBody",
-                fontName=self.fonts["regular"],
-                fontSize=8.8,
-                leading=11.3,
-                textColor=BRAND_INK,
-                spaceAfter=5,
-            ),
-            "small": ParagraphStyle(
-                "KassiberSourceFundsSmall",
-                fontName=self.fonts["regular"],
-                fontSize=7.4,
-                leading=9.3,
-                textColor=BRAND_MUTED,
-            ),
-            "mono": ParagraphStyle(
-                "KassiberSourceFundsMono",
-                fontName=self.fonts["mono"],
-                fontSize=7.1,
-                leading=8.8,
-                textColor=BRAND_INK,
-            ),
-            "table_header": ParagraphStyle(
-                "KassiberSourceFundsTableHeader",
-                fontName=self.fonts["bold"],
-                fontSize=7.6,
-                leading=9.4,
-                textColor=BRAND_INK,
-            ),
-        }
+        return build_report_styles(self.rl, self.fonts, prefix="KassiberSourceFunds")
 
     def p(self, text: Any, style: str = "body") -> Any:
         return self.rl["Paragraph"](_escape(text), self.styles[style])
@@ -223,7 +166,7 @@ class _SourceFundsPdfBuilder:
         label = _escape(text)
         href = _escape(url)
         return self.rl["Paragraph"](
-            f'<link href="{href}"><font color="#0f766e"><u>{label}</u></font></link>',
+            f'<link href="{href}"><font color="{BRAND_LINK}"><u>{label}</u></font></link>',
             self.styles[style],
         )
 
@@ -250,53 +193,17 @@ class _SourceFundsPdfBuilder:
         right_columns: Iterable[int] = (),
         style: str = "body",
     ) -> Any:
-        Table = self.rl["Table"]
-        TableStyle = self.rl["TableStyle"]
-        colors = self.rl["colors"]
-        mm = self.rl["mm"]
-        data = []
-        for row_index, row in enumerate(rows):
-            rendered = []
-            for cell in row:
-                if hasattr(cell, "wrap"):
-                    rendered.append(cell)
-                elif header and row_index == 0:
-                    rendered.append(self.p(cell, "table_header"))
-                else:
-                    rendered.append(self.p(cell, "small" if compact else style))
-            data.append(rendered)
-        table = Table(
-            data,
-            colWidths=[width * mm for width in widths] if widths else None,
-            repeatRows=1 if header and repeat else 0,
-            hAlign="LEFT",
-            splitByRow=True,
+        return build_report_table(
+            self.rl,
+            self.styles,
+            rows,
+            widths=widths,
+            header=header,
+            repeat=repeat,
+            compact=compact,
+            right_columns=right_columns,
+            body_style=style,
         )
-        commands: list[tuple[Any, ...]] = [
-            ("BOX", (0, 0), (-1, -1), 0.4, colors.HexColor(BRAND_LINE)),
-            ("INNERGRID", (0, 0), (-1, -1), 0.25, colors.HexColor(BRAND_LINE)),
-            ("VALIGN", (0, 0), (-1, -1), "TOP"),
-            ("LEFTPADDING", (0, 0), (-1, -1), 4),
-            ("RIGHTPADDING", (0, 0), (-1, -1), 4),
-            ("TOPPADDING", (0, 0), (-1, -1), 3 if compact else 4),
-            ("BOTTOMPADDING", (0, 0), (-1, -1), 3 if compact else 4),
-        ]
-        if header and rows:
-            commands.extend(
-                [
-                    ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor(BRAND_SOFT)),
-                    ("LINEBELOW", (0, 0), (-1, 0), 0.7, colors.HexColor(BRAND_INK)),
-                ]
-            )
-        for row_index in range(1 if header else 0, len(rows)):
-            if row_index % 2 == 0:
-                commands.append(
-                    ("BACKGROUND", (0, row_index), (-1, row_index), colors.HexColor("#fbfbfb"))
-                )
-        for column in right_columns:
-            commands.append(("ALIGN", (column, 0), (column, -1), "RIGHT"))
-        table.setStyle(TableStyle(commands))
-        return table
 
     def kv_table(self, rows: Sequence[tuple[str, Any]], *, widths: Sequence[float] = (43, 118)) -> Any:
         return self.table(
@@ -314,7 +221,7 @@ class _SourceFundsPdfBuilder:
         context = self.report.get("report_context") or {}
         target_label = "Bitcoin being sold" if purpose.get("type") == "planned_exchange_sale" else "Target"
         rows: list[tuple[str, Any]] = [
-            ("Generated at", self.generated_at),
+            ("Generated at", _datetime(self.generated_at) or self.generated_at),
             ("Workspace", self.report.get("workspace", "")),
             ("Profile", self.report.get("profile", "")),
             ("Jurisdiction", context.get("jurisdiction_label") or ""),
@@ -698,7 +605,7 @@ class _SourceFundsPdfBuilder:
                     ]
                 )
         story.append(
-            self.table(rows, widths=(12, 20, 50, 28, 31, 28), compact=True, right_columns={0, 5})
+            self.table(rows, widths=scale_widths((12, 20, 50, 28, 31, 28)), compact=True, right_columns={0, 5})
         )
         return story
 
@@ -788,7 +695,7 @@ class _SourceFundsPdfBuilder:
             story.append(
                 self.table(
                     rows,
-                    widths=(20, 23, 15, 20, 20, 17, 19, 29, 13),
+                    widths=scale_widths((20, 23, 15, 20, 20, 17, 19, 29, 13)),
                     compact=True,
                     right_columns={3, 4, 5, 6},
                 )
@@ -839,7 +746,7 @@ class _SourceFundsPdfBuilder:
             )
         )
         story.append(
-            self.table(rows, widths=(20, 30, 30, 26, 24, 46), compact=True, right_columns={3})
+            self.table(rows, widths=scale_widths((20, 30, 30, 26, 24, 46)), compact=True, right_columns={3})
         )
         return story
 
@@ -917,7 +824,7 @@ class _SourceFundsPdfBuilder:
                     ]
                 )
         story.append(
-            self.table(rows, widths=(28, 36, 25, 17, 25, 41), compact=True, right_columns={4})
+            self.table(rows, widths=scale_widths((28, 36, 25, 17, 25, 41)), compact=True, right_columns={4})
         )
         return story
 
@@ -1030,14 +937,31 @@ class _SourceFundsPdfBuilder:
     def build(self) -> list[Any]:
         story = self.cover()
         story.append(self.rl["PageBreak"]())
+        # Flip the contiguous wide-detail block to landscape and restore
+        # portrait afterwards. Driven by actually-emitted content (not fixed
+        # plan indices) so omit_sections and empty builders keep working: an
+        # entirely omitted/empty block emits no flip.
+        in_landscape = False
         for key, _title, builder in self._section_plan():
             if key and key in self.omitted_sections:
                 continue
             content = builder()
             if not content:
                 continue
+            wants_landscape = key in _LANDSCAPE_SECTION_KEYS
+            if wants_landscape and not in_landscape:
+                story.append(self.rl["NextPageTemplate"]("landscape"))
+                story.append(self.rl["PageBreak"]())
+                in_landscape = True
+            elif not wants_landscape and in_landscape:
+                story.append(self.rl["NextPageTemplate"]("portrait"))
+                story.append(self.rl["PageBreak"]())
+                in_landscape = False
             story.extend(content)
             story.append(self.spacer(7))
+        if in_landscape:
+            story.append(self.rl["NextPageTemplate"]("portrait"))
+            story.append(self.rl["PageBreak"]())
         return story
 
 
@@ -1048,7 +972,8 @@ def _on_page(canvas: Any, doc: Any, *, title: str, fonts: dict[str, str], rl: di
         title=title,
         fonts=fonts,
         rl=rl,
-        brand_label="",
+        brand_label="Kassiber",
+        footer_left="Local-first evidence disclosure. Not legal or AML advice.",
         page_label="Page",
         line_width=0.3,
     )
@@ -1071,9 +996,13 @@ def write_source_funds_pdf(
     Frame = rl["Frame"]
     PageTemplate = rl["PageTemplate"]
     A4 = rl["A4"]
+    landscape = rl["landscape"]
     mm = rl["mm"]
 
     title = f"Kassiber {_report_title(report)}"
+    # The page masthead already prints "Kassiber"; keep the running header
+    # title brand-free so it is not duplicated on every page.
+    running_title = _report_title(report)
     doc = BaseDocTemplate(
         str(path),
         pagesize=A4,
@@ -1087,14 +1016,24 @@ def write_source_funds_pdf(
         subject="Source-of-funds evidence report",
     )
     frame = Frame(doc.leftMargin, doc.bottomMargin, doc.width, doc.height, id="portrait")
+    landscape_size = landscape(A4)
+    landscape_frame = Frame(
+        12 * mm, 13 * mm, landscape_size[0] - 24 * mm, landscape_size[1] - 30 * mm, id="landscape"
+    )
     doc.addPageTemplates(
         [
             PageTemplate(
                 id="portrait",
                 frames=[frame],
                 pagesize=A4,
-                onPage=lambda canvas, document: _on_page(canvas, document, title=title, fonts=fonts, rl=rl),
-            )
+                onPage=lambda canvas, document: _on_page(canvas, document, title=running_title, fonts=fonts, rl=rl),
+            ),
+            PageTemplate(
+                id="landscape",
+                frames=[landscape_frame],
+                pagesize=landscape_size,
+                onPage=lambda canvas, document: _on_page(canvas, document, title=running_title, fonts=fonts, rl=rl),
+            ),
         ]
     )
     builder = _SourceFundsPdfBuilder(

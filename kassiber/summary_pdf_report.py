@@ -10,6 +10,8 @@ from ._pdf_common import (
     BRAND_LINE,
     BRAND_MUTED,
     BRAND_SOFT,
+    build_report_styles,
+    build_report_table,
     decimal_value,
     draw_page_header,
     escape_paragraph_text,
@@ -150,6 +152,15 @@ def _para(rl: dict[str, Any], styles: dict[str, Any], text: Any, style: str = "b
     return rl["Paragraph"](escape_paragraph_text(text), styles[style])
 
 
+def _format_generated(value: Any) -> str:
+    text = str(value or "").replace("T", " ")
+    if text.endswith("Z"):
+        text = text[:-1]
+    if len(text) >= 16 and text[4] == "-" and text[7] == "-":
+        return f"{text[:10]} {text[11:16]}"
+    return text
+
+
 def _format_age_days(days: Any) -> str:
     if days is None:
         return "—"
@@ -187,34 +198,26 @@ def _direction_label(direction: Any) -> str:
     return text.title() or "—"
 
 
-def _table_cell(cell: Any) -> Any:
-    if hasattr(cell, "wrap") or hasattr(cell, "drawOn"):
-        return cell
-    return str(cell)
-
-
-def _table(rl: dict[str, Any], rows: Sequence[Sequence[Any]], widths: Sequence[float], *, header: bool = True):
-    colors = rl["colors"]
-    table = rl["Table"]([[_table_cell(cell) for cell in row] for row in rows], colWidths=list(widths), repeatRows=1 if header else 0)
-    commands = [
-        ("FONT", (0, 0), (-1, -1), _font(rl, "regular"), 8),
-        ("TEXTCOLOR", (0, 0), (-1, -1), colors.HexColor(BRAND_INK)),
-        ("GRID", (0, 0), (-1, -1), 0.3, colors.HexColor(BRAND_LINE)),
-        ("VALIGN", (0, 0), (-1, -1), "TOP"),
-        ("LEFTPADDING", (0, 0), (-1, -1), 5),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 5),
-        ("TOPPADDING", (0, 0), (-1, -1), 4),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
-    ]
-    if header and rows:
-        commands.extend(
-            [
-                ("FONT", (0, 0), (-1, 0), _font(rl, "bold"), 8),
-                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor(BRAND_SOFT)),
-            ]
-        )
-    table.setStyle(rl["TableStyle"](commands))
-    return table
+def _table(
+    rl: dict[str, Any],
+    styles: dict[str, Any],
+    rows: Sequence[Sequence[Any]],
+    widths: Sequence[float],
+    *,
+    header: bool = True,
+    right_columns: Sequence[int] = (),
+):
+    # Delegates to the shared house table style (framed box, hairline grid,
+    # soft header with ink underline, zebra rows) so the summary matches the
+    # tax and source-of-funds reports. ``widths`` are already in points here.
+    return build_report_table(
+        rl,
+        styles,
+        rows,
+        col_widths=list(widths),
+        header=header,
+        right_columns=right_columns,
+    )
 
 
 def _metric_strip(rl: dict[str, Any], metrics: Sequence[tuple[str, str]]):
@@ -533,7 +536,7 @@ def _cover_flowables(rl, styles, report):
     return [
         _para(rl, styles, report.get("title") or "Kassiber Summary Report", "title"),
         _para(rl, styles, f"{report.get('workspace')} / {report.get('profile')}", "body"),
-        _para(rl, styles, f"Timeframe: {report.get('timeframe', {}).get('label', '')} · Generated: {report.get('generated_at', '')}", "muted"),
+        _para(rl, styles, f"Timeframe: {report.get('timeframe', {}).get('label', '')} · Generated: {_format_generated(report.get('generated_at', ''))}", "muted"),
         rl["Spacer"](1, 6),
     ]
 
@@ -557,7 +560,7 @@ def _snapshot_flowables(rl, styles, report, currency):
             f"Current snapshot: {_money(currency, snapshot.get('total_market_value'))} · {_asset_quantity_text(snapshot)}",
             "h2",
         ),
-        _table(rl, rows, [44 * rl["mm"], 34 * rl["mm"], 38 * rl["mm"], 45 * rl["mm"]]),
+        _table(rl, styles, rows, [44 * rl["mm"], 34 * rl["mm"], 38 * rl["mm"], 45 * rl["mm"]], right_columns={2, 3}),
         rl["Spacer"](1, 8),
     ]
 
@@ -606,7 +609,7 @@ def _data_integrity_flowables(rl, styles, report, currency):
         rows.append(["Quarantine reasons", "None in scope"])
     return [
         _para(rl, styles, "Data Integrity", "h2"),
-        _table(rl, rows, [70 * rl["mm"], 92 * rl["mm"]]),
+        _table(rl, styles, rows, [70 * rl["mm"], 92 * rl["mm"]]),
     ]
 
 
@@ -636,7 +639,7 @@ def _disposal_table_flowables(rl, styles, top_disposals, currency):
     for row in top_disposals:
         rows.append([
             str(row.get("occurred_at", ""))[:10],
-            str(row.get("wallet", ""))[:22],
+            str(row.get("wallet", "")),
             _btc(-decimal_value(row.get("quantity"))),
             _money(currency, row.get("proceeds")),
             _money(currency, row.get("cost_basis")),
@@ -645,7 +648,7 @@ def _disposal_table_flowables(rl, styles, top_disposals, currency):
     return [
         rl["Spacer"](1, 4),
         _para(rl, styles, "Largest disposals", "body"),
-        _table(rl, rows, [22 * rl["mm"], 36 * rl["mm"], 30 * rl["mm"], 30 * rl["mm"], 30 * rl["mm"], 34 * rl["mm"]]),
+        _table(rl, styles, rows, [22 * rl["mm"], 36 * rl["mm"], 30 * rl["mm"], 30 * rl["mm"], 30 * rl["mm"], 34 * rl["mm"]], right_columns={2, 3, 4, 5}),
     ]
 
 
@@ -656,17 +659,17 @@ def _movement_table_flowables(rl, styles, top_movements, currency):
     for row in top_movements:
         rows.append([
             str(row.get("occurred_at", ""))[:10],
-            str(row.get("wallet", ""))[:22],
+            str(row.get("wallet", "")),
             _direction_label(row.get("direction")),
             str(row.get("asset", "")),
             _btc(row.get("quantity")),
             _money(currency, row.get("fiat_value")),
-            str(row.get("counterparty", ""))[:28],
+            str(row.get("counterparty", "")),
         ])
     return [
         rl["Spacer"](1, 4),
         _para(rl, styles, "Largest activity", "body"),
-        _table(rl, rows, [22 * rl["mm"], 30 * rl["mm"], 12 * rl["mm"], 14 * rl["mm"], 28 * rl["mm"], 30 * rl["mm"], 46 * rl["mm"]]),
+        _table(rl, styles, rows, [22 * rl["mm"], 30 * rl["mm"], 12 * rl["mm"], 14 * rl["mm"], 28 * rl["mm"], 30 * rl["mm"], 46 * rl["mm"]], right_columns={4, 5}),
     ]
 
 
@@ -695,7 +698,7 @@ def _appendix_flowables(rl, styles, report, currency):
     return [
         rl["Spacer"](1, 7),
         _para(rl, styles, "Wallet Appendix", "h2"),
-        _table(rl, rows, [42 * rl["mm"], 38 * rl["mm"], 22 * rl["mm"], 38 * rl["mm"], 42 * rl["mm"]]),
+        _table(rl, styles, rows, [42 * rl["mm"], 38 * rl["mm"], 22 * rl["mm"], 38 * rl["mm"], 42 * rl["mm"]], right_columns={2, 3, 4}),
         rl["Spacer"](1, 8),
         _para(rl, styles, "This summary report is a portfolio and treasury view. It intentionally omits tax tables; use the tax PDF for tax filing support.", "muted"),
     ]
@@ -703,12 +706,19 @@ def _appendix_flowables(rl, styles, report, currency):
 
 def _build_styles(rl, fonts):
     colors = rl["colors"]
-    return {
-        "title": rl["ParagraphStyle"]("Title", fontName=fonts["bold"], fontSize=18, leading=22, textColor=colors.HexColor(BRAND_INK)),
-        "h2": rl["ParagraphStyle"]("H2", fontName=fonts["bold"], fontSize=11.5, leading=15, spaceBefore=8, spaceAfter=5, textColor=colors.HexColor(BRAND_INK)),
-        "body": rl["ParagraphStyle"]("Body", fontName=fonts["regular"], fontSize=8.5, leading=12, textColor=colors.HexColor(BRAND_INK)),
-        "muted": rl["ParagraphStyle"]("Muted", fontName=fonts["regular"], fontSize=8, leading=11, textColor=colors.HexColor(BRAND_MUTED)),
-    }
+    # Shared house scale (also brings the table cell styles + right-aligned
+    # variants the summary tables need), plus a couple of dashboard-specific
+    # aliases used throughout this module.
+    styles = build_report_styles(rl, fonts, prefix="Summary")
+    styles["title"] = rl["ParagraphStyle"](
+        "SummaryTitle", fontName=fonts["bold"], fontSize=23, leading=27,
+        textColor=colors.HexColor(BRAND_INK),
+    )
+    styles["muted"] = rl["ParagraphStyle"](
+        "SummaryMutedBody", fontName=fonts["regular"], fontSize=8, leading=11,
+        textColor=colors.HexColor(BRAND_MUTED),
+    )
+    return styles
 
 
 def _build_doc_template(rl, file_path, report, fonts):
