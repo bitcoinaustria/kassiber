@@ -1091,14 +1091,44 @@ export function getDataForPeriod(
 }
 
 const autoCandidatePeriods: Exclude<TimePeriod, "auto">[] = [
-  "30days",
-  "3months",
-  "6months",
   "ytd",
   "1year",
   "5years",
   "all",
 ];
+const AUTO_MIN_MEANINGFUL_EVENTS = 3;
+const AUTO_MIN_ACTIVITY_VOLUME_BTC = 0.00001;
+const AUTO_MIN_BALANCE_RANGE_BTC = 0.001;
+const AUTO_MIN_BALANCE_RANGE_RATIO = 0.01;
+
+function portfolioBalanceValuesForPeriod(
+  snapshot: OverviewSnapshot,
+  events: TreasuryActivityEvent[],
+  latestDate: Date,
+  period: Exclude<TimePeriod, "auto">,
+): number[] {
+  const seriesValues = (snapshot.portfolioSeries ?? [])
+    .filter((point) => isPointInPeriod(point.date, latestDate, period))
+    .map((point) => point.balanceBtc)
+    .filter((value) => Number.isFinite(value));
+  const eventValues = events
+    .filter((event) => isActivityInTreasuryPeriod(event, latestDate, period))
+    .map((event) => event.postBalanceBtc)
+    .filter((value): value is number => value !== undefined && Number.isFinite(value));
+  return [...seriesValues, ...eventValues];
+}
+
+function hasMeaningfulBalanceRange(values: number[]): boolean {
+  if (values.length < 2) return true;
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const latest = Math.abs(values[values.length - 1] ?? max);
+  const threshold = Math.max(
+    AUTO_MIN_BALANCE_RANGE_BTC,
+    latest * AUTO_MIN_BALANCE_RANGE_RATIO,
+  );
+  return max - min >= threshold;
+}
 
 export function resolveAutoTimePeriod(
   snapshot: OverviewSnapshot,
@@ -1116,13 +1146,30 @@ export function resolveAutoTimePeriod(
   const latestDate = new Date(
     candidateTimes.length ? Math.max(...candidateTimes) : Date.now(),
   );
-  const targetEventCount = Math.min(3, events.length);
+  const meaningfulEvents = events.filter(
+    (event) => event.volumeBtc >= AUTO_MIN_ACTIVITY_VOLUME_BTC,
+  );
+  if (!meaningfulEvents.length) return "ytd";
+  const targetEventCount = Math.min(
+    AUTO_MIN_MEANINGFUL_EVENTS,
+    meaningfulEvents.length,
+  );
   return (
     autoCandidatePeriods.find(
-      (candidate) =>
-        events.filter((event) =>
+      (candidate) => {
+        const visibleEvents = meaningfulEvents.filter((event) =>
           isActivityInTreasuryPeriod(event, latestDate, candidate),
-        ).length >= targetEventCount,
+        );
+        if (visibleEvents.length < targetEventCount) return false;
+        return hasMeaningfulBalanceRange(
+          portfolioBalanceValuesForPeriod(
+            snapshot,
+            events,
+            latestDate,
+            candidate,
+          ),
+        );
+      },
     ) ?? "all"
   );
 }

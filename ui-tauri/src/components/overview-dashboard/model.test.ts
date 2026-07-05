@@ -454,7 +454,7 @@ describe("chart scale helpers", () => {
     conf: 1,
   });
 
-  it("recognizes auto period params and resolves to the tightest active window", () => {
+  it("recognizes auto period params and uses YTD as the minimum window", () => {
     expect(normalizeTimePeriodParam("auto")).toBe("auto");
     expect(normalizeTimePeriodParam("automatic")).toBe("auto");
 
@@ -477,7 +477,7 @@ describe("chart scale helpers", () => {
       ],
     };
 
-    expect(resolveAutoTimePeriod(snapshot, "auto")).toBe("30days");
+    expect(resolveAutoTimePeriod(snapshot, "auto")).toBe("ytd");
   });
 
   it("zooms out when recent periods do not contain enough activity", () => {
@@ -497,6 +497,43 @@ describe("chart scale helpers", () => {
         autoPeriodTx("old-1", "2026-01-20T12:00:00Z"),
         autoPeriodTx("old-2", "2026-01-10T12:00:00Z"),
         autoPeriodTx("old-3", "2025-12-15T12:00:00Z"),
+      ],
+    };
+
+    expect(resolveAutoTimePeriod(snapshot, "auto")).toBe("1year");
+  });
+
+  it("zooms out when the YTD balance range is visually quiet", () => {
+    const snapshot: OverviewSnapshot = {
+      ...MOCK_OVERVIEW,
+      portfolioSeries: [
+        {
+          date: "2025-08-01",
+          label: "Aug 1",
+          balanceBtc: 0.4,
+          valueEur: 20_000,
+          costBasisEur: 18_000,
+        },
+        {
+          date: "2026-01-01",
+          label: "Jan 1",
+          balanceBtc: 1.0,
+          valueEur: 50_000,
+          costBasisEur: 45_000,
+        },
+        {
+          date: "2026-07-05",
+          label: "Jul 5",
+          balanceBtc: 1.0002,
+          valueEur: 50_010,
+          costBasisEur: 45_000,
+        },
+      ],
+      txs: [],
+      activityTxs: [
+        autoPeriodTx("recent-1", "2026-06-28T12:00:00Z"),
+        autoPeriodTx("recent-2", "2026-06-20T12:00:00Z"),
+        autoPeriodTx("recent-3", "2026-06-10T12:00:00Z"),
       ],
     };
 
