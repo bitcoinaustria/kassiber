@@ -31,6 +31,7 @@ The adapter registers itself with the shared registry on import:
 
 from __future__ import annotations
 
+import base64
 import json
 import ssl
 from pathlib import Path
@@ -44,7 +45,10 @@ from ...backends import backend_timeout, backend_value
 from ...db import APP_NAME
 from ...egress_ledger import get_egress_ledger, http_request_bytes_out
 from ...errors import AppError
-from ...time_utils import timestamp_to_iso
+from ...msat import msat_to_btc
+from ...time_utils import UNKNOWN_OCCURRED_AT, timestamp_to_iso
+from .. import imports as core_imports
+from ..repo import invalidate_journals
 from .registry import register_adapter
 from .types import (
     NodeChannel,
@@ -827,6 +831,216 @@ class LndAdapter:
             routing=routing,
             forwards=tuple(_map_forward(row) for row in forwards),
         )
+
+
+LND_IMPORT_SOURCE = "lnd"
+
+_HEX_DIGITS = frozenset("0123456789abcdefABCDEF")
+
+
+def _normalize_lnd_hash(value: Any) -> str | None:
+    """Return a lowercase-hex payment hash from an LND ``r_hash``/``payment_hash``.
+
+    LND's gRPC ``payment_hash`` is hex, but the REST gateway base64-encodes the
+    32-byte ``r_hash`` on invoices. Normalizing both to hex is what lets an
+    own-node CLN<->LND payment pair by hash: the CLN side stores hex, so the LND
+    legs must match. Returns ``None`` when the value is neither 32-byte hex nor
+    32-byte base64 (so unmatched rows simply stay unpaired rather than mispair).
+    """
+    if not value:
+        return None
+    text = str(value).strip()
+    if len(text) == 64 and all(char in _HEX_DIGITS for char in text):
+        return text.lower()
+    for decoder in (base64.urlsafe_b64decode, base64.b64decode):
+        try:
+            raw = decoder(text + "=" * (-len(text) % 4))
+        except Exception:  # noqa: BLE001 - defensive base64 decode
+            continue
+        if len(raw) == 32:
+            return raw.hex()
+    return None
+
+
+def _lnd_invoice_import(invoice: Mapping[str, Any]) -> dict[str, Any] | None:
+    """Promote a settled LND invoice to an inbound wallet transaction.
+
+    Mirrors the Core Lightning invoice-income promotion so LND income is booked
+    and can pair (by payment hash) with an own-node outbound leg.
+    """
+    state = str(invoice.get("state") or "").upper()
+    if not (_is_truthy(invoice.get("settled")) or state == "SETTLED"):
+        return None
+    amount_msat = _msat(invoice.get("amt_paid_msat") or invoice.get("value_msat"))
+    if amount_msat <= 0:
+        amount_msat = _msat(invoice.get("amt_paid_sat") or invoice.get("value"), sats=True)
+    if amount_msat <= 0:
+        return None
+    payment_hash = _normalize_lnd_hash(invoice.get("r_hash"))
+    external_id = payment_hash or str(
+        invoice.get("settle_index")
+        or invoice.get("add_index")
+        or invoice.get("creation_date")
+        or ""
+    )
+    if not external_id:
+        return None
+    occurred_at = (
+        _timestamp(invoice.get("settle_date") or invoice.get("creation_date"))
+        or UNKNOWN_OCCURRED_AT
+    )
+    return {
+        "id": f"lnd:invoice:{external_id}",
+        "occurred_at": occurred_at,
+        "confirmed_at": occurred_at,
+        "direction": "inbound",
+        "asset": "BTC",
+        "amount": msat_to_btc(amount_msat),
+        "fee": 0,
+        "kind": "lnd_invoice",
+        "description": str(invoice.get("memo") or "LND invoice"),
+        "counterparty": None,
+        "payment_hash": payment_hash,
+        "payment_hash_source": "lnd" if payment_hash else None,
+        "raw_json": "{}",
+    }
+
+
+def _lnd_payment_import(payment: Mapping[str, Any]) -> dict[str, Any] | None:
+    """Promote a succeeded LND payment to an outbound wallet transaction.
+
+    ``value_msat`` is the principal and ``fee_msat`` the routing fee — the same
+    split Core Lightning uses, so an own-node payment nets to a transfer whose
+    only taxable component is the routing fee.
+    """
+    status = str(payment.get("status") or "").upper()
+    if status not in {"SUCCEEDED", "COMPLETE", "COMPLETED"}:
+        return None
+    amount_msat = _msat(payment.get("value_msat"))
+    if amount_msat <= 0:
+        amount_msat = _msat(payment.get("value"), sats=True)
+    if amount_msat <= 0:
+        return None
+    fee_msat = _msat(payment.get("fee_msat"))
+    if fee_msat <= 0:
+        fee_msat = _msat(payment.get("fee"), sats=True)
+    payment_hash = _normalize_lnd_hash(payment.get("payment_hash"))
+    external_id = payment_hash or str(
+        payment.get("payment_index") or payment.get("creation_date") or ""
+    )
+    if not external_id:
+        return None
+    created = payment.get("creation_date")
+    if not created and payment.get("creation_time_ns"):
+        created = _int(payment.get("creation_time_ns")) // 1_000_000_000
+    occurred_at = _timestamp(created) or UNKNOWN_OCCURRED_AT
+    return {
+        "id": f"lnd:pay:{external_id}",
+        "occurred_at": occurred_at,
+        "confirmed_at": occurred_at,
+        "direction": "outbound",
+        "asset": "BTC",
+        "amount": msat_to_btc(amount_msat),
+        "fee": msat_to_btc(fee_msat),
+        "kind": "lnd_pay",
+        "description": "LND payment",
+        "counterparty": None,
+        "payment_hash": payment_hash,
+        "payment_hash_source": "lnd" if payment_hash else None,
+        "raw_json": "{}",
+    }
+
+
+def lnd_import_records(
+    invoices: list[Mapping[str, Any]],
+    payments: list[Mapping[str, Any]],
+) -> list[dict[str, Any]]:
+    """Build the wallet-transaction import rows for an LND sync (pure)."""
+    records: list[dict[str, Any]] = []
+    for invoice in invoices:
+        record = _lnd_invoice_import(invoice)
+        if record is not None:
+            records.append(record)
+    for payment in payments:
+        record = _lnd_payment_import(payment)
+        if record is not None:
+            records.append(record)
+    return records
+
+
+def sync_lnd_wallet(
+    conn: Any,
+    profile: Mapping[str, Any],
+    wallet: Mapping[str, Any],
+    backend: Mapping[str, Any],
+    hooks: "core_imports.ImportCoordinatorHooks",
+    *,
+    commit: bool = True,
+    client: "LndRestClient | None" = None,
+) -> dict[str, Any]:
+    """Import settled invoices and succeeded payments for one ``lnd`` wallet.
+
+    Unlike Core Lightning, the LND node dashboard is served live from
+    :meth:`LndAdapter.fetch_node_snapshot`, so this sync only promotes ledger
+    transactions (income + payments); it does not persist snapshot aggregates.
+    Payments and invoices carry the payment hash so own-node CLN<->LND transfers
+    net via :func:`kassiber.transfers.detect_intra_transfers`.
+    """
+    if str(backend.get("kind") or "").lower() != "lnd":
+        raise AppError(
+            f"Backend '{backend.get('name')}' has kind '{backend.get('kind')}', expected 'lnd'",
+            code="validation",
+            hint=(
+                "Create an LND backend with"
+                " `kassiber backends create <name> --kind lnd --url https://... --token-stdin`."
+            ),
+        )
+    if client is None:
+        client = LndRestClient(backend)
+
+    payments_payload = client.get(
+        "/v1/payments",
+        params={"include_incomplete": "false", "max_payments": LND_MAX_PAGE_SIZE},
+    )
+    payments = [
+        _sanitize_payment(row)
+        for row in (payments_payload.get("payments") or [])
+        if isinstance(row, dict)
+    ]
+    invoices_payload = client.get(
+        "/v1/invoices",
+        params={"num_max_invoices": LND_MAX_PAGE_SIZE},
+    )
+    invoices = [
+        _sanitize_invoice(row)
+        for row in (invoices_payload.get("invoices") or [])
+        if isinstance(row, dict)
+    ]
+
+    import_records = lnd_import_records(invoices, payments)
+    import_outcome = core_imports.insert_wallet_records(
+        conn,
+        profile,
+        wallet,
+        import_records,
+        LND_IMPORT_SOURCE,
+        hooks,
+        commit=False,
+    )
+    invalidate_journals(conn, profile["id"])
+    if commit:
+        conn.commit()
+    return {
+        "wallet": wallet["label"],
+        "backend": backend["name"],
+        "backend_kind": "lnd",
+        "status": "synced",
+        "transactions": {
+            "fetched": len(import_records),
+            "imported": import_outcome["imported"],
+            "skipped": import_outcome["skipped"],
+        },
+    }
 
 
 # Singleton instance — the registry is keyed by kind and this module is

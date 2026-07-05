@@ -815,6 +815,14 @@ demo_seed_lightning() {
   KASSIBER_LIGHTNING_BUSINESS_BACKUP_LND_MACAROON_HEX="$(demo_lnd_readonly_macaroon_hex)"
   ./dev/regtest/lightning-business-scenario.sh
   py -m tests.integration.lightning_business_regtest >/dev/null
+  # Real lightningd/lnd stamp settle times at wall-clock "now"; spread the
+  # imported Lightning history across the on-chain scenario window so the demo
+  # ledger shows years of activity instead of a single burst. Demo-only, and it
+  # must run AFTER sync but BEFORE journals process so journals re-derive over
+  # the backdated timestamps. Node channels/balances stay "now" (live snapshot).
+  export KASSIBER_DEMO_BACKDATE_SCENARIO="$DEMO_SCENARIO"
+  export KASSIBER_DEMO_BACKDATE_SEED="${KASSIBER_DEMO_BACKDATE_SEED:-0}"
+  py -m tests.integration.lightning_demo_backdate >/dev/null
   py -m kassiber \
     --data-root "$DEMO_HOME/data" \
     --machine \

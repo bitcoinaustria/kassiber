@@ -1320,14 +1320,54 @@ def _upsert_lightning_record(
     return False, changed
 
 
-def _record_to_import(record: Mapping[str, Any]) -> dict[str, Any] | None:
-    """Promote an invoice income row to a wallet transaction.
+def _pay_to_import(record: Mapping[str, Any]) -> dict[str, Any] | None:
+    """Promote a completed outbound pay row to a wallet transaction.
 
-    P1 fix #1: only ``tag=="invoice"`` rows reach this point because
-    :func:`_income_invoice_record` already filters them. The defensive check
-    here is kept so a future caller can't accidentally feed us a routed-event
-    row that would double-count.
+    Mirror of the invoice-income promotion for the outbound leg. Without this,
+    Core Lightning spends never reach the ledger at all, and a payment between
+    the operator's own nodes (e.g. CLN -> LND) leaves only the inbound invoice
+    booked as income — a phantom taxable event with no offsetting outflow.
+
+    The promoted row carries the ``payment_hash`` so
+    :func:`kassiber.core.transfer_matching` can pair it with the matching
+    inbound invoice on another owned wallet and reclassify the pair as an
+    internal transfer, leaving only the routing fee as the taxable component.
+    ``amount_msat`` here is the principal (``_pay_record`` already splits the
+    routing fee into ``fee_msat``).
     """
+    amount_msat = int(record.get("amount_msat") or 0)
+    if amount_msat <= 0:
+        return None
+    fee_msat = int(record.get("fee_msat") or 0)
+    payment_hash = record.get("payment_hash")
+    return {
+        "id": f"cln:pay:{record['external_id']}",
+        "occurred_at": record.get("occurred_at") or UNKNOWN_OCCURRED_AT,
+        "confirmed_at": record.get("occurred_at") or UNKNOWN_OCCURRED_AT,
+        "direction": "outbound",
+        "asset": "BTC",
+        "amount": msat_to_btc(amount_msat),
+        "fee": msat_to_btc(fee_msat),
+        "kind": "cln_pay",
+        "description": record.get("status") or "Core Lightning payment",
+        "counterparty": record.get("peer_id"),
+        "payment_hash": payment_hash,
+        "payment_hash_source": "core_lightning" if payment_hash else None,
+        "raw_json": "{}",
+    }
+
+
+def _record_to_import(record: Mapping[str, Any]) -> dict[str, Any] | None:
+    """Promote invoice-income and completed-pay rows to wallet transactions.
+
+    P1 fix #1: only ``tag=="invoice"`` income rows reach the income branch
+    because :func:`_income_invoice_record` already filters them. The defensive
+    checks here are kept so a future caller can't accidentally feed us a
+    routed-event row that would double-count. Outbound ``pay`` rows are promoted
+    via :func:`_pay_to_import` so own-node payments can pair by payment hash.
+    """
+    if record.get("record_type") == "pay" and record.get("direction") == "outbound":
+        return _pay_to_import(record)
     if record.get("record_type") != "income":
         return None
     if (record.get("tag") or "").lower() != "invoice":
