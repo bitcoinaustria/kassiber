@@ -18,6 +18,7 @@ import {
   X,
 } from "lucide-react";
 import * as React from "react";
+import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
@@ -248,6 +249,8 @@ const TransactionsTable = ({
   const [detailTransaction, setDetailTransaction] =
     React.useState<Transaction | null>(null);
   const [detailInitialTab, setDetailInitialTab] = React.useState("details");
+  const [expandedActionsHost, setExpandedActionsHost] =
+    React.useState<HTMLElement | null>(null);
   const [attachmentListOverride, setAttachmentListOverride] = React.useState<{
     transactionId: string;
     attachments: AttachmentRecord[];
@@ -906,6 +909,16 @@ const TransactionsTable = ({
     [],
   );
 
+  React.useEffect(() => {
+    if (!isExpanded || typeof document === "undefined") {
+      setExpandedActionsHost(null);
+      return;
+    }
+    setExpandedActionsHost(
+      document.getElementById("transactions-expanded-table-actions"),
+    );
+  }, [isExpanded]);
+
   const filteredTransactions = React.useMemo(() => {
     const filtered = records.filter((txn) => {
       const draft = getDraft(txn);
@@ -1360,6 +1373,119 @@ const TransactionsTable = ({
     </>
   );
 
+  const tableActions = (
+    <div className="flex flex-wrap items-center gap-2">
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            variant="outline"
+            size="sm"
+            className={cn(
+              "h-8 gap-1.5 sm:h-9 sm:gap-2",
+              activeFilterCount > 0 && "border-primary",
+            )}
+            aria-label={t("table.filter.menuAria")}
+          >
+            <SlidersHorizontal className="size-3.5 sm:size-4" aria-hidden="true" />
+            <span>{t("table.filter.menuTrigger")}</span>
+            {activeFilterCount > 0 ? (
+              <span className="grid min-w-4 place-items-center rounded-full bg-primary px-1 text-[10px] font-semibold leading-4 text-primary-foreground">
+                {activeFilterCount}
+              </span>
+            ) : null}
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-[220px]">
+          <DropdownMenuLabel>{t("table.filter.menuLabel")}</DropdownMenuLabel>
+          <DropdownMenuSeparator />
+          <DropdownMenuSub>
+            <DropdownMenuSubTrigger>
+              <span>{t("table.filter.statusTrigger")}</span>
+              {statusFilter !== "all" ? (
+                <span className="ml-1 size-1.5 rounded-full bg-primary" />
+              ) : null}
+            </DropdownMenuSubTrigger>
+            <DropdownMenuSubContent className="w-[180px]">
+              {renderStatusFilterItems()}
+            </DropdownMenuSubContent>
+          </DropdownMenuSub>
+          <DropdownMenuSub>
+            <DropdownMenuSubTrigger>
+              <span>{t("table.filter.flowTrigger")}</span>
+              {flowFilter !== "all" ? (
+                <span className="ml-1 size-1.5 rounded-full bg-primary" />
+              ) : null}
+            </DropdownMenuSubTrigger>
+            <DropdownMenuSubContent className="w-[190px]">
+              {renderFlowFilterItems()}
+            </DropdownMenuSubContent>
+          </DropdownMenuSub>
+          <DropdownMenuSub>
+            <DropdownMenuSubTrigger>
+              <span>{t("table.filter.networkTrigger")}</span>
+              {paymentMethodFilter !== "all" ? (
+                <span className="ml-1 size-1.5 rounded-full bg-primary" />
+              ) : null}
+            </DropdownMenuSubTrigger>
+            <DropdownMenuSubContent className="w-[200px]">
+              {renderNetworkFilterItems()}
+            </DropdownMenuSubContent>
+          </DropdownMenuSub>
+          <DropdownMenuSub>
+            <DropdownMenuSubTrigger disabled={walletOptions.length === 0}>
+              <span>{t("table.filter.walletTrigger")}</span>
+              {walletFilterActive ? (
+                <span className="ml-1 size-1.5 rounded-full bg-primary" />
+              ) : null}
+            </DropdownMenuSubTrigger>
+            <DropdownMenuSubContent className="max-h-[320px] w-[220px] overflow-y-auto">
+              {renderWalletFilterItems()}
+            </DropdownMenuSubContent>
+          </DropdownMenuSub>
+          <DropdownMenuSub>
+            <DropdownMenuSubTrigger>
+              <span>{t("table.filter.feesTrigger")}</span>
+              {feeFilter !== "all" ? (
+                <span className="ml-1 size-1.5 rounded-full bg-primary" />
+              ) : null}
+            </DropdownMenuSubTrigger>
+            <DropdownMenuSubContent className="w-[180px]">
+              {renderFeeFilterItems()}
+            </DropdownMenuSubContent>
+          </DropdownMenuSub>
+        </DropdownMenuContent>
+      </DropdownMenu>
+
+      {onExpandedChange ? (
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-8 w-8 p-0 sm:h-9 sm:w-9"
+          aria-label={
+            isExpanded
+              ? t("table.expand.collapseAria")
+              : t("table.expand.expandAria")
+          }
+          title={
+            isExpanded
+              ? t("table.expand.collapseAria")
+              : t("table.expand.expandAria")
+          }
+          onClick={() => onExpandedChange(!isExpanded)}
+        >
+          {isExpanded ? (
+            <Minimize2 className="size-3.5 sm:size-4" aria-hidden="true" />
+          ) : (
+            <Maximize2 className="size-3.5 sm:size-4" aria-hidden="true" />
+          )}
+          <span className="sr-only">
+            {isExpanded ? t("table.expand.collapse") : t("table.expand.expand")}
+          </span>
+        </Button>
+      ) : null}
+    </div>
+  );
+
   const allLoanMarks = loansQuery.data?.data?.marks ?? [];
   const detailLoanMark = detailTransaction
     ? loanMarkByTransaction.get(detailTransaction.id) ?? null
@@ -1396,272 +1522,175 @@ const TransactionsTable = ({
         role={isRefreshing ? "status" : undefined}
         aria-live={isRefreshing ? "polite" : undefined}
       >
-        <div
-          className="flex flex-col gap-3 p-3 sm:flex-row sm:items-center sm:gap-4 sm:px-6 sm:py-3.5"
-          onClick={handleTableToolbarClick}
-          onDoubleClick={handleTableToolbarDoubleClick}
-        >
-          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
-            <span className="text-sm font-medium sm:text-base">{t("table.title")}</span>
-            {hasActiveFilters && (
-              <div className="flex min-w-0 flex-wrap items-center gap-2">
-                <span className="text-[10px] text-muted-foreground sm:text-xs">
-                  {t("table.filters")}
+        {(!isExpanded || hasActiveFilters) && (
+          <div
+            className="flex flex-col gap-3 p-3 sm:flex-row sm:items-center sm:gap-4 sm:px-6 sm:py-3.5"
+            onClick={handleTableToolbarClick}
+            onDoubleClick={handleTableToolbarDoubleClick}
+          >
+            <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+              {!isExpanded ? (
+                <span className="text-sm font-medium sm:text-base">
+                  {t("table.title")}
                 </span>
-                {chartSelection && (
-                  <button
-                    type="button"
-                    className={filterChipClassName}
-                    onClick={() => onChartSelectionChange(null)}
-                    aria-label={t("table.chip.clearChart", {
-                      // loose translator
-                      label: flowChartSelectionLabel(
-                        chartSelection,
-                        t as (key: string, opts?: Record<string, unknown>) => string,
-                      ),
-                    })}
-                  >
-                    {t("table.chip.chartPrefix", {
-                      // loose translator
-                      label: flowChartSelectionLabel(
-                        chartSelection,
-                        t as (key: string, opts?: Record<string, unknown>) => string,
-                      ),
-                    })}
-                    <X className="size-2.5 sm:size-3" aria-hidden="true" />
-                  </button>
-                )}
-                {quickFilter && (
-                  <button
-                    type="button"
-                    className={filterChipClassName}
-                    onClick={() => onQuickFilterChange(null)}
-                    aria-label={t("table.chip.clearQuick", {
-                      // loose translator
-                      label: (t as (key: string) => string)(
-                        quickFilterLabel(quickFilter),
-                      ),
-                    })}
-                  >
-                    {/* loose translator */}
-                    {(t as (key: string) => string)(quickFilterLabel(quickFilter))}
-                    <X className="size-2.5 sm:size-3" aria-hidden="true" />
-                  </button>
-                )}
-                {breakdownSelection && (
-                  <button
-                    type="button"
-                    className={filterChipClassName}
-                    onClick={() => onBreakdownSelectionChange(null)}
-                    aria-label={t("table.chip.clearBreakdown", {
-                      // loose translator
-                      label: breakdownSelectionLabel(
-                        breakdownSelection,
-                        t as (key: string, opts?: Record<string, unknown>) => string,
-                      ),
-                    })}
-                  >
-                    {/* loose translator */}
-                    {breakdownSelectionLabel(
-                      breakdownSelection,
-                      t as (key: string, opts?: Record<string, unknown>) => string,
-                    )}
-                    <X className="size-2.5 sm:size-3" aria-hidden="true" />
-                  </button>
-                )}
-                {statusFilter !== "all" && (
-                  <button
-                    type="button"
-                    className={filterChipClassName}
-                    onClick={() => setStatusFilter("all")}
-                    aria-label={t("table.chip.clearStatus", {
-                      // loose translator
-                      label: (t as (key: string) => string)(
-                        transactionStatusLabels[statusFilter as TransactionStatus],
-                      ),
-                    })}
-                  >
-                    {/* loose translator */}
-                    {(t as (key: string) => string)(
-                      transactionStatusLabels[statusFilter as TransactionStatus],
-                    )}
-                    <X className="size-2.5 sm:size-3" aria-hidden="true" />
-                  </button>
-                )}
-                {flowFilter !== "all" && (
-                  <button
-                    type="button"
-                    className={filterChipClassName}
-                    onClick={() => setFlowFilter("all")}
-                    aria-label={t("table.chip.clearFlow", {
-                      // loose translator
-                      label: (t as (key: string) => string)(
-                        transactionFlowLabels[flowFilter as TransactionFlow],
-                      ),
-                    })}
-                  >
-                    {/* loose translator */}
-                    {(t as (key: string) => string)(
-                      transactionFlowLabels[flowFilter as TransactionFlow],
-                    )}
-                    <X className="size-2.5 sm:size-3" aria-hidden="true" />
-                  </button>
-                )}
-                {paymentMethodFilter !== "all" && (
-                  <button
-                    type="button"
-                    className={filterChipClassName}
-                    onClick={() => setPaymentMethodFilter("all")}
-                    aria-label={t("table.chip.clearPayment", {
-                      label: paymentMethodFilter,
-                    })}
-                  >
-                    {paymentMethodFilter}
-                    <X className="size-2.5 sm:size-3" aria-hidden="true" />
-                  </button>
-                )}
-                {feeFilter === "with-fees" && (
-                  <button
-                    type="button"
-                    className={filterChipClassName}
-                    onClick={() => setFeeFilter("all")}
-                    aria-label={t("table.chip.clearWithFees")}
-                  >
-                    {t("table.withFees")}
-                    <X className="size-2.5 sm:size-3" aria-hidden="true" />
-                  </button>
-                )}
-                <button
-                  onClick={clearFilters}
-                  className="text-[10px] text-destructive hover:underline sm:text-xs"
-                >
-                  {t("table.clearAll")}
-                </button>
-              </div>
-            )}
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className={cn(
-                    "h-8 gap-1.5 sm:h-9 sm:gap-2",
-                    activeFilterCount > 0 && "border-primary",
+              ) : null}
+              {hasActiveFilters && (
+                <div className="flex min-w-0 flex-wrap items-center gap-2">
+                  <span className="text-[10px] text-muted-foreground sm:text-xs">
+                    {t("table.filters")}
+                  </span>
+                  {chartSelection && (
+                    <button
+                      type="button"
+                      className={filterChipClassName}
+                      onClick={() => onChartSelectionChange(null)}
+                      aria-label={t("table.chip.clearChart", {
+                        // loose translator
+                        label: flowChartSelectionLabel(
+                          chartSelection,
+                          t as (
+                            key: string,
+                            opts?: Record<string, unknown>,
+                          ) => string,
+                        ),
+                      })}
+                    >
+                      {t("table.chip.chartPrefix", {
+                        // loose translator
+                        label: flowChartSelectionLabel(
+                          chartSelection,
+                          t as (
+                            key: string,
+                            opts?: Record<string, unknown>,
+                          ) => string,
+                        ),
+                      })}
+                      <X className="size-2.5 sm:size-3" aria-hidden="true" />
+                    </button>
                   )}
-                  aria-label={t("table.filter.menuAria")}
-                >
-                  <SlidersHorizontal className="size-3.5 sm:size-4" aria-hidden="true" />
-                  <span>{t("table.filter.menuTrigger")}</span>
-                  {activeFilterCount > 0 ? (
-                    <span className="grid min-w-4 place-items-center rounded-full bg-primary px-1 text-[10px] font-semibold leading-4 text-primary-foreground">
-                      {activeFilterCount}
-                    </span>
-                  ) : null}
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-[220px]">
-                <DropdownMenuLabel>
-                  {t("table.filter.menuLabel")}
-                </DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                <DropdownMenuSub>
-                  <DropdownMenuSubTrigger>
-                    <span>{t("table.filter.statusTrigger")}</span>
-                    {statusFilter !== "all" ? (
-                      <span className="ml-1 size-1.5 rounded-full bg-primary" />
-                    ) : null}
-                  </DropdownMenuSubTrigger>
-                  <DropdownMenuSubContent className="w-[180px]">
-                    {renderStatusFilterItems()}
-                  </DropdownMenuSubContent>
-                </DropdownMenuSub>
-                <DropdownMenuSub>
-                  <DropdownMenuSubTrigger>
-                    <span>{t("table.filter.flowTrigger")}</span>
-                    {flowFilter !== "all" ? (
-                      <span className="ml-1 size-1.5 rounded-full bg-primary" />
-                    ) : null}
-                  </DropdownMenuSubTrigger>
-                  <DropdownMenuSubContent className="w-[190px]">
-                    {renderFlowFilterItems()}
-                  </DropdownMenuSubContent>
-                </DropdownMenuSub>
-                <DropdownMenuSub>
-                  <DropdownMenuSubTrigger>
-                    <span>{t("table.filter.networkTrigger")}</span>
-                    {paymentMethodFilter !== "all" ? (
-                      <span className="ml-1 size-1.5 rounded-full bg-primary" />
-                    ) : null}
-                  </DropdownMenuSubTrigger>
-                  <DropdownMenuSubContent className="w-[200px]">
-                    {renderNetworkFilterItems()}
-                  </DropdownMenuSubContent>
-                </DropdownMenuSub>
-                <DropdownMenuSub>
-                  <DropdownMenuSubTrigger disabled={walletOptions.length === 0}>
-                    <span>{t("table.filter.walletTrigger")}</span>
-                    {walletFilterActive ? (
-                      <span className="ml-1 size-1.5 rounded-full bg-primary" />
-                    ) : null}
-                  </DropdownMenuSubTrigger>
-                  <DropdownMenuSubContent className="max-h-[320px] w-[220px] overflow-y-auto">
-                    {renderWalletFilterItems()}
-                  </DropdownMenuSubContent>
-                </DropdownMenuSub>
-                <DropdownMenuSub>
-                  <DropdownMenuSubTrigger>
-                    <span>{t("table.filter.feesTrigger")}</span>
-                    {feeFilter !== "all" ? (
-                      <span className="ml-1 size-1.5 rounded-full bg-primary" />
-                    ) : null}
-                  </DropdownMenuSubTrigger>
-                  <DropdownMenuSubContent className="w-[180px]">
-                    {renderFeeFilterItems()}
-                  </DropdownMenuSubContent>
-                </DropdownMenuSub>
-              </DropdownMenuContent>
-            </DropdownMenu>
+                  {quickFilter && (
+                    <button
+                      type="button"
+                      className={filterChipClassName}
+                      onClick={() => onQuickFilterChange(null)}
+                      aria-label={t("table.chip.clearQuick", {
+                        // loose translator
+                        label: (t as (key: string) => string)(
+                          quickFilterLabel(quickFilter),
+                        ),
+                      })}
+                    >
+                      {/* loose translator */}
+                      {(t as (key: string) => string)(
+                        quickFilterLabel(quickFilter),
+                      )}
+                      <X className="size-2.5 sm:size-3" aria-hidden="true" />
+                    </button>
+                  )}
+                  {breakdownSelection && (
+                    <button
+                      type="button"
+                      className={filterChipClassName}
+                      onClick={() => onBreakdownSelectionChange(null)}
+                      aria-label={t("table.chip.clearBreakdown", {
+                        // loose translator
+                        label: breakdownSelectionLabel(
+                          breakdownSelection,
+                          t as (
+                            key: string,
+                            opts?: Record<string, unknown>,
+                          ) => string,
+                        ),
+                      })}
+                    >
+                      {/* loose translator */}
+                      {breakdownSelectionLabel(
+                        breakdownSelection,
+                        t as (
+                          key: string,
+                          opts?: Record<string, unknown>,
+                        ) => string,
+                      )}
+                      <X className="size-2.5 sm:size-3" aria-hidden="true" />
+                    </button>
+                  )}
+                  {statusFilter !== "all" && (
+                    <button
+                      type="button"
+                      className={filterChipClassName}
+                      onClick={() => setStatusFilter("all")}
+                      aria-label={t("table.chip.clearStatus", {
+                        // loose translator
+                        label: (t as (key: string) => string)(
+                          transactionStatusLabels[
+                            statusFilter as TransactionStatus
+                          ],
+                        ),
+                      })}
+                    >
+                      {/* loose translator */}
+                      {(t as (key: string) => string)(
+                        transactionStatusLabels[statusFilter as TransactionStatus],
+                      )}
+                      <X className="size-2.5 sm:size-3" aria-hidden="true" />
+                    </button>
+                  )}
+                  {flowFilter !== "all" && (
+                    <button
+                      type="button"
+                      className={filterChipClassName}
+                      onClick={() => setFlowFilter("all")}
+                      aria-label={t("table.chip.clearFlow", {
+                        // loose translator
+                        label: (t as (key: string) => string)(
+                          transactionFlowLabels[flowFilter as TransactionFlow],
+                        ),
+                      })}
+                    >
+                      {/* loose translator */}
+                      {(t as (key: string) => string)(
+                        transactionFlowLabels[flowFilter as TransactionFlow],
+                      )}
+                      <X className="size-2.5 sm:size-3" aria-hidden="true" />
+                    </button>
+                  )}
+                  {paymentMethodFilter !== "all" && (
+                    <button
+                      type="button"
+                      className={filterChipClassName}
+                      onClick={() => setPaymentMethodFilter("all")}
+                      aria-label={t("table.chip.clearPayment", {
+                        label: paymentMethodFilter,
+                      })}
+                    >
+                      {paymentMethodFilter}
+                      <X className="size-2.5 sm:size-3" aria-hidden="true" />
+                    </button>
+                  )}
+                  {feeFilter === "with-fees" && (
+                    <button
+                      type="button"
+                      className={filterChipClassName}
+                      onClick={() => setFeeFilter("all")}
+                      aria-label={t("table.chip.clearWithFees")}
+                    >
+                      {t("table.withFees")}
+                      <X className="size-2.5 sm:size-3" aria-hidden="true" />
+                    </button>
+                  )}
+                  <button
+                    onClick={clearFilters}
+                    className="text-[10px] text-destructive hover:underline sm:text-xs"
+                  >
+                    {t("table.clearAll")}
+                  </button>
+                </div>
+              )}
+            </div>
 
-            {onExpandedChange ? (
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-8 w-8 p-0 sm:h-9 sm:w-9"
-                aria-label={
-                  isExpanded
-                    ? t("table.expand.collapseAria")
-                    : t("table.expand.expandAria")
-                }
-                title={
-                  isExpanded
-                    ? t("table.expand.collapseAria")
-                    : t("table.expand.expandAria")
-                }
-                onClick={() => onExpandedChange(!isExpanded)}
-              >
-                {isExpanded ? (
-                  <Minimize2
-                    className="size-3.5 sm:size-4"
-                    aria-hidden="true"
-                  />
-                ) : (
-                  <Maximize2
-                    className="size-3.5 sm:size-4"
-                    aria-hidden="true"
-                  />
-                )}
-                <span className="sr-only">
-                  {isExpanded
-                    ? t("table.expand.collapse")
-                    : t("table.expand.expand")}
-                </span>
-              </Button>
-            ) : null}
+            {!isExpanded ? tableActions : null}
           </div>
-        </div>
+        )}
 
       <div
         ref={tableScrollRef}
@@ -2383,6 +2412,9 @@ const TransactionsTable = ({
         <div aria-hidden="true" />
       </div>
       </div>
+      {isExpanded && expandedActionsHost
+        ? createPortal(tableActions, expandedActionsHost)
+        : null}
       <ExplorerOpenDialog
         transaction={explorerTransaction}
         target={explorerTarget}

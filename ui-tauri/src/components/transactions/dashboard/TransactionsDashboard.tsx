@@ -401,7 +401,12 @@ const TransactionsDashboard = ({
           onPeriodChange={handlePeriodChange}
           periodOptions={availablePeriods}
         />
-        {!tableExpanded && (
+        {tableExpanded ? (
+          <div
+            id="transactions-expanded-table-actions"
+            className={cn(pageHeaderActionsClassName, "shrink-0")}
+          />
+        ) : (
           <div className={pageHeaderActionsClassName}>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
