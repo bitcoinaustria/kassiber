@@ -39,7 +39,8 @@ export function ActivityScatterDot({
   const radius = Math.max(3, Math.sqrt(normalizedSize / Math.PI));
   const markerCount = payload.markerCount ?? 1;
   const allGroupedPoints = payload.markerGroupedPoints ?? [];
-  const groupedPoints = allGroupedPoints.slice(0, 9);
+  const useGridFanout = allGroupedPoints.length > 6;
+  const groupedPoints = allGroupedPoints;
   const groupedTransactionIds = [
     ...new Set(
       allGroupedPoints
@@ -165,6 +166,14 @@ export function ActivityScatterDot({
       };
   const childRadius = Math.max(3.5, Math.min(radius * 0.95, 5.5));
   const spreadRadius = Math.max(radius + 12, 18);
+  const gridCellSize = 13;
+  const gridGap = 2;
+  const gridColumns = Math.min(8, Math.ceil(Math.sqrt(groupedPoints.length)));
+  const gridRows = Math.ceil(groupedPoints.length / Math.max(1, gridColumns));
+  const gridWidth = gridColumns * gridCellSize + Math.max(0, gridColumns - 1) * gridGap;
+  const gridHeight = gridRows * gridCellSize + Math.max(0, gridRows - 1) * gridGap;
+  const gridStartX = cx + radius + 14;
+  const gridStartY = cy - gridHeight / 2;
   const flowForPoint = (point: TreasuryChartPoint): ActivityFlow =>
     point.eventFlow ?? payload.eventFlow;
   const flowIndex = new Map<ActivityFlow, number>();
@@ -176,10 +185,19 @@ export function ActivityScatterDot({
     },
     { incoming: 0, outgoing: 0, movement: 0, fee: 0 },
   );
-  const childPoints = groupedPoints.map((point) => {
+  const childPoints = groupedPoints.map((point, gridIndex) => {
     const flow = flowForPoint(point);
     const index = flowIndex.get(flow) ?? 0;
     flowIndex.set(flow, index + 1);
+    if (useGridFanout) {
+      const column = gridIndex % gridColumns;
+      const row = Math.floor(gridIndex / gridColumns);
+      return {
+        point,
+        x: gridStartX + column * (gridCellSize + gridGap) + gridCellSize / 2,
+        y: gridStartY + row * (gridCellSize + gridGap) + gridCellSize / 2,
+      };
+    }
     const total = flowTotal[flow] ?? 1;
     const offset = (index - (total - 1) / 2) * Math.max(childRadius * 2.8, 7);
     const axis =
@@ -228,6 +246,32 @@ export function ActivityScatterDot({
         <g
           className="opacity-[0.02] transition-opacity duration-150 ease-out group-hover/activity-marker:opacity-100 group-focus/activity-marker:opacity-100"
         >
+          {useGridFanout && (
+            <>
+              <line
+                x1={cx}
+                y1={cy}
+                x2={gridStartX - 5}
+                y2={cy}
+                stroke={parentFill}
+                strokeOpacity={0.32}
+                strokeWidth={1}
+                pointerEvents="none"
+              />
+              <rect
+                x={gridStartX - 5}
+                y={gridStartY - 5}
+                width={gridWidth + 10}
+                height={gridHeight + 10}
+                rx={5}
+                fill="var(--background)"
+                fillOpacity={0.86}
+                stroke="var(--border)"
+                strokeOpacity={0.75}
+                pointerEvents="none"
+              />
+            </>
+          )}
           {childPoints.map(({ point, x, y }, index) => (
             <g
               key={`${point.eventTransactionId ?? point.eventId ?? index}`}
@@ -250,29 +294,43 @@ export function ActivityScatterDot({
               onPointerEnter={() => hoverGroupedPoint(point)}
               onPointerLeave={leaveGroupedPoint}
             >
-              <line
-                x1={cx}
-                y1={cy}
-                x2={x}
-                y2={y}
-                stroke="transparent"
-                strokeWidth={Math.max(childRadius * 2.3, 8)}
-                pointerEvents="stroke"
-              />
-              <line
-                x1={cx}
-                y1={cy}
-                x2={x}
-                y2={y}
-                stroke={flowColors[flowForPoint(point)]}
-                strokeOpacity={0.32}
-                strokeWidth={1}
-                pointerEvents="none"
-              />
+              {useGridFanout ? (
+                <rect
+                  x={x - gridCellSize / 2}
+                  y={y - gridCellSize / 2}
+                  width={gridCellSize}
+                  height={gridCellSize}
+                  rx={4}
+                  fill="transparent"
+                  pointerEvents="all"
+                />
+              ) : (
+                <>
+                  <line
+                    x1={cx}
+                    y1={cy}
+                    x2={x}
+                    y2={y}
+                    stroke="transparent"
+                    strokeWidth={Math.max(childRadius * 2.3, 8)}
+                    pointerEvents="stroke"
+                  />
+                  <line
+                    x1={cx}
+                    y1={cy}
+                    x2={x}
+                    y2={y}
+                    stroke={flowColors[flowForPoint(point)]}
+                    strokeOpacity={0.32}
+                    strokeWidth={1}
+                    pointerEvents="none"
+                  />
+                </>
+              )}
               <circle
                 cx={x}
                 cy={y}
-                r={childRadius}
+                r={useGridFanout ? Math.min(childRadius, 4.2) : childRadius}
                 fill={flowColors[flowForPoint(point)]}
                 fillOpacity={0.96}
                 stroke="var(--background)"
