@@ -387,6 +387,38 @@ class LndAdapterFetchSnapshotTest(unittest.TestCase):
         )
         self.assertNotIn(leaked_pubkey, json.dumps(snapshot_to_dict(snapshot)))
 
+    def test_private_channel_can_use_graph_alias_without_pubkey_leak(
+        self,
+    ) -> None:
+        remote_pubkey = "03" + "dd" * 32
+        row = {
+            "active": True,
+            "chan_id": "333",
+            "channel_point": ("ee" * 32) + ":0",
+            "remote_pubkey": remote_pubkey,
+            "peer_alias": "",
+            "capacity": "500000",
+            "local_balance": "200000",
+            "remote_balance": "300000",
+            "private": True,
+            "initiator": False,
+        }
+        client = _FakeLndRestClient(BACKEND)
+        client.responses[("GET", f"/v1/graph/node/{remote_pubkey}")] = {
+            "node": {"alias": "KnownPrivatePeer"}
+        }
+
+        aliases = core_lnd._peer_alias_lookup(client, [row])
+        channel = core_lnd._map_channel(
+            row,
+            closed=False,
+            peer_alias_lookup=aliases,
+        )
+
+        self.assertEqual(channel.peer_alias, "KnownPrivatePeer")
+        self.assertIsNone(channel.peer_pubkey)
+        self.assertNotIn(remote_pubkey, channel.peer_alias)
+
     def test_private_channel_with_pubkey_shaped_alias_keeps_alias(self) -> None:
         """If LND surfaces an alias for a private channel — even one that
         happens to look like a pubkey — we keep it. The opsec rule is to

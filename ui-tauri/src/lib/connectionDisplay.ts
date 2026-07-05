@@ -40,6 +40,34 @@ export const connectionKindCategoryLabels: Record<ConnectionKind, string> = {
   backend: "Infrastructure",
 };
 
+const connectionCategorySortOrder = [
+  "On-chain",
+  "Liquid",
+  "Lightning",
+  "NWC",
+  "Ecash",
+  "BTCPay",
+  "Exchange",
+  "Custodial platform",
+  "CSV",
+  "BIP329",
+  "Custom",
+  "Infrastructure",
+] as const;
+
+const connectionCategorySortRanks = new Map<string, number>(
+  connectionCategorySortOrder.map((category, index) => [category, index]),
+);
+
+export function connectionCategorySortRank(
+  connection: Pick<Connection, "kind" | "chain" | "role">,
+): number {
+  return (
+    connectionCategorySortRanks.get(connectionCategoryLabel(connection)) ??
+    connectionCategorySortOrder.length
+  );
+}
+
 export const connectionKindLabels: Record<ConnectionKind, string> = {
   xpub: "Wallet export",
   address: "Address",

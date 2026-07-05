@@ -487,6 +487,8 @@ class RegtestHarnessTest(unittest.TestCase):
         self.assertIn("bitcoin/bitcoin:30.0", compose)
         self.assertIn("zmqpubsequence=tcp://0.0.0.0:28336", compose)
         self.assertIn("Dockerfile.frigate", compose)
+        self.assertIn("Waiting for bitcoind RPC before starting Frigate", compose)
+        self.assertIn("getnetworkinfo", compose)
         self.assertIn("backendElectrumServer = \"tcp://fulcrum:50001\"", compose)
         self.assertNotIn("backend-stack:", compose)
         self.assertIn("KASSIBER_REGTEST_ELEMENTSD_IMAGE", compose)
@@ -525,7 +527,24 @@ class RegtestHarnessTest(unittest.TestCase):
 
         self.assertIn("--no-business-tick", harness)
         self.assertIn("demo_load_rpc_env", harness)
+        self.assertIn("demo_manifest_url_port core_url", harness)
         self.assertIn("KASSIBER_REGTEST_COMPOSE_PROFILES", harness)
+        self.assertIn("deadline = time.monotonic() + 60", harness)
+        self.assertIn("except AppError:", harness)
+
+    def test_demo_up_includes_lightning_by_default_with_opt_out(self):
+        harness = (ROOT / "scripts" / "integration-harness.sh").read_text(encoding="utf-8")
+
+        self.assertIn("demo_lightning_enabled()", harness)
+        self.assertIn("KASSIBER_REGTEST_DEMO_LIGHTNING:-1", harness)
+        self.assertIn("dev/regtest/compose.lightning.yml", harness)
+        self.assertIn("demo_seed_lightning", harness)
+        self.assertIn("demo_write_lightning_cli_wrapper", harness)
+        self.assertIn("KASSIBER_LIGHTNING_BUSINESS_MERCHANT_CLI", harness)
+        self.assertIn('KASSIBER_REGTEST_COMPOSE_PROJECT="${KASSIBER_REGTEST_COMPOSE_PROJECT:-', harness)
+        self.assertIn('KASSIBER_LIGHTNING_BUSINESS_DATA_ROOT="$DEMO_HOME/data"', harness)
+        self.assertIn('KASSIBER_LIGHTNING_BUSINESS_WORKSPACE="Regtest Demo"', harness)
+        self.assertIn('KASSIBER_LIGHTNING_BUSINESS_PROFILE="Full Accounting"', harness)
 
     def test_regtest_lanes_auto_select_free_port_family(self):
         harness = (ROOT / "scripts" / "integration-harness.sh").read_text(encoding="utf-8")
@@ -536,7 +555,7 @@ class RegtestHarnessTest(unittest.TestCase):
         self.assertIn("for candidate in 18443 19443 20443 21443 22443", harness)
         self.assertLess(
             harness.index('export KASSIBER_REGTEST_RPC_PORT="$(choose_regtest_base_port)"'),
-            harness.index('docker_compose -p "$KASSIBER_REGTEST_COMPOSE_PROJECT"'),
+            harness.index("docker_compose_regtest up -d"),
         )
 
     def test_silent_payments_lane_probes_frigate(self):
@@ -562,7 +581,8 @@ class RegtestHarnessTest(unittest.TestCase):
     def test_all_lane_gives_demo_full_a_fresh_chain(self):
         harness = (ROOT / "scripts" / "integration-harness.sh").read_text(encoding="utf-8")
 
-        all_case = harness[harness.index("  all)") : harness.index("  *)")]
+        all_start = harness.rindex("  all)")
+        all_case = harness[all_start : harness.index("  *)", all_start)]
         self.assertIn("run_fast", all_case)
         self.assertIn("( run_bitcoin_core )", all_case)
         self.assertIn("( run_regtest_demo_full )", all_case)
@@ -575,10 +595,15 @@ class RegtestHarnessTest(unittest.TestCase):
         self.assertIn("path is root, user home, a temp root, or root-level", harness)
         self.assertIn("path is too shallow", harness)
         self.assertIn("missing Kassiber regtest demo manifest", harness)
+        down_case = harness[
+            harness.index("run_demo_down()") : harness.index("run_bitcoin_core()")
+        ]
+        self.assertIn('COMPOSE_PROFILES="$KASSIBER_REGTEST_COMPOSE_PROFILES"', down_case)
         self.assertLess(
             harness.index("demo_assert_safe_home rebuild"),
             harness.index('rm -rf "$DEMO_HOME/data"'),
         )
+        self.assertIn('"$DEMO_HOME/lightning"', harness)
         self.assertLess(
             harness.index("demo_assert_safe_home purge"),
             harness.index('rm -rf "$DEMO_HOME"'),

@@ -10,10 +10,10 @@ regtest infrastructure.
 | --- | --- | --- | --- |
 | FAST | `./scripts/integration-harness.sh fast` | no | Replays recorded regtest tapes through the real sync adapter, import, journal, report, and XLSX export path with `KASSIBER_NO_EGRESS=1`. Includes a baseline watch-only tape and an edge-case tape (multi-address wallet, immature vs. mature coinbase, dust, RBF-replaced conflict pair, same-wallet self-spend, mempool-pending receipt). |
 | SLOW | `./scripts/integration-harness.sh bitcoin-core` | yes, unless reusing a node | Starts or reuses the regtest Compose stack (Bitcoin Core, Elements, Bitcoin Fulcrum, plus local mempool/esplora-compatible loopback endpoints), creates real wallets and transactions (including coinbase maturity and a watched receive), drives the Core RPC sync/pricing/journal/report/export smoke, and compares a real Fulcrum/Electrum address-wallet sync against Core RPC for receipt, spend, incremental, and no-op sync parity. |
-| DEMO | `./scripts/integration-harness.sh demo-full` | yes, unless reusing a node | Builds the checked-in `full-accounting-v1` scenario: thirteen Kassiber wallets including multi-address Bitcoin wallets, a Silent Payments wallet, rotation targets, a mining wallet, and descriptor-backed Liquid wallets synced from real `elementsd` transactions through the local Liquid Electrum endpoint; real regtest acquisitions/disposals/transfers, ownership-derived fan-out self-transfer matching, operating-expense disposals with deterministic amount/fee variation, deprecated rotated-out wallets, batched, consolidation, dust, RBF-replacement, and mempool-pending edge cases, local Bitcoin/Liquid Electrum and mempool-compatible backend rows, a multi-year stress ledger, CoinJoin- and PayJoin-shaped collaborative transactions, swap/peg bridge pairs, loan marks, bundled real historical BTC/EUR pricing, journals, reports, and transaction exports. |
+| DEMO | `./scripts/integration-harness.sh demo-full` | yes, unless reusing a node | Builds the checked-in `full-accounting-v1` scenario: thirteen Kassiber wallets including multi-address Bitcoin wallets, a Silent Payments wallet, rotation targets, a mining wallet, and descriptor-backed Liquid wallets synced from real `elementsd` transactions through the local Liquid Electrum endpoint; real regtest acquisitions/disposals/transfers, ownership-derived fan-out self-transfer matching, operating-expense disposals with deterministic amount/fee variation, deprecated rotated-out wallets, batched, consolidation, dust, RBF-replacement, and mempool-pending edge cases, local Bitcoin/Liquid Electrum and mempool-compatible backend rows, a multi-year stress ledger, CoinJoin- and PayJoin-shaped collaborative transactions, swap/peg bridge pairs, loan marks, bundled real historical BTC/EUR pricing, journals, reports, and transaction exports. The persistent `demo-up` variant also starts the Core Lightning overlay and seeds a merchant `coreln` connection by default. |
 | SILENT PAYMENTS | `./scripts/integration-harness.sh silent-payments` | yes | Starts the regtest Compose stack with the `silent-payments` profile, which builds/runs Sparrow Frigate against Bitcoin Core v30 and Fulcrum, waits until Frigate advertises `silent_payments: [0]` through `server.features`, then runs Kassiber's Silent Payments sync tests. Override the cold-start wait with `KASSIBER_REGTEST_FRIGATE_WAIT_SECONDS` if the local Frigate index is slow. |
 | BOLTZ | `./scripts/integration-harness.sh boltz-liquid` | yes, upstream Boltz stack | Starts or reuses Boltz's official [`BoltzExchange/regtest`](https://github.com/BoltzExchange/regtest) Docker environment, probes the local Boltz API for Liquid-capable submarine, reverse, and BTC -> L-BTC chain-swap pairs, executes a Liquid on-chain payment plus an L-BTC -> BTC Lightning submarine swap, builds Kassiber import rows from the observed txids/hash/amounts, and verifies the swap pairs while the plain Liquid payment stays unpaired. Optional `KASSIBER_BOLTZ_V2_EVIDENCE=/path/to/evidence.json` adds real Boltz wallet/client/provider v2 chain/reverse/refund evidence rows to the temporary book and asserts exact `provider_swap_id` pairing. |
-| LIGHTNING | `./scripts/integration-harness.sh lightning-business` | yes, Kassiber stack + CLN overlay | Starts the existing regtest Compose stack plus `dev/regtest/compose.lightning.yml` with four pinned Core Lightning nodes. A seeded sim-ln-inspired business plan drives mainchain top-ups/withdrawals, merchant invoices, supplier payments, routed forwarding activity, an expired quote, and an intentionally failed oversized payment, then verifies Kassiber through `wallets sync`, `ui.connections.node.snapshot`, `reports lightning-profitability`, and `export-lightning-profitability-csv`. |
+| LIGHTNING | `./scripts/integration-harness.sh lightning-business` | yes, Kassiber stack + CLN/LND overlay | Starts the existing regtest Compose stack plus `dev/regtest/compose.lightning.yml` with four pinned Core Lightning nodes and one LND backup merchant node. A seeded sim-ln-inspired business plan drives mainchain top-ups/withdrawals, merchant invoices, supplier payments, routed forwarding activity, LND backup receipts/outbound payments, an expired quote, and an intentionally failed oversized payment, opens private CLN merchant -> LND backup and LND backup -> CLN router channels, then verifies Kassiber through `wallets sync`, `ui.connections.node.snapshot` for both node implementations, `reports lightning-profitability`, and `export-lightning-profitability-csv`. |
 
 The slow lane is opt-in with `KASSIBER_INTEGRATION=1`; normal unit gates do not
 start Docker. To reuse an existing regtest node instead of Compose, set an
@@ -208,12 +208,13 @@ to choose a different host binding.
 
 ## Lightning Business Regtest
 
-The `lightning-business` lane is Kassiber's live Core Lightning merchant-node
-test. It layers `dev/regtest/compose.lightning.yml` onto the existing Bitcoin
-regtest compose file and uses Bitcoin Core regtest as the funding/mining
-source. The CLN overlay defaults to the pinned
-`elementsproject/lightningd:v25.05` image; set `KASSIBER_REGTEST_CLN_IMAGE` to
-test a different CLN build intentionally.
+The `lightning-business` lane is Kassiber's live Lightning merchant-node test.
+It layers `dev/regtest/compose.lightning.yml` onto the existing Bitcoin regtest
+compose file and uses Bitcoin Core regtest as the funding/mining source. The
+CLN overlay defaults to the pinned `elementsproject/lightningd:v25.05` image;
+set `KASSIBER_REGTEST_CLN_IMAGE` to test a different CLN build intentionally.
+The LND backup node defaults to `lightninglabs/lnd:v0.18.4-beta`; set
+`KASSIBER_REGTEST_LND_IMAGE` to test a different LND build intentionally.
 
 Run:
 
@@ -223,20 +224,26 @@ Run:
 
 The lane creates these Docker-only actors:
 
-- `cln_merchant` — the only node Kassiber connects to
+- `cln_merchant` — the operational Core Lightning merchant node Kassiber syncs
 - `cln_customer` — pays merchant invoices and routed supplier invoices
 - `cln_supplier` — receives merchant expense payments
 - `cln_router` — provides the extra hop for routed payments and fee rows
+- `lnd_merchant_backup` — a live LND backup merchant node connected to
+  `cln_merchant` and `cln_router` through funded private channels
 
-Kassiber stores exactly one Lightning backend/wallet, both for
-`cln_merchant`. The backend's `lightning_cli` points at
+Kassiber stores two Lightning backend/wallet rows: the operational
+`cln_merchant` Core Lightning source and the `lnd_merchant_backup` LND source.
+The CLN backend's `lightning_cli` points at
 `dev/regtest/lightning-cli-merchant.sh`; customer, supplier, and router are
-never created as Kassiber wallets or connections.
+never created as Kassiber wallets or connections. The LND backend stores the
+loopback REST URL plus the node's disposable read-only macaroon from the
+regtest volume.
 
-The bootstrap script is idempotent: it waits for CLN, creates/reuses the
-Bitcoin faucet wallet, funds CLN wallets only below the threshold, opens the
-`customer -- merchant -- router -- supplier` channels if absent, mines
-confirmations, and waits for normal channels. The scenario then generates a
+The bootstrap script is idempotent: it waits for CLN and LND, creates/reuses the
+Bitcoin faucet wallet, funds CLN/LND wallets only below the threshold, opens the
+private `merchant -- lnd_merchant_backup` and `lnd_merchant_backup -- router`
+backup channels plus the public `customer -- merchant -- router -- supplier`
+channels if absent, mines confirmations, and waits for normal/active channels. The scenario then generates a
 seeded business plan at `$KASSIBER_LIGHTNING_BUSINESS_PLAN` (default:
 `$KASSIBER_LIGHTNING_BUSINESS_HOME/business-plan.json`) and executes the
 stable-label activity from that plan:
@@ -244,6 +251,8 @@ stable-label activity from that plan:
 - customer-paid merchant invoices (`merchant-pos-sale-*`) with varied amounts
 - merchant-paid supplier invoices routed through the router
 - customer/router third-party payments that cross the merchant as forwards
+- LND backup receipts and outbound LND payments so the backup-node dashboard
+  has real invoice/payment activity
 - one expired/unpaid merchant quote
 - one intentionally oversized failed payment to exercise failed-payment rows
 - Bitcoin Core mainchain actor wallets that send top-ups into the merchant CLN
@@ -265,7 +274,8 @@ against Kassiber output/state, not only `lightning-cli`: daemon snapshot,
 profitability report, CSV export, synced DB records, and the one-merchant-only
 wallet/backend invariant. The lane also checks that the merchant snapshot has
 on-chain balance evidence plus paid, expired, failed, outgoing-payment, channel,
-and forwarding activity. Persisted Lightning records do not store raw RPC JSON,
+and forwarding activity, while the LND snapshot has two private channels plus
+paid invoice and completed payment evidence. Persisted Lightning records do not store raw RPC JSON,
 and AI-safe Lightning payloads omit sensitive route, peer, preimage,
 payment-secret, bolt11, funding-outpoint, and failure-source fields.
 
@@ -409,12 +419,19 @@ What `demo-up` does:
 - starts (or reuses) the regtest Compose stack under the fixed Compose project
   `kassiber-regtest-demo`, separate from the per-worktree test projects, enables
   the `silent-payments` profile, and leaves Bitcoin Core, Elements, Fulcrum,
-  Frigate, and the local protocol API services running;
+  Frigate, the Core Lightning overlay, and the local protocol API services
+  running;
 - builds the `full-accounting-v1` book once into
   `~/.kassiber/regtest-demo/data` (override with
   `KASSIBER_REGTEST_DEMO_HOME`) and reuses it on later runs while the
   scenario file is unchanged; set `KASSIBER_REGTEST_DEMO_REBUILD=1` to force
   a rebuild;
+- seeds the Lightning business topology into that same demo book by default:
+  `cln_merchant` appears as a `coreln` wallet/backend in
+  `Regtest Demo / Full Accounting`, while `cln_customer`, `cln_supplier`, and
+  `cln_router` remain Docker-only actors. Set
+  `KASSIBER_REGTEST_DEMO_LIGHTNING=0` to opt out of the CLN overlay and
+  Lightning seed when you need a lighter Bitcoin/Liquid-only demo;
 - persists the generated regtest RPC credentials in
   `~/.kassiber/regtest-demo/demo-manifest.json` (mode 600, regtest-only
   throwaway secrets) so restarts keep matching the book's stored backend and

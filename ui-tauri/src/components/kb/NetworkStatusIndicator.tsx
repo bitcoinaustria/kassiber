@@ -72,6 +72,8 @@ type ConnectionHealthRecord = {
   checkedAt?: string;
 };
 
+const OUTBOUND_CONNECTION_ROW_LIMIT = 8;
+
 type BackendProbeEnvelope = {
   ok: boolean;
   logs?: string[];
@@ -317,6 +319,16 @@ function connectionIndicatorLabel(tone: ConnectionIndicatorTone, t: TFn) {
     default:
       return t("network.indicator.neutral");
   }
+}
+
+function OutboundConnectionsColgroup() {
+  return (
+    <colgroup>
+      <col className="w-16" />
+      <col className="w-[38%]" />
+      <col />
+    </colgroup>
+  );
 }
 
 function readDocumentVisible() {
@@ -605,83 +617,98 @@ export function NetworkStatusIndicator({
               {t("network.noneConfigured")}
             </div>
           ) : (
-            <Table className="table-fixed">
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-16">
-                    {t("network.columnState")}
-                  </TableHead>
-                  <TableHead className="w-[38%]">
-                    {t("network.columnConnection")}
-                  </TableHead>
-                  <TableHead className="hidden sm:table-cell">{t("network.columnEndpoint")}</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {connectionRows.map((row) => {
-                  const rowStatus = rowHealthStatus(row, healthRecords);
-                  const record = healthRecords[row.id];
-                  const rowStatusText = connectionStatusText(row, rowStatus, t);
-                  const rowStatusTitle = connectionStatusTitle(
-                    row,
-                    rowStatus,
-                    t,
-                    record,
-                  );
-                  const routeLabel = connectionRouteLabel(row, t);
-                  const routeTitle = connectionRouteTitle(row, t);
-                  const routeKind = connectionRouteKind(row);
-                  const dotTitle =
-                    routeKind === "tor" && routeTitle
-                      ? `${rowStatusTitle} · ${routeTitle}`
-                      : rowStatusTitle;
-                  return (
-                    <TableRow key={row.id}>
-                      <TableCell>
-                        <span
-                          className={cn(
-                            "block size-2.5 rounded-full",
-                            connectionDotClassName(rowStatus, routeKind),
-                          )}
-                          aria-label={rowStatusText}
-                          title={dotTitle}
-                        />
-                      </TableCell>
-                      <TableCell className="min-w-0">
-                        <button
-                          type="button"
-                          className="block min-w-0 text-left hover:text-primary focus-visible:rounded-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-                          onClick={() => openSettingsConnection(row)}
-                        >
-                          <span className="block truncate font-medium">
-                            {row.name}
-                          </span>
-                          <span
-                            className="block truncate text-xs text-muted-foreground"
-                            title={rowStatusTitle}
-                          >
-                            {row.protocol} · {rowStatusText}
-                            {routeLabel ? ` · ${routeLabel}` : ""}
-                          </span>
-                        </button>
-                      </TableCell>
-                      <TableCell className="hidden min-w-0 sm:table-cell">
-                        <button
-                          type="button"
-                          className="flex max-w-full items-center gap-2 text-left font-mono text-xs text-muted-foreground hover:text-primary focus-visible:rounded-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-                          title={row.endpoint}
-                          onClick={() => openSettingsConnection(row)}
-                        >
-                          <span className="min-w-0 truncate">
-                            {abbreviateEndpointMiddle(row.endpoint)}
-                          </span>
-                        </button>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
+            <div>
+              <Table className="table-fixed">
+                <OutboundConnectionsColgroup />
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>{t("network.columnState")}</TableHead>
+                    <TableHead>{t("network.columnConnection")}</TableHead>
+                    <TableHead className="hidden sm:table-cell">
+                      {t("network.columnEndpoint")}
+                    </TableHead>
+                  </TableRow>
+                </TableHeader>
+              </Table>
+              <div
+                className="max-h-[26rem] overflow-y-auto overscroll-contain border-t"
+                style={{
+                  maxHeight: `${OUTBOUND_CONNECTION_ROW_LIMIT * 3.25}rem`,
+                }}
+              >
+                <Table className="table-fixed">
+                  <OutboundConnectionsColgroup />
+                  <TableBody>
+                    {connectionRows.map((row) => {
+                      const rowStatus = rowHealthStatus(row, healthRecords);
+                      const record = healthRecords[row.id];
+                      const rowStatusText = connectionStatusText(
+                        row,
+                        rowStatus,
+                        t,
+                      );
+                      const rowStatusTitle = connectionStatusTitle(
+                        row,
+                        rowStatus,
+                        t,
+                        record,
+                      );
+                      const routeLabel = connectionRouteLabel(row, t);
+                      const routeTitle = connectionRouteTitle(row, t);
+                      const routeKind = connectionRouteKind(row);
+                      const dotTitle =
+                        routeKind === "tor" && routeTitle
+                          ? `${rowStatusTitle} · ${routeTitle}`
+                          : rowStatusTitle;
+                      return (
+                        <TableRow key={row.id} className="h-[3.25rem]">
+                          <TableCell>
+                            <span
+                              className={cn(
+                                "block size-2.5 rounded-full",
+                                connectionDotClassName(rowStatus, routeKind),
+                              )}
+                              aria-label={rowStatusText}
+                              title={dotTitle}
+                            />
+                          </TableCell>
+                          <TableCell className="min-w-0">
+                            <button
+                              type="button"
+                              className="block min-w-0 text-left hover:text-primary focus-visible:rounded-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                              onClick={() => openSettingsConnection(row)}
+                            >
+                              <span className="block truncate font-medium">
+                                {row.name}
+                              </span>
+                              <span
+                                className="block truncate text-xs text-muted-foreground"
+                                title={rowStatusTitle}
+                              >
+                                {row.protocol} · {rowStatusText}
+                                {routeLabel ? ` · ${routeLabel}` : ""}
+                              </span>
+                            </button>
+                          </TableCell>
+                          <TableCell className="hidden min-w-0 sm:table-cell">
+                            <button
+                              type="button"
+                              className="flex max-w-full items-center gap-2 text-left font-mono text-xs text-muted-foreground hover:text-primary focus-visible:rounded-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                              title={row.endpoint}
+                              onClick={() => openSettingsConnection(row)}
+                            >
+                              <span className="min-w-0 truncate">
+                                {abbreviateEndpointMiddle(row.endpoint)}
+                              </span>
+                            </button>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+            </div>
           )}
         </div>
         {lastCheckedAt ? (

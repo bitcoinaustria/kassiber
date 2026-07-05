@@ -84,6 +84,34 @@ def _canned_payloads(extra: dict[str, Any] | None = None) -> dict[str, Any]:
                     "their_amount_msat": "0msat",
                     "opener": "remote",
                 },
+                {
+                    "peer_id": "02" + "ce" * 32,
+                    "peer_alias": "closed-coop-peer",
+                    "peer_connected": False,
+                    "private": False,
+                    "channel_id": "ch-closed-coop",
+                    "short_channel_id": "742x3x0",
+                    "state": "CLOSINGD_COMPLETE",
+                    "total_msat": "700000000msat",
+                    "to_us_msat": "0msat",
+                    "their_amount_msat": "0msat",
+                    "opener": "local",
+                    "closed_at": 1_700_000_090,
+                },
+                {
+                    "peer_id": "02" + "cf" * 32,
+                    "peer_alias": "closed-force-peer",
+                    "peer_connected": False,
+                    "private": False,
+                    "channel_id": "ch-closed-force",
+                    "short_channel_id": "742x4x0",
+                    "state": "ONCHAIND_OUR_UNILATERAL",
+                    "total_msat": "900000000msat",
+                    "to_us_msat": "0msat",
+                    "their_amount_msat": "0msat",
+                    "opener": "local",
+                    "closed_at": 1_700_000_100,
+                },
             ]
         },
         "listforwards": {
@@ -230,6 +258,23 @@ class FetchNodeSnapshotTest(unittest.TestCase):
         self.assertIsNotNone(snapshot.routing)
         self.assertEqual(snapshot.routing.forward_count, 1)
 
+    def test_closed_channels_preserve_close_kind(self) -> None:
+        snapshot = self._snapshot()
+        self.assertEqual(len(snapshot.closed_channels), 2)
+        closed_by_scid = {
+            channel.short_channel_id: channel for channel in snapshot.closed_channels
+        }
+
+        cooperative = closed_by_scid["742x3x0"]
+        self.assertEqual(cooperative.state, "closed")
+        self.assertEqual(cooperative.close_kind, "cooperative")
+        self.assertEqual(cooperative.closed_at, "2023-11-14T22:14:50Z")
+
+        forced = closed_by_scid["742x4x0"]
+        self.assertEqual(forced.state, "force_closed")
+        self.assertEqual(forced.close_kind, "force")
+        self.assertEqual(forced.closed_at, "2023-11-14T22:15:00Z")
+
     def test_private_channel_peer_pubkey_is_none(self) -> None:
         snapshot = self._snapshot()
         private_channel = next(
@@ -306,6 +351,7 @@ class FetchNodeSnapshotTest(unittest.TestCase):
         # Only the invoice income row should be imported as a wallet tx.
         self.assertEqual(len(import_payloads), 1)
         self.assertEqual(import_payloads[0]["kind"], "cln_invoice")
+        self.assertEqual(import_payloads[0]["confirmed_at"], "2023-11-14T22:14:10Z")
         # And the routed event should not appear as a forward_day record's
         # source either — it should only contribute to the aggregate.
         forward_day_rows = [r for r in records if r["record_type"] == "forward_day"]

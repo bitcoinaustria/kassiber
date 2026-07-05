@@ -19,7 +19,7 @@ docker_compose() {
   if docker info >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
     docker compose "$@"
   elif sudo -n docker info >/dev/null 2>&1 && sudo -n docker compose version >/dev/null 2>&1; then
-    sudo -n --preserve-env=KASSIBER_REGTEST_RPC_USER,KASSIBER_REGTEST_RPC_PASSWORD,KASSIBER_REGTEST_RPC_AUTH,KASSIBER_REGTEST_CLN_IMAGE docker compose "$@"
+    sudo -n --preserve-env=KASSIBER_REGTEST_RPC_USER,KASSIBER_REGTEST_RPC_PASSWORD,KASSIBER_REGTEST_RPC_AUTH,KASSIBER_REGTEST_CLN_IMAGE,KASSIBER_REGTEST_LND_IMAGE,KASSIBER_REGTEST_LND_BACKUP_P2P_PORT,KASSIBER_REGTEST_LND_BACKUP_REST_PORT,KASSIBER_REGTEST_LND_BACKUP_RPC_PORT docker compose "$@"
   elif docker info >/dev/null 2>&1 && command -v docker-compose >/dev/null 2>&1; then
     docker-compose "$@"
   elif sudo -n docker info >/dev/null 2>&1 && sudo -n docker-compose version >/dev/null 2>&1; then
@@ -28,6 +28,10 @@ docker_compose() {
       KASSIBER_REGTEST_RPC_PASSWORD="${KASSIBER_REGTEST_RPC_PASSWORD:-}" \
       KASSIBER_REGTEST_RPC_AUTH="${KASSIBER_REGTEST_RPC_AUTH:-}" \
       KASSIBER_REGTEST_CLN_IMAGE="${KASSIBER_REGTEST_CLN_IMAGE:-}" \
+      KASSIBER_REGTEST_LND_IMAGE="${KASSIBER_REGTEST_LND_IMAGE:-}" \
+      KASSIBER_REGTEST_LND_BACKUP_P2P_PORT="${KASSIBER_REGTEST_LND_BACKUP_P2P_PORT:-}" \
+      KASSIBER_REGTEST_LND_BACKUP_REST_PORT="${KASSIBER_REGTEST_LND_BACKUP_REST_PORT:-}" \
+      KASSIBER_REGTEST_LND_BACKUP_RPC_PORT="${KASSIBER_REGTEST_LND_BACKUP_RPC_PORT:-}" \
       docker-compose "$@"
   else
     echo "Docker Compose is required for the Lightning regtest lane." >&2
@@ -105,6 +109,11 @@ cln() {
   compose exec -T "$service" lightning-cli --network=regtest "$@" </dev/null
 }
 
+lnd() {
+  compose exec -T lnd_merchant_backup \
+    lncli --network=regtest --rpcserver=localhost:10009 "$@" </dev/null
+}
+
 json_get() {
   local key="$1"
   python3 -c 'import json, sys
@@ -161,6 +170,10 @@ cln_id() {
   cln "$1" getinfo | python3 -c 'import json, sys; print(json.load(sys.stdin).get("id") or "")'
 }
 
+lnd_id() {
+  lnd getinfo | python3 -c 'import json, sys; print(json.load(sys.stdin).get("identity_pubkey") or "")'
+}
+
 cln_alias() {
   cln "$1" getinfo | python3 -c 'import json, sys; print(json.load(sys.stdin).get("alias") or "")'
 }
@@ -169,12 +182,28 @@ cln_new_address() {
   cln "$1" newaddr bech32 | python3 -c 'import json, sys; data=json.load(sys.stdin); print(data.get("bech32") or data.get("p2tr") or data.get("address") or "")'
 }
 
+lnd_new_address() {
+  lnd newaddress p2wkh | python3 -c 'import json, sys; print(json.load(sys.stdin).get("address") or "")'
+}
+
 cln_onchain_sat() {
   cln "$1" listfunds | json_msat_to_sat confirmed
 }
 
 cln_any_onchain_sat() {
   cln "$1" listfunds | json_msat_to_sat confirmed unconfirmed
+}
+
+lnd_onchain_sat() {
+  lnd walletbalance | python3 -c 'import json, sys
+data = json.load(sys.stdin)
+print(int(data.get("confirmed_balance") or 0))'
+}
+
+lnd_any_onchain_sat() {
+  lnd walletbalance | python3 -c 'import json, sys
+data = json.load(sys.stdin)
+print(int(data.get("total_balance") or 0))'
 }
 
 cln_has_channel_with_peer() {
@@ -215,4 +244,45 @@ for channel in data.get("channels", []):
     if str(channel.get("state") or "").lower() == "channeld_normal":
         count += 1
 print(count)'
+}
+
+lnd_channel_count_active() {
+  lnd listchannels | python3 -c 'import json, sys
+data = json.load(sys.stdin)
+count = 0
+for channel in data.get("channels", []):
+    if channel.get("active"):
+        count += 1
+print(count)'
+}
+
+lnd_has_channel_with_peer() {
+  local peer_id="$1"
+  lnd listchannels | python3 -c 'import json, sys
+peer_id = sys.argv[1]
+data = json.load(sys.stdin)
+for channel in data.get("channels", []):
+    if channel.get("remote_pubkey") == peer_id:
+        sys.exit(0)
+sys.exit(1)' "$peer_id"
+}
+
+lnd_has_pending_channel_with_peer() {
+  local peer_id="$1"
+  lnd pendingchannels | python3 -c 'import json, sys
+peer_id = sys.argv[1]
+data = json.load(sys.stdin)
+for key in ("pending_open_channels", "waiting_close_channels", "pending_closing_channels"):
+    for entry in data.get(key, []) or []:
+        channel = entry.get("channel") or entry
+        if channel.get("remote_node_pub") == peer_id or channel.get("remote_pubkey") == peer_id:
+            sys.exit(0)
+sys.exit(1)' "$peer_id"
+}
+
+lnd_readonly_macaroon_hex() {
+  compose exec -T lnd_merchant_backup \
+    cat /root/.lnd/data/chain/bitcoin/regtest/readonly.macaroon \
+    | od -An -tx1 -v | tr -d ' \n'
+  printf '\n'
 }

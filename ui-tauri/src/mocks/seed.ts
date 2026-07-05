@@ -655,7 +655,7 @@ export const MOCK_OVERVIEW: OverviewSnapshot = {
     {
       id: "c6",
       kind: "lnd",
-      label: "Routing Node (LND)",
+      label: "lnd_merchant_backup",
       last: "44s ago",
       lastSyncAt: "2026-06-26T11:59:16Z",
       balance: 0.02914872,

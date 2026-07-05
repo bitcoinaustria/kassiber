@@ -308,6 +308,7 @@ def _map_channel(
     closed: bool,
     fee_lookup: Mapping[str, dict[str, int]] | None = None,
     forwards_per_channel: Mapping[str, dict[str, int]] | None = None,
+    peer_alias_lookup: Mapping[str, str] | None = None,
 ) -> NodeChannel:
     chan_id = str(row.get("chan_id") or "") or None
     channel_point = (
@@ -332,10 +333,11 @@ def _map_channel(
     # chosen identity, and the opsec rule is to not leak the pubkey via
     # FALLBACK, not to second-guess what LND surfaces.
     raw_alias = row.get("peer_alias")
+    resolved_alias = (peer_alias_lookup or {}).get(str(remote_pubkey or ""))
     if is_private:
-        peer_alias = str(raw_alias) if raw_alias else "private peer"
+        peer_alias = str(raw_alias or resolved_alias or "private peer")
     else:
-        peer_alias = str(raw_alias or remote_pubkey or "unknown")
+        peer_alias = str(raw_alias or resolved_alias or remote_pubkey or "unknown")
     return NodeChannel(
         id=channel_id,
         peer_alias=peer_alias,
@@ -414,6 +416,42 @@ def _forwards_per_channel(
             fee_msat = _msat(row.get("fee"), sats=True)
         slot["earned_sat"] += fee_msat // 1000
     return out
+
+
+def _peer_alias_lookup(
+    client: LndRestClient,
+    rows: list[dict[str, Any]],
+) -> dict[str, str]:
+    """Resolve peer aliases for private LND channels without exposing pubkeys.
+
+    Some LND builds omit ``peer_alias`` from ``listchannels`` for private
+    channels even when the peer's node announcement is known through the graph.
+    The lookup map is used only while building ``peer_alias``; private-channel
+    ``peer_pubkey`` remains ``None`` in the emitted scaffold shape.
+    """
+
+    aliases: dict[str, str] = {}
+    pubkeys = {
+        str(row.get("remote_pubkey") or "")
+        for row in rows
+        if _is_truthy(row.get("private"))
+        and row.get("remote_pubkey")
+        and not row.get("peer_alias")
+    }
+    for pubkey in sorted(pubkeys):
+        try:
+            payload = client.get(
+                f"/v1/graph/node/{urlparse.quote(pubkey, safe='')}"
+            )
+        except AppError:
+            continue
+        node = payload.get("node")
+        if not isinstance(node, Mapping):
+            continue
+        alias = str(node.get("alias") or "").strip()
+        if alias:
+            aliases[pubkey] = alias
+    return aliases
 
 
 def _map_forward(row: Mapping[str, Any]) -> NodeForward:
@@ -721,6 +759,7 @@ class LndAdapter:
 
         # Per-channel forward aggregates (used for break-even view).
         forwards_per_channel = _forwards_per_channel(forwards)
+        peer_alias_lookup = _peer_alias_lookup(client, open_rows + closed_rows)
 
         channels = tuple(
             _map_channel(
@@ -728,11 +767,17 @@ class LndAdapter:
                 closed=False,
                 fee_lookup=fee_lookup,
                 forwards_per_channel=forwards_per_channel,
+                peer_alias_lookup=peer_alias_lookup,
             )
             for row in open_rows
         )
         closed_channels = tuple(
-            _map_channel(row, closed=True) for row in closed_rows
+            _map_channel(
+                row,
+                closed=True,
+                peer_alias_lookup=peer_alias_lookup,
+            )
+            for row in closed_rows
         )
 
         onchain_cost_sat = sum(

@@ -608,6 +608,8 @@ def _coerce_channel_state(value: Any, connected: bool | None = None) -> NodeChan
     text = (str_or_none(value) or "").lower()
     if not text:
         return "inactive"
+    if "breach" in text:
+        return "force_closed"
     if text in _CHANNEL_STATE_MAP:
         return _CHANNEL_STATE_MAP[text]
     if "onchain" in text:
@@ -623,6 +625,17 @@ def _coerce_channel_state(value: Any, connected: bool | None = None) -> NodeChan
     if "close" in text:
         return "closed"
     return "inactive"
+
+
+def _channel_close_kind(state_raw: Any, state: NodeChannelState) -> str | None:
+    text = (str_or_none(state_raw) or "").lower()
+    if "breach" in text:
+        return "breach"
+    if state == "force_closed":
+        return "force"
+    if state == "closed":
+        return "cooperative"
+    return None
 
 
 def _channel_short_id(channel: Mapping[str, Any]) -> str | None:
@@ -686,6 +699,7 @@ def _node_channel(channel: Mapping[str, Any], peer_alias_map: Mapping[str, str])
         fee_rate_ppm=int(channel.get("fee_proportional_millionths") or 0) or None,
         opened_at=_timestamp(channel.get("opened_at")) if channel.get("opened_at") else None,
         closed_at=_timestamp(channel.get("closed_at")) if channel.get("closed_at") else None,
+        close_kind=_channel_close_kind(state_raw, state),
     )
 
 
@@ -1328,6 +1342,10 @@ def _record_to_import(record: Mapping[str, Any]) -> dict[str, Any] | None:
     return {
         "id": f"cln:income:{record['external_id']}",
         "occurred_at": record.get("occurred_at") or UNKNOWN_OCCURRED_AT,
+        # Lightning invoice rows are promoted only after CLN reports them as
+        # paid/settled. They do not have an L1 confirmation, but the desktop
+        # status badge uses confirmed_at as the generic finality signal.
+        "confirmed_at": record.get("occurred_at") or UNKNOWN_OCCURRED_AT,
         "direction": "inbound",
         "asset": "BTC",
         "amount": msat_to_btc(amount_msat),

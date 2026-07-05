@@ -18,7 +18,6 @@ import {
   activeMarketFiatRate,
   blurClass,
   buildBalanceDrivers,
-  buildBalanceRailItems,
   buildHoldingsBySource,
   donutCenterValueClass,
   formatCompactDisplayMoney,
@@ -168,7 +167,6 @@ export const HoldingsBySourceChart = ({
   const { active: activeSlice, handleHover: setHoveredSlice } =
     useHoverHighlight<number>();
   const holdingsData = buildHoldingsBySource(snapshot);
-  const { items: balanceRailItems } = buildBalanceRailItems(snapshot);
   const unrealizedPercent = snapshot.fiat.eurCostBasis
     ? (snapshot.fiat.eurUnrealized / snapshot.fiat.eurCostBasis) * 100
     : 0;
@@ -186,7 +184,7 @@ export const HoldingsBySourceChart = ({
 
   return (
     <div className="flex flex-1 flex-col gap-3 rounded-lg border bg-card p-3">
-      <div className="flex items-center justify-between">
+      <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-2 sm:gap-2.5">
           <span
             className="flex size-7 shrink-0 items-center justify-center rounded-md border bg-background text-muted-foreground sm:size-8"
@@ -229,30 +227,13 @@ export const HoldingsBySourceChart = ({
             )}
           </div>
         </div>
+        <Link
+          to="/connections"
+          className="shrink-0 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          {t("holdings.viewConnections")}
+        </Link>
       </div>
-
-      {balanceRailItems.length > 1 ? (
-        <div className="flex flex-wrap gap-1.5">
-          {balanceRailItems.map((item) => (
-            <span
-              key={item.key}
-              className="inline-flex items-center gap-1 rounded-md border bg-background px-1.5 py-0.5 text-[10px] text-muted-foreground"
-            >
-              <span
-                className="size-1.5 rounded-full"
-                style={{ backgroundColor: item.color }}
-              />
-              {/* dynamic key */}
-              {t(item.labelKey as never)}
-              <span
-                className={cn("tabular-nums", blurClass(hideSensitive))}
-              >
-                {item.percent}%
-              </span>
-            </span>
-          ))}
-        </div>
-      ) : null}
 
       {singleHolding ? (
         <div className="flex flex-1 items-center rounded-md bg-muted/25 px-3 py-3">
@@ -345,7 +326,7 @@ export const HoldingsBySourceChart = ({
           </div>
         </div>
 
-        <div className="flex min-w-0 flex-col gap-2 sm:gap-3">
+        <div className="flex max-h-[128px] min-w-0 flex-col gap-2 overflow-y-auto pr-1 sm:max-h-[144px] sm:gap-3">
           {holdingsData.map((item, index) => (
             <div
               key={item.nameKey ?? item.name}

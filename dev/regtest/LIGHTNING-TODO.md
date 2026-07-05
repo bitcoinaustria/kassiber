@@ -10,19 +10,24 @@ Run:
 
 The lane extends the existing `dev/regtest/compose.bitcoin.yml` stack with
 `dev/regtest/compose.lightning.yml`. It keeps Bitcoin Core regtest as the
-funding/mining source and adds four pinned Core Lightning containers:
+funding/mining source and adds four pinned Core Lightning containers plus one
+LND backup node:
 
-- `cln_merchant` — the only node Kassiber connects to
+- `cln_merchant` — the operational Core Lightning merchant node Kassiber syncs
 - `cln_customer` — pays merchant invoices and routed supplier invoices
 - `cln_supplier` — receives merchant expense payments
 - `cln_router` — creates/receives routed flow so forwarding fees are real
+- `lnd_merchant_backup` — live LND backup node with funded private channels to
+  `cln_merchant` and `cln_router`
 
 The default image is `elementsproject/lightningd:v25.05`; override with
 `KASSIBER_REGTEST_CLN_IMAGE` when intentionally testing a different CLN build.
+The LND image defaults to `lightninglabs/lnd:v0.18.4-beta`; override with
+`KASSIBER_REGTEST_LND_IMAGE`.
 
 ## Files
 
-- `compose.lightning.yml` adds the four CLN services and named volumes.
+- `compose.lightning.yml` adds the CLN/LND services and named volumes.
 - `lightning-business-plan.py` generates the seeded business workload that the
   shell scenario executes. It is inspired by sim-ln's capacity-multiplier and
   defined-activity model, but remains deterministic and assertion-friendly.
@@ -32,8 +37,8 @@ The default image is `elementsproject/lightningd:v25.05`; override with
   customer-paid merchant invoices, merchant-paid supplier invoices routed via
   the router, third-party routed payments crossing the merchant, one
   intentionally expired merchant quote, one intentionally failed oversized
-  payment, and real Bitcoin regtest mainchain top-ups/withdrawals around the
-  merchant CLN wallet.
+  payment, LND backup receipts/outbound payments, and real Bitcoin regtest
+  mainchain top-ups/withdrawals around the merchant CLN wallet.
 - `lightning-cli-merchant.sh` is the only `lightning-cli` wrapper stored in
   the Kassiber book. It always executes against `cln_merchant`.
 - `tests/integration/lightning_business_regtest.py` builds/syncs the Kassiber
@@ -44,11 +49,14 @@ The default image is `elementsproject/lightningd:v25.05`; override with
 
 ```text
 cln_customer -- cln_merchant -- cln_router -- cln_supplier
+                   |             |
+             lnd_merchant_backup
 ```
 
 Channels are opened with balanced push amounts so both directions can pay on
-the first run. Re-running the bootstrap reuses existing channels and only funds
-nodes whose on-chain CLN wallet balance falls below the configured threshold.
+the first run. The LND backup edges are private/unannounced; the CLN path
+remains the public routing topology. Re-running the bootstrap reuses existing channels and only
+funds nodes whose on-chain wallet balance falls below the configured threshold.
 The scenario's business plan lives at
 `${KASSIBER_LIGHTNING_BUSINESS_PLAN:-$KASSIBER_LIGHTNING_BUSINESS_HOME/business-plan.json}`.
 Set `KASSIBER_REGTEST_LIGHTNING_SEED` for stable alternative traffic and
@@ -61,14 +69,15 @@ plan hash.
 
 The live assertion module verifies:
 
-- Kassiber has exactly one Lightning wallet and one `coreln` backend.
-- That wallet/backend represent `cln_merchant`; customer, supplier, and router
-  never become Kassiber wallets or connections.
+- Kassiber has two Lightning wallet/backend rows: `cln_merchant` (`coreln`) and
+  `lnd_merchant_backup` (`lnd`).
+- Customer, supplier, and router never become Kassiber wallets or connections.
 - `wallets sync --wallet cln_merchant` imports merchant invoice rows through
   the CLN sync path and persists aggregate Lightning node records.
-- `ui.connections.node.snapshot` returns merchant alias/pubkey, balances,
+- `ui.connections.node.snapshot` returns CLN merchant alias/pubkey, balances,
   on-chain balance, channels, invoice/payment counts, expired/failed cases,
-  routing summary, and forward rows.
+  routing summary, and forward rows, and returns an LND backup snapshot with
+  the CLN-LND and router-LND channels plus LND invoice/payment activity.
 - `reports lightning-profitability` and
   `reports export-lightning-profitability-csv` include liquidity, routing
   revenue, payment costs, forwarding counts, and open-cost coverage fields.
