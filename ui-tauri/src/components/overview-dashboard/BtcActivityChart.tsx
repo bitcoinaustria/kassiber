@@ -13,7 +13,6 @@ import {
   CartesianGrid,
   ComposedChart,
   Line,
-  ReferenceDot,
   ReferenceLine,
   Scatter,
   Tooltip,
@@ -45,7 +44,6 @@ import {
   activityMarkerView,
   autoFitDomain,
   brushedActivityMarkers,
-  buildTreasuryChartStats,
   blurClass,
   clusterActivityMarkers,
   defaultTreasurySeriesVisibility,
@@ -82,7 +80,6 @@ import {
   rawTreasuryBrushRange,
   sameTreasuryBrushRange,
   serializeActivityMarkerMinimum,
-  treasuryPrimaryValue,
   useHoverHighlight,
   useResolvedColorMode,
   Y_AUTO_FIT_PARAM,
@@ -98,7 +95,7 @@ import {
   type TreasurySeriesVisibility,
 } from "./model";
 import { ChartRangeToolbar } from "./ChartRangeToolbar";
-import { renderLastValueTag, renderPointValueLabel } from "./LastValueTag";
+import { renderLastValueTag } from "./LastValueTag";
 import { PortfolioInspector } from "./PortfolioInspector";
 import { ActivityLegendSwatch } from "./ChartControlsSheet";
 import { TreasuryTooltip } from "./TreasuryTooltip";
@@ -637,47 +634,6 @@ export const BtcActivityChart = ({
     const balancePoints = selectedChartDisplayData.filter(
       (point) => !point.isActivityEvent,
     );
-    const chartStats = buildTreasuryChartStats(
-      balancePoints.length ? balancePoints : selectedChartDisplayData,
-    );
-    const highPointValue = chartStats
-      ? treasuryPrimaryValue(chartStats.highPoint)
-      : null;
-    const lowPointValue = chartStats
-      ? treasuryPrimaryValue(chartStats.lowPoint)
-      : null;
-    const isDrawableBtcAxisValue = (value: number | null) =>
-      value !== null && Number.isFinite(value) && (!yScaleLog || value > 0);
-    // High/low live on the chart itself (TradingView-style annotations)
-    // instead of as stat-card copy. Skipped when flat — both labels would
-    // stack on the same line.
-    const showHighLowMarks =
-      chartStats !== null &&
-      seriesVisible.primary &&
-      !hideSensitive &&
-      highPointValue !== lowPointValue;
-    // Don't annotate an extreme whose value equals the current balance: the
-    // last-value tag already labels that number on the axis. For a
-    // monotonically growing balance the maximum IS the current value, so the
-    // high annotation would just repeat the tag right next to it.
-    const lastBalancePoint = balancePoints.at(-1);
-    const lastBalanceRaw = lastBalancePoint
-      ? treasuryPrimaryValue(lastBalancePoint)
-      : null;
-    const coincidesWithLast = (point: TreasuryChartPoint) =>
-      lastBalanceValue !== null &&
-      lastBalanceRaw !== null &&
-      treasuryPrimaryValue(point) === lastBalanceRaw;
-    const showHighMark =
-      showHighLowMarks &&
-      !!chartStats &&
-      isDrawableBtcAxisValue(highPointValue) &&
-      !coincidesWithLast(chartStats.highPoint);
-    const showLowMark =
-      showHighLowMarks &&
-      !!chartStats &&
-      isDrawableBtcAxisValue(lowPointValue) &&
-      !coincidesWithLast(chartStats.lowPoint);
     const selectedPoint = expanded
       ? (selectedChartDisplayData.find(
           (point) => point.date === expandedPointDate,
@@ -1144,42 +1100,6 @@ export const BtcActivityChart = ({
                         text: Math.round(lastBasisValue).toLocaleString("en-US"),
                         fill: secondaryColor,
                         side: "right",
-                      })}
-                    />
-                  )}
-                  {showHighMark && chartStats && (
-                    <ReferenceDot
-                      yAxisId="btc"
-                      x={chartStats.highPoint.date}
-                      y={highPointValue ?? undefined}
-                      r={2.5}
-                      fill={primaryColor}
-                      stroke="var(--background)"
-                      strokeWidth={1}
-                      label={renderPointValueLabel({
-                        text: formatBtc(
-                          highPointValue ?? 0,
-                          { precision: 4 },
-                        ),
-                        side: "above",
-                      })}
-                    />
-                  )}
-                  {showLowMark && chartStats && (
-                    <ReferenceDot
-                      yAxisId="btc"
-                      x={chartStats.lowPoint.date}
-                      y={lowPointValue ?? undefined}
-                      r={2.5}
-                      fill={primaryColor}
-                      stroke="var(--background)"
-                      strokeWidth={1}
-                      label={renderPointValueLabel({
-                        text: formatBtc(
-                          lowPointValue ?? 0,
-                          { precision: 4 },
-                        ),
-                        side: "below",
                       })}
                     />
                   )}
