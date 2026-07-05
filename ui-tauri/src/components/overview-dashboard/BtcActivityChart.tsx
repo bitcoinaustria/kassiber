@@ -489,6 +489,10 @@ export const BtcActivityChart = ({
       showLastValue && !hideSensitive && fiatSeriesEnabled && seriesVisible.price
         ? lastTreasuryLineValue(plotData, "lineBitcoinPriceEur")
         : null;
+    const lastBasisValue =
+      showLastValue && !hideSensitive && fiatSeriesEnabled && seriesVisible.basis
+        ? lastTreasuryLineValue(plotData, "lineAvgCostEur")
+        : null;
     const handleBrushChange = (range: TreasuryBrushChange) => {
       const normalizedRange = normalizeTreasuryBrushRange(
         chartDisplayData,
@@ -654,7 +658,7 @@ export const BtcActivityChart = ({
         className={cn(
           "treasury-chart-card relative z-10 flex min-w-0 flex-1 flex-col gap-3 rounded-lg border bg-card p-3",
           expanded
-            ? "h-full overflow-y-auto rounded-none border-0 xl:overflow-visible"
+            ? "h-full min-h-0 overflow-hidden rounded-none border-0"
             : "overflow-visible",
         )}
       >
@@ -880,7 +884,7 @@ export const BtcActivityChart = ({
               className={cn(
                 "min-w-0",
                 expanded
-                  ? "relative flex min-h-0 flex-1 flex-col gap-3"
+                  ? "relative flex min-h-0 flex-1 flex-col gap-2"
                   : "relative",
               )}
             >
@@ -888,7 +892,7 @@ export const BtcActivityChart = ({
             className={cn(
               "relative flex w-full min-w-0 select-none flex-col",
               expanded
-                ? "h-[min(66vh,648px)] xl:h-auto xl:min-h-0 xl:flex-1"
+                ? "min-h-0 flex-1"
                 : "h-[352px] sm:h-[420px]",
             )}
           >
@@ -1039,6 +1043,21 @@ export const BtcActivityChart = ({
                       label={renderLastValueTag({
                         text: Math.round(lastPriceValue).toLocaleString("en-US"),
                         fill: priceColor,
+                        side: "right",
+                      })}
+                    />
+                  )}
+                  {lastBasisValue !== null && (
+                    <ReferenceLine
+                      yAxisId="price"
+                      y={lastBasisValue}
+                      stroke={secondaryColor}
+                      strokeDasharray="2 4"
+                      strokeOpacity={0.45}
+                      zIndex={2100}
+                      label={renderLastValueTag({
+                        text: Math.round(lastBasisValue).toLocaleString("en-US"),
+                        fill: secondaryColor,
                         side: "right",
                       })}
                     />

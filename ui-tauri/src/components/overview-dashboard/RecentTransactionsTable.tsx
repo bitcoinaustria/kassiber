@@ -3,20 +3,11 @@ import {
   ArrowDownRight,
   ArrowLeftRight,
   ArrowUpRight,
-  SlidersHorizontal,
 } from "lucide-react";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
 
 import { CurrencyToggleText } from "@/components/kb/CurrencyToggleText";
-import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuCheckboxItem,
-  DropdownMenuContent,
-  DropdownMenuLabel,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import {
   formatBtc,
   formatFiatAmount,
@@ -34,9 +25,7 @@ import {
   statusStyles,
   transactionBtc,
   transactionDetailHref,
-  transactionStatuses,
   type Transaction,
-  type TransactionStatus,
 } from "./model";
 
 const RECENT_TX_REVEAL_STEP = 8;
@@ -67,71 +56,32 @@ export const RecentTransactionsTable = ({
   const { t } = useTranslation("overview");
   const resolvedTitle = title ?? t("recentTx.title");
   const resolvedShowAllLabel = showAllLabel ?? t("recentTx.showAll");
-  const [statusFilter, setStatusFilter] = React.useState<
-    TransactionStatus | "all"
-  >("all");
   const [visibleCount, setVisibleCount] = React.useState(RECENT_TX_REVEAL_STEP);
-  const [isHydrated, setIsHydrated] = React.useState(false);
-
-  React.useEffect(() => {
-    if (typeof window === "undefined") return;
-    const params = new URLSearchParams(window.location.search);
-    const nextStatus = params.get("status");
-    if (
-      nextStatus &&
-      (nextStatus === "all" ||
-        transactionStatuses.includes(nextStatus as TransactionStatus))
-    ) {
-      setStatusFilter(nextStatus as TransactionStatus | "all");
-    }
-    setIsHydrated(true);
-  }, []);
-
-  const filteredTransactions = React.useMemo(() => {
-    if (statusFilter === "all") return transactions;
-    return transactions.filter((t) => t.status === statusFilter);
-  }, [statusFilter, transactions]);
 
   const visibleTransactions = React.useMemo(
-    () => filteredTransactions.slice(0, visibleCount),
-    [filteredTransactions, visibleCount],
+    () => transactions.slice(0, visibleCount),
+    [transactions, visibleCount],
   );
 
   React.useEffect(() => {
     setVisibleCount(RECENT_TX_REVEAL_STEP);
-  }, [filteredTransactions.length, statusFilter]);
-
-  React.useEffect(() => {
-    if (!isHydrated || typeof window === "undefined") return;
-    const params = new URLSearchParams(window.location.search);
-    if (statusFilter !== "all") {
-      params.set("status", statusFilter);
-    } else {
-      params.delete("status");
-    }
-    params.delete("page");
-    const nextQuery = params.toString();
-    const nextUrl = nextQuery
-      ? `${window.location.pathname}?${nextQuery}`
-      : window.location.pathname;
-    window.history.replaceState(null, "", nextUrl);
-  }, [statusFilter, isHydrated]);
+  }, [transactions.length]);
 
   const revealMoreRows = React.useCallback(() => {
     setVisibleCount((current) =>
-      Math.min(filteredTransactions.length, current + RECENT_TX_REVEAL_STEP),
+      Math.min(transactions.length, current + RECENT_TX_REVEAL_STEP),
     );
-  }, [filteredTransactions.length]);
+  }, [transactions.length]);
 
   const handleScroll = React.useCallback(
     (event: React.UIEvent<HTMLDivElement>) => {
-      if (visibleCount >= filteredTransactions.length) return;
+      if (visibleCount >= transactions.length) return;
       const target = event.currentTarget;
       const distanceFromBottom =
         target.scrollHeight - target.scrollTop - target.clientHeight;
       if (distanceFromBottom < 72) revealMoreRows();
     },
-    [filteredTransactions.length, revealMoreRows, visibleCount],
+    [transactions.length, revealMoreRows, visibleCount],
   );
 
   return (
@@ -142,48 +92,16 @@ export const RecentTransactionsTable = ({
           <span className="text-sm font-medium">
             {resolvedTitle}
           </span>
-          <span className="text-xs tabular-nums text-muted-foreground">
-            {filteredTransactions.length}
-          </span>
         </div>
 
-        <div className="flex items-center gap-2">
-          {showAllTo ? (
-            <Button asChild variant="ghost" size="sm" className="h-8 sm:h-9">
-              <Link to={showAllTo}>{resolvedShowAllLabel}</Link>
-            </Button>
-          ) : null}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-8 gap-1.5 sm:h-9 sm:gap-2"
-              >
-                <SlidersHorizontal className="size-3.5 sm:size-4" aria-hidden="true" />
-                <span className="hidden sm:inline">{t("recentTx.filter")}</span>
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-[180px]">
-              <DropdownMenuLabel>{t("recentTx.filterByStatus")}</DropdownMenuLabel>
-              <DropdownMenuCheckboxItem
-                checked={statusFilter === "all"}
-                onCheckedChange={() => setStatusFilter("all")}
-              >
-                {t("recentTx.allStatuses")}
-              </DropdownMenuCheckboxItem>
-              {transactionStatuses.map((status) => (
-                <DropdownMenuCheckboxItem
-                  key={status}
-                  checked={statusFilter === status}
-                  onCheckedChange={() => setStatusFilter(status)}
-                >
-                  {t(statusLabelKeys[status])}
-                </DropdownMenuCheckboxItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
+        {showAllTo ? (
+          <Link
+            to={showAllTo}
+            className="shrink-0 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            {resolvedShowAllLabel}
+          </Link>
+        ) : null}
       </div>
 
       <div

@@ -137,7 +137,10 @@ describe("typed app logs", () => {
           value: "wpkh([abcd1234/84h/0h/0h]xpub661MyMwAqRbcFsecret/0/*)",
         },
         label: { type: "label", value: "Treasury hot wallet" },
-        data_root: { type: "path", value: "/Users/dev/.kassiber/data" },
+        data_root: {
+          type: "path",
+          value: "/Users/dev/.kassiber/projects/family/data",
+        },
         amount: { type: "amount", value: "1.234 BTC" },
       }),
     );
@@ -253,7 +256,7 @@ describe("typed app logs", () => {
     const mnemonic =
       "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
     const url = "https://user:password@example.test/wallet?api_key=sk-url-secret";
-    const localPath = "/Users/dev/.kassiber/data/kassiber.sqlite";
+    const localPath = "/Users/dev/.kassiber/projects/family/data/kassiber.sqlite";
     const amountText = "0.12345678 BTC";
     const rateText = "BTC/EUR 64000.12";
     const records: AppLogRecord[] = [
@@ -341,7 +344,7 @@ describe("typed app logs", () => {
     const liquidAddress = "lq1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq";
     const descriptor = "wpkh([abcd1234/84h/0h/0h]xpub661MyMwAqRbcFsecret/0/*)";
     const url = "https://user:secret@example.test/wallet?api_key=sk-url-secret";
-    const localPath = "/Users/dev/.kassiber/data/kassiber.sqlite";
+    const localPath = "/Users/dev/.kassiber/projects/family/data/kassiber.sqlite";
     const amountText = "0.12345678 BTC";
     const fiatAmountText = "\u20ac12,345.67";
     const prefixedFiatAmountText = "USD 42.10";

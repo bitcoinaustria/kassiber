@@ -392,7 +392,7 @@ const TransactionsDashboard = ({
         className={cn(
           "-mx-3 flex flex-col bg-background px-3 sm:-mx-4 sm:flex-row sm:items-center sm:justify-between sm:px-4 md:-mx-5 md:px-5",
           tableExpanded
-            ? "gap-2 py-0"
+            ? "gap-2 pt-3 pb-0 sm:pt-4 sm:pb-0 md:pt-5 md:pb-0"
             : "sticky top-2 z-30 gap-2 py-0 shadow-[0_12px_18px_-18px_hsl(var(--foreground)/0.55)] before:pointer-events-none before:absolute before:inset-x-0 before:-top-2 before:h-2 before:bg-background before:content-[''] after:pointer-events-none after:absolute after:inset-x-0 after:-bottom-2 after:h-2 after:bg-background after:content-[''] sm:top-[0.6875rem] sm:before:-top-[0.6875rem] sm:before:h-[0.6875rem] sm:after:-bottom-[0.6875rem] sm:after:h-[0.6875rem] md:top-[0.8125rem] md:before:-top-[0.8125rem] md:before:h-[0.8125rem] md:after:-bottom-[0.8125rem] md:after:h-[0.8125rem]",
         )}
       >
@@ -401,7 +401,15 @@ const TransactionsDashboard = ({
           onPeriodChange={handlePeriodChange}
           periodOptions={availablePeriods}
         />
-        {!tableExpanded && (
+        {tableExpanded ? (
+          <div
+            id="transactions-expanded-table-actions"
+            className={cn(
+              pageHeaderActionsClassName,
+              "min-w-0 flex-1 justify-end",
+            )}
+          />
+        ) : (
           <div className={pageHeaderActionsClassName}>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>

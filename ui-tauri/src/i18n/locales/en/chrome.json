@@ -53,6 +53,11 @@
       "releaseLabel": "Kassiber v{{version}}"
     }
   },
+  "projects": {
+    "menuLabel": "Book sets",
+    "switchFailedTitle": "Could not switch book set",
+    "switchFailedBody": "Kassiber could not open that project container."
+  },
   "routeMeta": {
     "activity": {
       "label": "Search activity",
@@ -227,8 +232,8 @@
     "couldNotOpen": "Could not open the selected local books folder."
   },
   "preAlpha": {
-    "label": "Pre-alpha software warning",
-    "message": "Pre-alpha software: unreliable at best. Review everything before relying on reports or exports."
+    "label": "Alpha software warning",
+    "message": "Alpha software: unreliable at best. Review everything before relying on reports or exports."
   },
   "network": {
     "outboundConnections": "Outbound connections",

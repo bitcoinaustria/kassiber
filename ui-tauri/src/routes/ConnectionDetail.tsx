@@ -1886,22 +1886,14 @@ function ConnectionDetailView({
                 </CardTitle>
               </div>
               {txCount > 0 ? (
-                <Button
-                  asChild
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="shrink-0"
+                <Link
+                  to="/transactions"
+                  search={{ wallet: connection.label }}
+                  hash="transactions-table"
+                  className="shrink-0 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
-                  <Link
-                    to="/transactions"
-                    search={{ wallet: connection.label }}
-                    hash="transactions-table"
-                  >
-                    {t("detail.recentTransactions.showAll")}
-                    <ArrowRight className="size-4" aria-hidden="true" />
-                  </Link>
-                </Button>
+                  {t("detail.recentTransactions.showAll")}
+                </Link>
               ) : null}
             </div>
           </div>

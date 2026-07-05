@@ -1342,6 +1342,37 @@ class FreshnessTest(unittest.TestCase):
         self.assertEqual(captured, ["remembered-passphrase"])
         self.assertTrue(closed.wait(timeout=2))
 
+    def test_stop_worker_rebinds_event_after_join_timeout(self):
+        original_event = threading.Event()
+
+        class _HungWorker:
+            def __init__(self):
+                self.join_timeout = None
+
+            def join(self, timeout=None):
+                self.join_timeout = timeout
+
+            def is_alive(self):
+                return True
+
+        worker = _HungWorker()
+
+        class _Ctx:
+            pass
+
+        ctx = _Ctx()
+        ctx.conn = None
+        ctx.freshness_stop_event = original_event
+        ctx.freshness_worker = worker
+
+        daemon_freshness._stop_freshness_background_worker(ctx)
+
+        self.assertEqual(worker.join_timeout, 2.0)
+        self.assertTrue(original_event.is_set())
+        self.assertIsNone(ctx.freshness_worker)
+        self.assertIsNot(ctx.freshness_stop_event, original_event)
+        self.assertFalse(ctx.freshness_stop_event.is_set())
+
     def test_daemon_lock_clears_remembered_background_passphrase(self):
         conn = self._db()
         _seed_profile(conn)
