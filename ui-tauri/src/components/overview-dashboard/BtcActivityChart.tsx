@@ -251,7 +251,11 @@ export const BtcActivityChart = ({
     if (typeof window === "undefined") return;
     const timeout = window.setTimeout(() => {
       const params = new URLSearchParams(window.location.search);
-      params.set("period", period);
+      if (period === "auto") {
+        params.delete("period");
+      } else {
+        params.set("period", period);
+      }
       params.delete(LEGACY_INCOMING_MARKER_MIN_PARAM);
       params.delete(LEGACY_OUTGOING_MARKER_MIN_PARAM);
       if (incomingMarkerMinimumBtc === DEFAULT_INCOMING_MARKER_MIN_BTC) {

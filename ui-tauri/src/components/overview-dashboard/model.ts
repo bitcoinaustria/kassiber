@@ -699,6 +699,7 @@ export function buildStatsData(
 }
 
 export type TimePeriod =
+  | "auto"
   | "30days"
   | "3months"
   | "6months"
@@ -709,6 +710,7 @@ export type TimePeriod =
 
 // i18n keys in the `overview` namespace, resolved via `t()` at the call site.
 export const periodLabelKeys = {
+  auto: "period.auto",
   "30days": "period.30days",
   "3months": "period.3months",
   "6months": "period.6months",
@@ -719,6 +721,7 @@ export const periodLabelKeys = {
 } as const satisfies Record<TimePeriod, string>;
 
 export const periodShortLabelKeys = {
+  auto: "period.short.auto",
   "30days": "period.short.30days",
   "3months": "period.short.3months",
   "6months": "period.short.6months",
@@ -729,6 +732,7 @@ export const periodShortLabelKeys = {
 } as const satisfies Record<TimePeriod, string>;
 
 export const periodKeys: TimePeriod[] = [
+  "auto",
   "30days",
   "3months",
   "6months",
@@ -741,6 +745,7 @@ export const periodKeys: TimePeriod[] = [
 export function normalizeTimePeriodParam(value: string | null): TimePeriod | null {
   if (!value) return null;
   const normalized = value.toLowerCase().replace(/[\s_-]/g, "");
+  if (normalized === "auto" || normalized === "automatic") return "auto";
   if (normalized === "30days" || normalized === "30day" || normalized === "30d") {
     return "30days";
   }
@@ -785,9 +790,9 @@ export function normalizeTimePeriodParam(value: string | null): TimePeriod | nul
 }
 
 export function initialTimePeriodFromUrl(): TimePeriod {
-  if (typeof window === "undefined") return "ytd";
+  if (typeof window === "undefined") return "auto";
   const params = new URLSearchParams(window.location.search);
-  return normalizeTimePeriodParam(params.get("period")) ?? "ytd";
+  return normalizeTimePeriodParam(params.get("period")) ?? "auto";
 }
 
 export function initialYScaleLogFromUrl(): boolean {
@@ -1013,10 +1018,11 @@ export function getDataForPeriod(
   currency: Currency,
   density: "compact" | "detailed",
 ): PortfolioChartPoint[] {
+  const resolvedPeriod = resolveAutoTimePeriod(snapshot, period);
   if (snapshot.portfolioSeries?.length) {
     const points = buildDatedPortfolioPoints(
       snapshot.portfolioSeries,
-      period,
+      resolvedPeriod,
       metric,
       currency,
       density,
@@ -1031,7 +1037,7 @@ export function getDataForPeriod(
   }
   const fiatRate = activeMarketFiatRate(snapshot);
   const labels =
-    period === "5years"
+    resolvedPeriod === "5years"
       ? ["2022", "2023", "2024", "2025", "2026"]
       : [
           "Jan",
@@ -1072,16 +1078,53 @@ export function getDataForPeriod(
       currency,
     );
   });
-  if (period === "30days") return points.slice(-4);
-  if (period === "3months") return points.slice(-3);
-  if (period === "6months") return points.slice(-6);
-  if (period === "ytd") {
+  if (resolvedPeriod === "30days") return points.slice(-4);
+  if (resolvedPeriod === "3months") return points.slice(-3);
+  if (resolvedPeriod === "6months") return points.slice(-6);
+  if (resolvedPeriod === "ytd") {
     return points.slice(0, Math.max(1, new Date().getMonth() + 1));
   }
-  if (period === "5years") {
+  if (resolvedPeriod === "5years") {
     return points.filter((_, index) => index % 3 === 0).slice(-5);
   }
   return points;
+}
+
+const autoCandidatePeriods: Exclude<TimePeriod, "auto">[] = [
+  "30days",
+  "3months",
+  "6months",
+  "ytd",
+  "1year",
+  "5years",
+  "all",
+];
+
+export function resolveAutoTimePeriod(
+  snapshot: OverviewSnapshot,
+  period: TimePeriod,
+): TimePeriod {
+  if (period !== "auto") return period;
+  const events = activityTxs(snapshot);
+  if (!events.length) return "ytd";
+  const candidateTimes = [
+    ...(snapshot.portfolioSeries ?? [])
+      .map((point) => parseSeriesDate(point.date).valueOf())
+      .filter((time) => Number.isFinite(time)),
+    ...events.map((event) => event.occurredAt.valueOf()),
+  ];
+  const latestDate = new Date(
+    candidateTimes.length ? Math.max(...candidateTimes) : Date.now(),
+  );
+  const targetEventCount = Math.min(3, events.length);
+  return (
+    autoCandidatePeriods.find(
+      (candidate) =>
+        events.filter((event) =>
+          isActivityInTreasuryPeriod(event, latestDate, candidate),
+        ).length >= targetEventCount,
+    ) ?? "all"
+  );
 }
 
 export function buildDatedPortfolioPoints(
@@ -1121,6 +1164,7 @@ export function isPointInPeriod(
   latestDate: Date,
   period: TimePeriod,
 ) {
+  if (period === "auto") return true;
   const pointDate = parseSeriesDate(value);
   if (period === "ytd") {
     return pointDate.getUTCFullYear() === latestDate.getUTCFullYear();
@@ -1603,6 +1647,7 @@ export function isActivityInTreasuryPeriod(
   latestDate: Date,
   period: TimePeriod,
 ) {
+  if (period === "auto") return true;
   if (period === "all") return true;
   if (period === "ytd") {
     return event.occurredAt.getUTCFullYear() === latestDate.getUTCFullYear();
@@ -1743,9 +1788,10 @@ export function enrichTreasuryChartData(
   snapshot: OverviewSnapshot,
   period: TimePeriod,
 ): TreasuryChartPoint[] {
+  const resolvedPeriod = resolveAutoTimePeriod(snapshot, period);
   const basePoints = points.map((point) => buildTreasuryBasePoint(point, snapshot));
   const events = activityTxs(snapshot);
-  const drawActivityLineValues = period === "30days";
+  const drawActivityLineValues = resolvedPeriod === "30days";
   const basePointsByDay = new Map(
     basePoints.map((point) => [String(point.date).slice(0, 10), point]),
   );
@@ -1767,7 +1813,7 @@ export function enrichTreasuryChartData(
   const latestTime = candidateTimes.length ? Math.max(...candidateTimes) : Date.now();
   const latestDate = new Date(latestTime);
   const eventPoints = events
-    .filter((event) => isActivityInTreasuryPeriod(event, latestDate, period))
+    .filter((event) => isActivityInTreasuryPeriod(event, latestDate, resolvedPeriod))
     .map((event) =>
       buildTreasuryActivityPoint(
         event,

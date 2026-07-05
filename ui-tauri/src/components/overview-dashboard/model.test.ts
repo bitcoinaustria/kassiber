@@ -28,6 +28,7 @@ import {
   normalizeTimePeriodParam,
   overviewTransactions,
   positiveLogDomain,
+  resolveAutoTimePeriod,
 } from "./model";
 
 describe("overview market rate display", () => {
@@ -439,6 +440,69 @@ describe("overview treasury chart", () => {
 });
 
 describe("chart scale helpers", () => {
+  const autoPeriodTx = (id: string, occurredAt: string) => ({
+    id,
+    date: occurredAt.slice(0, 10),
+    occurredAt,
+    type: "Income" as const,
+    account: "Treasury",
+    counter: "External",
+    amountSat: 100_000,
+    eur: 50,
+    rate: 50_000,
+    tag: "income",
+    conf: 1,
+  });
+
+  it("recognizes auto period params and resolves to the tightest active window", () => {
+    expect(normalizeTimePeriodParam("auto")).toBe("auto");
+    expect(normalizeTimePeriodParam("automatic")).toBe("auto");
+
+    const snapshot: OverviewSnapshot = {
+      ...MOCK_OVERVIEW,
+      portfolioSeries: [
+        {
+          date: "2026-07-05",
+          label: "Jul 5",
+          balanceBtc: 1,
+          valueEur: 50_000,
+          costBasisEur: 45_000,
+        },
+      ],
+      txs: [],
+      activityTxs: [
+        autoPeriodTx("recent-1", "2026-06-28T12:00:00Z"),
+        autoPeriodTx("recent-2", "2026-06-20T12:00:00Z"),
+        autoPeriodTx("recent-3", "2026-06-10T12:00:00Z"),
+      ],
+    };
+
+    expect(resolveAutoTimePeriod(snapshot, "auto")).toBe("30days");
+  });
+
+  it("zooms out when recent periods do not contain enough activity", () => {
+    const snapshot: OverviewSnapshot = {
+      ...MOCK_OVERVIEW,
+      portfolioSeries: [
+        {
+          date: "2026-07-05",
+          label: "Jul 5",
+          balanceBtc: 1,
+          valueEur: 50_000,
+          costBasisEur: 45_000,
+        },
+      ],
+      txs: [],
+      activityTxs: [
+        autoPeriodTx("old-1", "2026-01-20T12:00:00Z"),
+        autoPeriodTx("old-2", "2026-01-10T12:00:00Z"),
+        autoPeriodTx("old-3", "2025-12-15T12:00:00Z"),
+      ],
+    };
+
+    expect(resolveAutoTimePeriod(snapshot, "auto")).toBe("1year");
+  });
+
   it("recognizes 6-month period params and windows", () => {
     expect(normalizeTimePeriodParam("6m")).toBe("6months");
     expect(normalizeTimePeriodParam("6months")).toBe("6months");

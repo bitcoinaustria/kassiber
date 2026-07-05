@@ -275,6 +275,7 @@
     "fee": "Fee"
   },
   "period": {
+    "auto": "Auto",
     "30days": "30 Days",
     "3months": "3 Months",
     "6months": "6 Months",
@@ -283,6 +284,7 @@
     "5years": "5 Years",
     "all": "All Time",
     "short": {
+      "auto": "Auto",
       "30days": "30D",
       "3months": "3M",
       "6months": "6M",

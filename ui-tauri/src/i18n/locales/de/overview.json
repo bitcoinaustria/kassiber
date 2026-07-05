@@ -275,6 +275,7 @@
     "fee": "Gebühr"
   },
   "period": {
+    "auto": "Auto",
     "30days": "30 Tage",
     "3months": "3 Monate",
     "6months": "6 Monate",
@@ -283,6 +284,7 @@
     "5years": "5 Jahre",
     "all": "Gesamte Zeit",
     "short": {
+      "auto": "Auto",
       "30days": "30T",
       "3months": "3M",
       "6months": "6M",
