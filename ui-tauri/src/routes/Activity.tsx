@@ -2,9 +2,9 @@ import {
   Activity as ActivityIcon,
   Bot,
   CalendarClock,
-  Filter,
   RefreshCw,
   RotateCcw,
+  SlidersHorizontal,
 } from "lucide-react";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
@@ -152,7 +152,7 @@ export function Activity() {
 
         <section className="grid gap-3 rounded-md border bg-card p-3">
           <div className="flex items-center gap-2 text-sm font-medium">
-            <Filter className="size-4 text-muted-foreground" aria-hidden="true" />
+            <SlidersHorizontal className="size-4 text-muted-foreground" aria-hidden="true" />
             {t("activity.filters")}
           </div>
           <div className="grid gap-3 md:grid-cols-4">

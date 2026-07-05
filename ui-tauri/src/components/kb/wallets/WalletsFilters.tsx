@@ -1,4 +1,4 @@
-import { Filter, Wallet, X } from "lucide-react";
+import { SlidersHorizontal, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
@@ -72,7 +72,7 @@ export function WalletsFilters({
                 )}
                 aria-label={t("filters.filterByStatus")}
               >
-                <Filter className="size-3.5 sm:size-4" aria-hidden="true" />
+                <SlidersHorizontal className="size-3.5 sm:size-4" aria-hidden="true" />
                 <span className="hidden sm:inline">{t("filters.status")}</span>
                 {statusFilter !== "all" && (
                   <span className="size-1.5 rounded-full bg-primary sm:size-2" />
@@ -110,7 +110,7 @@ export function WalletsFilters({
                 )}
                 aria-label={t("filters.filterByKind")}
               >
-                <Wallet className="size-3.5 sm:size-4" aria-hidden="true" />
+                <SlidersHorizontal className="size-3.5 sm:size-4" aria-hidden="true" />
                 <span className="hidden sm:inline">{t("filters.kind")}</span>
                 {kindFilter !== "all" && (
                   <span className="size-1.5 rounded-full bg-primary sm:size-2" />

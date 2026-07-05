@@ -9,12 +9,12 @@ import {
   Coins,
   Copy,
   Eye,
-  Filter,
   Link2Off,
   Maximize2,
   Minimize2,
   MoreHorizontal,
   Pencil,
+  SlidersHorizontal,
   X,
 } from "lucide-react";
 import * as React from "react";
@@ -1553,7 +1553,7 @@ const TransactionsTable = ({
                   )}
                   aria-label={t("table.filter.menuAria")}
                 >
-                  <Filter className="size-3.5 sm:size-4" aria-hidden="true" />
+                  <SlidersHorizontal className="size-3.5 sm:size-4" aria-hidden="true" />
                   <span>{t("table.filter.menuTrigger")}</span>
                   {activeFilterCount > 0 ? (
                     <span className="grid min-w-4 place-items-center rounded-full bg-primary px-1 text-[10px] font-semibold leading-4 text-primary-foreground">
@@ -1752,7 +1752,7 @@ const TransactionsTable = ({
                       title={t("table.filter.paymentAria")}
                     >
                       <span>{t("table.column.network")}</span>
-                      <Filter className="size-3.5" aria-hidden="true" />
+                      <SlidersHorizontal className="size-3.5" aria-hidden="true" />
                       {paymentMethodFilter !== "all" ? (
                         <span className="size-1.5 rounded-full bg-primary" />
                       ) : null}
@@ -1776,7 +1776,7 @@ const TransactionsTable = ({
                       title={t("table.filter.statusAria")}
                     >
                       <span>{t("table.column.status")}</span>
-                      <Filter className="size-3.5" aria-hidden="true" />
+                      <SlidersHorizontal className="size-3.5" aria-hidden="true" />
                       {statusFilter !== "all" ? (
                         <span className="size-1.5 rounded-full bg-primary" />
                       ) : null}

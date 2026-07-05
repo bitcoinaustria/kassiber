@@ -3,7 +3,7 @@ import {
   ArrowDownRight,
   ArrowLeftRight,
   ArrowUpRight,
-  Filter,
+  SlidersHorizontal,
 } from "lucide-react";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
@@ -160,7 +160,7 @@ export const RecentTransactionsTable = ({
                 size="sm"
                 className="h-8 gap-1.5 sm:h-9 sm:gap-2"
               >
-                <Filter className="size-3.5 sm:size-4" aria-hidden="true" />
+                <SlidersHorizontal className="size-3.5 sm:size-4" aria-hidden="true" />
                 <span className="hidden sm:inline">{t("recentTx.filter")}</span>
               </Button>
             </DropdownMenuTrigger>
