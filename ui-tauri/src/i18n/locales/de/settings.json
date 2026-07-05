@@ -314,7 +314,7 @@
     "lockAfter": "Sperren nach",
     "minutes": "{{count}} Min",
     "requireOnLaunchLabel": "Passwort beim Start verlangen",
-    "requireOnLaunchEncrypted": "Frage sofort beim Öffnen von Kassiber; Kaltstarts benötigen weiterhin das Datenbank-Passwort, wenn der Daemon gesperrt ist.",
+    "requireOnLaunchEncrypted": "Verschlüsselte Bücher werden immer entsperrt, bevor das Dashboard geöffnet wird.",
     "requireOnLaunchPlaintext": "Frage jedes Mal, wenn Kassiber geöffnet wird.",
     "lockOnCloseLabel": "Beim Schließen des Fensters sperren",
     "lockOnCloseDescription": "Lösche den entschlüsselten Zustand aus dem Speicher, wenn das App-Fenster geschlossen wird.",

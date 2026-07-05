@@ -7,21 +7,27 @@
  * land, the daemon should map its status snapshot into the same shape.
  */
 
-import { Fragment, useMemo, useState } from "react";
+import { Fragment, useMemo, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 import { Link } from "@tanstack/react-router";
 import {
+  Activity,
   ArrowDownRight,
   ArrowLeft,
+  ArrowRight,
   ArrowUpRight,
   Cable,
+  ClipboardList,
   Coins,
   ExternalLink,
+  Gauge,
   Globe2,
+  ReceiptText,
   RefreshCw,
   Repeat,
   Server,
+  ShieldCheck,
   TrendingUp,
   XCircle,
   Zap,
@@ -55,11 +61,14 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { connectionKindLabels } from "@/lib/connectionDisplay";
 import { formatShortDate } from "@/lib/date";
+import { DEFAULT_OPEN_COST_SAT } from "@/lib/lightning";
 import {
   pageHeaderActionClassName,
   pageHeaderActionsClassName,
+  pageHeaderClassName,
   pageHeaderIconButtonClassName,
   screenShellClassName,
 } from "@/lib/screen-layout";
@@ -105,6 +114,22 @@ const channelStateLabel = (
   state: NodeChannelState,
   t: TFunction<"connections">,
 ) => t(channelStateLabelKeys[state]);
+
+type NodeChannelCloseKind = NonNullable<NodeChannel["closeKind"]>;
+
+const channelCloseKindLabelKeys = {
+  cooperative: "node.closeKind.cooperative",
+  force: "node.closeKind.force",
+  breach: "node.closeKind.breach",
+} as const satisfies Record<NodeChannelCloseKind, string>;
+
+const channelCloseKindLabel = (
+  closeKind: NodeChannel["closeKind"] | undefined,
+  t: TFunction<"connections">,
+) =>
+  closeKind
+    ? t(channelCloseKindLabelKeys[closeKind])
+    : t("node.channels.closedFallback");
 
 const forwardStatusLabelKeys = {
   settled: "node.forwardStatus.settled",
@@ -165,6 +190,8 @@ interface NodeConnectionDetailProps {
   hideSensitive: boolean;
   onSync: () => void;
   isSyncRunning: boolean;
+  isSnapshotLoading?: boolean;
+  snapshotErrorMessage?: string | null;
 }
 
 export function NodeConnectionDetail({
@@ -173,10 +200,13 @@ export function NodeConnectionDetail({
   hideSensitive,
   onSync,
   isSyncRunning,
+  isSnapshotLoading = false,
+  snapshotErrorMessage = null,
 }: NodeConnectionDetailProps) {
   const { t } = useTranslation("connections");
   const node = connection.node;
-  const refreshButtonLabel = isSyncRunning
+  const isBusy = isSyncRunning || isSnapshotLoading;
+  const refreshButtonLabel = isBusy
     ? t("node.header.refreshing")
     : t("node.header.refresh");
 
@@ -185,17 +215,25 @@ export function NodeConnectionDetail({
       <div className={screenShellClassName}>
         <NodeHeader
           connection={connection}
-          isSyncRunning={isSyncRunning}
+          isSyncRunning={isBusy}
           refreshButtonLabel={refreshButtonLabel}
           onSync={onSync}
         />
         <Card>
           <CardHeader className="border-b px-4 pb-3">
             <CardTitle className="text-sm sm:text-base">
-              {t("node.noSnapshot.title")}
+              {isSnapshotLoading
+                ? t("node.loadingSnapshot.title")
+                : t("node.noSnapshot.title")}
             </CardTitle>
             <CardDescription>
-              {t("node.noSnapshot.description")}
+              {isSnapshotLoading
+                ? t("node.loadingSnapshot.description")
+                : snapshotErrorMessage
+                  ? t("node.noSnapshot.errorDescription", {
+                      message: snapshotErrorMessage,
+                    })
+                  : t("node.noSnapshot.description")}
             </CardDescription>
           </CardHeader>
           <CardContent className="flex items-start gap-2 px-4 pt-4">
@@ -203,11 +241,12 @@ export function NodeConnectionDetail({
               type="button"
               variant="outline"
               size="sm"
-              disabled={isSyncRunning}
+              disabled={isBusy}
+              aria-busy={isBusy}
               onClick={onSync}
             >
               <RefreshCw
-                className={cn("size-4", isSyncRunning && "animate-spin")}
+                className={cn("size-4", isBusy && "animate-spin")}
                 aria-hidden="true"
               />
               {refreshButtonLabel}
@@ -223,45 +262,90 @@ export function NodeConnectionDetail({
       <NodeHeader
         connection={connection}
         node={node}
-        isSyncRunning={isSyncRunning}
+        isSyncRunning={isBusy}
         refreshButtonLabel={refreshButtonLabel}
         onSync={onSync}
       />
 
-      <NodeMetrics
+      <NodeOperatorHero
+        connection={connection}
         node={node}
         priceEur={priceEur}
         hideSensitive={hideSensitive}
+        isSyncRunning={isBusy}
+        refreshButtonLabel={refreshButtonLabel}
+        onSync={onSync}
       />
 
-      {node.routing ? (
-        <RoutingSummary
-          routing={node.routing}
-          hideSensitive={hideSensitive}
-          priceEur={priceEur}
-        />
-      ) : null}
+      <Tabs defaultValue="overview" className="gap-3">
+        <TabsList className="grid h-auto w-full grid-cols-2 gap-1 p-1 sm:grid-cols-5">
+          <TabsTrigger value="overview">{t("node.tabs.overview")}</TabsTrigger>
+          <TabsTrigger value="channels">{t("node.tabs.channels")}</TabsTrigger>
+          <TabsTrigger value="activity">{t("node.tabs.activity")}</TabsTrigger>
+          <TabsTrigger value="profitability">
+            {t("node.tabs.profitability")}
+          </TabsTrigger>
+          <TabsTrigger value="accounting">
+            {t("node.tabs.accounting")}
+          </TabsTrigger>
+        </TabsList>
 
-      <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1.45fr)_minmax(360px,0.85fr)]">
-        <ChannelsCard
-          channels={node.channels}
-          closedChannels={node.closedChannels ?? []}
-          hideSensitive={hideSensitive}
-          totalCapacitySat={node.totalCapacitySat}
-        />
-        <NodeDetailsCard
-          connection={connection}
-          node={node}
-          hideSensitive={hideSensitive}
-        />
-      </div>
+        <TabsContent value="overview" className="space-y-3">
+          <NodeMetrics
+            node={node}
+            priceEur={priceEur}
+            hideSensitive={hideSensitive}
+          />
+          <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(360px,0.8fr)]">
+            <NodeActivityCard node={node} />
+            <AccountingReadinessCard connection={connection} node={node} />
+          </div>
+        </TabsContent>
 
-      {node.forwards && node.forwards.length > 0 ? (
-        <ForwardsCard
-          forwards={node.forwards}
-          hideSensitive={hideSensitive}
-        />
-      ) : null}
+        <TabsContent value="channels" className="space-y-3">
+          <ChannelsCard
+            channels={node.channels}
+            closedChannels={node.closedChannels ?? []}
+            hideSensitive={hideSensitive}
+            totalCapacitySat={node.totalCapacitySat}
+          />
+        </TabsContent>
+
+        <TabsContent value="activity" className="space-y-3">
+          <NodeActivityCard node={node} />
+          {node.forwards && node.forwards.length > 0 ? (
+            <ForwardsCard
+              forwards={node.forwards}
+              hideSensitive={hideSensitive}
+            />
+          ) : null}
+        </TabsContent>
+
+        <TabsContent value="profitability" className="space-y-3">
+          {node.routing ? (
+            <RoutingSummary
+              routing={node.routing}
+              hideSensitive={hideSensitive}
+              priceEur={priceEur}
+            />
+          ) : null}
+          <ChannelEconomicsCard
+            channels={node.channels}
+            hideSensitive={hideSensitive}
+          />
+        </TabsContent>
+
+        <TabsContent value="accounting" className="space-y-3">
+          <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(360px,0.8fr)]">
+            <AccountingReadinessCard connection={connection} node={node} />
+            <NodeDetailsCard
+              connection={connection}
+              node={node}
+              hideSensitive={hideSensitive}
+            />
+          </div>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
@@ -283,76 +367,341 @@ function NodeHeader({
 }: NodeHeaderProps) {
   const { t } = useTranslation("connections");
   return (
-    <Card className="rounded-xl py-3">
-      <CardContent className="flex flex-col gap-3 px-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex min-w-0 items-center gap-3">
-          <Button
-            asChild
-            variant="outline"
-            size="icon"
-            className={cn(pageHeaderIconButtonClassName, "shrink-0")}
-          >
-            <Link to="/connections" aria-label={t("node.header.backToWallets")}>
-              <ArrowLeft className="size-4" aria-hidden="true" />
-            </Link>
-          </Button>
-          <ConnectionAssetBadge
-            connection={connection}
-            size="md"
-            className="hidden sm:flex"
+    <div className={pageHeaderClassName}>
+      <div className="flex min-w-0 items-center gap-3">
+        <Button
+          asChild
+          variant="outline"
+          size="icon"
+          className={cn(pageHeaderIconButtonClassName, "shrink-0")}
+        >
+          <Link to="/connections" aria-label={t("node.header.backToWallets")}>
+            <ArrowLeft className="size-4" aria-hidden="true" />
+          </Link>
+        </Button>
+        <ConnectionAssetBadge
+          connection={connection}
+          size="md"
+          className="hidden sm:flex"
+        />
+        <div className="min-w-0">
+          <h1 className="truncate text-xl font-semibold tracking-tight sm:text-2xl">
+            {connection.label}
+          </h1>
+          <div className="mt-1 flex min-w-0 flex-wrap items-center gap-2 text-xs text-muted-foreground">
+            <span className="truncate">
+              {connectionKindLabels[connection.kind]}
+            </span>
+            {node?.alias ? (
+              <>
+                <span aria-hidden="true">·</span>
+                <span className="truncate">{node.alias}</span>
+              </>
+            ) : null}
+            {node?.network ? (
+              <>
+                <span aria-hidden="true">·</span>
+                <span className="truncate">{node.network}</span>
+              </>
+            ) : null}
+            {connection.status !== "synced" ? (
+              <>
+                <span aria-hidden="true">·</span>
+                <ConnectionStatusPill status={connection.status} />
+              </>
+            ) : null}
+          </div>
+        </div>
+      </div>
+      <div className={cn(pageHeaderActionsClassName, "shrink-0 self-start sm:self-center")}>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className={pageHeaderActionClassName}
+          disabled={isSyncRunning}
+          aria-busy={isSyncRunning}
+          aria-label={t("node.header.refreshAction", {
+            action: refreshButtonLabel,
+            label: connection.label,
+          })}
+          onClick={onSync}
+        >
+          <RefreshCw
+            className={cn("size-4", isSyncRunning && "animate-spin")}
+            aria-hidden="true"
           />
-          <div className="min-w-0">
-            <h1 className="truncate text-xl font-semibold tracking-tight sm:text-2xl">
-              {connection.label}
-            </h1>
-            <div className="mt-1 flex min-w-0 flex-wrap items-center gap-2 text-xs text-muted-foreground">
-              <span className="truncate">
-                {connectionKindLabels[connection.kind]}
+          <span className="grid justify-items-center">
+            <span
+              aria-hidden="true"
+              className="invisible col-start-1 row-start-1"
+            >
+              {t("node.header.refresh")}
+            </span>
+            <span
+              aria-hidden="true"
+              className="invisible col-start-1 row-start-1"
+            >
+              {t("node.header.refreshing")}
+            </span>
+            <span className="col-start-1 row-start-1">
+              {refreshButtonLabel}
+            </span>
+          </span>
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+interface NodeOperatorHeroProps {
+  connection: Connection;
+  node: NodeSnapshot;
+  priceEur: number;
+  hideSensitive: boolean;
+  isSyncRunning: boolean;
+  refreshButtonLabel: string;
+  onSync: () => void;
+}
+
+function NodeOperatorHero({
+  connection,
+  node,
+  priceEur,
+  hideSensitive,
+  isSyncRunning,
+  refreshButtonLabel,
+  onSync,
+}: NodeOperatorHeroProps) {
+  const { t } = useTranslation("connections");
+  const activeChannels = node.channels.filter(
+    (channel) => channel.state === "active",
+  );
+  const totalCapacitySat = Math.max(0, node.totalCapacitySat);
+  const localPct =
+    totalCapacitySat > 0
+      ? Math.min(
+          100,
+          Math.max(0, (node.totalLocalBalanceSat / totalCapacitySat) * 100),
+        )
+      : 0;
+  const remotePct =
+    totalCapacitySat > 0
+      ? Math.min(
+          100,
+          Math.max(0, (node.totalRemoteBalanceSat / totalCapacitySat) * 100),
+        )
+      : 0;
+  const inboundRatio =
+    totalCapacitySat > 0 ? node.totalRemoteBalanceSat / totalCapacitySat : 0;
+  const outboundRatio =
+    totalCapacitySat > 0 ? node.totalLocalBalanceSat / totalCapacitySat : 0;
+  const signalKey =
+    activeChannels.length === 0
+      ? "noActiveChannels"
+      : inboundRatio < 0.15
+        ? "lowReceive"
+        : outboundRatio < 0.15
+          ? "lowSend"
+          : "balanced";
+  const netRoutingSat = node.routing?.netProfitSat ?? 0;
+  const netRoutingBtc = netRoutingSat / 100_000_000;
+
+  return (
+    <Card className="rounded-xl">
+      <CardContent className="grid gap-4 px-4 py-4 xl:grid-cols-[minmax(0,1fr)_220px]">
+        <div className="min-w-0 space-y-4">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <Badge variant="secondary" className="rounded-md">
+              {t("node.hero.operatorView")}
+            </Badge>
+            <span
+              className={cn(
+                "inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium ring-1 ring-inset",
+                signalKey === "balanced"
+                  ? "bg-emerald-50 text-emerald-700 ring-emerald-600/20 dark:bg-emerald-900/30 dark:text-emerald-300 dark:ring-emerald-400/20"
+                  : signalKey === "noActiveChannels"
+                    ? "bg-red-50 text-red-700 ring-red-600/20 dark:bg-red-900/30 dark:text-red-300 dark:ring-red-400/20"
+                    : "bg-amber-50 text-amber-700 ring-amber-600/20 dark:bg-amber-900/30 dark:text-amber-300 dark:ring-amber-400/20",
+              )}
+            >
+              <Gauge className="size-3.5" aria-hidden="true" />
+              {t(`node.hero.signal.${signalKey}`)}
+            </span>
+            <span className="text-xs text-muted-foreground">
+              {t("node.hero.snapshotLine", {
+                channels: activeChannels.length.toLocaleString("en-US"),
+                forwards: (
+                  node.routing?.forwardCount ??
+                  node.forwards?.length ??
+                  0
+                ).toLocaleString("en-US"),
+                peers: node.peerCount.toLocaleString("en-US"),
+              })}
+            </span>
+          </div>
+
+          <div className="grid gap-3 md:grid-cols-2 2xl:grid-cols-4">
+            <HeroStat
+              label={t("node.hero.canSend")}
+              value={fmtSat(node.totalLocalBalanceSat)}
+              detail={fmtEur(
+                (node.totalLocalBalanceSat / 100_000_000) * priceEur,
+              )}
+              icon={<Zap className="size-4" aria-hidden="true" />}
+              tone="text-emerald-700 dark:text-emerald-300"
+              hideSensitive={hideSensitive}
+            />
+            <HeroStat
+              label={t("node.hero.canReceive")}
+              value={fmtSat(node.totalRemoteBalanceSat)}
+              detail={t("node.hero.remoteCapacity")}
+              icon={<Cable className="size-4" aria-hidden="true" />}
+              tone="text-sky-700 dark:text-sky-300"
+              hideSensitive={hideSensitive}
+            />
+            <HeroStat
+              label={t("node.hero.onchainReserve")}
+              value={fmtSat(node.onchainBalanceSat)}
+              detail={fmtEur(
+                (node.onchainBalanceSat / 100_000_000) * priceEur,
+              )}
+              icon={<Coins className="size-4" aria-hidden="true" />}
+              tone="text-foreground"
+              hideSensitive={hideSensitive}
+            />
+            <HeroStat
+              label={t("node.hero.netRouting")}
+              value={fmtSatSigned(netRoutingSat)}
+              detail={fmtEur(netRoutingBtc * priceEur)}
+              icon={<TrendingUp className="size-4" aria-hidden="true" />}
+              tone={
+                netRoutingSat > 0
+                  ? "text-emerald-700 dark:text-emerald-300"
+                  : netRoutingSat < 0
+                    ? "text-red-700 dark:text-red-300"
+                    : "text-muted-foreground"
+              }
+              hideSensitive={hideSensitive}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <div
+              className="flex h-3 w-full overflow-hidden rounded-full bg-muted"
+              role="img"
+              aria-label={t("node.hero.liquidityAria", {
+                local: node.totalLocalBalanceSat.toLocaleString("en-US"),
+                remote: node.totalRemoteBalanceSat.toLocaleString("en-US"),
+              })}
+            >
+              <div
+                className="h-full bg-emerald-500 dark:bg-emerald-400/80"
+                style={{ width: `${localPct}%` }}
+              />
+              <div
+                className="h-full bg-sky-500 dark:bg-sky-400/80"
+                style={{ width: `${remotePct}%` }}
+              />
+            </div>
+            <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-muted-foreground">
+              <span className={cn("tabular-nums", blurClass(hideSensitive))}>
+                <span className="text-emerald-700 dark:text-emerald-300">
+                  {Math.round(localPct)}%
+                </span>{" "}
+                {t("node.hero.localShare")}
               </span>
-              {node?.alias ? (
-                <>
-                  <span aria-hidden="true">·</span>
-                  <span className="truncate">{node.alias}</span>
-                </>
-              ) : null}
-              {node?.network ? (
-                <>
-                  <span aria-hidden="true">·</span>
-                  <span className="truncate">{node.network}</span>
-                </>
-              ) : null}
-              {connection.status !== "synced" ? (
-                <>
-                  <span aria-hidden="true">·</span>
-                  <ConnectionStatusPill status={connection.status} />
-                </>
-              ) : null}
+              <span className={cn("tabular-nums", blurClass(hideSensitive))}>
+                <span className="text-sky-700 dark:text-sky-300">
+                  {Math.round(remotePct)}%
+                </span>{" "}
+                {t("node.hero.remoteShare")}
+              </span>
+              <span className={cn("tabular-nums", blurClass(hideSensitive))}>
+                {t("node.hero.capacity", { value: fmtSat(totalCapacitySat) })}
+              </span>
             </div>
           </div>
         </div>
-        <div className={cn(pageHeaderActionsClassName, "shrink-0 self-start sm:self-center")}>
+
+        <div className="flex flex-col gap-2 xl:items-stretch xl:justify-center">
           <Button
             type="button"
-            variant="outline"
+            variant="default"
             size="sm"
-            className={cn(pageHeaderActionClassName, "min-w-[7.5rem]")}
             disabled={isSyncRunning}
             aria-busy={isSyncRunning}
-            aria-label={t("node.header.refreshAction", {
-              action: refreshButtonLabel,
-              label: connection.label,
-            })}
             onClick={onSync}
           >
             <RefreshCw
               className={cn("size-4", isSyncRunning && "animate-spin")}
               aria-hidden="true"
             />
-            <span>{refreshButtonLabel}</span>
+            {refreshButtonLabel}
+          </Button>
+          <Button asChild type="button" variant="outline" size="sm">
+            <Link
+              to="/transactions"
+              search={{ wallet: connection.label }}
+              hash="transactions-table"
+            >
+              <ReceiptText className="size-4" aria-hidden="true" />
+              {t("node.hero.viewTransactions")}
+            </Link>
+          </Button>
+          <Button asChild type="button" variant="outline" size="sm">
+            <Link to="/reports">
+              <ArrowRight className="size-4" aria-hidden="true" />
+              {t("node.hero.openReports")}
+            </Link>
           </Button>
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+interface HeroStatProps {
+  label: string;
+  value: string;
+  detail: string;
+  icon: ReactNode;
+  tone: string;
+  hideSensitive: boolean;
+}
+
+function HeroStat({
+  label,
+  value,
+  detail,
+  icon,
+  tone,
+  hideSensitive,
+}: HeroStatProps) {
+  return (
+    <div className="min-w-0 rounded-md border bg-background px-3 py-2.5">
+      <div className="flex items-center gap-2 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+        {icon}
+        <span className="truncate">{label}</span>
+      </div>
+      <p
+        className={cn(
+          "mt-1 truncate font-mono text-base font-semibold tabular-nums",
+          tone,
+          blurClass(hideSensitive),
+        )}
+      >
+        {value}
+      </p>
+      <p
+        className={cn(
+          "mt-0.5 truncate text-[11px] text-muted-foreground",
+          blurClass(hideSensitive),
+        )}
+      >
+        {detail}
+      </p>
+    </div>
   );
 }
 
@@ -424,6 +773,264 @@ function NodeMetrics({ node, priceEur, hideSensitive }: NodeMetricsProps) {
         }
         icon={<Coins className="size-4" aria-hidden="true" />}
       />
+    </div>
+  );
+}
+
+function NodeActivityCard({ node }: { node: NodeSnapshot }) {
+  const { t } = useTranslation("connections");
+  const paidInvoices = node.paidInvoiceCount ?? 0;
+  const invoiceCount = node.invoiceCount ?? paidInvoices;
+  const completedPayments = node.completedPaymentCount ?? 0;
+  const paymentCount = node.paymentCount ?? completedPayments;
+  const failedOrExpired =
+    (node.failedPaymentCount ?? 0) + (node.expiredInvoiceCount ?? 0);
+  const forwardCount = node.routing?.forwardCount ?? node.forwards?.length ?? 0;
+  return (
+    <Card>
+      <CardHeader className="border-b px-4 pb-3">
+        <CardTitle className="flex items-center gap-2 text-sm sm:text-base">
+          <Activity className="size-4" aria-hidden="true" />
+          {t("node.activity.title")}
+        </CardTitle>
+        <CardDescription>{t("node.activity.description")}</CardDescription>
+      </CardHeader>
+      <CardContent className="grid gap-3 px-4 pt-4 sm:grid-cols-2 xl:grid-cols-4">
+        <CompactStat
+          label={t("node.activity.invoices")}
+          value={`${paidInvoices.toLocaleString("en-US")} / ${invoiceCount.toLocaleString("en-US")}`}
+          detail={t("node.activity.paid")}
+          icon={<ArrowDownRight className="size-4" aria-hidden="true" />}
+        />
+        <CompactStat
+          label={t("node.activity.payments")}
+          value={`${completedPayments.toLocaleString("en-US")} / ${paymentCount.toLocaleString("en-US")}`}
+          detail={t("node.activity.completed")}
+          icon={<ArrowUpRight className="size-4" aria-hidden="true" />}
+        />
+        <CompactStat
+          label={t("node.activity.forwards")}
+          value={forwardCount.toLocaleString("en-US")}
+          detail={node.routing?.windowLabel ?? t("node.activity.snapshotWindow")}
+          icon={<Repeat className="size-4" aria-hidden="true" />}
+        />
+        <CompactStat
+          label={t("node.activity.exceptions")}
+          value={failedOrExpired.toLocaleString("en-US")}
+          detail={t("node.activity.failedExpired")}
+          icon={<XCircle className="size-4" aria-hidden="true" />}
+        />
+      </CardContent>
+    </Card>
+  );
+}
+
+interface AccountingReadinessCardProps {
+  connection: Connection;
+  node: NodeSnapshot;
+}
+
+function AccountingReadinessCard({
+  connection,
+  node,
+}: AccountingReadinessCardProps) {
+  const { t } = useTranslation("connections");
+  const importedTransactions = connection.transactionCount ?? 0;
+  const bookedInvoiceCount = node.paidInvoiceCount ?? 0;
+  const operationalEvents =
+    bookedInvoiceCount +
+    (node.completedPaymentCount ?? 0) +
+    (node.routing?.forwardCount ?? 0);
+  return (
+    <Card>
+      <CardHeader className="border-b px-4 pb-3">
+        <CardTitle className="flex items-center gap-2 text-sm sm:text-base">
+          <ClipboardList className="size-4" aria-hidden="true" />
+          {t("node.accounting.title")}
+        </CardTitle>
+        <CardDescription>{t("node.accounting.description")}</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3 px-4 pt-4">
+        <div className="grid gap-3 sm:grid-cols-3">
+          <CompactStat
+            label={t("node.accounting.imported")}
+            value={importedTransactions.toLocaleString("en-US")}
+            detail={t("node.accounting.transactions")}
+            icon={<ReceiptText className="size-4" aria-hidden="true" />}
+          />
+          <CompactStat
+            label={t("node.accounting.bookedInvoices")}
+            value={bookedInvoiceCount.toLocaleString("en-US")}
+            detail={t("node.accounting.finalized")}
+            icon={<ShieldCheck className="size-4" aria-hidden="true" />}
+          />
+          <CompactStat
+            label={t("node.accounting.nodeEvents")}
+            value={operationalEvents.toLocaleString("en-US")}
+            detail={t("node.accounting.auditTrail")}
+            icon={<Activity className="size-4" aria-hidden="true" />}
+          />
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button asChild type="button" variant="outline" size="sm">
+            <Link
+              to="/transactions"
+              search={{ wallet: connection.label }}
+              hash="transactions-table"
+            >
+              <ReceiptText className="size-4" aria-hidden="true" />
+              {t("node.accounting.viewTransactions")}
+            </Link>
+          </Button>
+          <Button asChild type="button" variant="outline" size="sm">
+            <Link to="/journals">
+              <ClipboardList className="size-4" aria-hidden="true" />
+              {t("node.accounting.openJournals")}
+            </Link>
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function ChannelEconomicsCard({
+  channels,
+  hideSensitive,
+}: {
+  channels: NodeChannel[];
+  hideSensitive: boolean;
+}) {
+  const { t } = useTranslation("connections");
+  const rows = useMemo(
+    () =>
+      [...channels].sort(
+        (a, b) => (b.earnedRoutingSat ?? 0) - (a.earnedRoutingSat ?? 0),
+      ),
+    [channels],
+  );
+  return (
+    <Card>
+      <CardHeader className="border-b px-4 pb-3">
+        <CardTitle className="flex items-center gap-2 text-sm sm:text-base">
+          <TrendingUp className="size-4" aria-hidden="true" />
+          {t("node.channelEconomics.title")}
+        </CardTitle>
+        <CardDescription>
+          {t("node.channelEconomics.description", {
+            cost: DEFAULT_OPEN_COST_SAT.toLocaleString("en-US"),
+          })}
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="p-0">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>{t("node.channelEconomics.peer")}</TableHead>
+              <TableHead className="text-right">
+                {t("node.channelEconomics.forwards")}
+              </TableHead>
+              <TableHead className="text-right">
+                {t("node.channelEconomics.earned")}
+              </TableHead>
+              <TableHead className="text-right">
+                {t("node.channelEconomics.openCost")}
+              </TableHead>
+              <TableHead className="text-right">
+                {t("node.channelEconomics.state")}
+              </TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {rows.length === 0 ? (
+              <TableRow>
+                <TableCell
+                  className="text-center text-sm text-muted-foreground"
+                  colSpan={5}
+                >
+                  {t("node.channelEconomics.empty")}
+                </TableCell>
+              </TableRow>
+            ) : (
+              rows.map((channel) => {
+                const earned = channel.earnedRoutingSat ?? 0;
+                const coversOpenCost = earned >= DEFAULT_OPEN_COST_SAT;
+                return (
+                  <TableRow key={channel.id}>
+                    <TableCell className="min-w-0 align-top">
+                      <span className="block truncate text-sm font-medium">
+                        {channel.peerAlias}
+                      </span>
+                      <span className="block truncate font-mono text-[10px] text-muted-foreground sm:text-xs">
+                        {channel.shortChannelId ?? channel.id}
+                      </span>
+                    </TableCell>
+                    <TableCell className="text-right font-mono text-sm tabular-nums">
+                      {(channel.forwardCount ?? 0).toLocaleString("en-US")}
+                    </TableCell>
+                    <TableCell
+                      className={cn(
+                        "text-right font-mono text-sm tabular-nums",
+                        blurClass(hideSensitive),
+                      )}
+                    >
+                      {fmtSat(earned)}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <span
+                        className={cn(
+                          "inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-medium ring-1 ring-inset",
+                          coversOpenCost
+                            ? "bg-emerald-50 text-emerald-700 ring-emerald-600/20 dark:bg-emerald-900/30 dark:text-emerald-300 dark:ring-emerald-400/20"
+                            : "bg-muted text-muted-foreground ring-border",
+                        )}
+                      >
+                        {coversOpenCost
+                          ? t("node.channelEconomics.covered")
+                          : t("node.channelEconomics.notYet")}
+                      </span>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <span
+                        className={cn(
+                          "inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-medium ring-1 ring-inset",
+                          channelStateTone[channel.state],
+                        )}
+                      >
+                        {channelStateLabel(channel.state, t)}
+                      </span>
+                    </TableCell>
+                  </TableRow>
+                );
+              })
+            )}
+          </TableBody>
+        </Table>
+      </CardContent>
+    </Card>
+  );
+}
+
+interface CompactStatProps {
+  label: string;
+  value: string;
+  detail: string;
+  icon: ReactNode;
+}
+
+function CompactStat({ label, value, detail, icon }: CompactStatProps) {
+  return (
+    <div className="min-w-0 rounded-md border bg-background px-3 py-2.5">
+      <div className="flex items-center gap-2 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+        {icon}
+        <span className="truncate">{label}</span>
+      </div>
+      <p className="mt-1 truncate font-mono text-sm font-semibold tabular-nums">
+        {value}
+      </p>
+      <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
+        {detail}
+      </p>
     </div>
   );
 }
@@ -740,7 +1347,7 @@ function ChannelRow({
           >
             {channel.peerPubkey
               ? fmtPubkey(channel.peerPubkey)
-              : t("node.channels.privatePeer")}
+              : t("node.channels.unannouncedPeer")}
             {channel.shortChannelId ? ` · ${channel.shortChannelId}` : ""}
           </span>
         </button>
@@ -837,7 +1444,7 @@ function ChannelRow({
         </span>
         {channel.closedAt ? (
           <span className="mt-0.5 block text-[10px] text-muted-foreground sm:text-xs">
-            {channel.closeKind ?? t("node.channels.closedFallback")} ·{" "}
+            {channelCloseKindLabel(channel.closeKind, t)} ·{" "}
             {formatShortDate(channel.closedAt)}
           </span>
         ) : null}
@@ -1115,6 +1722,12 @@ function ChannelDetailBody({
               }
             />
           )}
+          {channel.isPrivate ? (
+            <DetailRow
+              label={t("node.channelDetail.visibility")}
+              value={t("node.channelDetail.privateVisibility")}
+            />
+          ) : null}
         </div>
 
         <div className="space-y-2.5">
@@ -1175,7 +1788,9 @@ function ChannelDetailBody({
             <DetailRow
               label={t("node.channelDetail.closed")}
               value={`${formatShortDate(channel.closedAt)}${
-                channel.closeKind ? ` · ${channel.closeKind}` : ""
+                channel.closeKind
+                  ? ` · ${channelCloseKindLabel(channel.closeKind, t)}`
+                  : ""
               }`}
               mono
             />

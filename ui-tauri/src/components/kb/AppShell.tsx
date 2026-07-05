@@ -604,7 +604,6 @@ export function AppShell() {
     Boolean(identity?.encrypted) || identity?.databaseMode === "sqlcipher";
   const lockEncryptedWorkspaceOnLaunch = shouldLockEncryptedWorkspaceOnLaunch({
     encryptedWorkspace,
-    requirePassphraseOnLaunch: appLockPolicy.requirePassphraseOnLaunch,
     hasSessionUnlock: hasSessionUnlockPassphrase(),
   });
   const [daemonAuthRequired, setDaemonAuthRequired] = React.useState(false);
@@ -1290,7 +1289,6 @@ export function AppShell() {
     clearSessionUnlockPassphrase();
     const nextLocked = shouldLockEncryptedWorkspaceOnLaunch({
       encryptedWorkspace,
-      requirePassphraseOnLaunch: appLockPolicy.requirePassphraseOnLaunch,
       hasSessionUnlock: false,
     });
     setTouchIdAutoPromptPending(nextLocked);
@@ -1320,7 +1318,6 @@ export function AppShell() {
     clearDaemonQueryCache,
     encryptedWorkspace,
     importedProjectRoot,
-    appLockPolicy.requirePassphraseOnLaunch,
     t,
   ]);
 

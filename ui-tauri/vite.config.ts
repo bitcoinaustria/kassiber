@@ -68,6 +68,7 @@ const ALLOWED_BRIDGE_KINDS = new Set([
   "ui.backends.detect_core",
   "ui.backends.electrum.test",
   "ui.backends.http.test",
+  "ui.backends.lightning.test",
   "ui.profiles.snapshot",
   "ui.onboarding.complete",
   "ui.profiles.create",

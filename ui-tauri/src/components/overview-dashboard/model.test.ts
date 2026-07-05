@@ -184,6 +184,7 @@ describe("overview treasury chart", () => {
         },
       ],
       activityTxs: [],
+      txs: [],
     };
 
     const points = enrichTreasuryChartData(

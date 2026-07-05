@@ -4,6 +4,7 @@ import {
   connectionAssetIconKind,
   connectionAssetLabel,
   connectionCategoryLabel,
+  connectionCategorySortRank,
   connectionTypeLabel,
 } from "./connectionDisplay";
 
@@ -65,5 +66,27 @@ describe("connection display", () => {
         chain: "liquid",
       }),
     ).toBe("Infrastructure");
+  });
+
+  it("sorts displayed source categories in product order", () => {
+    const categories = [
+      { kind: "lnd" as const },
+      { kind: "address" as const, chain: "bitcoin" },
+      { kind: "descriptor" as const, chain: "liquid" },
+      { kind: "btcpay" as const },
+      { kind: "backend" as const, role: "backend" as const },
+    ]
+      .sort(
+        (a, b) => connectionCategorySortRank(a) - connectionCategorySortRank(b),
+      )
+      .map((connection) => connectionCategoryLabel(connection));
+
+    expect(categories).toEqual([
+      "On-chain",
+      "Liquid",
+      "Lightning",
+      "BTCPay",
+      "Infrastructure",
+    ]);
   });
 });

@@ -19,10 +19,32 @@ from kassiber.backends import (
 from kassiber.db import open_db, resolve_database_path
 
 ROOT = Path(__file__).resolve().parents[2]
-WORKSPACE_LABEL = "Lightning Business"
-PROFILE_LABEL = "Merchant"
-CONNECTION_LABEL = "cln_merchant"
-BACKEND_NAME = "cln-merchant"
+WORKSPACE_LABEL = (
+    os.environ.get("KASSIBER_LIGHTNING_BUSINESS_WORKSPACE") or "Lightning Business"
+)
+PROFILE_LABEL = os.environ.get("KASSIBER_LIGHTNING_BUSINESS_PROFILE") or "Merchant"
+CONNECTION_LABEL = (
+    os.environ.get("KASSIBER_LIGHTNING_BUSINESS_CONNECTION_LABEL") or "cln_merchant"
+)
+BACKEND_NAME = (
+    os.environ.get("KASSIBER_LIGHTNING_BUSINESS_BACKEND_NAME") or "cln-merchant"
+)
+BACKUP_LND_CONNECTION_LABEL = (
+    os.environ.get("KASSIBER_LIGHTNING_BUSINESS_BACKUP_LND_CONNECTION_LABEL")
+    or "lnd_merchant_backup"
+)
+BACKUP_LND_BACKEND_NAME = (
+    os.environ.get("KASSIBER_LIGHTNING_BUSINESS_BACKUP_LND_BACKEND_NAME")
+    or "lnd-merchant-backup"
+)
+BACKUP_LND_URL = (
+    os.environ.get("KASSIBER_LIGHTNING_BUSINESS_BACKUP_LND_URL")
+    or "https://127.0.0.1:19740"
+)
+BACKUP_LND_MACAROON_HEX = (
+    os.environ.get("KASSIBER_LIGHTNING_BUSINESS_BACKUP_LND_MACAROON_HEX")
+    or "00"
+)
 LN_KINDS = ("coreln", "lnd", "nwc")
 
 FORBIDDEN_AI_KEYS = {
@@ -49,7 +71,11 @@ def _default_home() -> Path:
     return Path(tempfile.gettempdir()) / f"kassiber-lightning-business-{safe}"
 
 
-def _run_cli(data_root: Path, *args: str) -> dict[str, Any]:
+def _run_cli(
+    data_root: Path,
+    *args: str,
+    input_text: str | None = None,
+) -> dict[str, Any]:
     result = subprocess.run(
         [
             sys.executable,
@@ -61,6 +87,7 @@ def _run_cli(data_root: Path, *args: str) -> dict[str, Any]:
             *args,
         ],
         cwd=ROOT,
+        input=input_text,
         capture_output=True,
         text=True,
         check=False,
@@ -79,38 +106,110 @@ def _run_cli(data_root: Path, *args: str) -> dict[str, Any]:
     return payload
 
 
+def _embedded_mode() -> bool:
+    value = str(os.environ.get("KASSIBER_LIGHTNING_BUSINESS_EMBEDDED") or "")
+    return value.lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+
+
 def _book_exists(data_root: Path) -> bool:
     if not resolve_database_path(data_root).exists():
         return False
     conn = open_db(data_root)
     try:
         row = conn.execute(
-            "SELECT 1 FROM wallets WHERE label = ? AND kind = 'coreln'",
-            (CONNECTION_LABEL,),
+            """
+            SELECT 1
+            FROM wallets wl
+            JOIN profiles p ON p.id = wl.profile_id
+            JOIN workspaces ws ON ws.id = p.workspace_id
+            WHERE wl.label = ?
+              AND wl.kind = 'coreln'
+              AND p.label = ?
+              AND ws.label = ?
+            """,
+            (CONNECTION_LABEL, PROFILE_LABEL, WORKSPACE_LABEL),
         ).fetchone()
         return row is not None
     finally:
         conn.close()
 
 
-def _build_book(data_root: Path, merchant_cli: Path) -> None:
+def _ensure_scope(data_root: Path) -> None:
     data_root.parent.mkdir(parents=True, exist_ok=True)
-    _run_cli(data_root, "init")
-    _run_cli(data_root, "workspaces", "create", WORKSPACE_LABEL)
-    _run_cli(
-        data_root,
-        "profiles",
-        "create",
-        PROFILE_LABEL,
-        "--workspace",
-        WORKSPACE_LABEL,
-        "--fiat-currency",
-        "EUR",
-        "--tax-country",
-        "generic",
-        "--gains-algorithm",
-        "FIFO",
-    )
+    if not resolve_database_path(data_root).exists():
+        _run_cli(data_root, "init")
+
+    conn = open_db(data_root)
+    try:
+        workspace = conn.execute(
+            "SELECT id FROM workspaces WHERE lower(label) = lower(?)",
+            (WORKSPACE_LABEL,),
+        ).fetchone()
+        profile = None
+        if workspace is not None:
+            profile = conn.execute(
+                """
+                SELECT id
+                FROM profiles
+                WHERE workspace_id = ? AND lower(label) = lower(?)
+                """,
+                (workspace["id"], PROFILE_LABEL),
+            ).fetchone()
+    finally:
+        conn.close()
+
+    if workspace is None:
+        _run_cli(data_root, "workspaces", "create", WORKSPACE_LABEL)
+    if profile is None:
+        _run_cli(
+            data_root,
+            "profiles",
+            "create",
+            PROFILE_LABEL,
+            "--workspace",
+            WORKSPACE_LABEL,
+            "--fiat-currency",
+            "EUR",
+            "--tax-country",
+            "generic",
+            "--gains-algorithm",
+            "FIFO",
+        )
+
+
+def _ensure_backend(data_root: Path, merchant_cli: Path) -> None:
+    conn = open_db(data_root)
+    try:
+        row = conn.execute(
+            "SELECT kind, config_json FROM backends WHERE lower(name) = lower(?)",
+            (BACKEND_NAME,),
+        ).fetchone()
+    finally:
+        conn.close()
+    if row is not None:
+        if str(row["kind"] or "").lower() != "coreln":
+            raise AssertionError(
+                f"Backend {BACKEND_NAME!r} exists with kind {row['kind']!r}, expected coreln"
+            )
+        try:
+            config = json.loads(row["config_json"] or "{}")
+        except ValueError:
+            config = {}
+        if config.get("lightning_cli") != str(merchant_cli):
+            _run_cli(
+                data_root,
+                "backends",
+                "update",
+                BACKEND_NAME,
+                "--lightning-cli",
+                str(merchant_cli),
+            )
+        return
     _run_cli(
         data_root,
         "backends",
@@ -127,6 +226,105 @@ def _build_book(data_root: Path, merchant_cli: Path) -> None:
         "--lightning-cli",
         str(merchant_cli),
     )
+
+
+def _ensure_backup_lnd_source(data_root: Path) -> None:
+    conn = open_db(data_root)
+    try:
+        backend = conn.execute(
+            "SELECT kind, url FROM backends WHERE lower(name) = lower(?)",
+            (BACKUP_LND_BACKEND_NAME,),
+        ).fetchone()
+        wallet = conn.execute(
+            """
+            SELECT wl.kind
+            FROM wallets wl
+            JOIN profiles p ON p.id = wl.profile_id
+            JOIN workspaces ws ON ws.id = p.workspace_id
+            WHERE lower(wl.label) = lower(?)
+              AND p.label = ?
+              AND ws.label = ?
+            """,
+            (BACKUP_LND_CONNECTION_LABEL, PROFILE_LABEL, WORKSPACE_LABEL),
+        ).fetchone()
+    finally:
+        conn.close()
+
+    if backend is not None:
+        if str(backend["kind"] or "").lower() != "lnd":
+            raise AssertionError(
+                f"Backend {BACKUP_LND_BACKEND_NAME!r} exists with kind "
+                f"{backend['kind']!r}, expected lnd"
+            )
+        _run_cli(
+            data_root,
+            "backends",
+            "update",
+            BACKUP_LND_BACKEND_NAME,
+            "--url",
+            BACKUP_LND_URL,
+            "--network",
+            "regtest",
+            "--timeout",
+            "15",
+            "--insecure",
+            "true",
+            "--token-stdin",
+            input_text=BACKUP_LND_MACAROON_HEX,
+        )
+    else:
+        _run_cli(
+            data_root,
+            "backends",
+            "create",
+            BACKUP_LND_BACKEND_NAME,
+            "--kind",
+            "lnd",
+            "--url",
+            BACKUP_LND_URL,
+            "--network",
+            "regtest",
+            "--timeout",
+            "15",
+            "--insecure",
+            "true",
+            "--token-stdin",
+            "--notes",
+            "Demo backup LND source for wallet-list and node UI coverage.",
+            input_text=BACKUP_LND_MACAROON_HEX,
+        )
+
+    if wallet is not None:
+        if str(wallet["kind"] or "").lower() != "lnd":
+            raise AssertionError(
+                f"Wallet {BACKUP_LND_CONNECTION_LABEL!r} exists with kind "
+                f"{wallet['kind']!r}, expected lnd"
+            )
+        return
+
+    _run_cli(
+        data_root,
+        "wallets",
+        "create",
+        "--workspace",
+        WORKSPACE_LABEL,
+        "--profile",
+        PROFILE_LABEL,
+        "--label",
+        BACKUP_LND_CONNECTION_LABEL,
+        "--kind",
+        "lnd",
+        "--backend",
+        BACKUP_LND_BACKEND_NAME,
+        "--network",
+        "regtest",
+    )
+
+
+def _build_book(data_root: Path, merchant_cli: Path) -> None:
+    _ensure_scope(data_root)
+    _ensure_backend(data_root, merchant_cli)
+    _ensure_backup_lnd_source(data_root)
     _run_cli(
         data_root,
         "wallets",
@@ -160,7 +358,7 @@ def _write_payload(proc: subprocess.Popen[str], payload: dict[str, Any]) -> None
     proc.stdin.flush()
 
 
-def _daemon_snapshot(data_root: Path) -> dict[str, Any]:
+def _daemon_snapshot(data_root: Path, connection_label: str = CONNECTION_LABEL) -> dict[str, Any]:
     proc = subprocess.Popen(
         [
             sys.executable,
@@ -185,7 +383,7 @@ def _daemon_snapshot(data_root: Path) -> dict[str, Any]:
             {
                 "request_id": "ln-snapshot-1",
                 "kind": "ui.connections.node.snapshot",
-                "args": {"connection": CONNECTION_LABEL, "window_days": 30},
+                "args": {"connection": connection_label, "window_days": 30},
             },
         )
         deadline = time.monotonic() + 120
@@ -254,21 +452,37 @@ def _assert_db_state(data_root: Path) -> dict[str, int]:
                 LN_KINDS,
             )
         ]
-        if len(ln_wallets) != 1:
-            raise AssertionError(f"expected exactly one LN wallet, got {ln_wallets}")
-        if ln_wallets[0]["label"] != CONNECTION_LABEL:
-            raise AssertionError(f"unexpected LN wallet: {ln_wallets[0]}")
+        expected_ln_wallets = {
+            (CONNECTION_LABEL, "coreln"),
+            (BACKUP_LND_CONNECTION_LABEL, "lnd"),
+        }
+        actual_ln_wallets = {
+            (str(row["label"] or ""), str(row["kind"] or "").lower())
+            for row in ln_wallets
+        }
+        if actual_ln_wallets != expected_ln_wallets:
+            raise AssertionError(
+                f"unexpected LN wallets: expected {expected_ln_wallets}, got {ln_wallets}"
+            )
         all_wallets = [
             dict(row)
             for row in conn.execute("SELECT label, kind FROM wallets ORDER BY label")
         ]
-        if all_wallets != [{"label": CONNECTION_LABEL, "kind": "coreln"}]:
-            raise AssertionError(f"expected only merchant wallet, got {all_wallets}")
-        for forbidden in ("customer", "supplier", "router"):
-            if forbidden in ln_wallets[0]["label"].lower():
+        if not _embedded_mode():
+            actual_wallets = {
+                (str(row["label"] or ""), str(row["kind"] or "").lower())
+                for row in all_wallets
+            }
+            if actual_wallets != expected_ln_wallets:
                 raise AssertionError(
-                    f"scenario actor leaked into wallet label: {ln_wallets[0]}"
+                    f"expected only merchant LN wallets, got {all_wallets}"
                 )
+        for forbidden in ("customer", "supplier", "router"):
+            for wallet in ln_wallets:
+                if forbidden in wallet["label"].lower():
+                    raise AssertionError(
+                        f"scenario actor leaked into wallet label: {wallet}"
+                    )
 
         backend_rows = [
             dict(row)
@@ -278,6 +492,14 @@ def _assert_db_state(data_root: Path) -> dict[str, int]:
         ]
         if backend_rows != [{"name": BACKEND_NAME, "kind": "coreln"}]:
             raise AssertionError(f"unexpected Core Lightning backends: {backend_rows}")
+        lnd_backend_rows = [
+            dict(row)
+            for row in conn.execute(
+                "SELECT name, kind FROM backends WHERE kind = 'lnd' ORDER BY name"
+            )
+        ]
+        if lnd_backend_rows != [{"name": BACKUP_LND_BACKEND_NAME, "kind": "lnd"}]:
+            raise AssertionError(f"unexpected LND backends: {lnd_backend_rows}")
 
         counts = {
             row["record_type"]: int(row["count"])
@@ -350,6 +572,23 @@ def _assert_snapshot(snapshot: dict[str, Any]) -> None:
             raise AssertionError(f"private channel leaked peer pubkey: {channel}")
 
 
+def _assert_lnd_snapshot(snapshot: dict[str, Any]) -> None:
+    if snapshot.get("alias") != "kassiber-lnd-backup":
+        raise AssertionError(f"unexpected LND alias: {snapshot.get('alias')}")
+    if len(str(snapshot.get("pubkey") or "")) < 66:
+        raise AssertionError("LND pubkey missing from desktop snapshot")
+    if snapshot.get("network") != "regtest":
+        raise AssertionError(f"expected LND regtest snapshot, got {snapshot.get('network')}")
+    if int(snapshot.get("totalCapacitySat") or 0) <= 0:
+        raise AssertionError("LND channel capacity missing")
+    if len(snapshot.get("channels") or []) < 2:
+        raise AssertionError(f"expected LND backup channels, got {snapshot.get('channels')}")
+    if int(snapshot.get("paidInvoiceCount") or 0) < 1:
+        raise AssertionError(f"expected paid LND invoices, got {snapshot}")
+    if int(snapshot.get("completedPaymentCount") or 0) < 1:
+        raise AssertionError(f"expected completed LND payments, got {snapshot}")
+
+
 def _assert_profitability(report: dict[str, Any], csv_file: Path) -> None:
     summary = report.get("summary") or {}
     if int(summary.get("forwardCount") or 0) < 1:
@@ -411,7 +650,10 @@ def run() -> dict[str, Any]:
     )
     exports = home / "exports"
     csv_file = exports / "lightning-profitability.csv"
-    merchant_cli = ROOT / "dev" / "regtest" / "lightning-cli-merchant.sh"
+    merchant_cli = Path(
+        os.environ.get("KASSIBER_LIGHTNING_BUSINESS_MERCHANT_CLI")
+        or ROOT / "dev" / "regtest" / "lightning-cli-merchant.sh"
+    )
 
     reuse_book = bool(
         os.environ.get("KASSIBER_LIGHTNING_BUSINESS_REUSE_BOOK")
@@ -422,7 +664,10 @@ def run() -> dict[str, Any]:
         shutil.rmtree(exports, ignore_errors=True)
     exports.mkdir(parents=True, exist_ok=True)
 
-    if not _book_exists(data_root):
+    if _book_exists(data_root):
+        _ensure_backend(data_root, merchant_cli)
+        _ensure_backup_lnd_source(data_root)
+    else:
         _build_book(data_root, merchant_cli)
 
     _run_cli(
@@ -437,6 +682,7 @@ def run() -> dict[str, Any]:
         CONNECTION_LABEL,
     )
     snapshot = _daemon_snapshot(data_root)
+    lnd_snapshot = _daemon_snapshot(data_root, BACKUP_LND_CONNECTION_LABEL)
     report = _run_cli(
         data_root,
         "reports",
@@ -459,6 +705,7 @@ def run() -> dict[str, Any]:
     )
 
     _assert_snapshot(snapshot)
+    _assert_lnd_snapshot(lnd_snapshot)
     _assert_profitability(report, csv_file)
     counts = _assert_db_state(data_root)
     _assert_ai_opsec(data_root)
@@ -476,6 +723,11 @@ def run() -> dict[str, Any]:
             "completed_payments": snapshot.get("completedPaymentCount"),
             "failed_payments": snapshot.get("failedPaymentCount"),
             "onchain_balance_sat": snapshot.get("onchainBalanceSat"),
+        },
+        "lnd_snapshot": {
+            "alias": lnd_snapshot.get("alias"),
+            "channels": len(lnd_snapshot.get("channels") or []),
+            "onchain_balance_sat": lnd_snapshot.get("onchainBalanceSat"),
         },
         "report_summary": report.get("summary"),
         "record_counts": counts,

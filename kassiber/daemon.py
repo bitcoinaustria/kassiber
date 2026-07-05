@@ -313,6 +313,7 @@ SUPPORTED_KINDS = (
     "ui.backends.detect_core",
     "ui.backends.electrum.test",
     "ui.backends.http.test",
+    "ui.backends.lightning.test",
     "ui.reports.capital_gains",
     "ui.reports.summary",
     "ui.reports.balance_sheet",
@@ -8204,6 +8205,83 @@ def _test_http_backend_payload(args: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _test_lightning_backend_payload(
+    ctx: "DaemonContext",
+    args: dict[str, Any],
+) -> dict[str, Any]:
+    backend_ref = _required_str_arg(args, "backend", "Lightning backend")
+    backend = dict(resolve_backend(ctx.runtime_config, backend_ref))
+    backend_name = str(backend.get("name") or backend_ref).strip() or backend_ref
+    kind = str(backend.get("kind") or "").lower()
+    logs = [f"Opening Lightning connection to backend '{backend_name}'"]
+    if kind not in {"coreln", "lnd"}:
+        return {
+            "ok": False,
+            "backend": backend_name,
+            "kind": kind or None,
+            "logs": logs
+            + [
+                f"Backend kind '{kind or 'unknown'}' is not a Lightning node backend.",
+            ],
+        }
+    adapter = core_lightning.resolve_adapter(kind)
+    if adapter is None:
+        error = _lightning_adapter_unavailable_error(kind)
+        return {
+            "ok": False,
+            "backend": backend_name,
+            "kind": kind,
+            "logs": logs + [error.hint or str(error)],
+            "error": {
+                "code": error.code,
+                "message": str(error),
+                "hint": error.hint,
+            },
+        }
+    try:
+        snapshot = adapter.fetch_node_snapshot(
+            {
+                "id": backend_name,
+                "label": backend_name,
+                "kind": kind,
+            },
+            backend,
+            window_days=1,
+        )
+    except Exception as exc:  # pragma: no cover - transport-specific boundary
+        logs.append(f"Connection failed: {exc}")
+        return {
+            "ok": False,
+            "backend": backend_name,
+            "kind": kind,
+            "logs": logs,
+            "error": {
+                "message": str(exc),
+            },
+        }
+    channel_count = len(snapshot.channels)
+    peer_count = snapshot.peer_count
+    logs.append(
+        (
+            f"Connected to {snapshot.alias or backend_name}: "
+            f"{channel_count} channels, {peer_count} peers"
+        )
+    )
+    if snapshot.block_height is not None:
+        logs.append(f"Block height: {snapshot.block_height}")
+    return {
+        "ok": True,
+        "backend": backend_name,
+        "kind": kind,
+        "alias": snapshot.alias,
+        "network": snapshot.network,
+        "block_height": snapshot.block_height,
+        "peer_count": peer_count,
+        "channel_count": channel_count,
+        "logs": logs,
+    }
+
+
 _CORE_LOCAL_CANDIDATES = (
     ("main", "http://127.0.0.1:8332", (".cookie",)),
     ("test", "http://127.0.0.1:18332", ("testnet3", ".cookie")),
@@ -10114,6 +10192,21 @@ def handle_request(
                 build_envelope(
                     "ui.backends.http.test",
                     _test_http_backend_payload(
+                        _coerce_args_dict(request_id, request.get("args")),
+                    ),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
+    if kind == "ui.backends.lightning.test":
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.backends.lightning.test",
+                    _test_lightning_backend_payload(
+                        ctx,
                         _coerce_args_dict(request_id, request.get("args")),
                     ),
                 ),

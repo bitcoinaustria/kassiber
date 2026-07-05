@@ -84,6 +84,34 @@ def _canned_payloads(extra: dict[str, Any] | None = None) -> dict[str, Any]:
                     "their_amount_msat": "0msat",
                     "opener": "remote",
                 },
+                {
+                    "peer_id": "02" + "ce" * 32,
+                    "peer_alias": "closed-coop-peer",
+                    "peer_connected": False,
+                    "private": False,
+                    "channel_id": "ch-closed-coop",
+                    "short_channel_id": "742x3x0",
+                    "state": "CLOSINGD_COMPLETE",
+                    "total_msat": "700000000msat",
+                    "to_us_msat": "0msat",
+                    "their_amount_msat": "0msat",
+                    "opener": "local",
+                    "closed_at": 1_700_000_090,
+                },
+                {
+                    "peer_id": "02" + "cf" * 32,
+                    "peer_alias": "closed-force-peer",
+                    "peer_connected": False,
+                    "private": False,
+                    "channel_id": "ch-closed-force",
+                    "short_channel_id": "742x4x0",
+                    "state": "ONCHAIND_OUR_UNILATERAL",
+                    "total_msat": "900000000msat",
+                    "to_us_msat": "0msat",
+                    "their_amount_msat": "0msat",
+                    "opener": "local",
+                    "closed_at": 1_700_000_100,
+                },
             ]
         },
         "listforwards": {
@@ -230,6 +258,23 @@ class FetchNodeSnapshotTest(unittest.TestCase):
         self.assertIsNotNone(snapshot.routing)
         self.assertEqual(snapshot.routing.forward_count, 1)
 
+    def test_closed_channels_preserve_close_kind(self) -> None:
+        snapshot = self._snapshot()
+        self.assertEqual(len(snapshot.closed_channels), 2)
+        closed_by_scid = {
+            channel.short_channel_id: channel for channel in snapshot.closed_channels
+        }
+
+        cooperative = closed_by_scid["742x3x0"]
+        self.assertEqual(cooperative.state, "closed")
+        self.assertEqual(cooperative.close_kind, "cooperative")
+        self.assertEqual(cooperative.closed_at, "2023-11-14T22:14:50Z")
+
+        forced = closed_by_scid["742x4x0"]
+        self.assertEqual(forced.state, "force_closed")
+        self.assertEqual(forced.close_kind, "force")
+        self.assertEqual(forced.closed_at, "2023-11-14T22:15:00Z")
+
     def test_private_channel_peer_pubkey_is_none(self) -> None:
         snapshot = self._snapshot()
         private_channel = next(
@@ -303,13 +348,46 @@ class FetchNodeSnapshotTest(unittest.TestCase):
             for payload in (core_cln._record_to_import(record) for record in records)
             if payload is not None
         ]
-        # Only the invoice income row should be imported as a wallet tx.
-        self.assertEqual(len(import_payloads), 1)
-        self.assertEqual(import_payloads[0]["kind"], "cln_invoice")
+        # The invoice income row and the completed outbound pay are imported as
+        # wallet transactions; the routed forwarding event is NOT (it is already
+        # in the routing aggregate — the P1 double-count guard).
+        kinds = sorted(payload["kind"] for payload in import_payloads)
+        self.assertEqual(kinds, ["cln_invoice", "cln_pay"])
+        routed_payment_id = "11" * 32
+        self.assertNotIn(
+            routed_payment_id,
+            {payload.get("payment_hash") for payload in import_payloads},
+        )
+        invoice_payload = next(p for p in import_payloads if p["kind"] == "cln_invoice")
+        self.assertEqual(invoice_payload["confirmed_at"], "2023-11-14T22:14:10Z")
+        pay_payload = next(p for p in import_payloads if p["kind"] == "cln_pay")
+        self.assertEqual(pay_payload["direction"], "outbound")
+        self.assertEqual(pay_payload["payment_hash"], "22" * 32)
         # And the routed event should not appear as a forward_day record's
         # source either — it should only contribute to the aggregate.
         forward_day_rows = [r for r in records if r["record_type"] == "forward_day"]
         self.assertEqual(len(forward_day_rows), 1)
+
+    def test_outbound_pay_promoted_with_principal_and_routing_fee(self) -> None:
+        # The completed listpays row (amount_msat=40000, amount_sent_msat=40500)
+        # becomes an outbound cln_pay: principal 40000 msat, routing fee 500 msat.
+        from kassiber.msat import msat_to_btc
+
+        snapshot_blob = core_cln.fetch_core_lightning_snapshot(
+            {"kind": "coreln", "name": "cln", "url": "cln://local"},
+            rpc_call=_rpc(_canned_payloads()),
+        )
+        records = core_cln.snapshot_records(snapshot_blob, "2026-05-18T12:00:00Z")
+        pay_record = next(r for r in records if r["record_type"] == "pay")
+        payload = core_cln._record_to_import(pay_record)
+        self.assertIsNotNone(payload)
+        assert payload is not None
+        self.assertEqual(payload["kind"], "cln_pay")
+        self.assertEqual(payload["direction"], "outbound")
+        self.assertEqual(payload["amount"], msat_to_btc(40_000))
+        self.assertEqual(payload["fee"], msat_to_btc(500))
+        self.assertEqual(payload["payment_hash"], "22" * 32)
+        self.assertEqual(payload["payment_hash_source"], "core_lightning")
 
 
 class AdapterContractTest(unittest.TestCase):

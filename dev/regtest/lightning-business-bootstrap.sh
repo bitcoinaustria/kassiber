@@ -7,6 +7,7 @@ NODE_FUND_BTC="${KASSIBER_REGTEST_LIGHTNING_NODE_FUND_BTC:-2.0}"
 NODE_MIN_ONCHAIN_SAT="${KASSIBER_REGTEST_LIGHTNING_NODE_MIN_ONCHAIN_SAT:-50000000}"
 CHANNEL_CAPACITY_SAT="${KASSIBER_REGTEST_LIGHTNING_CHANNEL_CAPACITY_SAT:-5000000}"
 CHANNEL_PUSH_MSAT="${KASSIBER_REGTEST_LIGHTNING_CHANNEL_PUSH_MSAT:-2500000000}"
+CHANNEL_FUNDING_UTXO_SAT="${KASSIBER_REGTEST_LIGHTNING_CHANNEL_FUNDING_UTXO_SAT:-7500000}"
 
 wait_for_cln() {
   local service="$1"
@@ -16,6 +17,19 @@ wait_for_cln() {
     if [ "$SECONDS" -ge "$deadline" ]; then
       echo "Timed out waiting for $service lightning-cli." >&2
       compose logs --tail=120 "$service" >&2 || true
+      return 1
+    fi
+    sleep 2
+  done
+}
+
+wait_for_lnd() {
+  local deadline=$((SECONDS + 180))
+  until lnd getinfo >/dev/null 2>&1
+  do
+    if [ "$SECONDS" -ge "$deadline" ]; then
+      echo "Timed out waiting for lnd_merchant_backup lncli." >&2
+      compose logs --tail=120 lnd_merchant_backup >&2 || true
       return 1
     fi
     sleep 2
@@ -45,6 +59,28 @@ fund_node_if_needed() {
   return 0
 }
 
+fund_lnd_if_needed() {
+  local sat any_sat address
+  sat="$(lnd_onchain_sat 2>/dev/null || printf '0')"
+  if [ "$sat" -ge "$NODE_MIN_ONCHAIN_SAT" ]; then
+    echo "lnd_merchant_backup already has on-chain LND funds (${sat} sat)."
+    return 1
+  fi
+  any_sat="$(lnd_any_onchain_sat 2>/dev/null || printf '0')"
+  if [ "$any_sat" -ge "$NODE_MIN_ONCHAIN_SAT" ]; then
+    echo "lnd_merchant_backup has unconfirmed LND funds (${any_sat} sat); mining confirmations."
+    return 0
+  fi
+  address="$(lnd_new_address)"
+  if [ -z "$address" ]; then
+    echo "Could not get a funding address from lnd_merchant_backup." >&2
+    return 2
+  fi
+  btc -rpcwallet="$FAUCET_WALLET" sendtoaddress "$address" "$NODE_FUND_BTC" >/dev/null
+  echo "Funded lnd_merchant_backup with $NODE_FUND_BTC BTC."
+  return 0
+}
+
 wait_for_node_funds() {
   local service="$1"
   local min_sat="$2"
@@ -65,6 +101,45 @@ wait_for_node_funds() {
   done
 }
 
+ensure_channel_funding_utxo() {
+  local service="$1"
+  local min_sat="$2"
+  local sat address
+  sat="$(cln_onchain_sat "$service" 2>/dev/null || printf '0')"
+  if [ "$sat" -ge "$min_sat" ]; then
+    return 1
+  fi
+  address="$(cln_new_address "$service")"
+  if [ -z "$address" ]; then
+    echo "Could not get a channel funding address from $service." >&2
+    return 2
+  fi
+  btc -rpcwallet="$FAUCET_WALLET" sendtoaddress "$address" "$(sat_to_btc "$CHANNEL_FUNDING_UTXO_SAT")" >/dev/null
+  echo "Funded $service with an additional $CHANNEL_FUNDING_UTXO_SAT sat channel UTXO."
+  mine_to_faucet 6
+  wait_for_node_funds "$service" "$min_sat"
+  return 0
+}
+
+wait_for_lnd_funds() {
+  local min_sat="$1"
+  local deadline=$((SECONDS + 240))
+  local sat
+  while true; do
+    sat="$(lnd_onchain_sat 2>/dev/null || printf '0')"
+    if [ "$sat" -ge "$min_sat" ]; then
+      echo "lnd_merchant_backup sees $sat sat of on-chain LND funds."
+      return 0
+    fi
+    if [ "$SECONDS" -ge "$deadline" ]; then
+      echo "Timed out waiting for lnd_merchant_backup to see at least $min_sat sat (saw $sat)." >&2
+      lnd walletbalance || true
+      return 1
+    fi
+    sleep 3
+  done
+}
+
 peer_connected() {
   local service="$1"
   local peer_id="$2"
@@ -74,6 +149,91 @@ for peer in data.get("peers", []):
     if peer.get("connected"):
         sys.exit(0)
 sys.exit(1)'
+}
+
+ensure_cln_channel_to_lnd() {
+  local from_service="cln_merchant"
+  local peer_id from_id result
+  peer_id="$(lnd_id)"
+  if [ -z "$peer_id" ]; then
+    echo "Could not read LND backup node id." >&2
+    return 1
+  fi
+  from_id="$(cln_id "$from_service")"
+  if [ -n "$from_id" ]; then
+    lnd connect "$from_id@$from_service:9735" >/dev/null || true
+  fi
+  result="$(cln "$from_service" connect "$peer_id" lnd_merchant_backup 9735 2>&1 || true)"
+  if ! printf '%s\n' "$result" | python3 -c 'import json, sys
+try:
+    data = json.load(sys.stdin)
+except json.JSONDecodeError:
+    sys.exit(1)
+sys.exit(1 if "code" in data else 0)'; then
+    printf '%s\n' "$result" >&2
+    echo "connect failed for $from_service -> lnd_merchant_backup." >&2
+    return 1
+  fi
+  if cln_has_normal_channel_with_peer "$from_service" "$peer_id"; then
+    echo "$from_service already has a normal channel with lnd_merchant_backup."
+    return 1
+  fi
+  if cln_has_channel_with_peer "$from_service" "$peer_id"; then
+    echo "$from_service already has a pending channel with lnd_merchant_backup; mining confirmations."
+    return 0
+  fi
+  result="$(
+  cln "$from_service" -k fundchannel \
+    id="$peer_id" \
+    amount="${CHANNEL_CAPACITY_SAT}sat" \
+    push_msat="${CHANNEL_PUSH_MSAT}msat" \
+    announce=false \
+      minconf=1
+  )"
+  if ! printf '%s\n' "$result" | python3 -c 'import json, sys
+data = json.load(sys.stdin)
+sys.exit(1 if "code" in data else 0)'; then
+    printf '%s\n' "$result" >&2
+    echo "fundchannel failed for $from_service -> lnd_merchant_backup." >&2
+    return 1
+  fi
+  echo "Opened $CHANNEL_CAPACITY_SAT sat channel $from_service -> lnd_merchant_backup."
+  return 0
+}
+
+ensure_lnd_channel_to_cln() {
+  local to_service="$1"
+  local peer_id result
+  peer_id="$(cln_id "$to_service")"
+  if [ -z "$peer_id" ]; then
+    echo "Could not read $to_service node id." >&2
+    return 1
+  fi
+  lnd connect "$peer_id@$to_service:9735" >/dev/null || true
+  if lnd_has_channel_with_peer "$peer_id"; then
+    echo "lnd_merchant_backup already has an active channel with $to_service."
+    return 1
+  fi
+  if lnd_has_pending_channel_with_peer "$peer_id"; then
+    echo "lnd_merchant_backup already has a pending channel with $to_service; mining confirmations."
+    return 0
+  fi
+  result="$(
+    lnd openchannel \
+      --node_key="$peer_id" \
+      --local_amt="$CHANNEL_CAPACITY_SAT" \
+      --push_amt="$((CHANNEL_PUSH_MSAT / 1000))" \
+      --private
+  )"
+  if ! printf '%s\n' "$result" | python3 -c 'import json, sys
+data = json.load(sys.stdin)
+sys.exit(1 if data.get("code") or data.get("error") else 0)'; then
+    printf '%s\n' "$result" >&2
+    echo "openchannel failed for lnd_merchant_backup -> $to_service." >&2
+    return 1
+  fi
+  echo "Opened $CHANNEL_CAPACITY_SAT sat channel lnd_merchant_backup -> $to_service."
+  return 0
 }
 
 ensure_connected() {
@@ -142,10 +302,29 @@ wait_for_normal_channels() {
   done
 }
 
+wait_for_lnd_active_channels() {
+  local expected="$1"
+  local deadline=$((SECONDS + 240))
+  local count
+  while true; do
+    count="$(lnd_channel_count_active 2>/dev/null || printf '0')"
+    if [ "$count" -ge "$expected" ]; then
+      return 0
+    fi
+    if [ "$SECONDS" -ge "$deadline" ]; then
+      echo "Timed out waiting for lnd_merchant_backup to reach $expected active channels (saw $count)." >&2
+      lnd listchannels || true
+      return 1
+    fi
+    sleep 2
+  done
+}
+
 main() {
   for service in cln_merchant cln_customer cln_supplier cln_router; do
     wait_for_cln "$service"
   done
+  wait_for_lnd
 
   ensure_faucet_wallet
   ensure_faucet_funds
@@ -156,15 +335,25 @@ main() {
       funded=1
     fi
   done
+  if fund_lnd_if_needed; then
+    funded=1
+  fi
   if [ "$funded" -eq 1 ]; then
     mine_to_faucet 6
   fi
   for service in cln_merchant cln_customer cln_supplier cln_router; do
     wait_for_node_funds "$service" "$NODE_MIN_ONCHAIN_SAT"
   done
+  wait_for_lnd_funds "$NODE_MIN_ONCHAIN_SAT"
 
   local opened=0
+  if ensure_cln_channel_to_lnd; then opened=1; fi
+  if ensure_lnd_channel_to_cln cln_router; then opened=1; fi
+  if [ "$opened" -eq 1 ]; then
+    mine_to_faucet 6
+  fi
   if ensure_channel cln_customer cln_merchant cln_merchant; then opened=1; fi
+  ensure_channel_funding_utxo cln_merchant "$CHANNEL_FUNDING_UTXO_SAT" || true
   if ensure_channel cln_merchant cln_router cln_router; then opened=1; fi
   if ensure_channel cln_router cln_supplier cln_supplier; then opened=1; fi
   if [ "$opened" -eq 1 ]; then
@@ -172,9 +361,10 @@ main() {
   fi
 
   wait_for_normal_channels cln_customer 1
-  wait_for_normal_channels cln_merchant 2
-  wait_for_normal_channels cln_router 2
+  wait_for_normal_channels cln_merchant 3
+  wait_for_normal_channels cln_router 3
   wait_for_normal_channels cln_supplier 1
+  wait_for_lnd_active_channels 2
 
   for service in cln_customer cln_merchant cln_router cln_supplier; do
     cln "$service" setchannel all 1000 500 >/dev/null || true
@@ -188,6 +378,11 @@ main() {
       "$(cln_id "$service")" \
       "$(cln_channel_count_normal "$service")"
   done
+  printf '  %s %s %s active_channels=%s\n' \
+    "lnd_merchant_backup" \
+    "kassiber-lnd-backup" \
+    "$(lnd_id)" \
+    "$(lnd_channel_count_active)"
 }
 
 main "$@"
