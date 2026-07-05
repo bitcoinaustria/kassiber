@@ -277,18 +277,75 @@
     },
     "noSnapshot": {
       "title": "No node snapshot yet",
-      "description": "Lightning node sync has not produced a snapshot for this connection yet. Run a refresh to fetch channels, balances, and the routing summary."
+      "description": "Lightning node sync has not produced a snapshot for this connection yet. Run a refresh to fetch channels, balances, and the routing summary.",
+      "errorDescription": "Kassiber could not load a node snapshot: {{message}}"
+    },
+    "loadingSnapshot": {
+      "title": "Loading node snapshot",
+      "description": "Kassiber is fetching channels, liquidity, and routing activity from this Lightning node."
+    },
+    "tabs": {
+      "overview": "Overview",
+      "channels": "Channels",
+      "activity": "Activity",
+      "profitability": "Profitability",
+      "accounting": "Accounting"
+    },
+    "hero": {
+      "operatorView": "Operator view",
+      "snapshotLine": "{{channels}} active channels · {{forwards}} forwards · {{peers}} peers",
+      "canSend": "Can send",
+      "canReceive": "Can receive",
+      "onchainReserve": "On-chain reserve",
+      "netRouting": "30d net routing",
+      "remoteCapacity": "Remote channel balance",
+      "localShare": "send side",
+      "remoteShare": "receive side",
+      "capacity": "{{value}} capacity",
+      "liquidityAria": "{{local}} sat can send and {{remote}} sat can receive",
+      "viewTransactions": "View activity",
+      "openReports": "Reports",
+      "signal": {
+        "balanced": "Balanced liquidity",
+        "lowReceive": "Low receive capacity",
+        "lowSend": "Low send balance",
+        "noActiveChannels": "No active channels"
+      }
     },
     "metrics": {
-      "localBalance": "Local balance",
+      "localBalance": "Can send",
       "localBalanceDetail": "{{sat}} sat · {{eur}}",
-      "inboundLiquidity": "Inbound liquidity",
+      "inboundLiquidity": "Can receive",
       "totalCapacity": "Total capacity {{capacity}}",
       "channels": "Channels",
       "channelsDetail": "{{peers}} peers · {{closed}} closed",
-      "onChain": "On-chain",
+      "onChain": "On-chain reserve",
       "localInChannels": "{{percent}}% local in channels",
       "noChannelLiquidity": "No channel liquidity"
+    },
+    "activity": {
+      "title": "Lightning activity",
+      "description": "Invoices, payments, and routed forwards reported by this node snapshot.",
+      "invoices": "Invoices",
+      "paid": "paid",
+      "payments": "Payments",
+      "completed": "completed",
+      "forwards": "Forwards",
+      "snapshotWindow": "snapshot window",
+      "exceptions": "Exceptions",
+      "failedExpired": "failed or expired"
+    },
+    "accounting": {
+      "title": "Accounting readiness",
+      "description": "How the node snapshot is represented in Kassiber's transaction and journal surfaces.",
+      "imported": "Imported",
+      "transactions": "transactions",
+      "bookedInvoices": "Booked invoices",
+      "finalized": "settled and final",
+      "nodeEvents": "Node events",
+      "auditTrail": "activity evidence",
+      "viewTransactions": "View transactions",
+      "openJournals": "Journals"
     },
     "routing": {
       "title": "Routing summary",
@@ -298,6 +355,18 @@
       "rebalanceFees": "Rebalance fees",
       "onChainCosts": "On-chain costs",
       "netProfit": "Net profit"
+    },
+    "channelEconomics": {
+      "title": "Channel economics",
+      "description": "Routing earned per channel compared with the default {{cost}} sat open-cost assumption.",
+      "peer": "Peer",
+      "forwards": "Forwards",
+      "earned": "Earned",
+      "openCost": "Open cost",
+      "state": "State",
+      "covered": "Covered",
+      "notYet": "Not yet",
+      "empty": "No channel economics reported."
     },
     "channels": {
       "title": "Channels",
@@ -314,6 +383,7 @@
       "private": "Private",
       "remoteOpened": "Remote-opened",
       "privatePeer": "private peer",
+      "unannouncedPeer": "unannounced channel",
       "balanceAria": "{{local}} sat local of {{capacity}} sat capacity",
       "localLabel": "local",
       "remoteLabel": "remote",
@@ -331,6 +401,11 @@
       "closed": "Closed",
       "forceClosed": "Force-closed"
     },
+    "closeKind": {
+      "cooperative": "Cooperative close",
+      "force": "Forced close",
+      "breach": "Breach close"
+    },
     "channelDetail": {
       "locallyInitiated": "Locally initiated",
       "remoteOpened": "Remote-opened",
@@ -342,7 +417,9 @@
       "peer": "Peer",
       "alias": "Alias",
       "publicKey": "Public key",
-      "publicKeyHidden": "Hidden — private channel",
+      "publicKeyHidden": "Hidden for unannounced channel",
+      "visibility": "Visibility",
+      "privateVisibility": "Private / unannounced. The connected peer is shown by alias; the public key is hidden from this UI surface.",
       "channel": "Channel",
       "shortChannelId": "Short channel id",
       "shortChannelIdPending": "Pending confirmation",
@@ -398,12 +475,13 @@
     },
     "sync": {
       "alreadyRunningTitle": "Node refresh already running",
-      "alreadyRunningBody": "{{label}} is already scanning. Kassiber will update this page when the daemon finishes.",
+      "alreadyRunningBody": "{{label}} is already fetching node data. Kassiber will update this page when the daemon finishes.",
       "startedTitle": "Node refresh started",
       "startedBody": "{{label}} is fetching channel and routing data in read-only mode.",
-      "stillScanning": "{{label}} is still scanning. Large channel histories can take a moment; Kassiber will update when the daemon returns.",
+      "stillScanning": "{{label}} is still fetching node data. Large channel histories can take a moment; Kassiber will update when the daemon returns.",
       "failedTitle": "Node refresh failed",
       "finishedTitle": "Node refresh finished",
+      "finishedBody": "{{label}} node snapshot is current.",
       "failedFallback": "Node refresh failed."
     }
   },
@@ -504,6 +582,8 @@
       "refreshing": "Refreshing…",
       "importingSamourai": "Importing Samourai…",
       "importing": "Importing…",
+      "previewingLabels": "Previewing labels…",
+      "previewLabels": "Preview labels",
       "importingLabels": "Importing labels…",
       "saving": "Saving…",
       "saveWalletMapping": "Save wallet mapping",
@@ -863,8 +943,31 @@
       "selectLabelFileTitle": "Select BIP329 label file",
       "labelFileFilter": "BIP329 JSONL",
       "errorPickFile": "Pick the BIP329 label file.",
+      "previewReadyTitle": "BIP329 preview ready",
+      "previewReadyBody": "{{count}} records checked: {{exact}} exact, {{ambiguous}} ambiguous.",
       "labelsImportedTitle": "Labels imported",
-      "labelsImportedBody": "{{count}} label records processed."
+      "labelsImportedBody": "{{count}} label records processed. {{added}} transaction tags added; {{skipped}} ambiguous tag projections skipped.",
+      "exportModeLabel": "Export mode",
+      "exportModeStored": "Stored labels",
+      "exportModeSynthesized": "Kassiber labels",
+      "exportModeAll": "Stored + Kassiber labels",
+      "exportWalletLabel": "Export scope",
+      "exportWalletProfile": "Profile-wide",
+      "exportButton": "Export labels",
+      "exporting": "Exporting labels...",
+      "exportSaveTitle": "Save BIP329 labels",
+      "exportReadyTitle": "Labels exported",
+      "exportReadyBody": "{{count}} label records written to {{path}}.",
+      "preview": {
+        "exact": "Exact",
+        "ambiguous": "Ambiguous",
+        "unmatched": "Unmatched",
+        "preserved": "Preserved",
+        "conflicts": "{{count}} conflicts",
+        "duplicates": "{{count}} duplicates",
+        "tagAdditions": "{{count}} tags to add",
+        "ambiguousSkipped": "{{count}} skipped"
+      }
     },
     "backendSettings": {
       "line1": "This connection is configured as a backend endpoint in Settings.",

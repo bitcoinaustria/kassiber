@@ -7,12 +7,13 @@ import os
 import sqlite3
 import uuid
 from dataclasses import dataclass
-from typing import Any, Callable, Mapping
+from typing import Any, Callable, Mapping, Sequence
 
 from ..errors import AppError
 from ..importers import load_bip329_file
 from ..msat import dec, msat_to_btc
 from . import pricing
+from . import ownership
 from . import transaction_history
 
 DEFAULT_RECORDS_LIMIT = 100
@@ -39,6 +40,8 @@ SUPPORTED_AT_CATEGORY_OVERRIDES = {
     "alt_taxfree",
     "none",
 }
+BIP329_PRESERVED_TYPES = {"pubkey", "xpub", "spscan"}
+BIP329_EXPORT_MODES = {"stored", "synthesized", "all"}
 
 ScopeResolver = Callable[[sqlite3.Connection, str | None, str | None], tuple[Mapping[str, Any], Mapping[str, Any]]]
 WalletResolver = Callable[[sqlite3.Connection, str, str], Mapping[str, Any]]
@@ -1132,122 +1135,640 @@ def _decode_bip329_data(raw_json):
     return payload if isinstance(payload, dict) else {}
 
 
-def import_bip329_labels(conn, workspace_ref, profile_ref, file_path, hooks: MetadataHooks):
+def _parse_bip329_outpoint(ref: Any) -> tuple[str, int] | None:
+    text = str(ref or "").strip()
+    if ":" not in text:
+        return None
+    txid, vout_text = text.rsplit(":", 1)
+    txid = txid.strip()
+    if not txid:
+        return None
+    try:
+        vout = int(vout_text)
+    except (TypeError, ValueError):
+        return None
+    if vout < 0:
+        return None
+    return txid, vout
+
+
+def _redact_bip329_ref(record_type: str, ref: str) -> tuple[str, bool]:
+    if record_type not in {"pubkey", "xpub", "spscan"}:
+        return ref, False
+    text = str(ref or "")
+    if len(text) <= 16:
+        return "[redacted]", True
+    return f"{text[:8]}...{text[-8:]}", True
+
+
+def _wallet_match_from_owned_matches(matches: Sequence[Any], *, source: str) -> dict[str, Any]:
+    unique: dict[str, str] = {}
+    match_sources: set[str] = set()
+    for match in matches:
+        wallet_id = str(match.wallet_id)
+        unique.setdefault(wallet_id, str(match.wallet_label))
+        if getattr(match, "source", None):
+            match_sources.add(str(match.source))
+    wallets = [
+        {"wallet_id": wallet_id, "wallet": label}
+        for wallet_id, label in sorted(unique.items(), key=lambda item: (item[1], item[0]))
+    ]
+    if not wallets:
+        return {
+            "status": "unmatched",
+            "confidence": "none",
+            "wallet_ids": [],
+            "wallets": [],
+            "match_source": source,
+        }
+    return {
+        "status": "exact" if len(wallets) == 1 else "ambiguous",
+        "confidence": "deterministic",
+        "wallet_ids": [wallet["wallet_id"] for wallet in wallets],
+        "wallets": [wallet["wallet"] for wallet in wallets],
+        "match_source": ",".join(sorted(match_sources)) if match_sources else source,
+    }
+
+
+def _wallet_match_from_transaction_rows(rows: Sequence[sqlite3.Row]) -> dict[str, Any]:
+    unique: dict[str, str] = {}
+    for row in rows:
+        wallet_id = str(row["wallet_id"] or "")
+        if not wallet_id:
+            continue
+        unique.setdefault(wallet_id, str(row["wallet_label"] or wallet_id))
+    wallets = [
+        {"wallet_id": wallet_id, "wallet": label}
+        for wallet_id, label in sorted(unique.items(), key=lambda item: (item[1], item[0]))
+    ]
+    if not rows:
+        return {
+            "status": "unmatched",
+            "confidence": "none",
+            "wallet_ids": [],
+            "wallets": [],
+            "match_source": "transactions.external_id",
+        }
+    if len(rows) == 1 and len(wallets) == 1:
+        status = "exact"
+    else:
+        status = "ambiguous"
+    return {
+        "status": status,
+        "confidence": "deterministic",
+        "wallet_ids": [wallet["wallet_id"] for wallet in wallets],
+        "wallets": [wallet["wallet"] for wallet in wallets],
+        "match_source": "transactions.external_id",
+    }
+
+
+def _preserved_bip329_match(record_type: str) -> dict[str, Any]:
+    return {
+        "status": "preserved",
+        "confidence": "none",
+        "wallet_ids": [],
+        "wallets": [],
+        "match_source": record_type,
+    }
+
+
+def _match_bip329_record(
+    conn: sqlite3.Connection,
+    profile_id: str,
+    record: Mapping[str, Any],
+    index: ownership.OwnedIndex,
+) -> tuple[dict[str, Any], list[sqlite3.Row]]:
+    record_type = str(record["type"])
+    ref = str(record["ref"])
+    if record_type == "tx":
+        rows = conn.execute(
+            """
+            SELECT t.id, t.wallet_id, w.label AS wallet_label
+            FROM transactions t
+            LEFT JOIN wallets w ON w.id = t.wallet_id
+            WHERE t.profile_id = ? AND lower(t.external_id) = lower(?)
+            ORDER BY w.label ASC, t.occurred_at ASC, t.created_at ASC, t.id ASC
+            """,
+            (profile_id, ref),
+        ).fetchall()
+        return _wallet_match_from_transaction_rows(rows), rows
+    if record_type == "addr":
+        verdict = ownership.classify_address({"input": ref}, index)
+        matches = verdict.get("matches") or []
+        if not matches:
+            return {
+                "status": "unmatched",
+                "confidence": "none",
+                "wallet_ids": [],
+                "wallets": [],
+                "match_source": "address",
+            }, []
+        wallets = {
+            str(match.get("wallet_id") or ""): str(match.get("wallet") or match.get("wallet_id") or "")
+            for match in matches
+            if match.get("wallet_id")
+        }
+        ordered = [
+            {"wallet_id": wallet_id, "wallet": label}
+            for wallet_id, label in sorted(wallets.items(), key=lambda item: (item[1], item[0]))
+        ]
+        return {
+            "status": "ambiguous" if verdict.get("ownership_ambiguous") else "exact",
+            "confidence": "deterministic",
+            "wallet_ids": [wallet["wallet_id"] for wallet in ordered],
+            "wallets": [wallet["wallet"] for wallet in ordered],
+            "match_source": "address",
+        }, []
+    if record_type == "output":
+        outpoint = _parse_bip329_outpoint(ref)
+        matches = index.lookup_outpoint(f"{outpoint[0]}:{outpoint[1]}") if outpoint else []
+        return _wallet_match_from_owned_matches(matches, source="wallet_utxos.outpoint"), []
+    if record_type == "input":
+        outpoint = _parse_bip329_outpoint(ref)
+        if outpoint is None:
+            return {
+                "status": "unmatched",
+                "confidence": "none",
+                "wallet_ids": [],
+                "wallets": [],
+                "match_source": "input_ref",
+            }, []
+        txid, input_index = outpoint
+        legs = ownership.load_local_tx_legs(conn, profile_id, txid)
+        matches = []
+        if legs is not None:
+            inputs = legs.get("inputs") or []
+            if 0 <= input_index < len(inputs):
+                leg = inputs[input_index]
+                matches = index.lookup_outpoint(leg.get("outpoint"))
+                if not matches:
+                    matches = index.lookup_script(leg.get("script"))
+        return _wallet_match_from_owned_matches(matches, source="local_tx.input"), []
+    if record_type in BIP329_PRESERVED_TYPES:
+        return _preserved_bip329_match(record_type), []
+    return {
+        "status": "unmatched",
+        "confidence": "none",
+        "wallet_ids": [],
+        "wallets": [],
+        "match_source": "unsupported",
+    }, []
+
+
+def _existing_bip329_row(
+    conn: sqlite3.Connection,
+    profile_id: str,
+    record: Mapping[str, Any],
+) -> sqlite3.Row | None:
+    return conn.execute(
+        """
+        SELECT *
+        FROM bip329_labels
+        WHERE profile_id = ?
+          AND record_type = ?
+          AND ref = ?
+        LIMIT 1
+        """,
+        (
+            profile_id,
+            record["type"],
+            record["ref"],
+        ),
+    ).fetchone()
+
+
+def _bip329_record_conflicts(existing: sqlite3.Row | None, record: Mapping[str, Any]) -> list[str]:
+    if not existing:
+        return []
+    conflicts: list[str] = []
+    for field in ("label", "origin"):
+        incoming = record.get(field)
+        if incoming is not None and existing[field] is not None and incoming != existing[field]:
+            conflicts.append(field)
+    incoming_spendable = record.get("spendable")
+    if incoming_spendable is not None and existing["spendable"] is not None:
+        if bool(existing["spendable"]) != bool(incoming_spendable):
+            conflicts.append("spendable")
+    existing_data = _decode_bip329_data(existing["data_json"])
+    for key, value in (record.get("data") or {}).items():
+        if key in existing_data and existing_data[key] != value:
+            conflicts.append(f"data.{key}")
+    return conflicts
+
+
+def _merge_bip329_import_match_data(
+    record_data: Mapping[str, Any],
+    match_info: Mapping[str, Any],
+) -> dict[str, Any]:
+    data = dict(record_data or {})
+    imported_kassiber = data.get("kassiber")
+    kassiber_data = dict(imported_kassiber) if isinstance(imported_kassiber, dict) else {}
+    if imported_kassiber is not None and not isinstance(imported_kassiber, dict):
+        kassiber_data.setdefault("imported_value", imported_kassiber)
+    kassiber_data["wallet_match"] = {
+        "status": match_info.get("status"),
+        "confidence": match_info.get("confidence"),
+        "wallet_ids": list(match_info.get("wallet_ids") or []),
+        "wallets": list(match_info.get("wallets") or []),
+        "match_source": match_info.get("match_source"),
+    }
+    data["kassiber"] = kassiber_data
+    return data
+
+
+def _planned_tx_tag_effects(
+    conn: sqlite3.Connection,
+    profile_id: str,
+    label: str | None,
+    tx_rows: Sequence[sqlite3.Row],
+    *,
+    match_status: str,
+    project_tags: bool,
+    apply_ambiguous: bool,
+    hooks: MetadataHooks,
+) -> list[dict[str, Any]]:
+    if not label:
+        return []
+    if len(label.strip()) > MAX_TRANSACTION_TAG_CHARS:
+        return [
+            {
+                "action": "skipped_label_too_long",
+                "reason": f"BIP329 labels projected to tags cannot exceed {MAX_TRANSACTION_TAG_CHARS} characters.",
+            }
+        ]
+    if not project_tags:
+        return [{"action": "skipped_duplicate", "reason": "A later duplicate record wins."}]
+    if match_status == "ambiguous" and not apply_ambiguous:
+        return [
+            {
+                "transaction_id": row["id"],
+                "wallet": row["wallet_label"] or "",
+                "wallet_id": row["wallet_id"] or "",
+                "action": "skipped_ambiguous",
+            }
+            for row in tx_rows
+        ]
+    if match_status != "exact" and not (match_status == "ambiguous" and apply_ambiguous):
+        return []
+    normalized = hooks.normalize_code(label)
+    existing_tag = conn.execute(
+        "SELECT label FROM tags WHERE profile_id = ? AND code = ? LIMIT 1",
+        (profile_id, normalized),
+    ).fetchone()
+    effects: list[dict[str, Any]] = []
+    for row in tx_rows:
+        current_tags = _tags_for_transaction(conn, row["id"])
+        has_tag = any(tag["code"] == normalized for tag in current_tags)
+        action = "unchanged" if has_tag else "add"
+        effect = {
+            "transaction_id": row["id"],
+            "wallet": row["wallet_label"] or "",
+            "wallet_id": row["wallet_id"] or "",
+            "tag": normalized,
+            "label": label,
+            "action": action,
+        }
+        if existing_tag and existing_tag["label"] != label:
+            effect["conflict"] = "tag_label"
+            effect["existing_label"] = existing_tag["label"]
+        effects.append(effect)
+    return effects
+
+
+def _bip329_plan_counts(rows: Sequence[Mapping[str, Any]], duplicate_refs: int) -> dict[str, int]:
+    counts = {
+        "exact": 0,
+        "ambiguous": 0,
+        "unmatched": 0,
+        "preserved": 0,
+        "conflicts": 0,
+        "duplicate_refs": duplicate_refs,
+        "duplicate_records": 0,
+        "tag_additions": 0,
+        "tag_unchanged": 0,
+        "tag_skipped_ambiguous": 0,
+        "tag_skipped_duplicate": 0,
+        "tag_skipped_label_too_long": 0,
+    }
+    for row in rows:
+        status = str(row.get("match_status") or "unmatched")
+        if status in counts:
+            counts[status] += 1
+        if row.get("duplicate"):
+            counts["duplicate_records"] += 1
+        if row.get("conflicts"):
+            counts["conflicts"] += 1
+        for effect in row.get("tag_effects") or []:
+            action = effect.get("action")
+            if action == "add":
+                counts["tag_additions"] += 1
+            elif action == "unchanged":
+                counts["tag_unchanged"] += 1
+            elif action == "skipped_ambiguous":
+                counts["tag_skipped_ambiguous"] += 1
+            elif action == "skipped_duplicate":
+                counts["tag_skipped_duplicate"] += 1
+            elif action == "skipped_label_too_long":
+                counts["tag_skipped_label_too_long"] += 1
+    return counts
+
+
+def _plan_bip329_import(
+    conn: sqlite3.Connection,
+    workspace_ref: str | None,
+    profile_ref: str | None,
+    file_path: str,
+    hooks: MetadataHooks,
+    *,
+    apply_ambiguous: bool = False,
+) -> dict[str, Any]:
     workspace, profile = hooks.resolve_scope(conn, workspace_ref, profile_ref)
     records = load_bip329_file(file_path)
+    wallets = ownership.load_profile_wallets(conn, profile["id"])
+    owned_index, warnings = ownership.build_owned_index(conn, profile["id"], wallets)
+    key_counts: dict[tuple[str, str], int] = {}
+    last_index_by_key: dict[tuple[str, str], int] = {}
+    for index, record in enumerate(records):
+        key = (record["type"], record["ref"])
+        key_counts[key] = key_counts.get(key, 0) + 1
+        last_index_by_key[key] = index
+    duplicate_refs = sum(1 for count in key_counts.values() if count > 1)
+    rows: list[dict[str, Any]] = []
+    seen_by_key: dict[tuple[str, str], int] = {}
+    for index, record in enumerate(records):
+        key = (record["type"], record["ref"])
+        seen_by_key[key] = seen_by_key.get(key, 0) + 1
+        match_info, tx_rows = _match_bip329_record(conn, profile["id"], record, owned_index)
+        existing = _existing_bip329_row(conn, profile["id"], record)
+        conflicts = _bip329_record_conflicts(existing, record)
+        ref_preview, ref_redacted = _redact_bip329_ref(record["type"], record["ref"])
+        is_duplicate = key_counts[key] > 1
+        project_tags = record["type"] == "tx" and index == last_index_by_key[key]
+        tag_effects = (
+            _planned_tx_tag_effects(
+                conn,
+                profile["id"],
+                record["label"],
+                tx_rows,
+                match_status=match_info["status"],
+                project_tags=project_tags,
+                apply_ambiguous=apply_ambiguous,
+                hooks=hooks,
+            )
+            if record["type"] == "tx"
+            else []
+        )
+        rows.append(
+            {
+                "_record": record,
+                "_tx_rows": tx_rows,
+                "line": index + 1,
+                "type": record["type"],
+                "ref": ref_preview if ref_redacted else record["ref"],
+                "ref_preview": ref_preview,
+                "ref_redacted": ref_redacted,
+                "label": record["label"] or "",
+                "origin": record["origin"] or "",
+                "match_status": match_info["status"],
+                "match_confidence": match_info["confidence"],
+                "wallet_ids": list(match_info.get("wallet_ids") or []),
+                "wallets": list(match_info.get("wallets") or []),
+                "match_source": match_info.get("match_source") or "",
+                "duplicate": is_duplicate,
+                "duplicate_ordinal": seen_by_key[key] if is_duplicate else None,
+                "conflicts": conflicts,
+                "existing": {
+                    "label": existing["label"] if existing else None,
+                    "origin": existing["origin"] if existing else None,
+                    "spendable": (None if not existing or existing["spendable"] is None else bool(existing["spendable"])),
+                }
+                if existing
+                else None,
+                "tag_effects": tag_effects,
+                "wallet_match": match_info,
+            }
+        )
+    return {
+        "file": os.path.abspath(file_path),
+        "workspace_id": workspace["id"],
+        "profile_id": profile["id"],
+        "records": len(records),
+        "rows": rows,
+        "counts": _bip329_plan_counts(rows, duplicate_refs),
+        "warnings": warnings,
+        "apply_ambiguous": bool(apply_ambiguous),
+    }
+
+
+def _public_bip329_plan(plan: Mapping[str, Any], *, include_rows: bool = True) -> dict[str, Any]:
+    public = {
+        "file": plan["file"],
+        "records": plan["records"],
+        "counts": plan["counts"],
+        "warnings": plan.get("warnings") or [],
+        "apply_policy": "all_matches" if plan.get("apply_ambiguous") else "exact_only",
+    }
+    if include_rows:
+        rows = []
+        for row in plan.get("rows") or []:
+            rows.append(
+                {
+                    key: value
+                    for key, value in row.items()
+                    if not key.startswith("_") and key != "wallet_match"
+                }
+            )
+        public["rows"] = rows
+    return public
+
+
+def preview_bip329_import(conn, workspace_ref, profile_ref, file_path, hooks: MetadataHooks):
+    return _public_bip329_plan(
+        _plan_bip329_import(conn, workspace_ref, profile_ref, file_path, hooks),
+        include_rows=True,
+    )
+
+
+def _upsert_bip329_record(
+    conn: sqlite3.Connection,
+    workspace_id: str,
+    profile_id: str,
+    record: Mapping[str, Any],
+    match_info: Mapping[str, Any],
+    hooks: MetadataHooks,
+) -> str:
+    existing = _existing_bip329_row(conn, profile_id, record)
+    record_data = _merge_bip329_import_match_data(record.get("data") or {}, match_info)
+    if existing:
+        effective_label = record["label"] if record["label"] is not None else existing["label"]
+        effective_origin = record["origin"] if record["origin"] is not None else existing["origin"]
+        effective_spendable = (
+            existing["spendable"]
+            if record["spendable"] is None
+            else (1 if record["spendable"] else 0)
+        )
+        merged_data = _decode_bip329_data(existing["data_json"])
+        imported_kassiber = merged_data.get("kassiber")
+        merged_data.update(record_data)
+        if isinstance(imported_kassiber, dict) and isinstance(record_data.get("kassiber"), dict):
+            kassiber_data = dict(imported_kassiber)
+            kassiber_data.update(record_data["kassiber"])
+            merged_data["kassiber"] = kassiber_data
+        conn.execute(
+            """
+            UPDATE bip329_labels
+            SET wallet_id = NULL,
+                label = ?,
+                origin = ?,
+                spendable = ?,
+                data_json = ?
+            WHERE id = ?
+            """,
+            (
+                effective_label,
+                effective_origin,
+                effective_spendable,
+                json.dumps(merged_data, sort_keys=True),
+                existing["id"],
+            ),
+        )
+        return "updated"
+    conn.execute(
+        """
+        INSERT INTO bip329_labels(
+            id, workspace_id, profile_id, wallet_id, record_type, ref,
+            label, origin, spendable, data_json, created_at
+        ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            str(uuid.uuid4()),
+            workspace_id,
+            profile_id,
+            None,
+            record["type"],
+            record["ref"],
+            record["label"],
+            record["origin"],
+            None if record["spendable"] is None else (1 if record["spendable"] else 0),
+            json.dumps(record_data, sort_keys=True),
+            hooks.now_iso(),
+        ),
+    )
+    return "imported"
+
+
+def _apply_bip329_tag_effect(
+    conn: sqlite3.Connection,
+    workspace: Mapping[str, Any],
+    profile: Mapping[str, Any],
+    effect: Mapping[str, Any],
+    hooks: MetadataHooks,
+    *,
+    source: str,
+    reason: str,
+) -> tuple[bool, bool]:
+    if effect.get("action") != "add":
+        return False, False
+    label = str(effect.get("label") or "").strip()
+    if not label:
+        return False, False
+    tx = conn.execute(
+        "SELECT * FROM transactions WHERE profile_id = ? AND id = ? LIMIT 1",
+        (profile["id"], effect.get("transaction_id")),
+    ).fetchone()
+    if not tx:
+        return False, False
+    _tag, tag_created = ensure_tag_row(conn, workspace["id"], profile["id"], label, label, hooks)
+    current_tags = _tags_for_transaction(conn, tx["id"])
+    normalized = hooks.normalize_code(label)
+    if any(tag["code"] == normalized for tag in current_tags):
+        return tag_created, False
+    next_tags = [tag["label"] for tag in current_tags] + [label]
+    _event_id, changed = _apply_audited_transaction_update(
+        conn,
+        workspace=workspace,
+        profile=profile,
+        tx=tx,
+        hooks=hooks,
+        tx_updates={},
+        state_updates={},
+        tags_set=True,
+        tags=next_tags,
+        source=source,
+        reason=reason,
+        commit=False,
+    )
+    return tag_created, changed
+
+
+def import_bip329_labels(
+    conn,
+    workspace_ref,
+    profile_ref,
+    file_path,
+    hooks: MetadataHooks,
+    *,
+    apply_ambiguous: bool = False,
+    source: str = "cli",
+):
+    workspace, profile = hooks.resolve_scope(conn, workspace_ref, profile_ref)
+    plan = _plan_bip329_import(
+        conn,
+        workspace_ref,
+        profile_ref,
+        file_path,
+        hooks,
+        apply_ambiguous=apply_ambiguous,
+    )
     imported = 0
     updated = 0
     transaction_tags_added = 0
     transaction_tags_created = 0
-    transaction_labels_by_ref = {}
-    for record in records:
-        existing = conn.execute(
-            """
-            SELECT *
-            FROM bip329_labels
-            WHERE profile_id = ?
-              AND record_type = ?
-              AND ref = ?
-            LIMIT 1
-            """,
-            (
-                profile["id"],
-                record["type"],
-                record["ref"],
-            ),
-        ).fetchone()
-        if existing:
-            effective_label = record["label"] if record["label"] is not None else existing["label"]
-            effective_origin = record["origin"] if record["origin"] is not None else existing["origin"]
-            effective_spendable = (
-                existing["spendable"]
-                if record["spendable"] is None
-                else (1 if record["spendable"] else 0)
-            )
-            merged_data = _decode_bip329_data(existing["data_json"])
-            merged_data.update(record["data"])
-            conn.execute(
-                """
-                UPDATE bip329_labels
-                SET wallet_id = NULL,
-                    label = ?,
-                    origin = ?,
-                    spendable = ?,
-                    data_json = ?
-                WHERE id = ?
-                """,
-                (
-                    effective_label,
-                    effective_origin,
-                    effective_spendable,
-                    json.dumps(merged_data, sort_keys=True),
-                    existing["id"],
-                ),
-            )
-            updated += 1
-        else:
-            effective_label = record["label"]
-            conn.execute(
-                """
-                INSERT INTO bip329_labels(
-                    id, workspace_id, profile_id, wallet_id, record_type, ref,
-                    label, origin, spendable, data_json, created_at
-                ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    str(uuid.uuid4()),
-                    workspace["id"],
-                    profile["id"],
-                    None,
-                    record["type"],
-                    record["ref"],
-                    record["label"],
-                    record["origin"],
-                    None if record["spendable"] is None else (1 if record["spendable"] else 0),
-                    json.dumps(record["data"], sort_keys=True),
-                    hooks.now_iso(),
-                ),
-            )
-            imported += 1
-        if record["type"] == "tx" and effective_label:
-            transaction_labels_by_ref[record["ref"]] = effective_label
-    for tx_ref, label in transaction_labels_by_ref.items():
-        tx_rows = conn.execute(
-            """
-            SELECT id
-            FROM transactions
-            WHERE profile_id = ? AND external_id = ?
-            """,
-            (profile["id"], tx_ref),
-        ).fetchall()
-        for tx in tx_rows:
-            tag, created = ensure_tag_row(
+    try:
+        for row in plan["rows"]:
+            status = _upsert_bip329_record(
                 conn,
-                profile["workspace_id"],
+                workspace["id"],
                 profile["id"],
-                label,
-                label,
+                row["_record"],
+                row["wallet_match"],
                 hooks,
             )
-            if created:
-                transaction_tags_created += 1
-            before = conn.total_changes
-            conn.execute(
-                "INSERT OR IGNORE INTO transaction_tags(transaction_id, tag_id) VALUES(?, ?)",
-                (tx["id"], tag["id"]),
-            )
-            if conn.total_changes > before:
-                transaction_tags_added += 1
-    if records:
-        hooks.invalidate_journals(conn, profile["id"])
-    conn.commit()
+            if status == "imported":
+                imported += 1
+            else:
+                updated += 1
+        for row in plan["rows"]:
+            record = row["_record"]
+            if record["type"] != "tx":
+                continue
+            reason = f"Imported BIP329 label for {record['ref']}"
+            for effect in row.get("tag_effects") or []:
+                created, changed = _apply_bip329_tag_effect(
+                    conn,
+                    workspace,
+                    profile,
+                    effect,
+                    hooks,
+                    source=source,
+                    reason=reason,
+                )
+                transaction_tags_created += 1 if created else 0
+                transaction_tags_added += 1 if changed else 0
+        if plan["records"]:
+            hooks.invalidate_journals(conn, profile["id"])
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
     return {
         "file": os.path.abspath(file_path),
         "imported": imported,
         "updated": updated,
-        "records": len(records),
+        "records": plan["records"],
         "transaction_tags_created": transaction_tags_created,
         "transaction_tags_added": transaction_tags_added,
+        "preview": _public_bip329_plan(plan, include_rows=False),
     }
 
 
@@ -1345,9 +1866,33 @@ def list_bip329_labels(
     }
 
 
-def export_bip329_labels(conn, workspace_ref, profile_ref, file_path, hooks: MetadataHooks):
-    _, profile = hooks.resolve_scope(conn, workspace_ref, profile_ref)
-    params = [profile["id"]]
+def _record_from_bip329_row(row: sqlite3.Row) -> dict[str, Any]:
+    return {
+        "type": row["record_type"],
+        "ref": row["ref"],
+        "label": row["label"],
+        "origin": row["origin"],
+        "spendable": None if row["spendable"] is None else bool(row["spendable"]),
+        "data": _decode_bip329_data(row["data_json"]),
+    }
+
+
+def _payload_from_bip329_record(record: Mapping[str, Any]) -> dict[str, Any]:
+    payload = {"type": record["type"], "ref": record["ref"]}
+    if record.get("label") is not None:
+        payload["label"] = record["label"]
+    if record.get("origin") is not None:
+        payload["origin"] = record["origin"]
+    if record.get("spendable") is not None:
+        payload["spendable"] = bool(record["spendable"])
+    payload.update(record.get("data") or {})
+    return payload
+
+
+def _stored_bip329_records(
+    conn: sqlite3.Connection,
+    profile_id: str,
+) -> list[dict[str, Any]]:
     rows = conn.execute(
         """
         SELECT record_type, ref, label, origin, spendable, data_json
@@ -1355,19 +1900,206 @@ def export_bip329_labels(conn, workspace_ref, profile_ref, file_path, hooks: Met
         WHERE profile_id = ?
         ORDER BY created_at ASC, record_type ASC, ref ASC, id ASC
         """,
+        (profile_id,),
+    ).fetchall()
+    return [_record_from_bip329_row(row) for row in rows]
+
+
+def _wallet_scoped_bip329_records(
+    conn: sqlite3.Connection,
+    profile_id: str,
+    records: Sequence[Mapping[str, Any]],
+    wallet_id: str | None,
+) -> list[dict[str, Any]]:
+    if wallet_id is None:
+        return [dict(record) for record in records]
+    wallets = ownership.load_profile_wallets(conn, profile_id)
+    owned_index, _warnings = ownership.build_owned_index(conn, profile_id, wallets)
+    scoped = []
+    for record in records:
+        match_info, _tx_rows = _match_bip329_record(conn, profile_id, record, owned_index)
+        if match_info.get("status") == "exact" and wallet_id in set(match_info.get("wallet_ids") or []):
+            scoped.append(dict(record))
+    return scoped
+
+
+def _clip_bip329_label(value: str, *, max_chars: int = 255) -> str:
+    text = " ".join(str(value or "").split())
+    if len(text) <= max_chars:
+        return text
+    return text[: max_chars - 3].rstrip() + "..."
+
+
+def _short_label_part(value: Any, *, max_chars: int = 72) -> str:
+    return _clip_bip329_label(str(value or ""), max_chars=max_chars)
+
+
+def _float_or_none(value: Any) -> float | None:
+    if value in (None, ""):
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _msat_to_sats_if_whole(value: Any) -> int | None:
+    try:
+        msat = int(value)
+    except (TypeError, ValueError):
+        return None
+    if msat % 1000 != 0:
+        return None
+    return msat // 1000
+
+
+def _synthesized_tx_bip329_label(conn: sqlite3.Connection, tx: sqlite3.Row) -> dict[str, Any] | None:
+    tags = _tags_for_transaction(conn, tx["id"])
+    tag_labels = [tag["label"] for tag in tags]
+    parts: list[str] = []
+    if tx["counterparty"]:
+        parts.append(_short_label_part(tx["counterparty"]))
+    if tag_labels:
+        parts.append("tags: " + _short_label_part(", ".join(tag_labels), max_chars=90))
+    if tx["review_status"]:
+        parts.append(f"review: {_short_label_part(tx['review_status'], max_chars=32)}")
+    if tx["fiat_value"] is not None and tx["fiat_currency"]:
+        parts.append(f"FMV {tx['fiat_currency']} {_short_label_part(tx['fiat_value'], max_chars=32)}")
+    if tx["note"]:
+        parts.append("note: " + _short_label_part(tx["note"], max_chars=90))
+    if not parts:
+        return None
+    label = _clip_bip329_label(" | ".join(parts))
+    payload: dict[str, Any] = {
+        "type": "tx",
+        "ref": tx["external_id"],
+        "label": label,
+        "origin": "kassiber",
+        "data": {
+            "kassiber": {
+                "source": "synthesized",
+                "transaction_id": tx["id"],
+                "wallet_id": tx["wallet_id"],
+                "wallet": tx["wallet_label"],
+                "review_status": tx["review_status"],
+                "tags": tag_labels,
+            }
+        },
+    }
+    occurred_at = tx["confirmed_at"] or tx["occurred_at"]
+    if occurred_at:
+        payload["data"]["time"] = occurred_at
+    asset = str(tx["asset"] or "").upper()
+    if asset in {"BTC", "XBT"}:
+        sats = _msat_to_sats_if_whole(tx["amount"])
+        if sats is not None:
+            payload["data"]["value"] = -sats if tx["direction"] == "outbound" else sats
+        fee_sats = _msat_to_sats_if_whole(tx["fee"])
+        if fee_sats is not None and fee_sats > 0:
+            payload["data"]["fee"] = fee_sats
+    rate = _float_or_none(tx["fiat_rate_exact"]) if tx["fiat_rate_exact"] else _float_or_none(tx["fiat_rate"])
+    if rate is not None and tx["fiat_currency"]:
+        payload["data"]["rate"] = {str(tx["fiat_currency"]).upper(): rate}
+    return payload
+
+
+def _synthesized_bip329_records(
+    conn: sqlite3.Connection,
+    profile_id: str,
+    *,
+    wallet_id: str | None = None,
+) -> list[dict[str, Any]]:
+    where = ["t.profile_id = ?", "t.external_id IS NOT NULL", "t.external_id != ''"]
+    params: list[Any] = [profile_id]
+    if wallet_id is not None:
+        where.append("t.wallet_id = ?")
+        params.append(wallet_id)
+    rows = conn.execute(
+        f"""
+        SELECT
+            t.id,
+            t.wallet_id,
+            w.label AS wallet_label,
+            t.external_id,
+            t.occurred_at,
+            t.confirmed_at,
+            t.direction,
+            t.asset,
+            t.amount,
+            t.fee,
+            t.fiat_currency,
+            t.fiat_rate,
+            t.fiat_rate_exact,
+            t.fiat_value,
+            t.review_status,
+            t.counterparty,
+            t.note
+        FROM transactions t
+        LEFT JOIN wallets w ON w.id = t.wallet_id
+        WHERE {" AND ".join(where)}
+        ORDER BY t.occurred_at ASC, t.created_at ASC, t.id ASC
+        """,
         params,
     ).fetchall()
-    output_lines = []
+    records = []
     for row in rows:
-        payload = {"type": row["record_type"], "ref": row["ref"]}
-        if row["label"] is not None:
-            payload["label"] = row["label"]
-        if row["origin"] is not None:
-            payload["origin"] = row["origin"]
-        if row["spendable"] is not None:
-            payload["spendable"] = bool(row["spendable"])
-        payload.update(json.loads(row["data_json"] or "{}"))
-        output_lines.append(json.dumps(payload, ensure_ascii=True))
+        record = _synthesized_tx_bip329_label(conn, row)
+        if record is not None:
+            records.append(record)
+    return records
+
+
+def export_bip329_labels(
+    conn,
+    workspace_ref,
+    profile_ref,
+    file_path,
+    hooks: MetadataHooks,
+    *,
+    wallet_ref: str | None = None,
+    mode: str = "stored",
+):
+    _, profile = hooks.resolve_scope(conn, workspace_ref, profile_ref)
+    mode = str(mode or "stored").strip().lower()
+    if mode not in BIP329_EXPORT_MODES:
+        raise AppError(
+            f"Unsupported BIP329 export mode '{mode}'",
+            code="validation",
+            hint="Use stored, synthesized, or all.",
+            retryable=False,
+        )
+    wallet = hooks.resolve_wallet(conn, profile["id"], wallet_ref) if wallet_ref else None
+    wallet_id = wallet["id"] if wallet else None
+    records: list[dict[str, Any]] = []
+    exported_stored = 0
+    exported_synthesized = 0
+    seen: set[tuple[str, str]] = set()
+    if mode in {"stored", "all"}:
+        stored = _wallet_scoped_bip329_records(
+            conn,
+            profile["id"],
+            _stored_bip329_records(conn, profile["id"]),
+            wallet_id,
+        )
+        for record in stored:
+            key = (str(record["type"]), str(record["ref"]))
+            if key in seen:
+                continue
+            seen.add(key)
+            records.append(record)
+            exported_stored += 1
+    if mode in {"synthesized", "all"}:
+        for record in _synthesized_bip329_records(conn, profile["id"], wallet_id=wallet_id):
+            key = (str(record["type"]), str(record["ref"]))
+            if key in seen:
+                continue
+            seen.add(key)
+            records.append(record)
+            exported_synthesized += 1
+    output_lines = [
+        json.dumps(_payload_from_bip329_record(record), ensure_ascii=True)
+        for record in records
+    ]
     export_path = os.path.abspath(file_path)
     with open(export_path, "w", encoding="utf-8") as handle:
         if output_lines:
@@ -1375,6 +2107,10 @@ def export_bip329_labels(conn, workspace_ref, profile_ref, file_path, hooks: Met
     return {
         "file": export_path,
         "exported": len(output_lines),
+        "mode": mode,
+        "wallet": wallet["label"] if wallet else "",
+        "exported_stored": exported_stored,
+        "exported_synthesized": exported_synthesized,
     }
 
 
@@ -1390,6 +2126,7 @@ __all__ = [
     "get_transaction_record",
     "import_bip329_labels",
     "list_bip329_labels",
+    "preview_bip329_import",
     "list_activity_history",
     "list_transaction_history",
     "list_tags",

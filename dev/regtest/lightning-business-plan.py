@@ -244,6 +244,34 @@ def build_plan(
                     "expected_failure": "insufficient_liquidity",
                 }
             ],
+            "lnd_invoices": [
+                {
+                    "label": "lnd-backup-merchant-receipt-001",
+                    "amount_msat": _round_msat(max(42_000_000, expected_payment_msat // 3)),
+                    "description": "Backup LND merchant receipt 001",
+                    "expiry": 3600,
+                },
+                {
+                    "label": "lnd-backup-service-retainer-001",
+                    "amount_msat": _round_msat(max(58_000_000, expected_payment_msat // 2)),
+                    "description": "Backup LND service retainer 001",
+                    "expiry": 3600,
+                },
+            ],
+            "lnd_payments": [
+                {
+                    "label": "lnd-backup-merchant-rebalance-001",
+                    "amount_msat": _round_msat(max(36_000_000, expected_payment_msat // 4)),
+                    "description": "Backup LND merchant rebalance 001",
+                    "expiry": 3600,
+                },
+                {
+                    "label": "lnd-backup-merchant-rebalance-002",
+                    "amount_msat": _round_msat(max(48_000_000, expected_payment_msat // 3)),
+                    "description": "Backup LND merchant rebalance 002",
+                    "expiry": 3600,
+                },
+            ],
         },
         "mainchain": {
             "actor_wallets": [

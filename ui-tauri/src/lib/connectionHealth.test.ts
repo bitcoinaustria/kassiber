@@ -111,7 +111,7 @@ describe("connection health model", () => {
         kind: "coreln",
         net: "LN",
       }),
-    ).toBe("unsupported");
+    ).toBe("lightning");
     expect(
       connectionProbeKind({
         id: "rpc",
@@ -129,7 +129,7 @@ describe("connection health model", () => {
         kind: "lnd",
         net: "LN",
       }),
-    ).toBe("unsupported");
+    ).toBe("lightning");
     expect(
       connectionProbeKind({
         id: "btcpay",

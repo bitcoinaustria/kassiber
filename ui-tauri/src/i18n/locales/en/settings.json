@@ -314,7 +314,7 @@
     "lockAfter": "Lock after",
     "minutes": "{{count}}m",
     "requireOnLaunchLabel": "Require passphrase on launch",
-    "requireOnLaunchEncrypted": "Prompt immediately when Kassiber opens; cold starts still need the database passphrase when the daemon is locked.",
+    "requireOnLaunchEncrypted": "Encrypted books always unlock before the dashboard opens.",
     "requireOnLaunchPlaintext": "Prompt every time Kassiber opens.",
     "lockOnCloseLabel": "Lock on window close",
     "lockOnCloseDescription": "Clear in-memory decrypted state when the app window closes.",

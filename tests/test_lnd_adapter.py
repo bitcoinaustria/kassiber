@@ -387,6 +387,38 @@ class LndAdapterFetchSnapshotTest(unittest.TestCase):
         )
         self.assertNotIn(leaked_pubkey, json.dumps(snapshot_to_dict(snapshot)))
 
+    def test_private_channel_can_use_graph_alias_without_pubkey_leak(
+        self,
+    ) -> None:
+        remote_pubkey = "03" + "dd" * 32
+        row = {
+            "active": True,
+            "chan_id": "333",
+            "channel_point": ("ee" * 32) + ":0",
+            "remote_pubkey": remote_pubkey,
+            "peer_alias": "",
+            "capacity": "500000",
+            "local_balance": "200000",
+            "remote_balance": "300000",
+            "private": True,
+            "initiator": False,
+        }
+        client = _FakeLndRestClient(BACKEND)
+        client.responses[("GET", f"/v1/graph/node/{remote_pubkey}")] = {
+            "node": {"alias": "KnownPrivatePeer"}
+        }
+
+        aliases = core_lnd._peer_alias_lookup(client, [row])
+        channel = core_lnd._map_channel(
+            row,
+            closed=False,
+            peer_alias_lookup=aliases,
+        )
+
+        self.assertEqual(channel.peer_alias, "KnownPrivatePeer")
+        self.assertIsNone(channel.peer_pubkey)
+        self.assertNotIn(remote_pubkey, channel.peer_alias)
+
     def test_private_channel_with_pubkey_shaped_alias_keeps_alias(self) -> None:
         """If LND surfaces an alias for a private channel — even one that
         happens to look like a pubkey — we keep it. The opsec rule is to
@@ -549,6 +581,102 @@ class LndAdapterBackendValidationTest(unittest.TestCase):
                 {"name": "node", "kind": "btcpay"},
             )
         self.assertEqual(ctx.exception.code, "validation")
+
+
+class LndTransactionImportTest(unittest.TestCase):
+    """The LND sync promotes settled invoices + succeeded payments to the ledger.
+
+    NOTE: field mapping (especially base64 ``r_hash``) is validated here against
+    canned payloads; it must still be exercised against a real LND regtest node
+    (the lightning-business lane) before shipping — the REST encoding cannot be
+    verified without a live node.
+    """
+
+    def test_normalize_hash_hex_passthrough(self) -> None:
+        hex_hash = "ab" * 32
+        self.assertEqual(core_lnd._normalize_lnd_hash(hex_hash), hex_hash)
+        self.assertEqual(core_lnd._normalize_lnd_hash(hex_hash.upper()), hex_hash)
+
+    def test_normalize_hash_base64_matches_hex(self) -> None:
+        # The netting linchpin: LND REST base64 r_hash and a CLN hex payment_hash
+        # for the SAME 32 bytes must normalize to the same hex so they pair.
+        import base64
+
+        raw = bytes(range(32))
+        hex_hash = raw.hex()
+        b64 = base64.b64encode(raw).decode()
+        self.assertEqual(core_lnd._normalize_lnd_hash(b64), hex_hash)
+        self.assertEqual(core_lnd._normalize_lnd_hash(hex_hash), hex_hash)
+
+    def test_normalize_hash_invalid_returns_none(self) -> None:
+        self.assertIsNone(core_lnd._normalize_lnd_hash(""))
+        self.assertIsNone(core_lnd._normalize_lnd_hash("not-a-hash"))
+
+    def test_import_records_settled_invoice_and_succeeded_payment(self) -> None:
+        import base64
+
+        raw_invoice = bytes([1]) * 32
+        raw_payment = bytes([2]) * 32
+        invoices = [
+            {
+                "r_hash": base64.b64encode(raw_invoice).decode(),
+                "value_msat": "3000000",
+                "amt_paid_msat": "3000000",
+                "settled": True,
+                "state": "SETTLED",
+                "settle_date": "1709980050",
+                "creation_date": "1709980000",
+                "memo": "Consulting",
+            },
+            {  # open invoice must be skipped
+                "r_hash": base64.b64encode(bytes([9]) * 32).decode(),
+                "value_msat": "1000",
+                "state": "OPEN",
+            },
+        ]
+        payments = [
+            {
+                "payment_hash": raw_payment.hex(),
+                "value_msat": "1000000",
+                "fee_msat": "2000",
+                "status": "SUCCEEDED",
+                "creation_date": "1709990000",
+            },
+            {  # failed payment must be skipped
+                "payment_hash": (bytes([8]) * 32).hex(),
+                "value_msat": "5000",
+                "status": "FAILED",
+            },
+        ]
+        records = core_lnd.lnd_import_records(invoices, payments)
+        by_kind = {r["kind"]: r for r in records}
+        self.assertEqual(set(by_kind), {"lnd_invoice", "lnd_pay"})
+
+        inv = by_kind["lnd_invoice"]
+        self.assertEqual(inv["direction"], "inbound")
+        self.assertEqual(inv["payment_hash"], raw_invoice.hex())
+        self.assertEqual(inv["fee"], 0)
+        self.assertEqual(inv["occurred_at"], core_lnd._timestamp("1709980050"))
+
+        pay = by_kind["lnd_pay"]
+        self.assertEqual(pay["direction"], "outbound")
+        self.assertEqual(pay["payment_hash"], raw_payment.hex())
+        from kassiber.msat import msat_to_btc
+
+        self.assertEqual(pay["amount"], msat_to_btc(1_000_000))
+        self.assertEqual(pay["fee"], msat_to_btc(2_000))
+
+    def test_sync_lnd_wallet_rejects_wrong_backend_kind(self) -> None:
+        from kassiber.errors import AppError
+
+        with self.assertRaises(AppError):
+            core_lnd.sync_lnd_wallet(
+                None,
+                {"id": "p", "workspace_id": "w"},
+                {"id": "wl", "label": "lnd"},
+                {"name": "b", "kind": "coreln"},
+                None,
+            )
 
 
 if __name__ == "__main__":  # pragma: no cover

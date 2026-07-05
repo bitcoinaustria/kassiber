@@ -251,39 +251,90 @@ print(int(data.get("confirmations") or 0))')"
   return 0
 }
 
-invoice_status() {
+invoice_status_once() {
   local service="$1"
   local label="$2"
   cln "$service" listinvoices "$label" | python3 -c 'import json, sys
-data = json.load(sys.stdin)
+try:
+    data = json.load(sys.stdin)
+except ValueError:
+    sys.exit(2)
 invoices = data.get("invoices") or []
 print((invoices[0].get("status") if invoices else "") or "")'
+}
+
+invoice_status() {
+  local service="$1"
+  local label="$2"
+  local attempt status
+  for attempt in $(seq 1 20); do
+    if status="$(invoice_status_once "$service" "$label" 2>/dev/null)"; then
+      printf '%s\n' "$status"
+      return 0
+    fi
+    sleep 1
+  done
+  invoice_status_once "$service" "$label"
+}
+
+invoice_bolt11_once() {
+  local service="$1"
+  local label="$2"
+  cln "$service" listinvoices "$label" | python3 -c 'import json, sys
+try:
+    data = json.load(sys.stdin)
+except ValueError:
+    sys.exit(2)
+invoices = data.get("invoices") or []
+print((invoices[0].get("bolt11") if invoices else "") or "")'
 }
 
 invoice_bolt11() {
   local service="$1"
   local label="$2"
+  local attempt bolt11
+  for attempt in $(seq 1 20); do
+    if bolt11="$(invoice_bolt11_once "$service" "$label" 2>/dev/null)" && [ -n "$bolt11" ]; then
+      printf '%s\n' "$bolt11"
+      return 0
+    fi
+    sleep 1
+  done
+  invoice_bolt11_once "$service" "$label"
+}
+
+invoice_payment_hash_once() {
+  local service="$1"
+  local label="$2"
   cln "$service" listinvoices "$label" | python3 -c 'import json, sys
-data = json.load(sys.stdin)
+try:
+    data = json.load(sys.stdin)
+except ValueError:
+    sys.exit(2)
 invoices = data.get("invoices") or []
-print((invoices[0].get("bolt11") if invoices else "") or "")'
+print((invoices[0].get("payment_hash") if invoices else "") or "")'
 }
 
 invoice_payment_hash() {
   local service="$1"
   local label="$2"
-  cln "$service" listinvoices "$label" | python3 -c 'import json, sys
-data = json.load(sys.stdin)
-invoices = data.get("invoices") or []
-print((invoices[0].get("payment_hash") if invoices else "") or "")'
+  local attempt payment_hash
+  for attempt in $(seq 1 20); do
+    if payment_hash="$(invoice_payment_hash_once "$service" "$label" 2>/dev/null)" && [ -n "$payment_hash" ]; then
+      printf '%s\n' "$payment_hash"
+      return 0
+    fi
+    sleep 1
+  done
+  invoice_payment_hash_once "$service" "$label"
 }
 
-invoice_matches_plan() {
+invoice_matches_plan_once() {
   local service="$1"
   local label="$2"
   local expected_amount_msat="$3"
   local expected_description="$4"
-  cln "$service" listinvoices "$label" | python3 - "$expected_amount_msat" "$expected_description" <<'PY'
+  cln "$service" listinvoices "$label" | python3 -c '
 import json
 import sys
 
@@ -307,7 +358,10 @@ def parse_msat(value):
         return int(float(text[:-3] or "0") * 1000)
     return int(float(text or "0"))
 
-data = json.load(sys.stdin)
+try:
+    data = json.load(sys.stdin)
+except ValueError:
+    sys.exit(2)
 invoices = data.get("invoices") or []
 if not invoices:
     sys.exit(2)
@@ -315,7 +369,22 @@ invoice = invoices[0]
 actual_amount = parse_msat(invoice.get("amount_msat") or invoice.get("amount_received_msat"))
 actual_description = str(invoice.get("description") or "")
 sys.exit(0 if actual_amount == expected_amount and actual_description == expected_description else 1)
-PY
+' "$expected_amount_msat" "$expected_description"
+}
+
+invoice_matches_plan() {
+  local service="$1"
+  local label="$2"
+  local expected_amount_msat="$3"
+  local expected_description="$4"
+  local attempt
+  for attempt in $(seq 1 20); do
+    if invoice_matches_plan_once "$service" "$label" "$expected_amount_msat" "$expected_description" 2>/dev/null; then
+      return 0
+    fi
+    sleep 1
+  done
+  invoice_matches_plan_once "$service" "$label" "$expected_amount_msat" "$expected_description"
 }
 
 payment_status_by_hash() {
@@ -397,6 +466,80 @@ ensure_paid_invoice() {
     return 0
   fi
   pay_bolt11 "$payer" "$(invoice_bolt11 "$issuer" "$label")" "$label"
+}
+
+lnd_create_invoice_bolt11() {
+  local amount_msat="$1"
+  local description="$2"
+  local expiry="$3"
+  lnd addinvoice \
+    --amt_msat="$amount_msat" \
+    --memo="$description" \
+    --expiry="$expiry" | python3 -c 'import json, sys
+data = json.load(sys.stdin)
+print(data.get("payment_request") or "")'
+}
+
+lnd_pay_bolt11() {
+  local bolt11="$1"
+  local label="$2"
+  local deadline=$((SECONDS + 90))
+  while true; do
+    if lnd payinvoice --force --pay_req="$bolt11" >/dev/null 2>&1; then
+      echo "lnd_merchant_backup paid $label."
+      return 0
+    fi
+    if lnd payinvoice --force "$bolt11" >/dev/null 2>&1; then
+      echo "lnd_merchant_backup paid $label."
+      return 0
+    fi
+    if [ "$SECONDS" -ge "$deadline" ]; then
+      echo "lnd_merchant_backup could not pay $label before timeout." >&2
+      lnd payinvoice --force --pay_req="$bolt11" || true
+      return 1
+    fi
+    sleep 3
+  done
+}
+
+ensure_lnd_invoice_paid_by_cln() {
+  local payer="$1"
+  local amount_msat="$2"
+  local label="$3"
+  local description="$4"
+  local expiry="${5:-3600}"
+  local bolt11
+  if state_done "$label"; then
+    echo "$label already paid."
+    return 0
+  fi
+  bolt11="$(lnd_create_invoice_bolt11 "$amount_msat" "$description" "$expiry")"
+  if [ -z "$bolt11" ]; then
+    echo "Could not create LND invoice for $label." >&2
+    return 1
+  fi
+  pay_bolt11 "$payer" "$bolt11" "$label"
+  state_mark_done "$label"
+}
+
+ensure_lnd_paid_cln_invoice() {
+  local issuer="$1"
+  local amount_msat="$2"
+  local label="$3"
+  local description="$4"
+  local expiry="${5:-3600}"
+  ensure_invoice "$issuer" "$amount_msat" "$label" "$description" "$expiry"
+  if state_done "$label"; then
+    echo "$label already paid."
+    return 0
+  fi
+  if [ "$(invoice_status "$issuer" "$label")" = "paid" ]; then
+    state_mark_done "$label"
+    echo "$label already paid."
+    return 0
+  fi
+  lnd_pay_bolt11 "$(invoice_bolt11 "$issuer" "$label")" "$label"
+  state_mark_done "$label"
 }
 
 ensure_expired_merchant_quote() {
@@ -603,12 +746,27 @@ run_lightning_activity() {
   done < "$PLAN_ROWS_FILE"
 }
 
+run_lnd_activity() {
+  load_plan_rows lightning.lnd_invoices label amount_msat description expiry
+  while IFS=$'\t' read -r label amount_msat description expiry; do
+    [ -n "$label" ] || continue
+    ensure_lnd_invoice_paid_by_cln cln_merchant "$amount_msat" "$label" "$description" "$expiry"
+  done < "$PLAN_ROWS_FILE"
+
+  load_plan_rows lightning.lnd_payments label amount_msat description expiry
+  while IFS=$'\t' read -r label amount_msat description expiry; do
+    [ -n "$label" ] || continue
+    ensure_lnd_paid_cln_invoice cln_merchant "$amount_msat" "$label" "$description" "$expiry"
+  done < "$PLAN_ROWS_FILE"
+}
+
 main() {
   trap cleanup_plan_rows EXIT
   ensure_plan
   ensure_state_for_plan
   run_mainchain_topups
   run_lightning_activity
+  run_lnd_activity
   run_mainchain_withdrawals
 
   sleep 2

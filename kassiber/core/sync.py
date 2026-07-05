@@ -59,6 +59,10 @@ SyncCoreLightningWallet = Callable[
     [sqlite3.Connection, RuntimeConfig, ProfileRow, WalletRow],
     SyncOutcome,
 ]
+SyncLndWallet = Callable[
+    [sqlite3.Connection, RuntimeConfig, ProfileRow, WalletRow],
+    SyncOutcome,
+]
 UpdateOutputInventory = Callable[
     [
         sqlite3.Connection,
@@ -98,6 +102,7 @@ class WalletSyncHooks:
     enrich_btcpay_wallet: EnrichBTCPayWallet | None = None
     enrich_bullbitcoin_wallet: EnrichBullBitcoinWallet | None = None
     sync_core_lightning_wallet: SyncCoreLightningWallet | None = None
+    sync_lnd_wallet: SyncLndWallet | None = None
     update_output_inventory: UpdateOutputInventory | None = None
 
 
@@ -948,6 +953,18 @@ def sync_wallets(
                 hooks,
                 outcome,
             )
+            results.append({"wallet": sync_wallet["label"], **outcome})
+            continue
+        if sync_wallet["kind"] == "lnd" and config.get("backend"):
+            if hooks.sync_lnd_wallet is None:
+                raise AppError("LND source refresh is not configured for this runtime")
+            token = _wrap_sync_progress_for_wallet(sync_wallet)
+            try:
+                _emit_wallet_sync_progress(sync_wallet, {"phase": "backend_fetch"})
+                outcome = hooks.sync_lnd_wallet(conn, runtime_config, profile, sync_wallet)
+            finally:
+                if token is not None:
+                    sync_progress_emitter.reset(token)
             results.append({"wallet": sync_wallet["label"], **outcome})
             continue
         if source_file and source_format:

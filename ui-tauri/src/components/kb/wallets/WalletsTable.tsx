@@ -7,7 +7,6 @@ import {
 } from "lucide-react";
 
 import { ConnectionAssetBadge } from "@/components/kb/ConnectionAssetBadge";
-import { ConnectionStatusPill } from "@/components/kb/ConnectionStatusPill";
 import { CurrencyToggleText } from "@/components/kb/CurrencyToggleText";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -20,6 +19,7 @@ import {
 } from "@/components/ui/table";
 import {
   connectionCategoryLabel,
+  connectionCategorySortRank,
   connectionTypeLabel,
 } from "@/lib/connectionDisplay";
 import type { Currency } from "@/lib/currency";
@@ -69,6 +69,8 @@ function compareBy(a: Connection, b: Connection, key: SortKey): number {
       return collator.compare(a.label, b.label);
     case "kind":
       return (
+        connectionCategorySortRank(a) - connectionCategorySortRank(b) ||
+        collator.compare(connectionCategoryLabel(a), connectionCategoryLabel(b)) ||
         collator.compare(connectionTypeLabel(a), connectionTypeLabel(b)) ||
         collator.compare(a.label, b.label)
       );
@@ -96,7 +98,7 @@ export function WalletsTable({
   totalBtc,
   totalCount,
 }: WalletsTableProps) {
-  const [sortKey, setSortKey] = useState<SortKey | null>(null);
+  const [sortKey, setSortKey] = useState<SortKey | null>("kind");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
 
   const sortedConnections = useMemo(() => {
@@ -309,7 +311,6 @@ function WalletRow({
         <div className="flex min-w-0 items-start gap-3">
           <ConnectionAssetBadge
             connection={connection}
-            status={connection.status}
             className="mt-0.5"
           />
           <div className="min-w-0">
@@ -339,9 +340,8 @@ function WalletRow({
         )}
       </TableCell>
       <TableCell>
-        <div className="flex flex-col gap-1 text-sm whitespace-nowrap">
+        <div className="text-sm whitespace-nowrap">
           <span>{connection.last}</span>
-          <ConnectionStatusPill status={connection.status} />
         </div>
       </TableCell>
       <TableCell className="hidden lg:table-cell">
