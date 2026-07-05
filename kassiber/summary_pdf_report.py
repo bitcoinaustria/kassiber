@@ -49,6 +49,25 @@ def _btc(value: Any) -> str:
     return f"{decimal_value(value):,.8f} BTC"
 
 
+def _asset_quantity_text(row: Mapping[str, Any]) -> str:
+    quantities = row.get("asset_quantities") or []
+    parts = []
+    for item in quantities:
+        asset = str(item.get("asset") or "").strip().upper()
+        if asset:
+            parts.append(f"{decimal_value(item.get('quantity')):,.8f} {asset}")
+    if parts:
+        return ", ".join(parts)
+    assets = [str(asset).strip().upper() for asset in row.get("assets") or [] if str(asset).strip()]
+    suffix = assets[0] if len(assets) == 1 else "units"
+    quantity = row.get("quantity")
+    if quantity is None:
+        quantity = row.get("end_quantity")
+    if quantity is None:
+        quantity = row.get("total_quantity")
+    return f"{decimal_value(quantity):,.8f} {suffix}"
+
+
 def _signed_money(currency: str, value: Any) -> str:
     number = decimal_value(value)
     prefix = "+" if number > 0 else ""
@@ -77,15 +96,15 @@ def _compact_number(value: Any) -> str:
     return f"{sign}{amount:.0f}"
 
 
-def _compact_btc(value: Any) -> str:
+def _compact_quantity(value: Any) -> str:
     number = decimal_value(value)
     sign = "-" if number < 0 else ""
     amount = abs(number)
     if amount >= Decimal("1"):
-        return f"{sign}{amount:.4f} BTC"
+        return f"{sign}{amount:.4f}"
     if amount >= Decimal("0.01"):
-        return f"{sign}{amount:.3f} BTC"
-    return f"{sign}{amount:.8f} BTC"
+        return f"{sign}{amount:.3f}"
+    return f"{sign}{amount:.8f}"
 
 
 def _pct(value: Decimal, total: Decimal) -> str:
@@ -101,13 +120,13 @@ def _perf_change_text(currency: str, start: Decimal, end: Decimal) -> str:
     return f"{_signed_money(currency, end - start)} vs start"
 
 
-def _btc_stack_change_text(start: Decimal, end: Decimal) -> str:
+def _quantity_change_text(start: Decimal, end: Decimal) -> str:
     if start > 0:
         pct = (end - start) / start * Decimal("100")
         return f"{pct:+.1f}%"
     delta = end - start
     sign = "+" if delta > 0 else ""
-    return f"{sign}{delta:.4f} BTC"
+    return f"{sign}{delta:.4f} units"
 
 
 def _perf_summary_lines(currency: str, metrics: Mapping[str, Any], benchmark: Mapping[str, Any] | None) -> list[str]:
@@ -120,11 +139,11 @@ def _perf_summary_lines(currency: str, metrics: Mapping[str, Any], benchmark: Ma
     if benchmark and benchmark.get("change_pct") is not None:
         fiat_parts[0] += f" (BTC spot {decimal_value(benchmark['change_pct']):+.1f}%)"
     fiat_parts.append(f"Unrealized at close: {_signed_money(currency, unrealized)}")
-    btc_line = (
-        f"BTC stack: {stack_start:.4f} → {stack_end:.4f} BTC ({_btc_stack_change_text(stack_start, stack_end)})"
+    quantity_line = (
+        f"Total quantity: {stack_start:.4f} → {stack_end:.4f} units ({_quantity_change_text(stack_start, stack_end)})"
         f" · Network + venue fees: {_btc(metrics.get('fees_btc'))} · {_money(currency, metrics.get('fees_fiat'))}"
     )
-    return [" · ".join(fiat_parts), btc_line]
+    return [" · ".join(fiat_parts), quantity_line]
 
 
 def _para(rl: dict[str, Any], styles: dict[str, Any], text: Any, style: str = "body"):
@@ -318,8 +337,8 @@ def _line_chart(rl: dict[str, Any], title: str, rows: Sequence[Mapping[str, Any]
         y = bottom + _scale(fiat_tick, fiat_low, fiat_high, plot_h)
         drawing.add(Line(left, y, left + plot_w, y, strokeColor=colors.HexColor(BRAND_LINE), strokeWidth=0.3))
         drawing.add(String(left - 4, y - 2, _compact_money(currency, fiat_tick), fontName=_font(rl, "regular"), fontSize=5.8, fillColor=colors.HexColor(BRAND_MUTED), textAnchor="end"))
-        btc_tick = btc_low + ((btc_high - btc_low) * Decimal(idx) / Decimal(4))
-        drawing.add(String(left + plot_w + 4, y - 2, _compact_btc(btc_tick), fontName=_font(rl, "regular"), fontSize=5.8, fillColor=colors.HexColor(BRAND_MUTED)))
+        quantity_tick = btc_low + ((btc_high - btc_low) * Decimal(idx) / Decimal(4))
+        drawing.add(String(left + plot_w + 4, y - 2, _compact_quantity(quantity_tick), fontName=_font(rl, "regular"), fontSize=5.8, fillColor=colors.HexColor(BRAND_MUTED)))
     drawing.add(Line(left, bottom, left + plot_w, bottom, strokeColor=colors.HexColor(BRAND_LINE), strokeWidth=0.6))
     drawing.add(Line(left, bottom, left, bottom + plot_h, strokeColor=colors.HexColor(BRAND_LINE), strokeWidth=0.6))
     drawing.add(Line(left + plot_w, bottom, left + plot_w, bottom + plot_h, strokeColor=colors.HexColor(BRAND_LINE), strokeWidth=0.6))
@@ -328,7 +347,7 @@ def _line_chart(rl: dict[str, Any], title: str, rows: Sequence[Mapping[str, Any]
     drawing.add(Rect(width - 94, height - 15, 5, 5, strokeColor=colors.HexColor(COLOR_GRAY), fillColor=colors.HexColor(COLOR_GRAY)))
     drawing.add(String(width - 86, height - 15, "Cost basis", fontName=_font(rl, "regular"), fontSize=6.4, fillColor=colors.HexColor(BRAND_MUTED)))
     drawing.add(Rect(width - 39, height - 15, 5, 5, strokeColor=colors.HexColor(COLOR_BALANCE), fillColor=colors.HexColor(COLOR_BALANCE)))
-    drawing.add(String(width - 31, height - 15, "BTC", fontName=_font(rl, "regular"), fontSize=6.4, fillColor=colors.HexColor(BRAND_MUTED)))
+    drawing.add(String(width - 31, height - 15, "Units", fontName=_font(rl, "regular"), fontSize=6.4, fillColor=colors.HexColor(BRAND_MUTED)))
     count = max(len(rows) - 1, 1)
     label_size = _axis_label_font_size(len(rows), 5.2)
     label_indexes = _axis_label_indexes(len(rows))
@@ -357,7 +376,7 @@ def _line_chart(rl: dict[str, Any], title: str, rows: Sequence[Mapping[str, Any]
     last_row = rows[-1]
     drawing.add(String(left + 3, bottom + plot_h + 5, f"Start {_compact_money(currency, first_row.get('market_value'))}", fontName=_font(rl, "regular"), fontSize=6, fillColor=colors.HexColor(BRAND_MUTED)))
     drawing.add(String(left + plot_w - 3, bottom + plot_h + 5, f"End {_compact_money(currency, last_row.get('market_value'))}", fontName=_font(rl, "bold"), fontSize=6, fillColor=colors.HexColor(BRAND_INK), textAnchor="end"))
-    drawing.add(String(left, 5, "Left axis market value · right axis BTC balance", fontName=_font(rl, "regular"), fontSize=6.3, fillColor=colors.HexColor(BRAND_MUTED)))
+    drawing.add(String(left, 5, "Left axis market value · right axis total units", fontName=_font(rl, "regular"), fontSize=6.3, fillColor=colors.HexColor(BRAND_MUTED)))
     if rows and rows[-1].get("period_partial"):
         drawing.add(String(left + 142, 5, f"Final period capped at {str(rows[-1].get('period_end', ''))[:10]}", fontName=_font(rl, "regular"), fontSize=6.3, fillColor=colors.HexColor(BRAND_MUTED)))
     return drawing
@@ -528,11 +547,16 @@ def _snapshot_flowables(rl, styles, report, currency):
         rows.append([
             row.get("wallet", ""),
             ", ".join(row.get("assets") or []),
-            _btc(row.get("quantity")),
+            _asset_quantity_text(row),
             _money(currency, row.get("market_value")),
         ])
     return [
-        _para(rl, styles, f"As of today: {_money(currency, snapshot.get('total_market_value'))} · {_btc(snapshot.get('total_quantity'))}", "h2"),
+        _para(
+            rl,
+            styles,
+            f"Current snapshot: {_money(currency, snapshot.get('total_market_value'))} · {_asset_quantity_text(snapshot)}",
+            "h2",
+        ),
         _table(rl, rows, [44 * rl["mm"], 34 * rl["mm"], 38 * rl["mm"], 45 * rl["mm"]]),
         rl["Spacer"](1, 8),
     ]
@@ -665,7 +689,7 @@ def _appendix_flowables(rl, styles, report, currency):
             row.get("wallet", ""),
             row.get("scope", ""),
             row.get("tx_count", 0),
-            _btc(row.get("end_quantity")),
+            _asset_quantity_text(row),
             _money(currency, row.get("end_market_value")),
         ])
     return [

@@ -4211,13 +4211,12 @@ def _planned_auto_read_tools(validated: dict[str, Any]) -> list[AutoReadToolCall
         "addresses exposed",
         "third-party",
         "third party",
-        "tor",
         "proxy",
         "egress",
         "privatsphäre",
         "privatsphaere",
         "datenschutz",
-    ):
+    ) or _message_has_token(text, "tor"):
         add("ui.reports.privacy_hygiene")
         add("ui.reports.privacy_mirror")
 

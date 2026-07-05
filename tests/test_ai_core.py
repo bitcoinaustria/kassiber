@@ -198,6 +198,8 @@ class ToolCatalogPromptTest(unittest.TestCase):
             "ui_reports_tax_summary",
             "ui_reports_balance_history",
             "ui_reports_lightning_profitability",
+            "ui_reports_privacy_hygiene",
+            "ui_reports_privacy_mirror",
             "ui_connections_node_snapshot",
             "ui_journals_snapshot",
             "ui_journals_quarantine",

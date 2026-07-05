@@ -361,19 +361,6 @@ class PrivacyMirrorTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             data_root = Path(tmp)
             _run_cli(data_root, "init")
-            _run_cli(data_root, "workspaces", "create", "Demo")
-            _run_cli(data_root, "profiles", "create", "Main", "--fiat-currency", "EUR")
-            _run_cli(data_root, "context", "set", "--workspace", "Demo", "--profile", "Main")
-            with open_db(data_root) as conn:
-                conn.execute(
-                    "UPDATE workspaces SET id = 'ws' WHERE label = 'Demo'"
-                )
-                conn.execute(
-                    "UPDATE profiles SET id = 'pf', workspace_id = 'ws' WHERE label = 'Main'"
-                )
-                set_setting(conn, "context_workspace", "ws")
-                set_setting(conn, "context_profile", "pf")
-                conn.commit()
             with sqlite3.connect(data_root / "kassiber.sqlite3") as raw_conn:
                 raw_conn.row_factory = sqlite3.Row
                 self.conn.backup(raw_conn)
@@ -396,7 +383,7 @@ class PrivacyMirrorTests(unittest.TestCase):
                 machine=False,
             )
             self.assertIn("evidence_level", table)
-            self.assertIn("worst_privacy_risk", table)
+            self.assertIn("worst_risk", table)
             self.assertNotIn("api.example.com", table)
 
     def test_ai_schema_and_allowlists_are_wired(self):

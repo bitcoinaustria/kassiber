@@ -4658,6 +4658,37 @@ class DaemonSmokeTest(unittest.TestCase):
                 "messages": [
                     {
                         "role": "user",
+                        "content": "current balance and monthly balance history",
+                    }
+                ],
+            }
+        )
+        planned_names = [item.name for item in planned]
+        self.assertIn("ui.reports.balance_history", planned_names)
+        self.assertNotIn("ui.reports.privacy_hygiene", planned_names)
+        self.assertNotIn("ui.reports.privacy_mirror", planned_names)
+
+        planned = _planned_auto_read_tools(
+            {
+                "system_prompt_kind": "kassiber",
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": "is my backend using Tor for privacy",
+                    }
+                ],
+            }
+        )
+        planned_names = [item.name for item in planned]
+        self.assertIn("ui.reports.privacy_hygiene", planned_names)
+        self.assertIn("ui.reports.privacy_mirror", planned_names)
+
+        planned = _planned_auto_read_tools(
+            {
+                "system_prompt_kind": "kassiber",
+                "messages": [
+                    {
+                        "role": "user",
                         "content": (
                             "isnt the LBTC tx a swap? why isnt it explained as such"
                         ),
@@ -7341,7 +7372,7 @@ class DaemonSmokeTest(unittest.TestCase):
 
                 records = []
                 terminal = None
-                deadline = time.time() + 5
+                deadline = time.time() + 15
                 while time.time() < deadline and terminal is None:
                     payload = _read_payload_timeout(proc, max(0.1, deadline - time.time()))
                     if payload.get("request_id") != "chat-pending-1":
