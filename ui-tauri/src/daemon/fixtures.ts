@@ -1190,6 +1190,16 @@ export const fixtures: Record<string, unknown> = {
     },
     summary: {
       evidence_level: "unknown",
+      privacy_score: {
+        value: 53,
+        base: 100,
+        evidence_level: "derived",
+        coverage_ratio: 0.5,
+        factors: [
+          { key: "wallet_linkage", linked: 1, total: 2, weight: 0.55, points: -28 },
+          { key: "transaction_leaks", leaking: 2, total: 3, weight: 0.45, points: -19 },
+        ],
+      },
       linkage_score: 2,
       linkable_cluster_count: 2,
       adversary_view_count: 3,

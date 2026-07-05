@@ -353,6 +353,78 @@ class PrivacyMirrorTests(unittest.TestCase):
             & _json_keys(payload)
         )
 
+    def test_privacy_score_is_grounded_bounded_and_explainable(self):
+        payload = core_reports.report_privacy_mirror(
+            self.conn,
+            None,
+            None,
+            _privacy_report_hooks("ws", "pf"),
+        )
+        score = payload["summary"]["privacy_score"]
+        self.assertIsInstance(score["value"], int)
+        self.assertGreaterEqual(score["value"], 0)
+        self.assertLessEqual(score["value"], 100)
+        self.assertEqual(score["base"], 100)
+        self.assertGreaterEqual(score["coverage_ratio"], 0.0)
+        self.assertLessEqual(score["coverage_ratio"], 1.0)
+        self.assertEqual(
+            {factor["key"] for factor in score["factors"]},
+            {"wallet_linkage", "transaction_leaks"},
+        )
+        # The value is exactly base plus the (negative) factor points, so the UI
+        # can render an honest waterfall instead of an opaque number.
+        self.assertEqual(
+            score["value"],
+            max(0, min(100, score["base"] + sum(f["points"] for f in score["factors"]))),
+        )
+
+    def test_privacy_score_formula_is_deterministic(self):
+        score = core_reports._privacy_mirror_score(
+            wallet_rows=[{"linkage_edge_count": 1}, {"linkage_edge_count": 0}],
+            transaction_rows=[
+                {"tell_count": 2, "tell_kinds": ["sender_common_input", "fee_fingerprint"]},
+                {"tell_count": 1, "tell_kinds": ["op_return_output"]},
+            ],
+            hygiene_summary={"active_transaction_count": 4},
+            coverage_known=1,
+            coverage_unknown=1,
+        )
+        # 1 of 2 wallets linked -> linkage 0.5 -> round(100*0.55*0.5) = 28.
+        # Leaks weighted by strongest tell: max(1.0, 0.3) + 0.25 = 1.25 over 4 tx
+        # -> 0.3125 -> round(100*0.45*0.3125) = 14. 100 - 28 - 14 = 58.
+        self.assertEqual(score["value"], 58)
+        self.assertEqual(score["coverage_ratio"], 0.5)
+
+        # A strong ownership tell costs more than a weak metadata tell.
+        strong = core_reports._privacy_mirror_score(
+            wallet_rows=[{"linkage_edge_count": 0}],
+            transaction_rows=[{"tell_count": 1, "tell_kinds": ["sender_common_input"]}],
+            hygiene_summary={"active_transaction_count": 1},
+            coverage_known=1,
+            coverage_unknown=0,
+        )
+        weak = core_reports._privacy_mirror_score(
+            wallet_rows=[{"linkage_edge_count": 0}],
+            transaction_rows=[{"tell_count": 1, "tell_kinds": ["op_return_output"]}],
+            hygiene_summary={"active_transaction_count": 1},
+            coverage_known=1,
+            coverage_unknown=0,
+        )
+        self.assertEqual(strong["value"], 55)  # 100 - round(45 * 1.0)
+        self.assertEqual(weak["value"], 89)  # 100 - round(45 * 0.25)
+        self.assertLess(strong["value"], weak["value"])
+
+        # Unknown coins lower coverage/confidence, never the score itself.
+        clean = core_reports._privacy_mirror_score(
+            wallet_rows=[{"linkage_edge_count": 0}],
+            transaction_rows=[{"tell_count": 0}],
+            hygiene_summary={"active_transaction_count": 1},
+            coverage_known=0,
+            coverage_unknown=5,
+        )
+        self.assertEqual(clean["value"], 100)
+        self.assertEqual(clean["coverage_ratio"], 0.0)
+
     @unittest.skipUnless(
         importlib.util.find_spec("embit") is not None,
         "CLI privacy-mirror test requires runtime dependencies",

@@ -1,11 +1,29 @@
 export type EvidenceLevel = "exact" | "derived" | "unknown" | string;
 
+export interface PrivacyScoreFactor {
+  key?: string;
+  linked?: number;
+  leaking?: number;
+  total?: number;
+  weight?: number;
+  points?: number;
+}
+
+export interface PrivacyScoreSummary {
+  value?: number;
+  base?: number;
+  evidence_level?: EvidenceLevel;
+  coverage_ratio?: number;
+  factors?: PrivacyScoreFactor[];
+}
+
 export interface PrivacyMirrorPayload {
   local_only?: boolean;
   read_only?: boolean;
   advisory_only?: boolean;
   summary?: {
     evidence_level?: EvidenceLevel;
+    privacy_score?: PrivacyScoreSummary;
     linkage_score?: number;
     linkable_cluster_count?: number;
     adversary_view_count?: number;
@@ -179,6 +197,57 @@ export function privacyEvidenceTone(level: EvidenceLevel | undefined) {
     return "border-sky-500/30 text-sky-700 dark:text-sky-300";
   }
   return "border-amber-500/30 text-amber-800 dark:text-amber-300";
+}
+
+export type PrivacySeverity = "info" | "warning" | "alert";
+
+/**
+ * Severity is the "how bad" axis (info < warning < alert), orthogonal to the
+ * evidence "how sure" axis. It uses a SEPARATE visual channel (a left stripe +
+ * a mono chip) so the two never collide (both would otherwise reach for amber).
+ */
+export function privacySeverity(value: unknown): PrivacySeverity {
+  return value === "alert" || value === "warning" ? value : "info";
+}
+
+export function privacySeverityTone(severity: PrivacySeverity) {
+  if (severity === "alert") {
+    return {
+      text: "text-destructive",
+      dot: "bg-destructive",
+      bg: "bg-destructive/10",
+      stripe: "border-l-destructive",
+    };
+  }
+  if (severity === "warning") {
+    return {
+      text: "text-amber-700 dark:text-amber-300",
+      dot: "bg-amber-500",
+      bg: "bg-amber-500/10",
+      stripe: "border-l-amber-500",
+    };
+  }
+  return {
+    text: "text-sky-700 dark:text-sky-300",
+    dot: "bg-sky-500",
+    bg: "bg-sky-500/10",
+    stripe: "border-l-sky-500",
+  };
+}
+
+/**
+ * Count -> severity policy for rows that carry no explicit `severity` field
+ * (wallet/transaction/timeline rows). Deliberately conservative: any positive
+ * leak signal escalates to `warning` so a real finding is never under-stated;
+ * a clean row stays `info`. Kept in one place so the threshold is testable.
+ */
+export function transactionRowSeverity(row: {
+  tell_count?: number;
+  wallet_penalty_count?: number;
+}): PrivacySeverity {
+  if ((row.wallet_penalty_count ?? 0) > 0) return "warning";
+  if ((row.tell_count ?? 0) > 0) return "warning";
+  return "info";
 }
 
 function normalizedRef(value: unknown) {
