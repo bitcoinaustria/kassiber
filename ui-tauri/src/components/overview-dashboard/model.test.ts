@@ -10,6 +10,7 @@ import {
   brushedActivityMarkers,
   buildBalanceRailItems,
   buildHoldingsBySource,
+  clusterActivityMarkers,
   enrichTreasuryChartData,
   formatBtcAxisFitted,
   formatCompactDisplayMoney,
@@ -436,6 +437,132 @@ describe("overview treasury chart", () => {
     expect(markerView.chartDisplayData.some((point) => point.isActivityEvent)).toBe(
       true,
     );
+  });
+
+  it("uses movement markers for swaps and transfers and hides fee-only markers", () => {
+    const snapshot: OverviewSnapshot = {
+      ...MOCK_OVERVIEW,
+      portfolioSeries: [
+        {
+          date: "2026-01-01",
+          label: "2026-01-01",
+          balanceBtc: 1,
+          valueEur: 100_000,
+          costBasisEur: 80_000,
+          priceEur: 100_000,
+        },
+      ],
+      activityTxs: [
+        {
+          id: "tx-transfer",
+          date: "2026-01-01 10:00",
+          occurredAt: "2026-01-01T10:00:00Z",
+          type: "Transfer",
+          account: "Treasury",
+          counter: "Vault",
+          amountSat: -100_000,
+          eur: -1_000,
+          rate: 100_000,
+          tag: "Transfer",
+          conf: 6,
+        },
+        {
+          id: "tx-swap",
+          date: "2026-01-01 11:00",
+          occurredAt: "2026-01-01T11:00:00Z",
+          type: "Swap",
+          account: "Treasury",
+          counter: "Swap",
+          amountSat: 100_000,
+          eur: 1_000,
+          rate: 100_000,
+          tag: "Swap",
+          conf: 6,
+        },
+        {
+          id: "tx-fee",
+          date: "2026-01-01 12:00",
+          occurredAt: "2026-01-01T12:00:00Z",
+          type: "Fee",
+          account: "Treasury",
+          counter: "Fee",
+          amountSat: -10_000,
+          eur: -100,
+          rate: 100_000,
+          tag: "Fee",
+          conf: 6,
+        },
+      ],
+    };
+
+    const points = enrichTreasuryChartData(
+      getDataForPeriod("all", snapshot, "value", "eur", "detailed"),
+      snapshot,
+      "all",
+    );
+    const markerView = activityMarkerView(points, true, () => 0, false);
+
+    expect(points.filter((point) => point.isActivityEvent).map((point) => point.eventFlow))
+      .toEqual(["movement", "movement", "fee"]);
+    expect(markerView.visibleActivityMarkers.map((point) => point.eventTransactionId))
+      .toEqual(["tx-transfer", "tx-swap"]);
+  });
+
+  it("clusters overlapping activity markers on the same chart anchor", () => {
+    const snapshot: OverviewSnapshot = {
+      ...MOCK_OVERVIEW,
+      portfolioSeries: [
+        {
+          date: "2026-01-01",
+          label: "2026-01-01",
+          balanceBtc: 1,
+          valueEur: 100_000,
+          costBasisEur: 80_000,
+          priceEur: 100_000,
+        },
+      ],
+      activityTxs: [
+        {
+          id: "tx-one",
+          date: "2026-01-01 10:00",
+          occurredAt: "2026-01-01T10:00:00Z",
+          type: "Income",
+          account: "Treasury",
+          counter: "Invoice",
+          amountSat: 100_000,
+          eur: 1_000,
+          rate: 100_000,
+          tag: "Revenue",
+          conf: 6,
+        },
+        {
+          id: "tx-two",
+          date: "2026-01-01 11:00",
+          occurredAt: "2026-01-01T11:00:00Z",
+          type: "Expense",
+          account: "Treasury",
+          counter: "Spend",
+          amountSat: -50_000,
+          eur: -500,
+          rate: 100_000,
+          tag: "Spend",
+          conf: 6,
+        },
+      ],
+    };
+
+    const points = enrichTreasuryChartData(
+      getDataForPeriod("all", snapshot, "value", "eur", "detailed"),
+      snapshot,
+      "all",
+    );
+    const markerView = activityMarkerView(points, true, () => 0, false);
+    const clustered = clusterActivityMarkers(markerView.visibleActivityMarkers);
+
+    expect(clustered).toHaveLength(1);
+    expect(clustered[0]?.markerCount).toBe(2);
+    expect(clustered[0]?.markerGroupedPoints?.map((point) => point.eventTransactionId))
+      .toEqual(["tx-one", "tx-two"]);
   });
 });
 

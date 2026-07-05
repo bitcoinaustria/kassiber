@@ -175,6 +175,8 @@ type TableSortState = {
   direction: TableSortDirection;
 } | null;
 
+const EMPTY_TRANSACTION_ID_FILTER: string[] = [];
+
 function sortableTransactionDateValue(label: string) {
   const normalized = label.trim().toLowerCase();
   if (normalized === "today") return Date.now();
@@ -199,6 +201,7 @@ const TransactionsTable = ({
   chartSelection,
   quickFilter,
   breakdownSelection,
+  transactionIdFilter = EMPTY_TRANSACTION_ID_FILTER,
   onChartSelectionChange,
   onQuickFilterChange,
   onBreakdownSelectionChange,
@@ -221,6 +224,7 @@ const TransactionsTable = ({
   chartSelection: FlowChartSelection | null;
   quickFilter: TableQuickFilter | null;
   breakdownSelection: BreakdownSelection | null;
+  transactionIdFilter?: string[];
   onChartSelectionChange: (selection: FlowChartSelection | null) => void;
   onQuickFilterChange: (filter: TableQuickFilter | null) => void;
   onBreakdownSelectionChange: (selection: BreakdownSelection | null) => void;
@@ -684,15 +688,30 @@ const TransactionsTable = ({
     chartSelection !== null ||
     quickFilter !== null ||
     breakdownSelection !== null ||
+    transactionIdFilter.length > 0 ||
     statusFilter !== "all" ||
     flowFilter !== "all" ||
     paymentMethodFilter !== "all" ||
     feeFilter !== "all";
 
+  const clearTransactionIdFilter = React.useCallback(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      params.delete("txids");
+      const nextQuery = params.toString();
+      void navigate({
+        to: nextQuery
+          ? `${window.location.pathname}?${nextQuery}`
+          : window.location.pathname,
+      });
+    }
+  }, [navigate]);
+
   const clearFilters = () => {
     onChartSelectionChange(null);
     onQuickFilterChange(null);
     onBreakdownSelectionChange(null);
+    clearTransactionIdFilter();
     setStatusFilter("all");
     setFlowFilter("all");
     setPaymentMethodFilter("all");
@@ -920,8 +939,11 @@ const TransactionsTable = ({
   }, [isExpanded]);
 
   const filteredTransactions = React.useMemo(() => {
+    const selectedTransactionIds = new Set(transactionIdFilter);
     const filtered = records.filter((txn) => {
       const draft = getDraft(txn);
+      const matchesTransactionIds =
+        selectedTransactionIds.size === 0 || selectedTransactionIds.has(txn.id);
       const matchesStatus =
         statusFilter === "all" || draft.reviewStatus === statusFilter;
 
@@ -965,6 +987,7 @@ const TransactionsTable = ({
 
       return (
         matchesChartSelection &&
+        matchesTransactionIds &&
         matchesQuickFilter &&
         matchesBreakdownSelection &&
         matchesStatus &&
@@ -1020,6 +1043,7 @@ const TransactionsTable = ({
     });
   }, [
     records,
+    transactionIdFilter,
     getDraft,
     chartSelection,
     quickFilter,
@@ -1035,7 +1059,10 @@ const TransactionsTable = ({
 
   React.useEffect(() => {
     if (
-      (!chartSelection && !quickFilter && !breakdownSelection) ||
+      (!chartSelection &&
+        !quickFilter &&
+        !breakdownSelection &&
+        transactionIdFilter.length === 0) ||
       typeof window === "undefined"
     ) {
       return;
@@ -1043,7 +1070,13 @@ const TransactionsTable = ({
     window.requestAnimationFrame(() => {
       scrollTableIntoView();
     });
-  }, [chartSelection, quickFilter, breakdownSelection, scrollTableIntoView]);
+  }, [
+    chartSelection,
+    quickFilter,
+    breakdownSelection,
+    transactionIdFilter.length,
+    scrollTableIntoView,
+  ]);
 
   const virtualRowCount = isRefreshing
     ? 10
@@ -1439,6 +1472,21 @@ const TransactionsTable = ({
             breakdownSelection,
             t as (key: string, opts?: Record<string, unknown>) => string,
           )}
+          <X className="size-2.5 sm:size-3" aria-hidden="true" />
+        </button>
+      )}
+      {transactionIdFilter.length > 0 && (
+        <button
+          type="button"
+          className={filterChipClassName}
+          onClick={clearTransactionIdFilter}
+          aria-label={t("table.chip.clearTransactionSet", {
+            count: transactionIdFilter.length,
+          })}
+        >
+          {t("table.chip.transactionSet", {
+            count: transactionIdFilter.length,
+          })}
           <X className="size-2.5 sm:size-3" aria-hidden="true" />
         </button>
       )}

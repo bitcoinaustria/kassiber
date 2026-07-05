@@ -126,8 +126,13 @@ export type PortfolioChartPoint = {
 };
 
 export type PortfolioChartMetric = "value" | "btc" | "basis" | "unrealized";
-export type ActivityFlow = "incoming" | "outgoing" | "swap" | "transfer" | "fee";
-export type TreasuryChartSeriesKey = "primary" | "price" | "basis" | "events";
+export type ActivityFlow = "incoming" | "outgoing" | "movement" | "fee";
+export type TreasuryChartSeriesKey =
+  | "primary"
+  | "portfolioValue"
+  | "price"
+  | "basis"
+  | "events";
 export type TreasurySeriesVisibility = Record<TreasuryChartSeriesKey, boolean>;
 export type TreasuryLegendItem = {
   key: TreasuryChartSeriesKey;
@@ -147,11 +152,13 @@ export const LEGACY_INCOMING_MARKER_MIN_PARAM = "incomingMin";
 export const LEGACY_OUTGOING_MARKER_MIN_PARAM = "outgoingMin";
 export const Y_SCALE_PARAM = "scale";
 export const Y_AUTO_FIT_PARAM = "fit";
+export const ACTIVITY_MARKER_GROUPING_PARAM = "groupEvents";
 export const TREASURY_BRUSH_MIN_WINDOW_MS = (7 * 24 * 60 * 60 * 1000) / 3;
 export const TREASURY_BRUSH_MIN_INDEX_SPAN = 2;
 
 export const defaultTreasurySeriesVisibility: TreasurySeriesVisibility = {
   primary: true,
+  portfolioValue: false,
   price: true,
   basis: true,
   events: true,
@@ -161,6 +168,7 @@ export type TreasuryChartPoint = PortfolioChartPoint & {
   bitcoinPriceEur: number;
   avgCostEur: number | null;
   lineBalanceBtc?: number;
+  linePortfolioValueEur?: number;
   lineBitcoinPriceEur?: number;
   lineAvgCostEur?: number | null;
   brushBalanceBtc: number;
@@ -184,6 +192,9 @@ export type TreasuryChartPoint = PortfolioChartPoint & {
   eventConfirmations?: number;
   eventId?: string;
   eventTransactionId?: string;
+  markerCount?: number;
+  markerGroupedPoints?: TreasuryChartPoint[];
+  markerMixedFlows?: boolean;
   sortTimeMs: number;
   isActivityEvent?: boolean;
 };
@@ -537,6 +548,7 @@ export const palette = {
 export const portfolioChartColors = {
   light: {
     value: "#f7931a",
+    portfolioValue: "#0284c7",
     costBasis: "#2fae79",
     focus: "#2f2f33",
     risk: "#e3000f",
@@ -546,6 +558,7 @@ export const portfolioChartColors = {
   },
   dark: {
     value: "#f6a21a",
+    portfolioValue: "#38bdf8",
     costBasis: "#50c695",
     focus: "#e8e8ec",
     risk: "#ff3341",
@@ -810,6 +823,13 @@ export function initialYAutoFitFromUrl(): boolean {
   return value === "auto" || value === "1";
 }
 
+export function initialActivityMarkerGroupingFromUrl(): boolean {
+  if (typeof window === "undefined") return true;
+  const params = new URLSearchParams(window.location.search);
+  const value = params.get(ACTIVITY_MARKER_GROUPING_PARAM)?.toLowerCase();
+  return value !== "0" && value !== "false" && value !== "off";
+}
+
 // A log scale has no place for zero: before the first funding the balance
 // line sits at 0, which d3's log scale maps to -Infinity and breaks the SVG
 // path. Null those values out instead — the lines already `connectNulls`, so
@@ -824,6 +844,7 @@ export function logSafeTreasuryPoints(
   return points.map((point) => ({
     ...point,
     lineBalanceBtc: positive(point.lineBalanceBtc),
+    linePortfolioValueEur: positive(point.linePortfolioValueEur),
     lineBitcoinPriceEur: positive(point.lineBitcoinPriceEur),
     lineAvgCostEur: positive(point.lineAvgCostEur) ?? null,
   }));
@@ -950,7 +971,11 @@ export function autoFitDomain(
 // the TradingView-style last-value tag on the axis.
 export function lastTreasuryLineValue(
   points: TreasuryChartPoint[],
-  key: "lineBalanceBtc" | "lineBitcoinPriceEur" | "lineAvgCostEur",
+  key:
+    | "lineBalanceBtc"
+    | "linePortfolioValueEur"
+    | "lineBitcoinPriceEur"
+    | "lineAvgCostEur",
 ): number | null {
   for (let index = points.length - 1; index >= 0; index -= 1) {
     const value = points[index][key];
@@ -1597,7 +1622,8 @@ export function statusForOverviewTx(tx: OverviewTx): TransactionStatus {
 
 export function activityFlowForTx(tx: OverviewTx): ActivityFlow {
   if (tx.type === "Fee") return "fee";
-  return flowForOverviewTx(tx);
+  const flow = flowForOverviewTx(tx);
+  return flow === "swap" || flow === "transfer" ? "movement" : flow;
 }
 
 // i18n keys in the `overview` namespace, indexed by activity flow. Resolved via
@@ -1605,8 +1631,7 @@ export function activityFlowForTx(tx: OverviewTx): ActivityFlow {
 export const activityFlowLabelKeys = {
   incoming: "activityFlow.incoming",
   outgoing: "activityFlow.outgoing",
-  swap: "activityFlow.swap",
-  transfer: "activityFlow.transfer",
+  movement: "activityFlow.movement",
   fee: "activityFlow.fee",
 } as const satisfies Record<ActivityFlow, string>;
 
@@ -1616,14 +1641,14 @@ export const activityFlowLabelKeys = {
 export const activityFlowLabels: Record<ActivityFlow, string> = {
   incoming: "Received",
   outgoing: "Spent",
-  swap: "Swap",
-  transfer: "Transfer",
+  movement: "Movement",
   fee: "Fee",
 };
 
 // Marker colors need different weights per theme: the airy 400-tier hues read
 // well on the dark card but wash out on white, so light mode steps down to
-// the 600-tier of the same hues (fee: zinc-500).
+// the 600-tier of the same hues. Fee remains a flow for summaries/tooltips but
+// is not rendered as its own overview marker.
 export const activityFlowPalettes: Record<
   "light" | "dark",
   Record<ActivityFlow, string>
@@ -1631,15 +1656,13 @@ export const activityFlowPalettes: Record<
   light: {
     incoming: "#059669",
     outgoing: "#dc2626",
-    swap: "#0284c7",
-    transfer: "#d97706",
+    movement: "#0284c7",
     fee: "#71717a",
   },
   dark: {
     incoming: "#34d399",
     outgoing: "#f87171",
-    swap: "#38bdf8",
-    transfer: "#f59e0b",
+    movement: "#38bdf8",
     fee: "#a1a1aa",
   },
 };
@@ -1651,9 +1674,7 @@ export function useActivityFlowColors() {
 export const activityFlowKeys: ActivityFlow[] = [
   "incoming",
   "outgoing",
-  "swap",
-  "transfer",
-  "fee",
+  "movement",
 ];
 
 export function activityTxs(snapshot: OverviewSnapshot): TreasuryActivityEvent[] {
@@ -1673,7 +1694,11 @@ export function activityTxs(snapshot: OverviewSnapshot): TreasuryActivityEvent[]
         satToBtc(Math.abs(tx.pair?.inAmountSat ?? 0)),
       );
       const volumeBtc =
-        flow === "fee" ? Math.max(btc, feeBtc) : flow === "swap" ? pairedVolume : btc;
+        flow === "fee"
+          ? Math.max(btc, feeBtc)
+          : flow === "movement"
+            ? pairedVolume
+            : btc;
       if (volumeBtc <= 0 && feeBtc <= 0) return [];
       const valueEur = Math.abs(tx.eur ?? 0);
       const priceEur =
@@ -1762,6 +1787,7 @@ export function buildTreasuryBasePoint(
     bitcoinPriceEur,
     avgCostEur,
     lineBalanceBtc: point.balanceBtc,
+    linePortfolioValueEur: point.valueEur,
     lineBitcoinPriceEur: bitcoinPriceEur,
     lineAvgCostEur: avgCostEur,
     brushBalanceBtc: point.balanceBtc,
@@ -1826,6 +1852,7 @@ export function buildTreasuryActivityPoint(
     bitcoinPriceEur: event.priceEur,
     avgCostEur,
     lineBalanceBtc: options.drawLineValues ? balanceBtc : undefined,
+    linePortfolioValueEur: options.drawLineValues ? valueEur : undefined,
     lineBitcoinPriceEur: undefined,
     lineAvgCostEur: options.drawLineValues ? avgCostEur : undefined,
     brushBalanceBtc: balanceBtc,
@@ -1942,6 +1969,7 @@ export function activityMarkerView(
   const visibleActivityMarkers = activityPoints.filter(
     (point) =>
       showEvents &&
+      point.eventFlow !== "fee" &&
       (point.eventSize || point.activityBtc) >= markerMinimumForPoint(point),
   );
   const chartDisplayData = plottedData.filter(
@@ -1952,6 +1980,98 @@ export function activityMarkerView(
     chartDisplayData,
     visibleActivityMarkers,
   };
+}
+
+function markerGroupToleranceBtc(balanceBtc: number) {
+  return Math.max(Math.abs(balanceBtc) * 0.002, 0.00001);
+}
+
+function dominantActivityFlow(points: TreasuryChartPoint[]): ActivityFlow {
+  const totals: Record<ActivityFlow, number> = {
+    incoming: 0,
+    outgoing: 0,
+    movement: 0,
+    fee: 0,
+  };
+  for (const point of points) {
+    if (!point.eventFlow) continue;
+    totals[point.eventFlow] += point.eventSize || point.activityBtc || 0;
+  }
+  return (Object.entries(totals) as Array<[ActivityFlow, number]>).reduce(
+    (winner, entry) => (entry[1] > winner[1] ? entry : winner),
+    ["movement", 0] as [ActivityFlow, number],
+  )[0];
+}
+
+function representativeActivityPoint(points: TreasuryChartPoint[]) {
+  return points.reduce((winner, point) =>
+    (point.eventSize || point.activityBtc || 0) >
+    (winner.eventSize || winner.activityBtc || 0)
+      ? point
+      : winner,
+  );
+}
+
+export function clusterActivityMarkers(
+  markers: TreasuryChartPoint[],
+): TreasuryChartPoint[] {
+  if (markers.length < 2) return markers;
+  const byDate = new Map<string, TreasuryChartPoint[]>();
+  for (const marker of markers) {
+    const date = String(marker.date);
+    byDate.set(date, [...(byDate.get(date) ?? []), marker]);
+  }
+
+  const clustered: TreasuryChartPoint[] = [];
+  for (const dateMarkers of byDate.values()) {
+    const ordered = [...dateMarkers].sort(
+      (a, b) => (a.markerBalanceBtc ?? 0) - (b.markerBalanceBtc ?? 0),
+    );
+    const groups: TreasuryChartPoint[][] = [];
+    for (const marker of ordered) {
+      const markerBalance = marker.markerBalanceBtc ?? marker.balanceBtc;
+      const group = groups.find((candidate) => {
+        const anchor = candidate[0];
+        if (!anchor) return false;
+        const anchorBalance = anchor.markerBalanceBtc ?? anchor.balanceBtc;
+        return (
+          Math.abs(markerBalance - anchorBalance) <=
+          markerGroupToleranceBtc(anchorBalance)
+        );
+      });
+      if (group) {
+        group.push(marker);
+      } else {
+        groups.push([marker]);
+      }
+    }
+
+    for (const group of groups) {
+      if (group.length === 1) {
+        clustered.push(group[0]);
+        continue;
+      }
+      const representative = representativeActivityPoint(group);
+      const eventFlow = dominantActivityFlow(group);
+      const eventSize = Math.max(
+        ...group.map((point) => point.eventSize || point.activityBtc || 0),
+      );
+      const flowCount = new Set(group.map((point) => point.eventFlow).filter(Boolean))
+        .size;
+      clustered.push({
+        ...representative,
+        eventFlow,
+        eventSize: eventSize * (1 + Math.min(group.length - 1, 8) * 0.12),
+        markerCount: group.length,
+        markerGroupedPoints: group,
+        markerMixedFlows: flowCount > 1,
+        eventId: undefined,
+        eventTransactionId: undefined,
+      });
+    }
+  }
+
+  return clustered.sort((a, b) => a.sortTimeMs - b.sortTimeMs);
 }
 
 export function brushedActivityMarkers(
@@ -2679,6 +2799,17 @@ export function transactionDetailHref(transactionId: string) {
   }
   params.set("tx", transactionId);
   return `/transactions?${params.toString()}`;
+}
+
+export function transactionSetHref(transactionIds: string[]) {
+  const params = new URLSearchParams();
+  if (typeof window !== "undefined") {
+    const currentParams = new URLSearchParams(window.location.search);
+    const period = currentParams.get("period");
+    if (period) params.set("period", period);
+  }
+  params.set("txids", transactionIds.join(","));
+  return `/transactions?${params.toString()}#transactions-table`;
 }
 
 export function buildOverviewReadiness(snapshot: OverviewSnapshot): OverviewReadiness {

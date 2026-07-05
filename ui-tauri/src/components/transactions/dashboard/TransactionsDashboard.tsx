@@ -73,6 +73,7 @@ const TransactionsDashboard = ({
   deepLinkedTransactionTab,
   deepLinkedWallet,
   deepLinkedQuickFilter,
+  deepLinkedTransactionIds = [],
   onWalletScopeChange,
 }: {
   className?: string;
@@ -90,6 +91,7 @@ const TransactionsDashboard = ({
   deepLinkedTransactionTab?: string;
   deepLinkedWallet?: string | null;
   deepLinkedQuickFilter?: TableQuickFilter | null;
+  deepLinkedTransactionIds?: string[];
   onWalletScopeChange?: (wallet: string | null) => void;
 }) => {
   const { t } = useTranslation("transactions");
@@ -284,7 +286,8 @@ const TransactionsDashboard = ({
     return [focusedRecord, ...tablePeriodRecords];
   }, [focusedRecord, tablePeriodRecords]);
   const useWorkbenchRowsForTable =
-    quickFilter !== null && workbenchBackedQuickFilters.has(quickFilter);
+    deepLinkedTransactionIds.length > 0 ||
+    (quickFilter !== null && workbenchBackedQuickFilters.has(quickFilter));
   const visibleTableRecords = React.useMemo(() => {
     if (!useWorkbenchRowsForTable) return tableRecords;
     if (
@@ -492,6 +495,7 @@ const TransactionsDashboard = ({
           chartSelection={flowChartSelection}
           quickFilter={quickFilter}
           breakdownSelection={breakdownSelection}
+          transactionIdFilter={deepLinkedTransactionIds}
           onChartSelectionChange={setFlowChartSelection}
           onQuickFilterChange={setQuickFilter}
           onBreakdownSelectionChange={setBreakdownSelection}

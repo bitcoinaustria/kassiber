@@ -102,6 +102,8 @@ export type ChartControlsSheetProps = {
   outgoingMarkerMinimumBtc: number;
   onOutgoingMarkerMinimumChange: (value: number) => void;
   onResetMarkerMinimums: () => void;
+  groupActivityMarkers: boolean;
+  onGroupActivityMarkersChange: (value: boolean) => void;
   hideSensitive: boolean;
 };
 
@@ -179,6 +181,8 @@ export function ChartControlsSheet({
   outgoingMarkerMinimumBtc,
   onOutgoingMarkerMinimumChange,
   onResetMarkerMinimums,
+  groupActivityMarkers,
+  onGroupActivityMarkersChange,
   hideSensitive,
 }: ChartControlsSheetProps) {
   const { t } = useTranslation(["overview", "common"]);
@@ -355,6 +359,23 @@ export function ChartControlsSheet({
                 color={activityFlowColors.incoming}
                 onChange={onIncomingMarkerMinimumChange}
               />
+              <label className="flex cursor-pointer items-start gap-2 rounded-md px-2 py-2 text-sm transition-colors hover:bg-muted/35">
+                <Checkbox
+                  checked={groupActivityMarkers}
+                  onCheckedChange={(checked) =>
+                    onGroupActivityMarkersChange(checked === true)
+                  }
+                  aria-label={t("controls.groupActivityMarkers")}
+                />
+                <span className="min-w-0">
+                  <span className="block text-xs font-medium text-foreground">
+                    {t("controls.groupActivityMarkers")}
+                  </span>
+                  <span className="mt-0.5 block text-xs text-muted-foreground">
+                    {t("controls.groupActivityMarkersHint")}
+                  </span>
+                </span>
+              </label>
             </div>
 
             <div className="rounded-md border border-red-500/20 bg-red-500/5 p-3">

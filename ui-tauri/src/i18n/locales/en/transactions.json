@@ -345,7 +345,9 @@
       "clearStatus": "Clear {{label}} filter",
       "clearFlow": "Clear {{label}} filter",
       "clearPayment": "Clear {{label}} filter",
-      "clearWithFees": "Clear with fees filter"
+      "clearWithFees": "Clear with fees filter",
+      "transactionSet": "Cluster events: {{count}}",
+      "clearTransactionSet": "Clear cluster events filter"
     },
     "empty": "No transactions found matching your filters.",
     "value": {

@@ -345,7 +345,9 @@
       "clearStatus": "Filter {{label}} entfernen",
       "clearFlow": "Filter {{label}} entfernen",
       "clearPayment": "Filter {{label}} entfernen",
-      "clearWithFees": "Filter „Mit Gebühren“ entfernen"
+      "clearWithFees": "Filter „Mit Gebühren“ entfernen",
+      "transactionSet": "Cluster-Ereignisse: {{count}}",
+      "clearTransactionSet": "Cluster-Ereignisfilter entfernen"
     },
     "empty": "Keine Transaktionen gefunden, die deinen Filtern entsprechen.",
     "value": {

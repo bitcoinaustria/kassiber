@@ -250,6 +250,7 @@ export function Transactions() {
       deepLinkedTransactionTab={detailParams.tab}
       deepLinkedWallet={scopeParams.wallet}
       deepLinkedQuickFilter={scopeParams.quick}
+      deepLinkedTransactionIds={scopeParams.transactionIds}
       onWalletScopeChange={setWalletScope}
     />
   );

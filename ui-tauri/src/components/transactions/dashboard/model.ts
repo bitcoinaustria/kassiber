@@ -1214,16 +1214,24 @@ const quickFilterValues: TableQuickFilter[] = [
 function readTransactionScopeParams(): {
   wallet: string | null;
   quick: TableQuickFilter | null;
+  transactionIds: string[];
 } {
-  if (typeof window === "undefined") return { wallet: null, quick: null };
+  if (typeof window === "undefined") {
+    return { wallet: null, quick: null, transactionIds: [] };
+  }
   const params = new URLSearchParams(window.location.search);
   const wallet = params.get("wallet");
   const quick = params.get("quick");
+  const transactionIds = (params.get("txids") ?? "")
+    .split(",")
+    .map((id) => id.trim())
+    .filter(Boolean);
   return {
     wallet: wallet && wallet.trim() ? wallet : null,
     quick: quickFilterValues.includes(quick as TableQuickFilter)
       ? (quick as TableQuickFilter)
       : null,
+    transactionIds,
   };
 }
 

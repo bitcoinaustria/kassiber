@@ -30,6 +30,8 @@ export function ChartRangeToolbar({
   onYAutoFitChange,
   showLastValue,
   onShowLastValueChange,
+  groupActivityMarkers,
+  onGroupActivityMarkersChange,
   onOpenMoreSettings,
 }: {
   period: TimePeriod;
@@ -40,6 +42,8 @@ export function ChartRangeToolbar({
   onYAutoFitChange: (value: boolean) => void;
   showLastValue: boolean;
   onShowLastValueChange: (value: boolean) => void;
+  groupActivityMarkers: boolean;
+  onGroupActivityMarkersChange: (value: boolean) => void;
   onOpenMoreSettings: () => void;
 }) {
   const { t } = useTranslation("overview");
@@ -129,6 +133,13 @@ export function ChartRangeToolbar({
               onSelect={(event) => event.preventDefault()}
             >
               {t("controls.lastValueLabel")}
+            </DropdownMenuCheckboxItem>
+            <DropdownMenuCheckboxItem
+              checked={groupActivityMarkers}
+              onCheckedChange={onGroupActivityMarkersChange}
+              onSelect={(event) => event.preventDefault()}
+            >
+              {t("controls.groupActivityMarkers")}
             </DropdownMenuCheckboxItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem onSelect={onOpenMoreSettings}>

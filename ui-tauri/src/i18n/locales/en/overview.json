@@ -270,8 +270,7 @@
   "activityFlow": {
     "incoming": "Received",
     "outgoing": "Spent",
-    "swap": "Swap",
-    "transfer": "Transfer",
+    "movement": "Movement",
     "fee": "Fee"
   },
   "period": {
@@ -310,6 +309,7 @@
   "treasury": {
     "series": {
       "bitcoinBalance": "Bitcoin Balance",
+      "portfolioValue": "Portfolio Value",
       "btcPrice": "BTC Price",
       "avgBasis": "Avg cost / BTC",
       "activity": "Activity"
@@ -352,7 +352,10 @@
     "btcBalance": "BTC balance",
     "avgBasis": "Avg cost / BTC",
     "unrealized": "Unrealized",
-    "volume": "{{value}} volume"
+    "volume": "{{value}} volume",
+    "groupedEvents": "Grouped events",
+    "groupedMore_one": "+ {{count}} more event",
+    "groupedMore_other": "+ {{count}} more events"
   },
   "controls": {
     "title": "Chart controls",
@@ -380,6 +383,8 @@
     "minSizeWithCount": "Minimum size in BTC · {{visible}} of {{total}} dots shown",
     "incomingSliderAria": "Minimum incoming payment dot size in BTC",
     "outgoingSliderAria": "Minimum outgoing activity dot size in BTC",
+    "groupActivityMarkers": "Group nearby events",
+    "groupActivityMarkersHint": "Cluster overlapping dots; hover to inspect, click a cluster to filter the table.",
     "customMinTitle": "Click to enter a custom BTC minimum",
     "customMinAria": "Custom marker minimum in BTC"
   },

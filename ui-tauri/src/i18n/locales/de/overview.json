@@ -270,8 +270,7 @@
   "activityFlow": {
     "incoming": "Erhalten",
     "outgoing": "Ausgegeben",
-    "swap": "Swap",
-    "transfer": "Transfer",
+    "movement": "Bewegung",
     "fee": "Gebühr"
   },
   "period": {
@@ -310,6 +309,7 @@
   "treasury": {
     "series": {
       "bitcoinBalance": "Bitcoin-Guthaben",
+      "portfolioValue": "Portfoliowert",
       "btcPrice": "BTC-Kurs",
       "avgBasis": "Ø Kosten / BTC",
       "activity": "Aktivität"
@@ -352,7 +352,10 @@
     "btcBalance": "BTC-Guthaben",
     "avgBasis": "Ø Kosten / BTC",
     "unrealized": "Unrealisiert",
-    "volume": "{{value}} Volumen"
+    "volume": "{{value}} Volumen",
+    "groupedEvents": "Gruppierte Ereignisse",
+    "groupedMore_one": "+ {{count}} weiteres Ereignis",
+    "groupedMore_other": "+ {{count}} weitere Ereignisse"
   },
   "controls": {
     "title": "Diagramm-Steuerung",
@@ -380,6 +383,8 @@
     "minSizeWithCount": "Mindestgröße in BTC · {{visible}} von {{total}} Punkten gezeigt",
     "incomingSliderAria": "Mindestgröße eingehender Zahlungspunkte in BTC",
     "outgoingSliderAria": "Mindestgröße ausgehender Aktivitätspunkte in BTC",
+    "groupActivityMarkers": "Nahe Ereignisse gruppieren",
+    "groupActivityMarkersHint": "Überlappende Punkte clustern; per Hover prüfen, per Klick die Tabelle filtern.",
     "customMinTitle": "Klicke, um eine eigene BTC-Mindestgröße einzugeben",
     "customMinAria": "Eigene Marker-Mindestgröße in BTC"
   },

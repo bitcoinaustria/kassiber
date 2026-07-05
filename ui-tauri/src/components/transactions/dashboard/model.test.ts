@@ -97,6 +97,25 @@ describe("transaction dashboard chart selection", () => {
       expect(readTransactionScopeParams()).toEqual({
         wallet: "Satoshi-Liquid -> Satoshi-Onchain-Multi",
         quick: "missing_price",
+        transactionIds: [],
+      });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("preserves clustered transaction id filters in scope parameters", () => {
+    vi.stubGlobal("window", {
+      location: {
+        search: "?txids=tx-one,tx-two&quick=review_queue",
+      },
+    });
+
+    try {
+      expect(readTransactionScopeParams()).toEqual({
+        wallet: null,
+        quick: "review_queue",
+        transactionIds: ["tx-one", "tx-two"],
       });
     } finally {
       vi.unstubAllGlobals();
