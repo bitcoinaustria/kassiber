@@ -708,6 +708,8 @@ export type TimePeriod =
   | "5years"
   | "all";
 
+export type ResolvedTimePeriod = Exclude<TimePeriod, "auto"> | "10years" | "15years";
+
 // i18n keys in the `overview` namespace, resolved via `t()` at the call site.
 export const periodLabelKeys = {
   auto: "period.auto",
@@ -1090,22 +1092,33 @@ export function getDataForPeriod(
   return points;
 }
 
-const autoCandidatePeriods: Exclude<TimePeriod, "auto">[] = [
-  "ytd",
-  "1year",
-  "5years",
-  "all",
-];
 const AUTO_MIN_MEANINGFUL_EVENTS = 3;
 const AUTO_MIN_ACTIVITY_VOLUME_BTC = 0.00001;
 const AUTO_MIN_BALANCE_RANGE_BTC = 0.001;
 const AUTO_MIN_BALANCE_RANGE_RATIO = 0.01;
+const MS_PER_YEAR = 365.25 * 24 * 60 * 60 * 1000;
+
+function autoCandidatePeriodsForHistory(
+  oldestDate: Date,
+  latestDate: Date,
+): ResolvedTimePeriod[] {
+  const historyYears =
+    (latestDate.valueOf() - oldestDate.valueOf()) / MS_PER_YEAR;
+  return [
+    "ytd",
+    "1year",
+    "5years",
+    ...(historyYears >= 8 ? (["10years"] as const) : []),
+    ...(historyYears >= 12 ? (["15years"] as const) : []),
+    "all",
+  ];
+}
 
 function portfolioBalanceValuesForPeriod(
   snapshot: OverviewSnapshot,
   events: TreasuryActivityEvent[],
   latestDate: Date,
-  period: Exclude<TimePeriod, "auto">,
+  period: ResolvedTimePeriod,
 ): number[] {
   const seriesValues = (snapshot.portfolioSeries ?? [])
     .filter((point) => isPointInPeriod(point.date, latestDate, period))
@@ -1133,7 +1146,7 @@ function hasMeaningfulBalanceRange(values: number[]): boolean {
 export function resolveAutoTimePeriod(
   snapshot: OverviewSnapshot,
   period: TimePeriod,
-): TimePeriod {
+): ResolvedTimePeriod {
   if (period !== "auto") return period;
   const events = activityTxs(snapshot);
   if (!events.length) return "ytd";
@@ -1146,6 +1159,9 @@ export function resolveAutoTimePeriod(
   const latestDate = new Date(
     candidateTimes.length ? Math.max(...candidateTimes) : Date.now(),
   );
+  const oldestDate = new Date(
+    candidateTimes.length ? Math.min(...candidateTimes) : latestDate.valueOf(),
+  );
   const meaningfulEvents = events.filter(
     (event) => event.volumeBtc >= AUTO_MIN_ACTIVITY_VOLUME_BTC,
   );
@@ -1155,7 +1171,7 @@ export function resolveAutoTimePeriod(
     meaningfulEvents.length,
   );
   return (
-    autoCandidatePeriods.find(
+    autoCandidatePeriodsForHistory(oldestDate, latestDate).find(
       (candidate) => {
         const visibleEvents = meaningfulEvents.filter((event) =>
           isActivityInTreasuryPeriod(event, latestDate, candidate),
@@ -1176,7 +1192,7 @@ export function resolveAutoTimePeriod(
 
 export function buildDatedPortfolioPoints(
   series: PortfolioPoint[],
-  period: TimePeriod,
+  period: ResolvedTimePeriod,
   metric: PortfolioChartMetric,
   currency: Currency,
   density: "compact" | "detailed",
@@ -1209,7 +1225,7 @@ export function parseSeriesDate(value: string | undefined) {
 export function isPointInPeriod(
   value: string,
   latestDate: Date,
-  period: TimePeriod,
+  period: TimePeriod | ResolvedTimePeriod,
 ) {
   if (period === "auto") return true;
   const pointDate = parseSeriesDate(value);
@@ -1227,6 +1243,10 @@ export function isPointInPeriod(
     start.setUTCFullYear(start.getUTCFullYear() - 1);
   } else if (period === "5years") {
     start.setUTCFullYear(start.getUTCFullYear() - 5);
+  } else if (period === "10years") {
+    start.setUTCFullYear(start.getUTCFullYear() - 10);
+  } else if (period === "15years") {
+    start.setUTCFullYear(start.getUTCFullYear() - 15);
   } else {
     return true;
   }
@@ -1692,7 +1712,7 @@ export function activityTxs(snapshot: OverviewSnapshot): TreasuryActivityEvent[]
 export function isActivityInTreasuryPeriod(
   event: TreasuryActivityEvent,
   latestDate: Date,
-  period: TimePeriod,
+  period: TimePeriod | ResolvedTimePeriod,
 ) {
   if (period === "auto") return true;
   if (period === "all") return true;
@@ -1710,6 +1730,10 @@ export function isActivityInTreasuryPeriod(
     start.setUTCFullYear(start.getUTCFullYear() - 1);
   } else if (period === "5years") {
     start.setUTCFullYear(start.getUTCFullYear() - 5);
+  } else if (period === "10years") {
+    start.setUTCFullYear(start.getUTCFullYear() - 10);
+  } else if (period === "15years") {
+    start.setUTCFullYear(start.getUTCFullYear() - 15);
   }
   return event.occurredAt >= start && event.occurredAt <= latestDate;
 }
@@ -1970,12 +1994,15 @@ export function expandFallbackYearData(
 
 export function samplePortfolioPoints(
   points: PortfolioPoint[],
-  period: TimePeriod,
+  period: TimePeriod | ResolvedTimePeriod,
   density: "compact" | "detailed",
 ) {
   const maxPoints =
     density === "detailed"
-      ? period === "all" || period === "5years"
+      ? period === "all" ||
+        period === "5years" ||
+        period === "10years" ||
+        period === "15years"
         ? 720
         : 420
       : period === "30days"
@@ -1991,7 +2018,10 @@ export function samplePortfolioPoints(
   );
 }
 
-export function formatPortfolioTick(value: string, period: TimePeriod) {
+export function formatPortfolioTick(
+  value: string,
+  period: TimePeriod | ResolvedTimePeriod,
+) {
   const date = parseSeriesDate(value);
   if (period === "5years") {
     return date.toLocaleDateString("en-US", {
@@ -2014,12 +2044,20 @@ export function formatPortfolioTick(value: string, period: TimePeriod) {
   });
 }
 
-export function portfolioTickBucket(point: PortfolioChartPoint, period: TimePeriod) {
+export function portfolioTickBucket(
+  point: PortfolioChartPoint,
+  period: TimePeriod | ResolvedTimePeriod,
+) {
   if (point.date.startsWith("fallback-") || point.date.startsWith("series-")) {
     return point.month;
   }
   if (period === "30days" || period === "3months") return point.month;
-  if (period === "5years" || period === "all") {
+  if (
+    period === "5years" ||
+    period === "10years" ||
+    period === "15years" ||
+    period === "all"
+  ) {
     const date = parseSeriesDate(point.date);
     return `${date.getUTCFullYear()}-${Math.floor(date.getUTCMonth() / 3)}`;
   }
@@ -2029,7 +2067,7 @@ export function portfolioTickBucket(point: PortfolioChartPoint, period: TimePeri
 
 export function portfolioAxisTicks(
   points: PortfolioChartPoint[],
-  period: TimePeriod,
+  period: TimePeriod | ResolvedTimePeriod,
   expanded: boolean,
 ) {
   const maxTicks = expanded ? 10 : 8;

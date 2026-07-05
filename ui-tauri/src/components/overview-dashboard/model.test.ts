@@ -540,6 +540,66 @@ describe("chart scale helpers", () => {
     expect(resolveAutoTimePeriod(snapshot, "auto")).toBe("1year");
   });
 
+  it("uses a 10-year internal auto window when history is long enough", () => {
+    const snapshot: OverviewSnapshot = {
+      ...MOCK_OVERVIEW,
+      portfolioSeries: [
+        {
+          date: "2017-01-01",
+          label: "Jan 1",
+          balanceBtc: 0.2,
+          valueEur: 2_000,
+          costBasisEur: 1_800,
+        },
+        {
+          date: "2026-07-05",
+          label: "Jul 5",
+          balanceBtc: 1.2,
+          valueEur: 60_000,
+          costBasisEur: 45_000,
+        },
+      ],
+      txs: [],
+      activityTxs: [
+        autoPeriodTx("old-1", "2018-06-28T12:00:00Z"),
+        autoPeriodTx("old-2", "2019-06-20T12:00:00Z"),
+        autoPeriodTx("old-3", "2020-06-10T12:00:00Z"),
+      ],
+    };
+
+    expect(resolveAutoTimePeriod(snapshot, "auto")).toBe("10years");
+  });
+
+  it("uses a 15-year internal auto window when 10 years is still too tight", () => {
+    const snapshot: OverviewSnapshot = {
+      ...MOCK_OVERVIEW,
+      portfolioSeries: [
+        {
+          date: "2012-01-01",
+          label: "Jan 1",
+          balanceBtc: 0.1,
+          valueEur: 500,
+          costBasisEur: 400,
+        },
+        {
+          date: "2026-07-05",
+          label: "Jul 5",
+          balanceBtc: 1.2,
+          valueEur: 60_000,
+          costBasisEur: 45_000,
+        },
+      ],
+      txs: [],
+      activityTxs: [
+        autoPeriodTx("ancient-1", "2013-06-28T12:00:00Z"),
+        autoPeriodTx("ancient-2", "2014-06-20T12:00:00Z"),
+        autoPeriodTx("ancient-3", "2015-06-10T12:00:00Z"),
+      ],
+    };
+
+    expect(resolveAutoTimePeriod(snapshot, "auto")).toBe("15years");
+  });
+
   it("recognizes 6-month period params and windows", () => {
     expect(normalizeTimePeriodParam("6m")).toBe("6months");
     expect(normalizeTimePeriodParam("6months")).toBe("6months");
