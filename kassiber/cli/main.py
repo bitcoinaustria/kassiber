@@ -1357,6 +1357,15 @@ def build_parser() -> argparse.ArgumentParser:
     bip329_import.add_argument("--workspace")
     bip329_import.add_argument("--profile")
     bip329_import.add_argument("--file", required=True)
+    bip329_import.add_argument(
+        "--apply-ambiguous",
+        action="store_true",
+        help="Also project ambiguous transaction-label matches into Kassiber tags.",
+    )
+    bip329_preview = bip329_sub.add_parser("preview")
+    bip329_preview.add_argument("--workspace")
+    bip329_preview.add_argument("--profile")
+    bip329_preview.add_argument("--file", required=True)
     bip329_list = bip329_sub.add_parser("list")
     bip329_list.add_argument("--workspace")
     bip329_list.add_argument("--profile")
@@ -1366,6 +1375,13 @@ def build_parser() -> argparse.ArgumentParser:
     bip329_export.add_argument("--workspace")
     bip329_export.add_argument("--profile")
     bip329_export.add_argument("--file", required=True)
+    bip329_export.add_argument("--wallet")
+    bip329_export.add_argument(
+        "--mode",
+        choices=sorted(core_metadata.BIP329_EXPORT_MODES),
+        default="stored",
+        help="Export stored BIP329 rows, synthesized Kassiber labels, or both.",
+    )
     exclude = meta_sub.add_parser("exclude")
     exclude.add_argument("--workspace")
     exclude.add_argument("--profile")
@@ -3045,7 +3061,23 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                 return emit(
                     args,
                     core_metadata.import_bip329_labels(
-                        conn, args.workspace, args.profile, args.file, metadata_hooks
+                        conn,
+                        args.workspace,
+                        args.profile,
+                        args.file,
+                        metadata_hooks,
+                        apply_ambiguous=args.apply_ambiguous,
+                    ),
+                )
+            if args.bip329_command == "preview":
+                return emit(
+                    args,
+                    core_metadata.preview_bip329_import(
+                        conn,
+                        args.workspace,
+                        args.profile,
+                        args.file,
+                        metadata_hooks,
                     ),
                 )
             if args.bip329_command == "list":
@@ -3066,7 +3098,13 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                 return emit(
                     args,
                     core_metadata.export_bip329_labels(
-                        conn, args.workspace, args.profile, args.file, metadata_hooks
+                        conn,
+                        args.workspace,
+                        args.profile,
+                        args.file,
+                        metadata_hooks,
+                        wallet_ref=args.wallet,
+                        mode=args.mode,
                     ),
                 )
         if args.metadata_command == "exclude":

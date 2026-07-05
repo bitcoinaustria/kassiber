@@ -138,6 +138,7 @@ interface SetupFormState {
   btcpayRouteWallets: Record<string, string>;
   bip329Wallet: string;
   bip329File: string;
+  bip329ExportMode: "stored" | "synthesized" | "all";
   syncAfterCreate: boolean;
 }
 
@@ -333,6 +334,42 @@ interface ImportFileResult {
   inserted_records?: ImportChangeRecord[];
   updated_records?: ImportChangeRecord[];
   reconciliation_records?: ImportChangeRecord[];
+}
+
+type Bip329MatchStatus = "exact" | "ambiguous" | "unmatched" | "preserved";
+
+interface Bip329PreviewResult {
+  file: string;
+  records: number;
+  counts: {
+    exact: number;
+    ambiguous: number;
+    unmatched: number;
+    preserved: number;
+    conflicts: number;
+    duplicate_refs: number;
+    duplicate_records: number;
+    tag_additions: number;
+    tag_unchanged: number;
+    tag_skipped_ambiguous: number;
+    tag_skipped_duplicate: number;
+    tag_skipped_label_too_long: number;
+  };
+  warnings?: string[];
+  apply_policy: string;
+  rows?: Array<{
+    line: number;
+    type: string;
+    ref: string;
+    ref_preview: string;
+    ref_redacted: boolean;
+    label: string;
+    match_status: Bip329MatchStatus;
+    wallets: string[];
+    conflicts: string[];
+    duplicate: boolean;
+    tag_effects?: Array<{ action: string }>;
+  }>;
 }
 
 interface SamouraiImportResult {
@@ -584,6 +621,7 @@ const formDefaultsFor = (
     btcpayRouteWallets: {},
     bip329Wallet: "",
     bip329File: "",
+    bip329ExportMode: "stored",
     syncAfterCreate:
       source.setupKind === "file-wallet" ||
       source.setupKind === "bullbitcoin-wallet" ||
@@ -798,10 +836,23 @@ export function AddConnectionDialog({
   const discoverBtcpay = useDaemonMutation<BtcpayDiscoveryData>(
     "ui.connections.btcpay.discover",
   );
+  const previewBip329 = useDaemonMutation<Bip329PreviewResult>(
+    "ui.metadata.bip329.preview",
+  );
   const importBip329 = useDaemonMutation<{
     records: number;
     transaction_tags_added: number;
+    preview?: Pick<Bip329PreviewResult, "counts" | "apply_policy">;
   }>("ui.metadata.bip329.import");
+  const exportBip329 = useDaemonMutation<{
+    file: string;
+    filename: string;
+    exported: number;
+    exported_stored: number;
+    exported_synthesized: number;
+    mode: string;
+    wallet: string;
+  }>("ui.metadata.bip329.export");
   const previewDescriptor = useDaemonMutation<{
     chain: string;
     network: string;
@@ -887,6 +938,8 @@ export function AddConnectionDialog({
     React.useState(false);
   const [genericLedgerPreviewSource, setGenericLedgerPreviewSource] =
     React.useState<GenericLedgerPreviewSource | null>(null);
+  const [bip329Preview, setBip329Preview] =
+    React.useState<Bip329PreviewResult | null>(null);
   const [fieldErrors, setFieldErrors] = React.useState<
     Partial<Record<keyof SetupFormState, string>>
   >({});
@@ -1082,7 +1135,9 @@ export function AddConnectionDialog({
     discoverBtcpay.isPending ||
     detectCore.isPending ||
     testCore.isPending ||
+    previewBip329.isPending ||
     importBip329.isPending ||
+    exportBip329.isPending ||
     syncWallet.isPending;
   const requiresBackend =
     setupKind === "descriptor" ||
@@ -1099,8 +1154,12 @@ export function AddConnectionDialog({
           ? t("add.submit.importingSamourai")
         : importFile.isPending
           ? t("add.submit.importing")
+        : previewBip329.isPending
+          ? t("add.submit.previewingLabels")
         : importBip329.isPending
           ? t("add.submit.importingLabels")
+        : setupKind === "bip329" && !bip329Preview
+          ? t("add.submit.previewLabels")
           : isSubmitting
             ? t("add.submit.saving")
             : setupKind === "btcpay" &&
@@ -1127,6 +1186,7 @@ export function AddConnectionDialog({
     setLastImportResult(null);
     setGenericLedgerPreviewBlocksSubmit(false);
     setGenericLedgerPreviewSource(null);
+    setBip329Preview(null);
     setPreviewAddresses(null);
     setPreviewError(null);
     setBtcpayTestStatus(null);
@@ -1153,6 +1213,7 @@ export function AddConnectionDialog({
     setLastImportResult(null);
     setGenericLedgerPreviewBlocksSubmit(false);
     setGenericLedgerPreviewSource(null);
+    setBip329Preview(null);
     setSourceQuery("");
   }, [initialSourceId, open]);
 
@@ -1165,6 +1226,7 @@ export function AddConnectionDialog({
     setLastImportResult(null);
     setGenericLedgerPreviewBlocksSubmit(false);
     setGenericLedgerPreviewSource(null);
+    setBip329Preview(null);
     setPreviewAddresses(null);
     setPreviewError(null);
     setPurgedKeys(null);
@@ -1232,8 +1294,12 @@ export function AddConnectionDialog({
       setGenericLedgerPreviewBlocksSubmit(String(value ?? "").trim().length > 0);
       setGenericLedgerPreviewSource(null);
     }
+    if (key === "bip329File") {
+      setBip329Preview(null);
+    }
     if (
       key === "sourceFile" ||
+      key === "bip329File" ||
       key === "samouraiDeposit" ||
       key === "samouraiBadbank" ||
       key === "samouraiPremix" ||
@@ -2086,6 +2152,22 @@ export function AddConnectionDialog({
           tone: "success",
         });
       } else if (setupKind === "bip329") {
+        if (!bip329Preview) {
+          const envelope = await previewBip329.mutateAsync({
+            file: form.bip329File.trim(),
+          });
+          setBip329Preview(envelope.data ?? null);
+          addNotification({
+            title: t("add.bip329.previewReadyTitle"),
+            body: t("add.bip329.previewReadyBody", {
+              count: envelope.data?.records ?? 0,
+              exact: envelope.data?.counts.exact ?? 0,
+              ambiguous: envelope.data?.counts.ambiguous ?? 0,
+            }),
+            tone: envelope.data?.counts.conflicts ? "warning" : "success",
+          });
+          return;
+        }
         const envelope = await importBip329.mutateAsync({
           file: form.bip329File.trim(),
         });
@@ -2093,6 +2175,8 @@ export function AddConnectionDialog({
           title: t("add.bip329.labelsImportedTitle"),
           body: t("add.bip329.labelsImportedBody", {
             count: envelope.data?.records ?? 0,
+            added: envelope.data?.transaction_tags_added ?? 0,
+            skipped: envelope.data?.preview?.counts.tag_skipped_ambiguous ?? 0,
           }),
           tone: "success",
         });
@@ -2183,6 +2267,26 @@ export function AddConnectionDialog({
       {label}
     </label>
   );
+
+  const bip329MatchLabel = (status: Bip329MatchStatus) => {
+    switch (status) {
+      case "exact":
+        return t("add.bip329.preview.exact");
+      case "ambiguous":
+        return t("add.bip329.preview.ambiguous");
+      case "preserved":
+        return t("add.bip329.preview.preserved");
+      case "unmatched":
+      default:
+        return t("add.bip329.preview.unmatched");
+    }
+  };
+
+  const bip329MatchVariant = (status: Bip329MatchStatus) => {
+    if (status === "ambiguous") return "secondary";
+    if (status === "unmatched") return "destructive";
+    return "outline";
+  };
 
   // Static literal keys so the typed `t()` resolves them (it rejects
   // template-literal keys). The hyphen in p2sh-p2wpkh isn't a valid i18n key
@@ -2359,6 +2463,45 @@ export function AddConnectionDialog({
       addNotification({
         title: t("add.genericLedger.templateFailedTitle"),
         body: error instanceof Error ? error.message : String(error),
+        tone: "error",
+      });
+    }
+  };
+
+  const exportBip329Labels = async () => {
+    try {
+      const envelope = await exportBip329.mutateAsync({
+        mode: form.bip329ExportMode,
+        wallet: form.bip329Wallet.trim() || undefined,
+      });
+      const file = envelope.data?.file;
+      if (!file) return;
+      const { copied, savedPath } = await saveDaemonExport({
+        exportPath: file,
+        title: t("add.bip329.exportSaveTitle"),
+        defaultName: envelope.data?.filename || "kassiber-bip329-labels.jsonl",
+        filters: [
+          {
+            name: t("add.bip329.labelFileFilter"),
+            extensions: ["jsonl", "json"],
+          },
+        ],
+      });
+      addNotification({
+        title: t("add.bip329.exportReadyTitle"),
+        body: t("add.bip329.exportReadyBody", {
+          count: envelope.data?.exported ?? 0,
+          path: copied ? savedPath : file,
+        }),
+        tone: "success",
+      });
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : t("add.setupFailed.fallback");
+      setSetupError(message);
+      addNotification({
+        title: t("add.setupFailed.title"),
+        body: message,
         tone: "error",
       });
     }
@@ -2838,6 +2981,60 @@ export function AddConnectionDialog({
               ) : null}
             </div>
           ) : null}
+          <div className="space-y-3 rounded-md border bg-background p-3">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <SetupField
+                id="connection-bip329-export-mode"
+                label={t("add.bip329.exportModeLabel")}
+              >
+                <select
+                  id="connection-bip329-export-mode"
+                  className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                  value={form.bip329ExportMode}
+                  onChange={(event) =>
+                    updateForm(
+                      "bip329ExportMode",
+                      event.target.value as SetupFormState["bip329ExportMode"],
+                    )
+                  }
+                >
+                  <option value="stored">{t("add.bip329.exportModeStored")}</option>
+                  <option value="synthesized">
+                    {t("add.bip329.exportModeSynthesized")}
+                  </option>
+                  <option value="all">{t("add.bip329.exportModeAll")}</option>
+                </select>
+              </SetupField>
+              <SetupField
+                id="connection-bip329-export-wallet"
+                label={t("add.bip329.exportWalletLabel")}
+              >
+                <select
+                  id="connection-bip329-export-wallet"
+                  className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                  value={form.bip329Wallet}
+                  onChange={(event) => updateForm("bip329Wallet", event.target.value)}
+                >
+                  <option value="">{t("add.bip329.exportWalletProfile")}</option>
+                  {(walletsList.data?.data?.wallets ?? []).map((wallet) => (
+                    <option key={wallet.label} value={wallet.label}>
+                      {wallet.label}
+                    </option>
+                  ))}
+                </select>
+              </SetupField>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => void exportBip329Labels()}
+              disabled={exportBip329.isPending}
+            >
+              {exportBip329.isPending
+                ? t("add.bip329.exporting")
+                : t("add.bip329.exportButton")}
+            </Button>
+          </div>
         </>
       );
     }
@@ -3391,6 +3588,93 @@ export function AddConnectionDialog({
               ) : null}
             </div>
           </SetupField>
+          {bip329Preview ? (
+            <div className="space-y-3 rounded-md border bg-muted/30 p-3">
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                {[
+                  {
+                    key: "exact",
+                    label: t("add.bip329.preview.exact"),
+                    value: bip329Preview.counts.exact,
+                  },
+                  {
+                    key: "ambiguous",
+                    label: t("add.bip329.preview.ambiguous"),
+                    value: bip329Preview.counts.ambiguous,
+                  },
+                  {
+                    key: "unmatched",
+                    label: t("add.bip329.preview.unmatched"),
+                    value: bip329Preview.counts.unmatched,
+                  },
+                  {
+                    key: "preserved",
+                    label: t("add.bip329.preview.preserved"),
+                    value: bip329Preview.counts.preserved,
+                  },
+                ].map((item) => (
+                  <div key={item.key} className="rounded-md border bg-background p-2">
+                    <p className="text-[11px] text-muted-foreground">
+                      {item.label}
+                    </p>
+                    <p className="text-lg font-semibold tabular-nums">{item.value}</p>
+                  </div>
+                ))}
+              </div>
+              <div className="flex flex-wrap gap-2 text-xs">
+                <Badge variant={bip329Preview.counts.conflicts ? "destructive" : "outline"}>
+                  {t("add.bip329.preview.conflicts", {
+                    count: bip329Preview.counts.conflicts,
+                  })}
+                </Badge>
+                <Badge variant={bip329Preview.counts.duplicate_refs ? "secondary" : "outline"}>
+                  {t("add.bip329.preview.duplicates", {
+                    count: bip329Preview.counts.duplicate_refs,
+                  })}
+                </Badge>
+                <Badge variant="outline">
+                  {t("add.bip329.preview.tagAdditions", {
+                    count: bip329Preview.counts.tag_additions,
+                  })}
+                </Badge>
+                <Badge variant="outline">
+                  {t("add.bip329.preview.ambiguousSkipped", {
+                    count: bip329Preview.counts.tag_skipped_ambiguous,
+                  })}
+                </Badge>
+              </div>
+              {(bip329Preview.rows ?? []).slice(0, 6).length > 0 ? (
+                <div className="space-y-2">
+                  {(bip329Preview.rows ?? []).slice(0, 6).map((row) => (
+                    <div
+                      key={`${row.line}-${row.type}-${row.ref_preview}`}
+                      className="grid gap-1 rounded-md border bg-background p-2 text-xs sm:grid-cols-[64px_1fr_auto]"
+                    >
+                      <span className="font-medium uppercase text-muted-foreground">
+                        {row.type}
+                      </span>
+                      <span className="min-w-0 truncate font-mono">
+                        {row.ref_preview}
+                      </span>
+                      <Badge variant={bip329MatchVariant(row.match_status)}>
+                        {bip329MatchLabel(row.match_status)}
+                      </Badge>
+                      {row.wallets.length > 0 ? (
+                        <span className="min-w-0 truncate text-muted-foreground sm:col-span-3">
+                          {row.wallets.join(", ")}
+                        </span>
+                      ) : null}
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+              {bip329Preview.warnings?.length ? (
+                <p className="text-xs text-muted-foreground">
+                  {bip329Preview.warnings.slice(0, 2).join(" ")}
+                </p>
+              ) : null}
+            </div>
+          ) : null}
         </>
       );
     }

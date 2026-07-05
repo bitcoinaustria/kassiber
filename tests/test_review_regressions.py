@@ -6499,6 +6499,21 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual(payload["data"]["records"][0]["tags"], [{"code": "merchant", "label": "merchant"}])
 
         payload, result = self._run_json(
+            "metadata", "records", "history", "list",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--transaction", "demo-bip329-tx",
+        )
+        self._assert_ok(payload, result, "metadata.records.history.list")
+        self.assertTrue(
+            any(
+                event["reason"] == "Imported BIP329 label for demo-bip329-tx"
+                and any(field["field"] == "tags" for field in event["fields"])
+                for event in payload["data"]["events"]
+            )
+        )
+
+        payload, result = self._run_json(
             "metadata", "bip329", "list",
             "--workspace", "Main",
             "--profile", "Default",
@@ -6537,21 +6552,19 @@ class ReviewRegressionTest(unittest.TestCase):
         self._assert_ok(payload, result, "metadata.bip329.export")
         self.assertEqual(payload["data"]["exported"], 2)
         exported = [json.loads(line) for line in export_file.read_text(encoding="utf-8").splitlines() if line.strip()]
-        self.assertEqual(
-            exported,
-            [
-                {
-                    "type": "output",
-                    "ref": "demo-bip329-tx:0",
-                    "label": "change",
-                    "origin": "wallet",
-                    "spendable": False,
-                },
-                {"type": "tx", "ref": "demo-bip329-tx", "label": "merchant"},
-            ],
-        )
+        self.assertEqual(exported[0]["type"], "output")
+        self.assertEqual(exported[0]["ref"], "demo-bip329-tx:0")
+        self.assertEqual(exported[0]["label"], "change")
+        self.assertEqual(exported[0]["origin"], "wallet")
+        self.assertFalse(exported[0]["spendable"])
+        self.assertEqual(exported[0]["kassiber"]["wallet_match"]["status"], "unmatched")
+        self.assertEqual(exported[1]["type"], "tx")
+        self.assertEqual(exported[1]["ref"], "demo-bip329-tx")
+        self.assertEqual(exported[1]["label"], "merchant")
+        self.assertEqual(exported[1]["kassiber"]["wallet_match"]["status"], "exact")
+        self.assertEqual(exported[1]["kassiber"]["wallet_match"]["wallets"], ["Labels"])
 
-    def test_bip329_import_bridges_transaction_tags_across_wallets(self):
+    def test_bip329_import_preserves_ambiguous_transaction_labels_until_opt_in(self):
         self._bootstrap_wallet(label="LabelsA")
         payload, result = self._run_json(
             "wallets",
@@ -6596,6 +6609,33 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual(payload["data"]["records"], 1)
         self.assertEqual(payload["data"]["imported"], 1)
         self.assertEqual(payload["data"]["updated"], 0)
+        self.assertEqual(payload["data"]["transaction_tags_created"], 0)
+        self.assertEqual(payload["data"]["transaction_tags_added"], 0)
+        self.assertEqual(payload["data"]["preview"]["counts"]["ambiguous"], 1)
+        self.assertEqual(payload["data"]["preview"]["counts"]["tag_skipped_ambiguous"], 2)
+
+        for wallet_label in ("LabelsA", "LabelsB"):
+            payload, result = self._run_json(
+                "metadata", "records", "list",
+                "--workspace", "Main",
+                "--profile", "Default",
+                "--wallet", wallet_label,
+            )
+            self._assert_ok(payload, result, "metadata.records.list")
+            self.assertEqual(len(payload["data"]["records"]), 1)
+            self.assertEqual(payload["data"]["records"][0]["tags"], [])
+
+        payload, result = self._run_json(
+            "metadata", "bip329", "import",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--file", str(bip329_file),
+            "--apply-ambiguous",
+        )
+        self._assert_ok(payload, result, "metadata.bip329.import")
+        self.assertEqual(payload["data"]["records"], 1)
+        self.assertEqual(payload["data"]["imported"], 0)
+        self.assertEqual(payload["data"]["updated"], 1)
         self.assertEqual(payload["data"]["transaction_tags_created"], 1)
         self.assertEqual(payload["data"]["transaction_tags_added"], 2)
 
@@ -6703,21 +6743,257 @@ class ReviewRegressionTest(unittest.TestCase):
         )
         self._assert_ok(payload, result, "metadata.bip329.export")
         exported = [json.loads(line) for line in export_file.read_text(encoding="utf-8").splitlines()]
-        self.assertEqual(
-            exported,
-            [
-                {
-                    "type": "output",
-                    "ref": "dedupe-tx:0",
-                    "label": "reserve",
-                    "origin": "wallet",
-                    "spendable": False,
-                    "color": "blue",
-                    "note": "second import wins",
-                },
-                {"type": "tx", "ref": "dedupe-tx", "label": "final-tx-label"},
-            ],
+        self.assertEqual(exported[0]["type"], "output")
+        self.assertEqual(exported[0]["ref"], "dedupe-tx:0")
+        self.assertEqual(exported[0]["label"], "reserve")
+        self.assertEqual(exported[0]["origin"], "wallet")
+        self.assertFalse(exported[0]["spendable"])
+        self.assertEqual(exported[0]["color"], "blue")
+        self.assertEqual(exported[0]["note"], "second import wins")
+        self.assertEqual(exported[0]["kassiber"]["wallet_match"]["status"], "unmatched")
+        self.assertEqual(exported[1]["type"], "tx")
+        self.assertEqual(exported[1]["ref"], "dedupe-tx")
+        self.assertEqual(exported[1]["label"], "final-tx-label")
+        self.assertEqual(exported[1]["kassiber"]["wallet_match"]["status"], "exact")
+
+    def test_bip329_preview_reports_match_buckets_duplicates_and_conflicts(self):
+        self._bootstrap_wallet(label="LabelsA")
+        payload, result = self._run_json(
+            "wallets",
+            "create",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--label", "LabelsB",
+            "--kind", "phoenix",
         )
+        self._assert_ok(payload, result, "wallets.create")
+        self._insert_transaction(
+            wallet_label="LabelsA",
+            tx_id="exact-preview",
+            occurred_at="2024-05-01T12:00:00Z",
+            amount_msat=100_000_000,
+        )
+        self._insert_transaction(
+            wallet_label="LabelsA",
+            tx_id="shared-preview-a",
+            external_id="shared-preview",
+            occurred_at="2024-05-01T12:01:00Z",
+            amount_msat=100_000_000,
+        )
+        self._insert_transaction(
+            wallet_label="LabelsB",
+            tx_id="shared-preview-b",
+            external_id="shared-preview",
+            occurred_at="2024-05-01T12:02:00Z",
+            amount_msat=100_000_000,
+        )
+        existing_file = self.case_dir / "preview-existing.jsonl"
+        existing_file.write_text(
+            json.dumps({"type": "tx", "ref": "exact-preview", "label": "old-label"}) + "\n",
+            encoding="utf-8",
+        )
+        payload, result = self._run_json(
+            "metadata", "bip329", "import",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--file", str(existing_file),
+        )
+        self._assert_ok(payload, result, "metadata.bip329.import")
+
+        preview_file = self.case_dir / "preview-labels.jsonl"
+        preview_file.write_text(
+            "\n".join(
+                [
+                    json.dumps({"type": "tx", "ref": "exact-preview", "label": "old-label"}),
+                    json.dumps({"type": "tx", "ref": "shared-preview", "label": "shared-label"}),
+                    json.dumps({"type": "tx", "ref": "missing-preview", "label": "missing-label"}),
+                    json.dumps({"type": "tx", "ref": "exact-preview", "label": "new-label"}),
+                ]
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        payload, result = self._run_json(
+            "metadata", "bip329", "preview",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--file", str(preview_file),
+        )
+        self._assert_ok(payload, result, "metadata.bip329.preview")
+        counts = payload["data"]["counts"]
+        self.assertEqual(counts["exact"], 2)
+        self.assertEqual(counts["ambiguous"], 1)
+        self.assertEqual(counts["unmatched"], 1)
+        self.assertEqual(counts["duplicate_refs"], 1)
+        self.assertEqual(counts["duplicate_records"], 2)
+        self.assertEqual(counts["conflicts"], 1)
+        self.assertEqual(counts["tag_additions"], 1)
+        self.assertEqual(counts["tag_skipped_ambiguous"], 2)
+        conflict_rows = [row for row in payload["data"]["rows"] if row["conflicts"]]
+        self.assertEqual(conflict_rows[0]["ref"], "exact-preview")
+        self.assertEqual(conflict_rows[0]["conflicts"], ["label"])
+
+    def test_bip329_import_accepts_spscan_and_preserves_unknown_fields(self):
+        self._bootstrap_wallet(label="Labels")
+        spscan = "spscan1q" + ("p" * 40)
+        bip329_file = self.case_dir / "spscan-labels.jsonl"
+        bip329_file.write_text(
+            json.dumps(
+                {
+                    "type": "spscan",
+                    "ref": spscan,
+                    "label": "silent-payment scanner",
+                    "note": "round-trip me",
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        payload, result = self._run_json(
+            "metadata", "bip329", "import",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--file", str(bip329_file),
+        )
+        self._assert_ok(payload, result, "metadata.bip329.import")
+        self.assertEqual(payload["data"]["records"], 1)
+        self.assertEqual(payload["data"]["preview"]["counts"]["preserved"], 1)
+
+        export_file = self.case_dir / "spscan-export.jsonl"
+        payload, result = self._run_json(
+            "metadata", "bip329", "export",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--file", str(export_file),
+        )
+        self._assert_ok(payload, result, "metadata.bip329.export")
+        exported = [json.loads(line) for line in export_file.read_text(encoding="utf-8").splitlines()]
+        self.assertEqual(exported[0]["type"], "spscan")
+        self.assertEqual(exported[0]["ref"], spscan)
+        self.assertEqual(exported[0]["label"], "silent-payment scanner")
+        self.assertEqual(exported[0]["note"], "round-trip me")
+        self.assertEqual(exported[0]["kassiber"]["wallet_match"]["status"], "preserved")
+        third_party_view = {key: value for key, value in exported[0].items() if key != "kassiber"}
+        self.assertEqual(third_party_view["type"], "spscan")
+        self.assertEqual(third_party_view["ref"], spscan)
+
+    def test_bip329_wallet_scoped_and_synthesized_exports(self):
+        self._bootstrap_wallet(label="LabelsA")
+        payload, result = self._run_json(
+            "wallets",
+            "create",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--label", "LabelsB",
+            "--kind", "phoenix",
+        )
+        self._assert_ok(payload, result, "wallets.create")
+        self._insert_transaction(
+            wallet_label="LabelsA",
+            tx_id="exact-export",
+            occurred_at="2024-05-01T12:00:00Z",
+            amount_msat=100_000_000,
+        )
+        self._insert_transaction(
+            wallet_label="LabelsA",
+            tx_id="shared-export-a",
+            external_id="shared-export",
+            occurred_at="2024-05-01T12:01:00Z",
+            amount_msat=100_000_000,
+        )
+        self._insert_transaction(
+            wallet_label="LabelsB",
+            tx_id="shared-export-b",
+            external_id="shared-export",
+            occurred_at="2024-05-01T12:02:00Z",
+            amount_msat=100_000_000,
+        )
+        bip329_file = self.case_dir / "wallet-scope-labels.jsonl"
+        bip329_file.write_text(
+            "\n".join(
+                [
+                    json.dumps({"type": "tx", "ref": "exact-export", "label": "exact label"}),
+                    json.dumps({"type": "tx", "ref": "shared-export", "label": "shared label"}),
+                    json.dumps({"type": "tx", "ref": "missing-export", "label": "missing label"}),
+                ]
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        payload, result = self._run_json(
+            "metadata", "bip329", "import",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--file", str(bip329_file),
+        )
+        self._assert_ok(payload, result, "metadata.bip329.import")
+
+        profile_export = self.case_dir / "profile-export.jsonl"
+        payload, result = self._run_json(
+            "metadata", "bip329", "export",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--file", str(profile_export),
+        )
+        self._assert_ok(payload, result, "metadata.bip329.export")
+        self.assertEqual(payload["data"]["exported"], 3)
+
+        wallet_export = self.case_dir / "wallet-export.jsonl"
+        payload, result = self._run_json(
+            "metadata", "bip329", "export",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--wallet", "LabelsA",
+            "--file", str(wallet_export),
+        )
+        self._assert_ok(payload, result, "metadata.bip329.export")
+        exported = [json.loads(line) for line in wallet_export.read_text(encoding="utf-8").splitlines()]
+        self.assertEqual([row["ref"] for row in exported], ["exact-export"])
+
+        payload, result = self._run_json(
+            "metadata", "tags", "create",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--code", "reviewed-source",
+            "--label", "reviewed-source",
+        )
+        self._assert_ok(payload, result, "metadata.tags.create")
+        payload, result = self._run_json(
+            "metadata", "tags", "add",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--transaction", "exact-export",
+            "--tag", "reviewed-source",
+        )
+        self._assert_ok(payload, result, "metadata.tags.add")
+        payload, result = self._run_json(
+            "metadata", "notes", "set",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--transaction", "exact-export",
+            "--note", "Known merchant payout",
+        )
+        self._assert_ok(payload, result, "metadata.notes.set")
+        synth_export = self.case_dir / "synth-export.jsonl"
+        payload, result = self._run_json(
+            "metadata", "bip329", "export",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--wallet", "LabelsA",
+            "--mode", "synthesized",
+            "--file", str(synth_export),
+        )
+        self._assert_ok(payload, result, "metadata.bip329.export")
+        self.assertEqual(payload["data"]["exported_synthesized"], 1)
+        synthesized = [json.loads(line) for line in synth_export.read_text(encoding="utf-8").splitlines()]
+        self.assertEqual(synthesized[0]["type"], "tx")
+        self.assertEqual(synthesized[0]["ref"], "exact-export")
+        self.assertIn("reviewed-source", synthesized[0]["label"])
+        self.assertEqual(synthesized[0]["value"], 100000)
+        self.assertEqual(synthesized[0]["kassiber"]["source"], "synthesized")
+        third_party_view = {key: value for key, value in synthesized[0].items() if key != "kassiber"}
+        self.assertEqual(third_party_view["type"], "tx")
+        self.assertIn("label", third_party_view)
 
     def _insert_transaction(
         self,
