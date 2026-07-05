@@ -368,6 +368,37 @@ class FetchNodeSnapshotTest(unittest.TestCase):
         forward_day_rows = [r for r in records if r["record_type"] == "forward_day"]
         self.assertEqual(len(forward_day_rows), 1)
 
+    def test_channel_lifecycle_records_funding_and_closing_txids(self) -> None:
+        from types import SimpleNamespace
+
+        channel = {
+            "channel_id": "ch-1",
+            "short_channel_id": "742x1x0",
+            "state": "CHANNELD_NORMAL",
+            "peer_connected": True,
+            "funding": {"txid": "aa" * 32, "outnum": 0},
+            "opened_at": 1_700_000_000,
+        }
+        # The closing txid comes from bkpr-listaccountevents (listpeerchannels
+        # drops fully-closed channels).
+        account_events = [
+            {"account": "742x9x0", "tag": "channel_close", "txid": "bb" * 32},
+            {"account": "wallet", "tag": "onchain_fee", "txid": "cc" * 32},
+        ]
+        records = core_cln._channel_lifecycle_records(
+            SimpleNamespace(channels=[channel], account_events=account_events)
+        )
+        by_tag = {rec["tag"]: rec for rec in records}
+        self.assertEqual(set(by_tag), {"channel_open", "channel_close"})
+        self.assertEqual(by_tag["channel_open"]["txid"], "aa" * 32)
+        self.assertEqual(by_tag["channel_close"]["txid"], "bb" * 32)
+        # An onchain_fee event is not a channel lifecycle tx.
+        self.assertNotIn("cc" * 32, {rec["txid"] for rec in records})
+        # Channel metadata records are NOT wallet transactions.
+        for rec in records:
+            self.assertEqual(rec["record_type"], "channel")
+            self.assertIsNone(core_cln._record_to_import(rec))
+
     def test_outbound_pay_promoted_with_principal_and_routing_fee(self) -> None:
         # The completed listpays row (amount_msat=40000, amount_sent_msat=40500)
         # becomes an outbound cln_pay: principal 40000 msat, routing fee 500 msat.
