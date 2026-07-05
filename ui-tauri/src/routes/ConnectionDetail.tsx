@@ -1334,143 +1334,139 @@ function ConnectionDetailView({
 
   return (
     <div className={screenShellClassName}>
-      <Card className="rounded-xl py-3">
-        <CardContent className="flex flex-col gap-3 px-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex min-w-0 items-center gap-3">
-            <Button asChild variant="outline" size="icon" className="shrink-0">
-              <Link to="/connections" aria-label={t("detail.backToWallets")}>
-                <ArrowLeft className="size-4" aria-hidden="true" />
-              </Link>
-            </Button>
-            <ConnectionAssetBadge
-              connection={connection}
-              size="md"
-              className="hidden sm:flex"
-            />
-            <div className="min-w-0">
-              <h1 className="truncate text-xl font-semibold tracking-tight sm:text-2xl">
-                {connection.label}
-              </h1>
-              <div className="mt-1 flex min-w-0 flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                <span className="truncate">
-                  {connectionKindLabels[connection.kind]}
-                </span>
-                {connection.status !== "synced" ? (
-                  <>
-                    <span aria-hidden="true">·</span>
-                    <ConnectionStatusPill status={connection.status} />
-                  </>
-                ) : null}
-                {isDeprecatedWallet ? (
-                  <>
-                    <span aria-hidden="true">·</span>
-                    <Badge variant="secondary" className="rounded-md">
-                      {t("detail.deprecatedBadge")}
-                    </Badge>
-                  </>
-                ) : null}
-              </div>
-            </div>
-          </div>
-          <div className="flex shrink-0 items-center gap-2 self-start sm:self-center">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={isWalletSyncRunning}
-              aria-busy={isWalletSyncRunning}
-              aria-label={t("detail.refreshAction", {
-                action: refreshButtonLabel,
-                label: connection.label,
-              })}
-              onClick={() => onSync()}
-            >
-              <RefreshCw
-                className={cn("size-4", isWalletSyncRunning && "animate-spin")}
-                aria-hidden="true"
-              />
-              {/*
-                Reserve the width of the widest label so the button never
-                resizes when it flips to the in-progress text. A mid-refresh
-                width change strands a stale composited tile of the spinning
-                icon in WKWebView (the macOS webview), leaving a frozen "ghost"
-                copy of the button overlaid on the live, spinning one. The
-                shift — and the ghost — only showed in locales where the two
-                labels differ in width (e.g. de "Aktualisieren" →
-                "Wird aktualisiert"); English clamped to the same width and
-                stayed clean. Stacking both labels pins the width to the
-                wider one in every locale.
-              */}
-              <span className="grid justify-items-center">
-                <span
-                  aria-hidden="true"
-                  className="invisible col-start-1 row-start-1"
-                >
-                  {t("detail.refresh")}
-                </span>
-                <span
-                  aria-hidden="true"
-                  className="invisible col-start-1 row-start-1"
-                >
-                  {t("detail.refreshing")}
-                </span>
-                <span className="col-start-1 row-start-1">
-                  {refreshButtonLabel}
-                </span>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex min-w-0 items-center gap-3">
+          <Button asChild variant="outline" size="icon" className="shrink-0">
+            <Link to="/connections" aria-label={t("detail.backToWallets")}>
+              <ArrowLeft className="size-4" aria-hidden="true" />
+            </Link>
+          </Button>
+          <ConnectionAssetBadge
+            connection={connection}
+            size="md"
+            className="hidden sm:flex"
+          />
+          <div className="min-w-0">
+            <h1 className="truncate text-xl font-semibold tracking-tight sm:text-2xl">
+              {connection.label}
+            </h1>
+            <div className="mt-1 flex min-w-0 flex-wrap items-center gap-2 text-xs text-muted-foreground">
+              <span className="truncate">
+                {connectionKindLabels[connection.kind]}
               </span>
-            </Button>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="icon"
-                  aria-label={t("detail.moreActions")}
-                >
-                  <MoreHorizontal className="size-4" aria-hidden="true" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-56">
-                <DropdownMenuItem onClick={openEditDialog}>
-                  <Pencil className="size-4" aria-hidden="true" />
-                  {t("common:actions.edit")}
-                </DropdownMenuItem>
-                {hasStoredDescriptor ? (
-                  <DropdownMenuItem onClick={openRevealDialog}>
-                    <Copy className="size-4" aria-hidden="true" />
-                    {t("detail.reveal.menuItem")}
-                  </DropdownMenuItem>
-                ) : null}
-                <DropdownMenuItem
-                  disabled={isWalletSyncRunning}
-                  onClick={() => onSync({ forceFull: true })}
-                >
-                  <RotateCcw className="size-4" aria-hidden="true" />
-                  {t("detail.fullRescan")}
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  className="text-destructive focus:text-destructive"
-                  onClick={openDeleteDialog}
-                >
-                  <Trash2 className="size-4" aria-hidden="true" />
-                  {t("common:actions.remove")}
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-        </CardContent>
-        {syncErrorMessage && (
-          <div className="px-4 pt-3">
-            <div
-              className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-300"
-              role="status"
-            >
-              {syncErrorMessage}
+              {connection.status !== "synced" ? (
+                <>
+                  <span aria-hidden="true">·</span>
+                  <ConnectionStatusPill status={connection.status} />
+                </>
+              ) : null}
+              {isDeprecatedWallet ? (
+                <>
+                  <span aria-hidden="true">·</span>
+                  <Badge variant="secondary" className="rounded-md">
+                    {t("detail.deprecatedBadge")}
+                  </Badge>
+                </>
+              ) : null}
             </div>
           </div>
-        )}
-      </Card>
+        </div>
+        <div className="flex shrink-0 items-center gap-2 self-start sm:self-center">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={isWalletSyncRunning}
+            aria-busy={isWalletSyncRunning}
+            aria-label={t("detail.refreshAction", {
+              action: refreshButtonLabel,
+              label: connection.label,
+            })}
+            onClick={() => onSync()}
+          >
+            <RefreshCw
+              className={cn("size-4", isWalletSyncRunning && "animate-spin")}
+              aria-hidden="true"
+            />
+            {/*
+              Reserve the width of the widest label so the button never
+              resizes when it flips to the in-progress text. A mid-refresh
+              width change strands a stale composited tile of the spinning
+              icon in WKWebView (the macOS webview), leaving a frozen "ghost"
+              copy of the button overlaid on the live, spinning one. The
+              shift — and the ghost — only showed in locales where the two
+              labels differ in width (e.g. de "Aktualisieren" →
+              "Wird aktualisiert"); English clamped to the same width and
+              stayed clean. Stacking both labels pins the width to the
+              wider one in every locale.
+            */}
+            <span className="grid justify-items-center">
+              <span
+                aria-hidden="true"
+                className="invisible col-start-1 row-start-1"
+              >
+                {t("detail.refresh")}
+              </span>
+              <span
+                aria-hidden="true"
+                className="invisible col-start-1 row-start-1"
+              >
+                {t("detail.refreshing")}
+              </span>
+              <span className="col-start-1 row-start-1">
+                {refreshButtonLabel}
+              </span>
+            </span>
+          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                aria-label={t("detail.moreActions")}
+              >
+                <MoreHorizontal className="size-4" aria-hidden="true" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuItem onClick={openEditDialog}>
+                <Pencil className="size-4" aria-hidden="true" />
+                {t("common:actions.edit")}
+              </DropdownMenuItem>
+              {hasStoredDescriptor ? (
+                <DropdownMenuItem onClick={openRevealDialog}>
+                  <Copy className="size-4" aria-hidden="true" />
+                  {t("detail.reveal.menuItem")}
+                </DropdownMenuItem>
+              ) : null}
+              <DropdownMenuItem
+                disabled={isWalletSyncRunning}
+                onClick={() => onSync({ forceFull: true })}
+              >
+                <RotateCcw className="size-4" aria-hidden="true" />
+                {t("detail.fullRescan")}
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                className="text-destructive focus:text-destructive"
+                onClick={openDeleteDialog}
+              >
+                <Trash2 className="size-4" aria-hidden="true" />
+                {t("common:actions.remove")}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      </div>
+      {syncErrorMessage && (
+        <div
+          className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-300"
+          role="status"
+        >
+          {syncErrorMessage}
+        </div>
+      )}
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <MetricCard
