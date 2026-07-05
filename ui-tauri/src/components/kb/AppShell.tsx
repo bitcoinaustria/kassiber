@@ -1838,9 +1838,9 @@ function AppSidebar({
     <Sidebar
       variant="sidebar"
       collapsible="icon"
-      className="top-[4.5rem] h-[calc(100svh-4.5rem)] !border-r-0 group-data-[side=left]:!border-r-0"
+      className="top-6 h-[calc(100svh-1.5rem)] !border-r-0 group-data-[side=left]:!border-r-0"
     >
-      <SidebarContent>
+      <SidebarContent className="pt-12">
         {navGroups.map((group) => (
           <SidebarGroup key={group.titleKey}>
             <SidebarGroupLabel>{t(group.titleKey as never) /* dynamic key */}</SidebarGroupLabel>
@@ -2597,7 +2597,7 @@ function AppDashboardHeader({
 
   return (
     <header
-      className="grid h-12 w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-2 bg-sidebar px-2 text-sidebar-foreground md:grid-cols-[minmax(0,1fr)_minmax(10rem,28rem)_minmax(0,1fr)] 2xl:grid-cols-[minmax(0,1fr)_minmax(16rem,38rem)_minmax(0,1fr)]"
+      className="relative z-20 grid h-12 w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-2 bg-sidebar px-2 text-sidebar-foreground md:grid-cols-[minmax(0,1fr)_minmax(10rem,28rem)_minmax(0,1fr)] 2xl:grid-cols-[minmax(0,1fr)_minmax(16rem,38rem)_minmax(0,1fr)]"
     >
       <div className="flex min-w-0 items-center gap-1.5 sm:gap-2">
         <Link
