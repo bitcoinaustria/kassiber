@@ -58,6 +58,10 @@ from .wallets import (
     wallet_policy_asset_id,
 )
 
+
+ELECTRUM_STORED_GRAPH_VERSION = 1
+
+
 def _emit_backend_progress(phase: str, **payload):
     event = {"phase": phase, **payload}
     if "processed" not in event:
@@ -3100,6 +3104,75 @@ def electrum_output_at_index(tx, index):
     return outputs[index]
 
 
+def _electrum_output_value_sats(output):
+    if not isinstance(output, dict):
+        return None
+    value_sats = output.get("value_sats")
+    if value_sats is None:
+        value = output.get("value")
+        if value is None:
+            return None
+        if isinstance(value, bool):
+            return None
+        if isinstance(value, int):
+            return dec(value, "0").to_integral_value()
+        if isinstance(value, str) and "." not in value:
+            return dec(value, "0").to_integral_value()
+        return (dec(value, "0") * SATS_PER_BTC).to_integral_value()
+    return dec(value_sats, "0").to_integral_value()
+
+
+def _electrum_graph_output_payload(output):
+    if not isinstance(output, dict):
+        return None
+    script = output.get("scriptpubkey") or output.get("script_hex")
+    value_sats = _electrum_output_value_sats(output)
+    if script is None or value_sats is None:
+        return None
+    return {
+        "scriptpubkey": script,
+        "value": int(value_sats),
+    }
+
+
+def _normalize_electrum_bitcoin_graph_for_storage(tx, tx_lookup):
+    """Persist the public graph shape that local consumers expect.
+
+    Fulcrum/Electrum returns raw transaction hex, so the current transaction
+    decodes to input outpoints plus outputs shaped as ``script_hex`` /
+    ``value_sats``. Fetching each distinct previous tx once and normalizing
+    current outputs to ``scriptpubkey`` / integer-sat ``value`` makes the stored
+    row usable for local-only graph consumers after sync, matching Esplora's
+    inline-prevout convention.
+    """
+    if not isinstance(tx, dict):
+        return tx
+    vout = tx.get("vout")
+    if isinstance(vout, list):
+        for entry in vout:
+            payload = _electrum_graph_output_payload(entry)
+            if payload is not None:
+                entry.update(payload)
+    vin = tx.get("vin")
+    if not isinstance(vin, list):
+        return tx
+    for entry in vin:
+        if not isinstance(entry, dict):
+            continue
+        if isinstance(entry.get("prevout"), dict):
+            continue
+        prev_txid = entry.get("txid")
+        prev_index = entry.get("vout")
+        if prev_txid is None or prev_index is None:
+            continue
+        prev_tx = tx_lookup(prev_txid)
+        prevout = electrum_output_at_index(prev_tx, prev_index)
+        payload = _electrum_graph_output_payload(prevout)
+        if payload is not None:
+            entry["prevout"] = payload
+    return tx
+
+
 def _electrum_utxo_status(raw_utxo, header_timestamps):
     height = _positive_electrum_height(raw_utxo.get("height"))
     if height is None:
@@ -3225,10 +3298,15 @@ def record_from_electrum_tx(txid, tx, height, tracked_scripts, backend_name, tx_
     received_sats = Decimal("0")
     sent_sats = Decimal("0")
     total_input_sats = Decimal("0")
-    total_output_sats = tx["total_output_sats"]
+    total_output_sats = dec(tx.get("total_output_sats"), "0")
+    if total_output_sats == 0:
+        total_output_sats = sum(
+            (_electrum_output_value_sats(vout) or Decimal("0")) for vout in tx.get("vout", [])
+        )
     for vout in tx.get("vout", []):
-        if vout.get("script_hex") in tracked_scripts:
-            received_sats += vout["value_sats"]
+        value_sats = _electrum_output_value_sats(vout)
+        if value_sats is not None and vout.get("script_hex") in tracked_scripts:
+            received_sats += value_sats
     for vin in tx.get("vin", []):
         prev_txid = vin.get("txid")
         prev_index = vin.get("vout")
@@ -3238,9 +3316,12 @@ def record_from_electrum_tx(txid, tx, height, tracked_scripts, backend_name, tx_
         prevout = electrum_output_at_index(prev_tx, prev_index)
         if not prevout:
             continue
-        total_input_sats += prevout["value_sats"]
+        value_sats = _electrum_output_value_sats(prevout)
+        if value_sats is None:
+            continue
+        total_input_sats += value_sats
         if prevout.get("script_hex") in tracked_scripts:
-            sent_sats += prevout["value_sats"]
+            sent_sats += value_sats
     if received_sats == 0 and sent_sats == 0:
         return None
     fee_sats = total_input_sats - total_output_sats if total_input_sats > 0 else Decimal("0")
@@ -3300,6 +3381,10 @@ def electrum_records_for_wallet(backend, sync_state: WalletSyncState):
     previous_statuses = checkpoint.get("electrum_scripthash_statuses") or {}
     previous_dirty = set(checkpoint.get("electrum_dirty_scripthashes") or [])
     previous_known_txids = checkpoint.get("electrum_known_txids") or {}
+    stored_graph_current = (
+        int(checkpoint.get("electrum_stored_graph_version") or 0)
+        >= ELECTRUM_STORED_GRAPH_VERSION
+    )
     highest_used = dict(checkpoint.get("highest_used") or {})
     header_timestamps = {
         int(height): timestamp
@@ -3346,7 +3431,11 @@ def electrum_records_for_wallet(backend, sync_state: WalletSyncState):
                         scripts_unchanged=unchanged_scripts,
                     )
                 continue
-            if status == previous_statuses.get(scripthash) and scripthash not in previous_dirty:
+            if (
+                stored_graph_current
+                and status == previous_statuses.get(scripthash)
+                and scripthash not in previous_dirty
+            ):
                 next_known_txids[scripthash] = sorted(previous_known_txids.get(scripthash) or [])
                 unchanged_scripts += 1
                 if status_index % max(1, batch_size) == 0 or status_index == total_scripts:
@@ -3513,6 +3602,7 @@ def electrum_records_for_wallet(backend, sync_state: WalletSyncState):
                 )
             else:
                 tx = lookup(txid)
+                _normalize_electrum_bitcoin_graph_for_storage(tx, lookup)
                 normalized = record_from_electrum_tx(
                     txid,
                     tx,
@@ -3537,6 +3627,7 @@ def electrum_records_for_wallet(backend, sync_state: WalletSyncState):
             "electrum_headers": {
                 str(height): header_timestamps[height] for height in sorted(header_timestamps)
             },
+            "electrum_stored_graph_version": ELECTRUM_STORED_GRAPH_VERSION,
             "electrum_known_txids": dict(sorted(next_known_txids.items())),
             "electrum_scripthash_statuses": dict(sorted(next_statuses.items())),
             "highest_used": dict(sorted(highest_used.items())),

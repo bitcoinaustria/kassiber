@@ -6,8 +6,9 @@ output paid an address owned by another of the user's wallets. These tests
 feed synthetic rows + a hand-built index so they pin the algorithm without
 SQLite or a real descriptor scan.
 
-Amount convention mirrors production: row ``amount``/``fee`` are in msat,
-esplora ``vout[].value`` is in sats (msat = sats * 1000).
+Amount convention mirrors production: row ``amount``/``fee`` are in msat;
+stored Bitcoin graph outputs use sats, either as ``vout[].value`` or legacy
+Electrum ``vout[].value_sats`` (msat = sats * 1000).
 """
 
 import json
@@ -15,6 +16,7 @@ import unittest
 
 from kassiber.core.ownership import OwnedIndex, OwnedMatch
 from kassiber.core.ownership_transfers import (
+    _parse_onchain_tx,
     derive_multi_source_consolidations,
     derive_ownership_transfers,
     derive_recorded_fanout_transfers,
@@ -121,6 +123,48 @@ class OwnershipDeriverTests(unittest.TestCase):
             wallet_refs_by_id=refs,
             already_paired_ids=already or set(),
         )
+
+    def test_parse_onchain_tx_prefers_electrum_value_sats(self):
+        parsed = _parse_onchain_tx(
+            json.dumps(
+                {
+                    "txid": "electrum-shaped",
+                    "vin": [
+                        {
+                            "txid": "prev",
+                            "vout": 0,
+                            "prevout": {"scriptpubkey": SCRIPT["A"]},
+                        }
+                    ],
+                    "vout": [
+                        {
+                            "n": 0,
+                            "script_hex": SCRIPT["B"],
+                            "value_sats": 70_000,
+                            "value": 0.0007,
+                        }
+                    ],
+                }
+            )
+        )
+
+        self.assertIsNotNone(parsed)
+        self.assertEqual(parsed["outputs"][0]["script"], SCRIPT["B"])
+        self.assertEqual(parsed["outputs"][0]["value_sats"], 70_000)
+
+    def test_parse_onchain_tx_converts_decimal_btc_value_fallback(self):
+        parsed = _parse_onchain_tx(
+            json.dumps(
+                {
+                    "txid": "decimal-value",
+                    "vin": [{"txid": "prev", "vout": 0}],
+                    "vout": [{"n": 0, "scriptpubkey": SCRIPT["B"], "value": 0.0007}],
+                }
+            )
+        )
+
+        self.assertIsNotNone(parsed)
+        self.assertEqual(parsed["outputs"][0]["value_sats"], 70_000)
 
     def test_one_to_one_non_txid_candidate_blocks_for_review(self):
         # A -> B, both rows recorded but with different external_ids (CSV import).

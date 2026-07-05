@@ -1018,13 +1018,14 @@ def load_local_tx_legs(
 ) -> dict[str, Any] | None:
     """Recover input/output scripts from a locally stored transaction.
 
-    Only Bitcoin on-chain sync persists full ``vin``/``vout`` JSON in
-    ``raw_json``: esplora and normalized Bitcoin Core graphs use
-    ``vout[].scriptpubkey`` plus optional ``vin[].prevout.scriptpubkey``, while
-    Electrum's decoded form uses ``vout[].script_hex`` with no inline prevout
-    scripts. Liquid (component context only) and all import paths carry no
-    vin/vout, so they return ``None`` and the caller falls back to on-chain
-    verification.
+    Bitcoin on-chain sync persists full ``vin``/``vout`` JSON in ``raw_json``:
+    esplora, Electrum/Fulcrum, and normalized Bitcoin Core graphs use
+    ``vout[].scriptpubkey`` plus optional ``vin[].prevout.scriptpubkey``.
+    Older Electrum rows may still only have ``vout[].script_hex`` and input
+    outpoints; those remain usable for output matching and fall back to local
+    UTXO ownership for inputs. Liquid (component context only) and all import
+    paths carry no vin/vout, so they return ``None`` and the caller falls back
+    to on-chain verification.
     """
     rows = conn.execute(
         """
@@ -1097,8 +1098,8 @@ def _legs_from_local_tx_json(
         outpoint = None
         if entry.get("txid") is not None and entry.get("vout") is not None:
             outpoint = f"{str(entry.get('txid')).lower()}:{int(entry.get('vout'))}"
-        # esplora carries the prevout script inline; the Electrum decode form
-        # does not (input ownership then resolves via the outpoint).
+        # New Electrum/Fulcrum sync rows carry prevout scripts too; older rows
+        # still resolve input ownership by outpoint.
         inputs.append({"outpoint": outpoint, "script": prevout.get("scriptpubkey")})
     outputs = []
     for position, entry in enumerate(vout):

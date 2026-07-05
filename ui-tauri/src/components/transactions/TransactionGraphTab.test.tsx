@@ -272,12 +272,14 @@ describe("TransactionFlowDiagram", () => {
     expect(html).not.toContain('data-testid="transaction-melt-trunk"');
     expect(html).toContain('data-testid="transaction-fee-strand"');
     expect(html).not.toContain('data-testid="transaction-flow-middle-band"');
-    expect(html).toContain('id="transaction-flow-input-gradient"');
-    expect(html).toContain('id="transaction-flow-output-gradient"');
-    expect(html).toContain('id="transaction-flow-fee-gradient"');
-    expect(html).toContain('id="transaction-flow-input-hover-gradient"');
-    expect(html).toContain('id="transaction-flow-output-hover-gradient"');
-    expect(html).toContain('id="transaction-flow-fee-hover-gradient"');
+    // Gradient ids carry a per-instance useId() segment so multiple diagrams
+    // on one page do not collide, e.g. transaction-flow-_R_0_-input-gradient.
+    expect(html).toMatch(/id="transaction-flow-[^"]*-input-gradient"/);
+    expect(html).toMatch(/id="transaction-flow-[^"]*-output-gradient"/);
+    expect(html).toMatch(/id="transaction-flow-[^"]*-fee-gradient"/);
+    expect(html).toMatch(/id="transaction-flow-[^"]*-input-hover-gradient"/);
+    expect(html).toMatch(/id="transaction-flow-[^"]*-output-hover-gradient"/);
+    expect(html).toMatch(/id="transaction-flow-[^"]*-fee-hover-gradient"/);
     expect(html).not.toContain('id="transaction-flow-hover-glow"');
     expect(html).not.toContain('data-testid="transaction-hover-strand"');
     expect(html).toContain('aria-label="Fee graph leg"');

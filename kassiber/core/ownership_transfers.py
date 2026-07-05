@@ -24,10 +24,11 @@ existing row-matching + quarantine behavior, never mis-booked):
   to the spend, per-wallet sync double-counts the network fee (each wallet's
   outbound row carries the whole ``fee``), so the amounts are unreliable. Such
   transactions are declined and left for the existing fan-out quarantine.
-* **esplora/mempool shape.** The split needs per-output values; the Electrum
-  decode form stores scripts without values, and Liquid / all CSV imports
-  store no ``vin``/``vout`` at all. Those parse to ``None`` and are skipped
-  (this is also what cleanly excludes cross-asset pegs).
+* **Bitcoin graph shape.** The split needs per-output values; Esplora,
+  Core-derived, and current Electrum/Fulcrum sync rows carry enough graph data.
+  Legacy graphless Electrum rows, Liquid component rows, and CSV imports parse
+  to ``None`` and are skipped (this is also what cleanly excludes cross-asset
+  pegs).
 * **Owned outputs only.** External recipients and OP_RETURN are never legs;
   the residual ``amount - Σ(legs)`` stays on the source as a real disposal.
 
@@ -58,7 +59,7 @@ from dataclasses import dataclass, field
 from decimal import Decimal
 from typing import Any, Mapping, Optional, Sequence
 
-from ..msat import msat_to_btc
+from ..msat import SATS_PER_BTC, dec, msat_to_btc
 from ..transfers import normalize_group_txid
 from ..wallet_descriptors import normalize_chain, normalize_network
 
@@ -73,6 +74,23 @@ _SYNTHETIC_ID_PREFIXES = (
     "direct-payout:",
     "multi-consol:",
 )
+
+
+def _stored_graph_value_sats(value: Any, *, explicit_sats: bool) -> int | None:
+    if value is None or value == "":
+        return None
+    try:
+        if isinstance(value, bool):
+            return None
+        if explicit_sats:
+            return int(value)
+        if isinstance(value, int):
+            return value
+        if isinstance(value, str) and "." not in value:
+            return int(value)
+        return int((dec(value, "0") * SATS_PER_BTC).to_integral_value())
+    except (TypeError, ValueError, ArithmeticError):
+        return None
 
 
 @dataclass(frozen=True)
@@ -1130,12 +1148,13 @@ def _lookup_outpoint(index: Any, outpoint: Any) -> list[Any]:
 
 
 def _parse_onchain_tx(raw_json: Any) -> Optional[dict[str, Any]]:
-    """Parse stored esplora/mempool tx JSON into inputs + valued outputs.
+    """Parse stored Bitcoin tx JSON into inputs + valued outputs.
 
     Returns ``None`` for anything without a usable ``vin``/``vout`` carrying
-    per-output values: the Electrum decode form (scripts only, no value),
-    Liquid (no vin/vout), and every CSV import. That ``None`` is exactly the
-    clean skip for cross-asset pegs and non-on-chain sources.
+    per-output values: legacy Electrum decode rows that were stored before
+    graph normalization, Liquid (no vin/vout), and every CSV import. That
+    ``None`` is exactly the clean skip for cross-asset pegs and non-on-chain
+    sources.
     """
     try:
         raw = json.loads(raw_json or "{}")
@@ -1165,14 +1184,13 @@ def _parse_onchain_tx(raw_json: Any) -> Optional[dict[str, Any]]:
     for position, entry in enumerate(vout):
         if not isinstance(entry, dict):
             return None
-        script = entry.get("scriptpubkey")
-        value = entry.get("value")
-        if value is None:
-            # Electrum decode form: scripts but no value — cannot split.
-            return None
-        try:
-            value_sats = int(value)
-        except (TypeError, ValueError):
+        script = entry.get("scriptpubkey") or entry.get("script_hex")
+        if entry.get("value_sats") is not None:
+            value_sats = _stored_graph_value_sats(entry.get("value_sats"), explicit_sats=True)
+        else:
+            value_sats = _stored_graph_value_sats(entry.get("value"), explicit_sats=False)
+        if value_sats is None:
+            # Legacy Electrum decode rows may have scripts but no sats value.
             return None
         try:
             output_index = int(entry.get("n", position))
