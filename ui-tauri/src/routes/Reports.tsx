@@ -850,9 +850,6 @@ function ReportPackageHeader({
             <ReadinessIcon className="size-4" aria-hidden="true" />
             {readiness.title}
           </span>
-          <span className="min-w-0 truncate text-xs text-muted-foreground sm:max-w-[360px]">
-            {readiness.detail}
-          </span>
           {readiness.action ? (
             <Button asChild size="sm" variant="outline" className="h-7 shrink-0 px-2 text-xs">
               <Link to={readiness.action.href}>{readiness.action.label}</Link>
