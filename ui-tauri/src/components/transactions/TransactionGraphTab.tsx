@@ -8,7 +8,7 @@ import {
   Maximize2,
 } from "lucide-react";
 import type { TFunction } from "i18next";
-import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
 import { useTranslation } from "react-i18next";
 
 import bitcoinIcon from "@/assets/integrations/bitcoin.svg";
@@ -696,20 +696,27 @@ function buildDrawableRows(
   }));
 }
 
-function strandStroke(node: GraphRow, active = false) {
+type StrandGradientIds = {
+  input: string;
+  inputHover: string;
+  output: string;
+  outputHover: string;
+  fee: string;
+  feeHover: string;
+};
+
+function gradientUrl(id: string) {
+  return `url(#${id})`;
+}
+
+function strandStroke(node: GraphRow, gradientIds: StrandGradientIds, active = false) {
   if (node.role === "fee") {
-    return active
-      ? "url(#transaction-flow-fee-hover-gradient)"
-      : "url(#transaction-flow-fee-gradient)";
+    return gradientUrl(active ? gradientIds.feeHover : gradientIds.fee);
   }
   if (node.side === "input") {
-    return active
-      ? "url(#transaction-flow-input-hover-gradient)"
-      : "url(#transaction-flow-input-gradient)";
+    return gradientUrl(active ? gradientIds.inputHover : gradientIds.input);
   }
-  return active
-    ? "url(#transaction-flow-output-hover-gradient)"
-    : "url(#transaction-flow-output-gradient)";
+  return gradientUrl(active ? gradientIds.outputHover : gradientIds.output);
 }
 
 function makeBowtiePath(
@@ -757,6 +764,7 @@ function GraphStrand({
   markerPath,
   testId,
   active,
+  gradientIds,
   hideSensitive,
   onHover,
   onLeave,
@@ -766,6 +774,7 @@ function GraphStrand({
   markerPath: string;
   testId?: string;
   active?: boolean;
+  gradientIds: StrandGradientIds;
   hideSensitive: boolean;
   onHover: (node: DrawableGraphRow) => void;
   onLeave: () => void;
@@ -805,7 +814,8 @@ function GraphStrand({
         onKeyDown={handleKeyDown}
         onPointerEnter={() => onHover(node)}
         onPointerMove={() => onHover(node)}
-        onMouseLeave={onLeave}
+        onPointerLeave={onLeave}
+        onPointerCancel={onLeave}
         onFocus={() => onHover(node)}
         onBlur={onLeave}
       />
@@ -814,7 +824,7 @@ function GraphStrand({
         data-testid={testId}
         aria-hidden="true"
         className="pointer-events-none fill-none opacity-100 transition-opacity"
-        stroke={strandStroke(node, active)}
+        stroke={strandStroke(node, gradientIds, active)}
         strokeWidth={node.thickness + 1}
         strokeLinecap="butt"
       />
@@ -1187,6 +1197,15 @@ export function TransactionFlowDiagram({
   expanded?: boolean;
 }) {
   const { t } = useTranslation("transactions");
+  const graphInstanceId = useId().replace(/[^a-zA-Z0-9_-]/g, "");
+  const gradientIds: StrandGradientIds = {
+    input: `transaction-flow-${graphInstanceId}-input-gradient`,
+    inputHover: `transaction-flow-${graphInstanceId}-input-hover-gradient`,
+    output: `transaction-flow-${graphInstanceId}-output-gradient`,
+    outputHover: `transaction-flow-${graphInstanceId}-output-hover-gradient`,
+    fee: `transaction-flow-${graphInstanceId}-fee-gradient`,
+    feeHover: `transaction-flow-${graphInstanceId}-fee-hover-gradient`,
+  };
   const preferredCanvasWidth = expanded ? 1120 : 960;
   const shellRef = useRef<HTMLDivElement | null>(null);
   const [hoverDetail, setHoverDetail] = useState<GraphHoverDetail | null>(null);
@@ -1299,28 +1318,28 @@ export function TransactionFlowDiagram({
             aria-label={t("graph.diagramAria")}
           >
             <defs>
-              <linearGradient id="transaction-flow-input-gradient" x1="0%" y1="0%" x2="100%" y2="0%">
+              <linearGradient id={gradientIds.input} x1="0%" y1="0%" x2="100%" y2="0%">
                 <stop offset="0%" stopColor="rgb(59 130 246)" />
                 <stop offset="100%" stopColor="rgb(14 165 233)" />
               </linearGradient>
-              <linearGradient id="transaction-flow-input-hover-gradient" x1="0%" y1="0%" x2="100%" y2="0%">
+              <linearGradient id={gradientIds.inputHover} x1="0%" y1="0%" x2="100%" y2="0%">
                 <stop offset="0%" stopColor="rgb(96 165 250)" />
                 <stop offset="100%" stopColor="rgb(34 211 238)" />
               </linearGradient>
-              <linearGradient id="transaction-flow-output-gradient" x1="0%" y1="0%" x2="100%" y2="0%">
+              <linearGradient id={gradientIds.output} x1="0%" y1="0%" x2="100%" y2="0%">
                 <stop offset="0%" stopColor="rgb(14 165 233)" />
                 <stop offset="100%" stopColor="rgb(59 130 246)" />
               </linearGradient>
-              <linearGradient id="transaction-flow-output-hover-gradient" x1="0%" y1="0%" x2="100%" y2="0%">
+              <linearGradient id={gradientIds.outputHover} x1="0%" y1="0%" x2="100%" y2="0%">
                 <stop offset="0%" stopColor="rgb(34 211 238)" />
                 <stop offset="100%" stopColor="rgb(96 165 250)" />
               </linearGradient>
-              <linearGradient id="transaction-flow-fee-gradient" x1="0%" y1="0%" x2="100%" y2="0%">
+              <linearGradient id={gradientIds.fee} x1="0%" y1="0%" x2="100%" y2="0%">
                 <stop offset="0%" stopColor="rgb(14 165 233)" />
                 <stop offset="52%" stopColor="rgb(245 158 11)" />
                 <stop offset="100%" stopColor="transparent" />
               </linearGradient>
-              <linearGradient id="transaction-flow-fee-hover-gradient" x1="0%" y1="0%" x2="100%" y2="0%">
+              <linearGradient id={gradientIds.feeHover} x1="0%" y1="0%" x2="100%" y2="0%">
                 <stop offset="0%" stopColor="rgb(34 211 238)" />
                 <stop offset="58%" stopColor="rgb(251 191 36)" />
                 <stop offset="100%" stopColor="transparent" />
@@ -1334,6 +1353,7 @@ export function TransactionFlowDiagram({
               markerPath={markerPathFor(node)}
               testId="transaction-input-strand"
               active={hoverDetail?.node.id === node.id && hoverDetail.node.side === node.side}
+              gradientIds={gradientIds}
               hideSensitive={hideSensitive}
               onHover={showHoverDetail}
               onLeave={() => setHoverDetail(null)}
@@ -1347,6 +1367,7 @@ export function TransactionFlowDiagram({
               markerPath={markerPathFor(node)}
               testId={node.side === "fee" ? "transaction-fee-strand" : "transaction-output-strand"}
               active={hoverDetail?.node.id === node.id && hoverDetail.node.side === node.side}
+              gradientIds={gradientIds}
               hideSensitive={hideSensitive}
               onHover={showHoverDetail}
               onLeave={() => setHoverDetail(null)}
