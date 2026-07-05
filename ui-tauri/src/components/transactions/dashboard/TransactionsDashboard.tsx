@@ -44,12 +44,6 @@ import {
   type BreakdownSelection,
 } from "./model";
 
-const workbenchBackedQuickFilters = new Set<TableQuickFilter>([
-  "no_explorer_id",
-  "missing_price",
-  "failed_import",
-]);
-
 interface TransactionsExportResult {
   file?: string;
   rows?: number;
@@ -111,6 +105,8 @@ const TransactionsDashboard = ({
         : null,
     );
   const [tableExpanded, setTableExpanded] = React.useState(false);
+  const [tableLocalFiltersActive, setTableLocalFiltersActive] =
+    React.useState(false);
   const [resetTableFiltersToken, setResetTableFiltersToken] = React.useState(0);
   const [newTransactionDraft, setNewTransactionDraft] =
     React.useState<NewTransactionDraft>(createNewTransactionDraft);
@@ -221,9 +217,9 @@ const TransactionsDashboard = ({
       txs.unshift(focusedTransaction);
     }
     return dashboardRecordsFromTxs(
-        txs,
-        t as (key: string, opts?: Record<string, unknown>) => string,
-      );
+      txs,
+      t as (key: string, opts?: Record<string, unknown>) => string,
+    );
   }, [focusedTransaction, tableTransactions, transactions, t]);
   const allPeriodRecords = React.useMemo(
     () => sortTransactionsByDateDesc(records),
@@ -287,7 +283,10 @@ const TransactionsDashboard = ({
   }, [focusedRecord, tablePeriodRecords]);
   const useWorkbenchRowsForTable =
     deepLinkedTransactionIds.length > 0 ||
-    (quickFilter !== null && workbenchBackedQuickFilters.has(quickFilter));
+    flowChartSelection !== null ||
+    quickFilter !== null ||
+    breakdownSelection !== null ||
+    tableLocalFiltersActive;
   const visibleTableRecords = React.useMemo(() => {
     if (deepLinkedTransactionIds.length > 0) {
       return allPeriodRecords;
@@ -306,6 +305,7 @@ const TransactionsDashboard = ({
     focusedRecord,
     periodRecords,
     tableRecords,
+    tableLocalFiltersActive,
     useWorkbenchRowsForTable,
   ]);
   const tableSwapCandidateIds = React.useMemo(
@@ -509,6 +509,7 @@ const TransactionsDashboard = ({
           onChartSelectionChange={setFlowChartSelection}
           onQuickFilterChange={setQuickFilter}
           onBreakdownSelectionChange={setBreakdownSelection}
+          onLocalFiltersActiveChange={setTableLocalFiltersActive}
           resetTableFiltersToken={resetTableFiltersToken}
           isRefreshing={showRefreshSkeleton}
           hasMoreRecords={hasMoreTransactions && !useWorkbenchRowsForTable}

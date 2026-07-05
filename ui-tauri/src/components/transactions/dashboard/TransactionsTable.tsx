@@ -205,6 +205,7 @@ const TransactionsTable = ({
   onChartSelectionChange,
   onQuickFilterChange,
   onBreakdownSelectionChange,
+  onLocalFiltersActiveChange,
   resetTableFiltersToken,
   isRefreshing,
   hasMoreRecords = false,
@@ -228,6 +229,7 @@ const TransactionsTable = ({
   onChartSelectionChange: (selection: FlowChartSelection | null) => void;
   onQuickFilterChange: (filter: TableQuickFilter | null) => void;
   onBreakdownSelectionChange: (selection: BreakdownSelection | null) => void;
+  onLocalFiltersActiveChange?: (active: boolean) => void;
   resetTableFiltersToken: number;
   isRefreshing?: boolean;
   hasMoreRecords?: boolean;
@@ -693,6 +695,15 @@ const TransactionsTable = ({
     flowFilter !== "all" ||
     paymentMethodFilter !== "all" ||
     feeFilter !== "all";
+  const localFiltersActive =
+    statusFilter !== "all" ||
+    flowFilter !== "all" ||
+    paymentMethodFilter !== "all" ||
+    feeFilter !== "all";
+
+  React.useEffect(() => {
+    onLocalFiltersActiveChange?.(localFiltersActive);
+  }, [localFiltersActive, onLocalFiltersActiveChange]);
 
   const clearTransactionIdFilter = React.useCallback(() => {
     if (typeof window !== "undefined") {
