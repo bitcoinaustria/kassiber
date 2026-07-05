@@ -178,7 +178,8 @@ export function SecuritySettingsPanel({
               ? t("security.requireOnLaunchEncrypted")
               : t("security.requireOnLaunchPlaintext")
           }
-          checked={appLockPolicy.requirePassphraseOnLaunch}
+          checked={encryptedWorkspace || appLockPolicy.requirePassphraseOnLaunch}
+          disabled={encryptedWorkspace}
           onCheckedChange={(checked) =>
             setAppLockPolicy({ requirePassphraseOnLaunch: checked })
           }

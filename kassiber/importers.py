@@ -3395,7 +3395,7 @@ def normalize_bip329_record(record):
         raise AppError("BIP329 records must be JSON objects")
     record_type = str(record.get("type") or "").strip()
     ref = str(record.get("ref") or "").strip()
-    if record_type not in {"tx", "addr", "pubkey", "input", "output", "xpub"}:
+    if record_type not in {"tx", "addr", "pubkey", "input", "output", "xpub", "spscan"}:
         raise AppError(f"Unsupported BIP329 record type '{record_type}'")
     if not ref:
         raise AppError("BIP329 records require a non-empty ref")

@@ -492,8 +492,9 @@ class DaemonProjectSwitchTests(unittest.TestCase):
                 self.assertEqual(response["kind"], "ui.projects.select")
                 self.assertIsNotNone(ctx.conn)
                 self.assertEqual(ctx.project_id, "beta")
-                with self.assertRaises(sqlite3.ProgrammingError):
+                with self.assertRaises(Exception) as closed:
                     alpha_conn.execute("SELECT 1")
+                self.assertIn("closed database", str(closed.exception))
                 self.assertEqual(
                     ctx.conn.execute("SELECT COUNT(*) FROM settings").fetchone()[0],
                     0,

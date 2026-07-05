@@ -43,6 +43,8 @@ class LightningBusinessPlanTest(unittest.TestCase):
         self.assertGreaterEqual(len(first["lightning"]["routed_customer_supplier"]), 3)
         self.assertEqual(len(first["lightning"]["expired_invoices"]), 1)
         self.assertEqual(len(first["lightning"]["failed_payments"]), 1)
+        self.assertEqual(len(first["lightning"]["lnd_invoices"]), 2)
+        self.assertEqual(len(first["lightning"]["lnd_payments"]), 2)
         self.assertGreater(
             first["lightning"]["failed_payments"][0]["amount_msat"],
             5_000_000_000,
@@ -84,6 +86,34 @@ class LightningBusinessPlanTest(unittest.TestCase):
 
         self.assertNotEqual(one["traffic_model"]["plan_hash"], padded["traffic_model"]["plan_hash"])
         self.assertNotEqual(one["lightning"], padded["lightning"])
+
+    def test_scenario_retries_transient_invoice_reads(self):
+        script = (ROOT / "dev" / "regtest" / "lightning-business-scenario.sh").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn("invoice_status_once()", script)
+        self.assertIn("invoice_matches_plan_once()", script)
+        self.assertIn("ensure_lnd_invoice_paid_by_cln()", script)
+        self.assertIn("ensure_lnd_paid_cln_invoice()", script)
+        self.assertIn("for attempt in $(seq 1 20)", script)
+        self.assertIn("except ValueError:", script)
+        self.assertNotIn('python3 - "$expected_amount_msat" "$expected_description"', script)
+
+    def test_seed_updates_stale_demo_lightning_cli_wrapper(self):
+        script = (ROOT / "tests" / "integration" / "lightning_business_regtest.py").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn("KASSIBER_LIGHTNING_BUSINESS_MERCHANT_CLI", script)
+        self.assertIn('"backends"', script)
+        self.assertIn('"update"', script)
+        self.assertIn('"--lightning-cli"', script)
+        self.assertIn("if _book_exists(data_root):", script)
+        self.assertIn("_ensure_backend(data_root, merchant_cli)", script)
+        self.assertIn("_ensure_backup_lnd_source(data_root)", script)
+        self.assertIn("BACKUP_LND_MACAROON_HEX", script)
+        self.assertIn("lnd_snapshot", script)
 
 
 if __name__ == "__main__":

@@ -83,8 +83,36 @@ services:
     volumes:
       - cln-router-regtest:/root/.lightning
 
+  lnd_merchant_backup:
+    image: ${KASSIBER_REGTEST_LND_IMAGE:-lightninglabs/lnd:v0.18.4-beta}
+    depends_on:
+      - bitcoind
+    command:
+      - "--bitcoin.active"
+      - "--bitcoin.regtest"
+      - "--bitcoin.node=bitcoind"
+      - "--bitcoind.rpchost=bitcoind:18443"
+      - "--bitcoind.rpcuser=${KASSIBER_REGTEST_RPC_USER}"
+      - "--bitcoind.rpcpass=${KASSIBER_REGTEST_RPC_PASSWORD}"
+      - "--bitcoind.zmqpubrawblock=tcp://bitcoind:28332"
+      - "--bitcoind.zmqpubrawtx=tcp://bitcoind:28333"
+      - "--alias=kassiber-lnd-backup"
+      - "--color=#6f4cff"
+      - "--listen=0.0.0.0:9735"
+      - "--rpclisten=0.0.0.0:10009"
+      - "--restlisten=0.0.0.0:8080"
+      - "--noseedbackup"
+      - "--debuglevel=info"
+    ports:
+      - "127.0.0.1:${KASSIBER_REGTEST_LND_BACKUP_P2P_PORT:-19739}:9735"
+      - "127.0.0.1:${KASSIBER_REGTEST_LND_BACKUP_REST_PORT:-19740}:8080"
+      - "127.0.0.1:${KASSIBER_REGTEST_LND_BACKUP_RPC_PORT:-19741}:10009"
+    volumes:
+      - lnd-merchant-backup-regtest:/root/.lnd
+
 volumes:
   cln-merchant-regtest:
   cln-customer-regtest:
   cln-supplier-regtest:
   cln-router-regtest:
+  lnd-merchant-backup-regtest:

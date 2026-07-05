@@ -180,6 +180,9 @@ describe("daemon mutation invalidation scope", () => {
       invalidatedDaemonQueryKindsForMutation("ui.backends.bitcoinrpc.test"),
     ).toEqual([]);
     expect(
+      invalidatedDaemonQueryKindsForMutation("ui.backends.lightning.test"),
+    ).toEqual([]);
+    expect(
       invalidatedDaemonQueryKindsForMutation("ui.backends.detect_core"),
     ).toEqual([]);
   });

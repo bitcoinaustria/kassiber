@@ -38,6 +38,7 @@ from ..core import commercial as core_commercial
 from ..core import freshness as core_freshness
 from ..core import imports as core_imports
 from ..core.lightning import cln as core_lightning_cln
+from ..core.lightning import lnd as core_lightning_lnd
 from ..core import loans as core_loans
 from ..core import metadata as core_metadata
 from ..core import output_inventory as core_output_inventory
@@ -2275,6 +2276,17 @@ def _wallet_sync_hooks(commit=True):
             commit=commit,
         ),
         sync_core_lightning_wallet=lambda conn, runtime_config, profile, wallet: core_lightning_cln.sync_core_lightning_wallet(
+            conn,
+            profile,
+            wallet,
+            resolve_backend(
+                runtime_config,
+                json.loads(wallet["config_json"] or "{}").get("backend"),
+            ),
+            _import_coordinator_hooks(),
+            commit=commit,
+        ),
+        sync_lnd_wallet=lambda conn, runtime_config, profile, wallet: core_lightning_lnd.sync_lnd_wallet(
             conn,
             profile,
             wallet,

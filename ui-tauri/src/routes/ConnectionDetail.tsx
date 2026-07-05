@@ -489,12 +489,7 @@ function NodeConnectionContainer({
   hideSensitive,
 }: NodeConnectionContainerProps) {
   const { t } = useTranslation("connections");
-  const queryClient = useQueryClient();
-  const dataMode = useUiStore((state) => state.dataMode);
   const addNotification = useUiStore((state) => state.addNotification);
-  const updateNotification = useUiStore((state) => state.updateNotification);
-  const syncNoticeIdRef = useRef<string | null>(null);
-  const progressValueRef = useRef(startingSyncProgress().value ?? 5);
   const nodeSnapshotQuery = useDaemon<NodeSnapshot>(
     "ui.connections.node.snapshot",
     { connection: connection.id },
@@ -504,39 +499,17 @@ function NodeConnectionContainer({
   const resolvedConnection = liveSnapshot
     ? { ...connection, node: liveSnapshot }
     : connection;
-  const walletSyncMutationKey = daemonMutationKey(dataMode, "ui.wallets.sync");
-  const connectionRefreshing = useConnectionRefreshState(connection);
-  // TODO: switch to ui.connections.node.sync (or similar) once #154/#155 land
-  // a real node-sync kind. ui.wallets.sync is a mock-only stop-gap — the
-  // Python daemon won't execute it for lnd/core-ln/nwc kinds yet.
-  const syncWallet = useDaemonStreamMutation<
-    { results: SyncResult[] },
-    WalletSyncProgress
-  >("ui.wallets.sync", {
-    onProgress: (record) => {
-      if (!syncNoticeIdRef.current) return;
-      const wallet = record.wallet ?? connection.label;
-      const nextProgress = syncProgressNotification(
-        { ...record, wallet },
-        progressValueRef.current,
-      );
-      progressValueRef.current = nextProgress.value;
-      updateNotification(syncNoticeIdRef.current, {
-        body: nextProgress.body,
-        progress: nextProgress.progress,
-      });
-    },
-  });
-  const { startSyncNotice, clearSyncNotice } = useSyncProgressNotice();
   const nodeSyncDedupeKey = `node-sync-${connection.id}`;
-
-  const isSyncRunning = syncWallet.isPending || connectionRefreshing;
+  const snapshotErrorMessage =
+    nodeSnapshotQuery.error instanceof Error
+      ? nodeSnapshotQuery.error.message
+      : null;
+  const isSyncRunning = nodeSnapshotQuery.isFetching;
+  const isSnapshotLoading =
+    !liveSnapshot && !connection.node && nodeSnapshotQuery.isFetching;
 
   const onSync = () => {
-    if (
-      syncWallet.isPending ||
-      queryClient.isMutating({ mutationKey: walletSyncMutationKey }) > 0
-    ) {
+    if (nodeSnapshotQuery.isFetching) {
       addNotification({
         title: t("node.sync.alreadyRunningTitle"),
         body: t("node.sync.alreadyRunningBody", { label: connection.label }),
@@ -545,64 +518,35 @@ function NodeConnectionContainer({
       });
       return;
     }
-    progressValueRef.current = startingSyncProgress().value ?? 5;
-    syncNoticeIdRef.current = addNotification({
+
+    addNotification({
       title: t("node.sync.startedTitle"),
       body: t("node.sync.startedBody", { label: connection.label }),
-      tone: "warning",
+      tone: "info",
       dedupeKey: nodeSyncDedupeKey,
-      progress: startingSyncProgress(),
     });
-    startSyncNotice(
-      t("node.sync.stillScanning", { label: connection.label }),
-    );
-    syncWallet.mutate(
-      { wallet: connection.label },
-      {
-        onSuccess: (envelope) => {
-          const result = envelope.data?.results?.find(
-            (item) => item.wallet === connection.label,
-          );
-          const status = result?.status ?? "synced";
-          const message = describeWalletSyncResult(result, connection.label);
-          const notification = {
-            title:
-              status === "error"
-                ? t("node.sync.failedTitle")
-                : t("node.sync.finishedTitle"),
-            body: message,
-            tone: status === "error" ? "error" : "success",
-            dedupeKey: nodeSyncDedupeKey,
-            progress: undefined,
-          } as const;
-          if (syncNoticeIdRef.current) {
-            updateNotification(syncNoticeIdRef.current, notification);
-          } else {
-            addNotification(notification);
-          }
-        },
-        onError: (error) => {
-          const message =
-            error instanceof Error ? error.message : t("node.sync.failedFallback");
-          const notification = {
-            title: t("node.sync.failedTitle"),
-            body: message,
-            tone: "error",
-            dedupeKey: nodeSyncDedupeKey,
-            progress: undefined,
-          } as const;
-          if (syncNoticeIdRef.current) {
-            updateNotification(syncNoticeIdRef.current, notification);
-          } else {
-            addNotification(notification);
-          }
-        },
-        onSettled: () => {
-          clearSyncNotice();
-          syncNoticeIdRef.current = null;
-        },
-      },
-    );
+
+    void nodeSnapshotQuery.refetch().then((result) => {
+      if (result.error) {
+        addNotification({
+          title: t("node.sync.failedTitle"),
+          body:
+            result.error instanceof Error
+              ? result.error.message
+              : t("node.sync.failedFallback"),
+          tone: "error",
+          dedupeKey: nodeSyncDedupeKey,
+        });
+        return;
+      }
+
+      addNotification({
+        title: t("node.sync.finishedTitle"),
+        body: t("node.sync.finishedBody", { label: connection.label }),
+        tone: "success",
+        dedupeKey: nodeSyncDedupeKey,
+      });
+    });
   };
 
   return (
@@ -612,6 +556,8 @@ function NodeConnectionContainer({
       hideSensitive={hideSensitive}
       onSync={onSync}
       isSyncRunning={isSyncRunning}
+      isSnapshotLoading={isSnapshotLoading}
+      snapshotErrorMessage={snapshotErrorMessage}
     />
   );
 }
