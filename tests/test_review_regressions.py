@@ -11799,14 +11799,20 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertIn("at-e1kv-staking", notes_text)
         self.assertNotIn("NFT", notes_text)
 
-    def test_pdf_report_substitutes_non_latin1_glyphs(self):
-        # Pin the remaining generic text-PDF limitation.
-        # Austrian E 1kv and source-funds PDFs use ReportLab renderers instead.
+    def test_pdf_report_transliterates_non_latin1_glyphs(self):
+        # The generic text PDF transliterates common non-Latin-1 glyphs to
+        # legible ASCII instead of silently dropping them to "?" (the exit-tax
+        # lines emit em dashes and a warning sign). Austrian E 1kv and
+        # source-funds PDFs use ReportLab renderers instead.
         from kassiber.pdf_report import _ascii_text
 
-        self.assertEqual(_ascii_text("€"), "?")
-        self.assertEqual(_ascii_text("₿"), "?")
-        self.assertEqual(_ascii_text("↔"), "?")
+        self.assertEqual(_ascii_text("€"), "EUR")
+        self.assertEqual(_ascii_text("₿"), "BTC")
+        self.assertEqual(_ascii_text("↔"), "<->")
+        self.assertEqual(_ascii_text("estimate — value"), "estimate - value")
+        self.assertEqual(_ascii_text("⚠ 3 quarantined"), "(!) 3 quarantined")
+        # Anything still outside Latin-1 degrades to "?" rather than crashing.
+        self.assertEqual(_ascii_text("中"), "?")
         # Latin-1 covers German umlauts and ß, so they survive today.
         self.assertEqual(_ascii_text("Übersicht"), "Übersicht")
         self.assertEqual(_ascii_text("Größe ä ö ü ß"), "Größe ä ö ü ß")
