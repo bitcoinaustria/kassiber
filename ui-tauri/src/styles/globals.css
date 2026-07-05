@@ -49,6 +49,16 @@
 }
 
 :root {
+  /*
+   * Root font-size is `16px * --app-auto-scale * --app-ui-scale`, and the whole
+   * UI is rem-based off it. `--app-ui-scale` is the user's manual nudge
+   * (Settings → Appearance + Cmd/Ctrl +/−/0), default 0.9. `--app-auto-scale`
+   * is the automatic screen-fit factor set at runtime by AppScaleController
+   * from the window size (see lib/appAutoScale.ts) so density stays consistent
+   * across screen sizes; it defaults to 1 (large-screen / today's baseline) and
+   * only dips below on smaller laptop viewports.
+   */
+  --app-auto-scale: 1;
   --app-ui-scale: 0.9;
   /*
    * Bitcoin Austria brand red, theme-aware. The `@theme inline` block at
@@ -117,7 +127,7 @@
     height: 100%;
   }
   html {
-    font-size: calc(16px * var(--app-ui-scale));
+    font-size: calc(16px * var(--app-auto-scale, 1) * var(--app-ui-scale));
   }
   body {
     font-family: var(--font-sans);

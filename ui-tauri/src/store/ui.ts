@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
 import type { LanguageCode } from "@/i18n/config";
+import { MAX_AUTO_SCALE } from "@/lib/appAutoScale";
 import {
   DEFAULT_EXPLORER_SETTINGS,
   type ExplorerSettings,
@@ -169,6 +170,13 @@ export interface UiState {
   dataMode: DataMode;
   theme: ThemePreference;
   appScale: number;
+  /**
+   * Automatic screen-fit factor derived from the window size (see
+   * `lib/appAutoScale.ts`). Ephemeral — recomputed on every launch/resize by
+   * `AppScaleController`, never persisted. The effective on-screen scale is
+   * `appAutoScale * appScale`; Settings shows that product.
+   */
+  appAutoScale: number;
   hideSensitive: boolean;
   clearClipboard: boolean;
   explorerSettings: ExplorerSettings;
@@ -200,6 +208,7 @@ export interface UiState {
   setDataMode: (dataMode: DataMode) => void;
   setTheme: (theme: ThemePreference) => void;
   setAppScale: (appScale: number) => void;
+  setAppAutoScale: (appAutoScale: number) => void;
   increaseAppScale: () => void;
   decreaseAppScale: () => void;
   resetAppScale: () => void;
@@ -344,6 +353,7 @@ export const useUiStore = create<UiState>()(
       dataMode: "real",
       theme: "system",
       appScale: DEFAULT_APP_SCALE,
+      appAutoScale: MAX_AUTO_SCALE,
       hideSensitive: false,
       clearClipboard: true,
       explorerSettings: DEFAULT_EXPLORER_SETTINGS,
@@ -367,6 +377,7 @@ export const useUiStore = create<UiState>()(
       setTheme: (theme) => set({ theme }),
       setAppScale: (appScale) =>
         set({ appScale: normalizeAppScale(appScale) }),
+      setAppAutoScale: (appAutoScale) => set({ appAutoScale }),
       increaseAppScale: () =>
         set((state) => ({
           appScale: normalizeAppScale(state.appScale + APP_SCALE_STEP),

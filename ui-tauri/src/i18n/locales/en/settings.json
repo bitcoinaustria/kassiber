@@ -15,7 +15,7 @@
     },
     "scale": {
       "title": "Interface scale",
-      "description": "Make every screen denser or larger. Applies across the whole app.",
+      "description": "Kassiber fits the interface to your screen automatically. Use −/+ to fine-tune the density — it applies across the whole app.",
       "decrease": "Decrease interface scale",
       "increase": "Increase interface scale",
       "value": "{{percent}}%"

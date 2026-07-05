@@ -15,7 +15,7 @@
     },
     "scale": {
       "title": "Oberflächenskalierung",
-      "description": "Stelle jeden Bildschirm kompakter oder größer dar. Gilt für die gesamte App.",
+      "description": "Kassiber passt die Oberfläche automatisch an deinen Bildschirm an. Mit −/+ justierst du die Dichte fein – gilt für die gesamte App.",
       "decrease": "Oberflächenskalierung verringern",
       "increase": "Oberflächenskalierung erhöhen",
       "value": "{{percent}} %"
