@@ -3,9 +3,7 @@ import {
   ArrowDownRight,
   ArrowLeftRight,
   ArrowUpRight,
-  ChevronLeft,
-  ChevronRight,
-  Filter,
+  SlidersHorizontal,
 } from "lucide-react";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
@@ -41,6 +39,8 @@ import {
   type TransactionStatus,
 } from "./model";
 
+const RECENT_TX_REVEAL_STEP = 8;
+
 export const RecentTransactionsTable = ({
   className,
   title,
@@ -70,9 +70,8 @@ export const RecentTransactionsTable = ({
   const [statusFilter, setStatusFilter] = React.useState<
     TransactionStatus | "all"
   >("all");
-  const [currentPage, setCurrentPage] = React.useState(1);
+  const [visibleCount, setVisibleCount] = React.useState(RECENT_TX_REVEAL_STEP);
   const [isHydrated, setIsHydrated] = React.useState(false);
-  const pageSize = 5;
 
   React.useEffect(() => {
     if (typeof window === "undefined") return;
@@ -85,10 +84,6 @@ export const RecentTransactionsTable = ({
     ) {
       setStatusFilter(nextStatus as TransactionStatus | "all");
     }
-    const nextPage = Number(params.get("page"));
-    if (!Number.isNaN(nextPage) && nextPage > 0) {
-      setCurrentPage(nextPage);
-    }
     setIsHydrated(true);
   }, []);
 
@@ -97,19 +92,14 @@ export const RecentTransactionsTable = ({
     return transactions.filter((t) => t.status === statusFilter);
   }, [statusFilter, transactions]);
 
-  const totalPages = Math.max(
-    1,
-    Math.ceil(filteredTransactions.length / pageSize),
+  const visibleTransactions = React.useMemo(
+    () => filteredTransactions.slice(0, visibleCount),
+    [filteredTransactions, visibleCount],
   );
 
-  const paginatedTransactions = React.useMemo(() => {
-    const startIndex = (currentPage - 1) * pageSize;
-    return filteredTransactions.slice(startIndex, startIndex + pageSize);
-  }, [filteredTransactions, currentPage, pageSize]);
-
   React.useEffect(() => {
-    setCurrentPage(1);
-  }, [statusFilter]);
+    setVisibleCount(RECENT_TX_REVEAL_STEP);
+  }, [filteredTransactions.length, statusFilter]);
 
   React.useEffect(() => {
     if (!isHydrated || typeof window === "undefined") return;
@@ -119,31 +109,35 @@ export const RecentTransactionsTable = ({
     } else {
       params.delete("status");
     }
-    if (currentPage > 1) {
-      params.set("page", String(currentPage));
-    } else {
-      params.delete("page");
-    }
+    params.delete("page");
     const nextQuery = params.toString();
     const nextUrl = nextQuery
       ? `${window.location.pathname}?${nextQuery}`
       : window.location.pathname;
     window.history.replaceState(null, "", nextUrl);
-  }, [statusFilter, currentPage, isHydrated]);
+  }, [statusFilter, isHydrated]);
 
-  const goToPage = (page: number) => {
-    setCurrentPage(Math.max(1, Math.min(page, totalPages)));
-  };
+  const revealMoreRows = React.useCallback(() => {
+    setVisibleCount((current) =>
+      Math.min(filteredTransactions.length, current + RECENT_TX_REVEAL_STEP),
+    );
+  }, [filteredTransactions.length]);
 
-  const startRow = filteredTransactions.length
-    ? (currentPage - 1) * pageSize + 1
-    : 0;
-  const endRow = Math.min(currentPage * pageSize, filteredTransactions.length);
+  const handleScroll = React.useCallback(
+    (event: React.UIEvent<HTMLDivElement>) => {
+      if (visibleCount >= filteredTransactions.length) return;
+      const target = event.currentTarget;
+      const distanceFromBottom =
+        target.scrollHeight - target.scrollTop - target.clientHeight;
+      if (distanceFromBottom < 72) revealMoreRows();
+    },
+    [filteredTransactions.length, revealMoreRows, visibleCount],
+  );
 
   return (
     <>
       <div className={cn("overflow-hidden rounded-lg border bg-card", className)}>
-      <div className="flex items-center justify-between gap-3 px-3 pt-3 sm:px-4">
+      <div className="flex items-center justify-between gap-3 border-b px-3 py-2.5 sm:px-4">
         <div className="flex items-center gap-2">
           <span className="text-sm font-medium">
             {resolvedTitle}
@@ -166,7 +160,7 @@ export const RecentTransactionsTable = ({
                 size="sm"
                 className="h-8 gap-1.5 sm:h-9 sm:gap-2"
               >
-                <Filter className="size-3.5 sm:size-4" aria-hidden="true" />
+                <SlidersHorizontal className="size-3.5 sm:size-4" aria-hidden="true" />
                 <span className="hidden sm:inline">{t("recentTx.filter")}</span>
               </Button>
             </DropdownMenuTrigger>
@@ -192,14 +186,17 @@ export const RecentTransactionsTable = ({
         </div>
       </div>
 
-      <div className="px-3 pt-2.5 pb-3 sm:px-4">
-        {paginatedTransactions.length === 0 ? (
-          <div className="flex h-24 items-center justify-center rounded-lg border border-dashed text-sm text-muted-foreground">
+      <div
+        className="max-h-[340px] min-h-0 overflow-auto"
+        onScroll={handleScroll}
+      >
+        {visibleTransactions.length === 0 ? (
+          <div className="m-3 flex h-24 items-center justify-center rounded-lg border border-dashed text-sm text-muted-foreground sm:m-4">
             {t("recentTx.empty")}
           </div>
         ) : (
-          <div className="divide-y rounded-md border bg-background">
-            {paginatedTransactions.map((tx) => {
+          <div className="divide-y">
+            {visibleTransactions.map((tx) => {
               const flow = tx.flow ?? "incoming";
               const FlowIcon =
                 flow === "incoming"
@@ -234,12 +231,13 @@ export const RecentTransactionsTable = ({
               const primaryTag = tx.tags[0] ?? flowLabel;
               const extraTags = Math.max(0, tx.tags.length - 1);
               const rowClassName =
-                "group flex min-w-0 items-center gap-3 px-3 py-2 text-left transition-colors hover:bg-muted/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+                "group flex min-w-0 items-center gap-3 px-3 py-2 text-left transition-colors hover:bg-muted/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:px-4";
               const rowContent = (
                 <>
                   <span
                     className={cn(
                       "flex size-8 shrink-0 items-center justify-center rounded-md",
+                      "border",
                       overviewFlowStyles[flow],
                     )}
                     aria-hidden="true"
@@ -253,7 +251,7 @@ export const RecentTransactionsTable = ({
                         blurClass(hideSensitive),
                       )}
                     >
-                      {tx.counterparty}
+                      {tx.counterparty || tx.txid}
                     </span>
                     <span className="mt-1 flex min-w-0 flex-wrap items-center gap-1.5">
                       <span
@@ -337,38 +335,6 @@ export const RecentTransactionsTable = ({
             })}
           </div>
         )}
-      </div>
-
-      <div className="flex items-center justify-between border-t px-3 py-2.5 text-[10px] text-muted-foreground sm:px-4 sm:text-xs">
-        <span>
-          {t("recentTx.rangeOfTotal", {
-            start: startRow,
-            end: endRow,
-            total: filteredTransactions.length,
-          })}
-        </span>
-        <div className="flex items-center gap-1">
-          <Button
-            variant="outline"
-            size="icon"
-            className="size-7"
-            onClick={() => goToPage(currentPage - 1)}
-            disabled={currentPage === 1}
-            aria-label={t("recentTx.previousPage")}
-          >
-            <ChevronLeft className="size-3.5" />
-          </Button>
-          <Button
-            variant="outline"
-            size="icon"
-            className="size-7"
-            onClick={() => goToPage(currentPage + 1)}
-            disabled={currentPage === totalPages}
-            aria-label={t("recentTx.nextPage")}
-          >
-            <ChevronRight className="size-3.5" />
-          </Button>
-        </div>
       </div>
       </div>
     </>

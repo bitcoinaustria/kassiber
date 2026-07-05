@@ -2,7 +2,6 @@ import {
   CalendarClock,
   ExternalLink,
   Network,
-  Repeat2,
   X,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -51,7 +50,6 @@ export function TransactionDetailHeader({
   valueAtTimeEur,
   valueNowEur,
   pricedChange,
-  confLabel,
   timelineSteps,
   explorer,
   onOpenExplorer,
@@ -67,7 +65,6 @@ export function TransactionDetailHeader({
   valueAtTimeEur: number | null;
   valueNowEur: number | null;
   pricedChange: number | null;
-  confLabel: string | null;
   timelineSteps: TimelineStep[];
   explorer: ExplorerSummary;
   onOpenExplorer: (transaction: Transaction) => void;
@@ -98,15 +95,6 @@ export function TransactionDetailHeader({
             >
               {networkLabel(transaction)}
             </HeaderChip>
-            {confLabel ? (
-              <HeaderChip
-                title={t("detailHeader.confirmationsTitle", {
-                  count: transaction.confirmations,
-                })}
-              >
-                {confLabel}
-              </HeaderChip>
-            ) : null}
             {showReviewStatusChip ? (
               <HeaderChip
                 icon={
@@ -115,21 +103,6 @@ export function TransactionDetailHeader({
                 className={transactionStatusStyles[reviewStatus]}
               >
                 {t(transactionStatusLabels[reviewStatus])}
-              </HeaderChip>
-            ) : null}
-            {pair ? (
-              <HeaderChip
-                icon={
-                  <Repeat2
-                    className="size-3 text-sky-500"
-                    aria-hidden="true"
-                  />
-                }
-                className="border-sky-500/30 text-sky-700 dark:text-sky-300"
-              >
-                {t("detailHeader.paired")} ·{" "}
-                {pair.outWallet ?? t("detailHeader.pairOut")} →{" "}
-                {pair.inWallet ?? t("detailHeader.pairIn")}
               </HeaderChip>
             ) : null}
           </div>
@@ -186,10 +159,14 @@ export function TransactionDetailHeader({
                 <span className="text-muted-foreground">·</span>
               </>
             ) : null}
-            <span className="text-muted-foreground">
-              {transaction.wallet ?? t("detailHeader.unassignedWallet")}
-            </span>
-            <span className="text-muted-foreground">·</span>
+            {!pair ? (
+              <>
+                <span className="text-muted-foreground">
+                  {transaction.wallet ?? t("detailHeader.unassignedWallet")}
+                </span>
+                <span className="text-muted-foreground">·</span>
+              </>
+            ) : null}
             <span className="inline-flex items-center gap-1 text-muted-foreground">
               <CalendarClock className="size-3.5" aria-hidden="true" />
               {transaction.date}

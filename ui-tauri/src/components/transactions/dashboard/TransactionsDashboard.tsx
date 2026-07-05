@@ -12,7 +12,11 @@ import {
 import { useDaemonMutation } from "@/daemon/client";
 import { cn } from "@/lib/utils";
 import { exportBasename, saveDaemonExport } from "@/lib/exportFile";
-import { screenShellClassName } from "@/lib/screen-layout";
+import {
+  pageHeaderActionClassName,
+  pageHeaderActionsClassName,
+  screenShellClassName,
+} from "@/lib/screen-layout";
 import { useCurrency } from "@/lib/currency";
 import { useWalletSyncAction } from "@/hooks/useWalletSyncAction";
 import { MOCK_TRANSACTIONS, type TransactionsList } from "@/mocks/transactions";
@@ -376,7 +380,8 @@ const TransactionsDashboard = ({
     <div
       className={cn(
         screenShellClassName,
-        tableExpanded && "flex h-full min-h-0 flex-col overflow-hidden",
+        tableExpanded &&
+          "flex h-full min-h-0 flex-col overflow-hidden pt-0 pb-3 sm:pt-0 sm:pb-3 md:pt-0 md:pb-3",
         "relative",
         className,
       )}
@@ -384,7 +389,12 @@ const TransactionsDashboard = ({
     >
       <div
         id="transactions-period-nav"
-        className="-mx-3 flex flex-col gap-3 bg-background px-3 py-2 shadow-[0_12px_18px_-18px_hsl(var(--foreground)/0.55)] sm:-mx-4 sm:flex-row sm:items-center sm:justify-between sm:px-4 md:-mx-5 md:px-5 sticky top-2 z-30 before:pointer-events-none before:absolute before:inset-x-0 before:-top-2 before:h-2 before:bg-background before:content-[''] after:pointer-events-none after:absolute after:inset-x-0 after:-bottom-2 after:h-2 after:bg-background after:content-[''] sm:top-[0.6875rem] sm:before:-top-[0.6875rem] sm:before:h-[0.6875rem] sm:after:-bottom-[0.6875rem] sm:after:h-[0.6875rem] md:top-[0.8125rem] md:before:-top-[0.8125rem] md:before:h-[0.8125rem] md:after:-bottom-[0.8125rem] md:after:h-[0.8125rem]"
+        className={cn(
+          "-mx-3 flex flex-col bg-background px-3 sm:-mx-4 sm:flex-row sm:items-center sm:justify-between sm:px-4 md:-mx-5 md:px-5",
+          tableExpanded
+            ? "gap-2 py-0"
+            : "sticky top-2 z-30 gap-2 py-0 shadow-[0_12px_18px_-18px_hsl(var(--foreground)/0.55)] before:pointer-events-none before:absolute before:inset-x-0 before:-top-2 before:h-2 before:bg-background before:content-[''] after:pointer-events-none after:absolute after:inset-x-0 after:-bottom-2 after:h-2 after:bg-background after:content-[''] sm:top-[0.6875rem] sm:before:-top-[0.6875rem] sm:before:h-[0.6875rem] sm:after:-bottom-[0.6875rem] sm:after:h-[0.6875rem] md:top-[0.8125rem] md:before:-top-[0.8125rem] md:before:h-[0.8125rem] md:after:-bottom-[0.8125rem] md:after:h-[0.8125rem]",
+        )}
       >
         <PeriodTabs
           activePeriod={period}
@@ -392,13 +402,13 @@ const TransactionsDashboard = ({
           periodOptions={availablePeriods}
         />
         {!tableExpanded && (
-          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+          <div className={pageHeaderActionsClassName}>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button
                   variant="outline"
                   size="sm"
-                  className="h-8 gap-2 sm:h-9"
+                  className={pageHeaderActionClassName}
                   aria-label={t("dashboard.export.label")}
                   disabled={isExporting}
                 >
@@ -461,7 +471,7 @@ const TransactionsDashboard = ({
         id="transactions-table"
         className={cn(
           "scroll-mt-4",
-          tableExpanded && "min-h-0 flex-1 overflow-hidden pt-3",
+          tableExpanded && "min-h-0 flex-1 overflow-hidden",
         )}
       >
         <TransactionsTable

@@ -25,13 +25,6 @@ import {
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Table,
@@ -45,7 +38,11 @@ import { CopyButton } from "@/components/kb/CopyButton";
 import { hiddenSensitiveClassName } from "@/components/kb/wallets/format";
 import { useDaemonMutation } from "@/daemon/client";
 import { copyTextWithPolicy } from "@/lib/clipboard";
-import { screenShellClassName } from "@/lib/screen-layout";
+import {
+  pageHeaderActionClassName,
+  pageHeaderClassName,
+  screenShellClassName,
+} from "@/lib/screen-layout";
 import { useUiStore } from "@/store/ui";
 
 interface IdentifyMatch {
@@ -412,17 +409,25 @@ export function Reconcile() {
 
   return (
     <div className={screenShellClassName}>
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Fingerprint className="size-5 text-primary" />
-            {t("reconcile.title")}
-          </CardTitle>
-          <CardDescription>
-            {t("reconcile.description")}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3">
+      <div className={pageHeaderClassName}>
+        <div className="flex min-w-0 items-start gap-3">
+          <span
+            className="flex size-8 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary ring-1 ring-primary/25 ring-inset"
+            aria-hidden="true"
+          >
+            <Fingerprint className="size-4" />
+          </span>
+          <div className="min-w-0">
+            <h1 className="text-base font-semibold">{t("reconcile.title")}</h1>
+            <p className="mt-0.5 max-w-4xl text-xs text-muted-foreground sm:text-sm">
+              {t("reconcile.description")}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div className="rounded-lg border bg-card p-3">
+        <div className="space-y-3">
           <Textarea
             value={input}
             onChange={(event) => setInput(event.target.value)}
@@ -461,6 +466,7 @@ export function Reconcile() {
               <Button
                 type="button"
                 variant="outline"
+                className={pageHeaderActionClassName}
                 onClick={() => fileInputRef.current?.click()}
                 disabled={check.isPending || verify.isPending}
               >
@@ -469,6 +475,7 @@ export function Reconcile() {
               </Button>
               <Button
                 type="button"
+                className={pageHeaderActionClassName}
                 onClick={onCheck}
                 disabled={!hasInput || check.isPending || verify.isPending}
               >
@@ -477,15 +484,13 @@ export function Reconcile() {
               </Button>
             </div>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
 
       {errorMessage ? (
-        <Card>
-          <CardContent className="py-4 text-sm text-destructive">
-            {errorMessage}
-          </CardContent>
-        </Card>
+        <div className="rounded-lg border bg-card p-4 text-sm text-destructive">
+          {errorMessage}
+        </div>
       ) : null}
 
       {summary ? (
@@ -525,9 +530,9 @@ export function Reconcile() {
             ) : null}
           </div>
 
-          <Card>
-            <CardHeader className="flex-row items-center justify-between gap-2 space-y-0">
-              <CardDescription>
+          <div className="overflow-hidden rounded-lg border bg-card">
+            <div className="flex flex-col gap-2 border-b p-3 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-xs text-muted-foreground">
                 {t("reconcile.scanned", {
                   count: summary.wallets_scanned,
                   index: summary.scan_to_index,
@@ -535,7 +540,7 @@ export function Reconcile() {
                     ? t("reconcile.verifiedSuffix")
                     : "",
                 })}
-              </CardDescription>
+              </p>
               <div className="flex items-center gap-2">
                 {verifyCount > 0 ? (
                   <Button
@@ -562,8 +567,8 @@ export function Reconcile() {
                   {copied ? t("reconcile.copied") : t("reconcile.copyCsv")}
                 </Button>
               </div>
-            </CardHeader>
-            <CardContent>
+            </div>
+            <div className="p-3">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -667,17 +672,15 @@ export function Reconcile() {
                   )}
                 </TableBody>
               </Table>
-            </CardContent>
-          </Card>
+            </div>
+          </div>
 
           {report?.warnings && report.warnings.length > 0 ? (
-            <Card>
-              <CardContent className="space-y-1 py-3 text-xs text-muted-foreground">
-                {report.warnings.map((warning, index) => (
-                  <p key={index}>⚠ {warning}</p>
-                ))}
-              </CardContent>
-            </Card>
+            <div className="space-y-1 rounded-lg border bg-card p-3 text-xs text-muted-foreground">
+              {report.warnings.map((warning, index) => (
+                <p key={index}>⚠ {warning}</p>
+              ))}
+            </div>
           ) : null}
         </>
       ) : null}

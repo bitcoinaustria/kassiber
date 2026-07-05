@@ -2,9 +2,9 @@ import {
   Activity as ActivityIcon,
   Bot,
   CalendarClock,
-  Filter,
   RefreshCw,
   RotateCcw,
+  SlidersHorizontal,
 } from "lucide-react";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
@@ -22,7 +22,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { screenShellClassName } from "@/lib/screen-layout";
+import { pageHeaderClassName, screenShellClassName } from "@/lib/screen-layout";
 import { useDaemon, useDaemonInfinite, useDaemonMutation } from "@/daemon/client";
 import { useJournalProcessingAction } from "@/hooks/useJournalProcessingAction";
 import { cn } from "@/lib/utils";
@@ -121,7 +121,7 @@ export function Activity() {
   return (
     <div className={screenShellClassName}>
       <div className="flex w-full flex-col gap-5">
-        <header className="flex flex-wrap items-start justify-between gap-3">
+        <header className={pageHeaderClassName}>
           <div className="min-w-0">
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <ActivityIcon className="size-4" aria-hidden="true" />
@@ -152,7 +152,7 @@ export function Activity() {
 
         <section className="grid gap-3 rounded-md border bg-card p-3">
           <div className="flex items-center gap-2 text-sm font-medium">
-            <Filter className="size-4 text-muted-foreground" aria-hidden="true" />
+            <SlidersHorizontal className="size-4 text-muted-foreground" aria-hidden="true" />
             {t("activity.filters")}
           </div>
           <div className="grid gap-3 md:grid-cols-4">

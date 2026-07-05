@@ -52,7 +52,11 @@ import {
   saveExportedFileAs,
 } from "@/daemon/transport";
 import { saveFile } from "@/lib/filePicker";
-import { screenShellClassName } from "@/lib/screen-layout";
+import {
+  pageHeaderActionClassName,
+  pageHeaderClassName,
+  screenShellClassName,
+} from "@/lib/screen-layout";
 import { cn } from "@/lib/utils";
 import type {
   ExitTaxDestination,
@@ -169,7 +173,7 @@ export function ExitTax() {
 
   return (
     <div className={screenShellClassName}>
-      <header className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+      <header className={pageHeaderClassName}>
         <div className="flex items-start gap-3">
           <div className="grid size-10 shrink-0 place-items-center rounded-xl border bg-card text-primary">
             <Plane className="size-5" />
@@ -183,13 +187,13 @@ export function ExitTax() {
             </p>
           </div>
         </div>
-        <div className="flex flex-wrap items-end gap-3">
+        <div className="flex flex-wrap items-end gap-2 sm:gap-3">
           <label className="flex flex-col gap-1 text-xs font-medium text-muted-foreground">
             Departure date
             <DatePicker
               value={departureDate}
               onChange={(next) => setDepartureDate(next || todayIso())}
-              className="w-[180px]"
+              className={cn(pageHeaderActionClassName, "w-[180px]")}
             />
           </label>
           <label className="flex flex-col gap-1 text-xs font-medium text-muted-foreground">
@@ -198,7 +202,7 @@ export function ExitTax() {
               value={destination}
               onValueChange={(value) => setDestination(value as ExitTaxDestination)}
             >
-              <SelectTrigger className="h-9 w-[220px]">
+              <SelectTrigger className="h-8 w-[220px]">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>

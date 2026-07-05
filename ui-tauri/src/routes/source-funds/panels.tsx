@@ -35,6 +35,7 @@ import {
 } from "@/components/ui/select";
 import { openExternalUrl } from "@/daemon/transport";
 import { formatFiatAmount } from "@/lib/currency";
+import { cn } from "@/lib/utils";
 
 import {
   COVERAGE_BUCKET_BARS,
@@ -148,60 +149,60 @@ export function TransactionTargetRow({
 
   return (
     <div
-      className={[
-        "flex items-stretch gap-1 rounded-md border transition-colors",
-        active ? "border-primary bg-primary/5" : "hover:bg-muted/45",
-      ].join(" ")}
+      className={cn(
+        "grid grid-cols-[minmax(0,1fr)_44px] transition-colors hover:bg-muted/35",
+        active && "bg-primary/5 ring-1 ring-primary/30 ring-inset",
+      )}
     >
       <button
         type="button"
-        className="min-w-0 flex-1 px-3 py-2 text-left"
+        className="min-w-0 px-3 py-2 text-left"
         onClick={onSelect}
       >
-      <div className="grid min-w-0 gap-3 md:grid-cols-[minmax(0,1fr)_140px_150px_130px] md:items-center">
-        <div className="flex min-w-0 items-start gap-3">
-          <span
-            className={`mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md border ${flowClassName}`}
-            aria-hidden="true"
-          >
-            <FlowIcon className="size-4" />
-          </span>
-          <div className="min-w-0">
-            <div className="truncate text-sm font-medium text-foreground">
-              {description}
-            </div>
-            <div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
-              <span>{row.asset || "BTC"}</span>
-              <span className="break-all font-mono">
-                {shortId(txid)}
-              </span>
-              {row.direction && (
-                <span className="md:hidden">{pretty(txDirection(row))}</span>
-              )}
+        <div className="grid min-w-0 gap-3 md:grid-cols-[minmax(0,1fr)_150px_160px_130px] md:items-center">
+          <div className="flex min-w-0 items-start gap-3">
+            <span
+              className={`mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md border ${flowClassName}`}
+              aria-hidden="true"
+            >
+              <FlowIcon className="size-4" />
+            </span>
+            <div className="min-w-0">
+              <div className="truncate text-sm font-medium text-foreground">
+                {description}
+              </div>
+              <div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+                <span>{row.asset || "BTC"}</span>
+                <span className="break-all font-mono">
+                  {shortId(txid)}
+                </span>
+                {row.direction && (
+                  <span className="md:hidden">{pretty(txDirection(row))}</span>
+                )}
+              </div>
             </div>
           </div>
+          <div className={`font-mono text-sm tabular-nums md:text-right ${amountClassName}`}>
+            {txSignedAmount(row)}
+          </div>
+          <div className="text-sm text-muted-foreground">
+            <span className="md:hidden">Wallet: </span>
+            {txWallet(row)}
+          </div>
+          <div className="flex flex-wrap items-center gap-2 md:justify-end">
+            <span className={`inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs font-medium ${flowClassName}`}>
+              <FlowIcon className="size-3.5" aria-hidden="true" />
+              {txFlowLabel(row)}
+            </span>
+            <span className="text-xs text-muted-foreground">
+              {txDate(row)}
+            </span>
+          </div>
         </div>
-        <div className={`font-mono text-sm tabular-nums md:text-right ${amountClassName}`}>
-          {txSignedAmount(row)}
-        </div>
-        <div className="text-sm text-muted-foreground">
-          <span className="md:hidden">Wallet: </span>
-          {txWallet(row)}
-        </div>
-        <div className="flex flex-wrap items-center gap-2 md:justify-end">
-          <span className={`inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs font-medium ${flowClassName}`}>
-            <FlowIcon className="size-3.5" aria-hidden="true" />
-            {txFlowLabel(row)}
-          </span>
-          <span className="text-xs text-muted-foreground">
-            {txDate(row)}
-          </span>
-        </div>
-      </div>
       </button>
       <button
         type="button"
-        className="flex shrink-0 items-center border-l px-2.5 text-muted-foreground transition-colors hover:text-foreground"
+        className="flex shrink-0 items-center justify-center border-l text-muted-foreground transition-colors hover:bg-muted/45 hover:text-foreground"
         onClick={onOpenDetails}
         aria-label="View transaction details"
         title="View details"
@@ -215,11 +216,12 @@ export function TransactionTargetRow({
 
 export function TransactionTargetHeader() {
   return (
-    <div className="hidden border-b bg-muted/35 px-5 py-2 text-xs font-medium text-muted-foreground md:grid md:grid-cols-[minmax(0,1fr)_140px_150px_130px] md:gap-3">
+    <div className="hidden border-b bg-muted/50 px-3 py-2 text-xs font-medium text-muted-foreground md:grid md:grid-cols-[minmax(0,1fr)_150px_160px_130px_44px] md:gap-3">
       <span>Transaction</span>
       <span className="text-right">Amount</span>
       <span>Wallet</span>
       <span className="text-right">Flow</span>
+      <span aria-hidden="true" />
     </div>
   );
 }

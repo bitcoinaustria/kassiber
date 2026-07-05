@@ -115,18 +115,18 @@ export function WalletBalanceHistoryCard({
   const change = latest - first;
 
   return (
-    <Card>
-      <CardHeader className="border-b px-4 pb-3">
+    <Card className="gap-0 overflow-hidden py-0 shadow-none">
+      <CardHeader className="border-b p-3 sm:px-6 sm:py-3.5 [.border-b]:pb-3 sm:[.border-b]:pb-3.5">
         <CardTitle className="text-sm sm:text-base">
           {t("detail.balanceHistory.title")}
         </CardTitle>
-        <CardDescription>
+        <CardDescription className="text-xs">
           {t("detail.balanceHistory.description", {
             count: points.length || 12,
           })}
         </CardDescription>
       </CardHeader>
-      <CardContent className="px-4 pt-4">
+      <CardContent className="px-3 py-3 sm:px-6">
         {query.isLoading ? (
           <Skeleton className="h-24 w-full" />
         ) : (

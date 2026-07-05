@@ -2,62 +2,102 @@ import { ChevronDown, ChevronUp } from "lucide-react";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
 
-import { formatBtc, type Currency } from "@/lib/currency";
+import { formatBtc } from "@/lib/currency";
 import { cn } from "@/lib/utils";
 
 import {
   blurClass,
-  formatDetailedPortfolioMoney,
   formatPortfolioMoney,
   type PortfolioChartPoint,
 } from "./model";
 
 export function PortfolioInspector({
   point,
-  previousPoint,
   hideSensitive,
   priceEur,
   fiatCurrency,
-  chartCurrency,
+  variant = "panel",
+  className,
 }: {
   point: PortfolioChartPoint | null;
-  previousPoint: PortfolioChartPoint | null;
   hideSensitive: boolean;
   priceEur: number;
   fiatCurrency: string;
-  chartCurrency: Currency;
+  variant?: "panel" | "header";
+  className?: string;
 }) {
   const { t } = useTranslation("overview");
-  // Floating over the chart, the panel must always be dismissable out of the
-  // way — collapsing leaves just the header strip.
+  // The legacy panel layout remains collapsible; the expanded chart header
+  // uses the compact variant below.
   const [collapsed, setCollapsed] = React.useState(false);
-  const isBtc = chartCurrency === "btc";
-  const priorValueEur = previousPoint?.valueEur ?? point?.valueEur ?? 0;
-  const pointValueEur = point?.valueEur ?? 0;
-  const eurDelta = pointValueEur - priorValueEur;
-  const priorBtc = previousPoint?.balanceBtc ?? point?.balanceBtc ?? 0;
-  const btcDelta =
-    point && previousPoint ? point.balanceBtc - previousPoint.balanceBtc : 0;
-  const primaryDelta = isBtc ? btcDelta : eurDelta;
-  const primaryPrior = isBtc ? priorBtc : priorValueEur;
-  const deltaPct = previousPoint && primaryPrior
-    ? (primaryDelta / Math.abs(primaryPrior)) * 100
-    : null;
-  const secondaryDelta = isBtc ? eurDelta : btcDelta;
-  const secondaryLabel = isBtc
-    ? `${secondaryDelta >= 0 ? "+" : "−"}${formatPortfolioMoney(
-        Math.abs(secondaryDelta),
-        priceEur,
-        "eur",
-        fiatCurrency,
-      )}`
-    : `${secondaryDelta >= 0 ? "+" : "−"}${formatBtc(
-        Math.abs(secondaryDelta),
-        { precision: 8 },
-      )}`;
+  const valueLabel = formatPortfolioMoney(
+    point?.valueEur ?? 0,
+    priceEur,
+    "eur",
+    fiatCurrency,
+  );
+  const btcLabel = formatBtc(point?.balanceBtc ?? 0, { precision: 8 });
+  const costBasisLabel = formatPortfolioMoney(
+    point?.costBasisEur ?? 0,
+    priceEur,
+    "eur",
+    fiatCurrency,
+  );
+  const unrealizedLabel = `${(point?.unrealizedEur ?? 0) >= 0 ? "+ " : "− "}${formatPortfolioMoney(
+    Math.abs(point?.unrealizedEur ?? 0),
+    priceEur,
+    "eur",
+    fiatCurrency,
+  )}`;
+
+  if (variant === "header") {
+    return (
+      <aside
+        className={cn(
+          "flex min-w-0 max-w-full flex-wrap items-center gap-1.5 rounded-md border bg-background/85 px-2 py-1.5 text-xs shadow-sm backdrop-blur-sm",
+          className,
+        )}
+      >
+        <div className="min-w-[88px] pr-1">
+          <p className="text-[9px] font-medium tracking-wide text-muted-foreground uppercase">
+            {t("inspector.position")}
+          </p>
+          <p className="truncate text-[11px] font-semibold">
+            {point?.detailLabel ?? t("inspector.noDateSelected")}
+          </p>
+        </div>
+        <HeaderInspectorMetric
+          label={t("inspector.value")}
+          value={valueLabel}
+          hidden={hideSensitive}
+        />
+        <HeaderInspectorMetric
+          label={t("inspector.btc")}
+          value={btcLabel}
+          hidden={hideSensitive}
+        />
+        <HeaderInspectorMetric
+          label={t("inspector.costBasis")}
+          value={costBasisLabel}
+          hidden={hideSensitive}
+        />
+        <HeaderInspectorMetric
+          label={t("inspector.unrealized")}
+          value={unrealizedLabel}
+          tone={(point?.unrealizedEur ?? 0) >= 0 ? "good" : "bad"}
+          hidden={hideSensitive}
+        />
+      </aside>
+    );
+  }
 
   return (
-    <aside className="flex max-h-full min-h-0 flex-col gap-3 overflow-y-auto rounded-lg border bg-background/85 p-3 shadow-lg backdrop-blur-sm">
+    <aside
+      className={cn(
+        "flex max-h-full min-h-0 flex-col gap-3 overflow-y-auto rounded-lg border bg-background/85 p-3 shadow-lg backdrop-blur-sm",
+        className,
+      )}
+    >
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <p className="text-[10px] font-medium tracking-wide text-muted-foreground uppercase">
@@ -92,67 +132,25 @@ export function PortfolioInspector({
           <div className="grid gap-2">
             <InspectorMetric
               label={t("inspector.value")}
-              value={formatPortfolioMoney(
-                point?.valueEur ?? 0,
-                priceEur,
-                "eur",
-                fiatCurrency,
-              )}
+              value={valueLabel}
               hidden={hideSensitive}
             />
             <InspectorMetric
               label={t("inspector.btc")}
-              value={formatBtc(point?.balanceBtc ?? 0, { precision: 8 })}
+              value={btcLabel}
               hidden={hideSensitive}
             />
             <InspectorMetric
               label={t("inspector.costBasis")}
-              value={formatPortfolioMoney(
-                point?.costBasisEur ?? 0,
-                priceEur,
-                "eur",
-                fiatCurrency,
-              )}
+              value={costBasisLabel}
               hidden={hideSensitive}
             />
             <InspectorMetric
               label={t("inspector.unrealized")}
-              value={`${(point?.unrealizedEur ?? 0) >= 0 ? "+ " : "− "}${formatPortfolioMoney(
-                Math.abs(point?.unrealizedEur ?? 0),
-                priceEur,
-                "eur",
-                fiatCurrency,
-              )}`}
+              value={unrealizedLabel}
               tone={(point?.unrealizedEur ?? 0) >= 0 ? "good" : "bad"}
               hidden={hideSensitive}
             />
-          </div>
-
-          <div className="rounded-md border bg-muted/20 p-2.5">
-            <p className="text-[10px] font-medium text-muted-foreground">
-              {t("inspector.sincePrevious")}
-            </p>
-            <div
-              className={cn(
-                "mt-1 text-sm font-semibold tabular-nums",
-                primaryDelta >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-[var(--kb-accent)]",
-                blurClass(hideSensitive),
-              )}
-            >
-              {primaryDelta >= 0 ? "+ " : "− "}
-              {formatDetailedPortfolioMoney(
-                Math.abs(primaryDelta),
-                priceEur,
-                chartCurrency,
-                fiatCurrency,
-              )}
-            </div>
-            <p className="mt-1 text-[10px] text-muted-foreground">
-              {deltaPct === null
-                ? t("inspector.startOfRange")
-                : `${deltaPct >= 0 ? "+" : "−"}${Math.abs(deltaPct).toFixed(1)}%`}{" "}
-              · {secondaryLabel}
-            </p>
           </div>
         </>
       )}
@@ -191,6 +189,41 @@ export function InspectorMetric({
           {detail}
         </p>
       )}
+    </div>
+  );
+}
+
+function HeaderInspectorMetric({
+  label,
+  value,
+  detail,
+  tone = "neutral",
+  hidden,
+}: {
+  label: string;
+  value: string;
+  detail?: string;
+  tone?: "good" | "bad" | "neutral";
+  hidden: boolean;
+}) {
+  return (
+    <div className="min-w-[92px] rounded bg-muted/20 px-2 py-1">
+      <p className="truncate text-[9px] font-medium text-muted-foreground">
+        {label}
+      </p>
+      <p
+        className={cn(
+          "truncate text-[11px] font-semibold tabular-nums",
+          tone === "good" && "text-emerald-600 dark:text-emerald-400",
+          tone === "bad" && "text-[var(--kb-accent)]",
+          blurClass(hidden),
+        )}
+      >
+        {value}
+      </p>
+      {detail ? (
+        <p className="truncate text-[9px] text-muted-foreground">{detail}</p>
+      ) : null}
     </div>
   );
 }

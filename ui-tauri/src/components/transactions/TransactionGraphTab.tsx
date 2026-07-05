@@ -4,7 +4,6 @@ import {
   ArrowRightLeft,
   ChevronDown,
   ChevronUp,
-  ExternalLink,
   Info,
   Maximize2,
 } from "lucide-react";
@@ -12,6 +11,8 @@ import type { TFunction } from "i18next";
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { useTranslation } from "react-i18next";
 
+import bitcoinIcon from "@/assets/integrations/bitcoin.svg";
+import liquidIcon from "@/assets/integrations/liquid.svg";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -23,6 +24,10 @@ import {
 import { openExternalUrl } from "@/daemon/transport";
 import { formatBtc } from "@/lib/currency";
 import {
+  connectionAssetIconKind,
+  type ConnectionAssetLabel,
+} from "@/lib/connectionDisplay";
+import {
   explorerTargetForAddress,
   explorerTargetForTransaction,
   type ExplorerNetwork,
@@ -33,115 +38,29 @@ import { cn } from "@/lib/utils";
 import { useUiStore } from "@/store/ui";
 
 import { copyText, formatShortTxid } from "./model";
+import {
+  compactGraphRows,
+  nodeTooltipTitle,
+  sensitiveGraphText,
+  type GraphRow,
+  type TransactionGraphAnnotation,
+  type TransactionGraphIssueTarget,
+  type TransactionGraphNode,
+  type TransactionGraphPayload,
+  type TransactionSwapRoute,
+  type TransactionSwapRouteLeg,
+  type TransactionSwapRouteLegKey,
+} from "./TransactionGraphModel";
 
-export type TransactionGraphAnnotation = {
-  code: string;
-  label?: string;
-  severity?: "info" | "warning" | "error";
-  groupId?: string | null;
-  amountMsat?: number;
-  amountBtc?: number;
-  residualMsat?: number;
-  residualBtc?: number;
-};
-
-export type TransactionGraphNode = {
-  id: string;
-  index?: number;
-  outpoint?: string;
-  txid?: string;
-  vout?: number;
-  address?: string;
-  scriptType?: string;
-  valueSats?: number | null;
-  valueBtc?: number | null;
-  valueState?: "known" | "missing" | "confidential";
-  label?: string;
-  wallet?: string;
-  walletId?: string | null;
-  ownership?: string;
-  role?: string;
-  overflow?: boolean;
-  overflowCount?: number;
-  annotations?: TransactionGraphAnnotation[];
-};
-
-export type TransactionSwapRouteLeg = {
-  id?: string;
-  externalId?: string | null;
-  txid?: string | null;
-  direction?: string | null;
-  role?: "consolidation" | "spend" | "receive" | null;
-  asset?: string | null;
-  network?: string | null;
-  amountMsat?: number | null;
-  amountBtc?: number | null;
-  feeMsat?: number | null;
-  feeBtc?: number | null;
-  occurredAt?: string | null;
-  confirmedAt?: string | null;
-  kind?: string | null;
-  counterparty?: string | null;
-  description?: string | null;
-  wallet?: {
-    id?: string | null;
-    label?: string | null;
-    kind?: string | null;
-  } | null;
-};
-
-export type TransactionSwapRoute = {
-  id?: string;
-  kind?: string | null;
-  routeKind?: string | null;
-  policy?: string | null;
-  pairSource?: string | null;
-  confidence?: string | null;
-  createdAt?: string | null;
-  currentLeg?: "out" | "in" | null;
-  swapFeeMsat?: number | null;
-  swapFeeBtc?: number | null;
-  swapFeeKind?: string | null;
-  outAmountMsat?: number | null;
-  outAmountBtc?: number | null;
-  outFullAmountMsat?: number | null;
-  outFullAmountBtc?: number | null;
-  out: TransactionSwapRouteLeg;
-  in: TransactionSwapRouteLeg;
-};
-
-export type TransactionGraphPayload = {
-  transaction: {
-    id: string;
-    txid?: string | null;
-    externalId?: string | null;
-    asset?: string | null;
-    inputCount?: number | null;
-    outputCount?: number | null;
-    version?: number | null;
-    locktime?: number | null;
-    size?: number | null;
-    vsize?: number | null;
-    weight?: number | null;
-    feeRateSatVb?: number | null;
-    network?: string | null;
-  } | null;
-  supportLevel: "full" | "partial" | "graphless" | "unsupported";
-  unsupportedReason?: string | null;
-  warnings?: Array<{ code: string; level?: string; message: string }>;
-  inputs: TransactionGraphNode[];
-  outputs: TransactionGraphNode[];
-  fee?: TransactionGraphNode | null;
-  annotations?: TransactionGraphAnnotation[];
-  accounting?: {
-    quarantine?: { reason?: string | null; detail?: Record<string, unknown> } | null;
-    linkedPairs?: TransactionGraphAnnotation[];
-    transferGroupIds?: string[];
-  };
-  swapRoute?: TransactionSwapRoute | null;
-};
-
-export type TransactionGraphIssueTarget = "bitcoin" | "liquid";
+export type {
+  TransactionGraphAnnotation,
+  TransactionGraphIssueTarget,
+  TransactionGraphNode,
+  TransactionGraphPayload,
+  TransactionSwapRoute,
+  TransactionSwapRouteLeg,
+  TransactionSwapRouteLegKey,
+} from "./TransactionGraphModel";
 
 type TransactionGraphIssueLabelKey =
   | "graph.addBitcoinBackend"
@@ -154,62 +73,11 @@ type TransactionGraphIssueAction = {
   labelKey: TransactionGraphIssueLabelKey;
 };
 
-type GraphRow = TransactionGraphNode & { side: "input" | "output" | "fee" };
-
 const MAX_COMPACT_ROWS = 24;
 // The expanded dialog shows far more strands, but still caps so a fan-out
 // transaction cannot render thousands of paths. Matches the backend node cap.
 const MAX_EXPANDED_ROWS = 250;
 const MAX_DETAIL_COLLAPSED_ROWS = 8;
-
-export function compactGraphRows(
-  nodes: TransactionGraphNode[],
-  side: "input" | "output",
-  maxRows = MAX_COMPACT_ROWS,
-): GraphRow[] {
-  const rows = nodes.map((node) => ({ ...node, side }));
-  if (rows.length <= maxRows) return rows;
-  const visible = rows.slice(0, Math.max(1, maxRows - 1));
-  const hidden = rows.slice(visible.length);
-  // A hidden node may itself be a server-side overflow node, so count the legs
-  // it represents rather than the strand.
-  const hiddenCount = hidden.reduce((sum, node) => sum + (node.overflowCount ?? 1), 0);
-  // Only advertise a concrete value when every hidden leg has a known amount;
-  // otherwise leave it amountless so a partial sum isn't shown as a total.
-  const allKnown = hidden.every((node) => typeof node.valueSats === "number");
-  const totalSats = allKnown
-    ? hidden.reduce((sum, node) => sum + (node.valueSats ?? 0), 0)
-    : null;
-  return [
-    ...visible,
-    {
-      id: `${side}-overflow`,
-      side,
-      label: `+${hiddenCount} more`,
-      role: "overflow",
-      ownership: "overflow",
-      overflow: true,
-      overflowCount: hiddenCount,
-      valueSats: totalSats,
-      valueBtc: totalSats != null ? totalSats / 100_000_000 : null,
-      annotations: [
-        {
-          code: "overflow",
-          label: `${hiddenCount} compacted ${side} rows`,
-        },
-      ],
-    },
-  ];
-}
-
-export function sensitiveGraphText(
-  value: string | null | undefined,
-  hidden: boolean,
-  hiddenLabel = "Hidden",
-) {
-  if (!value) return "";
-  return hidden ? hiddenLabel : value;
-}
 
 function formatNodeAmount(node: TransactionGraphNode, hidden: boolean, t: TFunction<"transactions">) {
   if (hidden) return t("graph.hidden");
@@ -221,18 +89,6 @@ function formatNodeAmount(node: TransactionGraphNode, hidden: boolean, t: TFunct
     return `${node.valueSats.toLocaleString("de-AT")} sats`;
   }
   return "";
-}
-
-function nodeTitle(node: TransactionGraphNode) {
-  if (node.overflow) return node.label ?? "More";
-  return node.wallet || node.address || node.outpoint || node.label || "Transaction leg";
-}
-
-export function nodeTooltipTitle(node: TransactionGraphNode) {
-  const title = nodeTitle(node);
-  if (node.outpoint && title === node.outpoint) return formatShortTxid(node.outpoint);
-  if (title.length > 48) return formatShortTxid(title);
-  return title;
 }
 
 function nodeDisplayTitle(node: TransactionGraphNode, t: TFunction<"transactions">) {
@@ -276,72 +132,6 @@ function nodeReference(node: TransactionGraphNode) {
   return node.address || node.outpoint || node.txid || node.label || "";
 }
 
-function txidFromOutpoint(outpoint: string | undefined) {
-  const [txid] = outpoint?.split(":") ?? [];
-  return txid && /^[0-9a-f]{64}$/i.test(txid) ? txid : undefined;
-}
-
-function looksLiquidAddress(address: string | undefined) {
-  const normalized = address?.trim().toLowerCase();
-  if (!normalized) return false;
-  return (
-    normalized.startsWith("lq1") ||
-    normalized.startsWith("ex1") ||
-    normalized.startsWith("el1") ||
-    normalized.startsWith("ert1") ||
-    normalized.startsWith("tex1") ||
-    normalized.startsWith("tlq1")
-  );
-}
-
-function inferExplorerNetwork(
-  graph: TransactionGraphPayload,
-  node: TransactionGraphNode,
-): ExplorerNetwork {
-  const hints = [
-    graph.transaction?.network,
-    graph.transaction?.asset,
-    node.address,
-    node.scriptType,
-  ]
-    .filter(Boolean)
-    .join(" ")
-    .toLowerCase();
-  if (
-    hints.includes("liquid") ||
-    hints.includes("l-btc") ||
-    hints.includes("lbtc") ||
-    looksLiquidAddress(node.address)
-  ) {
-    return "liquid";
-  }
-  return "bitcoin";
-}
-
-function explorerTargetForGraphNode({
-  graph,
-  node,
-  settings,
-}: {
-  graph: TransactionGraphPayload;
-  node: TransactionGraphNode;
-  settings: ExplorerSettings;
-}) {
-  const network = inferExplorerNetwork(graph, node);
-  if (node.address) {
-    return explorerTargetForAddress({
-      address: node.address,
-      network,
-      settings,
-    });
-  }
-  return explorerTargetForTransaction({
-    txid: node.txid || txidFromOutpoint(node.outpoint),
-    network,
-    settings,
-  });
-}
-
 function nodeDetailReference(
   node: TransactionGraphNode,
   hidden: boolean,
@@ -382,6 +172,38 @@ function nodeDetailMeta(
     parts.push(formatShortTxid(node.outpoint));
   }
   return parts;
+}
+
+function graphExplorerNetwork(graph: TransactionGraphPayload): ExplorerNetwork {
+  const text = `${graph.transaction?.network ?? ""} ${graph.transaction?.asset ?? ""}`.toLowerCase();
+  return text.includes("liquid") || text.includes("lbtc") || text.includes("l-btc")
+    ? "liquid"
+    : "bitcoin";
+}
+
+function explorerTargetForGraphNode({
+  graph,
+  node,
+  settings,
+}: {
+  graph: TransactionGraphPayload;
+  node: TransactionGraphNode;
+  settings: ExplorerSettings;
+}): ExplorerTarget | null {
+  const network = graphExplorerNetwork(graph);
+  if (node.address) {
+    return explorerTargetForAddress({
+      address: node.address,
+      network,
+      settings,
+    });
+  }
+  const txid = node.txid || node.outpoint?.split(":")[0];
+  return explorerTargetForTransaction({
+    txid,
+    network,
+    settings,
+  });
 }
 
 function amountSummary(nodes: TransactionGraphNode[]) {
@@ -499,25 +321,20 @@ function TransactionIoRow({
         )}
       >
         <span>{amount}</span>
-        {canOpenExplorer ? (
-          <ExternalLink className="mt-0.5 size-3 text-muted-foreground" aria-hidden="true" />
-        ) : null}
       </div>
     </>
   );
   if (canOpenExplorer && explorerTarget) {
+    const openLabel = t("graph.inputsOutputs.openExplorer", {
+      explorer: explorerTarget.label,
+      reference: nodeDetailReference(node, false, t),
+    });
     return (
       <button
         type="button"
         className="grid w-full min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] gap-2 border-t py-2 text-left first:border-t-0 hover:bg-muted/35 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        aria-label={t("graph.inputsOutputs.openExplorer", {
-          explorer: explorerTarget.label,
-          reference: nodeDetailReference(node, false, t),
-        })}
-        title={t("graph.inputsOutputs.openExplorer", {
-          explorer: explorerTarget.label,
-          reference: nodeDetailReference(node, false, t),
-        })}
+        aria-label={openLabel}
+        title={openLabel}
         onClick={() => onOpenExplorer(explorerTarget)}
       >
         {content}
@@ -597,25 +414,55 @@ function TransactionIoColumn({
           </button>
         ) : null}
       </div>
-      <div className="mt-1.5 flex items-center justify-between gap-2 border-t pt-1.5 text-xs">
-        <span className="text-muted-foreground">
-          {t(
-            hasCompleteTotal(nodes)
-              ? "graph.inputsOutputs.total"
-              : "graph.inputsOutputs.knownTotal",
-          )}
-        </span>
-        <span
-          className={cn(
-            "font-medium tabular-nums",
-            hideSensitive && "sensitive",
-          )}
+    </div>
+  );
+}
+
+function TransactionIoTotalsPane({
+  graph,
+  hideSensitive,
+}: {
+  graph: TransactionGraphPayload;
+  hideSensitive: boolean;
+}) {
+  const { t } = useTranslation("transactions");
+  const rows: Array<{
+    id: "input" | "output";
+    label: string;
+    nodes: TransactionGraphNode[];
+  }> = [
+    { id: "input", label: t("graph.inputsOutputs.inputs"), nodes: graph.inputs },
+    { id: "output", label: t("graph.inputsOutputs.outputs"), nodes: graph.outputs },
+  ];
+  return (
+    <div
+      className="mt-2 grid gap-4 border-t pt-2 md:grid-cols-2"
+      data-testid="transaction-inputs-outputs-totals"
+    >
+      {rows.map((row) => (
+        <div
+          key={row.id}
+          className="flex min-w-0 items-center justify-between gap-3 text-xs"
         >
-          {hideSensitive
-            ? t("graph.hidden")
-            : formatTotal(nodes, t)}
-        </span>
-      </div>
+          <div className="min-w-0">
+            <div className="text-muted-foreground">
+              {t(
+                hasCompleteTotal(row.nodes)
+                  ? "graph.inputsOutputs.total"
+                  : "graph.inputsOutputs.knownTotal",
+              )}
+            </div>
+          </div>
+          <div
+            className={cn(
+              "min-w-0 break-words text-right font-medium tabular-nums",
+              hideSensitive && "sensitive",
+            )}
+          >
+            {hideSensitive ? t("graph.hidden") : formatTotal(row.nodes, t)}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
@@ -641,24 +488,6 @@ export function TransactionInputsOutputsPanel({
   if (!graph.inputs.length && !graph.outputs.length) return null;
   return (
     <section className="border-t pt-3" data-testid="transaction-inputs-outputs-panel">
-      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <div className="text-sm font-medium">
-            {t("graph.inputsOutputs.title")}
-          </div>
-          <div className="text-xs text-muted-foreground">
-            {t("graph.inputsOutputs.counts", {
-              inputs: graph.transaction?.inputCount ?? graph.inputs.length,
-              outputs: graph.transaction?.outputCount ?? graph.outputs.length,
-            })}
-          </div>
-        </div>
-        {graph.transaction?.asset ? (
-          <Badge variant="secondary" className="rounded-md">
-            {graph.transaction.asset}
-          </Badge>
-        ) : null}
-      </div>
       <div className="grid gap-4 md:grid-cols-2">
         <TransactionIoColumn
           title={t("graph.inputsOutputs.inputs")}
@@ -693,6 +522,7 @@ export function TransactionInputsOutputsPanel({
           onOpenExplorer={handleOpenExplorer}
         />
       </div>
+      <TransactionIoTotalsPane graph={graph} hideSensitive={hideSensitive} />
     </section>
   );
 }
@@ -711,7 +541,9 @@ type GraphHoverDetail = {
   node: DrawableGraphRow;
 };
 
-export type TransactionSwapRouteLegKey = "out" | "in";
+const AMOUNTLESS_FEE_STRAND_THICKNESS = 0.5;
+const GRAPH_ROW_HEIGHT = 29;
+const GRAPH_MULTI_LEG_GAP = 4;
 
 function positiveKnownSats(node: TransactionGraphNode) {
   return typeof node.valueSats === "number" && node.valueSats > 0
@@ -735,15 +567,12 @@ function visualSatsForNode(node: TransactionGraphNode, fallbackSats: number) {
 
 function visualKnownSatsForNode(
   node: GraphRow,
-  fallbackSats: number,
   hasAmountlessNonFeeRows: boolean,
 ) {
   const valueSats = node.valueSats;
   if (typeof valueSats !== "number" || node.valueState === "confidential") return null;
   const value = Math.max(0, valueSats);
-  if (node.side === "fee" && hasAmountlessNonFeeRows && value > 0) {
-    return Math.min(value, Math.max(1, fallbackSats));
-  }
+  if (node.side === "fee" && hasAmountlessNonFeeRows && value > 0) return 1;
   return value;
 }
 
@@ -774,7 +603,7 @@ function buildDrawableRows(
     (node) => node.side !== "fee" && hasAmountlessGeometryValue(node),
   );
   const knownVisualValues = rows.map((node) =>
-    visualKnownSatsForNode(node, fallbackSats, hasAmountlessNonFeeRows),
+    visualKnownSatsForNode(node, hasAmountlessNonFeeRows),
   );
   const visualValues = rows.map((node, index) =>
     knownVisualValues[index] ?? visualSatsForNode(node, fallbackSats),
@@ -799,11 +628,15 @@ function buildDrawableRows(
       typeof node.valueSats === "number" &&
       node.valueSats <= 0;
     const weight = weights[index] ?? 0;
+    const amountlessPeerFee =
+      node.side === "fee" && hasAmountlessNonFeeRows && weight > 0;
     return {
       ...node,
       outerY: centerY,
       innerY: centerY,
-      thickness: knownZero
+      thickness: amountlessPeerFee
+        ? AMOUNTLESS_FEE_STRAND_THICKNESS
+        : knownZero
         ? 3
         : Math.min(combinedWeight + 0.5, Math.max(2, weight) + 1),
       weight,
@@ -816,7 +649,10 @@ function buildDrawableRows(
   const spacing =
     lines.length <= 1
       ? 0
-      : Math.max(8, (Math.max(120, height - 80) - visibleWeight) / Math.max(1, lines.length - 1));
+      : Math.max(
+          GRAPH_MULTI_LEG_GAP,
+          (Math.max(120, height - 80) - visibleWeight) / Math.max(1, lines.length - 1),
+        );
   const innerTop = centerY - combinedWeight / 2;
   const innerBottom = innerTop + combinedWeight + 0.5;
   let lastOuter = 40;
@@ -979,33 +815,10 @@ function GraphStrand({
         aria-hidden="true"
         className="pointer-events-none fill-none opacity-100 transition-opacity"
         stroke={strandStroke(node, active)}
-        strokeWidth={active ? node.thickness + 1.5 : node.thickness + 1}
+        strokeWidth={node.thickness + 1}
         strokeLinecap="butt"
       />
     </>
-  );
-}
-
-function GraphStrandHoverHighlight({
-  node,
-  path,
-  testId,
-}: {
-  node: DrawableGraphRow;
-  path: string;
-  testId?: string;
-}) {
-  return (
-    <path
-      d={path}
-      data-testid={testId}
-      aria-hidden="true"
-      className="pointer-events-none fill-none opacity-100"
-      stroke={strandStroke(node, true)}
-      strokeWidth={node.thickness + 4}
-      strokeLinecap="butt"
-      filter="url(#transaction-flow-hover-glow)"
-    />
   );
 }
 
@@ -1039,30 +852,106 @@ function formatRouteAmount(
   asset: string | null | undefined,
   hidden: boolean,
   hiddenLabel = "Hidden",
+  showAsset = true,
 ) {
   if (hidden) return hiddenLabel;
   if (typeof amountBtc !== "number") return "";
-  const assetText = asset ? ` ${asset}` : "";
+  const assetText = showAsset && asset ? ` ${asset}` : "";
   return `${formatBtc(amountBtc)}${assetText}`;
 }
 
-function legReference(leg: TransactionSwapRouteLeg) {
-  return leg.txid || leg.externalId || leg.id || "";
+function formatRouteFeePercent(
+  feeBtc: number | null | undefined,
+  baseBtc: number | null | undefined,
+  hidden: boolean,
+  hiddenLabel = "Hidden",
+) {
+  if (hidden) return hiddenLabel;
+  if (
+    typeof feeBtc !== "number" ||
+    typeof baseBtc !== "number" ||
+    !Number.isFinite(feeBtc) ||
+    !Number.isFinite(baseBtc) ||
+    baseBtc === 0
+  ) {
+    return "";
+  }
+  const percent = (Math.abs(feeBtc) / Math.abs(baseBtc)) * 100;
+  const precision = percent < 0.1 ? 3 : percent < 1 ? 2 : 1;
+  return `${percent.toFixed(precision)}%`;
+}
+
+function routeLegAssetLabel(leg: TransactionSwapRouteLeg): ConnectionAssetLabel | null {
+  const text = [
+    leg.asset,
+    leg.network,
+    leg.wallet?.kind,
+    leg.wallet?.label,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+  if (!text) return null;
+  if (text.includes("liquid") || text.includes("lbtc") || text.includes("l-btc")) {
+    return "LBTC";
+  }
+  if (text.includes("lightning") || text.includes("ln-btc")) {
+    return "LN-BTC";
+  }
+  if (text.includes("btc") || text.includes("bitcoin") || text.includes("descriptor")) {
+    return "BTC";
+  }
+  return null;
+}
+
+function RouteLegAssetIcon({ leg }: { leg: TransactionSwapRouteLeg }) {
+  const asset = routeLegAssetLabel(leg);
+  if (!asset) return null;
+  const iconKind = connectionAssetIconKind(asset);
+  const icon = iconKind === "liquid" ? liquidIcon : bitcoinIcon;
+  return (
+    <span
+      className={cn(
+        "inline-flex size-4 shrink-0 items-center justify-center rounded-sm border border-border/60 bg-muted/40",
+        iconKind === "bitcoin" && "p-0.5",
+      )}
+      data-testid="swap-route-leg-asset-icon"
+      data-asset={asset}
+      aria-label={asset}
+      title={asset}
+    >
+      <img src={icon} alt="" className="max-h-full max-w-full object-contain" />
+    </span>
+  );
 }
 
 function legGraphReference(leg: TransactionSwapRouteLeg) {
   return leg.id || leg.txid || leg.externalId || "";
 }
 
-function routeCounterparty(route: TransactionSwapRoute) {
-  return (
-    route.out.counterparty ||
-    route.in.counterparty ||
-    route.out.description ||
-    route.in.description ||
-    route.kind ||
-    ""
-  );
+function isSyncProvenanceLabel(value: string) {
+  return /^synced from\b/i.test(value.trim());
+}
+
+function routeCounterparty(
+  route: TransactionSwapRoute,
+  kind: ReturnType<typeof pairedRouteKind>,
+) {
+  const candidates = [
+    route.out.counterparty,
+    route.in.counterparty,
+    route.out.description,
+    route.in.description,
+    route.kind,
+  ];
+  for (const candidate of candidates) {
+    const value = candidate?.trim();
+    if (!value) continue;
+    if (["swap", "coinjoin", "transfer", "pair"].includes(value.toLowerCase())) continue;
+    if (kind === "swap" && isSyncProvenanceLabel(value)) continue;
+    return value;
+  }
+  return "";
 }
 
 function pairedRouteKind(route: TransactionSwapRoute): "swap" | "coinjoin" | "transfer" | "pair" {
@@ -1117,9 +1006,13 @@ function SwapRouteLeg({
 }) {
   const { t } = useTranslation("transactions");
   const hiddenLabel = t("graph.hidden");
-  const amount = formatRouteAmount(leg.amountBtc, leg.asset, hideSensitive, hiddenLabel);
-  const wallet = sensitiveGraphText(leg.wallet?.label, hideSensitive, hiddenLabel);
-  const reference = sensitiveGraphText(formatShortTxid(legReference(leg)), hideSensitive, hiddenLabel);
+  const amount = formatRouteAmount(
+    leg.amountBtc,
+    leg.asset,
+    hideSensitive,
+    hiddenLabel,
+    false,
+  );
   return (
     <button
       type="button"
@@ -1131,18 +1024,14 @@ function SwapRouteLeg({
         active && "border-primary/60 bg-primary/10",
       )}
     >
-      <div className="flex min-w-0 items-center justify-between gap-2">
+      <div className="flex min-w-0 items-start justify-between gap-2">
         <div className="min-w-0">
           <div className="text-[10px] font-medium uppercase text-muted-foreground">
             {label}
           </div>
           <div className="mt-1 flex min-w-0 items-center gap-1.5 text-sm font-medium">
             <span>{leg.network || leg.asset || unknownLabel}</span>
-            {leg.asset ? (
-              <Badge variant="secondary" className="rounded-md px-1.5 py-0 text-[10px]">
-                {leg.asset}
-              </Badge>
-            ) : null}
+            <RouteLegAssetIcon leg={leg} />
           </div>
         </div>
         {active ? (
@@ -1152,18 +1041,8 @@ function SwapRouteLeg({
         ) : null}
       </div>
       {amount ? (
-        <div className={cn("mt-1 text-sm tabular-nums", hideSensitive && "sensitive")}>
+        <div className={cn("mt-1 text-sm font-medium tabular-nums", hideSensitive && "sensitive")}>
           {amount}
-        </div>
-      ) : null}
-      {wallet ? (
-        <div className={cn("mt-1 truncate text-xs text-muted-foreground", hideSensitive && "sensitive")}>
-          {wallet}
-        </div>
-      ) : null}
-      {reference ? (
-        <div className={cn("mt-1 truncate font-mono text-[11px] text-muted-foreground", hideSensitive && "sensitive")}>
-          {reference}
         </div>
       ) : null}
     </button>
@@ -1182,17 +1061,31 @@ function SwapRouteStrip({
   onSelectLeg?: (leg: TransactionSwapRouteLegKey) => void;
 }) {
   const { t } = useTranslation("transactions");
+  const [feeMode, setFeeMode] = useState<"relative" | "absolute">("relative");
   if (!route) return null;
   const activeLeg = selectedLeg ?? route.currentLeg ?? "out";
   const canSelectOut = Boolean(onSelectLeg && legGraphReference(route.out));
   const canSelectIn = Boolean(onSelectLeg && legGraphReference(route.in));
   const hiddenLabel = t("graph.hidden");
-  const counterparty = sensitiveGraphText(routeCounterparty(route), hideSensitive, hiddenLabel);
-  const fee = formatRouteAmount(route.swapFeeBtc, route.out.asset, hideSensitive, hiddenLabel);
   const kind = pairedRouteKind(route);
-  const routeLabel = `${route.out.asset || t("graph.swapRouteAsset")} -> ${
-    route.in.asset || t("graph.swapRouteAsset")
-  }`;
+  const counterparty = sensitiveGraphText(routeCounterparty(route, kind), hideSensitive, hiddenLabel);
+  const feeBaseBtc =
+    route.outFullAmountBtc ?? route.outAmountBtc ?? route.out.amountBtc ?? route.in.amountBtc;
+  const feeAbsolute = formatRouteAmount(
+    route.swapFeeBtc,
+    route.out.asset,
+    hideSensitive,
+    hiddenLabel,
+    false,
+  );
+  const feeRelative = formatRouteFeePercent(
+    route.swapFeeBtc,
+    feeBaseBtc,
+    hideSensitive,
+    hiddenLabel,
+  );
+  const fee = feeMode === "absolute" ? feeAbsolute : feeRelative || feeAbsolute;
+  const hasFeeToggle = Boolean(feeAbsolute && feeRelative);
   const title =
     kind === "coinjoin"
       ? t("graph.coinjoinRouteTitle")
@@ -1201,14 +1094,6 @@ function SwapRouteStrip({
         : kind === "pair"
           ? t("graph.pairRouteTitle")
           : t("graph.swapRouteTitle");
-  const middleLabel =
-    kind === "coinjoin"
-      ? t("graph.coinjoinRouteMiddle")
-      : kind === "transfer"
-        ? t("graph.transferRouteMiddle")
-        : kind === "pair"
-          ? t("graph.pairRouteMiddle")
-          : t("graph.swapRouteMiddle");
   const pairFallback =
     kind === "coinjoin"
       ? t("graph.coinjoinRoutePair")
@@ -1232,14 +1117,8 @@ function SwapRouteStrip({
           <ArrowRightLeft className="size-4 shrink-0 text-sky-500" aria-hidden="true" />
           <div className="min-w-0">
             <div className="text-sm font-medium">{title}</div>
-            <div className="truncate text-xs text-muted-foreground">{routeLabel}</div>
           </div>
         </div>
-        {fee ? (
-          <Badge variant="secondary" className={cn("rounded-md", hideSensitive && "sensitive")}>
-            {t("graph.swapRouteFee", { fee })}
-          </Badge>
-        ) : null}
       </div>
       <div className="mt-3 grid items-stretch gap-2 md:grid-cols-[minmax(0,1fr)_minmax(190px,0.9fr)_minmax(0,1fr)]">
         <SwapRouteLeg
@@ -1254,16 +1133,32 @@ function SwapRouteStrip({
         <div className="flex min-w-0 items-center justify-center gap-2 px-3 py-2 text-center">
           <ArrowRight className="hidden size-4 shrink-0 text-muted-foreground md:block" aria-hidden="true" />
           <div className="min-w-0">
-            <div className="text-[10px] font-medium uppercase text-muted-foreground">
-              {middleLabel}
-            </div>
-            <div className={cn("mt-1 text-sm font-medium leading-snug", hideSensitive && "sensitive")}>
+            <div className={cn("text-sm font-medium leading-snug", hideSensitive && "sensitive")}>
               {counterparty || pairFallback}
             </div>
             {route.policy ? (
               <div className="mt-1 truncate text-[11px] text-muted-foreground">
                 {route.policy}
               </div>
+            ) : null}
+            {fee ? (
+              <button
+                type="button"
+                className={cn(
+                  "mt-2 inline-flex max-w-full items-center justify-center rounded border border-border/70 bg-muted/35 px-1.5 py-0.5 text-[10px] font-medium tabular-nums text-muted-foreground transition-colors hover:border-primary/40 hover:bg-primary/10 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                  hideSensitive && "sensitive",
+                )}
+                aria-pressed={feeMode === "absolute"}
+                title={feeMode === "absolute" ? feeRelative : feeAbsolute}
+                onClick={() =>
+                  hasFeeToggle &&
+                  setFeeMode((current) =>
+                    current === "relative" ? "absolute" : "relative",
+                  )
+                }
+              >
+                {t("graph.swapRouteFee", { fee })}
+              </button>
             ) : null}
           </div>
           <ArrowRight className="hidden size-4 shrink-0 text-muted-foreground md:block" aria-hidden="true" />
@@ -1314,7 +1209,7 @@ export function TransactionFlowDiagram({
     ? redactRowsForGeometry(destinationRows)
     : destinationRows;
   const rowCount = Math.max(inputRows.length, destinationRows.length, 2);
-  const height = Math.max(280, rowCount * 58 + 90);
+  const height = Math.max(280, rowCount * GRAPH_ROW_HEIGHT + 90);
   const viewportHeight = expanded
     ? `min(72vh, ${Math.max(440, Math.min(height + 24, 760))}px)`
     : `${Math.max(340, Math.min(height + 8, 430))}px`;
@@ -1363,14 +1258,6 @@ export function TransactionFlowDiagram({
     curveWidth,
     fallbackSats,
   );
-  const activeNode =
-    hoverDetail
-      ? [...inputDrawRows, ...outputDrawRows].find(
-          (node) =>
-            node.id === hoverDetail.node.id &&
-            node.side === hoverDetail.node.side,
-        )
-      : undefined;
   const pathFor = (node: DrawableGraphRow) =>
     makeBowtiePath(node, node.side === "input" ? "input" : "output", canvasWidth, edgePadding, centerX);
   const markerPathFor = (node: DrawableGraphRow) =>
@@ -1387,7 +1274,7 @@ export function TransactionFlowDiagram({
   return (
     <div
       ref={shellRef}
-      className="relative overflow-hidden bg-transparent"
+      className="relative min-w-0 overflow-hidden bg-transparent"
       style={{ height: viewportHeight }}
       data-testid="transaction-flow-diagram"
     >
@@ -1396,15 +1283,15 @@ export function TransactionFlowDiagram({
           ? t("graph.hiddenReferences")
           : t("graph.availableReferences")}
       </span>
-      <div className="h-full overflow-auto">
+      <div className="h-full min-w-0 overflow-y-auto overflow-x-hidden">
         <div
-          className="relative"
+          className="relative min-w-0"
           data-testid="transaction-flow-canvas"
           data-transaction-flow-canvas
-          style={{ width: canvasWidth, height }}
+          style={{ width: "100%", height }}
         >
           <svg
-            className="absolute inset-0"
+            className="absolute inset-0 h-full w-full"
             width={canvasWidth}
             height={height}
             viewBox={`0 0 ${canvasWidth} ${height}`}
@@ -1438,29 +1325,6 @@ export function TransactionFlowDiagram({
                 <stop offset="58%" stopColor="rgb(251 191 36)" />
                 <stop offset="100%" stopColor="transparent" />
               </linearGradient>
-              <filter
-                id="transaction-flow-hover-glow"
-                x="-18%"
-                y="-70%"
-                width="136%"
-                height="240%"
-                colorInterpolationFilters="sRGB"
-              >
-                <feDropShadow
-                  dx="0"
-                  dy="0"
-                  stdDeviation="3.2"
-                  floodColor="rgb(125 211 252)"
-                  floodOpacity="0.7"
-                />
-                <feDropShadow
-                  dx="0"
-                  dy="0"
-                  stdDeviation="1"
-                  floodColor="rgb(255 255 255)"
-                  floodOpacity="0.55"
-                />
-              </filter>
             </defs>
           {inputDrawRows.map((node) => (
             <GraphStrand
@@ -1488,13 +1352,6 @@ export function TransactionFlowDiagram({
               onLeave={() => setHoverDetail(null)}
             />
           ))}
-          {activeNode ? (
-            <GraphStrandHoverHighlight
-              node={activeNode}
-              path={pathFor(activeNode)}
-              testId="transaction-hover-strand"
-            />
-          ) : null}
         </svg>
         </div>
       </div>
@@ -1676,6 +1533,12 @@ export function TransactionGraphPanel({
 
   return (
     <div className="space-y-4">
+      <SwapRouteStrip
+        route={graph?.swapRoute}
+        hideSensitive={hideSensitive}
+        selectedLeg={selectedSwapLeg}
+        onSelectLeg={onSelectSwapLeg}
+      />
       {showDiagram ? (
         <>
           <div className="flex flex-wrap items-center justify-between gap-2">
@@ -1687,9 +1550,15 @@ export function TransactionGraphPanel({
             </div>
             <Dialog>
               <DialogTrigger asChild>
-                <Button type="button" variant="outline" size="sm" className="gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  className="size-8 shrink-0"
+                  aria-label={t("graph.expand")}
+                  title={t("graph.expand")}
+                >
                   <Maximize2 className="size-4" aria-hidden="true" />
-                  {t("graph.expand")}
                 </Button>
               </DialogTrigger>
               <DialogContent className="w-[min(1180px,calc(100vw-2rem))] max-w-none sm:max-w-none">
@@ -1698,12 +1567,6 @@ export function TransactionGraphPanel({
               </DialogContent>
             </Dialog>
           </div>
-          <SwapRouteStrip
-            route={graph.swapRoute}
-            hideSensitive={hideSensitive}
-            selectedLeg={selectedSwapLeg}
-            onSelectLeg={onSelectSwapLeg}
-          />
           <AnnotationStrip annotations={graph.annotations} hideSensitive={hideSensitive} />
           <TransactionFlowDiagram graph={graph} hideSensitive={hideSensitive} />
           <TransactionInputsOutputsPanel graph={graph} hideSensitive={hideSensitive} />

@@ -2,8 +2,17 @@ import { Plus } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
+import {
+  pageHeaderActionClassName,
+  pageHeaderActionsClassName,
+  pageHeaderClassName,
+} from "@/lib/screen-layout";
+import { cn } from "@/lib/utils";
 
-const headerActionClassName = "h-9 min-w-[112px] justify-center gap-2";
+const headerActionClassName = cn(
+  pageHeaderActionClassName,
+  "min-w-[112px] justify-center",
+);
 
 interface WalletsDashboardHeaderProps {
   onAddWallet: () => void;
@@ -14,7 +23,7 @@ export function WalletsDashboardHeader({
 }: WalletsDashboardHeaderProps) {
   const { t } = useTranslation("connections");
   return (
-    <div className="flex flex-col gap-2.5 sm:flex-row sm:items-end sm:justify-between">
+    <div className={pageHeaderClassName}>
       <div className="min-w-0 space-y-1">
         <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
           {t("dashboard.eyebrow")}
@@ -23,7 +32,7 @@ export function WalletsDashboardHeader({
           {t("dashboard.title")}
         </h2>
       </div>
-      <div className="flex flex-wrap items-center gap-2">
+      <div className={pageHeaderActionsClassName}>
         <Button size="sm" className={headerActionClassName} onClick={onAddWallet}>
           <Plus className="size-4" aria-hidden="true" />
           {t("dashboard.addWallet")}

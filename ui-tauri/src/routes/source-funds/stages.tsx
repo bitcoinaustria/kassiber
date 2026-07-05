@@ -194,7 +194,7 @@ export function TargetStage({ state }: { state: SourceFundsCaseState }) {
         </div>
       )}
 
-      <div className="rounded-md border">
+      <div className="overflow-hidden rounded-lg border bg-card">
         <div className="flex flex-col gap-3 border-b p-3 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <div className="text-sm font-medium">{targetLabel}</div>
@@ -215,14 +215,14 @@ export function TargetStage({ state }: { state: SourceFundsCaseState }) {
                   value={state.targetSearch}
                   onChange={(event) => state.setTargetSearch(event.target.value)}
                   placeholder="Search txid, wallet, note..."
-                  className="h-9 pl-9"
+                  className="h-8 pl-9"
                 />
               </div>
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
-                className="h-9"
+                className="h-8"
                 onClick={() =>
                   state.setShowAdvancedTargetFilters(
                     !state.showAdvancedTargetFilters,
@@ -238,7 +238,7 @@ export function TargetStage({ state }: { state: SourceFundsCaseState }) {
                   type="button"
                   variant="outline"
                   size="sm"
-                  className="h-9"
+                  className="h-8"
                   onClick={state.clearTargetFilters}
                 >
                   <X className="mr-2 size-4" aria-hidden="true" />
@@ -250,12 +250,12 @@ export function TargetStage({ state }: { state: SourceFundsCaseState }) {
               open={state.showAdvancedTargetFilters}
               onOpenChange={state.setShowAdvancedTargetFilters}
             >
-              <CollapsibleContent className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
+              <CollapsibleContent className="grid gap-2 border-t pt-3 sm:grid-cols-2 xl:grid-cols-5">
                 <Select
                   value={state.targetDirectionFilter}
                   onValueChange={state.setTargetDirectionFilter}
                 >
-                  <SelectTrigger className="h-9 w-full" aria-label="Filter by direction">
+                  <SelectTrigger className="h-8 w-full" aria-label="Filter by direction">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -270,7 +270,7 @@ export function TargetStage({ state }: { state: SourceFundsCaseState }) {
                   value={state.targetDateFilter}
                   onValueChange={state.setTargetDateFilter}
                 >
-                  <SelectTrigger className="h-9 w-full" aria-label="Filter by date">
+                  <SelectTrigger className="h-8 w-full" aria-label="Filter by date">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -286,7 +286,7 @@ export function TargetStage({ state }: { state: SourceFundsCaseState }) {
                   value={state.targetStatusFilter}
                   onValueChange={state.setTargetStatusFilter}
                 >
-                  <SelectTrigger className="h-9 w-full" aria-label="Filter by status">
+                  <SelectTrigger className="h-8 w-full" aria-label="Filter by status">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -300,7 +300,7 @@ export function TargetStage({ state }: { state: SourceFundsCaseState }) {
                   value={state.targetNetworkFilter}
                   onValueChange={state.setTargetNetworkFilter}
                 >
-                  <SelectTrigger className="h-9 w-full" aria-label="Filter by network">
+                  <SelectTrigger className="h-8 w-full" aria-label="Filter by network">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -316,7 +316,7 @@ export function TargetStage({ state }: { state: SourceFundsCaseState }) {
                   value={state.targetAssetFilter}
                   onValueChange={state.setTargetAssetFilter}
                 >
-                  <SelectTrigger className="h-9 w-full" aria-label="Filter by asset">
+                  <SelectTrigger className="h-8 w-full" aria-label="Filter by asset">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -333,7 +333,7 @@ export function TargetStage({ state }: { state: SourceFundsCaseState }) {
                   onValueChange={state.setTargetWalletFilter}
                 >
                   <SelectTrigger
-                    className="h-9 w-full xl:col-span-2"
+                    className="h-8 w-full xl:col-span-2"
                     aria-label="Filter by wallet"
                   >
                     <SelectValue />
@@ -352,11 +352,13 @@ export function TargetStage({ state }: { state: SourceFundsCaseState }) {
           </div>
         </div>
         <TransactionTargetHeader />
-        <div className="max-h-[430px] overflow-y-auto p-2">
+        <div className="max-h-[430px] overflow-y-auto">
           {state.filteredTargetRows.length === 0 ? (
-            <EmptyState text="No transactions match these filters." />
+            <div className="p-3">
+              <EmptyState text="No transactions match these filters." />
+            </div>
           ) : (
-            <div className="space-y-2">
+            <div className="divide-y">
               {state.filteredTargetRows.map((row) => (
                 <TransactionTargetRow
                   key={txRef(row)}

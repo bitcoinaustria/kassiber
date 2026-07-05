@@ -23,7 +23,6 @@ import {
   LedgerRow,
   networkLabel,
 } from "./TransactionDetailSheetParts";
-import { TransactionLedgerSection } from "./TransactionLedgerSection";
 import { CommercialProvenancePanel } from "./TransactionDetailCommercialPanel";
 import {
   blurClass,
@@ -40,6 +39,10 @@ import {
   type TransactionSwapRoute,
   type TransactionSwapRouteLegKey,
 } from "./TransactionGraphTab";
+import {
+  preloadableSwapLegGraphLookupArgs,
+  transactionGraphLookupReferenceArgs,
+} from "./TransactionGraphLookup";
 
 function graphWithPairFallbackRoute(
   graphData: TransactionGraphPayload | undefined,
@@ -134,64 +137,6 @@ function routeNetwork(asset?: string | null, wallet?: string | null) {
   }
   if (assetText === "BTC") return "Bitcoin";
   return asset || undefined;
-}
-
-function normalizedReferenceSet(references: Array<string | null | undefined>) {
-  return new Set(
-    references
-      .map((reference) => reference?.trim().toLowerCase())
-      .filter((reference): reference is string => Boolean(reference)),
-  );
-}
-
-function swapRouteLegReference(
-  route: TransactionSwapRoute | null | undefined,
-  leg: TransactionSwapRouteLegKey,
-) {
-  const routeLeg = route?.[leg];
-  return routeLeg?.id || routeLeg?.txid || routeLeg?.externalId || null;
-}
-
-export function preloadableSwapLegGraphReference(
-  route: TransactionSwapRoute | null | undefined,
-  leg: TransactionSwapRouteLegKey,
-  currentReferences: Array<string | null | undefined>,
-) {
-  const reference = swapRouteLegReference(route, leg)?.trim();
-  if (!reference) return null;
-  if (normalizedReferenceSet(currentReferences).has(reference.toLowerCase())) {
-    return null;
-  }
-  return reference;
-}
-
-function looksLikeTxid(value: string | null | undefined) {
-  return /^[0-9a-f]{64}$/i.test(value?.trim() ?? "");
-}
-
-function hasPublicGraphLookupReference(
-  transaction: TransactionDetailTabContext["transaction"] | null | undefined,
-) {
-  if (!transaction || !looksLikeTxid(transaction.explorerId)) return false;
-  return transaction.paymentMethod === "On-chain" || transaction.paymentMethod === "Liquid";
-}
-
-export function transactionGraphLookupArgs(
-  transaction: TransactionDetailTabContext["transaction"] | null | undefined,
-) {
-  return {
-    transaction: transaction?.id ?? "",
-    allowPublicLookup: hasPublicGraphLookupReference(transaction),
-  };
-}
-
-export function transactionGraphLookupReferenceArgs(
-  transactionRef: string | null | undefined,
-) {
-  return {
-    transaction: transactionRef ?? "",
-    allowPublicLookup: false,
-  };
 }
 
 function PrivacyEvidencePill({ level }: { level?: EvidenceLevel }) {
@@ -326,23 +271,29 @@ export function TransactionDetailsTab({ ctx }: { ctx: TransactionDetailTabContex
       transaction.txnId,
     ],
   );
-  const swapOutTransactionRef = useMemo(
-    () => preloadableSwapLegGraphReference(swapRoute, "out", currentGraphReferences),
+  const swapOutGraphArgs = useMemo(
+    () => preloadableSwapLegGraphLookupArgs(swapRoute, "out", currentGraphReferences),
     [currentGraphReferences, swapRoute],
   );
-  const swapInTransactionRef = useMemo(
-    () => preloadableSwapLegGraphReference(swapRoute, "in", currentGraphReferences),
+  const swapInGraphArgs = useMemo(
+    () => preloadableSwapLegGraphLookupArgs(swapRoute, "in", currentGraphReferences),
     [currentGraphReferences, swapRoute],
   );
   const swapOutGraphQuery = useDaemon<TransactionGraphPayload>(
     "ui.transactions.graph",
-    transactionGraphLookupReferenceArgs(swapOutTransactionRef),
-    { enabled: Boolean(swapOutTransactionRef) },
+    transactionGraphLookupReferenceArgs(
+      swapOutGraphArgs.transaction,
+      swapOutGraphArgs.allowPublicLookup,
+    ),
+    { enabled: Boolean(swapOutGraphArgs.transaction) },
   );
   const swapInGraphQuery = useDaemon<TransactionGraphPayload>(
     "ui.transactions.graph",
-    transactionGraphLookupReferenceArgs(swapInTransactionRef),
-    { enabled: Boolean(swapInTransactionRef) },
+    transactionGraphLookupReferenceArgs(
+      swapInGraphArgs.transaction,
+      swapInGraphArgs.allowPublicLookup,
+    ),
+    { enabled: Boolean(swapInGraphArgs.transaction) },
   );
   const privacyMirrorQuery = useDaemon<PrivacyMirrorPayload>("ui.reports.privacy_mirror");
   const activeSwapGraphQuery =
@@ -370,9 +321,9 @@ export function TransactionDetailsTab({ ctx }: { ctx: TransactionDetailTabContex
   };
   const activeSwapTransactionRef =
     activeSwapLeg === "out"
-      ? swapOutTransactionRef
+      ? swapOutGraphArgs.transaction
       : activeSwapLeg === "in"
-        ? swapInTransactionRef
+        ? swapInGraphArgs.transaction
         : null;
   const activeGraphData =
     swapRoute && activeSwapLeg && activeSwapTransactionRef
@@ -458,7 +409,6 @@ export function TransactionDetailsTab({ ctx }: { ctx: TransactionDetailTabContex
                         hint={t("details.priceAtTimeHint")}
                       />
                     </div>
-                    <TransactionLedgerSection ctx={ctx} />
                     <div className="grid gap-3 lg:grid-cols-2">
                       <div className="overflow-hidden rounded-md border">
                         <div className="border-b bg-muted px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">

@@ -134,6 +134,7 @@ class TransactionGraphTest(unittest.TestCase):
         *,
         chain="bitcoin",
         network="main",
+        asset="BTC",
     ):
         self.conn.execute(
             """
@@ -150,7 +151,7 @@ class TransactionGraphTest(unittest.TestCase):
                 wallet_id,
                 chain,
                 network,
-                "BTC",
+                asset,
                 amount * 1000,
                 txid,
                 vout,
@@ -920,6 +921,93 @@ class TransactionGraphTest(unittest.TestCase):
         serialized = json.dumps(payload)
         self.assertNotIn("valuecommitment", serialized)
         self.assertNotIn("assetcommitment", serialized)
+
+    def test_liquid_reference_graph_uses_local_wallet_amounts(self):
+        txid = "65" * 32
+        prev_txid = "64" * 32
+        self._utxo(
+            "wallet-a",
+            ADDR_A,
+            prev_txid,
+            0,
+            amount=13_000_000,
+            chain="liquid",
+            network="liquidv1",
+            asset="LBTC",
+        )
+        self._utxo(
+            "wallet-b",
+            ADDR_B,
+            txid,
+            0,
+            amount=12_900_000,
+            chain="liquid",
+            network="liquidv1",
+            asset="LBTC",
+        )
+        fetched = {
+            "txid": txid,
+            "version": 2,
+            "locktime": 0,
+            "vin": [
+                {
+                    "txid": prev_txid,
+                    "vout": 0,
+                    "prevout": {
+                        "scriptpubkey": SCRIPT_A,
+                        "valuecommitment": "09" + "aa" * 32,
+                    },
+                }
+            ],
+            "vout": [
+                {
+                    "n": 0,
+                    "scriptpubkey": SCRIPT_B,
+                    "valuecommitment": "09" + "bb" * 32,
+                },
+                {"n": 1, "scriptpubkey_type": "fee", "value": 100_000},
+            ],
+        }
+        create_db_backend(
+            self.conn,
+            "graph-liquid-local-values",
+            "mempool",
+            "https://liquid.example/api",
+            chain="liquid",
+            network="liquidv1",
+            timeout=5,
+            commit=False,
+        )
+        self._tx(
+            "liquid-local-values-row",
+            "wallet-a",
+            "outbound",
+            12_900_000_000,
+            txid,
+            "{}",
+            asset="LBTC",
+        )
+
+        with patch(
+            "kassiber.core.transaction_graph.fetch_esplora_transaction",
+            return_value=fetched,
+        ):
+            payload = self._graph("liquid-local-values-row", allow_public_lookup=True)
+
+        self.assertEqual(payload["supportLevel"], "full")
+        self.assertIsNone(payload["unsupportedReason"])
+        self.assertEqual(payload["inputs"][0]["valueState"], "known")
+        self.assertEqual(payload["inputs"][0]["valueSats"], 13_000_000)
+        self.assertEqual(payload["outputs"][0]["valueState"], "known")
+        self.assertEqual(payload["outputs"][0]["valueSats"], 12_900_000)
+        self.assertEqual(payload["fee"]["valueSats"], 100_000)
+        self.assertNotIn(
+            "confidential_values_hidden",
+            {warning["code"] for warning in payload["warnings"]},
+        )
+        cached = self._cached_graph_raw(txid, chain="liquid", network="liquidv1")
+        self.assertEqual(cached["vin"][0]["prevout"]["value_state"], "confidential")
+        self.assertEqual(cached["vout"][0]["value_state"], "confidential")
 
     def test_liquid_runtime_http_backend_is_used(self):
         txid = "6b" * 32

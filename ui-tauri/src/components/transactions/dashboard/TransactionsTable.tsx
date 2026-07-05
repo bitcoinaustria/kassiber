@@ -9,12 +9,12 @@ import {
   Coins,
   Copy,
   Eye,
-  Filter,
   Link2Off,
   Maximize2,
   Minimize2,
   MoreHorizontal,
   Pencil,
+  SlidersHorizontal,
   X,
 } from "lucide-react";
 import * as React from "react";
@@ -1073,6 +1073,7 @@ const TransactionsTable = ({
         const previousCardRect =
           tableHost?.previousElementSibling?.getBoundingClientRect();
         const dashboardShell = tableHost?.parentElement;
+        const dashboardShellRect = dashboardShell?.getBoundingClientRect();
         const appMainRect = appMain.getBoundingClientRect();
         const appMainStyle = window.getComputedStyle(appMain);
         const appMainPaddingBottom =
@@ -1084,15 +1085,19 @@ const TransactionsTable = ({
           ? Math.max(0, tableRect.top - previousCardRect.bottom)
           : 12;
         const bottomGap = isExpanded
-          ? stackGap
+          ? 8
           : stackGap - dashboardShellPaddingBottom;
         const minHeight = Math.floor(window.innerHeight * 0.8);
         // In normal mode AppShell reserves scrollable bottom padding for the
         // assistant dock. Pull the card edge through that padding so the page
         // does not end in blank canvas below the table; expanded mode
         // suppresses the dock at the shell level.
+        const availableBottom =
+          isExpanded && dashboardShellRect
+            ? dashboardShellRect.bottom - dashboardShellPaddingBottom
+            : appMainRect.bottom;
         const availableHeight = Math.floor(
-          appMainRect.bottom - tableRect.top - bottomGap,
+          availableBottom - tableRect.top - bottomGap,
         );
         const nextHeight = Math.max(minHeight, availableHeight);
         const nextMarginBottom = isExpanded
@@ -1548,7 +1553,7 @@ const TransactionsTable = ({
                   )}
                   aria-label={t("table.filter.menuAria")}
                 >
-                  <Filter className="size-3.5 sm:size-4" aria-hidden="true" />
+                  <SlidersHorizontal className="size-3.5 sm:size-4" aria-hidden="true" />
                   <span>{t("table.filter.menuTrigger")}</span>
                   {activeFilterCount > 0 ? (
                     <span className="grid min-w-4 place-items-center rounded-full bg-primary px-1 text-[10px] font-semibold leading-4 text-primary-foreground">
@@ -1747,7 +1752,7 @@ const TransactionsTable = ({
                       title={t("table.filter.paymentAria")}
                     >
                       <span>{t("table.column.network")}</span>
-                      <Filter className="size-3.5" aria-hidden="true" />
+                      <SlidersHorizontal className="size-3.5" aria-hidden="true" />
                       {paymentMethodFilter !== "all" ? (
                         <span className="size-1.5 rounded-full bg-primary" />
                       ) : null}
@@ -1771,7 +1776,7 @@ const TransactionsTable = ({
                       title={t("table.filter.statusAria")}
                     >
                       <span>{t("table.column.status")}</span>
-                      <Filter className="size-3.5" aria-hidden="true" />
+                      <SlidersHorizontal className="size-3.5" aria-hidden="true" />
                       {statusFilter !== "all" ? (
                         <span className="size-1.5 rounded-full bg-primary" />
                       ) : null}

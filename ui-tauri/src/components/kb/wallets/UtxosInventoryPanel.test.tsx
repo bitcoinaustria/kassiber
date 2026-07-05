@@ -89,7 +89,6 @@ describe("UtxosInventoryPanel", () => {
     const html = renderPanel();
 
     expect(html).toContain("UTXOs");
-    expect(html).toContain("Currently unspent transaction outputs");
     expect(html).toContain("₿ 0.12500000");
     expect(html).toContain("receive #3");
     expect(html).toContain("12 conf");
@@ -315,7 +314,7 @@ describe("UtxosInventoryPanel", () => {
     expect(html).not.toContain("₿");
   });
 
-  it("paginates large inventories with a show-more control", () => {
+  it("reveals large inventories progressively without a footer pager", () => {
     const many = Array.from({ length: 60 }, (_, i) => {
       const txid = `${i.toString(16).padStart(2, "0")}${baseInventory.utxos[0].txid.slice(2)}`;
       return {
@@ -329,8 +328,8 @@ describe("UtxosInventoryPanel", () => {
 
     const html = renderPanel({ ...baseInventory, utxos: many });
 
-    expect(html).toContain("Showing 50 of 60");
-    expect(html).toContain("Show 10 more");
+    expect(html).not.toContain("Showing 50 of 60");
+    expect(html).not.toContain("Show 10 more");
     expect(html).toContain("bc1qvisiblerow0");
     expect(html).not.toContain("bc1qhiddenrowmarker");
   });
@@ -347,8 +346,6 @@ describe("UtxosInventoryPanel", () => {
     });
 
     expect(html).toContain("500 of 1,234");
-    expect(html).toContain("Showing the first 500 UTXOs returned by this source.");
-    expect(html).toContain("the table response is capped at 500 rows");
-    expect(html).toContain("Showing 500 transported rows of 1,234 total active UTXOs.");
+    expect(html).toContain("Loaded 500 of 1,234 active UTXOs.");
   });
 });

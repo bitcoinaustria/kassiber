@@ -107,7 +107,11 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useDaemon, useDaemonMutation } from "@/daemon/client";
 import { useKeymap, type Keybinding } from "@/lib/keymap";
-import { screenShellClassName } from "@/lib/screen-layout";
+import {
+  pageHeaderActionClassName,
+  pageHeaderClassName,
+  screenShellClassName,
+} from "@/lib/screen-layout";
 import { cn } from "@/lib/utils";
 import { useUiStore } from "@/store/ui";
 
@@ -496,10 +500,12 @@ export function SwapMatching() {
         onValueChange={(value) => setActiveTab(value as PairingReviewTab)}
         className="space-y-3"
       >
-        <TabsList className="w-full justify-start overflow-x-auto sm:w-fit">
-          <TabsTrigger value="transfers">{t("swap.tabs.transfers")}</TabsTrigger>
-          <TabsTrigger value="swaps">{t("swap.tabs.swaps")}</TabsTrigger>
-        </TabsList>
+        <div className={pageHeaderClassName}>
+          <TabsList className="w-full justify-start overflow-x-auto sm:w-fit">
+            <TabsTrigger value="transfers">{t("swap.tabs.transfers")}</TabsTrigger>
+            <TabsTrigger value="swaps">{t("swap.tabs.swaps")}</TabsTrigger>
+          </TabsList>
+        </div>
         <TabsContent value="transfers" className="mt-0">
           {activeTab === "transfers" ? (
             view === "review" ? (
@@ -608,7 +614,7 @@ function PairedSwaps({
 
   return (
     <div className="min-w-0">
-      <div className="overflow-hidden rounded-xl border bg-card">
+      <div className="overflow-hidden rounded-lg border bg-card">
         <header className="flex flex-col gap-3 px-3 py-3 sm:flex-row sm:items-start sm:justify-between sm:px-4">
           <div className="min-w-0 space-y-1">
             <p className="text-[10px] font-medium tracking-[0.18em] text-muted-foreground uppercase">
@@ -620,7 +626,7 @@ function PairedSwaps({
           <Button
             variant="outline"
             size="sm"
-            className="h-9 shrink-0"
+            className={cn(pageHeaderActionClassName, "shrink-0")}
             onClick={onBackToReview}
           >
             <ArrowLeft className="size-3.5" aria-hidden="true" />
@@ -1552,7 +1558,7 @@ function PairingReview({
   return (
     <div className="min-w-0">
       <Collapsible open={rulesExpanded} onOpenChange={setRulesExpanded}>
-        <div className="overflow-hidden rounded-xl border bg-card">
+        <div className="overflow-hidden rounded-lg border bg-card">
           <header className="flex flex-col gap-2.5 px-3 py-3 sm:flex-row sm:items-start sm:justify-between sm:px-4">
             <div className="min-w-0">
               <p className="text-[10px] font-medium tracking-[0.18em] text-muted-foreground uppercase">
@@ -1596,7 +1602,7 @@ function PairingReview({
               {exactSolo.length > 0 ? (
                 <Button
                   size="sm"
-                  className="h-9 whitespace-nowrap"
+                  className={cn(pageHeaderActionClassName, "whitespace-nowrap")}
                   onClick={openExactPreview}
                   disabled={bulkPairMutation.isPending}
                 >
@@ -1607,7 +1613,7 @@ function PairingReview({
               <Button
                 variant="outline"
                 size="sm"
-                className="h-9"
+                className={pageHeaderActionClassName}
                 onClick={() => void refetch()}
                 disabled={isFetching}
               >
@@ -1615,7 +1621,7 @@ function PairingReview({
                 <span className="ml-1">{t("common:actions.refresh")}</span>
               </Button>
               <CollapsibleTrigger asChild>
-                <Button variant="outline" size="sm" className="h-9">
+                <Button variant="outline" size="sm" className={pageHeaderActionClassName}>
                   <SettingsIcon className="size-3.5" />
                   <span>{t("swap.header.rules", { enabled: enabledRuleCount, total: rules.length })}</span>
                 </Button>

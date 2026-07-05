@@ -25,7 +25,11 @@ import {
 } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import { useDaemon, useDaemonMutation } from "@/daemon/client";
-import { screenShellClassName } from "@/lib/screen-layout";
+import {
+  pageHeaderActionsClassName,
+  pageHeaderClassName,
+  screenShellClassName,
+} from "@/lib/screen-layout";
 import {
   formatPrivacyInt as fmtInt,
   formatPrivacyMsat as fmtMsat,
@@ -206,12 +210,12 @@ export function PrivacyMirrorPayloadView({ payload }: { payload: PrivacyMirrorPa
 
   return (
     <div data-testid="privacy-mirror-page" className={screenShellClassName}>
-      <div className="flex flex-wrap items-start justify-between gap-3">
+      <div className={pageHeaderClassName}>
         <div>
           <h1 className="text-2xl font-semibold tracking-normal">{t("title")}</h1>
           <p className="mt-1 max-w-3xl text-sm text-muted-foreground">{t("subtitle")}</p>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className={pageHeaderActionsClassName}>
           <EvidenceBadge level={summary.evidence_level} />
           <Badge variant="outline" className="rounded-md">
             {payload.local_only ? t("guardrail.local") : t("guardrail.degraded")}

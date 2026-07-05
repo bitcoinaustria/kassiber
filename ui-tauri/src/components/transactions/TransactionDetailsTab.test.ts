@@ -1,11 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import type { TransactionSwapRoute } from "./TransactionGraphTab";
+import type { TransactionSwapRoute } from "./TransactionGraphModel";
 import {
+  preloadableSwapLegGraphLookupArgs,
   preloadableSwapLegGraphReference,
   transactionGraphLookupArgs,
   transactionGraphLookupReferenceArgs,
-} from "./TransactionDetailsTab";
+} from "./TransactionGraphLookup";
 
 describe("transactionGraphLookupArgs", () => {
   it("opts on-chain rows with explorer txids into configured public lookup", () => {
@@ -41,10 +42,17 @@ describe("transactionGraphLookupArgs", () => {
     });
   });
 
-  it("keeps preloaded swap leg references local-only", () => {
+  it("keeps ad hoc reference lookups local-only by default", () => {
     expect(transactionGraphLookupReferenceArgs("row-3")).toEqual({
       transaction: "row-3",
       allowPublicLookup: false,
+    });
+  });
+
+  it("can opt local transaction reference lookups into configured public lookup", () => {
+    expect(transactionGraphLookupReferenceArgs("row-3", true)).toEqual({
+      transaction: "row-3",
+      allowPublicLookup: true,
     });
   });
 });
@@ -84,5 +92,43 @@ describe("preloadableSwapLegGraphReference", () => {
       "A152E23BFB6646B3",
     );
     expect(preloadableSwapLegGraphReference(route, "in", ["AFEC51D0BC49779E"])).toBeNull();
+  });
+
+  it("allows configured graph lookup only for paired legs with a local row id", () => {
+    const route: TransactionSwapRoute = {
+      id: "pair-3",
+      currentLeg: "out",
+      out: {
+        id: "out-row",
+        txid: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      },
+      in: {
+        id: "in-row",
+        txid: "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+      },
+    };
+
+    expect(preloadableSwapLegGraphLookupArgs(route, "in", ["out-row"])).toEqual({
+      transaction: "in-row",
+      allowPublicLookup: true,
+    });
+  });
+
+  it("keeps txid-only paired leg lookups local-only", () => {
+    const route: TransactionSwapRoute = {
+      id: "pair-4",
+      currentLeg: "in",
+      out: {
+        txid: "A152E23BFB6646B3",
+      },
+      in: {
+        externalId: "afec51d0bc49779e",
+      },
+    };
+
+    expect(preloadableSwapLegGraphLookupArgs(route, "out", ["afec51d0bc49779e"])).toEqual({
+      transaction: "A152E23BFB6646B3",
+      allowPublicLookup: false,
+    });
   });
 });

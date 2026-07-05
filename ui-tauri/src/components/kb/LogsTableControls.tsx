@@ -1,9 +1,9 @@
 import {
   Eye,
-  Filter,
   Regex,
   Settings,
   Shield,
+  SlidersHorizontal,
   X,
 } from "lucide-react";
 import * as React from "react";
@@ -188,7 +188,7 @@ function LogFilterMenu({
           aria-label={t("logsControls.filterLogsAria")}
           title={t("logsControls.filterLogsAria")}
         >
-          <Filter className="size-4" aria-hidden="true" />
+          <SlidersHorizontal className="size-4" aria-hidden="true" />
           {hasTableFilters ? <ActiveDot /> : null}
         </Button>
       </DropdownMenuTrigger>

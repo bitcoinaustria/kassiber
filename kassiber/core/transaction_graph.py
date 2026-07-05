@@ -118,14 +118,21 @@ def build_transaction_graph_snapshot(
     semantics = bundle.semantics
     raw = _json_obj(_row_get(row, "raw_json"))
     allow_public_lookup = _parse_public_lookup_arg(raw_args)
+    enriched_raw = _enrich_graph_raw(
+        conn,
+        row,
+        raw,
+        runtime_config,
+        allow_public_lookup=allow_public_lookup,
+    )
     graph = _parse_graph(
         row,
-        _enrich_graph_raw(
+        enriched_raw,
+        local_outpoint_amounts=_local_wallet_outpoint_amounts(
             conn,
+            profile_id,
             row,
-            raw,
-            runtime_config,
-            allow_public_lookup=allow_public_lookup,
+            enriched_raw,
         ),
     )
     _annotate_graph(graph, row, owned_index, semantics)
@@ -433,8 +440,74 @@ def _public_nodes_capped(nodes: Sequence[Mapping[str, Any]], side: str) -> list[
     return [*visible, overflow]
 
 
-def _parse_graph(row: Mapping[str, Any], raw: Mapping[str, Any] | None = None) -> dict[str, Any]:
+def _local_wallet_outpoint_amounts(
+    conn: sqlite3.Connection,
+    profile_id: str,
+    row: Mapping[str, Any],
+    raw: Mapping[str, Any] | None,
+) -> dict[str, int]:
+    if not isinstance(raw, Mapping):
+        return {}
+    outpoints: set[str] = set()
+    vin = raw.get("vin")
+    if isinstance(vin, list):
+        for entry in vin:
+            if isinstance(entry, Mapping):
+                outpoint = _outpoint(entry)
+                if outpoint:
+                    outpoints.add(outpoint.lower())
+    txid = _string_or_none(raw.get("txid")) or _txid_from_row(row)
+    vout = raw.get("vout")
+    if txid and isinstance(vout, list):
+        for index, entry in enumerate(vout):
+            if not isinstance(entry, Mapping):
+                continue
+            n = _int_or_none(entry.get("n"))
+            if n is None:
+                n = index
+            outpoints.add(f"{txid.lower()}:{n}")
+    if not outpoints:
+        return {}
+    chain, network = _row_chain_network(row, default_chain="liquid", default_network="liquidv1")
+    placeholders = ", ".join("?" for _ in outpoints)
+    rows = conn.execute(
+        f"""
+        SELECT lower(outpoint) AS outpoint, amount
+        FROM wallet_utxos
+        WHERE profile_id = ?
+          AND lower(chain) = ?
+          AND lower(network) = ?
+          AND lower(outpoint) IN ({placeholders})
+        """,
+        (profile_id, chain.lower(), network.lower(), *sorted(outpoints)),
+    ).fetchall()
+    amounts: dict[str, int] = {}
+    for amount_row in rows:
+        outpoint = _string_or_none(_row_get(amount_row, "outpoint"))
+        amount_msat = _int_or_none(_row_get(amount_row, "amount"))
+        if outpoint is not None and amount_msat is not None and amount_msat >= 0:
+            amounts[outpoint.lower()] = amount_msat // SATS_TO_MSAT
+    return amounts
+
+
+def _local_outpoint_sats(
+    local_outpoint_amounts: Mapping[str, int],
+    outpoint: str | None,
+) -> int | None:
+    if not outpoint:
+        return None
+    value = local_outpoint_amounts.get(outpoint.lower())
+    return value if isinstance(value, int) and value >= 0 else None
+
+
+def _parse_graph(
+    row: Mapping[str, Any],
+    raw: Mapping[str, Any] | None = None,
+    *,
+    local_outpoint_amounts: Mapping[str, int] | None = None,
+) -> dict[str, Any]:
     raw = dict(raw) if isinstance(raw, Mapping) else _json_obj(_row_get(row, "raw_json"))
+    local_amounts = local_outpoint_amounts or {}
     metadata = _transaction_metadata(raw)
     vin = raw.get("vin")
     vout = raw.get("vout")
@@ -481,8 +554,15 @@ def _parse_graph(row: Mapping[str, Any], raw: Mapping[str, Any] | None = None) -
             continue
         prevout = entry.get("prevout") if isinstance(entry.get("prevout"), dict) else {}
         outpoint = _outpoint(entry)
-        value_hidden = confidential or _confidential_leg(prevout)
-        value_sats = None if value_hidden else _value_sats_or_none(prevout.get("value"))
+        local_value_sats = _local_outpoint_sats(local_amounts, outpoint)
+        value_hidden = local_value_sats is None and (confidential or _confidential_leg(prevout))
+        value_sats = (
+            local_value_sats
+            if local_value_sats is not None
+            else None
+            if value_hidden
+            else _value_sats_or_none(prevout.get("value"))
+        )
         if value_sats is None:
             input_value_complete = False
         script = _script_from_prevout(prevout)
@@ -521,19 +601,27 @@ def _parse_graph(row: Mapping[str, Any], raw: Mapping[str, Any] | None = None) -
             if fee_value is not None and fee_value >= 0:
                 liquid_fee_sats = (liquid_fee_sats or 0) + fee_value
             continue
-        value_hidden = confidential or _confidential_leg(entry)
-        value_sats = None if value_hidden else _value_sats_or_none(entry.get("value"))
-        if value_sats is None:
-            output_value_complete = False
         script = _string_or_none(entry.get("scriptpubkey") or entry.get("script_hex"))
         n = _int_or_none(entry.get("n"))
         if n is None:
             n = index
+        outpoint = f"{str(raw.get('txid') or _row_get(row, 'external_id') or '').lower()}:{n}"
+        local_value_sats = _local_outpoint_sats(local_amounts, outpoint)
+        value_hidden = local_value_sats is None and (confidential or _confidential_leg(entry))
+        value_sats = (
+            local_value_sats
+            if local_value_sats is not None
+            else None
+            if value_hidden
+            else _value_sats_or_none(entry.get("value"))
+        )
+        if value_sats is None:
+            output_value_complete = False
         outputs.append(
             {
                 "id": f"out-{n}",
                 "index": n,
-                "outpoint": f"{str(raw.get('txid') or _row_get(row, 'external_id') or '').lower()}:{n}",
+                "outpoint": outpoint,
                 "address": _string_or_none(entry.get("scriptpubkey_address")),
                 "scriptType": _script_type(entry, script),
                 "valueSats": value_sats,
@@ -547,7 +635,7 @@ def _parse_graph(row: Mapping[str, Any], raw: Mapping[str, Any] | None = None) -
             }
         )
 
-    if valued is not None and input_value_complete and output_value_complete:
+    if input_value_complete and output_value_complete and (valued is not None or confidential):
         support = "full"
         reason = None
     else:
