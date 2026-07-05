@@ -1694,7 +1694,10 @@ const TransactionsTable = ({
 
       <div
         ref={tableScrollRef}
-        className="min-h-0 flex-1 overflow-auto px-3 pb-3 sm:px-6 sm:pb-4"
+        className={cn(
+          "min-h-0 flex-1 overflow-auto px-3 pb-3 sm:px-6 sm:pb-4",
+          isExpanded && "pt-3 sm:pt-4",
+        )}
         role="region"
         aria-label={t("table.virtual.scrollRegion")}
         tabIndex={0}
