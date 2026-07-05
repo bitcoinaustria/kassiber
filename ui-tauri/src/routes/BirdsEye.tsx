@@ -38,7 +38,12 @@ import {
   type Currency,
   useCurrency,
 } from "@/lib/currency";
-import { screenShellClassName } from "@/lib/screen-layout";
+import {
+  pageHeaderActionClassName,
+  pageHeaderActionsClassName,
+  pageHeaderClassName,
+  screenShellClassName,
+} from "@/lib/screen-layout";
 import { cn } from "@/lib/utils";
 import type { OverviewSnapshot } from "@/mocks/seed";
 import type {
@@ -291,7 +296,7 @@ export function BirdsEyeView({
 
   const title = snapshot?.workspace?.label ?? to("birdsEye.fallbackTitle");
   const fiat = snapshot?.fiat ?? null;
-  const books = snapshot?.books ?? [];
+  const books = React.useMemo(() => snapshot?.books ?? [], [snapshot?.books]);
   const readyBooks = snapshot?.status.readyBooks ?? books.filter((book) => book.readiness.ready).length;
   const blockedBooks = snapshot?.status.blockedBooks ?? books.length - readyBooks;
   const chartSnapshot = React.useMemo(
@@ -483,7 +488,7 @@ export function BirdsEyeView({
       className={cn(screenShellClassName, "relative")}
       aria-busy={isFetching || refreshWorkspace.isPending}
     >
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+      <div className={pageHeaderClassName}>
         <div className="min-w-0 space-y-2">
           <div className="flex flex-wrap items-center gap-2">
             <h2 className="text-2xl font-semibold tracking-tight">
@@ -498,12 +503,13 @@ export function BirdsEyeView({
             {title}
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <Button variant="outline" asChild>
+        <div className={pageHeaderActionsClassName}>
+          <Button variant="outline" className={pageHeaderActionClassName} asChild>
             <Link to="/books">{to("birdsEye.booksLink")}</Link>
           </Button>
           <Button
             type="button"
+            className={pageHeaderActionClassName}
             onClick={handleRefresh}
             disabled={refreshWorkspace.isPending || !workspaceId}
           >

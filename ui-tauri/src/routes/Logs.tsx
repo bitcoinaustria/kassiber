@@ -51,7 +51,13 @@ import {
 } from "@/lib/appLogs";
 import { isFilePickerAvailable, saveFile } from "@/lib/filePicker";
 import { appVersionLabel } from "@/lib/appVersion";
-import { screenShellClassName } from "@/lib/screen-layout";
+import {
+  pageHeaderActionClassName,
+  pageHeaderActionsClassName,
+  pageHeaderClassName,
+  pageHeaderIconButtonClassName,
+  screenShellClassName,
+} from "@/lib/screen-layout";
 import { saveLogsExportAs } from "@/lib/saveText";
 import { cn } from "@/lib/utils";
 import { useUiStore } from "@/store/ui";
@@ -327,7 +333,7 @@ export function Logs() {
 
   return (
     <div className={cn(screenShellClassName, "flex h-full min-h-0 flex-col")}>
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+      <div className={pageHeaderClassName}>
         <div className="min-w-0 space-y-1">
           <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
             {t("logs.developerTools")}
@@ -349,14 +355,20 @@ export function Logs() {
             {t("logs.ramNote")}
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Button type="button" size="sm" variant="outline" onClick={copyLast200}>
+        <div className={pageHeaderActionsClassName}>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className={pageHeaderActionClassName}
+            onClick={copyLast200}
+          >
             <Copy className="size-4" aria-hidden="true" />
             {t("logs.copy200")}
           </Button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button type="button" size="sm">
+              <Button type="button" size="sm" className={pageHeaderActionClassName}>
                 <Download className="size-4" aria-hidden="true" />
                 {t("common:actions.export")}
               </Button>
@@ -384,7 +396,7 @@ export function Logs() {
             type="button"
             size="icon"
             variant="ghost"
-            className="size-8"
+            className={pageHeaderIconButtonClassName}
             onClick={clearAppLogRecords}
             title={t("logs.clearLogsAria")}
           >

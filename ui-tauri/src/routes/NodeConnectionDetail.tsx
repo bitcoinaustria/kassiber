@@ -57,7 +57,12 @@ import {
 } from "@/components/ui/table";
 import { connectionKindLabels } from "@/lib/connectionDisplay";
 import { formatShortDate } from "@/lib/date";
-import { screenShellClassName } from "@/lib/screen-layout";
+import {
+  pageHeaderActionClassName,
+  pageHeaderActionsClassName,
+  pageHeaderIconButtonClassName,
+  screenShellClassName,
+} from "@/lib/screen-layout";
 import { cn } from "@/lib/utils";
 import { MISSING_FIAT_LABEL } from "@/lib/currency";
 import type {
@@ -281,7 +286,12 @@ function NodeHeader({
     <Card className="rounded-xl py-3">
       <CardContent className="flex flex-col gap-3 px-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex min-w-0 items-center gap-3">
-          <Button asChild variant="outline" size="icon" className="shrink-0">
+          <Button
+            asChild
+            variant="outline"
+            size="icon"
+            className={cn(pageHeaderIconButtonClassName, "shrink-0")}
+          >
             <Link to="/connections" aria-label={t("node.header.backToWallets")}>
               <ArrowLeft className="size-4" aria-hidden="true" />
             </Link>
@@ -320,12 +330,12 @@ function NodeHeader({
             </div>
           </div>
         </div>
-        <div className="flex shrink-0 items-center gap-2 self-start sm:self-center">
+        <div className={cn(pageHeaderActionsClassName, "shrink-0 self-start sm:self-center")}>
           <Button
             type="button"
             variant="outline"
             size="sm"
-            className="min-w-[7.5rem]"
+            className={cn(pageHeaderActionClassName, "min-w-[7.5rem]")}
             disabled={isSyncRunning}
             aria-busy={isSyncRunning}
             aria-label={t("node.header.refreshAction", {

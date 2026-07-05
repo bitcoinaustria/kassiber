@@ -24,7 +24,13 @@ import {
 } from "@/components/ui/table";
 import { useDaemon } from "@/daemon/client";
 import { useJournalProcessingAction } from "@/hooks/useJournalProcessingAction";
-import { screenPanelClassName, screenShellClassName } from "@/lib/screen-layout";
+import {
+  pageHeaderActionClassName,
+  pageHeaderActionsClassName,
+  pageHeaderClassName,
+  screenPanelClassName,
+  screenShellClassName,
+} from "@/lib/screen-layout";
 import { cn } from "@/lib/utils";
 import { useUiStore } from "@/store/ui";
 
@@ -145,7 +151,7 @@ export function Journals() {
   return (
     <div className={screenShellClassName}>
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-3">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div className={pageHeaderClassName}>
           <TabsList className="w-full justify-start overflow-x-auto sm:w-fit">
             <TabsTrigger value="state">{t("ledger.tabs.state")}</TabsTrigger>
             <TabsTrigger value="reportable">
@@ -153,16 +159,16 @@ export function Journals() {
             </TabsTrigger>
           </TabsList>
           {activeTab === "state" ? (
-            <div className="flex flex-wrap gap-2">
+            <div className={pageHeaderActionsClassName}>
               {status.quarantines ? (
-                <Button asChild variant="outline" className="h-8">
+                <Button asChild variant="outline" className={pageHeaderActionClassName}>
                   <Link to="/quarantine">
                     <ShieldAlert className="size-4" aria-hidden="true" />
                     {t("nav:book.quarantine")}
                   </Link>
                 </Button>
               ) : null}
-              <Button asChild variant="outline" className="h-8">
+              <Button asChild variant="outline" className={pageHeaderActionClassName}>
                 <Link to="/reports">
                   <FileText className="size-4" aria-hidden="true" />
                   {t("nav:book.reports")}
@@ -170,7 +176,7 @@ export function Journals() {
               </Button>
               <Button
                 type="button"
-                className="h-8"
+                className={pageHeaderActionClassName}
                 onClick={runJournalProcessing}
                 disabled={isProcessingJournals}
               >

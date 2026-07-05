@@ -2,6 +2,11 @@ import { Plus } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
+import {
+  pageHeaderActionClassName,
+  pageHeaderActionsClassName,
+  pageHeaderClassName,
+} from "@/lib/screen-layout";
 import { cn } from "@/lib/utils";
 import type { OverviewSnapshot } from "@/mocks/seed";
 
@@ -30,7 +35,7 @@ export const WelcomeSection = ({
   );
 
   return (
-    <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
+    <div className={pageHeaderClassName}>
       <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
         {needsJournals ? (
           <button
@@ -62,10 +67,10 @@ export const WelcomeSection = ({
         </span>
       </div>
 
-      <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+      <div className={pageHeaderActionsClassName}>
         <Button
           size="sm"
-          className="h-8 gap-2"
+          className={pageHeaderActionClassName}
           aria-label={t("welcome.addConnectionAria")}
           onClick={onAddConnection}
         >

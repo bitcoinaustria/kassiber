@@ -72,7 +72,13 @@ import {
 } from "@/lib/reportExportStatus";
 import { reportYearFromSearch } from "@/lib/reportYear";
 import { exportBasename } from "@/lib/exportFile";
-import { screenPanelClassName, screenShellClassName } from "@/lib/screen-layout";
+import {
+  pageHeaderActionClassName,
+  pageHeaderActionsClassName,
+  pageHeaderClassName,
+  screenPanelClassName,
+  screenShellClassName,
+} from "@/lib/screen-layout";
 import { cn } from "@/lib/utils";
 import {
   JURISDICTIONS,
@@ -819,11 +825,11 @@ function ReportPackageHeader({
   };
   return (
     <div className="space-y-2">
-      <div className="flex min-w-0 flex-col gap-3 py-1 lg:flex-row lg:items-center lg:justify-between">
+      <div className={pageHeaderClassName}>
         <div className="flex min-w-0 flex-wrap items-center gap-2 sm:gap-3">
           <span className="text-sm font-semibold sm:text-base">Tax report</span>
           <Select value={String(selectedYear)} onValueChange={handleYearChange}>
-            <SelectTrigger className="h-7 w-[88px] rounded-md text-xs" aria-label="Tax year">
+            <SelectTrigger className="h-8 w-[88px] rounded-md text-xs" aria-label="Tax year">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -840,7 +846,7 @@ function ReportPackageHeader({
             <span className="truncate">{periodLabel}</span>
           </span>
         </div>
-        <div className="flex min-w-0 flex-wrap items-center gap-2 lg:justify-end">
+        <div className={cn(pageHeaderActionsClassName, "min-w-0 lg:justify-end")}>
           <span
             className={cn(
               "inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md border px-2 text-xs font-medium",
@@ -851,7 +857,12 @@ function ReportPackageHeader({
             {readiness.title}
           </span>
           {readiness.action ? (
-            <Button asChild size="sm" variant="outline" className="h-7 shrink-0 px-2 text-xs">
+            <Button
+              asChild
+              size="sm"
+              variant="outline"
+              className={cn(pageHeaderActionClassName, "shrink-0 px-2 text-xs")}
+            >
               <Link to={readiness.action.href}>{readiness.action.label}</Link>
             </Button>
           ) : null}
@@ -859,7 +870,7 @@ function ReportPackageHeader({
             type="button"
             variant="outline"
             size="sm"
-            className="h-7 max-w-full gap-2 px-2 text-xs"
+            className={cn(pageHeaderActionClassName, "max-w-full px-2 text-xs")}
             title={`Profile rules · ${jurisdiction.code} · ${methodName}`}
             aria-label={
               rulesExpanded ? "Collapse profile rules" : "Expand profile rules"

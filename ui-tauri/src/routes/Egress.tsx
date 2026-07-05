@@ -15,7 +15,11 @@ import { useDaemon } from "@/daemon/client";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { screenShellClassName } from "@/lib/screen-layout";
+import {
+  pageHeaderActionClassName,
+  pageHeaderClassName,
+  screenShellClassName,
+} from "@/lib/screen-layout";
 import { cn } from "@/lib/utils";
 
 type EgressAllowlistStatus = "expected" | "unexpected" | "unknown";
@@ -107,7 +111,7 @@ export function Egress() {
 
   return (
     <main className={screenShellClassName}>
-      <div className="flex flex-wrap items-start justify-between gap-3">
+      <div className={pageHeaderClassName}>
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             <Plane className="size-5 text-muted-foreground" aria-hidden="true" />
@@ -123,6 +127,7 @@ export function Egress() {
           type="button"
           size="sm"
           variant="outline"
+          className={pageHeaderActionClassName}
           onClick={() => void snapshotQuery.refetch()}
           disabled={snapshotQuery.isFetching}
         >

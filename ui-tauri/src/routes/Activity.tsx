@@ -22,7 +22,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { screenShellClassName } from "@/lib/screen-layout";
+import { pageHeaderClassName, screenShellClassName } from "@/lib/screen-layout";
 import { useDaemon, useDaemonInfinite, useDaemonMutation } from "@/daemon/client";
 import { useJournalProcessingAction } from "@/hooks/useJournalProcessingAction";
 import { cn } from "@/lib/utils";
@@ -121,7 +121,7 @@ export function Activity() {
   return (
     <div className={screenShellClassName}>
       <div className="flex w-full flex-col gap-5">
-        <header className="flex flex-wrap items-start justify-between gap-3">
+        <header className={pageHeaderClassName}>
           <div className="min-w-0">
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <ActivityIcon className="size-4" aria-hidden="true" />

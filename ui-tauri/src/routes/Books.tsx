@@ -43,7 +43,12 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { screenShellClassName } from "@/lib/screen-layout";
+import {
+  pageHeaderActionClassName,
+  pageHeaderActionsClassName,
+  pageHeaderClassName,
+  screenShellClassName,
+} from "@/lib/screen-layout";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -404,7 +409,7 @@ function BooksView({ snapshot }: { snapshot: ProfilesSnapshot }) {
 
   return (
     <div className={screenShellClassName}>
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+      <div className={pageHeaderClassName}>
         <div className="min-w-0 space-y-2">
           <h2 className="text-2xl font-semibold tracking-tight">
             {t("books.title")}
@@ -413,9 +418,10 @@ function BooksView({ snapshot }: { snapshot: ProfilesSnapshot }) {
             {t("books.intro")}
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className={pageHeaderActionsClassName}>
           <Button
             type="button"
+            className={pageHeaderActionClassName}
             data-testid="create-workspace-button"
             onClick={() => {
               setWorkspaceError(null);

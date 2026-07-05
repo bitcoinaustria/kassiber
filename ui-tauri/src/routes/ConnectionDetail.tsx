@@ -94,7 +94,13 @@ import {
   retryRetryableDaemonError,
 } from "@/daemon/client";
 import { connectionKindLabels } from "@/lib/connectionDisplay";
-import { screenShellClassName } from "@/lib/screen-layout";
+import {
+  pageHeaderActionClassName,
+  pageHeaderActionsClassName,
+  pageHeaderClassName,
+  pageHeaderIconButtonClassName,
+  screenShellClassName,
+} from "@/lib/screen-layout";
 import { cn } from "@/lib/utils";
 import { formatShortDate } from "@/lib/date";
 import { isFilePickerAvailable, pickFile } from "@/lib/filePicker";
@@ -1369,9 +1375,14 @@ function ConnectionDetailView({
 
   return (
     <div className={screenShellClassName}>
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className={pageHeaderClassName}>
         <div className="flex min-w-0 items-center gap-3">
-          <Button asChild variant="outline" size="icon" className="shrink-0">
+          <Button
+            asChild
+            variant="outline"
+            size="icon"
+            className={cn(pageHeaderIconButtonClassName, "shrink-0")}
+          >
             <Link to="/connections" aria-label={t("detail.backToWallets")}>
               <ArrowLeft className="size-4" aria-hidden="true" />
             </Link>
@@ -1406,11 +1417,12 @@ function ConnectionDetailView({
             </div>
           </div>
         </div>
-        <div className="flex shrink-0 items-center gap-2 self-start sm:self-center">
+        <div className={cn(pageHeaderActionsClassName, "shrink-0 self-start sm:self-center")}>
           <Button
             type="button"
             variant="outline"
             size="sm"
+            className={pageHeaderActionClassName}
             disabled={isWalletSyncRunning}
             aria-busy={isWalletSyncRunning}
             aria-label={t("detail.refreshAction", {
@@ -1459,6 +1471,7 @@ function ConnectionDetailView({
                 type="button"
                 variant="outline"
                 size="icon"
+                className={pageHeaderIconButtonClassName}
                 aria-label={t("detail.moreActions")}
               >
                 <MoreHorizontal className="size-4" aria-hidden="true" />

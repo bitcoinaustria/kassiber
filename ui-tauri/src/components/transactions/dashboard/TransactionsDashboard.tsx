@@ -12,7 +12,11 @@ import {
 import { useDaemonMutation } from "@/daemon/client";
 import { cn } from "@/lib/utils";
 import { exportBasename, saveDaemonExport } from "@/lib/exportFile";
-import { screenShellClassName } from "@/lib/screen-layout";
+import {
+  pageHeaderActionClassName,
+  pageHeaderActionsClassName,
+  screenShellClassName,
+} from "@/lib/screen-layout";
 import { useCurrency } from "@/lib/currency";
 import { useWalletSyncAction } from "@/hooks/useWalletSyncAction";
 import { MOCK_TRANSACTIONS, type TransactionsList } from "@/mocks/transactions";
@@ -398,13 +402,13 @@ const TransactionsDashboard = ({
           periodOptions={availablePeriods}
         />
         {!tableExpanded && (
-          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+          <div className={pageHeaderActionsClassName}>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button
                   variant="outline"
                   size="sm"
-                  className="h-8 gap-2"
+                  className={pageHeaderActionClassName}
                   aria-label={t("dashboard.export.label")}
                   disabled={isExporting}
                 >

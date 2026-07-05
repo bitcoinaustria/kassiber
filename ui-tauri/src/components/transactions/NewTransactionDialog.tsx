@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { formatBtc } from "@/lib/currency";
+import { pageHeaderActionClassName } from "@/lib/screen-layout";
 import { cn } from "@/lib/utils";
 
 import {
@@ -184,7 +185,11 @@ export function NewTransactionDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger asChild>
-        <Button size="sm" className="h-8 gap-2" aria-label={t("newDialog.triggerAria")}>
+        <Button
+          size="sm"
+          className={pageHeaderActionClassName}
+          aria-label={t("newDialog.triggerAria")}
+        >
           <Plus className="size-4" aria-hidden="true" />
           <span className="hidden sm:inline">{t("newDialog.trigger")}</span>
         </Button>
