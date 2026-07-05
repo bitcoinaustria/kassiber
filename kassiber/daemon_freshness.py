@@ -1222,10 +1222,10 @@ def _stop_freshness_background_worker(
     worker = ctx.freshness_worker
     if worker is not None:
         worker.join(timeout=2.0)
-    stopped = worker is None or not worker.is_alive()
-    if stopped:
-        ctx.freshness_worker = None
-    if reset_event and stopped:
+    # The worker captured the old event, so a timed-out worker can drain while
+    # the next project/session gets a fresh stop event and worker slot.
+    ctx.freshness_worker = None
+    if reset_event:
         ctx.freshness_stop_event = threading.Event()
 
 

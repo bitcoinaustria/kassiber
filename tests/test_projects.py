@@ -247,6 +247,52 @@ class LegacyProjectMigrationTests(unittest.TestCase):
             self.assertEqual(len(backups), 1)
             self.assertTrue((backups[0] / DEFAULT_DB_FILENAME).exists())
 
+    def test_promoted_project_recovery_moves_legacy_artifacts_aside(self):
+        from kassiber import projects as projects_module
+
+        with tempfile.TemporaryDirectory() as root:
+            state_root = Path(root) / ".kassiber"
+            data_root = state_root / "data"
+            data_root.mkdir(parents=True)
+            db_path = data_root / DEFAULT_DB_FILENAME
+            conn = sqlite3.connect(db_path)
+            try:
+                conn.execute("CREATE TABLE workspaces(id TEXT PRIMARY KEY, label TEXT, created_at TEXT)")
+                conn.execute("INSERT INTO workspaces VALUES('one', 'One', '2026-01-01T00:00:00Z')")
+                conn.commit()
+            finally:
+                conn.close()
+            config_root = state_root / "config"
+            config_root.mkdir()
+            (config_root / "backends.env").write_text("TOKEN=plaintext\n", encoding="utf-8")
+            target_db = state_root / "projects" / "default" / "data" / DEFAULT_DB_FILENAME
+            target_db.parent.mkdir(parents=True)
+            target_conn = sqlite3.connect(target_db)
+            try:
+                target_conn.execute("CREATE TABLE settings(key TEXT PRIMARY KEY, value TEXT)")
+                target_conn.commit()
+            finally:
+                target_conn.close()
+
+            old_state = projects_module.DEFAULT_STATE_ROOT
+            old_data = projects_module.DEFAULT_DATA_ROOT
+            try:
+                projects_module.DEFAULT_STATE_ROOT = str(state_root)
+                projects_module.DEFAULT_DATA_ROOT = str(data_root)
+                migrated = migrate_legacy_default_layout_if_needed()
+            finally:
+                projects_module.DEFAULT_STATE_ROOT = old_state
+                projects_module.DEFAULT_DATA_ROOT = old_data
+
+            self.assertEqual(migrated.id, "default")
+            self.assertTrue(target_db.exists())
+            self.assertFalse(db_path.exists())
+            self.assertFalse((config_root / "backends.env").exists())
+            backups = sorted(state_root.glob("pre-project-migration-*"))
+            self.assertEqual(len(backups), 1)
+            self.assertTrue((backups[0] / "data" / DEFAULT_DB_FILENAME).exists())
+            self.assertTrue((backups[0] / "config" / "backends.env").exists())
+
     def test_stale_legacy_migrating_directory_is_retried(self):
         from kassiber import projects as projects_module
 

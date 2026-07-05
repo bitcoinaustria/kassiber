@@ -714,6 +714,20 @@ def _move_legacy_artifacts_aside(layout: LegacyLayout) -> dict[str, Any]:
     return {"moved": moved, "backup_root": str(backup_root)}
 
 
+def _register_existing_default_project_after_legacy_recovery(
+    layout: LegacyLayout,
+    target_root: Path,
+) -> ProjectEntry:
+    _move_legacy_artifacts_aside(layout)
+    return create_project(
+        DEFAULT_PROJECT_NAME,
+        project_id=DEFAULT_PROJECT_ID,
+        root=target_root,
+        encrypted=_database_encrypted_at(target_root / DEFAULT_DATA_DIRNAME),
+        select=True,
+    )
+
+
 def migrate_legacy_default_layout_if_needed(
     *,
     state_root: str | Path | None = None,
@@ -729,12 +743,9 @@ def migrate_legacy_default_layout_if_needed(
     target_root = project_root_for_id(DEFAULT_PROJECT_ID)
     target_db = target_root / DEFAULT_DATA_DIRNAME / DEFAULT_DB_FILENAME
     if target_db.exists():
-        return create_project(
-            DEFAULT_PROJECT_NAME,
-            project_id=DEFAULT_PROJECT_ID,
-            root=target_root,
-            encrypted=_database_encrypted_at(target_root / DEFAULT_DATA_DIRNAME),
-            select=True,
+        return _register_existing_default_project_after_legacy_recovery(
+            layout,
+            target_root,
         )
 
     workspace_count = _workspace_count_for_plaintext(source_db)
@@ -743,12 +754,9 @@ def migrate_legacy_default_layout_if_needed(
     if staging_root.exists():
         if target_db.exists():
             shutil.rmtree(staging_root, ignore_errors=True)
-            return create_project(
-                DEFAULT_PROJECT_NAME,
-                project_id=DEFAULT_PROJECT_ID,
-                root=target_root,
-                encrypted=_database_encrypted_at(target_root / DEFAULT_DATA_DIRNAME),
-                select=True,
+            return _register_existing_default_project_after_legacy_recovery(
+                layout,
+                target_root,
             )
         shutil.rmtree(staging_root, ignore_errors=True)
     try:
