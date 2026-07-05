@@ -27,6 +27,16 @@ export function ActivityScatterDot({
 }: ActivityScatterDotProps) {
   const navigate = useNavigate();
   const openedOnPointerDownRef = React.useRef(false);
+  const closeFanoutTimerRef = React.useRef<number | null>(null);
+  const [fanoutOpen, setFanoutOpen] = React.useState(false);
+  React.useEffect(
+    () => () => {
+      if (closeFanoutTimerRef.current !== null) {
+        window.clearTimeout(closeFanoutTimerRef.current);
+      }
+    },
+    [],
+  );
   if (
     typeof cx !== "number" ||
     typeof cy !== "number" ||
@@ -54,6 +64,30 @@ export function ActivityScatterDot({
   const transactionId =
     markerCount > 1 ? undefined : (payload.eventTransactionId ?? payload.eventId);
   const canOpenMarker = Boolean(transactionId || groupedTransactionIds.length > 0);
+  const hasGroupedFanout = markerCount > 1 && allGroupedPoints.length > 1;
+  const cancelFanoutClose = () => {
+    if (closeFanoutTimerRef.current !== null) {
+      window.clearTimeout(closeFanoutTimerRef.current);
+      closeFanoutTimerRef.current = null;
+    }
+  };
+  const openFanout = () => {
+    if (!hasGroupedFanout) return;
+    cancelFanoutClose();
+    setFanoutOpen(true);
+  };
+  const scheduleFanoutClose = () => {
+    if (!hasGroupedFanout) {
+      onHoverActivityPoint?.(null);
+      return;
+    }
+    cancelFanoutClose();
+    closeFanoutTimerRef.current = window.setTimeout(() => {
+      setFanoutOpen(false);
+      onHoverActivityPoint?.(null);
+      closeFanoutTimerRef.current = null;
+    }, 180);
+  };
   const openTransactionDetailById = (id: string | undefined) => {
     if (!id) return;
     if (onOpenTransactionDetail) {
@@ -85,9 +119,11 @@ export function ActivityScatterDot({
     openTransactionDetailById(groupedTransactionId);
   };
   const hoverGroupedPoint = (point: TreasuryChartPoint) => {
+    openFanout();
     onHoverActivityPoint?.(point);
   };
   const leaveGroupedPoint = () => {
+    scheduleFanoutClose();
     onHoverActivityPoint?.(payload);
   };
   const handlePointerDown = (event: React.PointerEvent<SVGGElement>) => {
@@ -116,10 +152,11 @@ export function ActivityScatterDot({
     openCurrentMarker();
   };
   const handlePointerEnter = () => {
+    openFanout();
     onHoverActivityPoint?.(payload);
   };
   const handlePointerLeave = () => {
-    onHoverActivityPoint?.(null);
+    scheduleFanoutClose();
   };
 
   const interactiveProps = transactionId
@@ -242,9 +279,13 @@ export function ActivityScatterDot({
         strokeWidth={2.5}
         style={{ transformBox: "fill-box", transformOrigin: "center" }}
       />
-      {markerCount > 1 && childPoints.length > 1 && (
+      {hasGroupedFanout && childPoints.length > 1 && (
         <g
-          className="opacity-[0.02] transition-opacity duration-150 ease-out group-hover/activity-marker:opacity-100 group-focus/activity-marker:opacity-100"
+          className={
+            fanoutOpen
+              ? "opacity-100 transition-opacity duration-150 ease-out"
+              : "pointer-events-none opacity-0 transition-opacity duration-150 ease-out"
+          }
         >
           {useGridFanout && (
             <>
@@ -268,7 +309,12 @@ export function ActivityScatterDot({
                 fillOpacity={0.86}
                 stroke="var(--border)"
                 strokeOpacity={0.75}
-                pointerEvents="none"
+                pointerEvents="all"
+                onClick={(event) => event.stopPropagation()}
+                onMouseEnter={openFanout}
+                onMouseLeave={scheduleFanoutClose}
+                onPointerEnter={openFanout}
+                onPointerLeave={scheduleFanoutClose}
               />
             </>
           )}
