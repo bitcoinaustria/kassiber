@@ -303,6 +303,7 @@ def write_catalog(catalog: dict[str, Any], path: str | Path | None = None) -> Pa
         try:
             tmp_path.unlink()
         except OSError:
+            # Preserve the original write/replace error if cleanup also fails.
             pass
         raise
     return cpath
