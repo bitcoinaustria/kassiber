@@ -5,7 +5,13 @@
  * Connections and Overview screens.
  */
 
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type FormEvent,
+  type ReactNode,
+} from "react";
 import { Trans, useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 import { useQueryClient } from "@tanstack/react-query";
@@ -20,7 +26,6 @@ import {
   CheckCircle2,
   CircleDollarSign,
   Copy,
-  Database,
   ListChecks,
   MoreHorizontal,
   Pencil,
@@ -31,7 +36,6 @@ import {
   ShieldAlert,
   ShieldCheck,
   Trash2,
-  Wallet,
 } from "lucide-react";
 
 import { ScreenSkeleton } from "@/components/kb/ScreenSkeleton";
@@ -39,7 +43,6 @@ import { ConnectionAssetBadge } from "@/components/kb/ConnectionAssetBadge";
 import { ConnectionStatusPill } from "@/components/kb/ConnectionStatusPill";
 import { CountBadge } from "@/components/kb/CountBadge";
 import { DetailRow } from "@/components/kb/DetailRow";
-import { MetricCard } from "@/components/kb/MetricCard";
 import {
   UtxosInventoryPanel,
   WalletBalanceHistoryCard,
@@ -165,7 +168,39 @@ const fmtEurSigned = (amountEur: number | null) =>
     ? MISSING_FIAT_LABEL
     : `${amountEur >= 0 ? "+ " : "- "}${fmtEur(Math.abs(amountEur))}`;
 const fmtShortTxid = (value?: string) =>
-  !value ? "no id" : value.length <= 18 ? value : `${value.slice(0, 10)}…${value.slice(-6)}`;
+  !value
+    ? "no id"
+    : value.length <= 18
+      ? value
+      : `${value.slice(0, 10)}…${value.slice(-6)}`;
+
+function WalletOverviewStat({
+  label,
+  value,
+  detail,
+}: {
+  label: string;
+  value: ReactNode;
+  detail?: ReactNode;
+}) {
+  return (
+    <div className="group relative isolate overflow-hidden p-3 transition-colors before:absolute before:inset-0 before:z-0 before:origin-left before:scale-x-0 before:bg-muted/45 before:content-[''] before:transition-transform before:duration-200 before:ease-out hover:before:scale-x-100 focus-within:before:scale-x-100">
+      <div className="pointer-events-none relative z-20 space-y-1.5">
+        <div className="text-muted-foreground">
+          <span className="text-xs font-medium">{label}</span>
+        </div>
+        <p className="text-lg font-semibold tracking-tight tabular-nums sm:text-xl">
+          {value}
+        </p>
+        {detail != null ? (
+          <p className="truncate text-[10px] font-medium leading-tight text-muted-foreground sm:text-xs">
+            {detail}
+          </p>
+        ) : null}
+      </div>
+    </div>
+  );
+}
 
 const relatedViewLinkClass =
   "group flex items-center gap-3 px-4 py-3 transition-colors hover:bg-muted/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring";
@@ -1468,37 +1503,45 @@ function ConnectionDetailView({
         </div>
       )}
 
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <MetricCard
-          label={t("detail.metric.balance")}
-          value={
-            <span className={blurClass(hideSensitive)}>
-              {fmtBtc(connection.balance)}
-            </span>
-          }
-          detail={fmtEur(connection.balance * priceEur)}
-          icon={<Wallet className="size-4" aria-hidden="true" />}
-        />
-        <MetricCard
-          label={t("detail.metric.transactions")}
-          value={txCount.toLocaleString("en-US")}
-          detail={t("detail.metric.transactionsDetail")}
-          icon={<ArrowLeftRight className="size-4" aria-hidden="true" />}
-        />
-        <MetricCard
-          label={t("detail.metric.lastSync")}
-          value={connection.last}
-          detail={connection.status}
-          icon={<RefreshCw className="size-4" aria-hidden="true" />}
-        />
-        <MetricCard
-          label={hasGapMetric ? t("detail.metric.gapLimit") : t("detail.metric.source")}
-          value={
-            hasGapMetric ? connection.gap?.toLocaleString("en-US") ?? "—" : sourceValue
-          }
-          detail={hasGapMetric ? t("detail.metric.gapLimitDetail") : sourceDetail}
-          icon={<Database className="size-4" aria-hidden="true" />}
-        />
+      <div className="overflow-hidden rounded-lg border bg-card">
+        <div className="grid grid-cols-1 divide-y divide-border sm:grid-cols-2 sm:divide-y-0 xl:grid-cols-4 xl:divide-x">
+          <WalletOverviewStat
+            label={t("detail.metric.balance")}
+            value={
+              <span className={blurClass(hideSensitive)}>
+                {fmtBtc(connection.balance)}
+              </span>
+            }
+            detail={fmtEur(connection.balance * priceEur)}
+          />
+          <WalletOverviewStat
+            label={t("detail.metric.transactions")}
+            value={txCount.toLocaleString("en-US")}
+            detail={t("detail.metric.transactionsDetail")}
+          />
+          <WalletOverviewStat
+            label={t("detail.metric.lastSync")}
+            value={connection.last}
+            detail={connection.status}
+          />
+          <WalletOverviewStat
+            label={
+              hasGapMetric
+                ? t("detail.metric.gapLimit")
+                : t("detail.metric.source")
+            }
+            value={
+              hasGapMetric
+                ? connection.gap?.toLocaleString("en-US") ?? "—"
+                : sourceValue
+            }
+            detail={
+              hasGapMetric
+                ? t("detail.metric.gapLimitDetail")
+                : sourceDetail
+            }
+          />
+        </div>
       </div>
 
       <WalletPrivacyMirrorPanel
