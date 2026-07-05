@@ -8,6 +8,8 @@
     "totalBalance": "Total balance",
     "totalTransactions": "Total transactions",
     "totalTransactionsDetail": "Imported across wallets",
+    "openTransactions": "Open all wallet transactions",
+    "openReview": "Open transaction review queue",
     "upToDate": "Up to date",
     "upToDateAllSources": "All configured sources",
     "upToDateRefreshingNow": "{{count}} refreshing now",

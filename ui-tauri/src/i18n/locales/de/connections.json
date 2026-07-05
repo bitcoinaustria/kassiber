@@ -8,6 +8,8 @@
     "totalBalance": "Gesamtguthaben",
     "totalTransactions": "Transaktionen gesamt",
     "totalTransactionsDetail": "Über Wallets importiert",
+    "openTransactions": "Alle Wallet-Transaktionen öffnen",
+    "openReview": "Transaktionsprüfung öffnen",
     "upToDate": "Aktuell",
     "upToDateAllSources": "Alle konfigurierten Quellen",
     "upToDateRefreshingNow": "{{count}} werden gerade aktualisiert",

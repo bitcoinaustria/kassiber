@@ -1,3 +1,4 @@
+import { Link } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -15,26 +16,49 @@ function WalletsOverviewStat({
   label,
   value,
   detail,
+  link,
 }: {
   label: string;
   value: ReactNode;
   detail?: ReactNode;
+  link?: {
+    to: "/transactions";
+    search?: {
+      quick?: "review_queue";
+    };
+    hash?: string;
+    ariaLabel: string;
+  };
 }) {
-  return (
-    <div className="group relative isolate overflow-hidden p-3 transition-colors before:absolute before:inset-0 before:z-0 before:origin-left before:scale-x-0 before:bg-muted/45 before:content-[''] before:transition-transform before:duration-200 before:ease-out hover:before:scale-x-100 focus-within:before:scale-x-100">
-      <div className="pointer-events-none relative z-20 space-y-1.5">
-        <div className="text-muted-foreground">
-          <span className="text-xs font-medium">{label}</span>
-        </div>
-        <p className="text-lg font-semibold tracking-tight tabular-nums sm:text-xl">
-          {value}
-        </p>
-        {detail != null ? (
-          <p className="truncate text-[10px] font-medium leading-tight text-muted-foreground sm:text-xs">
-            {detail}
-          </p>
-        ) : null}
+  const content = (
+    <div className="pointer-events-none relative z-20 space-y-1.5">
+      <div className="text-muted-foreground">
+        <span className="text-xs font-medium">{label}</span>
       </div>
+      <p className="text-lg font-semibold tracking-tight tabular-nums sm:text-xl">
+        {value}
+      </p>
+      {detail != null ? (
+        <p className="truncate text-[10px] font-medium leading-tight text-muted-foreground sm:text-xs">
+          {detail}
+        </p>
+      ) : null}
+    </div>
+  );
+
+  return link ? (
+    <Link
+      to={link.to}
+      search={link.search}
+      hash={link.hash}
+      aria-label={link.ariaLabel}
+      className="group relative isolate block overflow-hidden p-3 transition-colors before:absolute before:inset-0 before:z-0 before:origin-left before:scale-x-0 before:bg-muted/45 before:content-[''] before:transition-transform before:duration-200 before:ease-out hover:before:scale-x-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-within:before:scale-x-100"
+    >
+      {content}
+    </Link>
+  ) : (
+    <div className="group relative isolate overflow-hidden p-3 transition-colors before:absolute before:inset-0 before:z-0 before:origin-left before:scale-x-0 before:bg-muted/45 before:content-[''] before:transition-transform before:duration-200 before:ease-out hover:before:scale-x-100 focus-within:before:scale-x-100">
+      {content}
     </div>
   );
 }
@@ -102,6 +126,11 @@ export function WalletsMetricGrid({
           label={t("metrics.totalTransactions")}
           value={totalTransactions.toLocaleString("en-US")}
           detail={t("metrics.totalTransactionsDetail")}
+          link={{
+            to: "/transactions",
+            hash: "transactions-table",
+            ariaLabel: t("metrics.openTransactions"),
+          }}
         />
         <WalletsOverviewStat
           label={t("metrics.upToDate")}
@@ -116,6 +145,12 @@ export function WalletsMetricGrid({
               ? t("metrics.needsAttentionFailed")
               : t("metrics.needsAttentionNoFailed")
           }
+          link={{
+            to: "/transactions",
+            search: { quick: "review_queue" },
+            hash: "transactions-table",
+            ariaLabel: t("metrics.openReview"),
+          }}
         />
       </div>
     </div>
