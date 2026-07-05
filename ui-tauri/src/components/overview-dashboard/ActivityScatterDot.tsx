@@ -45,6 +45,7 @@ export function ActivityScatterDot({
     return null;
   }
 
+  const parentFlow = payload.eventFlow;
   const normalizedSize = typeof size === "number" ? size : 80;
   const radius = Math.max(3, Math.sqrt(normalizedSize / Math.PI));
   const markerCount = payload.markerCount ?? 1;
@@ -60,7 +61,7 @@ export function ActivityScatterDot({
   ];
   const parentFill = payload.markerMixedFlows
     ? "var(--muted-foreground)"
-    : flowColors[payload.eventFlow];
+    : flowColors[parentFlow];
   const transactionId =
     markerCount > 1 ? undefined : (payload.eventTransactionId ?? payload.eventId);
   const canOpenMarker = Boolean(transactionId || groupedTransactionIds.length > 0);
@@ -161,7 +162,7 @@ export function ActivityScatterDot({
 
   const interactiveProps = transactionId
     ? {
-        "aria-label": `Open ${activityFlowLabels[payload.eventFlow]} transaction`,
+        "aria-label": `Open ${activityFlowLabels[parentFlow]} transaction`,
         className: "group/activity-marker outline-none",
         "data-activity-marker": true,
         focusable: true,
@@ -212,7 +213,7 @@ export function ActivityScatterDot({
   const gridStartX = cx + radius + 14;
   const gridStartY = cy - gridHeight / 2;
   const flowForPoint = (point: TreasuryChartPoint): ActivityFlow =>
-    point.eventFlow ?? payload.eventFlow;
+    point.eventFlow ?? parentFlow;
   const flowIndex = new Map<ActivityFlow, number>();
   const flowTotal = groupedPoints.reduce<Record<ActivityFlow, number>>(
     (totals, point) => {
