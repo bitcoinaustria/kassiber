@@ -100,9 +100,27 @@ export const fixtures: Record<string, unknown> = {
   "ui.loans.unmark": { transaction_id: "tx16" },
   status: {
     version: "0.0.0-ui-scaffold",
-    data_root: "~/.kassiber",
+    project_id: "mock",
+    project_name: "Mock Books",
+    project_root: "~/.kassiber/projects/mock",
+    data_root: "~/.kassiber/projects/mock/data",
     workspace: null,
     profile: null,
+  },
+  "ui.projects.list": {
+    selected_project_id: "mock",
+    projects: [
+      {
+        id: "mock",
+        name: "Mock Books",
+        path: "~/.kassiber/projects/mock",
+        data_root: "~/.kassiber/projects/mock/data",
+        database: "~/.kassiber/projects/mock/data/kassiber.sqlite3",
+        encrypted: true,
+        last_opened_at: "2026-07-01T09:00:00Z",
+        selected: true,
+      },
+    ],
   },
   "ui.logs.snapshot": {
     records: [],
@@ -1472,7 +1490,7 @@ export const fixtures: Record<string, unknown> = {
     },
   },
   "ui.reports.export_pdf": {
-    file: "~/.kassiber/exports/reports/kassiber-report-mock.pdf",
+    file: "~/.kassiber/projects/mock/exports/reports/kassiber-report-mock.pdf",
     filename: "kassiber-report-mock.pdf",
     format: "pdf",
     scope: "report",
@@ -1481,7 +1499,7 @@ export const fixtures: Record<string, unknown> = {
     title: "Kassiber Report - Mock",
   },
   "ui.reports.export_summary_pdf": {
-    file: "~/.kassiber/exports/reports/kassiber-summary-report-mock.pdf",
+    file: "~/.kassiber/projects/mock/exports/reports/kassiber-summary-report-mock.pdf",
     filename: "kassiber-summary-report-mock.pdf",
     format: "pdf",
     scope: "summary_report",
@@ -1500,7 +1518,7 @@ export const fixtures: Record<string, unknown> = {
     },
   },
   "ui.reports.export_csv": {
-    file: "~/.kassiber/exports/reports/kassiber-report-mock.csv",
+    file: "~/.kassiber/projects/mock/exports/reports/kassiber-report-mock.csv",
     filename: "kassiber-report-mock.csv",
     format: "csv",
     scope: "report",
@@ -1509,7 +1527,7 @@ export const fixtures: Record<string, unknown> = {
     sections: ["Overview", "Wallets", "Asset Flow", "Transactions"],
   },
   "ui.reports.export_xlsx": {
-    file: "~/.kassiber/exports/reports/kassiber-report-mock.xlsx",
+    file: "~/.kassiber/projects/mock/exports/reports/kassiber-report-mock.xlsx",
     filename: "kassiber-report-mock.xlsx",
     format: "xlsx",
     scope: "report",
@@ -1518,7 +1536,7 @@ export const fixtures: Record<string, unknown> = {
     bytes: 20480,
   },
   "ui.reports.export_capital_gains_csv": {
-    file: "~/.kassiber/exports/reports/kassiber-capital-gains-mock.csv",
+    file: "~/.kassiber/projects/mock/exports/reports/kassiber-capital-gains-mock.csv",
     filename: "kassiber-capital-gains-mock.csv",
     format: "csv",
     scope: "capital_gains",
@@ -1526,7 +1544,7 @@ export const fixtures: Record<string, unknown> = {
     bytes: 8192,
   },
   "ui.reports.export_austrian_e1kv_pdf": {
-    file: "~/.kassiber/exports/reports/kassiber-austrian-e1kv-2025-mock.pdf",
+    file: "~/.kassiber/projects/mock/exports/reports/kassiber-austrian-e1kv-2025-mock.pdf",
     filename: "kassiber-austrian-e1kv-2025-mock.pdf",
     format: "pdf",
     scope: "austrian_e1kv",
@@ -1535,7 +1553,7 @@ export const fixtures: Record<string, unknown> = {
     bytes: 32768,
   },
   "ui.reports.export_austrian_e1kv_xlsx": {
-    file: "~/.kassiber/exports/reports/kassiber-austrian-e1kv-2025-mock.xlsx",
+    file: "~/.kassiber/projects/mock/exports/reports/kassiber-austrian-e1kv-2025-mock.xlsx",
     filename: "kassiber-austrian-e1kv-2025-mock.xlsx",
     format: "xlsx",
     scope: "austrian_e1kv",
@@ -1545,7 +1563,7 @@ export const fixtures: Record<string, unknown> = {
     bytes: 24576,
   },
   "ui.reports.export_austrian_e1kv_csv": {
-    dir: "~/.kassiber/exports/reports/kassiber-austrian-e1kv-2025-csv-mock",
+    dir: "~/.kassiber/projects/mock/exports/reports/kassiber-austrian-e1kv-2025-csv-mock",
     filename: "kassiber-austrian-e1kv-2025-csv-mock",
     format: "csv",
     scope: "austrian_e1kv",
@@ -1555,7 +1573,7 @@ export const fixtures: Record<string, unknown> = {
     files: [
       {
         sheet: "Übersicht",
-        file: "~/.kassiber/exports/reports/kassiber-austrian-e1kv-2025-csv-mock/00_uebersicht.csv",
+        file: "~/.kassiber/projects/mock/exports/reports/kassiber-austrian-e1kv-2025-csv-mock/00_uebersicht.csv",
         rows: 3,
         bytes: 2048,
       },
@@ -2082,7 +2100,7 @@ export const fixtures: Record<string, unknown> = {
     ],
   },
   "ui.source_funds.export_pdf": {
-    file: "~/.kassiber/exports/reports/kassiber-source-funds-mock.pdf",
+    file: "~/.kassiber/projects/mock/exports/reports/kassiber-source-funds-mock.pdf",
     filename: "kassiber-source-funds-mock.pdf",
     format: "pdf",
     scope: "source_funds",

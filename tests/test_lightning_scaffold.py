@@ -375,6 +375,10 @@ class LightningRegistryTest(unittest.TestCase):
             # Sorted output keeps the error-hint stable across runs.
             self.assertEqual(list(kinds), sorted(kinds))
 
+    def test_package_import_registers_implemented_adapters(self) -> None:
+        self.assertIsNotNone(core_lightning.resolve_adapter("coreln"))
+        self.assertIsNotNone(core_lightning.resolve_adapter("lnd"))
+
 
 class LightningForwardFailureReasonTest(unittest.TestCase):
     def test_known_failure_reasons_accepted(self) -> None:

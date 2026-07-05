@@ -663,6 +663,12 @@ export function isImportProjectActive(dataRoot: string): boolean {
   return activeImportProjectSelection?.dataRoot === dataRoot;
 }
 
+export function noteActiveImportProject(selection: ImportProjectSelection): void {
+  importProjectActivationGeneration += 1;
+  activeImportProjectActivation = null;
+  activeImportProjectSelection = selection;
+}
+
 export async function clearImportProject(): Promise<void> {
   if (DAEMON_MODE === "mock") {
     return;
@@ -776,10 +782,10 @@ export async function storeTouchIdPassphrase(
   });
 }
 
-export async function unlockTouchIdPassphrase(
+export async function unlockTouchIdPassphrase<T = unknown>(
   dataRoot?: string | null,
-  options?: { requireExistingProject?: boolean },
-): Promise<DaemonEnvelope> {
+  options?: { requireExistingProject?: boolean; projectId?: string | null },
+): Promise<DaemonEnvelope<T>> {
   if (DAEMON_MODE !== "tauri") {
     return {
       kind: "error",
@@ -788,12 +794,13 @@ export async function unlockTouchIdPassphrase(
         code: "touch_id_unavailable",
         message: "Touch ID passphrase unlock is only available in the macOS desktop app.",
       },
-    };
+    } as DaemonEnvelope<T>;
   }
   const { invoke } = await import("@tauri-apps/api/core");
-  return invoke<DaemonEnvelope>("touch_id_unlock_passphrase_command", {
+  return invoke<DaemonEnvelope<T>>("touch_id_unlock_passphrase_command", {
     dataRoot: dataRoot ?? null,
     requireExistingProject: options?.requireExistingProject ?? false,
+    projectId: options?.projectId ?? null,
   });
 }
 

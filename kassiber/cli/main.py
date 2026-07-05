@@ -132,13 +132,25 @@ from ..backup.cli import add_backup_parser, dispatch_backup
 from ..backends import preferred_explorer_base
 from ..envelope import write_text
 from ..errors import AppError
+from ..projects import (
+    create_project,
+    get_project,
+    list_projects,
+    load_catalog,
+    mark_project_opened,
+    refresh_project_metadata,
+    set_selected_project,
+)
 from ..log_ring import sanitize_traceback_text
+from ..secrets.migration import create_empty_encrypted_database
 from ..secrets.cli import add_secrets_parser, dispatch_secrets
 from ..secrets.cli_input import (
     add_secret_stdin_options,
     enforce_single_stdin_consumer,
     read_secret_from_args,
 )
+from ..secrets.prompt import read_passphrase_from_fd
+from ..secrets.sqlcipher import require_sqlcipher
 from ..tax_policy import supported_tax_countries
 from ..wallet_descriptors import MAX_DESCRIPTOR_GAP_LIMIT
 from .chat import run_chat_command
@@ -146,6 +158,7 @@ from .chat import run_chat_command
 
 _AI_PROVIDER_KINDS_LIST = AI_PROVIDER_KINDS
 _AI_PROVIDER_CLEARABLE_FIELDS = ("api_key", "default_model", "notes")
+_MIN_PROJECT_PASSPHRASE_CHARS = 12
 
 
 def _ai_provider_redacted(conn: sqlite3.Connection, provider: dict) -> dict:
@@ -236,6 +249,68 @@ def _normalized_backend_clear_fields(values: Sequence[str] | None) -> list[str]:
 def _add_workspace_profile_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--workspace")
     parser.add_argument("--profile")
+
+
+def _project_payload(entry) -> dict[str, object]:
+    return {
+        "id": entry.id,
+        "name": entry.name,
+        "path": str(entry.root),
+        "data_root": str(entry.data_root),
+        "database": str(entry.database),
+        "encrypted": bool(entry.encrypted),
+        "last_opened_at": entry.last_opened_at,
+    }
+
+
+def cmd_projects_list(args: argparse.Namespace) -> dict[str, object]:
+    selected = getattr(args, "project", None) or load_catalog().get("selected_project_id")
+    projects = []
+    for entry in list_projects():
+        payload = _project_payload(entry)
+        payload["selected"] = entry.id == selected
+        projects.append(payload)
+    return {"selected_project_id": selected, "projects": projects}
+
+
+def cmd_projects_show(args: argparse.Namespace) -> dict[str, object]:
+    entry = get_project(args.project_ref)
+    return _project_payload(entry)
+
+
+def cmd_projects_create(args: argparse.Namespace) -> dict[str, object]:
+    passphrase = None
+    passphrase_fd = getattr(args, "new_passphrase_fd", None)
+    if passphrase_fd is not None:
+        require_sqlcipher()
+        passphrase = read_passphrase_from_fd(int(passphrase_fd))
+        if len(passphrase) < _MIN_PROJECT_PASSPHRASE_CHARS:
+            raise AppError(
+                f"passphrase must be at least {_MIN_PROJECT_PASSPHRASE_CHARS} characters long",
+                code="invalid_passphrase",
+                hint="Pick a long passphrase from a password manager.",
+                retryable=False,
+            )
+    entry = create_project(
+        args.name,
+        project_id=args.project_id,
+        root=args.path,
+        select=not args.no_select,
+        replace_existing=False,
+        allow_existing_database=False,
+    )
+    if passphrase is not None:
+        create_empty_encrypted_database(entry.database, passphrase)
+        if args.no_select:
+            entry = refresh_project_metadata(entry.id, data_root=entry.data_root)
+        else:
+            entry = mark_project_opened(entry.id, data_root=entry.data_root)
+    return _project_payload(entry)
+
+
+def cmd_projects_select(args: argparse.Namespace) -> dict[str, object]:
+    entry = set_selected_project(args.project_ref)
+    return _project_payload(entry)
 
 
 def _read_optional_text_file(file_path: str | None, label: str) -> str | None:
@@ -518,7 +593,19 @@ def build_parser() -> argparse.ArgumentParser:
         prog=APP_NAME,
         description="Open-source, local-first Bitcoin accounting with wallet buckets and multi-wallet support. CLI surface of the Kassiber suite; a desktop GUI is also available.",
     )
-    parser.add_argument("--data-root", default=DEFAULT_DATA_ROOT, help="Data directory for the local SQLite store")
+    parser.add_argument(
+        "--project",
+        default=None,
+        help="Project/book-set id from the global Kassiber project catalog",
+    )
+    parser.add_argument(
+        "--data-root",
+        default=None,
+        help=(
+            "Explicit project data directory for the local SQLite store; "
+            "bypasses the selected project catalog entry"
+        ),
+    )
     parser.add_argument(
         "--env-file",
         default=None,
@@ -565,6 +652,26 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("daemon")
     sub.add_parser("init")
     sub.add_parser("status")
+
+    projects = sub.add_parser("projects", help="List, create, and select encrypted project containers")
+    projects_sub = projects.add_subparsers(dest="projects_command", required=True)
+    projects_sub.add_parser("list")
+    projects_show = projects_sub.add_parser("show")
+    projects_show.add_argument("project_ref")
+    projects_create = projects_sub.add_parser("create")
+    projects_create.add_argument("name")
+    projects_create.add_argument("--project-id", default=None)
+    projects_create.add_argument("--path", default=None, help="Project root path; defaults to ~/.kassiber/projects/<id>")
+    projects_create.add_argument("--no-select", action="store_true", help="Create without making it the selected project")
+    projects_create.add_argument(
+        "--new-passphrase-fd",
+        type=int,
+        default=None,
+        metavar="FD",
+        help="Create the project database encrypted with a passphrase read from this fd",
+    )
+    projects_select = projects_sub.add_parser("select")
+    projects_select.add_argument("project_ref")
 
     chat = sub.add_parser(
         "chat",
@@ -2407,6 +2514,20 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
         return cmd_init(conn, args)
     if args.command == "status":
         return cmd_status(conn, args)
+    if args.command == "projects":
+        if args.projects_command == "list":
+            return emit(args, cmd_projects_list(args), kind="projects.list")
+        if args.projects_command == "show":
+            return emit(args, cmd_projects_show(args), kind="projects.show")
+        if args.projects_command == "create":
+            return emit(args, cmd_projects_create(args), kind="projects.create")
+        if args.projects_command == "select":
+            return emit(args, cmd_projects_select(args), kind="projects.select")
+        raise AppError(
+            f"unknown projects command: {args.projects_command!r}",
+            code="unknown_command",
+            retryable=False,
+        )
     if args.command == "secrets":
         return emit(args, dispatch_secrets(args))
     if args.command == "backup":
@@ -4433,6 +4554,8 @@ def command_needs_db(args: argparse.Namespace) -> bool:
         return False
     if args.command == "backup":
         return False
+    if args.command == "projects":
+        return False
     return True
 
 
@@ -4488,6 +4611,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 1
 
     try:
+        if args.command == "projects":
+            dispatch(None, args)
+            return 0
         runtime = bootstrap_runtime(
             args,
             needs_db=command_needs_db(args),

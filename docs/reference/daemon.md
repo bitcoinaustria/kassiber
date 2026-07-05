@@ -81,6 +81,9 @@ daemon for the exact current allowlist:
       "ui.workspace.create",
       "ui.workspace.delete",
       "ui.profiles.reset_data",
+      "ui.projects.list",
+      "ui.projects.create",
+      "ui.projects.select",
       "ui.secrets.init",
       "ui.secrets.change_passphrase",
       "ui.next_actions",
@@ -550,9 +553,9 @@ logs event records in the dev-server terminal instead.
 
 `status`, the `ui.*` snapshots, report export kinds, `ui.wallets.sync`,
 `ui.freshness.*`, and `ui.journals.process` are backed by real data today.
-Report export kinds write files under the managed `exports/reports/` state
-directory and return the written path plus metadata. UI kinds not yet wired
-return `daemon_unavailable` instead.
+Report export kinds write files under the active project's managed
+`exports/reports/` directory and return the written path plus metadata. UI
+kinds not yet wired return `daemon_unavailable` instead.
 
 `ui.overview.snapshot` remains scoped to the active book/profile.
 `ui.workspace.health` is also active-context health despite the historical
@@ -695,11 +698,11 @@ surface the unavailable-adapter state without inventing data.
 
 ## Encrypted database
 
-When `kassiber.sqlite3` is SQLCipher-encrypted, the daemon still bootstraps
-through the normal runtime path: it accepts the global `--db-passphrase-fd
-<FD>` and falls back to an interactive prompt only if a controlling TTY is
-attached. The Tauri supervisor will eventually hand the passphrase via fd
-inheritance (tracked in `TODO.md`).
+When the active project's `kassiber.sqlite3` is SQLCipher-encrypted, the daemon
+still bootstraps through the normal runtime path: it accepts
+`--db-passphrase-fd <FD>` for that selected project and falls back to an
+interactive prompt only if a controlling TTY is attached. The Tauri supervisor
+will eventually hand the passphrase via fd inheritance (tracked in `TODO.md`).
 
 ## Reveal kinds (local-auth round-trip)
 

@@ -25,6 +25,8 @@ use tauri_plugin_deep_link::DeepLinkExt;
 
 const SCHEMA_VERSION: u8 = 1;
 const DEFAULT_STATE_DIR: &str = ".kassiber";
+const DEFAULT_PROJECTS_DIR: &str = "projects";
+const DEFAULT_PROJECT_ID: &str = "default";
 const DEFAULT_DATA_DIR: &str = "data";
 const DB_FILENAMES: &[&str] = &["kassiber.sqlite3", "satbooks.sqlite3"];
 const LEDGER_PREVIEW_EXTENSIONS: &[&str] = &["csv", "tsv", "xlsx", "xlsm"];
@@ -242,6 +244,9 @@ const ALLOWED_DAEMON_KINDS: &[&str] = &[
     "ui.workspace.create",
     "ui.workspace.rename",
     "ui.workspace.delete",
+    "ui.projects.list",
+    "ui.projects.create",
+    "ui.projects.select",
     "ui.secrets.init",
     "ui.secrets.change_passphrase",
     "ui.next_actions",
@@ -890,19 +895,19 @@ fn clear_import_project(state: State<'_, Arc<DaemonSupervisor>>) -> Result<(), S
 #[tauri::command]
 fn touch_id_passphrase_status_command(
     state: State<'_, Arc<DaemonSupervisor>>,
-    _data_root: Option<String>,
+    data_root: Option<String>,
 ) -> Result<TouchIdPassphraseStatus, String> {
-    let account = touch_id_account_for_active_data_root(&state)?;
+    let account = touch_id_account_for_data_root(&state, data_root)?;
     Ok(touch_id_passphrase_status(&account))
 }
 
 #[tauri::command]
 fn touch_id_store_passphrase_command(
     state: State<'_, Arc<DaemonSupervisor>>,
-    _data_root: Option<String>,
+    data_root: Option<String>,
     passphrase_secret: String,
 ) -> Result<TouchIdPassphraseStatus, String> {
-    let account = touch_id_account_for_active_data_root(&state)?;
+    let account = touch_id_account_for_data_root(&state, data_root)?;
     touch_id_store_passphrase(&account, &passphrase_secret)?;
     Ok(touch_id_passphrase_status(&account))
 }
@@ -911,10 +916,11 @@ fn touch_id_store_passphrase_command(
 async fn touch_id_unlock_passphrase_command(
     app: tauri::AppHandle,
     state: State<'_, Arc<DaemonSupervisor>>,
-    _data_root: Option<String>,
+    data_root: Option<String>,
     require_existing_project: Option<bool>,
+    project_id: Option<String>,
 ) -> Result<DaemonEnvelope, String> {
-    let account = touch_id_account_for_active_data_root(&state)?;
+    let account = touch_id_account_for_data_root(&state, data_root)?;
     let Some(passphrase_secret) = touch_id_get_passphrase(&account)? else {
         return Ok(error_envelope(
             "touch_id_passphrase_not_found",
@@ -925,13 +931,19 @@ async fn touch_id_unlock_passphrase_command(
             false,
         ));
     };
-    let args = json!({
+    let mut args = json!({
         "auth_response": { "passphrase_secret": passphrase_secret },
         "require_existing_project": require_existing_project.unwrap_or(false),
     });
+    let kind = if let Some(project_id) = project_id.filter(|value| !value.trim().is_empty()) {
+        args["project_id"] = json!(project_id);
+        "ui.projects.select"
+    } else {
+        "daemon.unlock"
+    };
     let supervisor = Arc::clone(state.inner());
     tauri::async_runtime::spawn_blocking(move || {
-        match supervisor.invoke("daemon.unlock", Some(args), &app, false, None) {
+        match supervisor.invoke(kind, Some(args), &app, false, None) {
             Ok(mut response) => {
                 attach_secret_store_policy_status(&mut response);
                 serde_json::from_value(response).map_err(|error| {
@@ -948,9 +960,9 @@ async fn touch_id_unlock_passphrase_command(
 #[tauri::command]
 fn touch_id_forget_passphrase_command(
     state: State<'_, Arc<DaemonSupervisor>>,
-    _data_root: Option<String>,
+    data_root: Option<String>,
 ) -> Result<TouchIdPassphraseStatus, String> {
-    let account = touch_id_account_for_active_data_root(&state)?;
+    let account = touch_id_account_for_data_root(&state, data_root)?;
     touch_id_delete_passphrase(&account)?;
     Ok(touch_id_passphrase_status(&account))
 }
@@ -972,8 +984,13 @@ fn terminal_command_remove_command() -> Result<TerminalCommandStatus, String> {
     terminal_command_status()
 }
 
-fn touch_id_account_for_active_data_root(state: &Arc<DaemonSupervisor>) -> Result<String, String> {
-    let selected = if let Some(active) = state.current_data_root().map_err(|error| error.message)? {
+fn touch_id_account_for_data_root(
+    state: &Arc<DaemonSupervisor>,
+    data_root: Option<String>,
+) -> Result<String, String> {
+    let selected = if let Some(explicit) = data_root.filter(|value| !value.trim().is_empty()) {
+        PathBuf::from(explicit)
+    } else if let Some(active) = state.current_data_root().map_err(|error| error.message)? {
         active
     } else {
         default_state_data_root()
@@ -1228,8 +1245,18 @@ fn default_import_picker_root() -> PathBuf {
 
 fn default_state_data_root() -> PathBuf {
     home_dir()
-        .map(|home| home.join(DEFAULT_STATE_DIR).join(DEFAULT_DATA_DIR))
-        .unwrap_or_else(|| PathBuf::from(DEFAULT_STATE_DIR).join(DEFAULT_DATA_DIR))
+        .map(|home| {
+            home.join(DEFAULT_STATE_DIR)
+                .join(DEFAULT_PROJECTS_DIR)
+                .join(DEFAULT_PROJECT_ID)
+                .join(DEFAULT_DATA_DIR)
+        })
+        .unwrap_or_else(|| {
+            PathBuf::from(DEFAULT_STATE_DIR)
+                .join(DEFAULT_PROJECTS_DIR)
+                .join(DEFAULT_PROJECT_ID)
+                .join(DEFAULT_DATA_DIR)
+        })
 }
 
 fn terminal_command_paths() -> Result<TerminalCommandPaths, String> {

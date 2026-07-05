@@ -53,6 +53,11 @@
       "releaseLabel": "Kassiber v{{version}}"
     }
   },
+  "projects": {
+    "menuLabel": "Bücher-Sets",
+    "switchFailedTitle": "Bücher-Set konnte nicht gewechselt werden",
+    "switchFailedBody": "Kassiber konnte diesen Projektcontainer nicht öffnen."
+  },
   "routeMeta": {
     "activity": {
       "label": "Aktivität durchsuchen",

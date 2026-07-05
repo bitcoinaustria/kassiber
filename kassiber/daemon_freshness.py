@@ -1132,6 +1132,7 @@ def _start_freshness_background_worker(
     passphrase_handoff: dict[str, str | None] = {
         "value": passphrase if passphrase is not None else ctx.db_passphrase
     }
+    stop_event = ctx.freshness_stop_event
 
     def _worker() -> None:
         current_request_id.set("background:freshness")
@@ -1170,7 +1171,7 @@ def _start_freshness_background_worker(
             )
             return
         try:
-            while not ctx.freshness_stop_event.wait(FRESHNESS_BACKGROUND_POLL_SECONDS):
+            while not stop_event.wait(FRESHNESS_BACKGROUND_POLL_SECONDS):
                 try:
                     _freshness_background_tick(worker_conn, ctx.runtime_config, ctx.out)
                 except Exception as exc:
@@ -1221,8 +1222,9 @@ def _stop_freshness_background_worker(
     worker = ctx.freshness_worker
     if worker is not None:
         worker.join(timeout=2.0)
-    if worker is None or not worker.is_alive():
-        ctx.freshness_worker = None
+    # The worker captured the old event, so a timed-out worker can drain while
+    # the next project/session gets a fresh stop event and worker slot.
+    ctx.freshness_worker = None
     if reset_event:
         ctx.freshness_stop_event = threading.Event()
 
