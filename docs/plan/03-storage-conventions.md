@@ -141,20 +141,23 @@ Rules:
 
 ## Legacy App-Wide Migration
 
-On first default startup without a project catalog, Kassiber discovers a legacy
-`~/.kassiber/data/kassiber.sqlite3` and stages a copy into
-`~/.kassiber/projects/default/`. The legacy source remains in place for manual
-rollback. Project-local `attachments/`, `exports/`, `config/backends.env`, and
-`config/settings.json` are copied or regenerated under the project; logs are not
-migrated because Kassiber's normal log ring is RAM-only.
+On first default startup without a project catalog, Kassiber discovers legacy
+databases in the old hidden-home and XDG locations (`~/.kassiber/data/`,
+`~/.local/share/kassiber/`, `~/.local/share/satbooks/`) and stages a copy into
+`~/.kassiber/projects/default/`. After the staged project is in place, the old
+plaintext database, `config/backends.env`, `config/settings.json`,
+`attachments/`, and `exports/` artifacts are moved aside under
+`pre-project-migration-<timestamp>/` at the legacy source root. This preserves a
+manual rollback package without leaving the old active plaintext path in place.
+Logs are not migrated because Kassiber's normal log ring is RAM-only.
 
-Automatic migration is allowed only when the legacy DB is missing workspace
-state or clearly has zero/one workspace. A plaintext legacy DB with multiple
-workspaces fails before copying and writes a JSON report under
-`~/.kassiber/config/migration-reports/`. An encrypted legacy DB is copied first,
-then validated after unlock; if it contains multiple workspaces, Kassiber
-refuses to use it and writes the same staged split report. The split policy is
-explicit:
+A legacy DB with multiple workspaces is migrated as one default project
+container because a project/book-set may contain multiple books/profiles. A JSON
+report under the legacy source root's `config/migration-reports/` records the
+workspace count and the future split policy. An encrypted legacy DB whose
+workspace count cannot be read before unlock is validated after the first
+successful unlock and then clears the validation marker instead of blocking
+startup. The split policy for any future explicit split is:
 
 - workspace/profile-scoped tables filter by `workspace_id` / `profile_id`
 - relationship tables follow their parent transaction/session/attachment rows

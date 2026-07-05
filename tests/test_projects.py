@@ -30,7 +30,7 @@ class ProjectCatalogTests(unittest.TestCase):
             entry = create_project("Family Treasury", state_root=root)
             entry.database.parent.mkdir(parents=True, exist_ok=True)
             entry.database.write_bytes(b"not a plaintext sqlite header")
-            entry = refresh_project_metadata(entry.id, data_root=entry.data_root, state_root=root)
+            refresh_project_metadata(entry.id, data_root=entry.data_root, state_root=root)
 
             raw = json.loads(catalog_path(root).read_text(encoding="utf-8"))
             self.assertEqual(raw["schema_version"], 1)
@@ -142,15 +142,27 @@ class ProjectCatalogTests(unittest.TestCase):
             self.assertEqual(entry.id, "beta")
             self.assertEqual(load_catalog(catalog_path(root))["selected_project_id"], "alpha")
 
+    def test_project_and_data_root_flags_conflict(self):
+        with self.assertRaises(AppError) as ctx:
+            resolve_runtime_paths(data_root="/tmp/example", project="family")
+
+        self.assertEqual(ctx.exception.code, "invalid_flag_combination")
+
 
 class LegacyProjectMigrationTests(unittest.TestCase):
-    def test_multi_workspace_legacy_db_fails_with_staged_policy_report(self):
+    def test_multi_workspace_legacy_db_migrates_as_single_project_and_moves_old_artifacts(self):
         from kassiber import projects as projects_module
 
         with tempfile.TemporaryDirectory() as root:
             state_root = Path(root) / ".kassiber"
             data_root = state_root / "data"
             data_root.mkdir(parents=True)
+            attachments_root = state_root / "attachments"
+            attachments_root.mkdir()
+            (attachments_root / "evidence.txt").write_text("receipt", encoding="utf-8")
+            config_root = state_root / "config"
+            config_root.mkdir()
+            (config_root / "backends.env").write_text("TOKEN=plaintext\n", encoding="utf-8")
             db_path = data_root / DEFAULT_DB_FILENAME
             conn = sqlite3.connect(db_path)
             try:
@@ -166,25 +178,111 @@ class LegacyProjectMigrationTests(unittest.TestCase):
             try:
                 projects_module.DEFAULT_STATE_ROOT = str(state_root)
                 projects_module.DEFAULT_DATA_ROOT = str(data_root)
-                with self.assertRaises(AppError) as ctx:
-                    migrate_legacy_default_layout_if_needed()
+                migrated = migrate_legacy_default_layout_if_needed()
             finally:
                 projects_module.DEFAULT_STATE_ROOT = old_state
                 projects_module.DEFAULT_DATA_ROOT = old_data
 
-            self.assertEqual(ctx.exception.code, "legacy_multi_workspace_split_required")
-            report = Path(ctx.exception.details["report"])
-            self.assertTrue(report.exists())
-            payload = json.loads(report.read_text(encoding="utf-8"))
+            self.assertEqual(migrated.id, "default")
+            migrated_db = state_root / "projects" / "default" / "data" / DEFAULT_DB_FILENAME
+            self.assertTrue(migrated_db.exists())
+            migrated_conn = sqlite3.connect(migrated_db)
+            try:
+                self.assertEqual(migrated_conn.execute("SELECT COUNT(*) FROM workspaces").fetchone()[0], 2)
+            finally:
+                migrated_conn.close()
+            self.assertFalse(db_path.exists())
+            backups = sorted(state_root.glob("pre-project-migration-*"))
+            self.assertEqual(len(backups), 1)
+            self.assertTrue((backups[0] / "data" / DEFAULT_DB_FILENAME).exists())
+            self.assertTrue((backups[0] / "attachments" / "evidence.txt").exists())
+            self.assertTrue((backups[0] / "config" / "backends.env").exists())
+            reports = sorted((state_root / "config" / "migration-reports").glob("*.json"))
+            self.assertTrue(reports)
+            payload = json.loads(reports[-1].read_text(encoding="utf-8"))
+            self.assertEqual(payload["status"], "staged_multi_workspace_single_project_copy")
             self.assertEqual(payload["details"]["workspace_count"], 2)
             self.assertEqual(
                 payload["split_policy"]["project_shared_tables_copied_to_each_split_project"],
                 WORKSPACE_SPLIT_POLICY["project_shared_tables_copied_to_each_split_project"],
             )
 
+    def test_legacy_xdg_database_is_migrated_instead_of_orphaned(self):
+        from kassiber import projects as projects_module
+
+        with tempfile.TemporaryDirectory() as root:
+            state_root = Path(root) / ".kassiber"
+            default_data_root = state_root / "data"
+            xdg_root = Path(root) / ".local" / "share" / "kassiber"
+            xdg_root.mkdir(parents=True)
+            db_path = xdg_root / DEFAULT_DB_FILENAME
+            conn = sqlite3.connect(db_path)
+            try:
+                conn.execute("CREATE TABLE workspaces(id TEXT PRIMARY KEY, label TEXT, created_at TEXT)")
+                conn.execute("INSERT INTO workspaces VALUES('one', 'One', '2026-01-01T00:00:00Z')")
+                conn.commit()
+            finally:
+                conn.close()
+
+            old_state = projects_module.DEFAULT_STATE_ROOT
+            old_data = projects_module.DEFAULT_DATA_ROOT
+            old_xdg = projects_module.LEGACY_XDG_DATA_ROOT
+            old_legacy = projects_module.LEGACY_DATA_ROOT
+            try:
+                projects_module.DEFAULT_STATE_ROOT = str(state_root)
+                projects_module.DEFAULT_DATA_ROOT = str(default_data_root)
+                projects_module.LEGACY_XDG_DATA_ROOT = str(xdg_root)
+                projects_module.LEGACY_DATA_ROOT = str(Path(root) / ".local" / "share" / "satbooks")
+                migrated = migrate_legacy_default_layout_if_needed()
+            finally:
+                projects_module.DEFAULT_STATE_ROOT = old_state
+                projects_module.DEFAULT_DATA_ROOT = old_data
+                projects_module.LEGACY_XDG_DATA_ROOT = old_xdg
+                projects_module.LEGACY_DATA_ROOT = old_legacy
+
+            self.assertEqual(migrated.id, "default")
+            self.assertTrue((state_root / "projects" / "default" / "data" / DEFAULT_DB_FILENAME).exists())
+            self.assertFalse(db_path.exists())
+            backups = sorted(xdg_root.glob("pre-project-migration-*"))
+            self.assertEqual(len(backups), 1)
+            self.assertTrue((backups[0] / DEFAULT_DB_FILENAME).exists())
+
+    def test_stale_legacy_migrating_directory_is_retried(self):
+        from kassiber import projects as projects_module
+
+        with tempfile.TemporaryDirectory() as root:
+            state_root = Path(root) / ".kassiber"
+            data_root = state_root / "data"
+            data_root.mkdir(parents=True)
+            db_path = data_root / DEFAULT_DB_FILENAME
+            conn = sqlite3.connect(db_path)
+            try:
+                conn.execute("CREATE TABLE workspaces(id TEXT PRIMARY KEY, label TEXT, created_at TEXT)")
+                conn.execute("INSERT INTO workspaces VALUES('one', 'One', '2026-01-01T00:00:00Z')")
+                conn.commit()
+            finally:
+                conn.close()
+            stale = state_root / "projects" / "default.migrating"
+            stale.mkdir(parents=True)
+            (stale / "partial.txt").write_text("interrupted", encoding="utf-8")
+
+            old_state = projects_module.DEFAULT_STATE_ROOT
+            old_data = projects_module.DEFAULT_DATA_ROOT
+            try:
+                projects_module.DEFAULT_STATE_ROOT = str(state_root)
+                projects_module.DEFAULT_DATA_ROOT = str(data_root)
+                migrated = migrate_legacy_default_layout_if_needed()
+            finally:
+                projects_module.DEFAULT_STATE_ROOT = old_state
+                projects_module.DEFAULT_DATA_ROOT = old_data
+
+            self.assertEqual(migrated.id, "default")
+            self.assertFalse(stale.exists())
+            self.assertTrue((state_root / "projects" / "default" / "data" / DEFAULT_DB_FILENAME).exists())
+
 
 class DaemonProjectSwitchTests(unittest.TestCase):
-    def test_switch_closes_current_project_before_prompting_for_next_passphrase(self):
+    def test_switch_keeps_current_project_open_until_next_passphrase_succeeds(self):
         if not sqlcipher_available():
             self.skipTest("SQLCipher driver is not installed")
         from kassiber import daemon as daemon_runtime
@@ -238,10 +336,16 @@ class DaemonProjectSwitchTests(unittest.TestCase):
                 )
                 self.assertFalse(shutdown)
                 self.assertEqual(response["kind"], "auth_required")
-                self.assertIsNone(ctx.conn)
-                self.assertEqual(ctx.project_id, "beta")
-                with self.assertRaises(sqlite3.ProgrammingError):
-                    alpha_conn.execute("SELECT 1")
+                self.assertIs(ctx.conn, alpha_conn)
+                self.assertEqual(ctx.project_id, "alpha")
+                self.assertEqual(
+                    alpha_conn.execute("SELECT value FROM settings WHERE key='project'").fetchone()[0],
+                    "alpha",
+                )
+                self.assertEqual(
+                    load_catalog(catalog_path(state_root))["selected_project_id"],
+                    "alpha",
+                )
 
                 response, _ = daemon_runtime.handle_request(
                     ctx,
@@ -258,6 +362,8 @@ class DaemonProjectSwitchTests(unittest.TestCase):
                 self.assertEqual(response["kind"], "ui.projects.select")
                 self.assertIsNotNone(ctx.conn)
                 self.assertEqual(ctx.project_id, "beta")
+                with self.assertRaises(sqlite3.ProgrammingError):
+                    alpha_conn.execute("SELECT 1")
                 self.assertEqual(
                     ctx.conn.execute("SELECT COUNT(*) FROM settings").fetchone()[0],
                     0,

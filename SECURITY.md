@@ -97,7 +97,9 @@ start or bundle Tor, so the user still needs an existing Tor service.
 - `~/.kassiber/config/projects.json` — global project catalog. Contains only
   project id/name/path/encrypted status/last-opened metadata. It must never
   contain passphrases, verifier hashes, wrapped keys, descriptors, xpubs,
-  backend tokens, accounting rows, or chat content.
+  backend tokens, accounting rows, or chat content. Project ids/names and
+  last-opened timestamps are still local metadata: choose labels accordingly.
+  Kassiber writes the catalog with best-effort owner-only permissions.
 - `~/.kassiber/projects/<project>/data/kassiber.sqlite3` — project SQLite DB.
   Contains the books/profiles in that project: descriptors, xpubs, addresses,
   transactions, metadata, rates cache, backend definitions/defaults, and any
@@ -158,6 +160,9 @@ unlock any other project.
 - The pre-migration plaintext file is preserved as
   `kassiber.pre-encryption.sqlite3.bak` so `mv` rolls back the change.
   Kassiber refuses to overwrite an existing rollback backup at that path.
+- Legacy app-wide project migration moves old active plaintext database/config
+  artifacts aside under `pre-project-migration-<timestamp>/` after the new
+  project copy is staged, instead of leaving the old active paths silently live.
 - `projects.json`, `config/backends.env`, `config/settings.json`,
   `attachments/`, and `exports/` are **not** inside the SQLCipher boundary.
   They are outside the encrypted database file and remain plaintext on disk.

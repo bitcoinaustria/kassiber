@@ -4513,6 +4513,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 1
 
     try:
+        if args.command == "projects":
+            dispatch(None, args)
+            return 0
         runtime = bootstrap_runtime(
             args,
             needs_db=command_needs_db(args),

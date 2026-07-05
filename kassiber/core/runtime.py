@@ -76,6 +76,13 @@ def resolve_output_format(args):
 def resolve_runtime_paths(data_root=None, env_file=None, project=None):
     project_entry = None
     project_metadata = None
+    if data_root is not None and project is not None:
+        raise AppError(
+            "--project and --data-root cannot be used together",
+            code="invalid_flag_combination",
+            hint="Use --project for a catalog project or --data-root for an explicit project data directory, not both.",
+            retryable=False,
+        )
     if data_root is None:
         project_entry = project_for_runtime(project_id=project)
         effective_data_root = str(resolve_effective_data_root(project_entry.data_root))
@@ -178,6 +185,8 @@ def _warn_plaintext_secrets_once(env_file: str) -> None:
 
 
 def bootstrap_runtime(args, needs_db=True, persist_bootstrap=False):
+    explicit_project_target = bool(getattr(args, "project", None))
+    explicit_data_root_target = getattr(args, "data_root", None) is not None
     paths = ensure_runtime_layout(
         resolve_runtime_paths(
             getattr(args, "data_root", None),
@@ -189,6 +198,7 @@ def bootstrap_runtime(args, needs_db=True, persist_bootstrap=False):
     args.env_file = paths.env_file
     args.project_id = paths.project_id
     args.project_root = paths.project_root
+    args.project_selection_explicit = explicit_project_target or explicit_data_root_target
     args.runtime_config = load_runtime_config(paths.env_file)
 
     conn = None
@@ -212,6 +222,7 @@ def bootstrap_runtime(args, needs_db=True, persist_bootstrap=False):
                 mark_project_opened(
                     paths.project_id,
                     data_root=paths.data_root,
+                    select=not (explicit_project_target or explicit_data_root_target),
                 )
         return RuntimeState(paths=paths, runtime_config=args.runtime_config, conn=conn)
     except Exception:

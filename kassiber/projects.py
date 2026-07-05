@@ -9,9 +9,11 @@ history stay out of this file.
 from __future__ import annotations
 
 import json
+import os
 import re
 import shutil
 import sqlite3
+import tempfile
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -25,7 +27,9 @@ from .db import (
     DEFAULT_DB_FILENAME,
     DEFAULT_EXPORTS_DIRNAME,
     DEFAULT_STATE_ROOT,
+    LEGACY_DATA_ROOT,
     LEGACY_DB_FILENAME,
+    LEGACY_XDG_DATA_ROOT,
     resolve_database_path,
     resolve_effective_state_root,
 )
@@ -40,6 +44,7 @@ DEFAULT_PROJECTS_DIRNAME = "projects"
 PROJECT_CATALOG_FILENAME = "projects.json"
 PROJECT_MIGRATION_MARKER = "legacy-project-migration.json"
 MIGRATION_REPORTS_DIRNAME = "migration-reports"
+LEGACY_MIGRATION_BACKUP_PREFIX = "pre-project-migration-"
 
 
 WORKSPACE_SPLIT_POLICY: dict[str, Any] = {
@@ -152,8 +157,22 @@ class ProjectEntry:
         }
 
 
+@dataclass(frozen=True)
+class LegacyLayout:
+    data_root: Path
+    state_root: Path
+    database: Path
+
+
 def now_iso() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _chmod_best_effort(path: Path, mode: int) -> None:
+    try:
+        path.chmod(mode)
+    except OSError:
+        return
 
 
 def default_state_root() -> Path:
@@ -252,6 +271,7 @@ def load_catalog(path: str | Path | None = None) -> dict[str, Any]:
 def write_catalog(catalog: dict[str, Any], path: str | Path | None = None) -> Path:
     cpath = Path(path).expanduser() if path is not None else catalog_path()
     cpath.parent.mkdir(parents=True, exist_ok=True)
+    _chmod_best_effort(cpath.parent, 0o700)
     normalized = {
         "schema_version": CATALOG_SCHEMA_VERSION,
         "selected_project_id": catalog.get("selected_project_id"),
@@ -266,12 +286,25 @@ def write_catalog(catalog: dict[str, Any], path: str | Path | None = None) -> Pa
             continue
         seen.add(entry.id)
         normalized["projects"].append(entry.to_catalog_dict())
-    tmp_path = cpath.with_suffix(cpath.suffix + ".tmp")
-    tmp_path.write_text(
-        json.dumps(normalized, indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
+    fd, tmp_name = tempfile.mkstemp(
+        prefix=f"{cpath.name}.",
+        suffix=".tmp",
+        dir=str(cpath.parent),
+        text=True,
     )
-    tmp_path.replace(cpath)
+    tmp_path = Path(tmp_name)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write(json.dumps(normalized, indent=2, sort_keys=True) + "\n")
+        _chmod_best_effort(tmp_path, 0o600)
+        tmp_path.replace(cpath)
+        _chmod_best_effort(cpath, 0o600)
+    except Exception:
+        try:
+            tmp_path.unlink()
+        except OSError:
+            pass
+        raise
     return cpath
 
 
@@ -503,13 +536,14 @@ def mark_project_opened(
     *,
     data_root: str | Path | None = None,
     state_root: str | Path | None = None,
+    select: bool = True,
 ) -> ProjectEntry:
     return refresh_project_metadata(
         project_id,
         data_root=data_root,
         state_root=state_root,
         last_opened_at=now_iso(),
-        select=True,
+        select=select,
     )
 
 
@@ -550,13 +584,26 @@ def project_metadata_for_data_root(data_root: str | Path) -> dict[str, Any] | No
 
 
 def _legacy_database_path() -> Path | None:
-    data_root = Path(DEFAULT_DATA_ROOT).expanduser()
-    current = data_root / DEFAULT_DB_FILENAME
-    legacy = data_root / LEGACY_DB_FILENAME
-    if current.exists():
-        return current
-    if legacy.exists():
-        return legacy
+    layout = _legacy_layout()
+    return layout.database if layout is not None else None
+
+
+def _legacy_layout() -> LegacyLayout | None:
+    candidate_data_roots = (
+        Path(DEFAULT_DATA_ROOT).expanduser(),
+        Path(LEGACY_XDG_DATA_ROOT).expanduser(),
+        Path(LEGACY_DATA_ROOT).expanduser(),
+    )
+    for data_root in candidate_data_roots:
+        for filename in (DEFAULT_DB_FILENAME, LEGACY_DB_FILENAME):
+            database = data_root / filename
+            if not database.exists():
+                continue
+            return LegacyLayout(
+                data_root=data_root,
+                state_root=Path(resolve_effective_state_root(data_root)).expanduser(),
+                database=database,
+            )
     return None
 
 
@@ -622,16 +669,61 @@ def _copy_if_exists(source: Path, target: Path) -> bool:
     return True
 
 
+def _backup_dir_for_legacy_migration(source_state: Path) -> Path:
+    base = source_state / (
+        LEGACY_MIGRATION_BACKUP_PREFIX
+        + datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    )
+    candidate = base
+    suffix = 1
+    while candidate.exists():
+        suffix += 1
+        candidate = Path(f"{base}-{suffix}")
+    return candidate
+
+
+def _move_if_exists(source: Path, backup_root: Path, source_state: Path) -> str | None:
+    if not source.exists():
+        return None
+    try:
+        rel = source.relative_to(source_state)
+    except ValueError:
+        rel = Path(source.name)
+    target = backup_root / rel
+    target.parent.mkdir(parents=True, exist_ok=True)
+    shutil.move(str(source), str(target))
+    return str(target)
+
+
+def _move_legacy_artifacts_aside(layout: LegacyLayout) -> dict[str, Any]:
+    backup_root = _backup_dir_for_legacy_migration(layout.state_root)
+    moved: dict[str, str] = {}
+    for key, source in (
+        ("database", layout.database),
+        ("attachments", layout.state_root / DEFAULT_ATTACHMENTS_DIRNAME),
+        ("exports", layout.state_root / DEFAULT_EXPORTS_DIRNAME),
+        ("backends_env", layout.state_root / DEFAULT_CONFIG_DIRNAME / "backends.env"),
+        ("settings_json", layout.state_root / DEFAULT_CONFIG_DIRNAME / "settings.json"),
+    ):
+        moved_to = _move_if_exists(source, backup_root, layout.state_root)
+        if moved_to is not None:
+            moved[key] = moved_to
+    if not moved:
+        return {"moved": {}, "backup_root": None}
+    return {"moved": moved, "backup_root": str(backup_root)}
+
+
 def migrate_legacy_default_layout_if_needed(
     *,
     state_root: str | Path | None = None,
 ) -> ProjectEntry | None:
     if state_root is not None:
         return None
-    source_state = Path(DEFAULT_STATE_ROOT).expanduser()
-    source_db = _legacy_database_path()
-    if source_db is None:
+    layout = _legacy_layout()
+    if layout is None:
         return None
+    source_state = layout.state_root
+    source_db = layout.database
 
     target_root = project_root_for_id(DEFAULT_PROJECT_ID)
     target_db = target_root / DEFAULT_DATA_DIRNAME / DEFAULT_DB_FILENAME
@@ -645,39 +737,21 @@ def migrate_legacy_default_layout_if_needed(
         )
 
     workspace_count = _workspace_count_for_plaintext(source_db)
-    if workspace_count is not None and workspace_count > 1:
-        report = _write_migration_report(
-            state_root=source_state,
-            status="blocked_multi_workspace",
-            source_state_root=source_state,
-            source_database=source_db,
-            target_project_root=target_root,
-            details={
-                "workspace_count": workspace_count,
-                "reason": "legacy DB has more than one workspace; automatic migration refuses to guess project boundaries",
-            },
-        )
-        raise AppError(
-            "legacy app-wide database contains multiple workspaces; automatic project migration is blocked",
-            code="legacy_multi_workspace_split_required",
-            hint=(
-                "Inspect the staged migration report and split/import the legacy "
-                "workspaces into explicit projects."
-            ),
-            details={"report": str(report), "workspace_count": workspace_count},
-            retryable=False,
-        )
 
     staging_root = target_root.with_name(target_root.name + ".migrating")
     if staging_root.exists():
-        raise AppError(
-            "a legacy project migration staging directory already exists",
-            code="legacy_migration_resume_required",
-            details={"staging_root": str(staging_root)},
-            retryable=False,
-        )
-    staging_root.mkdir(parents=True, exist_ok=False)
+        if target_db.exists():
+            shutil.rmtree(staging_root, ignore_errors=True)
+            return create_project(
+                DEFAULT_PROJECT_NAME,
+                project_id=DEFAULT_PROJECT_ID,
+                root=target_root,
+                encrypted=_database_encrypted_at(target_root / DEFAULT_DATA_DIRNAME),
+                select=True,
+            )
+        shutil.rmtree(staging_root, ignore_errors=True)
     try:
+        staging_root.mkdir(parents=True, exist_ok=False)
         for dirname in (
             DEFAULT_DATA_DIRNAME,
             DEFAULT_CONFIG_DIRNAME,
@@ -700,13 +774,24 @@ def migrate_legacy_default_layout_if_needed(
                 source_state / DEFAULT_CONFIG_DIRNAME / "backends.env",
                 staging_root / DEFAULT_CONFIG_DIRNAME / "backends.env",
             ),
+            "settings_json": _copy_if_exists(
+                source_state / DEFAULT_CONFIG_DIRNAME / "settings.json",
+                staging_root / DEFAULT_CONFIG_DIRNAME / "settings.json",
+            ),
         }
+        status = (
+            "staged_multi_workspace_single_project_copy"
+            if workspace_count is not None and workspace_count > 1
+            else "staged_single_project_copy"
+        )
         marker = {
             "schema_version": 1,
             "source_state_root": str(source_state),
+            "source_data_root": str(layout.data_root),
             "source_database": str(source_db),
             "created_at": now_iso(),
             "requires_single_workspace_validation": workspace_count is None,
+            "legacy_workspace_count": workspace_count,
         }
         marker_path = staging_root / DEFAULT_CONFIG_DIRNAME / PROJECT_MIGRATION_MARKER
         marker_path.write_text(
@@ -715,11 +800,20 @@ def migrate_legacy_default_layout_if_needed(
         )
         report = _write_migration_report(
             state_root=source_state,
-            status="staged_single_project_copy",
+            status=status,
             source_state_root=source_state,
             source_database=source_db,
             target_project_root=target_root,
-            details={"copied": copied, "workspace_count": workspace_count},
+            details={
+                "copied": copied,
+                "workspace_count": workspace_count,
+                "reason": (
+                    "legacy DB has multiple workspaces; migrated as one default "
+                    "project container because a project may contain multiple books"
+                )
+                if workspace_count is not None and workspace_count > 1
+                else "legacy DB migrated as one default project container",
+            },
         )
         marker["report"] = str(report)
         marker_path.write_text(
@@ -727,6 +821,14 @@ def migrate_legacy_default_layout_if_needed(
             encoding="utf-8",
         )
         staging_root.replace(target_root)
+        moved = _move_legacy_artifacts_aside(layout)
+        marker_path = target_root / DEFAULT_CONFIG_DIRNAME / PROJECT_MIGRATION_MARKER
+        marker["legacy_artifacts"] = moved
+        marker["legacy_artifacts_moved_at"] = now_iso()
+        marker_path.write_text(
+            json.dumps(marker, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
     except Exception:
         shutil.rmtree(staging_root, ignore_errors=True)
         raise
@@ -752,29 +854,27 @@ def validate_project_migration_after_unlock(data_root: str | Path, conn: sqlite3
     if not marker.get("requires_single_workspace_validation"):
         return
     workspace_count = int(conn.execute("SELECT COUNT(*) FROM workspaces").fetchone()[0])
+    source_state = Path(marker.get("source_state_root") or DEFAULT_STATE_ROOT).expanduser()
+    source_db_raw = marker.get("source_database")
+    source_db = Path(source_db_raw).expanduser() if isinstance(source_db_raw, str) else None
     if workspace_count > 1:
-        source_state = Path(marker.get("source_state_root") or DEFAULT_STATE_ROOT).expanduser()
-        source_db_raw = marker.get("source_database")
-        source_db = Path(source_db_raw).expanduser() if isinstance(source_db_raw, str) else None
         report = _write_migration_report(
             state_root=source_state,
-            status="blocked_multi_workspace_after_unlock",
+            status="validated_multi_workspace_single_project",
             source_state_root=source_state,
             source_database=source_db,
             target_project_root=state_root,
             details={
                 "workspace_count": workspace_count,
-                "reason": "encrypted legacy DB unlocked with multiple workspaces; split must be staged explicitly",
+                "reason": (
+                    "encrypted legacy DB has multiple workspaces; it remains a "
+                    "single project container until the user chooses an explicit split"
+                ),
             },
         )
-        raise AppError(
-            "legacy encrypted database contains multiple workspaces; project split is required before use",
-            code="legacy_multi_workspace_split_required",
-            hint="Inspect the migration report and create separate project containers.",
-            details={"report": str(report), "workspace_count": workspace_count},
-            retryable=False,
-        )
+        marker["report_after_unlock"] = str(report)
     marker["requires_single_workspace_validation"] = False
+    marker["legacy_workspace_count"] = workspace_count
     marker["validated_at"] = now_iso()
     marker_path.write_text(
         json.dumps(marker, indent=2, sort_keys=True) + "\n",

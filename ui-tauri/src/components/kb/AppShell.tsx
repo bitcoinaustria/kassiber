@@ -594,8 +594,11 @@ export function AppShell() {
     requirePassphraseOnLaunch: appLockPolicy.requirePassphraseOnLaunch,
     hasSessionUnlock: hasSessionUnlockPassphrase(),
   });
+  const [daemonAuthRequired, setDaemonAuthRequired] = React.useState(false);
+  const [pendingProjectUnlock, setPendingProjectUnlock] =
+    React.useState<ProjectCatalogEntry | null>(null);
   const importedProjectRoot = identity?.importedProject?.dataRoot ?? null;
-  const touchIdDataRoot = importedProjectRoot;
+  const touchIdDataRoot = pendingProjectUnlock?.data_root ?? importedProjectRoot;
   const touchIdPlatformSupported = canUseTouchIdPassphraseUnlock();
   const [importRootReady, setImportRootReady] = React.useState(
     () => !importedProjectRoot,
@@ -603,7 +606,6 @@ export function AppShell() {
   const [importRootError, setImportRootError] = React.useState<string | null>(
     null,
   );
-  const [daemonAuthRequired, setDaemonAuthRequired] = React.useState(false);
   const [touchIdStatus, setTouchIdStatus] =
     React.useState<TouchIdPassphraseStatus | null>(null);
   const requiresDaemonUnlock = shouldUseDaemonUnlock({
@@ -730,6 +732,7 @@ export function AppShell() {
   ]);
 
   const applyLock = React.useCallback((autoPromptTouchId: boolean) => {
+    setPendingProjectUnlock(null);
     setTouchIdAutoPromptPending(autoPromptTouchId);
     if (requiresDaemonUnlock) {
       clearSessionUnlockPassphrase();
@@ -775,17 +778,51 @@ export function AppShell() {
           };
         }
         bumpDaemonSession();
-        const envelope = await getTransport("real").invoke({
-          kind: "daemon.unlock",
-          args: {
-            ...(identity?.importedProject
-              ? { require_existing_project: true }
-              : {}),
-            auth_response: { passphrase_secret: passphrase },
-          },
-        });
-        const unlocked = envelope.kind === "daemon.unlock";
+        let envelope;
+        let nextIdentity: Identity | null = null;
+        if (pendingProjectUnlock) {
+          const projectEnvelope =
+            await getTransport("real").invoke<ProjectSelectSnapshot>({
+              kind: "ui.projects.select",
+              args: {
+                project_id: pendingProjectUnlock.id,
+                require_existing_project: true,
+                auth_response: { passphrase_secret: passphrase },
+              },
+            });
+          envelope = projectEnvelope;
+          if (
+            projectEnvelope.kind === "ui.projects.select" &&
+            projectEnvelope.data?.project
+          ) {
+            nextIdentity = identityFromProject(
+              projectEnvelope.data.project,
+              projectEnvelope.data.status,
+            );
+          }
+        } else {
+          envelope = await getTransport("real").invoke({
+            kind: "daemon.unlock",
+            args: {
+              ...(identity?.importedProject
+                ? { require_existing_project: true }
+                : {}),
+              auth_response: { passphrase_secret: passphrase },
+            },
+          });
+        }
+        const unlocked = pendingProjectUnlock
+          ? envelope.kind === "ui.projects.select"
+          : envelope.kind === "daemon.unlock";
         if (unlocked) {
+          if (nextIdentity) {
+            noteActiveImportProject({
+              ...nextIdentity.importedProject,
+              encrypted: nextIdentity.encrypted,
+            });
+            setIdentity(nextIdentity);
+          }
+          setPendingProjectUnlock(null);
           await setSessionUnlockPassphrase(passphrase);
           setDaemonAuthRequired(false);
           setTouchIdAutoPromptPending(false);
@@ -859,9 +896,11 @@ export function AppShell() {
       identity?.importedProject,
       importRootBlocked,
       importRootError,
+      pendingProjectUnlock,
       queryClient,
       refreshTouchIdStatus,
       requiresDaemonUnlock,
+      setIdentity,
       setAppLockPolicy,
       t,
       touchIdDataRoot,
@@ -878,11 +917,35 @@ export function AppShell() {
       };
     }
     bumpDaemonSession();
-    const envelope = await unlockTouchIdPassphrase(touchIdDataRoot, {
-      requireExistingProject: Boolean(identity?.importedProject),
-    });
-    const unlocked = envelope.kind === "daemon.unlock";
+    const envelope = await unlockTouchIdPassphrase<ProjectSelectSnapshot>(
+      touchIdDataRoot,
+      {
+        requireExistingProject: Boolean(
+          pendingProjectUnlock ?? identity?.importedProject,
+        ),
+        projectId: pendingProjectUnlock?.id ?? null,
+      },
+    );
+    const unlocked = pendingProjectUnlock
+      ? envelope.kind === "ui.projects.select"
+      : envelope.kind === "daemon.unlock";
     if (unlocked) {
+      if (
+        pendingProjectUnlock &&
+        envelope.kind === "ui.projects.select" &&
+        envelope.data?.project
+      ) {
+        const nextIdentity = identityFromProject(
+          envelope.data.project,
+          envelope.data.status,
+        );
+        noteActiveImportProject({
+          ...nextIdentity.importedProject,
+          encrypted: nextIdentity.encrypted,
+        });
+        setIdentity(nextIdentity);
+        setPendingProjectUnlock(null);
+      }
       setDaemonAuthRequired(false);
       setTouchIdAutoPromptPending(false);
       setLocked(false);
@@ -909,8 +972,11 @@ export function AppShell() {
     identity?.importedProject,
     importRootBlocked,
     importRootError,
+    noteActiveImportProject,
+    pendingProjectUnlock,
     queryClient,
     refreshTouchIdStatus,
+    setIdentity,
     t,
     touchIdDataRoot,
   ]);
@@ -943,9 +1009,9 @@ export function AppShell() {
           return;
         }
         if (envelope.kind === "auth_required") {
-          setIdentity(identityFromProject(project));
+          setPendingProjectUnlock(project);
           setDaemonAuthRequired(true);
-          setTouchIdAutoPromptPending(true);
+          setTouchIdAutoPromptPending(false);
           clearSessionUnlockPassphrase();
           clearDaemonQueryCache();
           bumpDaemonSession();

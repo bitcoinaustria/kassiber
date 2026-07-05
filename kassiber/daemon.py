@@ -227,7 +227,7 @@ from .daemon_freshness import (
 from .secrets.credentials import migrate_dotenv_credentials
 from .secrets.migration import create_empty_encrypted_database, migrate_plaintext_to_encrypted
 from .secrets.passphrase import change_database_passphrase
-from .secrets.sqlcipher import looks_like_plaintext_sqlite, open_encrypted, require_sqlcipher, sqlcipher_available
+from .secrets.sqlcipher import open_encrypted, require_sqlcipher, sqlcipher_available
 from .sync_btcpay import (
     discover_btcpay_wallet_sources,
     probe_btcpay_wallet,
@@ -788,6 +788,7 @@ class DaemonContext:
     freshness_stop_event: threading.Event
     project_id: str | None = None
     project_root: str | None = None
+    select_project_on_open: bool = True
     db_passphrase: str | None = None
     freshness_worker: threading.Thread | None = None
 
@@ -2575,7 +2576,11 @@ def _open_daemon_connection(
         raise
     ctx.conn = conn
     if ctx.project_id is not None:
-        mark_project_opened(ctx.project_id, data_root=ctx.data_root)
+        mark_project_opened(
+            ctx.project_id,
+            data_root=ctx.data_root,
+            select=ctx.select_project_on_open,
+        )
     _remember_unlocked_passphrase(ctx, passphrase)
     _start_freshness_background_worker(ctx, passphrase=passphrase)
     return conn
@@ -2635,6 +2640,7 @@ def _set_ctx_project(ctx: DaemonContext, entry) -> None:
     ctx.project_id = entry.id
     ctx.project_root = str(entry.root)
     ctx.data_root = str(entry.data_root)
+    ctx.select_project_on_open = True
     env_file = resolve_effective_env_file(None, ctx.data_root)
     ctx.runtime_config = load_runtime_config(env_file)
     ctx.auth_backoff = AuthAttemptBackoff(
@@ -2657,11 +2663,7 @@ def _select_project_payload(
 
     entry = get_project(project_id)
     switching = ctx.project_id != entry.id or Path(ctx.data_root).expanduser() != entry.data_root
-    if switching:
-        _close_current_project_for_switch(ctx)
-        entry = set_selected_project(entry.id)
-        _set_ctx_project(ctx, entry)
-    elif ctx.conn is not None:
+    if not switching and ctx.conn is not None:
         entry = mark_project_opened(entry.id, data_root=ctx.data_root)
         return (
             _with_request_id(
@@ -2678,17 +2680,30 @@ def _select_project_payload(
         )
 
     passphrase = _passphrase_from_auth(args)
-    if _data_root_database_is_encrypted(ctx.data_root):
+    target_data_root = str(entry.data_root)
+    target_encrypted = _data_root_database_is_encrypted(target_data_root)
+    if target_encrypted:
         if not passphrase:
             return (
-                _locked_envelope(
-                    "unlock_project",
-                    f"Enter the SQLCipher passphrase for project {entry.name!r}.",
+                _with_request_id(
+                    build_envelope(
+                        "auth_required",
+                        {
+                            "scope": "unlock_project",
+                            "label": f"Enter the SQLCipher passphrase for project {entry.name!r}.",
+                            "project": _project_payload(entry),
+                        },
+                    ),
                     request_id,
                 ),
                 False,
             )
-        if not _verify_passphrase_with_backoff(ctx, "unlock_project", passphrase):
+        verified = (
+            _verify_project_passphrase_with_backoff(entry, "unlock_project", passphrase)
+            if switching
+            else _verify_passphrase_with_backoff(ctx, "unlock_project", passphrase)
+        )
+        if not verified:
             return (
                 _error_envelope(
                     "local_auth_denied",
@@ -2698,6 +2713,13 @@ def _select_project_payload(
                 ),
                 False,
             )
+
+    if switching:
+        _close_current_project_for_switch(ctx)
+        entry = set_selected_project(entry.id)
+        _set_ctx_project(ctx, entry)
+
+    if target_encrypted:
         _open_daemon_connection(
             ctx,
             passphrase=passphrase,
@@ -5238,9 +5260,13 @@ def _verify_passphrase_for_reveal(ctx: "DaemonContext", passphrase: str) -> bool
     cleanly without affecting the live `ctx.conn` handle.
     """
 
+    return _verify_passphrase_for_data_root(ctx.data_root, passphrase)
+
+
+def _verify_passphrase_for_data_root(data_root: str, passphrase: str) -> bool:
     if not sqlcipher_available():
         return False
-    db_path = resolve_database_path(resolve_effective_data_root(ctx.data_root))
+    db_path = resolve_database_path(resolve_effective_data_root(data_root))
     try:
         probe = open_encrypted(db_path, passphrase, quiet_unlock_errors=True)
     except AppError as exc:
@@ -5262,6 +5288,23 @@ def _verify_passphrase_with_backoff(
         ctx.auth_backoff.record_success()
     else:
         ctx.auth_backoff.record_failure()
+    return verified
+
+
+def _verify_project_passphrase_with_backoff(
+    entry: Any,
+    scope: str,
+    passphrase: str,
+) -> bool:
+    backoff = AuthAttemptBackoff(
+        str(resolve_config_root(entry.data_root) / AUTH_BACKOFF_FILENAME)
+    )
+    backoff.check(scope)
+    verified = _verify_passphrase_for_data_root(str(entry.data_root), passphrase)
+    if verified:
+        backoff.record_success()
+    else:
+        backoff.record_failure()
     return verified
 
 
@@ -11502,6 +11545,9 @@ def run(
         data_root=args.data_root,
         project_id=getattr(args, "project_id", None),
         project_root=getattr(args, "project_root", None),
+        select_project_on_open=not bool(
+            getattr(args, "project_selection_explicit", False)
+        ),
         runtime_config=args.runtime_config,
         active_ai_chats=ActiveAiChats(),
         main_thread_tasks=queue.Queue(),

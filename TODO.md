@@ -767,9 +767,11 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
 - [x] When the per-project storage layout lands, migrate attachment links
   **and** the managed-copy blobs into each project bundle rather than the
   global state-root tree. New project roots use project-local `attachments/`,
-  backups include those files, and legacy single-project migration copies the
-  old managed tree into `projects/default/attachments/`. Multi-workspace legacy
-  DBs still require an explicit split plan/report before use.
+  backups include those files, and legacy migration copies the old managed tree
+  into `projects/default/attachments/`, then moves the old active plaintext
+  artifacts into a timestamped `pre-project-migration-*` rollback directory.
+  Multi-workspace legacy DBs migrate as one project container until an explicit
+  split/import workflow exists.
 - [x] Keep backend definitions and default-backend selection canonical in
   SQLite; dotenv files now bootstrap older/new stores instead of serving as
   the long-term storage path
@@ -820,10 +822,11 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
   `~/.kassiber/projects/<project>/data/kassiber.sqlite3`, the global
   `projects.json` catalog stores only non-secret routing metadata, CLI/daemon
   project create/list/select flows close the active DB before switching, and
-  backups are scoped to the selected project container. Legacy single-workspace
-  app-wide installs are copied into `projects/default` with rollback-safe source
-  preservation; multi-workspace legacy DBs are blocked with a staged split
-  report instead of pretending books/profiles are cryptographic boundaries.
+  backups are scoped to the selected project container. Legacy app-wide installs
+  (including old XDG roots) are copied into `projects/default` with rollback
+  artifacts moved aside; multi-workspace legacy DBs migrate as one project
+  container and record the future split policy instead of pretending
+  books/profiles are cryptographic boundaries.
 - [x] Move backend secrets (token, password, auth_header, basic-auth username
   + RPC aliases) out of the plaintext `config/backends.env` bootstrap and into
   the encrypted `backends` table. `kassiber secrets migrate-credentials` lifts
