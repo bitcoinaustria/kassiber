@@ -37,6 +37,7 @@ from ..core import attachments as core_attachments
 from ..core import commercial as core_commercial
 from ..core import freshness as core_freshness
 from ..core import imports as core_imports
+from ..core.lightning import channel_lifecycle
 from ..core.lightning import cln as core_lightning_cln
 from ..core.lightning import lnd as core_lightning_lnd
 from ..core import loans as core_loans
@@ -3596,6 +3597,33 @@ def build_ledger_state(conn, profile):
         "SELECT transaction_id, role FROM loan_legs WHERE profile_id = ? AND deleted_at IS NULL",
         (profile["id"],),
     ).fetchall()
+    # Lightning channel-lifecycle roles: a channel funding tx that a separately
+    # synced on-chain wallet recorded is not a disposal (the coins stay owned in
+    # the channel), and a close is not an acquisition. Persisted channel records
+    # (record_type='channel') carry the funding/closing txids; match them to the
+    # on-chain rows so the engine suppresses them as non-events.
+    channel_records = conn.execute(
+        """
+        SELECT txid, outpoint, raw_json
+        FROM lightning_node_records
+        WHERE profile_id = ? AND record_type = 'channel'
+        """,
+        (profile["id"],),
+    ).fetchall()
+    channel_rows = []
+    for record in channel_records:
+        try:
+            extra = json.loads(record["raw_json"] or "{}")
+        except (TypeError, ValueError):
+            extra = {}
+        channel_rows.append(
+            {
+                "funding_txid": record["txid"],
+                "funding_outpoint": record["outpoint"],
+                "closing_txid": extra.get("closing_txid"),
+            }
+        )
+    channel_roles = channel_lifecycle.channel_role_map(channel_rows, rows)
     engine_state = tax_engine.build_ledger_state(
         TaxEngineLedgerInputs(
             rows=rows,
@@ -3604,6 +3632,7 @@ def build_ledger_state(conn, profile):
             direct_payout_records=direct_payout_records,
             owned_index=owned_index,
             loan_legs=loan_legs,
+            channel_roles=channel_roles,
         )
     )
     return {

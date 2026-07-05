@@ -1192,13 +1192,84 @@ def _balance_snapshot_records(
     return records
 
 
+def _channel_closing_txid(channel: Mapping[str, Any]) -> str | None:
+    """Best-effort closing txid for a channel (limited by listpeerchannels).
+
+    Coop/unilateral closing txids are not reliably present in
+    ``listpeerchannels`` — capturing them robustly needs
+    ``bkpr-listaccountevents`` / ``listclosedchannels`` (a follow-up). Until
+    then the close side of channel-lifecycle netting only fires when the node
+    happens to surface one of these fields.
+    """
+    for key in ("closing_txid", "close_txid", "scratch_txid"):
+        value = str_or_none(channel.get(key))
+        if value:
+            return value
+    return None
+
+
+def _channel_lifecycle_records(snapshot: CoreLightningSnapshot) -> list[dict[str, Any]]:
+    """Emit one ``channel`` metadata record per channel with its funding (and,
+    when known, closing) txid.
+
+    These are NOT promoted to wallet transactions (``_record_to_import`` ignores
+    them). They let the tax engine recognize a separately-synced on-chain
+    wallet's channel funding/close txs as non-taxable intra-node moves rather
+    than a disposal (open) or acquisition (close). No amount is stored — the
+    record exists only to carry the txids.
+    """
+    records: list[dict[str, Any]] = []
+    for channel in snapshot.channels:
+        outpoint = _channel_funding_outpoint(channel)
+        funding_txid = outpoint.split(":", 1)[0] if outpoint else None
+        closing_txid = _channel_closing_txid(channel)
+        if not funding_txid and not closing_txid:
+            continue
+        channel_id = (
+            str_or_none(channel.get("channel_id"))
+            or _channel_short_id(channel)
+            or funding_txid
+            or ""
+        )
+        state_raw = channel.get("state") or channel.get("status")
+        state = _coerce_channel_state(state_raw, connected=channel.get("peer_connected"))
+        opened = channel.get("opened_at")
+        records.append(
+            {
+                "record_type": "channel",
+                "external_id": _stable_hash(
+                    ("channel", funding_txid, closing_txid, channel_id)
+                ),
+                "occurred_at": (_timestamp(opened) if opened else None)
+                or UNKNOWN_OCCURRED_AT,
+                "account": channel_id,
+                "peer_id": None,
+                "channel_id": channel_id,
+                "direction": "",
+                "amount_msat": 0,
+                "fee_msat": 0,
+                "tag": "channel",
+                "status": state,
+                "currency": "bc",
+                "payment_hash": None,
+                "txid": funding_txid,
+                "outpoint": outpoint,
+                "raw_json": _json_dumps({"closing_txid": closing_txid})
+                if closing_txid
+                else "{}",
+            }
+        )
+    return records
+
+
 def snapshot_records(snapshot: CoreLightningSnapshot, synced_at: str) -> list[dict[str, Any]]:
     """Reshape ``snapshot`` into the curated persistence rows.
 
     The list is intentionally narrow: aggregated forwards, paid invoices,
-    completed pays, daily balance snapshots, and invoice-only bookkeeper
-    income rows that become wallet transactions. No raw RPC payloads, no
-    per-forward rows, no preimages, no bolt11 strings, no onion routes.
+    completed pays, daily balance snapshots, channel funding/closing txids, and
+    invoice-only bookkeeper income rows that become wallet transactions. No raw
+    RPC payloads, no per-forward rows, no preimages, no bolt11 strings, no onion
+    routes.
     """
     peer_alias_map = _build_peer_alias_map(snapshot)
     records: list[dict[str, Any]] = []
@@ -1216,6 +1287,7 @@ def snapshot_records(snapshot: CoreLightningSnapshot, synced_at: str) -> list[di
         if record is not None:
             records.append(record)
     records.extend(_balance_snapshot_records(snapshot, synced_at))
+    records.extend(_channel_lifecycle_records(snapshot))
     return records
 
 

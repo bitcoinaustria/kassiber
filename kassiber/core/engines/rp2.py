@@ -2456,6 +2456,12 @@ class GenericRP2TaxEngine:
                 for leg in (inputs.loan_legs or ())
                 if leg["transaction_id"] is not None
             }
+            # Derived Lightning channel-lifecycle roles share the loan non-event
+            # suppression (CHANNEL_OPEN / CHANNEL_CLOSE are in the loan
+            # suppress-role sets). setdefault keeps an explicit loan mark
+            # authoritative if the same tx were ever both (disjoint in practice).
+            for tx_id, role in (inputs.channel_roles or {}).items():
+                loan_leg_by_transaction_id.setdefault(str(tx_id), str(role))
 
             # Phase 1: normalize + build RP2 `InputData` for every asset. No `compute_tax`
             # runs here so the country's cross-asset validator can see every asset's

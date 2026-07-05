@@ -368,6 +368,26 @@ class FetchNodeSnapshotTest(unittest.TestCase):
         forward_day_rows = [r for r in records if r["record_type"] == "forward_day"]
         self.assertEqual(len(forward_day_rows), 1)
 
+    def test_channel_lifecycle_record_carries_funding_txid(self) -> None:
+        from types import SimpleNamespace
+
+        channel = {
+            "channel_id": "ch-1",
+            "short_channel_id": "742x1x0",
+            "state": "CHANNELD_NORMAL",
+            "peer_connected": True,
+            "funding": {"txid": "aa" * 32, "outnum": 0},
+            "opened_at": 1_700_000_000,
+        }
+        records = core_cln._channel_lifecycle_records(SimpleNamespace(channels=[channel]))
+        self.assertEqual(len(records), 1)
+        rec = records[0]
+        self.assertEqual(rec["record_type"], "channel")
+        self.assertEqual(rec["txid"], "aa" * 32)
+        self.assertEqual(rec["outpoint"], "aa" * 32 + ":0")
+        # A channel metadata record is NOT a wallet transaction.
+        self.assertIsNone(core_cln._record_to_import(rec))
+
     def test_outbound_pay_promoted_with_principal_and_routing_fee(self) -> None:
         # The completed listpays row (amount_msat=40000, amount_sent_msat=40500)
         # becomes an outbound cln_pay: principal 40000 msat, routing fee 500 msat.
