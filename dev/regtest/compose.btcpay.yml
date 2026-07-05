@@ -1,0 +1,72 @@
+services:
+  btcpay-postgres:
+    image: ${KASSIBER_REGTEST_BTCPAY_POSTGRES_IMAGE:-postgres:18.1-alpine}
+    environment:
+      POSTGRES_HOST_AUTH_METHOD: trust
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+    volumes:
+      - btcpay-postgres-regtest:/var/lib/postgresql/data
+
+  btcpay-nbxplorer:
+    image: ${KASSIBER_REGTEST_BTCPAY_NBXPLORER_IMAGE:-nicolasdorier/nbxplorer:2.5.29}
+    restart: unless-stopped
+    depends_on:
+      bitcoind:
+        condition: service_started
+      btcpay-postgres:
+        condition: service_healthy
+    environment:
+      NBXPLORER_NETWORK: regtest
+      NBXPLORER_CHAINS: btc
+      NBXPLORER_BTCRPCURL: http://bitcoind:18443/
+      NBXPLORER_BTCNODEENDPOINT: bitcoind:18444
+      NBXPLORER_BTCRPCUSER: ${KASSIBER_REGTEST_RPC_USER}
+      NBXPLORER_BTCRPCPASSWORD: ${KASSIBER_REGTEST_RPC_PASSWORD}
+      NBXPLORER_BIND: 0.0.0.0:32838
+      NBXPLORER_MINGAPSIZE: 5
+      NBXPLORER_MAXGAPSIZE: 20
+      NBXPLORER_VERBOSE: 1
+      NBXPLORER_POSTGRES: User ID=postgres;Include Error Detail=true;Host=btcpay-postgres;Port=5432;Database=nbxplorer
+      NBXPLORER_EXPOSERPC: 1
+      NBXPLORER_NOAUTH: 1
+    ports:
+      - "127.0.0.1:${KASSIBER_REGTEST_BTCPAY_NBXPLORER_PORT:-18550}:32838"
+    volumes:
+      - btcpay-nbxplorer-regtest:/datadir
+
+  btcpayserver:
+    image: ${KASSIBER_REGTEST_BTCPAY_IMAGE:-btcpayserver/btcpayserver:2.3.9}
+    restart: unless-stopped
+    depends_on:
+      btcpay-nbxplorer:
+        condition: service_started
+      btcpay-postgres:
+        condition: service_healthy
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      BTCPAY_ALLOW-ADMIN-REGISTRATION: "true"
+      BTCPAY_BIND: 0.0.0.0
+      BTCPAY_BTCEXPLORERURL: http://btcpay-nbxplorer:32838/
+      BTCPAY_CHAINS: btc
+      BTCPAY_CHEATMODE: "true"
+      BTCPAY_DATADIR: /datadir
+      BTCPAY_DISABLE-REGISTRATION: "false"
+      BTCPAY_DOCKERDEPLOYMENT: "true"
+      BTCPAY_NETWORK: regtest
+      BTCPAY_PORT: "49392"
+      BTCPAY_POSTGRES: User ID=postgres;Include Error Detail=true;Host=btcpay-postgres;Port=5432;Database=btcpayserver
+      BTCPAY_RECOMMENDED-PLUGINS: ""
+      BTCPAY_VERBOSE: "true"
+    ports:
+      - "127.0.0.1:${KASSIBER_REGTEST_BTCPAY_PORT:-18549}:49392"
+    volumes:
+      - btcpayserver-regtest:/datadir
+
+volumes:
+  btcpay-postgres-regtest:
+  btcpay-nbxplorer-regtest:
+  btcpayserver-regtest:

@@ -29,6 +29,7 @@ SQLCipher system package command if the development headers are not available.
 | DEMO | `./scripts/integration-harness.sh demo-full` | yes, unless reusing a node | Builds the checked-in `full-accounting-v1` scenario: thirteen Kassiber wallets including multi-address Bitcoin wallets, a Silent Payments wallet, rotation targets, a mining wallet, and descriptor-backed Liquid wallets synced from real `elementsd` transactions through the local Liquid Electrum endpoint; real regtest acquisitions/disposals/transfers, ownership-derived fan-out self-transfer matching, operating-expense disposals with deterministic amount/fee variation, deprecated rotated-out wallets, batched, consolidation, dust, RBF-replacement, and mempool-pending edge cases, local Bitcoin/Liquid Electrum and mempool-compatible backend rows, a multi-year stress ledger, CoinJoin- and PayJoin-shaped collaborative transactions, swap/peg bridge pairs, loan marks, bundled real historical BTC/EUR pricing, journals, reports, and transaction exports. The persistent `demo-up` variant also starts the Core Lightning overlay and seeds a merchant `coreln` connection by default. |
 | SILENT PAYMENTS | `./scripts/integration-harness.sh silent-payments` | yes | Starts the regtest Compose stack with the `silent-payments` profile, which builds/runs Sparrow Frigate against Bitcoin Core v30 and Fulcrum, waits until Frigate advertises `silent_payments: [0]` through `server.features`, then runs Kassiber's Silent Payments sync tests. Override the cold-start wait with `KASSIBER_REGTEST_FRIGATE_WAIT_SECONDS` if the local Frigate index is slow. |
 | BOLTZ | `./scripts/integration-harness.sh boltz-liquid` | yes, upstream Boltz stack | Starts or reuses Boltz's official [`BoltzExchange/regtest`](https://github.com/BoltzExchange/regtest) Docker environment, probes the local Boltz API for Liquid-capable submarine, reverse, and BTC -> L-BTC chain-swap pairs, executes a Liquid on-chain payment plus an L-BTC -> BTC Lightning submarine swap, builds Kassiber import rows from the observed txids/hash/amounts, and verifies the swap pairs while the plain Liquid payment stays unpaired. Optional `KASSIBER_BOLTZ_V2_EVIDENCE=/path/to/evidence.json` adds real Boltz wallet/client/provider v2 chain/reverse/refund evidence rows to the temporary book and asserts exact `provider_swap_id` pairing. |
+| BTCPAY | `./scripts/integration-harness.sh btcpay` | yes | Starts the standard Bitcoin regtest stack plus a BTCPay overlay (Postgres, NBXplorer, BTCPay Server) wired to the same disposable `bitcoind`, creates a first admin user, creates or reuses a test store, generates a BTC on-chain store wallet, creates and pays a BTC invoice from the regtest Core wallet, confirms it, syncs BTCPay wallet history into a temporary Kassiber book, syncs invoice provenance, and writes a local seed JSON containing the store id, disposable API key, invoice id, and payment txid. |
 | LIGHTNING | `./scripts/integration-harness.sh lightning-business` | yes, Kassiber stack + CLN/LND overlay | Starts the existing regtest Compose stack plus `dev/regtest/compose.lightning.yml` with four pinned Core Lightning nodes and one LND backup merchant node. A seeded sim-ln-inspired business plan drives mainchain top-ups/withdrawals, merchant invoices, supplier payments, routed forwarding activity, LND backup receipts/outbound payments, an expired quote, and an intentionally failed oversized payment, opens private CLN merchant -> LND backup and LND backup -> CLN router channels, then verifies Kassiber through `wallets sync`, `ui.connections.node.snapshot` for both node implementations, `reports lightning-profitability`, and `export-lightning-profitability-csv`. |
 
 The slow lane is opt-in with `KASSIBER_INTEGRATION=1`; normal unit gates do not
@@ -99,6 +100,51 @@ KASSIBER_DEFAULT_AI_BASE_URL=http://host.docker.internal:11434/v1
 
 This only affects first-time AI provider seeding; existing books should update
 their `ollama` provider row to the host alias explicitly.
+
+## BTCPay Regtest
+
+The BTCPay lane is opt-in because it pulls a full BTCPay Server/NBXplorer/
+Postgres overlay in addition to the normal Bitcoin regtest stack:
+
+```bash
+./scripts/integration-harness.sh btcpay
+```
+
+The overlay is defined in `dev/regtest/compose.btcpay.yml`. It reuses the
+managed regtest `bitcoind` and generated RPC credentials, runs NBXplorer against
+that node, and publishes BTCPay on host loopback. By default the ports are
+derived from the regtest base port:
+
+```text
+BTCPay Server: http://127.0.0.1:18549
+BTCPay NBXplorer: http://127.0.0.1:18550
+```
+
+Override them with `KASSIBER_REGTEST_BTCPAY_PORT` and
+`KASSIBER_REGTEST_BTCPAY_NBXPLORER_PORT`. The BTCPay image is pinned to the
+published stable `btcpayserver/btcpayserver:2.3.9` tag because Docker Hub does
+not publish a `latest` tag. Override images with `KASSIBER_REGTEST_BTCPAY_IMAGE`,
+`KASSIBER_REGTEST_BTCPAY_NBXPLORER_IMAGE`, and
+`KASSIBER_REGTEST_BTCPAY_POSTGRES_IMAGE`.
+
+The seed helper (`python -m dev.regtest.btcpay_seed`) uses the Greenfield API to
+create a disposable admin user, store, BTC on-chain payment method, and scoped
+API key. In the standalone `btcpay` lane it also creates a BTC-denominated
+invoice, reads the non-sensitive invoice payment-method destination, pays it
+from the regtest Core wallet, mines the confirmation, syncs BTCPay wallet
+history into a temporary Kassiber book, and syncs invoice/payment provenance.
+For the persistent demo book, opt into the same overlay with:
+
+```bash
+KASSIBER_REGTEST_DEMO_BTCPAY=1 ./scripts/integration-harness.sh demo-up
+```
+
+That writes the BTCPay URL, store id, and disposable API key into
+`demo-manifest.json` (mode `0600`) and configures the demo book with a
+`btcpay-regtest` backend plus a `BTCPay Regtest Store` wallet using
+`BTC-CHAIN` wallet-history sync. The persistent demo path provisions the store
+and wallet without automatically mining an invoice payment, so repeated
+`demo-up` runs do not advance the long-lived demo chain just for BTCPay setup.
 
 Set `KASSIBER_REGTEST_KEEP=1` to keep the full Docker Compose project running
 for debugging (containers, bound ports, and volumes); otherwise the stack is

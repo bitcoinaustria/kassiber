@@ -162,7 +162,14 @@ def fetch_btcpay_invoice_provenance(
                 f"BTCPay response for {url} was not a JSON array",
                 code="protocol_error",
             )
-        return page
+        return _hydrate_invoice_payment_methods(
+            base,
+            store_id,
+            page,
+            http_opener,
+            token,
+            timeout,
+        )
 
     invoices, next_pages, page_metadata = _fetch_incremental_pages(
         fetch_page=fetch_page,
@@ -323,8 +330,21 @@ def _build_payment_methods_url(base, store_id):
 
 def _build_invoices_url(base, store_id, skip, limit):
     store_q = urlparse.quote(store_id, safe="")
-    query = urlparse.urlencode({"skip": str(skip), "take": str(limit)})
+    query = urlparse.urlencode(
+        {
+            "skip": str(skip),
+            "take": str(limit),
+            "includePaymentMethods": "true",
+        }
+    )
     return f"{base.rstrip('/')}/api/v1/stores/{store_q}/invoices?{query}"
+
+
+def _build_invoice_payment_methods_url(base, store_id, invoice_id):
+    store_q = urlparse.quote(store_id, safe="")
+    invoice_q = urlparse.quote(invoice_id, safe="")
+    query = urlparse.urlencode({"onlyAccountedPayments": "true"})
+    return f"{base.rstrip('/')}/api/v1/stores/{store_q}/invoices/{invoice_q}/payment-methods?{query}"
 
 
 def _backend_http_opener(backend):
@@ -626,6 +646,69 @@ def _invoice_page_fingerprint(page):
     return hashlib.sha256(
         json.dumps(_invoice_page_fingerprint_rows(page), sort_keys=True).encode("utf-8")
     ).hexdigest()
+
+
+def _hydrate_invoice_payment_methods(base, store_id, invoices, http_opener, token, timeout):
+    hydrated = []
+    for invoice in invoices:
+        if not isinstance(invoice, dict):
+            hydrated.append(invoice)
+            continue
+        payments = invoice.get("payments")
+        if isinstance(payments, list) and payments:
+            hydrated.append(invoice)
+            continue
+        invoice_id = invoice.get("id") or invoice.get("invoiceId")
+        if not invoice_id:
+            hydrated.append(invoice)
+            continue
+        methods_url = _build_invoice_payment_methods_url(base, store_id, str(invoice_id))
+        methods = _http_get_json(
+            http_opener,
+            methods_url,
+            token,
+            timeout,
+            permission_hint="Grant the API key the BTCPay 'View invoices' permission.",
+        )
+        if not isinstance(methods, list):
+            raise AppError(
+                f"BTCPay response for {methods_url} was not a JSON array",
+                code="protocol_error",
+            )
+        copy = dict(invoice)
+        copy["paymentMethods"] = methods
+        copy["payments"] = _payments_from_invoice_payment_methods(methods)
+        hydrated.append(copy)
+    return hydrated
+
+
+def _payments_from_invoice_payment_methods(methods):
+    payments = []
+    for method in methods:
+        if not isinstance(method, dict):
+            continue
+        payment_method_id = method.get("paymentMethodId")
+        method_payments = method.get("payments") or []
+        if not isinstance(method_payments, list):
+            continue
+        for payment in method_payments:
+            if not isinstance(payment, dict):
+                continue
+            enriched = dict(payment)
+            enriched.setdefault("paymentMethodId", payment_method_id)
+            if method.get("rate") is not None:
+                enriched.setdefault("rate", method.get("rate"))
+            if method.get("destination") is not None:
+                enriched.setdefault("destination", method.get("destination"))
+            payment_id = str(enriched.get("id") or "")
+            if not enriched.get("transactionId") and _looks_like_txid(payment_id):
+                enriched["transactionId"] = payment_id
+            payments.append(enriched)
+    return payments
+
+
+def _looks_like_txid(value):
+    return len(value) == 64 and all(char in "0123456789abcdefABCDEF" for char in value)
 
 
 def _http_get_json(opener, url, token, timeout, *, permission_hint=None):

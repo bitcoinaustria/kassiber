@@ -129,6 +129,43 @@ class IntegrationHarnessSafetyTest(unittest.TestCase):
             payload = json.loads(manifest.read_text(encoding="utf-8"))
             self.assertEqual(payload["scenario_checksum"], "abc123")
 
+    def test_demo_write_manifest_includes_btcpay_seed_metadata_when_enabled(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-demo-manifest-") as tmp:
+            tmp_path = Path(tmp)
+            demo_home = tmp_path / "kassiber-regtest-demo"
+            demo_home.mkdir()
+            (demo_home / "btcpay-seed.json").write_text(
+                json.dumps(
+                    {
+                        "api_key": "test-token",
+                        "payment_method_id": "BTC-CHAIN",
+                        "store_id": "store123",
+                        "user": "merchant.regtest@example.invalid",
+                    }
+                ),
+                encoding="utf-8",
+            )
+            env = _demo_manifest_env(tmp_path, demo_home)
+            env.update(
+                {
+                    "KASSIBER_REGTEST_DEMO_BTCPAY_ENABLED": "1",
+                    "KASSIBER_REGTEST_BTCPAY_PORT": "18549",
+                    "KASSIBER_REGTEST_BTCPAY_NBXPLORER_PORT": "18550",
+                }
+            )
+            result = _run_harness_snippet(tmp_path, "demo_write_manifest abc123", env)
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            payload = json.loads((demo_home / "demo-manifest.json").read_text(encoding="utf-8"))
+            self.assertTrue(payload["btcpay_enabled"])
+            self.assertEqual(payload["btcpay_url"], "http://127.0.0.1:18549")
+            self.assertEqual(payload["btcpay_backend"], "btcpay-regtest")
+            self.assertEqual(payload["btcpay_wallet"], "BTCPay Regtest Store")
+            self.assertEqual(payload["btcpay_store_id"], "store123")
+            self.assertEqual(payload["btcpay_payment_method_id"], "BTC-CHAIN")
+            self.assertEqual(payload["btcpay_user"], "merchant.regtest@example.invalid")
+            self.assertEqual(payload["btcpay_api_key"], "test-token")
+
 
 if __name__ == "__main__":
     unittest.main()

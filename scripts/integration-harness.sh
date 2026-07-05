@@ -11,7 +11,7 @@ STARTED_COMPOSE=0
 STARTED_BOLTZ=0
 BOLTZ_COMPOSE_FILE=""
 BOLTZ_COMPOSE_TEMP=""
-SUDO_DOCKER_ENV=COMPOSE_PROFILES,KASSIBER_REGTEST_COMPOSE_PROFILES,KASSIBER_REGTEST_RPC_USER,KASSIBER_REGTEST_RPC_PASSWORD,KASSIBER_REGTEST_RPC_AUTH,KASSIBER_REGTEST_RPC_PORT,KASSIBER_REGTEST_ELEMENTS_RPC_PORT,KASSIBER_REGTEST_BITCOIND_IMAGE,KASSIBER_REGTEST_ELEMENTSD_IMAGE,KASSIBER_REGTEST_FULCRUM_IMAGE,KASSIBER_REGTEST_FRIGATE_IMAGE,KASSIBER_REGTEST_FRIGATE_VERSION,KASSIBER_REGTEST_FRIGATE_TARBALL_SHA256,KASSIBER_REGTEST_BACKEND_STACK_IMAGE,KASSIBER_REGTEST_BITCOIN_ELECTRUM_PORT,KASSIBER_REGTEST_BITCOIN_MEMPOOL_PORT,KASSIBER_REGTEST_LIQUID_ELECTRUM_PORT,KASSIBER_REGTEST_LIQUID_MEMPOOL_PORT,KASSIBER_REGTEST_FRIGATE_PORT,KASSIBER_REGTEST_CLN_IMAGE,KASSIBER_REGTEST_CLN_MERCHANT_PORT,KASSIBER_REGTEST_CLN_CUSTOMER_PORT,KASSIBER_REGTEST_CLN_SUPPLIER_PORT,KASSIBER_REGTEST_CLN_ROUTER_PORT,KASSIBER_REGTEST_LND_IMAGE,KASSIBER_REGTEST_LND_BACKUP_P2P_PORT,KASSIBER_REGTEST_LND_BACKUP_REST_PORT,KASSIBER_REGTEST_LND_BACKUP_RPC_PORT
+SUDO_DOCKER_ENV=COMPOSE_PROFILES,KASSIBER_REGTEST_COMPOSE_PROFILES,KASSIBER_REGTEST_RPC_USER,KASSIBER_REGTEST_RPC_PASSWORD,KASSIBER_REGTEST_RPC_AUTH,KASSIBER_REGTEST_RPC_PORT,KASSIBER_REGTEST_ELEMENTS_RPC_PORT,KASSIBER_REGTEST_BITCOIND_IMAGE,KASSIBER_REGTEST_ELEMENTSD_IMAGE,KASSIBER_REGTEST_FULCRUM_IMAGE,KASSIBER_REGTEST_FRIGATE_IMAGE,KASSIBER_REGTEST_FRIGATE_VERSION,KASSIBER_REGTEST_FRIGATE_TARBALL_SHA256,KASSIBER_REGTEST_BACKEND_STACK_IMAGE,KASSIBER_REGTEST_BITCOIN_ELECTRUM_PORT,KASSIBER_REGTEST_BITCOIN_MEMPOOL_PORT,KASSIBER_REGTEST_LIQUID_ELECTRUM_PORT,KASSIBER_REGTEST_LIQUID_MEMPOOL_PORT,KASSIBER_REGTEST_FRIGATE_PORT,KASSIBER_REGTEST_BTCPAY_PORT,KASSIBER_REGTEST_BTCPAY_NBXPLORER_PORT,KASSIBER_REGTEST_BTCPAY_IMAGE,KASSIBER_REGTEST_BTCPAY_NBXPLORER_IMAGE,KASSIBER_REGTEST_BTCPAY_POSTGRES_IMAGE,KASSIBER_REGTEST_CLN_IMAGE,KASSIBER_REGTEST_CLN_MERCHANT_PORT,KASSIBER_REGTEST_CLN_CUSTOMER_PORT,KASSIBER_REGTEST_CLN_SUPPLIER_PORT,KASSIBER_REGTEST_CLN_ROUTER_PORT,KASSIBER_REGTEST_LND_IMAGE,KASSIBER_REGTEST_LND_BACKUP_P2P_PORT,KASSIBER_REGTEST_LND_BACKUP_REST_PORT,KASSIBER_REGTEST_LND_BACKUP_RPC_PORT
 SUDO_DOCKER=(sudo -n --preserve-env="$SUDO_DOCKER_ENV" docker)
 
 export PYTHONHASHSEED="${PYTHONHASHSEED:-0}"
@@ -106,6 +106,11 @@ docker_compose() {
       KASSIBER_REGTEST_BITCOIN_MEMPOOL_PORT="${KASSIBER_REGTEST_BITCOIN_MEMPOOL_PORT:-}" \
       KASSIBER_REGTEST_LIQUID_ELECTRUM_PORT="${KASSIBER_REGTEST_LIQUID_ELECTRUM_PORT:-}" \
       KASSIBER_REGTEST_LIQUID_MEMPOOL_PORT="${KASSIBER_REGTEST_LIQUID_MEMPOOL_PORT:-}" \
+      KASSIBER_REGTEST_BTCPAY_PORT="${KASSIBER_REGTEST_BTCPAY_PORT:-}" \
+      KASSIBER_REGTEST_BTCPAY_NBXPLORER_PORT="${KASSIBER_REGTEST_BTCPAY_NBXPLORER_PORT:-}" \
+      KASSIBER_REGTEST_BTCPAY_IMAGE="${KASSIBER_REGTEST_BTCPAY_IMAGE:-}" \
+      KASSIBER_REGTEST_BTCPAY_NBXPLORER_IMAGE="${KASSIBER_REGTEST_BTCPAY_NBXPLORER_IMAGE:-}" \
+      KASSIBER_REGTEST_BTCPAY_POSTGRES_IMAGE="${KASSIBER_REGTEST_BTCPAY_POSTGRES_IMAGE:-}" \
       KASSIBER_REGTEST_CLN_IMAGE="${KASSIBER_REGTEST_CLN_IMAGE:-}" \
       KASSIBER_REGTEST_CLN_MERCHANT_PORT="${KASSIBER_REGTEST_CLN_MERCHANT_PORT:-}" \
       KASSIBER_REGTEST_CLN_CUSTOMER_PORT="${KASSIBER_REGTEST_CLN_CUSTOMER_PORT:-}" \
@@ -136,8 +141,16 @@ configure_lightning_ports() {
   export KASSIBER_REGTEST_LND_BACKUP_RPC_PORT="${KASSIBER_REGTEST_LND_BACKUP_RPC_PORT:-$((KASSIBER_REGTEST_RPC_PORT + 1298))}"
 }
 
+configure_btcpay_ports() {
+  export KASSIBER_REGTEST_BTCPAY_PORT="${KASSIBER_REGTEST_BTCPAY_PORT:-$((KASSIBER_REGTEST_RPC_PORT + 106))}"
+  export KASSIBER_REGTEST_BTCPAY_NBXPLORER_PORT="${KASSIBER_REGTEST_BTCPAY_NBXPLORER_PORT:-$((KASSIBER_REGTEST_RPC_PORT + 107))}"
+}
+
 docker_compose_regtest() {
   local files=(-f dev/regtest/compose.bitcoin.yml)
+  if [ -n "${KASSIBER_REGTEST_USE_BTCPAY_COMPOSE:-}" ]; then
+    files+=(-f dev/regtest/compose.btcpay.yml)
+  fi
   if [ -n "${KASSIBER_REGTEST_USE_LIGHTNING_COMPOSE:-}" ]; then
     files+=(-f dev/regtest/compose.lightning.yml)
   fi
@@ -269,6 +282,9 @@ run_with_bitcoin_core() {
   export KASSIBER_REGTEST_CORE_URL="${KASSIBER_REGTEST_CORE_URL:-http://127.0.0.1:${KASSIBER_REGTEST_RPC_PORT}}"
   export KASSIBER_REGTEST_ELEMENTS_URL="${KASSIBER_REGTEST_ELEMENTS_URL:-http://127.0.0.1:${KASSIBER_REGTEST_ELEMENTS_RPC_PORT}}"
   export KASSIBER_REGTEST_COMPOSE_PROJECT="${KASSIBER_REGTEST_COMPOSE_PROJECT:-$(py -c 'import hashlib, os; print("kassiber-regtest-" + hashlib.sha256(os.getcwd().encode()).hexdigest()[:12])')}"
+  if [ -n "${KASSIBER_REGTEST_USE_BTCPAY_COMPOSE:-}" ]; then
+    configure_btcpay_ports
+  fi
   if [ -n "${KASSIBER_REGTEST_USE_LIGHTNING_COMPOSE:-}" ]; then
     configure_lightning_ports
   fi
@@ -583,6 +599,22 @@ demo_configure_lightning() {
   fi
 }
 
+demo_configure_btcpay() {
+  case "${KASSIBER_REGTEST_DEMO_BTCPAY:-0}" in
+    1|true|TRUE|True|yes|YES|Yes|on|ON|On)
+      export KASSIBER_REGTEST_USE_BTCPAY_COMPOSE=1
+      export KASSIBER_REGTEST_DEMO_BTCPAY_ENABLED=1
+      if [ -n "${KASSIBER_REGTEST_RPC_PORT:-}" ]; then
+        configure_btcpay_ports
+      fi
+      ;;
+    *)
+      unset KASSIBER_REGTEST_USE_BTCPAY_COMPOSE
+      export KASSIBER_REGTEST_DEMO_BTCPAY_ENABLED=0
+      ;;
+  esac
+}
+
 demo_write_manifest() {
   local checksum="$1"
   KASSIBER_DEMO_MANIFEST="$DEMO_MANIFEST" \
@@ -613,6 +645,7 @@ manifest = {
     "liquid_electrum_url": f"tcp://127.0.0.1:{os.environ['KASSIBER_REGTEST_LIQUID_ELECTRUM_PORT']}",
     "liquid_mempool_url": f"http://127.0.0.1:{os.environ['KASSIBER_REGTEST_LIQUID_MEMPOOL_PORT']}/api",
     "lightning_enabled": os.environ.get("KASSIBER_REGTEST_DEMO_LIGHTNING_ENABLED") == "1",
+    "btcpay_enabled": os.environ.get("KASSIBER_REGTEST_DEMO_BTCPAY_ENABLED") == "1",
     "compose_project": os.environ.get("KASSIBER_REGTEST_COMPOSE_PROJECT", ""),
     "rpc_user": os.environ["KASSIBER_REGTEST_RPC_USER"],
     "rpc_password": os.environ["KASSIBER_REGTEST_RPC_PASSWORD"],
@@ -634,6 +667,27 @@ if manifest["lightning_enabled"]:
             "lightning_backup_backend": "lnd-merchant-backup",
         }
     )
+if manifest["btcpay_enabled"]:
+    btcpay_seed_path = os.path.join(home, "btcpay-seed.json")
+    manifest.update(
+        {
+            "btcpay_url": f"http://127.0.0.1:{os.environ['KASSIBER_REGTEST_BTCPAY_PORT']}",
+            "btcpay_nbxplorer_url": f"http://127.0.0.1:{os.environ['KASSIBER_REGTEST_BTCPAY_NBXPLORER_PORT']}",
+            "btcpay_backend": "btcpay-regtest",
+            "btcpay_wallet": "BTCPay Regtest Store",
+            "btcpay_seed": btcpay_seed_path,
+        }
+    )
+    if os.path.exists(btcpay_seed_path):
+        try:
+            with open(btcpay_seed_path, "r", encoding="utf-8") as handle:
+                seed = json.load(handle)
+            manifest["btcpay_store_id"] = seed.get("store_id")
+            manifest["btcpay_payment_method_id"] = seed.get("payment_method_id")
+            manifest["btcpay_user"] = seed.get("user")
+            manifest["btcpay_api_key"] = seed.get("api_key")
+        except Exception:
+            pass
 os.makedirs(home, mode=0o700, exist_ok=True)
 os.chmod(home, 0o700)
 os.makedirs(manifest_dir, mode=0o700, exist_ok=True)
@@ -831,6 +885,18 @@ demo_seed_lightning() {
     --profile "Full Accounting" >/dev/null
 }
 
+demo_seed_btcpay() {
+  if [ "${KASSIBER_REGTEST_DEMO_BTCPAY_ENABLED:-0}" != "1" ]; then
+    return 0
+  fi
+  local seed_path="$DEMO_HOME/btcpay-seed.json"
+  echo "Seeding BTCPay regtest store..."
+  py -m dev.regtest.btcpay_seed \
+    --base-url "http://127.0.0.1:$KASSIBER_REGTEST_BTCPAY_PORT" \
+    --kassiber-data-root "$DEMO_HOME/data" \
+    --json-output "$seed_path" >/dev/null
+}
+
 demo_build_book() {
   local checksum
   local current_checksum
@@ -842,6 +908,7 @@ demo_build_book() {
     && [ "$current_checksum" = "$checksum" ]; then
     demo_refresh_live_rate
     demo_seed_lightning
+    demo_seed_btcpay
     demo_write_manifest "$checksum"
     echo "Reusing existing demo book (scenario unchanged): $DEMO_HOME/data"
     return 0
@@ -867,6 +934,7 @@ demo_build_book() {
 
   demo_refresh_live_rate
   demo_seed_lightning
+  demo_seed_btcpay
   demo_write_manifest "$checksum"
 }
 
@@ -883,6 +951,11 @@ Demo environment is up.
   BTC mempool:  http://127.0.0.1:$KASSIBER_REGTEST_BITCOIN_MEMPOOL_PORT/api
   LBTC Electrum: tcp://127.0.0.1:$KASSIBER_REGTEST_LIQUID_ELECTRUM_PORT
   LBTC mempool:  http://127.0.0.1:$KASSIBER_REGTEST_LIQUID_MEMPOOL_PORT/api
+$(if [ "${KASSIBER_REGTEST_DEMO_BTCPAY_ENABLED:-0}" = "1" ]; then cat <<EOF_BTCPAY
+  BTCPay:       http://127.0.0.1:$KASSIBER_REGTEST_BTCPAY_PORT (store/API key in $DEMO_MANIFEST)
+  BTCPay wallet: BTCPay Regtest Store (backend btcpay-regtest)
+EOF_BTCPAY
+fi)
 $(if demo_lightning_enabled; then cat <<EOF_LIGHTNING
   CLN merchant: cln_merchant (Core Lightning; port $KASSIBER_REGTEST_CLN_MERCHANT_PORT)
   LND backup:   lnd_merchant_backup (LND; REST https://127.0.0.1:$KASSIBER_REGTEST_LND_BACKUP_REST_PORT)
@@ -912,8 +985,10 @@ run_demo_up() {
   export KASSIBER_REGTEST_COMPOSE_PROFILES="${KASSIBER_REGTEST_COMPOSE_PROFILES:-silent-payments}"
   export COMPOSE_PROFILES="$KASSIBER_REGTEST_COMPOSE_PROFILES"
   export KASSIBER_REGTEST_REQUIRE_ELEMENTS=1
+  demo_configure_btcpay
   demo_configure_lightning
   demo_load_rpc_env
+  demo_assert_safe_home rebuild
   if demo_book_needs_rebuild && [ -z "${KASSIBER_REGTEST_REUSE_CORE:-}" ]; then
     echo "Removing the managed demo regtest chain before rebuilding the backdated book..."
     docker_compose_regtest down -v --remove-orphans
@@ -1130,6 +1205,40 @@ run_lightning_business() {
   py -m unittest tests.integration.test_live_lightning_business_regtest -v
 }
 
+run_btcpay_seed_smoke() {
+  local seed_path
+  local data_root
+  seed_path="${TMPDIR:-/tmp}/kassiber-btcpay-regtest-seed-${KASSIBER_REGTEST_COMPOSE_PROJECT}.json"
+  data_root="${TMPDIR:-/tmp}/kassiber-btcpay-regtest-data-${KASSIBER_REGTEST_COMPOSE_PROJECT}"
+  rm -rf "$data_root"
+  py -m dev.regtest.btcpay_seed \
+    --base-url "http://127.0.0.1:$KASSIBER_REGTEST_BTCPAY_PORT" \
+    --kassiber-data-root "$data_root" \
+    --exercise-invoice \
+    --json-output "$seed_path" >/dev/null
+  KASSIBER_BTCPAY_SEED_PATH="$seed_path" py - <<'PY'
+import json
+import os
+
+with open(os.environ["KASSIBER_BTCPAY_SEED_PATH"], "r", encoding="utf-8") as handle:
+    payload = json.load(handle)
+invoice = payload.get("invoice") or {}
+print(
+    "BTCPay regtest store seeded and exercised: "
+    f"store={payload.get('store_id')} "
+    f"invoice={invoice.get('invoice_id')} "
+    f"status={invoice.get('invoice_status')} "
+    f"txid={invoice.get('payment_txid')} "
+    f"seed={os.environ['KASSIBER_BTCPAY_SEED_PATH']}"
+)
+PY
+}
+
+run_btcpay_regtest() {
+  export KASSIBER_REGTEST_USE_BTCPAY_COMPOSE=1
+  run_with_bitcoin_core run_btcpay_seed_smoke
+}
+
 run_silent_payments() {
   export KASSIBER_REGTEST_COMPOSE_PROFILES="${KASSIBER_REGTEST_COMPOSE_PROFILES:-silent-payments}"
   run_with_bitcoin_core run_silent_payments_smoke
@@ -1328,6 +1437,9 @@ case "$MODE" in
   lightning-business)
     run_lightning_business
     ;;
+  btcpay|btcpay-regtest)
+    run_btcpay_regtest
+    ;;
   silent-payments)
     run_silent_payments
     ;;
@@ -1340,7 +1452,7 @@ case "$MODE" in
     ( run_regtest_demo_full )
     ;;
   *)
-    echo "usage: $0 [fast|bitcoin-core|bitcoin-electrum|slow|demo|demo-full|demo-up|demo-tick [N]|demo-down [--purge]|boltz-liquid|lightning-business|silent-payments|all]" >&2
+    echo "usage: $0 [fast|bitcoin-core|bitcoin-electrum|slow|demo|demo-full|demo-up|demo-tick [N]|demo-down [--purge]|boltz-liquid|lightning-business|btcpay|silent-payments|all]" >&2
     exit 2
     ;;
 esac

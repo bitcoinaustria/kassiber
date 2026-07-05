@@ -21,14 +21,19 @@ class _Response:
 
 
 class _Opener:
-    def __init__(self, pages):
+    def __init__(self, pages, payment_methods=None):
         self.pages = pages
+        self.payment_methods = payment_methods or {}
         self.urls = []
 
     def open(self, request, timeout=30):
         del timeout
         url = request.full_url
         self.urls.append(url)
+        parts = [part for part in urlsplit(url).path.split("/") if part]
+        if "invoices" in parts and "payment-methods" in parts:
+            invoice_id = parts[parts.index("invoices") + 1]
+            return _Response(self.payment_methods.get(invoice_id, []))
         query = parse_qs(urlsplit(url).query)
         skip = int((query.get("skip") or ["0"])[0])
         return _Response(self.pages.get(skip, []))
@@ -305,7 +310,8 @@ class BtcpayIncrementalTest(unittest.TestCase):
             metadata=metadata,
         )
         self.assertEqual(len(records), 1)
-        self.assertEqual(len(opener.urls), 2)
+        self.assertEqual(len(opener.urls), 3)
+        self.assertEqual(parse_qs(urlsplit(opener.urls[0]).query).get("includePaymentMethods"), ["true"])
 
         second_opener = _Opener({0: page0, 1: []})
         second_metadata = {}
@@ -318,7 +324,7 @@ class BtcpayIncrementalTest(unittest.TestCase):
             metadata=second_metadata,
         )
         self.assertEqual(records, [])
-        self.assertEqual(len(second_opener.urls), 2)
+        self.assertEqual(len(second_opener.urls), 3)
         self.assertEqual(second_metadata["pages_fetched"], 2)
         self.assertTrue(second_metadata["stopped_by_known_page"])
 
@@ -362,7 +368,7 @@ class BtcpayIncrementalTest(unittest.TestCase):
         self.assertEqual(len(records), 1)
         self.assertEqual(records[0]["order_id"], "order-2")
         self.assertEqual(records[0]["order_url"], "https://shop.example/orders/2")
-        self.assertEqual(len(second_opener.urls), 2)
+        self.assertEqual(len(second_opener.urls), 3)
 
     def test_invoice_provenance_reimports_older_changed_page_after_newer_unchanged(self):
         backend = {"name": "btcpay", "kind": "btcpay", "url": "https://btcpay.example", "token": "secret"}
@@ -411,7 +417,7 @@ class BtcpayIncrementalTest(unittest.TestCase):
 
         self.assertEqual(len(records), 1)
         self.assertEqual(records[0]["order_id"], "order-old-corrected")
-        self.assertEqual(len(second_opener.urls), 3)
+        self.assertEqual(len(second_opener.urls), 5)
         self.assertTrue(second_metadata["stopped_by_known_page"])
 
     def test_invoice_provenance_deep_audit_finds_older_metadata_edit(self):
