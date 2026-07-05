@@ -348,7 +348,7 @@ export function ReviewDataTable({
         </div>
       </div>
 
-      <div className="rounded-lg border bg-card">
+      <div className="overflow-hidden rounded-lg border bg-card">
         <div
           className={cn(
             "grid grid-cols-2 divide-x-0 divide-y divide-border sm:divide-x sm:divide-y-0",
