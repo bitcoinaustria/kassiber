@@ -818,8 +818,8 @@ function ReportPackageHeader({
     onYearChange(nextYear);
   };
   return (
-    <div className="overflow-hidden rounded-lg border bg-card">
-      <div className="flex min-w-0 flex-col gap-3 p-3 lg:flex-row lg:items-center lg:justify-between">
+    <div className="space-y-2">
+      <div className="flex min-w-0 flex-col gap-3 py-1 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex min-w-0 flex-wrap items-center gap-2 sm:gap-3">
           <span className="text-sm font-semibold sm:text-base">Tax report</span>
           <Select value={String(selectedYear)} onValueChange={handleYearChange}>
@@ -882,7 +882,7 @@ function ReportPackageHeader({
         </div>
       </div>
       {rulesExpanded ? (
-        <div className="border-t p-3">
+        <div className="rounded-lg border bg-card p-3">
           <ReportPolicyDetails
             jurisdiction={jurisdiction}
             methodName={methodName}
@@ -997,14 +997,9 @@ function KennzahlOverviewPanel({
   hideSensitive: boolean;
   formatNumber: (value: number) => string;
 }) {
-  const [showEmptyFields, setShowEmptyFields] = useState(false);
-  const hasMockRows = rows.some((row) => row.source === "mock");
-  const hasPendingRows = rows.some((row) => row.source === "pending");
-  const sourceLabel = hasPendingRows ? "Pending" : hasMockRows ? "Preview" : "Daemon";
   const isEmptyField = (row: KennzahlRow) =>
     row.amount !== null && row.rowCount === 0 && Math.abs(row.amount) < 0.005;
-  const emptyFieldCount = rows.filter(isEmptyField).length;
-  const visibleRows = showEmptyFields ? rows : rows.filter((row) => !isEmptyField(row));
+  const visibleRows = rows.filter((row) => !isEmptyField(row));
   const rowGroups = visibleRows.reduce<Array<{ form: string; rows: KennzahlRow[] }>>(
     (groups, row) => {
       const fallbackForm = AUSTRIAN_TAX_FIELD_COPY[row.code]?.form ?? "E 1kv";
@@ -1041,32 +1036,10 @@ function KennzahlOverviewPanel({
         </div>
         <div className="flex shrink-0 items-center gap-2">
           <Badge variant="outline" className="rounded-md">
-            {sourceLabel}
-          </Badge>
-          <Badge variant="outline" className="rounded-md">
             {visibleRows.length} of {rows.length} fields
           </Badge>
         </div>
       </div>
-
-      {emptyFieldCount ? (
-        <div className="mx-3 mb-3 flex items-center justify-between gap-3 rounded-md border bg-background/50 px-3 py-2">
-          <span className="min-w-0 truncate text-xs text-muted-foreground">
-            {showEmptyFields
-              ? "Showing empty filing fields"
-              : `${emptyFieldCount} empty filing field${emptyFieldCount === 1 ? "" : "s"} hidden`}
-          </span>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="h-8 shrink-0"
-            onClick={() => setShowEmptyFields((value) => !value)}
-          >
-            {showEmptyFields ? "Hide empty" : "Show empty"}
-          </Button>
-        </div>
-      ) : null}
 
       <div className="grid gap-2 px-3 pb-3 sm:grid-cols-2">
         {rowGroups.length ? (
@@ -1463,9 +1436,7 @@ function HandoffScopePanel({
   onIncludeEditHistoryChange: (value: boolean) => void;
   onExport: (format: ReportExportFormatId) => void;
 }) {
-  // Open by default: the audit-package export is a real, available action,
-  // not informational copy — burying it cost discoverability.
-  const [expanded, setExpanded] = useState(true);
+  const [expanded, setExpanded] = useState(false);
   const auditExportDisabled =
     Boolean(activeExport) ||
     (auditScope === "source_funds_case" && !auditCaseId);
