@@ -83,6 +83,12 @@ export function ActivityScatterDot({
     event.stopPropagation();
     openTransactionDetailById(groupedTransactionId);
   };
+  const hoverGroupedPoint = (point: TreasuryChartPoint) => {
+    onHoverActivityPoint?.(point);
+  };
+  const leaveGroupedPoint = () => {
+    onHoverActivityPoint?.(payload);
+  };
   const handlePointerDown = (event: React.PointerEvent<SVGGElement>) => {
     if (!canOpenMarker) return;
     event.preventDefault();
@@ -191,15 +197,6 @@ export function ActivityScatterDot({
 
   return (
     <g {...interactiveProps}>
-      {markerCount > 1 && (
-        <circle
-          cx={cx}
-          cy={cy}
-          r={spreadRadius + childRadius + 7}
-          fill="transparent"
-          pointerEvents="all"
-        />
-      )}
       <circle
         cx={cx}
         cy={cy}
@@ -241,12 +238,27 @@ export function ActivityScatterDot({
               tabIndex={0}
               style={{ cursor: "pointer" }}
               onClick={(event) => openGroupedPoint(point, event)}
+              onBlur={leaveGroupedPoint}
+              onFocus={() => hoverGroupedPoint(point)}
               onKeyDown={(event) => {
                 if (event.key !== "Enter" && event.key !== " ") return;
                 openGroupedPoint(point, event);
               }}
+              onMouseEnter={() => hoverGroupedPoint(point)}
+              onMouseLeave={leaveGroupedPoint}
               onPointerDown={(event) => openGroupedPoint(point, event)}
+              onPointerEnter={() => hoverGroupedPoint(point)}
+              onPointerLeave={leaveGroupedPoint}
             >
+              <line
+                x1={cx}
+                y1={cy}
+                x2={x}
+                y2={y}
+                stroke="transparent"
+                strokeWidth={Math.max(childRadius * 2.3, 8)}
+                pointerEvents="stroke"
+              />
               <line
                 x1={cx}
                 y1={cy}
