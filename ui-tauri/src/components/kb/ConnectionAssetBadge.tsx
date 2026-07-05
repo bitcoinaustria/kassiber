@@ -1,5 +1,8 @@
 import { statusDotStyles } from "@/components/kb/wallets/format";
 import bitcoinIcon from "@/assets/integrations/bitcoin.svg";
+import coreLightningIcon from "@/assets/integrations/core-lightning.svg";
+import lightningIcon from "@/assets/integrations/lightning.svg";
+import lightningLabsIcon from "@/assets/integrations/lightning-labs.svg";
 import liquidIcon from "@/assets/integrations/liquid.svg";
 import {
   connectionAssetIconKind,
@@ -26,13 +29,36 @@ export function ConnectionAssetBadge({
 }: ConnectionAssetBadgeProps) {
   const asset = connectionAssetLabel(connection);
   const iconKind = connectionAssetIconKind(asset);
-  const icon = iconKind === "liquid" ? liquidIcon : bitcoinIcon;
+  const isCoreLightning = connection.kind === "core-ln";
+  const isLnd = connection.kind === "lnd";
+  const isLightning =
+    isCoreLightning ||
+    isLnd ||
+    connection.kind === "nwc" ||
+    connection.kind === "phoenix";
+  const icon = isCoreLightning
+    ? coreLightningIcon
+    : isLnd
+      ? lightningLabsIcon
+      : isLightning
+        ? lightningIcon
+        : iconKind === "liquid"
+          ? liquidIcon
+          : bitcoinIcon;
+  const lightningBackground = isCoreLightning
+    ? "border-zinc-950/80 bg-zinc-950 dark:border-zinc-700 dark:bg-zinc-950"
+    : isLnd
+      ? "border-[#6f4cff]/30 bg-[#6f4cff]/10 dark:border-[#8b72ff]/40 dark:bg-[#6f4cff]/20"
+      : isLightning
+        ? "border-[#792EE5]/25 bg-[#792EE5]/10 dark:border-[#9f6af0]/35 dark:bg-[#792EE5]/20"
+        : null;
 
   return (
     <span
       className={cn(
         "relative flex shrink-0 items-center justify-center rounded-md border border-border/70 bg-muted/60 shadow-sm shadow-zinc-950/5 dark:border-border/80 dark:bg-muted/55 dark:shadow-black/20",
-        iconKind === "liquid"
+        lightningBackground,
+        iconKind === "liquid" || isLightning
           ? size === "md"
             ? "size-9 p-0"
             : "size-8 p-0"
@@ -47,7 +73,10 @@ export function ConnectionAssetBadge({
       <img
         src={icon}
         alt=""
-        className="max-h-full max-w-full object-contain scale-115"
+        className={cn(
+          "max-h-full max-w-full object-contain",
+          isCoreLightning ? "scale-150" : "scale-115",
+        )}
       />
       {status ? (
         <span
