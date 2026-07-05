@@ -453,7 +453,22 @@ def _inventory_indexes(
                 outpoints[key] = _inventory_owner(row, wallet_by_id)
         script = _hex_or_none(row["script_pubkey"])
         if script:
-            scripts.setdefault(script, _inventory_owner(row, wallet_by_id))
+            owner = _inventory_owner(row, wallet_by_id)
+            existing = scripts.get(script)
+            if existing is None:
+                scripts[script] = owner
+            elif existing.get("wallet_id") != owner.get("wallet_id"):
+                scripts[script] = {
+                    "wallet_id": None,
+                    "wallet_label": "",
+                    "amount_sats": 0,
+                    "address_type": (
+                        existing["address_type"]
+                        if existing["address_type"] == owner["address_type"]
+                        else "unknown"
+                    ),
+                    "ambiguous": True,
+                }
     return {
         "outpoints": outpoints,
         "scripts": scripts,
@@ -638,6 +653,7 @@ def _parse_local_transaction(
         )
 
     outputs = []
+    ambiguous_ownership = 0
     for index, entry in enumerate(vout):
         if not isinstance(entry, Mapping):
             continue
@@ -654,6 +670,9 @@ def _parse_local_transaction(
             owner = inventory_index["outpoints"].get((current_txid, n))
         if owner is None and script is not None:
             owner = inventory_index["scripts"].get(script)
+            if owner is not None and owner.get("ambiguous"):
+                ambiguous_ownership += 1
+                owner = None
         outputs.append(
             {
                 "index": n,
@@ -673,6 +692,10 @@ def _parse_local_transaction(
     if known_input_values < len(inputs) or known_output_values < len(outputs):
         support = "partial"
         reason = "missing_prevout_or_output_values"
+    if ambiguous_ownership:
+        support = "partial"
+        if reason is None:
+            reason = "ambiguous_inventory_owner"
 
     return {
         "support": support,
@@ -681,6 +704,7 @@ def _parse_local_transaction(
         "output_count": len(outputs),
         "known_input_values": known_input_values,
         "known_output_values": known_output_values,
+        "ambiguous_ownership": ambiguous_ownership,
         "inputs": inputs,
         "outputs": outputs,
         "version": _int_or_none(raw.get("version")),

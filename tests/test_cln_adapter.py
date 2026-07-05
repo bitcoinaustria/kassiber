@@ -12,7 +12,9 @@ import tempfile
 import unittest
 from collections.abc import Mapping
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
+from unittest.mock import patch
 
 from kassiber.backends import get_db_backend
 from kassiber.core import accounts as core_accounts
@@ -334,6 +336,30 @@ class RpcAllowlistTest(unittest.TestCase):
                 or method.startswith("bkpr-"),
                 msg=f"non-read method allowed: {method}",
             )
+
+    def test_commando_rune_is_passed_without_shell_placeholder_and_redacted(self) -> None:
+        backend = {
+            "kind": "coreln",
+            "name": "cln",
+            "url": "cln://commando",
+            "token": "secret-rune-value",
+            "commando_peer_id": "02" + "ab" * 32,
+        }
+        seen = {}
+
+        def _fake_run(command, **_kwargs):
+            seen["command"] = command
+            return SimpleNamespace(returncode=1, stdout="", stderr="denied")
+
+        with patch("kassiber.core.lightning.cln.subprocess.run", side_effect=_fake_run):
+            with self.assertRaises(AppError) as ctx:
+                core_cln.call_core_lightning(backend, "getinfo")
+
+        command = seen["command"]
+        self.assertNotIn("--commando-rune=${LIGHTNING_RUNE}", command)
+        self.assertIn("--commando-rune=secret-rune-value", command)
+        self.assertNotIn("secret-rune-value", str(ctx.exception.details))
+        self.assertIn("<commando rune redacted>", str(ctx.exception.details))
 
 
 class PersistenceIdempotenceTest(unittest.TestCase):

@@ -25,19 +25,26 @@ import json
 import os
 import shutil
 import sqlite3
+import sys
 import tarfile
 import tempfile
 import threading
 import time
 import unittest
 from pathlib import Path
-from types import SimpleNamespace
+from types import ModuleType, SimpleNamespace
+from unittest.mock import patch
 
 from kassiber.ai.providers import (
     ai_provider_secret_service_id,
     get_ai_provider_api_key_for_use,
     get_db_ai_provider,
     redact_ai_provider_for_output,
+)
+from kassiber.backup.age_cli import (
+    AgeBackend,
+    AgeUnavailableError,
+    select_age_backend,
 )
 from kassiber.backup.cli import cmd_backup_import
 from kassiber.backup.pack import export_backup, import_backup
@@ -489,6 +496,53 @@ class SafeTarTests(unittest.TestCase):
 
 
 class BackupRoundTripTests(unittest.TestCase):
+    def test_recipient_mode_requires_streaming_binary(self):
+        with patch("kassiber.backup.age_cli.shutil.which", return_value=None), \
+                patch.dict(sys.modules, {"pyrage": ModuleType("pyrage")}):
+            with self.assertRaises(AgeUnavailableError) as ctx:
+                select_age_backend(mode="recipient")
+        self.assertEqual(ctx.exception.code, "age_unavailable")
+
+    def test_export_failure_preserves_existing_archive(self):
+        with tempfile.TemporaryDirectory() as root:
+            data_root = Path(root) / "data"
+            data_root.mkdir()
+            (data_root / "kassiber.sqlite3").write_bytes(b"live-db")
+            backup_path = Path(root) / "snap.kassiber"
+            backup_path.write_bytes(b"existing archive")
+
+            def _fake_backup(_src_path, _src_passphrase, dst_path):
+                dst_path.write_bytes(b"encrypted-db-copy")
+
+            def _fail_encrypt(_src, dst, **_kwargs):
+                dst.write(b"partial ciphertext")
+                raise AppError("age failed", code="age_encrypt_failed")
+
+            with patch(
+                "kassiber.backup.pack._backup_sqlcipher_database",
+                side_effect=_fake_backup,
+            ), patch(
+                "kassiber.backup.pack._collect_ai_provider_secret_refs",
+                return_value=[],
+            ), patch(
+                "kassiber.backup.pack.encrypt_age_stream",
+                side_effect=_fail_encrypt,
+            ):
+                with self.assertRaises(AppError):
+                    export_backup(
+                        str(data_root),
+                        backup_path,
+                        "db-pass",
+                        backup_passphrase="outer-pass",
+                        age_backend=AgeBackend(flavor="pyrage"),
+                    )
+
+            self.assertEqual(backup_path.read_bytes(), b"existing archive")
+            self.assertEqual(
+                list(backup_path.parent.glob(f".{backup_path.name}.*.tmp")),
+                [],
+            )
+
     def test_export_then_import(self):
         with tempfile.TemporaryDirectory() as root:
             data_root = Path(root) / "data"

@@ -56,6 +56,7 @@ from .types import (
 # at import time. Listing them here ensures the daemon and CLI can resolve
 # the adapter without an explicit import.
 from . import cln as _cln  # noqa: F401  -- register_adapter("coreln", ...)
+from . import lnd as _lnd  # noqa: F401  -- register_adapter("lnd", ...)
 
 __all__ = [
     "ChannelOpenCostCheck",
