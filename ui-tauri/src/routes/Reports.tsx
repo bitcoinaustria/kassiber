@@ -999,7 +999,7 @@ function KennzahlOverviewPanel({
 }) {
   const isEmptyField = (row: KennzahlRow) =>
     row.amount !== null && row.rowCount === 0 && Math.abs(row.amount) < 0.005;
-  const visibleRows = rows.filter((row) => !isEmptyField(row));
+  const visibleRows = rows;
   const rowGroups = visibleRows.reduce<Array<{ form: string; rows: KennzahlRow[] }>>(
     (groups, row) => {
       const fallbackForm = AUSTRIAN_TAX_FIELD_COPY[row.code]?.form ?? "E 1kv";
