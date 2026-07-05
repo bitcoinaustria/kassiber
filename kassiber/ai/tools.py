@@ -177,6 +177,63 @@ TOOL_CATALOG: tuple[ToolEntry, ...] = (
                     "type": "string",
                     "description": "Optional RFC3339 lower bound on occurred_at.",
                 },
+                "until": {
+                    "type": "string",
+                    "description": "Optional RFC3339 upper bound on occurred_at.",
+                },
+                "period": {
+                    "type": "string",
+                    "enum": [
+                        "30days",
+                        "3months",
+                        "ytd",
+                        "1year",
+                        "5years",
+                        "10years",
+                        "15years",
+                        "all",
+                    ],
+                    "description": "Optional relative period filter.",
+                },
+                "txids": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Exact internal, external, or public explorer transaction ids.",
+                },
+                "status": {
+                    "type": "string",
+                    "enum": ["completed", "pending", "failed", "review"],
+                    "description": "Optional review/status filter.",
+                },
+                "flow": {
+                    "type": "string",
+                    "enum": ["incoming", "outgoing", "transfer", "swap", "layer-transition"],
+                    "description": "Optional UI flow filter.",
+                },
+                "payment_method": {
+                    "type": "string",
+                    "enum": ["On-chain", "Exchange", "Lightning", "Liquid"],
+                    "description": "Optional payment method / network family filter.",
+                },
+                "network": {
+                    "type": "string",
+                    "description": "Optional wallet network/chain/payment method filter.",
+                },
+                "withFees": {
+                    "type": "boolean",
+                    "description": "Only return transactions with a non-zero fee.",
+                },
+                "quick": {
+                    "type": "string",
+                    "enum": [
+                        "external_flow",
+                        "review_queue",
+                        "no_explorer_id",
+                        "missing_price",
+                        "failed_import",
+                    ],
+                    "description": "Optional desktop quick filter.",
+                },
                 "sort": {
                     "type": "string",
                     "enum": ["occurred-at", "amount", "fiat-value", "fee"],

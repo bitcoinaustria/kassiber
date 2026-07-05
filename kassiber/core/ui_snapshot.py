@@ -5,7 +5,7 @@ import binascii
 import json
 import sqlite3
 from collections import defaultdict
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Any
 
@@ -51,6 +51,51 @@ _UI_TRANSACTION_SORT_COLUMNS = {
     "amount": "t.amount",
     "fiat-value": "COALESCE(t.fiat_value, 0)",
     "fee": "t.fee",
+}
+_UI_TRANSACTION_FLOW_KINDS = {
+    "chain-swap",
+    "peg-in",
+    "peg-out",
+    "reverse-submarine-swap",
+    "submarine-swap",
+    "swap",
+    "swap-refund",
+}
+_UI_TRANSACTION_LAYER_TRANSITION_KINDS = {
+    "chain-swap",
+    "peg-in",
+    "peg-out",
+    "reverse-submarine-swap",
+    "submarine-swap",
+    "swap-refund",
+}
+_UI_TRANSACTION_PAYMENT_METHODS = {
+    "exchange": "Exchange",
+    "lightning": "Lightning",
+    "liquid": "Liquid",
+    "on-chain": "On-chain",
+    "onchain": "On-chain",
+    "on chain": "On-chain",
+}
+_UI_TRANSACTION_PERIOD_DAYS = {
+    "30days": 29,
+    "30day": 29,
+    "30d": 29,
+    "3months": 92,
+    "3month": 92,
+    "3m": 92,
+    "1year": 365,
+    "1years": 365,
+    "1y": 365,
+    "5years": 365 * 5,
+    "5year": 365 * 5,
+    "5y": 365 * 5,
+    "10years": 365 * 10,
+    "10year": 365 * 10,
+    "10y": 365 * 10,
+    "15years": 365 * 15,
+    "15year": 365 * 15,
+    "15y": 365 * 15,
 }
 _JOURNAL_DISPLAY_ENTRY_TYPE_SQL = """
 CASE
@@ -267,6 +312,13 @@ def _ui_transaction_cursor_filters(
     since: str | None,
     until: str | None,
     query: str | None,
+    txids: list[str],
+    status: str | None,
+    flow: str | None,
+    payment_method: str | None,
+    network: str | None,
+    with_fees: bool,
+    quick: str | None,
 ) -> dict[str, str]:
     return {
         "workspace_id": str(context.get("workspace_id") or ""),
@@ -277,6 +329,13 @@ def _ui_transaction_cursor_filters(
         "since": since or "",
         "until": until or "",
         "query": query or "",
+        "txids": ",".join(txids),
+        "status": status or "",
+        "flow": flow or "",
+        "payment_method": payment_method or "",
+        "network": network or "",
+        "with_fees": "1" if with_fees else "",
+        "quick": quick or "",
     }
 
 
@@ -295,6 +354,232 @@ def _ui_transaction_cursor_value(row: sqlite3.Row, sort: str) -> int | float | s
         hint="Use one of: occurred-at, amount, fiat-value, fee.",
         retryable=False,
     )
+
+
+def _coerce_optional_string_arg(args: dict[str, Any], key: str) -> str | None:
+    value = args.get(key)
+    if value is None:
+        return None
+    if not isinstance(value, str) or not value.strip():
+        raise AppError(
+            f"{key} must be a non-empty string",
+            code="validation",
+            details={key: value},
+            retryable=False,
+        )
+    return value.strip()
+
+
+def _coerce_optional_string_list_arg(args: dict[str, Any], key: str) -> list[str]:
+    value = args.get(key)
+    if value is None:
+        return []
+    values: list[Any]
+    if isinstance(value, str):
+        values = value.split(",")
+    elif isinstance(value, list):
+        values = value
+    else:
+        raise AppError(
+            f"{key} must be a string or a list of strings",
+            code="validation",
+            details={key: value},
+            retryable=False,
+        )
+    output: list[str] = []
+    seen: set[str] = set()
+    for item in values:
+        if not isinstance(item, str):
+            raise AppError(
+                f"{key} must contain only strings",
+                code="validation",
+                details={key: value},
+                retryable=False,
+            )
+        normalized = item.strip()
+        if normalized and normalized.lower() not in seen:
+            output.append(normalized)
+            seen.add(normalized.lower())
+    return output
+
+
+def _coerce_optional_bool_arg(args: dict[str, Any], *keys: str) -> bool:
+    for key in keys:
+        if key not in args:
+            continue
+        value = args.get(key)
+        if isinstance(value, bool):
+            return value
+        if value in (0, 1):
+            return bool(value)
+        if isinstance(value, str):
+            normalized = value.strip().lower()
+            if normalized in {"1", "true", "yes", "on", "with-fees"}:
+                return True
+            if normalized in {"0", "false", "no", "off", "all", ""}:
+                return False
+        raise AppError(
+            f"{key} must be a boolean",
+            code="validation",
+            details={key: value},
+            retryable=False,
+        )
+    return False
+
+
+def _coerce_ui_transaction_period(value: str) -> str:
+    normalized = value.strip().lower().replace("_", "").replace("-", "").replace(" ", "")
+    if normalized == "ytd":
+        return "ytd"
+    if normalized in {"all", "max"}:
+        return "all"
+    if normalized in _UI_TRANSACTION_PERIOD_DAYS:
+        return normalized
+    raise AppError(
+        "period must be one of: 30days, 3months, ytd, 1year, 5years, 10years, 15years, all",
+        code="validation",
+        details={"period": value},
+        retryable=False,
+    )
+
+
+def _ui_transaction_since_for_period(period: str) -> str | None:
+    if period == "all":
+        return None
+    now = datetime.now(timezone.utc)
+    if period == "ytd":
+        return _iso_z(datetime(now.year, 1, 1, tzinfo=timezone.utc))
+    days = _UI_TRANSACTION_PERIOD_DAYS[period]
+    start = now - timedelta(days=days)
+    return _iso_z(start.replace(hour=0, minute=0, second=0, microsecond=0))
+
+
+def _normalize_ui_transaction_status(value: str) -> str:
+    normalized = value.strip().lower().replace("-", "_")
+    aliases = {
+        "complete": "completed",
+        "error": "failed",
+        "needs_review": "review",
+        "blocked": "review",
+        "quarantined": "review",
+    }
+    normalized = aliases.get(normalized, normalized)
+    if normalized not in {"completed", "pending", "failed", "review"}:
+        raise AppError(
+            "status must be one of: completed, pending, failed, review",
+            code="validation",
+            details={"status": value},
+            retryable=False,
+        )
+    return normalized
+
+
+def _normalize_ui_transaction_flow(value: str) -> str:
+    normalized = value.strip().lower().replace("_", "-")
+    if normalized in {"incoming", "outgoing", "transfer", "swap", "layer-transition"}:
+        return normalized
+    raise AppError(
+        "flow must be one of: incoming, outgoing, transfer, swap, layer-transition",
+        code="validation",
+        details={"flow": value},
+        retryable=False,
+    )
+
+
+def _normalize_ui_transaction_payment_method(value: str) -> str:
+    normalized = value.strip().lower()
+    payment_method = _UI_TRANSACTION_PAYMENT_METHODS.get(normalized)
+    if payment_method:
+        return payment_method
+    raise AppError(
+        "payment_method must be one of: On-chain, Exchange, Lightning, Liquid",
+        code="validation",
+        details={"payment_method": value},
+        retryable=False,
+    )
+
+
+def _normalize_ui_transaction_quick_filter(value: str) -> str:
+    normalized = value.strip().lower().replace("-", "_")
+    if normalized in {
+        "external_flow",
+        "review_queue",
+        "no_explorer_id",
+        "missing_price",
+        "failed_import",
+    }:
+        return normalized
+    raise AppError(
+        "quick must be one of: external_flow, review_queue, no_explorer_id, missing_price, failed_import",
+        code="validation",
+        details={"quick": value},
+        retryable=False,
+    )
+
+
+def _ui_transaction_pair_exists_sql(pair_type: str | None = None) -> str:
+    if pair_type == "swap":
+        type_predicate = "AND tout.asset <> tin.asset"
+    elif pair_type == "transfer":
+        type_predicate = "AND tout.asset = tin.asset"
+    else:
+        type_predicate = ""
+    return f"""
+        EXISTS (
+          SELECT 1
+          FROM transaction_pairs p
+          JOIN transactions tout ON tout.id = p.out_transaction_id
+          JOIN transactions tin ON tin.id = p.in_transaction_id
+          WHERE p.deleted_at IS NULL
+            AND (p.out_transaction_id = t.id OR p.in_transaction_id = t.id)
+            {type_predicate}
+        )
+    """
+
+
+def _ui_transaction_payment_method_sql() -> str:
+    return """
+        CASE
+          WHEN lower(t.asset) = 'lbtc'
+            OR lower(w.kind) IN ('liquid')
+            OR lower(w.config_json) LIKE '%"chain"%liquid%'
+            OR lower(w.label) LIKE '%liquid%'
+            OR lower(w.label) LIKE '%lbtc%'
+            THEN 'Liquid'
+          WHEN lower(w.kind) IN ('lnd', 'core-ln', 'coreln', 'nwc', 'phoenix')
+            OR lower(w.label) LIKE '%lightning%'
+            OR lower(w.label) LIKE '%phoenix%'
+            OR lower(w.label) LIKE '% ln%'
+            OR lower(w.label) LIKE 'ln %'
+            OR lower(w.label) LIKE '%(ln)%'
+            THEN 'Lightning'
+          WHEN lower(w.kind) IN (
+              'kraken', 'bitstamp', 'coinbase', 'bitpanda', 'river',
+              'bullbitcoin', 'coinfinity', 'strike', 'exchange'
+            )
+            OR lower(w.label) LIKE '%exchange%'
+            THEN 'Exchange'
+          ELSE 'On-chain'
+        END
+    """.strip()
+
+
+def _ui_transaction_status_sql() -> str:
+    return """
+        CASE
+          WHEN lower(COALESCE(t.review_status, '')) IN
+               ('review', 'needs_review', 'needs-review', 'blocked', 'quarantined')
+            OR jq.reason IS NOT NULL
+            THEN 'review'
+          WHEN lower(COALESCE(t.review_status, '')) IN ('failed', 'error')
+            THEN 'failed'
+          WHEN lower(COALESCE(t.review_status, '')) IN ('completed', 'complete')
+            THEN 'completed'
+          WHEN t.confirmed_at IS NULL
+            THEN 'pending'
+          ELSE 'completed'
+        END
+    """.strip()
 
 
 def _encode_ui_transaction_cursor(
@@ -2521,11 +2806,23 @@ def _build_transactions_page_snapshot(
             "limit",
             "cursor",
             "query",
+            "txids",
             "direction",
             "asset",
             "wallet",
             "since",
+            "start",
             "until",
+            "end",
+            "period",
+            "status",
+            "flow",
+            "payment_method",
+            "paymentMethod",
+            "network",
+            "with_fees",
+            "withFees",
+            "quick",
             "sort",
             "order",
         }
@@ -2537,16 +2834,8 @@ def _build_transactions_page_snapshot(
             details={"unknown": unknown},
             retryable=False,
         )
-    query = raw_args.get("query")
-    if query is not None:
-        if not isinstance(query, str) or not query.strip():
-            raise AppError(
-                f"{kind} query must be a non-empty string",
-                code="validation",
-                retryable=False,
-            )
-        query = query.strip()
-    elif require_query:
+    query = _coerce_optional_string_arg(raw_args, "query")
+    if query is None and require_query:
         raise AppError(
             f"{kind} query must be a non-empty string",
             code="validation",
@@ -2556,7 +2845,7 @@ def _build_transactions_page_snapshot(
     limit = _coerce_limit(raw_args, default=default_limit, maximum=maximum_limit)
     filters = ["t.profile_id = ?"]
     params: list[Any] = [context["profile_id"]]
-    direction = raw_args.get("direction")
+    direction = _coerce_optional_string_arg(raw_args, "direction")
     if direction is not None:
         if direction not in {"inbound", "outbound"}:
             raise AppError(
@@ -2567,38 +2856,155 @@ def _build_transactions_page_snapshot(
             )
         filters.append("t.direction = ?")
         params.append(direction)
-    asset = raw_args.get("asset")
+    asset = _coerce_optional_string_arg(raw_args, "asset")
     asset_filter = None
     if asset is not None:
-        if not isinstance(asset, str) or not asset.strip():
-            raise AppError("asset must be a non-empty string", code="validation")
         asset_filter = asset.strip().upper()
         filters.append("upper(t.asset) = ?")
         params.append(asset_filter)
-    wallet = raw_args.get("wallet")
+    wallet = _coerce_optional_string_arg(raw_args, "wallet")
     wallet_filter = None
     if wallet is not None:
-        if not isinstance(wallet, str) or not wallet.strip():
-            raise AppError("wallet must be a non-empty string", code="validation")
         wallet_filter = wallet.strip()
         filters.append("(t.wallet_id = ? OR lower(w.label) = lower(?))")
         params.extend([wallet_filter, wallet_filter])
-    since = raw_args.get("since")
+    period = _coerce_optional_string_arg(raw_args, "period")
+    period_filter = _coerce_ui_transaction_period(period) if period else None
+    since = _coerce_optional_string_arg(raw_args, "since")
+    if since is None:
+        since = _coerce_optional_string_arg(raw_args, "start")
+    if since is None and period_filter:
+        since = _ui_transaction_since_for_period(period_filter)
     since_filter = None
     if since is not None:
-        if not isinstance(since, str) or not since.strip():
-            raise AppError("since must be an RFC3339 timestamp", code="validation")
         since_filter = _iso_z(_parse_iso_datetime(since, "since"))
         filters.append("t.occurred_at >= ?")
         params.append(since_filter)
-    until = raw_args.get("until")
+    until = _coerce_optional_string_arg(raw_args, "until")
+    if until is None:
+        until = _coerce_optional_string_arg(raw_args, "end")
     until_filter = None
     if until is not None:
-        if not isinstance(until, str) or not until.strip():
-            raise AppError("until must be an RFC3339 timestamp", code="validation")
         until_filter = _iso_z(_parse_iso_datetime(until, "until"))
         filters.append("t.occurred_at <= ?")
         params.append(until_filter)
+    txids_filter = _coerce_optional_string_list_arg(raw_args, "txids")
+    if txids_filter:
+        txid_terms = [value.lower() for value in txids_filter]
+        placeholders = ", ".join("?" for _ in txid_terms)
+        filters.append(
+            f"""(
+              lower(t.id) IN ({placeholders})
+              OR lower(COALESCE(t.external_id, '')) IN ({placeholders})
+              OR (
+                length(COALESCE(t.external_id, '')) = 64
+                AND lower(COALESCE(t.external_id, '')) IN ({placeholders})
+              )
+            )"""
+        )
+        params.extend([*txid_terms, *txid_terms, *txid_terms])
+    status_filter_raw = _coerce_optional_string_arg(raw_args, "status")
+    status_filter = _normalize_ui_transaction_status(status_filter_raw) if status_filter_raw else None
+    if status_filter:
+        filters.append(f"({_ui_transaction_status_sql()}) = ?")
+        params.append(status_filter)
+    flow_filter_raw = _coerce_optional_string_arg(raw_args, "flow")
+    flow_filter = _normalize_ui_transaction_flow(flow_filter_raw) if flow_filter_raw else None
+    if flow_filter == "incoming":
+        filters.append(
+            f"""(
+              t.direction = 'inbound'
+              AND lower(COALESCE(t.kind, '')) NOT IN ({", ".join("?" for _ in _UI_TRANSACTION_FLOW_KINDS | {"transfer"})})
+              AND NOT {_ui_transaction_pair_exists_sql()}
+            )"""
+        )
+        params.extend(sorted(_UI_TRANSACTION_FLOW_KINDS | {"transfer"}))
+    elif flow_filter == "outgoing":
+        filters.append(
+            f"""(
+              t.direction = 'outbound'
+              AND lower(COALESCE(t.kind, '')) NOT IN ({", ".join("?" for _ in _UI_TRANSACTION_FLOW_KINDS | {"transfer"})})
+              AND NOT {_ui_transaction_pair_exists_sql()}
+            )"""
+        )
+        params.extend(sorted(_UI_TRANSACTION_FLOW_KINDS | {"transfer"}))
+    elif flow_filter == "transfer":
+        filters.append(
+            f"(lower(COALESCE(t.kind, '')) = 'transfer' OR {_ui_transaction_pair_exists_sql('transfer')})"
+        )
+    elif flow_filter == "swap":
+        filters.append(
+            f"""(
+              lower(COALESCE(t.kind, '')) IN ({", ".join("?" for _ in _UI_TRANSACTION_FLOW_KINDS)})
+              OR {_ui_transaction_pair_exists_sql('swap')}
+            )"""
+        )
+        params.extend(sorted(_UI_TRANSACTION_FLOW_KINDS))
+    elif flow_filter == "layer-transition":
+        filters.append(
+            f"lower(COALESCE(t.kind, '')) IN ({', '.join('?' for _ in _UI_TRANSACTION_LAYER_TRANSITION_KINDS)})"
+        )
+        params.extend(sorted(_UI_TRANSACTION_LAYER_TRANSITION_KINDS))
+    payment_raw = _coerce_optional_string_arg(raw_args, "payment_method")
+    if payment_raw is None:
+        payment_raw = _coerce_optional_string_arg(raw_args, "paymentMethod")
+    payment_filter = _normalize_ui_transaction_payment_method(payment_raw) if payment_raw else None
+    if payment_filter:
+        filters.append(f"({_ui_transaction_payment_method_sql()}) = ?")
+        params.append(payment_filter)
+    network_filter = _coerce_optional_string_arg(raw_args, "network")
+    if network_filter:
+        normalized_network = network_filter.lower()
+        maybe_payment = _UI_TRANSACTION_PAYMENT_METHODS.get(normalized_network)
+        if maybe_payment:
+            filters.append(f"({_ui_transaction_payment_method_sql()}) = ?")
+            params.append(maybe_payment)
+        else:
+            filters.append(
+                """(
+                  lower(w.kind) = ?
+                  OR lower(w.config_json) LIKE ?
+                  OR lower(w.label) LIKE ?
+                  OR upper(t.asset) = ?
+                )"""
+            )
+            params.extend(
+                [
+                    normalized_network,
+                    f"%{normalized_network}%",
+                    f"%{normalized_network}%",
+                    "LBTC" if normalized_network == "liquid" else normalized_network.upper(),
+                ]
+            )
+    with_fees = _coerce_optional_bool_arg(raw_args, "with_fees", "withFees")
+    if with_fees:
+        filters.append("COALESCE(t.fee, 0) <> 0")
+    quick_raw = _coerce_optional_string_arg(raw_args, "quick")
+    quick_filter = _normalize_ui_transaction_quick_filter(quick_raw) if quick_raw else None
+    if quick_filter == "external_flow":
+        filters.append("t.direction IN ('inbound', 'outbound')")
+        filters.append("lower(COALESCE(t.kind, '')) <> 'transfer'")
+    elif quick_filter == "review_queue":
+        filters.append(f"({_ui_transaction_status_sql()}) <> 'completed'")
+    elif quick_filter == "no_explorer_id":
+        filters.append(
+            """(
+              t.external_id IS NULL
+              OR length(trim(t.external_id)) <> 64
+              OR lower(trim(t.external_id)) GLOB '*[^0-9a-f]*'
+            )"""
+        )
+    elif quick_filter == "missing_price":
+        filters.append(
+            """(
+              t.fiat_rate IS NULL
+              OR t.fiat_rate <= 0
+              OR lower(COALESCE(t.pricing_quality, '')) = 'missing'
+              OR lower(COALESCE(t.pricing_source_kind, '')) = 'missing'
+            )"""
+        )
+    elif quick_filter == "failed_import":
+        filters.append(f"({_ui_transaction_status_sql()}) = 'failed'")
     if query is not None:
         filters.append(
             """
@@ -2656,7 +3062,30 @@ def _build_transactions_page_snapshot(
         since=since_filter,
         until=until_filter,
         query=query,
+        txids=txids_filter,
+        status=status_filter,
+        flow=flow_filter,
+        payment_method=payment_filter,
+        network=network_filter,
+        with_fees=with_fees,
+        quick=quick_filter,
     )
+    base_filters = list(filters)
+    base_params = list(params)
+    total_row = conn.execute(
+        f"""
+        SELECT COUNT(DISTINCT COALESCE('pair:' || p.id, 'tx:' || t.id)) AS count
+        FROM transactions t
+        JOIN wallets w ON w.id = t.wallet_id
+        LEFT JOIN journal_quarantines jq ON jq.transaction_id = t.id
+        LEFT JOIN transaction_pairs p
+          ON p.deleted_at IS NULL
+         AND (p.out_transaction_id = t.id OR p.in_transaction_id = t.id)
+        WHERE {' AND '.join(base_filters)}
+        """,
+        base_params,
+    ).fetchone()
+    filtered_count = int(total_row["count"] or 0) if total_row else 0
     cursor_data = _decode_ui_transaction_cursor(
         raw_args.get("cursor"),
         sort=sort,
@@ -2776,14 +3205,24 @@ def _build_transactions_page_snapshot(
         "filters": {
             "query": query,
             "limit": limit,
+            "period": period_filter,
             "direction": direction,
             "asset": asset_filter,
             "wallet": wallet_filter,
             "since": since_filter,
             "until": until_filter,
+            "txids": txids_filter,
+            "status": status_filter,
+            "flow": flow_filter,
+            "paymentMethod": payment_filter,
+            "network": network_filter,
+            "withFees": with_fees,
+            "quick": quick_filter,
             "sort": sort,
             "order": order,
         },
+        "count": filtered_count,
+        "total": filtered_count,
         "nextCursor": next_cursor,
         "hasMore": has_more,
     }

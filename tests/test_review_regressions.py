@@ -9198,6 +9198,178 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual(payload.get("kind"), "error")
         self.assertEqual(payload["error"]["code"], "validation")
 
+    def test_ui_transactions_snapshot_filters_count_and_paginate_server_side(self):
+        self._bootstrap_wallet(label="Cold", kind="custom")
+        payload, result = self._run_json(
+            "wallets",
+            "create",
+            "--workspace",
+            "Main",
+            "--profile",
+            "Default",
+            "--label",
+            "Liquid Pocket",
+            "--kind",
+            "custom",
+        )
+        self._assert_ok(payload, result, "wallets.create")
+
+        public_txid = "ab" * 32
+        self._insert_transaction(
+            wallet_label="Cold",
+            tx_id="internal-receipt",
+            external_id="invoice-1",
+            occurred_at="2024-01-10T00:00:00Z",
+            amount_msat=100_000_000,
+            direction="inbound",
+        )
+        self._insert_transaction(
+            wallet_label="Cold",
+            tx_id="public-spend",
+            external_id=public_txid,
+            occurred_at="2024-02-10T00:00:00Z",
+            amount_msat=200_000_000,
+            direction="outbound",
+        )
+        self._insert_transaction(
+            wallet_label="Cold",
+            tx_id="failed-import",
+            external_id="failed-import-source",
+            occurred_at="2024-03-10T00:00:00Z",
+            amount_msat=300_000_000,
+            direction="inbound",
+        )
+        self._insert_transaction(
+            wallet_label="Liquid Pocket",
+            tx_id="liquid-row",
+            external_id="liquid-row-source",
+            occurred_at="2024-04-10T00:00:00Z",
+            amount_msat=400_000_000,
+            direction="inbound",
+            asset="LBTC",
+        )
+
+        conn = open_db(self.data_root)
+        self.addCleanup(conn.close)
+        conn.execute(
+            """
+            UPDATE wallets
+            SET config_json = ?
+            WHERE label = 'Liquid Pocket'
+            """,
+            (json.dumps({"chain": "liquid", "network": "regtest"}),),
+        )
+        conn.execute(
+            """
+            UPDATE transactions
+            SET fiat_rate = 70000, fiat_value = 140, fee = 1000
+            WHERE id = 'public-spend'
+            """,
+        )
+        conn.execute(
+            """
+            UPDATE transactions
+            SET review_status = 'failed'
+            WHERE id = 'failed-import'
+            """,
+        )
+        conn.execute(
+            """
+            UPDATE transactions
+            SET fiat_rate = 71000, fiat_value = 284
+            WHERE id = 'liquid-row'
+            """,
+        )
+        conn.commit()
+
+        by_txids = build_transactions_snapshot(
+            conn,
+            {"txids": ["internal-receipt", public_txid], "limit": 10},
+        )
+        self.assertEqual(by_txids["count"], 2)
+        self.assertEqual(
+            {row["id"] for row in by_txids["txs"]},
+            {"internal-receipt", "public-spend"},
+        )
+
+        missing_price = build_transactions_snapshot(
+            conn,
+            {"quick": "missing_price", "limit": 10},
+        )
+        self.assertEqual(missing_price["count"], 2)
+        self.assertEqual(
+            {row["id"] for row in missing_price["txs"]},
+            {"internal-receipt", "failed-import"},
+        )
+
+        no_explorer = build_transactions_snapshot(
+            conn,
+            {"quick": "no_explorer_id", "limit": 10},
+        )
+        self.assertEqual(no_explorer["count"], 3)
+        self.assertNotIn("public-spend", {row["id"] for row in no_explorer["txs"]})
+
+        failed = build_transactions_snapshot(conn, {"status": "failed", "limit": 10})
+        self.assertEqual(failed["count"], 1)
+        self.assertEqual(failed["txs"][0]["id"], "failed-import")
+
+        liquid = build_transactions_snapshot(
+            conn,
+            {"payment_method": "Liquid", "network": "regtest", "limit": 10},
+        )
+        self.assertEqual(liquid["count"], 1)
+        self.assertEqual(liquid["txs"][0]["id"], "liquid-row")
+
+        with_fees = build_transactions_snapshot(
+            conn,
+            {"withFees": True, "limit": 10},
+        )
+        self.assertEqual(with_fees["count"], 1)
+        self.assertEqual(with_fees["txs"][0]["id"], "public-spend")
+
+        incoming_page = build_transactions_snapshot(
+            conn,
+            {
+                "flow": "incoming",
+                "since": "2024-01-01T00:00:00Z",
+                "until": "2024-12-31T23:59:59Z",
+                "limit": 1,
+                "sort": "occurred-at",
+                "order": "asc",
+            },
+        )
+        self.assertEqual(incoming_page["count"], 3)
+        self.assertEqual(incoming_page["txs"][0]["id"], "internal-receipt")
+        self.assertTrue(incoming_page["hasMore"])
+        next_page = build_transactions_snapshot(
+            conn,
+            {
+                "flow": "incoming",
+                "since": "2024-01-01T00:00:00Z",
+                "until": "2024-12-31T23:59:59Z",
+                "limit": 1,
+                "sort": "occurred-at",
+                "order": "asc",
+                "cursor": incoming_page["nextCursor"],
+            },
+        )
+        self.assertEqual(next_page["count"], 3)
+        self.assertEqual(next_page["txs"][0]["id"], "failed-import")
+
+        with self.assertRaises(AppError):
+            build_transactions_snapshot(
+                conn,
+                {
+                    "flow": "outgoing",
+                    "since": "2024-01-01T00:00:00Z",
+                    "until": "2024-12-31T23:59:59Z",
+                    "limit": 1,
+                    "sort": "occurred-at",
+                    "order": "asc",
+                    "cursor": incoming_page["nextCursor"],
+                },
+            )
+
     def test_report_journal_entries_is_not_truncated_to_internal_page_size(self):
         self._bootstrap_wallet(label="Ledger")
         self._insert_transaction(

@@ -174,6 +174,13 @@ type TableSortState = {
   key: TableSortKey;
   direction: TableSortDirection;
 } | null;
+export type TransactionTableFilterState = {
+  status: string;
+  flow: string;
+  paymentMethod: string;
+  fee: FeeFilter;
+  sort: TableSortState;
+};
 
 const EMPTY_TRANSACTION_ID_FILTER: string[] = [];
 
@@ -211,6 +218,7 @@ const TransactionsTable = ({
   hasMoreRecords = false,
   isLoadingMoreRecords = false,
   onLoadMoreRecords,
+  onFilterStateChange,
   deepLinkedTransactionId,
   deepLinkedTransactionTab = "details",
   isExpanded = false,
@@ -235,6 +243,7 @@ const TransactionsTable = ({
   hasMoreRecords?: boolean;
   isLoadingMoreRecords?: boolean;
   onLoadMoreRecords?: () => void;
+  onFilterStateChange?: (state: TransactionTableFilterState) => void;
   deepLinkedTransactionId?: string | null;
   deepLinkedTransactionTab?: string;
   isExpanded?: boolean;
@@ -736,6 +745,23 @@ const TransactionsTable = ({
     setPaymentMethodFilter("all");
     setFeeFilter("all");
   }, [resetTableFiltersToken]);
+
+  React.useEffect(() => {
+    onFilterStateChange?.({
+      status: statusFilter,
+      flow: flowFilter,
+      paymentMethod: paymentMethodFilter,
+      fee: feeFilter,
+      sort: tableSort,
+    });
+  }, [
+    feeFilter,
+    flowFilter,
+    onFilterStateChange,
+    paymentMethodFilter,
+    statusFilter,
+    tableSort,
+  ]);
 
   React.useEffect(() => {
     if (typeof window === "undefined") return;
