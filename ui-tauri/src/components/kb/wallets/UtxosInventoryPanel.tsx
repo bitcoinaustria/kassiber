@@ -28,7 +28,6 @@ import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
-  CardHeader,
   CardTitle,
 } from "@/components/ui/card";
 import {
@@ -733,28 +732,27 @@ export function UtxosInventoryPanel({
   );
 
   return (
-    <Card>
-      <CardHeader className="border-b px-4 py-2.5">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div className="min-w-0">
-            <CardTitle className="flex items-center gap-2 text-sm sm:text-base">
-              <Coins className="size-4" aria-hidden="true" />
-              {t("utxos.title")}
-              <CountBadge>
-                {serverTruncated
-                  ? t("utxos.countOf", {
-                      returned: returnedCount.toLocaleString("en-US"),
-                      total: totalCount.toLocaleString("en-US"),
-                    })
+    <Card className="gap-0 overflow-hidden py-0 shadow-none">
+      <div className="flex flex-col gap-3 border-b p-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:px-6 sm:py-3.5">
+        <div className="min-w-0">
+          <CardTitle className="flex items-center gap-2 text-sm sm:text-base">
+            <Coins className="size-4" aria-hidden="true" />
+            {t("utxos.title")}
+            <CountBadge>
+              {serverTruncated
+                ? t("utxos.countOf", {
+                    returned: returnedCount.toLocaleString("en-US"),
+                    total: totalCount.toLocaleString("en-US"),
+                  })
                 : totalCount.toLocaleString("en-US")}
-              </CountBadge>
-            </CardTitle>
-          </div>
+            </CountBadge>
+          </CardTitle>
+        </div>
           <Button
             type="button"
             variant="outline"
             size="icon-xs"
-            className="shrink-0 self-start"
+            className="shrink-0 self-start sm:self-auto"
             disabled={isRefreshing}
             aria-label={isRefreshing ? t("utxos.refreshing") : t("utxos.refresh")}
             title={isRefreshing ? t("utxos.refreshing") : t("utxos.refresh")}
@@ -765,8 +763,7 @@ export function UtxosInventoryPanel({
               aria-hidden="true"
             />
           </Button>
-        </div>
-      </CardHeader>
+      </div>
       <CardContent className="p-0">
         {isLoading ? (
           <div className="space-y-3 p-4">

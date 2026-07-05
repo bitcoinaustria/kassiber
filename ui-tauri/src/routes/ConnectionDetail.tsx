@@ -1824,9 +1824,9 @@ function ConnectionDetailView({
       ) : null}
 
       <div className="grid grid-cols-1 items-start gap-3 xl:grid-cols-[minmax(0,1.35fr)_minmax(360px,0.85fr)]">
-        <Card>
-          <CardHeader className="border-b px-4 py-2.5">
-            <div className="flex items-start justify-between gap-2">
+        <Card className="gap-0 overflow-hidden py-0 shadow-none">
+          <div className="flex flex-col gap-3 border-b p-3 sm:flex-row sm:items-center sm:gap-4 sm:px-6 sm:py-3.5">
+            <div className="flex min-w-0 flex-1 flex-wrap items-center justify-between gap-2">
               <div className="min-w-0">
                 <CardTitle className="flex items-center gap-2 text-sm sm:text-base">
                   {t("detail.recentTransactions.title")}
@@ -1852,7 +1852,7 @@ function ConnectionDetailView({
                 </Button>
               ) : null}
             </div>
-          </CardHeader>
+          </div>
           <CardContent className="p-0">
             {walletTransactionsLoading ? (
               <div className="divide-y">
@@ -1944,16 +1944,16 @@ function ConnectionDetailView({
             walletId={connection.id}
             hideSensitive={hideSensitive}
           />
-          <Card>
-            <CardHeader className="border-b px-4 pb-3">
+          <Card className="gap-0 overflow-hidden py-0 shadow-none">
+            <CardHeader className="border-b p-3 sm:px-6 sm:py-3.5 [.border-b]:pb-3 sm:[.border-b]:pb-3.5">
               <CardTitle className="text-sm sm:text-base">
                 {t("detail.connectionDetails.title")}
               </CardTitle>
-              <CardDescription>
+              <CardDescription className="text-xs">
                 {t("detail.connectionDetails.description")}
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-3 px-4 pt-4">
+            <CardContent className="space-y-3 px-3 py-3 sm:px-6">
               <DetailRow
                 label={t("detail.connectionDetails.syncMode")}
                 value={
@@ -2032,12 +2032,12 @@ function ConnectionDetailView({
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader className="border-b px-4 pb-3">
+          <Card className="gap-0 overflow-hidden py-0 shadow-none">
+            <CardHeader className="border-b p-3 sm:px-6 sm:py-3.5 [.border-b]:pb-3 sm:[.border-b]:pb-3.5">
               <CardTitle className="text-sm sm:text-base">
                 {t("detail.relatedViews.title")}
               </CardTitle>
-              <CardDescription>
+              <CardDescription className="text-xs">
                 {t("detail.relatedViews.description")}
               </CardDescription>
             </CardHeader>
