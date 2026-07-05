@@ -404,7 +404,10 @@ const TransactionsDashboard = ({
         {tableExpanded ? (
           <div
             id="transactions-expanded-table-actions"
-            className={cn(pageHeaderActionsClassName, "shrink-0")}
+            className={cn(
+              pageHeaderActionsClassName,
+              "min-w-0 flex-1 justify-end",
+            )}
           />
         ) : (
           <div className={pageHeaderActionsClassName}>
