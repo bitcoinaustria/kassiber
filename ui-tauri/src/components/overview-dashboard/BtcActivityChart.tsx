@@ -489,6 +489,10 @@ export const BtcActivityChart = ({
       showLastValue && !hideSensitive && fiatSeriesEnabled && seriesVisible.price
         ? lastTreasuryLineValue(plotData, "lineBitcoinPriceEur")
         : null;
+    const lastBasisValue =
+      showLastValue && !hideSensitive && fiatSeriesEnabled && seriesVisible.basis
+        ? lastTreasuryLineValue(plotData, "lineAvgCostEur")
+        : null;
     const handleBrushChange = (range: TreasuryBrushChange) => {
       const normalizedRange = normalizeTreasuryBrushRange(
         chartDisplayData,
@@ -1039,6 +1043,21 @@ export const BtcActivityChart = ({
                       label={renderLastValueTag({
                         text: Math.round(lastPriceValue).toLocaleString("en-US"),
                         fill: priceColor,
+                        side: "right",
+                      })}
+                    />
+                  )}
+                  {lastBasisValue !== null && (
+                    <ReferenceLine
+                      yAxisId="price"
+                      y={lastBasisValue}
+                      stroke={secondaryColor}
+                      strokeDasharray="2 4"
+                      strokeOpacity={0.45}
+                      zIndex={2100}
+                      label={renderLastValueTag({
+                        text: Math.round(lastBasisValue).toLocaleString("en-US"),
+                        fill: secondaryColor,
                         side: "right",
                       })}
                     />
