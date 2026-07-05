@@ -84,6 +84,11 @@ def _compact_money(currency: str, value: Any) -> str:
         return f"{sign}{currency} {amount / Decimal('1000000'):.1f}m"
     if amount >= Decimal("1000"):
         return f"{sign}{currency} {amount / Decimal('1000'):.1f}k"
+    if 0 < amount < Decimal("1"):
+        # Sub-unit values round to "0" under .0f, so the donut centre showed
+        # "EUR 0" for dust holdings (contradicting its own legend) and small
+        # axis ticks collapsed to duplicate labels. Keep two decimals here.
+        return f"{sign}{currency} {amount:.2f}"
     return f"{sign}{currency} {amount:.0f}"
 
 
@@ -256,9 +261,16 @@ def _series_bounds(values: Sequence[Decimal]) -> tuple[Decimal, Decimal]:
     high = max(values)
     if low == high:
         pad = abs(high) * Decimal("0.1") or Decimal("1")
-        return low - pad, high + pad
-    pad = (high - low) * Decimal("0.06")
-    return low - pad, high + pad
+        low_bound, high_bound = low - pad, high + pad
+    else:
+        pad = (high - low) * Decimal("0.06")
+        low_bound, high_bound = low - pad, high + pad
+    # Never pad a wholly non-negative series below zero: one large outlier
+    # otherwise drives the axis floor negative (e.g. "-EUR 166.6k" under a
+    # positive-only balance history), wasting the plot and implying debt.
+    if low >= 0 and low_bound < 0:
+        low_bound = Decimal("0")
+    return low_bound, high_bound
 
 
 def _tick_values(low: Decimal, high: Decimal, count: int = 5) -> list[Decimal]:
@@ -333,8 +345,13 @@ def _line_chart(rl: dict[str, Any], title: str, rows: Sequence[Mapping[str, Any]
         return drawing
 
     fiat_values = [decimal_value(row.get("market_value")) for row in rows]
+    cost_values = [decimal_value(row.get("cumulative_cost_basis")) for row in rows]
     btc_values = [decimal_value(row.get("quantity")) for row in rows]
-    fiat_low, fiat_high = _series_bounds(fiat_values)
+    # The market-value and cost-basis lines share the left axis, so bound it
+    # over BOTH. Scaling to market value alone let the cost-basis line run off
+    # the plot (and across the page) whenever cost basis exceeded market value
+    # — i.e. for any underwater or early-DCA portfolio.
+    fiat_low, fiat_high = _series_bounds(fiat_values + cost_values)
     btc_low, btc_high = _series_bounds(btc_values)
     for idx, fiat_tick in enumerate(_tick_values(fiat_low, fiat_high)):
         y = bottom + _scale(fiat_tick, fiat_low, fiat_high, plot_h)
