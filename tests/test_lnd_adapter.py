@@ -666,6 +666,19 @@ class LndTransactionImportTest(unittest.TestCase):
         self.assertEqual(pay["amount"], msat_to_btc(1_000_000))
         self.assertEqual(pay["fee"], msat_to_btc(2_000))
 
+    def test_channel_records_from_open_and_closed_channels(self) -> None:
+        open_channels = [{"channel_point": "aa" * 32 + ":0"}]
+        closed_channels = [
+            {"channel_point": "dd" * 32 + ":1", "closing_tx_hash": "bb" * 32},
+        ]
+        records = core_lnd.lnd_channel_records(open_channels, closed_channels)
+        by_tag = {}
+        for rec in records:
+            by_tag.setdefault(rec["tag"], set()).add(rec["txid"])
+        # Funding txids from both open and closed channels; closing from the close.
+        self.assertEqual(by_tag["channel_open"], {"aa" * 32, "dd" * 32})
+        self.assertEqual(by_tag["channel_close"], {"bb" * 32})
+
     def test_sync_lnd_wallet_rejects_wrong_backend_kind(self) -> None:
         from kassiber.errors import AppError
 

@@ -3604,7 +3604,7 @@ def build_ledger_state(conn, profile):
     # on-chain rows so the engine suppresses them as non-events.
     channel_records = conn.execute(
         """
-        SELECT txid, outpoint, raw_json
+        SELECT txid, tag
         FROM lightning_node_records
         WHERE profile_id = ? AND record_type = 'channel'
         """,
@@ -3612,17 +3612,12 @@ def build_ledger_state(conn, profile):
     ).fetchall()
     channel_rows = []
     for record in channel_records:
-        try:
-            extra = json.loads(record["raw_json"] or "{}")
-        except (TypeError, ValueError):
-            extra = {}
-        channel_rows.append(
-            {
-                "funding_txid": record["txid"],
-                "funding_outpoint": record["outpoint"],
-                "closing_txid": extra.get("closing_txid"),
-            }
-        )
+        if not record["txid"]:
+            continue
+        if record["tag"] == "channel_close":
+            channel_rows.append({"closing_txid": record["txid"]})
+        else:
+            channel_rows.append({"funding_txid": record["txid"]})
     channel_roles = channel_lifecycle.channel_role_map(channel_rows, rows)
     engine_state = tax_engine.build_ledger_state(
         TaxEngineLedgerInputs(

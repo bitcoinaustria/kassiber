@@ -74,6 +74,7 @@ CLN_ALLOWED_METHODS: tuple[str, ...] = (
     "listinvoices",
     "bkpr-listincome",
     "bkpr-listbalances",
+    "bkpr-listaccountevents",
 )
 
 #: Suggested restriction list for a least-privilege commando rune. Pair it
@@ -116,6 +117,9 @@ class CoreLightningSnapshot:
     income_events: tuple[Mapping[str, Any], ...]
     balance_accounts: tuple[Mapping[str, Any], ...]
     errors: Mapping[str, str]
+    # bkpr-listaccountevents rows (channel_open/channel_close carry the on-chain
+    # funding/closing txids). Defaulted so older constructions/tests still work.
+    account_events: tuple[Mapping[str, Any], ...] = ()
 
 
 # --- Helpers ---------------------------------------------------------------
@@ -494,6 +498,26 @@ def _sanitize_income_event(row: Mapping[str, Any]) -> dict[str, Any]:
     return _pick(row, _INCOME_KEEP)
 
 
+_ACCOUNT_EVENT_KEEP: tuple[str, ...] = (
+    "account",
+    "type",
+    "tag",
+    "txid",
+    "outpoint",
+    "timestamp",
+)
+
+
+def _sanitize_account_event(row: Mapping[str, Any]) -> dict[str, Any]:
+    """Curate one bkpr-listaccountevents row.
+
+    We only use ``channel_open`` / ``channel_close`` rows to harvest the
+    on-chain funding/closing txids for channel-lifecycle netting, so keep the
+    account, tag and txid and drop amounts / descriptions / blockheights.
+    """
+    return _pick(row, _ACCOUNT_EVENT_KEEP)
+
+
 def _sanitize_balance_account(row: Mapping[str, Any]) -> dict[str, Any]:
     """Curate one bkpr-listbalances account entry.
 
@@ -566,6 +590,7 @@ def fetch_core_lightning_snapshot(
     invoices_payload = _safe_call("listinvoices")
     income_payload = _safe_call("bkpr-listincome")
     balances_payload = _safe_call("bkpr-listbalances")
+    account_events_payload = _safe_call("bkpr-listaccountevents")
 
     return CoreLightningSnapshot(
         node_id=node_id,
@@ -581,6 +606,7 @@ def fetch_core_lightning_snapshot(
         invoices=_sanitize_list(invoices_payload, "invoices", _sanitize_invoice),
         income_events=_sanitize_list(income_payload, "income_events", _sanitize_income_event),
         balance_accounts=_sanitize_list(balances_payload, "accounts", _sanitize_balance_account),
+        account_events=_sanitize_list(account_events_payload, "events", _sanitize_account_event),
         errors=errors,
     )
 
@@ -1192,73 +1218,74 @@ def _balance_snapshot_records(
     return records
 
 
-def _channel_closing_txid(channel: Mapping[str, Any]) -> str | None:
-    """Best-effort closing txid for a channel (limited by listpeerchannels).
+def _channel_record(tag: str, txid: str, account: str | None) -> dict[str, Any]:
+    """A ``channel`` metadata record carrying one channel-lifecycle txid.
 
-    Coop/unilateral closing txids are not reliably present in
-    ``listpeerchannels`` — capturing them robustly needs
-    ``bkpr-listaccountevents`` / ``listclosedchannels`` (a follow-up). Until
-    then the close side of channel-lifecycle netting only fires when the node
-    happens to surface one of these fields.
+    ``tag`` is ``channel_open`` (funding) or ``channel_close`` (closing). These
+    are NOT promoted to wallet transactions (``_record_to_import`` ignores
+    them) — they let the tax engine recognize a separately-synced on-chain
+    wallet's channel funding/close txs as non-taxable intra-node moves. No
+    amount is stored; the record exists only to carry the txid.
     """
-    for key in ("closing_txid", "close_txid", "scratch_txid"):
-        value = str_or_none(channel.get(key))
-        if value:
-            return value
-    return None
+    return {
+        "record_type": "channel",
+        "external_id": _stable_hash(("channel", tag, txid)),
+        "occurred_at": UNKNOWN_OCCURRED_AT,
+        "account": account,
+        "peer_id": None,
+        "channel_id": account,
+        "direction": "",
+        "amount_msat": 0,
+        "fee_msat": 0,
+        "tag": tag,
+        "status": "",
+        "currency": "bc",
+        "payment_hash": None,
+        "txid": txid,
+        "outpoint": None,
+        "raw_json": "{}",
+    }
 
 
 def _channel_lifecycle_records(snapshot: CoreLightningSnapshot) -> list[dict[str, Any]]:
-    """Emit one ``channel`` metadata record per channel with its funding (and,
-    when known, closing) txid.
+    """Emit ``channel`` metadata records carrying channel funding/closing txids.
 
-    These are NOT promoted to wallet transactions (``_record_to_import`` ignores
-    them). They let the tax engine recognize a separately-synced on-chain
-    wallet's channel funding/close txs as non-taxable intra-node moves rather
-    than a disposal (open) or acquisition (close). No amount is stored — the
-    record exists only to carry the txids.
+    Funding txids come from open channels' ``funding_outpoint`` AND bookkeeper
+    ``channel_open`` events; closing txids come from bookkeeper ``channel_close``
+    events (``listpeerchannels`` does not retain a channel once fully closed, so
+    ``bkpr-listaccountevents`` is the reliable source for the closing tx).
     """
-    records: list[dict[str, Any]] = []
+    open_txids: dict[str, str | None] = {}
+    close_txids: dict[str, str | None] = {}
     for channel in snapshot.channels:
         outpoint = _channel_funding_outpoint(channel)
         funding_txid = outpoint.split(":", 1)[0] if outpoint else None
-        closing_txid = _channel_closing_txid(channel)
-        if not funding_txid and not closing_txid:
+        if funding_txid:
+            account = (
+                str_or_none(channel.get("channel_id"))
+                or _channel_short_id(channel)
+                or funding_txid
+            )
+            open_txids.setdefault(funding_txid, account)
+    for event in snapshot.account_events:
+        tag = (str_or_none(event.get("tag")) or "").lower()
+        outpoint = str_or_none(event.get("outpoint"))
+        txid = str_or_none(event.get("txid")) or (
+            outpoint.split(":", 1)[0] if outpoint else None
+        )
+        if not txid:
             continue
-        channel_id = (
-            str_or_none(channel.get("channel_id"))
-            or _channel_short_id(channel)
-            or funding_txid
-            or ""
-        )
-        state_raw = channel.get("state") or channel.get("status")
-        state = _coerce_channel_state(state_raw, connected=channel.get("peer_connected"))
-        opened = channel.get("opened_at")
-        records.append(
-            {
-                "record_type": "channel",
-                "external_id": _stable_hash(
-                    ("channel", funding_txid, closing_txid, channel_id)
-                ),
-                "occurred_at": (_timestamp(opened) if opened else None)
-                or UNKNOWN_OCCURRED_AT,
-                "account": channel_id,
-                "peer_id": None,
-                "channel_id": channel_id,
-                "direction": "",
-                "amount_msat": 0,
-                "fee_msat": 0,
-                "tag": "channel",
-                "status": state,
-                "currency": "bc",
-                "payment_hash": None,
-                "txid": funding_txid,
-                "outpoint": outpoint,
-                "raw_json": _json_dumps({"closing_txid": closing_txid})
-                if closing_txid
-                else "{}",
-            }
-        )
+        account = str_or_none(event.get("account")) or txid
+        if tag == "channel_open":
+            open_txids.setdefault(txid, account)
+        elif tag == "channel_close":
+            close_txids.setdefault(txid, account)
+
+    records: list[dict[str, Any]] = []
+    for txid, account in sorted(open_txids.items()):
+        records.append(_channel_record("channel_open", txid, account))
+    for txid, account in sorted(close_txids.items()):
+        records.append(_channel_record("channel_close", txid, account))
     return records
 
 

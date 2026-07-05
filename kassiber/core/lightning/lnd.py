@@ -46,7 +46,7 @@ from ...db import APP_NAME
 from ...egress_ledger import get_egress_ledger, http_request_bytes_out
 from ...errors import AppError
 from ...msat import msat_to_btc
-from ...time_utils import UNKNOWN_OCCURRED_AT, timestamp_to_iso
+from ...time_utils import UNKNOWN_OCCURRED_AT, now_iso, timestamp_to_iso
 from .. import imports as core_imports
 from ..repo import invalidate_journals
 from .registry import register_adapter
@@ -968,6 +968,89 @@ def lnd_import_records(
     return records
 
 
+def _lnd_funding_txid(row: Mapping[str, Any]) -> str | None:
+    channel_point = str(row.get("channel_point") or "")
+    if not channel_point:
+        return None
+    return channel_point.split(":", 1)[0] or None
+
+
+def _lnd_channel_record(tag: str, txid: str) -> dict[str, Any]:
+    """A ``channel`` metadata record carrying one channel-lifecycle txid.
+
+    Mirrors the Core Lightning channel record shape so the tax engine's
+    channel-lifecycle netting is adapter-agnostic. Not a wallet transaction.
+    """
+    return {
+        "record_type": "channel",
+        "external_id": f"channel:{tag}:{txid}",
+        "tag": tag,
+        "txid": txid,
+    }
+
+
+def lnd_channel_records(
+    open_channels: list[Mapping[str, Any]],
+    closed_channels: list[Mapping[str, Any]],
+) -> list[dict[str, Any]]:
+    """Build channel funding/closing records from LND open + closed channels."""
+    open_txids: dict[str, None] = {}
+    close_txids: dict[str, None] = {}
+    for row in open_channels:
+        txid = _lnd_funding_txid(row)
+        if txid:
+            open_txids.setdefault(txid, None)
+    for row in closed_channels:
+        funding = _lnd_funding_txid(row)
+        if funding:
+            open_txids.setdefault(funding, None)
+        closing = str(row.get("closing_tx_hash") or "") or None
+        if closing:
+            close_txids.setdefault(closing, None)
+    records = [_lnd_channel_record("channel_open", txid) for txid in sorted(open_txids)]
+    records += [_lnd_channel_record("channel_close", txid) for txid in sorted(close_txids)]
+    return records
+
+
+def _persist_lnd_channel_records(
+    conn: Any,
+    profile: Mapping[str, Any],
+    wallet: Mapping[str, Any],
+    backend: Mapping[str, Any],
+    records: list[Mapping[str, Any]],
+    timestamp: str,
+) -> None:
+    for record in records:
+        external_id = str(record["external_id"])
+        record_id = f"{wallet['id']}:{backend['name']}:channel:{external_id}"
+        conn.execute(
+            """
+            INSERT INTO lightning_node_records(
+                id, workspace_id, profile_id, wallet_id, backend_name, node_id,
+                record_type, external_id, occurred_at, account, peer_id, channel_id,
+                direction, amount_msat, fee_msat, tag, status, currency, payment_hash,
+                txid, outpoint, sync_id, raw_json, first_seen_at, updated_at
+            ) VALUES(?, ?, ?, ?, ?, NULL, 'channel', ?, ?, NULL, NULL, NULL,
+                     '', 0, 0, ?, '', 'bc', NULL, ?, NULL, NULL, '{}', ?, ?)
+            ON CONFLICT(profile_id, wallet_id, backend_name, record_type, external_id)
+            DO UPDATE SET txid = excluded.txid, tag = excluded.tag, updated_at = excluded.updated_at
+            """,
+            (
+                record_id,
+                profile["workspace_id"],
+                profile["id"],
+                wallet["id"],
+                backend["name"],
+                external_id,
+                UNKNOWN_OCCURRED_AT,
+                str(record["tag"]),
+                str(record["txid"]),
+                timestamp,
+                timestamp,
+            ),
+        )
+
+
 def sync_lnd_wallet(
     conn: Any,
     profile: Mapping[str, Any],
@@ -1027,6 +1110,22 @@ def sync_lnd_wallet(
         hooks,
         commit=False,
     )
+
+    # Channel funding/closing txids, so a separately synced on-chain wallet's
+    # channel opens/closes net as non-taxable intra-node moves (parity with CLN).
+    open_channels = [
+        row
+        for row in (client.get("/v1/channels").get("channels") or [])
+        if isinstance(row, dict)
+    ]
+    closed_channels = [
+        row
+        for row in (client.get("/v1/channels/closed").get("channels") or [])
+        if isinstance(row, dict)
+    ]
+    channel_records = lnd_channel_records(open_channels, closed_channels)
+    _persist_lnd_channel_records(conn, profile, wallet, backend, channel_records, now_iso())
+
     invalidate_journals(conn, profile["id"])
     if commit:
         conn.commit()
@@ -1040,6 +1139,7 @@ def sync_lnd_wallet(
             "imported": import_outcome["imported"],
             "skipped": import_outcome["skipped"],
         },
+        "channels": {"records": len(channel_records)},
     }
 
 
