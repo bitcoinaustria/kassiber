@@ -4576,6 +4576,8 @@ def cmd_init(conn, args):
         args,
         {
             "version": __version__,
+            "project_id": getattr(args, "project_id", None),
+            "project_root": getattr(args, "project_root", None),
             "state_root": str(state_root),
             "data_root": str(effective_data_root),
             "database": str(resolve_database_path(effective_data_root)),

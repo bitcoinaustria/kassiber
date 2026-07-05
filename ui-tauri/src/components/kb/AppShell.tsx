@@ -94,7 +94,7 @@ import {
 } from "@/components/ui/sidebar";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { bookIdentityKey, isDaemonDataMode, useUiStore } from "@/store/ui";
-import type { AppNotification, ThemePreference } from "@/store/ui";
+import type { AppNotification, Identity, ThemePreference } from "@/store/ui";
 import { BOOK_REFRESH_PROGRESS_ID } from "@/lib/syncProgress";
 import {
   DAEMON_AUTH_REQUIRED_EVENT,
@@ -109,6 +109,7 @@ import {
   clearImportProject,
   getTransport,
   isImportProjectActive,
+  noteActiveImportProject,
   storeTouchIdPassphrase,
   touchIdPassphraseStatus,
   unlockTouchIdPassphrase,
@@ -198,6 +199,31 @@ type ReviewBadgesSnapshot = {
   quarantine: number;
   journals_needs_processing: boolean;
   swaps: number | null;
+};
+
+type ProjectCatalogEntry = {
+  id: string;
+  name: string;
+  path: string;
+  data_root: string;
+  database: string;
+  encrypted: boolean;
+  last_opened_at?: string | null;
+  selected?: boolean;
+};
+
+type ProjectsListSnapshot = {
+  selected_project_id: string | null;
+  projects: ProjectCatalogEntry[];
+};
+
+type ProjectSelectSnapshot = {
+  project: ProjectCatalogEntry;
+  status?: {
+    current_workspace?: string | null;
+    current_profile?: string | null;
+    database_encrypted?: boolean;
+  };
 };
 
 type NavBadgeTone = "blocker" | "review";
@@ -512,6 +538,26 @@ function assistantReturnPathFor(pathname: string): AssistantReturnPath {
   return "/overview";
 }
 
+function identityFromProject(
+  project: ProjectCatalogEntry,
+  status?: ProjectSelectSnapshot["status"],
+): Identity {
+  const encrypted = Boolean(status?.database_encrypted ?? project.encrypted);
+  return {
+    name: status?.current_profile ?? project.name,
+    workspace: status?.current_workspace ?? project.name,
+    profile: status?.current_profile ?? project.name,
+    country: "Generic",
+    encrypted,
+    databaseMode: encrypted ? "sqlcipher" : "plaintext",
+    importedProject: {
+      stateRoot: project.path,
+      dataRoot: project.data_root,
+      database: project.database,
+    },
+  };
+}
+
 export function AppShell() {
   const { t } = useTranslation("chrome");
   const navigate = useNavigate();
@@ -557,8 +603,11 @@ export function AppShell() {
     requirePassphraseOnLaunch: appLockPolicy.requirePassphraseOnLaunch,
     hasSessionUnlock: hasSessionUnlockPassphrase(),
   });
+  const [daemonAuthRequired, setDaemonAuthRequired] = React.useState(false);
+  const [pendingProjectUnlock, setPendingProjectUnlock] =
+    React.useState<ProjectCatalogEntry | null>(null);
   const importedProjectRoot = identity?.importedProject?.dataRoot ?? null;
-  const touchIdDataRoot = importedProjectRoot;
+  const touchIdDataRoot = pendingProjectUnlock?.data_root ?? importedProjectRoot;
   const touchIdPlatformSupported = canUseTouchIdPassphraseUnlock();
   const [importRootReady, setImportRootReady] = React.useState(
     () => !importedProjectRoot,
@@ -566,7 +615,6 @@ export function AppShell() {
   const [importRootError, setImportRootError] = React.useState<string | null>(
     null,
   );
-  const [daemonAuthRequired, setDaemonAuthRequired] = React.useState(false);
   const [touchIdStatus, setTouchIdStatus] =
     React.useState<TouchIdPassphraseStatus | null>(null);
   const requiresDaemonUnlock = shouldUseDaemonUnlock({
@@ -695,6 +743,7 @@ export function AppShell() {
   ]);
 
   const applyLock = React.useCallback((autoPromptTouchId: boolean) => {
+    setPendingProjectUnlock(null);
     setTouchIdAutoPromptPending(autoPromptTouchId);
     if (requiresDaemonUnlock) {
       clearSessionUnlockPassphrase();
@@ -740,17 +789,51 @@ export function AppShell() {
           };
         }
         bumpDaemonSession();
-        const envelope = await getTransport("real").invoke({
-          kind: "daemon.unlock",
-          args: {
-            ...(identity?.importedProject
-              ? { require_existing_project: true }
-              : {}),
-            auth_response: { passphrase_secret: passphrase },
-          },
-        });
-        const unlocked = envelope.kind === "daemon.unlock";
+        let envelope;
+        let nextIdentity: Identity | null = null;
+        if (pendingProjectUnlock) {
+          const projectEnvelope =
+            await getTransport("real").invoke<ProjectSelectSnapshot>({
+              kind: "ui.projects.select",
+              args: {
+                project_id: pendingProjectUnlock.id,
+                require_existing_project: true,
+                auth_response: { passphrase_secret: passphrase },
+              },
+            });
+          envelope = projectEnvelope;
+          if (
+            projectEnvelope.kind === "ui.projects.select" &&
+            projectEnvelope.data?.project
+          ) {
+            nextIdentity = identityFromProject(
+              projectEnvelope.data.project,
+              projectEnvelope.data.status,
+            );
+          }
+        } else {
+          envelope = await getTransport("real").invoke({
+            kind: "daemon.unlock",
+            args: {
+              ...(identity?.importedProject
+                ? { require_existing_project: true }
+                : {}),
+              auth_response: { passphrase_secret: passphrase },
+            },
+          });
+        }
+        const unlocked = pendingProjectUnlock
+          ? envelope.kind === "ui.projects.select"
+          : envelope.kind === "daemon.unlock";
         if (unlocked) {
+          if (nextIdentity) {
+            noteActiveImportProject({
+              ...nextIdentity.importedProject,
+              encrypted: nextIdentity.encrypted,
+            });
+            setIdentity(nextIdentity);
+          }
+          setPendingProjectUnlock(null);
           await setSessionUnlockPassphrase(passphrase);
           setDaemonAuthRequired(false);
           setTouchIdAutoPromptPending(false);
@@ -824,9 +907,11 @@ export function AppShell() {
       identity?.importedProject,
       importRootBlocked,
       importRootError,
+      pendingProjectUnlock,
       queryClient,
       refreshTouchIdStatus,
       requiresDaemonUnlock,
+      setIdentity,
       setAppLockPolicy,
       t,
       touchIdDataRoot,
@@ -843,11 +928,35 @@ export function AppShell() {
       };
     }
     bumpDaemonSession();
-    const envelope = await unlockTouchIdPassphrase(touchIdDataRoot, {
-      requireExistingProject: Boolean(identity?.importedProject),
-    });
-    const unlocked = envelope.kind === "daemon.unlock";
+    const envelope = await unlockTouchIdPassphrase<ProjectSelectSnapshot>(
+      touchIdDataRoot,
+      {
+        requireExistingProject: Boolean(
+          pendingProjectUnlock ?? identity?.importedProject,
+        ),
+        projectId: pendingProjectUnlock?.id ?? null,
+      },
+    );
+    const unlocked = pendingProjectUnlock
+      ? envelope.kind === "ui.projects.select"
+      : envelope.kind === "daemon.unlock";
     if (unlocked) {
+      if (
+        pendingProjectUnlock &&
+        envelope.kind === "ui.projects.select" &&
+        envelope.data?.project
+      ) {
+        const nextIdentity = identityFromProject(
+          envelope.data.project,
+          envelope.data.status,
+        );
+        noteActiveImportProject({
+          ...nextIdentity.importedProject,
+          encrypted: nextIdentity.encrypted,
+        });
+        setIdentity(nextIdentity);
+        setPendingProjectUnlock(null);
+      }
       setDaemonAuthRequired(false);
       setTouchIdAutoPromptPending(false);
       setLocked(false);
@@ -874,11 +983,76 @@ export function AppShell() {
     identity?.importedProject,
     importRootBlocked,
     importRootError,
+    noteActiveImportProject,
+    pendingProjectUnlock,
     queryClient,
     refreshTouchIdStatus,
+    setIdentity,
     t,
     touchIdDataRoot,
   ]);
+
+  const switchProject = React.useCallback(
+    async (project: ProjectCatalogEntry) => {
+      if (!isDaemonDataMode(dataMode)) return;
+      try {
+        const envelope = await getTransport("real").invoke<ProjectSelectSnapshot>({
+          kind: "ui.projects.select",
+          args: { project_id: project.id },
+        });
+        if (envelope.kind === "ui.projects.select" && envelope.data?.project) {
+          const nextIdentity = identityFromProject(
+            envelope.data.project,
+            envelope.data.status,
+          );
+          noteActiveImportProject({
+            ...nextIdentity.importedProject,
+            encrypted: nextIdentity.encrypted,
+          });
+          setIdentity(nextIdentity);
+          setDaemonAuthRequired(false);
+          setTouchIdAutoPromptPending(false);
+          setLocked(false);
+          bumpDaemonSession();
+          clearDaemonQueryCache();
+          void queryClient.invalidateQueries({ queryKey: ["daemon"] });
+          void navigate({ to: "/overview" });
+          return;
+        }
+        if (envelope.kind === "auth_required") {
+          setPendingProjectUnlock(project);
+          setDaemonAuthRequired(true);
+          setTouchIdAutoPromptPending(false);
+          clearSessionUnlockPassphrase();
+          clearDaemonQueryCache();
+          bumpDaemonSession();
+          setLocked(true);
+          return;
+        }
+        addNotification({
+          title: t("projects.switchFailedTitle"),
+          body: formatDaemonEnvelopeError(envelope) ?? t("projects.switchFailedBody"),
+          tone: "error",
+        });
+      } catch (error) {
+        addNotification({
+          title: t("projects.switchFailedTitle"),
+          body: error instanceof Error ? error.message : t("projects.switchFailedBody"),
+          tone: "error",
+        });
+      }
+    },
+    [
+      addNotification,
+      bumpDaemonSession,
+      clearDaemonQueryCache,
+      dataMode,
+      navigate,
+      queryClient,
+      setIdentity,
+      t,
+    ],
+  );
 
   const resetLocalUiSession = React.useCallback(() => {
     clearSessionUnlockPassphrase();
@@ -1429,6 +1603,7 @@ export function AppShell() {
             <AppSidebar
               pathname={pathname}
               onLock={lockApp}
+              onProjectSelect={switchProject}
               daemonEnabled={daemonEnabled}
               aiFeaturesEnabled={aiFeaturesEnabled}
               developerToolsEnabled={developerToolsEnabled}
@@ -1596,12 +1771,14 @@ function RouteTopProgressLine({
 function AppSidebar({
   pathname,
   onLock,
+  onProjectSelect,
   daemonEnabled,
   aiFeaturesEnabled,
   developerToolsEnabled,
 }: {
   pathname: string;
   onLock: () => void;
+  onProjectSelect: (project: ProjectCatalogEntry) => void;
   daemonEnabled: boolean;
   aiFeaturesEnabled: boolean;
   developerToolsEnabled: boolean;
@@ -1683,7 +1860,11 @@ function AppSidebar({
           pathname={pathname}
           developerToolsEnabled={developerToolsEnabled}
         />
-        <NavUser onLock={onLock} daemonEnabled={daemonEnabled} />
+        <NavUser
+          onLock={onLock}
+          onProjectSelect={onProjectSelect}
+          daemonEnabled={daemonEnabled}
+        />
         <AppVersion />
       </SidebarFooter>
       <SidebarRail className="after:hidden" />
@@ -2014,9 +2195,11 @@ function NavMenuItem({
 
 function NavUser({
   onLock,
+  onProjectSelect,
   daemonEnabled,
 }: {
   onLock: () => void;
+  onProjectSelect: (project: ProjectCatalogEntry) => void;
   daemonEnabled: boolean;
 }) {
   const { t } = useTranslation("chrome");
@@ -2026,7 +2209,13 @@ function NavUser({
     undefined,
     { enabled: daemonEnabled },
   );
+  const projectsQuery = useDaemon<ProjectsListSnapshot>(
+    "ui.projects.list",
+    undefined,
+    { enabled: daemonEnabled },
+  );
   const status = data?.data?.status;
+  const projects = projectsQuery.data?.data?.projects ?? [];
   const name =
     status?.workspace ?? identity?.workspace ?? t("shell.user.fallbackWorkspace");
   const detail =
@@ -2091,6 +2280,35 @@ function NavUser({
               </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
+            {projects.length > 0 ? (
+              <>
+                <DropdownMenuLabel className="px-2 py-1.5 text-xs font-medium text-muted-foreground">
+                  {t("projects.menuLabel")}
+                </DropdownMenuLabel>
+                {projects.map((project) => {
+                  const selected =
+                    project.selected ||
+                    identity?.importedProject?.dataRoot === project.data_root;
+                  return (
+                    <DropdownMenuItem
+                      key={project.id}
+                      disabled={selected}
+                      onSelect={(event) => {
+                        event.preventDefault();
+                        onProjectSelect(project);
+                      }}
+                    >
+                      <Database className="mr-2 size-4" aria-hidden="true" />
+                      <span className="min-w-0 flex-1 truncate">{project.name}</span>
+                      {selected ? (
+                        <BadgeCheck className="ml-2 size-4 text-primary" aria-hidden="true" />
+                      ) : null}
+                    </DropdownMenuItem>
+                  );
+                })}
+                <DropdownMenuSeparator />
+              </>
+            ) : null}
             <DropdownMenuItem asChild>
               <Link to="/books">
                 <User className="mr-2 size-4" aria-hidden="true" />

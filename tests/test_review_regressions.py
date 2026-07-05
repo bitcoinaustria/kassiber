@@ -10941,7 +10941,10 @@ class ReviewRegressionTest(unittest.TestCase):
             cwd=repo_dir,
         )
         self._assert_ok(payload, result, "init")
-        expected_root = home_dir / ".kassiber"
+        app_root = home_dir / ".kassiber"
+        expected_root = app_root / "projects" / "default"
+        self.assertEqual(payload["data"]["project_id"], "default")
+        self.assertEqual(payload["data"]["project_root"], str(expected_root))
         self.assertEqual(payload["data"]["state_root"], str(expected_root))
         self.assertEqual(payload["data"]["data_root"], str(expected_root / "data"))
         self.assertEqual(payload["data"]["database"], str(expected_root / "data" / "kassiber.sqlite3"))
@@ -10952,6 +10955,7 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual(payload["data"]["env_file"], str(expected_root / "config" / "backends.env"))
         self.assertTrue((expected_root / "data" / "kassiber.sqlite3").exists())
         self.assertTrue((expected_root / "config" / "settings.json").exists())
+        self.assertTrue((app_root / "config" / "projects.json").exists())
         settings_payload = json.loads((expected_root / "config" / "settings.json").read_text(encoding="utf-8"))
         self.assertEqual(settings_payload["paths"]["state_root"], str(expected_root))
         self.assertEqual(settings_payload["paths"]["data_root"], str(expected_root / "data"))
@@ -10966,6 +10970,7 @@ class ReviewRegressionTest(unittest.TestCase):
             cwd=repo_dir,
         )
         self._assert_ok(payload, result, "status")
+        self.assertEqual(payload["data"]["project_id"], "default")
         self.assertEqual(payload["data"]["state_root"], str(expected_root))
         self.assertEqual(payload["data"]["data_root"], str(expected_root / "data"))
         self.assertEqual(payload["data"]["config_root"], str(expected_root / "config"))
