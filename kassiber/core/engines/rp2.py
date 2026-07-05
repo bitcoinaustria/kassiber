@@ -38,6 +38,7 @@ from ..tax_events import (
     normalize_tax_asset_inputs,
 )
 from ..loans import (
+    CHANNEL_OPEN,
     LOCK_SUPPRESS_ROLES as _LOAN_LOCK_SUPPRESS_ROLES,
     RELEASE_SUPPRESS_ROLES as _LOAN_RELEASE_SUPPRESS_ROLES,
 )
@@ -964,13 +965,19 @@ def _prepare_rp2_asset_input(profile, normalized_inputs: NormalizedTaxAssetInput
         if needed <= 0:
             continue
         loan_role = getattr(event, "loan_leg_role", None)
-        if loan_role in _LOAN_LOCK_SUPPRESS_ROLES:
+        channel_open_fee_only = loan_role == CHANNEL_OPEN and event.fee > 0
+        if loan_role in _LOAN_LOCK_SUPPRESS_ROLES and not channel_open_fee_only:
             # Outbound loan non-events are not disposals: posted collateral stays
             # owned and principal repayment returns borrowed coins. Skip emission
             # and leave availability untouched. If collateral is liquidated
             # instead of returned, the user removes the mark and this outbound
             # books as the disposal it is.
             continue
+        if channel_open_fee_only:
+            # Funding a Lightning channel is not a disposal, but the L1 miner fee
+            # did leave the owned BTC pool. Book only that fee; the funded
+            # channel principal remains owned and keeps its basis.
+            needed = event.fee
         disposal_kind = _normalized_event_kind(event)
         if _kind_has_token(disposal_kind, _NON_SALE_DISPOSAL_KIND_TOKENS):
             # Gift / donation / lost-or-stolen: a disposition, but not a market
@@ -1061,11 +1068,17 @@ def _prepare_rp2_asset_input(profile, normalized_inputs: NormalizedTaxAssetInput
                 asset=asset,
                 exchange=event.wallet_label,
                 holder=holder,
-                transaction_type="SELL" if event.amount > 0 else "FEE",
+                transaction_type="SELL"
+                if event.amount > 0 and not channel_open_fee_only
+                else "FEE",
                 spot_price=_rp2_decimal(event.spot_price),
-                crypto_out_no_fee=_rp2_decimal(event.amount),
+                crypto_out_no_fee=_rp2_decimal(
+                    0 if channel_open_fee_only else event.amount
+                ),
                 crypto_fee=_rp2_decimal(event.fee),
-                fiat_out_no_fee=_rp2_decimal(event.fiat_value) if event.amount > 0 else None,
+                fiat_out_no_fee=_rp2_decimal(event.fiat_value)
+                if event.amount > 0 and not channel_open_fee_only
+                else None,
                 fiat_fee=_rp2_decimal(event.fee * event.spot_price),
                 row=row_index,
                 unique_id=event.transaction_id,

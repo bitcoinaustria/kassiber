@@ -20,6 +20,7 @@ from kassiber.core.loans import CHANNEL_CLOSE, CHANNEL_OPEN
 FUNDING_TXID = "aa" * 32
 CLOSING_TXID = "bb" * 32
 ONE_BTC = 100_000_000_000  # msat
+FEE_MSAT = 100_000_000  # 0.001 BTC
 
 
 class ChannelRoleMapTest(unittest.TestCase):
@@ -72,7 +73,7 @@ def _wallet_refs():
     }
 
 
-def _row(tx_id, direction, amount_msat, occurred_at, *, external_id=None):
+def _row(tx_id, direction, amount_msat, occurred_at, *, external_id=None, fee=0):
     return {
         "id": tx_id,
         "wallet_id": "onchain",
@@ -80,7 +81,7 @@ def _row(tx_id, direction, amount_msat, occurred_at, *, external_id=None):
         "asset": "BTC",
         "direction": direction,
         "amount": amount_msat,
-        "fee": 0,
+        "fee": fee,
         "fiat_rate": 50_000,
         "fiat_value": None,
         "kind": "deposit" if direction == "inbound" else "withdrawal",
@@ -132,6 +133,28 @@ class ChannelLifecycleEngineTest(unittest.TestCase):
         tagged = _run(rows, roles)
         self.assertEqual(_btc_quantity(tagged), Decimal("1"))
         self.assertFalse(_has_disposal(tagged))
+
+    def test_channel_open_books_miner_fee_without_disposing_principal(self) -> None:
+        rows = [
+            _row("buy", "inbound", ONE_BTC + FEE_MSAT, "2025-05-01T00:00:00Z"),
+            _row(
+                "fund",
+                "outbound",
+                ONE_BTC,
+                "2025-06-01T00:00:00Z",
+                external_id=FUNDING_TXID,
+                fee=FEE_MSAT,
+            ),
+        ]
+        roles = channel_role_map([{"funding_txid": FUNDING_TXID}], rows)
+        result = _run(rows, roles)
+
+        # The channel capacity stays owned, but the L1 miner fee left the pool.
+        self.assertEqual(_btc_quantity(result), Decimal("1"))
+        self.assertFalse(_has_disposal(result))
+        fee_entries = [row for row in result.entries if row["entry_type"] == "fee"]
+        self.assertEqual(len(fee_entries), 1)
+        self.assertEqual(Decimal(str(fee_entries[0]["quantity"])), Decimal("-0.001"))
 
     def test_open_then_close_round_trip_is_net_zero(self) -> None:
         rows = [
