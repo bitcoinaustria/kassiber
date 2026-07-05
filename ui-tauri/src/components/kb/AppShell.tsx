@@ -226,6 +226,10 @@ type ProjectSelectSnapshot = {
   };
 };
 
+type ProjectIdentity = Identity & {
+  importedProject: NonNullable<Identity["importedProject"]>;
+};
+
 type NavBadgeTone = "blocker" | "review";
 
 // A resolved hint for one nav item. `count: null` renders a presence-only dot
@@ -541,7 +545,7 @@ function assistantReturnPathFor(pathname: string): AssistantReturnPath {
 function identityFromProject(
   project: ProjectCatalogEntry,
   status?: ProjectSelectSnapshot["status"],
-): Identity {
+): ProjectIdentity {
   const encrypted = Boolean(status?.database_encrypted ?? project.encrypted);
   return {
     name: status?.current_profile ?? project.name,
@@ -790,7 +794,7 @@ export function AppShell() {
         }
         bumpDaemonSession();
         let envelope;
-        let nextIdentity: Identity | null = null;
+        let nextIdentity: ProjectIdentity | null = null;
         if (pendingProjectUnlock) {
           const projectEnvelope =
             await getTransport("real").invoke<ProjectSelectSnapshot>({
