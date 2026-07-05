@@ -437,7 +437,9 @@ SUPPORTED_KINDS = (
     "ui.connections.btcpay.test",
     "ui.connections.node.snapshot",
     "ui.reports.lightning_profitability",
+    "ui.metadata.bip329.preview",
     "ui.metadata.bip329.import",
+    "ui.metadata.bip329.export",
     "ui.wallets.update",
     "ui.wallets.delete",
     "ui.wallets.sync",
@@ -7609,13 +7611,67 @@ def _import_bip329_payload(
             hint="Choose an existing local JSONL label export.",
             retryable=False,
         )
+    apply_ambiguous = _optional_bool_arg(args, "apply_ambiguous", False)
     return core_metadata.import_bip329_labels(
         conn,
         None,
         None,
         str(path.resolve()),
         _metadata_hooks(),
+        apply_ambiguous=apply_ambiguous,
+        source="gui",
     )
+
+
+def _preview_bip329_payload(
+    conn: sqlite3.Connection,
+    args: dict[str, Any],
+) -> dict[str, Any]:
+    file_path = _required_str_arg(args, "file", "BIP329 label file")
+    path = Path(file_path).expanduser()
+    if not path.exists():
+        raise AppError(
+            f"BIP329 label file not found: {file_path}",
+            code="not_found",
+            hint="Choose an existing local JSONL label export.",
+            retryable=False,
+        )
+    return core_metadata.preview_bip329_import(
+        conn,
+        None,
+        None,
+        str(path.resolve()),
+        _metadata_hooks(),
+    )
+
+
+def _export_bip329_payload(
+    ctx: DaemonContext,
+    args: dict[str, Any],
+) -> dict[str, Any]:
+    conn = _require_conn(ctx)
+    mode = (_optional_str_arg(args, "mode") or "stored").strip().lower()
+    wallet = _optional_str_arg(args, "wallet")
+    path = _managed_report_export_path(ctx.data_root, "kassiber-bip329-labels", ".jsonl")
+    payload = dict(
+        core_metadata.export_bip329_labels(
+            conn,
+            None,
+            None,
+            str(path),
+            _metadata_hooks(),
+            wallet_ref=wallet,
+            mode=mode,
+        )
+    )
+    payload.update(
+        {
+            "format": "jsonl",
+            "scope": "bip329",
+            "filename": Path(payload["file"]).name,
+        }
+    )
+    return payload
 
 
 def _handle_transaction_metadata_update(
@@ -11117,6 +11173,21 @@ def handle_request(
             False,
         )
 
+    if kind == "ui.metadata.bip329.preview":
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.metadata.bip329.preview",
+                    _preview_bip329_payload(
+                        ctx.conn,
+                        _coerce_args_dict(request_id, request.get("args")),
+                    ),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
     if kind == "ui.metadata.bip329.import":
         return (
             _with_request_id(
@@ -11124,6 +11195,21 @@ def handle_request(
                     "ui.metadata.bip329.import",
                     _import_bip329_payload(
                         ctx.conn,
+                        _coerce_args_dict(request_id, request.get("args")),
+                    ),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
+    if kind == "ui.metadata.bip329.export":
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.metadata.bip329.export",
+                    _export_bip329_payload(
+                        ctx,
                         _coerce_args_dict(request_id, request.get("args")),
                     ),
                 ),

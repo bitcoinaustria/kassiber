@@ -78,10 +78,18 @@ transaction, pricing-only, and AI-only filters.
 ## BIP329
 
 ```bash
-kassiber metadata bip329 import --wallet satoshi-liquid --file /path/to/labels.jsonl
-kassiber metadata bip329 list --wallet satoshi-liquid
-kassiber metadata bip329 export --wallet satoshi-liquid --file /path/to/export.jsonl
+kassiber metadata bip329 preview --file /path/to/labels.jsonl
+kassiber metadata bip329 import --file /path/to/labels.jsonl
+kassiber metadata bip329 list
+kassiber metadata bip329 export --mode stored --file /path/to/export.jsonl
+kassiber metadata bip329 export --mode synthesized --wallet satoshi-liquid --file /path/to/wallet-labels.jsonl
 ```
+
+Import is profile-wide and stores every valid BIP329 row. Only exact transaction
+matches become Kassiber tags by default; ambiguous rows are preserved but skipped
+unless `--apply-ambiguous` is used after reviewing the preview. Wallet-scoped
+export is conservative and emits only rows Kassiber can tie deterministically to
+that wallet.
 
 ## Attachments
 

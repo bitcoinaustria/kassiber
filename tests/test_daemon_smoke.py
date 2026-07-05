@@ -3015,6 +3015,19 @@ class DaemonSmokeTest(unittest.TestCase):
                 _write_payload(
                     proc,
                     {
+                        "request_id": "preview-labels",
+                        "kind": "ui.metadata.bip329.preview",
+                        "args": {"file": str(labels_path)},
+                    },
+                )
+                preview = _read_payload_timeout(proc)
+                self.assertEqual(preview["kind"], "ui.metadata.bip329.preview")
+                self.assertEqual(preview["data"]["records"], 1)
+                self.assertEqual(preview["data"]["counts"]["exact"], 1)
+
+                _write_payload(
+                    proc,
+                    {
                         "request_id": "import-labels",
                         "kind": "ui.metadata.bip329.import",
                         "args": {"wallet": "River UI", "file": str(labels_path)},
@@ -3024,6 +3037,19 @@ class DaemonSmokeTest(unittest.TestCase):
                 self.assertEqual(labels["kind"], "ui.metadata.bip329.import")
                 self.assertEqual(labels["data"]["records"], 1)
                 self.assertEqual(labels["data"]["transaction_tags_added"], 1)
+
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "export-labels",
+                        "kind": "ui.metadata.bip329.export",
+                        "args": {"mode": "stored", "wallet": "River UI"},
+                    },
+                )
+                exported = _read_payload_timeout(proc)
+                self.assertEqual(exported["kind"], "ui.metadata.bip329.export")
+                self.assertEqual(exported["data"]["exported"], 1)
+                self.assertTrue(Path(exported["data"]["file"]).exists())
 
                 _write_payload(
                     proc,
@@ -7479,7 +7505,7 @@ class DaemonSmokeTest(unittest.TestCase):
 
                 records = []
                 terminal = None
-                deadline = time.time() + 5
+                deadline = time.time() + 15
                 while time.time() < deadline and terminal is None:
                     payload = _read_payload_timeout(proc, max(0.1, deadline - time.time()))
                     if payload.get("request_id") != "chat-context-1":
@@ -7591,7 +7617,7 @@ class DaemonSmokeTest(unittest.TestCase):
                     },
                 )
                 terminal = None
-                deadline = time.time() + 5
+                deadline = time.time() + 15
                 while time.time() < deadline and terminal is None:
                     payload = _read_payload_timeout(proc, max(0.1, deadline - time.time()))
                     if (

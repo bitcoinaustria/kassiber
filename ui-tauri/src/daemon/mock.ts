@@ -2388,6 +2388,49 @@ export const mockDaemon: DaemonTransport = {
       };
     }
 
+    if (req.kind === "ui.metadata.bip329.preview") {
+      return {
+        kind: "ui.metadata.bip329.preview",
+        schema_version: 1,
+        request_id: req.request_id,
+        data: {
+          file: String((req.args as { file?: string } | undefined)?.file ?? ""),
+          records: 3,
+          counts: {
+            exact: 1,
+            ambiguous: 1,
+            unmatched: 1,
+            preserved: 0,
+            conflicts: 0,
+            duplicate_refs: 0,
+            duplicate_records: 0,
+            tag_additions: 1,
+            tag_unchanged: 0,
+            tag_skipped_ambiguous: 1,
+            tag_skipped_duplicate: 0,
+            tag_skipped_label_too_long: 0,
+          },
+          warnings: [],
+          apply_policy: "exact_only",
+          rows: [
+            {
+              line: 1,
+              type: "tx",
+              ref: "mock-txid",
+              ref_preview: "mock-txid",
+              ref_redacted: false,
+              label: "merchant",
+              match_status: "exact",
+              wallets: ["Treasury"],
+              conflicts: [],
+              duplicate: false,
+              tag_effects: [{ action: "add" }],
+            },
+          ],
+        } as T,
+      };
+    }
+
     if (req.kind === "ui.metadata.bip329.import") {
       return {
         kind: "ui.metadata.bip329.import",
@@ -2398,6 +2441,42 @@ export const mockDaemon: DaemonTransport = {
           imported: 1,
           updated: 0,
           transaction_tags_added: 1,
+          preview: {
+            counts: {
+              exact: 1,
+              ambiguous: 0,
+              unmatched: 0,
+              preserved: 0,
+              conflicts: 0,
+              duplicate_refs: 0,
+              duplicate_records: 0,
+              tag_additions: 1,
+              tag_unchanged: 0,
+              tag_skipped_ambiguous: 0,
+              tag_skipped_duplicate: 0,
+              tag_skipped_label_too_long: 0,
+            },
+            apply_policy: "exact_only",
+          },
+        } as T,
+      };
+    }
+
+    if (req.kind === "ui.metadata.bip329.export") {
+      return {
+        kind: "ui.metadata.bip329.export",
+        schema_version: 1,
+        request_id: req.request_id,
+        data: {
+          file: "/mock/exports/kassiber-bip329-labels.jsonl",
+          filename: "kassiber-bip329-labels.jsonl",
+          exported: 3,
+          exported_stored: 2,
+          exported_synthesized: 1,
+          mode: String((req.args as { mode?: string } | undefined)?.mode ?? "stored"),
+          wallet: String((req.args as { wallet?: string } | undefined)?.wallet ?? ""),
+          format: "jsonl",
+          scope: "bip329",
         } as T,
       };
     }
