@@ -14,8 +14,8 @@ from typing import Any
 from urllib import error, parse, request
 
 
-DEFAULT_USER = "merchant.regtest@example.invalid"
-DEFAULT_PASSWORD = "kassiber-regtest-merchant"
+DEFAULT_USER = "regtest@regtest.local"
+DEFAULT_PASSWORD = "regtest"
 DEFAULT_STORE_NAME = "Kassiber Regtest Store"
 DEFAULT_BACKEND_NAME = "btcpay-regtest"
 DEFAULT_WALLET_LABEL = "BTCPay Regtest Store"
@@ -250,6 +250,9 @@ def _ensure_user(base_url: str, user: str, password: str) -> None:
             body={"email": user, "password": password, "isAdministrator": True},
         )
     except HttpFailure as exc:
+        if exc.status == 401:
+            _json_request(base_url, "GET", "/api/v1/users/me", basic=(user, password))
+            return
         if exc.status in {400, 409, 422}:
             return
         raise
@@ -326,9 +329,38 @@ def _ensure_wallet(
             )
             break
         except HttpFailure as exc:
+            try:
+                error_payload = json.loads(exc.body)
+            except json.JSONDecodeError:
+                error_payload = None
+            if (
+                exc.status == 400
+                and isinstance(error_payload, dict)
+                and error_payload.get("code") == "already-configured"
+            ):
+                return False
             if exc.status != 503 or time.monotonic() >= deadline:
                 raise
             time.sleep(3)
+    return True
+
+
+def _ensure_lightning(
+    base_url: str,
+    user: str,
+    password: str,
+    store_id: str,
+    connection_string: str | None,
+) -> bool:
+    if not connection_string:
+        return False
+    _json_request(
+        base_url,
+        "PUT",
+        f"/api/v1/stores/{store_id}/payment-methods/BTC-LN",
+        body={"enabled": True, "config": connection_string},
+        basic=(user, password),
+    )
     return True
 
 
@@ -1080,6 +1112,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--kassiber-data-root")
     parser.add_argument("--backend-name", default=DEFAULT_BACKEND_NAME)
     parser.add_argument("--wallet-label", default=DEFAULT_WALLET_LABEL)
+    parser.add_argument(
+        "--lightning-connection-string",
+        default=os.environ.get("KASSIBER_REGTEST_BTCPAY_LIGHTNING_CONNECTION_STRING"),
+    )
     parser.add_argument("--exercise-invoice", action="store_true")
     parser.add_argument("--invoice-order-id", default=DEFAULT_ORDER_ID)
     parser.add_argument("--invoice-amount", default="0.00021000")
@@ -1100,6 +1136,13 @@ def main(argv: list[str] | None = None) -> int:
         args.password,
         store_id,
         args.payment_method_id,
+    )
+    lightning_configured = _ensure_lightning(
+        args.base_url,
+        args.user,
+        args.password,
+        store_id,
+        args.lightning_connection_string,
     )
     api_key = _create_api_key(args.base_url, args.user, args.password, store_id)
     if args.kassiber_data_root:
@@ -1161,11 +1204,14 @@ def main(argv: list[str] | None = None) -> int:
     payload = {
         "base_url": args.base_url,
         "user": args.user,
+        "password": args.password,
         "store_id": store_id,
         "store_name": args.store_name,
         "payment_method_id": args.payment_method_id,
         "api_key": api_key,
         "generated_wallet": generated_wallet,
+        "lightning_configured": lightning_configured,
+        "lightning_connection_string": args.lightning_connection_string if lightning_configured else None,
         "backend": args.backend_name if args.kassiber_data_root else None,
         "wallet": args.wallet_label if args.kassiber_data_root else None,
         "invoice": invoice_results[0] if invoice_results else None,

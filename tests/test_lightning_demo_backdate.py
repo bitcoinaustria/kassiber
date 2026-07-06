@@ -10,12 +10,14 @@ import json
 import sqlite3
 import tempfile
 import unittest
+import json
 from datetime import datetime, timezone
 from pathlib import Path
 
 from kassiber.db import open_db
 from tests.integration.lightning_demo_backdate import (
     _rebucket_forward_day_records,
+    _stabilize_wallet_liquidity_dates,
     assign_historical_dates,
     backdate_ln_records,
 )
@@ -78,6 +80,39 @@ class AssignHistoricalDatesTests(unittest.TestCase):
             assign_historical_dates(["a"], WINDOW_END, WINDOW_START, seed=0)
         with self.assertRaises(ValueError):
             assign_historical_dates(["a"], WINDOW_START, WINDOW_START, seed=0)
+
+    def test_stabilizes_outbound_after_wallet_inbound_lot(self) -> None:
+        date_map = {
+            "pay-hash": "2019-04-19T11:18:00Z",
+            "income-hash": "2019-10-19T16:40:00Z",
+        }
+        adjusted = _stabilize_wallet_liquidity_dates(
+            [
+                {
+                    "id": "pay",
+                    "wallet_id": "merchant",
+                    "asset": "BTC",
+                    "direction": "outbound",
+                    "amount": 50_000_000,
+                    "fee": 0,
+                    "payment_hash": "pay-hash",
+                },
+                {
+                    "id": "income",
+                    "wallet_id": "merchant",
+                    "asset": "BTC",
+                    "direction": "inbound",
+                    "amount": 50_000_000,
+                    "fee": 0,
+                    "payment_hash": "income-hash",
+                },
+            ],
+            date_map,
+            WINDOW_END,
+        )
+
+        self.assertEqual(adjusted, 1)
+        self.assertGreater(_parse(date_map["pay-hash"]), _parse(date_map["income-hash"]))
 
 
 _FORWARD_DAY_DDL = """
@@ -147,13 +182,16 @@ class RebucketForwardDayTests(unittest.TestCase):
         self.assertEqual(inserted, 1)
 
         rows = conn.execute(
-            "SELECT occurred_at, amount_msat, fee_msat, channel_id FROM lightning_node_records"
+            "SELECT occurred_at, amount_msat, fee_msat, channel_id, raw_json, first_seen_at, updated_at FROM lightning_node_records"
         ).fetchall()
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]["occurred_at"], "2021-03-04T00:00:00Z")
         self.assertEqual(rows[0]["amount_msat"], 30_000)
         self.assertEqual(rows[0]["fee_msat"], 12)
         self.assertEqual(rows[0]["channel_id"], "chan-1")
+        self.assertEqual(json.loads(rows[0]["raw_json"])["forward_count"], 2)
+        self.assertEqual(rows[0]["first_seen_at"], "2026-06-30T00:00:00Z")
+        self.assertEqual(rows[0]["updated_at"], "2026-06-30T00:00:00Z")
 
     def test_distinct_days_stay_separate(self) -> None:
         conn = self._conn()

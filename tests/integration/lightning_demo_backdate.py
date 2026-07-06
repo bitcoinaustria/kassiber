@@ -109,6 +109,92 @@ def assign_historical_dates(
     return result
 
 
+def _transaction_date_key(row: Mapping[str, Any]) -> str:
+    try:
+        payment_hash = row["payment_hash"]
+    except (KeyError, IndexError):
+        payment_hash = None
+    if payment_hash:
+        return str(payment_hash)
+    return f"tx:{row['id']}"
+
+
+def _stabilize_wallet_liquidity_dates(
+    tx_rows: Sequence[Mapping[str, Any]],
+    date_map: dict[str, str],
+    window_end: str | datetime,
+) -> int:
+    """Move demo-only outgoing Lightning rows after enough wallet inflow exists.
+
+    The base spread is intentionally hash-deterministic, but tax lots are
+    wallet-scoped and chronological. If an outgoing payment is placed before the
+    corresponding wallet has enough inbound Lightning lots, reports quarantine
+    the row as ``insufficient_lots``. This correction only moves rows forward
+    and keeps all rows sharing a payment hash on the same corrected timestamp.
+    """
+
+    end = _parse_iso(window_end)
+    groups: dict[tuple[str, str], list[Mapping[str, Any]]] = {}
+    for row in tx_rows:
+        key = _transaction_date_key(row)
+        if key not in date_map:
+            continue
+        groups.setdefault((str(row["wallet_id"]), str(row["asset"])), []).append(row)
+
+    changed_count = 0
+    # Moving a shared payment-hash key can affect the counterparty wallet's
+    # ordering. A few fixed passes are enough for the small demo graph, and the
+    # monotonic "move forward only" rule guarantees convergence.
+    for _ in range(max(1, min(12, len(tx_rows) + 1))):
+        changed = False
+        for rows in groups.values():
+            balance = 0
+            pending: list[Mapping[str, Any]] = []
+            ordered = sorted(
+                rows,
+                key=lambda row: (
+                    _parse_iso(date_map[_transaction_date_key(row)]),
+                    _transaction_date_key(row),
+                    str(row["id"]),
+                ),
+            )
+            for row in ordered:
+                direction = str(row["direction"] or "").lower()
+                amount = int(row["amount"] or 0)
+                fee = int(row["fee"] or 0)
+                if direction == "inbound":
+                    balance += amount
+                    release_base = _parse_iso(date_map[_transaction_date_key(row)])
+                    offset = 1
+                    remaining: list[Mapping[str, Any]] = []
+                    for pending_row in pending:
+                        required = int(pending_row["amount"] or 0) + int(
+                            pending_row["fee"] or 0
+                        )
+                        if balance < required:
+                            remaining.append(pending_row)
+                            continue
+                        balance -= required
+                        pending_key = _transaction_date_key(pending_row)
+                        current = _parse_iso(date_map[pending_key])
+                        target = min(end, release_base + timedelta(minutes=offset))
+                        offset += 1
+                        if target > current:
+                            date_map[pending_key] = _to_iso(target)
+                            changed = True
+                            changed_count += 1
+                    pending = remaining
+                elif direction == "outbound":
+                    required = amount + fee
+                    if balance >= required:
+                        balance -= required
+                    else:
+                        pending.append(row)
+        if not changed:
+            break
+    return changed_count
+
+
 def _resolve_profile_ids(
     conn: Any,
     workspace_label: str | None,
@@ -202,7 +288,11 @@ def _rebucket_forward_day_records(
         )
         bucket["amount_msat"] += int(row["amount_msat"] or 0)
         bucket["fee_msat"] += int(row["fee_msat"] or 0)
-        bucket["forward_count"] += int(json.loads(row["raw_json"] or "{}").get("forward_count") or 0) or 1
+        try:
+            raw = json.loads(row["raw_json"] or "{}")
+        except (TypeError, json.JSONDecodeError):
+            raw = {}
+        bucket["forward_count"] += int(raw.get("forward_count") or 0) or 1
 
     conn.execute(
         f"DELETE FROM lightning_node_records WHERE record_type = 'forward_day'{clause}",
@@ -215,7 +305,10 @@ def _rebucket_forward_day_records(
         day = bucket["day"]
         channel_id = bucket["channel_id"]
         external_id = _stable_hash(("fw_day", day, channel_id))
-        raw = json.loads(bucket["raw_json"] or "{}")
+        try:
+            raw = json.loads(bucket["raw_json"] or "{}")
+        except (TypeError, json.JSONDecodeError):
+            raw = {}
         raw["forward_count"] = bucket["forward_count"]
         conn.execute(
             """
@@ -243,9 +336,9 @@ def _rebucket_forward_day_records(
                 bucket["fee_msat"],
                 bucket["currency"],
                 bucket["sync_id"],
+                json.dumps(raw, separators=(",", ":"), sort_keys=True),
                 bucket["first_seen_at"],
                 bucket["updated_at"],
-                json.dumps(raw, separators=(",", ":"), sort_keys=True),
             ),
         )
         inserted += 1
@@ -283,7 +376,7 @@ def backdate_ln_records(
 
         tx_rows = conn.execute(
             f"""
-            SELECT id, payment_hash
+            SELECT id, wallet_id, asset, direction, amount, fee, payment_hash
             FROM transactions
             WHERE kind IN ({kind_placeholders}){tx_clause}
             """,
@@ -326,6 +419,11 @@ def backdate_ln_records(
             window_start,
             window_end,
             seed=seed,
+        )
+        liquidity_adjustments = _stabilize_wallet_liquidity_dates(
+            tx_rows,
+            date_map,
+            window_end,
         )
 
         updated_tx = 0
@@ -372,6 +470,7 @@ def backdate_ln_records(
         "transactions_backdated": updated_tx,
         "node_records_backdated": updated_rec,
         "forward_day_rows": rebucketed,
+        "liquidity_adjustments": liquidity_adjustments,
         "seed": seed,
     }
 

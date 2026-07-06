@@ -1,0 +1,67 @@
+services:
+  mempool-db:
+    image: ${KASSIBER_REGTEST_MEMPOOL_DB_IMAGE:-mariadb:10.5.21}
+    environment:
+      MYSQL_DATABASE: mempool
+      MYSQL_USER: mempool
+      MYSQL_PASSWORD: mempool
+      MYSQL_ROOT_PASSWORD: admin
+      MARIADB_AUTO_UPGRADE: "1"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "mempool", "-pmempool"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    volumes:
+      - mempool-db-regtest:/var/lib/mysql
+
+  mempool-api:
+    image: ${KASSIBER_REGTEST_MEMPOOL_BACKEND_IMAGE:-mempool/backend:latest}
+    depends_on:
+      bitcoind:
+        condition: service_started
+      fulcrum:
+        condition: service_started
+      mempool-db:
+        condition: service_healthy
+    environment:
+      MEMPOOL_NETWORK: regtest
+      MEMPOOL_BACKEND: electrum
+      MEMPOOL_HTTP_PORT: "8999"
+      CORE_RPC_HOST: bitcoind
+      CORE_RPC_PORT: "18443"
+      CORE_RPC_USERNAME: ${KASSIBER_REGTEST_RPC_USER}
+      CORE_RPC_PASSWORD: ${KASSIBER_REGTEST_RPC_PASSWORD}
+      ELECTRUM_HOST: fulcrum
+      ELECTRUM_PORT: "50001"
+      ELECTRUM_TLS_ENABLED: "false"
+      DATABASE_ENABLED: "true"
+      DATABASE_HOST: mempool-db
+      DATABASE_DATABASE: mempool
+      DATABASE_USERNAME: mempool
+      DATABASE_PASSWORD: mempool
+      MEMPOOL_CACHE_DIR: /tmp/mempool-cache
+      STATISTICS_ENABLED: "true"
+      MEMPOOL_BLOCKS_SUMMARIES_INDEXING: "false"
+      MEMPOOL_GOGGLES_INDEXING: "false"
+      MEMPOOL_AUTOMATIC_POOLS_UPDATE: "false"
+      MEMPOOL_PRICE_UPDATES_PER_HOUR: "0"
+    command: "sh -c 'mkdir -p /tmp/mempool-cache && ./wait-for-it.sh mempool-db:3306 --timeout=720 --strict -- ./start.sh'"
+
+  mempool-web:
+    image: ${KASSIBER_REGTEST_MEMPOOL_FRONTEND_IMAGE:-mempool/frontend:latest}
+    depends_on:
+      mempool-api:
+        condition: service_started
+      mempool-db:
+        condition: service_healthy
+    environment:
+      FRONTEND_HTTP_PORT: "8080"
+      BACKEND_MAINNET_HTTP_HOST: mempool-api
+      BACKEND_MAINNET_HTTP_PORT: "8999"
+    command: "./wait-for mempool-db:3306 --timeout=720 -- nginx -g 'daemon off;'"
+    ports:
+      - "127.0.0.1:${KASSIBER_REGTEST_MEMPOOL_UI_PORT:-18551}:8080"
+
+volumes:
+  mempool-db-regtest:

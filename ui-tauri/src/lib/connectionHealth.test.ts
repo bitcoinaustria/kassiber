@@ -138,7 +138,7 @@ describe("connection health model", () => {
         kind: "btcpay",
         net: "BTC",
       }),
-    ).toBe("unsupported");
+    ).toBe("btcpay");
     expect(
       connectionProbeKind({
         id: "unknown",

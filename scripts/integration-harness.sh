@@ -11,7 +11,7 @@ STARTED_COMPOSE=0
 STARTED_BOLTZ=0
 BOLTZ_COMPOSE_FILE=""
 BOLTZ_COMPOSE_TEMP=""
-SUDO_DOCKER_ENV=COMPOSE_PROFILES,KASSIBER_REGTEST_COMPOSE_PROFILES,KASSIBER_REGTEST_RPC_USER,KASSIBER_REGTEST_RPC_PASSWORD,KASSIBER_REGTEST_RPC_AUTH,KASSIBER_REGTEST_RPC_PORT,KASSIBER_REGTEST_ELEMENTS_RPC_PORT,KASSIBER_REGTEST_BITCOIND_IMAGE,KASSIBER_REGTEST_ELEMENTSD_IMAGE,KASSIBER_REGTEST_FULCRUM_IMAGE,KASSIBER_REGTEST_FRIGATE_IMAGE,KASSIBER_REGTEST_FRIGATE_VERSION,KASSIBER_REGTEST_FRIGATE_TARBALL_SHA256,KASSIBER_REGTEST_BACKEND_STACK_IMAGE,KASSIBER_REGTEST_BITCOIN_ELECTRUM_PORT,KASSIBER_REGTEST_BITCOIN_MEMPOOL_PORT,KASSIBER_REGTEST_LIQUID_ELECTRUM_PORT,KASSIBER_REGTEST_LIQUID_MEMPOOL_PORT,KASSIBER_REGTEST_FRIGATE_PORT,KASSIBER_REGTEST_BTCPAY_PORT,KASSIBER_REGTEST_BTCPAY_NBXPLORER_PORT,KASSIBER_REGTEST_BTCPAY_IMAGE,KASSIBER_REGTEST_BTCPAY_NBXPLORER_IMAGE,KASSIBER_REGTEST_BTCPAY_POSTGRES_IMAGE,KASSIBER_REGTEST_CLN_IMAGE,KASSIBER_REGTEST_CLN_MERCHANT_PORT,KASSIBER_REGTEST_CLN_CUSTOMER_PORT,KASSIBER_REGTEST_CLN_SUPPLIER_PORT,KASSIBER_REGTEST_CLN_ROUTER_PORT,KASSIBER_REGTEST_LND_IMAGE,KASSIBER_REGTEST_LND_BACKUP_P2P_PORT,KASSIBER_REGTEST_LND_BACKUP_REST_PORT,KASSIBER_REGTEST_LND_BACKUP_RPC_PORT
+SUDO_DOCKER_ENV=COMPOSE_PROFILES,KASSIBER_REGTEST_COMPOSE_PROFILES,KASSIBER_REGTEST_RPC_USER,KASSIBER_REGTEST_RPC_PASSWORD,KASSIBER_REGTEST_RPC_AUTH,KASSIBER_REGTEST_RPC_PORT,KASSIBER_REGTEST_ELEMENTS_RPC_PORT,KASSIBER_REGTEST_BITCOIND_IMAGE,KASSIBER_REGTEST_ELEMENTSD_IMAGE,KASSIBER_REGTEST_FULCRUM_IMAGE,KASSIBER_REGTEST_FRIGATE_IMAGE,KASSIBER_REGTEST_FRIGATE_VERSION,KASSIBER_REGTEST_FRIGATE_TARBALL_SHA256,KASSIBER_REGTEST_BACKEND_STACK_IMAGE,KASSIBER_REGTEST_BITCOIN_ELECTRUM_PORT,KASSIBER_REGTEST_BITCOIN_MEMPOOL_PORT,KASSIBER_REGTEST_LIQUID_ELECTRUM_PORT,KASSIBER_REGTEST_LIQUID_MEMPOOL_PORT,KASSIBER_REGTEST_FRIGATE_PORT,KASSIBER_REGTEST_BTCPAY_PORT,KASSIBER_REGTEST_BTCPAY_NBXPLORER_PORT,KASSIBER_REGTEST_BTCPAY_IMAGE,KASSIBER_REGTEST_BTCPAY_NBXPLORER_IMAGE,KASSIBER_REGTEST_BTCPAY_POSTGRES_IMAGE,KASSIBER_REGTEST_MEMPOOL_UI_PORT,KASSIBER_REGTEST_MEMPOOL_FRONTEND_IMAGE,KASSIBER_REGTEST_MEMPOOL_BACKEND_IMAGE,KASSIBER_REGTEST_MEMPOOL_DB_IMAGE,KASSIBER_REGTEST_CLN_IMAGE,KASSIBER_REGTEST_CLN_MERCHANT_PORT,KASSIBER_REGTEST_CLN_CUSTOMER_PORT,KASSIBER_REGTEST_CLN_SUPPLIER_PORT,KASSIBER_REGTEST_CLN_ROUTER_PORT,KASSIBER_REGTEST_LND_IMAGE,KASSIBER_REGTEST_LND_BACKUP_P2P_PORT,KASSIBER_REGTEST_LND_BACKUP_REST_PORT,KASSIBER_REGTEST_LND_BACKUP_RPC_PORT
 SUDO_DOCKER=(sudo -n --preserve-env="$SUDO_DOCKER_ENV" docker)
 
 export PYTHONHASHSEED="${PYTHONHASHSEED:-0}"
@@ -111,6 +111,10 @@ docker_compose() {
       KASSIBER_REGTEST_BTCPAY_IMAGE="${KASSIBER_REGTEST_BTCPAY_IMAGE:-}" \
       KASSIBER_REGTEST_BTCPAY_NBXPLORER_IMAGE="${KASSIBER_REGTEST_BTCPAY_NBXPLORER_IMAGE:-}" \
       KASSIBER_REGTEST_BTCPAY_POSTGRES_IMAGE="${KASSIBER_REGTEST_BTCPAY_POSTGRES_IMAGE:-}" \
+      KASSIBER_REGTEST_MEMPOOL_UI_PORT="${KASSIBER_REGTEST_MEMPOOL_UI_PORT:-}" \
+      KASSIBER_REGTEST_MEMPOOL_FRONTEND_IMAGE="${KASSIBER_REGTEST_MEMPOOL_FRONTEND_IMAGE:-}" \
+      KASSIBER_REGTEST_MEMPOOL_BACKEND_IMAGE="${KASSIBER_REGTEST_MEMPOOL_BACKEND_IMAGE:-}" \
+      KASSIBER_REGTEST_MEMPOOL_DB_IMAGE="${KASSIBER_REGTEST_MEMPOOL_DB_IMAGE:-}" \
       KASSIBER_REGTEST_CLN_IMAGE="${KASSIBER_REGTEST_CLN_IMAGE:-}" \
       KASSIBER_REGTEST_CLN_MERCHANT_PORT="${KASSIBER_REGTEST_CLN_MERCHANT_PORT:-}" \
       KASSIBER_REGTEST_CLN_CUSTOMER_PORT="${KASSIBER_REGTEST_CLN_CUSTOMER_PORT:-}" \
@@ -146,10 +150,17 @@ configure_btcpay_ports() {
   export KASSIBER_REGTEST_BTCPAY_NBXPLORER_PORT="${KASSIBER_REGTEST_BTCPAY_NBXPLORER_PORT:-$((KASSIBER_REGTEST_RPC_PORT + 107))}"
 }
 
+configure_mempool_ui_ports() {
+  export KASSIBER_REGTEST_MEMPOOL_UI_PORT="${KASSIBER_REGTEST_MEMPOOL_UI_PORT:-$((KASSIBER_REGTEST_RPC_PORT + 108))}"
+}
+
 docker_compose_regtest() {
   local files=(-f dev/regtest/compose.bitcoin.yml)
   if [ -n "${KASSIBER_REGTEST_USE_BTCPAY_COMPOSE:-}" ]; then
     files+=(-f dev/regtest/compose.btcpay.yml)
+  fi
+  if [ -n "${KASSIBER_REGTEST_USE_MEMPOOL_UI_COMPOSE:-}" ]; then
+    files+=(-f dev/regtest/compose.mempool.yml)
   fi
   if [ -n "${KASSIBER_REGTEST_USE_LIGHTNING_COMPOSE:-}" ]; then
     files+=(-f dev/regtest/compose.lightning.yml)
@@ -284,6 +295,9 @@ run_with_bitcoin_core() {
   export KASSIBER_REGTEST_COMPOSE_PROJECT="${KASSIBER_REGTEST_COMPOSE_PROJECT:-$(py -c 'import hashlib, os; print("kassiber-regtest-" + hashlib.sha256(os.getcwd().encode()).hexdigest()[:12])')}"
   if [ -n "${KASSIBER_REGTEST_USE_BTCPAY_COMPOSE:-}" ]; then
     configure_btcpay_ports
+  fi
+  if [ -n "${KASSIBER_REGTEST_USE_MEMPOOL_UI_COMPOSE:-}" ]; then
+    configure_mempool_ui_ports
   fi
   if [ -n "${KASSIBER_REGTEST_USE_LIGHTNING_COMPOSE:-}" ]; then
     configure_lightning_ports
@@ -562,6 +576,19 @@ demo_scenario_checksum() {
   py -c 'import hashlib, sys; print(hashlib.sha256(open(sys.argv[1], "rb").read()).hexdigest())' "$DEMO_SCENARIO"
 }
 
+demo_scenario_base_epoch() {
+  py - "$DEMO_SCENARIO" <<'PY'
+import datetime
+import json
+import sys
+
+with open(sys.argv[1], "r", encoding="utf-8") as handle:
+    scenario = json.load(handle)
+base_time = str(scenario["base_time"]).replace("Z", "+00:00")
+print(int(datetime.datetime.fromisoformat(base_time).timestamp()))
+PY
+}
+
 demo_book_needs_rebuild() {
   local checksum
   local current_checksum
@@ -623,6 +650,30 @@ demo_configure_btcpay() {
   fi
 }
 
+demo_mempool_ui_enabled() {
+  case "${KASSIBER_REGTEST_DEMO_MEMPOOL_UI:-1}" in
+    0|false|FALSE|False|no|NO|No|off|OFF|Off)
+      return 1
+      ;;
+    *)
+      return 0
+      ;;
+  esac
+}
+
+demo_configure_mempool_ui() {
+  if demo_mempool_ui_enabled; then
+    export KASSIBER_REGTEST_USE_MEMPOOL_UI_COMPOSE=1
+    export KASSIBER_REGTEST_DEMO_MEMPOOL_UI_ENABLED=1
+    if [ -n "${KASSIBER_REGTEST_RPC_PORT:-}" ]; then
+      configure_mempool_ui_ports
+    fi
+  else
+    unset KASSIBER_REGTEST_USE_MEMPOOL_UI_COMPOSE
+    export KASSIBER_REGTEST_DEMO_MEMPOOL_UI_ENABLED=0
+  fi
+}
+
 demo_write_manifest() {
   local checksum="$1"
   KASSIBER_DEMO_MANIFEST="$DEMO_MANIFEST" \
@@ -652,6 +703,7 @@ manifest = {
     "bitcoin_mempool_url": f"http://127.0.0.1:{os.environ['KASSIBER_REGTEST_BITCOIN_MEMPOOL_PORT']}/api",
     "liquid_electrum_url": f"tcp://127.0.0.1:{os.environ['KASSIBER_REGTEST_LIQUID_ELECTRUM_PORT']}",
     "liquid_mempool_url": f"http://127.0.0.1:{os.environ['KASSIBER_REGTEST_LIQUID_MEMPOOL_PORT']}/api",
+    "mempool_ui_enabled": os.environ.get("KASSIBER_REGTEST_DEMO_MEMPOOL_UI_ENABLED") == "1",
     "lightning_enabled": os.environ.get("KASSIBER_REGTEST_DEMO_LIGHTNING_ENABLED") == "1",
     "btcpay_enabled": os.environ.get("KASSIBER_REGTEST_DEMO_BTCPAY_ENABLED") == "1",
     "compose_project": os.environ.get("KASSIBER_REGTEST_COMPOSE_PROJECT", ""),
@@ -675,6 +727,8 @@ if manifest["lightning_enabled"]:
             "lightning_backup_backend": "lnd-merchant-backup",
         }
     )
+if manifest["mempool_ui_enabled"]:
+    manifest["bitcoin_mempool_ui_url"] = f"http://127.0.0.1:{os.environ['KASSIBER_REGTEST_MEMPOOL_UI_PORT']}"
 if manifest["btcpay_enabled"]:
     btcpay_seed_path = os.path.join(home, "btcpay-seed.json")
     manifest.update(
@@ -693,6 +747,9 @@ if manifest["btcpay_enabled"]:
             manifest["btcpay_store_id"] = seed.get("store_id")
             manifest["btcpay_payment_method_id"] = seed.get("payment_method_id")
             manifest["btcpay_user"] = seed.get("user")
+            manifest["btcpay_password"] = seed.get("password")
+            manifest["btcpay_lightning_configured"] = bool(seed.get("lightning_configured"))
+            manifest["btcpay_lightning_connection_string"] = seed.get("lightning_connection_string")
             manifest["btcpay_api_key"] = seed.get("api_key")
         except Exception:
             pass
@@ -898,10 +955,17 @@ demo_seed_btcpay() {
     return 0
   fi
   local seed_path="$DEMO_HOME/btcpay-seed.json"
+  local lightning_args=()
+  if demo_lightning_enabled; then
+    lightning_args=(
+      --lightning-connection-string "type=clightning;server=/cln-merchant/regtest/lightning-rpc"
+    )
+  fi
   echo "Seeding BTCPay regtest store..."
   py -m dev.regtest.btcpay_seed \
     --base-url "http://127.0.0.1:$KASSIBER_REGTEST_BTCPAY_PORT" \
     --kassiber-data-root "$DEMO_HOME/data" \
+    "${lightning_args[@]}" \
     --json-output "$seed_path" >/dev/null
 }
 
@@ -915,8 +979,8 @@ demo_build_book() {
     && [ -d "$DEMO_HOME/data" ] \
     && [ "$current_checksum" = "$checksum" ]; then
     demo_refresh_live_rate
-    demo_seed_lightning
     demo_seed_btcpay
+    demo_seed_lightning
     demo_write_manifest "$checksum"
     echo "Reusing existing demo book (scenario unchanged): $DEMO_HOME/data"
     return 0
@@ -941,8 +1005,8 @@ demo_build_book() {
     --json-output "$DEMO_HOME/demo-summary.json" >/dev/null
 
   demo_refresh_live_rate
-  demo_seed_lightning
   demo_seed_btcpay
+  demo_seed_lightning
   demo_write_manifest "$checksum"
 }
 
@@ -957,6 +1021,10 @@ Demo environment is up.
   BTC Electrum: tcp://127.0.0.1:$KASSIBER_REGTEST_BITCOIN_ELECTRUM_PORT
   BTC Frigate:  tcp://127.0.0.1:$KASSIBER_REGTEST_FRIGATE_PORT (Silent Payments Electrum)
   BTC mempool:  http://127.0.0.1:$KASSIBER_REGTEST_BITCOIN_MEMPOOL_PORT/api
+$(if [ "${KASSIBER_REGTEST_DEMO_MEMPOOL_UI_ENABLED:-0}" = "1" ]; then cat <<EOF_MEMPOOL_UI
+  BTC explorer UI: http://127.0.0.1:$KASSIBER_REGTEST_MEMPOOL_UI_PORT (mempool.space)
+EOF_MEMPOOL_UI
+fi)
   LBTC Electrum: tcp://127.0.0.1:$KASSIBER_REGTEST_LIQUID_ELECTRUM_PORT
   LBTC mempool:  http://127.0.0.1:$KASSIBER_REGTEST_LIQUID_MEMPOOL_PORT/api
 $(if [ "${KASSIBER_REGTEST_DEMO_BTCPAY_ENABLED:-0}" = "1" ]; then cat <<EOF_BTCPAY
@@ -993,13 +1061,15 @@ run_demo_up() {
   export KASSIBER_REGTEST_COMPOSE_PROFILES="${KASSIBER_REGTEST_COMPOSE_PROFILES:-silent-payments}"
   export COMPOSE_PROFILES="$KASSIBER_REGTEST_COMPOSE_PROFILES"
   export KASSIBER_REGTEST_REQUIRE_ELEMENTS=1
-  demo_configure_btcpay
-  demo_configure_lightning
   demo_load_rpc_env
+  demo_configure_btcpay
+  demo_configure_mempool_ui
+  demo_configure_lightning
   demo_assert_safe_home rebuild
   if demo_book_needs_rebuild && [ -z "${KASSIBER_REGTEST_REUSE_CORE:-}" ]; then
     echo "Removing the managed demo regtest chain before rebuilding the backdated book..."
     docker_compose_regtest down -v --remove-orphans
+    export KASSIBER_REGTEST_MOCKTIME="${KASSIBER_REGTEST_MOCKTIME:-$(demo_scenario_base_epoch)}"
     export KASSIBER_REGTEST_DEMO_CHAIN_RESET_DONE=1
   fi
   run_with_bitcoin_core demo_build_book
@@ -1042,6 +1112,7 @@ run_demo_down() {
   demo_load_rpc_env
   export KASSIBER_REGTEST_USE_LIGHTNING_COMPOSE=1
   export KASSIBER_REGTEST_USE_BTCPAY_COMPOSE=1
+  export KASSIBER_REGTEST_USE_MEMPOOL_UI_COMPOSE=1
   if [ "$purge" = "--purge" ]; then
     demo_assert_safe_home purge
     docker_compose_regtest down -v
@@ -1119,6 +1190,14 @@ btcpay_ports_available() {
   return 0
 }
 
+mempool_ui_ports_available() {
+  local base="$1"
+  if ! port_is_free "$((base + 108))"; then
+    return 1
+  fi
+  return 0
+}
+
 lightning_extra_ports_available() {
   local base="$1"
   local ports=(
@@ -1145,6 +1224,9 @@ selected_regtest_ports_available() {
     return 1
   fi
   if [ -n "${KASSIBER_REGTEST_USE_BTCPAY_COMPOSE:-}" ] && ! btcpay_ports_available "$base"; then
+    return 1
+  fi
+  if [ -n "${KASSIBER_REGTEST_USE_MEMPOOL_UI_COMPOSE:-}" ] && ! mempool_ui_ports_available "$base"; then
     return 1
   fi
   if [ -n "${KASSIBER_REGTEST_USE_LIGHTNING_COMPOSE:-}" ] && ! lightning_extra_ports_available "$base"; then

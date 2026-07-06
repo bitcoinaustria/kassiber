@@ -2,6 +2,7 @@ import type { Net } from "@/components/kb/settings/SettingsModel";
 import type { NetworkStatus } from "./networkStatus";
 
 export type ConnectionProbeKind =
+  | "btcpay"
   | "bitcoinrpc"
   | "electrum"
   | "http"
@@ -100,6 +101,12 @@ export function connectionProbeKind(connection: ConnectionHealthInput): Connecti
   }
   if (kind === "coreln" || kind === "lnd") {
     return "lightning";
+  }
+  if (
+    kind === "btcpay" &&
+    (url.startsWith("http://") || url.startsWith("https://"))
+  ) {
+    return "btcpay";
   }
   if (
     allowDisplayHttpProbe &&

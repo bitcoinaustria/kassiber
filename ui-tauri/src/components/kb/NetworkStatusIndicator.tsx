@@ -125,6 +125,12 @@ type LightningProbeEnvelope = {
   };
 };
 
+type BtcpayProbeEnvelope = {
+  backend?: string;
+  stores?: unknown[];
+  payment_methods?: unknown[];
+};
+
 function bitcoinRpcHealth(
   payload: BitcoinRpcProbeEnvelope | undefined,
   t: TFunction<"chrome">,
@@ -384,6 +390,9 @@ export function NetworkStatusIndicator({
   const testLightning = useDaemonMutation<LightningProbeEnvelope>(
     "ui.backends.lightning.test",
   );
+  const testBtcpay = useDaemonMutation<BtcpayProbeEnvelope>(
+    "ui.connections.btcpay.discover",
+  );
   const savedBackends = React.useMemo(
     () =>
       (backendSettingsQuery.data?.data?.backends ?? []).map(
@@ -479,18 +488,27 @@ export function NetworkStatusIndicator({
                         backend: row.backendId,
                         timeout: 5,
                       })
-                : await testHttp.mutateAsync({
-                    url: row.rawUrl,
-                    proxy: row.proxy,
-                    timeout: 5,
-                  });
+                    : row.probeKind === "btcpay"
+                      ? await testBtcpay.mutateAsync({
+                          backend: row.backendId,
+                        })
+                      : await testHttp.mutateAsync({
+                          url: row.rawUrl,
+                          proxy: row.proxy,
+                          timeout: 5,
+                        });
             const payload = envelope.data;
             const coreHealth =
               row.probeKind === "bitcoinrpc"
                 ? bitcoinRpcHealth(payload as BitcoinRpcProbeEnvelope | undefined, t)
                 : undefined;
+            const btcpayHealth =
+              row.probeKind === "btcpay"
+                ? Array.isArray((payload as BtcpayProbeEnvelope | undefined)?.stores)
+                : undefined;
             const ok =
               coreHealth?.ok ??
+              btcpayHealth ??
               Boolean((payload as BackendProbeEnvelope | undefined)?.ok);
             return [
               row.id,
@@ -536,6 +554,7 @@ export function NetworkStatusIndicator({
     canCheckConnections,
     checkableRows,
     t,
+    testBtcpay,
     testBitcoinRpc,
     testElectrum,
     testHttp,

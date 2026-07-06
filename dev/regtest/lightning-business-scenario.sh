@@ -403,6 +403,23 @@ for pay in data.get("pays", []):
 sys.exit(1)' "$payment_hash"
 }
 
+payment_terminal_status_by_hash() {
+  local service="$1"
+  local payment_hash="$2"
+  local attempt status
+  for attempt in $(seq 1 30); do
+    status="$(payment_status_by_hash "$service" "$payment_hash" 2>/dev/null || true)"
+    case "$status" in
+      failed|complete|completed|paid)
+        printf '%s\n' "$status"
+        return 0
+        ;;
+    esac
+    sleep 1
+  done
+  printf '%s\n' "$status"
+}
+
 ensure_invoice() {
   local service="$1"
   local amount_msat="$2"
@@ -606,7 +623,7 @@ ensure_failed_payment() {
   else
     echo "$label intentionally failed due to liquidity limits."
   fi
-  status="$(payment_status_by_hash "$payer" "$payment_hash" 2>/dev/null || true)"
+  status="$(payment_terminal_status_by_hash "$payer" "$payment_hash")"
   if [ "$status" != "failed" ]; then
     echo "$label did not reach failed payment status (status=$status)." >&2
     return 1

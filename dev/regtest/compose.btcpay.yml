@@ -65,8 +65,10 @@ services:
       - "127.0.0.1:${KASSIBER_REGTEST_BTCPAY_PORT:-18549}:49392"
     volumes:
       - btcpayserver-regtest:/datadir
+      - cln-merchant-regtest:/cln-merchant:rw
 
 volumes:
   btcpay-postgres-regtest:
   btcpay-nbxplorer-regtest:
   btcpayserver-regtest:
+  cln-merchant-regtest:
