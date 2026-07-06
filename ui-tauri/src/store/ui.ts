@@ -17,6 +17,7 @@ export type ThemePreference = "system" | "light" | "dark";
 export type NotificationTone = "info" | "success" | "warning" | "error";
 
 export const DEFAULT_APP_SCALE = 0.9;
+export const DEFAULT_THEME: ThemePreference = "dark";
 export const MIN_APP_SCALE = 0.8;
 export const MAX_APP_SCALE = 1.2;
 export const APP_SCALE_STEP = 0.05;
@@ -351,7 +352,7 @@ export const useUiStore = create<UiState>()(
       lang: "en",
       currency: "btc",
       dataMode: "real",
-      theme: "system",
+      theme: DEFAULT_THEME,
       appScale: DEFAULT_APP_SCALE,
       appAutoScale: MAX_AUTO_SCALE,
       hideSensitive: false,
