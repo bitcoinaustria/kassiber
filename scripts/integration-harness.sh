@@ -1222,13 +1222,15 @@ import os
 
 with open(os.environ["KASSIBER_BTCPAY_SEED_PATH"], "r", encoding="utf-8") as handle:
     payload = json.load(handle)
-invoice = payload.get("invoice") or {}
+exercise = payload.get("btcpay_regtest") or {}
+kassiber = exercise.get("kassiber") or {}
 print(
     "BTCPay regtest store seeded and exercised: "
     f"store={payload.get('store_id')} "
-    f"invoice={invoice.get('invoice_id')} "
-    f"status={invoice.get('invoice_status')} "
-    f"txid={invoice.get('payment_txid')} "
+    f"invoices={exercise.get('invoice_count')} "
+    f"settled={exercise.get('settled_invoice_count')} "
+    f"scenarios={','.join(exercise.get('scenarios') or [])} "
+    f"origins={','.join(kassiber.get('provenance_origin_kinds') or [])} "
     f"seed={os.environ['KASSIBER_BTCPAY_SEED_PATH']}"
 )
 PY

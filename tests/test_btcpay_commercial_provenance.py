@@ -233,6 +233,67 @@ class BtcpayCommercialProvenanceTest(unittest.TestCase):
         self.assertEqual(invoices[0]["payments"][0]["txid"], "a" * 64)
         self.assertIn("/api/v1/stores/store-1/invoices?", opener.urls[0])
 
+    def test_fetch_invoice_provenance_preserves_payment_request_origin(self):
+        opener = _Opener(
+            [
+                [
+                    {
+                        "id": "inv-payment-request",
+                        "status": "Settled",
+                        "metadata": {
+                            "paymentRequestId": "pr-regtest-1",
+                            "itemDesc": "Membership renewal",
+                        },
+                        "payments": [{"id": "pay-pr-1", "paymentMethod": "BTC-CHAIN"}],
+                    }
+                ]
+            ]
+        )
+        backend = {"url": "https://btcpay.example", "token": "secret", "timeout": 5}
+
+        invoices = fetch_btcpay_invoice_provenance(
+            backend,
+            "store-1",
+            page_size=100,
+            opener=opener,
+        )
+
+        self.assertEqual(invoices[0]["payment_request_id"], "pr-regtest-1")
+        self.assertEqual(invoices[0]["origin_kind"], "payment_request")
+        self.assertEqual(invoices[0]["origin_label"], "Membership renewal")
+
+    def test_fetch_invoice_provenance_preserves_crowdfund_origin(self):
+        opener = _Opener(
+            [
+                [
+                    {
+                        "id": "inv-crowdfund",
+                        "orderId": "crowdfund-regtest-1",
+                        "status": "Settled",
+                        "metadata": {
+                            "appId": "kassiber-regtest-crowdfund",
+                            "appName": "Kassiber Crowdfund",
+                            "orderUrl": "https://btcpay.example/apps/crowdfund/kassiber",
+                            "itemDesc": "Supporter pledge",
+                        },
+                        "payments": [{"id": "pay-cf-1", "paymentMethod": "BTC-CHAIN"}],
+                    }
+                ]
+            ]
+        )
+        backend = {"url": "https://btcpay.example", "token": "secret", "timeout": 5}
+
+        invoices = fetch_btcpay_invoice_provenance(
+            backend,
+            "store-1",
+            page_size=100,
+            opener=opener,
+        )
+
+        self.assertEqual(invoices[0]["origin_kind"], "crowdfund")
+        self.assertEqual(invoices[0]["origin_app_id"], "kassiber-regtest-crowdfund")
+        self.assertEqual(invoices[0]["origin_label"], "Kassiber Crowdfund")
+
     def test_transaction_commercial_context_includes_btcpay_origin_chain(self):
         self._upsert_invoice_payment()
         document = self._create_matching_document()

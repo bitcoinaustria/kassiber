@@ -11,7 +11,7 @@ import time
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
-from urllib import error, request
+from urllib import error, parse, request
 
 
 DEFAULT_USER = "merchant.regtest@example.invalid"
@@ -23,6 +23,49 @@ DEFAULT_PAYMENT_METHOD_ID = "BTC-CHAIN"
 DEFAULT_WORKSPACE = "Regtest Demo"
 DEFAULT_PROFILE = "Full Accounting"
 DEFAULT_ORDER_ID = "kassiber-regtest-btcpay-smoke"
+
+
+REGTEST_INVOICE_SCENARIOS = (
+    {
+        "kind": "direct_invoice",
+        "suffix": "direct",
+        "amount": "0.00021000",
+        "metadata": {
+            "itemDesc": "Direct Greenfield invoice",
+            "buyerName": "Kassiber Regtest Buyer",
+        },
+    },
+    {
+        "kind": "pos",
+        "suffix": "pos-coffee",
+        "amount": "0.00012000",
+        "metadata": {
+            "itemDesc": "Point-of-sale coffee",
+            "posData": {"title": "Coffee bag", "quantity": 1},
+            "orderUrl": "/apps/pos/kassiber-regtest-pos",
+        },
+    },
+    {
+        "kind": "payment_request",
+        "suffix": "payment-request",
+        "amount": "0.00015000",
+        "metadata": {
+            "itemDesc": "Monthly association membership",
+            "paymentRequestId": "kassiber-regtest-membership-request",
+        },
+    },
+    {
+        "kind": "crowdfund",
+        "suffix": "crowdfund",
+        "amount": "0.00018000",
+        "metadata": {
+            "itemDesc": "Crowdfund supporter pledge",
+            "appId": "kassiber-regtest-crowdfund",
+            "appName": "Kassiber Crowdfund",
+            "orderUrl": "/apps/crowdfund/kassiber-regtest-campaign",
+        },
+    },
+)
 
 
 class HttpFailure(RuntimeError):
@@ -274,11 +317,25 @@ def _create_api_key(base_url: str, user: str, password: str, store_id: str) -> s
     return str(payload["apiKey"])
 
 
-def _find_invoice_by_order_id(base_url: str, token: str, store_id: str, order_id: str) -> dict[str, Any] | None:
+def _find_invoice_by_reference(
+    base_url: str,
+    token: str,
+    store_id: str,
+    *,
+    order_id: str | None = None,
+    metadata_key: str | None = None,
+    metadata_value: str | None = None,
+) -> dict[str, Any] | None:
+    params = {
+        "includePaymentMethods": "true",
+        "take": "50",
+    }
+    if order_id:
+        params["orderId"] = order_id
     payload = _json_request(
         base_url,
         "GET",
-        f"/api/v1/stores/{store_id}/invoices?orderId={order_id}&includePaymentMethods=true&take=10",
+        f"/api/v1/stores/{store_id}/invoices?{parse.urlencode(params)}",
         token=token,
     )
     invoices = payload.get("data") if isinstance(payload, dict) else payload
@@ -288,9 +345,16 @@ def _find_invoice_by_order_id(base_url: str, token: str, store_id: str, order_id
         if not isinstance(invoice, dict):
             continue
         metadata = invoice.get("metadata")
-        if isinstance(metadata, dict) and metadata.get("orderId") == order_id:
+        if order_id and isinstance(metadata, dict) and metadata.get("orderId") == order_id:
             return invoice
-        if invoice.get("orderId") == order_id:
+        if order_id and invoice.get("orderId") == order_id:
+            return invoice
+        if (
+            metadata_key
+            and metadata_value
+            and isinstance(metadata, dict)
+            and str(metadata.get(metadata_key) or "") == metadata_value
+        ):
             return invoice
     return None
 
@@ -300,13 +364,26 @@ def _create_or_get_invoice(
     token: str,
     store_id: str,
     *,
-    order_id: str,
+    order_id: str | None,
     amount: str,
     currency: str,
+    metadata: dict[str, Any],
+    metadata_key: str | None = None,
+    metadata_value: str | None = None,
 ) -> dict[str, Any]:
-    existing = _find_invoice_by_order_id(base_url, token, store_id, order_id)
+    existing = _find_invoice_by_reference(
+        base_url,
+        token,
+        store_id,
+        order_id=order_id,
+        metadata_key=metadata_key,
+        metadata_value=metadata_value,
+    )
     if existing is not None:
         return existing
+    invoice_metadata = dict(metadata)
+    if order_id:
+        invoice_metadata.setdefault("orderId", order_id)
     payload = _json_request(
         base_url,
         "POST",
@@ -314,11 +391,7 @@ def _create_or_get_invoice(
         body={
             "amount": amount,
             "currency": currency,
-            "metadata": {
-                "orderId": order_id,
-                "buyerName": "Kassiber Regtest",
-                "itemDesc": "Regtest BTCPay reconciliation smoke",
-            },
+            "metadata": invoice_metadata,
         },
         token=token,
     )
@@ -376,6 +449,86 @@ def _wait_for_invoice_settlement(
                 return payload
         time.sleep(2)
     raise RuntimeError(f"BTCPay invoice {invoice_id} did not settle in time: {last_invoice!r}")
+
+
+def _invoice_is_settled(invoice: dict[str, Any]) -> bool:
+    return str(invoice.get("status") or "").lower() == "settled"
+
+
+def _scenario_order_id(base_order_id: str, scenario: dict[str, Any]) -> str | None:
+    if scenario["kind"] == "payment_request":
+        return None
+    return f"{base_order_id}-{scenario['suffix']}"
+
+
+def _scenario_metadata(base_url: str, base_order_id: str, scenario: dict[str, Any]) -> dict[str, Any]:
+    metadata = dict(scenario["metadata"])
+    metadata["kassiberRegtestScenario"] = scenario["kind"]
+    metadata["kassiberRegtestOrderBase"] = base_order_id
+    order_url = metadata.get("orderUrl")
+    if isinstance(order_url, str) and order_url.startswith("/"):
+        metadata["orderUrl"] = base_url.rstrip("/") + order_url
+    return metadata
+
+
+def _exercise_btcpay_invoice(
+    *,
+    base_url: str,
+    api_key: str,
+    store_id: str,
+    payment_method_id: str,
+    base_order_id: str,
+    scenario: dict[str, Any],
+    currency: str,
+    payer_wallet: str,
+    wait_seconds: int,
+) -> dict[str, Any]:
+    kind = str(scenario["kind"])
+    order_id = _scenario_order_id(base_order_id, scenario)
+    metadata = _scenario_metadata(base_url, base_order_id, scenario)
+    invoice = _create_or_get_invoice(
+        base_url,
+        api_key,
+        store_id,
+        order_id=order_id,
+        amount=str(scenario["amount"]),
+        currency=currency,
+        metadata=metadata,
+        metadata_key="kassiberRegtestScenario",
+        metadata_value=kind,
+    )
+    invoice_id = str(invoice["id"])
+    payment_txid: str | None = None
+    settled_invoice = invoice
+    if not _invoice_is_settled(invoice):
+        method = _payment_method_for_invoice(
+            base_url,
+            api_key,
+            store_id,
+            invoice_id,
+            payment_method_id,
+        )
+        destination = str(method.get("destination") or "")
+        amount_btc = str(method.get("due") or method.get("amount") or "")
+        if not destination or not amount_btc:
+            raise RuntimeError(f"BTCPay invoice {invoice_id} did not expose a payable on-chain destination")
+        payment_txid = _pay_regtest_invoice_from_core(destination, amount_btc, payer_wallet)
+        settled_invoice = _wait_for_invoice_settlement(
+            base_url,
+            api_key,
+            store_id,
+            invoice_id,
+            deadline_seconds=wait_seconds,
+        )
+    return {
+        "scenario": kind,
+        "invoice_id": invoice_id,
+        "invoice_status": settled_invoice.get("status"),
+        "invoice_order_id": order_id,
+        "invoice_amount": str(scenario["amount"]),
+        "invoice_currency": currency,
+        "payment_txid": payment_txid,
+    }
 
 
 def _run_kassiber(args: list[str], *, token: str | None = None) -> subprocess.CompletedProcess[str]:
@@ -578,10 +731,26 @@ def _exercise_kassiber_btcpay_sync(
         ]
     )
     records = provenance_list if isinstance(provenance_list, list) else None
+    origin_kinds = sorted(
+        {
+            str(record.get("origin_kind"))
+            for record in (records or [])
+            if isinstance(record, dict) and record.get("origin_kind")
+        }
+    )
+    payment_txids = sorted(
+        {
+            str(record.get("txid"))
+            for record in (records or [])
+            if isinstance(record, dict) and record.get("txid")
+        }
+    )
     return {
         "wallet_sync": wallet_sync,
         "provenance_sync": provenance_sync,
         "provenance_payment_records": len(records) if isinstance(records, list) else None,
+        "provenance_origin_kinds": origin_kinds,
+        "provenance_payment_txids": payment_txids,
     }
 
 
@@ -631,38 +800,28 @@ def main(argv: list[str] | None = None) -> int:
             workspace=args.workspace,
             profile=args.profile,
         )
-    invoice_result: dict[str, Any] | None = None
+    invoice_results: list[dict[str, Any]] = []
+    btcpay_exercise: dict[str, Any] | None = None
     if args.exercise_invoice:
         if not args.kassiber_data_root:
             raise RuntimeError("--exercise-invoice requires --kassiber-data-root")
-        invoice = _create_or_get_invoice(
-            args.base_url,
-            api_key,
-            store_id,
-            order_id=args.invoice_order_id,
-            amount=args.invoice_amount,
-            currency=args.invoice_currency,
-        )
-        invoice_id = str(invoice["id"])
-        method = _payment_method_for_invoice(
-            args.base_url,
-            api_key,
-            store_id,
-            invoice_id,
-            args.payment_method_id,
-        )
-        destination = str(method.get("destination") or "")
-        amount_btc = str(method.get("due") or method.get("amount") or "")
-        if not destination or not amount_btc:
-            raise RuntimeError(f"BTCPay invoice {invoice_id} did not expose a payable on-chain destination")
-        payment_txid = _pay_regtest_invoice_from_core(destination, amount_btc, args.payer_wallet)
-        settled_invoice = _wait_for_invoice_settlement(
-            args.base_url,
-            api_key,
-            store_id,
-            invoice_id,
-            deadline_seconds=args.wait_seconds,
-        )
+        first_scenario = dict(REGTEST_INVOICE_SCENARIOS[0])
+        first_scenario["amount"] = args.invoice_amount
+        scenarios = (first_scenario, *REGTEST_INVOICE_SCENARIOS[1:])
+        for scenario in scenarios:
+            invoice_results.append(
+                _exercise_btcpay_invoice(
+                    base_url=args.base_url,
+                    api_key=api_key,
+                    store_id=store_id,
+                    payment_method_id=args.payment_method_id,
+                    base_order_id=args.invoice_order_id,
+                    scenario=scenario,
+                    currency=args.invoice_currency,
+                    payer_wallet=args.payer_wallet,
+                    wait_seconds=args.wait_seconds,
+                )
+            )
         kassiber_sync = _exercise_kassiber_btcpay_sync(
             data_root=Path(args.kassiber_data_root),
             backend_name=args.backend_name,
@@ -672,15 +831,15 @@ def main(argv: list[str] | None = None) -> int:
             workspace=args.workspace,
             profile=args.profile,
         )
-        invoice_result = {
-            "invoice_id": invoice_id,
-            "invoice_status": settled_invoice.get("status"),
-            "invoice_order_id": args.invoice_order_id,
-            "invoice_amount": args.invoice_amount,
-            "invoice_currency": args.invoice_currency,
-            "payment_destination": destination,
-            "payment_amount_btc": amount_btc,
-            "payment_txid": payment_txid,
+        btcpay_exercise = {
+            "invoice_count": len(invoice_results),
+            "scenarios": [invoice["scenario"] for invoice in invoice_results],
+            "settled_invoice_count": sum(
+                1 for invoice in invoice_results if str(invoice.get("invoice_status") or "") == "Settled"
+            ),
+            "payment_txids": [
+                invoice["payment_txid"] for invoice in invoice_results if invoice.get("payment_txid")
+            ],
             "kassiber": kassiber_sync,
         }
 
@@ -694,7 +853,9 @@ def main(argv: list[str] | None = None) -> int:
         "generated_wallet": generated_wallet,
         "backend": args.backend_name if args.kassiber_data_root else None,
         "wallet": args.wallet_label if args.kassiber_data_root else None,
-        "invoice": invoice_result,
+        "invoice": invoice_results[0] if invoice_results else None,
+        "invoices": invoice_results,
+        "btcpay_regtest": btcpay_exercise,
     }
     if args.json_output:
         output = Path(args.json_output)

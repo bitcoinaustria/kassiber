@@ -129,10 +129,14 @@ not publish a `latest` tag. Override images with `KASSIBER_REGTEST_BTCPAY_IMAGE`
 
 The seed helper (`python -m dev.regtest.btcpay_seed`) uses the Greenfield API to
 create a disposable admin user, store, BTC on-chain payment method, and scoped
-API key. In the standalone `btcpay` lane it also creates a BTC-denominated
-invoice, reads the non-sensitive invoice payment-method destination, pays it
-from the regtest Core wallet, mines the confirmation, syncs BTCPay wallet
-history into a temporary Kassiber book, and syncs invoice/payment provenance.
+API key. In the standalone `btcpay` lane it creates and pays a realistic
+BTCPay-origin mix: a direct Greenfield invoice, a point-of-sale sale, a
+payment-request invoice, and a crowdfund pledge. Each invoice receives a fresh
+BTCPay on-chain address, is paid from the regtest Core wallet, confirmed by a
+mined block, synced through BTCPay wallet history into a temporary Kassiber
+book, and reconciled through invoice/payment provenance. The seed JSON records
+the invoice ids, txids, scenarios, and origin kinds so failures can be
+replayed locally.
 For the persistent demo book, opt into the same overlay with:
 
 ```bash
@@ -142,9 +146,11 @@ KASSIBER_REGTEST_DEMO_BTCPAY=1 ./scripts/integration-harness.sh demo-up
 That writes the BTCPay URL, store id, and disposable API key into
 `demo-manifest.json` (mode `0600`) and configures the demo book with a
 `btcpay-regtest` backend plus a `BTCPay Regtest Store` wallet using
-`BTC-CHAIN` wallet-history sync. The persistent demo path provisions the store
-and wallet without automatically mining an invoice payment, so repeated
-`demo-up` runs do not advance the long-lived demo chain just for BTCPay setup.
+`BTC-CHAIN` wallet-history sync. The persistent `demo-up` path deliberately
+stops at store/wallet/backend setup, so repeated starts stay idempotent and do
+not advance the long-lived demo chain. Use the dedicated `btcpay` lane when the
+test needs paid invoices, payment requests, POS/crowdfund provenance, wallet
+history import, and reconciliation proof.
 
 Set `KASSIBER_REGTEST_KEEP=1` to keep the full Docker Compose project running
 for debugging (containers, bound ports, and volumes); otherwise the stack is

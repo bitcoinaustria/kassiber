@@ -980,11 +980,25 @@ def _invoice_origin(invoice, metadata, order_id):
 
     lower_order_url = (order_url or "").lower()
     lower_order_id = (order_id or "").lower()
+    lower_app_name = (app_name or "").lower()
+    lower_app_id = (app_id or "").lower()
     if pos_data is not None or "/pos" in lower_order_url or lower_order_id.startswith("pos"):
         return {
             "kind": "pos",
             "app_id": app_id,
             "label": app_name or item_desc or pos_label or order_id,
+            "url": order_url,
+        }
+    if (
+        "crowdfund" in lower_app_name
+        or "crowdfund" in lower_app_id
+        or "/crowdfund" in lower_order_url
+        or lower_order_id.startswith("crowdfund")
+    ):
+        return {
+            "kind": "crowdfund",
+            "app_id": app_id,
+            "label": app_name or item_desc or order_id,
             "url": order_url,
         }
     if app_id or app_name:
