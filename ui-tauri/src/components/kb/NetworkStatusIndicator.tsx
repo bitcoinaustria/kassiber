@@ -339,8 +339,8 @@ function OutboundConnectionsColgroup() {
   return (
     <colgroup>
       <col className="w-16" />
-      <col className="w-[38%]" />
-      <col />
+      <col className="w-[30rem]" />
+      <col className="w-[26rem]" />
     </colgroup>
   );
 }
@@ -601,7 +601,7 @@ export function NetworkStatusIndicator({
       </DropdownMenuTrigger>
       <DropdownMenuContent
         align="end"
-        className="w-[42rem] max-w-[calc(100vw-1rem)] sm:w-[46rem]"
+        className="w-[min(64rem,calc(100vw-1rem))]"
       >
         <div className="flex items-center justify-between gap-2 px-2 py-1.5">
           <DropdownMenuLabel className="p-0">
@@ -641,8 +641,8 @@ export function NetworkStatusIndicator({
               {t("network.noneConfigured")}
             </div>
           ) : (
-            <div>
-              <Table className="table-fixed">
+            <div className="overflow-x-auto">
+              <Table className="min-w-[60rem] table-fixed">
                 <OutboundConnectionsColgroup />
                 <TableHeader>
                   <TableRow>
@@ -660,7 +660,7 @@ export function NetworkStatusIndicator({
                   maxHeight: `${OUTBOUND_CONNECTION_ROW_LIMIT * 3.25}rem`,
                 }}
               >
-                <Table className="table-fixed">
+                <Table className="min-w-[60rem] table-fixed">
                   <OutboundConnectionsColgroup />
                   <TableBody>
                     {connectionRows.map((row) => {

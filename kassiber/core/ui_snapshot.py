@@ -1352,6 +1352,8 @@ def _transactions(conn: sqlite3.Connection, profile_id: str) -> list[dict[str, A
             t.occurred_at,
             t.confirmed_at,
             w.label AS wallet,
+            w.kind AS wallet_kind,
+            w.config_json AS wallet_config_json,
             t.direction,
             t.asset,
             t.amount,
@@ -1405,6 +1407,8 @@ def _activity_transactions(
             t.occurred_at,
             t.confirmed_at,
             w.label AS wallet,
+            w.kind AS wallet_kind,
+            w.config_json AS wallet_config_json,
             t.direction,
             t.asset,
             t.amount,
@@ -1500,6 +1504,29 @@ def _transaction_type(kind: str, direction: str, quarantine_reason: str | None) 
     if direction == "inbound":
         return "Income"
     return "Expense"
+
+
+def _transaction_row_chain_network(row: sqlite3.Row | dict[str, Any]) -> tuple[str, str]:
+    row_keys = set(row.keys())
+    asset = _string_or_empty(row["asset"] if "asset" in row_keys else "").upper()
+    wallet_kind = _string_or_empty(
+        row["wallet_kind"] if "wallet_kind" in row_keys else "",
+    ).lower()
+    config = _json_config(
+        row["wallet_config_json"] if "wallet_config_json" in row_keys else None,
+    )
+    fallback_chain = (
+        "liquid" if asset in {"LBTC", "L-BTC"} or "liquid" in wallet_kind else "bitcoin"
+    )
+    try:
+        chain = normalize_chain(config.get("chain") or fallback_chain)
+    except ValueError:
+        chain = fallback_chain
+    try:
+        network = normalize_network(chain, config.get("network"))
+    except ValueError:
+        network = "liquidv1" if chain == "liquid" else "main"
+    return chain, network
 
 
 def _ui_sat_amount(msat: int) -> int | float:
@@ -1798,12 +1825,16 @@ def _transaction_row_to_ui(
         include_empty_tags = True
 
     row_keys = set(row.keys())
+    chain, network = _transaction_row_chain_network(row)
     payload = {
         "id": row_id,
         "externalId": external_id,
         "explorerId": _public_explorer_id(external_id),
         "date": (occurred_at or "")[:16].replace("T", " "),
         "type": type_label,
+        "asset": row["asset"] if "asset" in row_keys else None,
+        "chain": chain,
+        "network": network,
         "account": account,
         "counter": counter,
         "amountSat": _ui_sat_amount(amount_msat),
@@ -3144,6 +3175,8 @@ def _build_transactions_page_snapshot(
             t.confirmed_at,
             t.created_at AS _created_at,
             w.label AS wallet,
+            w.kind AS wallet_kind,
+            w.config_json AS wallet_config_json,
             t.direction,
             t.asset,
             t.amount,
@@ -3344,6 +3377,8 @@ def build_transactions_resolve_snapshot(
             t.occurred_at,
             t.confirmed_at,
             w.label AS wallet,
+            w.kind AS wallet_kind,
+            w.config_json AS wallet_config_json,
             t.direction,
             t.asset,
             t.amount,

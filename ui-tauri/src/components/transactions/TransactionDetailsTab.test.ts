@@ -22,6 +22,20 @@ describe("transactionGraphLookupArgs", () => {
     });
   });
 
+  it("opts chain-backed rows into configured public lookup even when the payment label is generic", () => {
+    expect(
+      transactionGraphLookupArgs({
+        id: "row-mining",
+        explorerId: "c".repeat(64),
+        paymentMethod: "Exchange",
+        chain: "bitcoin",
+      } as Parameters<typeof transactionGraphLookupArgs>[0]),
+    ).toEqual({
+      transaction: "row-mining",
+      allowPublicLookup: true,
+    });
+  });
+
   it("does not public-lookup source ids without a verified explorer txid", () => {
     expect(
       transactionGraphLookupArgs({

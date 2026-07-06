@@ -219,6 +219,9 @@ export interface Tx {
   date: string;
   occurredAt?: string;
   type: TxType;
+  asset?: string | null;
+  chain?: string | null;
+  network?: string | null;
   account: string;
   counter: string;
   amountSat: number;

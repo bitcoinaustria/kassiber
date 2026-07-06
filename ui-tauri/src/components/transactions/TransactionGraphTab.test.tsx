@@ -15,6 +15,29 @@ import {
   type TransactionGraphPayload,
 } from "./TransactionGraphModel";
 
+const STRAND_MARKER_LEAD_RATIO = 0.5;
+
+function strandRailPositions(
+  html: string,
+  testId: "transaction-input-strand" | "transaction-output-strand",
+) {
+  return [
+    ...html.matchAll(
+      new RegExp(
+        `<path d="M ([0-9.]+) [^"]+" data-testid="${testId}"[^>]*stroke-width="([^"]+)"`,
+        "g",
+      ),
+    ),
+  ].map((match) => {
+    const pathStart = Number(match[1]);
+    const strokeWidth = Number(match[2]);
+    const lead = strokeWidth * STRAND_MARKER_LEAD_RATIO;
+    return testId === "transaction-input-strand"
+      ? pathStart - lead
+      : pathStart + lead;
+  });
+}
+
 const graph: TransactionGraphPayload = {
   transaction: {
     id: "tx-graph",
@@ -126,6 +149,27 @@ describe("TransactionFlowDiagram", () => {
 
     expect(html).toContain('aria-label="Copy input outpoint"');
     expect(html).toContain('aria-label="Copy output reference"');
+  });
+
+  it("uses stroke-scaled markers for graph strand direction", () => {
+    const html = renderToStaticMarkup(
+      <TooltipProvider>
+        <TransactionFlowDiagram graph={graph} hideSensitive={false} />
+      </TooltipProvider>,
+    );
+
+    expect(html).toContain("<marker");
+    expect(html).toContain("marker-start=");
+    expect(html).toContain('markerWidth="1.5"');
+    expect(html).toContain('id="transaction-flow-');
+    expect(html).toContain('fill="rgb(59 130 246)"');
+    expect(html).not.toContain('data-testid="transaction-input-strand-tip"');
+    expect(html).not.toContain('data-testid="transaction-output-strand-tip"');
+    expect(html).not.toContain('data-testid="transaction-fee-strand-tip"');
+    const feePath = html.match(
+      /<path d="([^"]+)" data-testid="transaction-fee-strand"[^>]*>/,
+    )?.[0];
+    expect(feePath).not.toContain("marker-start=");
   });
 
   it("disables strand copy controls when sensitive values are hidden", () => {
@@ -283,8 +327,15 @@ describe("TransactionFlowDiagram", () => {
     expect(html).not.toContain('id="transaction-flow-hover-glow"');
     expect(html).not.toContain('data-testid="transaction-hover-strand"');
     expect(html).toContain('aria-label="Fee graph leg"');
-    expect(html).not.toContain("markerStart");
-    expect(html).not.toContain("<marker");
+    expect(html).toContain("<marker");
+    expect(html).toContain("marker-start=");
+    expect(html).toMatch(/id="transaction-flow-[^"]*-input-marker"/);
+    expect(html).toMatch(/id="transaction-flow-[^"]*-output-marker"/);
+    expect(html).toMatch(/id="transaction-flow-[^"]*-input-hover-marker"/);
+    expect(html).toMatch(/id="transaction-flow-[^"]*-output-hover-marker"/);
+    expect(html).not.toContain('data-testid="transaction-input-strand-tip"');
+    expect(html).not.toContain('data-testid="transaction-output-strand-tip"');
+    expect(html).not.toContain('data-testid="transaction-fee-strand-tip"');
     expect(html).not.toContain(">fee</text>");
     expect(html).not.toContain("<circle");
     expect(html).not.toContain('width="88" height="104" rx="12"');
@@ -393,6 +444,126 @@ describe("TransactionFlowDiagram", () => {
     expect(feeWidth).toBeLessThan(Math.min(...outputWidths));
   });
 
+  it("uses known opposite-side totals only as visual weight for confidential Liquid legs", () => {
+    const confidentialInputGraph: TransactionGraphPayload = {
+      ...graph,
+      transaction: {
+        ...graph.transaction,
+        id: "liquid-confidential-visual",
+        inputCount: 1,
+        outputCount: 1,
+      },
+      supportLevel: "partial",
+      inputs: [
+        {
+          id: "conf-in",
+          outpoint:
+            "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789:0",
+          valueSats: null,
+          valueBtc: null,
+          valueState: "confidential",
+          role: "input",
+          ownership: "owned",
+        },
+      ],
+      outputs: [
+        {
+          id: "known-out",
+          outpoint:
+            "bbcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789:1",
+          valueSats: 2_000_000,
+          valueBtc: 0.02,
+          valueState: "known",
+          role: "external_recipient",
+          ownership: "external",
+        },
+      ],
+      fee: null,
+    };
+    const html = renderToStaticMarkup(
+      <TooltipProvider>
+        <TransactionFlowDiagram graph={confidentialInputGraph} hideSensitive={false} />
+      </TooltipProvider>,
+    );
+
+    const inputWidth = Number(
+      html.match(/data-testid="transaction-input-strand"[^>]*stroke-width="([^"]+)"/)?.[1],
+    );
+    const outputWidth = Number(
+      html.match(/data-testid="transaction-output-strand"[^>]*stroke-width="([^"]+)"/)?.[1],
+    );
+
+    expect(inputWidth).toBeGreaterThan(40);
+    expect(inputWidth).toBe(outputWidth);
+    expect(html).toContain("marker-start=");
+  });
+
+  it("renders known zero-value outputs as short outer strands without arrows", () => {
+    const zeroOutputGraph: TransactionGraphPayload = {
+      ...graph,
+      inputs: graph.inputs.slice(0, 1),
+      outputs: [
+        {
+          ...graph.outputs[0],
+          id: "zero-out",
+          valueSats: 0,
+          valueBtc: 0,
+          valueState: "known",
+        },
+      ],
+      fee: null,
+    };
+    const html = renderToStaticMarkup(
+      <TooltipProvider>
+        <TransactionFlowDiagram graph={zeroOutputGraph} hideSensitive={false} />
+      </TooltipProvider>,
+    );
+
+    const outputPath = html.match(
+      /<path d="([^"]+)" data-testid="transaction-output-strand"[^>]*>/,
+    )?.[0];
+
+    expect(outputPath).toContain('d="M 894 ');
+    expect(outputPath).toContain(" L 834 ");
+    expect(outputPath).toContain('stroke-linecap="round"');
+    expect(outputPath).not.toContain("marker-start=");
+    expect(outputPath).not.toContain(" C ");
+    expect(html).not.toContain('data-testid="transaction-output-strand-tip"');
+  });
+
+  it("keeps different-value input endpoints aligned on one rail", () => {
+    const variedInputGraph: TransactionGraphPayload = {
+      ...graph,
+      fee: null,
+      inputs: [
+        {
+          ...graph.inputs[0],
+          id: "large-in",
+          valueSats: 1_900_000,
+          valueBtc: 0.019,
+        },
+        {
+          ...graph.inputs[1],
+          id: "small-in",
+          valueSats: 100_000,
+          valueBtc: 0.001,
+        },
+      ],
+      outputs: [graph.outputs[0]],
+    };
+    const html = renderToStaticMarkup(
+      <TooltipProvider>
+        <TransactionFlowDiagram graph={variedInputGraph} hideSensitive={false} />
+      </TooltipProvider>,
+    );
+
+    const inputRails = strandRailPositions(html, "transaction-input-strand");
+    expect(inputRails).toHaveLength(2);
+    expect(new Set(inputRails.map((rail) => rail.toFixed(3)))).toEqual(
+      new Set(["64.000"]),
+    );
+  });
+
   it("keeps different-value output endpoints aligned on one rail", () => {
     const variedOutputGraph: TransactionGraphPayload = {
       ...graph,
@@ -421,11 +592,11 @@ describe("TransactionFlowDiagram", () => {
       </TooltipProvider>,
     );
 
-    const outputPaths = [
-      ...html.matchAll(/<path d="M ([0-9.]+) [^"]+" data-testid="transaction-output-strand"/g),
-    ];
-    expect(outputPaths).toHaveLength(2);
-    expect(new Set(outputPaths.map((match) => match[1]))).toEqual(new Set(["896"]));
+    const outputRails = strandRailPositions(html, "transaction-output-strand");
+    expect(outputRails).toHaveLength(2);
+    expect(new Set(outputRails.map((rail) => rail.toFixed(3)))).toEqual(
+      new Set(["896.000"]),
+    );
   });
 
   it("flattens graph geometry when sensitive values are hidden", () => {
@@ -1076,7 +1247,7 @@ describe("TransactionGraphPanel", () => {
           code: "bitcoin_reference_lookup_failed",
           level: "warning",
           message:
-            "Could not fetch public Bitcoin transaction references from the selected backend. Review the backend URL and network in Settings.",
+            "Could not fetch public Bitcoin transaction references from a configured backend. Review the backend URL and network in Settings.",
         },
       ],
     };

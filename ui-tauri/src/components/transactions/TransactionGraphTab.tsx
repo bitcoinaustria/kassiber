@@ -535,6 +535,7 @@ type DrawableGraphRow = GraphRow & {
   offset: number;
   visualValueSats: number;
   estimatedVisualValue: boolean;
+  zeroValue: boolean;
 };
 
 type GraphHoverDetail = {
@@ -551,8 +552,24 @@ function positiveKnownSats(node: TransactionGraphNode) {
     : 0;
 }
 
+function visualTotalSatsForSides(inputRows: GraphRow[], destinationRows: GraphRow[]) {
+  // Drawing only: confidential and missing values still render as confidential
+  // text, but the bowtie needs a stable visual total to size unknown legs.
+  const inputKnownTotal = inputRows.reduce((sum, node) => sum + positiveKnownSats(node), 0);
+  const outputKnownTotal = destinationRows.reduce((sum, node) => sum + positiveKnownSats(node), 0);
+  return Math.max(inputKnownTotal, outputKnownTotal, 1);
+}
+
+function fallbackVisualSats(visualTotalSats: number, rowCount: number) {
+  return Math.max(1, visualTotalSats / Math.max(1, rowCount));
+}
+
 function hasAmountlessGeometryValue(node: TransactionGraphNode) {
   return typeof node.valueSats !== "number" || node.valueState === "confidential";
+}
+
+function hasKnownZeroGeometryValue(node: TransactionGraphNode) {
+  return !hasAmountlessGeometryValue(node) && typeof node.valueSats === "number" && node.valueSats <= 0;
 }
 
 function visualSatsForNode(node: TransactionGraphNode, fallbackSats: number) {
@@ -623,10 +640,7 @@ function buildDrawableRows(
     return (combinedWeight * value) / Math.max(1, totalSats);
   });
   const lines = rows.map((node, index) => {
-    const knownZero =
-      !hasAmountlessGeometryValue(node) &&
-      typeof node.valueSats === "number" &&
-      node.valueSats <= 0;
+    const knownZero = hasKnownZeroGeometryValue(node);
     const weight = weights[index] ?? 0;
     const amountlessPeerFee =
       node.side === "fee" && hasAmountlessNonFeeRows && weight > 0;
@@ -643,6 +657,7 @@ function buildDrawableRows(
       offset: 0,
       visualValueSats: visualValues[index] ?? 0,
       estimatedVisualValue: hasAmountlessGeometryValue(node),
+      zeroValue: knownZero,
     };
   });
   const visibleWeight = lines.reduce((sum, line) => sum + line.thickness, 0);
@@ -705,6 +720,13 @@ type StrandGradientIds = {
   feeHover: string;
 };
 
+type StrandMarkerIds = {
+  input: string;
+  inputHover: string;
+  output: string;
+  outputHover: string;
+};
+
 function gradientUrl(id: string) {
   return `url(#${id})`;
 }
@@ -719,6 +741,22 @@ function strandStroke(node: GraphRow, gradientIds: StrandGradientIds, active = f
   return gradientUrl(active ? gradientIds.outputHover : gradientIds.output);
 }
 
+function visibleStrandStrokeWidth(node: DrawableGraphRow) {
+  return node.thickness + 1;
+}
+
+const STRAND_MARKER_WIDTH = 1.5;
+const STRAND_MARKER_LEAD_RATIO = 0.5;
+
+function hasStrandTip(node: DrawableGraphRow) {
+  return node.side !== "fee" && !node.zeroValue;
+}
+
+function strandMarkerLead(node: DrawableGraphRow) {
+  if (!hasStrandTip(node)) return 0;
+  return visibleStrandStrokeWidth(node) * STRAND_MARKER_LEAD_RATIO;
+}
+
 function makeBowtiePath(
   node: DrawableGraphRow,
   side: "input" | "output",
@@ -726,7 +764,7 @@ function makeBowtiePath(
   edgePadding: number,
   centerX: number,
 ) {
-  const start = edgePadding;
+  const start = edgePadding + strandMarkerLead(node);
   const end = centerX + 1;
   const maxOffset = Math.max(0, end - start - 44);
   const offset = Math.min(node.offset, maxOffset);
@@ -748,6 +786,23 @@ function makeBowtiePath(
   } L ${canvasWidth - end} ${node.innerY}`;
 }
 
+function makeZeroValuePath(
+  node: DrawableGraphRow,
+  side: "input" | "output",
+  canvasWidth: number,
+  edgePadding: number,
+  centerX: number,
+) {
+  const halfWidth = Math.max(1.5, visibleStrandStrokeWidth(node) / 2);
+  const start = edgePadding + halfWidth;
+  const length = Math.min(60, Math.max(20, centerX - edgePadding - 110));
+  const y = node.outerY;
+  if (side === "input") {
+    return `M ${start} ${y} L ${start + length} ${y}`;
+  }
+  return `M ${canvasWidth - start} ${y} L ${canvasWidth - start - length} ${y}`;
+}
+
 function copyReference(node: GraphRow) {
   return node.outpoint || node.address || node.txid || null;
 }
@@ -758,6 +813,18 @@ function copyAriaLabel(side: GraphRow["side"], t: TFunction<"transactions">) {
   return t("graph.copyOutput");
 }
 
+function strandMarkerId(
+  node: DrawableGraphRow,
+  markerIds: StrandMarkerIds,
+  active = false,
+) {
+  if (!hasStrandTip(node)) return undefined;
+  if (node.side === "input") {
+    return active ? markerIds.inputHover : markerIds.input;
+  }
+  return active ? markerIds.outputHover : markerIds.output;
+}
+
 function GraphStrand({
   node,
   path,
@@ -765,6 +832,7 @@ function GraphStrand({
   testId,
   active,
   gradientIds,
+  markerIds,
   hideSensitive,
   onHover,
   onLeave,
@@ -775,6 +843,7 @@ function GraphStrand({
   testId?: string;
   active?: boolean;
   gradientIds: StrandGradientIds;
+  markerIds: StrandMarkerIds;
   hideSensitive: boolean;
   onHover: (node: DrawableGraphRow) => void;
   onLeave: () => void;
@@ -796,6 +865,7 @@ function GraphStrand({
       handleCopy();
     }
   };
+  const markerId = strandMarkerId(node, markerIds, active);
 
   return (
     <>
@@ -825,8 +895,9 @@ function GraphStrand({
         aria-hidden="true"
         className="pointer-events-none fill-none opacity-100 transition-opacity"
         stroke={strandStroke(node, gradientIds, active)}
-        strokeWidth={node.thickness + 1}
-        strokeLinecap="butt"
+        strokeWidth={visibleStrandStrokeWidth(node)}
+        strokeLinecap={node.zeroValue ? "round" : "butt"}
+        markerStart={markerId ? `url(#${markerId})` : undefined}
       />
     </>
   );
@@ -1206,6 +1277,12 @@ export function TransactionFlowDiagram({
     fee: `transaction-flow-${graphInstanceId}-fee-gradient`,
     feeHover: `transaction-flow-${graphInstanceId}-fee-hover-gradient`,
   };
+  const markerIds: StrandMarkerIds = {
+    input: `transaction-flow-${graphInstanceId}-input-marker`,
+    inputHover: `transaction-flow-${graphInstanceId}-input-hover-marker`,
+    output: `transaction-flow-${graphInstanceId}-output-marker`,
+    outputHover: `transaction-flow-${graphInstanceId}-output-hover-marker`,
+  };
   const preferredCanvasWidth = expanded ? 1120 : 960;
   const shellRef = useRef<HTMLDivElement | null>(null);
   const [hoverDetail, setHoverDetail] = useState<GraphHoverDetail | null>(null);
@@ -1250,16 +1327,8 @@ export function TransactionFlowDiagram({
   const centerX = canvasWidth / 2;
   const edgePadding = expanded ? 84 : 64;
   const curveWidth = centerX - edgePadding - 12;
-  const inputKnownTotal = layoutInputRows.reduce(
-    (sum, node) => sum + positiveKnownSats(node),
-    0,
-  );
-  const outputKnownTotal = layoutDestinationRows.reduce(
-    (sum, node) => sum + positiveKnownSats(node),
-    0,
-  );
-  const visualTotal = Math.max(inputKnownTotal, outputKnownTotal, 1);
-  const fallbackSats = Math.max(1, visualTotal / rowCount);
+  const visualTotal = visualTotalSatsForSides(layoutInputRows, layoutDestinationRows);
+  const fallbackSats = fallbackVisualSats(visualTotal, rowCount);
   const combinedWeight = Math.min(expanded ? 96 : 82, Math.max(26, Math.floor((canvasWidth - 2 * edgePadding) / 9)));
   const inputDrawRows = buildDrawableRows(
     layoutInputRows,
@@ -1278,15 +1347,31 @@ export function TransactionFlowDiagram({
     fallbackSats,
   );
   const pathFor = (node: DrawableGraphRow) =>
-    makeBowtiePath(node, node.side === "input" ? "input" : "output", canvasWidth, edgePadding, centerX);
+    node.zeroValue
+      ? makeZeroValuePath(
+          node,
+          node.side === "input" ? "input" : "output",
+          canvasWidth,
+          edgePadding,
+          centerX,
+        )
+      : makeBowtiePath(node, node.side === "input" ? "input" : "output", canvasWidth, edgePadding, centerX);
   const markerPathFor = (node: DrawableGraphRow) =>
-    makeBowtiePath(
-      { ...node, thickness: Math.max(18, node.thickness + 12) },
-      node.side === "input" ? "input" : "output",
-      canvasWidth,
-      edgePadding,
-      centerX,
-    );
+    node.zeroValue
+      ? makeZeroValuePath(
+          node,
+          node.side === "input" ? "input" : "output",
+          canvasWidth,
+          edgePadding,
+          centerX,
+        )
+      : makeBowtiePath(
+          node,
+          node.side === "input" ? "input" : "output",
+          canvasWidth,
+          edgePadding,
+          centerX,
+        );
   const showHoverDetail = (node: DrawableGraphRow) => {
     setHoverDetail({ node });
   };
@@ -1318,6 +1403,70 @@ export function TransactionFlowDiagram({
             aria-label={t("graph.diagramAria")}
           >
             <defs>
+              <marker
+                id={markerIds.input}
+                viewBox="-5 -5 10 10"
+                refX="0"
+                refY="0"
+                markerUnits="strokeWidth"
+                markerWidth={STRAND_MARKER_WIDTH}
+                markerHeight="1"
+                orient="auto"
+              >
+                <path
+                  d="M -5 -5 L 0 0 L -5 5 L 1 5 L 1 -5 Z"
+                  strokeWidth="0"
+                  fill="rgb(59 130 246)"
+                />
+              </marker>
+              <marker
+                id={markerIds.inputHover}
+                viewBox="-5 -5 10 10"
+                refX="0"
+                refY="0"
+                markerUnits="strokeWidth"
+                markerWidth={STRAND_MARKER_WIDTH}
+                markerHeight="1"
+                orient="auto"
+              >
+                <path
+                  d="M -5 -5 L 0 0 L -5 5 L 1 5 L 1 -5 Z"
+                  strokeWidth="0"
+                  fill="rgb(96 165 250)"
+                />
+              </marker>
+              <marker
+                id={markerIds.output}
+                viewBox="-5 -5 10 10"
+                refX="0"
+                refY="0"
+                markerUnits="strokeWidth"
+                markerWidth={STRAND_MARKER_WIDTH}
+                markerHeight="1"
+                orient="auto"
+              >
+                <path
+                  d="M 1 -5 L 0 -5 L -5 0 L 0 5 L 1 5 Z"
+                  strokeWidth="0"
+                  fill="rgb(59 130 246)"
+                />
+              </marker>
+              <marker
+                id={markerIds.outputHover}
+                viewBox="-5 -5 10 10"
+                refX="0"
+                refY="0"
+                markerUnits="strokeWidth"
+                markerWidth={STRAND_MARKER_WIDTH}
+                markerHeight="1"
+                orient="auto"
+              >
+                <path
+                  d="M 1 -5 L 0 -5 L -5 0 L 0 5 L 1 5 Z"
+                  strokeWidth="0"
+                  fill="rgb(96 165 250)"
+                />
+              </marker>
               <linearGradient id={gradientIds.input} x1="0%" y1="0%" x2="100%" y2="0%">
                 <stop offset="0%" stopColor="rgb(59 130 246)" />
                 <stop offset="100%" stopColor="rgb(14 165 233)" />
@@ -1354,6 +1503,7 @@ export function TransactionFlowDiagram({
               testId="transaction-input-strand"
               active={hoverDetail?.node.id === node.id && hoverDetail.node.side === node.side}
               gradientIds={gradientIds}
+              markerIds={markerIds}
               hideSensitive={hideSensitive}
               onHover={showHoverDetail}
               onLeave={() => setHoverDetail(null)}
@@ -1368,6 +1518,7 @@ export function TransactionFlowDiagram({
               testId={node.side === "fee" ? "transaction-fee-strand" : "transaction-output-strand"}
               active={hoverDetail?.node.id === node.id && hoverDetail.node.side === node.side}
               gradientIds={gradientIds}
+              markerIds={markerIds}
               hideSensitive={hideSensitive}
               onHover={showHoverDetail}
               onLeave={() => setHoverDetail(null)}

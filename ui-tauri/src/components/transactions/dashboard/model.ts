@@ -178,14 +178,19 @@ function toDashboardTransaction(
         ? "Receive"
         : "Send";
   const status: TransactionStatus = tx.conf > 0 ? "completed" : "pending";
+  const accountLabel = tx.account.toLowerCase();
+  const chain = tx.chain?.trim().toLowerCase();
   const paymentMethod =
-    tx.account.toLowerCase().includes("lightning") ||
-    tx.account.toLowerCase().includes("ln") ||
-    tx.account.toLowerCase().includes("phoenix")
+    accountLabel.includes("lightning") ||
+    accountLabel.includes("ln") ||
+    accountLabel.includes("phoenix")
       ? "Lightning"
-      : tx.account.toLowerCase().includes("liquid") ||
-          tx.account.toLowerCase().includes("lbtc")
+      : chain === "liquid" ||
+          accountLabel.includes("liquid") ||
+          accountLabel.includes("lbtc")
         ? "Liquid"
+        : chain === "bitcoin"
+          ? "On-chain"
         : "On-chain";
   return {
     id: tx.id,
@@ -203,7 +208,9 @@ function toDashboardTransaction(
       tx.feeSat && tx.rate !== null
         ? Math.abs((tx.feeSat / SATS_PER_BTC) * tx.rate)
         : null,
-    asset: "BTC",
+    asset: tx.asset ?? "BTC",
+    chain: tx.chain ?? null,
+    network: tx.network ?? null,
     rate: tx.rate,
     fiatCurrency: tx.fiatCurrency,
     pricingSourceKind: tx.pricingSourceKind as Transaction["pricingSourceKind"],

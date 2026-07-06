@@ -59,11 +59,21 @@ function looksLikeTxid(value: string | null | undefined) {
   return /^[0-9a-f]{64}$/i.test(value?.trim() ?? "");
 }
 
+function graphLookupChain(
+  transaction: TransactionDetailTabContext["transaction"] | null | undefined,
+) {
+  const chain = transaction?.chain?.trim().toLowerCase();
+  if (chain === "bitcoin" || chain === "liquid") return chain;
+  if (transaction?.paymentMethod === "On-chain") return "bitcoin";
+  if (transaction?.paymentMethod === "Liquid") return "liquid";
+  return null;
+}
+
 function hasPublicGraphLookupReference(
   transaction: TransactionDetailTabContext["transaction"] | null | undefined,
 ) {
   if (!transaction || !looksLikeTxid(transaction.explorerId)) return false;
-  return transaction.paymentMethod === "On-chain" || transaction.paymentMethod === "Liquid";
+  return graphLookupChain(transaction) !== null;
 }
 
 export function transactionGraphLookupArgs(

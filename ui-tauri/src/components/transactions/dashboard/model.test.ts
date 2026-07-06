@@ -231,6 +231,23 @@ describe("transaction dashboard chart selection", () => {
     expect(transaction.feeBtc).toBe(0.0004218);
   });
 
+  it("preserves daemon asset and chain metadata on transaction rows", () => {
+    const transaction = toDashboardTransaction(
+      rawTx({
+        asset: "LBTC",
+        chain: "liquid",
+        network: "liquidv1",
+        account: "Wallet export",
+      }),
+      0,
+    );
+
+    expect(transaction.asset).toBe("LBTC");
+    expect(transaction.chain).toBe("liquid");
+    expect(transaction.network).toBe("liquidv1");
+    expect(transaction.paymentMethod).toBe("Liquid");
+  });
+
   it("normalizes backend review-status variants before detail rendering", () => {
     const tx = rawTx({
       id: "tx-missing-price",
