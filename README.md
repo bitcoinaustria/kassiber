@@ -88,8 +88,9 @@ carries a working Austrian (§ 27b EStG) plugin with E 1kv exports.
   (`--no-verify` for the lean workbook); local
   BTC-USD / BTC-EUR rates cache (configurable live provider, Coinbase by
   default, CoinGecko supported, plus Kraken OHLCVT local archive and
-  auto-seeded bundled BTC-only offline history for daily values, backfilled to
-  2011-01-01 with Coin Metrics + ECB-derived rows) and
+  auto-seeded bundled BTC-only offline history for hourly values, backfilled to
+  2011-01-01 with daily-derived Coin Metrics + ECB rows before Kraken hourly
+  coverage begins) and
   opt-in desktop background refresh for the latest BTC price.
 - **Sovereign storage** — one SQLite system of record per project/book-set;
   optional SQLCipher 4 passphrase encryption; single-project `tar | age`

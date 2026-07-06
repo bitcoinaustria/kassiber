@@ -187,11 +187,10 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
   const isRebuildingRates = rebuildRates.isPending;
   const maintenanceSettings = maintenanceSettingsQuery.data?.data ?? null;
   const freshnessSettings = maintenanceSettings?.settings ?? null;
-  const autoMarketRatesEnabled = Boolean(
-    freshnessSettings?.background_enabled &&
-      freshnessSettings.source_classes?.market_rates,
+  const liveMinuteRatesEnabled = Boolean(
+    freshnessSettings?.source_classes?.market_rates,
   );
-  const autoMarketRatesDisabled =
+  const liveMinuteRatesDisabled =
     maintenanceSettingsQuery.isLoading ||
     configureMaintenance.isPending ||
     !maintenanceSettings?.profile;
@@ -219,6 +218,7 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
     ) ?? 0;
   const rateRebuildJournalBlocker = rateRebuildJournalError(rateRebuildResult);
   const startRateRebuild = async () => {
+    if (!liveMinuteRatesEnabled) return;
     setRateRebuildError(null);
     setRateRebuildResult(null);
     rebuildNoticeRef.current = addNotification({
@@ -289,7 +289,7 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
       }
     }
   };
-  const setAutoMarketRates = async (enabled: boolean) => {
+  const setLiveMinuteRates = async (enabled: boolean) => {
     if (!freshnessSettings) return;
     const sourceClasses = {
       ...freshnessSettings.source_classes,
@@ -404,7 +404,7 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
           </div>
           <Select
             value={marketRateProvider}
-            disabled={autoMarketRatesDisabled}
+            disabled={liveMinuteRatesDisabled}
             onValueChange={(value) => {
               void setMarketRateProvider(value as MarketRateProvider);
             }}
@@ -424,10 +424,10 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
         <div className="flex items-start gap-3">
           <Checkbox
             id="market-data-auto-refresh"
-            checked={autoMarketRatesEnabled}
-            disabled={autoMarketRatesDisabled}
+            checked={liveMinuteRatesEnabled}
+            disabled={liveMinuteRatesDisabled}
             onCheckedChange={(checked) => {
-              void setAutoMarketRates(checked === true);
+              void setLiveMinuteRates(checked === true);
             }}
           />
           <Label
@@ -520,7 +520,9 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
               setRateRebuildError(null);
               setRateRebuildOpen(true);
             }}
-            disabled={isRebuildingRates || isImportingKraken}
+            disabled={
+              isRebuildingRates || isImportingKraken || !liveMinuteRatesEnabled
+            }
           >
             {isRebuildingRates ? (
               <RefreshCw className="size-4 animate-spin" aria-hidden="true" />
@@ -533,6 +535,11 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
         <p className="mt-2 text-xs text-muted-foreground">
           {t("marketData.rebuildFootnote")}
         </p>
+        {!liveMinuteRatesEnabled ? (
+          <p className="mt-2 text-xs text-amber-700 dark:text-amber-300">
+            {t("marketData.rebuildOptInRequired")}
+          </p>
+        ) : null}
         {isRebuildingRates ? (
           <div className="mt-3 rounded-md border border-primary/25 bg-primary/5 p-3">
             <div className="flex items-center justify-between gap-3 text-xs">
@@ -873,7 +880,7 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
             <Button
               type="button"
               onClick={() => void startRateRebuild()}
-              disabled={isRebuildingRates}
+              disabled={isRebuildingRates || !liveMinuteRatesEnabled}
             >
               {isRebuildingRates ? (
                 <RefreshCw className="size-4 animate-spin" aria-hidden="true" />

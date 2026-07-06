@@ -129,7 +129,7 @@ def default_policy() -> FreshnessPolicy:
         SOURCE_ONCHAIN: False,
         SOURCE_BTCPAY_WALLET: False,
         SOURCE_BTCPAY_PROVENANCE: False,
-        SOURCE_RATES: True,
+        SOURCE_RATES: False,
         SOURCE_JOURNALS: True,
     }
     return FreshnessPolicy(

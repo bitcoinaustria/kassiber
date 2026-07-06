@@ -116,6 +116,7 @@ from .core import maintenance as core_maintenance
 from .core import metadata as core_metadata
 from .core import privacy_hygiene as core_privacy_hygiene
 from .core import rates as core_rates
+from .core import freshness as core_freshness
 from .core import wallets as core_wallets
 from .core.repo import current_context_snapshot, resolve_wallet as core_resolve_wallet
 from .core.runtime import build_status_payload
@@ -3008,7 +3009,7 @@ def _rates_kraken_csv_import_payload(
         raise AppError(
             "ui.rates.kraken_csv.import requires args.path",
             code="validation",
-            hint="Choose a local Kraken OHLCVT .zip or .csv archive, or use the bundled BTC daily seed.",
+            hint="Choose a local Kraken OHLCVT .zip or .csv archive, or use the bundled BTC hourly seed.",
             retryable=False,
         )
     if use_bundled and path is not None and not isinstance(path, str):
@@ -3041,7 +3042,7 @@ def _rates_kraken_csv_import_payload(
         else None
     )
     if use_bundled:
-        archive_path, summary = core_rates.sync_bundled_kraken_btc_daily(
+        archive_path, summary = core_rates.sync_bundled_kraken_btc_hourly(
             conn,
             pair=pair,
         )
@@ -3127,6 +3128,8 @@ def _rates_rebuild_payload(
                 retryable=False,
                 details={"fiat_currency": active_profile["fiat_currency"]},
             )
+    if source in core_rates.LIVE_MARKET_RATE_SOURCES:
+        active_profile = _require_live_market_rates_opt_in(conn, active_profile)
     profile_id = None
     journal_input_version_before = None
     if reprice_transactions:
@@ -3223,8 +3226,10 @@ def _rates_latest_payload(
         )
     if isinstance(pair_arg, str) and pair_arg.strip():
         pair = core_rates.require_supported_pair(pair_arg)
+        _require_live_market_rates_opt_in(conn)
     else:
         _, profile = resolve_scope(conn, None, None)
+        _require_live_market_rates_opt_in(conn, profile)
         pair = core_rates.transaction_rate_pair("BTC", profile["fiat_currency"])
         if pair is None:
             raise AppError(
@@ -3251,6 +3256,27 @@ def _rates_latest_payload(
         "latest": latest,
         "marketRate": _market_rate_payload_from_rate(rate),
     }
+
+
+def _require_live_market_rates_opt_in(
+    conn: sqlite3.Connection,
+    profile: Mapping[str, Any] | None = None,
+) -> Mapping[str, Any]:
+    if profile is None:
+        _, profile = resolve_scope(conn, None, None)
+    policy = core_freshness.get_policy(conn, str(profile["id"]))
+    if not policy.source_classes.get(core_freshness.SOURCE_RATES, False):
+        raise AppError(
+            "Live market-rate provider lookups are disabled for this book",
+            code="live_market_rates_disabled",
+            hint=(
+                "Enable live market-rate lookups in Settings > Market data, "
+                "or use the bundled/local Kraken history for offline pricing."
+            ),
+            retryable=False,
+            details={"profile_id": profile["id"]},
+        )
+    return profile
 
 
 def _ai_chat_args(args: dict) -> dict[str, Any]:
