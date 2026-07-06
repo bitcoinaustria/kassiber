@@ -1367,8 +1367,37 @@ def build_parser() -> argparse.ArgumentParser:
     tx_list.add_argument("--wallet")
     tx_list.add_argument("--direction", choices=("inbound", "outbound"))
     tx_list.add_argument("--asset")
+    tx_list.add_argument(
+        "--txid",
+        "--txids",
+        action="append",
+        dest="txids",
+        help="Internal id, external txid, or public explorer id to filter; repeat or comma-separate",
+    )
     tx_list.add_argument("--start", help="RFC3339 lower bound (inclusive) on occurred_at")
     tx_list.add_argument("--end", help="RFC3339 upper bound (inclusive) on occurred_at")
+    tx_list.add_argument(
+        "--period",
+        choices=("30days", "3months", "ytd", "1year", "5years", "10years", "15years", "all"),
+        help="Relative occurred_at window",
+    )
+    tx_list.add_argument("--status", choices=("completed", "pending", "failed", "review"))
+    tx_list.add_argument(
+        "--flow",
+        choices=("incoming", "outgoing", "transfer", "swap", "layer-transition"),
+    )
+    tx_list.add_argument(
+        "--payment-method",
+        choices=("On-chain", "Exchange", "Lightning", "Liquid"),
+        help="Payment method / network family filter",
+    )
+    tx_list.add_argument("--network", help="Wallet network/chain/payment method filter")
+    tx_list.add_argument("--with-fees", action="store_true", help="Only include transactions with non-zero fees")
+    tx_list.add_argument(
+        "--quick",
+        choices=("external_flow", "review_queue", "no_explorer_id", "missing_price", "failed_import"),
+        help="Desktop quick filter",
+    )
     tx_list.add_argument("--cursor", help="Opaque pagination cursor from a previous response")
     tx_list.add_argument(
         "--sort",
@@ -3013,6 +3042,14 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                 asset=args.asset,
                 start=args.start,
                 end=args.end,
+                txids=args.txids,
+                period=args.period,
+                status=args.status,
+                flow=args.flow,
+                payment_method=args.payment_method,
+                network=args.network,
+                with_fees=args.with_fees,
+                quick=args.quick,
                 cursor=args.cursor,
                 sort=args.sort,
                 order=args.order,

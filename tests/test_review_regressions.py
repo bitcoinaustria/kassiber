@@ -9198,6 +9198,242 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual(payload.get("kind"), "error")
         self.assertEqual(payload["error"]["code"], "validation")
 
+    def test_transactions_list_supports_extended_cli_filters(self):
+        self._bootstrap_wallet(label="Cold", kind="custom")
+        payload, result = self._run_json(
+            "wallets",
+            "create",
+            "--workspace",
+            "Main",
+            "--profile",
+            "Default",
+            "--label",
+            "Liquid Pocket",
+            "--kind",
+            "custom",
+        )
+        self._assert_ok(payload, result, "wallets.create")
+
+        public_txid = "ab" * 32
+        self._insert_transaction(
+            wallet_label="Cold",
+            tx_id="internal-receipt",
+            external_id="invoice-1",
+            occurred_at="2026-01-10T00:00:00Z",
+            amount_msat=100_000_000,
+            direction="inbound",
+        )
+        self._insert_transaction(
+            wallet_label="Cold",
+            tx_id="public-spend",
+            external_id=public_txid,
+            occurred_at="2026-02-10T00:00:00Z",
+            amount_msat=200_000_000,
+            direction="outbound",
+        )
+        self._insert_transaction(
+            wallet_label="Cold",
+            tx_id="failed-import",
+            external_id="failed-import-source",
+            occurred_at="2026-03-10T00:00:00Z",
+            amount_msat=300_000_000,
+            direction="inbound",
+        )
+        self._insert_transaction(
+            wallet_label="Liquid Pocket",
+            tx_id="liquid-row",
+            external_id="liquid-row-source",
+            occurred_at="2026-04-10T00:00:00Z",
+            amount_msat=400_000_000,
+            direction="inbound",
+            asset="LBTC",
+        )
+
+        conn = open_db(self.data_root)
+        self.addCleanup(conn.close)
+        conn.execute(
+            """
+            UPDATE wallets
+            SET config_json = ?
+            WHERE label = 'Liquid Pocket'
+            """,
+            (json.dumps({"chain": "liquid", "network": "regtest"}),),
+        )
+        conn.execute(
+            """
+            UPDATE transactions
+            SET fiat_rate = 70000, fiat_value = 140, fee = 1000
+            WHERE id = 'public-spend'
+            """,
+        )
+        conn.execute(
+            """
+            UPDATE transactions
+            SET review_status = 'failed'
+            WHERE id = 'failed-import'
+            """,
+        )
+        conn.execute(
+            """
+            UPDATE transactions
+            SET fiat_rate = 71000, fiat_value = 284
+            WHERE id = 'liquid-row'
+            """,
+        )
+        conn.commit()
+
+        payload, result = self._run_json(
+            "transactions",
+            "list",
+            "--workspace",
+            "Main",
+            "--profile",
+            "Default",
+            "--txid",
+            "internal-receipt",
+            "--txid",
+            public_txid,
+            "--period",
+            "15years",
+        )
+        self._assert_ok(payload, result, "transactions.list")
+        self.assertEqual(payload["count"], 2)
+        self.assertEqual(payload["total"], 2)
+        self.assertEqual({row["id"] for row in payload["data"]}, {"internal-receipt", "public-spend"})
+
+        payload, result = self._run_json(
+            "transactions",
+            "list",
+            "--workspace",
+            "Main",
+            "--profile",
+            "Default",
+            "--quick",
+            "missing_price",
+        )
+        self._assert_ok(payload, result, "transactions.list")
+        self.assertEqual({row["id"] for row in payload["data"]}, {"internal-receipt", "failed-import"})
+
+        payload, result = self._run_json(
+            "transactions",
+            "list",
+            "--workspace",
+            "Main",
+            "--profile",
+            "Default",
+            "--quick",
+            "no_explorer_id",
+        )
+        self._assert_ok(payload, result, "transactions.list")
+        self.assertEqual(
+            {row["id"] for row in payload["data"]},
+            {"internal-receipt", "failed-import", "liquid-row"},
+        )
+
+        payload, result = self._run_json(
+            "transactions",
+            "list",
+            "--workspace",
+            "Main",
+            "--profile",
+            "Default",
+            "--status",
+            "failed",
+        )
+        self._assert_ok(payload, result, "transactions.list")
+        self.assertEqual([row["id"] for row in payload["data"]], ["failed-import"])
+
+        payload, result = self._run_json(
+            "transactions",
+            "list",
+            "--workspace",
+            "Main",
+            "--profile",
+            "Default",
+            "--payment-method",
+            "Liquid",
+        )
+        self._assert_ok(payload, result, "transactions.list")
+        self.assertEqual([row["id"] for row in payload["data"]], ["liquid-row"])
+
+        payload, result = self._run_json(
+            "transactions",
+            "list",
+            "--workspace",
+            "Main",
+            "--profile",
+            "Default",
+            "--network",
+            "regtest",
+        )
+        self._assert_ok(payload, result, "transactions.list")
+        self.assertEqual([row["id"] for row in payload["data"]], ["liquid-row"])
+
+        payload, result = self._run_json(
+            "transactions",
+            "list",
+            "--workspace",
+            "Main",
+            "--profile",
+            "Default",
+            "--with-fees",
+        )
+        self._assert_ok(payload, result, "transactions.list")
+        self.assertEqual([row["id"] for row in payload["data"]], ["public-spend"])
+
+        payload, result = self._run_json(
+            "transactions",
+            "list",
+            "--workspace",
+            "Main",
+            "--profile",
+            "Default",
+            "--flow",
+            "incoming",
+            "--limit",
+            "2",
+        )
+        self._assert_ok(payload, result, "transactions.list")
+        self.assertEqual(payload["count"], 3)
+        self.assertTrue(payload["has_more"])
+        first_cursor = payload["next_cursor"]
+
+        payload, result = self._run_json(
+            "transactions",
+            "list",
+            "--workspace",
+            "Main",
+            "--profile",
+            "Default",
+            "--flow",
+            "incoming",
+            "--limit",
+            "2",
+            "--cursor",
+            first_cursor,
+        )
+        self._assert_ok(payload, result, "transactions.list")
+        self.assertFalse(payload["has_more"])
+        self.assertEqual(len(payload["data"]), 1)
+
+        payload, result = self._run_json(
+            "transactions",
+            "list",
+            "--workspace",
+            "Main",
+            "--profile",
+            "Default",
+            "--flow",
+            "outgoing",
+            "--limit",
+            "2",
+            "--cursor",
+            first_cursor,
+        )
+        self.assertEqual(result.returncode, 1, msg=payload)
+        self.assertEqual(payload.get("kind"), "error")
+        self.assertEqual(payload["error"]["code"], "validation")
+
     def test_ui_transactions_snapshot_filters_count_and_paginate_server_side(self):
         self._bootstrap_wallet(label="Cold", kind="custom")
         payload, result = self._run_json(
