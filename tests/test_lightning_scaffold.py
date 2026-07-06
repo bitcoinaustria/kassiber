@@ -7,6 +7,7 @@ written and reviewed independently.
 
 from __future__ import annotations
 
+import json
 import sqlite3
 import tempfile
 import unittest
@@ -19,14 +20,18 @@ from kassiber.core import accounts as core_accounts
 from kassiber.core import lightning as core_lightning
 from kassiber.core import wallets as core_wallets
 from kassiber.core.lightning import (
+    LightningCapabilities,
     NodeChannel,
     NodeForward,
     NodeRoutingSnapshot,
     NodeSnapshot,
     build_profitability_report,
+    lightning_capabilities_from_adapter,
+    lightning_capabilities_to_wire,
     profitability_csv_rows,
     register_adapter,
     registered_kinds,
+    require_lightning_capability,
     resolve_adapter,
     resolve_lightning_backend,
     resolve_lightning_connection,
@@ -106,6 +111,16 @@ def _snapshot_with_routing() -> NodeSnapshot:
 @dataclass
 class _FakeAdapter:
     kind: str = "lnd"
+    capabilities: LightningCapabilities = LightningCapabilities(
+        node_snapshot=True,
+        routing_profitability=True,
+        channel_balances=True,
+        channel_lifecycle=True,
+        forward_events=True,
+        invoice_activity=True,
+        payment_activity=True,
+        onchain_balance=True,
+    )
 
     def fetch_node_snapshot(
         self,
@@ -380,6 +395,60 @@ class LightningRegistryTest(unittest.TestCase):
         self.assertIsNotNone(core_lightning.resolve_adapter("lnd"))
 
 
+class LightningCapabilitiesTest(unittest.TestCase):
+    def test_capabilities_serialize_to_stable_safe_wire_keys(self) -> None:
+        capabilities = LightningCapabilities(
+            node_snapshot=True,
+            routing_profitability=True,
+            channel_balances=True,
+        )
+        self.assertEqual(
+            capabilities.supported_capabilities(),
+            ("node_snapshot", "routing_profitability", "channel_balances"),
+        )
+        self.assertEqual(
+            lightning_capabilities_to_wire(capabilities),
+            {
+                "nodeSnapshot": True,
+                "routingProfitability": True,
+                "channelBalances": True,
+                "channelLifecycle": False,
+                "forwardEvents": False,
+                "invoiceActivity": False,
+                "paymentActivity": False,
+                "onchainBalance": False,
+            },
+        )
+
+    def test_missing_capability_declaration_means_no_capabilities(self) -> None:
+        class _LegacyAdapter:
+            kind = "legacy"
+
+        self.assertEqual(
+            lightning_capabilities_from_adapter(_LegacyAdapter()),
+            LightningCapabilities(),
+        )
+
+    def test_require_capability_raises_stable_ui_safe_error(self) -> None:
+        adapter = _FakeAdapter(
+            kind="nwc",
+            capabilities=LightningCapabilities(node_snapshot=True),
+        )
+        with self.assertRaises(AppError) as ctx:
+            require_lightning_capability(
+                kind="nwc",
+                adapter=adapter,
+                capability="routing_profitability",
+            )
+        self.assertEqual(ctx.exception.code, "lightning_capability_unsupported")
+        self.assertFalse(ctx.exception.retryable)
+        self.assertEqual(ctx.exception.details["kind"], "nwc")
+        self.assertEqual(
+            ctx.exception.details["supported_capabilities"],
+            ["node_snapshot"],
+        )
+
+
 class LightningForwardFailureReasonTest(unittest.TestCase):
     def test_known_failure_reasons_accepted(self) -> None:
         # The Literal enum is a static check, not a runtime one — but
@@ -584,7 +653,15 @@ def _scoped_lightning_conn(
         " kind TEXT NOT NULL,"
         " profile_id TEXT NOT NULL,"
         " config_json TEXT NOT NULL DEFAULT '{}',"
+        " created_at TEXT NOT NULL DEFAULT '2026-01-01T00:00:00Z',"
         " UNIQUE (profile_id, label))"
+    )
+    conn.execute(
+        "CREATE TABLE transactions ("
+        " id TEXT PRIMARY KEY,"
+        " wallet_id TEXT NOT NULL,"
+        " excluded INTEGER NOT NULL DEFAULT 0,"
+        " occurred_at TEXT)"
     )
     conn.execute(
         "CREATE TABLE backends ("
@@ -767,6 +844,26 @@ class ResolveLightningConnectionTest(unittest.TestCase):
             )
 
 
+class LightningOverviewCapabilitiesTest(unittest.TestCase):
+    def test_overview_connection_exposes_only_safe_capability_bits(self) -> None:
+        from kassiber.core.ui_snapshot import _connections
+
+        conn = _scoped_lightning_conn(
+            [("w-1", "Home LND", "lnd", "pf-1", "{}")]
+        )
+        with _adapter_registered("lnd", _FakeAdapter(kind="lnd")):
+            rows = _connections(conn, "pf-1", {})
+        self.assertEqual(rows[0]["kind"], "lnd")
+        self.assertTrue(rows[0]["lightningCapabilities"]["nodeSnapshot"])
+        self.assertTrue(
+            rows[0]["lightningCapabilities"]["routingProfitability"]
+        )
+        payload = json.dumps(rows, sort_keys=True)
+        self.assertNotIn("peerPubkey", payload)
+        self.assertNotIn("fundingOutpoint", payload)
+        self.assertNotIn("backend", payload)
+
+
 class LightningDaemonPayloadTest(unittest.TestCase):
     def _conn_with_lightning_wallet(self) -> sqlite3.Connection:
         return _scoped_lightning_conn(
@@ -829,10 +926,13 @@ class LightningDaemonPayloadTest(unittest.TestCase):
             payload = _lightning_node_snapshot_payload(
                 conn, {}, {"connection": "w-1"}
             )
-        self.assertEqual(
-            payload["connection"],
-            {"id": "w-1", "label": "Home CLN", "kind": "coreln"},
+        self.assertEqual(payload["connection"]["id"], "w-1")
+        self.assertEqual(payload["connection"]["label"], "Home CLN")
+        self.assertEqual(payload["connection"]["kind"], "coreln")
+        self.assertTrue(
+            payload["connection"]["lightningCapabilities"]["nodeSnapshot"]
         )
+        self.assertTrue(payload["capabilities"]["nodeSnapshot"])
         self.assertIn("totalLocalBalanceSat", payload)
         self.assertIn("routing", payload)
 
@@ -847,8 +947,52 @@ class LightningDaemonPayloadTest(unittest.TestCase):
                 conn, {}, {"connection": "w-1"}
             )
         self.assertEqual(payload["connection"]["id"], "w-1")
+        self.assertTrue(
+            payload["connection"]["lightningCapabilities"][
+                "routingProfitability"
+            ]
+        )
         self.assertEqual(payload["summary"]["netProfitSat"], 3_280)
         self.assertGreaterEqual(len(payload["channels"]), 1)
+
+    def test_ai_snapshot_payload_keeps_capabilities_but_not_identity_graph(
+        self,
+    ) -> None:
+        from kassiber.daemon import _lightning_node_snapshot_payload_for_ai
+
+        conn = self._conn_with_lightning_wallet()
+        with _adapter_registered("coreln", _FakeAdapter(kind="coreln")):
+            payload = _lightning_node_snapshot_payload_for_ai(
+                conn, {}, {"connection": "w-1"}
+            )
+        self.assertTrue(payload["capabilities"]["nodeSnapshot"])
+        self.assertNotIn("id", payload["connection"])
+        serialized = json.dumps(payload, sort_keys=True)
+        self.assertNotIn("peerPubkey", serialized)
+        self.assertNotIn("peerAlias", serialized)
+        self.assertNotIn("shortChannelId", serialized)
+        self.assertNotIn("fundingOutpoint", serialized)
+
+    def test_profitability_payload_rejects_adapter_without_capability(
+        self,
+    ) -> None:
+        from kassiber.daemon import _lightning_profitability_payload
+
+        conn = self._conn_with_lightning_wallet()
+        adapter = _FakeAdapter(
+            kind="coreln",
+            capabilities=LightningCapabilities(node_snapshot=True),
+        )
+        with _adapter_registered("coreln", adapter):
+            with self.assertRaises(AppError) as ctx:
+                _lightning_profitability_payload(
+                    conn, {}, {"connection": "w-1"}
+                )
+        self.assertEqual(ctx.exception.code, "lightning_capability_unsupported")
+        self.assertEqual(
+            ctx.exception.details["capability"],
+            "routing_profitability",
+        )
 
     def test_cli_profitability_payload_passes_configured_backend_to_adapter(
         self,
@@ -857,6 +1001,10 @@ class LightningDaemonPayloadTest(unittest.TestCase):
 
         class _RecordingAdapter:
             kind = "coreln"
+            capabilities = LightningCapabilities(
+                node_snapshot=True,
+                routing_profitability=True,
+            )
 
             def __init__(self) -> None:
                 self.backend: dict[str, Any] | None = None
@@ -920,8 +1068,12 @@ class LightningModuleExportsTest(unittest.TestCase):
     def test_top_level_exports_match_public_api(self) -> None:
         expected = {
             "DEFAULT_OPEN_COST_SAT",
+            "EMPTY_LIGHTNING_CAPABILITIES",
             "LIGHTNING_ADAPTER_KINDS",
             "LightningAdapter",
+            "LIGHTNING_CAPABILITY_NAMES",
+            "LightningCapabilities",
+            "LightningCapability",
             "LightningProfitabilityReport",
             "ChannelOpenCostCheck",
             "NodeChannel",
@@ -932,9 +1084,14 @@ class LightningModuleExportsTest(unittest.TestCase):
             "NodeRoutingSnapshot",
             "NodeSnapshot",
             "build_profitability_report",
+            "lightning_capabilities_from_adapter",
+            "lightning_capabilities_to_wire",
+            "normalize_lightning_capabilities",
             "profitability_csv_rows",
             "register_adapter",
+            "registered_capabilities",
             "registered_kinds",
+            "require_lightning_capability",
             "resolve_adapter",
             "resolve_lightning_backend",
             "resolve_lightning_connection",

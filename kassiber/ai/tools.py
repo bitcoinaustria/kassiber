@@ -513,7 +513,8 @@ TOOL_CATALOG: tuple[ToolEntry, ...] = (
             "connection id and per-channel covers-open-cost rows are omitted "
             "because per-channel peer aliases and short channel ids identify "
             "third parties. Requires a registered Lightning adapter; returns an "
-            "error envelope when no LND/CLN sync is installed."
+            "error envelope when no LND/CLN sync is installed or the adapter "
+            "does not support routing profitability."
         ),
         parameters={
             "type": "object",
@@ -550,7 +551,8 @@ TOOL_CATALOG: tuple[ToolEntry, ...] = (
             "funding outpoints, short channel ids, peer pubkeys and peer aliases "
             "(including on forwards) are omitted; the operator's own connection "
             "label is kept. Returns an error envelope when no Lightning adapter "
-            "is registered for the connection's kind."
+            "is registered for the connection's kind or the adapter does not "
+            "support node snapshots."
         ),
         parameters={
             "type": "object",

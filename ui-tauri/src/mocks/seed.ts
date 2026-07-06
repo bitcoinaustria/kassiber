@@ -66,7 +66,19 @@ export interface Connection {
   addresses?: number;
   gap?: number;
   channels?: number;
+  lightningCapabilities?: LightningCapabilities;
   node?: NodeSnapshot;
+}
+
+export interface LightningCapabilities {
+  nodeSnapshot: boolean;
+  routingProfitability: boolean;
+  channelBalances: boolean;
+  channelLifecycle: boolean;
+  forwardEvents: boolean;
+  invoiceActivity: boolean;
+  paymentActivity: boolean;
+  onchainBalance: boolean;
 }
 
 export type NodeChannelState =
@@ -374,6 +386,16 @@ export const MOCK_OVERVIEW: OverviewSnapshot = {
       balance: 0.04821309,
       status: "synced",
       channels: 12,
+      lightningCapabilities: {
+        nodeSnapshot: true,
+        routingProfitability: true,
+        channelBalances: true,
+        channelLifecycle: true,
+        forwardEvents: true,
+        invoiceActivity: true,
+        paymentActivity: true,
+        onchainBalance: true,
+      },
       node: {
         alias: "kassiber-home",
         pubkey:
@@ -664,6 +686,16 @@ export const MOCK_OVERVIEW: OverviewSnapshot = {
       balance: 0.02914872,
       status: "syncing",
       channels: 7,
+      lightningCapabilities: {
+        nodeSnapshot: true,
+        routingProfitability: true,
+        channelBalances: true,
+        channelLifecycle: true,
+        forwardEvents: true,
+        invoiceActivity: true,
+        paymentActivity: true,
+        onchainBalance: true,
+      },
       node: {
         alias: "kassiber-routing",
         pubkey:

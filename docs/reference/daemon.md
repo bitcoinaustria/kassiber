@@ -702,6 +702,20 @@ that the daemon imports at startup. Without a registered adapter the daemon
 returns an `lightning_adapter_unavailable` error envelope so the desktop can
 surface the unavailable-adapter state without inventing data.
 
+Lightning adapters also declare explicit safe capability metadata through
+`LightningCapabilities` (`node_snapshot`, `routing_profitability`,
+`channel_balances`, `channel_lifecycle`, `forward_events`,
+`invoice_activity`, `payment_activity`, `onchain_balance`). The daemon checks
+`node_snapshot` before `ui.connections.node.snapshot` and checks both
+`node_snapshot` and `routing_profitability` before
+`ui.reports.lightning_profitability`. A registered adapter that lacks the
+requested feature returns a deterministic `lightning_capability_unsupported`
+error with safe details (`kind`, requested `capability`, and supported
+capability names). Capability blocks exposed to the desktop use camelCase
+booleans such as `nodeSnapshot` and `routingProfitability`; they never include
+peer pubkeys, channel funding outpoints, short channel ids, descriptors,
+backend URLs/tokens, raw wallet config, or other identity graph data.
+
 ## Encrypted database
 
 When the active project's `kassiber.sqlite3` is SQLCipher-encrypted, the daemon

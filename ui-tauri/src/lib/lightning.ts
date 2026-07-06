@@ -19,6 +19,74 @@ export const LIGHTNING_CONNECTION_KINDS: ReadonlySet<string> = new Set([
   "nwc",
 ]);
 
+export interface LightningCapabilities {
+  nodeSnapshot: boolean;
+  routingProfitability: boolean;
+  channelBalances: boolean;
+  channelLifecycle: boolean;
+  forwardEvents: boolean;
+  invoiceActivity: boolean;
+  paymentActivity: boolean;
+  onchainBalance: boolean;
+}
+
+export type LightningCapabilityKey = keyof LightningCapabilities;
+
+export const EMPTY_LIGHTNING_CAPABILITIES: LightningCapabilities = {
+  nodeSnapshot: false,
+  routingProfitability: false,
+  channelBalances: false,
+  channelLifecycle: false,
+  forwardEvents: false,
+  invoiceActivity: false,
+  paymentActivity: false,
+  onchainBalance: false,
+};
+
+const LEGACY_NODE_SNAPSHOT_KINDS = new Set(["core-ln", "coreln", "lnd"]);
+
+function normalizeLightningCapabilities(value: unknown) {
+  if (!value || typeof value !== "object") return null;
+  const raw = value as Partial<Record<LightningCapabilityKey, unknown>>;
+  return {
+    nodeSnapshot: raw.nodeSnapshot === true,
+    routingProfitability: raw.routingProfitability === true,
+    channelBalances: raw.channelBalances === true,
+    channelLifecycle: raw.channelLifecycle === true,
+    forwardEvents: raw.forwardEvents === true,
+    invoiceActivity: raw.invoiceActivity === true,
+    paymentActivity: raw.paymentActivity === true,
+    onchainBalance: raw.onchainBalance === true,
+  } satisfies LightningCapabilities;
+}
+
+export function lightningCapabilitiesForConnection(connection: {
+  kind?: string | null;
+  lightningCapabilities?: unknown;
+}): LightningCapabilities {
+  const declared = normalizeLightningCapabilities(
+    connection.lightningCapabilities,
+  );
+  if (declared) return declared;
+  const kind = connection.kind ?? "";
+  if (!LEGACY_NODE_SNAPSHOT_KINDS.has(kind)) return EMPTY_LIGHTNING_CAPABILITIES;
+  return {
+    ...EMPTY_LIGHTNING_CAPABILITIES,
+    nodeSnapshot: true,
+    routingProfitability: true,
+  };
+}
+
+export function connectionSupportsLightningCapability(
+  connection: {
+    kind?: string | null;
+    lightningCapabilities?: unknown;
+  },
+  capability: LightningCapabilityKey,
+): boolean {
+  return lightningCapabilitiesForConnection(connection)[capability];
+}
+
 // Sentinel strings the daemon emits when reporting that a Core Lightning
 // backend has secret-bearing fields configured but redacted. The settings
 // form replaces these with empty inputs so users do not see "Configured

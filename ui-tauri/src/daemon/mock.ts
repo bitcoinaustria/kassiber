@@ -13,7 +13,11 @@ import type {
   DaemonStreamRecord,
   DaemonTransport,
 } from "./transport";
-import { DEFAULT_OPEN_COST_SAT } from "@/lib/lightning";
+import {
+  DEFAULT_OPEN_COST_SAT,
+  connectionSupportsLightningCapability,
+  type LightningCapabilities,
+} from "@/lib/lightning";
 import { accountMatchesLabel } from "@/lib/connectionTransactions";
 import { MOCK_PROFILES } from "@/mocks/profiles";
 import { MOCK_TRANSACTION_GRAPHS } from "@/mocks/transactions";
@@ -495,6 +499,7 @@ type MockConnection = {
   network?: string;
   paymentMethodId?: string;
   gap?: number;
+  lightningCapabilities?: LightningCapabilities;
   /** balance in BTC (float) — present on overview-snapshot connection rows. */
   balance?: number;
 };
@@ -3412,6 +3417,20 @@ export const mockDaemon: DaemonTransport = {
           },
         };
       }
+      if (
+        !connectionSupportsLightningCapability(connection, "nodeSnapshot")
+      ) {
+        return {
+          kind: "error",
+          schema_version: 1,
+          request_id: req.request_id,
+          error: {
+            code: "lightning_capability_unsupported",
+            message: `Lightning adapter for '${connection.label}' does not support node snapshots.`,
+            retryable: false,
+          },
+        };
+      }
       const node = (connection as { node?: unknown }).node;
       if (!node) {
         return {
@@ -3435,7 +3454,9 @@ export const mockDaemon: DaemonTransport = {
             id: connection.id,
             label: connection.label,
             kind: connection.kind,
+            lightningCapabilities: connection.lightningCapabilities,
           },
+          capabilities: connection.lightningCapabilities,
         } as T,
       };
     }
@@ -3467,6 +3488,23 @@ export const mockDaemon: DaemonTransport = {
           error: {
             code: "not_found",
             message: `Lightning connection '${ref}' not found.`,
+            retryable: false,
+          },
+        };
+      }
+      if (
+        !connectionSupportsLightningCapability(
+          connection,
+          "routingProfitability",
+        )
+      ) {
+        return {
+          kind: "error",
+          schema_version: 1,
+          request_id: req.request_id,
+          error: {
+            code: "lightning_capability_unsupported",
+            message: `Lightning adapter for '${connection.label}' does not support routing profitability.`,
             retryable: false,
           },
         };
@@ -3533,6 +3571,7 @@ export const mockDaemon: DaemonTransport = {
             id: connection.id,
             label: connection.label,
             kind: connection.kind,
+            lightningCapabilities: connection.lightningCapabilities,
           },
           windowLabel: routing?.windowLabel ?? "No routing window reported",
           summary,

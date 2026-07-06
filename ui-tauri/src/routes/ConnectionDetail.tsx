@@ -103,6 +103,7 @@ import {
 } from "@/lib/screen-layout";
 import { cn } from "@/lib/utils";
 import { formatShortDate } from "@/lib/date";
+import { connectionSupportsLightningCapability } from "@/lib/lightning";
 import { isFilePickerAvailable, pickFile } from "@/lib/filePicker";
 import { editConfigKindForConnection } from "@/lib/connectionEditKind";
 import {
@@ -133,25 +134,13 @@ import { useSyncProgressNotice } from "@/hooks/useSyncProgressNotice";
 import { useConnectionRefreshState } from "@/hooks/useConnectionRefreshState";
 import type {
   Connection,
-  ConnectionKind,
   NodeSnapshot,
   OverviewSnapshot,
 } from "@/mocks/seed";
 import type { TransactionsList } from "@/mocks/transactions";
 
-// Lightning *node* kinds — sync against a daemon that exposes channels,
-// peers, and routing snapshots. Phoenix is also categorised as "Lightning"
-// in connectionDisplay, but it lives in Kassiber as a CSV-import wallet
-// (`wallets import-phoenix`, setupKind: "file-wallet"), not a node-shaped
-// sync target — so it keeps rendering with the wallet detail layout below.
-const NODE_CONNECTION_KINDS: ReadonlySet<ConnectionKind> = new Set([
-  "lnd",
-  "core-ln",
-  "nwc",
-]);
-
-const isNodeConnection = (kind: ConnectionKind) =>
-  NODE_CONNECTION_KINDS.has(kind);
+const isNodeConnection = (connection: Connection) =>
+  connectionSupportsLightningCapability(connection, "nodeSnapshot");
 
 const blurClass = (hidden: boolean) => (hidden ? "sensitive" : "");
 const MAX_DESCRIPTOR_GAP_LIMIT = 5000;
@@ -448,7 +437,7 @@ export function ConnectionDetail() {
     );
   }
 
-  if (isNodeConnection(connection.kind)) {
+  if (isNodeConnection(connection)) {
     // Node detail intentionally diverges from the wallet detail: it
     // does NOT expose the per-connection edit/remove dropdown menu.
     // The wallet edit dialog edits descriptor / source_file / btcpay

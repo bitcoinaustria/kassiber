@@ -177,9 +177,16 @@ encode the policy where they can:
 - `NodeSnapshot` has no fields for preimages, payment_secrets, or
   bolt11 strings. There is nowhere for an adapter to "accidentally"
   forward them; they must be discarded at the adapter boundary.
-- The `LightningAdapter` Protocol exposes only
-  `fetch_node_snapshot()` — there is no `pay()`, `close()`,
-  `withdraw()`, or `open()` surface, by construction.
+- The `LightningAdapter` Protocol exposes a safe
+  `LightningCapabilities` declaration plus `fetch_node_snapshot()` —
+  there is no `pay()`, `close()`, `withdraw()`, or `open()` surface, by
+  construction. Capabilities are coarse booleans (`node_snapshot`,
+  `routing_profitability`, `channel_balances`, `channel_lifecycle`,
+  `forward_events`, `invoice_activity`, `payment_activity`,
+  `onchain_balance`) and must not contain endpoint URLs, peer ids,
+  channel ids, descriptors, tokens, or wallet config. Callers must check
+  the capability before dispatching a feature; unsupported features fail
+  with `lightning_capability_unsupported`.
 
 ### AI tool surface redaction
 

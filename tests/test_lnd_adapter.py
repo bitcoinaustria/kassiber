@@ -25,6 +25,7 @@ from unittest.mock import patch
 
 from kassiber.core import accounts as core_accounts
 from kassiber.core.lightning import (
+    LightningCapabilities,
     NodeSnapshot,
     register_adapter,
     resolve_adapter,
@@ -244,6 +245,22 @@ class LndAdapterRegistrationTest(unittest.TestCase):
     def test_registered_adapter_is_LndAdapter_instance(self) -> None:
         adapter = resolve_adapter("lnd")
         self.assertIsInstance(adapter, core_lnd.LndAdapter)
+
+    def test_lnd_declares_real_read_capabilities(self) -> None:
+        adapter = resolve_adapter("lnd")
+        self.assertEqual(
+            adapter.capabilities,
+            LightningCapabilities(
+                node_snapshot=True,
+                routing_profitability=True,
+                channel_balances=True,
+                channel_lifecycle=True,
+                forward_events=True,
+                invoice_activity=True,
+                payment_activity=True,
+                onchain_balance=True,
+            ),
+        )
 
 
 class LndAdapterFetchSnapshotTest(unittest.TestCase):

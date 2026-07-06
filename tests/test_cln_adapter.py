@@ -21,6 +21,7 @@ from kassiber.core import accounts as core_accounts
 from kassiber.core import imports as core_imports
 from kassiber.core import wallets as core_wallets
 from kassiber.core.lightning import (
+    LightningCapabilities,
     NodeSnapshot,
     build_profitability_report,
     register_adapter,
@@ -231,6 +232,22 @@ class AdapterRegistrationTest(unittest.TestCase):
         self.assertIsNotNone(adapter)
         self.assertIsInstance(adapter, CoreLightningAdapter)
         self.assertEqual(adapter.kind, "coreln")
+
+    def test_core_lightning_declares_real_read_capabilities(self) -> None:
+        adapter = resolve_adapter("coreln")
+        self.assertEqual(
+            adapter.capabilities,
+            LightningCapabilities(
+                node_snapshot=True,
+                routing_profitability=True,
+                channel_balances=True,
+                channel_lifecycle=True,
+                forward_events=True,
+                invoice_activity=True,
+                payment_activity=True,
+                onchain_balance=True,
+            ),
+        )
 
 
 class FetchNodeSnapshotTest(unittest.TestCase):

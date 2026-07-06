@@ -11,6 +11,8 @@ from __future__ import annotations
 from threading import Lock
 from typing import TYPE_CHECKING
 
+from .capabilities import LightningCapabilities, lightning_capabilities_from_adapter
+
 if TYPE_CHECKING:
     from .adapter import LightningAdapter
 
@@ -47,3 +49,10 @@ def registered_kinds() -> tuple[str, ...]:
     """Return the kinds with a registered adapter (sorted, for stable output)."""
     with _lock:
         return tuple(sorted(_registry.keys()))
+
+
+def registered_capabilities(kind: str) -> LightningCapabilities:
+    """Return explicit capabilities for a registered adapter kind."""
+    with _lock:
+        adapter = _registry.get(kind)
+    return lightning_capabilities_from_adapter(adapter)

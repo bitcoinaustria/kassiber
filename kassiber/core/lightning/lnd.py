@@ -49,6 +49,7 @@ from ...msat import msat_to_btc
 from ...time_utils import UNKNOWN_OCCURRED_AT, now_iso, timestamp_to_iso
 from .. import imports as core_imports
 from ..repo import invalidate_journals
+from .capabilities import LightningCapabilities
 from .registry import register_adapter
 from .types import (
     NodeChannel,
@@ -653,6 +654,16 @@ class LndAdapter:
     """
 
     kind = "lnd"
+    capabilities = LightningCapabilities(
+        node_snapshot=True,
+        routing_profitability=True,
+        channel_balances=True,
+        channel_lifecycle=True,
+        forward_events=True,
+        invoice_activity=True,
+        payment_activity=True,
+        onchain_balance=True,
+    )
 
     def fetch_node_snapshot(
         self,
