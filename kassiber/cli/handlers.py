@@ -7,6 +7,7 @@ import sqlite3
 import sys
 import uuid
 from collections import defaultdict
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from functools import lru_cache
 from pathlib import Path
@@ -3077,6 +3078,159 @@ TRANSACTION_SORT_COLUMNS = {
     "fee": "t.fee",
 }
 MAX_TRANSACTION_PAGE_SIZE = 1000
+TRANSACTION_FLOW_KINDS = {
+    "chain-swap",
+    "peg-in",
+    "peg-out",
+    "reverse-submarine-swap",
+    "submarine-swap",
+    "swap",
+    "swap-refund",
+}
+TRANSACTION_LAYER_TRANSITION_KINDS = {
+    "chain-swap",
+    "peg-in",
+    "peg-out",
+    "reverse-submarine-swap",
+    "submarine-swap",
+    "swap-refund",
+}
+TRANSACTION_PAYMENT_METHODS = {
+    "exchange": "Exchange",
+    "lightning": "Lightning",
+    "liquid": "Liquid",
+    "on-chain": "On-chain",
+    "onchain": "On-chain",
+    "on chain": "On-chain",
+}
+TRANSACTION_PERIOD_DAYS = {
+    "30days": 29,
+    "30day": 29,
+    "30d": 29,
+    "3months": 92,
+    "3month": 92,
+    "3m": 92,
+    "1year": 365,
+    "1years": 365,
+    "1y": 365,
+    "5years": 365 * 5,
+    "5year": 365 * 5,
+    "5y": 365 * 5,
+    "10years": 365 * 10,
+    "10year": 365 * 10,
+    "10y": 365 * 10,
+    "15years": 365 * 15,
+    "15year": 365 * 15,
+    "15y": 365 * 15,
+}
+
+
+def _coerce_transaction_txids(values):
+    output = []
+    seen = set()
+    for raw in values or ():
+        for part in str(raw).split(","):
+            value = part.strip()
+            if not value:
+                continue
+            normalized = value.lower()
+            if normalized in seen:
+                continue
+            seen.add(normalized)
+            output.append(normalized)
+    return output
+
+
+def _transaction_since_for_period(period):
+    normalized = str(period).strip().lower()
+    if normalized == "all":
+        return None
+    if normalized == "ytd":
+        now = datetime.now(timezone.utc)
+        return _iso_z(datetime(now.year, 1, 1, tzinfo=timezone.utc))
+    days = TRANSACTION_PERIOD_DAYS.get(normalized)
+    if days is None:
+        raise AppError(
+            "--period must be one of: 30days, 3months, ytd, 1year, 5years, 10years, 15years, all",
+            code="validation",
+        )
+    return _iso_z(datetime.now(timezone.utc) - timedelta(days=days))
+
+
+def _normalize_transaction_payment_method(value):
+    normalized = str(value).strip().lower()
+    payment_method = TRANSACTION_PAYMENT_METHODS.get(normalized)
+    if payment_method:
+        return payment_method
+    raise AppError(
+        "--payment-method must be one of: On-chain, Exchange, Lightning, Liquid",
+        code="validation",
+    )
+
+
+def _transaction_pair_exists_sql(pair_type=None):
+    if pair_type == "swap":
+        type_predicate = "AND tout.asset <> tin.asset"
+    elif pair_type == "transfer":
+        type_predicate = "AND tout.asset = tin.asset"
+    else:
+        type_predicate = ""
+    return f"""
+        EXISTS (
+          SELECT 1
+          FROM transaction_pairs p
+          JOIN transactions tout ON tout.id = p.out_transaction_id
+          JOIN transactions tin ON tin.id = p.in_transaction_id
+          WHERE p.deleted_at IS NULL
+            AND (p.out_transaction_id = t.id OR p.in_transaction_id = t.id)
+            {type_predicate}
+        )
+    """
+
+
+def _transaction_payment_method_sql():
+    return """
+        CASE
+          WHEN lower(t.asset) = 'lbtc'
+            OR lower(w.kind) IN ('liquid')
+            OR lower(w.config_json) LIKE '%"chain"%liquid%'
+            OR lower(w.label) LIKE '%liquid%'
+            OR lower(w.label) LIKE '%lbtc%'
+            THEN 'Liquid'
+          WHEN lower(w.kind) IN ('lnd', 'core-ln', 'coreln', 'nwc', 'phoenix')
+            OR lower(w.label) LIKE '%lightning%'
+            OR lower(w.label) LIKE '%phoenix%'
+            OR lower(w.label) LIKE '% ln%'
+            OR lower(w.label) LIKE 'ln %'
+            OR lower(w.label) LIKE '%(ln)%'
+            THEN 'Lightning'
+          WHEN lower(w.kind) IN (
+              'kraken', 'bitstamp', 'coinbase', 'bitpanda', 'river',
+              'bullbitcoin', 'coinfinity', 'strike', 'exchange'
+            )
+            OR lower(w.label) LIKE '%exchange%'
+            THEN 'Exchange'
+          ELSE 'On-chain'
+        END
+    """.strip()
+
+
+def _transaction_status_sql():
+    return """
+        CASE
+          WHEN lower(COALESCE(t.review_status, '')) IN
+               ('review', 'needs_review', 'needs-review', 'blocked', 'quarantined')
+            OR jq.reason IS NOT NULL
+            THEN 'review'
+          WHEN lower(COALESCE(t.review_status, '')) IN ('failed', 'error')
+            THEN 'failed'
+          WHEN lower(COALESCE(t.review_status, '')) IN ('completed', 'complete')
+            THEN 'completed'
+          WHEN t.confirmed_at IS NULL
+            THEN 'pending'
+          ELSE 'completed'
+        END
+    """.strip()
 
 
 def _transaction_cursor_filters(
@@ -3087,6 +3241,14 @@ def _transaction_cursor_filters(
     asset=None,
     start_ts=None,
     end_ts=None,
+    txids=None,
+    period=None,
+    status=None,
+    flow=None,
+    payment_method=None,
+    network=None,
+    with_fees=False,
+    quick=None,
 ):
     return {
         "workspace_id": workspace_id,
@@ -3096,6 +3258,14 @@ def _transaction_cursor_filters(
         "asset": asset.upper() if asset else "",
         "start": start_ts or "",
         "end": end_ts or "",
+        "txids": ",".join(txids or []),
+        "period": period or "",
+        "status": status or "",
+        "flow": flow or "",
+        "payment_method": payment_method or "",
+        "network": network or "",
+        "with_fees": "1" if with_fees else "",
+        "quick": quick or "",
     }
 
 
@@ -3163,6 +3333,14 @@ def list_transactions(
     asset=None,
     start=None,
     end=None,
+    txids=None,
+    period=None,
+    status=None,
+    flow=None,
+    payment_method=None,
+    network=None,
+    with_fees=False,
+    quick=None,
     cursor=None,
     sort="occurred-at",
     order="desc",
@@ -3195,8 +3373,12 @@ def list_transactions(
 
     params = [profile["id"]]
     filters = ["t.profile_id = ?"]
+    period_filter = period.strip().lower() if isinstance(period, str) and period.strip() else None
     start_ts = _iso_z(_parse_iso_datetime(start, "start")) if start else None
+    if start_ts is None and period_filter:
+        start_ts = _transaction_since_for_period(period_filter)
     end_ts = _iso_z(_parse_iso_datetime(end, "end")) if end else None
+    txid_terms = _coerce_transaction_txids(txids)
     wallet_id = ""
     if wallet_ref:
         wallet = resolve_wallet(conn, profile["id"], wallet_ref)
@@ -3215,17 +3397,137 @@ def list_transactions(
     if end_ts:
         filters.append("t.occurred_at <= ?")
         params.append(end_ts)
+    if txid_terms:
+        placeholders = ", ".join("?" for _ in txid_terms)
+        filters.append(
+            f"""(
+              lower(t.id) IN ({placeholders})
+              OR lower(COALESCE(t.external_id, '')) IN ({placeholders})
+              OR (
+                length(COALESCE(t.external_id, '')) = 64
+                AND lower(COALESCE(t.external_id, '')) IN ({placeholders})
+              )
+            )"""
+        )
+        params.extend([*txid_terms, *txid_terms, *txid_terms])
+    if status:
+        filters.append(f"({_transaction_status_sql()}) = ?")
+        params.append(status)
+    if flow == "incoming":
+        flow_kinds = sorted(TRANSACTION_FLOW_KINDS | {"transfer"})
+        filters.append(
+            f"""(
+              t.direction = 'inbound'
+              AND lower(COALESCE(t.kind, '')) NOT IN ({", ".join("?" for _ in flow_kinds)})
+              AND NOT {_transaction_pair_exists_sql()}
+            )"""
+        )
+        params.extend(flow_kinds)
+    elif flow == "outgoing":
+        flow_kinds = sorted(TRANSACTION_FLOW_KINDS | {"transfer"})
+        filters.append(
+            f"""(
+              t.direction = 'outbound'
+              AND lower(COALESCE(t.kind, '')) NOT IN ({", ".join("?" for _ in flow_kinds)})
+              AND NOT {_transaction_pair_exists_sql()}
+            )"""
+        )
+        params.extend(flow_kinds)
+    elif flow == "transfer":
+        filters.append(
+            f"(lower(COALESCE(t.kind, '')) = 'transfer' OR {_transaction_pair_exists_sql('transfer')})"
+        )
+    elif flow == "swap":
+        filters.append(
+            f"""(
+              lower(COALESCE(t.kind, '')) IN ({", ".join("?" for _ in TRANSACTION_FLOW_KINDS)})
+              OR {_transaction_pair_exists_sql('swap')}
+            )"""
+        )
+        params.extend(sorted(TRANSACTION_FLOW_KINDS))
+    elif flow == "layer-transition":
+        filters.append(
+            f"lower(COALESCE(t.kind, '')) IN ({', '.join('?' for _ in TRANSACTION_LAYER_TRANSITION_KINDS)})"
+        )
+        params.extend(sorted(TRANSACTION_LAYER_TRANSITION_KINDS))
+    if payment_method:
+        payment_filter = _normalize_transaction_payment_method(payment_method)
+        filters.append(f"({_transaction_payment_method_sql()}) = ?")
+        params.append(payment_filter)
+    if network:
+        normalized_network = network.strip().lower()
+        maybe_payment = TRANSACTION_PAYMENT_METHODS.get(normalized_network)
+        if maybe_payment:
+            filters.append(f"({_transaction_payment_method_sql()}) = ?")
+            params.append(maybe_payment)
+        else:
+            filters.append(
+                """(
+                  lower(w.kind) = ?
+                  OR lower(w.config_json) LIKE ?
+                  OR lower(w.label) LIKE ?
+                  OR upper(t.asset) = ?
+                )"""
+            )
+            params.extend(
+                [
+                    normalized_network,
+                    f"%{normalized_network}%",
+                    f"%{normalized_network}%",
+                    "LBTC" if normalized_network == "liquid" else normalized_network.upper(),
+                ]
+            )
+    if with_fees:
+        filters.append("COALESCE(t.fee, 0) <> 0")
+    if quick == "external_flow":
+        filters.append("t.direction IN ('inbound', 'outbound')")
+        filters.append("lower(COALESCE(t.kind, '')) <> 'transfer'")
+    elif quick == "review_queue":
+        filters.append(f"({_transaction_status_sql()}) <> 'completed'")
+    elif quick == "no_explorer_id":
+        filters.append(
+            """(
+              t.external_id IS NULL
+              OR length(trim(t.external_id)) <> 64
+              OR lower(trim(t.external_id)) GLOB '*[^0-9a-f]*'
+            )"""
+        )
+    elif quick == "missing_price":
+        filters.append(core_rates.transaction_price_missing_sql())
+    elif quick == "failed_import":
+        filters.append(f"({_transaction_status_sql()}) = 'failed'")
 
+    cursor_start_ts = "" if period_filter and not start else start_ts
     cursor_filters = _transaction_cursor_filters(
         workspace["id"],
         profile["id"],
         wallet_id,
         direction,
         asset,
-        start_ts,
+        cursor_start_ts,
         end_ts,
+        txid_terms,
+        period_filter,
+        status,
+        flow,
+        payment_method,
+        network,
+        with_fees,
+        quick,
     )
     cursor_data = _decode_transaction_cursor(cursor, sort, order, cursor_filters)
+    count_filters = list(filters)
+    count_params = list(params)
+    filtered_count = conn.execute(
+        f"""
+        SELECT COUNT(*) AS count
+        FROM transactions t
+        JOIN wallets w ON w.id = t.wallet_id
+        LEFT JOIN journal_quarantines jq ON jq.transaction_id = t.id
+        WHERE {' AND '.join(count_filters)}
+        """,
+        count_params,
+    ).fetchone()["count"]
     if cursor_data:
         if sort == "occurred-at":
             op = ">" if order == "asc" else "<"
@@ -3299,6 +3601,7 @@ def list_transactions(
             t.excluded
         FROM transactions t
         JOIN wallets w ON w.id = t.wallet_id
+        LEFT JOIN journal_quarantines jq ON jq.transaction_id = t.id
         WHERE {' AND '.join(filters)}
         ORDER BY {order_by}
         LIMIT ?
@@ -3342,6 +3645,8 @@ def list_transactions(
     return results, {
         "next_cursor": next_cursor,
         "has_more": has_more,
+        "count": filtered_count,
+        "total": filtered_count,
         "limit": limit,
         "sort": sort,
         "order": order,

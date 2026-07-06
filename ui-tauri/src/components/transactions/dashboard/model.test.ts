@@ -12,6 +12,7 @@ import {
   candidateReferenceReviewType,
   dashboardRecordsFromTxs,
   flowChartSelectionLabel,
+  flowChartSelectionDateWindow,
   isAttachmentListQueryKeyForTransaction,
   matchesFlowChartSelection,
   readTransactionDetailParams,
@@ -120,6 +121,36 @@ describe("transaction dashboard chart selection", () => {
     } finally {
       vi.unstubAllGlobals();
     }
+  });
+
+  it("maps chart buckets to daemon date windows", () => {
+    expect(
+      flowChartSelectionDateWindow({
+        id: "bucket-1",
+        period: "1year",
+        bucketKey: "2026-04",
+        bucketLabel: "Apr 26",
+        segment: "incoming",
+        mode: "external",
+      }),
+    ).toEqual({
+      since: new Date(2026, 3, 1).toISOString(),
+      until: new Date(2026, 4, 1, 0, 0, 0, -1).toISOString(),
+    });
+
+    expect(
+      flowChartSelectionDateWindow({
+        id: "bucket-2",
+        period: "5years",
+        bucketKey: "2026-Q2",
+        bucketLabel: "Q2 26",
+        segment: "swaps",
+        mode: "all",
+      }),
+    ).toEqual({
+      since: new Date(2026, 3, 1).toISOString(),
+      until: new Date(2026, 6, 1, 0, 0, 0, -1).toISOString(),
+    });
   });
 
   it("hides long-range period tabs for young transaction histories", () => {

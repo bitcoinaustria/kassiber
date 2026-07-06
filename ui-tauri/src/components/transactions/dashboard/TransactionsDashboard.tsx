@@ -28,12 +28,16 @@ import {
   mockNewTransactionWalletSourceOptions,
   type NewTransactionDraft,
 } from "@/components/transactions";
-import { TransactionsTable } from "./TransactionsTable";
+import {
+  TransactionsTable,
+  type TransactionTableFilterState,
+} from "./TransactionsTable";
 import { PeriodTabs, TransactionWorkbench } from "./TransactionWorkbench";
 import {
   availablePeriodKeysForRecords,
   buildSwapCandidates,
   dashboardRecordsFromTxs,
+  flowChartSelectionDateWindow,
   initialPeriodFromUrl,
   recordsForPeriod,
   sortTransactionsByDateDesc,
@@ -69,6 +73,7 @@ const TransactionsDashboard = ({
   deepLinkedQuickFilter,
   deepLinkedTransactionIds = [],
   onWalletScopeChange,
+  onTableFilterArgsChange,
 }: {
   className?: string;
   transactions?: TransactionsList;
@@ -87,6 +92,7 @@ const TransactionsDashboard = ({
   deepLinkedQuickFilter?: TableQuickFilter | null;
   deepLinkedTransactionIds?: string[];
   onWalletScopeChange?: (wallet: string | null) => void;
+  onTableFilterArgsChange?: (args: Record<string, unknown>) => void;
 }) => {
   const { t } = useTranslation("transactions");
   const [period, setPeriod] = React.useState<PeriodKey>(initialPeriodFromUrl);
@@ -105,8 +111,14 @@ const TransactionsDashboard = ({
         : null,
     );
   const [tableExpanded, setTableExpanded] = React.useState(false);
-  const [tableLocalFiltersActive, setTableLocalFiltersActive] =
-    React.useState(false);
+  const [tableFilterState, setTableFilterState] =
+    React.useState<TransactionTableFilterState>({
+      status: "all",
+      flow: "all",
+      paymentMethod: "all",
+      fee: "all",
+      sort: null,
+    });
   const [resetTableFiltersToken, setResetTableFiltersToken] = React.useState(0);
   const [newTransactionDraft, setNewTransactionDraft] =
     React.useState<NewTransactionDraft>(createNewTransactionDraft);
@@ -281,33 +293,9 @@ const TransactionsDashboard = ({
     }
     return [focusedRecord, ...tablePeriodRecords];
   }, [focusedRecord, tablePeriodRecords]);
-  const useWorkbenchRowsForTable =
-    deepLinkedTransactionIds.length > 0 ||
-    flowChartSelection !== null ||
-    quickFilter !== null ||
-    breakdownSelection !== null ||
-    tableLocalFiltersActive;
   const visibleTableRecords = React.useMemo(() => {
-    if (deepLinkedTransactionIds.length > 0) {
-      return allPeriodRecords;
-    }
-    if (!useWorkbenchRowsForTable) return tableRecords;
-    if (
-      !focusedRecord ||
-      periodRecords.some((record) => record.id === focusedRecord.id)
-    ) {
-      return periodRecords;
-    }
-    return [focusedRecord, ...periodRecords];
-  }, [
-    deepLinkedTransactionIds.length,
-    allPeriodRecords,
-    focusedRecord,
-    periodRecords,
-    tableRecords,
-    tableLocalFiltersActive,
-    useWorkbenchRowsForTable,
-  ]);
+    return tableRecords;
+  }, [tableRecords]);
   const tableSwapCandidateIds = React.useMemo(
     () =>
       new Set(
@@ -349,6 +337,67 @@ const TransactionsDashboard = ({
         : null,
     );
   }, [breakdownSelection, onWalletScopeChange]);
+
+  React.useEffect(() => {
+    const args: Record<string, unknown> = {};
+    if (period !== "all") args.period = period;
+    if (deepLinkedTransactionIds.length > 0) {
+      args.txids = deepLinkedTransactionIds;
+    }
+
+    if (flowChartSelection) {
+      const window = flowChartSelectionDateWindow(flowChartSelection);
+      if (window) {
+        args.since = window.since;
+        args.until = window.until;
+        delete args.period;
+      }
+      if (flowChartSelection.segment === "incoming") args.flow = "incoming";
+      if (flowChartSelection.segment === "outgoing") args.flow = "outgoing";
+      if (flowChartSelection.segment === "transfers") args.flow = "transfer";
+      if (flowChartSelection.segment === "swaps") args.flow = "swap";
+      if (flowChartSelection.mode === "external" && !flowChartSelection.segment) {
+        args.quick = "external_flow";
+      }
+    }
+
+    if (quickFilter) args.quick = quickFilter;
+    if (breakdownSelection?.dimension === "network") {
+      args.payment_method = breakdownSelection.key;
+    }
+    if (
+      breakdownSelection?.dimension === "wallet" &&
+      breakdownSelection.match !== "leg" &&
+      !breakdownSelection.key.includes("→") &&
+      !breakdownSelection.key.includes("->")
+    ) {
+      args.wallet = breakdownSelection.key;
+    }
+
+    if (tableFilterState.status !== "all") args.status = tableFilterState.status;
+    if (tableFilterState.flow !== "all") args.flow = tableFilterState.flow;
+    if (tableFilterState.paymentMethod !== "all") {
+      args.payment_method = tableFilterState.paymentMethod;
+    }
+    if (tableFilterState.fee === "with-fees") args.withFees = true;
+    if (tableFilterState.sort?.key === "date") {
+      args.sort = "occurred-at";
+      args.order = tableFilterState.sort.direction;
+    } else if (tableFilterState.sort?.key === "amount") {
+      args.sort = "amount";
+      args.order = tableFilterState.sort.direction;
+    }
+
+    onTableFilterArgsChange?.(args);
+  }, [
+    breakdownSelection,
+    deepLinkedTransactionIds,
+    flowChartSelection,
+    onTableFilterArgsChange,
+    period,
+    quickFilter,
+    tableFilterState,
+  ]);
 
   React.useEffect(() => {
     if (typeof window === "undefined") return;
@@ -509,12 +558,12 @@ const TransactionsDashboard = ({
           onChartSelectionChange={setFlowChartSelection}
           onQuickFilterChange={setQuickFilter}
           onBreakdownSelectionChange={setBreakdownSelection}
-          onLocalFiltersActiveChange={setTableLocalFiltersActive}
           resetTableFiltersToken={resetTableFiltersToken}
           isRefreshing={showRefreshSkeleton}
-          hasMoreRecords={hasMoreTransactions && !useWorkbenchRowsForTable}
+          hasMoreRecords={hasMoreTransactions}
           isLoadingMoreRecords={isLoadingMoreTransactions}
           onLoadMoreRecords={onLoadMoreTransactions}
+          onFilterStateChange={setTableFilterState}
           deepLinkedTransactionId={deepLinkedTransactionId}
           deepLinkedTransactionTab={deepLinkedTransactionTab}
           isExpanded={tableExpanded}

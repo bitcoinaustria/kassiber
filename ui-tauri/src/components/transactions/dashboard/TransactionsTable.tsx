@@ -174,6 +174,13 @@ type TableSortState = {
   key: TableSortKey;
   direction: TableSortDirection;
 } | null;
+export type TransactionTableFilterState = {
+  status: string;
+  flow: string;
+  paymentMethod: string;
+  fee: FeeFilter;
+  sort: TableSortState;
+};
 
 const EMPTY_TRANSACTION_ID_FILTER: string[] = [];
 
@@ -205,12 +212,12 @@ const TransactionsTable = ({
   onChartSelectionChange,
   onQuickFilterChange,
   onBreakdownSelectionChange,
-  onLocalFiltersActiveChange,
   resetTableFiltersToken,
   isRefreshing,
   hasMoreRecords = false,
   isLoadingMoreRecords = false,
   onLoadMoreRecords,
+  onFilterStateChange,
   deepLinkedTransactionId,
   deepLinkedTransactionTab = "details",
   isExpanded = false,
@@ -229,12 +236,12 @@ const TransactionsTable = ({
   onChartSelectionChange: (selection: FlowChartSelection | null) => void;
   onQuickFilterChange: (filter: TableQuickFilter | null) => void;
   onBreakdownSelectionChange: (selection: BreakdownSelection | null) => void;
-  onLocalFiltersActiveChange?: (active: boolean) => void;
   resetTableFiltersToken: number;
   isRefreshing?: boolean;
   hasMoreRecords?: boolean;
   isLoadingMoreRecords?: boolean;
   onLoadMoreRecords?: () => void;
+  onFilterStateChange?: (state: TransactionTableFilterState) => void;
   deepLinkedTransactionId?: string | null;
   deepLinkedTransactionTab?: string;
   isExpanded?: boolean;
@@ -695,16 +702,6 @@ const TransactionsTable = ({
     flowFilter !== "all" ||
     paymentMethodFilter !== "all" ||
     feeFilter !== "all";
-  const localFiltersActive =
-    statusFilter !== "all" ||
-    flowFilter !== "all" ||
-    paymentMethodFilter !== "all" ||
-    feeFilter !== "all";
-
-  React.useEffect(() => {
-    onLocalFiltersActiveChange?.(localFiltersActive);
-  }, [localFiltersActive, onLocalFiltersActiveChange]);
-
   const clearTransactionIdFilter = React.useCallback(() => {
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
@@ -736,6 +733,23 @@ const TransactionsTable = ({
     setPaymentMethodFilter("all");
     setFeeFilter("all");
   }, [resetTableFiltersToken]);
+
+  React.useEffect(() => {
+    onFilterStateChange?.({
+      status: statusFilter,
+      flow: flowFilter,
+      paymentMethod: paymentMethodFilter,
+      fee: feeFilter,
+      sort: tableSort,
+    });
+  }, [
+    feeFilter,
+    flowFilter,
+    onFilterStateChange,
+    paymentMethodFilter,
+    statusFilter,
+    tableSort,
+  ]);
 
   React.useEffect(() => {
     if (typeof window === "undefined") return;

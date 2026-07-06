@@ -804,6 +804,39 @@ function bucketTransactionDate(date: Date, period: PeriodKey): FlowBucket {
   };
 }
 
+function flowChartSelectionDateWindow(selection: FlowChartSelection): {
+  since: string;
+  until: string;
+} | null {
+  const { bucketKey, period } = selection;
+  if (!bucketKey) return null;
+
+  let start: Date | null = null;
+  let end: Date | null = null;
+
+  if (period === "30days" || period === "3months") {
+    start = new Date(`${bucketKey}T00:00:00`);
+    if (Number.isNaN(start.getTime())) return null;
+    end = new Date(start);
+    end.setDate(end.getDate() + (period === "3months" ? 7 : 1));
+  } else if (isLongHistoryPeriod(period)) {
+    const match = bucketKey.match(/^(\d{4})-Q([1-4])$/);
+    if (!match) return null;
+    start = new Date(Number(match[1]), (Number(match[2]) - 1) * 3, 1);
+    end = new Date(start);
+    end.setMonth(end.getMonth() + 3);
+  } else {
+    const match = bucketKey.match(/^(\d{4})-(\d{2})$/);
+    if (!match) return null;
+    start = new Date(Number(match[1]), Number(match[2]) - 1, 1);
+    end = new Date(start);
+    end.setMonth(end.getMonth() + 1);
+  }
+
+  end.setMilliseconds(end.getMilliseconds() - 1);
+  return { since: start.toISOString(), until: end.toISOString() };
+}
+
 function buildEmptyFlowBuckets(
   period: PeriodKey,
   records: Transaction[],
@@ -1361,6 +1394,7 @@ export {
   flowChartSegmentForFlow,
   flowChartSegmentFromDataKey,
   flowChartSegmentLabels,
+  flowChartSelectionDateWindow,
   flowChartSelectionLabel,
   flowColorForSegment,
   flowColors,
