@@ -1060,6 +1060,107 @@ Behavior:
   and buy-row cost basis can fill pricing when Strike does not export a price
 - fiat-only deposit and reversal rows are ignored by the importer
 
+## Ledger Live
+
+Kassiber supports Ledger Live operation-history CSV as wallet movement only.
+Ledger's own export warns that countervalues are informational, so Kassiber
+imports BTC/LBTC `IN` and `OUT` rows without exact fiat pricing. Account xpub
+columns are redacted from stored `raw_json`.
+
+```bash
+python3 -m kassiber wallets import-ledger-live \
+  --workspace W --profile P --wallet "Ledger Live" \
+  --file /path/to/ledger-live.csv
+```
+
+You can also store `source_format="ledgerlive_csv"` on a wallet and use
+`wallets sync`. Non-BTC/LBTC assets are skipped. Unsupported Ledger operation
+types fail with `AppError` instead of being guessed.
+
+## DALI/RP2-Inspired Exchange Imports
+
+Kassiber ports the useful BTC-focused DALI/RP2 row taxonomy natively instead of
+depending on DALI at runtime. Exchange/order evidence stays separate from later
+self-custody wallet sync evidence.
+
+### Kraken API
+
+Create a backend with `kind=kraken`; store the API key in `token` and the
+base64 API secret in `auth_header` (or `password`). Raw credentials remain in
+the backend secret boundary and are redacted from output.
+
+```bash
+python3 -m kassiber backends create kraken-main \
+  --kind kraken --url https://api.kraken.com \
+  --token-stdin --auth-header-stdin
+
+python3 -m kassiber wallets sync-kraken \
+  --workspace W --profile P --backend kraken-main
+```
+
+The importer fetches Kraken private `TradesHistory` and `Ledgers`, imports
+BTC/LBTC deposits and withdrawals as wallet movement, and imports fiat-quoted
+BTC/LBTC trades as exact `exchange_execution` pricing (`pricing_method =
+"kraken_api"`). BTC trades without matching trade history or without a fiat
+quote fail safe.
+
+### Coinbase API
+
+Create a backend with `kind=coinbase`; store the API key in `token` and the
+API secret in `auth_header` (or `password`).
+
+```bash
+python3 -m kassiber backends create coinbase-main \
+  --kind coinbase --url https://api.coinbase.com \
+  --token-stdin --auth-header-stdin
+
+python3 -m kassiber wallets sync-coinbase \
+  --workspace W --profile P --backend coinbase-main
+```
+
+BTC account `buy`, `sell`, `trade`, and `advanced_trade_fill` rows import as
+exact execution evidence when Coinbase supplies a usable fiat native amount.
+BTC sends/exchange transfers import as wallet movement without exact execution
+pricing. Unsupported BTC row types raise validation errors rather than guessing.
+
+### Binance API and Supplemental CSV
+
+Create a backend with `kind=binance`; store the API key in `token` and the API
+secret in `auth_header` (or `password`).
+
+```bash
+python3 -m kassiber backends create binance-main \
+  --kind binance --url https://api.binance.com \
+  --token-stdin --auth-header-stdin
+
+python3 -m kassiber wallets sync-binance \
+  --workspace W --profile P --backend binance-main
+```
+
+The native API importer covers BTC fiat-payment buys, BTC deposits,
+withdrawals, and BTC income/dividend rows. Binance spot pair crawling,
+altcoin/BNB dust conversions, staking-lock principal bookkeeping, and mining
+subaccounts that require an extra username are intentionally deferred because
+they are either altcoin-heavy or need additional provider-specific controls.
+
+Supplemental Binance CSV import currently supports:
+
+- autoinvest BTC rows funded by fiat (`binance_supplemental_csv`) as exact
+  execution evidence
+- BTC dividend/mining-style rows as income without exact fiat pricing
+
+```bash
+python3 -m kassiber wallets import-binance-supplemental \
+  --workspace W --profile P \
+  --file /path/to/binance-supplemental.csv
+```
+
+Crypto-funded Binance autoinvest/cross-asset rows fail validation and should be
+entered through the generic ledger with explicit review. DALI's Pionex, Nexo,
+BlockFi, and Trezor-family plugins are deferred for Kassiber: they are
+obsolete, altcoin-heavy, or add less value than descriptor/wallet sync plus the
+generic ledger for BTC-side edge cases.
+
 ## BIP329
 
 Kassiber stores imported BIP329 records once per active profile, deduplicated by

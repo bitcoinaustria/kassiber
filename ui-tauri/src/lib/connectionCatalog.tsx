@@ -70,6 +70,8 @@ export type ConnectionSourceFormat =
   | "21bitcoin_csv"
   | "pocketbitcoin_csv"
   | "strike_csv"
+  | "ledgerlive_csv"
+  | "binance_supplemental_csv"
   | "wasabi_bundle"
   | "generic_ledger";
 
@@ -416,9 +418,16 @@ export const CONNECTION_SOURCES: ConnectionSource[] = [
     image: ledgerIcon,
     imageFrameClassName: lightLogoFrame,
     imageClassName: hardwareWalletIconClassName,
-    status: "planned",
-    pathLabel: "Wallet export",
-    details: ["Use generic CSV until a dedicated Ledger Live parser lands"],
+    status: "ready",
+    pathLabel: "CSV import",
+    formatLabel: "ledgerlive_csv",
+    setupKind: "file-wallet",
+    walletKind: "ledgerlive",
+    sourceFormat: "ledgerlive_csv",
+    details: [
+      "BTC and Liquid BTC IN/OUT rows become wallet movement",
+      "Ledger countervalues are ignored because the export marks them informational",
+    ],
   },
   {
     id: "foundation-passport",
@@ -691,15 +700,18 @@ export const CONNECTION_SOURCES: ConnectionSource[] = [
   {
     id: "kraken",
     title: "Kraken",
-    description: "BTC rows from Kraken ledger and trade exports.",
+    description: "BTC rows from Kraken private API history.",
     category: "exchanges",
     image: krakenIcon,
     imageClassName: "size-8",
     status: "planned",
-    pathLabel: "Ledger/trade CSV",
+    pathLabel: "API import",
     docsHref:
       "https://support.kraken.com/articles/360001169383-how-to-interpret-ledger-history-fields",
-    details: ["Needs multi-row trade pairing before cost basis can be trusted"],
+    details: [
+      "CLI API import pairs BTC/LBTC ledgers with trade history for exact pricing",
+      "Desktop credential setup is not wired yet",
+    ],
   },
   {
     id: "coinbase",
@@ -710,7 +722,27 @@ export const CONNECTION_SOURCES: ConnectionSource[] = [
     imageClassName: "size-8",
     status: "planned",
     pathLabel: "CSV/API import",
-    details: ["Dedicated BTC parser is not wired yet"],
+    details: [
+      "CLI API import handles BTC account trades and wallet movement",
+      "Desktop credential setup is not wired yet",
+    ],
+  },
+  {
+    id: "binance",
+    title: "Binance",
+    description: "BTC supplemental rows from Binance exports.",
+    category: "exchanges",
+    image: sourceIcon("BN", "#f0b90b", "#111827"),
+    status: "ready",
+    pathLabel: "Supplemental CSV",
+    formatLabel: "binance_supplemental_csv",
+    setupKind: "file-enrichment",
+    walletKind: "binance",
+    sourceFormat: "binance_supplemental_csv",
+    details: [
+      "BTC autoinvest rows funded by fiat preserve exact execution value",
+      "BTC dividend/mining rows import as income without guessing fiat price",
+    ],
   },
   {
     id: "generic-ledger",
