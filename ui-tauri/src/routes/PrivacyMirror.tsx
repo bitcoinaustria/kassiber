@@ -26,7 +26,7 @@ import {
   TransactionGraphPanel,
   type TransactionGraphPayload,
 } from "@/components/transactions/TransactionGraphTab";
-import { transactionGraphLookupReferenceArgs } from "@/components/transactions/TransactionDetailsTab";
+import { transactionGraphLookupReferenceArgs } from "@/components/transactions/TransactionGraphLookup";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -137,7 +137,7 @@ function Section({
     <Collapsible
       defaultOpen={defaultOpen}
       data-testid={testId}
-      className="rounded-md border bg-background"
+      className="rounded-md border bg-card text-card-foreground"
     >
       <CollapsibleTrigger className="group flex w-full items-center justify-between gap-3 border-b px-4 py-3 text-left data-[state=closed]:border-b-0 hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
         <span className="flex min-w-0 items-center gap-2">
@@ -161,12 +161,12 @@ function Section({
 
 function Metric({ label, value, level }: { label: string; value: ReactNode; level?: EvidenceLevel }) {
   return (
-    <div className="rounded-md border bg-muted/20 p-3">
+    <div className="min-w-0 rounded-md border bg-background p-3">
       <div className="flex items-start justify-between gap-2">
-        <p className="text-xs text-muted-foreground">{label}</p>
+        <p className="min-w-0 text-xs text-muted-foreground">{label}</p>
         {level ? <EvidenceBadge level={level} /> : null}
       </div>
-      <p className="mt-2 font-mono text-xl tabular-nums">{value}</p>
+      <p className="mt-2 truncate font-mono text-lg tabular-nums sm:text-xl">{value}</p>
     </div>
   );
 }
@@ -203,7 +203,7 @@ function FindingList({ findings }: { findings?: Array<{ id?: string; title?: str
 function PrivacyTable({ columns, rows }: { columns: string[]; rows: ReactNode[][] }) {
   const { t } = useTranslation("privacyMirror");
   return (
-    <div className="overflow-hidden rounded-md border bg-background">
+    <div className="overflow-hidden rounded-md border bg-card">
       <div className="overflow-x-auto">
         <Table>
           <TableHeader>
@@ -309,7 +309,7 @@ function PrivacyMirrorPsbtPanel() {
         </div>
       </div>
       <div className="space-y-3">
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid gap-2 sm:grid-cols-3">
           <Metric
             label={t("psbt.metric.merge")}
             value={fmtInt(result?.summary?.cluster_merge_delta)}
@@ -327,7 +327,7 @@ function PrivacyMirrorPsbtPanel() {
           />
         </div>
         <FindingList findings={result?.findings} />
-        <div className="rounded-md border bg-muted/20 p-3">
+        <div className="rounded-md border bg-background p-3">
           <p className="text-xs font-medium text-muted-foreground">{t("psbt.whatIf")}</p>
           <div className="mt-2 grid gap-1.5">
             {(result?.what_if ?? []).map((item) => (
@@ -444,7 +444,7 @@ export function PrivacyMirrorPayloadView({
       {/* Primary recommendation — the worst risk, what to fix first. */}
       <section
         data-testid="privacy-mirror-worst-risk"
-        className={cn("rounded-md border border-l-2 bg-background", privacySeverityTone(worstSeverity).stripe)}
+        className={cn("rounded-md border border-l-2 bg-card text-card-foreground", privacySeverityTone(worstSeverity).stripe)}
       >
         <div className="flex items-center justify-between gap-3 border-b px-4 py-3">
           <div className="flex min-w-0 items-center gap-2">
@@ -496,7 +496,7 @@ export function PrivacyMirrorPayloadView({
       </section>
 
       {/* Pre-broadcast check — prevent a leak before you spend. Elevated, not buried. */}
-      <section className="rounded-md border border-l-2 border-l-sky-500 bg-background" data-testid="privacy-mirror-psbt">
+      <section className="rounded-md border border-l-2 border-l-sky-500 bg-card text-card-foreground" data-testid="privacy-mirror-psbt">
         <div className="flex items-center gap-2 border-b px-4 py-3">
           <ShieldAlert className="size-4 shrink-0 text-sky-500" aria-hidden="true" />
           <div className="min-w-0">
@@ -527,7 +527,7 @@ export function PrivacyMirrorPayloadView({
       >
         <div className="grid gap-3 lg:grid-cols-3">
           {adversaries.map((card) => (
-            <div key={card.tier} className="rounded-md border bg-background">
+            <div key={card.tier} className="rounded-md border bg-card text-card-foreground">
               <div className="flex items-center gap-2 border-b px-4 py-3">
                 <h3 className="text-sm font-semibold break-words">
                   {t(`adversaryTier.${card.tier}`, {
@@ -536,13 +536,13 @@ export function PrivacyMirrorPayloadView({
                 </h3>
               </div>
               <div className="grid gap-3 p-4">
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid gap-2 sm:grid-cols-2">
                   <Metric label={t("adversary.clusters")} value={fmtInt(card.summary?.exposed_cluster_count)} level={card.evidence_level} />
                   <Metric label={t("adversary.wallets")} value={fmtInt(card.summary?.wallet_count)} level={card.evidence_level} />
                 </div>
                 <div className="space-y-2">
                   {(card.model_assumptions ?? []).slice(0, 3).map((assumption) => (
-                    <div key={assumption.code} className="rounded-md border bg-muted/20 p-2 text-xs">
+                    <div key={assumption.code} className="rounded-md border bg-background p-2 text-xs">
                       <div className="flex items-start justify-between gap-2">
                         <span>
                           {t(`assumption.${assumption.code}`, {
@@ -600,7 +600,7 @@ export function PrivacyMirrorPayloadView({
             <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
               {t("section.coverage")}
             </p>
-            <div className="grid gap-2 rounded-md border bg-muted/20 p-3">
+            <div className="grid gap-2 rounded-md border bg-background p-3">
               <div className="flex items-center justify-between gap-2 text-sm">
                 <span>{t("coverage.known")}</span>
                 <span className="font-mono tabular-nums">{fmtInt(coverage.source_proximity_known_coin_count)}</span>

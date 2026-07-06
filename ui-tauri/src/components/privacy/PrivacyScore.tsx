@@ -21,7 +21,6 @@ import {
 import {
   AIE_HEURISTIC_COVERAGE,
   GRADE_HEX,
-  HEURISTIC_STATUS_HEX,
   SEVERITY_HEX,
   SEVERITY_ORDER,
   type HeuristicStatus,
@@ -78,6 +77,20 @@ const GRADE_ZONES: Array<{ grade: keyof typeof GRADE_HEX; from: number }> = [
   { grade: "A+", from: 90 },
 ];
 
+const GRADE_TEXT_CLASS: Record<keyof typeof GRADE_HEX, string> = {
+  "A+": "text-emerald-600 dark:text-emerald-300",
+  B: "text-lime-600 dark:text-lime-300",
+  C: "text-amber-600 dark:text-amber-300",
+  D: "text-orange-600 dark:text-orange-300",
+  F: "text-destructive",
+};
+
+const HEURISTIC_STATUS_CLASS: Record<HeuristicStatus, string> = {
+  computed: "bg-emerald-500",
+  partial: "bg-amber-500",
+  not_local: "bg-muted-foreground",
+};
+
 export function PrivacyScoreHero({ model }: { model: PrivacyScoreModel }) {
   const { t } = useTranslation("privacyMirror");
   const reduced = usePrefersReducedMotion();
@@ -85,16 +98,17 @@ export function PrivacyScoreHero({ model }: { model: PrivacyScoreModel }) {
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
   const hex = GRADE_HEX[model.grade];
+  const gradeClass = GRADE_TEXT_CLASS[model.grade];
 
   return (
-    <div className="flex flex-col items-center gap-4 rounded-md border bg-muted/10 p-6 text-center">
+    <div className="flex flex-col items-center gap-4 rounded-md border bg-card p-5 text-center text-card-foreground sm:p-6">
       <div className="flex items-baseline gap-3">
         <span
           className={cn(
             "font-mono text-6xl font-bold leading-none transition-all duration-500 lg:text-7xl",
+            gradeClass,
             !reduced && !mounted && "scale-90 opacity-0",
           )}
-          style={{ color: hex, textShadow: model.grade === "A+" ? `0 0 24px ${hex}66` : undefined }}
           data-testid="privacy-score-grade"
         >
           {model.grade}
@@ -104,7 +118,7 @@ export function PrivacyScoreHero({ model }: { model: PrivacyScoreModel }) {
           <span className="text-lg">{t("score.of")}</span>
         </span>
       </div>
-      <p className="text-sm font-medium" style={{ color: hex }}>
+      <p className={cn("text-sm font-medium", gradeClass)}>
         {t(`gradeHint.${model.grade}`)}
       </p>
 
@@ -119,13 +133,13 @@ export function PrivacyScoreHero({ model }: { model: PrivacyScoreModel }) {
                 <span
                   key={zone.grade}
                   className="h-full"
-                  style={{ width: `${width}%`, backgroundColor: `${GRADE_HEX[zone.grade]}` , opacity: 0.35 }}
+                  style={{ width: `${width}%`, backgroundColor: GRADE_HEX[zone.grade], opacity: 0.35 }}
                 />
               );
             })}
           </div>
           <span
-            className="absolute top-1/2 size-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-background shadow transition-all duration-1000"
+            className="absolute top-1/2 size-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-background ring-1 ring-border transition-all duration-1000"
             style={{ left: `${reduced ? model.score : shown}%`, backgroundColor: hex }}
             aria-hidden="true"
           />
@@ -166,7 +180,7 @@ export function SeverityRing({
   });
 
   return (
-    <div className="flex flex-col items-center gap-3 rounded-md border bg-background p-4">
+    <div className="flex flex-col items-center gap-3 rounded-md border bg-card p-4 text-card-foreground">
       <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
         {t("score.census")}
       </p>
@@ -240,7 +254,7 @@ export function ScoreWaterfall({
 }) {
   const { t } = useTranslation("privacyMirror");
   return (
-    <div className="rounded-md border bg-background p-4">
+    <div className="rounded-md border bg-card p-4 text-card-foreground">
       <p className="mb-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">
         {t("score.waterfall")}
       </p>
@@ -256,8 +270,10 @@ export function ScoreWaterfall({
               <span className="font-mono text-xs text-muted-foreground">{factorDetail(factor)}</span>
             </span>
             <span
-              className="font-mono tabular-nums"
-              style={{ color: factor.points < 0 ? SEVERITY_HEX.warning : undefined }}
+              className={cn(
+                "font-mono tabular-nums",
+                factor.points < 0 && "text-amber-600 dark:text-amber-300",
+              )}
             >
               {factor.points > 0 ? `+${factor.points}` : factor.points}
             </span>
@@ -296,7 +312,7 @@ export function PrivacyFindingCard({
   const tone = privacySeverityTone(finding.severity);
   const reco = t(`reco.${finding.kind}`, { defaultValue: t("reco.fallback") });
   return (
-    <Collapsible className={cn("rounded-md border border-l-2 bg-background", tone.stripe)}>
+    <Collapsible className={cn("rounded-md border border-l-2 bg-card text-card-foreground", tone.stripe)}>
       <CollapsibleTrigger className="group flex w-full items-center justify-between gap-3 px-4 py-3 text-left hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
         <span className="flex min-w-0 items-center gap-2.5">
           <span className={cn("inline-block size-2.5 shrink-0 rounded-full", tone.dot)} aria-hidden="true" />
@@ -367,8 +383,7 @@ export function HeuristicCoverage() {
             title={t(`heuristics.status.${h.status}`)}
           >
             <span
-              className="size-2 shrink-0 rounded-full"
-              style={{ backgroundColor: HEURISTIC_STATUS_HEX[h.status] }}
+              className={cn("size-2 shrink-0 rounded-full", HEURISTIC_STATUS_CLASS[h.status])}
               aria-hidden="true"
             />
             {h.name}
@@ -379,8 +394,7 @@ export function HeuristicCoverage() {
         {order.map((status) => (
           <span key={status} className="flex items-center gap-1.5">
             <span
-              className="size-2 rounded-full"
-              style={{ backgroundColor: HEURISTIC_STATUS_HEX[status] }}
+              className={cn("size-2 rounded-full", HEURISTIC_STATUS_CLASS[status])}
               aria-hidden="true"
             />
             {counts[status] ?? 0} {t(`heuristics.status.${status}`)}
