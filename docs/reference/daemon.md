@@ -591,7 +591,7 @@ Job types are separate so partial success stays usable:
 - `market_rate_coverage` for incremental missing-minute rate coverage.
 - `journal_refresh` for follow-up local journal processing.
 
-Market-rate jobs first seed the bundled Kraken BTC daily BTC-EUR/BTC-USD
+Market-rate jobs first seed the bundled Kraken BTC hourly BTC-EUR/BTC-USD
 archive into `rates_cache` when missing, then fetch a small latest quote from
 the configured live market-rate provider for current BTC price display.
 Coinbase Exchange is the default provider when none is configured; CoinGecko is
@@ -605,11 +605,11 @@ itself also refuses any live provider call (returning `live_refresh: false`,
 off never reaches Coinbase Exchange, CoinGecko, or mempool — only the offline
 bundled seed runs. Background jobs skip the manual 30-day warm-cache fallback
 when no transaction minute is missing, so hourly price refresh stays
-provider-light. The bundled offline Kraken daily seed already includes the
-Coin Metrics + ECB-derived pre-Kraken backfill, so cached daily BTC-EUR/BTC-USD
-coverage starts at `2011-01-01` without adding another live provider. Kraken
-CSV remains an offline archive/import path because it needs a local file or
-bundled archive.
+provider-light. The bundled offline Kraken hourly seed includes a daily-derived
+pre-Kraken backfill from the existing Coin Metrics + ECB-derived daily bundle,
+so cached BTC-EUR/BTC-USD coverage starts at `2011-01-01` without adding
+another live provider. Kraken CSV remains an offline archive/import path
+because it needs a local file or bundled archive.
 
 Source states are `fresh`, `queued`, `syncing`, `paused`, `rate_limited`,
 `partially_stale`, `failed`, and `blocking_reports`. Report reads are blocked

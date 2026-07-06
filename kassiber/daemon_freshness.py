@@ -704,9 +704,9 @@ def _freshness_handlers(runtime_config: dict[str, object]) -> Mapping[str, core_
     ) -> Mapping[str, Any]:
         progress({"phase": core_freshness.PHASE_RATE_COVERAGE})
         check_cancelled()
-        # The bundled Kraken daily seed is an offline, idempotent local-cache
+        # The bundled Kraken hourly seed is an offline, idempotent local-cache
         # fill, so it always runs regardless of the market-rate policy.
-        archive_path, seed_summary = core_rates.ensure_bundled_kraken_btc_daily_seed(
+        archive_path, seed_summary = core_rates.ensure_bundled_kraken_btc_hourly_seed(
             conn,
             commit=True,
         )

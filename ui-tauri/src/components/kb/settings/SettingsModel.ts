@@ -431,7 +431,7 @@ export function marketRateBackends(
 ): Backend[] {
   const selectedProvider = settings?.market_rate_provider ?? "coinbase-exchange";
   const autoMarketRatesEnabled = Boolean(
-    settings?.background_enabled && settings.source_classes?.market_rates,
+    settings?.source_classes?.market_rates,
   );
   const providers = settings?.market_rate_providers?.length
     ? settings.market_rate_providers

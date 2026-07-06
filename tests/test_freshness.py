@@ -568,12 +568,18 @@ class FreshnessTest(unittest.TestCase):
 
         self.assertTrue(policy.report_read_sync)
         self.assertTrue(policy.source_classes[freshness.SOURCE_ONCHAIN])
-        self.assertTrue(policy.source_classes[freshness.SOURCE_RATES])
+        self.assertFalse(policy.source_classes[freshness.SOURCE_RATES])
         self.assertFalse(policy.background_enabled)
 
     def test_market_rate_job_seeds_bundled_kraken_before_live_sync(self):
         conn = self._db()
-        _seed_profile(conn)
+        profile_id = _seed_profile(conn)
+        freshness.set_policy(
+            conn,
+            profile_id,
+            source_classes={freshness.SOURCE_RATES: True},
+        )
+        conn.commit()
         calls = []
 
         def fake_seed(conn_arg, commit=True):
@@ -611,7 +617,7 @@ class FreshnessTest(unittest.TestCase):
         progress = []
         handler = daemon_freshness._freshness_handlers({})[freshness.JOB_MARKET_RATES]
         with patch(
-            "kassiber.daemon_freshness.core_rates.ensure_bundled_kraken_btc_daily_seed",
+            "kassiber.daemon_freshness.core_rates.ensure_bundled_kraken_btc_hourly_seed",
             fake_seed,
         ), patch("kassiber.daemon_freshness.core_rates.sync_latest_rates", fake_latest), patch(
             "kassiber.daemon_freshness.core_rates.sync_rates",
@@ -619,7 +625,7 @@ class FreshnessTest(unittest.TestCase):
         ):
             result = handler(
                 conn,
-                {},
+                {"profile_id": profile_id},
                 lambda payload: progress.append(dict(payload)),
                 lambda: None,
             )
@@ -634,7 +640,12 @@ class FreshnessTest(unittest.TestCase):
 
     def test_market_rate_job_uses_configured_coingecko_provider_for_latest_sync(self):
         conn = self._db()
-        _seed_profile(conn)
+        profile_id = _seed_profile(conn)
+        freshness.set_policy(
+            conn,
+            profile_id,
+            source_classes={freshness.SOURCE_RATES: True},
+        )
         core_rates.set_market_rate_provider(
             conn,
             core_rates.RATE_SOURCE_COINGECKO,
@@ -662,14 +673,14 @@ class FreshnessTest(unittest.TestCase):
         progress = []
         handler = daemon_freshness._freshness_handlers({})[freshness.JOB_MARKET_RATES]
         with patch(
-            "kassiber.daemon_freshness.core_rates.ensure_bundled_kraken_btc_daily_seed",
+            "kassiber.daemon_freshness.core_rates.ensure_bundled_kraken_btc_hourly_seed",
             fake_seed,
         ), patch("kassiber.daemon_freshness.core_rates.sync_latest_rates", fake_latest), patch(
             "kassiber.daemon_freshness.core_rates.sync_rates",
         ) as sync_rates:
             result = handler(
                 conn,
-                {},
+                {"profile_id": profile_id},
                 lambda payload: progress.append(dict(payload)),
                 lambda: None,
             )
@@ -683,7 +694,12 @@ class FreshnessTest(unittest.TestCase):
 
     def test_market_rate_job_uses_mempool_for_transaction_backfill(self):
         conn = self._db()
-        _seed_profile(conn)
+        profile_id = _seed_profile(conn)
+        freshness.set_policy(
+            conn,
+            profile_id,
+            source_classes={freshness.SOURCE_RATES: True},
+        )
         core_rates.set_market_rate_provider(
             conn,
             core_rates.RATE_SOURCE_MEMPOOL,
@@ -729,7 +745,7 @@ class FreshnessTest(unittest.TestCase):
 
         handler = daemon_freshness._freshness_handlers({})[freshness.JOB_MARKET_RATES]
         with patch(
-            "kassiber.daemon_freshness.core_rates.ensure_bundled_kraken_btc_daily_seed",
+            "kassiber.daemon_freshness.core_rates.ensure_bundled_kraken_btc_hourly_seed",
             fake_seed,
         ), patch("kassiber.daemon_freshness.core_rates.sync_latest_rates", fake_latest), patch(
             "kassiber.daemon_freshness.core_rates.sync_rates",
@@ -737,7 +753,7 @@ class FreshnessTest(unittest.TestCase):
         ):
             result = handler(
                 conn,
-                {},
+                {"profile_id": profile_id},
                 lambda _payload: None,
                 lambda: None,
             )
@@ -774,7 +790,7 @@ class FreshnessTest(unittest.TestCase):
         progress = []
         handler = daemon_freshness._freshness_handlers({})[freshness.JOB_MARKET_RATES]
         with patch(
-            "kassiber.daemon_freshness.core_rates.ensure_bundled_kraken_btc_daily_seed",
+            "kassiber.daemon_freshness.core_rates.ensure_bundled_kraken_btc_hourly_seed",
             fake_seed,
         ), patch(
             "kassiber.daemon_freshness.core_rates.sync_latest_rates", latest
@@ -1094,8 +1110,8 @@ class FreshnessTest(unittest.TestCase):
         )
         freshness.set_policy(
             conn,
-            first_profile,
-            source_classes={freshness.SOURCE_RATES: False},
+            "second-profile",
+            source_classes={freshness.SOURCE_RATES: True},
         )
         conn.commit()
 
@@ -1260,6 +1276,11 @@ class FreshnessTest(unittest.TestCase):
                     now,
                 ),
             ],
+        )
+        freshness.set_policy(
+            conn,
+            profile_id,
+            source_classes={freshness.SOURCE_RATES: True},
         )
         conn.commit()
         cold_key = freshness.source_key(freshness.SOURCE_ONCHAIN, "wallet-cold")

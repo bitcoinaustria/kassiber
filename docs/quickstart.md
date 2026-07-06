@@ -192,16 +192,17 @@ manual overrides (`rates set BTC-USD <ts> <rate>`). Desktop maintenance can use
 the configured live market-rate provider for automatic latest-price refresh and
 default pricing-cache rebuilds; Coinbase Exchange remains the default when no
 provider is configured.
-The repository also ships a small BTC-only Kraken offline history bundle for
-EUR and USD daily values under `kassiber/data/rates/kraken/btc_daily`, which
+The repository also ships a BTC-only Kraken offline history bundle for EUR and
+USD hourly values under `kassiber/data/rates/kraken/btc_hourly`, which
 freshness/rate-coverage jobs seed automatically when missing. It can also be
 imported with the same `kraken-csv` path flow, and Desktop Settings exposes it
-as `Kraken offline history: daily values` for offline fallback coverage. The
-early portion of that bundle is backfilled from Coin Metrics BTC-USD history
-and official ECB USD/EUR FX so cached daily BTC-EUR/BTC-USD coverage starts at
-`2011-01-01`.
-Bundled daily values are stored at candle close timestamps and should be
-treated as prior-close coarse fallback pricing, not exact intraday pricing.
+as `Kraken offline history: hourly values` for offline fallback coverage. The
+earliest rows are daily-derived from the existing bundled daily cache, which
+uses Coin Metrics BTC-USD history and official ECB USD/EUR FX so cached
+BTC-EUR/BTC-USD coverage starts at `2011-01-01`.
+Bundled hourly values are stored at candle close timestamps. Early
+daily-derived rows should be treated as coarse fallback pricing, not exact
+intraday pricing.
 
 ## 5. Austrian E 1kv reports
 
