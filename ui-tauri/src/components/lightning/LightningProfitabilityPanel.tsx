@@ -7,6 +7,7 @@
  */
 
 import { useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { TrendingUp, Zap } from "lucide-react";
 
 import { useDaemon, retryRetryableDaemonError } from "@/daemon/client";
@@ -28,6 +29,7 @@ import {
 } from "@/components/ui/table";
 import {
   DEFAULT_OPEN_COST_SAT,
+  connectionSupportsLightningCapability,
   LIGHTNING_CONNECTION_KINDS,
 } from "@/lib/lightning";
 import { cn } from "@/lib/utils";
@@ -38,6 +40,7 @@ interface LightningProfitabilityReport {
     id: string;
     label: string;
     kind: string;
+    lightningCapabilities?: unknown;
   };
   windowLabel: string;
   summary: {
@@ -65,6 +68,7 @@ const fmtSatSigned = (value: number) =>
   `${value >= 0 ? "+ " : "- "}${Math.abs(value).toLocaleString("en-US")} sat`;
 
 export function LightningProfitabilityPanel() {
+  const { t } = useTranslation("connections");
   const overview = useDaemon<OverviewSnapshot>("ui.overview.snapshot");
   const lightningConnections = useMemo(
     () =>
@@ -73,10 +77,20 @@ export function LightningProfitabilityPanel() {
       ),
     [overview.data],
   );
+  const reportableConnections = useMemo(
+    () =>
+      lightningConnections.filter((connection) =>
+        connectionSupportsLightningCapability(
+          connection,
+          "routingProfitability",
+        ),
+      ),
+    [lightningConnections],
+  );
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const activeConnection: Connection | null =
-    lightningConnections.find((connection) => connection.id === selectedId) ??
-    lightningConnections[0] ??
+    reportableConnections.find((connection) => connection.id === selectedId) ??
+    reportableConnections[0] ??
     null;
 
   if (lightningConnections.length === 0) {
@@ -88,37 +102,46 @@ export function LightningProfitabilityPanel() {
       <CardHeader className="border-b px-4 pb-3">
         <CardTitle className="flex items-center gap-2 text-sm sm:text-base">
           <TrendingUp className="size-4" aria-hidden="true" />
-          Lightning routing profitability
+          {t("node.profitabilityReport.title")}
         </CardTitle>
         <CardDescription>
-          Routing revenue minus payment, rebalance, and on-chain costs per
-          Lightning connection. The per-channel column reports whether earned
-          routing covers a coarse {DEFAULT_OPEN_COST_SAT.toLocaleString("en-US")} sat
-          open-cost default; adapters that know each channel's exact funding
-          fee can refine the threshold.
+          {t("node.profitabilityReport.description", {
+            cost: DEFAULT_OPEN_COST_SAT.toLocaleString("en-US"),
+          })}
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4 px-4 pt-4">
-        <div className="flex flex-wrap items-center gap-2">
-          <Label className="text-xs text-muted-foreground" htmlFor="ln-profitability-connection">
-            Connection
-          </Label>
-          <select
-            id="ln-profitability-connection"
-            className="h-8 rounded-md border border-input bg-background px-2 text-sm"
-            value={activeConnection?.id ?? ""}
-            onChange={(event) => setSelectedId(event.target.value)}
-          >
-            {lightningConnections.map((connection) => (
-              <option key={connection.id} value={connection.id}>
-                {connection.label}
-              </option>
-            ))}
-          </select>
-        </div>
-        {activeConnection ? (
-          <LightningProfitabilityBody connectionId={activeConnection.id} />
-        ) : null}
+        {reportableConnections.length === 0 ? (
+          <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-700 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-300">
+            {t("node.profitabilityReport.unsupported")}
+          </div>
+        ) : (
+          <>
+            <div className="flex flex-wrap items-center gap-2">
+              <Label
+                className="text-xs text-muted-foreground"
+                htmlFor="ln-profitability-connection"
+              >
+                {t("node.profitabilityReport.connection")}
+              </Label>
+              <select
+                id="ln-profitability-connection"
+                className="h-8 rounded-md border border-input bg-background px-2 text-sm"
+                value={activeConnection?.id ?? ""}
+                onChange={(event) => setSelectedId(event.target.value)}
+              >
+                {reportableConnections.map((connection) => (
+                  <option key={connection.id} value={connection.id}>
+                    {connection.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            {activeConnection ? (
+              <LightningProfitabilityBody connectionId={activeConnection.id} />
+            ) : null}
+          </>
+        )}
       </CardContent>
     </Card>
   );
@@ -129,6 +152,7 @@ function LightningProfitabilityBody({
 }: {
   connectionId: string;
 }) {
+  const { t } = useTranslation("connections");
   const profitability = useDaemon<LightningProfitabilityReport>(
     "ui.reports.lightning_profitability",
     { connection: connectionId },
@@ -137,7 +161,7 @@ function LightningProfitabilityBody({
   if (profitability.isLoading) {
     return (
       <div className="text-sm text-muted-foreground">
-        Reading routing profitability…
+        {t("node.profitabilityReport.loading")}
       </div>
     );
   }
@@ -146,7 +170,7 @@ function LightningProfitabilityBody({
       profitability.error instanceof Error
         ? profitability.error.message
         : profitability.data?.error?.message ??
-          "Routing profitability is not available for this connection yet.";
+          t("node.profitabilityReport.errorFallback");
     return (
       <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-700 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-300">
         {message}
@@ -157,7 +181,7 @@ function LightningProfitabilityBody({
   if (!report) {
     return (
       <div className="text-sm text-muted-foreground">
-        No routing data available.
+        {t("node.profitabilityReport.empty")}
       </div>
     );
   }
@@ -171,34 +195,36 @@ function LightningProfitabilityBody({
   return (
     <div className="space-y-4">
       <div className="text-xs text-muted-foreground">
-        {windowLabel} ·{" "}
-        {summary.forwardCount.toLocaleString("en-US")} forwards ·{" "}
-        {summary.paymentCount.toLocaleString("en-US")} payments ·{" "}
-        {summary.rebalanceCount.toLocaleString("en-US")} rebalances
+        {t("node.profitabilityReport.windowSummary", {
+          window: windowLabel,
+          forwards: summary.forwardCount.toLocaleString("en-US"),
+          payments: summary.paymentCount.toLocaleString("en-US"),
+          rebalances: summary.rebalanceCount.toLocaleString("en-US"),
+        })}
       </div>
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
         <Stat
-          label="Revenue"
+          label={t("node.profitabilityReport.revenue")}
           value={fmtSatSigned(summary.routingRevenueSat)}
           tone="text-emerald-700 dark:text-emerald-300"
         />
         <Stat
-          label="Payment fees"
+          label={t("node.profitabilityReport.paymentFees")}
           value={fmtSatSigned(-summary.paymentCostSat)}
           tone="text-red-700 dark:text-red-300"
         />
         <Stat
-          label="Rebalance fees"
+          label={t("node.profitabilityReport.rebalanceFees")}
           value={fmtSatSigned(-summary.rebalanceCostSat)}
           tone="text-red-700 dark:text-red-300"
         />
         <Stat
-          label="On-chain costs"
+          label={t("node.profitabilityReport.onChainCosts")}
           value={fmtSatSigned(-summary.onchainCostSat)}
           tone="text-red-700 dark:text-red-300"
         />
         <Stat
-          label="Net profit"
+          label={t("node.profitabilityReport.netProfit")}
           value={fmtSatSigned(summary.netProfitSat)}
           tone={profitTone}
         />
@@ -207,11 +233,19 @@ function LightningProfitabilityBody({
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Peer</TableHead>
-              <TableHead className="text-right">Capacity</TableHead>
-              <TableHead className="text-right">Earned routing</TableHead>
-              <TableHead className="text-right">Open cost</TableHead>
-              <TableHead className="text-right">Covers open cost</TableHead>
+              <TableHead>{t("node.profitabilityReport.peer")}</TableHead>
+              <TableHead className="text-right">
+                {t("node.profitabilityReport.capacity")}
+              </TableHead>
+              <TableHead className="text-right">
+                {t("node.profitabilityReport.earnedRouting")}
+              </TableHead>
+              <TableHead className="text-right">
+                {t("node.profitabilityReport.openCost")}
+              </TableHead>
+              <TableHead className="text-right">
+                {t("node.profitabilityReport.coversOpenCost")}
+              </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -221,7 +255,7 @@ function LightningProfitabilityBody({
                   className="text-center text-sm text-muted-foreground"
                   colSpan={5}
                 >
-                  No channels reported.
+                  {t("node.profitabilityReport.noChannels")}
                 </TableCell>
               </TableRow>
             ) : (
@@ -251,7 +285,9 @@ function LightningProfitabilityBody({
                           : "bg-muted text-muted-foreground ring-border",
                       )}
                     >
-                      {channel.coversOpenCost ? "Yes" : "Not yet"}
+                      {channel.coversOpenCost
+                        ? t("node.profitabilityReport.yes")
+                        : t("node.profitabilityReport.notYet")}
                     </span>
                   </TableCell>
                 </TableRow>

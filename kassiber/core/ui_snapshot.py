@@ -25,6 +25,7 @@ from ..wallet_descriptors import (
 from . import output_inventory as core_output_inventory
 from . import ownership as core_ownership
 from . import freshness as core_freshness
+from . import lightning as core_lightning
 from . import rates as core_rates
 from . import silent_payments
 from . import sync_backends as core_sync_backends
@@ -1338,6 +1339,10 @@ def _connections(
                 int(gap_limit)
                 if gap_limit not in (None, "")
                 else DEFAULT_DESCRIPTOR_GAP_LIMIT
+            )
+        if row["kind"] in core_lightning.LIGHTNING_ADAPTER_KINDS:
+            connection["lightningCapabilities"] = (
+                core_lightning.registered_capabilities(row["kind"]).to_wire_dict()
             )
         output.append(connection)
     return output
@@ -4857,6 +4862,12 @@ def build_backends_list_snapshot(
             }
             safe["has_url"] = bool(_string_or_empty(backend.get("url")))
             safe["is_default"] = str(name) == default_backend
+            if str(backend.get("kind") or "") in core_lightning.LIGHTNING_ADAPTER_KINDS:
+                safe["lightningCapabilities"] = (
+                    core_lightning.registered_capabilities(
+                        str(backend.get("kind") or "")
+                    ).to_wire_dict()
+                )
             rows.append(safe)
     return {
         "backends": rows,

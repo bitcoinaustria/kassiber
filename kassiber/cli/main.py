@@ -395,6 +395,7 @@ def _cli_build_lightning_snapshot(
     ref: str,
     *,
     window_days: int,
+    required_capability: core_lightning.LightningCapability = "node_snapshot",
     runtime_config: dict[str, object] | None = None,
     workspace_ref: str | None = None,
     profile_ref: str | None = None,
@@ -415,6 +416,17 @@ def _cli_build_lightning_snapshot(
             ),
         )
     backend = core_lightning.resolve_lightning_backend(conn, runtime_config, connection)
+    core_lightning.require_lightning_capability(
+        kind=kind,
+        adapter=adapter,
+        capability="node_snapshot",
+    )
+    if required_capability != "node_snapshot":
+        core_lightning.require_lightning_capability(
+            kind=kind,
+            adapter=adapter,
+            capability=required_capability,
+        )
     snapshot = adapter.fetch_node_snapshot(connection, backend, window_days=window_days)
     return connection, snapshot
 
@@ -432,6 +444,7 @@ def _cli_lightning_profitability_payload(
         conn,
         ref,
         window_days=window_days,
+        required_capability="routing_profitability",
         runtime_config=runtime_config,
         workspace_ref=workspace_ref,
         profile_ref=profile_ref,
@@ -442,7 +455,13 @@ def _cli_lightning_profitability_payload(
         connection_kind=str(connection.get("kind") or ""),
         snapshot=snapshot,
     )
-    return report.to_envelope_payload()
+    payload = report.to_envelope_payload()
+    payload["connection"]["lightningCapabilities"] = (
+        core_lightning.registered_capabilities(
+            str(connection.get("kind") or "")
+        ).to_wire_dict()
+    )
+    return payload
 
 
 def _cli_export_lightning_profitability_csv(
@@ -459,6 +478,7 @@ def _cli_export_lightning_profitability_csv(
         conn,
         ref,
         window_days=window_days,
+        required_capability="routing_profitability",
         runtime_config=runtime_config,
         workspace_ref=workspace_ref,
         profile_ref=profile_ref,

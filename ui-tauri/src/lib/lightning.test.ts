@@ -1,7 +1,9 @@
 import { describe, expect, test } from "vitest";
 
 import {
+  connectionSupportsLightningCapability,
   coreLightningBackendModeValid,
+  lightningCapabilitiesForConnection,
   type CoreLightningBackendFormState,
 } from "./lightning";
 
@@ -113,5 +115,53 @@ describe("coreLightningBackendModeValid (M-2)", () => {
     // local config) should not silently let the user save an empty
     // backend.
     expect(coreLightningBackendModeValid(makeState())).toBe(false);
+  });
+});
+
+describe("Lightning adapter capability helpers", () => {
+  test("uses explicit daemon capability metadata when present", () => {
+    const caps = lightningCapabilitiesForConnection({
+      kind: "lnd",
+      lightningCapabilities: {
+        nodeSnapshot: true,
+        routingProfitability: false,
+        channelBalances: true,
+      },
+    });
+
+    expect(caps.nodeSnapshot).toBe(true);
+    expect(caps.routingProfitability).toBe(false);
+    expect(caps.channelBalances).toBe(true);
+    expect(caps.forwardEvents).toBe(false);
+  });
+
+  test("legacy fallback is limited to implemented node adapters", () => {
+    expect(
+      connectionSupportsLightningCapability(
+        { kind: "lnd" },
+        "routingProfitability",
+      ),
+    ).toBe(true);
+    expect(
+      connectionSupportsLightningCapability(
+        { kind: "nwc" },
+        "routingProfitability",
+      ),
+    ).toBe(false);
+  });
+
+  test("explicit unsupported capability overrides kind fallback", () => {
+    expect(
+      connectionSupportsLightningCapability(
+        {
+          kind: "lnd",
+          lightningCapabilities: {
+            nodeSnapshot: true,
+            routingProfitability: false,
+          },
+        },
+        "routingProfitability",
+      ),
+    ).toBe(false);
   });
 });

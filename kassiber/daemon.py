@@ -6224,6 +6224,11 @@ def _backend_options_payload(ctx: "DaemonContext") -> dict[str, Any]:
         safe = {key: value for key, value in row.items() if key in allowed_fields}
         safe["has_url"] = bool(url)
         safe["is_default"] = row.pop("default", "") == "yes"
+        kind = str(safe.get("kind") or "")
+        if kind in core_lightning.LIGHTNING_ADAPTER_KINDS:
+            safe["lightningCapabilities"] = (
+                core_lightning.registered_capabilities(kind).to_wire_dict()
+            )
         rows.append(safe)
     return {
         "backends": rows,
@@ -6297,6 +6302,11 @@ def _backend_settings_list_payload(ctx: "DaemonContext") -> dict[str, Any]:
         if isinstance(name, str) and name:
             backend["is_default"] = name == default_backend
             backend["wallet_refs"] = wallet_backend_references(ctx.conn, name)
+        kind = str(backend.get("kind") or "")
+        if kind in core_lightning.LIGHTNING_ADAPTER_KINDS:
+            backend["lightningCapabilities"] = (
+                core_lightning.registered_capabilities(kind).to_wire_dict()
+            )
     return {
         "backends": backends,
         "summary": {
@@ -6319,6 +6329,43 @@ def _lightning_adapter_unavailable_error(kind: str) -> AppError:
         ),
         retryable=False,
     )
+
+
+def _lightning_adapter_for_capability(
+    kind: str,
+    capability: core_lightning.LightningCapability,
+) -> tuple[core_lightning.LightningAdapter, core_lightning.LightningCapabilities]:
+    adapter = core_lightning.resolve_adapter(kind)
+    if adapter is None:
+        raise _lightning_adapter_unavailable_error(kind)
+    capabilities = core_lightning.require_lightning_capability(
+        kind=kind,
+        adapter=adapter,
+        capability="node_snapshot",
+    )
+    if capability != "node_snapshot":
+        capabilities = core_lightning.require_lightning_capability(
+            kind=kind,
+            adapter=adapter,
+            capability=capability,
+        )
+    return adapter, capabilities
+
+
+def _lightning_connection_block(
+    connection: dict[str, Any],
+    capabilities: core_lightning.LightningCapabilities,
+    *,
+    include_id: bool = True,
+) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "label": connection.get("label"),
+        "kind": connection.get("kind"),
+        "lightningCapabilities": capabilities.to_wire_dict(),
+    }
+    if include_id:
+        payload["id"] = connection.get("id")
+    return payload
 
 
 def _lightning_connection_args(
@@ -6348,9 +6395,9 @@ def _lightning_node_snapshot_payload(
         conn, ref, workspace_ref=workspace_ref, profile_ref=profile_ref
     )
     kind = str(connection["kind"])
-    adapter = core_lightning.resolve_adapter(kind)
-    if adapter is None:
-        raise _lightning_adapter_unavailable_error(kind)
+    adapter, capabilities = _lightning_adapter_for_capability(
+        kind, "node_snapshot"
+    )
     window_days = _coerce_int(args.get("window_days"), default=30, minimum=1, maximum=365)
     snapshot = adapter.fetch_node_snapshot(
         connection,
@@ -6358,11 +6405,8 @@ def _lightning_node_snapshot_payload(
         window_days=window_days,
     )
     payload = core_lightning.snapshot_to_dict(snapshot)
-    payload["connection"] = {
-        "id": connection.get("id"),
-        "label": connection.get("label"),
-        "kind": connection.get("kind"),
-    }
+    payload["capabilities"] = capabilities.to_wire_dict()
+    payload["connection"] = _lightning_connection_block(connection, capabilities)
     return payload
 
 
@@ -6385,9 +6429,9 @@ def _lightning_node_snapshot_payload_for_ai(
         conn, ref, workspace_ref=workspace_ref, profile_ref=profile_ref
     )
     kind = str(connection["kind"])
-    adapter = core_lightning.resolve_adapter(kind)
-    if adapter is None:
-        raise _lightning_adapter_unavailable_error(kind)
+    adapter, capabilities = _lightning_adapter_for_capability(
+        kind, "node_snapshot"
+    )
     window_days = _coerce_int(args.get("window_days"), default=30, minimum=1, maximum=365)
     snapshot = adapter.fetch_node_snapshot(
         connection,
@@ -6395,10 +6439,10 @@ def _lightning_node_snapshot_payload_for_ai(
         window_days=window_days,
     )
     payload = core_lightning.snapshot_to_dict_for_ai(snapshot)
-    payload["connection"] = {
-        "label": connection.get("label"),
-        "kind": connection.get("kind"),
-    }
+    payload["capabilities"] = capabilities.to_wire_dict()
+    payload["connection"] = _lightning_connection_block(
+        connection, capabilities, include_id=False
+    )
     return payload
 
 
@@ -6412,9 +6456,9 @@ def _lightning_profitability_payload(
         conn, ref, workspace_ref=workspace_ref, profile_ref=profile_ref
     )
     kind = str(connection["kind"])
-    adapter = core_lightning.resolve_adapter(kind)
-    if adapter is None:
-        raise _lightning_adapter_unavailable_error(kind)
+    adapter, capabilities = _lightning_adapter_for_capability(
+        kind, "routing_profitability"
+    )
     window_days = _coerce_int(args.get("window_days"), default=30, minimum=1, maximum=365)
     snapshot = adapter.fetch_node_snapshot(
         connection,
@@ -6427,7 +6471,9 @@ def _lightning_profitability_payload(
         connection_kind=kind,
         snapshot=snapshot,
     )
-    return report.to_envelope_payload()
+    payload = report.to_envelope_payload()
+    payload["connection"]["lightningCapabilities"] = capabilities.to_wire_dict()
+    return payload
 
 
 def _lightning_profitability_payload_for_ai(
@@ -6448,9 +6494,9 @@ def _lightning_profitability_payload_for_ai(
         conn, ref, workspace_ref=workspace_ref, profile_ref=profile_ref
     )
     kind = str(connection["kind"])
-    adapter = core_lightning.resolve_adapter(kind)
-    if adapter is None:
-        raise _lightning_adapter_unavailable_error(kind)
+    adapter, _capabilities = _lightning_adapter_for_capability(
+        kind, "routing_profitability"
+    )
     window_days = _coerce_int(args.get("window_days"), default=30, minimum=1, maximum=365)
     snapshot = adapter.fetch_node_snapshot(
         connection,
@@ -8242,7 +8288,7 @@ def _test_lightning_backend_payload(
     backend_name = str(backend.get("name") or backend_ref).strip() or backend_ref
     kind = str(backend.get("kind") or "").lower()
     logs = [f"Opening Lightning connection to backend '{backend_name}'"]
-    if kind not in {"coreln", "lnd"}:
+    if kind not in core_lightning.LIGHTNING_ADAPTER_KINDS:
         return {
             "ok": False,
             "backend": backend_name,
@@ -8252,9 +8298,11 @@ def _test_lightning_backend_payload(
                 f"Backend kind '{kind or 'unknown'}' is not a Lightning node backend.",
             ],
         }
-    adapter = core_lightning.resolve_adapter(kind)
-    if adapter is None:
-        error = _lightning_adapter_unavailable_error(kind)
+    try:
+        adapter, capabilities = _lightning_adapter_for_capability(
+            kind, "node_snapshot"
+        )
+    except AppError as error:
         return {
             "ok": False,
             "backend": backend_name,
@@ -8301,6 +8349,7 @@ def _test_lightning_backend_payload(
         "ok": True,
         "backend": backend_name,
         "kind": kind,
+        "lightningCapabilities": capabilities.to_wire_dict(),
         "alias": snapshot.alias,
         "network": snapshot.network,
         "block_height": snapshot.block_height,
