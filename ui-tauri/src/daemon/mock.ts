@@ -16,6 +16,7 @@ import type {
 import {
   DEFAULT_OPEN_COST_SAT,
   connectionSupportsLightningCapability,
+  type LightningCapabilities,
 } from "@/lib/lightning";
 import { accountMatchesLabel } from "@/lib/connectionTransactions";
 import { MOCK_PROFILES } from "@/mocks/profiles";
@@ -498,6 +499,7 @@ type MockConnection = {
   network?: string;
   paymentMethodId?: string;
   gap?: number;
+  lightningCapabilities?: LightningCapabilities;
   /** balance in BTC (float) — present on overview-snapshot connection rows. */
   balance?: number;
 };
