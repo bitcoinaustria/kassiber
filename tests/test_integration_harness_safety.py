@@ -166,6 +166,28 @@ class IntegrationHarnessSafetyTest(unittest.TestCase):
             self.assertEqual(payload["btcpay_user"], "merchant.regtest@example.invalid")
             self.assertEqual(payload["btcpay_api_key"], "test-token")
 
+    def test_demo_btcpay_is_default_on_with_opt_out(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-demo-btcpay-") as tmp:
+            tmp_path = Path(tmp)
+            default_result = _run_harness_snippet(
+                tmp_path,
+                'demo_configure_btcpay; printf "%s:%s:%s\\n" "${KASSIBER_REGTEST_USE_BTCPAY_COMPOSE:-}" "${KASSIBER_REGTEST_DEMO_BTCPAY_ENABLED:-}" "${KASSIBER_REGTEST_BTCPAY_PORT:-}"',
+                {"KASSIBER_REGTEST_RPC_PORT": "18443"},
+            )
+            self.assertEqual(default_result.returncode, 0, default_result.stderr)
+            self.assertEqual(default_result.stdout.strip(), "1:1:18549")
+
+            disabled_result = _run_harness_snippet(
+                tmp_path,
+                'demo_configure_btcpay; printf "%s:%s\\n" "${KASSIBER_REGTEST_USE_BTCPAY_COMPOSE:-}" "${KASSIBER_REGTEST_DEMO_BTCPAY_ENABLED:-}"',
+                {
+                    "KASSIBER_REGTEST_DEMO_BTCPAY": "0",
+                    "KASSIBER_REGTEST_RPC_PORT": "18443",
+                },
+            )
+            self.assertEqual(disabled_result.returncode, 0, disabled_result.stderr)
+            self.assertEqual(disabled_result.stdout.strip(), ":0")
+
 
 if __name__ == "__main__":
     unittest.main()

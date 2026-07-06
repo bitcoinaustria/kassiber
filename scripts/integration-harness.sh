@@ -599,20 +599,28 @@ demo_configure_lightning() {
   fi
 }
 
-demo_configure_btcpay() {
-  case "${KASSIBER_REGTEST_DEMO_BTCPAY:-0}" in
-    1|true|TRUE|True|yes|YES|Yes|on|ON|On)
-      export KASSIBER_REGTEST_USE_BTCPAY_COMPOSE=1
-      export KASSIBER_REGTEST_DEMO_BTCPAY_ENABLED=1
-      if [ -n "${KASSIBER_REGTEST_RPC_PORT:-}" ]; then
-        configure_btcpay_ports
-      fi
+demo_btcpay_enabled() {
+  case "${KASSIBER_REGTEST_DEMO_BTCPAY:-1}" in
+    0|false|FALSE|False|no|NO|No|off|OFF|Off)
+      return 1
       ;;
     *)
-      unset KASSIBER_REGTEST_USE_BTCPAY_COMPOSE
-      export KASSIBER_REGTEST_DEMO_BTCPAY_ENABLED=0
+      return 0
       ;;
   esac
+}
+
+demo_configure_btcpay() {
+  if demo_btcpay_enabled; then
+    export KASSIBER_REGTEST_USE_BTCPAY_COMPOSE=1
+    export KASSIBER_REGTEST_DEMO_BTCPAY_ENABLED=1
+    if [ -n "${KASSIBER_REGTEST_RPC_PORT:-}" ]; then
+      configure_btcpay_ports
+    fi
+  else
+    unset KASSIBER_REGTEST_USE_BTCPAY_COMPOSE
+    export KASSIBER_REGTEST_DEMO_BTCPAY_ENABLED=0
+  fi
 }
 
 demo_write_manifest() {
@@ -1032,13 +1040,15 @@ run_demo_down() {
   export KASSIBER_REGTEST_COMPOSE_PROFILES="${KASSIBER_REGTEST_COMPOSE_PROFILES:-silent-payments}"
   export COMPOSE_PROFILES="$KASSIBER_REGTEST_COMPOSE_PROFILES"
   demo_load_rpc_env
+  export KASSIBER_REGTEST_USE_LIGHTNING_COMPOSE=1
+  export KASSIBER_REGTEST_USE_BTCPAY_COMPOSE=1
   if [ "$purge" = "--purge" ]; then
     demo_assert_safe_home purge
-    KASSIBER_REGTEST_USE_LIGHTNING_COMPOSE=1 docker_compose_regtest down -v
+    docker_compose_regtest down -v
     rm -rf "$DEMO_HOME"
     echo "Demo node, chain volume, and demo book removed."
   else
-    KASSIBER_REGTEST_USE_LIGHTNING_COMPOSE=1 docker_compose_regtest down
+    docker_compose_regtest down
     echo "Demo node stopped. Chain volume and demo book kept; 'demo-up' resumes them."
   fi
 }
@@ -1094,25 +1104,23 @@ regtest_ports_available() {
   return 0
 }
 
-choose_regtest_base_port() {
-  local candidate
-  for candidate in 18443 19443 20443 21443 22443; do
-    if regtest_ports_available "$candidate"; then
-      printf '%s\n' "$candidate"
-      return 0
+btcpay_ports_available() {
+  local base="$1"
+  local ports=(
+    "$((base + 106))"
+    "$((base + 107))"
+  )
+  local port
+  for port in "${ports[@]}"; do
+    if ! port_is_free "$port"; then
+      return 1
     fi
   done
-  echo "No free regtest port family found." >&2
-  echo "Set KASSIBER_REGTEST_RPC_PORT to an available base port and rerun." >&2
-  exit 2
+  return 0
 }
 
-lightning_ports_available() {
+lightning_extra_ports_available() {
   local base="$1"
-  if ! regtest_ports_available "$base"; then
-    return 1
-  fi
-
   local ports=(
     "$((base + 1292))"
     "$((base + 1293))"
@@ -1129,6 +1137,41 @@ lightning_ports_available() {
     fi
   done
   return 0
+}
+
+selected_regtest_ports_available() {
+  local base="$1"
+  if ! regtest_ports_available "$base"; then
+    return 1
+  fi
+  if [ -n "${KASSIBER_REGTEST_USE_BTCPAY_COMPOSE:-}" ] && ! btcpay_ports_available "$base"; then
+    return 1
+  fi
+  if [ -n "${KASSIBER_REGTEST_USE_LIGHTNING_COMPOSE:-}" ] && ! lightning_extra_ports_available "$base"; then
+    return 1
+  fi
+  return 0
+}
+
+choose_regtest_base_port() {
+  local candidate
+  for candidate in 18443 19443 20443 21443 22443; do
+    if selected_regtest_ports_available "$candidate"; then
+      printf '%s\n' "$candidate"
+      return 0
+    fi
+  done
+  echo "No free regtest port family found." >&2
+  echo "Set KASSIBER_REGTEST_RPC_PORT to an available base port and rerun." >&2
+  exit 2
+}
+
+lightning_ports_available() {
+  local base="$1"
+  if ! regtest_ports_available "$base"; then
+    return 1
+  fi
+  lightning_extra_ports_available "$base"
 }
 
 choose_lightning_base_port() {

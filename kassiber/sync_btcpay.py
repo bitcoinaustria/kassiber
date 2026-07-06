@@ -1001,6 +1001,13 @@ def _invoice_origin(invoice, metadata, order_id):
             "label": app_name or item_desc or order_id,
             "url": order_url,
         }
+    if payment_request_id:
+        return {
+            "kind": "payment_request",
+            "app_id": None,
+            "label": item_desc or payment_request_id,
+            "url": order_url,
+        }
     if app_id or app_name:
         return {
             "kind": "app",
@@ -1014,13 +1021,6 @@ def _invoice_origin(invoice, metadata, order_id):
             "app_id": None,
             "label": item_desc or order_id,
             "url": order_url,
-        }
-    if payment_request_id:
-        return {
-            "kind": "payment_request",
-            "app_id": None,
-            "label": item_desc or payment_request_id,
-            "url": None,
         }
     return {"kind": "unknown", "app_id": None, "label": item_desc, "url": order_url}
 

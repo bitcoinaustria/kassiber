@@ -36,6 +36,16 @@ REGTEST_INVOICE_SCENARIOS = (
         },
     },
     {
+        "kind": "duplicate_order_adjustment",
+        "suffix": "direct",
+        "amount": "0.00003000",
+        "metadata": {
+            "itemDesc": "Adjustment invoice for the original order",
+            "buyerName": "Kassiber Regtest Buyer",
+            "buyerEmail": "merchant-customer@example.invalid",
+        },
+    },
+    {
         "kind": "pos",
         "suffix": "pos-coffee",
         "amount": "0.00012000",
@@ -46,12 +56,35 @@ REGTEST_INVOICE_SCENARIOS = (
         },
     },
     {
+        "kind": "partial_payment",
+        "suffix": "partial-payment",
+        "amount": "0.00023000",
+        "payment_plan": ("0.00007000", "remaining"),
+        "metadata": {
+            "itemDesc": "Invoice paid in two on-chain transactions",
+            "buyerEmail": "split-payer@example.invalid",
+            "orderUrl": "/orders/kassiber-regtest-partial-payment",
+        },
+    },
+    {
+        "kind": "fiat_eur_invoice",
+        "suffix": "eur-checkout",
+        "amount": "11.00",
+        "currency": "EUR",
+        "metadata": {
+            "itemDesc": "EUR-denominated shop checkout",
+            "buyerEmail": "eur-buyer@example.invalid",
+            "orderUrl": "/orders/kassiber-regtest-eur-checkout",
+        },
+    },
+    {
         "kind": "payment_request",
         "suffix": "payment-request",
         "amount": "0.00015000",
         "metadata": {
             "itemDesc": "Monthly association membership",
             "paymentRequestId": "kassiber-regtest-membership-request",
+            "orderUrl": "/payment-requests/kassiber-regtest-membership",
         },
     },
     {
@@ -345,16 +378,18 @@ def _find_invoice_by_reference(
         if not isinstance(invoice, dict):
             continue
         metadata = invoice.get("metadata")
-        if order_id and isinstance(metadata, dict) and metadata.get("orderId") == order_id:
-            return invoice
-        if order_id and invoice.get("orderId") == order_id:
-            return invoice
         if (
             metadata_key
             and metadata_value
             and isinstance(metadata, dict)
             and str(metadata.get(metadata_key) or "") == metadata_value
         ):
+            return invoice
+        if metadata_key and metadata_value:
+            continue
+        if order_id and isinstance(metadata, dict) and metadata.get("orderId") == order_id:
+            return invoice
+        if order_id and invoice.get("orderId") == order_id:
             return invoice
     return None
 
@@ -455,6 +490,47 @@ def _invoice_is_settled(invoice: dict[str, Any]) -> bool:
     return str(invoice.get("status") or "").lower() == "settled"
 
 
+def _format_btc_amount(value: Decimal) -> str:
+    return f"{value.quantize(Decimal('0.00000001')):.8f}"
+
+
+def _method_due_btc(method: dict[str, Any]) -> Decimal:
+    return Decimal(str(method.get("due") or method.get("amount") or "0"))
+
+
+def _method_payment_count(method: dict[str, Any]) -> int:
+    payments = method.get("payments")
+    return len(payments) if isinstance(payments, list) else 0
+
+
+def _wait_for_payment_method_update(
+    *,
+    base_url: str,
+    api_key: str,
+    store_id: str,
+    invoice_id: str,
+    payment_method_id: str,
+    previous_due: Decimal,
+    expected_payment_count: int,
+    deadline_seconds: int,
+) -> dict[str, Any]:
+    deadline = time.monotonic() + deadline_seconds
+    last_method: dict[str, Any] | None = None
+    while time.monotonic() < deadline:
+        method = _payment_method_for_invoice(
+            base_url,
+            api_key,
+            store_id,
+            invoice_id,
+            payment_method_id,
+        )
+        last_method = method
+        if _method_payment_count(method) >= expected_payment_count or _method_due_btc(method) < previous_due:
+            return method
+        time.sleep(2)
+    raise RuntimeError(f"BTCPay invoice {invoice_id} did not observe the partial payment: {last_method!r}")
+
+
 def _scenario_order_id(base_order_id: str, scenario: dict[str, Any]) -> str | None:
     if scenario["kind"] == "payment_request":
         return None
@@ -486,33 +562,54 @@ def _exercise_btcpay_invoice(
     kind = str(scenario["kind"])
     order_id = _scenario_order_id(base_order_id, scenario)
     metadata = _scenario_metadata(base_url, base_order_id, scenario)
+    invoice_currency = str(scenario.get("currency") or currency)
     invoice = _create_or_get_invoice(
         base_url,
         api_key,
         store_id,
         order_id=order_id,
         amount=str(scenario["amount"]),
-        currency=currency,
+        currency=invoice_currency,
         metadata=metadata,
         metadata_key="kassiberRegtestScenario",
         metadata_value=kind,
     )
     invoice_id = str(invoice["id"])
-    payment_txid: str | None = None
+    payment_txids: list[str] = []
     settled_invoice = invoice
     if not _invoice_is_settled(invoice):
-        method = _payment_method_for_invoice(
-            base_url,
-            api_key,
-            store_id,
-            invoice_id,
-            payment_method_id,
-        )
-        destination = str(method.get("destination") or "")
-        amount_btc = str(method.get("due") or method.get("amount") or "")
-        if not destination or not amount_btc:
-            raise RuntimeError(f"BTCPay invoice {invoice_id} did not expose a payable on-chain destination")
-        payment_txid = _pay_regtest_invoice_from_core(destination, amount_btc, payer_wallet)
+        payment_plan = tuple(scenario.get("payment_plan") or ("remaining",))
+        method = {}
+        for index, planned_amount in enumerate(payment_plan):
+            method = _payment_method_for_invoice(
+                base_url,
+                api_key,
+                store_id,
+                invoice_id,
+                payment_method_id,
+            )
+            destination = str(method.get("destination") or "")
+            due_btc = _method_due_btc(method)
+            if not destination or due_btc <= 0:
+                raise RuntimeError(f"BTCPay invoice {invoice_id} did not expose a payable on-chain destination")
+            if str(planned_amount) == "remaining":
+                amount_btc = due_btc
+            else:
+                amount_btc = min(Decimal(str(planned_amount)), due_btc)
+            payment_txids.append(
+                _pay_regtest_invoice_from_core(destination, _format_btc_amount(amount_btc), payer_wallet)
+            )
+            if index < len(payment_plan) - 1:
+                method = _wait_for_payment_method_update(
+                    base_url=base_url,
+                    api_key=api_key,
+                    store_id=store_id,
+                    invoice_id=invoice_id,
+                    payment_method_id=payment_method_id,
+                    previous_due=due_btc,
+                    expected_payment_count=len(payment_txids),
+                    deadline_seconds=wait_seconds,
+                )
         settled_invoice = _wait_for_invoice_settlement(
             base_url,
             api_key,
@@ -526,8 +623,10 @@ def _exercise_btcpay_invoice(
         "invoice_status": settled_invoice.get("status"),
         "invoice_order_id": order_id,
         "invoice_amount": str(scenario["amount"]),
-        "invoice_currency": currency,
-        "payment_txid": payment_txid,
+        "invoice_currency": invoice_currency,
+        "payment_txid": payment_txids[0] if payment_txids else None,
+        "payment_txids": payment_txids,
+        "payment_count": len(payment_txids),
     }
 
 
@@ -727,7 +826,7 @@ def _exercise_kassiber_btcpay_sync(
             "--record-type",
             "payment",
             "--limit",
-            "10",
+            "50",
         ]
     )
     records = provenance_list if isinstance(provenance_list, list) else None
@@ -838,7 +937,7 @@ def main(argv: list[str] | None = None) -> int:
                 1 for invoice in invoice_results if str(invoice.get("invoice_status") or "") == "Settled"
             ),
             "payment_txids": [
-                invoice["payment_txid"] for invoice in invoice_results if invoice.get("payment_txid")
+                txid for invoice in invoice_results for txid in invoice.get("payment_txids", [])
             ],
             "kassiber": kassiber_sync,
         }

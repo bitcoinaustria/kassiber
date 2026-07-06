@@ -262,6 +262,41 @@ class BtcpayCommercialProvenanceTest(unittest.TestCase):
         self.assertEqual(invoices[0]["origin_kind"], "payment_request")
         self.assertEqual(invoices[0]["origin_label"], "Membership renewal")
 
+    def test_fetch_invoice_provenance_prefers_payment_request_before_external_order(self):
+        opener = _Opener(
+            [
+                [
+                    {
+                        "id": "inv-payment-request-order",
+                        "orderId": "membership-order-2026",
+                        "status": "Settled",
+                        "metadata": {
+                            "paymentRequestId": "pr-regtest-ordered",
+                            "itemDesc": "Membership renewal with order reference",
+                            "orderUrl": "https://btcpay.example/payment-requests/pr-regtest-ordered",
+                        },
+                        "payments": [{"id": "pay-pr-order-1", "paymentMethod": "BTC-CHAIN"}],
+                    }
+                ]
+            ]
+        )
+        backend = {"url": "https://btcpay.example", "token": "secret", "timeout": 5}
+
+        invoices = fetch_btcpay_invoice_provenance(
+            backend,
+            "store-1",
+            page_size=100,
+            opener=opener,
+        )
+
+        self.assertEqual(invoices[0]["payment_request_id"], "pr-regtest-ordered")
+        self.assertEqual(invoices[0]["origin_kind"], "payment_request")
+        self.assertEqual(invoices[0]["origin_label"], "Membership renewal with order reference")
+        self.assertEqual(
+            invoices[0]["origin_url"],
+            "https://btcpay.example/payment-requests/pr-regtest-ordered",
+        )
+
     def test_fetch_invoice_provenance_preserves_crowdfund_origin(self):
         opener = _Opener(
             [
