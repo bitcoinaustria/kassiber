@@ -6,6 +6,18 @@
     <title>Kassiber — local-first Bitcoin accounting</title>
     <script>
       (() => {
+        const applyTheme = (theme) => {
+          const selected =
+            theme === "dark" || theme === "light" || theme === "system"
+              ? theme
+              : "dark";
+          const dark =
+            selected === "dark" ||
+            (selected === "system" &&
+              window.matchMedia?.("(prefers-color-scheme: dark)").matches);
+          document.documentElement.classList.add(dark ? "dark" : "light");
+          document.documentElement.style.colorScheme = dark ? "dark" : "light";
+        };
         try {
           const raw = window.localStorage.getItem("kb.ui");
           const state = raw ? JSON.parse(raw)?.state : null;
@@ -14,11 +26,10 @@
           if (typeof lang === "string" && lang) {
             document.documentElement.lang = lang;
           }
-          if (theme === "dark" || theme === "light") {
-            document.documentElement.classList.add(theme);
-          }
+          applyTheme(theme);
         } catch {
-          // Keep the boot screen on system theme if persisted UI state is unreadable.
+          // Fall back to the app default if persisted UI state is unreadable.
+          applyTheme("dark");
         }
       })();
     </script>
