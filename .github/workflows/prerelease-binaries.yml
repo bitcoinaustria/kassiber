@@ -114,7 +114,7 @@ jobs:
           grep '"kind":"ui.rates.kraken_csv.import"' "$RUNNER_TEMP/kassiber-kraken-bundled-smoke.jsonl" >/dev/null
           grep '"bundled":true' "$RUNNER_TEMP/kassiber-kraken-bundled-smoke.jsonl" >/dev/null
           grep '"pairs":2' "$RUNNER_TEMP/kassiber-kraken-bundled-smoke.jsonl" >/dev/null
-          grep '"rows":11123' "$RUNNER_TEMP/kassiber-kraken-bundled-smoke.jsonl" >/dev/null
+          grep '"rows":255181' "$RUNNER_TEMP/kassiber-kraken-bundled-smoke.jsonl" >/dev/null
 
           at_root="$RUNNER_TEMP/kassiber-at-smoke"
           ./dist/kassiber --data-root "$at_root" --machine init >/dev/null
@@ -445,7 +445,7 @@ jobs:
           grep '"kind":"ui.rates.kraken_csv.import"' "$RUNNER_TEMP/cli-sidecar-kraken-bundled-smoke.jsonl" >/dev/null
           grep '"bundled":true' "$RUNNER_TEMP/cli-sidecar-kraken-bundled-smoke.jsonl" >/dev/null
           grep '"pairs":2' "$RUNNER_TEMP/cli-sidecar-kraken-bundled-smoke.jsonl" >/dev/null
-          grep '"rows":11123' "$RUNNER_TEMP/cli-sidecar-kraken-bundled-smoke.jsonl" >/dev/null
+          grep '"rows":255181' "$RUNNER_TEMP/cli-sidecar-kraken-bundled-smoke.jsonl" >/dev/null
 
           descriptor_root="$RUNNER_TEMP/kassiber-cli-sidecar-descriptor-smoke"
           "$sidecar" --data-root "$descriptor_root" --machine init >/dev/null
