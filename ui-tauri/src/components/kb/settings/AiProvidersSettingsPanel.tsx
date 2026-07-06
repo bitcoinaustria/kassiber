@@ -12,6 +12,7 @@ import type { AiModelsListData } from "@/lib/aiCapabilities";
 import { cn } from "@/lib/utils";
 import {
   AI_KIND_BADGE,
+  aiProviderDisplayName,
   aiSecretStateLabel,
   aiSecretStoreLabel,
   formatModelSummary,
@@ -150,6 +151,7 @@ export function AiProvidersSettingsPanel({
       ) : (
         <div className="grid gap-3">
           {data.providers.map((row) => {
+            const displayName = aiProviderDisplayName(row);
             const showNativeMove = Boolean(
               nativeStoreId &&
                 nativeAvailable &&
@@ -170,7 +172,7 @@ export function AiProvidersSettingsPanel({
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0 space-y-1">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="font-medium">{row.name}</span>
+                      <span className="font-medium">{displayName}</span>
                       <span
                         className={cn(
                           "inline-flex rounded-full border px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide",
@@ -196,7 +198,7 @@ export function AiProvidersSettingsPanel({
                       type="button"
                       size="icon-sm"
                       variant="ghost"
-                      aria-label={t("ai.editProvider", { name: row.name })}
+                      aria-label={t("ai.editProvider", { name: displayName })}
                       onClick={() => setEditingName(row.name)}
                     >
                       <Pencil className="size-3.5" aria-hidden="true" />
@@ -205,11 +207,11 @@ export function AiProvidersSettingsPanel({
                       type="button"
                       size="icon-sm"
                       variant="ghost"
-                      aria-label={t("ai.deleteProvider", { name: row.name })}
+                      aria-label={t("ai.deleteProvider", { name: displayName })}
                       disabled={row.is_default || deleteProvider.isPending}
                       onClick={() => {
                         const ok = window.confirm(
-                          t("ai.deleteConfirm", { name: row.name }),
+                          t("ai.deleteConfirm", { name: displayName }),
                         );
                         if (!ok) return;
                         deleteProvider.mutate({ name: row.name });

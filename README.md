@@ -58,10 +58,11 @@ carries a working Austrian (§ 27b EStG) plugin with E 1kv exports.
   [SECURITY.md](SECURITY.md). The
   [jlopp/physical-bitcoin-attacks](https://github.com/jlopp/physical-bitcoin-attacks)
   catalog covers the threats this addresses.
-- **Local AI Chat** — assistant defaults to local
-  [Ollama](https://ollama.com/); the desktop Assistant and `kassiber chat`
-  both use the same daemon tool loop. Off-device providers require explicit
-  per-provider acknowledgement and mutating tools require consent.
+- **Local AI Chat** — assistant ships with local
+  [Ollama](https://ollama.com/) and [oMLX](https://omlx.ai/) provider presets;
+  the desktop Assistant and `kassiber chat` both use the same daemon tool loop.
+  Off-device providers require explicit per-provider acknowledgement and
+  mutating tools require consent.
 - **AGPL 3.0** — auditable, forkable, no vendor lock-in.
 
 ## Highlights

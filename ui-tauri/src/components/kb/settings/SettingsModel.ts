@@ -273,6 +273,7 @@ export interface AiSecretStorePolicy {
 
 export interface AiProviderRow {
   name: string;
+  display_name?: string | null;
   base_url: string;
   kind: "local" | "remote" | "tee";
   default_model?: string | null;
@@ -284,6 +285,10 @@ export interface AiProviderRow {
   };
   is_default: boolean;
   acknowledged_at?: string | null;
+}
+
+export function aiProviderDisplayName(row: Pick<AiProviderRow, "name" | "display_name">): string {
+  return row.display_name?.trim() || row.name;
 }
 
 export interface AiProvidersListData {

@@ -63,6 +63,10 @@ function isCliProvider(provider: AiProviderRow): boolean {
   );
 }
 
+function providerDisplayName(provider: AiProviderRow): string {
+  return provider.display_name?.trim() || provider.name;
+}
+
 async function fetchProviderModels(
   dataMode: DataMode,
   provider: string,
@@ -230,8 +234,16 @@ export function ProviderModelPicker({
     });
   }, [providers, modelsByProvider, value]);
 
+  const currentProvider = value
+    ? providers.find((p) => p.name === value.provider)
+    : null;
+  const currentProviderLabel = value
+    ? currentProvider
+      ? providerDisplayName(currentProvider)
+      : value.provider
+    : null;
   const currentLabel = value
-    ? `${value.provider} · ${value.model}`
+    ? `${currentProviderLabel} · ${value.model}`
     : !enabled
       ? t("modelPicker.selectModel")
       : providers.length === 0
@@ -297,7 +309,7 @@ export function ProviderModelPicker({
           groupedRows.map(({ provider, models: rows }) => (
             <ModelSelectorGroup key={provider.name}>
               <ModelSelectorLabel
-                provider={provider.name}
+                provider={providerDisplayName(provider)}
                 kind={provider.kind}
               />
               {rows.length === 0 ? (

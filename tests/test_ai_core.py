@@ -10,14 +10,17 @@ from __future__ import annotations
 import io
 import json
 import os
+import queue
 import socket
 import subprocess
 import tempfile
+import threading
 import unittest
 import urllib.error
 from pathlib import Path
 from unittest.mock import patch
 
+from kassiber import daemon as daemon_runtime
 from kassiber.ai import (
     create_db_ai_provider,
     delete_db_ai_provider,
@@ -1039,6 +1042,63 @@ class StreamChatErrorMappingTest(unittest.TestCase):
             self.assertTrue(ctx.exception.retryable)
 
 
+class DaemonAiTestConnectionTest(unittest.TestCase):
+    class _FakeClient:
+        def list_models(self, *, strict: bool = False):
+            if not strict:
+                raise AssertionError("ai.test_connection must use strict model listing")
+            return [{"id": "mlx-local", "owned_by": "local"}]
+
+    def _ctx(self, conn):
+        return daemon_runtime.DaemonContext(
+            conn=conn,
+            data_root="",
+            runtime_config={},
+            active_ai_chats=daemon_runtime.ActiveAiChats(),
+            main_thread_tasks=queue.Queue(),
+            auth_backoff=daemon_runtime.AuthAttemptBackoff(),
+            input_lines=queue.Queue(),
+            deferred_input_lines=[],
+            out=None,
+            freshness_stop_event=threading.Event(),
+        )
+
+    def test_connection_accepts_transient_api_key_before_save(self):
+        captured: dict[str, object] = {}
+
+        def fake_client_factory(**kwargs):
+            captured.update(kwargs)
+            return self._FakeClient()
+
+        with tempfile.TemporaryDirectory(prefix="kassiber-ai-test-connection-") as tmp:
+            conn = open_db(str(Path(tmp) / "data"))
+            try:
+                with patch(
+                    "kassiber.daemon.ai_client_for_locator",
+                    side_effect=fake_client_factory,
+                ):
+                    envelope, should_shutdown = daemon_runtime.handle_request(
+                        self._ctx(conn),
+                        {
+                            "kind": "ai.test_connection",
+                            "request_id": "test-1",
+                            "args": {
+                                "base_url": "http://127.0.0.1:8000/v1",
+                                "api_key": "sk-unsaved-local",
+                            },
+                        },
+                        out=None,
+                    )
+                self.assertFalse(should_shutdown)
+                self.assertEqual(envelope["kind"], "ai.test_connection")
+                self.assertEqual(envelope["data"]["model_count"], 1)
+                self.assertEqual(captured["base_url"], "http://127.0.0.1:8000/v1")
+                self.assertEqual(captured["api_key"], "sk-unsaved-local")
+                self.assertEqual(captured["timeout"], 10.0)
+            finally:
+                conn.close()
+
+
 class ProvidersCrudTest(unittest.TestCase):
     """SQLite-backed CRUD round-trip; the API key never leaks into output."""
 
@@ -1054,14 +1114,16 @@ class ProvidersCrudTest(unittest.TestCase):
     def _conn(self):
         return open_db(str(self.data_root))
 
-    def test_seed_inserts_local_ollama_when_empty(self):
+    def test_seed_inserts_local_providers_when_empty(self):
         conn = self._conn()
         try:
             providers = list_db_ai_providers(conn)
-            self.assertEqual(len(providers), 1)
-            self.assertEqual(providers[0]["name"], "ollama")
-            self.assertEqual(providers[0]["kind"], "local")
-            self.assertEqual(providers[0]["base_url"], "http://localhost:11434/v1")
+            by_name = {provider["name"]: provider for provider in providers}
+            self.assertEqual(set(by_name), {"ollama", "omlx"})
+            self.assertEqual(by_name["ollama"]["kind"], "local")
+            self.assertEqual(by_name["ollama"]["base_url"], "http://localhost:11434/v1")
+            self.assertEqual(by_name["omlx"]["kind"], "local")
+            self.assertEqual(by_name["omlx"]["base_url"], "http://127.0.0.1:8000/v1")
         finally:
             conn.close()
 
@@ -1069,10 +1131,38 @@ class ProvidersCrudTest(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix="kassiber-ai-seed-host-") as tmp:
             conn = open_db(str(Path(tmp) / "data"))
             try:
-                with patch.dict(os.environ, {"KASSIBER_DEFAULT_AI_BASE_URL": "http://host.docker.internal:11434/v1"}):
+                with patch.dict(
+                    os.environ,
+                    {"KASSIBER_DEFAULT_AI_BASE_URL": "http://host.docker.internal:11434/v1"},
+                ):
                     seed_default_ai_provider_if_empty(conn)
                 providers = list_db_ai_providers(conn)
-                self.assertEqual(providers[0]["base_url"], "http://host.docker.internal:11434/v1")
+                by_name = {provider["name"]: provider for provider in providers}
+                self.assertEqual(
+                    by_name["ollama"]["base_url"],
+                    "http://host.docker.internal:11434/v1",
+                )
+                self.assertEqual(by_name["omlx"]["base_url"], "http://127.0.0.1:8000/v1")
+            finally:
+                conn.close()
+
+    def test_seed_can_select_omlx_as_default_provider(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-ai-seed-omlx-") as tmp:
+            conn = open_db(str(Path(tmp) / "data"))
+            try:
+                with patch.dict(
+                    os.environ,
+                    {
+                        "KASSIBER_DEFAULT_AI_PROVIDER": "omlx",
+                        "KASSIBER_DEFAULT_AI_BASE_URL": "http://127.0.0.1:8000/v1",
+                    },
+                ):
+                    seed_default_ai_provider_if_empty(conn)
+                payload = list_with_default(conn)
+                self.assertEqual(payload["default"], "omlx")
+                by_name = {provider["name"]: provider for provider in payload["providers"]}
+                self.assertEqual(by_name["omlx"]["base_url"], "http://127.0.0.1:8000/v1")
+                self.assertEqual(by_name["ollama"]["base_url"], "http://localhost:11434/v1")
             finally:
                 conn.close()
 
@@ -1085,7 +1175,10 @@ class ProvidersCrudTest(unittest.TestCase):
                 clear_default_ai_provider(conn)
                 delete_db_ai_provider(conn, "ollama")
                 seed_default_ai_provider_if_empty(conn)
-                self.assertEqual(list_db_ai_providers(conn), [])
+                self.assertNotIn(
+                    "ollama",
+                    {provider["name"] for provider in list_db_ai_providers(conn)},
+                )
             finally:
                 conn.close()
 
@@ -1095,7 +1188,7 @@ class ProvidersCrudTest(unittest.TestCase):
             try:
                 created = create_db_ai_provider(
                     conn,
-                    "openai",
+                    "OpenAI",
                     "https://api.openai.com/v1",
                     api_key="sk-secret",
                     default_model="gpt-4o-mini",
@@ -1103,6 +1196,7 @@ class ProvidersCrudTest(unittest.TestCase):
                     notes="Cloud OpenAI.",
                 )
                 self.assertEqual(created["name"], "openai")
+                self.assertEqual(created["display_name"], "OpenAI")
                 self.assertEqual(created["kind"], "remote")
                 self.assertIsNone(created["acknowledged_at"])
 
@@ -1111,6 +1205,7 @@ class ProvidersCrudTest(unittest.TestCase):
 
                 redacted = redact_ai_provider_for_output(fetched, default_name="ollama")
                 self.assertNotIn("api_key", redacted)
+                self.assertEqual(redacted["display_name"], "OpenAI")
                 self.assertTrue(redacted["has_api_key"])
                 self.assertEqual(redacted["secret_ref"]["store_id"], "sqlcipher_inline")
                 self.assertEqual(redacted["secret_ref"]["state"], "ok")

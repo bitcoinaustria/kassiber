@@ -79,11 +79,15 @@ explicitly backed by a local or confidential provider.
 
 Local inference is the recommended default.
 
-[Ollama](https://ollama.com/) is a good fit because it runs locally and exposes
-an OpenAI-compatible API at `http://localhost:11434/v1`. The first time the
-in-app assistant or CLI is invoked, Kassiber seeds a default `ollama` provider
-pointing at that endpoint. Run `ollama serve` (or have Ollama auto-start) and
-the assistant Just Works.
+Kassiber seeds first-class local provider rows for:
+
+- [Ollama](https://ollama.com/) at `http://localhost:11434/v1`
+- [oMLX](https://omlx.ai/) at `http://127.0.0.1:8000/v1`
+
+Ollama remains the default provider for compatibility, but oMLX appears as a
+built-in local provider and Settings preset. Run the server (`ollama serve`, or
+`omlx start` / the oMLX menu-bar app) and use **Test connection** in Settings
+before saving a provider change.
 
 If Kassiber itself is running inside a container and Ollama is running on the
 host, seed the provider with the Docker host alias instead:
@@ -94,6 +98,20 @@ KASSIBER_DEFAULT_AI_BASE_URL=http://host.docker.internal:11434/v1
 
 This only affects first-time provider seeding. For an existing book, update the
 `ollama` provider's `base_url` instead.
+
+To make oMLX the default for a brand-new book, set:
+
+```bash
+KASSIBER_DEFAULT_AI_PROVIDER=omlx
+KASSIBER_DEFAULT_AI_BASE_URL=http://127.0.0.1:8000/v1
+```
+
+Per-provider seed overrides are also supported:
+
+```bash
+KASSIBER_OMLX_AI_BASE_URL=http://127.0.0.1:8000/v1
+KASSIBER_OLLAMA_AI_BASE_URL=http://host.docker.internal:11434/v1
+```
 
 Example:
 

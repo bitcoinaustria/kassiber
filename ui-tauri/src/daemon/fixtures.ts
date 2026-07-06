@@ -2544,6 +2544,7 @@ export const fixtures: Record<string, unknown> = {
     providers: [
       {
         name: "ollama",
+        display_name: "Ollama",
         base_url: "http://localhost:11434/v1",
         kind: "local",
         default_model: "qwen3.6:35b",
@@ -2554,6 +2555,20 @@ export const fixtures: Record<string, unknown> = {
         has_api_key: false,
         secret_ref: { store_id: "sqlcipher_inline", state: "missing" },
         is_default: true,
+      },
+      {
+        name: "omlx",
+        display_name: "oMLX",
+        base_url: "http://127.0.0.1:8000/v1",
+        kind: "local",
+        default_model: null,
+        notes: "Local oMLX (mock).",
+        acknowledged_at: "2026-04-27T08:00:00Z",
+        created_at: "2026-04-27T08:00:00Z",
+        updated_at: "2026-04-27T08:00:00Z",
+        has_api_key: false,
+        secret_ref: { store_id: "sqlcipher_inline", state: "missing" },
+        is_default: false,
       },
     ],
     default: "ollama",

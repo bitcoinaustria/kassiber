@@ -1012,6 +1012,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_source_funds_recipients_active_label
 
 CREATE TABLE IF NOT EXISTS ai_providers (
     name TEXT PRIMARY KEY,
+    display_name TEXT,
     base_url TEXT NOT NULL,
     api_key TEXT,
     default_model TEXT,
@@ -1405,6 +1406,11 @@ def ensure_schema_compat(conn):
     ensure_column(conn, "wallet_utxos", "key_state", "TEXT")
     ensure_column(conn, "wallet_utxos", "anon_history_json", "TEXT NOT NULL DEFAULT '[]'")
     ensure_column(conn, "loan_legs", "loan_id", "TEXT")
+    ensure_column(conn, "ai_providers", "display_name", "TEXT")
+    conn.execute(
+        "UPDATE ai_providers SET display_name = name WHERE display_name IS NULL OR TRIM(display_name) = ''"
+    )
+    conn.commit()
     _ensure_ai_provider_secret_refs_schema(conn)
     _ensure_bip329_wallet_agnostic_schema(conn)
     _drop_legacy_source_funds_recipients_unique(conn)

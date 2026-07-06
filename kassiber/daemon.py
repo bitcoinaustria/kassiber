@@ -11494,10 +11494,14 @@ def handle_request(
                 code="validation",
                 hint="Save provider metadata first, then send the key through ai.providers.set_api_key.",
             )
+        display_name = args.get("display_name")
+        if display_name is not None and not isinstance(display_name, str):
+            raise AppError("ai.providers.create display_name must be a string", code="validation")
         created = create_db_ai_provider(
             ctx.conn,
             name,
             base_url,
+            display_name=display_name,
             default_model=args.get("default_model"),
             kind=str(args.get("kind") or "local"),
             notes=args.get("notes"),
@@ -11529,11 +11533,15 @@ def handle_request(
                 code="validation",
                 hint="Update provider metadata separately, then send the key through ai.providers.set_api_key.",
             )
+        display_name = args.get("display_name")
+        if display_name is not None and not isinstance(display_name, str):
+            raise AppError("ai.providers.update display_name must be a string", code="validation")
         updated = update_db_ai_provider(
             ctx.conn,
             name,
             {
                 "base_url": args.get("base_url"),
+                "display_name": display_name,
                 "default_model": args.get("default_model"),
                 "kind": args.get("kind"),
                 "notes": args.get("notes"),
@@ -11688,9 +11696,10 @@ def handle_request(
 
     if kind == "ai.test_connection":
         # Transient connection test against caller-supplied provider metadata —
-        # nothing is persisted. Stored credentials may only be reused for the
-        # stored provider URL; otherwise a compromised renderer could redirect
-        # a saved bearer token to an attacker-controlled OpenAI-compatible URL.
+        # nothing is persisted. A caller-supplied API key may be used for this
+        # one probe. Stored credentials may only be reused for the stored
+        # provider URL; otherwise a compromised renderer could redirect a saved
+        # bearer token to an attacker-controlled OpenAI-compatible URL.
         args = _coerce_args_dict(request_id, request.get("args"))
         base_url_raw = args.get("base_url")
         if not isinstance(base_url_raw, str) or not base_url_raw.strip():
@@ -11700,18 +11709,14 @@ def handle_request(
             )
         canonical_url = normalize_base_url(base_url_raw)
         api_key_raw = args.get("api_key")
+        api_key_text = ""
         if api_key_raw is not None:
             if not isinstance(api_key_raw, str):
                 raise AppError(
                     "ai.test_connection api_key must be a string",
                     code="validation",
                 )
-            raise AppError(
-                "ai.test_connection does not accept api_key; use ai.providers.set_api_key",
-                code="validation",
-                hint="Save or rotate the key through ai.providers.set_api_key, then test the stored provider.",
-            )
-        api_key_text = ""
+            api_key_text = str_or_none(api_key_raw) or ""
         if not api_key_text:
             stored_provider = args.get("provider")
             if isinstance(stored_provider, str) and stored_provider.strip():

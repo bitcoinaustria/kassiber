@@ -2551,6 +2551,7 @@ def build_parser() -> argparse.ArgumentParser:
     ai_providers_create.add_argument("--api-key", help="Deprecated argv bearer token shim; prefer --api-key-stdin or --api-key-fd")
     add_secret_stdin_options(ai_providers_create, "api-key", label="AI provider API key")
     ai_providers_create.add_argument("--default-model")
+    ai_providers_create.add_argument("--display-name")
     ai_providers_create.add_argument(
         "--kind",
         choices=list(_AI_PROVIDER_KINDS_LIST),
@@ -2570,6 +2571,7 @@ def build_parser() -> argparse.ArgumentParser:
     ai_providers_update.add_argument("--api-key", help="Deprecated argv bearer token shim; prefer --api-key-stdin or --api-key-fd")
     add_secret_stdin_options(ai_providers_update, "api-key", label="AI provider API key")
     ai_providers_update.add_argument("--default-model")
+    ai_providers_update.add_argument("--display-name")
     ai_providers_update.add_argument("--kind", choices=list(_AI_PROVIDER_KINDS_LIST))
     ai_providers_update.add_argument("--notes")
     ai_providers_update.add_argument(
@@ -4638,6 +4640,7 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                     conn,
                     args.name,
                     args.base_url,
+                    display_name=args.display_name,
                     api_key=api_key,
                     default_model=args.default_model,
                     kind=args.kind,
@@ -4650,6 +4653,7 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                 api_key = read_secret_from_args(args, "api-key", legacy_attr="api_key")
                 updates = {
                     "base_url": args.base_url,
+                    "display_name": args.display_name,
                     "api_key": api_key,
                     "default_model": args.default_model,
                     "kind": args.kind,
