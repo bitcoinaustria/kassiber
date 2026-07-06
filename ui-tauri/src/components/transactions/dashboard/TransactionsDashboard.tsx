@@ -345,18 +345,18 @@ const TransactionsDashboard = ({
       args.txids = deepLinkedTransactionIds;
     }
 
-    if (chartSelection) {
-      const window = flowChartSelectionDateWindow(chartSelection);
+    if (flowChartSelection) {
+      const window = flowChartSelectionDateWindow(flowChartSelection);
       if (window) {
         args.since = window.since;
         args.until = window.until;
         delete args.period;
       }
-      if (chartSelection.segment === "incoming") args.flow = "incoming";
-      if (chartSelection.segment === "outgoing") args.flow = "outgoing";
-      if (chartSelection.segment === "transfers") args.flow = "transfer";
-      if (chartSelection.segment === "swaps") args.flow = "swap";
-      if (chartSelection.mode === "external" && !chartSelection.segment) {
+      if (flowChartSelection.segment === "incoming") args.flow = "incoming";
+      if (flowChartSelection.segment === "outgoing") args.flow = "outgoing";
+      if (flowChartSelection.segment === "transfers") args.flow = "transfer";
+      if (flowChartSelection.segment === "swaps") args.flow = "swap";
+      if (flowChartSelection.mode === "external" && !flowChartSelection.segment) {
         args.quick = "external_flow";
       }
     }
@@ -391,8 +391,8 @@ const TransactionsDashboard = ({
     onTableFilterArgsChange?.(args);
   }, [
     breakdownSelection,
-    chartSelection,
     deepLinkedTransactionIds,
+    flowChartSelection,
     onTableFilterArgsChange,
     period,
     quickFilter,
