@@ -53,3 +53,17 @@ export function shouldStoreTouchIdPassphrase({
   }
   return rememberWithTouchId === true || touchIdStatusConfigured;
 }
+
+export function shouldAutoPromptTouchId({
+  autoPromptRequested,
+  canUseTouchId,
+  appVisible,
+  windowFocused,
+}: {
+  autoPromptRequested: boolean;
+  canUseTouchId: boolean;
+  appVisible: boolean;
+  windowFocused: boolean;
+}) {
+  return autoPromptRequested && canUseTouchId && appVisible && windowFocused;
+}

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   lockScreenConfig,
+  shouldAutoPromptTouchId,
   shouldLockEncryptedWorkspaceOnLaunch,
   shouldStoreTouchIdPassphrase,
   shouldUseDaemonUnlock,
@@ -121,6 +122,41 @@ describe("app lock decisions", () => {
         platformSupported: true,
         rememberWithTouchId: false,
         touchIdStatusConfigured: true,
+      }),
+    ).toBe(false);
+  });
+
+  it("auto-prompts Touch ID only for foreground lock screens", () => {
+    expect(
+      shouldAutoPromptTouchId({
+        autoPromptRequested: true,
+        canUseTouchId: true,
+        appVisible: true,
+        windowFocused: true,
+      }),
+    ).toBe(true);
+    expect(
+      shouldAutoPromptTouchId({
+        autoPromptRequested: true,
+        canUseTouchId: true,
+        appVisible: false,
+        windowFocused: true,
+      }),
+    ).toBe(false);
+    expect(
+      shouldAutoPromptTouchId({
+        autoPromptRequested: true,
+        canUseTouchId: true,
+        appVisible: true,
+        windowFocused: false,
+      }),
+    ).toBe(false);
+    expect(
+      shouldAutoPromptTouchId({
+        autoPromptRequested: false,
+        canUseTouchId: true,
+        appVisible: true,
+        windowFocused: true,
       }),
     ).toBe(false);
   });

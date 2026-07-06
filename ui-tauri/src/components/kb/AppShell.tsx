@@ -117,6 +117,7 @@ import {
 import type { TouchIdPassphraseStatus } from "@/daemon/transport";
 import {
   lockScreenConfig,
+  shouldAutoPromptTouchId,
   shouldLockEncryptedWorkspaceOnLaunch,
   shouldStoreTouchIdPassphrase,
   shouldUseDaemonUnlock,
@@ -280,6 +281,26 @@ const NATIVE_MENU_EVENT = "kassiber:intent";
 const ACTIVE_PROGRESS_CLEAR_GRACE_MS = 750;
 const topNavIconButtonClassName =
   "size-8 text-sidebar-foreground/75 hover:bg-sidebar-accent hover:text-sidebar-foreground";
+
+function appCanStartTouchIdPrompt() {
+  if (typeof document === "undefined") {
+    return { appVisible: true, windowFocused: true };
+  }
+  const appVisible = document.visibilityState === "visible";
+  const windowFocused =
+    typeof document.hasFocus !== "function" || document.hasFocus();
+  return { appVisible, windowFocused };
+}
+
+function foregroundTouchIdAutoPrompt(autoPromptRequested: boolean) {
+  const { appVisible, windowFocused } = appCanStartTouchIdPrompt();
+  return shouldAutoPromptTouchId({
+    autoPromptRequested,
+    canUseTouchId: true,
+    appVisible,
+    windowFocused,
+  });
+}
 
 function notificationProgressValue(value: number | undefined) {
   if (typeof value !== "number" || !Number.isFinite(value)) return 0;
@@ -640,7 +661,9 @@ export function AppShell() {
     () => lockEncryptedWorkspaceOnLaunch,
   );
   const [touchIdAutoPromptPending, setTouchIdAutoPromptPending] =
-    React.useState(() => lockEncryptedWorkspaceOnLaunch);
+    React.useState(() =>
+      foregroundTouchIdAutoPrompt(lockEncryptedWorkspaceOnLaunch),
+    );
   const [assistantReturnPath, setAssistantReturnPath] =
     React.useState<AssistantReturnPath>("/overview");
   const mainRef = React.useRef<HTMLElement>(null);
@@ -747,7 +770,9 @@ export function AppShell() {
 
   const applyLock = React.useCallback((autoPromptTouchId: boolean) => {
     setPendingProjectUnlock(null);
-    setTouchIdAutoPromptPending(autoPromptTouchId);
+    setTouchIdAutoPromptPending(
+      foregroundTouchIdAutoPrompt(autoPromptTouchId),
+    );
     if (requiresDaemonUnlock) {
       clearSessionUnlockPassphrase();
       clearDaemonQueryCache();
@@ -986,7 +1011,6 @@ export function AppShell() {
     identity?.importedProject,
     importRootBlocked,
     importRootError,
-    noteActiveImportProject,
     pendingProjectUnlock,
     queryClient,
     refreshTouchIdStatus,
@@ -1291,7 +1315,9 @@ export function AppShell() {
       encryptedWorkspace,
       hasSessionUnlock: false,
     });
-    setTouchIdAutoPromptPending(nextLocked);
+    setTouchIdAutoPromptPending(
+      foregroundTouchIdAutoPrompt(nextLocked),
+    );
     setLocked(nextLocked);
     void activateImportProject(importedProjectRoot)
       .then(() => {
@@ -1334,7 +1360,9 @@ export function AppShell() {
       setDaemonAuthRequired(true);
       clearSessionUnlockPassphrase();
       clearDaemonQueryCache();
-      setTouchIdAutoPromptPending(true);
+      setTouchIdAutoPromptPending(
+        foregroundTouchIdAutoPrompt(true),
+      );
       setLocked(true);
     };
 
@@ -3216,7 +3244,18 @@ function LockScreen({
   React.useEffect(() => {
     if (!autoTouchIdPrompt || !canUseTouchId) return;
     if (autoTouchIdPrompted.current) return;
+    const { appVisible, windowFocused } = appCanStartTouchIdPrompt();
     autoTouchIdPrompted.current = true;
+    if (
+      !shouldAutoPromptTouchId({
+        autoPromptRequested: autoTouchIdPrompt,
+        canUseTouchId,
+        appVisible,
+        windowFocused,
+      })
+    ) {
+      return;
+    }
     void submitTouchId();
   }, [autoTouchIdPrompt, canUseTouchId, submitTouchId]);
 
