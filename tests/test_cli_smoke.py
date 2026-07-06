@@ -596,6 +596,47 @@ class CliSmokeTest(unittest.TestCase):
         self.assertEqual(rows["liquid"]["batch_size"], 100)
         self.assertEqual(rows["liquid-blockstream"]["batch_size"], 100)
 
+    def test_01aa_exchange_backend_secrets_are_presence_only(self):
+        api_key = "exchange-api-key-secret"
+        api_secret = "exchange-api-secret-value"
+        payload = self._cli(
+            "backends", "create", "kraken-smoke",
+            "--kind", "kraken",
+            "--url", "https://api.kraken.com",
+            "--token-stdin",
+            "--auth-header", api_secret,
+            input_text=f"{api_key}\n",
+        )
+        self._assert_kind(payload, "backends.create")
+        encoded_payload = json.dumps(payload)
+        self.assertNotIn(api_key, encoded_payload)
+        self.assertNotIn(api_secret, encoded_payload)
+        self.assertTrue(payload["data"]["has_token"])
+        self.assertTrue(payload["data"]["has_auth_header"])
+        self.assertNotIn("token", payload["data"])
+        self.assertNotIn("auth_header", payload["data"])
+
+        payload = self._cli("backends", "get", "kraken-smoke")
+        self._assert_kind(payload, "backends.get")
+        encoded_payload = json.dumps(payload)
+        self.assertNotIn(api_key, encoded_payload)
+        self.assertNotIn(api_secret, encoded_payload)
+        self.assertTrue(payload["data"]["has_token"])
+        self.assertTrue(payload["data"]["has_auth_header"])
+        self.assertNotIn("token", payload["data"])
+        self.assertNotIn("auth_header", payload["data"])
+
+        payload = self._cli("backends", "list")
+        self._assert_kind(payload, "backends.list")
+        rows = {row["name"]: row for row in payload["data"]}
+        encoded_payload = json.dumps(rows["kraken-smoke"])
+        self.assertNotIn(api_key, encoded_payload)
+        self.assertNotIn(api_secret, encoded_payload)
+        self.assertTrue(rows["kraken-smoke"]["has_token"])
+        self.assertTrue(rows["kraken-smoke"]["has_auth_header"])
+        self.assertNotIn("token", rows["kraken-smoke"])
+        self.assertNotIn("auth_header", rows["kraken-smoke"])
+
     def test_01b_ai_providers_roundtrip(self):
         # Seeded local Ollama row should be present with the local-default
         # marker; api_key is never echoed in any redacted payload.
