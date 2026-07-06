@@ -13,6 +13,7 @@ from ..backends import backend_value, redact_backend_for_output
 from ..errors import AppError
 from ..msat import dec, msat_to_btc
 from ..time_utils import _iso_z, _parse_iso_datetime
+from ..transfers import profile_bitcoin_rail_carrying_value
 from ..wallet_descriptors import (
     BITCOIN_NETWORK_ALIASES,
     CHAIN_ALIASES,
@@ -5508,6 +5509,7 @@ def _unreviewed_swap_candidate_blocker(
             pair_records=pair_records,
             dismissals=dismissals,
             tax_country=str(profile["tax_country"] or ""),
+            bitcoin_rail_carrying_value=profile_bitcoin_rail_carrying_value(profile),
         )
         if _swap_candidate_blocks_reports(candidate)
     ]

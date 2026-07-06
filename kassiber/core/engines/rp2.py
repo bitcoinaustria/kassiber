@@ -16,7 +16,7 @@ from typing import Any, Iterable, Iterator, Mapping, Sequence
 from ...errors import AppError
 from ...msat import btc_to_msat, dec, msat_to_btc
 from ...tax_policy import build_tax_policy
-from ...transfers import apply_manual_pairs, detect_intra_transfers
+from ...transfers import apply_manual_pairs, detect_intra_transfers, is_bitcoin_rail_pair
 from .. import pricing
 from ..ownership_transfers import (
     derive_multi_source_consolidations,
@@ -1707,9 +1707,9 @@ def _direct_payout_proceeds_row(
 ) -> Mapping[str, Any]:
     """Apply reviewed external payout proceeds to the taxable source row.
 
-    Direct payout reviews are not Austrian-only. The Austrian-only part is the
-    cross-asset carrying-value synthesis below; ordinary taxable direct payouts
-    still need the reviewed payout value to drive disposal proceeds.
+    Direct payout reviews are not limited to carrying-value treatment. Ordinary
+    taxable direct payouts still need the reviewed payout value to drive disposal
+    proceeds.
     """
 
     payout_value = _row_get(record, "payout_fiat_value")
@@ -1811,11 +1811,10 @@ def _direct_payout_synthetic_rows(
 ]:
     """Return engine-only target legs for direct swap payouts.
 
-    Cross-asset Austrian carrying-value payouts need two facts in RP2: a
-    neutral swap into the payout asset, then an immediate external disposal.
-    The synthetic rows are never persisted as transactions; journal entries
-    produced from them point back to the real source row via
-    ``journal_transaction_id``.
+    Cross-asset carrying-value payouts need two facts in RP2: a neutral swap
+    into the payout asset, then an immediate external disposal. The synthetic
+    rows are never persisted as transactions; journal entries produced from
+    them point back to the real source row via ``journal_transaction_id``.
     """
 
     if not direct_payout_records:
@@ -1870,9 +1869,12 @@ def _direct_payout_synthetic_rows(
                 kind="sell",
             )
         is_cross_asset_carry = (
-            tax_country == "at"
-            and record["policy"] == "carrying-value"
+            record["policy"] == "carrying-value"
             and out_row["asset"] != payout_asset
+            and (
+                tax_country == "at"
+                or is_bitcoin_rail_pair(out_row["asset"], payout_asset)
+            )
         )
         if not is_cross_asset_carry:
             proceeds_row = _direct_payout_proceeds_row(record, source_out_row)
@@ -1980,6 +1982,13 @@ def _direct_payout_synthetic_rows(
     rows_for_engine = sorted(rows_for_engine, key=_transaction_row_sort_key)
 
     return rows_for_engine, cross_asset_pairs, direct_payouts, quarantines, blocked_row_ids
+
+
+def _is_direct_payout_synthetic_row_id(row_id: Any) -> bool:
+    text = str(row_id)
+    return text.startswith("direct-payout:") and (
+        text.endswith(":in") or text.endswith(":out")
+    )
 
 
 def _ownership_block_quarantines(
@@ -2105,6 +2114,93 @@ def _apply_cross_asset_splits(
     return new_rows, rewritten, out_id_to_real
 
 
+def _decimal_to_row_value(value: Decimal) -> str:
+    return format(value.normalize(), "f")
+
+
+def _with_carried_fiat_value(row: Mapping[str, Any], carried_basis: Decimal) -> dict[str, Any]:
+    value = _decimal_to_row_value(carried_basis)
+    return {
+        **dict(row),
+        "fiat_value": value,
+        "fiat_value_exact": value,
+    }
+
+
+def _computed_cost_basis_by_transaction_id(asset_states: Mapping[str, _RP2AssetState]) -> dict[str, Decimal]:
+    basis_by_id: dict[str, Decimal] = defaultdict(lambda: Decimal("0"))
+    for state in asset_states.values():
+        computed_data = state.computed_data
+        if computed_data is None:
+            continue
+        for gain_loss in computed_data.gain_loss_set:
+            transaction_id = str(gain_loss.taxable_event.unique_id)
+            basis_by_id[transaction_id] += dec(gain_loss.fiat_cost_basis)
+    return dict(basis_by_id)
+
+
+def _apply_generic_bitcoin_rail_carry_values(
+    profile: Mapping[str, Any],
+    rows_for_engine: list[Mapping[str, Any]],
+    cross_asset_pairs: Sequence[Mapping[str, Any]],
+    pairs_by_asset: Mapping[str, list[Mapping[str, Any]]],
+    configuration: Any,
+    wallet_refs_by_id: Mapping[str, Mapping[str, Any]],
+    *,
+    excluded_row_ids: set[str],
+    loan_leg_by_transaction_id: Mapping[str, str],
+) -> list[Mapping[str, Any]]:
+    """Carry BTC/LBTC basis for non-AT profiles without duplicating lot logic.
+
+    Generic RP2 has no country-level multi-asset hook, so first let RP2 price the
+    source disposal with the user's selected accounting method. The resulting
+    source-leg cost basis is then used as both the neutral proceeds of the
+    outgoing rail-change leg and the acquisition value of the incoming rail.
+    """
+
+    if _profile_str(profile, "tax_country").lower() == "at":
+        return rows_for_engine
+    rows_by_id = {str(row["id"]): row for row in rows_for_engine}
+    eligible_pairs = [
+        pair
+        for pair in cross_asset_pairs
+        if pair.get("policy") == "carrying-value"
+        and is_bitcoin_rail_pair(pair.get("out_asset"), pair.get("in_asset"))
+        and str(pair.get("out_id")) in rows_by_id
+        and str(pair.get("in_id")) in rows_by_id
+    ]
+    if not eligible_pairs:
+        return rows_for_engine
+
+    rows_by_asset: dict[str, list[Mapping[str, Any]]] = defaultdict(list)
+    for row in rows_for_engine:
+        rows_by_asset[row["asset"]].append(row)
+    prepared_by_asset = _prepare_assets(
+        profile,
+        rows_by_asset,
+        wallet_refs_by_id,
+        pairs_by_asset,
+        configuration,
+        excluded_row_ids=excluded_row_ids,
+        loan_leg_by_transaction_id=loan_leg_by_transaction_id,
+    )
+    asset_states = _rp2_asset_states_from_prepared(prepared_by_asset, profile, configuration)
+    basis_by_id = _computed_cost_basis_by_transaction_id(asset_states)
+
+    overrides: dict[str, Mapping[str, Any]] = {}
+    for pair in eligible_pairs:
+        out_id = str(pair["out_id"])
+        in_id = str(pair["in_id"])
+        carried_basis = basis_by_id.get(out_id)
+        if carried_basis is None or carried_basis <= 0:
+            continue
+        overrides[out_id] = _with_carried_fiat_value(rows_by_id[out_id], carried_basis)
+        overrides[in_id] = _with_carried_fiat_value(rows_by_id[in_id], carried_basis)
+    if not overrides:
+        return rows_for_engine
+    return [overrides.get(str(row["id"]), row) for row in rows_for_engine]
+
+
 class GenericRP2TaxEngine:
     """Current generic RP2-backed implementation behind the engine seam."""
 
@@ -2166,6 +2262,20 @@ class GenericRP2TaxEngine:
                 inputs.manual_pair_records,
             )
             auto_pairs, auto_matched_ids = detect_intra_transfers(rows_for_engine)
+            if auto_pairs:
+                kept_auto_pairs = []
+                for pair in auto_pairs:
+                    out_id = str(pair["out"]["id"])
+                    in_id = str(pair["in"]["id"])
+                    if (
+                        _is_direct_payout_synthetic_row_id(out_id)
+                        or _is_direct_payout_synthetic_row_id(in_id)
+                    ):
+                        auto_matched_ids.discard(out_id)
+                        auto_matched_ids.discard(in_id)
+                        continue
+                    kept_auto_pairs.append(pair)
+                auto_pairs = kept_auto_pairs
             # Give the address-ownership deriver first refusal on a 1-out/1-in
             # pair whose outbound graph shows value also left to a NON-owned
             # recipient (a partial payment). detect_intra_transfers would pair the
@@ -2476,6 +2586,22 @@ class GenericRP2TaxEngine:
             for tx_id, role in (inputs.channel_roles or {}).items():
                 loan_leg_by_transaction_id.setdefault(str(tx_id), str(role))
 
+            carried_rows_for_engine = _apply_generic_bitcoin_rail_carry_values(
+                self.profile,
+                rows_for_engine,
+                engine_cross_asset_pairs,
+                pairs_by_asset,
+                configuration,
+                inputs.wallet_refs_by_id,
+                excluded_row_ids=blocked_payout_row_ids,
+                loan_leg_by_transaction_id=loan_leg_by_transaction_id,
+            )
+            if carried_rows_for_engine is not rows_for_engine:
+                rows_for_engine = list(carried_rows_for_engine)
+                rows_by_asset = defaultdict(list)
+                for row in rows_for_engine:
+                    rows_by_asset[row["asset"]].append(row)
+
             # Phase 1: normalize + build RP2 `InputData` for every asset. No `compute_tax`
             # runs here so the country's cross-asset validator can see every asset's
             # markers before any accounting.
@@ -2504,6 +2630,11 @@ class GenericRP2TaxEngine:
                 synthetic_id
                 for pair in payout_pairs
                 if str(pair["in_id"]) in swap_link_by_row_id
+                or (
+                    _profile_str(self.profile, "tax_country").lower() != "at"
+                    and pair.get("policy") == "carrying-value"
+                    and is_bitcoin_rail_pair(pair.get("out_asset"), pair.get("in_asset"))
+                )
                 for synthetic_id in (str(pair["in_id"]), f"{pair['pair_id']}:out")
             }
             excluded_row_ids = blocked_payout_row_ids | quarantined_row_ids | (payout_synthetic_ids - selected_payout_synthetic_ids)

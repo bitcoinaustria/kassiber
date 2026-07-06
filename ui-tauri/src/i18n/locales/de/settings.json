@@ -299,6 +299,16 @@
       "countDescription": "Tageskurse werden für die Steuer akzeptiert und diese Zeilen sind berichtsfertig. Für feinere Genauigkeit in volatilen Phasen kannst du unten den Cache neu aufbauen, um sie aus präzisen Kursen zum Ereigniszeitpunkt neu zu bewerten.",
       "reviewToggleLabel": "Bewertung aus Tageskursen zur Prüfung zurückhalten",
       "reviewToggleDescription": "Aus (Standard): Transaktionen, die nur aus Tages-/groben Kursen bewertet sind, werden zum Tageskurs gebucht und zur optionalen Prüfung markiert. An: Sie werden in Quarantäne gestellt, bis du sie bestätigst oder einen präzisen Preis holst — nützlich für Audits."
+    },
+    "bitcoinRails": {
+      "enabledTitle": "Bitcoin-Rail Carry aktiviert",
+      "disabledTitle": "Bitcoin-Rail Carry deaktiviert",
+      "enabledBody": "BTC/LBTC-Rail-Wechsel werden in Vorschlägen standardmäßig als Carrying Value behandelt.",
+      "disabledBody": "BTC/LBTC-Rail-Wechsel werden in Vorschlägen standardmäßig steuerpflichtig behandelt, außer du überschreibst das Paar.",
+      "errorTitle": "Bitcoin-Rail-Richtlinie konnte nicht aktualisiert werden",
+      "errorBody": "Kassiber konnte die Einstellung zur Bitcoin-Rail-Behandlung nicht speichern.",
+      "toggleLabel": "Bitcoin-Rail-Wechsel als Carrying Value behandeln",
+      "toggleDescription": "An (Standard): BTC/LBTC-Bewegungen zwischen eigenen Rails werden standardmäßig als Carrying Value vorgeschlagen. Aus: Vorschläge sind standardmäßig steuerpflichtig; explizite Paar-Überschreibungen gewinnen weiterhin."
     }
   },
   "security": {

@@ -31,6 +31,7 @@ from kassiber.cli.handlers import (
     latest_rates_for_profile,
     list_transaction_pairs,
     process_journals,
+    suggest_transfer_candidates,
     update_transaction_pair,
 )
 from kassiber.core import attachments as core_attachments
@@ -10332,6 +10333,52 @@ class ReviewRegressionTest(unittest.TestCase):
         expected = self._load_fixture("generic_rp2_cross_asset_pair_snapshot.json")
         self.assertEqual(actual, expected)
 
+    def test_direct_generic_bitcoin_rail_carrying_value_pair_carries_basis(self):
+        profile, inputs = self._direct_cross_asset_pair_engine_inputs()
+        carry_inputs = TaxEngineLedgerInputs(
+            rows=[
+                *inputs.rows,
+                {
+                    "id": "lbtc-sale-after-carry",
+                    "wallet_id": "wallet-liquid",
+                    "wallet_label": "Liquid",
+                    "wallet_account_id": "account-treasury",
+                    "account_code": "treasury",
+                    "account_label": "Treasury",
+                    "occurred_at": "2026-04-20T10:00:00Z",
+                    "direction": "outbound",
+                    "asset": "LBTC",
+                    "amount": 10_000_000_000,
+                    "fee": 0,
+                    "fiat_rate": 83000,
+                    "fiat_value": 8300,
+                    "kind": "sell",
+                    "description": "Sell carried LBTC",
+                    "note": None,
+                    "external_id": "lbtc-sale-after-carry",
+                    "created_at": "2026-04-20T10:00:00Z",
+                },
+            ],
+            wallet_refs_by_id=inputs.wallet_refs_by_id,
+            manual_pair_records=[
+                {**dict(inputs.manual_pair_records[0]), "policy": "carrying-value"},
+            ],
+        )
+        actual = self._direct_engine_snapshot(profile, carry_inputs)
+        self.assertEqual(actual["quarantines"], [])
+        self.assertEqual(actual["account_holdings"], [])
+        disposals = {
+            entry["transaction_id"]: entry
+            for entry in actual["entries"]
+            if entry["entry_type"] == "disposal"
+        }
+        self.assertEqual(disposals["cross-out-leg"]["gain_loss"], 0.0)
+        self.assertEqual(disposals["cross-out-leg"]["cost_basis"], 8008.0)
+        self.assertEqual(disposals["cross-out-leg"]["proceeds"], 8008.0)
+        self.assertEqual(disposals["lbtc-sale-after-carry"]["cost_basis"], 8008.0)
+        self.assertEqual(disposals["lbtc-sale-after-carry"]["proceeds"], 8300.0)
+        self.assertEqual(disposals["lbtc-sale-after-carry"]["gain_loss"], 292.0)
+
     def test_generic_rp2_transfer_snapshot_matches_fixture(self):
         payload, result = self._run_json(
             "init",
@@ -10705,6 +10752,37 @@ class ReviewRegressionTest(unittest.TestCase):
             }
         ])
 
+    def test_generic_bitcoin_rail_direct_swap_payout_carries_then_disposes(self):
+        profile, inputs = self._direct_austrian_swap_payout_inputs()
+        profile = {
+            **profile,
+            "id": "profile-generic-rail-payout",
+            "label": "FixtureGenericRailPayout",
+            "tax_country": "generic",
+            "tax_long_term_days": 365,
+            "gains_algorithm": "FIFO",
+        }
+        state = build_tax_engine(profile).build_ledger_state(inputs)
+        entries = _normalize_engine_entries(state.entries)
+
+        self.assertEqual(state.quarantines, [])
+        self.assertEqual(state.direct_swap_payouts[0]["policy"], "carrying-value")
+        disposals = [
+            entry
+            for entry in entries
+            if entry["transaction_id"] == "swap-payout-source"
+            and entry["entry_type"] == "disposal"
+        ]
+        self.assertEqual(len(disposals), 2)
+        neutral_source = next(entry for entry in disposals if entry["asset"] == "LBTC")
+        taxable_payout = next(entry for entry in disposals if entry["asset"] == "BTC")
+        self.assertAlmostEqual(neutral_source["cost_basis"], 15000.0)
+        self.assertAlmostEqual(neutral_source["proceeds"], 15000.0)
+        self.assertAlmostEqual(neutral_source["gain_loss"], 0.0)
+        self.assertAlmostEqual(taxable_payout["cost_basis"], 15000.0)
+        self.assertAlmostEqual(taxable_payout["proceeds"], 24995.0)
+        self.assertAlmostEqual(taxable_payout["gain_loss"], 9995.0)
+
     def test_austrian_direct_swap_payout_sorts_synthetic_rows(self):
         profile, inputs = self._direct_austrian_swap_payout_inputs()
         rows = [
@@ -10948,7 +11026,7 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual(pairs[0]["kind"], "manual")
         self.assertEqual(pairs[0]["policy"], "carrying-value")
 
-    def test_update_cross_asset_carrying_value_gated_by_tax_country(self):
+    def test_update_cross_asset_carrying_value_allows_generic_bitcoin_rails_only(self):
         self._bootstrap_wallet(label="HotLN", kind="phoenix")
         self._create_second_wallet("LiquidVault", kind="custom")
         self._insert_transaction(
@@ -10967,20 +11045,130 @@ class ReviewRegressionTest(unittest.TestCase):
             conn, "Main", "Default", "ln-out", "lbtc-in",
             kind="manual", policy="taxable",
         )
-        # Generic profile: cross-asset carrying-value is not allowed.
-        with self.assertRaises(AppError) as ctx:
-            update_transaction_pair(
-                conn, "Main", "Default", pair["id"], policy="carrying-value",
-            )
-        self.assertEqual(ctx.exception.code, "validation")
-        # Flip the profile to Austrian and the same edit succeeds.
-        self._set_profile_tax_country("Default", "at")
-        conn_at = open_db(self.data_root)
-        self.addCleanup(conn_at.close)
         updated = update_transaction_pair(
-            conn_at, "Main", "Default", pair["id"], policy="carrying-value",
+            conn, "Main", "Default", pair["id"], policy="carrying-value",
         )
         self.assertEqual(updated["policy"], "carrying-value")
+        self._create_second_wallet("AltRail", kind="custom")
+        self._insert_transaction(
+            wallet_label="HotLN", tx_id="btc-out",
+            asset="BTC", occurred_at="2025-04-05T10:00:00Z",
+            amount_msat=100_000_000, direction="outbound",
+        )
+        self._insert_transaction(
+            wallet_label="AltRail", tx_id="xyz-in",
+            asset="XYZ", occurred_at="2025-04-05T10:05:00Z",
+            amount_msat=99_500_000, direction="inbound",
+        )
+        generic_pair = create_transaction_pair(
+            conn, "Main", "Default", "btc-out", "xyz-in",
+            kind="manual", policy="taxable",
+        )
+        with self.assertRaises(AppError) as ctx:
+            update_transaction_pair(
+                conn, "Main", "Default", generic_pair["id"], policy="carrying-value",
+            )
+        self.assertEqual(ctx.exception.code, "validation")
+
+    def test_bitcoin_rail_carrying_value_setting_controls_generic_defaults(self):
+        self._bootstrap_wallet(label="HotLN", kind="phoenix")
+        self._create_second_wallet("LiquidVault", kind="custom")
+        self._insert_transaction(
+            wallet_label="HotLN", tx_id="ln-out-default-on", asset="BTC",
+            occurred_at="2025-04-06T10:00:00Z",
+            amount_msat=100_000_000, direction="outbound",
+        )
+        self._insert_transaction(
+            wallet_label="LiquidVault", tx_id="lbtc-in-default-on", asset="LBTC",
+            occurred_at="2025-04-06T10:05:00Z",
+            amount_msat=99_500_000, direction="inbound",
+        )
+        conn = open_db(self.data_root)
+        self.addCleanup(conn.close)
+        default_pair = create_transaction_pair(
+            conn, "Main", "Default", "ln-out-default-on", "lbtc-in-default-on",
+        )
+        self.assertEqual(default_pair["policy"], "carrying-value")
+        self._insert_transaction(
+            wallet_label="LiquidVault", tx_id="lbtc-payout-default-on", asset="LBTC",
+            occurred_at="2025-04-06T11:00:00Z",
+            amount_msat=50_000_000, direction="outbound",
+        )
+        default_payout = create_direct_swap_payout(
+            conn,
+            "Main",
+            "Default",
+            "lbtc-payout-default-on",
+            payout_asset="BTC",
+            payout_amount="0.00049",
+            payout_fiat_value="25",
+            payout_external_id="btc-recipient-default-on",
+            counterparty="external-recipient",
+        )
+        self.assertEqual(default_payout["policy"], "carrying-value")
+
+        payload, result = self._run_json(
+            "profiles", "set",
+            "--profile", "Default",
+            "--no-bitcoin-rail-carrying-value",
+        )
+        self._assert_ok(payload, result, "profiles.set")
+        self.assertFalse(payload["data"]["bitcoin_rail_carrying_value"])
+        self._insert_transaction(
+            wallet_label="HotLN", tx_id="ln-out-default-off", asset="BTC",
+            occurred_at="2025-04-07T10:00:00Z",
+            amount_msat=100_000_000, direction="outbound",
+        )
+        self._insert_transaction(
+            wallet_label="LiquidVault", tx_id="lbtc-in-default-off", asset="LBTC",
+            occurred_at="2025-04-07T10:05:00Z",
+            amount_msat=99_500_000, direction="inbound",
+        )
+        candidates = suggest_transfer_candidates(conn, "Main", "Default")
+        candidate = next(
+            c for c in candidates["candidates"]
+            if c["out_id"] == "ln-out-default-off"
+        )
+        self.assertEqual(candidate["default_policy"], "taxable")
+        taxable_default_pair = create_transaction_pair(
+            conn, "Main", "Default", "ln-out-default-off", "lbtc-in-default-off",
+        )
+        self.assertEqual(taxable_default_pair["policy"], "taxable")
+        self._insert_transaction(
+            wallet_label="LiquidVault", tx_id="lbtc-payout-default-off", asset="LBTC",
+            occurred_at="2025-04-07T11:00:00Z",
+            amount_msat=50_000_000, direction="outbound",
+        )
+        taxable_default_payout = create_direct_swap_payout(
+            conn,
+            "Main",
+            "Default",
+            "lbtc-payout-default-off",
+            payout_asset="BTC",
+            payout_amount="0.00049",
+            payout_fiat_value="25",
+            payout_external_id="btc-recipient-default-off",
+            counterparty="external-recipient",
+        )
+        self.assertEqual(taxable_default_payout["policy"], "taxable")
+        self._insert_transaction(
+            wallet_label="HotLN", tx_id="btc-payout-explicit-carry", asset="BTC",
+            occurred_at="2025-04-07T12:00:00Z",
+            amount_msat=100_000_000, direction="outbound",
+        )
+        explicit_carry_payout = create_direct_swap_payout(
+            conn,
+            "Main",
+            "Default",
+            "btc-payout-explicit-carry",
+            payout_asset="LBTC",
+            payout_amount="0.00099",
+            payout_fiat_value="50",
+            payout_external_id="lbtc-recipient-explicit",
+            counterparty="external-recipient",
+            policy="carrying-value",
+        )
+        self.assertEqual(explicit_carry_payout["policy"], "carrying-value")
 
     def test_austrian_same_timestamp_swap_chain_reaches_rp2(self):
         profile, inputs = self._direct_austrian_same_timestamp_swap_chain_inputs()

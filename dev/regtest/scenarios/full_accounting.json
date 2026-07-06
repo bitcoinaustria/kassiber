@@ -9,8 +9,8 @@
   "profile": {
     "label": "Full Accounting",
     "fiat_currency": "EUR",
-    "tax_country": "generic",
-    "gains_algorithm": "FIFO"
+    "tax_country": "at",
+    "gains_algorithm": "MOVING_AVERAGE_AT"
   },
   "backend": {
     "name": "core-regtest",

@@ -201,6 +201,8 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
       ? freshnessSettings.market_rate_providers
       : ["coinbase-exchange", "coingecko", "mempool"];
   const requireCoarseReview = freshnessSettings?.require_coarse_review ?? false;
+  const bitcoinRailCarryingValue =
+    freshnessSettings?.bitcoin_rail_carrying_value ?? true;
   const coarsePricedCount = freshnessSettings?.coarse_priced_count ?? 0;
   // The coarse-review policy is independent of auto-pricing; gate it only on
   // load/mutation state and an active profile, not the market-rate toggles.
@@ -373,6 +375,32 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
       });
     }
   };
+  const setBitcoinRailCarryingValue = async (enabled: boolean) => {
+    if (enabled === bitcoinRailCarryingValue) return;
+    try {
+      await configureMaintenance.mutateAsync({
+        bitcoin_rail_carrying_value: enabled,
+      });
+      addNotification({
+        title: enabled
+          ? t("marketData.bitcoinRails.enabledTitle")
+          : t("marketData.bitcoinRails.disabledTitle"),
+        body: enabled
+          ? t("marketData.bitcoinRails.enabledBody")
+          : t("marketData.bitcoinRails.disabledBody"),
+        tone: "success",
+      });
+    } catch (error) {
+      addNotification({
+        title: t("marketData.bitcoinRails.errorTitle"),
+        body:
+          error instanceof Error
+            ? error.message
+            : t("marketData.bitcoinRails.errorBody"),
+        tone: "error",
+      });
+    }
+  };
   const importedPairs = krakenImportResult?.summary ?? [];
   const importedTotals = krakenImportResult?.totals;
   return (
@@ -461,6 +489,25 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
             <span>{t("marketData.coarse.reviewToggleLabel")}</span>
             <span className="font-normal text-muted-foreground">
               {t("marketData.coarse.reviewToggleDescription")}
+            </span>
+          </Label>
+        </div>
+        <div className="mt-3 flex items-start gap-3 border-t pt-3">
+          <Checkbox
+            id="bitcoin-rail-carrying-value"
+            checked={bitcoinRailCarryingValue}
+            disabled={maintenanceBusy}
+            onCheckedChange={(checked) => {
+              void setBitcoinRailCarryingValue(checked === true);
+            }}
+          />
+          <Label
+            htmlFor="bitcoin-rail-carrying-value"
+            className="grid gap-1 text-sm leading-relaxed"
+          >
+            <span>{t("marketData.bitcoinRails.toggleLabel")}</span>
+            <span className="font-normal text-muted-foreground">
+              {t("marketData.bitcoinRails.toggleDescription")}
             </span>
           </Label>
         </div>

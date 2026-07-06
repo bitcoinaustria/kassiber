@@ -123,6 +123,21 @@ class DefaultPolicyTests(unittest.TestCase):
         self.assertEqual(default_policy_for("generic"), POLICY_TAXABLE)
         self.assertEqual(default_policy_for(None), POLICY_TAXABLE)
 
+    def test_generic_bitcoin_rail_pair_gets_carrying_value(self):
+        self.assertEqual(default_policy_for("generic", "BTC", "LBTC"), POLICY_CARRYING_VALUE)
+        self.assertEqual(default_policy_for(None, "LBTC", "BTC"), POLICY_CARRYING_VALUE)
+
+    def test_generic_bitcoin_rail_pair_can_default_to_taxable(self):
+        self.assertEqual(
+            default_policy_for(
+                "generic",
+                "BTC",
+                "LBTC",
+                bitcoin_rail_carrying_value=False,
+            ),
+            POLICY_TAXABLE,
+        )
+
 
 class PaymentHashExactMatchTests(unittest.TestCase):
     def test_lightning_to_chain_pair_via_payment_hash(self):

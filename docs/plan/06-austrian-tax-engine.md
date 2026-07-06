@@ -40,8 +40,9 @@ Do not grow a second Austrian tax engine inside Kassiber.
 - Neuvermögen from 2023 uses moving average where supported by the RP2 fork.
 - Crypto-to-crypto swaps can be non-taxable for Neuvermögen, with basis carried
   to the acquired asset.
-- Cross-asset carrying-value pairing is Austrian-only today. Generic profiles
-  keep BTC/LBTC pairs as audit-linked SELL + BUY.
+- Cross-asset carrying-value pairing is supported for Austrian profiles and
+  for BTC/LBTC Bitcoin-rail moves in generic profiles. Generic profiles keep
+  other cross-asset pairs as audit-linked SELL + BUY.
 - Missing prices, malformed transfers, or ambiguous tax semantics quarantine
   instead of being guessed.
 - Raw `transactions` remain the source of truth; derived Austrian regime state

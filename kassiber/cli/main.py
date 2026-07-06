@@ -983,6 +983,13 @@ def build_parser() -> argparse.ArgumentParser:
     )
     profiles_create.add_argument("--tax-long-term-days", type=int, default=DEFAULT_LONG_TERM_DAYS)
     profiles_create.add_argument("--gains-algorithm", choices=list(RP2_ACCOUNTING_METHODS))
+    profiles_create.add_argument(
+        "--bitcoin-rail-carrying-value",
+        dest="bitcoin_rail_carrying_value",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Default BTC/LBTC rail-change suggestions to carrying-value treatment (default: on).",
+    )
 
     profiles_get = profiles_sub.add_parser("get")
     profiles_get.add_argument("--workspace")
@@ -999,6 +1006,13 @@ def build_parser() -> argparse.ArgumentParser:
     )
     profiles_set.add_argument("--tax-long-term-days", type=int)
     profiles_set.add_argument("--gains-algorithm", choices=list(RP2_ACCOUNTING_METHODS))
+    profiles_set.add_argument(
+        "--bitcoin-rail-carrying-value",
+        dest="bitcoin_rail_carrying_value",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="Default BTC/LBTC rail-change suggestions to carrying-value treatment (default: on).",
+    )
     profiles_set.add_argument(
         "--require-coarse-review",
         dest="require_coarse_review",
@@ -1772,7 +1786,7 @@ def build_parser() -> argparse.ArgumentParser:
     transfers_pair.add_argument("--tx-out", required=True, dest="tx_out", help="Outbound transaction id or external_id")
     transfers_pair.add_argument("--tx-in", required=True, dest="tx_in", help="Inbound transaction id or external_id")
     transfers_pair.add_argument("--kind", choices=list(TRANSFER_PAIR_KINDS), default="manual")
-    transfers_pair.add_argument("--policy", choices=list(TRANSFER_PAIR_POLICIES), default="carrying-value")
+    transfers_pair.add_argument("--policy", choices=list(TRANSFER_PAIR_POLICIES))
     transfers_pair.add_argument("--note", dest="note")
     transfers_pair.add_argument(
         "--out-amount",
@@ -1816,7 +1830,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Portion of the outbound (BTC) paid through the direct payout; "
         "the remainder can still resolve as a same-asset self-transfer.",
     )
-    transfers_payouts_create.add_argument("--policy", choices=list(TRANSFER_PAIR_POLICIES), default="carrying-value")
+    transfers_payouts_create.add_argument("--policy", choices=list(TRANSFER_PAIR_POLICIES))
     transfers_payouts_create.add_argument("--note", dest="note")
     transfers_payouts_delete = transfers_payouts_sub.add_parser("delete")
     transfers_payouts_delete.add_argument("--workspace")
@@ -2647,6 +2661,7 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                         args.gains_algorithm,
                         args.tax_country,
                         args.tax_long_term_days,
+                        bitcoin_rail_carrying_value=args.bitcoin_rail_carrying_value,
                     )
                 ),
             )
@@ -2663,12 +2678,13 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                 "tax_long_term_days": args.tax_long_term_days,
                 "gains_algorithm": args.gains_algorithm,
                 "require_coarse_review": args.require_coarse_review,
+                "bitcoin_rail_carrying_value": args.bitcoin_rail_carrying_value,
             }
             if all(v is None for v in updates.values()):
                 raise AppError(
                     "profiles set requires at least one field to update",
                     code="validation",
-                    hint="Pass one or more of --label, --fiat-currency, --tax-country, --tax-long-term-days, --gains-algorithm, --require-coarse-review",
+                    hint="Pass one or more of --label, --fiat-currency, --tax-country, --tax-long-term-days, --gains-algorithm, --require-coarse-review, --bitcoin-rail-carrying-value",
                 )
             return emit(
                 args,

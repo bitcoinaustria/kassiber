@@ -142,9 +142,8 @@ For a direct swap payout where the provider pays an external recipient and
 no owned inbound leg exists:
 
 ```bash
-# --payout-fiat-value is the reviewed sale/disposal proceeds in every
-# profile. Austrian cross-asset carrying-value additionally keeps the swap
-# leg neutral.
+# --payout-fiat-value is the reviewed sale/disposal proceeds for ordinary
+# taxable reviews. Cross-asset carrying-value keeps supported swap legs neutral.
 python3 -m kassiber transfers payouts create --tx-out <out-id> \
   --payout-asset BTC --payout-amount 0.24990000 \
   --payout-fiat-value 12495 --payout-external-id <recipient-txid> \
@@ -158,8 +157,10 @@ same-transaction-id self-transfer instead of being absorbed as a giant fee.
 
 Cross-asset BTC ↔ LBTC peg-ins/peg-outs and submarine swaps:
 
-- **Generic profiles** — pairs are surfaced and audit-linked, but still
-  process as normal SELL + BUY.
+- **Generic profiles** — BTC/LBTC Bitcoin-rail pairs default to
+  `carrying-value` while the profile's Bitcoin-rail setting is enabled;
+  disable it with `profiles set --no-bitcoin-rail-carrying-value`, or pass
+  `--policy taxable` on a specific pair.
 - **Austrian profiles** — reviewed `--policy carrying-value` pairs get
   Austrian swap markers and run through RP2's native multi-asset hook;
   `--policy taxable` stays on the SELL + BUY path.

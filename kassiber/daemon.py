@@ -1425,7 +1425,7 @@ def _ui_swap_matching_payload_from_conn(
             payout_asset=args.get("payout_asset"),
             payout_amount=args.get("payout_amount"),
             kind=str(args.get("kind") or "direct-swap-payout"),
-            policy=str(args.get("policy") or "carrying-value"),
+            policy=str(args["policy"]) if args.get("policy") is not None else None,
             payout_occurred_at=args.get("payout_occurred_at"),
             payout_fiat_value=args.get("payout_fiat_value"),
             payout_external_id=args.get("payout_external_id"),
@@ -1446,7 +1446,7 @@ def _ui_swap_matching_payload_from_conn(
             args.get("tx_out") or args.get("out_id"),
             args.get("tx_in") or args.get("in_id"),
             kind=str(args.get("kind") or "manual"),
-            policy=str(args.get("policy") or "carrying-value"),
+            policy=str(args["policy"]) if args.get("policy") is not None else None,
             notes=args.get("notes") or args.get("note"),
             pair_source=str(args.get("pair_source") or "manual"),
             confidence_at_pair=args.get("confidence_at_pair"),
@@ -5741,7 +5741,8 @@ def _profile_defaults_for_workspace(
                 fiat_currency,
                 tax_country,
                 tax_long_term_days,
-                gains_algorithm
+                gains_algorithm,
+                bitcoin_rail_carrying_value
             FROM profiles
             WHERE workspace_id = ?
               AND id = ?
@@ -5761,6 +5762,7 @@ def _profile_defaults_for_workspace(
             "tax_country": row["tax_country"],
             "tax_long_term_days": row["tax_long_term_days"],
             "gains_algorithm": row["gains_algorithm"],
+            "bitcoin_rail_carrying_value": bool(row["bitcoin_rail_carrying_value"]),
         }
 
     context = current_context_snapshot(conn)
@@ -5771,7 +5773,8 @@ def _profile_defaults_for_workspace(
             fiat_currency,
             tax_country,
             tax_long_term_days,
-            gains_algorithm
+            gains_algorithm,
+            bitcoin_rail_carrying_value
         FROM profiles
         WHERE workspace_id = ?
         ORDER BY created_at ASC, label ASC
@@ -5788,12 +5791,14 @@ def _profile_defaults_for_workspace(
             "tax_country": row["tax_country"],
             "tax_long_term_days": row["tax_long_term_days"],
             "gains_algorithm": row["gains_algorithm"],
+            "bitcoin_rail_carrying_value": bool(row["bitcoin_rail_carrying_value"]),
         }
     return {
         "fiat_currency": "EUR",
         "tax_country": "generic",
         "tax_long_term_days": 365,
         "gains_algorithm": "FIFO",
+        "bitcoin_rail_carrying_value": True,
     }
 
 
@@ -5837,6 +5842,7 @@ def _create_profile_payload(
     tax_country = defaults["tax_country"]
     gains_algorithm = defaults["gains_algorithm"]
     tax_long_term_days = int(defaults["tax_long_term_days"])
+    bitcoin_rail_carrying_value = bool(defaults.get("bitcoin_rail_carrying_value", True))
     # The "New book" dialog can pick a region + method explicitly. Copying from a
     # source book inherits its settings verbatim (region/method come from the
     # source), so explicit picks only apply when no source is chosen. core
@@ -5861,6 +5867,7 @@ def _create_profile_payload(
         gains_algorithm,
         tax_country,
         tax_long_term_days,
+        bitcoin_rail_carrying_value=bitcoin_rail_carrying_value,
     )
     workspace = conn.execute(
         "SELECT id, label FROM workspaces WHERE id = ?",

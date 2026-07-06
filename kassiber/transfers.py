@@ -21,6 +21,31 @@ Detection rule (intentionally conservative):
 from collections import defaultdict
 
 _HEX_DIGITS = frozenset("0123456789abcdefABCDEF")
+_BITCOIN_CARRY_ASSETS = frozenset({"BTC", "LBTC"})
+
+
+def is_bitcoin_rail_pair(out_asset, in_asset):
+    """True for BTC/LBTC rail changes of the same Bitcoin exposure."""
+
+    assets = {str(out_asset or "").strip().upper(), str(in_asset or "").strip().upper()}
+    return assets == _BITCOIN_CARRY_ASSETS
+
+
+def cross_asset_carrying_value_supported(tax_country, out_asset, in_asset):
+    """Whether a cross-asset carrying-value pair is supported for this profile."""
+
+    if str(tax_country or "").strip().lower() == "at":
+        return True
+    return is_bitcoin_rail_pair(out_asset, in_asset)
+
+
+def profile_bitcoin_rail_carrying_value(profile):
+    """Profile default for treating Bitcoin rail changes as carrying value."""
+
+    try:
+        return bool(profile["bitcoin_rail_carrying_value"])
+    except (KeyError, IndexError, TypeError):
+        return True
 
 
 def normalize_group_txid(external_id):

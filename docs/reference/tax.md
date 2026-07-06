@@ -9,6 +9,7 @@ Books carry tax defaults through the internal `profile` row:
 - `tax_country`
 - `tax_long_term_days` (generic policy only; Austrian Altbestand handling is wallet-specific)
 - `gains_algorithm`
+- `bitcoin_rail_carrying_value` (default on; controls the generic default treatment for BTC-equivalent rail changes)
 
 Current policies:
 
@@ -131,9 +132,11 @@ Current rules:
   basis but do not prove the full privacy graph or counterparty set
 - same-asset `--policy taxable` is rejected; leave those legs unpaired if you want normal SELL + BUY treatment
 - cross-asset pairs are always stored for audit
-- cross-asset `--policy carrying-value` is supported for Austrian books (`tax_country=at`): Kassiber emits reviewed swap markers, then rp2's native Austrian multi-asset hook carries basis
+- cross-asset `--policy carrying-value` is supported for BTC ↔ LBTC rail changes on every profile, because both assets represent the same Bitcoin exposure; Austrian books (`tax_country=at`) additionally use rp2's native multi-asset hook for reviewed carrying-value swaps
+- generic books default BTC ↔ LBTC suggestions and omitted-policy manual pairs to `carrying-value` while `bitcoin_rail_carrying_value` is enabled (default); turn it off with `profiles set --no-bitcoin-rail-carrying-value` when an adviser wants taxable-by-default rail changes
+- explicit per-pair policy still wins: `--policy taxable` keeps SELL + BUY treatment, and `--policy carrying-value` remains available for BTC ↔ LBTC rail changes
 - cross-asset `--policy taxable` keeps the normal SELL + BUY treatment
-- non-Austrian books still reject cross-asset `--policy carrying-value`
+- non-Austrian books still reject `--policy carrying-value` for other cross-asset swaps
 - cross-asset swaps are never auto-paired from time / amount heuristics during report generation; use `transfers pair` when those links matter for tax treatment
 - swap-routed payments or receipts should stay unpaired unless both legs are known owned-wallet legs of the same user
 
@@ -220,7 +223,7 @@ Current Austrian status:
 
 - Austrian books process through rp2's `AT` country plugin via the shared RP2 adapter
 - Kassiber keeps normalization, provenance capture, transfer preparation, reviewed swap-marker wiring, and current disposal-category / Kennzahl mapping
-- Austrian cross-asset `--policy carrying-value` pairs are supported and feed rp2's native Austrian multi-asset carry path
+- BTC ↔ LBTC `--policy carrying-value` pairs are supported on every profile; Austrian cross-asset carrying-value pairs feed rp2's native Austrian multi-asset carry path
 - Austrian E 1kv export is available through `reports austrian-e1kv`,
   `reports export-austrian-e1kv-pdf`, `reports export-austrian-e1kv-xlsx`,
   and `reports export-austrian-e1kv-csv`; `reports austrian-tax-summary` and
