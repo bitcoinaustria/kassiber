@@ -56,13 +56,27 @@ const defaultSortDir: Record<SortKey, SortDir> = {
   balance: "desc",
 };
 
-function syncMillis(connection: Connection): number | null {
-  if (!connection.lastSyncAt) return null;
-  const ms = Date.parse(connection.lastSyncAt);
+function activityMillis(connection: Connection): number | null {
+  if (!connection.lastTransactionAt) return null;
+  const ms = Date.parse(connection.lastTransactionAt);
   return Number.isNaN(ms) ? null : ms;
 }
 
-/** Ascending comparator per key; a never-synced row counts as the oldest. */
+function activityLabel(connection: Connection): string {
+  const ms = activityMillis(connection);
+  if (ms === null) return "never";
+  const diffSec = Math.max(0, Math.floor((Date.now() - ms) / 1000));
+  if (diffSec < 60) return "just now";
+  const minutes = Math.floor(diffSec / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 30) return `${days}d ago`;
+  return new Date(ms).toISOString().slice(0, 10);
+}
+
+/** Ascending comparator per key; a connection without activity counts as oldest. */
 function compareBy(a: Connection, b: Connection, key: SortKey): number {
   switch (key) {
     case "label":
@@ -77,8 +91,8 @@ function compareBy(a: Connection, b: Connection, key: SortKey): number {
     case "transactions":
       return (a.transactionCount ?? 0) - (b.transactionCount ?? 0);
     case "last": {
-      const ma = syncMillis(a);
-      const mb = syncMillis(b);
+      const ma = activityMillis(a);
+      const mb = activityMillis(b);
       if (ma === mb) return 0;
       if (ma === null) return -1;
       if (mb === null) return 1;
@@ -148,7 +162,7 @@ export function WalletsTable({
                 className="w-[120px] text-right"
               />
               <SortableHead
-                label="Last sync"
+                label="Last activity"
                 sortKey="last"
                 activeKey={sortKey}
                 dir={sortDir}
@@ -341,7 +355,7 @@ function WalletRow({
       </TableCell>
       <TableCell>
         <div className="text-sm whitespace-nowrap">
-          <span>{connection.last}</span>
+          <span>{activityLabel(connection)}</span>
         </div>
       </TableCell>
       <TableCell className="hidden lg:table-cell">
