@@ -121,6 +121,10 @@ def load_import_records(file_path, input_format):
         return load_pocketbitcoin_csv_records(file_path)
     if input_format == "strike_csv":
         return load_strike_csv_records(file_path)
+    if input_format == "ledgerlive_csv":
+        return load_ledgerlive_csv_records(file_path)
+    if input_format == "binance_supplemental_csv":
+        return load_binance_supplemental_csv_records(file_path)
     if input_format == "wasabi_bundle":
         return load_wasabi_bundle_records(file_path)
     if input_format == GENERIC_LEDGER_FORMAT:
@@ -963,6 +967,54 @@ def _river_decimal(value):
 
 def _river_currency(value):
     return _currency_cell(value)
+
+
+_BTC_ASSETS = {"BTC", "XBT"}
+_BITCOIN_FAMILY_ASSETS = {"BTC", "XBT", "LBTC"}
+_FIAT_CURRENCIES = {
+    "AED",
+    "ARS",
+    "AUD",
+    "BRL",
+    "CAD",
+    "CHF",
+    "CLP",
+    "CNY",
+    "CZK",
+    "DKK",
+    "EUR",
+    "GBP",
+    "HKD",
+    "HUF",
+    "ILS",
+    "INR",
+    "JPY",
+    "KRW",
+    "MXN",
+    "NOK",
+    "NZD",
+    "PLN",
+    "RON",
+    "SEK",
+    "SGD",
+    "THB",
+    "TRY",
+    "USD",
+    "ZAR",
+}
+
+
+def _bitcoin_family_asset(value):
+    asset = _currency_cell(value)
+    if asset == "XBT":
+        return "BTC"
+    if asset in _BITCOIN_FAMILY_ASSETS:
+        return asset
+    return None
+
+
+def _is_fiat_currency(value):
+    return _currency_cell(value) in _FIAT_CURRENCIES
 
 
 # -- Bull Bitcoin ------------------------------------------------------------
@@ -2046,12 +2098,326 @@ def is_strike_format(input_format):
     return input_format == "strike_csv"
 
 
+# -- Ledger Live -------------------------------------------------------------
+
+
+LEDGERLIVE_CSV_FORMAT = "ledgerlive_csv"
+_LEDGERLIVE_REQUIRED_COLUMNS = (
+    "Operation Date",
+    "Currency Ticker",
+    "Operation Type",
+    "Operation Amount",
+    "Operation Hash",
+)
+_LEDGERLIVE_REDACTED_COLUMNS = {
+    "account xpub",
+    "account xpub fingerprint",
+    "xpub",
+}
+
+
+def _ledgerlive_sanitized_record(record):
+    sanitized = {}
+    for key, value in record.items():
+        if key is None:
+            continue
+        column = str(key).strip()
+        if _normalized_column_key(column) in _LEDGERLIVE_REDACTED_COLUMNS:
+            sanitized[column] = "[redacted]"
+        else:
+            sanitized[column] = value
+    return sanitized
+
+
+def _ledgerlive_direction(value):
+    tag = str(value or "").strip().casefold()
+    if tag in {"in", "receive", "received"}:
+        return "inbound", "deposit"
+    if tag in {"out", "send", "sent"}:
+        return "outbound", "withdrawal"
+    return None, None
+
+
+def normalize_ledgerlive_record(record, index=0):
+    """Turn one Ledger Live operation-history row into wallet movement only."""
+    sanitized = _ledgerlive_sanitized_record(record)
+    asset = _bitcoin_family_asset(_get_cell(sanitized, "Currency Ticker"))
+    if asset is None:
+        return None
+    direction, kind = _ledgerlive_direction(_get_cell(sanitized, "Operation Type"))
+    if direction is None or kind is None:
+        raise AppError(
+            f"Ledger Live CSV has unsupported operation type '{_get_cell(sanitized, 'Operation Type')}'",
+            code="validation",
+            hint="Ledger Live imports support IN/OUT wallet movement rows for BTC/LBTC only.",
+            retryable=False,
+        )
+    amount = _decimal_cell(_get_cell(sanitized, "Operation Amount"))
+    if amount is None or amount == 0:
+        fee = abs(_decimal_cell(_get_cell(sanitized, "Operation Fees")) or Decimal("0"))
+        if fee > 0:
+            return None
+        raise AppError("Ledger Live CSV has a BTC row with an empty amount", code="validation")
+    fee = abs(_decimal_cell(_get_cell(sanitized, "Operation Fees")) or Decimal("0"))
+    occurred_at = _get_cell(sanitized, "Operation Date")
+    txid = str_or_none(_get_cell(sanitized, "Operation Hash"))
+    if not txid:
+        txid = f"ledgerlive:{occurred_at}:{direction}:{asset}:{abs(amount)}:{index}"
+    account_name = str_or_none(_get_cell(sanitized, "Account Name"))
+    description = f"Ledger Live {kind}"
+    if account_name:
+        description = f"{description} - {account_name}"
+    return {
+        "txid": txid,
+        "occurred_at": occurred_at,
+        "direction": direction,
+        "asset": asset,
+        "amount": abs(amount),
+        "fee": fee if direction == "outbound" else Decimal("0"),
+        "kind": kind,
+        "description": description,
+        "counterparty": "Ledger Live",
+        "raw_json": json.dumps(json_ready(sanitized), sort_keys=True),
+    }
+
+
+def load_ledgerlive_csv_records(file_path):
+    """Load Ledger Live operation-history CSV rows.
+
+    Ledger's fiat countervalues are intentionally ignored because the export
+    labels them informational, not accounting-grade.
+    """
+    with open(file_path, "r", encoding="utf-8-sig", newline="") as handle:
+        rows = list(csv.DictReader(handle))
+    if not rows:
+        return []
+    header = {_normalized_column_key(column) for column in rows[0].keys()}
+    missing = [
+        column
+        for column in _LEDGERLIVE_REQUIRED_COLUMNS
+        if _normalized_column_key(column) not in header
+    ]
+    if missing:
+        raise AppError("Ledger Live CSV is missing required columns: " + ", ".join(missing))
+    normalized = []
+    for index, row in enumerate(rows, start=1):
+        record = normalize_ledgerlive_record(row, index=index)
+        if record is not None:
+            normalized.append(record)
+    return normalized
+
+
+def is_ledgerlive_format(input_format):
+    return input_format == LEDGERLIVE_CSV_FORMAT
+
+
+# -- Binance supplemental CSV ------------------------------------------------
+
+
+BINANCE_SUPPLEMENTAL_CSV_FORMAT = "binance_supplemental_csv"
+_BINANCE_SUPPLEMENTAL_AUTOINVEST_COLUMNS = (
+    "timestamp utc",
+    "base asset symbol",
+    "quote asset amount + symbol",
+    "trading fee (in quote asset)",
+    "base asset amount + symbol",
+)
+_BINANCE_SUPPLEMENTAL_DIVIDEND_COLUMNS = (
+    "id",
+    "amount",
+    "asset",
+    "divtime",
+)
+
+
+def _split_amount_symbol(value, field):
+    text = str_or_none(value)
+    if text is None:
+        return None, None
+    parts = text.replace("\xa0", " ").strip().split()
+    if len(parts) < 2:
+        raise AppError(
+            f"Binance supplemental CSV has invalid {field}",
+            code="validation",
+            hint=f"Expected '<amount> <asset>' in {field}.",
+            retryable=False,
+        )
+    return _decimal_cell(parts[0]), _currency_cell(parts[1])
+
+
+def _binance_supplemental_fee(value):
+    text = str_or_none(value)
+    if text is None or text.strip() in {"--", "-"}:
+        return Decimal("0"), None
+    return _split_amount_symbol(text, "trading fee")
+
+
+def normalize_binance_supplemental_autoinvest_record(record, index=0):
+    sanitized = {str(key).strip(): value for key, value in record.items() if key is not None}
+    base_asset = _bitcoin_family_asset(
+        _get_cell(sanitized, "base asset symbol", "Base Asset Symbol")
+    )
+    quote_amount, quote_asset = _split_amount_symbol(
+        _get_cell(sanitized, "quote asset amount + symbol", "Quote Asset Amount + Symbol"),
+        "quote asset amount",
+    )
+    base_amount, parsed_base_asset = _split_amount_symbol(
+        _get_cell(sanitized, "base asset amount + symbol", "Base Asset Amount + Symbol"),
+        "base asset amount",
+    )
+    fee_amount, fee_asset = _binance_supplemental_fee(
+        _get_cell(sanitized, "trading fee (in quote asset)", "Trading Fee")
+    )
+    if base_asset is None and parsed_base_asset in _BITCOIN_FAMILY_ASSETS:
+        base_asset = "BTC" if parsed_base_asset == "XBT" else parsed_base_asset
+    if base_asset is None:
+        return None
+    if base_amount is None or quote_amount is None:
+        raise AppError("Binance supplemental CSV has a BTC autoinvest row with an empty amount")
+    if not _is_fiat_currency(quote_asset):
+        raise AppError(
+            "Binance supplemental BTC autoinvest rows must be funded by fiat for exact import",
+            code="validation",
+            hint=(
+                "Crypto-funded Binance autoinvest rows are cross-asset trades; "
+                "use the generic ledger with explicit review instead."
+            ),
+            retryable=False,
+        )
+    if fee_asset not in (None, quote_asset):
+        raise AppError(
+            "Binance supplemental BTC autoinvest fee asset does not match the quote asset",
+            code="validation",
+            retryable=False,
+        )
+    occurred_at = _get_cell(sanitized, "timestamp utc", "Timestamp UTC")
+    source = str_or_none(_get_cell(sanitized, "source of funds", "Source of Funds"))
+    fiat_value = abs(quote_amount) + abs(fee_amount or Decimal("0"))
+    external_ref = (
+        f"binance-supplemental:{occurred_at}:autoinvest:"
+        f"{base_asset}:{base_amount}:{index}"
+    )
+    description = "Binance autoinvest buy"
+    if source:
+        description = f"{description} - {source}"
+    return {
+        "txid": external_ref,
+        "occurred_at": occurred_at,
+        "direction": "inbound",
+        "asset": base_asset,
+        "amount": abs(base_amount),
+        "fee": Decimal("0"),
+        "fiat_rate": fiat_value / abs(base_amount) if base_amount else None,
+        "fiat_value": fiat_value,
+        "fiat_currency": quote_asset,
+        "pricing_source_kind": "exchange_execution",
+        "pricing_provider": "Binance",
+        "pricing_pair": f"{base_asset}-{quote_asset}",
+        "pricing_timestamp": occurred_at,
+        "pricing_method": "binance_supplemental_csv",
+        "pricing_external_ref": external_ref,
+        "pricing_quality": "exact",
+        "kind": "buy",
+        "description": description,
+        "counterparty": "Binance",
+        "raw_json": json.dumps(json_ready(sanitized), sort_keys=True),
+    }
+
+
+def _binance_ms_epoch_to_iso(value):
+    text = str_or_none(value)
+    if text is None:
+        return None
+    try:
+        number = Decimal(text)
+    except (ValueError, ArithmeticError) as exc:
+        raise AppError("Binance supplemental CSV has invalid millisecond timestamp") from exc
+    seconds = number / Decimal("1000")
+    return (
+        datetime.fromtimestamp(float(seconds), tz=timezone.utc)
+        .replace(microsecond=0)
+        .isoformat()
+        .replace("+00:00", "Z")
+    )
+
+
+def normalize_binance_supplemental_dividend_record(record, index=0):
+    sanitized = {str(key).strip(): value for key, value in record.items() if key is not None}
+    asset = _bitcoin_family_asset(_get_cell(sanitized, "asset", "Asset"))
+    if asset is None:
+        return None
+    amount = _decimal_cell(_get_cell(sanitized, "amount", "Amount"))
+    if amount is None or amount == 0:
+        return None
+    ref = str_or_none(_get_cell(sanitized, "id", "tranId", "tran id")) or str(index)
+    occurred_at = (
+        _binance_ms_epoch_to_iso(_get_cell(sanitized, "divTime", "divtime", "time"))
+        or _get_cell(sanitized, "timestamp", "Timestamp")
+    )
+    info = str_or_none(_get_cell(sanitized, "enInfo", "info", "description"))
+    kind = "mining" if info and "mining" in info.casefold() else "income"
+    return {
+        "txid": f"binance:{ref}",
+        "occurred_at": occurred_at,
+        "direction": "inbound",
+        "asset": asset,
+        "amount": abs(amount),
+        "fee": Decimal("0"),
+        "kind": kind,
+        "description": "Binance income" + (f" - {info}" if info else ""),
+        "counterparty": "Binance",
+        "raw_json": json.dumps(json_ready(sanitized), sort_keys=True),
+    }
+
+
+def load_binance_supplemental_csv_records(file_path):
+    """Load BTC-relevant Binance supplemental CSV rows."""
+    with open(file_path, "r", encoding="utf-8-sig", newline="") as handle:
+        rows = list(csv.DictReader(handle))
+    if not rows:
+        return []
+    header = {_normalized_column_key(column) for column in rows[0].keys()}
+    autoinvest = all(
+        _normalized_column_key(column) in header
+        for column in _BINANCE_SUPPLEMENTAL_AUTOINVEST_COLUMNS
+    )
+    dividends = all(
+        _normalized_column_key(column) in header
+        for column in _BINANCE_SUPPLEMENTAL_DIVIDEND_COLUMNS
+    )
+    if not autoinvest and not dividends:
+        raise AppError(
+            "Binance supplemental CSV is not a supported BTC supplemental export",
+            code="validation",
+            hint=(
+                "Use Binance autoinvest CSV or asset-dividend rows with id, "
+                "amount, asset, divTime."
+            ),
+            retryable=False,
+        )
+    normalized = []
+    for index, row in enumerate(rows, start=1):
+        record = (
+            normalize_binance_supplemental_autoinvest_record(row, index=index)
+            if autoinvest
+            else normalize_binance_supplemental_dividend_record(row, index=index)
+        )
+        if record is not None:
+            normalized.append(record)
+    return normalized
+
+
+def is_binance_supplemental_format(input_format):
+    return input_format == BINANCE_SUPPLEMENTAL_CSV_FORMAT
+
+
 def is_exchange_evidence_format(input_format):
     return input_format in {
         "bullbitcoin_csv",
         "coinfinity_csv",
         "21bitcoin_csv",
         "pocketbitcoin_csv",
+        "binance_supplemental_csv",
     }
 
 
@@ -2064,6 +2430,8 @@ def exchange_evidence_label(input_format):
         return "21bitcoin"
     if input_format == "pocketbitcoin_csv":
         return "Pocket Bitcoin"
+    if input_format == "binance_supplemental_csv":
+        return "Binance"
     return str(input_format or "").replace("_", " ")
 
 
@@ -2076,6 +2444,8 @@ def exchange_evidence_rows_key(input_format):
         return "twentyonebitcoin_rows"
     if input_format == "pocketbitcoin_csv":
         return "pocketbitcoin_rows"
+    if input_format == "binance_supplemental_csv":
+        return "binance_rows"
     return "exchange_rows"
 
 

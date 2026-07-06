@@ -6123,6 +6123,8 @@ _UI_WALLET_SOURCE_FORMATS = {
     "21bitcoin_csv",
     "pocketbitcoin_csv",
     "strike_csv",
+    "ledgerlive_csv",
+    "binance_supplemental_csv",
     "wasabi_bundle",
     "generic_ledger",
 }
@@ -6910,7 +6912,7 @@ def _import_wallet_file_payload(
             source_format,
             import_mode,
         )
-    if source_format == "21bitcoin_csv":
+    if source_format in {"21bitcoin_csv", "binance_supplemental_csv"}:
         wallet_ref = _optional_str_arg(args, "wallet")
         import_mode = (
             _optional_str_arg(args, "mode")

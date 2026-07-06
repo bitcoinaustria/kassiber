@@ -377,6 +377,9 @@ exchange evidence and enriches only unique matching transactions in the active
 profile. `mode="full"` imports all normalized provider rows into the selected
 or default provider wallet as excluded evidence, then flags each row as
 `matched`, `unmatched`, or `ambiguous` against this book's wallet transactions.
+`source_format="binance_supplemental_csv"` follows the same exchange-evidence
+contract, defaults to a `Binance` provider wallet in full mode, and returns
+`binance_rows`.
 `source_format="bullbitcoin_wallet_csv"` is different: it imports Bull's
 unified mobile wallet transaction export as active wallet-scoped BTC/LBTC/
 Lightning activity, returns `bullbitcoin_wallet_rows`, skips failed/expired and
@@ -396,6 +399,9 @@ timestamp. `source_format="strike_csv"` imports active Strike platform ledger
 rows into the selected or default `Strike` wallet, including exchange buy/sell
 rows plus Lightning and on-chain wallet activity. It keeps Lightning payment
 hashes when exported, skips fiat-only platform rows, and returns `strike_rows`.
+`source_format="ledgerlive_csv"` imports Ledger Live BTC/LBTC `IN`/`OUT` rows
+as wallet movement only, ignores informational countervalues, redacts account
+xpub columns from raw metadata, and returns normal wallet import counters.
 `source_format="wasabi_bundle"` imports sanitized Wasabi RPC/export bundles
 into a wallet-scoped `wasabi` source, returns `wasabi_transactions`,
 `wasabi_coins_observed`, `wasabi_coins_active`,

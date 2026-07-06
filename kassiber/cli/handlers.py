@@ -36,6 +36,7 @@ from ..core import accounts as core_accounts
 from ..core import attachments as core_attachments
 from ..core import commercial as core_commercial
 from ..core import freshness as core_freshness
+from ..core import exchange_imports as core_exchange_imports
 from ..core import imports as core_imports
 from ..core.lightning import channel_lifecycle
 from ..core.lightning import cln as core_lightning_cln
@@ -157,6 +158,10 @@ WALLET_KINDS = [
     "21bitcoin",
     "pocketbitcoin",
     "strike",
+    "ledgerlive",
+    "kraken",
+    "coinbase",
+    "binance",
     "wasabi",
     "custom",
 ]
@@ -1903,6 +1908,26 @@ WALLET_KIND_CATALOG = {
         "config_fields": ["source_file", "source_format"],
         "requires": [],
     },
+    "ledgerlive": {
+        "summary": "Ledger Live CSV importer for BTC/LBTC wallet movement only.",
+        "config_fields": ["source_file", "source_format"],
+        "requires": [],
+    },
+    "kraken": {
+        "summary": "Kraken exchange import wallet for API or CSV execution evidence.",
+        "config_fields": ["backend", "source_file", "source_format"],
+        "requires": [],
+    },
+    "coinbase": {
+        "summary": "Coinbase exchange import wallet for API execution and wallet movement evidence.",
+        "config_fields": ["backend", "source_file", "source_format"],
+        "requires": [],
+    },
+    "binance": {
+        "summary": "Binance exchange import wallet for API rows and BTC supplemental CSVs.",
+        "config_fields": ["backend", "source_file", "source_format"],
+        "requires": [],
+    },
     "wasabi": {
         "summary": "Wasabi Wallet sanitized RPC/export bundle importer with CoinJoin and anonymity evidence.",
         "config_fields": ["source_file", "source_format", "wasabi_metadata"],
@@ -1921,6 +1946,9 @@ DEFAULT_COINFINITY_WALLET_LABEL = "Coinfinity"
 DEFAULT_TWENTYONEBITCOIN_WALLET_LABEL = "21bitcoin"
 DEFAULT_POCKETBITCOIN_WALLET_LABEL = "Pocket Bitcoin"
 DEFAULT_STRIKE_WALLET_LABEL = "Strike"
+DEFAULT_BINANCE_WALLET_LABEL = "Binance"
+DEFAULT_KRAKEN_WALLET_LABEL = "Kraken"
+DEFAULT_COINBASE_WALLET_LABEL = "Coinbase"
 
 
 def _get_or_create_provider_import_wallet(conn, profile, input_format, wallet_ref=None):
@@ -1938,6 +1966,9 @@ def _get_or_create_provider_import_wallet(conn, profile, input_format, wallet_re
     elif input_format == "strike_csv":
         default_label = DEFAULT_STRIKE_WALLET_LABEL
         wallet_kind = "strike"
+    elif input_format == "binance_supplemental_csv":
+        default_label = DEFAULT_BINANCE_WALLET_LABEL
+        wallet_kind = "binance"
     else:
         default_label = DEFAULT_BULLBITCOIN_WALLET_LABEL
         wallet_kind = "bullbitcoin"
@@ -1964,6 +1995,92 @@ def _get_or_create_provider_import_wallet(conn, profile, input_format, wallet_re
     return resolve_wallet(conn, profile["id"], created["id"])
 
 
+def _get_or_create_exchange_api_wallet(conn, profile, provider_kind, backend_name, wallet_ref=None):
+    if wallet_ref:
+        return resolve_wallet(conn, profile["id"], wallet_ref)
+    labels = {
+        "binance": DEFAULT_BINANCE_WALLET_LABEL,
+        "coinbase": DEFAULT_COINBASE_WALLET_LABEL,
+        "kraken": DEFAULT_KRAKEN_WALLET_LABEL,
+    }
+    default_label = labels.get(provider_kind, provider_kind.title())
+    existing = conn.execute(
+        """
+        SELECT w.*, a.code AS account_code, a.label AS account_label
+        FROM wallets w
+        LEFT JOIN accounts a ON a.id = w.account_id
+        WHERE w.profile_id = ? AND lower(w.label) = lower(?)
+        LIMIT 1
+        """,
+        (profile["id"], default_label),
+    ).fetchone()
+    if existing:
+        return existing
+    created = core_wallets.create_wallet(
+        conn,
+        profile["workspace_id"],
+        profile["id"],
+        default_label,
+        provider_kind if provider_kind in {"binance", "coinbase", "kraken"} else "custom",
+        config={"backend": backend_name},
+    )
+    return resolve_wallet(conn, profile["id"], created["id"])
+
+
+def import_exchange_api(
+    conn,
+    runtime_config,
+    workspace_ref,
+    profile_ref,
+    backend_ref,
+    wallet_ref=None,
+    *,
+    expected_backend_kind=None,
+    commit=True,
+):
+    _, profile = resolve_scope(conn, workspace_ref, profile_ref)
+    backend = resolve_backend(runtime_config, backend_ref)
+    provider_kind = str(backend.get("kind") or "").strip().lower()
+    if provider_kind not in {"binance", "coinbase", "kraken"}:
+        raise AppError(
+            f"Backend '{backend['name']}' has kind '{provider_kind}', expected an exchange API kind",
+            code="validation",
+            hint="Use a backend kind of kraken, coinbase, or binance.",
+            retryable=False,
+        )
+    if expected_backend_kind and provider_kind != expected_backend_kind:
+        raise AppError(
+            f"Backend '{backend['name']}' has kind '{provider_kind}', expected '{expected_backend_kind}'",
+            code="validation",
+            retryable=False,
+        )
+    wallet = _get_or_create_exchange_api_wallet(
+        conn,
+        profile,
+        provider_kind,
+        backend["name"],
+        wallet_ref,
+    )
+    records = core_exchange_imports.fetch_exchange_records(backend)
+    outcome = core_imports.import_records_into_wallet(
+        conn,
+        profile,
+        wallet,
+        records,
+        f"{provider_kind}:api:{backend['name']}",
+        _import_coordinator_hooks(),
+        report_updates=True,
+        commit=commit,
+    )
+    outcome["backend"] = backend["name"]
+    outcome["backend_kind"] = provider_kind
+    outcome["backend_url"] = redact_backend_url(backend.get("url"))
+    outcome["wallet"] = wallet["label"]
+    outcome["fetched"] = len(records)
+    outcome["input_format"] = f"{provider_kind}_api"
+    return outcome
+
+
 def import_into_wallet(
     conn,
     workspace_ref,
@@ -1975,7 +2092,11 @@ def import_into_wallet(
 ):
     _, profile = resolve_scope(conn, workspace_ref, profile_ref)
     if input_format in {"21bitcoin_csv", "strike_csv"}:
-        default_mode = core_imports.BULLBITCOIN_IMPORT_MODE_FULL if input_format == "strike_csv" else None
+        default_mode = (
+            core_imports.BULLBITCOIN_IMPORT_MODE_FULL
+            if input_format == "strike_csv"
+            else None
+        )
         mode = core_imports.normalize_bullbitcoin_import_mode(import_mode or default_mode)
         if input_format == "21bitcoin_csv" and mode == core_imports.BULLBITCOIN_IMPORT_MODE_RELEVANT:
             if wallet_ref:

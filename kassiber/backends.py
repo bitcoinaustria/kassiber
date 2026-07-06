@@ -87,7 +87,20 @@ DEFAULT_BACKENDS = {
     },
 }
 
-BACKEND_KINDS = {"bitcoinrpc", "btcpay", "coreln", "custom", "electrum", "esplora", "liquid-esplora", "lnd", "mempool"}
+BACKEND_KINDS = {
+    "binance",
+    "bitcoinrpc",
+    "btcpay",
+    "coinbase",
+    "coreln",
+    "custom",
+    "electrum",
+    "esplora",
+    "kraken",
+    "liquid-esplora",
+    "lnd",
+    "mempool",
+}
 DEFAULT_ENV_FILENAME = "backends.env"
 DEFAULT_BACKEND_SETTING = "default_backend"
 BOOTSTRAP_DEFAULT_BACKEND_SETTING = "bootstrap_default_backend"

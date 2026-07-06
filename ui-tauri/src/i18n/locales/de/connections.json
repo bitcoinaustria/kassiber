@@ -746,6 +746,8 @@
       "pocketbitcoinCsv": "Pocket Bitcoin CSV",
       "twentyonebitcoinCsv": "21bitcoin CSV",
       "strikeCsv": "Strike CSV",
+      "ledgerliveCsv": "Ledger Live CSV",
+      "binanceSupplementalCsv": "Binance Supplemental CSV",
       "wasabiBundle": "Wasabi-JSON-Bundle",
       "samouraiSourceSet": "Samourai-Descriptor-Source-Set",
       "csvOrJson": "CSV oder JSON",

@@ -83,6 +83,7 @@ from .handlers import (
     emit,
     get_journal_event,
     identify_wallet_owners,
+    import_exchange_api,
     import_into_wallet,
     inspect_transfer_audit,
     list_direct_swap_payouts,
@@ -1107,7 +1108,26 @@ def build_parser() -> argparse.ArgumentParser:
     wallets_create.add_argument("--config")
     wallets_create.add_argument("--config-file")
     wallets_create.add_argument("--source-file")
-    wallets_create.add_argument("--source-format", choices=["json", "csv", "btcpay_json", "btcpay_csv", "phoenix_csv", "river_csv", "bullbitcoin_csv", "bullbitcoin_wallet_csv", "coinfinity_csv", "21bitcoin_csv", "pocketbitcoin_csv", "strike_csv", "wasabi_bundle"])
+    wallets_create.add_argument(
+        "--source-format",
+        choices=[
+            "json",
+            "csv",
+            "btcpay_json",
+            "btcpay_csv",
+            "phoenix_csv",
+            "river_csv",
+            "bullbitcoin_csv",
+            "bullbitcoin_wallet_csv",
+            "coinfinity_csv",
+            "21bitcoin_csv",
+            "pocketbitcoin_csv",
+            "strike_csv",
+            "ledgerlive_csv",
+            "binance_supplemental_csv",
+            "wasabi_bundle",
+        ],
+    )
 
     wallets_sub.add_parser("kinds")
 
@@ -1219,6 +1239,32 @@ def build_parser() -> argparse.ArgumentParser:
     wallets_import_strike.add_argument("--profile")
     wallets_import_strike.add_argument("--wallet")
     wallets_import_strike.add_argument("--file", required=True)
+    wallets_import_ledgerlive = wallets_sub.add_parser("import-ledger-live")
+    wallets_import_ledgerlive.add_argument("--workspace")
+    wallets_import_ledgerlive.add_argument("--profile")
+    wallets_import_ledgerlive.add_argument("--wallet", required=True)
+    wallets_import_ledgerlive.add_argument("--file", required=True)
+    wallets_import_binance_supplemental = wallets_sub.add_parser("import-binance-supplemental")
+    wallets_import_binance_supplemental.add_argument("--workspace")
+    wallets_import_binance_supplemental.add_argument("--profile")
+    wallets_import_binance_supplemental.add_argument("--wallet")
+    wallets_import_binance_supplemental.add_argument("--file", required=True)
+    wallets_import_binance_supplemental.add_argument("--mode", choices=["relevant", "full"], default="full")
+    wallets_sync_kraken = wallets_sub.add_parser("sync-kraken")
+    wallets_sync_kraken.add_argument("--workspace")
+    wallets_sync_kraken.add_argument("--profile")
+    wallets_sync_kraken.add_argument("--backend", required=True)
+    wallets_sync_kraken.add_argument("--wallet")
+    wallets_sync_coinbase = wallets_sub.add_parser("sync-coinbase")
+    wallets_sync_coinbase.add_argument("--workspace")
+    wallets_sync_coinbase.add_argument("--profile")
+    wallets_sync_coinbase.add_argument("--backend", required=True)
+    wallets_sync_coinbase.add_argument("--wallet")
+    wallets_sync_binance = wallets_sub.add_parser("sync-binance")
+    wallets_sync_binance.add_argument("--workspace")
+    wallets_sync_binance.add_argument("--profile")
+    wallets_sync_binance.add_argument("--backend", required=True)
+    wallets_sync_binance.add_argument("--wallet")
     wallets_import_ledger = wallets_sub.add_parser(
         "import-ledger",
         help="Import a filled-in generic ledger (.xlsx or CSV/TSV) into a wallet",
@@ -2889,6 +2935,43 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                     "full",
                 ),
             )
+        if args.wallets_command == "import-ledger-live":
+            return emit(
+                args,
+                import_into_wallet(
+                    conn,
+                    args.workspace,
+                    args.profile,
+                    args.wallet,
+                    args.file,
+                    "ledgerlive_csv",
+                ),
+            )
+        if args.wallets_command == "import-binance-supplemental":
+            return emit(
+                args,
+                import_into_wallet(
+                    conn,
+                    args.workspace,
+                    args.profile,
+                    args.wallet,
+                    args.file,
+                    "binance_supplemental_csv",
+                    args.mode,
+                ),
+            )
+        if args.wallets_command in {"sync-kraken", "sync-coinbase", "sync-binance"}:
+            expected_kind = args.wallets_command.removeprefix("sync-")
+            payload = import_exchange_api(
+                conn,
+                runtime_config,
+                args.workspace,
+                args.profile,
+                args.backend,
+                args.wallet,
+                expected_backend_kind=expected_kind,
+            )
+            return emit(args, payload)
         if args.wallets_command == "import-ledger":
             if args.dry_run:
                 return emit(

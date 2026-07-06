@@ -168,6 +168,12 @@ screen) checks whether pasted addresses / transaction ids belong to any of your
 wallets — receive or change — and flags the externals, classifying each
 transaction as a self-transfer, outbound payment, or inbound receipt.
 
+Exchange and wallet imports include Bitcoin-focused CSV/API paths for River,
+Bull Bitcoin, Coinfinity, 21bitcoin, Pocket Bitcoin, Strike, Ledger Live,
+Kraken, Coinbase, and Binance. Exact exchange executions are stored as pricing
+provenance, while wallet movement remains separate reconciliation evidence; see
+[docs/reference/imports.md](docs/reference/imports.md) for commands and limits.
+
 For transfer pairing, swap matching, source-of-funds, Austrian E 1kv,
 BTCPay reconciliation, and the concept model, see
 [docs/quickstart.md](docs/quickstart.md). The desktop GUI is optional:

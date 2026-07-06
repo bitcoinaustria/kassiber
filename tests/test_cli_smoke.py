@@ -116,6 +116,15 @@ strike-price-only,Mar 08 2026 11:00:00,,,,0.00050000,-,80000.00,,,Price-only inb
 strike-chain-1,Mar 09 2026 10:37:13,Send,,,-0.00100000,0.00001000,60000.00,55.00,bc1qstrikewithdrawal,On-chain withdrawal,bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb,Self custody
 """
 
+_LEDGERLIVE_CSV = """Operation Date,Currency Ticker,Operation Type,Operation Amount,Operation Fees,Operation Hash,Account Name,Account xpub,Countervalue Ticker,Countervalue at Operation Date
+2026-06-01T08:00:00.000Z,BTC,IN,0.01000000,,ledger-in,Bitcoin,xpub-secret,USD,600.00
+2026-06-02T08:00:00.000Z,BTC,OUT,-0.00200000,0.00001000,ledger-out,Bitcoin,xpub-secret,USD,120.00
+"""
+
+_BINANCE_SUPPLEMENTAL_CSV = """timestamp UTC,base asset symbol,quote asset amount + symbol,trading fee (in quote asset),base asset amount + symbol,source of funds
+2026-06-03 10:00:00,BTC,100.00 USD,1.00 USD,0.002 BTC,Spot Wallet
+"""
+
 _POCKETBITCOIN_EXISTING_CSV = """date,txid,direction,asset,amount,fee,description
 2022-07-19T23:15:28Z,pocket-wallet-tx,inbound,BTC,0.00228101,0,Synced from wallet
 """
@@ -4701,6 +4710,78 @@ class AccountBucketBehaviorTest(unittest.TestCase):
             "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         )
         self.assertEqual(row["payment_hash_source"], "importer")
+
+    def test_ledgerlive_csv_imports_wallet_movement(self):
+        ledger_csv = Path(self._tmp.name) / "ledger-live.csv"
+        ledger_csv.write_text(_LEDGERLIVE_CSV, encoding="utf-8")
+
+        self._cli(
+            "wallets", "create",
+            "--workspace", "Buckets",
+            "--profile", "Default",
+            "--label", "Ledger Live",
+            "--kind", "ledgerlive",
+            "--source-file", str(ledger_csv),
+            "--source-format", "ledgerlive_csv",
+        )
+        payload = self._cli(
+            "wallets", "sync",
+            "--workspace", "Buckets",
+            "--profile", "Default",
+            "--wallet", "Ledger Live",
+        )
+        self.assertEqual(payload["data"][0]["input_format"], "ledgerlive_csv")
+        self.assertEqual(payload["data"][0]["imported"], 2)
+
+        payload = self._cli(
+            "transactions", "list",
+            "--workspace", "Buckets",
+            "--profile", "Default",
+            "--wallet", "Ledger Live",
+            "--order", "asc",
+        )
+        records = payload["data"]
+        self.assertEqual(len(records), 2)
+        self.assertEqual(records[0]["external_id"], "ledger-in")
+        self.assertEqual(records[0]["kind"], "deposit")
+        self.assertIsNone(records[0]["pricing_source_kind"])
+        self.assertEqual(records[1]["external_id"], "ledger-out")
+        self.assertEqual(records[1]["kind"], "withdrawal")
+        self.assertEqual(records[1]["fee_msat"], 1000000)
+
+    def test_binance_supplemental_csv_full_imports_exchange_evidence_wallet(self):
+        binance_csv = Path(self._tmp.name) / "binance-supplemental.csv"
+        binance_csv.write_text(_BINANCE_SUPPLEMENTAL_CSV, encoding="utf-8")
+
+        payload = self._cli(
+            "wallets", "import-binance-supplemental",
+            "--workspace", "Buckets",
+            "--profile", "Default",
+            "--file", str(binance_csv),
+        )
+        data = payload["data"]
+        self.assertEqual(payload["kind"], "wallets.import-binance-supplemental")
+        self.assertEqual(data["mode"], "full")
+        self.assertEqual(data["wallet"], "Binance")
+        self.assertEqual(data["input_format"], "binance_supplemental_csv")
+        self.assertEqual(data["binance_rows"], 1)
+        self.assertEqual(data["imported"], 1)
+
+        payload = self._cli(
+            "transactions", "list",
+            "--workspace", "Buckets",
+            "--profile", "Default",
+            "--wallet", "Binance",
+            "--order", "asc",
+        )
+        records = payload["data"]
+        self.assertEqual(len(records), 1)
+        buy = records[0]
+        self.assertEqual(buy["kind"], "buy")
+        self.assertEqual(buy["pricing_source_kind"], "exchange_execution")
+        self.assertEqual(buy["pricing_provider"], "Binance")
+        self.assertEqual(buy["pricing_method"], "binance_supplemental_csv")
+        self.assertEqual(buy["fiat_value_exact"], "101.00")
 
     def test_z_pocketbitcoin_csv_enriches_existing_wallet_transaction(self):
         existing_csv = Path(self._tmp.name) / "pocket-existing-wallet.csv"

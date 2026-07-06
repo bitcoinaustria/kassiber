@@ -77,8 +77,14 @@ COINFINITY_RECONCILIATION_TAGS = {
     "unmatched": ("coinfinity-wallet-gap", "Coinfinity wallet gap"),
     "ambiguous": ("coinfinity-ambiguous", "Coinfinity ambiguous"),
 }
+BINANCE_RECONCILIATION_TAGS = {
+    "matched": ("binance-matched", "Binance matched"),
+    "unmatched": ("binance-wallet-gap", "Binance wallet gap"),
+    "ambiguous": ("binance-ambiguous", "Binance ambiguous"),
+}
 EXCHANGE_EVIDENCE_RECONCILIATION_TAGS = {
     "bullbitcoin_csv": BULLBITCOIN_RECONCILIATION_TAGS,
+    "binance_supplemental_csv": BINANCE_RECONCILIATION_TAGS,
     "coinfinity_csv": COINFINITY_RECONCILIATION_TAGS,
     "21bitcoin_csv": TWENTYONEBITCOIN_RECONCILIATION_TAGS,
     "pocketbitcoin_csv": POCKETBITCOIN_RECONCILIATION_TAGS,

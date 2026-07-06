@@ -52,6 +52,10 @@ WALLET_KINDS = [
     "21bitcoin",
     "pocketbitcoin",
     "strike",
+    "ledgerlive",
+    "kraken",
+    "coinbase",
+    "binance",
     "wasabi",
     "samourai",
     "custom",
@@ -763,6 +767,26 @@ WALLET_KIND_CATALOG = {
     "strike": {
         "summary": "Strike custodial platform CSV importer for exchange, Bitcoin, and Lightning rows.",
         "config_fields": ["source_file", "source_format"],
+        "requires": [],
+    },
+    "ledgerlive": {
+        "summary": "Ledger Live CSV importer for BTC/LBTC wallet movement only.",
+        "config_fields": ["source_file", "source_format"],
+        "requires": [],
+    },
+    "kraken": {
+        "summary": "Kraken exchange import wallet for API or CSV execution evidence.",
+        "config_fields": ["backend", "source_file", "source_format"],
+        "requires": [],
+    },
+    "coinbase": {
+        "summary": "Coinbase exchange import wallet for API execution and wallet movement evidence.",
+        "config_fields": ["backend", "source_file", "source_format"],
+        "requires": [],
+    },
+    "binance": {
+        "summary": "Binance exchange import wallet for API rows and BTC supplemental CSVs.",
+        "config_fields": ["backend", "source_file", "source_format"],
         "requires": [],
     },
     "wasabi": {

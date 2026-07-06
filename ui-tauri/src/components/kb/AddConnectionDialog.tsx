@@ -162,6 +162,7 @@ interface SyncResult {
   coinfinity_rows?: number;
   twentyonebitcoin_rows?: number;
   strike_rows?: number;
+  binance_rows?: number;
   wasabi_transactions?: number;
   wasabi_coins_observed?: number;
   wasabi_coins_active?: number;
@@ -326,6 +327,7 @@ interface ImportFileResult {
   coinfinity_rows?: number;
   twentyonebitcoin_rows?: number;
   strike_rows?: number;
+  binance_rows?: number;
   wasabi_transactions?: number;
   wasabi_coins_observed?: number;
   wasabi_coins_active?: number;
@@ -474,7 +476,8 @@ function isExchangeEvidenceFormat(sourceFormat?: string) {
     sourceFormat === "bullbitcoin_csv" ||
     sourceFormat === "coinfinity_csv" ||
     sourceFormat === "pocketbitcoin_csv" ||
-    sourceFormat === "21bitcoin_csv"
+    sourceFormat === "21bitcoin_csv" ||
+    sourceFormat === "binance_supplemental_csv"
   );
 }
 
@@ -539,6 +542,12 @@ function sourceFileFilters(
   }
   if (source.sourceFormat === "strike_csv") {
     return [{ name: t("add.fileFilter.strikeCsv"), extensions: ["csv"] }];
+  }
+  if (source.sourceFormat === "ledgerlive_csv") {
+    return [{ name: t("add.fileFilter.ledgerliveCsv"), extensions: ["csv"] }];
+  }
+  if (source.sourceFormat === "binance_supplemental_csv") {
+    return [{ name: t("add.fileFilter.binanceSupplementalCsv"), extensions: ["csv"] }];
   }
   if (source.sourceFormat === "wasabi_bundle") {
     return [{ name: t("add.fileFilter.wasabiBundle"), extensions: ["json"] }];
@@ -4681,6 +4690,7 @@ export function AddConnectionDialog({
       coinfinity_rows: result.coinfinity_rows,
       twentyonebitcoin_rows: result.twentyonebitcoin_rows,
       strike_rows: result.strike_rows,
+      binance_rows: result.binance_rows,
       wasabi_transactions: result.wasabi_transactions,
       wasabi_coins_observed: result.wasabi_coins_observed,
       wasabi_coins_active: result.wasabi_coins_active,
@@ -4706,6 +4716,7 @@ export function AddConnectionDialog({
       lastImportResult.coinfinity_rows ??
       lastImportResult.twentyonebitcoin_rows ??
       lastImportResult.strike_rows ??
+      lastImportResult.binance_rows ??
       lastImportResult.wasabi_transactions ??
       lastImportResult.imported + lastImportResult.skipped;
     const isBookWide = lastImportResult.scope === "book";
