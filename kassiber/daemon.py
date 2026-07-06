@@ -11696,10 +11696,9 @@ def handle_request(
 
     if kind == "ai.test_connection":
         # Transient connection test against caller-supplied provider metadata —
-        # nothing is persisted. A caller-supplied API key may be used for this
-        # one probe. Stored credentials may only be reused for the stored
-        # provider URL; otherwise a compromised renderer could redirect a saved
-        # bearer token to an attacker-controlled OpenAI-compatible URL.
+        # nothing is persisted. Stored credentials may only be reused for the
+        # stored provider URL; otherwise a compromised renderer could redirect
+        # a saved bearer token to an attacker-controlled OpenAI-compatible URL.
         args = _coerce_args_dict(request_id, request.get("args"))
         base_url_raw = args.get("base_url")
         if not isinstance(base_url_raw, str) or not base_url_raw.strip():
@@ -11708,36 +11707,33 @@ def handle_request(
                 code="validation",
             )
         canonical_url = normalize_base_url(base_url_raw)
-        api_key_raw = args.get("api_key")
+        if "api_key" in args:
+            raise AppError(
+                "ai.test_connection does not accept api_key; use ai.providers.set_api_key",
+                code="validation",
+                hint="Save or update the provider API key separately, then test the stored provider.",
+            )
         api_key_text = ""
-        if api_key_raw is not None:
-            if not isinstance(api_key_raw, str):
-                raise AppError(
-                    "ai.test_connection api_key must be a string",
-                    code="validation",
-                )
-            api_key_text = str_or_none(api_key_raw) or ""
-        if not api_key_text:
-            stored_provider = args.get("provider")
-            if isinstance(stored_provider, str) and stored_provider.strip():
-                try:
-                    stored = get_db_ai_provider(ctx.conn, stored_provider)
-                except AppError:
-                    stored = None
-                if stored:
-                    stored_url = normalize_base_url(stored.get("base_url"))
-                    has_stored_api_key = _ai_provider_has_stored_api_key(stored)
-                    if has_stored_api_key and canonical_url != stored_url:
-                        raise AppError(
-                            "ai.test_connection cannot reuse a stored API key for a different base_url",
-                            code="validation",
-                            hint=(
-                                "Save the provider URL first, then test it, so stored credentials are "
-                                "only sent to their configured origin."
-                            ),
-                        )
-                    if has_stored_api_key or canonical_url == stored_url:
-                        api_key_text = _resolve_ai_provider_api_key(ctx, stored, args) or ""
+        stored_provider = args.get("provider")
+        if isinstance(stored_provider, str) and stored_provider.strip():
+            try:
+                stored = get_db_ai_provider(ctx.conn, stored_provider)
+            except AppError:
+                stored = None
+            if stored:
+                stored_url = normalize_base_url(stored.get("base_url"))
+                has_stored_api_key = _ai_provider_has_stored_api_key(stored)
+                if has_stored_api_key and canonical_url != stored_url:
+                    raise AppError(
+                        "ai.test_connection cannot reuse a stored API key for a different base_url",
+                        code="validation",
+                        hint=(
+                            "Save the provider URL first, then test it, so stored credentials are "
+                            "only sent to their configured origin."
+                        ),
+                    )
+                if has_stored_api_key or canonical_url == stored_url:
+                    api_key_text = _resolve_ai_provider_api_key(ctx, stored, args) or ""
         # Use a tight timeout so a dead URL surfaces a clean error before
         # the Tauri supervisor's `DAEMON_INVOKE_TIMEOUT` (15s) kills the
         # daemon process. Test connection is interactive — a 10s ceiling
