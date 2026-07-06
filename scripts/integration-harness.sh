@@ -650,6 +650,17 @@ demo_configure_btcpay() {
   fi
 }
 
+demo_btcpay_invoice_exercise_enabled() {
+  case "${KASSIBER_REGTEST_DEMO_BTCPAY_INVOICES:-1}" in
+    0|false|FALSE|False|no|NO|No|off|OFF|Off)
+      return 1
+      ;;
+    *)
+      return 0
+      ;;
+  esac
+}
+
 demo_mempool_ui_enabled() {
   case "${KASSIBER_REGTEST_DEMO_MEMPOOL_UI:-1}" in
     0|false|FALSE|False|no|NO|No|off|OFF|Off)
@@ -751,6 +762,16 @@ if manifest["btcpay_enabled"]:
             manifest["btcpay_lightning_configured"] = bool(seed.get("lightning_configured"))
             manifest["btcpay_lightning_connection_string"] = seed.get("lightning_connection_string")
             manifest["btcpay_api_key"] = seed.get("api_key")
+            exercise = seed.get("btcpay_regtest")
+            if isinstance(exercise, dict):
+                manifest["btcpay_invoice_count"] = exercise.get("invoice_count")
+                manifest["btcpay_settled_invoice_count"] = exercise.get("settled_invoice_count")
+                manifest["btcpay_invoice_scenarios"] = exercise.get("scenarios")
+                manifest["btcpay_commercial_reconciliation"] = (
+                    exercise.get("kassiber", {}).get("commercial_reconciliation")
+                    if isinstance(exercise.get("kassiber"), dict)
+                    else None
+                )
         except Exception:
             pass
 os.makedirs(home, mode=0o700, exist_ok=True)
@@ -956,15 +977,20 @@ demo_seed_btcpay() {
   fi
   local seed_path="$DEMO_HOME/btcpay-seed.json"
   local lightning_args=()
+  local invoice_args=()
   if demo_lightning_enabled; then
     lightning_args=(
       --lightning-connection-string "type=clightning;server=/cln-merchant/regtest/lightning-rpc"
     )
   fi
+  if demo_btcpay_invoice_exercise_enabled; then
+    invoice_args=(--exercise-invoice)
+  fi
   echo "Seeding BTCPay regtest store..."
   py -m dev.regtest.btcpay_seed \
     --base-url "http://127.0.0.1:$KASSIBER_REGTEST_BTCPAY_PORT" \
     --kassiber-data-root "$DEMO_HOME/data" \
+    "${invoice_args[@]}" \
     "${lightning_args[@]}" \
     --json-output "$seed_path" >/dev/null
 }

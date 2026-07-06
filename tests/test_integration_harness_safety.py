@@ -165,6 +165,18 @@ class IntegrationHarnessSafetyTest(unittest.TestCase):
                         "password": "regtest",
                         "store_id": "store123",
                         "user": "regtest@regtest.local",
+                        "btcpay_regtest": {
+                            "invoice_count": 7,
+                            "settled_invoice_count": 7,
+                            "scenarios": ["direct_invoice", "payment_request"],
+                            "kassiber": {
+                                "commercial_reconciliation": {
+                                    "payment_request_id": "pr-1",
+                                    "pricing_source_kind": "btcpay_payment",
+                                    "transaction_tags": ["btcpay", "payment-request"],
+                                }
+                            },
+                        },
                     }
                 ),
                 encoding="utf-8",
@@ -195,6 +207,13 @@ class IntegrationHarnessSafetyTest(unittest.TestCase):
                 "type=clightning;server=/cln-merchant/regtest/lightning-rpc",
             )
             self.assertEqual(payload["btcpay_api_key"], "test-token")
+            self.assertEqual(payload["btcpay_invoice_count"], 7)
+            self.assertEqual(payload["btcpay_settled_invoice_count"], 7)
+            self.assertEqual(payload["btcpay_invoice_scenarios"], ["direct_invoice", "payment_request"])
+            self.assertEqual(
+                payload["btcpay_commercial_reconciliation"]["transaction_tags"],
+                ["btcpay", "payment-request"],
+            )
 
     def test_demo_btcpay_is_default_on_with_opt_out(self):
         with tempfile.TemporaryDirectory(prefix="kassiber-demo-btcpay-") as tmp:
@@ -217,6 +236,25 @@ class IntegrationHarnessSafetyTest(unittest.TestCase):
             )
             self.assertEqual(disabled_result.returncode, 0, disabled_result.stderr)
             self.assertEqual(disabled_result.stdout.strip(), ":0")
+
+    def test_demo_btcpay_invoice_exercise_is_default_on_with_opt_out(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-demo-btcpay-invoices-") as tmp:
+            tmp_path = Path(tmp)
+            default_result = _run_harness_snippet(
+                tmp_path,
+                'if demo_btcpay_invoice_exercise_enabled; then printf "enabled"; else printf "disabled"; fi',
+                {},
+            )
+            self.assertEqual(default_result.returncode, 0, default_result.stderr)
+            self.assertEqual(default_result.stdout.strip(), "enabled")
+
+            disabled_result = _run_harness_snippet(
+                tmp_path,
+                'if demo_btcpay_invoice_exercise_enabled; then printf "enabled"; else printf "disabled"; fi',
+                {"KASSIBER_REGTEST_DEMO_BTCPAY_INVOICES": "0"},
+            )
+            self.assertEqual(disabled_result.returncode, 0, disabled_result.stderr)
+            self.assertEqual(disabled_result.stdout.strip(), "disabled")
 
     def test_demo_mempool_ui_is_default_on_with_opt_out(self):
         with tempfile.TemporaryDirectory(prefix="kassiber-demo-mempool-ui-") as tmp:

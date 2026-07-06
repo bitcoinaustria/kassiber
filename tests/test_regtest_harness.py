@@ -554,8 +554,13 @@ class RegtestHarnessTest(unittest.TestCase):
 
         self.assertIn("demo_btcpay_enabled()", harness)
         self.assertIn("KASSIBER_REGTEST_DEMO_BTCPAY:-1", harness)
+        self.assertIn("demo_btcpay_invoice_exercise_enabled()", harness)
+        self.assertIn("KASSIBER_REGTEST_DEMO_BTCPAY_INVOICES:-1", harness)
         self.assertIn("dev/regtest/compose.btcpay.yml", harness)
         self.assertIn("demo_seed_btcpay", harness)
+        self.assertIn("--exercise-invoice", harness)
+        self.assertIn("btcpay_invoice_count", harness)
+        self.assertIn("btcpay_commercial_reconciliation", harness)
         self.assertIn("KASSIBER_REGTEST_USE_BTCPAY_COMPOSE=1", harness)
         self.assertIn("export KASSIBER_REGTEST_USE_BTCPAY_COMPOSE=1", harness)
         demo_build_book = harness.split("demo_build_book() {", 1)[1].split("demo_print_instructions()", 1)[0]

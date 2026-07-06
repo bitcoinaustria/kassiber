@@ -26,7 +26,7 @@ SQLCipher system package command if the development headers are not available.
 | --- | --- | --- | --- |
 | FAST | `./scripts/integration-harness.sh fast` | no | Replays recorded regtest tapes through the real sync adapter, import, journal, report, and XLSX export path with `KASSIBER_NO_EGRESS=1`. Includes a baseline watch-only tape and an edge-case tape (multi-address wallet, immature vs. mature coinbase, dust, RBF-replaced conflict pair, same-wallet self-spend, mempool-pending receipt). |
 | SLOW | `./scripts/integration-harness.sh bitcoin-core` | yes, unless reusing a node | Starts or reuses the regtest Compose stack (Bitcoin Core, Elements, Bitcoin Fulcrum, plus local mempool/esplora-compatible loopback endpoints), creates real wallets and transactions (including coinbase maturity and a watched receive), drives the Core RPC sync/pricing/journal/report/export smoke, and compares a real Fulcrum/Electrum address-wallet sync against Core RPC for receipt, spend, incremental, and no-op sync parity. |
-| DEMO | `./scripts/integration-harness.sh demo-full` | yes, unless reusing a node | Builds the checked-in `full-accounting-v1` scenario: thirteen Kassiber wallets including multi-address Bitcoin wallets, a Silent Payments wallet, rotation targets, a mining wallet, and descriptor-backed Liquid wallets synced from real `elementsd` transactions through the local Liquid Electrum endpoint; real regtest acquisitions/disposals/transfers, ownership-derived fan-out self-transfer matching, operating-expense disposals with deterministic amount/fee variation, deprecated rotated-out wallets, batched, consolidation, dust, RBF-replacement, and mempool-pending edge cases, local Bitcoin/Liquid Electrum and mempool-compatible backend rows, a multi-year stress ledger, CoinJoin- and PayJoin-shaped collaborative transactions, swap/peg bridge pairs, loan marks, bundled real historical BTC/EUR pricing, journals, reports, and transaction exports. The persistent `demo-up` variant also starts the Core Lightning and BTCPay overlays by default, seeding merchant Lightning and BTCPay connections unless explicitly disabled. |
+| DEMO | `./scripts/integration-harness.sh demo-full` | yes, unless reusing a node | Builds the checked-in `full-accounting-v1` scenario: thirteen Kassiber wallets including multi-address Bitcoin wallets, a Silent Payments wallet, rotation targets, a mining wallet, and descriptor-backed Liquid wallets synced from real `elementsd` transactions through the local Liquid Electrum endpoint; real regtest acquisitions/disposals/transfers, ownership-derived fan-out self-transfer matching, operating-expense disposals with deterministic amount/fee variation, deprecated rotated-out wallets, batched, consolidation, dust, RBF-replacement, and mempool-pending edge cases, local Bitcoin/Liquid Electrum and mempool-compatible backend rows, a multi-year stress ledger, CoinJoin- and PayJoin-shaped collaborative transactions, swap/peg bridge pairs, loan marks, bundled real historical BTC/EUR pricing, journals, reports, and transaction exports. The persistent `demo-up` variant also starts the Core Lightning and BTCPay overlays by default, seeding merchant Lightning, BTCPay connections, paid BTCPay invoice/payment-request examples, and reviewed commercial reconciliation unless explicitly disabled. |
 | SILENT PAYMENTS | `./scripts/integration-harness.sh silent-payments` | yes | Starts the regtest Compose stack with the `silent-payments` profile, which builds/runs Sparrow Frigate against Bitcoin Core v30 and Fulcrum, waits until Frigate advertises `silent_payments: [0]` through `server.features`, then runs Kassiber's Silent Payments sync tests. Override the cold-start wait with `KASSIBER_REGTEST_FRIGATE_WAIT_SECONDS` if the local Frigate index is slow. |
 | BOLTZ | `./scripts/integration-harness.sh boltz-liquid` | yes, upstream Boltz stack | Starts or reuses Boltz's official [`BoltzExchange/regtest`](https://github.com/BoltzExchange/regtest) Docker environment, probes the local Boltz API for Liquid-capable submarine, reverse, and BTC -> L-BTC chain-swap pairs, executes a Liquid on-chain payment plus an L-BTC -> BTC Lightning submarine swap, builds Kassiber import rows from the observed txids/hash/amounts, and verifies the swap pairs while the plain Liquid payment stays unpaired. Optional `KASSIBER_BOLTZ_V2_EVIDENCE=/path/to/evidence.json` adds real Boltz wallet/client/provider v2 chain/reverse/refund evidence rows to the temporary book and asserts exact `provider_swap_id` pairing. |
 | BTCPAY | `./scripts/integration-harness.sh btcpay` | yes | Starts the standard Bitcoin regtest stack plus a BTCPay overlay (Postgres, NBXplorer, BTCPay Server) wired to the same disposable `bitcoind`, creates a first admin user, creates or reuses a test store, generates a BTC on-chain store wallet, creates and pays a realistic invoice mix from the regtest Core wallet, confirms it, syncs BTCPay wallet history into a temporary Kassiber book, syncs invoice provenance, and writes a local seed JSON containing the store id, disposable API key, invoice ids, scenarios, and payment txids. |
@@ -151,16 +151,25 @@ The persistent demo book starts the same BTCPay overlay by default:
 That writes the BTCPay URL, store id, and disposable API key into
 `demo-manifest.json` (mode `0600`) and configures the demo book with a
 `btcpay-regtest` backend plus a `BTCPay Regtest Store` wallet using
-`BTC-CHAIN` wallet-history sync. The persistent `demo-up` path deliberately
-stops at store/wallet/backend setup, so repeated starts stay idempotent and do
-not advance the long-lived demo chain. Use the dedicated `btcpay` lane when the
-test needs paid invoices, payment requests, POS/crowdfund provenance,
-multi-payment invoices, duplicate commercial references, wallet-history import,
-and reconciliation proof. Disable the BTCPay overlay for a lighter persistent
-demo with:
+`BTC-CHAIN` wallet-history sync. By default it also runs the paid invoice
+exercise from the seed helper, so the long-lived demo book includes paid
+direct invoices, a payment request, POS/crowdfund provenance, a multi-payment
+invoice, duplicate commercial references, wallet-history import, a reviewed
+commercial payment-request link, and visible transaction tags
+(`btcpay`, `payment-request`, `commercial-income`) on the reconciled
+membership-income transaction. Use the dedicated `btcpay` lane when the same
+coverage should run in a temporary proof book instead of the persistent demo.
+Disable the BTCPay overlay for a lighter persistent demo with:
 
 ```bash
 KASSIBER_REGTEST_DEMO_BTCPAY=0 ./scripts/integration-harness.sh demo-up
+```
+
+Or keep the BTCPay store/UI in the persistent demo but skip paid invoice and
+commercial-reconciliation seeding with:
+
+```bash
+KASSIBER_REGTEST_DEMO_BTCPAY_INVOICES=0 ./scripts/integration-harness.sh demo-up
 ```
 
 Set `KASSIBER_REGTEST_KEEP=1` to keep the full Docker Compose project running

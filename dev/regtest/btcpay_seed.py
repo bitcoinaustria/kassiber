@@ -23,6 +23,11 @@ DEFAULT_PAYMENT_METHOD_ID = "BTC-CHAIN"
 DEFAULT_WORKSPACE = "Regtest Demo"
 DEFAULT_PROFILE = "Full Accounting"
 DEFAULT_ORDER_ID = "kassiber-regtest-btcpay-smoke"
+DEMO_COMMERCIAL_TAGS = (
+    ("btcpay", "BTCPay"),
+    ("payment-request", "Payment request"),
+    ("commercial-income", "Commercial income"),
+)
 
 
 REGTEST_INVOICE_SCENARIOS = (
@@ -707,6 +712,169 @@ def _first_match(items: list[Any], description: str, predicate) -> dict[str, Any
     raise RuntimeError(f"Could not find {description}")
 
 
+def _existing_document_by_external_ref(
+    *,
+    common: list[str],
+    workspace: str,
+    profile: str,
+    external_ref: str,
+) -> dict[str, Any] | None:
+    documents = _require_list(
+        _run_kassiber_checked(
+            [
+                *common,
+                "documents",
+                "list",
+                "--workspace",
+                workspace,
+                "--profile",
+                profile,
+                "--limit",
+                "500",
+            ]
+        ),
+        "external documents",
+    )
+    for document in documents:
+        if isinstance(document, dict) and str(document.get("external_ref") or "") == external_ref:
+            return document
+    return None
+
+
+def _create_or_get_payment_request_document(
+    *,
+    common: list[str],
+    workspace: str,
+    profile: str,
+    payment_request_id: str,
+    invoice_currency: str,
+    invoice_amount: str,
+) -> dict[str, Any]:
+    existing = _existing_document_by_external_ref(
+        common=common,
+        workspace=workspace,
+        profile=profile,
+        external_ref=payment_request_id,
+    )
+    if existing is not None:
+        return existing
+
+    document_args = [
+        *common,
+        "documents",
+        "create",
+        "--workspace",
+        workspace,
+        "--profile",
+        profile,
+        "--type",
+        "invoice",
+        "--label",
+        "BTCPay regtest membership invoice",
+        "--external-ref",
+        payment_request_id,
+        "--issuer",
+        DEFAULT_STORE_NAME,
+        "--counterparty",
+        "Kassiber Regtest Member",
+        "--notes",
+        "Synthetic regtest document keyed by BTCPay payment request id.",
+    ]
+    if invoice_currency and invoice_currency != "BTC" and invoice_amount:
+        document_args.extend(["--fiat-currency", invoice_currency, "--fiat-value", invoice_amount])
+    return _require_mapping(
+        _run_kassiber_checked(document_args),
+        "created commercial document",
+    )
+
+
+def _ensure_kassiber_tag(
+    *,
+    common: list[str],
+    workspace: str,
+    profile: str,
+    code: str,
+    label: str,
+) -> None:
+    tags = _require_list(
+        _run_kassiber_checked(
+            [
+                *common,
+                "metadata",
+                "tags",
+                "list",
+                "--workspace",
+                workspace,
+                "--profile",
+                profile,
+            ]
+        ),
+        "Kassiber tags",
+    )
+    if any(isinstance(tag, dict) and str(tag.get("code") or "") == code for tag in tags):
+        return
+    created = _run_kassiber(
+        [
+            *common,
+            "metadata",
+            "tags",
+            "create",
+            "--workspace",
+            workspace,
+            "--profile",
+            profile,
+            "--code",
+            code,
+            "--label",
+            label,
+        ]
+    )
+    if created.returncode != 0:
+        try:
+            payload = json.loads(created.stdout)
+            error_code = payload.get("error", {}).get("code") if isinstance(payload, dict) else None
+        except json.JSONDecodeError:
+            error_code = None
+        if error_code != "conflict":
+            raise RuntimeError(created.stderr or created.stdout)
+
+
+def _tag_transaction_for_demo(
+    *,
+    common: list[str],
+    workspace: str,
+    profile: str,
+    transaction_id: str,
+) -> list[dict[str, Any]]:
+    applied = []
+    for code, label in DEMO_COMMERCIAL_TAGS:
+        _ensure_kassiber_tag(common=common, workspace=workspace, profile=profile, code=code, label=label)
+        applied.append(
+            _require_mapping(
+                _run_kassiber_checked(
+                    [
+                        *common,
+                        "metadata",
+                        "tags",
+                        "add",
+                        "--workspace",
+                        workspace,
+                        "--profile",
+                        profile,
+                        "--transaction",
+                        transaction_id,
+                        "--tag",
+                        code,
+                        "--reason",
+                        "BTCPay regtest commercial reconciliation seed.",
+                    ]
+                ),
+                f"applied tag {code}",
+            )
+        )
+    return applied
+
+
 def _ensure_kassiber_book(data_root: Path, *, workspace: str, profile: str) -> None:
     common = ["--data-root", str(data_root), "--machine"]
     _run_kassiber([*common, "init"])
@@ -849,34 +1017,15 @@ def _exercise_btcpay_commercial_reconciliation(
     if not payment_request_id:
         raise RuntimeError("Payment-request invoice did not expose a payment_request_id")
 
-    document_args = [
-        *common,
-        "documents",
-        "create",
-        "--workspace",
-        workspace,
-        "--profile",
-        profile,
-        "--type",
-        "invoice",
-        "--label",
-        "BTCPay regtest membership invoice",
-        "--external-ref",
-        payment_request_id,
-        "--issuer",
-        DEFAULT_STORE_NAME,
-        "--counterparty",
-        "Kassiber Regtest Member",
-        "--notes",
-        "Synthetic regtest document keyed by BTCPay payment request id.",
-    ]
     invoice_currency = str(payment_request_invoice.get("invoice_currency") or "")
     invoice_amount = str(payment_request_invoice.get("invoice_amount") or "")
-    if invoice_currency and invoice_currency != "BTC" and invoice_amount:
-        document_args.extend(["--fiat-currency", invoice_currency, "--fiat-value", invoice_amount])
-    document = _require_mapping(
-        _run_kassiber_checked(document_args),
-        "created commercial document",
+    document = _create_or_get_payment_request_document(
+        common=common,
+        workspace=workspace,
+        profile=profile,
+        payment_request_id=payment_request_id,
+        invoice_currency=invoice_currency,
+        invoice_amount=invoice_amount,
     )
 
     suggest = _require_mapping(
@@ -984,6 +1133,12 @@ def _exercise_btcpay_commercial_reconciliation(
         raise RuntimeError(f"Subledger row did not use BTCPay payment pricing: {subledger_row!r}")
     if subledger_row.get("commercial_kind") != "income":
         raise RuntimeError(f"Subledger row did not classify reviewed payment as income: {subledger_row!r}")
+    applied_tags = _tag_transaction_for_demo(
+        common=common,
+        workspace=workspace,
+        profile=profile,
+        transaction_id=str(payment_link["transaction_id"]),
+    )
 
     return {
         "document_id": document_id,
@@ -1002,6 +1157,7 @@ def _exercise_btcpay_commercial_reconciliation(
         "fiat_currency": subledger_row.get("fiat_currency") or "",
         "fiat_value_exact": subledger_row.get("fiat_value_exact") or "",
         "commercial_kind": subledger_row["commercial_kind"],
+        "transaction_tags": [tag["tag"] for tag in applied_tags],
         "subledger_rows": len(subledger),
     }
 
