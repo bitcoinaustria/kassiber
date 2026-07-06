@@ -146,6 +146,7 @@ def _empty_overview_snapshot() -> dict[str, Any]:
             "eurUnrealized": 0.0,
             "eurRealizedYTD": 0.0,
         },
+        "taxFreeBalance": None,
         "status": {
             "workspace": None,
             "profile": None,
@@ -2322,6 +2323,93 @@ def _fiat_snapshot(
     }
 
 
+def _tax_free_balance_snapshot(
+    conn: sqlite3.Connection,
+    profile: sqlite3.Row,
+    freshness: dict[str, Any],
+) -> dict[str, Any] | None:
+    if str(profile["tax_country"] or "").lower() != "at":
+        return None
+    rows = conn.execute(
+        """
+        SELECT entry_type, asset, occurred_at, quantity, fiat_value, cost_basis, at_category
+        FROM journal_entries
+        WHERE profile_id = ? AND asset IN ('BTC', 'LBTC')
+        ORDER BY occurred_at ASC, created_at ASC, id ASC
+        """,
+        (profile["id"],),
+    ).fetchall()
+    if not rows:
+        return None
+    entries: list[dict[str, Any]] = []
+    for row in rows:
+        entries.append(
+            {
+                "entry_type": row["entry_type"],
+                "asset": row["asset"],
+                "occurred_at": row["occurred_at"],
+                "quantity": msat_to_btc(row["quantity"]) or Decimal("0"),
+                "fiat_value": dec(row["fiat_value"]),
+                "cost_basis": (
+                    dec(row["cost_basis"])
+                    if row["cost_basis"] is not None
+                    else None
+                ),
+                "at_category": row["at_category"],
+            }
+        )
+    today = datetime.now(timezone.utc).date().isoformat()
+    report = report_builders.compute_deemed_disposal(
+        conn,
+        dict(profile),
+        {
+            "entries": entries,
+            "wallet_holdings": {},
+            "account_holdings": {},
+            "quarantines": [],
+            "latest_rates": {},
+        },
+        departure_date=today,
+        destination="eu_eea",
+    )
+    totals = report["totals"]
+    tax_free_sats = int(totals["altQuantitySats"] or 0)
+    taxable_sats = int(totals["neuQuantitySats"] or 0)
+    total_sats = tax_free_sats + taxable_sats
+    if total_sats <= 0:
+        return None
+    return {
+        "rule": "austrian_altbestand",
+        "jurisdictionCode": report["jurisdictionCode"],
+        "fiatCurrency": report["fiatCurrency"],
+        "taxFreeQuantitySats": tax_free_sats,
+        "taxableQuantitySats": taxable_sats,
+        "totalQuantitySats": total_sats,
+        "taxFreeMarketValue": totals["altMarketValue"],
+        "taxableMarketValue": totals["neuMarketValue"],
+        "needsJournals": bool(freshness.get("needs_processing")),
+        "quarantines": int(freshness.get("quarantine_count") or 0),
+        "buckets": [
+            {
+                "id": "altbestand",
+                "regime": "alt",
+                "label": "Altbestand",
+                "quantitySats": tax_free_sats,
+                "marketValue": totals["altMarketValue"],
+                "taxFree": True,
+            },
+            {
+                "id": "neubestand",
+                "regime": "neu",
+                "label": "Neubestand",
+                "quantitySats": taxable_sats,
+                "marketValue": totals["neuMarketValue"],
+                "taxFree": False,
+            },
+        ],
+    }
+
+
 def _profile_readiness(
     *,
     wallet_count: int,
@@ -2431,6 +2519,7 @@ def _build_profile_overview_snapshot(
             has_book_state=has_book_state,
         ),
         "fiat": fiat,
+        "taxFreeBalance": _tax_free_balance_snapshot(conn, profile, freshness),
         "status": {
             "workspace": workspace["label"],
             "profile": profile["label"],

@@ -107,6 +107,12 @@
     "refreshingStats": "Refreshing overview statistics",
     "openStat": "Open {{title}}",
     "bitcoinBalance": "Bitcoin balance",
+    "taxFreeBalance": "Tax-free balance",
+    "taxFreeBreakdown": "{{taxFreeBucket}} {{taxFree}} · {{taxableBucket}} {{taxable}}",
+    "bucket": {
+      "taxFree": "Tax-free",
+      "taxable": "Taxable"
+    },
     "title": {
       "portfolioValue": "Portfolio value",
       "transactions": "Transactions",
@@ -129,6 +135,7 @@
       "estimate": "Estimate",
       "loaded": "Loaded",
       "configured": "Configured",
+      "needsJournals": "Needs journals",
       "open": "Open"
     }
   },

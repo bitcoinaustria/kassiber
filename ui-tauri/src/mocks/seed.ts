@@ -310,6 +310,29 @@ export interface MarketRateSnapshot {
   method: string | null;
 }
 
+export interface TaxFreeBalanceBucket {
+  id: "altbestand" | "neubestand" | string;
+  regime: "alt" | "neu" | string;
+  label: string;
+  quantitySats: number;
+  marketValue: number | null;
+  taxFree: boolean;
+}
+
+export interface TaxFreeBalanceSnapshot {
+  rule: "austrian_altbestand" | string;
+  jurisdictionCode: string;
+  fiatCurrency: string;
+  taxFreeQuantitySats: number;
+  taxableQuantitySats: number;
+  totalQuantitySats: number;
+  taxFreeMarketValue: number | null;
+  taxableMarketValue: number | null;
+  needsJournals: boolean;
+  quarantines: number;
+  buckets: TaxFreeBalanceBucket[];
+}
+
 export interface OverviewSnapshot {
   priceEur: number;
   priceUsd: number;
@@ -322,6 +345,7 @@ export interface OverviewSnapshot {
   /** dated portfolio points from the daemon, using real source dates/rates */
   portfolioSeries?: PortfolioPoint[];
   fiat: FiatSnapshot;
+  taxFreeBalance?: TaxFreeBalanceSnapshot | null;
   status?: {
     workspace: string | null;
     profile: string | null;
@@ -893,5 +917,35 @@ export const MOCK_OVERVIEW: OverviewSnapshot = {
     eurCostBasis: 198_502.40,
     eurUnrealized: 114_340.37,
     eurRealizedYTD: 42_118.92,
+  },
+  taxFreeBalance: {
+    rule: "austrian_altbestand",
+    jurisdictionCode: "AT",
+    fiatCurrency: "EUR",
+    taxFreeQuantitySats: 120_000_000,
+    taxableQuantitySats: 318_000_000,
+    totalQuantitySats: 438_000_000,
+    taxFreeMarketValue: 85_704.22,
+    taxableMarketValue: 227_138.55,
+    needsJournals: false,
+    quarantines: 0,
+    buckets: [
+      {
+        id: "altbestand",
+        regime: "alt",
+        label: "Altbestand",
+        quantitySats: 120_000_000,
+        marketValue: 85_704.22,
+        taxFree: true,
+      },
+      {
+        id: "neubestand",
+        regime: "neu",
+        label: "Neubestand",
+        quantitySats: 318_000_000,
+        marketValue: 227_138.55,
+        taxFree: false,
+      },
+    ],
   },
 };

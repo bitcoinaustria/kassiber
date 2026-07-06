@@ -24,6 +24,7 @@ vi.mock("@tanstack/react-router", async () => {
 });
 
 import { MOCK_OVERVIEW } from "@/mocks/seed";
+import type { OverviewSnapshot } from "@/mocks/seed";
 
 import { buildStatsData } from "./model";
 import { StatsCards, statStatusText } from "./StatsCards";
@@ -57,5 +58,53 @@ describe("overview stats cards", () => {
     expect(html).toContain("Bitcoin balance");
     expect(html).toContain("Refreshing");
     expect(html).not.toContain('data-slot="skeleton"');
+  });
+
+  it("renders tax-free balance with daemon-provided bucket labels", () => {
+    const snapshot: OverviewSnapshot = {
+      ...MOCK_OVERVIEW,
+      taxFreeBalance: {
+        rule: "generic_long_term_holding",
+        jurisdictionCode: "EX",
+        fiatCurrency: "EUR",
+        taxFreeQuantitySats: 210_000_000,
+        taxableQuantitySats: 30_000_000,
+        totalQuantitySats: 240_000_000,
+        taxFreeMarketValue: 126_000,
+        taxableMarketValue: 18_000,
+        needsJournals: false,
+        quarantines: 0,
+        buckets: [
+          {
+            id: "long-term",
+            regime: "long",
+            label: "Long-term",
+            quantitySats: 210_000_000,
+            marketValue: 126_000,
+            taxFree: true,
+          },
+          {
+            id: "short-term",
+            regime: "short",
+            label: "Short-term",
+            quantitySats: 30_000_000,
+            marketValue: 18_000,
+            taxFree: false,
+          },
+        ],
+      },
+    };
+
+    const html = renderToStaticMarkup(
+      createElement(StatsCards, {
+        snapshot,
+        hideSensitive: false,
+        currency: "btc",
+      }),
+    );
+
+    expect(html).toContain("Tax-free balance");
+    expect(html).toContain("\u20bf 2.100");
+    expect(html).toContain("Long-term \u20bf 2.100 \u00b7 Short-term \u20bf 0.300");
   });
 });

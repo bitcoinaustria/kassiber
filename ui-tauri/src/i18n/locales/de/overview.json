@@ -107,6 +107,12 @@
     "refreshingStats": "Übersichtsstatistiken werden aktualisiert…",
     "openStat": "{{title}} öffnen",
     "bitcoinBalance": "Bitcoin-Guthaben",
+    "taxFreeBalance": "Steuerfreies Guthaben",
+    "taxFreeBreakdown": "{{taxFreeBucket}} {{taxFree}} · {{taxableBucket}} {{taxable}}",
+    "bucket": {
+      "taxFree": "Steuerfrei",
+      "taxable": "Steuerpflichtig"
+    },
     "title": {
       "portfolioValue": "Portfoliowert",
       "transactions": "Transaktionen",
@@ -129,6 +135,7 @@
       "estimate": "Schätzung",
       "loaded": "Geladen",
       "configured": "Konfiguriert",
+      "needsJournals": "Journale nötig",
       "open": "Offen"
     }
   },
