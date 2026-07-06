@@ -333,9 +333,9 @@ the Core RPC backend, then verifies Kassiber behavior through the public CLI:
   inventory
 - an RBF fee-bumped payment: the conflicted original must be skipped by sync
   while only the confirmed replacement is booked
-- solo-mining block rewards into a dedicated mining wallet at two points in
-  history (visibly smaller after regtest halvings); immature coinbases must
-  never import
+- solo-mining block rewards swept into treasury at two points in history
+  (visibly smaller after regtest halvings), while the dedicated mining wallet
+  stays intentionally tiny; immature coinbases must never import
 - a customer payment that is still unconfirmed in the mempool when the book is
   synced, imported with an empty confirmed-at and a mempool UTXO state
 - a deterministic historical stress lane: 132 cycles spaced 20 days apart, with

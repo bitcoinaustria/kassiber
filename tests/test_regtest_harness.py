@@ -328,8 +328,10 @@ class RegtestHarnessTest(unittest.TestCase):
         # Deterministic amount/fee variation keeps the multi-year ledger from
         # looking like a spreadsheet of identical round numbers.
         self.assertGreaterEqual(int(stress["variation_bp"]), 1000)
+        miner_wallet = next(wallet for wallet in scenario["wallets"] if wallet["key"] == "miner")
+        self.assertEqual(miner_wallet["initial_btc"], "0.00025000")
         mining_events = stress["mining_events"]
-        self.assertEqual([event["role"] for event in mining_events], ["miner", "miner"])
+        self.assertEqual([event["role"] for event in mining_events], ["treasury", "treasury"])
         for event in mining_events:
             # Coinbase rewards must have >= 100 blocks left to mature before sync.
             self.assertLessEqual(int(event["cycle"]), stress["cycles"] - 35)

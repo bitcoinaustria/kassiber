@@ -2,7 +2,7 @@
   "schema_version": 1,
   "id": "full-accounting-v1",
   "title": "Full accounting regtest demo",
-  "description": "Disposable Bitcoin Core regtest scenario covering multi-address business wallets, regular fiat-expense disposals with deterministic amount/fee variation, self-transfers, ownership-derived fan-out transfers, wallet key rotations, deprecated old wallets, collaborative CoinJoin/PayJoin-shaped transactions, an RBF-replaced payment, halving-shrunk mining income, a dust deposit, a mempool-pending receipt at sync, Bitcoin-backed-loan marks, volatile pricing, local Electrum/mempool-compatible backend endpoints, and deterministic elementsregtest/LBTC bridge/import wallets.",
+  "description": "Disposable Bitcoin Core regtest scenario covering multi-address business wallets, regular fiat-expense disposals with deterministic amount/fee variation, self-transfers, ownership-derived fan-out transfers, wallet key rotations, deprecated old wallets, collaborative CoinJoin/PayJoin-shaped transactions, an RBF-replaced payment, halving-shrunk mining income swept to treasury, a tiny mining-rig wallet, a dust deposit, a mempool-pending receipt at sync, Bitcoin-backed-loan marks, volatile pricing, local Electrum/mempool-compatible backend endpoints, and deterministic elementsregtest/LBTC bridge/import wallets.",
   "base_time": "2019-01-15T09:00:00Z",
   "latest_time": "2026-07-01T00:00:00Z",
   "workspace": "Regtest Demo",
@@ -109,16 +109,16 @@
       {
         "id": "mining_reward_2021",
         "cycle": 40,
-        "role": "miner",
+        "role": "treasury",
         "blocks": 1,
-        "note": "The office mining rig finds a block; the reward lands in the mining wallet."
+        "note": "The office mining rig finds a block; the reward is swept into treasury."
       },
       {
         "id": "mining_reward_2024",
         "cycle": 96,
-        "role": "miner",
+        "role": "treasury",
         "blocks": 1,
-        "note": "A later block reward, visibly smaller after regtest halvings."
+        "note": "A later block reward, visibly smaller after regtest halvings, is swept into treasury."
       }
     ],
     "business_expenses": {
@@ -333,7 +333,7 @@
       "label": "Regtest Mining Rig",
       "account": "mining",
       "addresses": 2,
-      "initial_btc": "0.00000000"
+      "initial_btc": "0.00025000"
     },
     {
       "key": "treasury_2020",
