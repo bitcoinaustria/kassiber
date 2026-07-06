@@ -969,7 +969,6 @@ def _river_currency(value):
     return _currency_cell(value)
 
 
-_BTC_ASSETS = {"BTC", "XBT"}
 _BITCOIN_FAMILY_ASSETS = {"BTC", "XBT", "LBTC"}
 _FIAT_CURRENCIES = {
     "AED",
