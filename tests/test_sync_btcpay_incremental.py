@@ -351,7 +351,7 @@ class BtcpayIncrementalTest(unittest.TestCase):
                         "destination": "bcrt1qexample",
                         "payments": [
                             {
-                                "id": txid,
+                                "id": f"{txid}-0",
                                 "value": "0.00084000",
                                 "receivedDate": 1_700_000_000,
                             }
@@ -371,6 +371,7 @@ class BtcpayIncrementalTest(unittest.TestCase):
         self.assertEqual(len(records), 1)
         self.assertEqual(records[0]["origin_kind"], "payment_request")
         self.assertEqual(records[0]["origin_url"], "https://shop.example/pr")
+        self.assertEqual(records[0]["payments"][0]["payment_id"], f"{txid}-0")
         self.assertEqual(records[0]["payments"][0]["txid"], txid)
         self.assertEqual(records[0]["payments"][0]["payment_method_id"], "BTC-CHAIN")
         self.assertEqual(records[0]["payments"][0]["rate"], "50000.00")

@@ -674,7 +674,15 @@ def _suggest_document_links(conn, workspace, profile, now):
           ON p.profile_id = d.profile_id
          AND p.record_type = 'invoice'
          AND (
-              (d.external_ref IS NOT NULL AND d.external_ref != '' AND (d.external_ref = p.invoice_id OR d.external_ref = p.order_id))
+              (
+                   d.external_ref IS NOT NULL
+                   AND d.external_ref != ''
+                   AND (
+                       d.external_ref = p.invoice_id
+                       OR d.external_ref = p.order_id
+                       OR d.external_ref = p.payment_request_id
+                   )
+              )
               OR (
                    d.fiat_currency IS NOT NULL
                    AND p.fiat_currency = d.fiat_currency
@@ -725,7 +733,15 @@ def _suggest_document_transaction_links(conn, workspace, profile, now):
           ON p.profile_id = d.profile_id
          AND p.record_type = 'payment'
          AND (
-              (d.external_ref IS NOT NULL AND d.external_ref != '' AND (d.external_ref = p.invoice_id OR d.external_ref = p.order_id))
+              (
+                   d.external_ref IS NOT NULL
+                   AND d.external_ref != ''
+                   AND (
+                       d.external_ref = p.invoice_id
+                       OR d.external_ref = p.order_id
+                       OR d.external_ref = p.payment_request_id
+                   )
+              )
               OR (
                    d.fiat_currency IS NOT NULL
                    AND p.fiat_currency = d.fiat_currency
@@ -871,7 +887,8 @@ def list_links(conn, workspace_ref, profile_ref, hooks: CommercialHooks, *, stat
     rows = conn.execute(
         f"""
         SELECT cl.*, p.stable_key AS btcpay_stable_key, p.invoice_id, p.payment_id,
-               p.txid, d.label AS document_label, t.external_id AS transaction_external_id
+               p.txid, p.payment_request_id, p.origin_kind, p.origin_label,
+               d.label AS document_label, t.external_id AS transaction_external_id
         FROM commercial_links cl
         LEFT JOIN btcpay_provenance_records p ON p.id = cl.btcpay_record_id
         LEFT JOIN external_documents d ON d.id = cl.document_id
@@ -981,7 +998,8 @@ def get_link(conn, profile_id, link_ref):
     row = conn.execute(
         """
         SELECT cl.*, p.stable_key AS btcpay_stable_key, p.invoice_id, p.payment_id,
-               p.txid, d.label AS document_label, t.external_id AS transaction_external_id
+               p.txid, p.payment_request_id, p.origin_kind, p.origin_label,
+               d.label AS document_label, t.external_id AS transaction_external_id
         FROM commercial_links cl
         LEFT JOIN btcpay_provenance_records p ON p.id = cl.btcpay_record_id
         LEFT JOIN external_documents d ON d.id = cl.document_id
@@ -1272,7 +1290,8 @@ def build_reviewed_subledger_rows(conn, workspace_ref, profile_ref, hooks: Comme
                t.id AS transaction_id, t.external_id, t.occurred_at, t.direction,
                t.asset, t.amount, t.fee, t.fiat_currency, t.fiat_value_exact,
                t.pricing_source_kind, w.label AS wallet,
-               p.invoice_id, p.payment_id, p.order_id, p.stable_key,
+               p.invoice_id, p.payment_id, p.order_id, p.payment_request_id,
+               p.origin_kind, p.origin_label, p.stable_key,
                d.id AS document_id, d.label AS document_label, d.external_ref AS document_external_ref
         FROM commercial_links cl
         JOIN transactions t ON t.id = cl.transaction_id
@@ -1306,6 +1325,9 @@ def export_reviewed_subledger_csv(conn, workspace_ref, profile_ref, file_path, h
         "invoice_id",
         "payment_id",
         "order_id",
+        "payment_request_id",
+        "origin_kind",
+        "origin_label",
         "document_label",
         "document_external_ref",
         "reconciliation_state",
@@ -1454,6 +1476,9 @@ def _link_payload(row):
         "btcpay_stable_key": row["btcpay_stable_key"] or "",
         "invoice_id": row["invoice_id"] or "",
         "payment_id": row["payment_id"] or "",
+        "payment_request_id": row["payment_request_id"] or "",
+        "origin_kind": row["origin_kind"] or "",
+        "origin_label": row["origin_label"] or "",
         "txid": row["txid"] or "",
         "document_id": row["document_id"] or "",
         "document_label": row["document_label"] or "",
@@ -1497,6 +1522,9 @@ def _subledger_payload(row):
         "invoice_id": row["invoice_id"] or "",
         "payment_id": row["payment_id"] or "",
         "order_id": row["order_id"] or "",
+        "payment_request_id": row["payment_request_id"] or "",
+        "origin_kind": row["origin_kind"] or "",
+        "origin_label": row["origin_label"] or "",
         "btcpay_ref": row["stable_key"] or "",
         "document_id": row["document_id"] or "",
         "document_label": row["document_label"] or "",

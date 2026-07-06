@@ -701,14 +701,25 @@ def _payments_from_invoice_payment_methods(methods):
             if method.get("destination") is not None:
                 enriched.setdefault("destination", method.get("destination"))
             payment_id = str(enriched.get("id") or "")
-            if not enriched.get("transactionId") and _looks_like_txid(payment_id):
-                enriched["transactionId"] = payment_id
+            txid = _txid_from_payment_id(payment_id)
+            if not enriched.get("transactionId") and txid:
+                enriched["transactionId"] = txid
             payments.append(enriched)
     return payments
 
 
 def _looks_like_txid(value):
     return len(value) == 64 and all(char in "0123456789abcdefABCDEF" for char in value)
+
+
+def _txid_from_payment_id(value):
+    raw = str(value or "").strip()
+    if _looks_like_txid(raw):
+        return raw
+    first, separator, _ = raw.partition("-")
+    if separator and _looks_like_txid(first):
+        return first
+    return None
 
 
 def _http_get_json(opener, url, token, timeout, *, permission_hint=None):
@@ -903,15 +914,16 @@ def _normalize_invoice_payment(invoice, payment):
         or payment.get("paymentMethodData")
         or details.get("paymentMethod")
     )
+    payment_id = (
+        payment.get("id")
+        or payment.get("paymentId")
+        or payment.get("accountedPaymentId")
+        or payment.get("transactionId")
+        or details.get("transactionId")
+    )
     return {
         "payment": payment,
-        "payment_id": _str_or_none(
-            payment.get("id")
-            or payment.get("paymentId")
-            or payment.get("accountedPaymentId")
-            or payment.get("transactionId")
-            or details.get("transactionId")
-        ),
+        "payment_id": _str_or_none(payment_id),
         "payment_method_id": _str_or_none(method),
         "status": _str_or_none(payment.get("status") or details.get("status")),
         "received_at": _btcpay_time(
@@ -932,6 +944,7 @@ def _normalize_invoice_payment(invoice, payment):
             or payment.get("transactionHash")
             or details.get("transactionId")
             or details.get("transactionHash")
+            or _txid_from_payment_id(payment_id)
         ),
         "payment_hash": _str_or_none(
             payment.get("paymentHash")

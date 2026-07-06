@@ -755,6 +755,54 @@ class BtcpayCommercialProvenanceTest(unittest.TestCase):
             1,
         )
 
+    def test_payment_request_reference_drives_document_and_transaction_suggestions(self):
+        self._upsert_invoice_payment()
+        document = commercial.create_document(
+            self.conn,
+            None,
+            None,
+            _hooks(),
+            document_type="invoice",
+            label="Membership payment request",
+            external_ref="pr-1",
+        )
+
+        suggested = commercial.suggest_links(self.conn, None, None, _hooks())
+
+        document_links = [
+            row
+            for row in suggested["suggestions"]
+            if row["link_type"] == "document_btcpay" and row["document_id"] == document["id"]
+        ]
+        self.assertEqual(len(document_links), 1)
+        self.assertEqual(document_links[0]["payment_request_id"], "pr-1")
+        self.assertEqual(document_links[0]["origin_kind"], "pos")
+        payment_links = [
+            row
+            for row in suggested["suggestions"]
+            if row["link_type"] == "btcpay_payment_transaction"
+            and row["document_id"] == document["id"]
+            and row["transaction_id"] == "tx"
+        ]
+        self.assertEqual(len(payment_links), 1)
+        self.assertEqual(payment_links[0]["payment_request_id"], "pr-1")
+        self.assertEqual(payment_links[0]["origin_label"], "Coffee beans")
+
+        commercial.review_link(
+            self.conn,
+            None,
+            None,
+            payment_links[0]["id"],
+            _hooks(),
+            state="reviewed",
+            commercial_kind="income",
+        )
+        subledger = commercial.build_reviewed_subledger_rows(self.conn, None, None, _hooks())
+
+        self.assertEqual(subledger[0]["payment_request_id"], "pr-1")
+        self.assertEqual(subledger[0]["origin_kind"], "pos")
+        self.assertEqual(subledger[0]["origin_label"], "Coffee beans")
+
     def test_document_reference_resolution_rejects_ambiguous_labels_and_duplicate_refs(self):
         commercial.create_document(
             self.conn,

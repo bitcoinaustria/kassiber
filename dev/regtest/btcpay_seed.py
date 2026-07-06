@@ -80,7 +80,8 @@ REGTEST_INVOICE_SCENARIOS = (
     {
         "kind": "payment_request",
         "suffix": "payment-request",
-        "amount": "0.00015000",
+        "amount": "15.00",
+        "currency": "EUR",
         "metadata": {
             "itemDesc": "Monthly association membership",
             "paymentRequestId": "kassiber-regtest-membership-request",
@@ -624,6 +625,8 @@ def _exercise_btcpay_invoice(
         "invoice_order_id": order_id,
         "invoice_amount": str(scenario["amount"]),
         "invoice_currency": invoice_currency,
+        "payment_request_id": metadata.get("paymentRequestId"),
+        "order_url": metadata.get("orderUrl"),
         "payment_txid": payment_txids[0] if payment_txids else None,
         "payment_txids": payment_txids,
         "payment_count": len(payment_txids),
@@ -653,11 +656,41 @@ def _run_kassiber_checked(args: list[str], *, token: str | None = None) -> Any:
     return payload.get("data")
 
 
+def _require_mapping(value: Any, description: str) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        raise RuntimeError(f"Expected {description} to be an object, got {value!r}")
+    return value
+
+
+def _require_list(value: Any, description: str) -> list[Any]:
+    if not isinstance(value, list):
+        raise RuntimeError(f"Expected {description} to be a list, got {value!r}")
+    return value
+
+
+def _first_match(items: list[Any], description: str, predicate) -> dict[str, Any]:
+    for item in items:
+        if isinstance(item, dict) and predicate(item):
+            return item
+    raise RuntimeError(f"Could not find {description}")
+
+
 def _ensure_kassiber_book(data_root: Path, *, workspace: str, profile: str) -> None:
     common = ["--data-root", str(data_root), "--machine"]
     _run_kassiber([*common, "init"])
     _run_kassiber([*common, "workspaces", "create", workspace])
-    _run_kassiber([*common, "profiles", "create", "--workspace", workspace, profile])
+    _run_kassiber(
+        [
+            *common,
+            "profiles",
+            "create",
+            "--workspace",
+            workspace,
+            "--fiat-currency",
+            "EUR",
+            profile,
+        ]
+    )
 
 
 def _configure_kassiber(
@@ -767,6 +800,180 @@ def _configure_kassiber(
         raise RuntimeError(update_wallet.stderr or update_wallet.stdout)
 
 
+def _exercise_btcpay_commercial_reconciliation(
+    *,
+    data_root: Path,
+    invoice_results: list[dict[str, Any]],
+    workspace: str,
+    profile: str,
+) -> dict[str, Any]:
+    common = ["--data-root", str(data_root), "--machine"]
+    payment_request_invoice = _first_match(
+        invoice_results,
+        "payment-request invoice result",
+        lambda invoice: invoice.get("scenario") == "payment_request",
+    )
+    payment_request_id = str(payment_request_invoice.get("payment_request_id") or "")
+    if not payment_request_id:
+        raise RuntimeError("Payment-request invoice did not expose a payment_request_id")
+
+    document_args = [
+        *common,
+        "documents",
+        "create",
+        "--workspace",
+        workspace,
+        "--profile",
+        profile,
+        "--type",
+        "invoice",
+        "--label",
+        "BTCPay regtest membership invoice",
+        "--external-ref",
+        payment_request_id,
+        "--issuer",
+        DEFAULT_STORE_NAME,
+        "--counterparty",
+        "Kassiber Regtest Member",
+        "--notes",
+        "Synthetic regtest document keyed by BTCPay payment request id.",
+    ]
+    invoice_currency = str(payment_request_invoice.get("invoice_currency") or "")
+    invoice_amount = str(payment_request_invoice.get("invoice_amount") or "")
+    if invoice_currency and invoice_currency != "BTC" and invoice_amount:
+        document_args.extend(["--fiat-currency", invoice_currency, "--fiat-value", invoice_amount])
+    document = _require_mapping(
+        _run_kassiber_checked(document_args),
+        "created commercial document",
+    )
+
+    suggest = _require_mapping(
+        _run_kassiber_checked(
+            [
+                *common,
+                "btcpay",
+                "provenance",
+                "suggest",
+                "--workspace",
+                workspace,
+                "--profile",
+                profile,
+                "--limit",
+                "100",
+            ]
+        ),
+        "BTCPay provenance suggestions",
+    )
+    suggestions = _require_list(suggest.get("suggestions"), "BTCPay provenance suggestions")
+    document_id = str(document.get("id") or "")
+    document_link = _first_match(
+        suggestions,
+        "payment-request document to BTCPay invoice link",
+        lambda link: link.get("link_type") == "document_btcpay"
+        and link.get("document_id") == document_id
+        and link.get("payment_request_id") == payment_request_id,
+    )
+    payment_link = _first_match(
+        suggestions,
+        "payment-request BTCPay payment to transaction link",
+        lambda link: link.get("link_type") == "btcpay_payment_transaction"
+        and link.get("document_id") == document_id
+        and link.get("payment_request_id") == payment_request_id
+        and bool(link.get("transaction_id")),
+    )
+    reviewed = _require_mapping(
+        _run_kassiber_checked(
+            [
+                *common,
+                "btcpay",
+                "provenance",
+                "review",
+                "--workspace",
+                workspace,
+                "--profile",
+                profile,
+                "--link",
+                str(payment_link["id"]),
+                "--state",
+                "reviewed",
+                "--reconciliation-state",
+                "matched",
+                "--commercial-kind",
+                "income",
+                "--notes",
+                "Reviewed by BTCPay regtest reconciliation proof.",
+            ]
+        ),
+        "reviewed BTCPay provenance link",
+    )
+    if not reviewed.get("applied_to_transaction"):
+        raise RuntimeError(f"Reviewed BTCPay link did not apply pricing to the transaction: {reviewed!r}")
+
+    reviewed_links = _require_list(
+        _run_kassiber_checked(
+            [
+                *common,
+                "btcpay",
+                "provenance",
+                "links",
+                "--workspace",
+                workspace,
+                "--profile",
+                profile,
+                "--state",
+                "reviewed",
+                "--limit",
+                "100",
+            ]
+        ),
+        "reviewed BTCPay provenance links",
+    )
+    subledger = _require_list(
+        _run_kassiber_checked(
+            [
+                *common,
+                "reports",
+                "commercial-subledger",
+                "--workspace",
+                workspace,
+                "--profile",
+                profile,
+            ]
+        ),
+        "commercial subledger",
+    )
+    subledger_row = _first_match(
+        subledger,
+        "reviewed payment-request commercial subledger row",
+        lambda row: row.get("transaction_id") == payment_link.get("transaction_id")
+        and row.get("payment_request_id") == payment_request_id,
+    )
+    if subledger_row.get("pricing_source_kind") != "btcpay_payment":
+        raise RuntimeError(f"Subledger row did not use BTCPay payment pricing: {subledger_row!r}")
+    if subledger_row.get("commercial_kind") != "income":
+        raise RuntimeError(f"Subledger row did not classify reviewed payment as income: {subledger_row!r}")
+
+    return {
+        "document_id": document_id,
+        "document_external_ref": payment_request_id,
+        "document_link_id": document_link["id"],
+        "reviewed_link_id": reviewed["id"],
+        "reviewed_links": len(reviewed_links),
+        "suggested_links": len(suggestions),
+        "transaction_id": payment_link["transaction_id"],
+        "transaction_txid": payment_link.get("transaction_external_id") or "",
+        "invoice_id": subledger_row.get("invoice_id") or payment_request_invoice.get("invoice_id"),
+        "payment_request_id": payment_request_id,
+        "origin_kind": subledger_row.get("origin_kind") or "",
+        "origin_label": subledger_row.get("origin_label") or "",
+        "pricing_source_kind": subledger_row["pricing_source_kind"],
+        "fiat_currency": subledger_row.get("fiat_currency") or "",
+        "fiat_value_exact": subledger_row.get("fiat_value_exact") or "",
+        "commercial_kind": subledger_row["commercial_kind"],
+        "subledger_rows": len(subledger),
+    }
+
+
 def _exercise_kassiber_btcpay_sync(
     *,
     data_root: Path,
@@ -776,6 +983,7 @@ def _exercise_kassiber_btcpay_sync(
     payment_method_id: str,
     workspace: str,
     profile: str,
+    invoice_results: list[dict[str, Any]],
 ) -> dict[str, Any]:
     common = ["--data-root", str(data_root), "--machine"]
     wallet_sync = _run_kassiber_checked(
@@ -844,12 +1052,19 @@ def _exercise_kassiber_btcpay_sync(
             if isinstance(record, dict) and record.get("txid")
         }
     )
+    commercial_reconciliation = _exercise_btcpay_commercial_reconciliation(
+        data_root=data_root,
+        invoice_results=invoice_results,
+        workspace=workspace,
+        profile=profile,
+    )
     return {
         "wallet_sync": wallet_sync,
         "provenance_sync": provenance_sync,
         "provenance_payment_records": len(records) if isinstance(records, list) else None,
         "provenance_origin_kinds": origin_kinds,
         "provenance_payment_txids": payment_txids,
+        "commercial_reconciliation": commercial_reconciliation,
     }
 
 
@@ -929,6 +1144,7 @@ def main(argv: list[str] | None = None) -> int:
             payment_method_id=args.payment_method_id,
             workspace=args.workspace,
             profile=args.profile,
+            invoice_results=invoice_results,
         )
         btcpay_exercise = {
             "invoice_count": len(invoice_results),

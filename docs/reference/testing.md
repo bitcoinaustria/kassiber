@@ -132,12 +132,16 @@ create a disposable admin user, store, BTC on-chain payment method, and scoped
 API key. In the standalone `btcpay` lane it creates and pays a realistic
 BTCPay-origin mix: a direct Greenfield invoice, a duplicate-order adjustment,
 a point-of-sale sale, a two-transaction partial payment, a EUR-denominated
-checkout invoice, a payment-request invoice, and a crowdfund pledge. Each
+checkout invoice, a EUR-denominated payment-request invoice, and a crowdfund pledge. Each
 invoice receives a fresh BTCPay on-chain address, is paid from the regtest Core
 wallet, confirmed by a mined block, synced through BTCPay wallet history into a
 temporary Kassiber book, and reconciled through invoice/payment provenance. The
-seed JSON records the invoice ids, txids, scenarios, currencies, and origin
-kinds so failures can be replayed locally.
+standalone lane also creates a local commercial document keyed by the BTCPay
+payment-request id, runs `btcpay provenance suggest`, reviews the combined
+BTCPay-payment-to-wallet-transaction link as income, and checks that the
+commercial subledger uses `btcpay_payment` pricing. The seed JSON records the
+invoice ids, txids, scenarios, currencies, origin kinds, reviewed link id, and
+applied pricing proof so failures can be replayed locally.
 The persistent demo book starts the same BTCPay overlay by default:
 
 ```bash
