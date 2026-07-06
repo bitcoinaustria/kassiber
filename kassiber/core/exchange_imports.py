@@ -73,7 +73,7 @@ def _decimal(value: Any, default: str = "0") -> Decimal:
 
 def _asset(value: Any) -> str:
     text = normalize_asset_code(value)
-    if text in {"XXBT", "XBT"}:
+    if text in BTC_ASSETS:
         return "BTC"
     if text in LBTC_ASSETS:
         return "LBTC"
@@ -85,7 +85,7 @@ def _asset(value: Any) -> str:
 
 
 def _is_btc_asset(value: Any) -> bool:
-    return _asset(value) in {"BTC", "LBTC"}
+    return _asset(value) in BTC_ASSETS | {"LBTC"}
 
 
 def _is_fiat(value: Any) -> bool:
