@@ -14,6 +14,121 @@
     "derived": "Abgeleitet",
     "unknown": "Unbekannt"
   },
+  "severity": {
+    "info": "Info",
+    "warning": "Warnung",
+    "alert": "Alarm"
+  },
+  "question": {
+    "linkable": "Was ist verknüpfbar",
+    "infer": "Wer kann es ableiten",
+    "evidence": "Die Evidenz",
+    "future": "Was unbekannt ist oder sich bei einer künftigen Ausgabe verschlechtert",
+    "findings": "Befunde"
+  },
+  "score": {
+    "of": " / 100",
+    "local": "Lokal aus deinem Buch berechnet — keine Chain-Abfrage.",
+    "census": "Befunde nach Schweregrad",
+    "findings": "Befunde",
+    "waterfall": "Wie dieser Score entsteht",
+    "base": "Basis",
+    "result": "Score",
+    "coverage": "Herkunfts-Abdeckung",
+    "factor": {
+      "wallet_linkage": "Verknüpfte Wallets",
+      "transaction_leaks": "Transaktionen mit Lecks",
+      "alert": "Alarme",
+      "warning": "Warnungen",
+      "info": "Info"
+    }
+  },
+  "gradeHint": {
+    "A+": "Exzellent — kaum verknüpfbar",
+    "B": "Gut — geringe Exposure",
+    "C": "Mittel — spürbare Exposure",
+    "D": "Schlecht — erhebliche Exposure",
+    "F": "Kritisch — stark verknüpfbar"
+  },
+  "worstKind": {
+    "common_input": "Wallets durch gemeinsamen Input verknüpft",
+    "unknown_coverage": "Einige Coins konnten nicht geprüft werden",
+    "bounded_local_model": "Lokal nichts Stärkeres gefunden"
+  },
+  "adversaryTier": {
+    "passive_chain_watcher": "Alle, die die Blockchain beobachten",
+    "reviewed_kyc_source_funds_anchor_watcher": "Eine Börse, die deinen Ausweis geprüft hat",
+    "known_counterparty_hypothetical": "Jemand, den du bezahlt hast oder der dich bezahlt hat"
+  },
+  "assumption": {
+    "bitcoin_graph_facts_only": "Startet nur von öffentlichen Blockchain-Fakten, die bereits lokal vorliegen.",
+    "reviewed_anchor_starting_knowledge": "Startet von den lokal geprüften Herkunftsnachweisen (Anchors).",
+    "counterparty_starting_knowledge": "Startet von den lokal gekennzeichneten Gegenparteien."
+  },
+  "action": {
+    "reviewOrigins": "Coin-Herkunft prüfen"
+  },
+  "heuristics": {
+    "title": "Geprüfte Heuristiken",
+    "note": "Bildet den Heuristik-Satz von am-i-exposed ab. Kassiber berechnet die lokal ableitbare Teilmenge — keine Chain-Abfrage, keine Entitäts-Datenbank, keine Entropie-Engine.",
+    "status": {
+      "computed": "Geprüft",
+      "partial": "Teilweise",
+      "not_local": "Lokal nicht verfügbar"
+    }
+  },
+  "primary": {
+    "title": "Was du zuerst beheben solltest"
+  },
+  "finding": {
+    "empty": "Keine Befunde im lokalen Modell."
+  },
+  "reco": {
+    "sender_common_input": "Gib Coins aus verschiedenen Clustern nicht in einer Transaktion aus — ein gemeinsamer Input verknüpft sie.",
+    "common_input": "Gib Coins aus verschiedenen Clustern nicht in einer Transaktion aus — ein gemeinsamer Input verknüpft sie.",
+    "fee_fingerprint": "Eine auffällige Gebührenrate grenzt den Wallet-Kreis ein. Nutze übliche Gebührenraten.",
+    "op_return_output": "OP_RETURN-Daten sind öffentlich und dauerhaft. Vermeide identifizierende Metadaten.",
+    "change_output": "Wechselgeld kann die Wallet-Struktur verraten. Nutze gleiche Skripttypen und frische Adressen.",
+    "unknown_provenance": "Prüfe die Herkunft dieser Coins, damit ihre Provenienz lokal bekannt ist.",
+    "source_proximity_coverage_gaps": "Einige eigene Coins haben keine geprüfte Quellen-Nähe. Importiere oder prüfe ihre Historie.",
+    "coverage_degraded": "Die Analyse ist unvollständig — synchronisiere oder importiere fehlende Transaktionsdetails.",
+    "transaction_tell": "Prüfe die Inputs und Outputs dieser Transaktion auf Verknüpfung.",
+    "fallback": "Prüfe diesen Eintrag auf Privatsphäre-Exposure."
+  },
+  "linkage": {
+    "title": "Was ist verknüpfbar",
+    "observer": "Alle, die die Chain beobachten",
+    "edges": "verknüpft mit {{count}}",
+    "empty": "Keine Wallets zum Abbilden.",
+    "legendLinked": "Verknüpfbar",
+    "legendIsolated": "Isoliert"
+  },
+  "section": {
+    "wallets": "Verknüpfte Wallet-Gruppen",
+    "transactionTells": "Transaktions-Lecks",
+    "coins": "Coins",
+    "timeline": "Timeline",
+    "evidenceItems": "Evidenz",
+    "coverage": "Datenvollständigkeit",
+    "records": "Alle Details",
+    "psbt": "Ausgabe vor dem Senden prüfen (PSBT)"
+  },
+  "flow": {
+    "view": "Fluss ansehen",
+    "title": "Transaktionsfluss",
+    "subtitle": "Lokaler Flussgraph — nur hinweisend, verlässt dieses Gerät nie."
+  },
+  "tellKind": {
+    "sender_common_input": "Gemeinsamer Input",
+    "common_input": "Gemeinsamer Input",
+    "fee_fingerprint": "Gebühren-Fingerabdruck",
+    "op_return_output": "OP_RETURN-Ausgabe",
+    "change_output": "Wechselgeld-Ausgabe",
+    "unknown_provenance": "Unbekannte Coin-Herkunft",
+    "known_source_proximity": "Bekannte Coin-Herkunft",
+    "source_proximity_coverage_gaps": "Unbekannte Coin-Herkünfte",
+    "coverage_degraded": "Unvollständige Analyse"
+  },
   "metric": {
     "linkageScore": "Linkage-Score",
     "clusters": "Verknüpfbare Cluster",
@@ -43,19 +158,19 @@
     "title": "Exposure-Zusammenfassung"
   },
   "coverage": {
-    "title": "Coverage",
-    "known": "Coins mit bekannter Quellen-Nähe",
-    "unknown": "Coins mit unbekannter Quellen-Nähe",
-    "degraded": "Eingeschränkter Zustand sichtbar"
+    "title": "Datenvollständigkeit",
+    "known": "Coins mit bekannter Herkunft",
+    "unknown": "Coins mit unbekannter Herkunft",
+    "degraded": "Einige Coins konnten nicht analysiert werden"
   },
   "unknowns": {
     "title": "Unbekannte und eingeschränkte Zustände",
     "empty": "Das reduzierte lokale Modell hat keine unbekannte Coverage-Zeile ausgegeben."
   },
   "adversary": {
-    "unknown": "Unbekannter Gegner",
-    "clusters": "Cluster",
-    "wallets": "Wallets"
+    "unknown": "Unbekannter Beobachter",
+    "clusters": "Verknüpfte Gruppen",
+    "wallets": "Gesehene Wallets"
   },
   "table": {
     "wallet": "Wallet",
@@ -63,12 +178,12 @@
     "coin": "Coin",
     "coins": "Coins",
     "amount": "Betrag",
-    "edges": "Kanten",
-    "tells": "Merkmale",
-    "kinds": "Arten",
+    "edges": "Verknüpfungen",
+    "tells": "Lecks",
+    "kinds": "Leck-Art",
     "penalties": "Penalties",
     "role": "Rolle",
-    "proximity": "Nähe",
+    "proximity": "Herkunft",
     "event": "Ereignis",
     "category": "Kategorie",
     "detail": "Detail",
@@ -83,15 +198,20 @@
   },
   "psbt": {
     "title": "PSBT und What-if",
+    "intent": "Füge eine unsignierte Entwurfs-Transaktion ein, um zu sehen, was sie verknüpfen würde — bevor du sie sendest.",
     "placeholder": "Base64-PSBT für lokale Pre-Broadcast-Analyse einfügen",
     "inputAria": "PSBT-Text",
-    "analyze": "Lokal analysieren",
+    "analyze": "Diese Ausgabe prüfen",
     "whatIf": "What-if-Szenarien",
     "empty": "Noch keine PSBT-Analyse.",
     "metric": {
-      "merge": "Cluster-Merges",
-      "unknown": "Unbekannte Inputs",
-      "blast": "Blast Radius"
+      "merge": "Neu verknüpfte Wallet-Gruppen",
+      "unknown": "Inputs mit unbekannter Herkunft",
+      "blast": "Wallets, die dies offenlegen würde"
+    },
+    "scenario": {
+      "fresh_receive_output": "Wenn du auf eine frische Adresse empfangen hättest",
+      "hypothetical_input_consolidation": "Wenn du diese Inputs konsolidiert hättest"
     }
   },
   "detail": {

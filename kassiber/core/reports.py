@@ -1311,6 +1311,106 @@ def _privacy_mirror_evidence_drilldowns(graph_payload: Mapping[str, Any]) -> lis
     return drilldowns[:250]
 
 
+_PRIVACY_SCORE_LINKAGE_WEIGHT = 0.55
+_PRIVACY_SCORE_LEAK_WEIGHT = 0.45
+
+# Per-transaction leak weights, mirroring am-i-exposed's severity-graded
+# heuristics for the tell kinds Kassiber actually emits into `tell_kinds`
+# (verified in privacy_linkage.py `_load_transaction_tells`). Ownership-proving
+# tells weigh most; wallet-software fingerprints and embedded metadata weigh
+# little. Protective heuristics (CoinJoin, Taproot, entropy) are never leaks and
+# never appear here. Unmapped/new tells get a small non-zero floor.
+_PRIVACY_LEAK_TELL_WEIGHTS = {
+    "sender_common_input": 1.0,  # mirrors h3: strongest same-owner link
+    "fee_fingerprint": 0.3,  # mirrors h6: weak wallet-software fingerprint
+    "sender_rbf": 0.3,  # mirrors h11: RBF wallet-fingerprint signal
+    "op_return_output": 0.25,  # mirrors h7: embedded-metadata intent, not a link
+}
+_PRIVACY_LEAK_TELL_FLOOR = 0.2
+
+
+def _tx_leak_weight(row: Mapping[str, Any]) -> float:
+    kinds = row.get("tell_kinds") or []
+    if not kinds:
+        return 0.0
+    return max(_PRIVACY_LEAK_TELL_WEIGHTS.get(str(kind), _PRIVACY_LEAK_TELL_FLOOR) for kind in kinds)
+
+
+def _privacy_mirror_score(
+    wallet_rows: Sequence[Mapping[str, Any]],
+    transaction_rows: Sequence[Mapping[str, Any]],
+    hygiene_summary: Mapping[str, Any],
+    coverage_known: int,
+    coverage_unknown: int,
+) -> dict[str, Any]:
+    """Grounded 0-100 privacy score (higher = more private).
+
+    Derived from real local quantities via a fixed, documented formula rather
+    than an arbitrary base. Two exposure fractions drive it:
+
+    - wallet linkage: the share of wallets that can be tied to another wallet
+      (a linked wallet has at least one common-input/linkage edge);
+    - transaction leaks: the share of transactions that emit a linking tell.
+
+    The score is ``100 - 100*(0.55*linkage_fraction + 0.45*leak_fraction)``.
+    Uncertainty (coins whose origin is unknown) deliberately does NOT lower the
+    score: it is reported separately as ``coverage_ratio`` so a confident score
+    cannot silently hide missing data. Every factor ships its own counts so the
+    number is fully explainable in the UI rather than opaque.
+    """
+
+    wallet_count = len(wallet_rows)
+    linked_wallets = sum(
+        1 for row in wallet_rows if int(row.get("linkage_edge_count") or 0) > 0
+    )
+    leaking_transactions = sum(
+        1 for row in transaction_rows if int(row.get("tell_count") or 0) > 0
+    )
+    # Weight each transaction's leak by its strongest tell kind (MAX, not sum)
+    # rather than a flat 1.0. MAX because a transaction's tells are correlated
+    # (a multi-input send usually also carries a fee/OP_RETURN tell), so summing
+    # would double-penalise one economic event; MAX = "this tx is at least this
+    # linkable". This mirrors am-i-exposed's severity ordering locally.
+    weighted_leak_sum = sum(_tx_leak_weight(row) for row in transaction_rows)
+    active_transactions = int(hygiene_summary.get("active_transaction_count") or 0)
+    transaction_total = max(active_transactions, leaking_transactions)
+
+    linkage_fraction = (linked_wallets / wallet_count) if wallet_count else 0.0
+    leak_fraction = (
+        (weighted_leak_sum / transaction_total) if transaction_total else 0.0
+    )
+
+    linkage_points = round(100 * _PRIVACY_SCORE_LINKAGE_WEIGHT * linkage_fraction)
+    leak_points = round(100 * _PRIVACY_SCORE_LEAK_WEIGHT * leak_fraction)
+    value = max(0, min(100, 100 - linkage_points - leak_points))
+
+    known_total = coverage_known + coverage_unknown
+    coverage_ratio = (coverage_known / known_total) if known_total else 1.0
+
+    return {
+        "value": value,
+        "base": 100,
+        "evidence_level": "derived",
+        "coverage_ratio": round(coverage_ratio, 3),
+        "factors": [
+            {
+                "key": "wallet_linkage",
+                "linked": linked_wallets,
+                "total": wallet_count,
+                "weight": _PRIVACY_SCORE_LINKAGE_WEIGHT,
+                "points": -linkage_points,
+            },
+            {
+                "key": "transaction_leaks",
+                "leaking": leaking_transactions,
+                "total": transaction_total,
+                "weight": _PRIVACY_SCORE_LEAK_WEIGHT,
+                "points": -leak_points,
+            },
+        ],
+    }
+
+
 def report_privacy_mirror(
     conn: sqlite3.Connection,
     workspace_ref,
@@ -1337,6 +1437,7 @@ def report_privacy_mirror(
     graph_summary = graph_payload.get("summary") if isinstance(graph_payload.get("summary"), Mapping) else {}
     hygiene_summary = hygiene_payload.get("summary") if isinstance(hygiene_payload.get("summary"), Mapping) else {}
     source_unknown = int(graph_summary.get("source_proximity_unknown_coin_count") or 0)
+    source_known = int(graph_summary.get("source_proximity_known_coin_count") or 0)
     summary = {
         "evidence_level": _mirror_evidence_level(
             [
@@ -1344,6 +1445,13 @@ def report_privacy_mirror(
                 worst_risk,
                 *unknowns,
             ]
+        ),
+        "privacy_score": _privacy_mirror_score(
+            wallet_rows,
+            transaction_rows,
+            hygiene_summary,
+            source_known,
+            source_unknown,
         ),
         "linkage_score": int(graph_summary.get("linkage_score") or 0),
         "linkable_cluster_count": int(graph_summary.get("observer_entity_count") or 0),
