@@ -1063,7 +1063,7 @@ class DaemonAiTestConnectionTest(unittest.TestCase):
             freshness_stop_event=threading.Event(),
         )
 
-    def test_connection_rejects_transient_api_key_before_save(self):
+    def test_connection_accepts_transient_api_key_before_save(self):
         captured: dict[str, object] = {}
 
         def fake_client_factory(**kwargs):
@@ -1077,22 +1077,24 @@ class DaemonAiTestConnectionTest(unittest.TestCase):
                     "kassiber.daemon.ai_client_for_locator",
                     side_effect=fake_client_factory,
                 ):
-                    with self.assertRaises(AppError) as error:
-                        daemon_runtime.handle_request(
-                            self._ctx(conn),
-                            {
-                                "kind": "ai.test_connection",
-                                "request_id": "test-1",
-                                "args": {
-                                    "base_url": "http://127.0.0.1:8000/v1",
-                                    "api_key": "sk-unsaved-local",
-                                },
+                    envelope, should_shutdown = daemon_runtime.handle_request(
+                        self._ctx(conn),
+                        {
+                            "kind": "ai.test_connection",
+                            "request_id": "test-1",
+                            "args": {
+                                "base_url": "http://127.0.0.1:8000/v1",
+                                "api_key": "sk-unsaved-local",
                             },
-                            out=None,
-                        )
-                self.assertEqual(error.exception.code, "validation")
-                self.assertIn("does not accept api_key", str(error.exception))
-                self.assertEqual(captured, {})
+                        },
+                        out=None,
+                    )
+                self.assertFalse(should_shutdown)
+                self.assertEqual(envelope["kind"], "ai.test_connection")
+                self.assertEqual(envelope["data"]["model_count"], 1)
+                self.assertEqual(captured["base_url"], "http://127.0.0.1:8000/v1")
+                self.assertEqual(captured["api_key"], "sk-unsaved-local")
+                self.assertEqual(captured["timeout"], 10.0)
             finally:
                 conn.close()
 
