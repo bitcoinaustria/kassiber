@@ -981,6 +981,115 @@ class ChatReasoningPassthroughTest(unittest.TestCase):
         self.assertEqual(result["reasoning"], "thinking out loud")
         self.assertEqual(result["finish_reason"], "stop")
 
+    def test_chat_normalizes_reasoning_content_when_provider_emits_it(self):
+        payload = (
+            b'{"choices":[{"message":{"role":"assistant","content":"hi",'
+            b'"reasoning_content":"thinking from omlx"},"finish_reason":"stop"}]}'
+        )
+        with patch(
+            "urllib.request.urlopen",
+            return_value=self._FakeResponse(payload),
+        ):
+            client = OpenAICompatClient(base_url="http://x/v1")
+            result = client.chat(
+                messages=[{"role": "user", "content": "x"}], model="m"
+            )
+        self.assertEqual(result["content"], "hi")
+        self.assertEqual(result["reasoning"], "thinking from omlx")
+
+    def test_stream_chat_normalizes_reasoning_content_delta(self):
+        class _StreamResponse:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return False
+
+            def __iter__(self):
+                yield (
+                    b'data: {"choices":[{"delta":{"reasoning_content":'
+                    b'"thinking from omlx"},"finish_reason":null}]}\n'
+                )
+                yield b"\n"
+                yield (
+                    b'data: {"choices":[{"delta":{"content":"hi"},'
+                    b'"finish_reason":"stop"}]}\n'
+                )
+                yield b"\n"
+                yield b"data: [DONE]\n"
+                yield b"\n"
+
+        with patch("urllib.request.urlopen", return_value=_StreamResponse()):
+            client = OpenAICompatClient(base_url="http://x/v1")
+            chunks = list(
+                client.stream_chat(
+                    messages=[{"role": "user", "content": "x"}], model="m"
+                )
+            )
+        self.assertEqual(chunks[0].delta["reasoning"], "thinking from omlx")
+        self.assertEqual(chunks[1].delta["content"], "hi")
+        self.assertEqual(chunks[1].finish_reason, "stop")
+
+    def test_stream_chat_replaces_empty_reasoning_with_reasoning_content(self):
+        class _StreamResponse:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return False
+
+            def __iter__(self):
+                yield (
+                    b'data: {"choices":[{"delta":{"reasoning":"",'
+                    b'"reasoning_content":"thinking from omlx"},'
+                    b'"finish_reason":null}]}\n'
+                )
+                yield b"\n"
+                yield b"data: [DONE]\n"
+                yield b"\n"
+
+        with patch("urllib.request.urlopen", return_value=_StreamResponse()):
+            client = OpenAICompatClient(base_url="http://x/v1")
+            chunks = list(
+                client.stream_chat(
+                    messages=[{"role": "user", "content": "x"}], model="m"
+                )
+            )
+        self.assertEqual(chunks[0].delta["reasoning"], "thinking from omlx")
+
+    def test_stream_chat_keeps_structured_reasoning_delta(self):
+        class _StreamResponse:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return False
+
+            def __iter__(self):
+                yield (
+                    b'data: {"choices":[{"delta":{"reasoning":'
+                    b'"thinking from ollama"},"finish_reason":null}]}\n'
+                )
+                yield b"\n"
+                yield (
+                    b'data: {"choices":[{"delta":{"content":"hi"},'
+                    b'"finish_reason":"stop"}]}\n'
+                )
+                yield b"\n"
+                yield b"data: [DONE]\n"
+                yield b"\n"
+
+        with patch("urllib.request.urlopen", return_value=_StreamResponse()):
+            client = OpenAICompatClient(base_url="http://x/v1")
+            chunks = list(
+                client.stream_chat(
+                    messages=[{"role": "user", "content": "x"}], model="m"
+                )
+            )
+        self.assertEqual(chunks[0].delta["reasoning"], "thinking from ollama")
+        self.assertEqual(chunks[1].delta["content"], "hi")
+        self.assertEqual(chunks[1].finish_reason, "stop")
+
     def test_chat_omits_reasoning_when_provider_does_not_emit_it(self):
         payload = (
             b'{"choices":[{"message":{"role":"assistant","content":"plain"},'
