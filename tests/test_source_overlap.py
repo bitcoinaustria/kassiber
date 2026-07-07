@@ -6,9 +6,10 @@ from types import SimpleNamespace
 
 from embit import bip32, bip39
 
+from kassiber.cli.handlers import _repair_journal_source_overlaps, process_journals
 from kassiber.core import source_overlap
 from kassiber.core.sync import WalletBackendFetch, WalletSyncHooks, WalletSyncState, sync_wallet_from_backend
-from kassiber.core.ui_snapshot import build_report_blockers_snapshot
+from kassiber.core.ui_snapshot import build_overview_snapshot, build_report_blockers_snapshot
 from kassiber.core.wallets import normalize_addresses
 from kassiber.db import open_db, set_setting
 from kassiber.fingerprints import make_transaction_fingerprint
@@ -128,17 +129,36 @@ def _utxo(conn, wallet_id, address, txid="aa"):
     )
 
 
-def _tx(conn, tx_id, wallet_id, external_id):
+def _tx(
+    conn,
+    tx_id,
+    wallet_id,
+    external_id,
+    *,
+    direction="inbound",
+    amount_btc="0.01",
+    script_pubkey: str | None = None,
+):
     now = "2026-01-01T00:00:00Z"
-    amount = btc_to_msat("0.01")
+    amount = btc_to_msat(amount_btc)
+    amount_sat = amount // 1000
     fee = 0
+    script_pubkey = script_pubkey if script_pubkey is not None else _script(ADDR_A)
+    raw_payload = {"txid": external_id, "vin": [], "vout": []}
+    if script_pubkey:
+        if direction == "outbound":
+            raw_payload["vin"] = [
+                {"prevout": {"scriptpubkey": script_pubkey, "value": amount_sat}}
+            ]
+        else:
+            raw_payload["vout"] = [{"scriptpubkey": script_pubkey, "value": amount_sat}]
     fingerprint = make_transaction_fingerprint(
         wallet_id,
         external_id,
         now,
-        "inbound",
+        direction,
         "BTC",
-        "0.01",
+        amount_btc,
         "0",
     )
     conn.execute(
@@ -159,7 +179,7 @@ def _tx(conn, tx_id, wallet_id, external_id):
             fingerprint,
             now,
             now,
-            "inbound",
+            direction,
             "BTC",
             amount,
             fee,
@@ -172,7 +192,7 @@ def _tx(conn, tx_id, wallet_id, external_id):
             None,
             None,
             0,
-            "{}",
+            json.dumps(raw_payload, sort_keys=True),
             now,
         ),
     )
@@ -637,6 +657,7 @@ class SourceOverlapTests(unittest.TestCase):
                 blockers = build_report_blockers_snapshot(conn)
                 source_blocker = next(item for item in blockers["blockers"] if item["id"] == "source_overlap")
                 preview = source_blocker["repair_preview"]
+                self.assertEqual(source_blocker["daemon_kind"], "ui.journals.process")
                 self.assertEqual(preview["recommended_exclusions"], ["tx-addr"])
                 self.assertIn("Preview only", preview["repair_policy"])
                 overlap = source_blocker["overlap"]["overlaps"][0]
@@ -656,6 +677,250 @@ class SourceOverlapTests(unittest.TestCase):
                         }
                     ],
                 )
+            finally:
+                conn.close()
+
+    def test_journal_processing_repairs_address_list_overlap_before_tax_engine(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-source-overlap-") as tmp:
+            conn = open_db(Path(tmp) / "data")
+            try:
+                _seed_book(conn)
+                config = _descriptor_config(gap_limit=2)
+                target = _descriptor_target(config)
+                self.assertEqual(target.address, ADDR_A)
+                _wallet(conn, "desc", "Descriptor", "descriptor", config)
+                _wallet(
+                    conn,
+                    "addr",
+                    "Address list",
+                    "address",
+                    {"addresses": [ADDR_A], "chain": "bitcoin", "network": "mainnet"},
+                )
+                _tx(conn, "tx-desc", "desc", "cc" * 32)
+                _tx(conn, "tx-addr", "addr", "cc" * 32)
+                conn.commit()
+
+                processed = process_journals(conn, None, None)
+
+                repair = processed["source_overlap_repair"]
+                self.assertEqual(repair["addresses_removed"], 1)
+                self.assertEqual(repair["duplicates_excluded"], 1)
+                self.assertEqual(repair["remaining_overlap_count"], 0)
+                self.assertEqual(repair["excluded_records"][0]["transaction_id"], "tx-addr")
+                self.assertTrue(repair["excluded_records"][0]["history_event_id"])
+
+                addr_config = json.loads(
+                    conn.execute(
+                        "SELECT config_json FROM wallets WHERE id = 'addr'"
+                    ).fetchone()["config_json"]
+                )
+                self.assertEqual(addr_config["addresses"], [])
+                self.assertTrue(addr_config["deprecated"])
+                self.assertEqual(
+                    conn.execute(
+                        "SELECT excluded FROM transactions WHERE id = 'tx-addr'"
+                    ).fetchone()["excluded"],
+                    1,
+                )
+                self.assertGreater(
+                    conn.execute("SELECT COUNT(*) FROM journal_entries").fetchone()[0],
+                    0,
+                )
+                blockers = build_report_blockers_snapshot(conn)
+                self.assertNotIn(
+                    "source_overlap",
+                    [item["id"] for item in blockers["blockers"]],
+                )
+            finally:
+                conn.close()
+
+    def test_journal_processing_repairs_more_than_default_preview_limit(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-source-overlap-") as tmp:
+            conn = open_db(Path(tmp) / "data")
+            try:
+                _seed_book(conn)
+                config = _descriptor_config(gap_limit=2)
+                target = _descriptor_target(config)
+                self.assertEqual(target.address, ADDR_A)
+                _wallet(conn, "desc", "Descriptor", "descriptor", config)
+                _wallet(
+                    conn,
+                    "addr",
+                    "Address list",
+                    "address",
+                    {"addresses": [ADDR_A], "chain": "bitcoin", "network": "mainnet"},
+                )
+                for index in range(25):
+                    external_id = f"{index + 1:064x}"
+                    _tx(conn, f"tx-desc-{index}", "desc", external_id)
+                    _tx(conn, f"tx-addr-{index}", "addr", external_id.upper())
+                conn.commit()
+
+                processed = process_journals(conn, None, None)
+
+                repair = processed["source_overlap_repair"]
+                self.assertEqual(repair["duplicates_excluded"], 25)
+                self.assertEqual(repair["addresses_removed"], 1)
+                self.assertEqual(repair["remaining_overlap_count"], 0)
+                self.assertNotIn("source_overlap_warning", processed)
+                self.assertEqual(
+                    conn.execute(
+                        "SELECT COUNT(*) FROM transactions WHERE wallet_id = 'addr' AND excluded = 1"
+                    ).fetchone()[0],
+                    25,
+                )
+            finally:
+                conn.close()
+
+    def test_journal_overlap_repair_skips_paired_duplicates_without_trimming(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-source-overlap-") as tmp:
+            conn = open_db(Path(tmp) / "data")
+            try:
+                profile = _seed_book(conn)
+                config = _descriptor_config(gap_limit=2)
+                target = _descriptor_target(config)
+                self.assertEqual(target.address, ADDR_A)
+                _wallet(conn, "desc", "Descriptor", "descriptor", config)
+                _wallet(
+                    conn,
+                    "addr",
+                    "Address list",
+                    "address",
+                    {"addresses": [ADDR_A], "chain": "bitcoin", "network": "mainnet"},
+                )
+                _tx(conn, "tx-desc", "desc", "cc" * 32)
+                _tx(conn, "tx-addr", "addr", "cc" * 32)
+                conn.execute(
+                    """
+                    INSERT INTO transaction_pairs(
+                        id, workspace_id, profile_id, out_transaction_id,
+                        in_transaction_id, created_at
+                    ) VALUES('pair-1', 'ws', 'pf', 'tx-addr', 'tx-desc', ?)
+                    """,
+                    ("2026-01-01T00:00:00Z",),
+                )
+                conn.commit()
+
+                repair = _repair_journal_source_overlaps(conn, profile)
+
+                self.assertEqual(repair["duplicates_excluded"], 0)
+                self.assertEqual(repair["addresses_removed"], 0)
+                self.assertTrue(repair["address_list_trim_skipped"])
+                self.assertEqual(repair["skipped_records"][0]["transaction_id"], "tx-addr")
+                self.assertEqual(repair["remaining_overlap_count"], 1)
+                config_after = json.loads(
+                    conn.execute(
+                        "SELECT config_json FROM wallets WHERE id = 'addr'"
+                    ).fetchone()["config_json"]
+                )
+                self.assertEqual(config_after["addresses"], [ADDR_A])
+                self.assertEqual(
+                    conn.execute(
+                        "SELECT excluded FROM transactions WHERE id = 'tx-addr'"
+                    ).fetchone()["excluded"],
+                    0,
+                )
+            finally:
+                conn.close()
+
+    def test_journal_overlap_repair_requires_raw_overlap_script_evidence(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-source-overlap-") as tmp:
+            conn = open_db(Path(tmp) / "data")
+            try:
+                profile = _seed_book(conn)
+                config = _descriptor_config(gap_limit=2)
+                target = _descriptor_target(config)
+                self.assertEqual(target.address, ADDR_A)
+                _wallet(conn, "desc", "Descriptor", "descriptor", config)
+                _wallet(
+                    conn,
+                    "addr",
+                    "Address list",
+                    "address",
+                    {"addresses": [ADDR_A], "chain": "bitcoin", "network": "mainnet"},
+                )
+                # Same txid, amount, direction, and asset in overlapping wallet ids,
+                # but this row evidence touches a different output. It must stay
+                # preview-only instead of being auto-excluded before journals.
+                _tx(conn, "tx-desc", "desc", "dd" * 32, script_pubkey=_script(ADDR_B))
+                _tx(conn, "tx-addr", "addr", "dd" * 32, script_pubkey=_script(ADDR_B))
+                conn.commit()
+
+                repair = _repair_journal_source_overlaps(conn, profile)
+
+                self.assertEqual(repair["duplicates_excluded"], 0)
+                self.assertEqual(repair["addresses_removed"], 0)
+                self.assertTrue(repair["address_list_trim_skipped"])
+                self.assertEqual(repair["remaining_overlap_count"], 1)
+                self.assertEqual(
+                    conn.execute(
+                        "SELECT COUNT(*) FROM transactions WHERE excluded = 1"
+                    ).fetchone()[0],
+                    0,
+                )
+            finally:
+                conn.close()
+
+    def test_journal_processing_keeps_unrepairable_overlap_advisory(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-source-overlap-") as tmp:
+            conn = open_db(Path(tmp) / "data")
+            try:
+                _seed_book(conn)
+                config = _descriptor_config(gap_limit=2)
+                _wallet(conn, "desc-a", "Descriptor A", "descriptor", config)
+                _wallet(conn, "desc-b", "Descriptor B", "descriptor", config)
+                _tx(conn, "tx-desc", "desc-a", "dd" * 32)
+                conn.commit()
+
+                processed = process_journals(conn, None, None)
+
+                warning = processed["source_overlap_warning"]
+                self.assertGreaterEqual(warning["overlap_count"], 1)
+                self.assertGreater(
+                    conn.execute("SELECT COUNT(*) FROM journal_entries").fetchone()[0],
+                    0,
+                )
+            finally:
+                conn.close()
+
+    def test_overview_chain_balance_dedupes_duplicate_outpoints_in_aggregate(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-source-overlap-") as tmp:
+            conn = open_db(Path(tmp) / "data")
+            try:
+                _seed_book(conn)
+                _wallet(
+                    conn,
+                    "w1",
+                    "Wallet One",
+                    "address",
+                    {"addresses": [ADDR_A], "chain": "bitcoin", "network": "mainnet"},
+                )
+                _wallet(
+                    conn,
+                    "w2",
+                    "Wallet Two",
+                    "address",
+                    {"addresses": [ADDR_A], "chain": "bitcoin", "network": "mainnet"},
+                )
+                _utxo(conn, "w1", ADDR_A, txid="aa")
+                _utxo(conn, "w2", ADDR_A, txid="aa")
+                _tx(conn, "tx-w1", "w1", "aa" * 32)
+                _tx(conn, "tx-w2", "w2", "aa" * 32)
+                conn.commit()
+
+                snapshot = build_overview_snapshot(conn)
+
+                self.assertAlmostEqual(snapshot["fiat"]["eurBalance"], 500.0)
+                self.assertAlmostEqual(
+                    snapshot["fiat"]["chainDuplicateOutpointAdjustmentBtc"],
+                    0.01,
+                )
+                balances = {
+                    row["id"]: row["balance"]
+                    for row in snapshot["connections"]
+                }
+                self.assertAlmostEqual(balances["w1"], 0.01)
+                self.assertAlmostEqual(balances["w2"], 0.01)
             finally:
                 conn.close()
 

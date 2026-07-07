@@ -9,7 +9,12 @@ from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Any
 
-from ..backends import backend_value, redact_backend_for_output
+from ..backends import (
+    DEFAULT_BACKEND_SETTING,
+    backend_value,
+    redact_backend_for_output,
+)
+from ..db import get_setting
 from ..errors import AppError
 from ..msat import dec, msat_to_btc
 from ..time_utils import _iso_z, _parse_iso_datetime
@@ -48,6 +53,7 @@ from .wallets import (
 
 MAX_UI_LIST_LIMIT = 500
 MAX_UI_PREVIEW_LIMIT = 100
+DISPLAY_BALANCE_ASSETS = {"BTC", "LBTC", "L-BTC"}
 _UI_TRANSACTION_SORT_COLUMNS = {
     "occurred-at": "t.occurred_at",
     "amount": "t.amount",
@@ -1277,10 +1283,162 @@ def _wallet_balances(
     return _transaction_wallet_balances(conn, profile_id)
 
 
+def _db_backend_for_wallet_balance(
+    conn: sqlite3.Connection,
+    backend_name: str,
+) -> dict[str, Any] | None:
+    if not backend_name:
+        return None
+    row = conn.execute(
+        """
+        SELECT name, kind, chain, network, batch_size, timeout, config_json
+        FROM backends
+        WHERE name = ?
+        """,
+        (backend_name,),
+    ).fetchone()
+    if row is None:
+        return None
+    backend = {
+        "name": row["name"],
+        "kind": row["kind"],
+        "chain": row["chain"],
+        "network": row["network"],
+        "batch_size": row["batch_size"],
+        "timeout": row["timeout"],
+    }
+    backend.update(_json_config(row["config_json"]))
+    return backend
+
+
+def _chain_balance_for_wallet(
+    conn: sqlite3.Connection,
+    row: sqlite3.Row,
+    config: dict[str, Any],
+    default_backend: str | None,
+) -> dict[str, Any] | None:
+    backend_summary = _wallet_backend_summary(row["kind"], config, default_backend)
+    sync_mode = backend_summary["sync_mode"]
+    if (
+        _string_or_empty(config.get("source_format")) != "wasabi_bundle"
+        and sync_mode
+        not in {"backend_descriptor", "backend_addresses", "backend_silent_payment"}
+    ):
+        return None
+    backend = _db_backend_for_wallet_balance(conn, backend_summary["name"])
+    source_filter = _wallet_utxo_source_filter(config, backend_summary, backend)
+    inventory_summary = core_output_inventory.wallet_output_inventory_summary(
+        conn,
+        row["id"],
+        **source_filter,
+    )
+    if not inventory_summary["last_seen_at"]:
+        return None
+    totals = core_output_inventory.wallet_output_inventory_totals(
+        conn,
+        row["id"],
+        **source_filter,
+    )
+    balance = sum(
+        float(total.get("amount") or 0)
+        for total in totals
+        if str(total.get("asset") or "").upper() in DISPLAY_BALANCE_ASSETS
+    )
+    return {
+        "balance": balance,
+        "lastSeenAt": inventory_summary["last_seen_at"],
+        "activeCount": inventory_summary["active_count"],
+    }
+
+
+def _display_wallet_balances(
+    conn: sqlite3.Connection,
+    profile_id: str,
+    book_balances: dict[str, float],
+    *,
+    fallback_source: str,
+) -> dict[str, dict[str, Any]]:
+    rows = conn.execute(
+        """
+        SELECT id, kind, config_json
+        FROM wallets
+        WHERE profile_id = ?
+        """,
+        (profile_id,),
+    ).fetchall()
+    default_backend = (
+        _string_or_empty(get_setting(conn, DEFAULT_BACKEND_SETTING)) or None
+    )
+    balances: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        wallet_id = str(row["id"])
+        book_balance = book_balances.get(wallet_id, 0.0)
+        config = _json_config(row["config_json"])
+        chain_balance = _chain_balance_for_wallet(conn, row, config, default_backend)
+        if chain_balance is None:
+            balances[wallet_id] = {
+                "balance": book_balance,
+                "balanceSource": fallback_source,
+                "bookBalance": book_balance,
+                "chainBalance": None,
+                "chainLastSeenAt": None,
+                "chainActiveCount": None,
+            }
+            continue
+        balances[wallet_id] = {
+            "balance": chain_balance["balance"],
+            "balanceSource": "chain",
+            "bookBalance": book_balance,
+            "chainBalance": chain_balance["balance"],
+            "chainLastSeenAt": chain_balance["lastSeenAt"],
+            "chainActiveCount": chain_balance["activeCount"],
+        }
+    return balances
+
+
+def _chain_duplicate_outpoint_adjustment_btc(
+    conn: sqlite3.Connection,
+    profile_id: str,
+    display_balance_info: dict[str, dict[str, Any]],
+) -> float:
+    chain_wallet_ids = sorted(
+        wallet_id
+        for wallet_id, info in display_balance_info.items()
+        if info.get("balanceSource") == "chain"
+    )
+    if len(chain_wallet_ids) < 2:
+        return 0.0
+    wallet_placeholders = ", ".join("?" for _ in chain_wallet_ids)
+    asset_placeholders = ", ".join("?" for _ in DISPLAY_BALANCE_ASSETS)
+    rows = conn.execute(
+        f"""
+        SELECT
+            UPPER(asset) AS asset,
+            COALESCE(NULLIF(outpoint, ''), lower(txid) || ':' || vout) AS outpoint_key,
+            SUM(amount) AS total_msat,
+            MAX(amount) AS kept_msat,
+            COUNT(DISTINCT wallet_id) AS wallet_count
+        FROM wallet_utxos
+        WHERE profile_id = ?
+          AND wallet_id IN ({wallet_placeholders})
+          AND spent_at IS NULL
+          AND UPPER(asset) IN ({asset_placeholders})
+        GROUP BY UPPER(asset), outpoint_key
+        HAVING COUNT(DISTINCT wallet_id) > 1
+        """,
+        (profile_id, *chain_wallet_ids, *sorted(DISPLAY_BALANCE_ASSETS)),
+    ).fetchall()
+    duplicate_msat = sum(
+        max(0, int(row["total_msat"] or 0) - int(row["kept_msat"] or 0))
+        for row in rows
+    )
+    return float(msat_to_btc(duplicate_msat))
+
+
 def _connections(
     conn: sqlite3.Connection,
     profile_id: str,
-    balances: dict[str, float],
+    balances: dict[str, dict[str, Any]],
 ) -> list[dict[str, Any]]:
     rows = conn.execute(
         """
@@ -1327,7 +1485,12 @@ def _connections(
             ),
             "lastSyncAt": last_synced_at or None,
             "lastTransactionAt": row["last_tx_at"],
-            "balance": balances.get(row["id"], 0.0),
+            "balance": balances.get(row["id"], {}).get("balance", 0.0),
+            "balanceSource": balances.get(row["id"], {}).get("balanceSource", "books"),
+            "bookBalance": balances.get(row["id"], {}).get("bookBalance", 0.0),
+            "chainBalance": balances.get(row["id"], {}).get("chainBalance"),
+            "chainLastSeenAt": balances.get(row["id"], {}).get("chainLastSeenAt"),
+            "chainActiveCount": balances.get(row["id"], {}).get("chainActiveCount"),
             "status": "synced" if tx_count else "idle",
             "transactionCount": tx_count,
             "syncMode": backend_summary["sync_mode"],
@@ -2305,8 +2468,12 @@ def _fiat_snapshot(
     fiat_currency: str,
     fiat_rate: float,
     balances: dict[str, float],
+    *,
+    balance_total: float | None = None,
+    chain_duplicate_adjustment_btc: float = 0.0,
 ) -> dict[str, Any]:
-    market_value = sum(balances.values()) * fiat_rate
+    market_balance = sum(balances.values()) if balance_total is None else balance_total
+    market_value = market_balance * fiat_rate
     realized_row = conn.execute(
         """
         SELECT SUM(COALESCE(gain_loss, 0)) AS gain_loss
@@ -2318,13 +2485,18 @@ def _fiat_snapshot(
         (profile_id,),
     ).fetchone()
     cost_basis = _current_portfolio_cost_basis(conn, profile_id)
-    return {
+    payload = {
         "fiatCurrency": str(fiat_currency or "EUR").upper(),
         "eurBalance": float(market_value),
         "eurCostBasis": cost_basis,
         "eurUnrealized": float(market_value - cost_basis),
         "eurRealizedYTD": float(realized_row["gain_loss"] or 0),
     }
+    if chain_duplicate_adjustment_btc > 0:
+        payload["chainDuplicateOutpointAdjustmentBtc"] = float(
+            chain_duplicate_adjustment_btc
+        )
+    return payload
 
 
 def _tax_free_balance_snapshot(
@@ -2542,28 +2714,49 @@ def _build_profile_overview_snapshot(
             market_rate["fiatCurrency"],
         )
     )
-    # Once book state exists, wallet balances must match the book/report
-    # balance, even when every transaction was quarantined and the journal entry
-    # table is empty. Raw synced transactions remain only the pre-processing
-    # fallback.
+    # User-facing wallet balances prefer the chain-backed coin inventory when a
+    # wallet has observed inventory. Book/report balances remain the accounting
+    # fallback for sources without chain inventory and are carried alongside the
+    # display value for reconciliation.
     has_book_state = _has_book_balance_state(freshness)
-    balances = _wallet_balances(
+    book_balances = _wallet_balances(
         conn,
         profile["id"],
         has_book_state=has_book_state,
+    )
+    display_balance_info = _display_wallet_balances(
+        conn,
+        profile["id"],
+        book_balances,
+        fallback_source="books" if has_book_state else "transactions",
+    )
+    display_balances = {
+        wallet_id: float(info.get("balance") or 0.0)
+        for wallet_id, info in display_balance_info.items()
+    }
+    chain_duplicate_adjustment = _chain_duplicate_outpoint_adjustment_btc(
+        conn,
+        profile["id"],
+        display_balance_info,
+    )
+    display_balance_total = max(
+        0.0,
+        sum(display_balances.values()) - chain_duplicate_adjustment,
     )
     fiat = _fiat_snapshot(
         conn,
         profile["id"],
         profile["fiat_currency"],
         book_fiat_rate,
-        balances,
+        display_balances,
+        balance_total=display_balance_total,
+        chain_duplicate_adjustment_btc=chain_duplicate_adjustment,
     )
     snapshot = {
         "priceEur": price_eur,
         "priceUsd": price_usd,
         "marketRate": market_rate,
-        "connections": _connections(conn, profile["id"], balances),
+        "connections": _connections(conn, profile["id"], display_balance_info),
         "txs": _transactions(conn, profile["id"]),
         "activityTxs": _activity_transactions(
             conn,
@@ -2580,7 +2773,7 @@ def _build_profile_overview_snapshot(
             profile["id"],
             profile["fiat_currency"],
             book_fiat_rate,
-            sum(balances.values()),
+            display_balance_total,
             fiat["eurBalance"],
             has_book_state=has_book_state,
         ),
@@ -5778,11 +5971,12 @@ def build_report_blockers_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
                     "title": "Overlapping wallet sources",
                     "detail": (
                         f"{overlap['overlap_count']} concrete watched script(s) are "
-                        "owned by multiple active sources. Reports can double-count "
-                        "history until one source is reviewed, trimmed, deprecated, "
-                        "or duplicate rows are excluded."
+                        "owned by multiple active sources. Kassiber can resolve "
+                        "descriptor/xpub versus address-list duplicates by trimming "
+                        "the address-list source and excluding exact duplicate rows "
+                        "before rebuilding journals."
                     ),
-                    "daemon_kind": "ui.wallets.list",
+                    "daemon_kind": "ui.journals.process",
                     "overlap": overlap,
                     "repair_preview": repair_preview,
                 }
