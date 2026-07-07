@@ -295,6 +295,15 @@ interface BtcpayDiscoveryData {
     enabled: boolean;
     sync_supported: boolean;
   }>;
+  existing_routes?: Array<{
+    action: BtcpaySetupAction;
+    store_id: string;
+    payment_method_id: string;
+    wallet?: string | null;
+    wallet_id?: string | null;
+    route_id?: string | null;
+    label?: string | null;
+  }>;
 }
 
 interface WalletListData {
@@ -1114,6 +1123,26 @@ export function AddConnectionDialog({
       `${storeId}\u0000${paymentMethodId}`,
     [],
   );
+  const discoveredExistingRouteByKey = React.useMemo(() => {
+    const priority: Record<BtcpaySetupAction, number> = {
+      existing_wallet: 4,
+      wallet_source: 3,
+      provenance_only: 2,
+      skip: 1,
+    };
+    const entries = new Map<
+      string,
+      NonNullable<BtcpayDiscoveryData["existing_routes"]>[number]
+    >();
+    for (const route of btcpayDiscovery?.existing_routes ?? []) {
+      const key = btcpayRouteKey(route.store_id, route.payment_method_id);
+      const current = entries.get(key);
+      if (!current || priority[route.action] > priority[current.action]) {
+        entries.set(key, route);
+      }
+    }
+    return entries;
+  }, [btcpayDiscovery?.existing_routes, btcpayRouteKey]);
   const discoveredPaymentMethodOptions = btcpayDiscovery?.payment_methods ?? [];
   const syncableDiscoveredPaymentMethodOptions =
     discoveredPaymentMethodOptions.filter((method) => method.sync_supported);
@@ -1178,12 +1207,13 @@ export function AddConnectionDialog({
     (method: BtcpayDiscoveryData["payment_methods"][number]) => {
       const key = btcpayRouteKey(method.store_id, method.payment_method_id);
       const choice = form.btcpayRouteChoices[key];
+      const existingRoute = discoveredExistingRouteByKey.get(key);
       const fallback: BtcpaySetupAction = method.sync_supported
         ? form.btcpaySetupMode === "existing_wallets"
           ? "existing_wallet"
           : "wallet_source"
         : "provenance_only";
-      const action = choice?.action ?? fallback;
+      const action = choice?.action ?? existingRoute?.action ?? fallback;
       if (
         !method.sync_supported &&
         (action === "wallet_source" || action === "existing_wallet")
@@ -1192,16 +1222,23 @@ export function AddConnectionDialog({
       }
       return action;
     },
-    [btcpayRouteKey, form.btcpayRouteChoices, form.btcpaySetupMode],
+    [
+      btcpayRouteKey,
+      discoveredExistingRouteByKey,
+      form.btcpayRouteChoices,
+      form.btcpaySetupMode,
+    ],
   );
   const selectedBtcpayAccountRoutes = discoveredPaymentMethodOptions
     .map((method) => {
       const key = btcpayRouteKey(method.store_id, method.payment_method_id);
       const action = btcpayRouteActionFor(method);
+      const existingRoute = discoveredExistingRouteByKey.get(key);
       const wallet =
         form.btcpayRouteChoices[key]?.wallet ||
         form.btcpayRouteWallets[key] ||
         form.btcpayRouteWallets[method.payment_method_id] ||
+        existingRoute?.wallet ||
         walletForPaymentMethod(method.payment_method_id);
       return {
         key,
@@ -4143,6 +4180,29 @@ export function AddConnectionDialog({
                   setBtcpayDiscovery(data ?? null);
                   const firstStore = data?.stores?.[0]?.id ?? "";
                   setForm((current) => {
+                    const priority: Record<BtcpaySetupAction, number> = {
+                      existing_wallet: 4,
+                      wallet_source: 3,
+                      provenance_only: 2,
+                      skip: 1,
+                    };
+                    const existingByKey = new Map<
+                      string,
+                      NonNullable<BtcpayDiscoveryData["existing_routes"]>[number]
+                    >();
+                    for (const route of data?.existing_routes ?? []) {
+                      const key = btcpayRouteKey(
+                        route.store_id,
+                        route.payment_method_id,
+                      );
+                      const current = existingByKey.get(key);
+                      if (
+                        !current ||
+                        priority[route.action] > priority[current.action]
+                      ) {
+                        existingByKey.set(key, route);
+                      }
+                    }
                     const targetStore = current.btcpayStoreId || firstStore;
                     const methods = data?.payment_methods ?? [];
                     const syncableMethodsForStore = methods.filter(
@@ -4158,18 +4218,22 @@ export function AddConnectionDialog({
                         method.store_id,
                         method.payment_method_id,
                       );
+                      const existingRoute = existingByKey.get(key);
                       const wallet =
                         current.btcpayRouteChoices[key]?.wallet ||
                         current.btcpayRouteWallets[key] ||
                         current.btcpayRouteWallets[method.payment_method_id] ||
+                        existingRoute?.wallet ||
                         walletForPaymentMethod(method.payment_method_id);
                       routeWallets[key] = wallet;
                       routeChoices[key] = current.btcpayRouteChoices[key] ?? {
-                        action: method.sync_supported
-                          ? current.btcpaySetupMode === "existing_wallets"
-                            ? "existing_wallet"
-                            : "wallet_source"
-                          : "provenance_only",
+                        action:
+                          existingRoute?.action ??
+                          (method.sync_supported
+                            ? current.btcpaySetupMode === "existing_wallets"
+                              ? "existing_wallet"
+                              : "wallet_source"
+                            : "provenance_only"),
                         wallet,
                       };
                     }
@@ -4310,10 +4374,12 @@ export function AddConnectionDialog({
                     method.payment_method_id,
                   );
                   const action = btcpayRouteActionFor(method);
+                  const existingRoute = discoveredExistingRouteByKey.get(key);
                   const wallet =
                     form.btcpayRouteChoices[key]?.wallet ||
                     form.btcpayRouteWallets[key] ||
                     form.btcpayRouteWallets[method.payment_method_id] ||
+                    existingRoute?.wallet ||
                     walletForPaymentMethod(method.payment_method_id);
                   const storeLabel =
                     discoveredStoreById.get(method.store_id) ?? method.store_id;
@@ -4329,6 +4395,11 @@ export function AddConnectionDialog({
                         <div className="flex flex-wrap items-center gap-2">
                           <span className="font-medium">{storeLabel}</span>
                           <Badge variant="outline">{method.payment_method_id}</Badge>
+                          {existingRoute ? (
+                            <Badge variant="secondary">
+                              {t("add.btcpay.alreadyConfigured")}
+                            </Badge>
+                          ) : null}
                         </div>
                         <p className="truncate text-sm">{method.label}</p>
                         <span className="text-xs text-muted-foreground">

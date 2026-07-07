@@ -20,10 +20,12 @@ from .cli.handlers import (
     enrich_wallet_from_btcpay_provenance,
     process_journals,
     suggest_transfer_candidates,
+    sync_btcpay_commercial_provenance,
     sync_configured_btcpay_wallet,
     sync_wallet,
     sync_wallet_from_backend,
 )
+from .core import commercial as core_commercial
 from .core import freshness as core_freshness
 from .core import rates as core_rates
 from .core import wallets as core_wallets
@@ -518,6 +520,33 @@ def _freshness_wallet_source_specs(
                     "single_flight": not force_full,
                 }
             )
+    if wallet_ref is None:
+        for route in core_commercial.list_btcpay_account_routes(conn, profile_id):
+            payload = {
+                "account_route_id": route["id"],
+                "backend": route["backend"],
+                "store_id": route["store_id"],
+                "payment_method_id": route["payment_method_id"],
+            }
+            if force_full:
+                payload["force_full"] = True
+            source_label = (
+                f"BTCPay provenance {route['backend']} {route['store_id']}"
+            )
+            specs.append(
+                {
+                    "job_type": core_freshness.JOB_BTCPAY_PROVENANCE,
+                    "source_type": core_freshness.SOURCE_BTCPAY_PROVENANCE,
+                    "source_key": core_freshness.source_key(
+                        core_freshness.SOURCE_BTCPAY_PROVENANCE,
+                        f"account:{route['id']}",
+                    ),
+                    "source_label": source_label,
+                    "payload": payload,
+                    "priority": 40,
+                    "single_flight": not force_full,
+                }
+            )
     if include_rates:
         specs.append(
             {
@@ -588,12 +617,7 @@ def _load_freshness_profile_wallet(
     conn: sqlite3.Connection,
     job: Mapping[str, Any],
 ) -> tuple[sqlite3.Row, sqlite3.Row]:
-    profile = conn.execute(
-        "SELECT * FROM profiles WHERE id = ?",
-        (job["profile_id"],),
-    ).fetchone()
-    if profile is None:
-        raise AppError("Freshness job profile was not found", code="not_found")
+    profile = _load_freshness_profile(conn, job)
     payload = job.get("payload") if isinstance(job.get("payload"), dict) else {}
     wallet_id = payload.get("wallet_id")
     wallet = conn.execute(
@@ -603,6 +627,19 @@ def _load_freshness_profile_wallet(
     if wallet is None:
         raise AppError("Freshness job wallet was not found", code="not_found")
     return profile, wallet
+
+
+def _load_freshness_profile(
+    conn: sqlite3.Connection,
+    job: Mapping[str, Any],
+) -> sqlite3.Row:
+    profile = conn.execute(
+        "SELECT * FROM profiles WHERE id = ?",
+        (job["profile_id"],),
+    ).fetchone()
+    if profile is None:
+        raise AppError("Freshness job profile was not found", code="not_found")
+    return profile
 
 
 def _freshness_handlers(runtime_config: dict[str, object]) -> Mapping[str, core_freshness.JobHandler]:
@@ -675,6 +712,66 @@ def _freshness_handlers(runtime_config: dict[str, object]) -> Mapping[str, core_
         progress: Callable[[Mapping[str, Any]], None],
         check_cancelled: Callable[[], None],
     ) -> Mapping[str, Any]:
+        payload = job.get("payload") if isinstance(job.get("payload"), dict) else {}
+        account_route_id = str_or_none(payload.get("account_route_id"))
+        if account_route_id:
+            profile = _load_freshness_profile(conn, job)
+            route = conn.execute(
+                """
+                SELECT * FROM btcpay_account_routes
+                WHERE profile_id = ? AND id = ?
+                """,
+                (profile["id"], account_route_id),
+            ).fetchone()
+            if route is None:
+                raise AppError(
+                    "Freshness job BTCPay account route was not found",
+                    code="not_found",
+                )
+            force_full = _job_force_full(job)
+            checkpoint = _source_checkpoint_for_job(
+                conn,
+                profile["id"],
+                job["source_key"],
+                job,
+            )
+            progress(
+                {
+                    "phase": core_freshness.PHASE_BACKEND_FETCH,
+                    "store_id": route["store_id"],
+                }
+            )
+            token = sync_progress_emitter.set(progress)
+            try:
+                outcome = sync_btcpay_commercial_provenance(
+                    conn,
+                    runtime_config,
+                    profile["workspace_id"],
+                    profile["id"],
+                    route["backend_name"],
+                    route["store_id"],
+                    core_commercial.DEFAULT_PAGE_SIZE,
+                    checkpoint=checkpoint,
+                )
+            finally:
+                sync_progress_emitter.reset(token)
+            check_cancelled()
+            progress(
+                {
+                    "phase": core_freshness.PHASE_DECODE_ENRICH,
+                    "store_id": route["store_id"],
+                }
+            )
+            conn.commit()
+            if force_full:
+                outcome = {"force_full": True, **dict(outcome)}
+            return {
+                "status": "synced",
+                "account_route_id": account_route_id,
+                "backend": route["backend_name"],
+                "store_id": route["store_id"],
+                **outcome,
+            }
         profile, wallet = _load_freshness_profile_wallet(conn, job)
         force_full = _job_force_full(job)
         checkpoint = _source_checkpoint_for_job(conn, profile["id"], job["source_key"], job)

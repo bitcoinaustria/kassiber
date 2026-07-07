@@ -124,6 +124,152 @@ def _stable_payment_id(payment: Mapping[str, Any]) -> str:
     return f"sha256:{hashlib.sha256(raw.encode('utf-8')).hexdigest()}"
 
 
+BTCPAY_ACCOUNT_ROUTE_ACTIONS = ("provenance_only",)
+
+
+def normalize_btcpay_account_route_action(value: Any) -> str:
+    action = str(value or "").strip().lower()
+    if action not in BTCPAY_ACCOUNT_ROUTE_ACTIONS:
+        raise AppError(
+            f"Unsupported BTCPay account route action '{value}'",
+            code="validation",
+            hint="Only provenance_only account routes can be stored without a wallet.",
+            retryable=False,
+        )
+    return action
+
+
+def _account_route_payload(row: sqlite3.Row | Mapping[str, Any]) -> dict[str, Any]:
+    return {
+        "id": str(row["id"]),
+        "backend": str(row["backend_name"]),
+        "store_id": str(row["store_id"]),
+        "payment_method_id": str(row["payment_method_id"]),
+        "action": str(row["action"]),
+        "label": str(row["label"] or ""),
+        "created_at": str(row["created_at"]),
+        "updated_at": str(row["updated_at"]),
+    }
+
+
+def upsert_btcpay_account_route(
+    conn: sqlite3.Connection,
+    workspace: Mapping[str, Any],
+    profile: Mapping[str, Any],
+    *,
+    backend_name: str,
+    store_id: str,
+    payment_method_id: str,
+    action: str = "provenance_only",
+    label: str | None = None,
+) -> dict[str, Any]:
+    normalized_action = normalize_btcpay_account_route_action(action)
+    normalized_backend = str(backend_name).strip().lower()
+    route_id = str(uuid.uuid4())
+    now = now_iso()
+    conn.execute(
+        """
+        INSERT INTO btcpay_account_routes(
+            id, workspace_id, profile_id, backend_name, store_id,
+            payment_method_id, action, label, created_at, updated_at
+        ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(profile_id, backend_name, store_id, payment_method_id, action)
+        DO UPDATE SET
+            label = excluded.label,
+            updated_at = excluded.updated_at
+        """,
+        (
+            route_id,
+            workspace["id"],
+            profile["id"],
+            normalized_backend,
+            store_id,
+            payment_method_id,
+            normalized_action,
+            label,
+            now,
+            now,
+        ),
+    )
+    row = conn.execute(
+        """
+        SELECT * FROM btcpay_account_routes
+        WHERE profile_id = ? AND backend_name = ? AND store_id = ?
+          AND payment_method_id = ? AND action = ?
+        """,
+        (
+            profile["id"],
+            normalized_backend,
+            store_id,
+            payment_method_id,
+            normalized_action,
+        ),
+    ).fetchone()
+    if row is None:
+        raise AppError("Stored BTCPay account route could not be loaded", code="internal")
+    return _account_route_payload(row)
+
+
+def list_btcpay_account_routes(
+    conn: sqlite3.Connection,
+    profile_id: str,
+    *,
+    backend_name: str | None = None,
+) -> list[dict[str, Any]]:
+    params: list[Any] = [profile_id]
+    backend_filter = ""
+    if backend_name:
+        backend_filter = " AND backend_name = ?"
+        params.append(str(backend_name).strip().lower())
+    rows = conn.execute(
+        f"""
+        SELECT * FROM btcpay_account_routes
+        WHERE profile_id = ?{backend_filter}
+        ORDER BY backend_name ASC, store_id ASC, payment_method_id ASC, action ASC
+        """,
+        params,
+    ).fetchall()
+    return [_account_route_payload(row) for row in rows]
+
+
+def delete_btcpay_account_route(
+    conn: sqlite3.Connection,
+    profile_id: str,
+    *,
+    backend_name: str,
+    store_id: str,
+    payment_method_id: str,
+    action: str = "provenance_only",
+) -> int:
+    normalized_action = normalize_btcpay_account_route_action(action)
+    cursor = conn.execute(
+        """
+        DELETE FROM btcpay_account_routes
+        WHERE profile_id = ? AND backend_name = ? AND store_id = ?
+          AND payment_method_id = ? AND action = ?
+        """,
+        (
+            profile_id,
+            str(backend_name).strip().lower(),
+            store_id,
+            payment_method_id,
+            normalized_action,
+        ),
+    )
+    return int(cursor.rowcount or 0)
+
+
+def delete_btcpay_account_routes_for_backend(
+    conn: sqlite3.Connection,
+    backend_name: str,
+) -> int:
+    cursor = conn.execute(
+        "DELETE FROM btcpay_account_routes WHERE backend_name = ?",
+        (str(backend_name).strip().lower(),),
+    )
+    return int(cursor.rowcount or 0)
+
+
 def upsert_btcpay_provenance(
     conn: sqlite3.Connection,
     workspace: Mapping[str, Any],
@@ -1598,12 +1744,17 @@ __all__ = [
     "attach_document_evidence",
     "build_reviewed_subledger_rows",
     "create_document",
+    "delete_btcpay_account_route",
+    "delete_btcpay_account_routes_for_backend",
     "export_reviewed_subledger_csv",
     "get_transaction_commercial_context",
+    "list_btcpay_account_routes",
     "list_btcpay_records",
     "list_documents",
     "list_links",
+    "normalize_btcpay_account_route_action",
     "review_link",
     "suggest_links",
+    "upsert_btcpay_account_route",
     "upsert_btcpay_provenance",
 ]

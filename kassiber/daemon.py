@@ -6724,6 +6724,13 @@ def _update_backend_payload(ctx: "DaemonContext", args: dict[str, Any]) -> dict[
 def _delete_backend_payload(ctx: "DaemonContext", args: dict[str, Any]) -> dict[str, Any]:
     name = _required_str_arg(args, "name", "Backend name")
     payload = core_accounts.delete_backend(ctx.conn, name)
+    removed_account_routes = core_commercial.delete_btcpay_account_routes_for_backend(
+        ctx.conn,
+        name,
+    )
+    if removed_account_routes:
+        ctx.conn.commit()
+        payload["detached_btcpay_account_routes"] = removed_account_routes
     merge_db_backends(ctx.conn, ctx.runtime_config)
     return payload
 
@@ -7520,6 +7527,73 @@ def _wallet_payload_from_row(row: sqlite3.Row) -> dict[str, Any]:
     return payload
 
 
+def _btcpay_discovery_existing_routes(
+    conn: sqlite3.Connection,
+    profile_id: str,
+    *,
+    backend_name: str,
+) -> list[dict[str, Any]]:
+    normalized_backend = backend_name.strip().lower()
+    routes: list[dict[str, Any]] = []
+    rows = conn.execute(
+        """
+        SELECT id, label, kind, config_json
+        FROM wallets
+        WHERE profile_id = ?
+        ORDER BY label ASC
+        """,
+        (profile_id,),
+    ).fetchall()
+    for row in rows:
+        config = _wallet_config_from_json(row["config_json"])
+        if (
+            str(config.get("sync_source") or "") == core_wallets.BTCPAY_SYNC_SOURCE
+            and str(config.get("backend") or "").strip().lower()
+            == normalized_backend
+            and config.get("store_id")
+        ):
+            routes.append(
+                {
+                    "action": "wallet_source",
+                    "wallet": row["label"],
+                    "wallet_id": row["id"],
+                    "store_id": str(config.get("store_id")),
+                    "payment_method_id": core_wallets.normalize_btcpay_payment_method_id(
+                        config.get("payment_method_id")
+                        or core_wallets.BTCPAY_DEFAULT_PAYMENT_METHOD_ID
+                    ),
+                }
+            )
+        for route in core_wallets.wallet_btcpay_provenance_config(config):
+            if str(route.get("backend") or "").strip().lower() != normalized_backend:
+                continue
+            routes.append(
+                {
+                    "action": "existing_wallet",
+                    "wallet": row["label"],
+                    "wallet_id": row["id"],
+                    "store_id": route["store_id"],
+                    "payment_method_id": route["payment_method_id"],
+                }
+            )
+    for route in core_commercial.list_btcpay_account_routes(
+        conn,
+        profile_id,
+        backend_name=normalized_backend,
+    ):
+        routes.append(
+            {
+                "action": route["action"],
+                "route_id": route["id"],
+                "wallet": None,
+                "store_id": route["store_id"],
+                "payment_method_id": route["payment_method_id"],
+                "label": route.get("label") or "",
+            }
+        )
+    return routes
+
+
 def _create_or_reuse_btcpay_wallet_source(
     conn: sqlite3.Connection,
     profile: sqlite3.Row,
@@ -7573,7 +7647,7 @@ def _create_btcpay_account_setup_payload(
     conn = _require_conn(ctx)
     wallet_label = _required_str_arg(args, "label", "Connection label")
     routes = _btcpay_account_routes(args)
-    _, profile = resolve_scope(conn, None, None)
+    workspace, profile = resolve_scope(conn, None, None)
     _backend, safe_backend = _resolve_btcpay_backend_for_setup(
         ctx,
         args,
@@ -7583,6 +7657,7 @@ def _create_btcpay_account_setup_payload(
     wallet_results: list[dict[str, Any]] = []
     reused_wallets = 0
     mapping_results: list[dict[str, Any]] = []
+    account_route_results: list[dict[str, Any]] = []
     skipped_routes: list[dict[str, Any]] = []
     provenance_store_ids: set[str] = set()
     for route in routes:
@@ -7609,6 +7684,13 @@ def _create_btcpay_account_setup_payload(
             wallet_results.append(wallet)
             if reused:
                 reused_wallets += 1
+            core_commercial.delete_btcpay_account_route(
+                conn,
+                profile["id"],
+                backend_name=safe_backend["name"],
+                store_id=route["store_id"],
+                payment_method_id=route["payment_method_id"],
+            )
             provenance_store_ids.add(route["store_id"])
             continue
         if action == "existing_wallet":
@@ -7641,9 +7723,28 @@ def _create_btcpay_account_setup_payload(
                     "route": next_route,
                 }
             )
+            core_commercial.delete_btcpay_account_route(
+                conn,
+                profile["id"],
+                backend_name=safe_backend["name"],
+                store_id=route["store_id"],
+                payment_method_id=route["payment_method_id"],
+            )
             provenance_store_ids.add(route["store_id"])
             continue
         if action == "provenance_only":
+            account_route_results.append(
+                core_commercial.upsert_btcpay_account_route(
+                    conn,
+                    workspace,
+                    profile,
+                    backend_name=safe_backend["name"],
+                    store_id=route["store_id"],
+                    payment_method_id=route["payment_method_id"],
+                    action="provenance_only",
+                    label=route.get("store_name") or route.get("label"),
+                )
+            )
             provenance_store_ids.add(route["store_id"])
             continue
 
@@ -7661,6 +7762,8 @@ def _create_btcpay_account_setup_payload(
                     int(args.get("page_size") or core_commercial.DEFAULT_PAGE_SIZE),
                 )
             )
+    else:
+        conn.commit()
 
     wallets = wallet_results + [result["wallet"] for result in mapping_results]
     return {
@@ -7672,6 +7775,7 @@ def _create_btcpay_account_setup_payload(
         "wallet_sources": wallet_results,
         "reused_wallets": reused_wallets,
         "mappings": mapping_results,
+        "account_routes": account_route_results,
         "provenance": provenance_results,
         "skipped": skipped_routes,
     }
@@ -9571,17 +9675,24 @@ def _discover_btcpay_connection_payload(
     ctx: "DaemonContext",
     args: dict[str, Any],
 ) -> dict[str, Any]:
+    conn = _require_conn(ctx)
     backend, safe_backend = _resolve_btcpay_backend_for_setup(
         ctx,
         args,
         create_if_inline=False,
         reveal=True,
     )
+    _workspace, profile = resolve_scope(conn, None, None)
     discovered = discover_btcpay_wallet_sources(backend)
     return {
         "backend": safe_backend["name"],
         "stores": discovered["stores"],
         "payment_methods": discovered["payment_methods"],
+        "existing_routes": _btcpay_discovery_existing_routes(
+            conn,
+            profile["id"],
+            backend_name=safe_backend["name"],
+        ),
     }
 
 
