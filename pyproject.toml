@@ -38,4 +38,6 @@ include = ["kassiber*"]
 kassiber = [
   "data/rates/kraken/btc_daily/*.csv",
   "data/rates/kraken/btc_daily/README.md",
+  "data/rates/kraken/btc_hourly/*.csv",
+  "data/rates/kraken/btc_hourly/README.md",
 ]
