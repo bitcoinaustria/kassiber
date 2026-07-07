@@ -1171,6 +1171,51 @@ class ReviewRegressionTest(unittest.TestCase):
             [bucket["id"] for bucket in tax_free["buckets"]],
             ["altbestand", "neubestand"],
         )
+        self.assertEqual(tax_free["status"], "current")
+        self.assertFalse(tax_free["needsJournals"])
+        self.assertEqual(tax_free["quarantines"], 0)
+
+        conn.execute(
+            "UPDATE profiles SET last_processed_tx_count = ? WHERE id = ?",
+            (2, "pf-tax-free"),
+        )
+        conn.commit()
+
+        stale_overview = build_overview_snapshot(conn)
+        stale_tax_free = stale_overview["taxFreeBalance"]
+
+        self.assertEqual(stale_tax_free["status"], "needs_journals")
+        self.assertTrue(stale_tax_free["needsJournals"])
+        self.assertEqual(stale_tax_free["taxFreeQuantitySats"], 100_000_000)
+
+        conn.execute(
+            "UPDATE profiles SET last_processed_tx_count = ? WHERE id = ?",
+            (3, "pf-tax-free"),
+        )
+        conn.execute(
+            """
+            INSERT INTO journal_quarantines(
+                transaction_id, workspace_id, profile_id, reason,
+                detail_json, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "tx-neu-sale",
+                "ws-tax-free",
+                "pf-tax-free",
+                "missing_price",
+                "{}",
+                now,
+            ),
+        )
+        conn.commit()
+
+        quarantine_overview = build_overview_snapshot(conn)
+        quarantine_tax_free = quarantine_overview["taxFreeBalance"]
+
+        self.assertEqual(quarantine_tax_free["status"], "quarantines")
+        self.assertFalse(quarantine_tax_free["needsJournals"])
+        self.assertEqual(quarantine_tax_free["quarantines"], 1)
 
     def test_overview_wallet_balance_prefers_processed_book_quantity(self):
         conn = open_db(self.data_root)

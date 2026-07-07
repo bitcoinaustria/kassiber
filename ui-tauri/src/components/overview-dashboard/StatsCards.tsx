@@ -45,6 +45,15 @@ const STAT_STATUS_EN: Record<string, string> = {
   "stats.status.open": "Open",
 };
 
+function taxFreeStatusKey(
+  balance: NonNullable<OverviewSnapshot["taxFreeBalance"]>,
+) {
+  if (balance.status) return balance.status;
+  if (balance.needsJournals) return "needs_journals";
+  if (balance.quarantines > 0) return "quarantines";
+  return "current";
+}
+
 export function statStatusText(stat: StatItem, isBitcoinPortfolio: boolean) {
   const key = statStatusKey(stat, isBitcoinPortfolio);
   if (!key) {
@@ -231,12 +240,36 @@ export const StatsCards = ({
               taxFreeBalance.taxableQuantitySats) / 100_000_000;
           const taxFreeLabel = formatBtc(taxFreeBtc, { precision: 3 });
           const taxableLabel = formatBtc(taxableBtc, { precision: 3 });
-          const detail = t("stats.taxFreeBreakdown", {
+          const taxFreeStatus = taxFreeStatusKey(taxFreeBalance);
+          const taxFreeIsCurrent = taxFreeStatus === "current";
+          const taxFreeStatusLabel =
+            taxFreeStatus === "needs_journals"
+              ? t("stats.status.needsJournals")
+              : taxFreeStatus === "quarantines"
+                ? t("stats.status.reviewQuarantines", {
+                    count: taxFreeBalance.quarantines,
+                  })
+                : t("stats.status.current");
+          const taxFreeStatusCaption = taxFreeIsCurrent
+            ? taxFreeStatusLabel
+            : t("stats.status.reviewRequired");
+          const taxFreeStatusClass =
+            taxFreeStatus === "current"
+              ? "text-emerald-600 dark:text-emerald-400"
+              : taxFreeStatus === "quarantines"
+                ? "text-red-600 dark:text-red-400"
+                : "text-amber-600 dark:text-amber-400";
+          const breakdown = t("stats.taxFreeBreakdown", {
             taxFreeBucket: taxFreeBucket?.label ?? t("stats.bucket.taxFree"),
             taxFree: taxFreeLabel,
             taxableBucket: taxableBucket?.label ?? t("stats.bucket.taxable"),
             taxable: taxableLabel,
           });
+          const detail = taxFreeIsCurrent
+            ? breakdown
+            : taxFreeStatus === "quarantines"
+              ? t("stats.taxFreeBlockedQuarantines")
+              : t("stats.taxFreeBlockedJournals");
           return (
             <React.Fragment key={stat.id}>
               {card}
@@ -257,21 +290,19 @@ export const StatsCards = ({
                   <p
                     className={cn(
                       "text-lg font-semibold tracking-tight sm:text-xl",
-                      blurClass(hideSensitive),
+                      taxFreeIsCurrent ? blurClass(hideSensitive) : taxFreeStatusClass,
                     )}
                   >
-                    {taxFreeLabel}
+                    {taxFreeIsCurrent ? taxFreeLabel : taxFreeStatusLabel}
                   </p>
                   <div className="flex min-w-0 items-center gap-1.5 text-[10px] sm:text-xs">
                     <span
                       className={cn(
-                        "shrink-0 font-medium text-emerald-600 dark:text-emerald-400",
-                        blurClass(hideSensitive),
+                        "shrink-0 font-medium",
+                        taxFreeStatusClass,
                       )}
                     >
-                      {taxFreeBalance.needsJournals
-                        ? t("stats.status.needsJournals")
-                        : t("stats.status.current")}
+                      {taxFreeStatusCaption}
                     </span>
                     <span
                       className="min-w-0 truncate text-muted-foreground"

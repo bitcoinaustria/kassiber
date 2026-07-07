@@ -67,6 +67,7 @@ describe("overview stats cards", () => {
         rule: "generic_long_term_holding",
         jurisdictionCode: "EX",
         fiatCurrency: "EUR",
+        status: "current",
         taxFreeQuantitySats: 210_000_000,
         taxableQuantitySats: 30_000_000,
         totalQuantitySats: 240_000_000,
@@ -106,5 +107,53 @@ describe("overview stats cards", () => {
     expect(html).toContain("Tax-free balance");
     expect(html).toContain("\u20bf 2.100");
     expect(html).toContain("Long-term \u20bf 2.100 \u00b7 Short-term \u20bf 0.300");
+  });
+
+  it("blocks stale tax-free balances behind journal readiness", () => {
+    const snapshot: OverviewSnapshot = {
+      ...MOCK_OVERVIEW,
+      taxFreeBalance: {
+        ...MOCK_OVERVIEW.taxFreeBalance!,
+        status: "needs_journals",
+        needsJournals: true,
+      },
+    };
+
+    const html = renderToStaticMarkup(
+      createElement(StatsCards, {
+        snapshot,
+        hideSensitive: false,
+        currency: "btc",
+      }),
+    );
+
+    expect(html).toContain("Needs journals");
+    expect(html).toContain("Review required");
+    expect(html).toContain("Run journals before relying on this balance");
+    expect(html).not.toContain("Altbestand \u20bf 1.200");
+  });
+
+  it("blocks quarantined tax-free balances behind review", () => {
+    const snapshot: OverviewSnapshot = {
+      ...MOCK_OVERVIEW,
+      taxFreeBalance: {
+        ...MOCK_OVERVIEW.taxFreeBalance!,
+        status: "quarantines",
+        quarantines: 1,
+      },
+    };
+
+    const html = renderToStaticMarkup(
+      createElement(StatsCards, {
+        snapshot,
+        hideSensitive: false,
+        currency: "btc",
+      }),
+    );
+
+    expect(html).toContain("1 quarantine");
+    expect(html).toContain("Review required");
+    expect(html).toContain("Review quarantines before relying on this balance");
+    expect(html).not.toContain("Altbestand \u20bf 1.200");
   });
 });

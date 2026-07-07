@@ -109,6 +109,8 @@
     "bitcoinBalance": "Bitcoin-Guthaben",
     "taxFreeBalance": "Steuerfreies Guthaben",
     "taxFreeBreakdown": "{{taxFreeBucket}} {{taxFree}} · {{taxableBucket}} {{taxable}}",
+    "taxFreeBlockedJournals": "Verarbeite Journale, bevor du dich auf dieses Guthaben verlässt",
+    "taxFreeBlockedQuarantines": "Prüfe Quarantänen, bevor du dich auf dieses Guthaben verlässt",
     "bucket": {
       "taxFree": "Steuerfrei",
       "taxable": "Steuerpflichtig"
@@ -136,6 +138,9 @@
       "loaded": "Geladen",
       "configured": "Konfiguriert",
       "needsJournals": "Journale nötig",
+      "reviewQuarantines_one": "{{count}} Quarantäne",
+      "reviewQuarantines_other": "{{count}} Quarantänen",
+      "reviewRequired": "Prüfung nötig",
       "open": "Offen"
     }
   },

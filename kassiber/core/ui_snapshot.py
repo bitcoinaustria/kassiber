@@ -2378,17 +2378,27 @@ def _tax_free_balance_snapshot(
     total_sats = tax_free_sats + taxable_sats
     if total_sats <= 0:
         return None
+    needs_journals = bool(freshness.get("needs_processing"))
+    quarantines = int(freshness.get("quarantine_count") or 0)
+    status = (
+        "needs_journals"
+        if needs_journals
+        else "quarantines"
+        if quarantines
+        else "current"
+    )
     return {
         "rule": "austrian_altbestand",
         "jurisdictionCode": report["jurisdictionCode"],
         "fiatCurrency": report["fiatCurrency"],
+        "status": status,
         "taxFreeQuantitySats": tax_free_sats,
         "taxableQuantitySats": taxable_sats,
         "totalQuantitySats": total_sats,
         "taxFreeMarketValue": totals["altMarketValue"],
         "taxableMarketValue": totals["neuMarketValue"],
-        "needsJournals": bool(freshness.get("needs_processing")),
-        "quarantines": int(freshness.get("quarantine_count") or 0),
+        "needsJournals": needs_journals,
+        "quarantines": quarantines,
         "buckets": [
             {
                 "id": "altbestand",

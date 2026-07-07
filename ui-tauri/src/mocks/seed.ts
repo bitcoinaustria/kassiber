@@ -323,6 +323,7 @@ export interface TaxFreeBalanceSnapshot {
   rule: "austrian_altbestand" | string;
   jurisdictionCode: string;
   fiatCurrency: string;
+  status: "current" | "needs_journals" | "quarantines" | string;
   taxFreeQuantitySats: number;
   taxableQuantitySats: number;
   totalQuantitySats: number;
@@ -922,6 +923,7 @@ export const MOCK_OVERVIEW: OverviewSnapshot = {
     rule: "austrian_altbestand",
     jurisdictionCode: "AT",
     fiatCurrency: "EUR",
+    status: "current",
     taxFreeQuantitySats: 120_000_000,
     taxableQuantitySats: 318_000_000,
     totalQuantitySats: 438_000_000,
