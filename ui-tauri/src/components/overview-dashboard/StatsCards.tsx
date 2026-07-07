@@ -82,10 +82,7 @@ export const StatsCards = ({
   const stats = buildStatsData(snapshot, currency);
   const fiatCurrency = activeMarketFiatCurrency(snapshot);
   const fiatRate = activeMarketFiatRate(snapshot);
-  const taxFreeBalance =
-    snapshot.taxFreeBalance && snapshot.taxFreeBalance.totalQuantitySats > 0
-      ? snapshot.taxFreeBalance
-      : null;
+  const taxFreeBalance = snapshot.taxFreeBalance ?? null;
   const marketRateIsSynced = Boolean(
     snapshot.marketRate?.fetchedAt ?? snapshot.marketRate?.timestamp,
   );

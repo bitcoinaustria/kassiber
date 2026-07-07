@@ -1217,6 +1217,52 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertFalse(quarantine_tax_free["needsJournals"])
         self.assertEqual(quarantine_tax_free["quarantines"], 1)
 
+    def test_overview_snapshot_exposes_zero_austrian_tax_free_balance(self):
+        conn = open_db(self.data_root)
+        self.addCleanup(conn.close)
+        now = "2026-01-01T00:00:00Z"
+        conn.execute(
+            "INSERT INTO workspaces(id, label, created_at) VALUES(?, ?, ?)",
+            ("ws-tax-free-zero", "AT Workspace", now),
+        )
+        conn.execute(
+            """
+            INSERT INTO profiles(
+                id, workspace_id, label, fiat_currency, tax_country,
+                tax_long_term_days, gains_algorithm, last_processed_at,
+                last_processed_tx_count, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "pf-tax-free-zero",
+                "ws-tax-free-zero",
+                "AT Profile",
+                "EUR",
+                "at",
+                9223372036854775807,
+                "MOVING_AVERAGE_AT",
+                None,
+                0,
+                now,
+            ),
+        )
+        set_setting(conn, "context_workspace", "ws-tax-free-zero")
+        set_setting(conn, "context_profile", "pf-tax-free-zero")
+        conn.commit()
+
+        overview = build_overview_snapshot(conn)
+        tax_free = overview["taxFreeBalance"]
+
+        self.assertEqual(tax_free["rule"], "austrian_altbestand")
+        self.assertEqual(tax_free["status"], "current")
+        self.assertEqual(tax_free["taxFreeQuantitySats"], 0)
+        self.assertEqual(tax_free["taxableQuantitySats"], 0)
+        self.assertEqual(tax_free["totalQuantitySats"], 0)
+        self.assertEqual(
+            [bucket["quantitySats"] for bucket in tax_free["buckets"]],
+            [0, 0],
+        )
+
     def test_overview_wallet_balance_prefers_processed_book_quantity(self):
         conn = open_db(self.data_root)
         self.addCleanup(conn.close)

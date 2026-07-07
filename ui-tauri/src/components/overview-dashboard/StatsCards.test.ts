@@ -133,6 +133,37 @@ describe("overview stats cards", () => {
     expect(html).not.toContain("Altbestand \u20bf 1.200");
   });
 
+  it("renders the tax-free balance card when the current amount is zero", () => {
+    const snapshot: OverviewSnapshot = {
+      ...MOCK_OVERVIEW,
+      taxFreeBalance: {
+        ...MOCK_OVERVIEW.taxFreeBalance!,
+        taxFreeQuantitySats: 0,
+        taxableQuantitySats: 0,
+        totalQuantitySats: 0,
+        taxFreeMarketValue: 0,
+        taxableMarketValue: 0,
+        buckets: MOCK_OVERVIEW.taxFreeBalance!.buckets.map((bucket) => ({
+          ...bucket,
+          quantitySats: 0,
+          marketValue: 0,
+        })),
+      },
+    };
+
+    const html = renderToStaticMarkup(
+      createElement(StatsCards, {
+        snapshot,
+        hideSensitive: false,
+        currency: "btc",
+      }),
+    );
+
+    expect(html).toContain("Tax-free balance");
+    expect(html).toContain("\u20bf 0.000");
+    expect(html).toContain("Altbestand \u20bf 0.000 \u00b7 Neubestand \u20bf 0.000");
+  });
+
   it("blocks quarantined tax-free balances behind review", () => {
     const snapshot: OverviewSnapshot = {
       ...MOCK_OVERVIEW,

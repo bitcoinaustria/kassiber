@@ -2339,8 +2339,6 @@ def _tax_free_balance_snapshot(
         """,
         (profile["id"],),
     ).fetchall()
-    if not rows:
-        return None
     entries: list[dict[str, Any]] = []
     for row in rows:
         entries.append(
@@ -2376,8 +2374,6 @@ def _tax_free_balance_snapshot(
     tax_free_sats = int(totals["altQuantitySats"] or 0)
     taxable_sats = int(totals["neuQuantitySats"] or 0)
     total_sats = tax_free_sats + taxable_sats
-    if total_sats <= 0:
-        return None
     needs_journals = bool(freshness.get("needs_processing"))
     quarantines = int(freshness.get("quarantine_count") or 0)
     status = (
