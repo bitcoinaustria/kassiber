@@ -166,7 +166,7 @@ export function WalletsTable({
   return (
     <div className="border-t">
       <div className="overflow-x-auto px-3 pb-3 pt-3 sm:px-6 sm:pb-4">
-        <Table className="min-w-[900px] table-fixed">
+        <Table className="min-w-[1080px] table-fixed">
           <TableHeader>
             <TableRow className="bg-muted/50 hover:bg-muted/50">
               <SortableHead
@@ -175,7 +175,10 @@ export function WalletsTable({
                 activeKey={sortKey}
                 dir={sortDir}
                 onSort={onSort}
-                className="w-[24%] min-w-[180px] pr-5"
+                className={cn(
+                  "min-w-[260px] pr-6",
+                  showTaxFreeColumn ? "w-[43%]" : "w-[45%]",
+                )}
               />
               <SortableHead
                 label="Kind"
@@ -183,7 +186,7 @@ export function WalletsTable({
                 activeKey={sortKey}
                 dir={sortDir}
                 onSort={onSort}
-                className="w-[108px] px-3"
+                className={showTaxFreeColumn ? "w-[8%] px-3" : "w-[10%] px-3"}
               />
               <SortableHead
                 label="Transactions"
@@ -192,7 +195,11 @@ export function WalletsTable({
                 dir={sortDir}
                 onSort={onSort}
                 align="right"
-                className="w-[136px] px-3 text-right"
+                className={
+                  showTaxFreeColumn
+                    ? "w-[7%] px-4 text-right"
+                    : "w-[8%] px-4 text-right"
+                }
               />
               <SortableHead
                 label="Last activity"
@@ -200,9 +207,14 @@ export function WalletsTable({
                 activeKey={sortKey}
                 dir={sortDir}
                 onSort={onSort}
-                className="w-[122px] px-3"
+                align="right"
+                className={
+                  showTaxFreeColumn
+                    ? "w-[7%] px-4 text-right"
+                    : "w-[8%] px-4 text-right"
+                }
               />
-              <TableHead className="hidden w-[140px] px-3 text-xs font-medium text-muted-foreground sm:text-sm lg:table-cell">
+              <TableHead className="hidden w-[17%] px-4 text-right text-xs font-medium text-muted-foreground sm:text-sm lg:table-cell">
                 Composition
               </TableHead>
               {showTaxFreeColumn ? (
@@ -212,7 +224,8 @@ export function WalletsTable({
                   activeKey={sortKey}
                   dir={sortDir}
                   onSort={onSort}
-                  className="w-[118px] px-3"
+                  align="right"
+                  className="w-[6%] px-4 text-right"
                 />
               ) : null}
               <SortableHead
@@ -222,7 +235,7 @@ export function WalletsTable({
                 dir={sortDir}
                 onSort={onSort}
                 align="right"
-                className="w-[170px] px-3 text-right"
+                className="w-[12%] px-4 text-right"
               />
             </TableRow>
           </TableHeader>
@@ -370,7 +383,7 @@ function WalletRow({
       onClick={onSelect}
       onKeyDown={onKeyDown}
     >
-      <TableCell className="min-w-[180px] pr-5">
+      <TableCell className="min-w-[260px] pr-6">
         <div className="flex min-w-0 items-start gap-3">
           <ConnectionAssetBadge
             connection={connection}
@@ -393,7 +406,7 @@ function WalletRow({
           {connectionCategoryLabel(connection)}
         </Badge>
       </TableCell>
-      <TableCell className="px-3 text-right">
+      <TableCell className="px-4 text-right">
         {isBackend ? (
           <span className="text-sm text-muted-foreground">—</span>
         ) : (
@@ -402,12 +415,12 @@ function WalletRow({
           </span>
         )}
       </TableCell>
-      <TableCell className="px-3">
+      <TableCell className="px-4 text-right">
         <div className="text-sm whitespace-nowrap">
           <span>{activityLabel(connection)}</span>
         </div>
       </TableCell>
-      <TableCell className="hidden px-3 lg:table-cell">
+      <TableCell className="hidden px-4 lg:table-cell">
         {isBackend ? (
           <div
             className="text-xs text-muted-foreground"
@@ -428,7 +441,7 @@ function WalletRow({
         )}
       </TableCell>
       {showTaxFreeColumn ? (
-        <TableCell className="px-3">
+        <TableCell className="px-4 text-right">
           {isBackend ? (
             <span className="text-sm text-muted-foreground">—</span>
           ) : (
@@ -446,7 +459,7 @@ function WalletRow({
           )}
         </TableCell>
       ) : null}
-      <TableCell className="px-3 text-right">
+      <TableCell className="px-4 text-right">
         {isBackend ? (
           <>
             <div className="font-medium tabular-nums">
