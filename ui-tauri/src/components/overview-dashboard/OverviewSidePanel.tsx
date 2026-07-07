@@ -9,7 +9,7 @@ import { Cell, Pie, PieChart } from "recharts";
 
 import { CurrencyToggleText } from "@/components/kb/CurrencyToggleText";
 import { ChartContainer } from "@/components/ui/chart";
-import { type Currency } from "@/lib/currency";
+import { formatBtc, type Currency } from "@/lib/currency";
 import { cn } from "@/lib/utils";
 import type { OverviewSnapshot } from "@/mocks/seed";
 
@@ -27,6 +27,15 @@ import {
   transactionsDriverSearch,
   useHoverHighlight,
 } from "./model";
+
+function taxFreeStatusKey(
+  balance: NonNullable<OverviewSnapshot["taxFreeBalance"]>,
+) {
+  if (balance.status) return balance.status;
+  if (balance.needsJournals) return "needs_journals";
+  if (balance.quarantines > 0) return "quarantines";
+  return "current";
+}
 
 export const BalanceDriversCard = ({
   snapshot,
@@ -181,6 +190,38 @@ export const HoldingsBySourceChart = ({
     fiatCurrency,
   );
   const singleHolding = holdingsData.length === 1 ? holdingsData[0] : null;
+  const taxFreeBalance = snapshot.taxFreeBalance ?? null;
+  const taxFreeStatus = taxFreeBalance ? taxFreeStatusKey(taxFreeBalance) : null;
+  const taxFreeIsCurrent = taxFreeStatus === "current";
+  const taxFreeStatusLabel =
+    taxFreeStatus === "needs_journals"
+      ? t("stats.status.needsJournals")
+      : taxFreeStatus === "quarantines"
+        ? t("stats.status.reviewQuarantines", {
+            count: taxFreeBalance?.quarantines ?? 0,
+          })
+        : t("stats.status.current");
+  const taxFreeTone =
+    taxFreeStatus === "quarantines"
+      ? "text-red-600 dark:text-red-400"
+      : taxFreeStatus === "needs_journals"
+        ? "text-amber-600 dark:text-amber-400"
+        : "text-emerald-600 dark:text-emerald-400";
+  const taxFreeLabel = taxFreeBalance
+    ? formatBtc(taxFreeBalance.taxFreeQuantitySats / 100_000_000, {
+        precision: 3,
+      })
+    : "";
+  const taxableLabel = taxFreeBalance
+    ? formatBtc(taxFreeBalance.taxableQuantitySats / 100_000_000, {
+        precision: 3,
+      })
+    : "";
+  const taxFreeDetail = taxFreeIsCurrent
+    ? t("holdings.taxFreeTaxable", { taxable: taxableLabel })
+    : taxFreeStatus === "quarantines"
+      ? t("stats.taxFreeBlockedQuarantines")
+      : t("stats.taxFreeBlockedJournals");
 
   return (
     <div className="flex flex-1 flex-col gap-3 rounded-lg border bg-card p-3">
@@ -375,6 +416,38 @@ export const HoldingsBySourceChart = ({
         </div>
       </div>
       )}
+      {taxFreeBalance ? (
+        <div className="flex items-center justify-between gap-3 rounded-md border border-border/70 bg-muted/20 px-3 py-2">
+          <div className="min-w-0">
+            <p className="text-[10px] font-medium text-muted-foreground sm:text-xs">
+              {t("holdings.taxFree")}
+            </p>
+            <p
+              className={cn(
+                "truncate text-[10px] text-muted-foreground sm:text-xs",
+                taxFreeIsCurrent && blurClass(hideSensitive),
+              )}
+            >
+              {taxFreeDetail}
+            </p>
+          </div>
+          <div className="shrink-0 text-right">
+            <p
+              className={cn(
+                "text-sm font-semibold tabular-nums",
+                taxFreeIsCurrent ? blurClass(hideSensitive) : taxFreeTone,
+              )}
+            >
+              {taxFreeIsCurrent ? taxFreeLabel : taxFreeStatusLabel}
+            </p>
+            <p className={cn("text-[10px] font-medium sm:text-xs", taxFreeTone)}>
+              {taxFreeIsCurrent
+                ? taxFreeStatusLabel
+                : t("stats.status.reviewRequired")}
+            </p>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 };

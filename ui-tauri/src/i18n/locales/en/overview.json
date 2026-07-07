@@ -250,6 +250,8 @@
     "moreOptions": "More options",
     "onlyActiveSource": "Only active source",
     "total": "Total",
+    "taxFree": "Tax-free",
+    "taxFreeTaxable": "Taxable {{taxable}}",
     "rail": {
       "onchain": "On-chain",
       "lightning": "Lightning",

@@ -250,6 +250,8 @@
     "moreOptions": "Weitere Optionen",
     "onlyActiveSource": "Einzige aktive Quelle",
     "total": "Gesamt",
+    "taxFree": "Steuerfrei",
+    "taxFreeTaxable": "Steuerpflichtig {{taxable}}",
     "rail": {
       "onchain": "On-chain",
       "lightning": "Lightning",
