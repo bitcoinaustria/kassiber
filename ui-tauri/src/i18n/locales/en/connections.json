@@ -116,7 +116,7 @@
       "instance": "Instance",
       "store": "Store",
       "paymentMethod": "Payment method",
-      "footer": "Add more routes from <strong>Add wallet</strong> → <em>BTCPay Server</em> → <em>Map existing wallets</em>, or via <code>kassiber wallets attach-btcpay</code>. Use Edit to clear all routes from this wallet."
+      "footer": "Add more routes from <strong>Add wallet</strong> → <em>BTCPay Server</em> → <em>Map existing wallets</em>, or via <code>kassiber wallets attach-btcpay</code>. Use Edit to remove individual routes from this wallet."
     },
     "recentTransactions": {
       "title": "Recent transactions",
@@ -222,6 +222,9 @@
       "sourceFilePlaceholder": "Leave empty to keep the current file",
       "browse": "Browse…",
       "selectExportFileTitle": "Select {{label}} export file",
+      "provenanceRoutes": "BTCPay provenance routes",
+      "provenanceRoutesHelper": "Uncheck only the store/payment method links this wallet should no longer enrich.",
+      "keepProvenanceRoute": "Keep route",
       "clearProvenance": "Clear BTCPay provenance routes",
       "clearProvenanceHelper": "Removes all {{count}} stored route(s). Descriptor/file sync remains the balance source. Re-add routes from Add wallet.",
       "deprecated": "Deprecated wallet",
@@ -620,8 +623,10 @@
       "saving": "Saving…",
       "saveWalletMapping": "Save wallet mapping",
       "createConnections": "Create connections",
+      "importTransactions": "Import transactions",
       "importPricing": "Import pricing",
-      "createConnection": "Create connection"
+      "createConnection": "Create connection",
+      "setupBtcpayAccount": "Set up BTCPay account"
     },
     "field": {
       "connectionLabel": "Connection label",
@@ -765,6 +770,8 @@
     },
     "exportFile": {
       "label": "Export file path",
+      "btcpayLabel": "BTCPay CSV export path",
+      "btcpayHelper": "Choose a BTCPay wallet transactions CSV export. Kassiber imports comments as notes and labels as tags.",
       "wasabiLabel": "Wasabi JSON bundle path",
       "wasabiHelper": "Choose a sanitized local bundle with Wasabi gethistory plus listcoins/listunspentcoins data. Kassiber imports it as watch-only accounting evidence."
     },
@@ -779,6 +786,7 @@
       "strikeCsv": "Strike CSV",
       "ledgerliveCsv": "Ledger Live CSV",
       "binanceSupplementalCsv": "Binance supplemental CSV",
+      "btcpayCsv": "BTCPay CSV",
       "wasabiBundle": "Wasabi JSON bundle",
       "samouraiSourceSet": "Samourai descriptor source set",
       "csvOrJson": "CSV or JSON",
@@ -856,6 +864,22 @@
       "importAfter": "Import after setup",
       "stillImporting": "{{label}} is still importing from the selected file. Large exports can take a bit; Kassiber will update when the daemon finishes."
     },
+    "btcpayCsv": {
+      "importBehavior": "Import behavior",
+      "createWallet": "Create BTCPay wallet",
+      "importIntoExisting": "Import into wallet",
+      "createWalletHelper": "Create a file-backed BTCPay wallet source from this CSV export.",
+      "existingWalletHelper": "Use this when a descriptor, node, or other Kassiber wallet already tracks the settlement transactions.",
+      "walletToImport": "Kassiber wallet",
+      "walletToImportHelper": "Choose the wallet that already represents the BTCPay settlement wallet.",
+      "chooseWallet": "Choose wallet",
+      "noWalletsYet": "No non-BTCPay wallets yet",
+      "errorChooseWallet": "Choose the wallet that should receive this BTCPay CSV import.",
+      "errorCreateWalletFirst": "Create a settlement wallet first, or switch to creating a BTCPay wallet source.",
+      "importingExisting": "{{wallet}} is importing the BTCPay CSV export.",
+      "importedTitle": "BTCPay CSV imported",
+      "importedBody": "Imported BTCPay CSV rows into {{wallet}}."
+    },
     "descriptorWallet": {
       "stillScanning": "{{label}} is still scanning in watch-only mode. Large descriptors or slow backends can take a bit; Kassiber will update when the daemon finishes."
     },
@@ -929,6 +953,7 @@
       "apiKey": "API key",
       "createFromBtcpay": "Create from BTCPay",
       "mapExistingWallets": "Map existing wallets",
+      "manualCsvAlternative": "Use manual CSV import instead",
       "discovering": "Discovering…",
       "discoverStores": "Discover stores",
       "storesFound": "{{count}} stores found.",
@@ -940,6 +965,15 @@
       "paymentMethodsHelperDiscoverMap": "Run discovery so BTCPay can populate this mapping from the selected store.",
       "paymentMethodsHelperDefault": "BTC-CHAIN is the default. LBTC-CHAIN works for Liquid on-chain wallets. BTC-LN needs invoice/settlement sync and is not supported here yet.",
       "notSupportedYet": " · not supported yet",
+      "walletHistorySupported": "Can import confirmed BTCPay wallet history.",
+      "provenanceOnlyRecommended": "Use invoice/payment-request provenance; do not create a fake wallet.",
+      "alreadyConfigured": "Configured",
+      "routeActionLabel": "BTCPay route action for {{store}} {{method}}",
+      "routeWalletLabel": "BTCPay settlement wallet for {{store}} {{method}}",
+      "actionWalletSource": "Create Kassiber wallet source",
+      "actionExistingWallet": "Map to settlement wallet",
+      "actionProvenanceOnly": "Invoice provenance only",
+      "actionSkip": "Skip",
       "discoverToLoad": "Discover stores to load BTCPay payment methods for this settlement mapping.",
       "settlementMapping": "Settlement mapping",
       "settlementMappingHelper": "Link each BTCPay payment method to the Kassiber wallet that receives the funds.",
@@ -954,6 +988,8 @@
       "stillRefreshing": "{{label}} is still refreshing from BTCPay. Large stores can take a moment; Kassiber will update when the daemon finishes.",
       "refreshingSettlement": "{{label}} is refreshing the mapped settlement wallets. Kassiber will update when the daemon finishes.",
       "mappingSavedTitle": "BTCPay mapping saved",
+      "accountSavedTitle": "BTCPay account setup saved",
+      "accountSavedBody": "{{count}} BTCPay route(s) configured. {{wallets}} wallet source(s) can refresh from BTCPay; invoice and payment-request provenance was synced for selected stores.",
       "mappedBody_one": "{{count}} settlement wallet will use BTCPay provenance during refresh.",
       "mappedBody_other": "{{count}} settlement wallets will use BTCPay provenance during refresh.",
       "mappedBodyRefreshed_one": "{{count}} settlement wallet will use BTCPay provenance during refresh and was refreshed.",

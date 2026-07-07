@@ -822,6 +822,23 @@ CREATE INDEX IF NOT EXISTS idx_btcpay_provenance_profile_invoice
 CREATE INDEX IF NOT EXISTS idx_btcpay_provenance_profile_txid
     ON btcpay_provenance_records(profile_id, txid) WHERE txid IS NOT NULL;
 
+CREATE TABLE IF NOT EXISTS btcpay_account_routes (
+    id TEXT PRIMARY KEY,
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    backend_name TEXT NOT NULL,
+    store_id TEXT NOT NULL,
+    payment_method_id TEXT NOT NULL,
+    action TEXT NOT NULL,
+    label TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    UNIQUE(profile_id, backend_name, store_id, payment_method_id, action)
+);
+
+CREATE INDEX IF NOT EXISTS idx_btcpay_account_routes_profile_backend
+    ON btcpay_account_routes(profile_id, backend_name);
+
 CREATE TABLE IF NOT EXISTS external_documents (
     id TEXT PRIMARY KEY,
     workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
@@ -1698,6 +1715,27 @@ def _ensure_commercial_reconciliation_schema(conn):
         "CREATE INDEX IF NOT EXISTS idx_btcpay_provenance_profile_payment_request "
         "ON btcpay_provenance_records(profile_id, payment_request_id) "
         "WHERE payment_request_id IS NOT NULL"
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS btcpay_account_routes (
+            id TEXT PRIMARY KEY,
+            workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+            profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+            backend_name TEXT NOT NULL,
+            store_id TEXT NOT NULL,
+            payment_method_id TEXT NOT NULL,
+            action TEXT NOT NULL,
+            label TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            UNIQUE(profile_id, backend_name, store_id, payment_method_id, action)
+        )
+        """
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_btcpay_account_routes_profile_backend "
+        "ON btcpay_account_routes(profile_id, backend_name)"
     )
     conn.execute(
         """

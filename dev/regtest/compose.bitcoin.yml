@@ -28,6 +28,7 @@ services:
       - "-rpcallowip=172.16.0.0/12"
       - "-rpcallowip=192.168.0.0/16"
       - "-rpcauth=${KASSIBER_REGTEST_RPC_AUTH}"
+      - "-mocktime=${KASSIBER_REGTEST_MOCKTIME:-0}"
     ports:
       - "127.0.0.1:${KASSIBER_REGTEST_RPC_PORT:-18443}:18443"
     volumes:
@@ -54,6 +55,7 @@ services:
       - "-rpcallowip=172.16.0.0/12"
       - "-rpcallowip=192.168.0.0/16"
       - "-rpcauth=${KASSIBER_REGTEST_RPC_AUTH}"
+      - "-mocktime=${KASSIBER_REGTEST_MOCKTIME:-0}"
     ports:
       - "127.0.0.1:${KASSIBER_REGTEST_ELEMENTS_RPC_PORT:-18547}:7041"
     volumes:

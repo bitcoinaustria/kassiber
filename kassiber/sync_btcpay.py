@@ -162,7 +162,14 @@ def fetch_btcpay_invoice_provenance(
                 f"BTCPay response for {url} was not a JSON array",
                 code="protocol_error",
             )
-        return page
+        return _hydrate_invoice_payment_methods(
+            base,
+            store_id,
+            page,
+            http_opener,
+            token,
+            timeout,
+        )
 
     invoices, next_pages, page_metadata = _fetch_incremental_pages(
         fetch_page=fetch_page,
@@ -323,8 +330,21 @@ def _build_payment_methods_url(base, store_id):
 
 def _build_invoices_url(base, store_id, skip, limit):
     store_q = urlparse.quote(store_id, safe="")
-    query = urlparse.urlencode({"skip": str(skip), "take": str(limit)})
+    query = urlparse.urlencode(
+        {
+            "skip": str(skip),
+            "take": str(limit),
+            "includePaymentMethods": "true",
+        }
+    )
     return f"{base.rstrip('/')}/api/v1/stores/{store_q}/invoices?{query}"
+
+
+def _build_invoice_payment_methods_url(base, store_id, invoice_id):
+    store_q = urlparse.quote(store_id, safe="")
+    invoice_q = urlparse.quote(invoice_id, safe="")
+    query = urlparse.urlencode({"onlyAccountedPayments": "true"})
+    return f"{base.rstrip('/')}/api/v1/stores/{store_q}/invoices/{invoice_q}/payment-methods?{query}"
 
 
 def _backend_http_opener(backend):
@@ -616,6 +636,7 @@ def _invoice_page_fingerprint_rows(page):
                 or metadata.get("paymentRequestId")
                 or metadata.get("payment_request_id"),
                 "metadata": metadata,
+                "paymentMethods": invoice.get("paymentMethods"),
                 "payments": invoice.get("payments"),
             }
         )
@@ -626,6 +647,90 @@ def _invoice_page_fingerprint(page):
     return hashlib.sha256(
         json.dumps(_invoice_page_fingerprint_rows(page), sort_keys=True).encode("utf-8")
     ).hexdigest()
+
+
+def _hydrate_invoice_payment_methods(base, store_id, invoices, http_opener, token, timeout):
+    hydrated = []
+    for invoice in invoices:
+        if not isinstance(invoice, dict):
+            hydrated.append(invoice)
+            continue
+        methods = invoice.get("paymentMethods")
+        if isinstance(methods, list):
+            copy = dict(invoice)
+            copy["payments"] = _payments_from_invoice_payment_methods(methods)
+            hydrated.append(copy)
+            continue
+        payments = invoice.get("payments")
+        if isinstance(payments, list) and payments:
+            hydrated.append(invoice)
+            continue
+        invoice_id = invoice.get("id") or invoice.get("invoiceId")
+        if not invoice_id:
+            hydrated.append(invoice)
+            continue
+        methods_url = _build_invoice_payment_methods_url(base, store_id, str(invoice_id))
+        methods = _http_get_json(
+            http_opener,
+            methods_url,
+            token,
+            timeout,
+            permission_hint="Grant the API key the BTCPay 'View invoices' permission.",
+        )
+        if not isinstance(methods, list):
+            raise AppError(
+                f"BTCPay response for {methods_url} was not a JSON array",
+                code="protocol_error",
+            )
+        copy = dict(invoice)
+        copy["paymentMethods"] = methods
+        copy["payments"] = _payments_from_invoice_payment_methods(methods)
+        hydrated.append(copy)
+    return hydrated
+
+
+def _payments_from_invoice_payment_methods(methods):
+    payments = []
+    for method in methods:
+        if not isinstance(method, dict):
+            continue
+        payment_method_id = method.get("paymentMethodId")
+        method_payments = method.get("payments") or []
+        if not isinstance(method_payments, list):
+            continue
+        for payment in method_payments:
+            if not isinstance(payment, dict):
+                continue
+            enriched = dict(payment)
+            enriched.setdefault("paymentMethodId", payment_method_id)
+            if method.get("rate") is not None:
+                enriched.setdefault("rate", method.get("rate"))
+            if method.get("destination") is not None:
+                enriched.setdefault("destination", method.get("destination"))
+            payment_id = str(enriched.get("id") or "")
+            txid = _txid_from_payment_id(payment_id, payment_method_id)
+            if not enriched.get("transactionId") and txid:
+                enriched["transactionId"] = txid
+            payments.append(enriched)
+    return payments
+
+
+def _looks_like_txid(value):
+    return len(value) == 64 and all(char in "0123456789abcdefABCDEF" for char in value)
+
+
+def _is_chain_payment_method(payment_method_id):
+    return str(payment_method_id or "").strip().upper().endswith("-CHAIN")
+
+
+def _txid_from_payment_id(value, payment_method_id=None):
+    raw = str(value or "").strip()
+    if _looks_like_txid(raw) and _is_chain_payment_method(payment_method_id):
+        return raw
+    first, separator, _ = raw.partition("-")
+    if separator and _looks_like_txid(first):
+        return first
+    return None
 
 
 def _http_get_json(opener, url, token, timeout, *, permission_hint=None):
@@ -820,15 +925,16 @@ def _normalize_invoice_payment(invoice, payment):
         or payment.get("paymentMethodData")
         or details.get("paymentMethod")
     )
+    payment_id = (
+        payment.get("id")
+        or payment.get("paymentId")
+        or payment.get("accountedPaymentId")
+        or payment.get("transactionId")
+        or details.get("transactionId")
+    )
     return {
         "payment": payment,
-        "payment_id": _str_or_none(
-            payment.get("id")
-            or payment.get("paymentId")
-            or payment.get("accountedPaymentId")
-            or payment.get("transactionId")
-            or details.get("transactionId")
-        ),
+        "payment_id": _str_or_none(payment_id),
         "payment_method_id": _str_or_none(method),
         "status": _str_or_none(payment.get("status") or details.get("status")),
         "received_at": _btcpay_time(
@@ -849,6 +955,7 @@ def _normalize_invoice_payment(invoice, payment):
             or payment.get("transactionHash")
             or details.get("transactionId")
             or details.get("transactionHash")
+            or _txid_from_payment_id(payment_id, method)
         ),
         "payment_hash": _str_or_none(
             payment.get("paymentHash")
@@ -897,6 +1004,8 @@ def _invoice_origin(invoice, metadata, order_id):
 
     lower_order_url = (order_url or "").lower()
     lower_order_id = (order_id or "").lower()
+    lower_app_name = (app_name or "").lower()
+    lower_app_id = (app_id or "").lower()
     if pos_data is not None or "/pos" in lower_order_url or lower_order_id.startswith("pos"):
         return {
             "kind": "pos",
@@ -904,7 +1013,28 @@ def _invoice_origin(invoice, metadata, order_id):
             "label": app_name or item_desc or pos_label or order_id,
             "url": order_url,
         }
+    if (
+        "crowdfund" in lower_app_name
+        or "crowdfund" in lower_app_id
+        or "/crowdfund" in lower_order_url
+        or lower_order_id.startswith("crowdfund")
+    ):
+        return {
+            "kind": "crowdfund",
+            "app_id": app_id,
+            "label": app_name or item_desc or order_id,
+            "url": order_url,
+        }
+    if payment_request_id:
+        return {
+            "kind": "payment_request",
+            "app_id": None,
+            "label": item_desc or payment_request_id,
+            "url": order_url,
+        }
     if app_id or app_name:
+        # Unknown BTCPay apps/plugins are provenance, not matching semantics.
+        # Exact provider matching belongs in the dedicated provider evidence path.
         return {
             "kind": "app",
             "app_id": app_id,
@@ -917,13 +1047,6 @@ def _invoice_origin(invoice, metadata, order_id):
             "app_id": None,
             "label": item_desc or order_id,
             "url": order_url,
-        }
-    if payment_request_id:
-        return {
-            "kind": "payment_request",
-            "app_id": None,
-            "label": item_desc or payment_request_id,
-            "url": None,
         }
     return {"kind": "unknown", "app_id": None, "label": item_desc, "url": order_url}
 

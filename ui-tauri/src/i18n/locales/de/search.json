@@ -54,9 +54,13 @@
       "title": "Wallet hinzufügen",
       "subtitle": "Dialog zur Wallet-Verbindung öffnen"
     },
+    "connect-btcpay": {
+      "title": "BTCPay Server verbinden",
+      "subtitle": "BTCPay-API-Sync und Store-Zuordnung öffnen"
+    },
     "import-btcpay": {
-      "title": "BTCPay importieren",
-      "subtitle": "BTCPay-Wallet-Quellen-Setup öffnen"
+      "title": "BTCPay CSV importieren",
+      "subtitle": "Manuellen BTCPay-Wallet-Export-Import öffnen"
     },
     "export-report": {
       "title": "Bericht exportieren",

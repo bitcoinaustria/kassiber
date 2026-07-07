@@ -46,6 +46,7 @@ def _demo_manifest_env(tmp_path: Path, demo_home: Path) -> dict[str, str]:
         "KASSIBER_REGTEST_BITCOIN_ELECTRUM_PORT": "50001",
         "KASSIBER_REGTEST_FRIGATE_PORT": "18548",
         "KASSIBER_REGTEST_BITCOIN_MEMPOOL_PORT": "8080",
+        "KASSIBER_REGTEST_MEMPOOL_UI_PORT": "8088",
         "KASSIBER_REGTEST_LIQUID_ELECTRUM_PORT": "60001",
         "KASSIBER_REGTEST_LIQUID_MEMPOOL_PORT": "8081",
         "KASSIBER_REGTEST_RPC_USER": "demo-user",
@@ -128,6 +129,154 @@ class IntegrationHarnessSafetyTest(unittest.TestCase):
             self.assertEqual(manifest.stat().st_mode & 0o777, 0o600)
             payload = json.loads(manifest.read_text(encoding="utf-8"))
             self.assertEqual(payload["scenario_checksum"], "abc123")
+
+    def test_demo_write_manifest_includes_real_mempool_ui_when_enabled(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-demo-manifest-") as tmp:
+            tmp_path = Path(tmp)
+            demo_home = tmp_path / "kassiber-regtest-demo"
+            env = _demo_manifest_env(tmp_path, demo_home)
+            env.update(
+                {
+                    "KASSIBER_REGTEST_DEMO_MEMPOOL_UI_ENABLED": "1",
+                    "KASSIBER_REGTEST_MEMPOOL_UI_PORT": "18551",
+                }
+            )
+
+            result = _run_harness_snippet(tmp_path, "mkdir -p \"$DEMO_HOME\"; demo_write_manifest abc123", env)
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            payload = json.loads((demo_home / "demo-manifest.json").read_text(encoding="utf-8"))
+            self.assertTrue(payload["mempool_ui_enabled"])
+            self.assertEqual(payload["bitcoin_mempool_url"], "http://127.0.0.1:8080/api")
+            self.assertEqual(payload["bitcoin_mempool_ui_url"], "http://127.0.0.1:18551")
+
+    def test_demo_write_manifest_includes_btcpay_seed_metadata_when_enabled(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-demo-manifest-") as tmp:
+            tmp_path = Path(tmp)
+            demo_home = tmp_path / "kassiber-regtest-demo"
+            demo_home.mkdir()
+            (demo_home / "btcpay-seed.json").write_text(
+                json.dumps(
+                    {
+                        "api_key": "test-token",
+                        "lightning_configured": True,
+                        "lightning_connection_string": "type=clightning;server=/cln-merchant/regtest/lightning-rpc",
+                        "payment_method_id": "BTC-CHAIN",
+                        "password": "regtest",
+                        "store_id": "store123",
+                        "user": "regtest@regtest.local",
+                        "btcpay_regtest": {
+                            "invoice_count": 7,
+                            "settled_invoice_count": 7,
+                            "scenarios": ["direct_invoice", "payment_request"],
+                            "kassiber": {
+                                "commercial_reconciliation": {
+                                    "payment_request_id": "pr-1",
+                                    "pricing_source_kind": "btcpay_payment",
+                                    "transaction_tags": ["btcpay", "payment-request"],
+                                }
+                            },
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            env = _demo_manifest_env(tmp_path, demo_home)
+            env.update(
+                {
+                    "KASSIBER_REGTEST_DEMO_BTCPAY_ENABLED": "1",
+                    "KASSIBER_REGTEST_BTCPAY_PORT": "18549",
+                    "KASSIBER_REGTEST_BTCPAY_NBXPLORER_PORT": "18550",
+                }
+            )
+            result = _run_harness_snippet(tmp_path, "demo_write_manifest abc123", env)
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            payload = json.loads((demo_home / "demo-manifest.json").read_text(encoding="utf-8"))
+            self.assertTrue(payload["btcpay_enabled"])
+            self.assertEqual(payload["btcpay_url"], "http://127.0.0.1:18549")
+            self.assertEqual(payload["btcpay_backend"], "btcpay-regtest")
+            self.assertEqual(payload["btcpay_wallet"], "BTCPay Regtest Store")
+            self.assertEqual(payload["btcpay_store_id"], "store123")
+            self.assertEqual(payload["btcpay_payment_method_id"], "BTC-CHAIN")
+            self.assertEqual(payload["btcpay_user"], "regtest@regtest.local")
+            self.assertEqual(payload["btcpay_password"], "regtest")
+            self.assertTrue(payload["btcpay_lightning_configured"])
+            self.assertEqual(
+                payload["btcpay_lightning_connection_string"],
+                "type=clightning;server=/cln-merchant/regtest/lightning-rpc",
+            )
+            self.assertEqual(payload["btcpay_api_key"], "test-token")
+            self.assertEqual(payload["btcpay_invoice_count"], 7)
+            self.assertEqual(payload["btcpay_settled_invoice_count"], 7)
+            self.assertEqual(payload["btcpay_invoice_scenarios"], ["direct_invoice", "payment_request"])
+            self.assertEqual(
+                payload["btcpay_commercial_reconciliation"]["transaction_tags"],
+                ["btcpay", "payment-request"],
+            )
+
+    def test_demo_btcpay_is_default_on_with_opt_out(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-demo-btcpay-") as tmp:
+            tmp_path = Path(tmp)
+            default_result = _run_harness_snippet(
+                tmp_path,
+                'demo_configure_btcpay; printf "%s:%s:%s\\n" "${KASSIBER_REGTEST_USE_BTCPAY_COMPOSE:-}" "${KASSIBER_REGTEST_DEMO_BTCPAY_ENABLED:-}" "${KASSIBER_REGTEST_BTCPAY_PORT:-}"',
+                {"KASSIBER_REGTEST_RPC_PORT": "18443"},
+            )
+            self.assertEqual(default_result.returncode, 0, default_result.stderr)
+            self.assertEqual(default_result.stdout.strip(), "1:1:18549")
+
+            disabled_result = _run_harness_snippet(
+                tmp_path,
+                'demo_configure_btcpay; printf "%s:%s\\n" "${KASSIBER_REGTEST_USE_BTCPAY_COMPOSE:-}" "${KASSIBER_REGTEST_DEMO_BTCPAY_ENABLED:-}"',
+                {
+                    "KASSIBER_REGTEST_DEMO_BTCPAY": "0",
+                    "KASSIBER_REGTEST_RPC_PORT": "18443",
+                },
+            )
+            self.assertEqual(disabled_result.returncode, 0, disabled_result.stderr)
+            self.assertEqual(disabled_result.stdout.strip(), ":0")
+
+    def test_demo_btcpay_invoice_exercise_is_default_on_with_opt_out(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-demo-btcpay-invoices-") as tmp:
+            tmp_path = Path(tmp)
+            default_result = _run_harness_snippet(
+                tmp_path,
+                'if demo_btcpay_invoice_exercise_enabled; then printf "enabled"; else printf "disabled"; fi',
+                {},
+            )
+            self.assertEqual(default_result.returncode, 0, default_result.stderr)
+            self.assertEqual(default_result.stdout.strip(), "enabled")
+
+            disabled_result = _run_harness_snippet(
+                tmp_path,
+                'if demo_btcpay_invoice_exercise_enabled; then printf "enabled"; else printf "disabled"; fi',
+                {"KASSIBER_REGTEST_DEMO_BTCPAY_INVOICES": "0"},
+            )
+            self.assertEqual(disabled_result.returncode, 0, disabled_result.stderr)
+            self.assertEqual(disabled_result.stdout.strip(), "disabled")
+
+    def test_demo_mempool_ui_is_default_on_with_opt_out(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-demo-mempool-ui-") as tmp:
+            tmp_path = Path(tmp)
+            default_result = _run_harness_snippet(
+                tmp_path,
+                'demo_configure_mempool_ui; printf "%s:%s:%s\\n" "${KASSIBER_REGTEST_USE_MEMPOOL_UI_COMPOSE:-}" "${KASSIBER_REGTEST_DEMO_MEMPOOL_UI_ENABLED:-}" "${KASSIBER_REGTEST_MEMPOOL_UI_PORT:-}"',
+                {"KASSIBER_REGTEST_RPC_PORT": "18443"},
+            )
+            self.assertEqual(default_result.returncode, 0, default_result.stderr)
+            self.assertEqual(default_result.stdout.strip(), "1:1:18551")
+
+            disabled_result = _run_harness_snippet(
+                tmp_path,
+                'demo_configure_mempool_ui; printf "%s:%s\\n" "${KASSIBER_REGTEST_USE_MEMPOOL_UI_COMPOSE:-}" "${KASSIBER_REGTEST_DEMO_MEMPOOL_UI_ENABLED:-}"',
+                {
+                    "KASSIBER_REGTEST_DEMO_MEMPOOL_UI": "0",
+                    "KASSIBER_REGTEST_RPC_PORT": "18443",
+                },
+            )
+            self.assertEqual(disabled_result.returncode, 0, disabled_result.stderr)
+            self.assertEqual(disabled_result.stdout.strip(), ":0")
 
 
 if __name__ == "__main__":

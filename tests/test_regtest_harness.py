@@ -548,11 +548,56 @@ class RegtestHarnessTest(unittest.TestCase):
         self.assertIn('KASSIBER_LIGHTNING_BUSINESS_WORKSPACE="Regtest Demo"', harness)
         self.assertIn('KASSIBER_LIGHTNING_BUSINESS_PROFILE="Full Accounting"', harness)
 
+    def test_demo_up_includes_btcpay_by_default_with_opt_out(self):
+        harness = (ROOT / "scripts" / "integration-harness.sh").read_text(encoding="utf-8")
+        compose = (ROOT / "dev" / "regtest" / "compose.bitcoin.yml").read_text(encoding="utf-8")
+
+        self.assertIn("demo_btcpay_enabled()", harness)
+        self.assertIn("KASSIBER_REGTEST_DEMO_BTCPAY:-1", harness)
+        self.assertIn("demo_btcpay_invoice_exercise_enabled()", harness)
+        self.assertIn("KASSIBER_REGTEST_DEMO_BTCPAY_INVOICES:-1", harness)
+        self.assertIn("dev/regtest/compose.btcpay.yml", harness)
+        self.assertIn("demo_seed_btcpay", harness)
+        self.assertIn("--exercise-invoice", harness)
+        self.assertIn("btcpay_invoice_count", harness)
+        self.assertIn("btcpay_commercial_reconciliation", harness)
+        self.assertIn("KASSIBER_REGTEST_USE_BTCPAY_COMPOSE=1", harness)
+        self.assertIn("export KASSIBER_REGTEST_USE_BTCPAY_COMPOSE=1", harness)
+        demo_build_book = harness.split("demo_build_book() {", 1)[1].split("demo_print_instructions()", 1)[0]
+        self.assertLess(demo_build_book.index("demo_seed_btcpay"), demo_build_book.index("demo_seed_lightning"))
+        self.assertIn("demo_scenario_base_epoch()", harness)
+        self.assertIn("KASSIBER_REGTEST_MOCKTIME", harness)
+        self.assertIn("-mocktime=${KASSIBER_REGTEST_MOCKTIME:-0}", compose)
+
+    def test_demo_up_includes_real_mempool_ui_by_default_with_opt_out(self):
+        harness = (ROOT / "scripts" / "integration-harness.sh").read_text(encoding="utf-8")
+        compose = (ROOT / "dev" / "regtest" / "compose.mempool.yml").read_text(encoding="utf-8")
+
+        self.assertIn("demo_mempool_ui_enabled()", harness)
+        self.assertIn("KASSIBER_REGTEST_USE_MEMPOOL_UI_COMPOSE=1", harness)
+        self.assertIn("KASSIBER_REGTEST_DEMO_MEMPOOL_UI:-1", harness)
+        self.assertIn("dev/regtest/compose.mempool.yml", harness)
+        self.assertIn("KASSIBER_REGTEST_USE_MEMPOOL_UI_COMPOSE=1", harness)
+        self.assertIn("bitcoin_mempool_ui_url", harness)
+        self.assertIn("mempool/frontend", compose)
+        self.assertIn("mempool/backend", compose)
+        self.assertNotIn(":latest", compose)
+        self.assertIn("MEMPOOL_CACHE_DIR: /tmp/mempool-cache", compose)
+        self.assertIn("mariadb:10.5.21", compose)
+        self.assertIn("MEMPOOL_NETWORK: regtest", compose)
+        self.assertIn("ELECTRUM_HOST: fulcrum", compose)
+
     def test_regtest_lanes_auto_select_free_port_family(self):
         harness = (ROOT / "scripts" / "integration-harness.sh").read_text(encoding="utf-8")
 
         self.assertIn("choose_regtest_base_port()", harness)
         self.assertIn("regtest_ports_available()", harness)
+        self.assertIn("selected_regtest_ports_available()", harness)
+        self.assertIn("btcpay_ports_available()", harness)
+        self.assertIn("mempool_ui_ports_available()", harness)
+        self.assertIn("$((base + 106))", harness)
+        self.assertIn("$((base + 107))", harness)
+        self.assertIn("$((base + 108))", harness)
         self.assertIn('export KASSIBER_REGTEST_RPC_PORT="$(choose_regtest_base_port)"', harness)
         self.assertIn("for candidate in 18443 19443 20443 21443 22443", harness)
         self.assertLess(

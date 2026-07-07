@@ -704,15 +704,34 @@
   "commercial": {
     "title": "Kommerzielle Herkunft",
     "loading": "Wird geladen…",
-    "empty": "Kein verknüpfter BTCPay- oder Dokumentkontext.",
     "btcpayPayment": "BTCPay-Zahlung",
     "linked": "Verknüpft",
     "invoice": "Rechnung",
+    "paidInvoice": "Bezahlte Rechnung",
     "unknown": "Unbekannt",
     "paymentRequest": "Zahlungsanforderung",
-    "origin": "Herkunft",
-    "review": "Prüfung",
-    "documents": "Dokumente",
+    "origin": "BTCPay-Quelle",
+    "reconciliation": "Abgleich",
+    "openPaymentRequest": "BTCPay-Zahlungsanforderung öffnen",
+    "openOrigin": "BTCPay-Quelle öffnen",
+    "linkState": {
+      "suggested": "Vorgeschlagen",
+      "reviewed": "Geprüft",
+      "rejected": "Abgelehnt"
+    },
+    "reconciliationState": {
+      "matched": "Zugeordnet",
+      "mismatch": "Abweichung",
+      "ignored": "Ignoriert",
+      "unreviewed": "Ungeprüft"
+    },
+    "commercialKind": {
+      "income": "Einnahme",
+      "expense": "Ausgabe",
+      "refund": "Erstattung",
+      "transfer": "Transfer",
+      "none": "Keine"
+    },
     "originLabel": {
       "unknown": "Unbekannt",
       "pos": "BTCPay POS",

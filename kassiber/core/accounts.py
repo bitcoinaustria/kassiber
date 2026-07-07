@@ -25,6 +25,7 @@ from ..time_utils import now_iso
 from ..transfers import profile_bitcoin_rail_carrying_value
 from ..wallet_descriptors import normalize_asset_code
 from . import output_inventory as core_output_inventory
+from . import commercial as core_commercial
 from .repo import invalidate_journals, resolve_profile, resolve_scope, resolve_workspace
 
 ACCOUNT_TYPES = {"asset", "liability", "equity", "income", "expense"}
@@ -520,7 +521,15 @@ def update_backend(conn, name, updates):
 
 
 def delete_backend(conn, name):
-    return _delete_db_backend(conn, name)
+    payload = _delete_db_backend(conn, name)
+    removed_account_routes = core_commercial.delete_btcpay_account_routes_for_backend(
+        conn,
+        payload["name"],
+    )
+    if removed_account_routes:
+        conn.commit()
+        payload["detached_btcpay_account_routes"] = removed_account_routes
+    return payload
 
 
 def set_default_backend(conn, runtime_config, name, *, commit=True):

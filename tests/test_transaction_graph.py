@@ -400,6 +400,84 @@ class TransactionGraphTest(unittest.TestCase):
         self.assertNotIn("change", {annotation["code"] for annotation in payload["outputs"][0]["annotations"]})
         self.assertEqual(payload["outputs"][1]["role"], "external_recipient")
 
+    def test_inbound_graph_infers_payment_output_from_recorded_amount(self):
+        txid = "82" * 32
+        raw = {
+            "txid": txid,
+            "vin": [
+                {
+                    "txid": "55" * 32,
+                    "vout": 0,
+                    "prevout": {
+                        "scriptpubkey": "0014" + "88" * 20,
+                        "value": 312_414_797,
+                    },
+                }
+            ],
+            "vout": [
+                {
+                    "n": 0,
+                    "scriptpubkey": SCRIPT_B,
+                    "scriptpubkey_address": ADDR_B,
+                    "value": 26_705,
+                },
+                {"n": 1, "scriptpubkey": "0014" + "99" * 20, "value": 312_387_078},
+            ],
+        }
+        self._tx(
+            "inbound-amount-row",
+            "wallet-b",
+            "inbound",
+            26_705_000,
+            txid,
+            raw,
+        )
+
+        payload = self._graph("inbound-amount-row")
+
+        self.assertEqual(payload["outputs"][0]["role"], "incoming_payment")
+        self.assertEqual(payload["outputs"][0]["ownership"], "owned")
+        self.assertIn(
+            "recorded_incoming_amount",
+            {annotation["code"] for annotation in payload["outputs"][0]["annotations"]},
+        )
+        self.assertEqual(payload["outputs"][1]["role"], "external_recipient")
+
+    def test_inbound_amount_inference_skips_ambiguous_equal_outputs(self):
+        txid = "83" * 32
+        raw = {
+            "txid": txid,
+            "vin": [
+                {
+                    "txid": "56" * 32,
+                    "vout": 0,
+                    "prevout": {
+                        "scriptpubkey": "0014" + "88" * 20,
+                        "value": 20_500,
+                    },
+                }
+            ],
+            "vout": [
+                {"n": 0, "scriptpubkey": SCRIPT_B, "value": 10_000},
+                {"n": 1, "scriptpubkey": "0014" + "99" * 20, "value": 10_000},
+            ],
+        }
+        self._tx(
+            "ambiguous-inbound-amount-row",
+            "wallet-b",
+            "inbound",
+            10_000_000,
+            txid,
+            raw,
+        )
+
+        payload = self._graph("ambiguous-inbound-amount-row")
+
+        self.assertEqual(
+            [output["role"] for output in payload["outputs"]],
+            ["external_recipient", "external_recipient"],
+        )
+
     def test_bitcoin_missing_prevout_values_are_enriched_from_public_lookup(self):
         txid = "33" * 32
         raw = {

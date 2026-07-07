@@ -577,6 +577,7 @@ export type CommercialBtcpayRecord = {
   origin_kind: string;
   origin_app_id: string;
   origin_label: string;
+  origin_url?: string;
   fiat_currency: string;
   fiat_value_exact: string;
   fiat_rate_exact: string;
@@ -614,11 +615,13 @@ export type CommercialBtcpayMatch = {
     id: string;
     label: string;
     status: string;
+    url?: string;
   } | null;
   origin: {
     kind: string;
     app_id: string;
     label: string;
+    url?: string;
   } | null;
 };
 

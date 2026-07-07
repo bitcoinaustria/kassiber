@@ -3,7 +3,11 @@ import unittest
 from unittest.mock import patch
 from urllib.parse import parse_qs, urlsplit
 
-from kassiber.sync_btcpay import fetch_btcpay_invoice_provenance, fetch_btcpay_records
+from kassiber.sync_btcpay import (
+    discover_btcpay_wallet_sources,
+    fetch_btcpay_invoice_provenance,
+    fetch_btcpay_records,
+)
 
 
 class _Response:
@@ -21,17 +25,44 @@ class _Response:
 
 
 class _Opener:
-    def __init__(self, pages):
+    def __init__(self, pages, payment_methods=None):
         self.pages = pages
+        self.payment_methods = payment_methods or {}
         self.urls = []
 
     def open(self, request, timeout=30):
         del timeout
         url = request.full_url
         self.urls.append(url)
+        parts = [part for part in urlsplit(url).path.split("/") if part]
+        if "invoices" in parts and "payment-methods" in parts:
+            invoice_id = parts[parts.index("invoices") + 1]
+            return _Response(self.payment_methods.get(invoice_id, []))
         query = parse_qs(urlsplit(url).query)
         skip = int((query.get("skip") or ["0"])[0])
         return _Response(self.pages.get(skip, []))
+
+
+class _DiscoveryOpener:
+    def __init__(self, stores, payment_methods_by_store):
+        self.stores = stores
+        self.payment_methods_by_store = payment_methods_by_store
+        self.urls = []
+
+    def open(self, request, timeout=30):
+        del timeout
+        url = request.full_url
+        self.urls.append(url)
+        parts = [part for part in urlsplit(url).path.split("/") if part]
+        if parts == ["api", "v1", "stores"]:
+            return _Response(self.stores)
+        if (
+            len(parts) == 5
+            and parts[:3] == ["api", "v1", "stores"]
+            and parts[4] == "payment-methods"
+        ):
+            return _Response(self.payment_methods_by_store.get(parts[3], []))
+        return _Response([])
 
 
 class BtcpayIncrementalTest(unittest.TestCase):
@@ -57,6 +88,54 @@ class BtcpayIncrementalTest(unittest.TestCase):
                 "payments": [],
             }
         ]
+
+    def test_discovery_fetches_payment_methods_for_every_visible_store(self):
+        backend = {
+            "name": "btcpay",
+            "kind": "btcpay",
+            "url": "https://btcpay.example",
+            "token": "secret",
+        }
+        opener = _DiscoveryOpener(
+            [
+                {"id": "store-one", "name": "Main store", "defaultCurrency": "EUR"},
+                {"id": "store-two", "name": "Membership store", "defaultCurrency": "BTC"},
+            ],
+            {
+                "store-one": [
+                    {"paymentMethodId": "BTC-CHAIN", "name": "Bitcoin on-chain", "enabled": True},
+                    {"paymentMethodId": "BTC-LN", "name": "Lightning", "enabled": True},
+                ],
+                "store-two": [
+                    {"paymentMethodId": "LBTC-CHAIN", "name": "Liquid", "enabled": True},
+                ],
+            },
+        )
+
+        discovered = discover_btcpay_wallet_sources(backend, opener=opener)
+
+        self.assertEqual(
+            [store["id"] for store in discovered["stores"]],
+            ["store-one", "store-two"],
+        )
+        self.assertEqual(
+            [
+                (method["store_id"], method["payment_method_id"], method["sync_supported"])
+                for method in discovered["payment_methods"]
+            ],
+            [
+                ("store-one", "BTC-CHAIN", True),
+                ("store-one", "BTC-LN", False),
+                ("store-two", "LBTC-CHAIN", True),
+            ],
+        )
+        self.assertIn("/api/v1/stores", opener.urls[0])
+        self.assertTrue(
+            any("/api/v1/stores/store-one/payment-methods?" in url for url in opener.urls)
+        )
+        self.assertTrue(
+            any("/api/v1/stores/store-two/payment-methods?" in url for url in opener.urls)
+        )
 
     def test_wallet_history_default_opener_uses_backend_proxy(self):
         backend = {
@@ -305,7 +384,8 @@ class BtcpayIncrementalTest(unittest.TestCase):
             metadata=metadata,
         )
         self.assertEqual(len(records), 1)
-        self.assertEqual(len(opener.urls), 2)
+        self.assertEqual(len(opener.urls), 3)
+        self.assertEqual(parse_qs(urlsplit(opener.urls[0]).query).get("includePaymentMethods"), ["true"])
 
         second_opener = _Opener({0: page0, 1: []})
         second_metadata = {}
@@ -318,9 +398,177 @@ class BtcpayIncrementalTest(unittest.TestCase):
             metadata=second_metadata,
         )
         self.assertEqual(records, [])
-        self.assertEqual(len(second_opener.urls), 2)
+        self.assertEqual(len(second_opener.urls), 3)
         self.assertEqual(second_metadata["pages_fetched"], 2)
         self.assertTrue(second_metadata["stopped_by_known_page"])
+
+    def test_invoice_provenance_hydrates_payment_methods_when_invoice_page_omits_payments(self):
+        backend = {"name": "btcpay", "kind": "btcpay", "url": "https://btcpay.example", "token": "secret"}
+        txid = "ab" * 32
+        page0 = [
+            {
+                "id": "invoice-1",
+                "status": "Settled",
+                "currency": "EUR",
+                "amount": "42.00",
+                "metadata": {"paymentRequestId": "membership-2026", "orderUrl": "https://shop.example/pr"},
+                "payments": [],
+            }
+        ]
+        opener = _Opener(
+            {0: page0, 1: []},
+            payment_methods={
+                "invoice-1": [
+                    {
+                        "paymentMethodId": "BTC-CHAIN",
+                        "rate": "50000.00",
+                        "destination": "bcrt1qexample",
+                        "payments": [
+                            {
+                                "id": f"{txid}-0",
+                                "value": "0.00084000",
+                                "receivedDate": 1_700_000_000,
+                            }
+                        ],
+                    }
+                ]
+            },
+        )
+
+        records = fetch_btcpay_invoice_provenance(
+            backend,
+            "store",
+            page_size=1,
+            opener=opener,
+        )
+
+        self.assertEqual(len(records), 1)
+        self.assertEqual(records[0]["origin_kind"], "payment_request")
+        self.assertEqual(records[0]["origin_url"], "https://shop.example/pr")
+        self.assertEqual(records[0]["payments"][0]["payment_id"], f"{txid}-0")
+        self.assertEqual(records[0]["payments"][0]["txid"], txid)
+        self.assertEqual(records[0]["payments"][0]["payment_method_id"], "BTC-CHAIN")
+        self.assertEqual(records[0]["payments"][0]["rate"], "50000.00")
+        self.assertEqual(records[0]["payments"][0]["destination"], "bcrt1qexample")
+        self.assertEqual(records[0]["payments"][0]["invoice_currency"], "EUR")
+        self.assertEqual(records[0]["payments"][0]["invoice_amount"], "42.00")
+        payment_method_urls = [url for url in opener.urls if "/payment-methods" in url]
+        self.assertEqual(len(payment_method_urls), 1)
+
+    def test_invoice_provenance_uses_inlined_payment_methods_without_extra_fetch(self):
+        backend = {
+            "name": "btcpay",
+            "kind": "btcpay",
+            "url": "https://btcpay.example",
+            "token": "secret",
+        }
+        txid = "cd" * 32
+        page0 = [
+            {
+                "id": "invoice-1",
+                "status": "Settled",
+                "paymentMethods": [
+                    {
+                        "paymentMethodId": "BTC-CHAIN",
+                        "destination": "bcrt1qinline",
+                        "payments": [{"id": f"{txid}-0", "value": "0.001"}],
+                    }
+                ],
+            }
+        ]
+        opener = _Opener({0: page0, 1: []})
+
+        records = fetch_btcpay_invoice_provenance(
+            backend,
+            "store",
+            page_size=1,
+            opener=opener,
+        )
+
+        self.assertEqual(records[0]["payments"][0]["txid"], txid)
+        self.assertEqual(records[0]["payments"][0]["payment_method_id"], "BTC-CHAIN")
+        self.assertEqual(records[0]["payments"][0]["destination"], "bcrt1qinline")
+        payment_method_urls = [url for url in opener.urls if "/payment-methods" in url]
+        self.assertEqual(payment_method_urls, [])
+
+    def test_invoice_provenance_inlined_payment_methods_affect_page_fingerprint(self):
+        backend = {
+            "name": "btcpay",
+            "kind": "btcpay",
+            "url": "https://btcpay.example",
+            "token": "secret",
+        }
+        invoice = {
+            "id": "invoice-1",
+            "status": "Settled",
+            "paymentMethods": [],
+        }
+        metadata = {}
+        records = fetch_btcpay_invoice_provenance(
+            backend,
+            "store",
+            page_size=1,
+            opener=_Opener({0: [invoice], 1: []}),
+            metadata=metadata,
+        )
+        self.assertEqual(len(records), 1)
+
+        txid = "ef" * 32
+        updated = {
+            **invoice,
+            "paymentMethods": [
+                {
+                    "paymentMethodId": "BTC-CHAIN",
+                    "payments": [{"id": f"{txid}-0", "value": "0.001"}],
+                }
+            ],
+        }
+        second_metadata = {}
+        records = fetch_btcpay_invoice_provenance(
+            backend,
+            "store",
+            page_size=1,
+            opener=_Opener({0: [updated], 1: []}),
+            checkpoint={"btcpay_invoice_pages": metadata["btcpay_invoice_pages"]},
+            metadata=second_metadata,
+        )
+
+        self.assertEqual(records[0]["payments"][0]["txid"], txid)
+        self.assertIn(0, second_metadata["changed_pages"])
+
+    def test_invoice_provenance_does_not_treat_lightning_payment_hash_as_txid(self):
+        backend = {
+            "name": "btcpay",
+            "kind": "btcpay",
+            "url": "https://btcpay.example",
+            "token": "secret",
+        }
+        payment_hash = "12" * 32
+        page0 = [
+            {
+                "id": "invoice-ln",
+                "status": "Settled",
+                "payments": [
+                    {
+                        "id": payment_hash,
+                        "paymentMethod": "BTC-LN",
+                        "value": "0.001",
+                    }
+                ],
+            }
+        ]
+
+        records = fetch_btcpay_invoice_provenance(
+            backend,
+            "store",
+            page_size=1,
+            opener=_Opener({0: page0, 1: []}),
+        )
+
+        payment = records[0]["payments"][0]
+        self.assertEqual(payment["payment_id"], payment_hash)
+        self.assertEqual(payment["payment_method_id"], "BTC-LN")
+        self.assertIsNone(payment["txid"])
 
     def test_invoice_provenance_reimports_when_metadata_changes_with_same_id(self):
         backend = {"name": "btcpay", "kind": "btcpay", "url": "https://btcpay.example", "token": "secret"}
@@ -362,7 +610,7 @@ class BtcpayIncrementalTest(unittest.TestCase):
         self.assertEqual(len(records), 1)
         self.assertEqual(records[0]["order_id"], "order-2")
         self.assertEqual(records[0]["order_url"], "https://shop.example/orders/2")
-        self.assertEqual(len(second_opener.urls), 2)
+        self.assertEqual(len(second_opener.urls), 3)
 
     def test_invoice_provenance_reimports_older_changed_page_after_newer_unchanged(self):
         backend = {"name": "btcpay", "kind": "btcpay", "url": "https://btcpay.example", "token": "secret"}
@@ -411,7 +659,7 @@ class BtcpayIncrementalTest(unittest.TestCase):
 
         self.assertEqual(len(records), 1)
         self.assertEqual(records[0]["order_id"], "order-old-corrected")
-        self.assertEqual(len(second_opener.urls), 3)
+        self.assertEqual(len(second_opener.urls), 5)
         self.assertTrue(second_metadata["stopped_by_known_page"])
 
     def test_invoice_provenance_deep_audit_finds_older_metadata_edit(self):

@@ -61,6 +61,7 @@ export type SearchRouteTarget = {
 
 export type SearchActionId =
   | "add-wallet"
+  | "connect-btcpay"
   | "import-btcpay"
   | "process-journals";
 

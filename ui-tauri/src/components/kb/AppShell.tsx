@@ -2473,9 +2473,15 @@ function AppDashboardHeader({
           runJournalProcessing();
           return;
         case "add-wallet":
+        case "connect-btcpay":
         case "import-btcpay":
           setDeferredConnectionSetup({
-            sourceId: actionId === "import-btcpay" ? "btcpay" : "descriptor",
+            sourceId:
+              actionId === "connect-btcpay"
+                ? "btcpay"
+                : actionId === "import-btcpay"
+                  ? "btcpay-csv"
+                  : "descriptor",
             reason: t("search.actionReason.fromSearch"),
           });
           void navigate({ to: "/connections" });

@@ -33,6 +33,7 @@ from kassiber import daemon as daemon_module
 from kassiber.ai import tools as ai_tools
 from kassiber.ai.providers import ai_provider_secret_service_id
 from kassiber.core import attachments as core_attachments
+from kassiber.core import commercial as core_commercial
 from kassiber.core import source_funds as core_source_funds
 from kassiber.log_ring import get_log_ring
 from kassiber.core import freshness as core_freshness
@@ -707,6 +708,76 @@ class DaemonReportDepthClampTest(unittest.TestCase):
 
 
 class DaemonFreshnessForceFullTest(unittest.TestCase):
+    def test_account_btcpay_provenance_routes_enqueue_without_wallet(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-btcpay-account-freshness-") as tmp:
+            conn = open_db(Path(tmp) / "data")
+            try:
+                conn.execute(
+                    "INSERT INTO workspaces(id, label, created_at) VALUES(?, ?, ?)",
+                    ("workspace-1", "Main", "2026-01-01T00:00:00Z"),
+                )
+                conn.execute(
+                    """
+                    INSERT INTO profiles(
+                        id, workspace_id, label, fiat_currency, tax_country,
+                        tax_long_term_days, gains_algorithm, created_at
+                    ) VALUES(?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        "profile-1",
+                        "workspace-1",
+                        "Default",
+                        "EUR",
+                        "generic",
+                        365,
+                        "FIFO",
+                        "2026-01-01T00:00:00Z",
+                    ),
+                )
+                workspace = conn.execute(
+                    "SELECT * FROM workspaces WHERE id = ?",
+                    ("workspace-1",),
+                ).fetchone()
+                profile = conn.execute(
+                    "SELECT * FROM profiles WHERE id = ?",
+                    ("profile-1",),
+                ).fetchone()
+                route = core_commercial.upsert_btcpay_account_route(
+                    conn,
+                    workspace,
+                    profile,
+                    backend_name="merchant-btcpay",
+                    store_id="store-membership",
+                    payment_method_id="BTC-LN",
+                    action="provenance_only",
+                    label="Membership",
+                )
+
+                specs = _freshness_wallet_source_specs(
+                    conn,
+                    "profile-1",
+                    include_rates=False,
+                    include_journals=False,
+                )
+
+                self.assertEqual(len(specs), 1)
+                self.assertEqual(
+                    specs[0]["job_type"],
+                    core_freshness.JOB_BTCPAY_PROVENANCE,
+                )
+                self.assertEqual(
+                    specs[0]["payload"],
+                    {
+                        "account_route_id": route["id"],
+                        "backend": "merchant-btcpay",
+                        "store_id": "store-membership",
+                        "payment_method_id": "BTC-LN",
+                    },
+                )
+                self.assertIn("account:", specs[0]["source_key"])
+            finally:
+                conn.close()
+
     def test_wallet_sync_args_accept_force_full_boolean(self):
         self.assertEqual(
             _coerce_wallets_sync_args(
@@ -2973,6 +3044,11 @@ class DaemonSmokeTest(unittest.TestCase):
                                 "enabled": True,
                             },
                             {
+                                "paymentMethodId": "LBTC-CHAIN",
+                                "name": "Liquid on-chain",
+                                "enabled": True,
+                            },
+                            {
                                 "paymentMethodId": "BTC-LN",
                                 "name": "BTC Lightning",
                                 "enabled": True,
@@ -3000,6 +3076,75 @@ class DaemonSmokeTest(unittest.TestCase):
             with tempfile.TemporaryDirectory(prefix="kassiber-daemon-btcpay-discover-") as tmp:
                 data_root = Path(tmp) / "data"
                 _seed_workspace_with_transaction(data_root, tmp)
+                conn = open_db(data_root)
+                try:
+                    workspace = conn.execute(
+                        "SELECT * FROM workspaces WHERE label = ?",
+                        ("Demo",),
+                    ).fetchone()
+                    profile = conn.execute(
+                        "SELECT * FROM profiles WHERE label = ?",
+                        ("Main",),
+                    ).fetchone()
+                    account = conn.execute(
+                        "SELECT * FROM accounts WHERE profile_id = ? LIMIT 1",
+                        (profile["id"],),
+                    ).fetchone()
+                    conn.execute(
+                        """
+                        INSERT INTO wallets(
+                            id, workspace_id, profile_id, account_id, label,
+                            kind, config_json, created_at
+                        ) VALUES(?, ?, ?, ?, ?, ?, ?, ?)
+                        """,
+                        (
+                            "btcpay-existing-source",
+                            workspace["id"],
+                            profile["id"],
+                            account["id"],
+                            "BTCPay Existing Source",
+                            "custom",
+                            json.dumps(
+                                {
+                                    "backend": "btcpay-inline",
+                                    "store_id": "store-main",
+                                    "payment_method_id": "BTC-CHAIN",
+                                    "sync_source": "btcpay",
+                                },
+                                sort_keys=True,
+                            ),
+                            "2026-01-01T00:00:00Z",
+                        ),
+                    )
+                    cold = conn.execute(
+                        "SELECT * FROM wallets WHERE label = ?",
+                        ("Cold",),
+                    ).fetchone()
+                    cold_config = json.loads(cold["config_json"] or "{}")
+                    cold_config["btcpay_provenance"] = [
+                        {
+                            "backend": "btcpay-inline",
+                            "store_id": "store-main",
+                            "payment_method_id": "LBTC-CHAIN",
+                        }
+                    ]
+                    conn.execute(
+                        "UPDATE wallets SET config_json = ? WHERE id = ?",
+                        (json.dumps(cold_config, sort_keys=True), cold["id"]),
+                    )
+                    core_commercial.upsert_btcpay_account_route(
+                        conn,
+                        workspace,
+                        profile,
+                        backend_name="btcpay-inline",
+                        store_id="store-main",
+                        payment_method_id="BTC-LN",
+                        action="provenance_only",
+                        label="Main shop",
+                    )
+                    conn.commit()
+                finally:
+                    conn.close()
                 proc = _start_daemon(data_root)
                 try:
                     self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.ready")
@@ -3024,7 +3169,34 @@ class DaemonSmokeTest(unittest.TestCase):
                     methods = envelope["data"]["payment_methods"]
                     self.assertEqual(methods[0]["payment_method_id"], "BTC-CHAIN")
                     self.assertTrue(methods[0]["sync_supported"])
-                    self.assertFalse(methods[1]["sync_supported"])
+                    self.assertEqual(methods[1]["payment_method_id"], "LBTC-CHAIN")
+                    self.assertTrue(methods[1]["sync_supported"])
+                    self.assertFalse(methods[2]["sync_supported"])
+                    existing_routes = {
+                        (
+                            route["store_id"],
+                            route["payment_method_id"],
+                            route["action"],
+                        ): route
+                        for route in envelope["data"]["existing_routes"]
+                    }
+                    self.assertEqual(
+                        existing_routes[
+                            ("store-main", "BTC-CHAIN", "wallet_source")
+                        ]["wallet"],
+                        "BTCPay Existing Source",
+                    )
+                    self.assertEqual(
+                        existing_routes[
+                            ("store-main", "LBTC-CHAIN", "existing_wallet")
+                        ]["wallet"],
+                        "Cold",
+                    )
+                    self.assertIsNone(
+                        existing_routes[
+                            ("store-main", "BTC-LN", "provenance_only")
+                        ]["wallet"]
+                    )
                     self.assertEqual(received[0]["auth"], "token inline-secret")
                     self.assertIn("onlyEnabled=true", received[1]["path"])
                 finally:
@@ -3572,6 +3744,255 @@ class DaemonSmokeTest(unittest.TestCase):
                 _write_payload(
                     proc,
                     {
+                        "request_id": "inline-btcpay-duplicate-credentials",
+                        "kind": "ui.connections.btcpay.create",
+                        "args": {
+                            "label": "BTCPay Inline UI 3",
+                            "backend_label": "Duplicate Shop BTCPay",
+                            "server_url": "https://shop-btcpay.example/",
+                            "api_key": "inline-secret",
+                            "store_id": "store789",
+                            "payment_method_id": "BTC-CHAIN",
+                        },
+                    },
+                )
+                duplicate_credentials = _read_payload_timeout(proc)
+                self.assertEqual(duplicate_credentials["kind"], "error")
+                self.assertEqual(
+                    duplicate_credentials["error"]["code"], "conflict"
+                )
+                self.assertEqual(
+                    duplicate_credentials["error"]["details"]["existing_backend"],
+                    "shop-btcpay",
+                )
+                self.assertIn(
+                    "saved instance",
+                    duplicate_credentials["error"]["hint"].lower(),
+                )
+
+                account_setup_args = {
+                    "mode": "account",
+                    "label": "BTCPay Account UI",
+                    "backend": "btcpay-ui",
+                    "sync_provenance": False,
+                    "routes": [
+                        {
+                            "store_id": "store-account-a",
+                            "store_name": "Membership",
+                            "payment_method_id": "BTC-CHAIN",
+                            "action": "wallet_source",
+                        },
+                        {
+                            "store_id": "store-account-b",
+                            "store_name": "Merch",
+                            "payment_method_id": "LBTC-CHAIN",
+                            "action": "existing_wallet",
+                            "wallet": "River UI",
+                        },
+                        {
+                            "store_id": "store-account-b",
+                            "store_name": "Merch",
+                            "payment_method_id": "BTC-LN",
+                            "action": "provenance_only",
+                        },
+                        {
+                            "store_id": "store-account-b",
+                            "store_name": "Merch",
+                            "payment_method_id": "BTC-CHAIN",
+                            "action": "skip",
+                        },
+                    ],
+                }
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "btcpay-account-setup",
+                        "kind": "ui.connections.btcpay.create",
+                        "args": account_setup_args,
+                    },
+                )
+                account_setup = _read_payload_timeout(proc)
+                self.assertEqual(
+                    account_setup["kind"],
+                    "ui.connections.btcpay.create",
+                )
+                self.assertEqual(account_setup["data"]["mode"], "account")
+                self.assertEqual(account_setup["data"]["backend"]["name"], "btcpay-ui")
+                self.assertEqual(account_setup["data"]["reused_wallets"], 0)
+                self.assertEqual(account_setup["data"]["provenance"], [])
+                self.assertEqual(
+                    account_setup["data"]["account_routes"][0]["action"],
+                    "provenance_only",
+                )
+                self.assertEqual(
+                    account_setup["data"]["account_routes"][0]["payment_method_id"],
+                    "BTC-LN",
+                )
+                verify_conn = open_db(data_root)
+                try:
+                    saved_account_route = verify_conn.execute(
+                        """
+                        SELECT * FROM btcpay_account_routes
+                        WHERE backend_name = ? AND store_id = ?
+                          AND payment_method_id = ? AND action = ?
+                        """,
+                        (
+                            "btcpay-ui",
+                            "store-account-b",
+                            "BTC-LN",
+                            "provenance_only",
+                        ),
+                    ).fetchone()
+                finally:
+                    verify_conn.close()
+                self.assertIsNotNone(saved_account_route)
+                self.assertEqual(
+                    [
+                        wallet["label"]
+                        for wallet in account_setup["data"]["wallet_sources"]
+                    ],
+                    ["BTCPay Account UI - Membership - BTC-CHAIN"],
+                )
+                self.assertEqual(
+                    account_setup["data"]["wallet_sources"][0]["config"]["store_id"],
+                    "store-account-a",
+                )
+                self.assertEqual(
+                    account_setup["data"]["mappings"][0]["route"],
+                    {
+                        "backend": "btcpay-ui",
+                        "store_id": "store-account-b",
+                        "payment_method_id": "LBTC-CHAIN",
+                    },
+                )
+                self.assertEqual(
+                    account_setup["data"]["skipped"][0]["payment_method_id"],
+                    "BTC-CHAIN",
+                )
+                account_mapped_config = account_setup["data"]["mappings"][0][
+                    "wallet"
+                ]["config"]
+                self.assertIn("source_file", account_mapped_config)
+                self.assertEqual(
+                    account_mapped_config["source_format"],
+                    "river_csv",
+                )
+                self.assertEqual(
+                    account_mapped_config["btcpay_provenance"],
+                    [
+                        {
+                            "backend": "btcpay-ui",
+                            "store_id": "store789",
+                            "payment_method_id": "BTC-CHAIN",
+                        },
+                        {
+                            "backend": "btcpay-ui",
+                            "store_id": "store-account-b",
+                            "payment_method_id": "LBTC-CHAIN",
+                        },
+                    ],
+                )
+
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "btcpay-account-setup-repeat",
+                        "kind": "ui.connections.btcpay.create",
+                        "args": account_setup_args,
+                    },
+                )
+                account_setup_repeat = _read_payload_timeout(proc)
+                self.assertEqual(
+                    account_setup_repeat["kind"],
+                    "ui.connections.btcpay.create",
+                )
+                self.assertEqual(account_setup_repeat["data"]["reused_wallets"], 1)
+                self.assertEqual(
+                    account_setup_repeat["data"]["wallet_sources"][0]["label"],
+                    "BTCPay Account UI - Membership - BTC-CHAIN",
+                )
+                self.assertEqual(
+                    account_setup_repeat["data"]["account_routes"][0]["id"],
+                    account_setup["data"]["account_routes"][0]["id"],
+                )
+                self.assertEqual(
+                    account_setup_repeat["data"]["mappings"][0]["wallet"]["config"][
+                        "btcpay_provenance"
+                    ],
+                    account_mapped_config["btcpay_provenance"],
+                )
+
+                account_setup_skip_args = {
+                    **account_setup_args,
+                    "routes": [
+                        {
+                            "store_id": "store-account-b",
+                            "store_name": "Merch",
+                            "payment_method_id": "BTC-LN",
+                            "action": "skip",
+                        },
+                    ],
+                }
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "btcpay-account-setup-remove-skip",
+                        "kind": "ui.connections.btcpay.create",
+                        "args": account_setup_skip_args,
+                    },
+                )
+                account_setup_skip = _read_payload_timeout(proc)
+                self.assertEqual(
+                    account_setup_skip["kind"],
+                    "ui.connections.btcpay.create",
+                )
+                self.assertEqual(account_setup_skip["data"]["account_routes"], [])
+                self.assertEqual(
+                    account_setup_skip["data"]["skipped"][0]["payment_method_id"],
+                    "BTC-LN",
+                )
+
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "update-btcpay-provenance-routes",
+                        "kind": "ui.wallets.update",
+                        "args": {
+                            "wallet": "River UI",
+                            "btcpay_provenance": [
+                                {
+                                    "backend": "btcpay-ui",
+                                    "store_id": "store-account-b",
+                                    "payment_method_id": "LBTC-CHAIN",
+                                }
+                            ],
+                            "auth_response": {
+                                "plaintext_change_ack": "CHANGE LOCAL DATA",
+                            },
+                        },
+                    },
+                )
+                updated_provenance_routes = _read_payload_timeout(proc)
+                self.assertEqual(
+                    updated_provenance_routes["kind"],
+                    "ui.wallets.update",
+                )
+                self.assertEqual(
+                    updated_provenance_routes["data"]["wallet"]["config"][
+                        "btcpay_provenance"
+                    ],
+                    [
+                        {
+                            "backend": "btcpay-ui",
+                            "store_id": "store-account-b",
+                            "payment_method_id": "LBTC-CHAIN",
+                        }
+                    ],
+                )
+
+                _write_payload(
+                    proc,
+                    {
                         "request_id": "update-no-changes",
                         "kind": "ui.wallets.update",
                         "args": {
@@ -3594,6 +4015,24 @@ class DaemonSmokeTest(unittest.TestCase):
                 code, stderr = _close_daemon(proc)
                 self.assertEqual(code, 0, stderr)
                 self.assertEqual(stderr, "")
+                verify_conn = open_db(data_root)
+                try:
+                    saved_account_route = verify_conn.execute(
+                        """
+                        SELECT * FROM btcpay_account_routes
+                        WHERE backend_name = ? AND store_id = ?
+                          AND payment_method_id = ? AND action = ?
+                        """,
+                        (
+                            "btcpay-ui",
+                            "store-account-b",
+                            "BTC-LN",
+                            "provenance_only",
+                        ),
+                    ).fetchone()
+                finally:
+                    verify_conn.close()
+                self.assertIsNone(saved_account_route)
             finally:
                 if proc.poll() is None:
                     proc.kill()

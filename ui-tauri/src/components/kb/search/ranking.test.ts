@@ -311,6 +311,57 @@ describe("app search results", () => {
     });
   });
 
+  it("finds recent BTCPay payment transactions by merchant wording", () => {
+    const btcpaySnapshot: OverviewSnapshot = {
+      ...snapshot,
+      txs: [
+        {
+          id: "btcpay-tx",
+          explorerId:
+            "841e5c6ee7c818697534bbd6068471fc062c8c997163c81c0b1d811f09d3fe7f",
+          date: "2026-07-06 21:16",
+          type: "Income",
+          account: "BTCPay Regtest Store",
+          counter: "",
+          amountSat: 18_000,
+          eur: 10.61,
+          rate: 58_968.9,
+          tag: "invoice",
+          tags: ["invoice", "BTCPay", "payment-request"],
+          pricingSourceKind: "btcpay_payment",
+          pricingProvider: "btcpay",
+          pricingMethod: "reviewed_commercial_link",
+          conf: 1,
+        },
+      ],
+    };
+    const ranked = buildAppSearchResults({
+      snapshot: btcpaySnapshot,
+      query: "btcpay payments",
+      aiFeaturesEnabled: true,
+      developerToolsEnabled: true,
+      t,
+    });
+
+    expect(ranked[0]).toMatchObject({
+      id: "tx:recent:btcpay-tx",
+      category: "transaction",
+      route: { to: "/transactions", search: { tx: "btcpay-tx" } },
+    });
+
+    const paymentRequestRanked = buildAppSearchResults({
+      snapshot: btcpaySnapshot,
+      query: "payment request",
+      aiFeaturesEnabled: true,
+      developerToolsEnabled: true,
+      t,
+    });
+    expect(paymentRequestRanked[0]).toMatchObject({
+      id: "tx:recent:btcpay-tx",
+      route: { to: "/transactions", search: { tx: "btcpay-tx" } },
+    });
+  });
+
   it("finds screens with page and screen wording", () => {
     const ranked = buildAppSearchResults({
       snapshot,

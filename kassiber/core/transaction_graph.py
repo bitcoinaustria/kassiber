@@ -2156,6 +2156,9 @@ def _annotate_graph(
         if input_owner_ids or not _row_is_outbound(row)
         else {source_wallet_id}
     )
+    inferred_incoming_payment_ids = _inferred_incoming_payment_output_ids(
+        row, graph["outputs"]
+    )
     for node in graph["outputs"]:
         script = node.get("_script")
         if _is_unspendable(script):
@@ -2168,6 +2171,21 @@ def _annotate_graph(
         )
         owner_ids = {str(match.wallet_id) for match in matches}
         if not matches:
+            if node.get("id") in inferred_incoming_payment_ids:
+                node["ownership"] = "owned"
+                node["role"] = "incoming_payment"
+                node["annotations"].append(
+                    _node_annotation(
+                        "incoming_payment", "Incoming payment to this wallet"
+                    )
+                )
+                node["annotations"].append(
+                    _node_annotation(
+                        "recorded_incoming_amount",
+                        "Matches imported incoming amount",
+                    )
+                )
+                continue
             node["ownership"] = "external"
             node["role"] = "external_recipient"
             node["annotations"].append(_node_annotation("external_recipient", "External recipient"))
@@ -2195,6 +2213,26 @@ def _annotate_graph(
                 node["annotations"].append(
                     _node_annotation("linked_transfer_group", "Linked transfer group", group_id)
                 )
+
+
+def _inferred_incoming_payment_output_ids(
+    row: Mapping[str, Any],
+    outputs: Sequence[Mapping[str, Any]],
+) -> set[Any]:
+    if not _row_is_inbound(row):
+        return set()
+    amount_msat = _int_or_none(_row_get(row, "amount"))
+    if amount_msat is None or amount_msat <= 0 or amount_msat % SATS_TO_MSAT != 0:
+        return set()
+    amount_sats = amount_msat // SATS_TO_MSAT
+    candidates = [
+        node.get("id")
+        for node in outputs
+        if node.get("id") is not None and node.get("valueSats") == amount_sats
+    ]
+    if len(candidates) != 1:
+        return set()
+    return {candidates[0]}
 
 
 def _input_matches(node: Mapping[str, Any], owned_index: Any) -> list[Any]:

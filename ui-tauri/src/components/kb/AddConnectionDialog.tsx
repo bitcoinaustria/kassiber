@@ -89,6 +89,17 @@ interface AddConnectionDialogProps {
   initialSourceId?: string | null;
 }
 
+type BtcpaySetupAction =
+  | "wallet_source"
+  | "existing_wallet"
+  | "provenance_only"
+  | "skip";
+
+interface BtcpayRouteChoice {
+  action: BtcpaySetupAction;
+  wallet: string;
+}
+
 interface SetupFormState {
   label: string;
   backend: string;
@@ -102,6 +113,7 @@ interface SetupFormState {
   coreRpcNetwork: string;
   btcpayInstanceMode: "saved" | "new";
   btcpaySetupMode: "wallet_sources" | "existing_wallets";
+  btcpayCsvImportMode: "wallet_source" | "existing_wallet";
   bullWalletSetupMode: "wallet_sources" | "existing_wallets";
   bullWalletNetworks: BullBitcoinWalletNetwork[];
   bullWalletRouteWallets: Record<BullBitcoinWalletNetwork, string>;
@@ -136,6 +148,7 @@ interface SetupFormState {
   btcpayPaymentMethodId: string;
   btcpayPaymentMethodIds: string[];
   btcpayRouteWallets: Record<string, string>;
+  btcpayRouteChoices: Record<string, BtcpayRouteChoice>;
   bip329Wallet: string;
   bip329File: string;
   bip329ExportMode: "stored" | "synthesized" | "all";
@@ -281,6 +294,15 @@ interface BtcpayDiscoveryData {
     label: string;
     enabled: boolean;
     sync_supported: boolean;
+  }>;
+  existing_routes?: Array<{
+    action: BtcpaySetupAction;
+    store_id: string;
+    payment_method_id: string;
+    wallet?: string | null;
+    wallet_id?: string | null;
+    route_id?: string | null;
+    label?: string | null;
   }>;
 }
 
@@ -505,6 +527,12 @@ function fileWalletSourceField(
       helper: t("add.exportFile.wasabiHelper"),
     };
   }
+  if (source.sourceFormat === "btcpay_csv") {
+    return {
+      label: t("add.exportFile.btcpayLabel"),
+      helper: t("add.exportFile.btcpayHelper"),
+    };
+  }
   return {
     label: t("add.exportFile.label"),
     helper: undefined,
@@ -548,6 +576,9 @@ function sourceFileFilters(
   }
   if (source.sourceFormat === "binance_supplemental_csv") {
     return [{ name: t("add.fileFilter.binanceSupplementalCsv"), extensions: ["csv"] }];
+  }
+  if (source.sourceFormat === "btcpay_csv") {
+    return [{ name: t("add.fileFilter.btcpayCsv"), extensions: ["csv"] }];
   }
   if (source.sourceFormat === "wasabi_bundle") {
     return [{ name: t("add.fileFilter.wasabiBundle"), extensions: ["json"] }];
@@ -594,6 +625,7 @@ const formDefaultsFor = (
     coreRpcNetwork: source.network ?? "main",
     btcpayInstanceMode: "new",
     btcpaySetupMode: "wallet_sources",
+    btcpayCsvImportMode: "wallet_source",
     bullWalletSetupMode: "wallet_sources",
     bullWalletNetworks: ["bitcoin", "liquid", "lightning"],
     bullWalletRouteWallets: {
@@ -632,6 +664,7 @@ const formDefaultsFor = (
     btcpayPaymentMethodId: DEFAULT_BTCPAY_PAYMENT_METHOD_ID,
     btcpayPaymentMethodIds: [DEFAULT_BTCPAY_PAYMENT_METHOD_ID],
     btcpayRouteWallets: {},
+    btcpayRouteChoices: {},
     bip329Wallet: "",
     bip329File: "",
     bip329ExportMode: "stored",
@@ -836,9 +869,19 @@ export function AddConnectionDialog({
   const importSamourai =
     useDaemonMutation<SamouraiImportResult>("ui.wallets.import_samourai");
   const createBtcpay = useDaemonMutation<{
+    mode?: "wallet_sources" | "existing_wallets" | "account";
     backend: { name: string };
-    wallet: { label: string };
+    wallet?: { label: string } | null;
     wallets?: Array<{ label: string }>;
+    wallet_sources?: Array<{ label: string }>;
+    mappings?: Array<{ wallet: { label: string } }>;
+    routes?: Array<{
+      store_id: string;
+      payment_method_id: string;
+      action?: BtcpaySetupAction;
+      wallet?: string | null;
+    }>;
+    provenance?: Array<{ store_id?: string; inserted?: number; updated?: number }>;
   }>("ui.connections.btcpay.create");
   const createBullBitcoinWallet = useDaemonMutation<{
     mode: "wallet_sources" | "existing_wallets";
@@ -1065,11 +1108,42 @@ export function AddConnectionDialog({
     btcpayBackends[0]?.name ??
     "";
   const discoveredStoreOptions = btcpayDiscovery?.stores ?? [];
-  const discoveredPaymentMethodOptions = (
-    btcpayDiscovery?.payment_methods ?? []
-  ).filter(
-    (method) => !form.btcpayStoreId || method.store_id === form.btcpayStoreId,
+  const discoveredStoreById = React.useMemo(
+    () =>
+      new Map(
+        discoveredStoreOptions.map((store) => [
+          store.id,
+          store.name || store.id,
+        ]),
+      ),
+    [discoveredStoreOptions],
   );
+  const btcpayRouteKey = React.useCallback(
+    (storeId: string, paymentMethodId: string) =>
+      `${storeId}\u0000${paymentMethodId}`,
+    [],
+  );
+  const discoveredExistingRouteByKey = React.useMemo(() => {
+    const priority: Record<BtcpaySetupAction, number> = {
+      existing_wallet: 4,
+      wallet_source: 3,
+      provenance_only: 2,
+      skip: 1,
+    };
+    const entries = new Map<
+      string,
+      NonNullable<BtcpayDiscoveryData["existing_routes"]>[number]
+    >();
+    for (const route of btcpayDiscovery?.existing_routes ?? []) {
+      const key = btcpayRouteKey(route.store_id, route.payment_method_id);
+      const current = entries.get(key);
+      if (!current || priority[route.action] > priority[current.action]) {
+        entries.set(key, route);
+      }
+    }
+    return entries;
+  }, [btcpayDiscovery?.existing_routes, btcpayRouteKey]);
+  const discoveredPaymentMethodOptions = btcpayDiscovery?.payment_methods ?? [];
   const syncableDiscoveredPaymentMethodOptions =
     discoveredPaymentMethodOptions.filter((method) => method.sync_supported);
   const discoveredPaymentMethodIds = new Set(
@@ -1129,15 +1203,82 @@ export function AddConnectionDialog({
     paymentMethodId: id,
     wallet: form.btcpayRouteWallets[id] || walletForPaymentMethod(id),
   }));
+  const btcpayRouteActionFor = React.useCallback(
+    (method: BtcpayDiscoveryData["payment_methods"][number]) => {
+      const key = btcpayRouteKey(method.store_id, method.payment_method_id);
+      const choice = form.btcpayRouteChoices[key];
+      const existingRoute = discoveredExistingRouteByKey.get(key);
+      const fallback: BtcpaySetupAction = method.sync_supported
+        ? form.btcpaySetupMode === "existing_wallets"
+          ? "existing_wallet"
+          : "wallet_source"
+        : "provenance_only";
+      const action = choice?.action ?? existingRoute?.action ?? fallback;
+      if (
+        !method.sync_supported &&
+        (action === "wallet_source" || action === "existing_wallet")
+      ) {
+        return "provenance_only";
+      }
+      return action;
+    },
+    [
+      btcpayRouteKey,
+      discoveredExistingRouteByKey,
+      form.btcpayRouteChoices,
+      form.btcpaySetupMode,
+    ],
+  );
+  const allBtcpayAccountRoutes = discoveredPaymentMethodOptions.map((method) => {
+    const key = btcpayRouteKey(method.store_id, method.payment_method_id);
+    const action = btcpayRouteActionFor(method);
+    const existingRoute = discoveredExistingRouteByKey.get(key);
+    const wallet =
+      form.btcpayRouteChoices[key]?.wallet ||
+      form.btcpayRouteWallets[key] ||
+      form.btcpayRouteWallets[method.payment_method_id] ||
+      existingRoute?.wallet ||
+      walletForPaymentMethod(method.payment_method_id);
+    return {
+      key,
+      storeId: method.store_id,
+      storeName: discoveredStoreById.get(method.store_id) ?? method.store_id,
+      paymentMethodId: method.payment_method_id,
+      label: method.label,
+      syncSupported: method.sync_supported,
+      action,
+      wallet,
+    };
+  });
+  const selectedBtcpayAccountRoutes = allBtcpayAccountRoutes.filter(
+    (route) => route.action !== "skip",
+  );
+  const canSubmitBtcpayRoutes =
+    selectedBtcpayAccountRoutes.length > 0 ||
+    (form.btcpayInstanceMode === "saved" &&
+      discoveredPaymentMethodOptions.length > 0 &&
+      allBtcpayAccountRoutes.some((route) => route.action === "skip"));
+  const activeBtcpayRoutes =
+    discoveredPaymentMethodOptions.length > 0
+      ? selectedBtcpayAccountRoutes
+      : selectedBtcpayRoutes.map((route) => ({
+          key: route.paymentMethodId,
+          storeId: form.btcpayStoreId.trim(),
+          storeName: form.btcpayStoreId.trim(),
+          paymentMethodId: route.paymentMethodId,
+          label: route.paymentMethodId,
+          syncSupported: true,
+          action:
+            form.btcpaySetupMode === "existing_wallets"
+              ? ("existing_wallet" as const)
+              : ("wallet_source" as const),
+          wallet: route.wallet,
+        }));
   const selectedBullWalletRoutes = form.bullWalletNetworks.map((network) => ({
     network,
     wallet:
       form.bullWalletRouteWallets[network] || walletForBullNetwork(network),
   }));
-  const missingBtcpayMappingDiscovery =
-    setupKind === "btcpay" &&
-    form.btcpaySetupMode === "existing_wallets" &&
-    (!btcpayDiscovery || syncableDiscoveredPaymentMethodOptions.length === 0);
   const isSubmitting =
     createWallet.isPending ||
     importFile.isPending ||
@@ -1175,18 +1316,18 @@ export function AddConnectionDialog({
           ? t("add.submit.previewLabels")
           : isSubmitting
             ? t("add.submit.saving")
-            : setupKind === "btcpay" &&
-                form.btcpaySetupMode === "existing_wallets"
-              ? t("add.submit.saveWalletMapping")
-            : setupKind === "btcpay" &&
-                selectedBtcpayPaymentMethodIds.length > 1
-              ? t("add.submit.createConnections")
+            : setupKind === "btcpay"
+              ? t("add.submit.setupBtcpayAccount")
               : setupKind === "bullbitcoin-wallet" &&
                   form.bullWalletSetupMode === "existing_wallets"
                 ? t("add.submit.saveWalletMapping")
               : setupKind === "bullbitcoin-wallet" &&
                   form.bullWalletNetworks.length > 1
                 ? t("add.submit.createConnections")
+              : setupKind === "file-wallet" &&
+                  selected.sourceFormat === "btcpay_csv" &&
+                  form.btcpayCsvImportMode === "existing_wallet"
+                ? t("add.submit.importTransactions")
               : setupKind === "file-enrichment"
                 ? t("add.submit.importPricing")
               : t("add.submit.createConnection");
@@ -1298,6 +1439,17 @@ export function AddConnectionDialog({
     }
   };
 
+  const selectSourceForSetup = (sourceId: string) => {
+    const source = CONNECTION_SOURCES.find(
+      (candidate) => candidate.id === sourceId,
+    );
+    if (!source) return;
+    setActiveCategory(source.category);
+    setSelectedId(source.id);
+    setSourceQuery("");
+    setStep(source.status === "ready" ? "setup" : "source");
+  };
+
   const updateForm = <Key extends keyof SetupFormState>(
     key: Key,
     value: SetupFormState[Key],
@@ -1323,6 +1475,7 @@ export function AddConnectionDialog({
       key === "wasabiAdditional" ||
       key === "targetWallet" ||
       key === "sourceFormat" ||
+      key === "btcpayCsvImportMode" ||
       key === "bullImportMode" ||
       key === "bullWalletSetupMode" ||
       key === "bullWalletNetworks" ||
@@ -1480,7 +1633,11 @@ export function AddConnectionDialog({
       setupKind === "descriptor" ||
       setupKind === "silent-payment" ||
       setupKind === "address-list" ||
-      setupKind === "file-wallet" ||
+      (setupKind === "file-wallet" &&
+        !(
+          selected.sourceFormat === "btcpay_csv" &&
+          form.btcpayCsvImportMode === "existing_wallet"
+        )) ||
       setupKind === "samourai" ||
       setupKind === "btcpay" ||
       setupKind === "bullbitcoin-wallet" ||
@@ -1643,6 +1800,16 @@ export function AddConnectionDialog({
       ) {
         errors.sourceFile = t("add.genericLedger.preview.submitBlocked");
       }
+      if (
+        selected.sourceFormat === "btcpay_csv" &&
+        form.btcpayCsvImportMode === "existing_wallet"
+      ) {
+        if (existingWalletOptions.length === 0) {
+          errors.targetWallet = t("add.btcpayCsv.errorCreateWalletFirst");
+        } else if (!form.targetWallet.trim()) {
+          errors.targetWallet = t("add.btcpayCsv.errorChooseWallet");
+        }
+      }
     }
     if (setupKind === "file-enrichment") {
       if (!isExchangeEvidenceFormat(selected.sourceFormat) && !form.targetWallet.trim()) {
@@ -1683,25 +1850,24 @@ export function AddConnectionDialog({
           errors.btcpayApiKey = t("add.btcpay.errorApiKey");
         }
       }
-      if (!form.btcpayStoreId.trim()) {
+      if (!btcpayDiscovery && !form.btcpayStoreId.trim()) {
         errors.btcpayStoreId = t("add.btcpay.errorStoreId");
       }
-      if (
-        syncableDiscoveredPaymentMethodOptions.length > 0 &&
-        selectedBtcpayPaymentMethodIds.length === 0
-      ) {
+      if (!canSubmitBtcpayRoutes) {
         errors.btcpayPaymentMethodId = t("add.btcpay.errorSelectMethod");
       }
-      if (form.btcpaySetupMode === "existing_wallets") {
-        if (!btcpayDiscovery) {
-          errors.btcpayPaymentMethodId = t("add.btcpay.errorDiscoverFirst");
-        } else if (syncableDiscoveredPaymentMethodOptions.length === 0) {
-          errors.btcpayPaymentMethodId = t("add.btcpay.errorNoSupportedMethods");
-        } else if (existingWalletOptions.length === 0) {
+      if (
+        activeBtcpayRoutes.some((route) => route.action === "existing_wallet")
+      ) {
+        if (existingWalletOptions.length === 0) {
           errors.btcpayPaymentMethodId = t(
             "add.btcpay.errorCreateSettlementFirst",
           );
-        } else if (selectedBtcpayRoutes.some((route) => !route.wallet)) {
+        } else if (
+          activeBtcpayRoutes.some(
+            (route) => route.action === "existing_wallet" && !route.wallet,
+          )
+        ) {
           errors.btcpayPaymentMethodId = t(
             "add.btcpay.errorChooseSettlementEach",
           );
@@ -1911,60 +2077,88 @@ export function AddConnectionDialog({
       } else if (setupKind === "file-wallet") {
         const sourceFormat =
           selected.id === "csv" ? form.sourceFormat : selected.sourceFormat;
-        await createWallet.mutateAsync({
-          label,
-          kind: selected.walletKind ?? "custom",
-          ...(selected.sourceFormat === "wasabi_bundle" &&
-          form.wasabiImportMode === "rpc"
-            ? {}
-            : { source_file: form.sourceFile.trim() }),
-          source_format: sourceFormat,
-        });
+        if (!sourceFormat) {
+          throw new Error(t("add.enrichment.errorNoFormat"));
+        }
         if (
-          selected.sourceFormat === "wasabi_bundle" &&
-          form.wasabiImportMode === "rpc"
+          selected.sourceFormat === "btcpay_csv" &&
+          form.btcpayCsvImportMode === "existing_wallet"
         ) {
-          const { bundle } = buildWasabiBundle({
-            history: form.wasabiHistory,
-            coins: form.wasabiCoins,
-            walletInfo: form.wasabiWalletInfo,
-            additional: form.wasabiAdditional,
-          });
-          startSyncNotice(t("add.wasabi.importingRpc", { label }));
+          const targetWallet = form.targetWallet.trim();
+          startSyncNotice(
+            t("add.btcpayCsv.importingExisting", { wallet: targetWallet }),
+          );
           try {
             const envelope = await importFile.mutateAsync({
-              wallet: label,
-              source_format: "wasabi_bundle",
-              source_bundle: bundle,
+              wallet: targetWallet,
+              source_file: form.sourceFile.trim(),
+              source_format: sourceFormat,
             });
             setLastImportResult(envelope.data ?? null);
           } finally {
             clearSyncNotice();
           }
-        } else if (form.syncAfterCreate) {
-          startSyncNotice(
-            t("add.fileWallet.stillImporting", { label }),
-          );
-          try {
-            const envelope = await syncWallet.mutateAsync({ wallet: label });
-            const result = envelope.data?.results.find(
-              (item) => item.wallet === label,
-            );
-            const importSummary = importResultFromSyncResult(result);
-            if (importSummary) {
-              setLastImportResult(importSummary);
+          addNotification({
+            title: t("add.btcpayCsv.importedTitle"),
+            body: t("add.btcpayCsv.importedBody", { wallet: targetWallet }),
+            tone: "success",
+          });
+        } else {
+          await createWallet.mutateAsync({
+            label,
+            kind: selected.walletKind ?? "custom",
+            ...(selected.sourceFormat === "wasabi_bundle" &&
+            form.wasabiImportMode === "rpc"
+              ? {}
+              : { source_file: form.sourceFile.trim() }),
+            source_format: sourceFormat,
+          });
+          if (
+            selected.sourceFormat === "wasabi_bundle" &&
+            form.wasabiImportMode === "rpc"
+          ) {
+            const { bundle } = buildWasabiBundle({
+              history: form.wasabiHistory,
+              coins: form.wasabiCoins,
+              walletInfo: form.wasabiWalletInfo,
+              additional: form.wasabiAdditional,
+            });
+            startSyncNotice(t("add.wasabi.importingRpc", { label }));
+            try {
+              const envelope = await importFile.mutateAsync({
+                wallet: label,
+                source_format: "wasabi_bundle",
+                source_bundle: bundle,
+              });
+              setLastImportResult(envelope.data ?? null);
+            } finally {
+              clearSyncNotice();
             }
-          } finally {
-            clearSyncNotice();
+          } else if (form.syncAfterCreate) {
+            startSyncNotice(
+              t("add.fileWallet.stillImporting", { label }),
+            );
+            try {
+              const envelope = await syncWallet.mutateAsync({ wallet: label });
+              const result = envelope.data?.results.find(
+                (item) => item.wallet === label,
+              );
+              const importSummary = importResultFromSyncResult(result);
+              if (importSummary) {
+                setLastImportResult(importSummary);
+              }
+            } finally {
+              clearSyncNotice();
+            }
           }
+          addNotification({
+            title: t("add.added.title"),
+            body: form.syncAfterCreate
+              ? t("add.added.bodyImported", { label })
+              : t("add.added.body", { label }),
+            tone: "success",
+          });
         }
-        addNotification({
-          title: t("add.added.title"),
-          body: form.syncAfterCreate
-            ? t("add.added.bodyImported", { label })
-            : t("add.added.body", { label }),
-          tone: "success",
-        });
       } else if (setupKind === "file-enrichment") {
         const sourceFormat = selected.sourceFormat;
         if (!sourceFormat) {
@@ -2085,48 +2279,58 @@ export function AddConnectionDialog({
           tone: "success",
         });
       } else if (setupKind === "btcpay") {
-        const btcpayPayload =
-          form.btcpaySetupMode === "existing_wallets"
-            ? {
-                ...btcpayInstanceArgs(),
-                mode: "existing_wallets",
-                label,
-                store_id: form.btcpayStoreId.trim(),
-                routes: selectedBtcpayRoutes.map((route) => ({
-                  wallet: route.wallet,
-                  payment_method_id: route.paymentMethodId,
-                })),
-              }
-            : {
-                ...btcpayInstanceArgs(),
-                mode: "wallet_sources",
-                label,
-                store_id: form.btcpayStoreId.trim(),
-                payment_method_ids: selectedBtcpayPaymentMethodIds,
-              };
+        const btcpayPayload = {
+          ...btcpayInstanceArgs(),
+          mode: "account",
+          label,
+          routes: (
+            discoveredPaymentMethodOptions.length > 0
+              ? allBtcpayAccountRoutes
+              : activeBtcpayRoutes
+          ).map((route) => ({
+            store_id: route.storeId,
+            store_name: route.storeName,
+            payment_method_id: route.paymentMethodId,
+            label:
+              route.action === "wallet_source" && activeBtcpayRoutes.length === 1
+                ? label
+                : undefined,
+            action: route.action,
+            wallet:
+              route.action === "existing_wallet" || route.action === "skip"
+                ? route.wallet
+                : undefined,
+          })),
+          sync_provenance: true,
+        };
         const envelope = await createBtcpay.mutateAsync({
           ...btcpayPayload,
         });
-        const createdLabels = (
-          envelope.data?.wallets ?? [envelope.data?.wallet]
-        )
+        const walletSourceLabels = (envelope.data?.wallet_sources ?? [])
           .filter((wallet): wallet is { label: string } => Boolean(wallet))
           .map((wallet) => wallet.label);
-        if (form.syncAfterCreate && form.btcpaySetupMode === "wallet_sources") {
+        if (form.syncAfterCreate && walletSourceLabels.length > 0) {
           startSyncNotice(
             t("add.btcpay.stillRefreshing", { label }),
           );
           try {
-            for (const createdLabel of createdLabels) {
+            for (const createdLabel of walletSourceLabels) {
               await syncWallet.mutateAsync({ wallet: createdLabel });
             }
           } finally {
             clearSyncNotice();
           }
         }
-        if (form.syncAfterCreate && form.btcpaySetupMode === "existing_wallets") {
+        if (
+          form.syncAfterCreate &&
+          activeBtcpayRoutes.some((route) => route.action === "existing_wallet")
+        ) {
           const walletsToRefresh = Array.from(
-            new Set(selectedBtcpayRoutes.map((route) => route.wallet)),
+            new Set(
+              activeBtcpayRoutes
+                .filter((route) => route.action === "existing_wallet")
+                .map((route) => route.wallet),
+            ),
           );
           startSyncNotice(
             t("add.btcpay.refreshingSettlement", { label }),
@@ -2140,28 +2344,11 @@ export function AddConnectionDialog({
           }
         }
         addNotification({
-          title:
-            form.btcpaySetupMode === "existing_wallets"
-              ? t("add.btcpay.mappingSavedTitle")
-              : createdLabels.length > 1
-                ? t("add.added.titlePlural")
-                : t("add.added.title"),
-          body:
-            form.btcpaySetupMode === "existing_wallets"
-              ? form.syncAfterCreate
-                ? t("add.btcpay.mappedBodyRefreshed", {
-                    count: createdLabels.length,
-                  })
-                : t("add.btcpay.mappedBody", { count: createdLabels.length })
-              : createdLabels.length > 1
-              ? form.syncAfterCreate
-                ? t("add.btcpay.methodsBodyRefreshed", {
-                    count: createdLabels.length,
-                  })
-                : t("add.btcpay.methodsBody", { count: createdLabels.length })
-              : form.syncAfterCreate
-                ? t("add.added.bodyRefreshed", { label })
-                : t("add.added.body", { label }),
+          title: t("add.btcpay.accountSavedTitle"),
+          body: t("add.btcpay.accountSavedBody", {
+            count: activeBtcpayRoutes.length,
+            wallets: walletSourceLabels.length,
+          }),
           tone: "success",
         });
       } else if (setupKind === "bip329") {
@@ -3271,6 +3458,90 @@ export function AddConnectionDialog({
           </>
         );
       }
+      if (selected.sourceFormat === "btcpay_csv") {
+        const importIntoExisting =
+          form.btcpayCsvImportMode === "existing_wallet";
+        return (
+          <>
+            <SetupField
+              id="connection-btcpay-csv-mode"
+              label={t("add.btcpayCsv.importBehavior")}
+              helper={
+                importIntoExisting
+                  ? t("add.btcpayCsv.existingWalletHelper")
+                  : t("add.btcpayCsv.createWalletHelper")
+              }
+            >
+              <div className="grid grid-cols-2 gap-2">
+                <Button
+                  type="button"
+                  variant={
+                    form.btcpayCsvImportMode === "wallet_source"
+                      ? "secondary"
+                      : "outline"
+                  }
+                  onClick={() => updateForm("btcpayCsvImportMode", "wallet_source")}
+                >
+                  {t("add.btcpayCsv.createWallet")}
+                </Button>
+                <Button
+                  type="button"
+                  variant={importIntoExisting ? "secondary" : "outline"}
+                  onClick={() => {
+                    setForm((current) => ({
+                      ...current,
+                      btcpayCsvImportMode: "existing_wallet",
+                      targetWallet:
+                        current.targetWallet ||
+                        existingWalletOptions[0]?.label ||
+                        "",
+                    }));
+                    setLastImportResult(null);
+                  }}
+                >
+                  {t("add.btcpayCsv.importIntoExisting")}
+                </Button>
+              </div>
+            </SetupField>
+            {importIntoExisting ? (
+              <SetupField
+                id="connection-btcpay-csv-target-wallet"
+                label={t("add.btcpayCsv.walletToImport")}
+                error={fieldErrors.targetWallet}
+                helper={t("add.btcpayCsv.walletToImportHelper")}
+              >
+                <select
+                  id="connection-btcpay-csv-target-wallet"
+                  className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                  value={form.targetWallet}
+                  onChange={(event) =>
+                    updateForm("targetWallet", event.target.value)
+                  }
+                  disabled={existingWalletOptions.length === 0}
+                  required
+                >
+                  {existingWalletOptions.length === 0 ? (
+                    <option value="">{t("add.btcpayCsv.noWalletsYet")}</option>
+                  ) : (
+                    <option value="">{t("add.btcpayCsv.chooseWallet")}</option>
+                  )}
+                  {existingWalletOptions.map((wallet) => (
+                    <option key={wallet.label} value={wallet.label}>
+                      {wallet.label}
+                      {wallet.chain ? ` (${wallet.chain})` : ""}
+                    </option>
+                  ))}
+                </select>
+              </SetupField>
+            ) : (
+              renderConnectionLabelField()
+            )}
+            {renderSourceFileSetup(
+              importIntoExisting ? undefined : t("add.fileWallet.importAfter"),
+            )}
+          </>
+        );
+      }
       return (
         <>
           {renderConnectionLabelField()}
@@ -3824,7 +4095,32 @@ export function AddConnectionDialog({
                   : "outline"
               }
               onClick={() => {
-                updateForm("btcpaySetupMode", "wallet_sources");
+                setForm((current) => ({
+                  ...current,
+                  btcpaySetupMode: "wallet_sources",
+                  btcpayRouteChoices: Object.fromEntries(
+                    (btcpayDiscovery?.payment_methods ?? []).map((method) => {
+                      const key = btcpayRouteKey(
+                        method.store_id,
+                        method.payment_method_id,
+                      );
+                      const previous = current.btcpayRouteChoices[key];
+                      const wallet =
+                        previous?.wallet ||
+                        current.btcpayRouteWallets[key] ||
+                        walletForPaymentMethod(method.payment_method_id);
+                      return [
+                        key,
+                        {
+                          action: method.sync_supported
+                            ? "wallet_source"
+                            : "provenance_only",
+                          wallet,
+                        },
+                      ];
+                    }),
+                  ),
+                }));
                 setBtcpayTestStatus(null);
               }}
             >
@@ -3838,11 +4134,46 @@ export function AddConnectionDialog({
                   : "outline"
               }
               onClick={() => {
-                updateForm("btcpaySetupMode", "existing_wallets");
+                setForm((current) => ({
+                  ...current,
+                  btcpaySetupMode: "existing_wallets",
+                  btcpayRouteChoices: Object.fromEntries(
+                    (btcpayDiscovery?.payment_methods ?? []).map((method) => {
+                      const key = btcpayRouteKey(
+                        method.store_id,
+                        method.payment_method_id,
+                      );
+                      const previous = current.btcpayRouteChoices[key];
+                      const wallet =
+                        previous?.wallet ||
+                        current.btcpayRouteWallets[key] ||
+                        walletForPaymentMethod(method.payment_method_id);
+                      return [
+                        key,
+                        {
+                          action: method.sync_supported
+                            ? "existing_wallet"
+                            : "provenance_only",
+                          wallet,
+                        },
+                      ];
+                    }),
+                  ),
+                }));
                 setBtcpayTestStatus(null);
               }}
             >
               {t("add.btcpay.mapExistingWallets")}
+            </Button>
+          </div>
+          <div className="flex justify-end">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => selectSourceForSetup("btcpay-csv")}
+            >
+              {t("add.btcpay.manualCsvAlternative")}
             </Button>
           </div>
           <div className="flex items-center gap-2">
@@ -3861,24 +4192,63 @@ export function AddConnectionDialog({
                   setBtcpayDiscovery(data ?? null);
                   const firstStore = data?.stores?.[0]?.id ?? "";
                   setForm((current) => {
+                    const priority: Record<BtcpaySetupAction, number> = {
+                      existing_wallet: 4,
+                      wallet_source: 3,
+                      provenance_only: 2,
+                      skip: 1,
+                    };
+                    const existingByKey = new Map<
+                      string,
+                      NonNullable<BtcpayDiscoveryData["existing_routes"]>[number]
+                    >();
+                    for (const route of data?.existing_routes ?? []) {
+                      const key = btcpayRouteKey(
+                        route.store_id,
+                        route.payment_method_id,
+                      );
+                      const current = existingByKey.get(key);
+                      if (
+                        !current ||
+                        priority[route.action] > priority[current.action]
+                      ) {
+                        existingByKey.set(key, route);
+                      }
+                    }
                     const targetStore = current.btcpayStoreId || firstStore;
-                    const syncableMethodsForStore = (
-                      data?.payment_methods ?? []
-                    ).filter(
-                      (method) =>
-                        method.sync_supported &&
-                        (!targetStore || method.store_id === targetStore),
+                    const methods = data?.payment_methods ?? [];
+                    const syncableMethodsForStore = methods.filter(
+                      (method) => method.sync_supported,
                     );
                     const firstMethod =
                       syncableMethodsForStore[0]?.payment_method_id ??
                       DEFAULT_BTCPAY_PAYMENT_METHOD_ID;
-                    const routeWallets = Object.fromEntries(
-                      syncableMethodsForStore.map((method) => [
+                    const routeWallets: Record<string, string> = {};
+                    const routeChoices: Record<string, BtcpayRouteChoice> = {};
+                    for (const method of methods) {
+                      const key = btcpayRouteKey(
+                        method.store_id,
                         method.payment_method_id,
+                      );
+                      const existingRoute = existingByKey.get(key);
+                      const wallet =
+                        current.btcpayRouteChoices[key]?.wallet ||
+                        current.btcpayRouteWallets[key] ||
                         current.btcpayRouteWallets[method.payment_method_id] ||
-                          walletForPaymentMethod(method.payment_method_id),
-                      ]),
-                    );
+                        existingRoute?.wallet ||
+                        walletForPaymentMethod(method.payment_method_id);
+                      routeWallets[key] = wallet;
+                      routeChoices[key] = current.btcpayRouteChoices[key] ?? {
+                        action:
+                          existingRoute?.action ??
+                          (method.sync_supported
+                            ? current.btcpaySetupMode === "existing_wallets"
+                              ? "existing_wallet"
+                              : "wallet_source"
+                            : "provenance_only"),
+                        wallet,
+                      };
+                    }
                     return {
                       ...current,
                       btcpayStoreId: targetStore,
@@ -3896,6 +4266,10 @@ export function AddConnectionDialog({
                       btcpayRouteWallets: {
                         ...current.btcpayRouteWallets,
                         ...routeWallets,
+                      },
+                      btcpayRouteChoices: {
+                        ...current.btcpayRouteChoices,
+                        ...routeChoices,
                       },
                     };
                   });
@@ -4005,67 +4379,134 @@ export function AddConnectionDialog({
             }
           >
             {discoveredPaymentMethodOptions.length ? (
-              <div className="space-y-2 rounded-md border border-border/70 p-3">
+              <div className="space-y-3 rounded-md border border-border/70 p-3">
                 {discoveredPaymentMethodOptions.map((method) => {
-                  const checked = form.btcpayPaymentMethodIds.includes(
+                  const key = btcpayRouteKey(
+                    method.store_id,
                     method.payment_method_id,
                   );
+                  const action = btcpayRouteActionFor(method);
+                  const existingRoute = discoveredExistingRouteByKey.get(key);
+                  const wallet =
+                    form.btcpayRouteChoices[key]?.wallet ||
+                    form.btcpayRouteWallets[key] ||
+                    form.btcpayRouteWallets[method.payment_method_id] ||
+                    existingRoute?.wallet ||
+                    walletForPaymentMethod(method.payment_method_id);
+                  const storeLabel =
+                    discoveredStoreById.get(method.store_id) ?? method.store_id;
                   return (
-                    <label
-                      key={`${method.store_id}-${method.payment_method_id}`}
+                    <div
+                      key={key}
                       className={cn(
-                        "flex items-start gap-3 text-sm",
-                        !method.sync_supported && "opacity-55",
+                        "grid gap-3 rounded-md border border-border/60 bg-background/70 p-3 text-sm md:grid-cols-[minmax(0,1fr)_minmax(170px,0.65fr)]",
+                        action === "skip" && "opacity-60",
                       )}
                     >
-                      <Checkbox
-                        checked={method.sync_supported && checked}
-                        disabled={!method.sync_supported}
-                        onCheckedChange={(value) => {
-                          if (!method.sync_supported) return;
-                          const nextChecked = value === true;
-                          setForm((current) => {
-                            const currentIds = new Set(
-                              current.btcpayPaymentMethodIds,
-                            );
-                            if (nextChecked) {
-                              currentIds.add(method.payment_method_id);
-                            } else {
-                              currentIds.delete(method.payment_method_id);
-                            }
-                            const nextIds = Array.from(currentIds);
-                            const routeWallets = { ...current.btcpayRouteWallets };
-                            if (nextChecked && !routeWallets[method.payment_method_id]) {
-                              routeWallets[method.payment_method_id] =
-                                walletForPaymentMethod(method.payment_method_id);
-                            }
-                            return {
-                              ...current,
-                              btcpayPaymentMethodIds: nextIds,
-                              btcpayPaymentMethodId:
-                                nextIds[0] ?? method.payment_method_id,
-                              btcpayRouteWallets: routeWallets,
-                            };
-                          });
-                          setFieldErrors((current) => {
-                            if (!current.btcpayPaymentMethodId) return current;
-                            const next = { ...current };
-                            delete next.btcpayPaymentMethodId;
-                            return next;
-                          });
-                          setBtcpayTestStatus(null);
-                        }}
-                      />
-                      <span className="grid gap-0.5">
-                        <span>{method.label}</span>
+                      <div className="min-w-0 space-y-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-medium">{storeLabel}</span>
+                          <Badge variant="outline">{method.payment_method_id}</Badge>
+                          {existingRoute ? (
+                            <Badge variant="secondary">
+                              {t("add.btcpay.alreadyConfigured")}
+                            </Badge>
+                          ) : null}
+                        </div>
+                        <p className="truncate text-sm">{method.label}</p>
                         <span className="text-xs text-muted-foreground">
-                          {method.payment_method_id}
-                          {!method.sync_supported
-                            ? t("add.btcpay.notSupportedYet")
-                            : ""}
+                          {method.sync_supported
+                            ? t("add.btcpay.walletHistorySupported")
+                            : t("add.btcpay.provenanceOnlyRecommended")}
                         </span>
-                      </span>
-                    </label>
+                      </div>
+                      <div className="space-y-2">
+                        <select
+                          aria-label={t("add.btcpay.routeActionLabel", {
+                            method: method.payment_method_id,
+                            store: storeLabel,
+                          })}
+                          className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                          value={action}
+                          onChange={(event) => {
+                            const nextAction = event.target
+                              .value as BtcpaySetupAction;
+                            setForm((current) => ({
+                              ...current,
+                              btcpayRouteChoices: {
+                                ...current.btcpayRouteChoices,
+                                [key]: {
+                                  action: nextAction,
+                                  wallet:
+                                    current.btcpayRouteChoices[key]?.wallet ||
+                                    wallet,
+                                },
+                              },
+                            }));
+                            setBtcpayTestStatus(null);
+                          }}
+                        >
+                          {method.sync_supported ? (
+                            <>
+                              <option value="wallet_source">
+                                {t("add.btcpay.actionWalletSource")}
+                              </option>
+                              <option value="existing_wallet">
+                                {t("add.btcpay.actionExistingWallet")}
+                              </option>
+                            </>
+                          ) : null}
+                          <option value="provenance_only">
+                            {t("add.btcpay.actionProvenanceOnly")}
+                          </option>
+                          <option value="skip">{t("add.btcpay.actionSkip")}</option>
+                        </select>
+                        {action === "existing_wallet" ? (
+                          <select
+                            aria-label={t("add.btcpay.routeWalletLabel", {
+                              method: method.payment_method_id,
+                              store: storeLabel,
+                            })}
+                            className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                            value={wallet}
+                            onChange={(event) => {
+                              setForm((current) => ({
+                                ...current,
+                                btcpayRouteChoices: {
+                                  ...current.btcpayRouteChoices,
+                                  [key]: {
+                                    action,
+                                    wallet: event.target.value,
+                                  },
+                                },
+                                btcpayRouteWallets: {
+                                  ...current.btcpayRouteWallets,
+                                  [key]: event.target.value,
+                                },
+                              }));
+                              setBtcpayTestStatus(null);
+                            }}
+                            disabled={existingWalletOptions.length === 0}
+                          >
+                            {existingWalletOptions.length === 0 ? (
+                              <option value="">
+                                {t("add.btcpay.noSettlementWalletsYet")}
+                              </option>
+                            ) : (
+                              <option value="" disabled>
+                                {t("add.btcpay.selectSettlementWallet")}
+                              </option>
+                            )}
+                            {existingWalletOptions.map((option) => (
+                              <option key={option.label} value={option.label}>
+                                {option.label}
+                                {option.chain ? ` (${option.chain})` : ""}
+                              </option>
+                            ))}
+                          </select>
+                        ) : null}
+                      </div>
+                    </div>
                   );
                 })}
               </div>
@@ -4094,7 +4535,8 @@ export function AddConnectionDialog({
               />
             )}
           </SetupField>
-          {form.btcpaySetupMode === "existing_wallets" &&
+          {discoveredPaymentMethodOptions.length === 0 &&
+          form.btcpaySetupMode === "existing_wallets" &&
           selectedBtcpayRoutes.length > 0 ? (
             <div className="space-y-3 rounded-md border border-border/70 p-3">
               <div>
@@ -5043,7 +5485,6 @@ export function AddConnectionDialog({
                     isSubmitting ||
                     setupKind === "planned" ||
                     missingBackend ||
-                    missingBtcpayMappingDiscovery ||
                     (selected.sourceFormat === "generic_ledger" &&
                       genericLedgerPreviewBlocksSubmit)
                   }

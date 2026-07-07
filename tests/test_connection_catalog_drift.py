@@ -20,8 +20,10 @@ from kassiber.core.wallets import WALLET_KINDS
 from kassiber.daemon import (
     SUPPORTED_KINDS,
     _UI_WALLET_SOURCE_FORMATS,
+    _btcpay_account_routes,
     _create_btcpay_connection_payload,
 )
+from kassiber.errors import AppError
 
 
 _CATALOG_PATH = (
@@ -227,6 +229,60 @@ class ConnectionCatalogDriftTests(unittest.TestCase):
             WALLET_KINDS,
             "BTCPay setup hard-codes a wallet kind that WALLET_KINDS no longer contains",
         )
+
+    def test_btcpay_csv_import_is_manual_file_wallet_source(self):
+        match = re.search(
+            r"CONNECTION_SOURCES[^=]*=\s*\[(?P<body>.*?)\];",
+            self.catalog_text,
+            re.DOTALL,
+        )
+        self.assertIsNotNone(match, "could not find CONNECTION_SOURCES literal")
+        entries = {
+            _extract_field(entry, "id"): entry
+            for entry in _split_entries(match.group("body"))
+        }
+        self.assertEqual(_extract_field(entries["btcpay"], "setupKind"), "btcpay")
+
+        csv_entry = entries.get("btcpay-csv")
+        self.assertIsNotNone(csv_entry, "manual BTCPay CSV source is missing")
+        self.assertEqual(_extract_field(csv_entry, "setupKind"), "file-wallet")
+        self.assertEqual(_extract_field(csv_entry, "walletKind"), "custom")
+        self.assertEqual(_extract_field(csv_entry, "sourceFormat"), "btcpay_csv")
+        self.assertIn(
+            "invoice and payment-request provenance",
+            csv_entry,
+            "manual CSV copy should keep the API/provenance boundary visible",
+        )
+
+    def test_btcpay_account_routes_support_provenance_only_lightning(self):
+        routes = _btcpay_account_routes(
+            {
+                "routes": [
+                    {
+                        "store_id": "store-a",
+                        "payment_method_id": "BTC-LN",
+                        "action": "provenance_only",
+                    }
+                ]
+            }
+        )
+
+        self.assertEqual(routes[0]["store_id"], "store-a")
+        self.assertEqual(routes[0]["payment_method_id"], "BTC-LN")
+        self.assertEqual(routes[0]["action"], "provenance_only")
+
+        with self.assertRaises(AppError):
+            _btcpay_account_routes(
+                {
+                    "routes": [
+                        {
+                            "store_id": "store-a",
+                            "payment_method_id": "BTC-LN",
+                            "action": "wallet_source",
+                        }
+                    ]
+                }
+            )
 
     def _rust_allowlist(self) -> set[str]:
         match = re.search(

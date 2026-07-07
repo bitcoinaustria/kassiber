@@ -112,7 +112,16 @@ class BtcpayCommercialProvenanceTest(unittest.TestCase):
         self.conn.close()
         self.tmp.cleanup()
 
-    def _upsert_invoice_payment(self, *, raw_payment=None, raw_invoice=None, asset="BTC"):
+    def _upsert_invoice_payment(
+        self,
+        *,
+        raw_payment=None,
+        raw_invoice=None,
+        asset="BTC",
+        origin_kind="pos",
+        origin_label="Coffee beans",
+        origin_url="https://btcpay.example/apps/pos",
+    ):
         workspace, profile = _hooks().resolve_scope(self.conn)
         invoice = {
             "id": "inv-1",
@@ -139,9 +148,9 @@ class BtcpayCommercialProvenanceTest(unittest.TestCase):
                     "currency": "EUR",
                     "amount": "500.00",
                     "payment_request_id": "pr-1",
-                    "origin_kind": "pos",
-                    "origin_label": "Coffee beans",
-                    "origin_url": "https://btcpay.example/apps/pos",
+                    "origin_kind": origin_kind,
+                    "origin_label": origin_label,
+                    "origin_url": origin_url,
                     "invoice": invoice,
                     "payments": [
                         {
@@ -233,6 +242,142 @@ class BtcpayCommercialProvenanceTest(unittest.TestCase):
         self.assertEqual(invoices[0]["payments"][0]["txid"], "a" * 64)
         self.assertIn("/api/v1/stores/store-1/invoices?", opener.urls[0])
 
+    def test_fetch_invoice_provenance_preserves_payment_request_origin(self):
+        opener = _Opener(
+            [
+                [
+                    {
+                        "id": "inv-payment-request",
+                        "status": "Settled",
+                        "metadata": {
+                            "paymentRequestId": "pr-regtest-1",
+                            "itemDesc": "Membership renewal",
+                        },
+                        "payments": [{"id": "pay-pr-1", "paymentMethod": "BTC-CHAIN"}],
+                    }
+                ]
+            ]
+        )
+        backend = {"url": "https://btcpay.example", "token": "secret", "timeout": 5}
+
+        invoices = fetch_btcpay_invoice_provenance(
+            backend,
+            "store-1",
+            page_size=100,
+            opener=opener,
+        )
+
+        self.assertEqual(invoices[0]["payment_request_id"], "pr-regtest-1")
+        self.assertEqual(invoices[0]["origin_kind"], "payment_request")
+        self.assertEqual(invoices[0]["origin_label"], "Membership renewal")
+
+    def test_fetch_invoice_provenance_prefers_payment_request_before_external_order(self):
+        opener = _Opener(
+            [
+                [
+                    {
+                        "id": "inv-payment-request-order",
+                        "orderId": "membership-order-2026",
+                        "status": "Settled",
+                        "metadata": {
+                            "paymentRequestId": "pr-regtest-ordered",
+                            "itemDesc": "Membership renewal with order reference",
+                            "orderUrl": "https://btcpay.example/payment-requests/pr-regtest-ordered",
+                        },
+                        "payments": [{"id": "pay-pr-order-1", "paymentMethod": "BTC-CHAIN"}],
+                    }
+                ]
+            ]
+        )
+        backend = {"url": "https://btcpay.example", "token": "secret", "timeout": 5}
+
+        invoices = fetch_btcpay_invoice_provenance(
+            backend,
+            "store-1",
+            page_size=100,
+            opener=opener,
+        )
+
+        self.assertEqual(invoices[0]["payment_request_id"], "pr-regtest-ordered")
+        self.assertEqual(invoices[0]["origin_kind"], "payment_request")
+        self.assertEqual(invoices[0]["origin_label"], "Membership renewal with order reference")
+        self.assertEqual(
+            invoices[0]["origin_url"],
+            "https://btcpay.example/payment-requests/pr-regtest-ordered",
+        )
+
+    def test_fetch_invoice_provenance_preserves_crowdfund_origin(self):
+        opener = _Opener(
+            [
+                [
+                    {
+                        "id": "inv-crowdfund",
+                        "orderId": "crowdfund-regtest-1",
+                        "status": "Settled",
+                        "metadata": {
+                            "appId": "kassiber-regtest-crowdfund",
+                            "appName": "Kassiber Crowdfund",
+                            "orderUrl": "https://btcpay.example/apps/crowdfund/kassiber",
+                            "itemDesc": "Supporter pledge",
+                        },
+                        "payments": [{"id": "pay-cf-1", "paymentMethod": "BTC-CHAIN"}],
+                    }
+                ]
+            ]
+        )
+        backend = {"url": "https://btcpay.example", "token": "secret", "timeout": 5}
+
+        invoices = fetch_btcpay_invoice_provenance(
+            backend,
+            "store-1",
+            page_size=100,
+            opener=opener,
+        )
+
+        self.assertEqual(invoices[0]["origin_kind"], "crowdfund")
+        self.assertEqual(invoices[0]["origin_app_id"], "kassiber-regtest-crowdfund")
+        self.assertEqual(invoices[0]["origin_label"], "Kassiber Crowdfund")
+
+    def test_fetch_invoice_provenance_preserves_unknown_app_origin_generically(self):
+        opener = _Opener(
+            [
+                [
+                    {
+                        "id": "inv-plugin",
+                        "orderId": "plugin-order-1",
+                        "status": "Settled",
+                        "metadata": {
+                            "appId": "btcpay-boltz-plugin",
+                            "appName": "Boltz Plugin",
+                            "orderUrl": "https://btcpay.example/plugins/boltz/order-1",
+                            "itemDesc": "Swap settlement",
+                        },
+                        "payments": [{"id": "pay-plugin-1", "paymentMethod": "BTC-CHAIN"}],
+                    }
+                ]
+            ]
+        )
+        backend = {"url": "https://btcpay.example", "token": "secret", "timeout": 5}
+
+        invoices = fetch_btcpay_invoice_provenance(
+            backend,
+            "store-1",
+            page_size=100,
+            opener=opener,
+        )
+
+        self.assertEqual(invoices[0]["origin_kind"], "app")
+        self.assertEqual(invoices[0]["origin_app_id"], "btcpay-boltz-plugin")
+        self.assertEqual(invoices[0]["origin_label"], "Boltz Plugin")
+        self.assertEqual(
+            invoices[0]["origin_url"],
+            "https://btcpay.example/plugins/boltz/order-1",
+        )
+        self.assertEqual(
+            invoices[0]["invoice"]["metadata"]["itemDesc"],
+            "Swap settlement",
+        )
+
     def test_transaction_commercial_context_includes_btcpay_origin_chain(self):
         self._upsert_invoice_payment()
         document = self._create_matching_document()
@@ -263,12 +408,13 @@ class BtcpayCommercialProvenanceTest(unittest.TestCase):
         self.assertNotIn("payment_hash", match["payment"])
         self.assertNotIn("destination", match["payment"])
         self.assertNotIn("txid", match["payment"])
-        self.assertNotIn("origin_url", match["payment"])
+        self.assertEqual(match["payment"]["origin_url"], "https://btcpay.example/apps/pos")
         self.assertEqual(match["invoice"]["payment_request_id"], "pr-1")
         self.assertEqual(match["payment_request"]["id"], "pr-1")
+        self.assertEqual(match["payment_request"]["url"], "https://btcpay.example/apps/pos")
         self.assertEqual(match["origin"]["kind"], "pos")
         self.assertEqual(match["origin"]["label"], "Coffee beans")
-        self.assertNotIn("url", match["origin"])
+        self.assertEqual(match["origin"]["url"], "https://btcpay.example/apps/pos")
         self.assertEqual(context["documents"][0]["id"], document["id"])
         self.assertEqual(context["documents"][0]["external_ref"], "inv-1")
 
@@ -378,6 +524,58 @@ class BtcpayCommercialProvenanceTest(unittest.TestCase):
         subledger = commercial.build_reviewed_subledger_rows(self.conn, None, None, _hooks())
         self.assertEqual(subledger[0]["document_label"], "Invoice 2026-001")
         self.assertEqual(subledger[0]["invoice_id"], "inv-1")
+
+    def test_reviewed_payment_request_link_attaches_btcpay_url_to_transaction(self):
+        self._upsert_invoice_payment(
+            raw_invoice={
+                "metadata": {
+                    "paymentRequestId": "pr-1",
+                    "itemDesc": "Membership renewal",
+                    "orderUrl": "https://btcpay.example/payment-requests/pr-1",
+                }
+            },
+            origin_kind="payment_request",
+            origin_label="Membership renewal",
+            origin_url="https://btcpay.example/payment-requests/pr-1",
+        )
+        self._create_matching_document()
+        link_id = self._suggested_transaction_link_id()
+
+        commercial.review_link(
+            self.conn,
+            None,
+            None,
+            link_id,
+            _hooks(),
+            state="reviewed",
+            commercial_kind="income",
+        )
+        commercial.review_link(
+            self.conn,
+            None,
+            None,
+            link_id,
+            _hooks(),
+            state="reviewed",
+            commercial_kind="income",
+        )
+
+        attachments = self.conn.execute(
+            """
+            SELECT attachment_type, label, source_url, media_type
+            FROM attachments
+            WHERE transaction_id = 'tx'
+            ORDER BY created_at
+            """
+        ).fetchall()
+        self.assertEqual(len(attachments), 1)
+        self.assertEqual(attachments[0]["attachment_type"], "url")
+        self.assertEqual(attachments[0]["label"], "BTCPay payment request")
+        self.assertEqual(
+            attachments[0]["source_url"],
+            "https://btcpay.example/payment-requests/pr-1",
+        )
+        self.assertEqual(attachments[0]["media_type"], "text/uri-list")
 
     def test_rejecting_reviewed_link_restores_transaction_snapshot(self):
         self._upsert_invoice_payment()
@@ -658,6 +856,54 @@ class BtcpayCommercialProvenanceTest(unittest.TestCase):
             len([row for row in second["suggestions"] if row["link_type"] == "btcpay_payment_transaction"]),
             1,
         )
+
+    def test_payment_request_reference_drives_document_and_transaction_suggestions(self):
+        self._upsert_invoice_payment()
+        document = commercial.create_document(
+            self.conn,
+            None,
+            None,
+            _hooks(),
+            document_type="invoice",
+            label="Membership payment request",
+            external_ref="pr-1",
+        )
+
+        suggested = commercial.suggest_links(self.conn, None, None, _hooks())
+
+        document_links = [
+            row
+            for row in suggested["suggestions"]
+            if row["link_type"] == "document_btcpay" and row["document_id"] == document["id"]
+        ]
+        self.assertEqual(len(document_links), 1)
+        self.assertEqual(document_links[0]["payment_request_id"], "pr-1")
+        self.assertEqual(document_links[0]["origin_kind"], "pos")
+        payment_links = [
+            row
+            for row in suggested["suggestions"]
+            if row["link_type"] == "btcpay_payment_transaction"
+            and row["document_id"] == document["id"]
+            and row["transaction_id"] == "tx"
+        ]
+        self.assertEqual(len(payment_links), 1)
+        self.assertEqual(payment_links[0]["payment_request_id"], "pr-1")
+        self.assertEqual(payment_links[0]["origin_label"], "Coffee beans")
+
+        commercial.review_link(
+            self.conn,
+            None,
+            None,
+            payment_links[0]["id"],
+            _hooks(),
+            state="reviewed",
+            commercial_kind="income",
+        )
+        subledger = commercial.build_reviewed_subledger_rows(self.conn, None, None, _hooks())
+
+        self.assertEqual(subledger[0]["payment_request_id"], "pr-1")
+        self.assertEqual(subledger[0]["origin_kind"], "pos")
+        self.assertEqual(subledger[0]["origin_label"], "Coffee beans")
 
     def test_document_reference_resolution_rejects_ambiguous_labels_and_duplicate_refs(self):
         commercial.create_document(

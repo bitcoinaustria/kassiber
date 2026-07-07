@@ -9,6 +9,7 @@ import uuid
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Mapping, Sequence
+from urllib.parse import urlparse
 
 from ..envelope import json_ready
 from ..errors import AppError
@@ -121,6 +122,152 @@ def _computed_rate(fiat_value: Any, crypto_amount: Any) -> str | None:
 def _stable_payment_id(payment: Mapping[str, Any]) -> str:
     raw = _json(payment.get("payment") or payment)
     return f"sha256:{hashlib.sha256(raw.encode('utf-8')).hexdigest()}"
+
+
+BTCPAY_ACCOUNT_ROUTE_ACTIONS = ("provenance_only",)
+
+
+def normalize_btcpay_account_route_action(value: Any) -> str:
+    action = str(value or "").strip().lower()
+    if action not in BTCPAY_ACCOUNT_ROUTE_ACTIONS:
+        raise AppError(
+            f"Unsupported BTCPay account route action '{value}'",
+            code="validation",
+            hint="Only provenance_only account routes can be stored without a wallet.",
+            retryable=False,
+        )
+    return action
+
+
+def _account_route_payload(row: sqlite3.Row | Mapping[str, Any]) -> dict[str, Any]:
+    return {
+        "id": str(row["id"]),
+        "backend": str(row["backend_name"]),
+        "store_id": str(row["store_id"]),
+        "payment_method_id": str(row["payment_method_id"]),
+        "action": str(row["action"]),
+        "label": str(row["label"] or ""),
+        "created_at": str(row["created_at"]),
+        "updated_at": str(row["updated_at"]),
+    }
+
+
+def upsert_btcpay_account_route(
+    conn: sqlite3.Connection,
+    workspace: Mapping[str, Any],
+    profile: Mapping[str, Any],
+    *,
+    backend_name: str,
+    store_id: str,
+    payment_method_id: str,
+    action: str = "provenance_only",
+    label: str | None = None,
+) -> dict[str, Any]:
+    normalized_action = normalize_btcpay_account_route_action(action)
+    normalized_backend = str(backend_name).strip().lower()
+    route_id = str(uuid.uuid4())
+    now = now_iso()
+    conn.execute(
+        """
+        INSERT INTO btcpay_account_routes(
+            id, workspace_id, profile_id, backend_name, store_id,
+            payment_method_id, action, label, created_at, updated_at
+        ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(profile_id, backend_name, store_id, payment_method_id, action)
+        DO UPDATE SET
+            label = excluded.label,
+            updated_at = excluded.updated_at
+        """,
+        (
+            route_id,
+            workspace["id"],
+            profile["id"],
+            normalized_backend,
+            store_id,
+            payment_method_id,
+            normalized_action,
+            label,
+            now,
+            now,
+        ),
+    )
+    row = conn.execute(
+        """
+        SELECT * FROM btcpay_account_routes
+        WHERE profile_id = ? AND backend_name = ? AND store_id = ?
+          AND payment_method_id = ? AND action = ?
+        """,
+        (
+            profile["id"],
+            normalized_backend,
+            store_id,
+            payment_method_id,
+            normalized_action,
+        ),
+    ).fetchone()
+    if row is None:
+        raise AppError("Stored BTCPay account route could not be loaded", code="internal")
+    return _account_route_payload(row)
+
+
+def list_btcpay_account_routes(
+    conn: sqlite3.Connection,
+    profile_id: str,
+    *,
+    backend_name: str | None = None,
+) -> list[dict[str, Any]]:
+    params: list[Any] = [profile_id]
+    backend_filter = ""
+    if backend_name:
+        backend_filter = " AND backend_name = ?"
+        params.append(str(backend_name).strip().lower())
+    rows = conn.execute(
+        f"""
+        SELECT * FROM btcpay_account_routes
+        WHERE profile_id = ?{backend_filter}
+        ORDER BY backend_name ASC, store_id ASC, payment_method_id ASC, action ASC
+        """,
+        params,
+    ).fetchall()
+    return [_account_route_payload(row) for row in rows]
+
+
+def delete_btcpay_account_route(
+    conn: sqlite3.Connection,
+    profile_id: str,
+    *,
+    backend_name: str,
+    store_id: str,
+    payment_method_id: str,
+    action: str = "provenance_only",
+) -> int:
+    normalized_action = normalize_btcpay_account_route_action(action)
+    cursor = conn.execute(
+        """
+        DELETE FROM btcpay_account_routes
+        WHERE profile_id = ? AND backend_name = ? AND store_id = ?
+          AND payment_method_id = ? AND action = ?
+        """,
+        (
+            profile_id,
+            str(backend_name).strip().lower(),
+            store_id,
+            payment_method_id,
+            normalized_action,
+        ),
+    )
+    return int(cursor.rowcount or 0)
+
+
+def delete_btcpay_account_routes_for_backend(
+    conn: sqlite3.Connection,
+    backend_name: str,
+) -> int:
+    cursor = conn.execute(
+        "DELETE FROM btcpay_account_routes WHERE backend_name = ?",
+        (str(backend_name).strip().lower(),),
+    )
+    return int(cursor.rowcount or 0)
 
 
 def upsert_btcpay_provenance(
@@ -674,7 +821,15 @@ def _suggest_document_links(conn, workspace, profile, now):
           ON p.profile_id = d.profile_id
          AND p.record_type = 'invoice'
          AND (
-              (d.external_ref IS NOT NULL AND d.external_ref != '' AND (d.external_ref = p.invoice_id OR d.external_ref = p.order_id))
+              (
+                   d.external_ref IS NOT NULL
+                   AND d.external_ref != ''
+                   AND (
+                       d.external_ref = p.invoice_id
+                       OR d.external_ref = p.order_id
+                       OR d.external_ref = p.payment_request_id
+                   )
+              )
               OR (
                    d.fiat_currency IS NOT NULL
                    AND p.fiat_currency = d.fiat_currency
@@ -725,7 +880,15 @@ def _suggest_document_transaction_links(conn, workspace, profile, now):
           ON p.profile_id = d.profile_id
          AND p.record_type = 'payment'
          AND (
-              (d.external_ref IS NOT NULL AND d.external_ref != '' AND (d.external_ref = p.invoice_id OR d.external_ref = p.order_id))
+              (
+                   d.external_ref IS NOT NULL
+                   AND d.external_ref != ''
+                   AND (
+                       d.external_ref = p.invoice_id
+                       OR d.external_ref = p.order_id
+                       OR d.external_ref = p.payment_request_id
+                   )
+              )
               OR (
                    d.fiat_currency IS NOT NULL
                    AND p.fiat_currency = d.fiat_currency
@@ -871,7 +1034,8 @@ def list_links(conn, workspace_ref, profile_ref, hooks: CommercialHooks, *, stat
     rows = conn.execute(
         f"""
         SELECT cl.*, p.stable_key AS btcpay_stable_key, p.invoice_id, p.payment_id,
-               p.txid, d.label AS document_label, t.external_id AS transaction_external_id
+               p.txid, p.payment_request_id, p.origin_kind, p.origin_label,
+               d.label AS document_label, t.external_id AS transaction_external_id
         FROM commercial_links cl
         LEFT JOIN btcpay_provenance_records p ON p.id = cl.btcpay_record_id
         LEFT JOIN external_documents d ON d.id = cl.document_id
@@ -907,6 +1071,7 @@ def get_transaction_commercial_context(
                p.origin_kind AS payment_origin_kind,
                p.origin_app_id AS payment_origin_app_id,
                p.origin_label AS payment_origin_label,
+               p.origin_url AS payment_origin_url,
                p.fiat_currency AS payment_fiat_currency,
                p.fiat_value_exact AS payment_fiat_value_exact,
                p.fiat_rate_exact AS payment_fiat_rate_exact,
@@ -924,6 +1089,7 @@ def get_transaction_commercial_context(
                inv.origin_kind AS invoice_origin_kind,
                inv.origin_app_id AS invoice_origin_app_id,
                inv.origin_label AS invoice_origin_label,
+               inv.origin_url AS invoice_origin_url,
                inv.fiat_currency AS invoice_fiat_currency,
                inv.fiat_value_exact AS invoice_fiat_value_exact,
                inv.fiat_rate_exact AS invoice_fiat_rate_exact,
@@ -981,7 +1147,8 @@ def get_link(conn, profile_id, link_ref):
     row = conn.execute(
         """
         SELECT cl.*, p.stable_key AS btcpay_stable_key, p.invoice_id, p.payment_id,
-               p.txid, d.label AS document_label, t.external_id AS transaction_external_id
+               p.txid, p.payment_request_id, p.origin_kind, p.origin_label,
+               d.label AS document_label, t.external_id AS transaction_external_id
         FROM commercial_links cl
         LEFT JOIN btcpay_provenance_records p ON p.id = cl.btcpay_record_id
         LEFT JOIN external_documents d ON d.id = cl.document_id
@@ -1125,6 +1292,56 @@ def _restore_reviewed_link_transaction(conn, profile, link):
     return True
 
 
+def _btcpay_origin_attachment_label(record) -> str:
+    if record["origin_kind"] == "payment_request":
+        return "BTCPay payment request"
+    if record["origin_kind"] == "crowdfund":
+        return "BTCPay crowdfund"
+    if record["origin_kind"] == "pos":
+        return "BTCPay point of sale"
+    return "BTCPay invoice"
+
+
+def _attach_btcpay_origin_url(conn, profile, transaction_id: str, record) -> bool:
+    raw_url = str(record["origin_url"] or "").strip()
+    if not raw_url:
+        return False
+    parsed = urlparse(raw_url)
+    if parsed.scheme not in {"http", "https"}:
+        return False
+    existing = conn.execute(
+        """
+        SELECT id FROM attachments
+        WHERE profile_id = ?
+          AND transaction_id = ?
+          AND attachment_type = 'url'
+          AND source_url = ?
+        LIMIT 1
+        """,
+        (profile["id"], transaction_id, raw_url),
+    ).fetchone()
+    if existing:
+        return False
+    conn.execute(
+        """
+        INSERT INTO attachments(
+            id, workspace_id, profile_id, transaction_id, attachment_type,
+            label, source_url, media_type, created_at
+        ) VALUES(?, ?, ?, ?, 'url', ?, ?, 'text/uri-list', ?)
+        """,
+        (
+            str(uuid.uuid4()),
+            profile["workspace_id"],
+            profile["id"],
+            transaction_id,
+            _btcpay_origin_attachment_label(record),
+            raw_url,
+            _now(),
+        ),
+    )
+    return True
+
+
 def _apply_reviewed_link_to_transaction(conn, profile, link, commercial_kind):
     record = None
     if link["btcpay_record_id"]:
@@ -1260,6 +1477,7 @@ def _apply_reviewed_link_to_transaction(conn, profile, link, commercial_kind):
         f"UPDATE transactions SET {assignments} WHERE profile_id = ? AND id = ?",
         (*updates.values(), profile["id"], link["transaction_id"]),
     )
+    _attach_btcpay_origin_url(conn, profile, link["transaction_id"], record)
     return {"applied": True, "snapshot_json": snapshot_json}
 
 
@@ -1272,7 +1490,8 @@ def build_reviewed_subledger_rows(conn, workspace_ref, profile_ref, hooks: Comme
                t.id AS transaction_id, t.external_id, t.occurred_at, t.direction,
                t.asset, t.amount, t.fee, t.fiat_currency, t.fiat_value_exact,
                t.pricing_source_kind, w.label AS wallet,
-               p.invoice_id, p.payment_id, p.order_id, p.stable_key,
+               p.invoice_id, p.payment_id, p.order_id, p.payment_request_id,
+               p.origin_kind, p.origin_label, p.stable_key,
                d.id AS document_id, d.label AS document_label, d.external_ref AS document_external_ref
         FROM commercial_links cl
         JOIN transactions t ON t.id = cl.transaction_id
@@ -1306,6 +1525,9 @@ def export_reviewed_subledger_csv(conn, workspace_ref, profile_ref, file_path, h
         "invoice_id",
         "payment_id",
         "order_id",
+        "payment_request_id",
+        "origin_kind",
+        "origin_label",
         "document_label",
         "document_external_ref",
         "reconciliation_state",
@@ -1379,6 +1601,7 @@ def _btcpay_record_context_payload(row, prefix):
         "origin_kind": row[f"{prefix}_origin_kind"] or "",
         "origin_app_id": row[f"{prefix}_origin_app_id"] or "",
         "origin_label": row[f"{prefix}_origin_label"] or "",
+        "origin_url": row[f"{prefix}_origin_url"] or "",
         "fiat_currency": row[f"{prefix}_fiat_currency"] or "",
         "fiat_value_exact": row[f"{prefix}_fiat_value_exact"] or "",
         "fiat_rate_exact": row[f"{prefix}_fiat_rate_exact"] or "",
@@ -1395,6 +1618,7 @@ def _payment_request_context(payment, invoice):
         "id": source["payment_request_id"],
         "label": source.get("origin_label") or source["payment_request_id"],
         "status": source.get("status") or "",
+        "url": source.get("origin_url") or "",
     }
 
 
@@ -1409,6 +1633,7 @@ def _origin_context(payment, invoice):
         "kind": kind,
         "app_id": source.get("origin_app_id") or "",
         "label": source.get("origin_label") or "",
+        "url": source.get("origin_url") or "",
     }
 
 
@@ -1454,6 +1679,9 @@ def _link_payload(row):
         "btcpay_stable_key": row["btcpay_stable_key"] or "",
         "invoice_id": row["invoice_id"] or "",
         "payment_id": row["payment_id"] or "",
+        "payment_request_id": row["payment_request_id"] or "",
+        "origin_kind": row["origin_kind"] or "",
+        "origin_label": row["origin_label"] or "",
         "txid": row["txid"] or "",
         "document_id": row["document_id"] or "",
         "document_label": row["document_label"] or "",
@@ -1497,6 +1725,9 @@ def _subledger_payload(row):
         "invoice_id": row["invoice_id"] or "",
         "payment_id": row["payment_id"] or "",
         "order_id": row["order_id"] or "",
+        "payment_request_id": row["payment_request_id"] or "",
+        "origin_kind": row["origin_kind"] or "",
+        "origin_label": row["origin_label"] or "",
         "btcpay_ref": row["stable_key"] or "",
         "document_id": row["document_id"] or "",
         "document_label": row["document_label"] or "",
@@ -1513,12 +1744,17 @@ __all__ = [
     "attach_document_evidence",
     "build_reviewed_subledger_rows",
     "create_document",
+    "delete_btcpay_account_route",
+    "delete_btcpay_account_routes_for_backend",
     "export_reviewed_subledger_csv",
     "get_transaction_commercial_context",
+    "list_btcpay_account_routes",
     "list_btcpay_records",
     "list_documents",
     "list_links",
+    "normalize_btcpay_account_route_action",
     "review_link",
     "suggest_links",
+    "upsert_btcpay_account_route",
     "upsert_btcpay_provenance",
 ]

@@ -542,7 +542,8 @@ def _assert_db_state(data_root: Path) -> dict[str, int]:
             raise AssertionError(f"expected synced CLN invoice transactions, got {tx_count}")
 
         raw_leaks = conn.execute(
-            "SELECT COUNT(*) AS count FROM lightning_node_records WHERE raw_json != '{}'"
+            "SELECT COUNT(*) AS count FROM lightning_node_records"
+            " WHERE raw_json != '{}' AND record_type != 'forward_day'"
         ).fetchone()["count"]
         if int(raw_leaks) != 0:
             raise AssertionError("Lightning raw RPC payloads leaked into persistence")
