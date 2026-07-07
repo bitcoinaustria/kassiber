@@ -40,6 +40,12 @@ function translatedCommercialToken(
     : translated;
 }
 
+function compactMiddle(value: string, head = 12, tail = 10) {
+  const trimmed = value.trim();
+  if (trimmed.length <= head + tail + 3) return trimmed;
+  return `${trimmed.slice(0, head)}...${trimmed.slice(-tail)}`;
+}
+
 function ExternalCommercialValue({
   children,
   url,
@@ -132,8 +138,13 @@ export function CommercialProvenancePanel({
             <LedgerRow
               label={t("commercial.btcpayPayment")}
               value={
-                <span className={cn("truncate", hidden && "sensitive")}>
-                  {payment?.payment_id || t("commercial.linked")}
+                <span
+                  className={cn("truncate font-mono text-xs", hidden && "sensitive")}
+                  title={payment?.payment_id || undefined}
+                >
+                  {payment?.payment_id
+                    ? compactMiddle(payment.payment_id)
+                    : t("commercial.linked")}
                 </span>
               }
               muted={match.link.state !== "reviewed"}
