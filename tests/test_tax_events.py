@@ -1066,6 +1066,90 @@ class LightningPaymentHashEngineTest(unittest.TestCase):
         self.assertAlmostEqual(holdings["Node"], 0.99999)
 
 
+class TransferGateEngineTest(unittest.TestCase):
+    def test_blocked_plain_transfer_quarantines_destination_leg(self):
+        profile = {
+            "id": "profile-1",
+            "workspace_id": "workspace-1",
+            "label": "Default",
+            "fiat_currency": "USD",
+            "tax_country": "generic",
+            "tax_long_term_days": 365,
+            "gains_algorithm": "FIFO",
+        }
+        wallet_refs = {
+            "wallet-a": {
+                "id": "wallet-a",
+                "label": "Wallet A",
+                "wallet_account_id": "acct-a",
+                "account_code": "A",
+                "account_label": "Account A",
+            },
+            "wallet-b": {
+                "id": "wallet-b",
+                "label": "Wallet B",
+                "wallet_account_id": "acct-b",
+                "account_code": "B",
+                "account_label": "Account B",
+            },
+        }
+
+        def engine_row(tx_id, wallet_id, direction):
+            ref = wallet_refs[wallet_id]
+            return {
+                "id": tx_id,
+                "workspace_id": "workspace-1",
+                "profile_id": "profile-1",
+                "wallet_id": wallet_id,
+                "wallet_label": ref["label"],
+                "wallet_account_id": ref["wallet_account_id"],
+                "account_code": ref["account_code"],
+                "account_label": ref["account_label"],
+                "external_id": "move-txid",
+                "occurred_at": "2026-01-01T00:00:00Z",
+                "created_at": "2026-01-01T00:00:00Z",
+                "direction": direction,
+                "asset": "BTC",
+                "amount": 100_000_000_000,
+                "fee": 0,
+                "fiat_currency": "USD",
+                "fiat_rate": 40_000.0,
+                "fiat_rate_exact": "40000",
+                "fiat_value": None,
+                "kind": "transfer",
+                "description": tx_id,
+                "note": None,
+                "raw_json": "{}",
+                "excluded": 0,
+                "payment_hash": None,
+            }
+
+        state = build_tax_engine(profile).build_ledger_state(
+            TaxEngineLedgerInputs(
+                rows=[
+                    engine_row("move-out", "wallet-a", "outbound"),
+                    engine_row("move-in", "wallet-b", "inbound"),
+                ],
+                wallet_refs_by_id=wallet_refs,
+                manual_pair_records=[],
+            )
+        )
+
+        reasons_by_id = {q["transaction_id"]: q["reason"] for q in state.quarantines}
+        self.assertEqual(
+            reasons_by_id,
+            {"move-out": "insufficient_lots", "move-in": "insufficient_lots"},
+        )
+        partner_detail = json.loads(
+            next(
+                q["detail_json"]
+                for q in state.quarantines
+                if q["transaction_id"] == "move-in"
+            )
+        )
+        self.assertTrue(partner_detail["paired_leg"])
+
+
 class BuildTaxQuarantineTest(unittest.TestCase):
     profile = {"id": "p", "workspace_id": "w"}
 

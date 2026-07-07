@@ -780,6 +780,28 @@ def _prepare_rp2_asset_input(profile, normalized_inputs: NormalizedTaxAssetInput
         detail: Mapping[str, Any],
     ) -> None:
         quarantines.append(build_tax_quarantine(profile, transfer.out_row, reason, detail))
+        out_transaction_id = str(
+            _row_get(transfer.out_row, "journal_transaction_id")
+            or transfer.out_row["id"]
+        )
+        in_transaction_id = str(
+            _row_get(transfer.in_row, "journal_transaction_id")
+            or transfer.in_row["id"]
+        )
+        if in_transaction_id == out_transaction_id:
+            return
+        quarantines.append(
+            build_tax_quarantine(
+                profile,
+                transfer.in_row,
+                reason,
+                {
+                    **dict(detail),
+                    "paired_leg": "inbound",
+                    "blocked_by_transaction_id": out_transaction_id,
+                },
+            )
+        )
 
     def _append_group_gate_quarantines(
         group: Sequence[NormalizedTaxTransfer],

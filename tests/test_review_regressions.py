@@ -12097,8 +12097,20 @@ class ReviewRegressionTest(unittest.TestCase):
         )
         state = build_tax_engine(profile).build_ledger_state(inputs)
         self.assertEqual(state.entries, [])
-        self.assertEqual(len(state.quarantines), 1)
-        self.assertEqual(state.quarantines[0]["reason"], "insufficient_lots")
+        self.assertEqual(len(state.quarantines), 2)
+        reasons_by_id = {q["transaction_id"]: q["reason"] for q in state.quarantines}
+        self.assertEqual(
+            reasons_by_id,
+            {"transfer-out": "insufficient_lots", "transfer-in": "insufficient_lots"},
+        )
+        inbound_detail = json.loads(
+            next(
+                q["detail_json"]
+                for q in state.quarantines
+                if q["transaction_id"] == "transfer-in"
+            )
+        )
+        self.assertEqual(inbound_detail["paired_leg"], "inbound")
 
     def test_transfer_pricing_review_targets_used_price_leg(self):
         profile, inputs = self._direct_transfer_engine_inputs()
