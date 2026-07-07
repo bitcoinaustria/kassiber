@@ -87,6 +87,9 @@ export function CommercialProvenancePanel({
 }) {
   const { t } = useTranslation("transactions");
   const btcpay = context?.btcpay ?? [];
+  if (!btcpay.length) {
+    return null;
+  }
   if (loading) {
     return (
       <div className="overflow-hidden rounded-md border">
@@ -94,18 +97,6 @@ export function CommercialProvenancePanel({
           {t("commercial.title")}
         </div>
         <div className="px-3 py-3 text-sm text-muted-foreground">{t("commercial.loading")}</div>
-      </div>
-    );
-  }
-  if (!btcpay.length) {
-    return (
-      <div className="overflow-hidden rounded-md border">
-        <div className="border-b bg-muted px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-          {t("commercial.title")}
-        </div>
-        <div className="px-3 py-3 text-sm text-muted-foreground">
-          {t("commercial.empty")}
-        </div>
       </div>
     );
   }
