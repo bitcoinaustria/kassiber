@@ -321,6 +321,56 @@ class OwnershipDeriverTests(unittest.TestCase):
         )
         self.assertEqual(result.dropped_out_ids, {"a-out"})
 
+    def test_duplicate_outbound_group_declined_before_deriving(self):
+        # Source-overlap repair can leave a stale duplicate outbound sharing the
+        # same graph txid. The single-source deriver must not synthesize a MOVE
+        # from either row, or duplicate synthetic ids can hide one outflow while
+        # the sibling row books as a phantom disposal.
+        a_out = _outbound(
+            row_id="a-out",
+            wallet_id="A",
+            amount_sats=85_000_000,
+            fee_sats=0,
+            txid="dup-tx",
+            input_scripts=[SCRIPT["A"]],
+            outputs=[(SCRIPT["C"], 85_000_000)],
+        )
+        b_out = _outbound(
+            row_id="b-out",
+            wallet_id="B",
+            amount_sats=85_000_000,
+            fee_sats=0,
+            txid="dup-tx",
+            input_scripts=[SCRIPT["A"]],
+            outputs=[(SCRIPT["C"], 85_000_000)],
+        )
+        c_in = _inbound(
+            row_id="c-in",
+            wallet_id="C",
+            amount_sats=85_000_000,
+            txid="dup-tx",
+        )
+        index = _index({SCRIPT["A"]: ("A", "A"), SCRIPT["C"]: ("C", "C")})
+        index.note_txid("prev-0", "B", "B")
+
+        result = derive_ownership_transfers(
+            [a_out, b_out, c_in],
+            index=index,
+            wallet_refs_by_id=_refs("A", "B", "C"),
+            already_paired_ids=set(),
+        )
+
+        self.assertEqual(result.derived_pairs, [])
+        self.assertEqual(result.synthetic_rows, [])
+        self.assertEqual(result.dropped_out_ids, set())
+        self.assertEqual(
+            [item["reason"] for item in result.blocked_sources],
+            [
+                "ownership_transfer_duplicate_outbound",
+                "ownership_transfer_duplicate_outbound",
+            ],
+        )
+
     def test_multiple_outputs_to_same_wallet_aggregate_to_one_leg(self):
         # A wallet that receives two outputs in one tx records a single inbound
         # row of their combined value, so the deriver must aggregate per dest.

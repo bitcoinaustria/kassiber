@@ -163,6 +163,52 @@ class OwnershipDeriverEngineTest(unittest.TestCase):
         self.assertAlmostEqual(holdings.get("Hot", 0.0), 0.5, places=6)
         self.assertAlmostEqual(holdings.get("Savings", 0.0), 0.3, places=6)
 
+    def test_duplicate_outbound_group_quarantines_instead_of_deriving(self):
+        # A stale duplicate source-overlap row can pass the source fallback via
+        # txid_wallets. The deriver must decline the whole multi-outbound group
+        # so the fanout quarantine blocks every leg instead of synthesizing a MOVE
+        # and leaving a sibling disposal or duplicate synthetic id behind.
+        index = OwnedIndex()
+        index.add_script(SCRIPT_A, _match("A", "Cold"))
+        index.add_script(SCRIPT_B, _match("B", "Hot"))
+        index.add_script(SCRIPT_C, _match("C", "Savings"))
+        index.note_txid("prevtx", "B", "Hot")
+        dup_json = json.dumps(
+            {
+                "txid": "dup-tx",
+                "vin": [{"txid": "prevtx", "vout": 0, "prevout": {"scriptpubkey": SCRIPT_A}}],
+                "vout": [{"n": 0, "scriptpubkey": SCRIPT_C, "value": 85_000_000}],
+            }
+        )
+        rows = [
+            _row("A", "inbound", BTC, external_id="acqA"),
+            _row("B", "inbound", BTC, external_id="acqB"),
+            _row("A", "outbound", 85 * BTC // 100, external_id="dup-tx", raw_json=dup_json),
+            _row("B", "outbound", 85 * BTC // 100, external_id="dup-tx", raw_json=dup_json),
+            _row("C", "inbound", 85 * BTC // 100, external_id="dup-tx"),
+        ]
+
+        state = build_tax_engine(PROFILE).build_ledger_state(
+            TaxEngineLedgerInputs(
+                rows=rows,
+                wallet_refs_by_id=WALLET_REFS,
+                manual_pair_records=[],
+                owned_index=index,
+            )
+        )
+
+        self.assertEqual(
+            sorted(q["reason"] for q in state.quarantines),
+            ["owned_fanout_unresolved"] * 3,
+        )
+        self.assertFalse(
+            any(audit.get("pairing_source") == "ownership_derived" for audit in state.intra_audit)
+        )
+        entry_types = [entry["entry_type"] for entry in state.entries]
+        self.assertNotIn("disposal", entry_types)
+        self.assertNotIn("transfer_out", entry_types)
+        self.assertNotIn("transfer_in", entry_types)
+
     def test_derived_move_provenance_is_surfaced(self):
         # The non-taxable treatment must be auditable: every leg the deriver
         # proved from the on-chain graph is tagged "ownership_derived" in the
