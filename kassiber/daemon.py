@@ -156,6 +156,7 @@ from .core.sync_backends import (
 )
 from .backends import (
     BACKEND_KINDS,
+    BACKEND_RESERVED_FIELDS,
     backend_value,
     load_runtime_config,
     merge_db_backends,
@@ -201,7 +202,7 @@ from .log_ring import (
 )
 from .redaction import redact_operational_value, redact_secret_text, redact_secret_value
 from .time_utils import iso_to_unix, timestamp_to_iso
-from .util import str_or_none
+from .util import parse_int, str_or_none
 from .daemon_swap_review import (
     SWAP_REVIEW_DEFAULT_LIMIT,
     build_swap_review_context_payload,
@@ -6641,6 +6642,51 @@ def _create_backend_payload(ctx: "DaemonContext", args: dict[str, Any]) -> dict[
     return payload
 
 
+def _promote_bootstrap_backend_for_desktop_mutation(
+    ctx: "DaemonContext",
+    name: str,
+    *,
+    commit: bool = False,
+) -> bool:
+    """Copy a bootstrap backend into SQLite so desktop edits can persist.
+
+    Older books can still expose built-in/dotenv backends through the merged
+    runtime config without a corresponding SQLite row. Settings edits are DB
+    mutations, so create the row first instead of asking the user to recreate
+    Kassiber's own default manually.
+    """
+    normalized_name = name.strip().lower()
+    if ctx.conn.execute(
+        "SELECT 1 FROM backends WHERE name = ?",
+        (normalized_name,),
+    ).fetchone():
+        return False
+    bootstrap = ctx.runtime_config.get("bootstrap_backends", {}).get(normalized_name)
+    if not isinstance(bootstrap, dict):
+        return False
+    core_accounts.create_backend(
+        ctx.conn,
+        normalized_name,
+        str(bootstrap.get("kind") or ""),
+        str(bootstrap.get("url") or ""),
+        chain=str_or_none(bootstrap.get("chain")),
+        network=str_or_none(bootstrap.get("network")),
+        auth_header=str_or_none(bootstrap.get("auth_header")),
+        token=str_or_none(bootstrap.get("token")),
+        batch_size=parse_int(bootstrap.get("batch_size"), None),
+        timeout=parse_int(bootstrap.get("timeout"), None),
+        tor_proxy=str_or_none(bootstrap.get("tor_proxy")),
+        config={
+            key: value
+            for key, value in bootstrap.items()
+            if key not in BACKEND_RESERVED_FIELDS
+        },
+        notes=str_or_none(bootstrap.get("notes")),
+        commit=commit,
+    )
+    return True
+
+
 def _update_backend_payload(ctx: "DaemonContext", args: dict[str, Any]) -> dict[str, Any]:
     name = _required_str_arg(args, "name", "Backend name")
     common = _backend_common_args(args)
@@ -6657,7 +6703,13 @@ def _update_backend_payload(ctx: "DaemonContext", args: dict[str, Any]) -> dict[
         effective_url,
         effective_config,
     )
-    payload = core_accounts.update_backend(ctx.conn, name, common)
+    promoted = _promote_bootstrap_backend_for_desktop_mutation(ctx, name)
+    try:
+        payload = core_accounts.update_backend(ctx.conn, name, common)
+    except Exception:
+        if promoted:
+            ctx.conn.rollback()
+        raise
     merge_db_backends(ctx.conn, ctx.runtime_config)
     return payload
 
@@ -6671,7 +6723,14 @@ def _delete_backend_payload(ctx: "DaemonContext", args: dict[str, Any]) -> dict[
 
 def _set_default_backend_payload(ctx: "DaemonContext", args: dict[str, Any]) -> dict[str, Any]:
     name = _required_str_arg(args, "name", "Backend name")
-    payload = core_accounts.set_default_backend(ctx.conn, ctx.runtime_config, name)
+    resolve_backend(ctx.runtime_config, name)
+    promoted = _promote_bootstrap_backend_for_desktop_mutation(ctx, name)
+    try:
+        payload = core_accounts.set_default_backend(ctx.conn, ctx.runtime_config, name)
+    except Exception:
+        if promoted:
+            ctx.conn.rollback()
+        raise
     merge_db_backends(ctx.conn, ctx.runtime_config)
     return payload
 

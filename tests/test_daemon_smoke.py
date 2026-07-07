@@ -1,5 +1,6 @@
 import io
 import json
+import os
 import queue
 import select
 import shutil
@@ -44,6 +45,7 @@ from kassiber.daemon_freshness import (
     _maintenance_run_payload,
     _sync_results_from_freshness_jobs,
 )
+from kassiber.backends import DEFAULT_BACKENDS
 from kassiber.errors import AppError
 from kassiber.secrets.sqlcipher import sqlcipher_available
 from kassiber.wallet_descriptors import (
@@ -1030,6 +1032,321 @@ class DaemonSmokeTest(unittest.TestCase):
                 if proc.poll() is None:
                     proc.kill()
                     _close_daemon(proc)
+
+    def test_daemon_backend_update_promotes_bootstrap_default(self):
+        for backend_name, bootstrap in DEFAULT_BACKENDS.items():
+            with self.subTest(backend=backend_name):
+                with tempfile.TemporaryDirectory(
+                    prefix="kassiber-daemon-backend-promote-"
+                ) as tmp:
+                    data_root = Path(tmp) / "data"
+                    _run_cli(data_root, "init")
+                    conn = open_db(data_root)
+                    try:
+                        conn.execute(
+                            "DELETE FROM backends WHERE name = ?",
+                            (backend_name,),
+                        )
+                        conn.commit()
+                    finally:
+                        conn.close()
+
+                    proc = _start_daemon(data_root)
+                    try:
+                        ready = _read_payload_timeout(proc)
+                        self.assertEqual(ready["kind"], "daemon.ready")
+
+                        _write_payload(
+                            proc,
+                            {
+                                "request_id": "mark-first-party",
+                                "kind": "ui.backends.update",
+                                "args": {
+                                    "name": backend_name,
+                                    "config": {"infrastructure_owner": "self"},
+                                },
+                            },
+                        )
+                        updated = _read_payload_timeout(proc)
+                        self.assertEqual(updated["kind"], "ui.backends.update")
+                        self.assertEqual(updated["data"]["name"], backend_name)
+                        self.assertEqual(updated["data"]["kind"], bootstrap["kind"])
+                        self.assertEqual(
+                            updated["data"]["infrastructure_owner"],
+                            "self",
+                        )
+
+                        code, stderr = _close_daemon(proc)
+                        self.assertEqual(code, 0, stderr)
+                    finally:
+                        if proc.poll() is None:
+                            proc.kill()
+                            _close_daemon(proc)
+                    conn = open_db(data_root)
+                    try:
+                        row = conn.execute(
+                            "SELECT config_json FROM backends WHERE name = ?",
+                            (backend_name,),
+                        ).fetchone()
+                        self.assertIsNotNone(row)
+                        config = json.loads(row["config_json"] or "{}")
+                        self.assertEqual(config["infrastructure_owner"], "self")
+                    finally:
+                        conn.close()
+
+    def test_daemon_backend_set_default_promotes_bootstrap_default(self):
+        for backend_name in DEFAULT_BACKENDS:
+            with self.subTest(backend=backend_name):
+                with tempfile.TemporaryDirectory(
+                    prefix="kassiber-daemon-backend-default-promote-"
+                ) as tmp:
+                    data_root = Path(tmp) / "data"
+                    _run_cli(data_root, "init")
+                    conn = open_db(data_root)
+                    try:
+                        conn.execute(
+                            "DELETE FROM backends WHERE name = ?",
+                            (backend_name,),
+                        )
+                        conn.commit()
+                    finally:
+                        conn.close()
+
+                    proc = _start_daemon(data_root)
+                    try:
+                        ready = _read_payload_timeout(proc)
+                        self.assertEqual(ready["kind"], "daemon.ready")
+
+                        _write_payload(
+                            proc,
+                            {
+                                "request_id": "set-default-bootstrap",
+                                "kind": "ui.backends.set_default",
+                                "args": {"name": backend_name},
+                            },
+                        )
+                        updated = _read_payload_timeout(proc)
+                        self.assertEqual(updated["kind"], "ui.backends.set_default")
+                        self.assertEqual(
+                            updated["data"]["default_backend"],
+                            backend_name,
+                        )
+
+                        _write_payload(
+                            proc,
+                            {"request_id": "shutdown-1", "kind": "daemon.shutdown"},
+                        )
+                        self.assertEqual(
+                            _read_payload_timeout(proc)["kind"],
+                            "daemon.shutdown",
+                        )
+                        code, stderr = _close_daemon(proc)
+                        self.assertEqual(code, 0, stderr)
+                    finally:
+                        if proc.poll() is None:
+                            proc.kill()
+                            _close_daemon(proc)
+                    conn = open_db(data_root)
+                    try:
+                        row = conn.execute(
+                            "SELECT 1 FROM backends WHERE name = ?",
+                            (backend_name,),
+                        ).fetchone()
+                        self.assertIsNotNone(row)
+                        setting = conn.execute(
+                            "SELECT value FROM settings WHERE key = 'default_backend'",
+                        ).fetchone()
+                        self.assertIsNotNone(setting)
+                        self.assertEqual(setting["value"], backend_name)
+                    finally:
+                        conn.close()
+
+    def test_daemon_backend_promotion_preserves_dotenv_config_fields(self):
+        with tempfile.TemporaryDirectory(
+            prefix="kassiber-daemon-backend-dotenv-promote-"
+        ) as tmp:
+            data_root = Path(tmp) / "data"
+            init_payload = _run_cli(data_root, "init")
+            env_file = Path(init_payload["data"]["env_file"])
+            env_file.write_text(
+                "\n".join(
+                    [
+                        "KASSIBER_BACKEND_NODE_KIND=lnd",
+                        "KASSIBER_BACKEND_NODE_URL=https://127.0.0.1:8080",
+                        "KASSIBER_BACKEND_NODE_CHAIN=bitcoin",
+                        "KASSIBER_BACKEND_NODE_NETWORK=main",
+                        "KASSIBER_BACKEND_NODE_CERTIFICATE=/Users/dev/.lnd/tls.cert",
+                        (
+                            "KASSIBER_BACKEND_NODE_RPC_FILE="
+                            "/Users/dev/.lnd/admin.macaroon"
+                        ),
+                        "KASSIBER_BACKEND_NODE_LIGHTNING_DIR=/Users/dev/.lnd",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            proc = _start_daemon(data_root)
+            try:
+                ready = _read_payload_timeout(proc)
+                self.assertEqual(ready["kind"], "daemon.ready")
+
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "mark-first-party",
+                        "kind": "ui.backends.update",
+                        "args": {
+                            "name": "node",
+                            "config": {"infrastructure_owner": "self"},
+                        },
+                    },
+                )
+                updated = _read_payload_timeout(proc)
+                self.assertEqual(updated["kind"], "ui.backends.update")
+                self.assertEqual(updated["data"]["name"], "node")
+                self.assertTrue(updated["data"]["has_certificate"])
+                self.assertTrue(updated["data"]["has_rpc_file"])
+                self.assertTrue(updated["data"]["has_lightning_dir"])
+
+                code, stderr = _close_daemon(proc)
+                self.assertEqual(code, 0, stderr)
+            finally:
+                if proc.poll() is None:
+                    proc.kill()
+                    _close_daemon(proc)
+
+            conn = open_db(data_root)
+            try:
+                row = conn.execute(
+                    "SELECT config_json FROM backends WHERE name = ?",
+                    ("node",),
+                ).fetchone()
+                self.assertIsNotNone(row)
+                config = json.loads(row["config_json"] or "{}")
+                self.assertEqual(config["certificate"], "/Users/dev/.lnd/tls.cert")
+                self.assertEqual(
+                    config["rpc_file"],
+                    "/Users/dev/.lnd/admin.macaroon",
+                )
+                self.assertEqual(config["lightning_dir"], "/Users/dev/.lnd")
+                self.assertEqual(config["infrastructure_owner"], "self")
+            finally:
+                conn.close()
+
+    def test_daemon_backend_promotion_does_not_persist_process_env_overrides(self):
+        with tempfile.TemporaryDirectory(
+            prefix="kassiber-daemon-backend-env-promote-"
+        ) as tmp:
+            data_root = Path(tmp) / "data"
+            _run_cli(data_root, "init")
+            conn = open_db(data_root)
+            try:
+                conn.execute("DELETE FROM backends WHERE name = ?", ("mempool",))
+                conn.commit()
+            finally:
+                conn.close()
+
+            with mock.patch.dict(
+                os.environ,
+                {"KASSIBER_BACKEND_MEMPOOL_URL": "https://override.invalid/api"},
+            ):
+                proc = _start_daemon(data_root)
+                try:
+                    ready = _read_payload_timeout(proc)
+                    self.assertEqual(ready["kind"], "daemon.ready")
+
+                    _write_payload(
+                        proc,
+                        {
+                            "request_id": "mark-first-party",
+                            "kind": "ui.backends.update",
+                            "args": {
+                                "name": "mempool",
+                                "config": {"infrastructure_owner": "self"},
+                            },
+                        },
+                    )
+                    updated = _read_payload_timeout(proc)
+                    self.assertEqual(updated["kind"], "ui.backends.update")
+                    self.assertEqual(updated["data"]["name"], "mempool")
+
+                    code, stderr = _close_daemon(proc)
+                    self.assertEqual(code, 0, stderr)
+                finally:
+                    if proc.poll() is None:
+                        proc.kill()
+                        _close_daemon(proc)
+
+            conn = open_db(data_root)
+            try:
+                row = conn.execute(
+                    "SELECT url FROM backends WHERE name = ?",
+                    ("mempool",),
+                ).fetchone()
+                self.assertIsNotNone(row)
+                self.assertEqual(row["url"], DEFAULT_BACKENDS["mempool"]["url"])
+            finally:
+                conn.close()
+
+    def test_daemon_backend_promotion_rolls_back_when_update_fails(self):
+        with tempfile.TemporaryDirectory(
+            prefix="kassiber-daemon-backend-promote-rollback-"
+        ) as tmp:
+            data_root = Path(tmp) / "data"
+            _run_cli(data_root, "init")
+            conn = open_db(data_root)
+            try:
+                conn.execute("DELETE FROM backends WHERE name = ?", ("fulcrum",))
+                conn.commit()
+            finally:
+                conn.close()
+
+            proc = _start_daemon(data_root)
+            try:
+                ready = _read_payload_timeout(proc)
+                self.assertEqual(ready["kind"], "daemon.ready")
+
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "bad-update",
+                        "kind": "ui.backends.update",
+                        "args": {
+                            "name": "fulcrum",
+                            "batch_size": -1,
+                        },
+                    },
+                )
+                failed = _read_payload_timeout(proc)
+                self.assertEqual(failed["kind"], "error")
+                self.assertEqual(failed["error"]["code"], "validation")
+
+                _write_payload(
+                    proc,
+                    {"request_id": "shutdown-1", "kind": "daemon.shutdown"},
+                )
+                self.assertEqual(
+                    _read_payload_timeout(proc)["kind"],
+                    "daemon.shutdown",
+                )
+                code, stderr = _close_daemon(proc)
+                self.assertEqual(code, 0, stderr)
+            finally:
+                if proc.poll() is None:
+                    proc.kill()
+                    _close_daemon(proc)
+
+            conn = open_db(data_root)
+            try:
+                row = conn.execute(
+                    "SELECT 1 FROM backends WHERE name = ?",
+                    ("fulcrum",),
+                ).fetchone()
+                self.assertIsNone(row)
+            finally:
+                conn.close()
 
     def test_ai_provider_set_api_key_redacts_secret_from_daemon_envelopes_and_stderr(self):
         secret_marker = "sk-daemon-secret-marker"
