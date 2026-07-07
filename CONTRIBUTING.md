@@ -113,7 +113,8 @@ If behavior changes, check whether these also need updates:
 - `docs/quickstart.md`
 - `AGENTS.md`
 - `TODO.md`
-- `skills/kassiber/`
+- `kassiber/ai/skill_references/` and the external Agent Skill at
+  `bitcoinaustria/skills`
 - `docs/reference/i18n.md` + `docs/reference/i18n-glossary.md` when UI strings or German terminology change
 - `SECURITY.md` when privacy or external I/O changes
 

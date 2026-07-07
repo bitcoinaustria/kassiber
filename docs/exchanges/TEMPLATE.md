@@ -2,7 +2,7 @@
 
 > Copy this file to `docs/exchanges/<slug>.md` and fill every section before
 > any importer code is written. Driven by the intake interview in
-> [skills/kassiber/references/add-exchange.md](../../skills/kassiber/references/add-exchange.md).
+> [the Kassiber Agent Skill](https://github.com/bitcoinaustria/skills/blob/main/references/add-exchange.md).
 > See [strike.md](strike.md) for a filled worked example. Keep secrets and
 > personal data out of this file.
 

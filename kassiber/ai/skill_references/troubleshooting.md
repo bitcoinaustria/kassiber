@@ -121,8 +121,8 @@ kassiber status
 
 and trust the reported `state_root`, `data_root`, and `database` fields.
 
-If you are using the repo-local Kassiber skill bundle, remember that bundled
-references live under `<skill-dir>/references/`, not repo-root `references/`.
+If you are using the Kassiber Agent Skill, remember that bundled references
+live under `<skill-dir>/references/`, not repo-root `references/`.
 
 ## Passphrase / encrypted DB errors
 

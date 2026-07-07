@@ -82,14 +82,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          skill_refs_add_data="$(python -c 'import os; print(f"skills/kassiber/references{os.pathsep}skills/kassiber/references")')"
           uv run --with pyinstaller==6.20.0 pyinstaller \
             --clean \
             --noconfirm \
             --onefile \
             --name kassiber \
             --paths . \
-            --add-data "$skill_refs_add_data" \
             --collect-data kassiber \
             --collect-submodules embit \
             --collect-data embit \
@@ -406,14 +404,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          skill_refs_add_data="$(python -c 'import os; print(f"skills/kassiber/references{os.pathsep}skills/kassiber/references")')"
           uv run --with pyinstaller==6.20.0 pyinstaller \
             --clean \
             --noconfirm \
             --onefile \
             --name kassiber-cli \
             --paths . \
-            --add-data "$skill_refs_add_data" \
             --collect-data kassiber \
             --collect-submodules embit \
             --collect-data embit \

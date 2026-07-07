@@ -2,8 +2,10 @@
 description: Add support for a new exchange / broker / custodial platform — guided intake interview, then implementation.
 ---
 
-Onboard a new exchange into Kassiber by following the playbook in
-[skills/kassiber/references/add-exchange.md](../../skills/kassiber/references/add-exchange.md).
+Onboard a new exchange into Kassiber by following the playbook in the
+Kassiber Agent Skill:
+https://github.com/bitcoinaustria/skills/blob/main/references/add-exchange.md
+
 Read that file first; it is the source of truth for both halves of this flow.
 
 Steps:

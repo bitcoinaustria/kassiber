@@ -64,8 +64,6 @@ echo "Bundled sidecar: $SIDECAR_NAME"
 echo "Bundles: $BUNDLES"
 echo "Python: $PYTHON_VERSION"
 
-skill_refs_add_data="$(ROOT="$ROOT" python3 -c 'import os; print(os.environ["ROOT"] + "/skills/kassiber/references" + os.pathsep + "skills/kassiber/references")')"
-
 run uv run --python "$PYTHON_VERSION" --with pyinstaller==6.20.0 pyinstaller \
   --clean \
   --noconfirm \
@@ -73,7 +71,6 @@ run uv run --python "$PYTHON_VERSION" --with pyinstaller==6.20.0 pyinstaller \
   --name kassiber-cli \
   --specpath build \
   --paths . \
-  --add-data "$skill_refs_add_data" \
   --collect-data kassiber \
   --collect-submodules embit \
   --collect-data embit \
