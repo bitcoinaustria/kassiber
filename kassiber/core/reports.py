@@ -26,10 +26,19 @@ from ..errors import AppError
 from ..msat import btc_to_msat, dec, msat_to_btc
 from ..secrets.sqlcipher import looks_like_plaintext_sqlite
 from ..tax_policy import require_tax_processing_supported
+from ..wallet_descriptors import normalize_asset_code
 
 INTERVAL_CHOICES = ("hour", "day", "week", "month")
 DEFAULT_BALANCE_HISTORY_INTERVAL = "month"
 EUR_CENT = Decimal("0.01")
+SWAP_FEE_PAIR_KINDS = (
+    "chain-swap",
+    "peg-in",
+    "peg-out",
+    "reverse-submarine-swap",
+    "submarine-swap",
+    "swap-refund",
+)
 
 AUSTRIAN_E1KV_REVIEW_GATE = (
     "Review this Austrian E 1kv export with a Steuerberater before filing; "
@@ -4037,9 +4046,12 @@ def _swap_fee_summary_rows(conn, profile_id):
         SELECT p.kind,
                p.policy,
                p.swap_fee_msat,
+               t_out.asset AS out_asset,
+               t_in.asset AS in_asset,
                substr(t_out.occurred_at, 1, 4) AS year
         FROM transaction_pairs p
         JOIN transactions t_out ON t_out.id = p.out_transaction_id
+        JOIN transactions t_in ON t_in.id = p.in_transaction_id
         WHERE p.profile_id = ?
           AND p.deleted_at IS NULL
           AND p.swap_fee_msat IS NOT NULL
@@ -4047,6 +4059,8 @@ def _swap_fee_summary_rows(conn, profile_id):
         SELECT p.kind,
                p.policy,
                p.swap_fee_msat,
+               t_out.asset AS out_asset,
+               p.payout_asset AS in_asset,
                substr(COALESCE(p.payout_occurred_at, t_out.occurred_at), 1, 4) AS year
         FROM direct_swap_payouts p
         JOIN transactions t_out ON t_out.id = p.out_transaction_id
@@ -4062,6 +4076,12 @@ def _swap_fee_summary_rows(conn, profile_id):
     per_year = defaultdict(lambda: {"count": 0, "total_msat": 0})
     grand = {"count": 0, "total_msat": 0}
     for row in rows:
+        try:
+            same_asset = normalize_asset_code(row["out_asset"]) == normalize_asset_code(row["in_asset"])
+        except (TypeError, ValueError):
+            same_asset = False
+        if same_asset and str(row["kind"] or "").strip().lower() not in SWAP_FEE_PAIR_KINDS:
+            continue
         year_str = row["year"] or ""
         if not year_str.isdigit():
             continue

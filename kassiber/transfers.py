@@ -106,7 +106,16 @@ def apply_manual_pairs(rows, auto_pairs, manual_pair_records):
         manually_paired_ids.add(out_id)
         manually_paired_ids.add(in_id)
         if out_row["asset"] == in_row["asset"] and record["policy"] == "carrying-value":
-            manual_same_asset.append({"out": out_row, "in": in_row})
+            manual_same_asset.append(
+                {
+                    "out": out_row,
+                    "in": in_row,
+                    "pair_id": record["id"],
+                    "kind": record["kind"],
+                    "policy": record["policy"],
+                    "source": _row_field(record, "pair_source") or "manual",
+                }
+            )
         elif out_row["asset"] != in_row["asset"]:
             cross_asset_pairs.append(
                 {

@@ -566,8 +566,10 @@ covers review-queue actions exposed to chat: `ui_transfers_pair`,
 `ui_transfers_rules_create`, `ui_transfers_rules_delete`,
 `ui_transfers_rules_set_enabled`, `ui_transfers_rules_apply`,
 `ui_saved_views_create`, and `ui_saved_views_delete`. `ui_transfers_pair`
-supports a generic `coinjoin` kind for user-reviewed same-asset ownership hops;
-the AI may propose it, but the write still requires explicit user consent.
+supports `coinjoin` and `whirlpool` kinds for user-reviewed same-asset
+ownership hops, including reviewed one-to-many / many-to-one same-asset links.
+Cross-asset and layer-transition links remain one-to-one. The AI may propose
+these pairings, but the write still requires explicit user consent.
 Source-funds evidence writes are also consent-gated:
 `ui_source_funds_sources_create`,
 `ui_source_funds_links_create`, `ui_source_funds_links_review`,

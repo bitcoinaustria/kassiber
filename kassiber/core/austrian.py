@@ -16,7 +16,7 @@ of rp2 imports (Kassiber-core does not depend on rp2 types).
 
 from __future__ import annotations
 
-from collections import defaultdict
+from collections import defaultdict, deque
 from datetime import datetime
 from typing import Any, Literal, Mapping, Optional, Sequence
 from zoneinfo import ZoneInfo
@@ -193,6 +193,167 @@ def _move_transfer_availability(
     return preferred_regime
 
 
+def _row_msat(row: Mapping[str, Any], key: str) -> int:
+    return int(_row_value(row, key) or 0)
+
+
+def _copy_row_with_amount(
+    row: Mapping[str, Any],
+    *,
+    amount_msat: int | None = None,
+    fee_msat: int | None = None,
+) -> dict[str, Any]:
+    copied = {key: row[key] for key in row.keys()} if hasattr(row, "keys") else dict(row)
+    if amount_msat is not None:
+        copied["amount"] = amount_msat
+    if fee_msat is not None:
+        copied["fee"] = fee_msat
+    return copied
+
+
+def _allocate_fee_msat(total_fee_msat: int, bases: Sequence[int]) -> list[int]:
+    remaining = max(0, int(total_fee_msat))
+    allocated: list[int] = []
+    for base in bases:
+        if remaining <= 0:
+            allocated.append(0)
+            continue
+        portion = min(max(0, int(base)), remaining)
+        allocated.append(portion)
+        remaining -= portion
+    if remaining and allocated:
+        allocated[-1] += remaining
+    return allocated
+
+
+def _ordered_pair_component(
+    component: Sequence[Mapping[str, Mapping[str, Any]]],
+) -> list[Mapping[str, Mapping[str, Any]]]:
+    return sorted(
+        component,
+        key=lambda pair: (
+            str(_row_value(pair["out"], "occurred_at") or ""),
+            str(_row_value(pair["in"], "occurred_at") or ""),
+            str(pair["out"]["id"]),
+            str(pair["in"]["id"]),
+        ),
+    )
+
+
+def _intra_pair_components(
+    intra_pairs: Sequence[Mapping[str, Mapping[str, Any]]],
+) -> list[list[Mapping[str, Mapping[str, Any]]]]:
+    candidates: list[Mapping[str, Mapping[str, Any]]] = []
+    row_to_indexes: dict[str, list[int]] = defaultdict(list)
+    for pair in intra_pairs:
+        out_row = pair.get("out") if hasattr(pair, "get") else None
+        in_row = pair.get("in") if hasattr(pair, "get") else None
+        if out_row is None or in_row is None:
+            continue
+        index = len(candidates)
+        candidates.append(pair)
+        row_to_indexes[str(out_row["id"])].append(index)
+        row_to_indexes[str(in_row["id"])].append(index)
+
+    components: list[list[Mapping[str, Mapping[str, Any]]]] = []
+    seen: set[int] = set()
+    for start in range(len(candidates)):
+        if start in seen:
+            continue
+        queue: deque[int] = deque([start])
+        indexes: list[int] = []
+        seen.add(start)
+        while queue:
+            index = queue.popleft()
+            indexes.append(index)
+            pair = candidates[index]
+            for row_id in (str(pair["out"]["id"]), str(pair["in"]["id"])):
+                for linked_index in row_to_indexes.get(row_id, ()):
+                    if linked_index in seen:
+                        continue
+                    seen.add(linked_index)
+                    queue.append(linked_index)
+        components.append([candidates[index] for index in indexes])
+    return components
+
+
+def _transfer_actions_for_intra_pairs(
+    intra_pairs: Optional[Sequence[Mapping[str, Mapping[str, Any]]]],
+) -> tuple[
+    dict[str, list[tuple[Mapping[str, Any], Mapping[str, Any], str]]],
+    set[str],
+]:
+    actions_by_trigger_id: dict[
+        str, list[tuple[Mapping[str, Any], Mapping[str, Any], str]]
+    ] = defaultdict(list)
+    transfer_row_ids: set[str] = set()
+
+    for component in _intra_pair_components(intra_pairs or ()):
+        ordered_pairs = _ordered_pair_component(component)
+        out_rows_by_id = {
+            str(pair["out"]["id"]): pair["out"] for pair in ordered_pairs
+        }
+        in_rows_by_id = {
+            str(pair["in"]["id"]): pair["in"] for pair in ordered_pairs
+        }
+        group_row_ids = set(out_rows_by_id) | set(in_rows_by_id)
+        transfer_row_ids.update(group_row_ids)
+
+        if len(out_rows_by_id) > 1 and len(in_rows_by_id) > 1:
+            # The tax normalizer quarantines these as ambiguous; inference must
+            # not also treat their legs as ordinary acquisitions/disposals.
+            continue
+
+        total_sent_msat = sum(
+            _row_msat(row, "amount") + _row_msat(row, "fee")
+            for row in out_rows_by_id.values()
+        )
+        total_received_msat = sum(_row_msat(row, "amount") for row in in_rows_by_id.values())
+        if total_sent_msat < total_received_msat:
+            # The normalizer will quarantine transfer_mismatch. Do not poison
+            # wallet availability by crediting any side as a normal row.
+            continue
+
+        fee_msat = total_sent_msat - total_received_msat
+        if len(out_rows_by_id) == 1:
+            fee_allocations = _allocate_fee_msat(
+                fee_msat, [_row_msat(pair["in"], "amount") for pair in ordered_pairs]
+            )
+            for pair, fee_allocation in zip(ordered_pairs, fee_allocations):
+                out_row = pair["out"]
+                in_row = pair["in"]
+                received_msat = _row_msat(in_row, "amount")
+                action_out = _copy_row_with_amount(
+                    out_row,
+                    amount_msat=received_msat,
+                    fee_msat=fee_allocation,
+                )
+                actions_by_trigger_id[str(out_row["id"])].append(
+                    (action_out, in_row, str(out_row["id"]))
+                )
+            continue
+
+        sent_amounts = [
+            _row_msat(pair["out"], "amount") + _row_msat(pair["out"], "fee")
+            for pair in ordered_pairs
+        ]
+        fee_allocations = _allocate_fee_msat(fee_msat, sent_amounts)
+        for pair, sent_msat, fee_allocation in zip(
+            ordered_pairs, sent_amounts, fee_allocations
+        ):
+            received_msat = sent_msat - fee_allocation
+            if received_msat <= 0:
+                continue
+            out_row = pair["out"]
+            in_row = pair["in"]
+            action_in = _copy_row_with_amount(in_row, amount_msat=received_msat)
+            actions_by_trigger_id[str(out_row["id"])].append(
+                (out_row, action_in, str(out_row["id"]))
+            )
+
+    return actions_by_trigger_id, transfer_row_ids
+
+
 def infer_outbound_regimes(
     rows: Sequence[Mapping[str, Any]],
     intra_pairs: Optional[Sequence[Mapping[str, Mapping[str, Any]]]] = None,
@@ -211,33 +372,18 @@ def infer_outbound_regimes(
     alt_available_msat_by_key: dict[str, int] = defaultdict(int)
     neu_available_msat_by_key: dict[str, int] = defaultdict(int)
     regimes_by_row_id: dict[str, Literal["alt", "neu"]] = {}
-    transfer_by_row_id: dict[str, Mapping[str, Mapping[str, Any]]] = {}
-    for pair in intra_pairs or ():
-        out_row = pair.get("out")
-        in_row = pair.get("in")
-        if out_row is None or in_row is None:
-            continue
-        transfer_by_row_id[str(out_row["id"])] = pair
-        transfer_by_row_id[str(in_row["id"])] = pair
-    handled_transfer_keys: set[tuple[str, str]] = set()
+    transfer_actions_by_row_id, transfer_row_ids = _transfer_actions_for_intra_pairs(intra_pairs)
 
     for row in rows:
-        transfer_pair = transfer_by_row_id.get(str(row["id"]))
-        if transfer_pair is not None:
-            out_row = transfer_pair["out"]
-            in_row = transfer_pair["in"]
-            # Process the move at its OUT leg's position, not whichever leg is
-            # seen first. The IN leg is an inbound and sorts ahead of
-            # same-timestamp acquisitions (and the move's own out leg); triggering
-            # there would deplete the pool before those acquisitions land,
-            # flipping the move's fee regime (and any later disposal) on a
-            # transaction-id tiebreak. Skip the IN leg; the OUT leg, sorted after
-            # same-timestamp acquisitions, drives the move.
-            if str(row["id"]) != str(out_row["id"]):
-                continue
-            pair_key = (str(out_row["id"]), str(in_row["id"]))
-            if pair_key not in handled_transfer_keys:
-                handled_transfer_keys.add(pair_key)
+        row_id = str(row["id"])
+        transfer_actions = transfer_actions_by_row_id.get(row_id)
+        if transfer_actions:
+            # Process moves at their OUT leg's position, not whichever leg is
+            # seen first. IN legs sort ahead of same-timestamp acquisitions, and
+            # triggering there can deplete the pool before those acquisitions
+            # land. Multi-pair groups are sliced here the same way the tax
+            # normalizer later emits their transfer rows.
+            for out_row, in_row, regime_row_id in transfer_actions:
                 fee_regime = _move_transfer_availability(
                     alt_available_msat_by_key,
                     neu_available_msat_by_key,
@@ -247,7 +393,9 @@ def infer_outbound_regimes(
                 # Tag the self-transfer's out row so its taxable miner-fee
                 # disposal carries a regime; without it rp2's AT moving-average
                 # aborts the whole asset on "Ambiguous Austrian disposal".
-                regimes_by_row_id[str(out_row["id"])] = fee_regime
+                regimes_by_row_id.setdefault(regime_row_id, fee_regime)
+            continue
+        if row_id in transfer_row_ids:
             continue
 
         direction = str(_row_value(row, "direction") or "").strip().lower()

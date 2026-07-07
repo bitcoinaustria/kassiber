@@ -12,9 +12,9 @@
  * Heavy-user UX hooks already wired in this commit:
  *  - Status pill header with counts (total / exact / strong / conflicts).
  *  - Filter chips that pin confidence, method, and asset pair.
- *  - Conflict-cluster grouping renders a shared ⚠ banner; bulk-pair
- *    intentionally skips clustered candidates (the user must
- *    disambiguate first).
+ *  - Conflict-cluster grouping renders a shared alert banner. Exact/rule
+ *    auto-pairing skips clusters; selected bulk pairing can commit reviewed
+ *    same-asset privacy clusters.
  *  - "What actually left your custody" — the computed
  *    ``swap_fee_msat`` is the headline number on every card.
  *
@@ -118,6 +118,7 @@ import { useUiStore } from "@/store/ui";
 const PAIR_KIND_OPTIONS = [
   "manual",
   "coinjoin",
+  "whirlpool",
   "chain-swap",
   "peg-in",
   "peg-out",
@@ -126,6 +127,11 @@ const PAIR_KIND_OPTIONS = [
   "swap-refund",
 ] as const;
 const PAIR_POLICY_OPTIONS = ["carrying-value", "taxable"] as const;
+const REUSABLE_CLUSTER_PAIR_KINDS = new Set<PairKind>([
+  "manual",
+  "coinjoin",
+  "whirlpool",
+]);
 // Stable `value` (machine code, used in filter payloads + lookups) paired with a
 // `labelKey` into the `review` namespace; labels are resolved at render.
 const CONFIDENCE_OPTIONS = [
@@ -1245,6 +1251,18 @@ function PairingReview({
 
   const candidateKey = (c: SwapCandidate) => `${c.out_id}->${c.in_id}`;
 
+  const canSelectCandidate = useCallback((candidate: SwapCandidate) => {
+    if (candidate.conflict_size <= 1) return true;
+    const override = overrides[candidateKey(candidate)] ?? {};
+    const kind = override.kind ?? bulkKind ?? candidate.default_kind;
+    const policy = override.policy ?? bulkPolicy ?? candidate.default_policy;
+    return (
+      candidate.out_asset === candidate.in_asset &&
+      policy === "carrying-value" &&
+      REUSABLE_CLUSTER_PAIR_KINDS.has(kind)
+    );
+  }, [bulkKind, bulkPolicy, overrides]);
+
   const exactSolo = useMemo(
     () =>
       candidates.filter(
@@ -1262,8 +1280,8 @@ function PairingReview({
   );
 
   const selectableCandidates = useMemo(
-    () => candidates.filter((c) => c.conflict_size <= 1),
-    [candidates],
+    () => candidates.filter(canSelectCandidate),
+    [canSelectCandidate, candidates],
   );
 
   const selectableCandidatesByKey = useMemo(() => {
@@ -1481,8 +1499,7 @@ function PairingReview({
         description: t("swap.keymap.toggleSelection"),
         category: t("swap.keymap.categorySelection"),
         handler: () => {
-          if (!cursorCandidate) return;
-          if (cursorCandidate.conflict_size > 1) return;
+          if (!cursorCandidate || !canSelectCandidate(cursorCandidate)) return;
           toggleSelected(candidateKey(cursorCandidate));
         },
       },
@@ -1533,6 +1550,7 @@ function PairingReview({
     ];
   }, [
     candidates,
+    canSelectCandidate,
     cursorCandidate,
     exactSolo,
     detailCandidate,
@@ -1864,6 +1882,7 @@ function PairingReview({
                   {candidates.map((candidate) => {
                     const key = candidateKey(candidate);
                     const conflicted = candidate.conflict_size > 1;
+                    const selectable = canSelectCandidate(candidate);
                     const hiddenSiblings =
                       candidate.conflict_size -
                       (visibleClusterCounts[candidate.conflict_set_id] ?? 1);
@@ -1880,8 +1899,8 @@ function PairingReview({
                         <TableCell>
                           <Checkbox
                             aria-label={t("swap.table.selectAria")}
-                            disabled={conflicted}
-                            checked={!conflicted && selected.has(key)}
+                            disabled={!selectable}
+                            checked={selectable && selected.has(key)}
                             onClick={(event) => event.stopPropagation()}
                             onCheckedChange={() => toggleSelected(key)}
                           />

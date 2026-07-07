@@ -127,10 +127,18 @@ Current rules:
 - same-asset manual pairs support `--policy carrying-value`, including
   same-wallet failed-swap refunds where the send and refund have different
   transaction ids
-- reviewed `coinjoin` pairs are same-asset carrying-value links for manually
-  accepted ownership hops when descriptor history is incomplete; they preserve
-  basis but do not prove the full privacy graph or counterparty set
+- a reviewed same-asset link can reuse one side across multiple active pairs:
+  one outbound can be manually linked to several owned inbound legs, and several
+  outbound legs can be manually linked to one owned inbound leg. Kassiber books
+  those reused-leg links as one grouped carrying-value movement so the total
+  source quantity, destination quantity, and fee are counted once.
+- reviewed `coinjoin` / `whirlpool` pairs are same-asset carrying-value links
+  for manually accepted ownership hops when descriptor history is incomplete;
+  they preserve basis but do not prove the full privacy graph or counterparty set
 - same-asset `--policy taxable` is rejected; leave those legs unpaired if you want normal SELL + BUY treatment
+- cross-asset and layer-transition pairs stay one-to-one: a transaction leg
+  cannot belong to multiple active BTC↔LBTC / Lightning swap links until
+  explicit multi-leg swap accounting exists
 - cross-asset pairs are always stored for audit
 - cross-asset `--policy carrying-value` is supported for BTC ↔ LBTC rail changes on every profile, because both assets represent the same Bitcoin exposure; Austrian books (`tax_country=at`) additionally use rp2's native multi-asset hook for reviewed carrying-value swaps
 - generic books default BTC ↔ LBTC suggestions, omitted-policy manual pairs, and omitted-policy asset-specific auto-pair rules to `carrying-value` while `bitcoin_rail_carrying_value` is enabled (default); turn it off with `profiles set --no-bitcoin-rail-carrying-value` when an adviser wants taxable-by-default rail changes
@@ -140,7 +148,9 @@ Current rules:
 - cross-asset swaps are never auto-paired from time / amount heuristics during report generation; use `transfers pair` when those links matter for tax treatment
 - swap-routed payments or receipts should stay unpaired unless both legs are known owned-wallet legs of the same user
 
-Manual pairs override auto-detection.
+Manual pairs override auto-detection. `transfers suggest` still suppresses
+transactions that already have an active reviewed link; multi-link CoinJoin or
+missing-intermediate-wallet cases are manual review flows for now.
 
 ## Quarantines
 

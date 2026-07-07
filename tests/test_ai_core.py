@@ -329,6 +329,7 @@ class ToolCatalogPromptTest(unittest.TestCase):
         self.assertIn("ui_maintenance_run", tool_names)
         pair_schema = get_tool("ui_transfers_pair").parameters
         self.assertIn("coinjoin", pair_schema["properties"]["kind"]["enum"])
+        self.assertIn("whirlpool", pair_schema["properties"]["kind"]["enum"])
         self.assertIn("chain-swap", pair_schema["properties"]["kind"]["enum"])
         self.assertIn(
             "reverse-submarine-swap",
