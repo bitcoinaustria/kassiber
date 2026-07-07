@@ -87,3 +87,122 @@ def channel_role_map(
         elif direction == "inbound" and key in closing:
             roles[tx_id] = CHANNEL_CLOSE
     return roles
+
+
+def channel_transfer_pairs(
+    channel_rows: Iterable[Any],
+    tx_rows: Iterable[Any],
+    wallet_refs_by_id: Mapping[str, Mapping[str, Any]],
+) -> list[dict[str, Any]]:
+    """Return explicit same-asset pairs for channel capacity moves.
+
+    ``channel_role_map`` only suppresses the L1 row as a non-event. That preserves
+    profile-wide holdings but strands the capacity in the funding wallet. When the
+    channel metadata carries the node wallet id, synthesize the missing other leg
+    so funding becomes an on-chain-wallet -> node MOVE and cooperative close
+    becomes node -> on-chain-wallet.
+    """
+    funding_wallet_by_txid: dict[str, str] = {}
+    closing_wallet_by_txid: dict[str, str] = {}
+    for row in channel_rows:
+        wallet_id = _field(row, "wallet_id")
+        if not wallet_id or str(wallet_id) not in wallet_refs_by_id:
+            continue
+        fund = _txid_from_outpoint(
+            _field(row, "funding_txid") or _field(row, "funding_outpoint")
+        )
+        if fund:
+            funding_wallet_by_txid.setdefault(normalize_group_txid(fund), str(wallet_id))
+        close = _field(row, "closing_txid")
+        if close:
+            closing_wallet_by_txid.setdefault(
+                normalize_group_txid(str(close)), str(wallet_id)
+            )
+
+    pairs: list[dict[str, Any]] = []
+    paired_real_ids: set[str] = set()
+    for tx in tx_rows:
+        external_id = _field(tx, "external_id")
+        if not external_id:
+            continue
+        tx_id = str(_field(tx, "id"))
+        if tx_id in paired_real_ids:
+            continue
+        key = normalize_group_txid(str(external_id))
+        direction = _field(tx, "direction")
+        amount = int(_field(tx, "amount") or 0)
+        if amount <= 0:
+            continue
+        if direction == "outbound" and key in funding_wallet_by_txid:
+            node_wallet_id = funding_wallet_by_txid[key]
+            in_row = _clone_channel_leg(
+                tx,
+                wallet_refs_by_id[node_wallet_id],
+                row_id=f"channel-open:{tx_id}:in:{node_wallet_id}",
+                direction="inbound",
+                fee=0,
+            )
+            pairs.append(
+                {
+                    "out": tx,
+                    "in": in_row,
+                    "source": "channel_lifecycle",
+                    "kind": CHANNEL_OPEN,
+                }
+            )
+            paired_real_ids.add(tx_id)
+        elif direction == "inbound" and key in closing_wallet_by_txid:
+            node_wallet_id = closing_wallet_by_txid[key]
+            out_row = _clone_channel_leg(
+                tx,
+                wallet_refs_by_id[node_wallet_id],
+                row_id=f"channel-close:{tx_id}:out:{node_wallet_id}",
+                direction="outbound",
+                fee=0,
+            )
+            pairs.append(
+                {
+                    "out": out_row,
+                    "in": tx,
+                    "source": "channel_lifecycle",
+                    "kind": CHANNEL_CLOSE,
+                }
+            )
+            paired_real_ids.add(tx_id)
+    return pairs
+
+
+def _clone_channel_leg(
+    row: Any,
+    wallet_ref: Mapping[str, Any],
+    *,
+    row_id: str,
+    direction: str,
+    fee: int,
+) -> dict[str, Any]:
+    cloned = _row_dict(row)
+    cloned.update(
+        {
+            "id": row_id,
+            "journal_transaction_id": _field(row, "id"),
+            "direction": direction,
+            "fee": fee,
+            "wallet_id": wallet_ref["id"],
+            "wallet_label": wallet_ref["label"],
+            "wallet_account_id": wallet_ref.get("wallet_account_id"),
+            "account_code": wallet_ref.get("account_code"),
+            "account_label": wallet_ref.get("account_label"),
+            "kind": "self_transfer_in" if direction == "inbound" else "self_transfer_out",
+            "description": row_id,
+        }
+    )
+    return cloned
+
+
+def _row_dict(row: Any) -> dict[str, Any]:
+    if isinstance(row, Mapping):
+        return dict(row)
+    try:
+        return {key: row[key] for key in row.keys()}
+    except AttributeError:
+        return dict(getattr(row, "__dict__", {}))

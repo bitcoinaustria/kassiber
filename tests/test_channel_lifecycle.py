@@ -14,7 +14,7 @@ from decimal import Decimal
 
 from kassiber.core.engines.base import TaxEngineLedgerInputs
 from kassiber.core.engines.rp2 import GenericRP2TaxEngine
-from kassiber.core.lightning.channel_lifecycle import channel_role_map
+from kassiber.core.lightning.channel_lifecycle import channel_role_map, channel_transfer_pairs
 from kassiber.core.loans import CHANNEL_CLOSE, CHANNEL_OPEN
 
 FUNDING_TXID = "aa" * 32
@@ -70,14 +70,34 @@ def _wallet_refs():
             "account_code": "A",
             "account_label": "Account A",
         },
+        "node": {
+            "id": "node",
+            "label": "node",
+            "wallet_account_id": "acct-node",
+            "account_code": "LN",
+            "account_label": "Lightning",
+        },
     }
 
 
-def _row(tx_id, direction, amount_msat, occurred_at, *, external_id=None, fee=0):
+def _row(
+    tx_id,
+    direction,
+    amount_msat,
+    occurred_at,
+    *,
+    external_id=None,
+    fee=0,
+    wallet_id="onchain",
+):
+    wallet_ref = _wallet_refs()[wallet_id]
     return {
         "id": tx_id,
-        "wallet_id": "onchain",
-        "wallet_label": "onchain",
+        "wallet_id": wallet_id,
+        "wallet_label": wallet_ref["label"],
+        "wallet_account_id": wallet_ref["wallet_account_id"],
+        "account_code": wallet_ref["account_code"],
+        "account_label": wallet_ref["account_label"],
         "asset": "BTC",
         "direction": direction,
         "amount": amount_msat,
@@ -92,13 +112,14 @@ def _row(tx_id, direction, amount_msat, occurred_at, *, external_id=None, fee=0)
     }
 
 
-def _run(rows, channel_roles):
+def _run(rows, channel_roles, channel_pairs=()):
     return GenericRP2TaxEngine(_profile()).build_ledger_state(
         TaxEngineLedgerInputs(
             rows=rows,
             wallet_refs_by_id=_wallet_refs(),
             manual_pair_records=[],
             channel_roles=channel_roles,
+            channel_transfer_pairs=channel_pairs,
         )
     )
 
@@ -156,6 +177,47 @@ class ChannelLifecycleEngineTest(unittest.TestCase):
         self.assertEqual(len(fee_entries), 1)
         self.assertEqual(Decimal(str(fee_entries[0]["quantity"])), Decimal("-0.001"))
 
+    def test_channel_open_pair_credits_node_wallet_capacity(self) -> None:
+        rows = [
+            _row("buy", "inbound", ONE_BTC + FEE_MSAT, "2025-05-01T00:00:00Z"),
+            _row(
+                "fund",
+                "outbound",
+                ONE_BTC,
+                "2025-06-01T00:00:00Z",
+                external_id=FUNDING_TXID,
+                fee=FEE_MSAT,
+            ),
+            _row(
+                "node-pay",
+                "outbound",
+                ONE_BTC // 2,
+                "2025-06-02T00:00:00Z",
+                wallet_id="node",
+            ),
+        ]
+        channel_rows = [{"funding_txid": FUNDING_TXID, "wallet_id": "node"}]
+        result = _run(
+            rows,
+            channel_role_map(channel_rows, rows),
+            channel_transfer_pairs(channel_rows, rows, _wallet_refs()),
+        )
+
+        self.assertEqual(result.quarantines, [])
+        wallet_quantities = {
+            key[1]: totals["quantity"] for key, totals in result.wallet_holdings.items()
+        }
+        self.assertEqual(wallet_quantities.get("onchain", Decimal("0")), Decimal("0"))
+        self.assertEqual(wallet_quantities["node"], Decimal("0.5"))
+        transfer_audit = [
+            row
+            for row in result.intra_audit
+            if row.get("pairing_source") == "channel_lifecycle"
+        ]
+        self.assertEqual(len(transfer_audit), 1)
+        self.assertEqual(transfer_audit[0]["from_wallet_id"], "onchain")
+        self.assertEqual(transfer_audit[0]["to_wallet_id"], "node")
+
     def test_open_then_close_round_trip_is_net_zero(self) -> None:
         rows = [
             _row("buy", "inbound", ONE_BTC, "2025-05-01T00:00:00Z"),
@@ -170,6 +232,33 @@ class ChannelLifecycleEngineTest(unittest.TestCase):
         # acquisition at market price.
         self.assertEqual(_btc_quantity(result), Decimal("1"))
         self.assertFalse(_has_disposal(result))
+
+    def test_channel_pairs_move_capacity_back_on_close(self) -> None:
+        rows = [
+            _row("buy", "inbound", ONE_BTC, "2025-05-01T00:00:00Z"),
+            _row("fund", "outbound", ONE_BTC, "2025-06-01T00:00:00Z", external_id=FUNDING_TXID),
+            _row("close", "inbound", ONE_BTC, "2025-07-01T00:00:00Z", external_id=CLOSING_TXID),
+        ]
+        channel_rows = [
+            {
+                "funding_txid": FUNDING_TXID,
+                "closing_txid": CLOSING_TXID,
+                "wallet_id": "node",
+            }
+        ]
+        result = _run(
+            rows,
+            channel_role_map(channel_rows, rows),
+            channel_transfer_pairs(channel_rows, rows, _wallet_refs()),
+        )
+
+        self.assertEqual(result.quarantines, [])
+        self.assertFalse(_has_disposal(result))
+        wallet_quantities = {
+            key[1]: totals["quantity"] for key, totals in result.wallet_holdings.items()
+        }
+        self.assertEqual(wallet_quantities["onchain"], Decimal("1"))
+        self.assertEqual(wallet_quantities.get("node", Decimal("0")), Decimal("0"))
 
 
 if __name__ == "__main__":  # pragma: no cover

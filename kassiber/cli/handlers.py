@@ -4194,7 +4194,7 @@ def build_ledger_state(conn, profile):
     # on-chain rows so the engine suppresses them as non-events.
     channel_records = conn.execute(
         """
-        SELECT txid, tag
+        SELECT txid, tag, wallet_id
         FROM lightning_node_records
         WHERE profile_id = ? AND record_type = 'channel'
         """,
@@ -4205,10 +4205,19 @@ def build_ledger_state(conn, profile):
         if not record["txid"]:
             continue
         if record["tag"] == "channel_close":
-            channel_rows.append({"closing_txid": record["txid"]})
+            channel_rows.append(
+                {"closing_txid": record["txid"], "wallet_id": record["wallet_id"]}
+            )
         else:
-            channel_rows.append({"funding_txid": record["txid"]})
+            channel_rows.append(
+                {"funding_txid": record["txid"], "wallet_id": record["wallet_id"]}
+            )
     channel_roles = channel_lifecycle.channel_role_map(channel_rows, rows)
+    channel_transfer_pairs = channel_lifecycle.channel_transfer_pairs(
+        channel_rows,
+        rows,
+        wallet_refs_by_id,
+    )
     engine_state = tax_engine.build_ledger_state(
         TaxEngineLedgerInputs(
             rows=rows,
@@ -4218,6 +4227,7 @@ def build_ledger_state(conn, profile):
             owned_index=owned_index,
             loan_legs=loan_legs,
             channel_roles=channel_roles,
+            channel_transfer_pairs=channel_transfer_pairs,
         )
     )
     return {

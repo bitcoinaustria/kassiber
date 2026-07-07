@@ -2684,6 +2684,7 @@ class GenericRP2TaxEngine:
                 + consolidation_result.derived_pairs
                 + ownership_result.derived_pairs
                 + fanout_result.derived_pairs
+                + list(inputs.channel_transfer_pairs or ())
             )
             # The engine carries the synthetic split leg (so it can mark the
             # cross-asset swap-out without touching the self-transfer remainder),
