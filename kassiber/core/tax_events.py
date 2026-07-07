@@ -771,6 +771,391 @@ def _owned_fanout_row_ids(
     return fanout_ids
 
 
+def _pair_record_id(pair: Mapping[str, Any]) -> str | None:
+    raw = pair.get("pair_id") if hasattr(pair, "get") else None
+    if raw in (None, ""):
+        raw = pair.get("id") if hasattr(pair, "get") else None
+    if raw in (None, ""):
+        return None
+    return str(raw)
+
+
+def _pair_source(pair: Mapping[str, Any]) -> str | None:
+    raw = pair.get("source") if hasattr(pair, "get") else None
+    if raw in (None, ""):
+        return None
+    return str(raw)
+
+
+def _pair_kind(pair: Mapping[str, Any]) -> str:
+    raw = pair.get("kind") if hasattr(pair, "get") else None
+    if raw in (None, ""):
+        return ""
+    return str(raw).strip().lower()
+
+
+def _pair_is_reviewed_privacy_link(pair: Mapping[str, Any]) -> bool:
+    kind = _pair_kind(pair)
+    return kind == "coinjoin" or kind == "whirlpool" or "coinjoin" in kind
+
+
+def _row_msat(row: Mapping[str, Any], key: str) -> int:
+    return int(_row_get(row, key) or 0)
+
+
+def _allocate_fee_msat(total_fee_msat: int, bases: Sequence[int]) -> list[int]:
+    """Allocate an aggregate multi-link fee deterministically across legs."""
+    remaining = max(0, int(total_fee_msat))
+    allocated: list[int] = []
+    for base in bases:
+        if remaining <= 0:
+            allocated.append(0)
+            continue
+        portion = min(int(base), remaining)
+        allocated.append(portion)
+        remaining -= portion
+    if remaining and allocated:
+        allocated[-1] += remaining
+    return allocated
+
+
+def _append_manual_multi_pair_quarantines(
+    quarantines: list[dict[str, Any]],
+    profile: Mapping[str, Any],
+    rows: Sequence[Mapping[str, Any]],
+    reason: str,
+    detail: Mapping[str, Any],
+) -> None:
+    seen: set[str] = set()
+    for row in rows:
+        transaction_id = str(_row_get(row, "journal_transaction_id") or row["id"])
+        if transaction_id in seen:
+            continue
+        seen.add(transaction_id)
+        quarantines.append(build_tax_quarantine(profile, row, reason, dict(detail)))
+
+
+def _manual_multi_pair_components(
+    pairs: Sequence[Mapping[str, Any]],
+) -> list[list[Mapping[str, Any]]]:
+    candidates = [
+        pair
+        for pair in pairs
+        if _pair_record_id(pair) is not None and _pair_group_id(pair) is None
+    ]
+    if not candidates:
+        return []
+
+    usage: dict[str, int] = {}
+    row_to_indexes: dict[str, list[int]] = {}
+    for index, pair in enumerate(candidates):
+        for side in ("out", "in"):
+            row_id = str(pair[side]["id"])
+            usage[row_id] = usage.get(row_id, 0) + 1
+            row_to_indexes.setdefault(row_id, []).append(index)
+
+    multi_indexes = {
+        index
+        for index, pair in enumerate(candidates)
+        if usage[str(pair["out"]["id"])] > 1 or usage[str(pair["in"]["id"])] > 1
+    }
+    components: list[list[Mapping[str, Any]]] = []
+    seen: set[int] = set()
+    for start in sorted(multi_indexes):
+        if start in seen:
+            continue
+        stack = [start]
+        component_indexes: set[int] = set()
+        while stack:
+            index = stack.pop()
+            if index in seen:
+                continue
+            seen.add(index)
+            component_indexes.add(index)
+            pair = candidates[index]
+            for row_id in (str(pair["out"]["id"]), str(pair["in"]["id"])):
+                for linked_index in row_to_indexes.get(row_id, ()):
+                    if linked_index in multi_indexes and linked_index not in seen:
+                        stack.append(linked_index)
+        component = [candidates[index] for index in sorted(component_indexes)]
+        if len(component) > 1:
+            components.append(component)
+    return components
+
+
+def _build_manual_multi_pair_transfers(
+    profile: Mapping[str, Any],
+    asset: str,
+    pairs: Sequence[Mapping[str, Any]],
+    wallet_refs_by_id: Mapping[str, Mapping[str, Any]],
+    is_at: bool,
+    outbound_regimes: Mapping[str, AtRegime],
+) -> tuple[
+    dict[str, list[NormalizedTaxTransfer]],
+    set[str],
+    list[dict[str, Any]],
+]:
+    trigger_transfers: dict[str, list[NormalizedTaxTransfer]] = {}
+    consumed_row_ids: set[str] = set()
+    quarantines: list[dict[str, Any]] = []
+
+    for component in _manual_multi_pair_components(pairs):
+        ordered_pairs = sorted(
+            component,
+            key=lambda pair: (
+                str(_row_get(pair["out"], "occurred_at") or ""),
+                str(_pair_record_id(pair) or ""),
+                str(pair["out"]["id"]),
+                str(pair["in"]["id"]),
+            ),
+        )
+        pair_ids = [
+            _pair_record_id(pair) or f"{pair['out']['id']}->{pair['in']['id']}"
+            for pair in ordered_pairs
+        ]
+        group_id = "manual-multi:" + "|".join(pair_ids)
+        out_rows_by_id = {
+            str(pair["out"]["id"]): pair["out"] for pair in ordered_pairs
+        }
+        in_rows_by_id = {
+            str(pair["in"]["id"]): pair["in"] for pair in ordered_pairs
+        }
+        group_rows = [*out_rows_by_id.values(), *in_rows_by_id.values()]
+        group_row_ids = set(out_rows_by_id) | set(in_rows_by_id)
+        consumed_row_ids.update(group_row_ids)
+        detail_base = {
+            "asset": asset,
+            "direction": "transfer",
+            "transfer_group_id": group_id,
+            "pair_ids": pair_ids,
+        }
+
+        if len(out_rows_by_id) > 1 and len(in_rows_by_id) > 1:
+            _append_manual_multi_pair_quarantines(
+                quarantines,
+                profile,
+                group_rows,
+                "manual_multi_pair_ambiguous",
+                {
+                    **detail_base,
+                    "out_count": len(out_rows_by_id),
+                    "in_count": len(in_rows_by_id),
+                },
+            )
+            continue
+
+        privacy_rows = [row for row in group_rows if _privacy_hop_evidence(row) is not None]
+        reviewed_privacy_component = all(
+            _pair_is_reviewed_privacy_link(pair) for pair in ordered_pairs
+        )
+        if privacy_rows and not reviewed_privacy_component:
+            _append_manual_multi_pair_quarantines(
+                quarantines,
+                profile,
+                privacy_rows,
+                "privacy_hop_unresolved",
+                detail_base,
+            )
+            continue
+
+        total_sent_msat = sum(
+            _row_msat(row, "amount") + _row_msat(row, "fee")
+            for row in out_rows_by_id.values()
+        )
+        total_received_msat = sum(
+            _row_msat(row, "amount") for row in in_rows_by_id.values()
+        )
+        if total_sent_msat < total_received_msat:
+            _append_manual_multi_pair_quarantines(
+                quarantines,
+                profile,
+                group_rows,
+                "transfer_mismatch",
+                {
+                    **detail_base,
+                    "sent": float(msat_to_btc(total_sent_msat)),
+                    "received": float(msat_to_btc(total_received_msat)),
+                },
+            )
+            continue
+
+        fee_msat = total_sent_msat - total_received_msat
+        spot_price_row = next(iter(out_rows_by_id.values()))
+        spot_price_wallet_label = wallet_refs_by_id[spot_price_row["wallet_id"]]["label"]
+        spot_price = None
+        if fee_msat > 0:
+            for candidate in group_rows:
+                quantity = msat_to_btc(
+                    _row_msat(candidate, "amount") + _row_msat(candidate, "fee")
+                )
+                candidate_price = _spot_price_from_row(candidate, quantity)
+                if candidate_price is not None:
+                    spot_price = candidate_price
+                    spot_price_row = candidate
+                    spot_price_wallet_label = wallet_refs_by_id[candidate["wallet_id"]]["label"]
+                    break
+            if (
+                spot_price is not None
+                and _pricing_needs_review(spot_price_row)
+                and _profile_requires_coarse_review(profile)
+            ):
+                _append_manual_multi_pair_quarantines(
+                    quarantines,
+                    profile,
+                    group_rows,
+                    "pricing_review_required",
+                    _with_transfer_group(
+                        _pricing_review_detail(
+                            spot_price_row,
+                            spot_price_wallet_label,
+                            asset,
+                            "transfer",
+                        ),
+                        group_id,
+                    ),
+                )
+                continue
+            if spot_price is None:
+                _append_manual_multi_pair_quarantines(
+                    quarantines,
+                    profile,
+                    group_rows,
+                    "missing_spot_price",
+                    {
+                        **detail_base,
+                        "required_for": "transfer_fee",
+                    },
+                )
+                continue
+
+        transfers: list[NormalizedTaxTransfer] = []
+        if len(out_rows_by_id) == 1:
+            fee_allocations = _allocate_fee_msat(
+                fee_msat, [_row_msat(pair["in"], "amount") for pair in ordered_pairs]
+            )
+            for pair, fee_allocation in zip(ordered_pairs, fee_allocations):
+                out_row = pair["out"]
+                in_row = pair["in"]
+                sent_msat = _row_msat(in_row, "amount") + fee_allocation
+                received_msat = _row_msat(in_row, "amount")
+                transfer_id = f"{group_id}:{pair['out']['id']}->{pair['in']['id']}"
+                from_wallet = wallet_refs_by_id[out_row["wallet_id"]]
+                to_wallet = wallet_refs_by_id[in_row["wallet_id"]]
+                at_regime = None
+                if is_at:
+                    regime_override = _row_get(out_row, "at_regime_override")
+                    at_regime = (
+                        regime_override
+                        if regime_override in ("alt", "neu")
+                        else outbound_regimes.get(str(out_row["id"]))
+                    )
+                transfers.append(
+                    NormalizedTaxTransfer(
+                        asset=asset,
+                        occurred_at=out_row["occurred_at"],
+                        out_transaction_id=out_row["id"],
+                        in_transaction_id=in_row["id"],
+                        from_wallet_id=from_wallet["id"],
+                        from_wallet_label=from_wallet["label"],
+                        to_wallet_id=to_wallet["id"],
+                        to_wallet_label=to_wallet["label"],
+                        sent=msat_to_btc(sent_msat),
+                        received=msat_to_btc(received_msat),
+                        fee=msat_to_btc(fee_allocation),
+                        spot_price=spot_price,
+                        description=(
+                            out_row["note"]
+                            or out_row["description"]
+                            or out_row["kind"]
+                            or f"Transfer {from_wallet['label']} -> {to_wallet['label']}"
+                        ),
+                        external_id=out_row["external_id"],
+                        out_row=out_row,
+                        in_row=in_row,
+                        at_pool=resolve_pool_id(from_wallet["id"]) if is_at else None,
+                        at_regime=at_regime,
+                        transfer_id=transfer_id,
+                        group_id=group_id,
+                        group_block_rows=tuple(group_rows),
+                        pairing_source=_pair_source(pair),
+                    )
+                )
+        else:
+            sent_amounts = [
+                _row_msat(pair["out"], "amount") + _row_msat(pair["out"], "fee")
+                for pair in ordered_pairs
+            ]
+            fee_allocations = _allocate_fee_msat(fee_msat, sent_amounts)
+            for pair, sent_msat, fee_allocation in zip(
+                ordered_pairs, sent_amounts, fee_allocations
+            ):
+                out_row = pair["out"]
+                in_row = pair["in"]
+                received_msat = sent_msat - fee_allocation
+                if received_msat <= 0:
+                    _append_manual_multi_pair_quarantines(
+                        quarantines,
+                        profile,
+                        group_rows,
+                        "transfer_mismatch",
+                        {
+                            **detail_base,
+                            "sent": float(msat_to_btc(total_sent_msat)),
+                            "received": float(msat_to_btc(total_received_msat)),
+                        },
+                    )
+                    transfers = []
+                    break
+                transfer_id = f"{group_id}:{pair['out']['id']}->{pair['in']['id']}"
+                from_wallet = wallet_refs_by_id[out_row["wallet_id"]]
+                to_wallet = wallet_refs_by_id[in_row["wallet_id"]]
+                at_regime = None
+                if is_at:
+                    regime_override = _row_get(out_row, "at_regime_override")
+                    at_regime = (
+                        regime_override
+                        if regime_override in ("alt", "neu")
+                        else outbound_regimes.get(str(out_row["id"]))
+                    )
+                transfers.append(
+                    NormalizedTaxTransfer(
+                        asset=asset,
+                        occurred_at=out_row["occurred_at"],
+                        out_transaction_id=out_row["id"],
+                        in_transaction_id=in_row["id"],
+                        from_wallet_id=from_wallet["id"],
+                        from_wallet_label=from_wallet["label"],
+                        to_wallet_id=to_wallet["id"],
+                        to_wallet_label=to_wallet["label"],
+                        sent=msat_to_btc(sent_msat),
+                        received=msat_to_btc(received_msat),
+                        fee=msat_to_btc(fee_allocation),
+                        spot_price=spot_price,
+                        description=(
+                            out_row["note"]
+                            or out_row["description"]
+                            or out_row["kind"]
+                            or f"Transfer {from_wallet['label']} -> {to_wallet['label']}"
+                        ),
+                        external_id=out_row["external_id"],
+                        out_row=out_row,
+                        in_row=in_row,
+                        at_pool=resolve_pool_id(from_wallet["id"]) if is_at else None,
+                        at_regime=at_regime,
+                        transfer_id=transfer_id,
+                        group_id=group_id,
+                        group_block_rows=tuple(group_rows),
+                        pairing_source=_pair_source(pair),
+                    )
+                )
+
+        if transfers:
+            trigger = str(ordered_pairs[0]["out"]["id"])
+            trigger_transfers.setdefault(trigger, []).extend(transfers)
+
+    return trigger_transfers, consumed_row_ids, quarantines
+
+
 def normalize_tax_asset_inputs(
     profile: Mapping[str, Any],
     asset: str,
@@ -864,7 +1249,7 @@ def normalize_tax_asset_inputs(
         )
     )
 
-    pair_by_row: dict[str, tuple[str, Mapping[str, Any]]] = {}
+    pair_refs_by_row: dict[str, list[tuple[str, Mapping[str, Any]]]] = {}
     pairs_by_transfer_group: dict[str, list[Mapping[str, Any]]] = {}
     # non_conflict_pairs already drops any pair touching a conflict loser (computed
     # above, alongside the regime-inference filter). Booking it would emit a
@@ -872,14 +1257,27 @@ def normalize_tax_asset_inputs(
     # span different external_ids, so its non-conflicting partner would otherwise
     # reach role_pair below. The partner instead falls through to standalone.
     for pair in non_conflict_pairs:
-        pair_by_row[pair["out"]["id"]] = ("out", pair)
-        pair_by_row[pair["in"]["id"]] = ("in", pair)
+        pair_refs_by_row.setdefault(pair["out"]["id"], []).append(("out", pair))
+        pair_refs_by_row.setdefault(pair["in"]["id"], []).append(("in", pair))
         group_id = _pair_group_id(pair)
         if group_id:
             pairs_by_transfer_group.setdefault(group_id, []).append(pair)
+    (
+        manual_multi_transfers_by_trigger,
+        manual_multi_row_ids,
+        manual_multi_quarantines,
+    ) = _build_manual_multi_pair_transfers(
+        profile,
+        asset,
+        non_conflict_pairs,
+        wallet_refs_by_id,
+        is_at,
+        outbound_regimes,
+    )
+    quarantines.extend(manual_multi_quarantines)
     handled_pairs: set[tuple[str, str]] = set()
     blocked_transfer_group_reasons: dict[str, str] = {}
-    fanout_row_ids = _owned_fanout_row_ids(rows, pair_by_row, samourai_internal_row_ids)
+    fanout_row_ids = _owned_fanout_row_ids(rows, pair_refs_by_row, samourai_internal_row_ids)
     # conflict_row_ids was computed up front (before regime inference). Shared-
     # prevout conflicts (RBF / reorg / double-spend) cannot both be on-chain, so
     # the loser txid's legs are quarantined for review here rather than each being
@@ -911,6 +1309,14 @@ def normalize_tax_asset_inputs(
                 events.append(event)
                 ordered_items.append(("event", row["id"]))
             continue
+        manual_multi_transfers = manual_multi_transfers_by_trigger.get(row["id"])
+        if manual_multi_transfers is not None:
+            for transfer in manual_multi_transfers:
+                transfers.append(transfer)
+                ordered_items.append(("transfer", _transfer_item_id(transfer)))
+            continue
+        if row["id"] in manual_multi_row_ids:
+            continue
         if row["id"] in fanout_row_ids:
             # One on-chain tx that moves coins across several owned wallets.
             # Booking each leg standalone would destroy basis; quarantine the
@@ -929,9 +1335,9 @@ def normalize_tax_asset_inputs(
                 )
             )
             continue
-        role_pair = pair_by_row.get(row["id"])
-        if role_pair is not None:
-            _, pair = role_pair
+        role_pairs = pair_refs_by_row.get(row["id"])
+        if role_pairs is not None:
+            _, pair = role_pairs[0]
             pair_key = (pair["out"]["id"], pair["in"]["id"])
             if pair_key in handled_pairs:
                 continue
@@ -944,7 +1350,7 @@ def normalize_tax_asset_inputs(
             to_wallet = wallet_refs_by_id[in_row["wallet_id"]]
             out_privacy_hop = _privacy_hop_evidence(out_row)
             in_privacy_hop = _privacy_hop_evidence(in_row)
-            if out_privacy_hop or in_privacy_hop:
+            if (out_privacy_hop or in_privacy_hop) and not _pair_is_reviewed_privacy_link(pair):
                 if group_id:
                     blocked_transfer_group_reasons.setdefault(
                         group_id, "privacy_hop_unresolved"

@@ -436,12 +436,113 @@ BITCOIN_LAYER_TRANSITION_PAIR_KINDS = (
     "submarine-swap",
     "swap-refund",
 )
-TRANSFER_PAIR_KINDS = ("manual", "coinjoin", *BITCOIN_LAYER_TRANSITION_PAIR_KINDS)
+TRANSFER_PAIR_KINDS = (
+    "manual",
+    "coinjoin",
+    "whirlpool",
+    *BITCOIN_LAYER_TRANSITION_PAIR_KINDS,
+)
 TRANSFER_PAIR_POLICIES = ("carrying-value", "taxable")
 DIRECT_SWAP_PAYOUT_KINDS = ("direct-swap-payout",)
+REUSABLE_SAME_ASSET_PAIR_KINDS = ("manual", "coinjoin", "whirlpool")
 
 
 _PAIR_SOURCE_VALUES = ("manual", "bulk_exact", "bulk_selected", "rule_auto")
+
+
+def _pair_stores_swap_fee(out_row, in_row, kind):
+    if out_row["asset"] != in_row["asset"]:
+        return True
+    return kind in BITCOIN_LAYER_TRANSITION_PAIR_KINDS
+
+
+def _pair_allows_leg_reuse(out_asset, in_asset, kind, policy):
+    return (
+        str(out_asset).upper() == str(in_asset).upper()
+        and policy == "carrying-value"
+        and kind in REUSABLE_SAME_ASSET_PAIR_KINDS
+    )
+
+
+def _active_pairs_reusing_leg(
+    conn,
+    profile_id,
+    out_transaction_id,
+    in_transaction_id,
+    *,
+    exclude_pair_id=None,
+):
+    params = [profile_id, out_transaction_id, in_transaction_id]
+    exclude_sql = ""
+    if exclude_pair_id is not None:
+        exclude_sql = " AND transaction_pairs.id != ?"
+        params.append(exclude_pair_id)
+    return conn.execute(
+        f"""
+        SELECT
+          transaction_pairs.id,
+          transaction_pairs.out_transaction_id,
+          transaction_pairs.in_transaction_id,
+          transaction_pairs.kind,
+          transaction_pairs.policy,
+          out_tx.asset AS out_asset,
+          in_tx.asset AS in_asset
+        FROM transaction_pairs
+        JOIN transactions AS out_tx ON out_tx.id = transaction_pairs.out_transaction_id
+        JOIN transactions AS in_tx ON in_tx.id = transaction_pairs.in_transaction_id
+        WHERE transaction_pairs.profile_id = ? AND transaction_pairs.deleted_at IS NULL
+          AND (out_transaction_id = ? OR in_transaction_id = ?)
+          {exclude_sql}
+        ORDER BY transaction_pairs.created_at, transaction_pairs.id
+        """,
+        tuple(params),
+    ).fetchall()
+
+
+def _reject_disallowed_leg_reuse(
+    conn,
+    profile_id,
+    out_transaction_id,
+    in_transaction_id,
+    out_asset,
+    in_asset,
+    kind,
+    policy,
+    *,
+    exclude_pair_id=None,
+):
+    new_pair_allows_reuse = _pair_allows_leg_reuse(out_asset, in_asset, kind, policy)
+    for existing_pair in _active_pairs_reusing_leg(
+        conn,
+        profile_id,
+        out_transaction_id,
+        in_transaction_id,
+        exclude_pair_id=exclude_pair_id,
+    ):
+        existing_pair_allows_reuse = _pair_allows_leg_reuse(
+            existing_pair["out_asset"],
+            existing_pair["in_asset"],
+            existing_pair["kind"],
+            existing_pair["policy"],
+        )
+        if not (new_pair_allows_reuse and existing_pair_allows_reuse):
+            _raise_leg_reuse_conflict(existing_pair, out_transaction_id)
+
+
+def _raise_leg_reuse_conflict(existing_pair, out_transaction_id):
+    reused_leg = (
+        "--tx-out"
+        if existing_pair["out_transaction_id"] == out_transaction_id
+        else "--tx-in"
+    )
+    raise AppError(
+        f"{reused_leg} already belongs to active pair id={existing_pair['id']}. "
+        "Only same-asset manual, coinjoin, or whirlpool carrying-value links "
+        "may reuse a transaction leg; cross-asset and layer-transition pairs "
+        "must remain one-to-one.",
+        code="conflict",
+        hint=f"Unpair `{existing_pair['id']}` first, or use a same-asset privacy/manual pair kind.",
+    )
 
 
 def _pair_to_dict(row):
@@ -581,17 +682,27 @@ def create_transaction_pair(
         """
         SELECT id FROM transaction_pairs
         WHERE profile_id = ? AND deleted_at IS NULL
-          AND (out_transaction_id IN (?, ?) OR in_transaction_id IN (?, ?))
+          AND out_transaction_id = ? AND in_transaction_id = ?
         LIMIT 1
         """,
-        (profile["id"], out_row["id"], in_row["id"], out_row["id"], in_row["id"]),
+        (profile["id"], out_row["id"], in_row["id"]),
     ).fetchone()
     if existing:
         raise AppError(
-            f"One of the transactions is already paired (pair id={existing['id']}). "
+            f"Those transactions are already paired (pair id={existing['id']}). "
             f"Run `kassiber transfers unpair --pair-id {existing['id']}` first.",
             code="conflict",
         )
+    _reject_disallowed_leg_reuse(
+        conn,
+        profile["id"],
+        out_row["id"],
+        in_row["id"],
+        out_row["asset"],
+        in_row["asset"],
+        kind,
+        policy,
+    )
     existing_payout = conn.execute(
         """
         SELECT id FROM direct_swap_payouts
@@ -609,16 +720,19 @@ def create_transaction_pair(
             hint="Run `kassiber transfers payouts delete --payout-id "
             f"{existing_payout['id']}` first.",
         )
-    # On a split pair only the swapped portion (`out_amount`) crosses to the
-    # other asset, so the persisted swap fee must be measured against that, not
-    # the full outbound (the remainder is a same-asset self-transfer).
-    split_pair = out_amount_msat is not None
-    swap_fee_out_msat = out_amount_msat if split_pair else int(out_row["amount"] or 0)
-    swap_fee_msat, swap_fee_kind = core_transfer_matching.compute_swap_fee(
-        swap_fee_out_msat,
-        int(in_row["amount"] or 0),
-        _outbound_pair_fee_component_msat(out_row, split_pair=split_pair),
-    )
+    if _pair_stores_swap_fee(out_row, in_row, kind):
+        # On a split pair only the swapped portion (`out_amount`) crosses to the
+        # other asset, so the persisted swap fee must be measured against that,
+        # not the full outbound (the remainder is a same-asset self-transfer).
+        split_pair = out_amount_msat is not None
+        swap_fee_out_msat = out_amount_msat if split_pair else int(out_row["amount"] or 0)
+        swap_fee_msat, swap_fee_kind = core_transfer_matching.compute_swap_fee(
+            swap_fee_out_msat,
+            int(in_row["amount"] or 0),
+            _outbound_pair_fee_component_msat(out_row, split_pair=split_pair),
+        )
+    else:
+        swap_fee_msat, swap_fee_kind = None, None
     pair_id = str(uuid.uuid4())
     conn.execute(
         """
@@ -1393,35 +1507,28 @@ def dismiss_transfer_candidate(
             datetime.now(timezone.utc) + timedelta(days=int(expires_in_days))
         ).replace(microsecond=0).isoformat().replace("+00:00", "Z")
     dismissal_id = str(uuid.uuid4())
-    try:
-        conn.execute(
-            """
-            INSERT INTO transaction_pair_dismissals(
-                id, workspace_id, profile_id, out_transaction_id, in_transaction_id,
-                reason, created_at, expires_at
-            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                dismissal_id,
-                workspace["id"],
-                profile["id"],
-                out_row["id"],
-                in_row["id"],
-                reason,
-                now_iso(),
-                expires_at,
-            ),
-        )
-    except sqlite3.IntegrityError:
-        # Update the existing dismissal to refresh the expiry instead.
-        conn.execute(
-            """
-            UPDATE transaction_pair_dismissals
-            SET reason = COALESCE(?, reason), expires_at = ?
-            WHERE profile_id = ? AND out_transaction_id = ? AND in_transaction_id = ?
-            """,
-            (reason, expires_at, profile["id"], out_row["id"], in_row["id"]),
-        )
+    conn.execute(
+        """
+        INSERT INTO transaction_pair_dismissals(
+            id, workspace_id, profile_id, out_transaction_id, in_transaction_id,
+            reason, created_at, expires_at
+        ) VALUES(?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(profile_id, out_transaction_id, in_transaction_id)
+        DO UPDATE SET
+            reason = COALESCE(excluded.reason, transaction_pair_dismissals.reason),
+            expires_at = excluded.expires_at
+        """,
+        (
+            dismissal_id,
+            workspace["id"],
+            profile["id"],
+            out_row["id"],
+            in_row["id"],
+            reason,
+            now_iso(),
+            expires_at,
+        ),
+    )
     conn.commit()
     row = conn.execute(
         "SELECT * FROM transaction_pair_dismissals "
@@ -1713,6 +1820,17 @@ def update_transaction_pair(
                 code="validation",
                 hint="Re-run with --policy taxable, or use an Austrian profile for cross-asset carrying-value swaps.",
             )
+    _reject_disallowed_leg_reuse(
+        conn,
+        profile["id"],
+        row["out_transaction_id"],
+        row["in_transaction_id"],
+        row["out_asset"],
+        row["in_asset"],
+        new_kind,
+        new_policy,
+        exclude_pair_id=pair_id,
+    )
     new_notes = row["notes"] if notes is _UNSET else notes
     unchanged = (
         new_kind == row["kind"]

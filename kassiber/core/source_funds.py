@@ -1181,6 +1181,146 @@ def _same_external_id_still_deterministic(
     )
 
 
+@dataclass(frozen=True)
+class _TransactionPairAllocation:
+    allocation_msat: int
+    from_allocation_msat: int
+
+
+def _allocate_component_msat(total_msat: int, bases: Sequence[int]) -> list[int]:
+    total = max(0, int(total_msat))
+    normalized_bases = [max(0, int(base)) for base in bases]
+    base_total = sum(normalized_bases)
+    if base_total <= 0:
+        return [0 for _ in normalized_bases]
+    remaining = total
+    allocated: list[int] = []
+    for index, base in enumerate(normalized_bases):
+        if index == len(normalized_bases) - 1:
+            portion = remaining
+        else:
+            portion = min(remaining, (total * base) // base_total)
+        allocated.append(portion)
+        remaining -= portion
+    return allocated
+
+
+def _transaction_pair_components(
+    pair_rows: Sequence[Mapping[str, Any]],
+    rows_by_id: Mapping[str, Mapping[str, Any]],
+) -> list[list[Mapping[str, Any]]]:
+    candidates = [
+        pair
+        for pair in pair_rows
+        if rows_by_id.get(pair["out_transaction_id"])
+        and rows_by_id.get(pair["in_transaction_id"])
+    ]
+    row_to_indexes: dict[str, list[int]] = defaultdict(list)
+    for index, pair in enumerate(candidates):
+        row_to_indexes[str(pair["out_transaction_id"])].append(index)
+        row_to_indexes[str(pair["in_transaction_id"])].append(index)
+
+    components: list[list[Mapping[str, Any]]] = []
+    seen: set[int] = set()
+    for start in range(len(candidates)):
+        if start in seen:
+            continue
+        stack = [start]
+        indexes: list[int] = []
+        seen.add(start)
+        while stack:
+            index = stack.pop()
+            indexes.append(index)
+            pair = candidates[index]
+            for row_id in (str(pair["out_transaction_id"]), str(pair["in_transaction_id"])):
+                for linked_index in row_to_indexes.get(row_id, ()):
+                    if linked_index in seen:
+                        continue
+                    seen.add(linked_index)
+                    stack.append(linked_index)
+        components.append([candidates[index] for index in indexes])
+    return components
+
+
+def _transaction_pair_allocation_map(
+    pair_rows: Sequence[Mapping[str, Any]],
+    rows_by_id: Mapping[str, Mapping[str, Any]],
+) -> dict[str, _TransactionPairAllocation]:
+    allocations: dict[str, _TransactionPairAllocation] = {}
+    for component in _transaction_pair_components(pair_rows, rows_by_id):
+        ordered_pairs = sorted(
+            component,
+            key=lambda pair: (
+                str(pair["created_at"] or ""),
+                str(pair["id"]),
+            ),
+        )
+        out_rows_by_id = {
+            str(pair["out_transaction_id"]): rows_by_id[pair["out_transaction_id"]]
+            for pair in ordered_pairs
+        }
+        in_rows_by_id = {
+            str(pair["in_transaction_id"]): rows_by_id[pair["in_transaction_id"]]
+            for pair in ordered_pairs
+        }
+        if len(ordered_pairs) == 1:
+            pair = ordered_pairs[0]
+            out_tx = out_rows_by_id[str(pair["out_transaction_id"])]
+            in_tx = in_rows_by_id[str(pair["in_transaction_id"])]
+            allocations[str(pair["id"])] = _TransactionPairAllocation(
+                allocation_msat=int(in_tx["amount"]),
+                from_allocation_msat=int(out_tx["amount"]),
+            )
+            continue
+
+        component_assets = {
+            normalize_asset_code(row["asset"])
+            for row in [*out_rows_by_id.values(), *in_rows_by_id.values()]
+        }
+        if len(component_assets) != 1:
+            # Cross-asset reused-leg accounting remains one-to-one. Existing
+            # legacy rows are intentionally hidden from source-funds suggestion
+            # derivation instead of being double-counted.
+            continue
+        if len(out_rows_by_id) > 1 and len(in_rows_by_id) > 1:
+            continue
+
+        if len(out_rows_by_id) == 1:
+            out_tx = next(iter(out_rows_by_id.values()))
+            total_from_msat = int(out_tx["amount"] or 0)
+            bases = [
+                int(rows_by_id[pair["in_transaction_id"]]["amount"] or 0)
+                for pair in ordered_pairs
+            ]
+            if total_from_msat < sum(bases):
+                continue
+            from_allocations = _allocate_component_msat(total_from_msat, bases)
+            for pair, from_allocation in zip(ordered_pairs, from_allocations):
+                in_tx = rows_by_id[pair["in_transaction_id"]]
+                allocations[str(pair["id"])] = _TransactionPairAllocation(
+                    allocation_msat=int(in_tx["amount"] or 0),
+                    from_allocation_msat=from_allocation,
+                )
+            continue
+
+        in_tx = next(iter(in_rows_by_id.values()))
+        total_to_msat = int(in_tx["amount"] or 0)
+        bases = [
+            int(rows_by_id[pair["out_transaction_id"]]["amount"] or 0)
+            for pair in ordered_pairs
+        ]
+        if sum(bases) < total_to_msat:
+            continue
+        to_allocations = _allocate_component_msat(total_to_msat, bases)
+        for pair, allocation in zip(ordered_pairs, to_allocations):
+            out_tx = rows_by_id[pair["out_transaction_id"]]
+            allocations[str(pair["id"])] = _TransactionPairAllocation(
+                allocation_msat=allocation,
+                from_allocation_msat=int(out_tx["amount"] or 0),
+            )
+    return allocations
+
+
 def _transaction_pair_still_deterministic(
     conn: sqlite3.Connection,
     profile_id: str,
@@ -1192,18 +1332,41 @@ def _transaction_pair_still_deterministic(
         return False
     if _raw_privacy_hop(from_tx) or _raw_privacy_hop(to_tx):
         return False
-    return bool(
-        conn.execute(
-            """
-            SELECT 1
-            FROM transaction_pairs
-            WHERE profile_id = ? AND out_transaction_id = ? AND in_transaction_id = ?
-              AND deleted_at IS NULL
-            LIMIT 1
-            """,
-            (profile_id, from_tx["id"], to_tx["id"]),
-        ).fetchone()
-    )
+    rows = _active_transaction_rows(conn, profile_id)
+    rows_by_id = {tx["id"]: tx for tx in rows}
+    pair_rows = conn.execute(
+        """
+        SELECT * FROM transaction_pairs
+        WHERE profile_id = ? AND deleted_at IS NULL
+        ORDER BY created_at ASC, id ASC
+        """,
+        (profile_id,),
+    ).fetchall()
+    allocation_by_pair_id = _transaction_pair_allocation_map(pair_rows, rows_by_id)
+    try:
+        expected_allocation = int(row["allocation_amount"] or 0)
+        expected_from_allocation = int(
+            row["from_allocation_amount"]
+            if row["from_allocation_amount"] is not None
+            else expected_allocation
+        )
+    except (TypeError, ValueError):
+        return False
+    for pair in pair_rows:
+        if (
+            pair["out_transaction_id"] != from_tx["id"]
+            or pair["in_transaction_id"] != to_tx["id"]
+        ):
+            continue
+        allocation = allocation_by_pair_id.get(pair["id"])
+        if allocation is None:
+            continue
+        if (
+            allocation.allocation_msat == expected_allocation
+            and allocation.from_allocation_msat == expected_from_allocation
+        ):
+            return True
+    return False
 
 
 def _provider_values_for_method(row: Mapping[str, Any], method: str) -> set[str]:
@@ -1595,6 +1758,33 @@ def _insert_suggestion(
         link_type=link_type,
     )
     if existing:
+        if str(existing["state"] or "") == "suggested":
+            updated_at = _now()
+            conn.execute(
+                """
+                UPDATE source_funds_links
+                SET confidence = ?, asset = ?, allocation_amount = ?,
+                    from_asset = ?, from_allocation_amount = ?,
+                    allocation_policy = 'heuristic', explanation = ?,
+                    uses_chain_observation = 0, chain_data_confirmed = 1,
+                    updated_at = ?
+                WHERE id = ?
+                """,
+                (
+                    confidence,
+                    to_tx["asset"],
+                    allocation_msat,
+                    from_tx["asset"],
+                    from_allocation_msat,
+                    explanation,
+                    updated_at,
+                    existing["id"],
+                ),
+            )
+            return conn.execute(
+                "SELECT * FROM source_funds_links WHERE id = ?",
+                (existing["id"],),
+            ).fetchone()
         return None
     # A pair that already carries any non-rejected link (manual or another
     # method) must not get a parallel suggestion: two reviewed links on one
@@ -1844,10 +2034,14 @@ def suggest_links(
         "ORDER BY created_at ASC, id ASC",
         (profile["id"],),
     ).fetchall()
+    pair_allocations = _transaction_pair_allocation_map(pair_rows, rows_by_id)
     for pair in pair_rows:
         out_tx = rows_by_id.get(pair["out_transaction_id"])
         in_tx = rows_by_id.get(pair["in_transaction_id"])
         if not out_tx or not in_tx:
+            continue
+        allocation = pair_allocations.get(pair["id"])
+        if allocation is None:
             continue
         if _raw_privacy_hop(out_tx) or _raw_privacy_hop(in_tx):
             continue
@@ -1863,8 +2057,8 @@ def suggest_links(
             link_type=link_type,
             method="transaction_pair",
             confidence="strong",
-            allocation_msat=int(in_tx["amount"]),
-            from_allocation_msat=int(out_tx["amount"]),
+            allocation_msat=allocation.allocation_msat,
+            from_allocation_msat=allocation.from_allocation_msat,
             explanation=f"Existing reviewed transaction_pair ({pair['kind']}, {pair['policy']}) links these rows.",
         )
         remember(link)

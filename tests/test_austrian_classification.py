@@ -127,6 +127,54 @@ class InferOutboundRegimesTest(unittest.TestCase):
             {"xfer-out": REGIME_NEU, "sell-from-b": REGIME_NEU},
         )
 
+    def test_one_to_many_transfer_carries_regime_to_each_destination_wallet(self):
+        rows = [
+            _row("buy-alt", "wallet-a", "inbound", 100_000_000, occurred_at="2020-06-01T00:00:00Z"),
+            _row("xfer-in-b", "wallet-b", "inbound", 40_000_000, occurred_at="2025-01-01T00:00:00Z", external_id="cj-1"),
+            _row("xfer-in-c", "wallet-c", "inbound", 60_000_000, occurred_at="2025-01-01T00:00:00Z", external_id="cj-1"),
+            _row("xfer-out", "wallet-a", "outbound", 100_000_000, occurred_at="2025-01-01T00:00:00Z", external_id="cj-1"),
+            _row("sell-from-b", "wallet-b", "outbound", 10_000_000, occurred_at="2025-06-01T00:00:00Z"),
+            _row("sell-from-c", "wallet-c", "outbound", 10_000_000, occurred_at="2025-06-02T00:00:00Z"),
+        ]
+        intra_pairs = [
+            {"out": rows[3], "in": rows[1]},
+            {"out": rows[3], "in": rows[2]},
+        ]
+
+        self.assertEqual(
+            infer_outbound_regimes(rows, intra_pairs),
+            {
+                "xfer-out": REGIME_ALT,
+                "sell-from-b": REGIME_ALT,
+                "sell-from-c": REGIME_ALT,
+            },
+        )
+
+    def test_many_to_one_transfer_allocates_shared_inbound_once(self):
+        rows = [
+            _row("buy-alt-a", "wallet-a", "inbound", 80_000_000, occurred_at="2020-06-01T00:00:00Z"),
+            _row("buy-alt-b", "wallet-b", "inbound", 80_000_000, occurred_at="2020-06-02T00:00:00Z"),
+            _row("xfer-in-c", "wallet-c", "inbound", 100_000_000, occurred_at="2025-01-01T00:00:00Z", external_id="cj-2"),
+            _row("xfer-out-a", "wallet-a", "outbound", 80_000_000, occurred_at="2025-01-01T00:00:00Z", external_id="cj-2"),
+            _row("xfer-out-b", "wallet-b", "outbound", 80_000_000, occurred_at="2025-01-01T00:00:00Z", external_id="cj-2"),
+            _row("sell-from-c-large", "wallet-c", "outbound", 120_000_000, occurred_at="2025-06-01T00:00:00Z"),
+            _row("sell-from-c-after", "wallet-c", "outbound", 10_000_000, occurred_at="2025-06-02T00:00:00Z"),
+        ]
+        intra_pairs = [
+            {"out": rows[3], "in": rows[2]},
+            {"out": rows[4], "in": rows[2]},
+        ]
+
+        self.assertEqual(
+            infer_outbound_regimes(rows, intra_pairs),
+            {
+                "xfer-out-a": REGIME_ALT,
+                "xfer-out-b": REGIME_ALT,
+                "sell-from-c-large": REGIME_ALT,
+                "sell-from-c-after": REGIME_NEU,
+            },
+        )
+
     def test_self_transfer_fee_is_fee_first_when_neu_covers_fee_only(self):
         # A post-cutoff MOVE from a mixed Alt/Neu wallet uses the preferred Neu
         # slice for the taxable miner fee first. Only the remaining Neu quantity

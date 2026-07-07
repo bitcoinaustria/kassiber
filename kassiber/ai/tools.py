@@ -120,6 +120,7 @@ _TRANSFER_MATCH_METHODS = (
 _TRANSFER_PAIR_KINDS = (
     "manual",
     "coinjoin",
+    "whirlpool",
     "chain-swap",
     "peg-in",
     "peg-out",
@@ -1454,10 +1455,10 @@ TOOL_CATALOG: tuple[ToolEntry, ...] = (
         name="ui.transfers.pair",
         description=(
             "Pair one outbound + one inbound transaction after explicit "
-            "consent. Use kind='coinjoin' for a reviewed same-asset Coinjoin "
-            "ownership hop. Computes swap_fee_msat at pair time for swap-like "
-            "pairs and invalidates the journal so the next report read "
-            "reflects the change."
+            "consent. Use kind='coinjoin' or kind='whirlpool' for a reviewed "
+            "same-asset Coinjoin ownership hop. Computes swap_fee_msat at pair "
+            "time for swap-like pairs and invalidates the journal so the next "
+            "report read reflects the change."
         ),
         parameters={
             "type": "object",
