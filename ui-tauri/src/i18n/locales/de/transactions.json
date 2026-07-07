@@ -711,10 +711,10 @@
     "paidInvoice": "Bezahlte Rechnung",
     "unknown": "Unbekannt",
     "paymentRequest": "Zahlungsanforderung",
-    "origin": "Herkunft",
+    "origin": "BTCPay-Quelle",
     "reconciliation": "Abgleich",
     "openPaymentRequest": "BTCPay-Zahlungsanforderung öffnen",
-    "openOrigin": "BTCPay-Herkunft öffnen",
+    "openOrigin": "BTCPay-Quelle öffnen",
     "documents": "Dokumente",
     "linkState": {
       "suggested": "Vorgeschlagen",

@@ -1,4 +1,3 @@
-import { ExternalLink } from "lucide-react";
 import type * as React from "react";
 import { useTranslation } from "react-i18next";
 
@@ -58,7 +57,7 @@ function ExternalCommercialValue({
   return (
     <button
       type="button"
-      className="inline-flex min-w-0 max-w-full items-center gap-1 rounded-sm text-left text-foreground underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      className="inline-flex min-w-0 max-w-full items-center rounded-sm text-left text-foreground underline decoration-muted-foreground/70 underline-offset-2 hover:decoration-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       aria-label={ariaLabel}
       onClick={() => {
         void openExternalUrl(url).catch((error) => {
@@ -67,7 +66,6 @@ function ExternalCommercialValue({
       }}
     >
       <span className="truncate">{children}</span>
-      <ExternalLink className="size-3 shrink-0 text-muted-foreground" aria-hidden="true" />
     </button>
   );
 }
@@ -114,6 +112,9 @@ export function CommercialProvenancePanel({
       {btcpay.map((match) => {
         const payment = match.payment;
         const invoice = match.invoice;
+        const originDuplicatesPaymentRequest =
+          match.origin?.kind === "payment_request" && Boolean(match.payment_request);
+        const showLinkState = match.link.state !== "reviewed";
         const invoiceId =
           invoice?.invoice_id || payment?.invoice_id || t("commercial.unknown");
         const paymentRequestLabel =
@@ -160,7 +161,7 @@ export function CommercialProvenancePanel({
                 }
               />
             ) : null}
-            {match.origin ? (
+            {match.origin && !originDuplicatesPaymentRequest ? (
               <LedgerRow
                 label={t("commercial.origin")}
                 value={
@@ -178,16 +179,21 @@ export function CommercialProvenancePanel({
               label={t("commercial.reconciliation")}
               value={
                 <span className="inline-flex min-w-0 flex-wrap items-center gap-1.5">
-                  <Badge variant="secondary" className="rounded-md">
-                    {translatedCommercialToken(
-                      "commercial.linkState",
-                      match.link.state,
-                      t as (key: string) => string,
-                    )}
-                  </Badge>
+                  {showLinkState ? (
+                    <Badge variant="secondary" className="rounded-md">
+                      {translatedCommercialToken(
+                        "commercial.linkState",
+                        match.link.state,
+                        t as (key: string) => string,
+                      )}
+                    </Badge>
+                  ) : null}
                   {match.link.reconciliation_state &&
                   match.link.reconciliation_state !== "unreviewed" ? (
-                    <Badge variant="outline" className="rounded-md">
+                    <Badge
+                      variant={showLinkState ? "outline" : "secondary"}
+                      className="rounded-md"
+                    >
                       {translatedCommercialToken(
                         "commercial.reconciliationState",
                         match.link.reconciliation_state,

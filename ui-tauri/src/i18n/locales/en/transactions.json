@@ -692,10 +692,10 @@
     "paidInvoice": "Paid invoice",
     "unknown": "Unknown",
     "paymentRequest": "Payment request",
-    "origin": "Origin",
+    "origin": "BTCPay source",
     "reconciliation": "Reconciliation",
     "openPaymentRequest": "Open BTCPay payment request",
-    "openOrigin": "Open BTCPay origin",
+    "openOrigin": "Open BTCPay source",
     "documents": "Documents",
     "linkState": {
       "suggested": "Suggested",
