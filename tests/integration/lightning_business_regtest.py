@@ -358,6 +358,35 @@ def _write_payload(proc: subprocess.Popen[str], payload: dict[str, Any]) -> None
     proc.stdin.flush()
 
 
+def _shutdown_daemon_process(proc: subprocess.Popen[str], timeout: float = 10.0) -> None:
+    if proc.poll() is None:
+        try:
+            _write_payload(
+                proc,
+                {"request_id": "shutdown-1", "kind": "daemon.shutdown"},
+            )
+            _read_payload_timeout(proc, timeout)
+        except Exception:
+            pass
+    if proc.stdin is not None:
+        try:
+            proc.stdin.close()
+        except Exception:
+            pass
+    try:
+        code = proc.wait(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        code = proc.wait(timeout=timeout)
+    stderr = proc.stderr.read() if proc.stderr is not None else ""
+    if proc.stdout is not None:
+        proc.stdout.close()
+    if proc.stderr is not None:
+        proc.stderr.close()
+    if code != 0:
+        raise AssertionError(f"daemon exited with {code}; stderr={stderr}")
+
+
 def _daemon_snapshot(data_root: Path, connection_label: str = CONNECTION_LABEL) -> dict[str, Any]:
     proc = subprocess.Popen(
         [
@@ -397,24 +426,7 @@ def _daemon_snapshot(data_root: Path, connection_label: str = CONNECTION_LABEL) 
                 return payload["data"]
         raise AssertionError("daemon did not return ui.connections.node.snapshot")
     finally:
-        try:
-            _write_payload(
-                proc,
-                {"request_id": "shutdown-1", "kind": "daemon.shutdown"},
-            )
-            _read_payload_timeout(proc, 10.0)
-        except Exception:
-            proc.kill()
-        if proc.stdin is not None:
-            proc.stdin.close()
-        if proc.stdout is not None:
-            proc.stdout.close()
-        stderr = proc.stderr.read() if proc.stderr is not None else ""
-        if proc.stderr is not None:
-            proc.stderr.close()
-        code = proc.wait(timeout=10)
-        if code != 0:
-            raise AssertionError(f"daemon exited with {code}; stderr={stderr}")
+        _shutdown_daemon_process(proc)
 
 
 def _all_keys(value: Any) -> set[str]:
