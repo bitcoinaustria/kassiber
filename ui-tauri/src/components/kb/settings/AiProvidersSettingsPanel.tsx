@@ -9,6 +9,7 @@ import { AiProviderForm, type ExistingAiProvider } from "@/components/kb/AiProvi
 import { ChatHistorySettingsCard } from "@/components/kb/settings/ChatHistorySettingsCard";
 import { useDaemon, useDaemonMutation } from "@/daemon/client";
 import type { AiModelsListData } from "@/lib/aiCapabilities";
+import { confirmAction } from "@/lib/confirmAction";
 import { cn } from "@/lib/utils";
 import {
   AI_KIND_BADGE,
@@ -210,11 +211,13 @@ export function AiProvidersSettingsPanel({
                       aria-label={t("ai.deleteProvider", { name: displayName })}
                       disabled={row.is_default || deleteProvider.isPending}
                       onClick={() => {
-                        const ok = window.confirm(
-                          t("ai.deleteConfirm", { name: displayName }),
-                        );
-                        if (!ok) return;
-                        deleteProvider.mutate({ name: row.name });
+                        void (async () => {
+                          const ok = await confirmAction(
+                            t("ai.deleteConfirm", { name: displayName }),
+                          );
+                          if (!ok) return;
+                          deleteProvider.mutate({ name: row.name });
+                        })();
                       }}
                     >
                       <Trash2 className="size-3.5" aria-hidden="true" />

@@ -53,10 +53,11 @@ import {
   openExternalUrl,
   type DaemonEnvelope,
 } from "@/daemon/transport";
-import { cn } from "@/lib/utils";
 import { accountLegs, accountMatchesLabel } from "@/lib/connectionTransactions";
+import { confirmAction } from "@/lib/confirmAction";
 import { type Currency } from "@/lib/currency";
 import { type ExplorerSettings } from "@/lib/explorer";
+import { cn } from "@/lib/utils";
 import { useUiStore } from "@/store/ui";
 import { useJournalProcessingAction } from "@/hooks/useJournalProcessingAction";
 import type {
@@ -2404,20 +2405,22 @@ const TransactionsTable = ({
                             onSelect={(event: Event) => {
                               event.preventDefault();
                               if (typeof window === "undefined") return;
-                              const confirmed = window.confirm(
-                                t("table.row.excludeConfirm"),
-                              );
-                              if (!confirmed) return;
-                              void metadataUpdate.mutateAsync({
-                                transaction: txn.id,
-                                excluded: true,
-                              });
-                              useUiStore.getState().addNotification({
-                                title: t("notification.transactionExcluded.title"),
-                                body: t("notification.transactionExcluded.body"),
-                                tone: "info",
-                                dedupeKey: `tx-exclude-${txn.id}`,
-                              });
+                              void (async () => {
+                                const confirmed = await confirmAction(
+                                  t("table.row.excludeConfirm"),
+                                );
+                                if (!confirmed) return;
+                                await metadataUpdate.mutateAsync({
+                                  transaction: txn.id,
+                                  excluded: true,
+                                });
+                                useUiStore.getState().addNotification({
+                                  title: t("notification.transactionExcluded.title"),
+                                  body: t("notification.transactionExcluded.body"),
+                                  tone: "info",
+                                  dedupeKey: `tx-exclude-${txn.id}`,
+                                });
+                              })();
                             }}
                           >
                             <X className="mr-2 size-4" aria-hidden="true" />
