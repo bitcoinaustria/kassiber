@@ -112,7 +112,16 @@ class BtcpayCommercialProvenanceTest(unittest.TestCase):
         self.conn.close()
         self.tmp.cleanup()
 
-    def _upsert_invoice_payment(self, *, raw_payment=None, raw_invoice=None, asset="BTC"):
+    def _upsert_invoice_payment(
+        self,
+        *,
+        raw_payment=None,
+        raw_invoice=None,
+        asset="BTC",
+        origin_kind="pos",
+        origin_label="Coffee beans",
+        origin_url="https://btcpay.example/apps/pos",
+    ):
         workspace, profile = _hooks().resolve_scope(self.conn)
         invoice = {
             "id": "inv-1",
@@ -139,9 +148,9 @@ class BtcpayCommercialProvenanceTest(unittest.TestCase):
                     "currency": "EUR",
                     "amount": "500.00",
                     "payment_request_id": "pr-1",
-                    "origin_kind": "pos",
-                    "origin_label": "Coffee beans",
-                    "origin_url": "https://btcpay.example/apps/pos",
+                    "origin_kind": origin_kind,
+                    "origin_label": origin_label,
+                    "origin_url": origin_url,
                     "invoice": invoice,
                     "payments": [
                         {
@@ -474,6 +483,58 @@ class BtcpayCommercialProvenanceTest(unittest.TestCase):
         subledger = commercial.build_reviewed_subledger_rows(self.conn, None, None, _hooks())
         self.assertEqual(subledger[0]["document_label"], "Invoice 2026-001")
         self.assertEqual(subledger[0]["invoice_id"], "inv-1")
+
+    def test_reviewed_payment_request_link_attaches_btcpay_url_to_transaction(self):
+        self._upsert_invoice_payment(
+            raw_invoice={
+                "metadata": {
+                    "paymentRequestId": "pr-1",
+                    "itemDesc": "Membership renewal",
+                    "orderUrl": "https://btcpay.example/payment-requests/pr-1",
+                }
+            },
+            origin_kind="payment_request",
+            origin_label="Membership renewal",
+            origin_url="https://btcpay.example/payment-requests/pr-1",
+        )
+        self._create_matching_document()
+        link_id = self._suggested_transaction_link_id()
+
+        commercial.review_link(
+            self.conn,
+            None,
+            None,
+            link_id,
+            _hooks(),
+            state="reviewed",
+            commercial_kind="income",
+        )
+        commercial.review_link(
+            self.conn,
+            None,
+            None,
+            link_id,
+            _hooks(),
+            state="reviewed",
+            commercial_kind="income",
+        )
+
+        attachments = self.conn.execute(
+            """
+            SELECT attachment_type, label, source_url, media_type
+            FROM attachments
+            WHERE transaction_id = 'tx'
+            ORDER BY created_at
+            """
+        ).fetchall()
+        self.assertEqual(len(attachments), 1)
+        self.assertEqual(attachments[0]["attachment_type"], "url")
+        self.assertEqual(attachments[0]["label"], "BTCPay payment request")
+        self.assertEqual(
+            attachments[0]["source_url"],
+            "https://btcpay.example/payment-requests/pr-1",
+        )
+        self.assertEqual(attachments[0]["media_type"], "text/uri-list")
 
     def test_rejecting_reviewed_link_restores_transaction_snapshot(self):
         self._upsert_invoice_payment()

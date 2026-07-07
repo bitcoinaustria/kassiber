@@ -9,6 +9,7 @@ import uuid
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Mapping, Sequence
+from urllib.parse import urlparse
 
 from ..envelope import json_ready
 from ..errors import AppError
@@ -1143,6 +1144,56 @@ def _restore_reviewed_link_transaction(conn, profile, link):
     return True
 
 
+def _btcpay_origin_attachment_label(record) -> str:
+    if record["origin_kind"] == "payment_request":
+        return "BTCPay payment request"
+    if record["origin_kind"] == "crowdfund":
+        return "BTCPay crowdfund"
+    if record["origin_kind"] == "pos":
+        return "BTCPay point of sale"
+    return "BTCPay invoice"
+
+
+def _attach_btcpay_origin_url(conn, profile, transaction_id: str, record) -> bool:
+    raw_url = str(record["origin_url"] or "").strip()
+    if not raw_url:
+        return False
+    parsed = urlparse(raw_url)
+    if parsed.scheme not in {"http", "https"}:
+        return False
+    existing = conn.execute(
+        """
+        SELECT id FROM attachments
+        WHERE profile_id = ?
+          AND transaction_id = ?
+          AND attachment_type = 'url'
+          AND source_url = ?
+        LIMIT 1
+        """,
+        (profile["id"], transaction_id, raw_url),
+    ).fetchone()
+    if existing:
+        return False
+    conn.execute(
+        """
+        INSERT INTO attachments(
+            id, workspace_id, profile_id, transaction_id, attachment_type,
+            label, source_url, media_type, created_at
+        ) VALUES(?, ?, ?, ?, 'url', ?, ?, 'text/uri-list', ?)
+        """,
+        (
+            str(uuid.uuid4()),
+            profile["workspace_id"],
+            profile["id"],
+            transaction_id,
+            _btcpay_origin_attachment_label(record),
+            raw_url,
+            _now(),
+        ),
+    )
+    return True
+
+
 def _apply_reviewed_link_to_transaction(conn, profile, link, commercial_kind):
     record = None
     if link["btcpay_record_id"]:
@@ -1278,6 +1329,7 @@ def _apply_reviewed_link_to_transaction(conn, profile, link, commercial_kind):
         f"UPDATE transactions SET {assignments} WHERE profile_id = ? AND id = ?",
         (*updates.values(), profile["id"], link["transaction_id"]),
     )
+    _attach_btcpay_origin_url(conn, profile, link["transaction_id"], record)
     return {"applied": True, "snapshot_json": snapshot_json}
 
 
