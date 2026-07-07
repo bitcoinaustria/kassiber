@@ -3231,6 +3231,9 @@ TRANSACTION_PERIOD_DAYS = {
     "3months": 92,
     "3month": 92,
     "3m": 92,
+    "6months": 183,
+    "6month": 183,
+    "6m": 183,
     "1year": 365,
     "1years": 365,
     "1y": 365,
@@ -3272,7 +3275,7 @@ def _transaction_since_for_period(period):
     days = TRANSACTION_PERIOD_DAYS.get(normalized)
     if days is None:
         raise AppError(
-            "--period must be one of: 30days, 3months, ytd, 1year, 5years, 10years, 15years, all",
+            "--period must be one of: 30days, 3months, 6months, ytd, 1year, 5years, 10years, 15years, all",
             code="validation",
         )
     return _iso_z(datetime.now(timezone.utc) - timedelta(days=days))

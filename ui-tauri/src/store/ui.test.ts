@@ -66,6 +66,23 @@ describe("UI persistence", () => {
     expect(encoded).toContain('"clearClipboard":false');
   });
 
+  it("persists overview chart periods per book", () => {
+    useUiStore.setState({ bookChartPeriods: {} });
+    useUiStore.getState().setBookChartPeriod("db:/books/a.sqlite3", "5years");
+    useUiStore.getState().setBookChartPeriod("db:/books/b.sqlite3", "30days");
+
+    expect(useUiStore.getState().bookChartPeriods).toMatchObject({
+      "db:/books/a.sqlite3": "5years",
+      "db:/books/b.sqlite3": "30days",
+    });
+
+    const encoded = JSON.stringify(
+      uiStatePartialForStorage(useUiStore.getState()),
+    );
+    expect(encoded).toContain('"bookChartPeriods"');
+    expect(encoded).toContain('"db:/books/a.sqlite3":"5years"');
+  });
+
   it("keeps active maintenance progress transient and clears by id", () => {
     const startedAt = "2026-06-06T10:00:00Z";
     useUiStore.getState().setActiveMaintenanceProgress({

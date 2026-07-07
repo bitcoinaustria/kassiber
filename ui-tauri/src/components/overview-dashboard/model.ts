@@ -808,10 +808,10 @@ export function normalizeTimePeriodParam(value: string | null): TimePeriod | nul
   return null;
 }
 
-export function initialTimePeriodFromUrl(): TimePeriod {
-  if (typeof window === "undefined") return "auto";
+export function initialTimePeriodFromUrl(fallback: TimePeriod = "auto"): TimePeriod {
+  if (typeof window === "undefined") return fallback;
   const params = new URLSearchParams(window.location.search);
-  return normalizeTimePeriodParam(params.get("period")) ?? "auto";
+  return normalizeTimePeriodParam(params.get("period")) ?? fallback;
 }
 
 export function initialYScaleLogFromUrl(): boolean {

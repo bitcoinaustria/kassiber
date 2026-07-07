@@ -21,7 +21,11 @@ import { useCurrency } from "@/lib/currency";
 import { useWalletSyncAction } from "@/hooks/useWalletSyncAction";
 import { MOCK_TRANSACTIONS, type TransactionsList } from "@/mocks/transactions";
 import { MOCK_OVERVIEW } from "@/mocks/seed";
-import { useUiStore } from "@/store/ui";
+import {
+  bookIdentityKey,
+  type BookChartPeriod,
+  useUiStore,
+} from "@/store/ui";
 import {
   NewTransactionDialog,
   createNewTransactionDraft,
@@ -40,9 +44,11 @@ import {
   flowChartSelectionDateWindow,
   initialPeriodFromUrl,
   recordsForPeriod,
+  resolveAutoPeriodForRecords,
   sortTransactionsByDateDesc,
   type FlowChartSelection,
   type PeriodKey,
+  type ResolvedPeriodKey,
   type SwapCandidateReference,
   type TableQuickFilter,
   type BreakdownSelection,
@@ -53,6 +59,12 @@ interface TransactionsExportResult {
   rows?: number;
   format?: string;
   filename?: string;
+}
+
+function transactionPeriodFromSharedPeriod(
+  period: BookChartPeriod | undefined,
+): PeriodKey {
+  return period ?? "1year";
 }
 
 const TransactionsDashboard = ({
@@ -95,7 +107,18 @@ const TransactionsDashboard = ({
   onTableFilterArgsChange?: (args: Record<string, unknown>) => void;
 }) => {
   const { t } = useTranslation("transactions");
-  const [period, setPeriod] = React.useState<PeriodKey>(initialPeriodFromUrl);
+  const bookKey = useUiStore((state) => bookIdentityKey(state.identity));
+  const storedBookChartPeriod = useUiStore((state) =>
+    bookKey ? state.bookChartPeriods[bookKey] : undefined,
+  );
+  const setStoredBookChartPeriod = useUiStore(
+    (state) => state.setBookChartPeriod,
+  );
+  const [period, setPeriod] = React.useState<PeriodKey>(() =>
+    initialPeriodFromUrl(
+      transactionPeriodFromSharedPeriod(storedBookChartPeriod),
+    ),
+  );
   const [newTxnOpen, setNewTxnOpen] = React.useState(false);
   const [flowChartSelection, setFlowChartSelection] =
     React.useState<FlowChartSelection | null>(null);
@@ -129,6 +152,8 @@ const TransactionsDashboard = ({
   const { isSyncing } = useWalletSyncAction();
   const showRefreshSkeleton = isSyncing || isDataRefreshing;
   const addNotification = useUiStore((s) => s.addNotification);
+  const previousBookKey = React.useRef(bookKey);
+  const skipNextPeriodPersist = React.useRef(false);
   const exportTransactionsXlsx = useDaemonMutation<TransactionsExportResult>(
     "ui.transactions.export_xlsx",
   );
@@ -248,6 +273,14 @@ const TransactionsDashboard = ({
     () => availablePeriodKeysForRecords(records),
     [records],
   );
+  const periodOptions = React.useMemo<PeriodKey[]>(
+    () => ["auto", ...availablePeriods],
+    [availablePeriods],
+  );
+  const resolvedPeriod = React.useMemo<ResolvedPeriodKey>(
+    () => resolveAutoPeriodForRecords(records, period),
+    [period, records],
+  );
   // In daemon-backed (real/regtest) mode the New Transaction picker must not
   // offer fabricated MOCK wallet names; derive single-wallet labels from the
   // loaded book instead (skipping synthesized "A → B" transfer strings).
@@ -261,10 +294,10 @@ const TransactionsDashboard = ({
   }, [records]);
   const periodRecords = React.useMemo(
     () =>
-      period === "all"
+      resolvedPeriod === "all"
         ? allPeriodRecords
-        : recordsForPeriod(records, period),
-    [allPeriodRecords, records, period],
+        : recordsForPeriod(records, resolvedPeriod),
+    [allPeriodRecords, records, resolvedPeriod],
   );
   const focusedRecord = React.useMemo(() => {
     if (!focusedTransaction) return null;
@@ -279,10 +312,10 @@ const TransactionsDashboard = ({
   }, [focusedTransaction, tableSourceRecords]);
   const tablePeriodRecords = React.useMemo(
     () =>
-      period === "all"
+      resolvedPeriod === "all"
         ? sortTransactionsByDateDesc(tableSourceRecords)
-        : recordsForPeriod(tableSourceRecords, period),
-    [period, tableSourceRecords],
+        : recordsForPeriod(tableSourceRecords, resolvedPeriod),
+    [resolvedPeriod, tableSourceRecords],
   );
   const tableRecords = React.useMemo(() => {
     if (
@@ -313,6 +346,31 @@ const TransactionsDashboard = ({
     setResetTableFiltersToken((token) => token + 1);
   }, []);
   React.useEffect(() => {
+    if (previousBookKey.current === bookKey) return;
+    previousBookKey.current = bookKey;
+    skipNextPeriodPersist.current = true;
+    setPeriod(
+      initialPeriodFromUrl(
+        transactionPeriodFromSharedPeriod(storedBookChartPeriod),
+      ),
+    );
+    setFlowChartSelection(null);
+    setQuickFilter(null);
+    setBreakdownSelection(null);
+    setResetTableFiltersToken((token) => token + 1);
+  }, [bookKey, storedBookChartPeriod]);
+
+  React.useEffect(() => {
+    if (!bookKey) return;
+    if (skipNextPeriodPersist.current) {
+      skipNextPeriodPersist.current = false;
+      return;
+    }
+    setStoredBookChartPeriod(bookKey, period);
+  }, [bookKey, period, setStoredBookChartPeriod]);
+
+  React.useEffect(() => {
+    if (period === "auto") return;
     if (availablePeriods.includes(period)) return;
     handlePeriodChange(
       availablePeriods.includes("1year")
@@ -340,7 +398,7 @@ const TransactionsDashboard = ({
 
   React.useEffect(() => {
     const args: Record<string, unknown> = {};
-    if (period !== "all") args.period = period;
+    if (resolvedPeriod !== "all") args.period = resolvedPeriod;
     if (deepLinkedTransactionIds.length > 0) {
       args.txids = deepLinkedTransactionIds;
     }
@@ -394,8 +452,8 @@ const TransactionsDashboard = ({
     deepLinkedTransactionIds,
     flowChartSelection,
     onTableFilterArgsChange,
-    period,
     quickFilter,
+    resolvedPeriod,
     tableFilterState,
   ]);
 
@@ -461,7 +519,8 @@ const TransactionsDashboard = ({
         <PeriodTabs
           activePeriod={period}
           onPeriodChange={handlePeriodChange}
-          periodOptions={availablePeriods}
+          periodOptions={periodOptions}
+          resolvedPeriod={period === "auto" ? resolvedPeriod : null}
         />
         {tableExpanded ? (
           <div
@@ -522,7 +581,7 @@ const TransactionsDashboard = ({
 
       {!tableExpanded && (
         <TransactionWorkbench
-          period={period}
+          period={resolvedPeriod}
           records={periodRecords}
           hideSensitive={hideSensitive}
           currency={currency}
