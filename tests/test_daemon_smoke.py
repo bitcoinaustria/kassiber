@@ -3598,6 +3598,128 @@ class DaemonSmokeTest(unittest.TestCase):
                     duplicate_credentials["error"]["hint"].lower(),
                 )
 
+                account_setup_args = {
+                    "mode": "account",
+                    "label": "BTCPay Account UI",
+                    "backend": "btcpay-ui",
+                    "sync_provenance": False,
+                    "routes": [
+                        {
+                            "store_id": "store-account-a",
+                            "store_name": "Membership",
+                            "payment_method_id": "BTC-CHAIN",
+                            "action": "wallet_source",
+                        },
+                        {
+                            "store_id": "store-account-b",
+                            "store_name": "Merch",
+                            "payment_method_id": "LBTC-CHAIN",
+                            "action": "existing_wallet",
+                            "wallet": "River UI",
+                        },
+                        {
+                            "store_id": "store-account-b",
+                            "store_name": "Merch",
+                            "payment_method_id": "BTC-LN",
+                            "action": "provenance_only",
+                        },
+                        {
+                            "store_id": "store-account-b",
+                            "store_name": "Merch",
+                            "payment_method_id": "BTC-CHAIN",
+                            "action": "skip",
+                        },
+                    ],
+                }
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "btcpay-account-setup",
+                        "kind": "ui.connections.btcpay.create",
+                        "args": account_setup_args,
+                    },
+                )
+                account_setup = _read_payload_timeout(proc)
+                self.assertEqual(
+                    account_setup["kind"],
+                    "ui.connections.btcpay.create",
+                )
+                self.assertEqual(account_setup["data"]["mode"], "account")
+                self.assertEqual(account_setup["data"]["backend"]["name"], "btcpay-ui")
+                self.assertEqual(account_setup["data"]["reused_wallets"], 0)
+                self.assertEqual(account_setup["data"]["provenance"], [])
+                self.assertEqual(
+                    [
+                        wallet["label"]
+                        for wallet in account_setup["data"]["wallet_sources"]
+                    ],
+                    ["BTCPay Account UI - Membership - BTC-CHAIN"],
+                )
+                self.assertEqual(
+                    account_setup["data"]["wallet_sources"][0]["config"]["store_id"],
+                    "store-account-a",
+                )
+                self.assertEqual(
+                    account_setup["data"]["mappings"][0]["route"],
+                    {
+                        "backend": "btcpay-ui",
+                        "store_id": "store-account-b",
+                        "payment_method_id": "LBTC-CHAIN",
+                    },
+                )
+                self.assertEqual(
+                    account_setup["data"]["skipped"][0]["payment_method_id"],
+                    "BTC-CHAIN",
+                )
+                account_mapped_config = account_setup["data"]["mappings"][0][
+                    "wallet"
+                ]["config"]
+                self.assertIn("source_file", account_mapped_config)
+                self.assertEqual(
+                    account_mapped_config["source_format"],
+                    "river_csv",
+                )
+                self.assertEqual(
+                    account_mapped_config["btcpay_provenance"],
+                    [
+                        {
+                            "backend": "btcpay-ui",
+                            "store_id": "store789",
+                            "payment_method_id": "BTC-CHAIN",
+                        },
+                        {
+                            "backend": "btcpay-ui",
+                            "store_id": "store-account-b",
+                            "payment_method_id": "LBTC-CHAIN",
+                        },
+                    ],
+                )
+
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "btcpay-account-setup-repeat",
+                        "kind": "ui.connections.btcpay.create",
+                        "args": account_setup_args,
+                    },
+                )
+                account_setup_repeat = _read_payload_timeout(proc)
+                self.assertEqual(
+                    account_setup_repeat["kind"],
+                    "ui.connections.btcpay.create",
+                )
+                self.assertEqual(account_setup_repeat["data"]["reused_wallets"], 1)
+                self.assertEqual(
+                    account_setup_repeat["data"]["wallet_sources"][0]["label"],
+                    "BTCPay Account UI - Membership - BTC-CHAIN",
+                )
+                self.assertEqual(
+                    account_setup_repeat["data"]["mappings"][0]["wallet"]["config"][
+                        "btcpay_provenance"
+                    ],
+                    account_mapped_config["btcpay_provenance"],
+                )
+
                 _write_payload(
                     proc,
                     {

@@ -531,7 +531,7 @@ export const CONNECTION_SOURCES: ConnectionSource[] = [
   {
     id: "btcpay",
     title: "BTCPay Server",
-    description: "Store wallet history through a scoped API key.",
+    description: "Store discovery, wallet history, and invoice provenance through a scoped API key.",
     category: "merchant",
     image: btcpayIcon,
     imageClassName: "h-9 w-auto",
@@ -542,7 +542,9 @@ export const CONNECTION_SOURCES: ConnectionSource[] = [
     setupKind: "btcpay",
     details: [
       "Save or reuse a BTCPay instance",
-      "Map payment methods to Kassiber wallets",
+      "Discover stores and choose the action per payment method",
+      "Map payment methods to Kassiber wallets or keep invoice provenance only",
+      "Use BTCPay CSV when API access is not available",
     ],
   },
   {
@@ -562,7 +564,7 @@ export const CONNECTION_SOURCES: ConnectionSource[] = [
       "Imports a local BTCPay wallet transaction CSV export",
       "Comments become notes and labels become Kassiber tags",
       "Can create a file-backed source wallet or import into an existing settlement wallet",
-      "Use BTCPay Server for repeatable API sync and invoice provenance",
+      "Use BTCPay Server for repeatable sync plus invoice and payment-request provenance",
     ],
   },
   {
