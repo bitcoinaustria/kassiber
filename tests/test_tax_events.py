@@ -235,6 +235,60 @@ class NormalizeTaxAssetInputsTest(unittest.TestCase):
         self.assertEqual(len(inputs.transfers), 2)
         self.assertEqual({t.pairing_source for t in inputs.transfers}, {"manual"})
 
+    def test_manual_multi_pair_implausible_fee_quarantines_entire_group(self):
+        out_row = _row(
+            "premix-out",
+            "wallet-a",
+            "outbound",
+            100_000_000_000,
+            fiat_rate=65_000,
+            external_id="premix-out",
+        )
+        in_one = _row(
+            "postmix-in-1",
+            "wallet-b",
+            "inbound",
+            40_000_000_000,
+            external_id="postmix-1",
+        )
+        in_two = _row(
+            "postmix-in-2",
+            "wallet-b",
+            "inbound",
+            40_000_000_000,
+            external_id="postmix-2",
+        )
+        inputs = normalize_tax_asset_inputs(
+            self.profile,
+            "BTC",
+            [out_row, in_one, in_two],
+            self.wallet_refs_by_id,
+            [
+                {
+                    "out": out_row,
+                    "in": in_one,
+                    "pair_id": "pair-1",
+                    "source": "manual",
+                },
+                {
+                    "out": out_row,
+                    "in": in_two,
+                    "pair_id": "pair-2",
+                    "source": "manual",
+                },
+            ],
+        )
+
+        self.assertEqual(inputs.events, [])
+        self.assertEqual(inputs.transfers, [])
+        self.assertEqual(len(inputs.quarantines), 3)
+        self.assertTrue(
+            all(q["reason"] == "transfer_fee_implausible" for q in inputs.quarantines)
+        )
+        detail = json.loads(inputs.quarantines[0]["detail_json"])
+        self.assertAlmostEqual(detail["implied_fee"], 0.2, places=8)
+        self.assertGreater(detail["implied_fee"], detail["fee_ceiling"])
+
     def test_manual_many_to_one_pairs_group_and_allocate_destination_once(self):
         out_one = _row(
             "premix-out-1",

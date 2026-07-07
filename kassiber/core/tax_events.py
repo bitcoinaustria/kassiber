@@ -1002,6 +1002,56 @@ def _build_manual_multi_pair_transfers(
             continue
 
         fee_msat = total_sent_msat - total_received_msat
+        total_out_amount_msat = sum(
+            _row_msat(row, "amount") for row in out_rows_by_id.values()
+        )
+        if all(
+            _row_get(row, "amount_includes_fee")
+            for row in out_rows_by_id.values()
+        ):
+            unrecognized_outflow_msat = 0
+        else:
+            unrecognized_outflow_msat = max(
+                0, total_out_amount_msat - total_received_msat
+            )
+        fee_ceiling_msat = fee_threshold_msat(
+            total_out_amount_msat,
+            DEFAULT_FEE_PCT_MAX,
+            DEFAULT_FEE_SATS_MIN,
+        )
+        if unrecognized_outflow_msat > fee_ceiling_msat:
+            from_wallets = sorted(
+                {
+                    wallet_refs_by_id[row["wallet_id"]]["label"]
+                    for row in out_rows_by_id.values()
+                }
+            )
+            to_wallets = sorted(
+                {
+                    wallet_refs_by_id[row["wallet_id"]]["label"]
+                    for row in in_rows_by_id.values()
+                }
+            )
+            _append_manual_multi_pair_quarantines(
+                quarantines,
+                profile,
+                group_rows,
+                "transfer_fee_implausible",
+                {
+                    **detail_base,
+                    "from_wallets": from_wallets,
+                    "to_wallets": to_wallets,
+                    "sent": float(msat_to_btc(total_sent_msat)),
+                    "received": float(msat_to_btc(total_received_msat)),
+                    "implied_fee": float(msat_to_btc(fee_msat)),
+                    "unrecognized_outflow": float(
+                        msat_to_btc(unrecognized_outflow_msat)
+                    ),
+                    "fee_ceiling": float(msat_to_btc(fee_ceiling_msat)),
+                    "required_for": "transfer_fee_review",
+                },
+            )
+            continue
         spot_price_row = next(iter(out_rows_by_id.values()))
         spot_price_wallet_label = wallet_refs_by_id[spot_price_row["wallet_id"]]["label"]
         spot_price = None
