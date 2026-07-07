@@ -177,6 +177,36 @@ class ChannelLifecycleEngineTest(unittest.TestCase):
         self.assertEqual(len(fee_entries), 1)
         self.assertEqual(Decimal(str(fee_entries[0]["quantity"])), Decimal("-0.001"))
 
+    def test_austrian_channel_open_fee_uses_alt_lot_when_only_alt_is_available(
+        self,
+    ) -> None:
+        rows = [
+            _row("buy", "inbound", ONE_BTC + FEE_MSAT, "2021-02-01T00:00:00Z"),
+            _row(
+                "fund",
+                "outbound",
+                ONE_BTC,
+                "2025-06-01T00:00:00Z",
+                external_id=FUNDING_TXID,
+                fee=FEE_MSAT,
+            ),
+            _row(
+                "sell",
+                "outbound",
+                ONE_BTC // 2,
+                "2025-06-02T00:00:00Z",
+                external_id="cc" * 32,
+            ),
+        ]
+        roles = channel_role_map([{"funding_txid": FUNDING_TXID}], rows)
+        result = _run(rows, roles)
+
+        self.assertEqual(result.quarantines, [])
+        self.assertEqual(_btc_quantity(result), Decimal("0.5"))
+        fee_entries = [row for row in result.entries if row["entry_type"] == "fee"]
+        self.assertEqual(len(fee_entries), 1)
+        self.assertEqual(Decimal(str(fee_entries[0]["quantity"])), Decimal("-0.001"))
+
     def test_channel_open_pair_credits_node_wallet_capacity(self) -> None:
         rows = [
             _row("buy", "inbound", ONE_BTC + FEE_MSAT, "2025-05-01T00:00:00Z"),

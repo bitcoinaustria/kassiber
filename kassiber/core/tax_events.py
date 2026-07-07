@@ -9,7 +9,7 @@ from ..msat import msat_to_btc
 from ..transfers import normalize_group_txid
 from . import pricing
 from .austrian import infer_outbound_regimes, infer_regime_from_timestamp, resolve_pool_id
-from .loans import LOCK_SUPPRESS_ROLES, RELEASE_SUPPRESS_ROLES
+from .loans import CHANNEL_OPEN, LOCK_SUPPRESS_ROLES, RELEASE_SUPPRESS_ROLES
 from .ownership_transfers import detect_conflicting_spend_ids
 from .privacy_hops import privacy_hop_evidence_from_row
 from .transfer_matching import (
@@ -1179,11 +1179,6 @@ def normalize_tax_asset_inputs(
     # inference so a lock does not "consume" Alt inventory and a release does not
     # add phantom Neu inventory — otherwise a later real sale is assigned a regime
     # whose pool is empty and rp2 aborts with "in < taxable".
-    suppressed_loan_ids = {
-        str(tx_id)
-        for tx_id, role in loan_leg_map.items()
-        if role in LOCK_SUPPRESS_ROLES or role in RELEASE_SUPPRESS_ROLES
-    }
     # Shared-prevout conflicts (RBF / reorg / double-spend) must be excluded from
     # Austrian regime inference below: an unconfirmed loser sorted ahead of the
     # confirmed winner would otherwise deplete the Alt/Neu availability pool and
@@ -1205,12 +1200,26 @@ def normalize_tax_asset_inputs(
         if str(pair["out"]["id"]) not in conflict_row_ids
         and str(pair["in"]["id"]) not in conflict_row_ids
     ]
-    regime_rows = [
-        row
-        for row in rows
-        if str(row["id"]) not in suppressed_loan_ids
-        and str(row["id"]) not in conflict_row_ids
-    ]
+    regime_rows: list[Mapping[str, Any]] = []
+    for row in rows:
+        row_id = str(row["id"])
+        if row_id in conflict_row_ids:
+            continue
+        loan_role = loan_leg_map.get(row_id)
+        if loan_role in LOCK_SUPPRESS_ROLES or loan_role in RELEASE_SUPPRESS_ROLES:
+            # Suppressed loan legs should not consume/add Austrian regime
+            # availability. A Lightning channel-open miner fee is the one
+            # taxable slice: principal remains owned, but the fee left the
+            # wallet and needs a regime so rp2 can book it against the right
+            # Alt/Neu pool.
+            fee_msat = int(_row_get(row, "fee") or 0)
+            if loan_role == CHANNEL_OPEN and fee_msat > 0:
+                fee_row = dict(row)
+                fee_row["amount"] = 0
+                fee_row["fee"] = fee_msat
+                regime_rows.append(fee_row)
+            continue
+        regime_rows.append(row)
     # Austrian regime inference walks rows in order and depletes the Alt/Neu
     # pools positionally, so feed it a CHRONOLOGICAL, economically-meaningful
     # order — acquisitions before disposals at an equal timestamp — instead of
