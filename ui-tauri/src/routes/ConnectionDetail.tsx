@@ -33,7 +33,6 @@ import {
   RefreshCw,
   RotateCcw,
   Scale,
-  ShieldAlert,
   ShieldCheck,
   Trash2,
 } from "lucide-react";
@@ -106,14 +105,6 @@ import { formatShortDate } from "@/lib/date";
 import { connectionSupportsLightningCapability } from "@/lib/lightning";
 import { isFilePickerAvailable, pickFile } from "@/lib/filePicker";
 import { editConfigKindForConnection } from "@/lib/connectionEditKind";
-import {
-  findPrivacyWalletRow,
-  formatPrivacyInt,
-  formatPrivacyMsat,
-  privacyEvidenceTone,
-  type EvidenceLevel,
-  type PrivacyMirrorPayload,
-} from "@/lib/privacyMirror";
 import { describeWalletSyncResult, type SyncResult } from "@/lib/syncResults";
 import { transactionBelongsToConnection } from "@/lib/connectionTransactions";
 import { buildBalanceReconciliation } from "@/lib/walletBalanceReconcile";
@@ -559,99 +550,6 @@ interface ConnectionDetailViewProps {
   hideSensitive: boolean;
 }
 
-function PrivacyEvidenceBadge({ level }: { level?: EvidenceLevel }) {
-  const { t } = useTranslation("privacyMirror");
-  const key = level || "unknown";
-  const label =
-    key === "exact"
-      ? t("evidence.exact")
-      : key === "derived"
-        ? t("evidence.derived")
-        : key === "unknown"
-          ? t("evidence.unknown")
-          : key;
-  return (
-    <Badge variant="outline" className={cn("rounded-md", privacyEvidenceTone(key))}>
-      {label}
-    </Badge>
-  );
-}
-
-function WalletPrivacyMirrorPanel({
-  payload,
-  loading,
-  errorMessage,
-  connection,
-  walletDetail,
-}: {
-  payload?: PrivacyMirrorPayload;
-  loading: boolean;
-  errorMessage: string | null;
-  connection: Connection;
-  walletDetail?: WalletListItem;
-}) {
-  const { t } = useTranslation("privacyMirror");
-  const row = findPrivacyWalletRow(payload, [
-    connection.id,
-    connection.label,
-    walletDetail?.id,
-    walletDetail?.label,
-  ]);
-  const degraded = Boolean(errorMessage) || (!loading && !row);
-
-  return (
-    <Card data-testid="wallet-privacy-mirror-panel" className="rounded-xl">
-      <CardHeader className="border-b px-4 pb-3">
-        <div className="flex items-start justify-between gap-3">
-          <div className="flex min-w-0 items-center gap-2">
-            <ShieldAlert className="size-4 text-amber-600" aria-hidden="true" />
-            <div className="min-w-0">
-              <CardTitle className="truncate text-sm sm:text-base">
-                {t("detail.walletTitle")}
-              </CardTitle>
-              <CardDescription>{t("detail.source")}</CardDescription>
-            </div>
-          </div>
-          <PrivacyEvidenceBadge level={row?.evidence_level ?? (degraded ? "unknown" : "derived")} />
-        </div>
-      </CardHeader>
-      <CardContent className="grid gap-3 px-4 pt-4 sm:grid-cols-2 xl:grid-cols-4">
-        <DetailRow
-          label={t("detail.walletCoins")}
-          value={loading && !row ? "..." : formatPrivacyInt(row?.coin_count)}
-          mono
-        />
-        <DetailRow
-          label={t("detail.walletAmount")}
-          value={loading && !row ? "..." : formatPrivacyMsat(row?.amount_msat)}
-          mono
-        />
-        <DetailRow
-          label={t("detail.walletEdges")}
-          value={loading && !row ? "..." : formatPrivacyInt(row?.linkage_edge_count)}
-          mono
-        />
-        <DetailRow
-          label={t("detail.walletUnknown")}
-          value={loading && !row ? "..." : formatPrivacyInt(row?.unknown_role_coin_count)}
-          mono
-        />
-        <div className="sm:col-span-2 xl:col-span-4">
-          <p className="text-xs text-muted-foreground">
-            {errorMessage
-              ? t("detail.queryError", { message: errorMessage })
-              : row
-                ? t("detail.walletMatched", { id: row.wallet_id })
-                : loading
-                  ? t("detail.loading")
-                  : t("detail.degraded")}
-          </p>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
 function ConnectionDetailView({
   connection,
   snapshot,
@@ -710,11 +608,6 @@ function ConnectionDetailView({
   const walletTransactionsQuery = useDaemon<TransactionsList>(
     "ui.transactions.list",
     { wallet: connection.id, limit: RECENT_TRANSACTION_PREVIEW_LIMIT },
-  );
-  const privacyMirrorQuery = useDaemon<PrivacyMirrorPayload>(
-    "ui.reports.privacy_mirror",
-    undefined,
-    { retry: retryRetryableDaemonError },
   );
   const walletDetail = walletsListQuery.data?.data?.wallets?.find(
     (wallet) =>
@@ -826,8 +719,6 @@ function ConnectionDetailView({
   );
   const walletTransactionsLoading =
     walletTransactionsQuery.isLoading && txsForConnection.length === 0;
-  const privacyMirrorError =
-    privacyMirrorQuery.error instanceof Error ? privacyMirrorQuery.error.message : null;
 
   useEffect(() => {
     if (!pendingUtxoTransactionId || utxoTransactionQuery.isLoading) return;
@@ -1491,14 +1382,6 @@ function ConnectionDetailView({
           />
         </div>
       </div>
-
-      <WalletPrivacyMirrorPanel
-        payload={privacyMirrorQuery.data?.data}
-        loading={privacyMirrorQuery.isLoading}
-        errorMessage={privacyMirrorError}
-        connection={connection}
-        walletDetail={walletDetail}
-      />
 
       {reconciliation.available && !reconciliation.reconciled ? (
         // Only surface reconciliation when it needs attention: the two figures
