@@ -925,6 +925,7 @@ def get_transaction_commercial_context(
                p.origin_kind AS payment_origin_kind,
                p.origin_app_id AS payment_origin_app_id,
                p.origin_label AS payment_origin_label,
+               p.origin_url AS payment_origin_url,
                p.fiat_currency AS payment_fiat_currency,
                p.fiat_value_exact AS payment_fiat_value_exact,
                p.fiat_rate_exact AS payment_fiat_rate_exact,
@@ -942,6 +943,7 @@ def get_transaction_commercial_context(
                inv.origin_kind AS invoice_origin_kind,
                inv.origin_app_id AS invoice_origin_app_id,
                inv.origin_label AS invoice_origin_label,
+               inv.origin_url AS invoice_origin_url,
                inv.fiat_currency AS invoice_fiat_currency,
                inv.fiat_value_exact AS invoice_fiat_value_exact,
                inv.fiat_rate_exact AS invoice_fiat_rate_exact,
@@ -1453,6 +1455,7 @@ def _btcpay_record_context_payload(row, prefix):
         "origin_kind": row[f"{prefix}_origin_kind"] or "",
         "origin_app_id": row[f"{prefix}_origin_app_id"] or "",
         "origin_label": row[f"{prefix}_origin_label"] or "",
+        "origin_url": row[f"{prefix}_origin_url"] or "",
         "fiat_currency": row[f"{prefix}_fiat_currency"] or "",
         "fiat_value_exact": row[f"{prefix}_fiat_value_exact"] or "",
         "fiat_rate_exact": row[f"{prefix}_fiat_rate_exact"] or "",
@@ -1469,6 +1472,7 @@ def _payment_request_context(payment, invoice):
         "id": source["payment_request_id"],
         "label": source.get("origin_label") or source["payment_request_id"],
         "status": source.get("status") or "",
+        "url": source.get("origin_url") or "",
     }
 
 
@@ -1483,6 +1487,7 @@ def _origin_context(payment, invoice):
         "kind": kind,
         "app_id": source.get("origin_app_id") or "",
         "label": source.get("origin_label") or "",
+        "url": source.get("origin_url") or "",
     }
 
 

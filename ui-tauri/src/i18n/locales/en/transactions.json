@@ -689,11 +689,32 @@
     "btcpayPayment": "BTCPay payment",
     "linked": "Linked",
     "invoice": "Invoice",
+    "paidInvoice": "Paid invoice",
     "unknown": "Unknown",
     "paymentRequest": "Payment request",
     "origin": "Origin",
-    "review": "Review",
+    "reconciliation": "Reconciliation",
+    "openPaymentRequest": "Open BTCPay payment request",
+    "openOrigin": "Open BTCPay origin",
     "documents": "Documents",
+    "linkState": {
+      "suggested": "Suggested",
+      "reviewed": "Reviewed",
+      "rejected": "Rejected"
+    },
+    "reconciliationState": {
+      "matched": "Matched",
+      "mismatch": "Mismatch",
+      "ignored": "Ignored",
+      "unreviewed": "Unreviewed"
+    },
+    "commercialKind": {
+      "income": "Income",
+      "expense": "Expense",
+      "refund": "Refund",
+      "transfer": "Transfer",
+      "none": "None"
+    },
     "originLabel": {
       "unknown": "Unknown",
       "pos": "BTCPay POS",
