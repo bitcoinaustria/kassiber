@@ -107,14 +107,6 @@
     "refreshingStats": "Übersichtsstatistiken werden aktualisiert…",
     "openStat": "{{title}} öffnen",
     "bitcoinBalance": "Bitcoin-Guthaben",
-    "taxFreeBalance": "Steuerfreies Guthaben",
-    "taxFreeBreakdown": "{{taxFreeBucket}} {{taxFree}} · {{taxableBucket}} {{taxable}}",
-    "taxFreeBlockedJournals": "Verarbeite Journale, bevor du dich auf dieses Guthaben verlässt",
-    "taxFreeBlockedQuarantines": "Prüfe Quarantänen, bevor du dich auf dieses Guthaben verlässt",
-    "bucket": {
-      "taxFree": "Steuerfrei",
-      "taxable": "Steuerpflichtig"
-    },
     "title": {
       "portfolioValue": "Portfoliowert",
       "transactions": "Transaktionen",
@@ -250,8 +242,6 @@
     "moreOptions": "Weitere Optionen",
     "onlyActiveSource": "Einzige aktive Quelle",
     "total": "Gesamt",
-    "taxFree": "Steuerfrei",
-    "taxFreeTaxable": "Steuerpflichtig {{taxable}}",
     "rail": {
       "onchain": "On-chain",
       "lightning": "Lightning",

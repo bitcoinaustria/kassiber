@@ -98,6 +98,7 @@ export function Connections() {
         hideSensitive={hideSensitive}
         isSyncing={isSyncing}
         priceEur={snapshot.priceEur}
+        taxFreeBalance={snapshot.taxFreeBalance}
         totalBtc={totalBtc}
       />
 

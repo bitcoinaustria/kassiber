@@ -107,14 +107,6 @@
     "refreshingStats": "Refreshing overview statistics",
     "openStat": "Open {{title}}",
     "bitcoinBalance": "Bitcoin balance",
-    "taxFreeBalance": "Tax-free balance",
-    "taxFreeBreakdown": "{{taxFreeBucket}} {{taxFree}} · {{taxableBucket}} {{taxable}}",
-    "taxFreeBlockedJournals": "Run journals before relying on this balance",
-    "taxFreeBlockedQuarantines": "Review quarantines before relying on this balance",
-    "bucket": {
-      "taxFree": "Tax-free",
-      "taxable": "Taxable"
-    },
     "title": {
       "portfolioValue": "Portfolio value",
       "transactions": "Transactions",
@@ -250,8 +242,6 @@
     "moreOptions": "More options",
     "onlyActiveSource": "Only active source",
     "total": "Total",
-    "taxFree": "Tax-free",
-    "taxFreeTaxable": "Taxable {{taxable}}",
     "rail": {
       "onchain": "On-chain",
       "lightning": "Lightning",
