@@ -1,13 +1,46 @@
 import io
+import json
+import traceback
 import unittest
 from email.message import Message
 from urllib import error as urlerror
 
 from kassiber import http_client
+from kassiber.envelope import build_error_envelope
 from kassiber.errors import AppError
+from kassiber.log_ring import sanitize_traceback_text
 
 
 class HttpClientTest(unittest.TestCase):
+    def _assert_secret_url_absent_from_error_boundary(
+        self, exc: AppError, secret_url: str
+    ) -> None:
+        self.assertEqual(exc.code, "app_error")
+        self.assertIsNone(exc.details)
+        self.assertIsNone(exc.hint)
+        self.assertFalse(exc.retryable)
+        debug = sanitize_traceback_text(
+            "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
+        )
+        envelope = build_error_envelope(
+            exc.code,
+            str(exc),
+            details=exc.details,
+            hint=exc.hint,
+            retryable=exc.retryable,
+            debug=debug,
+        )
+        serialized = json.dumps(envelope, sort_keys=True)
+        self.assertIn("<redacted-host>", serialized)
+        for secret in (
+            secret_url,
+            "node.example",
+            "/api/address",
+            "bc1qsecret",
+            "token=abc",
+        ):
+            self.assertNotIn(secret, serialized)
+
     def test_error_messages_do_not_expose_url_path_or_query(self):
         secret_url = "https://node.example/api/address/bc1qsecret?token=abc"
 
@@ -24,6 +57,7 @@ class HttpClientTest(unittest.TestCase):
         self.assertNotIn("/api/address", message)
         self.assertNotIn("bc1qsecret", message)
         self.assertNotIn("token=abc", message)
+        self._assert_secret_url_absent_from_error_boundary(ctx.exception, secret_url)
 
         def url_error():
             raise urlerror.URLError("connection refused")
@@ -32,6 +66,7 @@ class HttpClientTest(unittest.TestCase):
             http_client.request_with_retry(secret_url, url_error, max_attempts=1)
         self.assertNotIn("node.example", str(ctx.exception))
         self.assertNotIn("bc1qsecret", str(ctx.exception))
+        self._assert_secret_url_absent_from_error_boundary(ctx.exception, secret_url)
 
     def test_host_limiter_is_keyed_by_normalized_hostname(self):
         first = http_client.host_limiter("https://shared.example/a")
