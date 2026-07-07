@@ -2,6 +2,7 @@ import json
 import unittest
 
 from kassiber.msat import msat_to_btc
+from kassiber.core.engines import TaxEngineLedgerInputs, build_tax_engine
 from kassiber.core.engines.rp2 import _apply_cross_asset_splits
 from kassiber.core.tax_events import (
     build_tax_quarantine,
@@ -550,14 +551,16 @@ class NormalizeTaxAssetInputsTest(unittest.TestCase):
         self.assertEqual(pairs, [])
         self.assertEqual(matched, set())
 
-    def test_lightning_same_wallet_payment_hash_not_paired(self):
-        # Defensive: an out and in on the SAME wallet sharing a hash (e.g. a
-        # self-circular route) must not be treated as a cross-wallet transfer.
+    def test_lightning_same_wallet_payment_hash_pairs_as_internal_move(self):
+        # A circular self-payment through the same owned node has distinct
+        # external ids but the same payment hash. Pair it as an internal move so
+        # the legs do not become a taxable disposal plus a fresh acquisition.
         from kassiber.transfers import detect_intra_transfers
 
         payment_hash = "ef" * 32
         out_row = _row(
             "p:out", "wallet-x", "outbound", 100_000_000,
+            fee=1_000_000, fiat_rate=60_000,
             external_id="p:out", payment_hash=payment_hash, kind="cln_pay",
         )
         in_row = _row(
@@ -565,8 +568,22 @@ class NormalizeTaxAssetInputsTest(unittest.TestCase):
             external_id="p:in", payment_hash=payment_hash, kind="cln_invoice",
         )
         pairs, matched = detect_intra_transfers([out_row, in_row])
-        self.assertEqual(pairs, [])
-        self.assertEqual(matched, set())
+        self.assertEqual(len(pairs), 1)
+        self.assertEqual(pairs[0]["out"]["id"], "p:out")
+        self.assertEqual(pairs[0]["in"]["id"], "p:in")
+        self.assertEqual(matched, {"p:out", "p:in"})
+
+        inputs = normalize_tax_asset_inputs(
+            self.profile,
+            "BTC",
+            [out_row, in_row],
+            {"wallet-x": {"id": "wallet-x", "label": "Node"}},
+            pairs,
+        )
+        self.assertEqual(inputs.events, [])
+        self.assertEqual(len(inputs.transfers), 1)
+        self.assertEqual(float(inputs.transfers[0].fee), 0.00001)
+        self.assertEqual(inputs.quarantines, [])
 
     def test_detect_intra_transfers_folds_mixed_case_txid(self):
         # A txid recorded uppercase in one wallet and lowercase in another is the
@@ -899,6 +916,100 @@ class NormalizeTaxAssetInputsTest(unittest.TestCase):
         self.assertEqual(len(inputs.transfers), 1)
         self.assertEqual(inputs.transfers[0].out_transaction_id, "tx-out")
         self.assertEqual(inputs.transfers[0].in_transaction_id, "tx-in")
+
+
+class LightningPaymentHashEngineTest(unittest.TestCase):
+    def test_same_wallet_payment_hash_books_fee_not_sell_buy(self):
+        profile = {
+            "id": "profile-1",
+            "workspace_id": "workspace-1",
+            "label": "Default",
+            "fiat_currency": "USD",
+            "tax_country": "generic",
+            "tax_long_term_days": 365,
+            "gains_algorithm": "FIFO",
+        }
+        wallet_refs = {
+            "wallet-x": {
+                "id": "wallet-x",
+                "label": "Node",
+                "wallet_account_id": "acct-1",
+                "account_code": "treasury",
+                "account_label": "Treasury",
+            }
+        }
+        payment_hash = "ef" * 32
+
+        def engine_row(tx_id, direction, amount, external_id, *, fee=0, payment_hash=None):
+            return {
+                "id": tx_id,
+                "workspace_id": "workspace-1",
+                "profile_id": "profile-1",
+                "wallet_id": "wallet-x",
+                "wallet_label": "Node",
+                "wallet_account_id": "acct-1",
+                "account_code": "treasury",
+                "account_label": "Treasury",
+                "external_id": external_id,
+                "occurred_at": "2026-01-01T00:00:00Z",
+                "created_at": "2026-01-01T00:00:00Z",
+                "direction": direction,
+                "asset": "BTC",
+                "amount": amount,
+                "fee": fee,
+                "fiat_currency": "USD",
+                "fiat_rate": 40_000.0,
+                "fiat_rate_exact": "40000",
+                "fiat_value": None,
+                "kind": "ln_pay" if direction == "outbound" else "ln_invoice",
+                "description": tx_id,
+                "note": None,
+                "raw_json": "{}",
+                "excluded": 0,
+                "payment_hash": payment_hash,
+            }
+
+        state = build_tax_engine(profile).build_ledger_state(
+            TaxEngineLedgerInputs(
+                rows=[
+                    engine_row("acq", "inbound", 100_000_000_000, "acq"),
+                    engine_row(
+                        "ln-pay",
+                        "outbound",
+                        5_000_000_000,
+                        "ln-pay-external",
+                        fee=1_000_000,
+                        payment_hash=payment_hash,
+                    ),
+                    engine_row(
+                        "ln-invoice",
+                        "inbound",
+                        5_000_000_000,
+                        "ln-invoice-external",
+                        payment_hash=payment_hash,
+                    ),
+                ],
+                wallet_refs_by_id=wallet_refs,
+                manual_pair_records=[],
+            )
+        )
+
+        self.assertEqual(state.quarantines, [])
+        entry_types = [entry["entry_type"] for entry in state.entries]
+        self.assertEqual(entry_types.count("acquisition"), 1)
+        self.assertIn("transfer_fee", entry_types)
+        self.assertIn("transfer_out", entry_types)
+        self.assertIn("transfer_in", entry_types)
+        self.assertNotIn("disposal", entry_types)
+        self.assertEqual(len(state.intra_audit), 1)
+        self.assertEqual(state.intra_audit[0]["from_wallet_label"], "Node")
+        self.assertEqual(state.intra_audit[0]["to_wallet_label"], "Node")
+        self.assertAlmostEqual(state.intra_audit[0]["crypto_fee"], 0.00001)
+        holdings = {
+            label: float(totals["quantity"])
+            for (_, label, _, _), totals in state.wallet_holdings.items()
+        }
+        self.assertAlmostEqual(holdings["Node"], 0.99999)
 
 
 class BuildTaxQuarantineTest(unittest.TestCase):

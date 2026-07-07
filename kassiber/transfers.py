@@ -224,8 +224,11 @@ def detect_intra_transfers(rows):
         if len(outs) != 1 or len(ins) != 1:
             continue
         out_row, in_row = outs[0], ins[0]
-        if out_row["wallet_id"] == in_row["wallet_id"]:
-            continue
+        # Same-wallet Lightning circular payments are still internal movements:
+        # pairing by payment_hash prevents the outbound/inbound legs from becoming
+        # a taxable disposal plus fresh acquisition. The txid path above stays
+        # cross-wallet-only because same-wallet on-chain txid rows are less
+        # semantically precise (change, provider artifacts, or manual repair rows).
         if out_row["id"] in matched_ids or in_row["id"] in matched_ids:
             continue
         pairs.append({"out": out_row, "in": in_row})
