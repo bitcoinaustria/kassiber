@@ -487,6 +487,28 @@ def _samourai_internal_privacy_row_ids(
     return {str(row["id"]) for group in groups for row, _ in group}
 
 
+def _samourai_internal_regime_pairs(
+    groups: Sequence[Sequence[SamouraiGroupEntry]],
+) -> list[dict[str, Mapping[str, Any]]]:
+    pairs: list[dict[str, Mapping[str, Any]]] = []
+    for entries in groups:
+        out_rows = [
+            row
+            for row, _ in entries
+            if _row_get(row, "direction") == "outbound"
+        ]
+        in_rows = [
+            row
+            for row, _ in entries
+            if _row_get(row, "direction") == "inbound"
+        ]
+        if len(out_rows) == 1:
+            pairs.extend({"out": out_rows[0], "in": in_row} for in_row in in_rows)
+        elif len(in_rows) == 1:
+            pairs.extend({"out": out_row, "in": in_rows[0]} for out_row in out_rows)
+    return pairs
+
+
 def _collect_samourai_internal_transfers(
     profile: Mapping[str, Any],
     asset: str,
@@ -1174,6 +1196,10 @@ def normalize_tax_asset_inputs(
     regime_map = at_regime_by_row_id or {}
     swap_link_map = at_swap_link_by_row_id or {}
     loan_leg_map = loan_leg_by_transaction_id or {}
+    samourai_internal_groups = _samourai_internal_privacy_groups(rows)
+    samourai_internal_row_ids = _samourai_internal_privacy_row_ids(
+        samourai_internal_groups
+    )
     # Suppressed loan legs (collateral lock/release and friends) are non-events:
     # the coins never leave the owned pool. Exclude them from regime/inventory
     # inference so a lock does not "consume" Alt inventory and a release does not
@@ -1199,6 +1225,19 @@ def normalize_tax_asset_inputs(
         for pair in intra_pairs
         if str(pair["out"]["id"]) not in conflict_row_ids
         and str(pair["in"]["id"]) not in conflict_row_ids
+    ]
+    paired_regime_row_ids = {
+        str(row["id"])
+        for pair in non_conflict_pairs
+        for row in (pair["out"], pair["in"])
+    }
+    samourai_regime_pairs = [
+        pair
+        for pair in _samourai_internal_regime_pairs(samourai_internal_groups)
+        if str(pair["out"]["id"]) not in conflict_row_ids
+        and str(pair["in"]["id"]) not in conflict_row_ids
+        and str(pair["out"]["id"]) not in paired_regime_row_ids
+        and str(pair["in"]["id"]) not in paired_regime_row_ids
     ]
     regime_rows: list[Mapping[str, Any]] = []
     for row in rows:
@@ -1237,15 +1276,12 @@ def normalize_tax_asset_inputs(
                 str(_row_get(r, "id")),
             ),
         )
-    outbound_regimes = infer_outbound_regimes(regime_rows, non_conflict_pairs) if is_at else {}
+    regime_pairs = [*non_conflict_pairs, *samourai_regime_pairs]
+    outbound_regimes = infer_outbound_regimes(regime_rows, regime_pairs) if is_at else {}
     events: list[NormalizedTaxEvent] = []
     transfers: list[NormalizedTaxTransfer] = []
     ordered_items: list[tuple[str, str]] = []
     quarantines: list[dict[str, Any]] = []
-    samourai_internal_groups = _samourai_internal_privacy_groups(rows)
-    samourai_internal_row_ids = _samourai_internal_privacy_row_ids(
-        samourai_internal_groups
-    )
     samourai_transfer_by_out_id, samourai_fee_event_by_out_id = (
         _collect_samourai_internal_transfers(
             profile,

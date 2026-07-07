@@ -1309,6 +1309,30 @@ class AustrianSelfTransferRegimeTest(unittest.TestCase):
         self.assertEqual(len(inputs.transfers), 1)
         self.assertIn(inputs.transfers[0].at_regime, ("alt", "neu"))
 
+    def test_samourai_internal_transfer_carries_alt_availability_to_destination(self):
+        def _cfg(section):
+            return json.dumps({"samourai": {"role": "child", "group_id": "wp", "section": section}})
+
+        alt = _row("alt", "wallet-a", "inbound", 60_000_000_000,
+                   occurred_at="2020-06-01T00:00:00Z", fiat_rate=10_000)
+        out_row = _row("wp-out", "wallet-a", "outbound", 50_000_000_000,
+                       occurred_at="2025-02-01T00:00:00Z", fee=100_000_000,
+                       fiat_rate=60_000, external_id="wptx")
+        out_row["config_json"] = _cfg("deposit")
+        in_row = _row("wp-in", "wallet-b", "inbound", 49_900_000_000,
+                      occurred_at="2025-02-01T00:00:00Z", external_id="wptx")
+        in_row["config_json"] = _cfg("premix")
+        sell = _row("sell", "wallet-b", "outbound", 10_000_000_000,
+                    occurred_at="2025-03-01T00:00:00Z", fiat_rate=60_000,
+                    fiat_value=6_000)
+
+        inputs = normalize_tax_asset_inputs(
+            self.AT_PROFILE, "BTC", [alt, out_row, in_row, sell], self.REFS, [],
+        )
+
+        by_id = {event.transaction_id: event for event in inputs.events}
+        self.assertEqual(by_id["sell"].at_regime, "alt")
+
 
 if __name__ == "__main__":
     unittest.main()
