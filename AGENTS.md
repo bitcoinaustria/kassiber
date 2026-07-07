@@ -360,8 +360,8 @@ List endpoints with `--limit` also accept `--cursor`. The cursor is an opaque ba
 - For non-trivial changes touching CLI behavior, tax logic, schema,
   reports, or multiple docs, gather repo evidence first, then restate the
   requirement, risks, and step plan before editing.
-- Prefer the external Kassiber Agent Skill from `bitcoinaustria/skills` when it
-  is installed; this repository no longer carries the general-purpose skill
+- Prefer the external Kassiber CLI Agent Skill from `bitcoinaustria/kassiber-skill`
+  when it is installed; this repository no longer carries the general-purpose skill
   bundle.
 - Before calling work push-ready, run `./scripts/quality-gate.sh`. That gate is
   Python-only; for `ui-tauri/` changes also run `pnpm typecheck && pnpm test --run && pnpm lint`

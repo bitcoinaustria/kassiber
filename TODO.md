@@ -878,7 +878,7 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
   policy can support them. These remain convenience over the SQLCipher
   passphrase, never a cryptographic substitute.
 - [x] Kassiber skill bundle for agents (moved to
-  https://github.com/bitcoinaustria/skills)
+  https://github.com/bitcoinaustria/kassiber-skill)
 - [ ] Optional server/REST mode, still local-first and opt-in
 
 ## Open bugs and debt

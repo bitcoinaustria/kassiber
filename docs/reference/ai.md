@@ -13,8 +13,8 @@ These are related, but they are not the same thing.
 
 Two surfaces ship today:
 
-- The Kassiber Agent Skill at
-  [bitcoinaustria/skills](https://github.com/bitcoinaustria/skills) for AI
+- The Kassiber CLI Agent Skill at
+  [bitcoinaustria/kassiber-skill](https://github.com/bitcoinaustria/kassiber-skill) for AI
   coding and terminal assistants.
 - An **in-app assistant** in the desktop UI that streams chat from an
   OpenAI-compatible endpoint or fixed Claude/Codex CLI adapter, plus a
@@ -655,6 +655,6 @@ These are directionally in scope, but should remain optional and review-gated:
 
 ## Related files
 
-- [Kassiber Agent Skill](https://github.com/bitcoinaustria/skills)
+- [Kassiber CLI Agent Skill](https://github.com/bitcoinaustria/kassiber-skill)
 - [`../plan/08-external-document-reconciliation.md`](../plan/08-external-document-reconciliation.md)
 - [`../../SECURITY.md`](../../SECURITY.md)

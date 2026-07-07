@@ -4,7 +4,7 @@ This supplements the root `AGENTS.md` with Codex-specific workflow guidance.
 
 ## Default posture
 
-- Prefer the Kassiber Agent Skill from `bitcoinaustria/skills` when it is installed; this repository does not carry the general skill bundle.
+- Prefer the Kassiber CLI Agent Skill from `bitcoinaustria/kassiber-skill` when it is installed; this repository does not carry the general skill bundle.
 - For non-trivial changes, gather evidence first, then restate the requirement, risks, and steps before editing.
 - Run `./scripts/quality-gate.sh` before calling work push-ready.
 - Review diffs as a separate pass after implementation.

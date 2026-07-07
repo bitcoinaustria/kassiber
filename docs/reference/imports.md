@@ -2,12 +2,10 @@
 
 Kassiber can ingest transactions and metadata from several sources. Imported data lands in the local SQLite store and then participates in the normal journal and report workflow.
 
-To add a provider that is **not** in this list, run the intake interview and
-implementation playbook in the
-[Kassiber Agent Skill](https://github.com/bitcoinaustria/skills/blob/main/references/add-exchange.md)
-(user entry point: the `/add-exchange` command when installed). It captures the provider's
-custodial model, Austrian tax treatment, row types, and export format into a
-spec under [docs/exchanges/](../exchanges/README.md) before any importer is
+To add a provider that is **not** in this list, start from
+[docs/exchanges/TEMPLATE.md](../exchanges/TEMPLATE.md) and the worked examples
+under [docs/exchanges/](../exchanges/README.md). Capture the provider's
+custodial model, row types, and export format in a spec before any importer is
 written.
 
 ## Supported import paths
