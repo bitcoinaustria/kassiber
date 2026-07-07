@@ -685,7 +685,7 @@
   "commercial": {
     "title": "Commercial provenance",
     "loading": "Loading…",
-    "empty": "No linked BTCPay or document context.",
+    "empty": "No linked BTCPay context.",
     "btcpayPayment": "BTCPay payment",
     "linked": "Linked",
     "invoice": "Invoice",
@@ -696,7 +696,6 @@
     "reconciliation": "Reconciliation",
     "openPaymentRequest": "Open BTCPay payment request",
     "openOrigin": "Open BTCPay source",
-    "documents": "Documents",
     "linkState": {
       "suggested": "Suggested",
       "reviewed": "Reviewed",

@@ -81,7 +81,6 @@ export function CommercialProvenancePanel({
 }) {
   const { t } = useTranslation("transactions");
   const btcpay = context?.btcpay ?? [];
-  const documents = context?.documents ?? [];
   if (loading) {
     return (
       <div className="overflow-hidden rounded-md border">
@@ -92,7 +91,7 @@ export function CommercialProvenancePanel({
       </div>
     );
   }
-  if (!btcpay.length && !documents.length) {
+  if (!btcpay.length) {
     return (
       <div className="overflow-hidden rounded-md border">
         <div className="border-b bg-muted px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
@@ -218,22 +217,6 @@ export function CommercialProvenancePanel({
           </div>
         );
       })}
-      {documents.length ? (
-        <div className="border-t bg-muted/20 px-3 py-2">
-          <div className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-            {t("commercial.documents")}
-          </div>
-          <div className="flex flex-wrap gap-1.5">
-            {documents.map((document) => (
-              <Badge key={document.id} variant="outline" className="rounded-md">
-                <span className={cn("max-w-48 truncate", hidden && "sensitive")}>
-                  {document.label}
-                </span>
-              </Badge>
-            ))}
-          </div>
-        </div>
-      ) : null}
     </div>
   );
 }
