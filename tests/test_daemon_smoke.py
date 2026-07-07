@@ -3922,6 +3922,74 @@ class DaemonSmokeTest(unittest.TestCase):
                     account_mapped_config["btcpay_provenance"],
                 )
 
+                account_setup_skip_args = {
+                    **account_setup_args,
+                    "routes": [
+                        {
+                            "store_id": "store-account-b",
+                            "store_name": "Merch",
+                            "payment_method_id": "BTC-LN",
+                            "action": "skip",
+                        },
+                    ],
+                }
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "btcpay-account-setup-remove-skip",
+                        "kind": "ui.connections.btcpay.create",
+                        "args": account_setup_skip_args,
+                    },
+                )
+                account_setup_skip = _read_payload_timeout(proc)
+                self.assertEqual(
+                    account_setup_skip["kind"],
+                    "ui.connections.btcpay.create",
+                )
+                self.assertEqual(account_setup_skip["data"]["account_routes"], [])
+                self.assertEqual(
+                    account_setup_skip["data"]["skipped"][0]["payment_method_id"],
+                    "BTC-LN",
+                )
+
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "update-btcpay-provenance-routes",
+                        "kind": "ui.wallets.update",
+                        "args": {
+                            "wallet": "River UI",
+                            "btcpay_provenance": [
+                                {
+                                    "backend": "btcpay-ui",
+                                    "store_id": "store-account-b",
+                                    "payment_method_id": "LBTC-CHAIN",
+                                }
+                            ],
+                            "auth_response": {
+                                "plaintext_change_ack": "CHANGE LOCAL DATA",
+                            },
+                        },
+                    },
+                )
+                updated_provenance_routes = _read_payload_timeout(proc)
+                self.assertEqual(
+                    updated_provenance_routes["kind"],
+                    "ui.wallets.update",
+                )
+                self.assertEqual(
+                    updated_provenance_routes["data"]["wallet"]["config"][
+                        "btcpay_provenance"
+                    ],
+                    [
+                        {
+                            "backend": "btcpay-ui",
+                            "store_id": "store-account-b",
+                            "payment_method_id": "LBTC-CHAIN",
+                        }
+                    ],
+                )
+
                 _write_payload(
                     proc,
                     {
@@ -3947,6 +4015,24 @@ class DaemonSmokeTest(unittest.TestCase):
                 code, stderr = _close_daemon(proc)
                 self.assertEqual(code, 0, stderr)
                 self.assertEqual(stderr, "")
+                verify_conn = open_db(data_root)
+                try:
+                    saved_account_route = verify_conn.execute(
+                        """
+                        SELECT * FROM btcpay_account_routes
+                        WHERE backend_name = ? AND store_id = ?
+                          AND payment_method_id = ? AND action = ?
+                        """,
+                        (
+                            "btcpay-ui",
+                            "store-account-b",
+                            "BTC-LN",
+                            "provenance_only",
+                        ),
+                    ).fetchone()
+                finally:
+                    verify_conn.close()
+                self.assertIsNone(saved_account_route)
             finally:
                 if proc.poll() is None:
                     proc.kill()

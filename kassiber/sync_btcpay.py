@@ -1022,6 +1022,8 @@ def _invoice_origin(invoice, metadata, order_id):
             "url": order_url,
         }
     if app_id or app_name:
+        # Unknown BTCPay apps/plugins are provenance, not matching semantics.
+        # Exact provider matching belongs in the dedicated provider evidence path.
         return {
             "kind": "app",
             "app_id": app_id,

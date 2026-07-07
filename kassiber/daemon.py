@@ -7471,7 +7471,7 @@ def _btcpay_account_routes(args: dict[str, Any]) -> list[dict[str, Any]]:
         )
         seen.add(key)
     active_routes = [route for route in routes if route["action"] != "skip"]
-    if not active_routes:
+    if not active_routes and not _optional_str_arg(args, "backend"):
         raise AppError(
             "BTCPay account setup has no selected routes",
             code="validation",
@@ -7664,6 +7664,57 @@ def _create_btcpay_account_setup_payload(
         action = route["action"]
         if action == "skip":
             skipped_routes.append(route)
+            core_commercial.delete_btcpay_account_route(
+                conn,
+                profile["id"],
+                backend_name=safe_backend["name"],
+                store_id=route["store_id"],
+                payment_method_id=route["payment_method_id"],
+            )
+            if route.get("wallet"):
+                wallet = core_wallets.get_wallet_details(
+                    conn,
+                    None,
+                    None,
+                    route["wallet"],
+                )
+                existing_routes = list(
+                    wallet.get("config", {}).get(
+                        core_wallets.BTCPAY_PROVENANCE_CONFIG_KEY,
+                    )
+                    or []
+                )
+                next_routes = [
+                    existing_route
+                    for existing_route in existing_routes
+                    if not (
+                        str(existing_route.get("backend") or "").strip().lower()
+                        == safe_backend["name"].strip().lower()
+                        and existing_route.get("store_id") == route["store_id"]
+                        and core_wallets.normalize_btcpay_payment_method_id(
+                            existing_route.get("payment_method_id")
+                            or core_wallets.BTCPAY_DEFAULT_PAYMENT_METHOD_ID
+                        )
+                        == route["payment_method_id"]
+                    )
+                ]
+                if len(next_routes) != len(existing_routes):
+                    core_wallets.update_wallet(
+                        conn,
+                        None,
+                        None,
+                        wallet["id"],
+                        (
+                            {"clear": [core_wallets.BTCPAY_PROVENANCE_CONFIG_KEY]}
+                            if not next_routes
+                            else {
+                                "config": {
+                                    core_wallets.BTCPAY_PROVENANCE_CONFIG_KEY: next_routes,
+                                }
+                            }
+                        ),
+                    )
+            conn.commit()
             continue
         if action == "wallet_source":
             label = _btcpay_account_route_wallet_label(
@@ -9741,6 +9792,13 @@ def _update_wallet_payload(
     source_file = _source_file_arg(args)
     if source_file is not None:
         config_updates["source_file"] = source_file
+    raw_btcpay_provenance = args.get(core_wallets.BTCPAY_PROVENANCE_CONFIG_KEY)
+    if raw_btcpay_provenance is not None:
+        config_updates[core_wallets.BTCPAY_PROVENANCE_CONFIG_KEY] = (
+            core_wallets.wallet_btcpay_provenance_config(
+                {core_wallets.BTCPAY_PROVENANCE_CONFIG_KEY: raw_btcpay_provenance}
+            )
+        )
     wallet_material = _optional_str_arg(args, "wallet_material")
     script_types = _script_types_arg(args)
     if wallet_material is not None:

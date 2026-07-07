@@ -116,7 +116,7 @@
       "instance": "Instance",
       "store": "Store",
       "paymentMethod": "Payment method",
-      "footer": "Add more routes from <strong>Add wallet</strong> → <em>BTCPay Server</em> → <em>Map existing wallets</em>, or via <code>kassiber wallets attach-btcpay</code>. Use Edit to clear all routes from this wallet."
+      "footer": "Add more routes from <strong>Add wallet</strong> → <em>BTCPay Server</em> → <em>Map existing wallets</em>, or via <code>kassiber wallets attach-btcpay</code>. Use Edit to remove individual routes from this wallet."
     },
     "recentTransactions": {
       "title": "Recent transactions",
@@ -222,6 +222,9 @@
       "sourceFilePlaceholder": "Leave empty to keep the current file",
       "browse": "Browse…",
       "selectExportFileTitle": "Select {{label}} export file",
+      "provenanceRoutes": "BTCPay provenance routes",
+      "provenanceRoutesHelper": "Uncheck only the store/payment method links this wallet should no longer enrich.",
+      "keepProvenanceRoute": "Keep route",
       "clearProvenance": "Clear BTCPay provenance routes",
       "clearProvenanceHelper": "Removes all {{count}} stored route(s). Descriptor/file sync remains the balance source. Re-add routes from Add wallet.",
       "deprecated": "Deprecated wallet",

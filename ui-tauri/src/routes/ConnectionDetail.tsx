@@ -278,6 +278,12 @@ type WalletListItem = {
   script_types?: string[];
 };
 
+function btcpayProvenanceRouteKey(
+  route: NonNullable<WalletListItem["btcpay_provenance"]>[number],
+) {
+  return `${route.backend}\u0000${route.store_id}\u0000${route.payment_method_id}`;
+}
+
 type BackendOption = {
   name: string;
   display_name?: string;
@@ -671,6 +677,10 @@ function ConnectionDetailView({
   const [editSourceFile, setEditSourceFile] = useState("");
   const [editDeprecated, setEditDeprecated] = useState(false);
   const [editClearProvenance, setEditClearProvenance] = useState(false);
+  const [
+    editRemovedProvenanceRouteKeys,
+    setEditRemovedProvenanceRouteKeys,
+  ] = useState<string[]>([]);
   const [editError, setEditError] = useState<string | null>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deletePassphrase, setDeletePassphrase] = useState("");
@@ -861,6 +871,7 @@ function ConnectionDetailView({
     setEditSourceFile("");
     setEditDeprecated(isDeprecatedWallet);
     setEditClearProvenance(false);
+    setEditRemovedProvenanceRouteKeys([]);
     setEditError(null);
     setEditOpen(true);
   };
@@ -1049,6 +1060,16 @@ function ConnectionDetailView({
     }
     if (editClearProvenance && walletProvenanceRoutes.length > 0) {
       clearFields.push("btcpay_provenance");
+    } else if (editRemovedProvenanceRouteKeys.length > 0) {
+      const removed = new Set(editRemovedProvenanceRouteKeys);
+      const nextRoutes = walletProvenanceRoutes.filter(
+        (route) => !removed.has(btcpayProvenanceRouteKey(route)),
+      );
+      if (nextRoutes.length === 0) {
+        clearFields.push("btcpay_provenance");
+      } else if (nextRoutes.length !== walletProvenanceRoutes.length) {
+        configChanges.btcpay_provenance = nextRoutes;
+      }
     }
     if (editDeprecated !== isDeprecatedWallet) {
       configChanges.deprecated = editDeprecated;
@@ -2207,15 +2228,67 @@ function ConnectionDetailView({
               </div>
             ) : null}
             {walletProvenanceRoutes.length > 0 ? (
-              <div className="space-y-2 rounded-md border border-border/70 p-3">
+              <div className="space-y-3 rounded-md border border-border/70 p-3">
+                <div className="space-y-1">
+                  <div className="text-sm font-medium">
+                    {t("detail.edit.provenanceRoutes")}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {t("detail.edit.provenanceRoutesHelper")}
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  {walletProvenanceRoutes.map((route, index) => {
+                    const key = btcpayProvenanceRouteKey(route);
+                    const removed =
+                      editClearProvenance ||
+                      editRemovedProvenanceRouteKeys.includes(key);
+                    return (
+                      <label
+                        key={`${key}-${index}`}
+                        className="flex items-start gap-3 rounded-md border border-border/60 px-3 py-2 text-sm"
+                      >
+                        <Checkbox
+                          className="mt-0.5"
+                          checked={!removed}
+                          disabled={editClearProvenance}
+                          onCheckedChange={(checked) => {
+                            setEditRemovedProvenanceRouteKeys((current) => {
+                              const keep = checked === true;
+                              const currentSet = new Set(current);
+                              if (keep) {
+                                currentSet.delete(key);
+                              } else {
+                                currentSet.add(key);
+                              }
+                              return Array.from(currentSet);
+                            });
+                          }}
+                        />
+                        <span className="min-w-0 flex-1">
+                          <span className="block font-medium">
+                            {t("detail.edit.keepProvenanceRoute")}
+                          </span>
+                          <span className="block truncate text-xs text-muted-foreground">
+                            {route.backend} · {route.store_id} ·{" "}
+                            {route.payment_method_id}
+                          </span>
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
                 <label className="flex items-start gap-3 text-sm">
                   <input
                     type="checkbox"
                     className="mt-0.5"
                     checked={editClearProvenance}
-                    onChange={(event) =>
-                      setEditClearProvenance(event.target.checked)
-                    }
+                    onChange={(event) => {
+                      setEditClearProvenance(event.target.checked);
+                      if (event.target.checked) {
+                        setEditRemovedProvenanceRouteKeys([]);
+                      }
+                    }}
                   />
                   <span className="grid gap-0.5">
                     <span>{t("detail.edit.clearProvenance")}</span>

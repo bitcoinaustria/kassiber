@@ -116,7 +116,7 @@
       "instance": "Instanz",
       "store": "Store",
       "paymentMethod": "Zahlungsmethode",
-      "footer": "Füge weitere Routen über <strong>Wallet hinzufügen</strong> → <em>BTCPay Server</em> → <em>Vorhandene Wallets zuordnen</em> hinzu oder via <code>kassiber wallets attach-btcpay</code>. Verwende Bearbeiten, um alle Routen aus dieser Wallet zu leeren."
+      "footer": "Füge weitere Routen über <strong>Wallet hinzufügen</strong> → <em>BTCPay Server</em> → <em>Vorhandene Wallets zuordnen</em> hinzu oder via <code>kassiber wallets attach-btcpay</code>. Verwende Bearbeiten, um einzelne Routen aus dieser Wallet zu entfernen."
     },
     "recentTransactions": {
       "title": "Letzte Transaktionen",
@@ -222,6 +222,9 @@
       "sourceFilePlaceholder": "Leer lassen, um die aktuelle Datei zu behalten",
       "browse": "Durchsuchen…",
       "selectExportFileTitle": "Exportdatei von {{label}} auswählen",
+      "provenanceRoutes": "BTCPay-Herkunftsrouten",
+      "provenanceRoutesHelper": "Entferne nur bei den Store-/Zahlungsmethode-Verknüpfungen das Häkchen, die diese Wallet nicht mehr anreichern soll.",
+      "keepProvenanceRoute": "Route behalten",
       "clearProvenance": "BTCPay-Herkunftsrouten leeren",
       "clearProvenanceHelper": "Entfernt alle {{count}} gespeicherten Route(n). Descriptor-/Datei-Sync bleibt die Guthaben-Quelle. Füge Routen über Wallet hinzufügen erneut hinzu.",
       "deprecated": "Veraltete Wallet",

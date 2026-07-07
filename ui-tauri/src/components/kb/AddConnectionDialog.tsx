@@ -1229,29 +1229,35 @@ export function AddConnectionDialog({
       form.btcpaySetupMode,
     ],
   );
-  const selectedBtcpayAccountRoutes = discoveredPaymentMethodOptions
-    .map((method) => {
-      const key = btcpayRouteKey(method.store_id, method.payment_method_id);
-      const action = btcpayRouteActionFor(method);
-      const existingRoute = discoveredExistingRouteByKey.get(key);
-      const wallet =
-        form.btcpayRouteChoices[key]?.wallet ||
-        form.btcpayRouteWallets[key] ||
-        form.btcpayRouteWallets[method.payment_method_id] ||
-        existingRoute?.wallet ||
-        walletForPaymentMethod(method.payment_method_id);
-      return {
-        key,
-        storeId: method.store_id,
-        storeName: discoveredStoreById.get(method.store_id) ?? method.store_id,
-        paymentMethodId: method.payment_method_id,
-        label: method.label,
-        syncSupported: method.sync_supported,
-        action,
-        wallet,
-      };
-    })
-    .filter((route) => route.action !== "skip");
+  const allBtcpayAccountRoutes = discoveredPaymentMethodOptions.map((method) => {
+    const key = btcpayRouteKey(method.store_id, method.payment_method_id);
+    const action = btcpayRouteActionFor(method);
+    const existingRoute = discoveredExistingRouteByKey.get(key);
+    const wallet =
+      form.btcpayRouteChoices[key]?.wallet ||
+      form.btcpayRouteWallets[key] ||
+      form.btcpayRouteWallets[method.payment_method_id] ||
+      existingRoute?.wallet ||
+      walletForPaymentMethod(method.payment_method_id);
+    return {
+      key,
+      storeId: method.store_id,
+      storeName: discoveredStoreById.get(method.store_id) ?? method.store_id,
+      paymentMethodId: method.payment_method_id,
+      label: method.label,
+      syncSupported: method.sync_supported,
+      action,
+      wallet,
+    };
+  });
+  const selectedBtcpayAccountRoutes = allBtcpayAccountRoutes.filter(
+    (route) => route.action !== "skip",
+  );
+  const canSubmitBtcpayRoutes =
+    selectedBtcpayAccountRoutes.length > 0 ||
+    (form.btcpayInstanceMode === "saved" &&
+      discoveredPaymentMethodOptions.length > 0 &&
+      allBtcpayAccountRoutes.some((route) => route.action === "skip"));
   const activeBtcpayRoutes =
     discoveredPaymentMethodOptions.length > 0
       ? selectedBtcpayAccountRoutes
@@ -1847,7 +1853,7 @@ export function AddConnectionDialog({
       if (!btcpayDiscovery && !form.btcpayStoreId.trim()) {
         errors.btcpayStoreId = t("add.btcpay.errorStoreId");
       }
-      if (activeBtcpayRoutes.length === 0) {
+      if (!canSubmitBtcpayRoutes) {
         errors.btcpayPaymentMethodId = t("add.btcpay.errorSelectMethod");
       }
       if (
@@ -2277,7 +2283,11 @@ export function AddConnectionDialog({
           ...btcpayInstanceArgs(),
           mode: "account",
           label,
-          routes: activeBtcpayRoutes.map((route) => ({
+          routes: (
+            discoveredPaymentMethodOptions.length > 0
+              ? allBtcpayAccountRoutes
+              : activeBtcpayRoutes
+          ).map((route) => ({
             store_id: route.storeId,
             store_name: route.storeName,
             payment_method_id: route.paymentMethodId,
@@ -2287,7 +2297,9 @@ export function AddConnectionDialog({
                 : undefined,
             action: route.action,
             wallet:
-              route.action === "existing_wallet" ? route.wallet : undefined,
+              route.action === "existing_wallet" || route.action === "skip"
+                ? route.wallet
+                : undefined,
           })),
           sync_provenance: true,
         };

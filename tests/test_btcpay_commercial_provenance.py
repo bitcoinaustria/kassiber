@@ -338,6 +338,46 @@ class BtcpayCommercialProvenanceTest(unittest.TestCase):
         self.assertEqual(invoices[0]["origin_app_id"], "kassiber-regtest-crowdfund")
         self.assertEqual(invoices[0]["origin_label"], "Kassiber Crowdfund")
 
+    def test_fetch_invoice_provenance_preserves_unknown_app_origin_generically(self):
+        opener = _Opener(
+            [
+                [
+                    {
+                        "id": "inv-plugin",
+                        "orderId": "plugin-order-1",
+                        "status": "Settled",
+                        "metadata": {
+                            "appId": "btcpay-boltz-plugin",
+                            "appName": "Boltz Plugin",
+                            "orderUrl": "https://btcpay.example/plugins/boltz/order-1",
+                            "itemDesc": "Swap settlement",
+                        },
+                        "payments": [{"id": "pay-plugin-1", "paymentMethod": "BTC-CHAIN"}],
+                    }
+                ]
+            ]
+        )
+        backend = {"url": "https://btcpay.example", "token": "secret", "timeout": 5}
+
+        invoices = fetch_btcpay_invoice_provenance(
+            backend,
+            "store-1",
+            page_size=100,
+            opener=opener,
+        )
+
+        self.assertEqual(invoices[0]["origin_kind"], "app")
+        self.assertEqual(invoices[0]["origin_app_id"], "btcpay-boltz-plugin")
+        self.assertEqual(invoices[0]["origin_label"], "Boltz Plugin")
+        self.assertEqual(
+            invoices[0]["origin_url"],
+            "https://btcpay.example/plugins/boltz/order-1",
+        )
+        self.assertEqual(
+            invoices[0]["invoice"]["metadata"]["itemDesc"],
+            "Swap settlement",
+        )
+
     def test_transaction_commercial_context_includes_btcpay_origin_chain(self):
         self._upsert_invoice_payment()
         document = self._create_matching_document()
