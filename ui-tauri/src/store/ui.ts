@@ -15,6 +15,17 @@ type Currency = "btc" | "eur";
 export type DataMode = "mock" | "real" | "regtest";
 export type ThemePreference = "system" | "light" | "dark";
 export type NotificationTone = "info" | "success" | "warning" | "error";
+export type BookChartPeriod =
+  | "auto"
+  | "30days"
+  | "3months"
+  | "6months"
+  | "ytd"
+  | "1year"
+  | "5years"
+  | "10years"
+  | "15years"
+  | "all";
 
 export const DEFAULT_APP_SCALE = 0.9;
 export const DEFAULT_THEME: ThemePreference = "dark";
@@ -197,6 +208,12 @@ export interface UiState {
    */
   firstSyncDone: Record<string, true>;
   /**
+   * Per-book chart/table period preference shared by Overview and Transactions.
+   * The URL `period` query param can still override this for shareable views;
+   * this map supplies the book-scoped default across navigation and app restarts.
+   */
+  bookChartPeriods: Record<string, BookChartPeriod>;
+  /**
    * Book keys whose in-progress first-sync card the user collapsed via
    * "Continue in background". Ephemeral (not persisted): re-opening from the
    * book-refresh notification clears it, and a completed sync makes it moot.
@@ -238,6 +255,10 @@ export interface UiState {
   reopenFirstSyncCard: (bookKey: string) => void;
   clearNotification: (id: string) => void;
   clearNotifications: () => void;
+  setBookChartPeriod: (
+    bookKey: string,
+    period: BookChartPeriod,
+  ) => void;
   setSourceFundsDraft: (profileKey: string, draft: SourceFundsDraft) => void;
   clearSourceFundsDraft: (profileKey: string) => void;
   setDeferredConnectionSetup: (intent: DeferredConnectionSetup | null) => void;
@@ -315,6 +336,32 @@ function stripNotificationProgress(
   });
 }
 
+const BOOK_CHART_PERIODS = new Set<BookChartPeriod>([
+  "auto",
+  "30days",
+  "3months",
+  "6months",
+  "ytd",
+  "1year",
+  "5years",
+  "10years",
+  "15years",
+  "all",
+]);
+
+function normalizeBookChartPeriods(
+  periods: unknown,
+): Record<string, BookChartPeriod> {
+  if (!periods || typeof periods !== "object") return {};
+  return Object.fromEntries(
+    Object.entries(periods as Record<string, unknown>).filter(
+      (entry): entry is [string, BookChartPeriod] =>
+        typeof entry[1] === "string" &&
+        BOOK_CHART_PERIODS.has(entry[1] as BookChartPeriod),
+    ),
+  );
+}
+
 export function normalizeAppScale(value: unknown): number {
   if (typeof value !== "number" || !Number.isFinite(value)) {
     return DEFAULT_APP_SCALE;
@@ -342,6 +389,7 @@ export function uiStatePartialForStorage(state: UiState) {
     daemonSession: state.daemonSession,
     notifications: stripNotificationProgress(state.notifications),
     firstSyncDone: state.firstSyncDone,
+    bookChartPeriods: state.bookChartPeriods,
     sourceFundsDrafts: state.sourceFundsDrafts,
   };
 }
@@ -367,6 +415,7 @@ export const useUiStore = create<UiState>()(
       notifications: [],
       activeMaintenanceProgress: null,
       firstSyncDone: {},
+      bookChartPeriods: {},
       firstSyncCardDismissed: {},
       sourceFundsDrafts: {},
       setLang: (lang) => set({ lang }),
@@ -496,6 +545,17 @@ export const useUiStore = create<UiState>()(
           ),
         })),
       clearNotifications: () => set({ notifications: [] }),
+      setBookChartPeriod: (bookKey, period) =>
+        set((state) =>
+          state.bookChartPeriods[bookKey] === period
+            ? state
+            : {
+                bookChartPeriods: {
+                  ...state.bookChartPeriods,
+                  [bookKey]: period,
+                },
+              },
+        ),
       setSourceFundsDraft: (profileKey, draft) =>
         set((state) => {
           const existing = state.sourceFundsDrafts[profileKey] ?? {};
@@ -559,6 +619,12 @@ export const useUiStore = create<UiState>()(
             restored.notifications ?? current.notifications,
           ),
           firstSyncDone: restored.firstSyncDone ?? current.firstSyncDone,
+          bookChartPeriods: normalizeBookChartPeriods(
+            restored.bookChartPeriods ??
+              (restored as { overviewChartPeriods?: unknown })
+                .overviewChartPeriods ??
+              current.bookChartPeriods,
+          ),
           sourceFundsDrafts:
             restored.sourceFundsDrafts ?? current.sourceFundsDrafts,
         };

@@ -169,9 +169,12 @@
     "missingFile": "Datei fehlt"
   },
   "period": {
+    "auto": "Auto",
+    "autoResolved": "Auto: {{period}}",
     "ytd": "Lfd. Jahr",
     "1year": "1 Jahr",
     "3months": "3 Monate",
+    "6months": "6 Monate",
     "30days": "30 Tage",
     "5years": "5 Jahre",
     "10years": "10 Jahre",

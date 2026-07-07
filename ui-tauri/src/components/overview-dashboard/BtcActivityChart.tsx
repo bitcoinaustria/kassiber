@@ -33,6 +33,11 @@ import {
 import { formatBtc, type Currency } from "@/lib/currency";
 import { cn } from "@/lib/utils";
 import type { OverviewSnapshot } from "@/mocks/seed";
+import {
+  bookIdentityKey,
+  type BookChartPeriod,
+  useUiStore,
+} from "@/store/ui";
 
 import { ActivityScatterDot } from "./ActivityScatterDot";
 import { ChartControlsSheet } from "./ChartControlsSheet";
@@ -107,6 +112,28 @@ function shouldShowPortfolioValueByDefault(
   return fiatSeriesEnabled && currency !== "btc";
 }
 
+function overviewTimePeriodFromSharedPeriod(
+  period: BookChartPeriod | undefined,
+): TimePeriod {
+  if (period === "10years" || period === "15years") return "5years";
+  return period ?? "auto";
+}
+
+function hasTimePeriodUrlParam() {
+  if (typeof window === "undefined") return false;
+  return new URLSearchParams(window.location.search).has("period");
+}
+
+function isLossySharedPeriodFallback(
+  sharedPeriod: BookChartPeriod | undefined,
+  overviewPeriod: TimePeriod,
+) {
+  return (
+    (sharedPeriod === "10years" || sharedPeriod === "15years") &&
+    overviewPeriod === overviewTimePeriodFromSharedPeriod(sharedPeriod)
+  );
+}
+
 export const BtcActivityChart = ({
   snapshot,
   hideSensitive,
@@ -130,8 +157,18 @@ export const BtcActivityChart = ({
     [snapshot],
   );
   const to = t as OverviewTranslate;
-  const [period, setPeriod] =
-    React.useState<TimePeriod>(initialTimePeriodFromUrl);
+  const bookKey = useUiStore((state) => bookIdentityKey(state.identity));
+  const storedBookChartPeriod = useUiStore((state) =>
+    bookKey ? state.bookChartPeriods[bookKey] : undefined,
+  );
+  const setStoredBookChartPeriod = useUiStore(
+    (state) => state.setBookChartPeriod,
+  );
+  const [period, setPeriod] = React.useState<TimePeriod>(() =>
+    initialTimePeriodFromUrl(
+      overviewTimePeriodFromSharedPeriod(storedBookChartPeriod),
+    ),
+  );
   const [yScaleLog, setYScaleLog] = React.useState<boolean>(
     initialYScaleLogFromUrl,
   );
@@ -185,6 +222,15 @@ export const BtcActivityChart = ({
     React.useState<TreasuryChartPoint | null>(null);
   const previousFiatSeriesEnabled = React.useRef(fiatSeriesEnabled);
   const previousPortfolioValueDefault = React.useRef(defaultPortfolioValueVisible);
+  const previousBookKey = React.useRef(bookKey);
+  const skipNextPeriodPersist = React.useRef(
+    Boolean(
+      storedBookChartPeriod &&
+        overviewTimePeriodFromSharedPeriod(storedBookChartPeriod) !==
+          storedBookChartPeriod &&
+        !hasTimePeriodUrlParam(),
+    ),
+  );
   const { active: activeSeries, handleHover } =
     useHoverHighlight<TreasuryChartSeriesKey>();
   const colorMode = useResolvedColorMode();
@@ -258,6 +304,30 @@ export const BtcActivityChart = ({
   );
 
   React.useEffect(() => {
+    if (previousBookKey.current === bookKey) return;
+    previousBookKey.current = bookKey;
+    skipNextPeriodPersist.current = true;
+    setPeriod(
+      initialTimePeriodFromUrl(
+        overviewTimePeriodFromSharedPeriod(storedBookChartPeriod),
+      ),
+    );
+    setCompactBrushRange(null);
+    setExpandedBrushRange(null);
+    setExpandedPointDate(null);
+    setHoveredActivityPoint(null);
+  }, [bookKey, storedBookChartPeriod]);
+
+  React.useEffect(() => {
+    if (!bookKey) return;
+    if (skipNextPeriodPersist.current) {
+      skipNextPeriodPersist.current = false;
+      return;
+    }
+    setStoredBookChartPeriod(bookKey, period);
+  }, [bookKey, period, setStoredBookChartPeriod]);
+
+  React.useEffect(() => {
     setSeriesVisible((current) => ({
       ...current,
       portfolioValue: defaultPortfolioValueVisible
@@ -284,7 +354,9 @@ export const BtcActivityChart = ({
     if (typeof window === "undefined") return;
     const timeout = window.setTimeout(() => {
       const params = new URLSearchParams(window.location.search);
-      if (period === "auto") {
+      if (isLossySharedPeriodFallback(storedBookChartPeriod, period)) {
+        params.delete("period");
+      } else if (period === "auto") {
         params.delete("period");
       } else {
         params.set("period", period);
@@ -334,6 +406,7 @@ export const BtcActivityChart = ({
     incomingMarkerMinimumBtc,
     outgoingMarkerMinimumBtc,
     period,
+    storedBookChartPeriod,
     yAutoFit,
     yScaleLog,
   ]);

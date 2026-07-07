@@ -169,9 +169,12 @@
     "missingFile": "missing file"
   },
   "period": {
+    "auto": "Auto",
+    "autoResolved": "Auto: {{period}}",
     "ytd": "YTD",
     "1year": "1 Year",
     "3months": "3 Months",
+    "6months": "6 Months",
     "30days": "30 Days",
     "5years": "5 Years",
     "10years": "10 Years",

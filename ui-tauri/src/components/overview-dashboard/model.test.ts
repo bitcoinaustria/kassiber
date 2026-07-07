@@ -18,6 +18,7 @@ import {
   formatMarketRateValue,
   formatRelativeMarketRateTime,
   getDataForPeriod,
+  initialTimePeriodFromUrl,
   isPointInPeriod,
   lastTreasuryLineValue,
   linearAxisTicks,
@@ -644,6 +645,15 @@ describe("chart scale helpers", () => {
     };
 
     expect(resolveAutoTimePeriod(snapshot, "auto")).toBe("ytd");
+  });
+
+  it("lets the URL period override a persisted fallback", () => {
+    vi.stubGlobal("window", { location: { search: "" } });
+    expect(initialTimePeriodFromUrl("5years")).toBe("5years");
+
+    vi.stubGlobal("window", { location: { search: "?period=30d" } });
+    expect(initialTimePeriodFromUrl("5years")).toBe("30days");
+    vi.unstubAllGlobals();
   });
 
   it("zooms out when recent periods do not contain enough activity", () => {

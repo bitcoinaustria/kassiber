@@ -13,12 +13,14 @@ import {
   dashboardRecordsFromTxs,
   flowChartSelectionLabel,
   flowChartSelectionDateWindow,
+  initialPeriodFromUrl,
   isAttachmentListQueryKeyForTransaction,
   matchesFlowChartSelection,
   readTransactionDetailParams,
   readTransactionScopeParams,
   removeAttachmentRecord,
   replaceAttachmentRecord,
+  resolveAutoPeriodForRecords,
   toDashboardTransaction,
   upsertAttachmentRecords,
   type AttachmentRecord,
@@ -159,7 +161,7 @@ describe("transaction dashboard chart selection", () => {
         transaction({ id: "newer", date: "2100-01-01T12:00:00Z" }),
         transaction({ id: "older", date: "2099-08-01T12:00:00Z" }),
       ]),
-    ).toEqual(["30days", "3months", "ytd", "1year", "all"]);
+    ).toEqual(["30days", "3months", "6months", "ytd", "1year", "all"]);
   });
 
   it("reveals longer period tabs as transaction history gets older", () => {
@@ -171,6 +173,7 @@ describe("transaction dashboard chart selection", () => {
     ).toEqual([
       "30days",
       "3months",
+      "6months",
       "ytd",
       "1year",
       "5years",
@@ -191,6 +194,7 @@ describe("transaction dashboard chart selection", () => {
     expect(availablePeriodKeysForRecords(recentSlice)).toEqual([
       "30days",
       "3months",
+      "6months",
       "ytd",
       "1year",
       "all",
@@ -201,6 +205,41 @@ describe("transaction dashboard chart selection", () => {
         transaction({ id: "oldest-bound", date: "2019-01-15T09:00:00Z" }),
       ]),
     ).toContain("5years");
+  });
+
+  it("parses auto period URLs and falls back to a stored period", () => {
+    vi.stubGlobal("window", { location: { search: "" } });
+    expect(initialPeriodFromUrl("5years")).toBe("5years");
+
+    vi.stubGlobal("window", { location: { search: "?period=auto" } });
+    expect(initialPeriodFromUrl("5years")).toBe("auto");
+
+    vi.stubGlobal("window", { location: { search: "?period=6m" } });
+    expect(initialPeriodFromUrl("5years")).toBe("6months");
+  });
+
+  it("resolves auto to the smallest useful transaction period", () => {
+    expect(
+      resolveAutoPeriodForRecords(
+        [
+          transaction({ id: "recent-1", date: "2026-06-28T12:00:00Z" }),
+          transaction({ id: "recent-2", date: "2026-06-20T12:00:00Z" }),
+          transaction({ id: "recent-3", date: "2026-06-10T12:00:00Z" }),
+        ],
+        "auto",
+      ),
+    ).toBe("ytd");
+
+    expect(
+      resolveAutoPeriodForRecords(
+        [
+          transaction({ id: "old-1", date: "2026-01-20T12:00:00Z" }),
+          transaction({ id: "old-2", date: "2026-01-10T12:00:00Z" }),
+          transaction({ id: "old-3", date: "2025-12-15T12:00:00Z" }),
+        ],
+        "auto",
+      ),
+    ).toBe("1year");
   });
 
   it("does not substitute demo rows for an empty live transaction list", () => {

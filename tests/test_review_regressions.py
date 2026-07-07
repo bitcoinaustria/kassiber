@@ -9605,6 +9605,20 @@ class ReviewRegressionTest(unittest.TestCase):
             "Main",
             "--profile",
             "Default",
+            "--period",
+            "6months",
+            "--limit",
+            "1",
+        )
+        self._assert_ok(payload, result, "transactions.list")
+
+        payload, result = self._run_json(
+            "transactions",
+            "list",
+            "--workspace",
+            "Main",
+            "--profile",
+            "Default",
             "--quick",
             "missing_price",
         )

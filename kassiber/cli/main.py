@@ -1458,7 +1458,7 @@ def build_parser() -> argparse.ArgumentParser:
     tx_list.add_argument("--end", help="RFC3339 upper bound (inclusive) on occurred_at")
     tx_list.add_argument(
         "--period",
-        choices=("30days", "3months", "ytd", "1year", "5years", "10years", "15years", "all"),
+        choices=("30days", "3months", "6months", "ytd", "1year", "5years", "10years", "15years", "all"),
         help="Relative occurred_at window",
     )
     tx_list.add_argument("--status", choices=("completed", "pending", "failed", "review"))
