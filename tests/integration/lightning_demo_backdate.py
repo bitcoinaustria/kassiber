@@ -114,8 +114,14 @@ def _resolve_profile_ids(
     workspace_label: str | None,
     profile_label: str | None,
 ) -> list[str]:
-    if not workspace_label or not profile_label:
+    workspace = str(workspace_label or "").strip()
+    profile = str(profile_label or "").strip()
+    if not workspace and not profile:
         return []
+    if not workspace or not profile:
+        raise ValueError(
+            "workspace_label and profile_label must be provided together when scoping Lightning backdating"
+        )
     rows = conn.execute(
         """
         SELECT p.id AS id
@@ -123,9 +129,14 @@ def _resolve_profile_ids(
         JOIN workspaces ws ON ws.id = p.workspace_id
         WHERE lower(ws.label) = lower(?) AND lower(p.label) = lower(?)
         """,
-        (workspace_label, profile_label),
+        (workspace, profile),
     ).fetchall()
-    return [str(row["id"]) for row in rows]
+    profile_ids = [str(row["id"]) for row in rows]
+    if not profile_ids:
+        raise ValueError(
+            f"No profile matched workspace_label={workspace!r} and profile_label={profile!r}"
+        )
+    return profile_ids
 
 
 def _profile_filter(profile_ids: Sequence[str], column: str = "profile_id") -> tuple[str, list[str]]:

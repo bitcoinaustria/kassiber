@@ -733,6 +733,7 @@ class KrakenCsvRatesTest(unittest.TestCase):
         )
 
         self.assertEqual(len(payload["data"]), 2)
+
         summaries = {summary["pair"]: summary for summary in payload["data"]}
         self.assertEqual(sorted(summaries), ["BTC-EUR", "BTC-USD"])
         self.assertEqual(summaries["BTC-EUR"]["samples"], 132402)
@@ -791,6 +792,16 @@ class KrakenCsvRatesTest(unittest.TestCase):
                 ),
             ],
         )
+
+    def test_package_data_includes_bundled_kraken_rate_fixtures(self):
+        pyproject_text = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+        for relpath in (
+            "data/rates/kraken/btc_daily/*.csv",
+            "data/rates/kraken/btc_daily/README.md",
+            "data/rates/kraken/btc_hourly/*.csv",
+            "data/rates/kraken/btc_hourly/README.md",
+        ):
+            self.assertIn(f'"{relpath}"', pyproject_text)
 
     def test_desktop_daemon_imports_bundled_kraken_btc_hourly_seed(self):
         conn = open_db(str(self.data_root))

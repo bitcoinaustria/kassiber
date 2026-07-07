@@ -6,13 +6,18 @@ without any Docker/regtest stack.
 
 from __future__ import annotations
 
+import json
 import sqlite3
+import tempfile
 import unittest
 from datetime import datetime, timezone
+from pathlib import Path
 
+from kassiber.db import open_db
 from tests.integration.lightning_demo_backdate import (
     _rebucket_forward_day_records,
     assign_historical_dates,
+    backdate_ln_records,
 )
 
 WINDOW_START = "2019-01-15T09:00:00Z"
@@ -164,6 +169,149 @@ class RebucketForwardDayTests(unittest.TestCase):
             for row in conn.execute("SELECT occurred_at FROM lightning_node_records")
         }
         self.assertEqual(days, {"2021-03-04T00:00:00Z", "2022-09-09T00:00:00Z"})
+
+
+class BackdateProfileScopeTests(unittest.TestCase):
+    def _write_scenario(self, root: Path) -> Path:
+        scenario = root / "scenario.json"
+        scenario.write_text(
+            json.dumps(
+                {
+                    "base_time": "2020-01-01T00:00:00Z",
+                    "latest_time": "2020-12-31T23:59:59Z",
+                }
+            ),
+            encoding="utf-8",
+        )
+        return scenario
+
+    def _seed_book(self, data_root: Path) -> None:
+        now = "2026-06-30T00:00:00Z"
+        conn = open_db(data_root)
+        try:
+            conn.execute(
+                "INSERT INTO workspaces(id, label, created_at) VALUES('ws', 'Books', ?)",
+                (now,),
+            )
+            for profile_id, profile_label, wallet_id in (
+                ("p-main", "Main", "w-main"),
+                ("p-other", "Other", "w-other"),
+            ):
+                conn.execute(
+                    """
+                    INSERT INTO profiles(id, workspace_id, label, created_at)
+                    VALUES(?, 'ws', ?, ?)
+                    """,
+                    (profile_id, profile_label, now),
+                )
+                conn.execute(
+                    """
+                    INSERT INTO wallets(id, workspace_id, profile_id, label, kind, config_json, created_at)
+                    VALUES(?, 'ws', ?, ?, 'coreln', '{}', ?)
+                    """,
+                    (wallet_id, profile_id, f"Wallet {profile_label}", now),
+                )
+                conn.execute(
+                    """
+                    INSERT INTO transactions(
+                        id, workspace_id, profile_id, wallet_id, external_id, fingerprint,
+                        occurred_at, confirmed_at, direction, asset, amount, kind,
+                        raw_json, payment_hash, created_at
+                    ) VALUES(?, 'ws', ?, ?, ?, ?, ?, ?, 'inbound', 'BTC', 1000,
+                             'cln_invoice', '{}', ?, ?)
+                    """,
+                    (
+                        f"tx-{profile_id}",
+                        profile_id,
+                        wallet_id,
+                        f"ext-{profile_id}",
+                        f"fp-{profile_id}",
+                        now,
+                        now,
+                        f"hash-{profile_id}",
+                        now,
+                    ),
+                )
+                conn.execute(
+                    """
+                    INSERT INTO lightning_node_records(
+                        id, workspace_id, profile_id, wallet_id, backend_name, node_id,
+                        record_type, external_id, occurred_at, amount_msat, currency,
+                        payment_hash, raw_json, first_seen_at, updated_at
+                    ) VALUES(?, 'ws', ?, ?, 'cln', 'node', 'invoice', ?, ?,
+                             1000, 'bc', ?, '{}', ?, ?)
+                    """,
+                    (
+                        f"rec-{profile_id}",
+                        profile_id,
+                        wallet_id,
+                        f"rec-ext-{profile_id}",
+                        now,
+                        f"hash-{profile_id}",
+                        now,
+                        now,
+                    ),
+                )
+            conn.commit()
+        finally:
+            conn.close()
+
+    def _dates(self, data_root: Path) -> dict[str, str]:
+        conn = open_db(data_root)
+        try:
+            rows = conn.execute(
+                """
+                SELECT id, occurred_at FROM transactions
+                UNION ALL
+                SELECT id, occurred_at FROM lightning_node_records
+                ORDER BY id
+                """
+            ).fetchall()
+            return {str(row["id"]): str(row["occurred_at"]) for row in rows}
+        finally:
+            conn.close()
+
+    def test_valid_labels_backdate_only_the_matching_profile(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="kassiber-ln-backdate-") as tmp:
+            root = Path(tmp)
+            data_root = root / "state"
+            self._seed_book(data_root)
+            scenario = self._write_scenario(root)
+
+            summary = backdate_ln_records(
+                data_root,
+                str(scenario),
+                workspace_label="Books",
+                profile_label="Main",
+                seed=1,
+            )
+
+            dates = self._dates(data_root)
+            self.assertEqual(summary["transactions_backdated"], 1)
+            self.assertEqual(summary["node_records_backdated"], 1)
+            self.assertNotEqual(dates["tx-p-main"], "2026-06-30T00:00:00Z")
+            self.assertNotEqual(dates["rec-p-main"], "2026-06-30T00:00:00Z")
+            self.assertEqual(dates["tx-p-other"], "2026-06-30T00:00:00Z")
+            self.assertEqual(dates["rec-p-other"], "2026-06-30T00:00:00Z")
+
+    def test_unresolved_requested_scope_raises_without_rewriting_profiles(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="kassiber-ln-backdate-") as tmp:
+            root = Path(tmp)
+            data_root = root / "state"
+            self._seed_book(data_root)
+            scenario = self._write_scenario(root)
+            before = self._dates(data_root)
+
+            with self.assertRaisesRegex(ValueError, "No profile matched"):
+                backdate_ln_records(
+                    data_root,
+                    str(scenario),
+                    workspace_label="Books",
+                    profile_label="Typo",
+                    seed=1,
+                )
+
+            self.assertEqual(self._dates(data_root), before)
 
 
 if __name__ == "__main__":  # pragma: no cover
