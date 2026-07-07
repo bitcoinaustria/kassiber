@@ -129,6 +129,10 @@
       "estimate": "Schätzung",
       "loaded": "Geladen",
       "configured": "Konfiguriert",
+      "needsJournals": "Journale nötig",
+      "reviewQuarantines_one": "{{count}} Quarantäne",
+      "reviewQuarantines_other": "{{count}} Quarantänen",
+      "reviewRequired": "Prüfung nötig",
       "open": "Offen"
     }
   },

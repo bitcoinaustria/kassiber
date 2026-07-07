@@ -129,6 +129,10 @@
       "estimate": "Estimate",
       "loaded": "Loaded",
       "configured": "Configured",
+      "needsJournals": "Needs journals",
+      "reviewQuarantines_one": "{{count}} quarantine",
+      "reviewQuarantines_other": "{{count}} quarantines",
+      "reviewRequired": "Review required",
       "open": "Open"
     }
   },

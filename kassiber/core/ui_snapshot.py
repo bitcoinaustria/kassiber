@@ -146,6 +146,7 @@ def _empty_overview_snapshot() -> dict[str, Any]:
             "eurUnrealized": 0.0,
             "eurRealizedYTD": 0.0,
         },
+        "taxFreeBalance": None,
         "status": {
             "workspace": None,
             "profile": None,
@@ -2322,6 +2323,144 @@ def _fiat_snapshot(
     }
 
 
+def _tax_free_balance_snapshot(
+    conn: sqlite3.Connection,
+    profile: sqlite3.Row,
+    freshness: dict[str, Any],
+) -> dict[str, Any] | None:
+    if str(profile["tax_country"] or "").lower() != "at":
+        return None
+    rows = conn.execute(
+        """
+        SELECT
+            wallet_id, entry_type, asset, occurred_at, quantity, fiat_value,
+            cost_basis, description, at_category
+        FROM journal_entries
+        WHERE profile_id = ? AND asset IN ('BTC', 'LBTC')
+        ORDER BY occurred_at ASC, created_at ASC, id ASC
+        """,
+        (profile["id"],),
+    ).fetchall()
+    entries: list[dict[str, Any]] = []
+    for row in rows:
+        entries.append(
+            {
+                "wallet_id": row["wallet_id"],
+                "entry_type": row["entry_type"],
+                "asset": row["asset"],
+                "occurred_at": row["occurred_at"],
+                "quantity": msat_to_btc(row["quantity"]) or Decimal("0"),
+                "fiat_value": dec(row["fiat_value"]),
+                "cost_basis": (
+                    dec(row["cost_basis"])
+                    if row["cost_basis"] is not None
+                    else None
+                ),
+                "description": row["description"],
+                "at_category": row["at_category"],
+            }
+        )
+    today = datetime.now(timezone.utc).date().isoformat()
+    report = report_builders.compute_deemed_disposal(
+        conn,
+        dict(profile),
+        {
+            "entries": entries,
+            "wallet_holdings": {},
+            "account_holdings": {},
+            "quarantines": [],
+            "latest_rates": {},
+        },
+        departure_date=today,
+        destination="eu_eea",
+    )
+    totals = report["totals"]
+    tax_free_sats = int(totals["altQuantitySats"] or 0)
+    taxable_sats = int(totals["neuQuantitySats"] or 0)
+    total_sats = tax_free_sats + taxable_sats
+    needs_journals = bool(freshness.get("needs_processing"))
+    quarantines = int(freshness.get("quarantine_count") or 0)
+    status = (
+        "needs_journals"
+        if needs_journals
+        else "quarantines"
+        if quarantines
+        else "current"
+    )
+    return {
+        "rule": "austrian_altbestand",
+        "jurisdictionCode": report["jurisdictionCode"],
+        "fiatCurrency": report["fiatCurrency"],
+        "status": status,
+        "taxFreeQuantitySats": tax_free_sats,
+        "taxableQuantitySats": taxable_sats,
+        "totalQuantitySats": total_sats,
+        "taxFreeMarketValue": totals["altMarketValue"],
+        "taxableMarketValue": totals["neuMarketValue"],
+        "needsJournals": needs_journals,
+        "quarantines": quarantines,
+        "wallets": _tax_free_wallet_summaries(entries),
+        "buckets": [
+            {
+                "id": "altbestand",
+                "regime": "alt",
+                "label": "Altbestand",
+                "quantitySats": tax_free_sats,
+                "marketValue": totals["altMarketValue"],
+                "taxFree": True,
+            },
+            {
+                "id": "neubestand",
+                "regime": "neu",
+                "label": "Neubestand",
+                "quantitySats": taxable_sats,
+                "marketValue": totals["neuMarketValue"],
+                "taxFree": False,
+            },
+        ],
+    }
+
+
+def _tax_free_wallet_summaries(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    tax_free_by_wallet: dict[str, Decimal] = defaultdict(Decimal)
+    for entry in entries:
+        wallet_id = str(entry.get("wallet_id") or "")
+        if not wallet_id:
+            continue
+        qty = dec(entry.get("quantity") or 0)
+        if qty == 0:
+            continue
+        if _entry_has_alt_regime(entry):
+            tax_free_by_wallet[wallet_id] += qty
+    return [
+        {
+            "walletId": wallet_id,
+            "hasTaxFreeBalance": qty > 0,
+        }
+        for wallet_id, qty in sorted(tax_free_by_wallet.items())
+    ]
+
+
+def _entry_has_alt_regime(entry: dict[str, Any]) -> bool:
+    description = str(entry.get("description") or "")
+    if "at_regime=alt" in description:
+        return True
+    if "at_regime=neu" in description:
+        return False
+    category = entry.get("at_category")
+    if category:
+        return str(category).startswith("alt")
+    occurred_at = entry.get("occurred_at")
+    if not occurred_at:
+        return False
+    try:
+        from .austrian import infer_regime_from_timestamp
+
+        return infer_regime_from_timestamp(str(occurred_at)) == "alt"
+    except ValueError:
+        return False
+
+
 def _profile_readiness(
     *,
     wallet_count: int,
@@ -2431,6 +2570,7 @@ def _build_profile_overview_snapshot(
             has_book_state=has_book_state,
         ),
         "fiat": fiat,
+        "taxFreeBalance": _tax_free_balance_snapshot(conn, profile, freshness),
         "status": {
             "workspace": workspace["label"],
             "profile": profile["label"],

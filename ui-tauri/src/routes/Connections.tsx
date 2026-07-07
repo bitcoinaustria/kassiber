@@ -98,6 +98,7 @@ export function Connections() {
         hideSensitive={hideSensitive}
         isSyncing={isSyncing}
         priceEur={snapshot.priceEur}
+        taxFreeBalance={snapshot.taxFreeBalance}
         totalBtc={totalBtc}
       />
 
@@ -117,6 +118,7 @@ export function Connections() {
           hideSensitive={hideSensitive}
           onSelectConnection={onSelectConnection}
           priceEur={snapshot.priceEur}
+          taxFreeBalance={snapshot.taxFreeBalance}
           totalBtc={totalBtc}
           totalCount={connections.length}
         />

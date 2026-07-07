@@ -3,8 +3,8 @@ import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
 import { CurrencyToggleText } from "@/components/kb/CurrencyToggleText";
-import type { Currency } from "@/lib/currency";
-import type { Connection } from "@/mocks/seed";
+import { formatBtc as formatDisplayBtc, type Currency } from "@/lib/currency";
+import type { Connection, OverviewSnapshot } from "@/mocks/seed";
 
 import {
   formatBtc,
@@ -63,12 +63,22 @@ function WalletsOverviewStat({
   );
 }
 
+function taxFreeStatusKey(
+  balance: NonNullable<OverviewSnapshot["taxFreeBalance"]>,
+) {
+  if (balance.status) return balance.status;
+  if (balance.needsJournals) return "needs_journals";
+  if (balance.quarantines > 0) return "quarantines";
+  return "current";
+}
+
 interface WalletsMetricGridProps {
   connections: Connection[];
   currency: Currency;
   hideSensitive: boolean;
   isSyncing: boolean;
   priceEur: number;
+  taxFreeBalance?: OverviewSnapshot["taxFreeBalance"];
   totalBtc: number;
 }
 
@@ -78,6 +88,7 @@ export function WalletsMetricGrid({
   hideSensitive,
   isSyncing,
   priceEur,
+  taxFreeBalance,
   totalBtc,
 }: WalletsMetricGridProps) {
   const { t } = useTranslation("connections");
@@ -99,10 +110,47 @@ export function WalletsMetricGrid({
       : unsyncedCount === 0
         ? t("metrics.upToDateAllSources")
         : t("metrics.upToDateNotUpToDate", { count: unsyncedCount });
+  const taxFreeStatus = taxFreeBalance ? taxFreeStatusKey(taxFreeBalance) : null;
+  const taxFreeIsCurrent = taxFreeStatus === "current";
+  const taxFreeValue = taxFreeBalance
+    ? formatDisplayBtc(taxFreeBalance.taxFreeQuantitySats / 100_000_000, {
+        precision: 3,
+      })
+    : "";
+  const taxableValue = taxFreeBalance
+    ? formatDisplayBtc(taxFreeBalance.taxableQuantitySats / 100_000_000, {
+        precision: 3,
+      })
+    : "";
+  const taxFreeStatusLabel =
+    taxFreeStatus === "needs_journals"
+      ? t("metrics.taxFreeNeedsJournals")
+      : taxFreeStatus === "quarantines"
+        ? t("metrics.taxFreeQuarantines", {
+            count: taxFreeBalance?.quarantines ?? 0,
+          })
+        : t("metrics.taxFreeCurrent");
+  const taxFreeTone =
+    taxFreeStatus === "quarantines"
+      ? "text-red-600 dark:text-red-400"
+      : taxFreeStatus === "needs_journals"
+        ? "text-amber-600 dark:text-amber-400"
+        : "";
+  const taxFreeDetail = taxFreeIsCurrent
+    ? t("metrics.taxFreeTaxable", { taxable: taxableValue })
+    : taxFreeStatus === "quarantines"
+      ? t("metrics.taxFreeBlockedQuarantines")
+      : t("metrics.taxFreeBlockedJournals");
 
   return (
     <div className="overflow-hidden rounded-lg border bg-card">
-      <div className="grid grid-cols-1 divide-x-0 divide-y divide-border sm:grid-cols-2 sm:divide-y-0 xl:grid-cols-4 xl:divide-x">
+      <div
+        className={
+          taxFreeBalance
+            ? "grid grid-cols-1 divide-x-0 divide-y divide-border sm:grid-cols-2 sm:divide-y-0 xl:grid-cols-5 xl:divide-x"
+            : "grid grid-cols-1 divide-x-0 divide-y divide-border sm:grid-cols-2 sm:divide-y-0 xl:grid-cols-4 xl:divide-x"
+        }
+      >
         <WalletsOverviewStat
           label={t("metrics.totalBalance")}
           value={
@@ -122,6 +170,33 @@ export function WalletsMetricGrid({
             </CurrencyToggleText>
           }
         />
+        {taxFreeBalance ? (
+          <WalletsOverviewStat
+            label={t("metrics.taxFreeBalance")}
+            value={
+              <span
+                className={
+                  taxFreeIsCurrent
+                    ? hiddenSensitiveClassName(hideSensitive)
+                    : taxFreeTone
+                }
+              >
+                {taxFreeIsCurrent ? taxFreeValue : taxFreeStatusLabel}
+              </span>
+            }
+            detail={
+              <span
+                className={
+                  taxFreeIsCurrent
+                    ? hiddenSensitiveClassName(hideSensitive)
+                    : taxFreeTone
+                }
+              >
+                {taxFreeDetail}
+              </span>
+            }
+          />
+        ) : null}
         <WalletsOverviewStat
           label={t("metrics.totalTransactions")}
           value={totalTransactions.toLocaleString("en-US")}

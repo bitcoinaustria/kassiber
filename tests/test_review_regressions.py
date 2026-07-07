@@ -972,6 +972,302 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual(unknown_filter.exception.code, "validation")
         self.assertEqual(unknown_filter.exception.details, {"unknown": ["limit"]})
 
+    def test_overview_snapshot_exposes_austrian_tax_free_balance(self):
+        conn = open_db(self.data_root)
+        self.addCleanup(conn.close)
+        now = "2026-01-01T00:00:00Z"
+        conn.execute(
+            "INSERT INTO workspaces(id, label, created_at) VALUES(?, ?, ?)",
+            ("ws-tax-free", "AT Workspace", now),
+        )
+        conn.execute(
+            """
+            INSERT INTO profiles(
+                id, workspace_id, label, fiat_currency, tax_country,
+                tax_long_term_days, gains_algorithm, last_processed_at,
+                last_processed_tx_count, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "pf-tax-free",
+                "ws-tax-free",
+                "AT Profile",
+                "EUR",
+                "at",
+                9223372036854775807,
+                "MOVING_AVERAGE_AT",
+                "2026-02-02T00:00:00Z",
+                3,
+                now,
+            ),
+        )
+        conn.execute(
+            """
+            INSERT INTO wallets(
+                id, workspace_id, profile_id, label, kind, config_json, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?)
+            """,
+            ("wal-tax-free", "ws-tax-free", "pf-tax-free", "Cold", "address", "{}", now),
+        )
+        tx_rows = [
+            ("tx-alt", "2020-06-01T00:00:00Z", "inbound", btc_to_msat("1.0"), 0, 8000),
+            ("tx-neu", "2022-01-01T00:00:00Z", "inbound", btc_to_msat("0.5"), 0, 20000),
+            ("tx-neu-sale", "2023-03-01T00:00:00Z", "outbound", btc_to_msat("0.1"), 0, 5000),
+        ]
+        for tx_id, occurred_at, direction, amount, fee, fiat_value in tx_rows:
+            conn.execute(
+                """
+                INSERT INTO transactions(
+                    id, workspace_id, profile_id, wallet_id, external_id, fingerprint,
+                    occurred_at, confirmed_at, direction, asset, amount, fee,
+                    fiat_currency, fiat_rate, fiat_value, fiat_price_source, kind,
+                    description, counterparty, note, excluded, raw_json, created_at
+                ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    tx_id,
+                    "ws-tax-free",
+                    "pf-tax-free",
+                    "wal-tax-free",
+                    tx_id,
+                    f"fp-{tx_id}",
+                    occurred_at,
+                    occurred_at,
+                    direction,
+                    "BTC",
+                    amount,
+                    fee,
+                    "EUR",
+                    60_000,
+                    fiat_value,
+                    "manual",
+                    "trade",
+                    tx_id,
+                    "",
+                    None,
+                    0,
+                    "{}",
+                    occurred_at,
+                ),
+            )
+        conn.executemany(
+            """
+            INSERT INTO journal_entries(
+                id, workspace_id, profile_id, transaction_id, wallet_id, account_id,
+                occurred_at, entry_type, asset, quantity, fiat_value, unit_cost,
+                cost_basis, proceeds, gain_loss, description, at_category,
+                at_kennzahl, capital_gains_type, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                (
+                    "je-alt",
+                    "ws-tax-free",
+                    "pf-tax-free",
+                    "tx-alt",
+                    "wal-tax-free",
+                    None,
+                    "2020-06-01T00:00:00Z",
+                    "acquisition",
+                    "BTC",
+                    btc_to_msat("1.0"),
+                    8000,
+                    8000,
+                    None,
+                    None,
+                    None,
+                    "Alt buy",
+                    None,
+                    None,
+                    None,
+                    now,
+                ),
+                (
+                    "je-neu",
+                    "ws-tax-free",
+                    "pf-tax-free",
+                    "tx-neu",
+                    "wal-tax-free",
+                    None,
+                    "2022-01-01T00:00:00Z",
+                    "acquisition",
+                    "BTC",
+                    btc_to_msat("0.5"),
+                    20000,
+                    40000,
+                    None,
+                    None,
+                    None,
+                    "Neu buy",
+                    None,
+                    None,
+                    None,
+                    now,
+                ),
+                (
+                    "je-neu-sale",
+                    "ws-tax-free",
+                    "pf-tax-free",
+                    "tx-neu-sale",
+                    "wal-tax-free",
+                    None,
+                    "2023-03-01T00:00:00Z",
+                    "disposal",
+                    "BTC",
+                    btc_to_msat("-0.1"),
+                    -5000,
+                    50000,
+                    4000,
+                    5000,
+                    1000,
+                    "Neu sale",
+                    "neu_gain",
+                    174,
+                    "short",
+                    now,
+                ),
+            ],
+        )
+        conn.execute(
+            """
+            INSERT INTO journal_wallet_holdings(
+                id, workspace_id, profile_id, wallet_id, wallet_label,
+                account_code, asset, quantity, cost_basis, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "holding-tax-free",
+                "ws-tax-free",
+                "pf-tax-free",
+                "wal-tax-free",
+                "Cold",
+                "treasury",
+                "BTC",
+                btc_to_msat("1.4"),
+                24000,
+                now,
+            ),
+        )
+        conn.execute(
+            """
+            INSERT INTO rates_cache(pair, timestamp, rate, source, fetched_at)
+            VALUES(?, ?, ?, ?, ?)
+            """,
+            ("BTC-EUR", "2026-06-15T12:00:00Z", 60_000, "manual", now),
+        )
+        set_setting(conn, "context_workspace", "ws-tax-free")
+        set_setting(conn, "context_profile", "pf-tax-free")
+        conn.commit()
+
+        overview = build_overview_snapshot(conn)
+        tax_free = overview["taxFreeBalance"]
+
+        self.assertEqual(tax_free["rule"], "austrian_altbestand")
+        self.assertEqual(tax_free["jurisdictionCode"], "AT")
+        self.assertEqual(tax_free["taxFreeQuantitySats"], 100_000_000)
+        self.assertEqual(tax_free["taxableQuantitySats"], 40_000_000)
+        self.assertEqual(tax_free["totalQuantitySats"], 140_000_000)
+        self.assertEqual(
+            tax_free["wallets"],
+            [{"walletId": "wal-tax-free", "hasTaxFreeBalance": True}],
+        )
+        self.assertEqual(
+            [bucket["id"] for bucket in tax_free["buckets"]],
+            ["altbestand", "neubestand"],
+        )
+        self.assertEqual(tax_free["status"], "current")
+        self.assertFalse(tax_free["needsJournals"])
+        self.assertEqual(tax_free["quarantines"], 0)
+
+        conn.execute(
+            "UPDATE profiles SET last_processed_tx_count = ? WHERE id = ?",
+            (2, "pf-tax-free"),
+        )
+        conn.commit()
+
+        stale_overview = build_overview_snapshot(conn)
+        stale_tax_free = stale_overview["taxFreeBalance"]
+
+        self.assertEqual(stale_tax_free["status"], "needs_journals")
+        self.assertTrue(stale_tax_free["needsJournals"])
+        self.assertEqual(stale_tax_free["taxFreeQuantitySats"], 100_000_000)
+
+        conn.execute(
+            "UPDATE profiles SET last_processed_tx_count = ? WHERE id = ?",
+            (3, "pf-tax-free"),
+        )
+        conn.execute(
+            """
+            INSERT INTO journal_quarantines(
+                transaction_id, workspace_id, profile_id, reason,
+                detail_json, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "tx-neu-sale",
+                "ws-tax-free",
+                "pf-tax-free",
+                "missing_price",
+                "{}",
+                now,
+            ),
+        )
+        conn.commit()
+
+        quarantine_overview = build_overview_snapshot(conn)
+        quarantine_tax_free = quarantine_overview["taxFreeBalance"]
+
+        self.assertEqual(quarantine_tax_free["status"], "quarantines")
+        self.assertFalse(quarantine_tax_free["needsJournals"])
+        self.assertEqual(quarantine_tax_free["quarantines"], 1)
+
+    def test_overview_snapshot_exposes_zero_austrian_tax_free_balance(self):
+        conn = open_db(self.data_root)
+        self.addCleanup(conn.close)
+        now = "2026-01-01T00:00:00Z"
+        conn.execute(
+            "INSERT INTO workspaces(id, label, created_at) VALUES(?, ?, ?)",
+            ("ws-tax-free-zero", "AT Workspace", now),
+        )
+        conn.execute(
+            """
+            INSERT INTO profiles(
+                id, workspace_id, label, fiat_currency, tax_country,
+                tax_long_term_days, gains_algorithm, last_processed_at,
+                last_processed_tx_count, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "pf-tax-free-zero",
+                "ws-tax-free-zero",
+                "AT Profile",
+                "EUR",
+                "at",
+                9223372036854775807,
+                "MOVING_AVERAGE_AT",
+                None,
+                0,
+                now,
+            ),
+        )
+        set_setting(conn, "context_workspace", "ws-tax-free-zero")
+        set_setting(conn, "context_profile", "pf-tax-free-zero")
+        conn.commit()
+
+        overview = build_overview_snapshot(conn)
+        tax_free = overview["taxFreeBalance"]
+
+        self.assertEqual(tax_free["rule"], "austrian_altbestand")
+        self.assertEqual(tax_free["status"], "current")
+        self.assertEqual(tax_free["taxFreeQuantitySats"], 0)
+        self.assertEqual(tax_free["taxableQuantitySats"], 0)
+        self.assertEqual(tax_free["totalQuantitySats"], 0)
+        self.assertEqual(tax_free["wallets"], [])
+        self.assertEqual(
+            [bucket["quantitySats"] for bucket in tax_free["buckets"]],
+            [0, 0],
+        )
+
     def test_overview_wallet_balance_prefers_processed_book_quantity(self):
         conn = open_db(self.data_root)
         self.addCleanup(conn.close)
