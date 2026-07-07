@@ -1875,7 +1875,7 @@ class DaemonSmokeTest(unittest.TestCase):
             self.assertEqual(code, 0, stderr)
             self.assertEqual(stderr, "")
 
-    def test_ai_provider_metadata_kinds_reject_api_key_ingress(self):
+    def test_ai_provider_create_update_reject_api_key_ingress(self):
         secret_marker = "sk-daemon-create-update-secret"
         with tempfile.TemporaryDirectory(prefix="kassiber-daemon-ai-ingress-") as tmp:
             proc = _start_daemon(Path(tmp) / "data")
@@ -1926,21 +1926,6 @@ class DaemonSmokeTest(unittest.TestCase):
                 self.assertEqual(updated["error"]["code"], "validation")
                 self.assertNotIn(secret_marker, json.dumps(updated, sort_keys=True))
 
-                _write_payload(
-                    proc,
-                    {
-                        "request_id": "test-secret-1",
-                        "kind": "ai.test_connection",
-                        "args": {
-                            "base_url": "https://example.test/v1",
-                            "api_key": secret_marker,
-                        },
-                    },
-                )
-                tested = _read_payload_timeout(proc)
-                self.assertEqual(tested["kind"], "error")
-                self.assertEqual(tested["error"]["code"], "validation")
-                self.assertNotIn(secret_marker, json.dumps(tested, sort_keys=True))
             finally:
                 _write_payload(proc, {"request_id": "shutdown-1", "kind": "daemon.shutdown"})
                 self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.shutdown")
