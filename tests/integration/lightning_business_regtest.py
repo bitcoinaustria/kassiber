@@ -359,6 +359,7 @@ def _write_payload(proc: subprocess.Popen[str], payload: dict[str, Any]) -> None
 
 
 def _shutdown_daemon_process(proc: subprocess.Popen[str], timeout: float = 10.0) -> None:
+    shutdown_error: Exception | None = None
     if proc.poll() is None:
         try:
             _write_payload(
@@ -366,12 +367,14 @@ def _shutdown_daemon_process(proc: subprocess.Popen[str], timeout: float = 10.0)
                 {"request_id": "shutdown-1", "kind": "daemon.shutdown"},
             )
             _read_payload_timeout(proc, timeout)
-        except Exception:
-            pass
+        except Exception as exc:
+            # Shutdown RPC is best-effort during teardown; wait/kill below owns cleanup.
+            shutdown_error = exc
     if proc.stdin is not None:
         try:
             proc.stdin.close()
-        except Exception:
+        except (BrokenPipeError, OSError):
+            # The daemon may close its stdin first while exiting.
             pass
     try:
         code = proc.wait(timeout=timeout)
@@ -384,7 +387,10 @@ def _shutdown_daemon_process(proc: subprocess.Popen[str], timeout: float = 10.0)
     if proc.stderr is not None:
         proc.stderr.close()
     if code != 0:
-        raise AssertionError(f"daemon exited with {code}; stderr={stderr}")
+        suffix = (
+            f"; shutdown_error={shutdown_error!r}" if shutdown_error is not None else ""
+        )
+        raise AssertionError(f"daemon exited with {code}; stderr={stderr}{suffix}")
 
 
 def _daemon_snapshot(data_root: Path, connection_label: str = CONNECTION_LABEL) -> dict[str, Any]:
