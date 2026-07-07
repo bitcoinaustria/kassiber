@@ -351,6 +351,27 @@ class FreshSchemaTests(unittest.TestCase):
                     INSERT INTO transaction_pairs(id, workspace_id, profile_id,
                         out_transaction_id, in_transaction_id, kind, policy,
                         swap_fee_msat, swap_fee_kind, deleted_at, created_at)
+                    VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        "deleted-same-pair",
+                        workspace_id,
+                        profile_id,
+                        "same-out",
+                        "same-in",
+                        "whirlpool",
+                        "carrying-value",
+                        789,
+                        "loss",
+                        _now(),
+                        _now(),
+                    ),
+                )
+                conn.execute(
+                    """
+                    INSERT INTO transaction_pairs(id, workspace_id, profile_id,
+                        out_transaction_id, in_transaction_id, kind, policy,
+                        swap_fee_msat, swap_fee_kind, deleted_at, created_at)
                     VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)
                     """,
                     (
@@ -381,6 +402,8 @@ class FreshSchemaTests(unittest.TestCase):
                 }
                 self.assertIsNone(rows["same-pair"]["swap_fee_msat"])
                 self.assertIsNone(rows["same-pair"]["swap_fee_kind"])
+                self.assertEqual(rows["deleted-same-pair"]["swap_fee_msat"], 789)
+                self.assertEqual(rows["deleted-same-pair"]["swap_fee_kind"], "loss")
                 self.assertEqual(rows["cross-pair"]["swap_fee_msat"], 456)
                 self.assertEqual(rows["cross-pair"]["swap_fee_kind"], "loss")
             finally:
