@@ -3168,6 +3168,7 @@ def _rates_rebuild_payload(
         try:
             journals = {"ok": True, "result": process_journals(conn, None, None)}
         except AppError as exc:
+            conn.rollback()
             journals = {"ok": False, "error": _app_error_payload(exc)}
     return {
         **rebuilt,

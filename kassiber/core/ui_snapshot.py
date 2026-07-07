@@ -1396,6 +1396,45 @@ def _display_wallet_balances(
     return balances
 
 
+def _chain_duplicate_outpoint_adjustment_btc(
+    conn: sqlite3.Connection,
+    profile_id: str,
+    display_balance_info: dict[str, dict[str, Any]],
+) -> float:
+    chain_wallet_ids = sorted(
+        wallet_id
+        for wallet_id, info in display_balance_info.items()
+        if info.get("balanceSource") == "chain"
+    )
+    if len(chain_wallet_ids) < 2:
+        return 0.0
+    wallet_placeholders = ", ".join("?" for _ in chain_wallet_ids)
+    asset_placeholders = ", ".join("?" for _ in DISPLAY_BALANCE_ASSETS)
+    rows = conn.execute(
+        f"""
+        SELECT
+            UPPER(asset) AS asset,
+            COALESCE(NULLIF(outpoint, ''), lower(txid) || ':' || vout) AS outpoint_key,
+            SUM(amount) AS total_msat,
+            MAX(amount) AS kept_msat,
+            COUNT(DISTINCT wallet_id) AS wallet_count
+        FROM wallet_utxos
+        WHERE profile_id = ?
+          AND wallet_id IN ({wallet_placeholders})
+          AND spent_at IS NULL
+          AND UPPER(asset) IN ({asset_placeholders})
+        GROUP BY UPPER(asset), outpoint_key
+        HAVING COUNT(DISTINCT wallet_id) > 1
+        """,
+        (profile_id, *chain_wallet_ids, *sorted(DISPLAY_BALANCE_ASSETS)),
+    ).fetchall()
+    duplicate_msat = sum(
+        max(0, int(row["total_msat"] or 0) - int(row["kept_msat"] or 0))
+        for row in rows
+    )
+    return float(msat_to_btc(duplicate_msat))
+
+
 def _connections(
     conn: sqlite3.Connection,
     profile_id: str,
@@ -2429,8 +2468,12 @@ def _fiat_snapshot(
     fiat_currency: str,
     fiat_rate: float,
     balances: dict[str, float],
+    *,
+    balance_total: float | None = None,
+    chain_duplicate_adjustment_btc: float = 0.0,
 ) -> dict[str, Any]:
-    market_value = sum(balances.values()) * fiat_rate
+    market_balance = sum(balances.values()) if balance_total is None else balance_total
+    market_value = market_balance * fiat_rate
     realized_row = conn.execute(
         """
         SELECT SUM(COALESCE(gain_loss, 0)) AS gain_loss
@@ -2442,13 +2485,18 @@ def _fiat_snapshot(
         (profile_id,),
     ).fetchone()
     cost_basis = _current_portfolio_cost_basis(conn, profile_id)
-    return {
+    payload = {
         "fiatCurrency": str(fiat_currency or "EUR").upper(),
         "eurBalance": float(market_value),
         "eurCostBasis": cost_basis,
         "eurUnrealized": float(market_value - cost_basis),
         "eurRealizedYTD": float(realized_row["gain_loss"] or 0),
     }
+    if chain_duplicate_adjustment_btc > 0:
+        payload["chainDuplicateOutpointAdjustmentBtc"] = float(
+            chain_duplicate_adjustment_btc
+        )
+    return payload
 
 
 def _tax_free_balance_snapshot(
@@ -2686,12 +2734,23 @@ def _build_profile_overview_snapshot(
         wallet_id: float(info.get("balance") or 0.0)
         for wallet_id, info in display_balance_info.items()
     }
+    chain_duplicate_adjustment = _chain_duplicate_outpoint_adjustment_btc(
+        conn,
+        profile["id"],
+        display_balance_info,
+    )
+    display_balance_total = max(
+        0.0,
+        sum(display_balances.values()) - chain_duplicate_adjustment,
+    )
     fiat = _fiat_snapshot(
         conn,
         profile["id"],
         profile["fiat_currency"],
         book_fiat_rate,
         display_balances,
+        balance_total=display_balance_total,
+        chain_duplicate_adjustment_btc=chain_duplicate_adjustment,
     )
     snapshot = {
         "priceEur": price_eur,
@@ -2714,7 +2773,7 @@ def _build_profile_overview_snapshot(
             profile["id"],
             profile["fiat_currency"],
             book_fiat_rate,
-            sum(display_balances.values()),
+            display_balance_total,
             fiat["eurBalance"],
             has_book_state=has_book_state,
         ),
