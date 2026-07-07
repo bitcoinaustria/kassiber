@@ -115,6 +115,10 @@ from ..tax_policy import (
     require_tax_country_supported_for_profile_mutation,
     require_tax_processing_supported,
 )
+from ..transfers import (
+    cross_asset_carrying_value_supported,
+    profile_bitcoin_rail_carrying_value,
+)
 from ..wallet_descriptors import (
     DEFAULT_DESCRIPTOR_GAP_LIMIT,
     MAX_DESCRIPTOR_GAP_LIMIT,
@@ -513,7 +517,7 @@ def create_transaction_pair(
     out_ref,
     in_ref,
     kind="manual",
-    policy="carrying-value",
+    policy=None,
     notes=None,
     *,
     pair_source="manual",
@@ -527,7 +531,7 @@ def create_transaction_pair(
             f"Unsupported pair kind '{kind}'. Supported: {', '.join(TRANSFER_PAIR_KINDS)}",
             code="validation",
         )
-    if policy not in TRANSFER_PAIR_POLICIES:
+    if policy is not None and policy not in TRANSFER_PAIR_POLICIES:
         raise AppError(
             f"Unsupported pair policy '{policy}'. Supported: {', '.join(TRANSFER_PAIR_POLICIES)}",
             code="validation",
@@ -541,6 +545,17 @@ def create_transaction_pair(
     in_row = resolve_transaction(conn, profile["id"], in_ref, direction="inbound")
     if out_row["id"] == in_row["id"]:
         raise AppError("--tx-out and --tx-in must reference different transactions", code="validation")
+    if policy is None:
+        policy = (
+            "carrying-value"
+            if str(out_row["asset"]).upper() == str(in_row["asset"]).upper()
+            else core_transfer_matching.default_policy_for(
+                str(profile["tax_country"] or ""),
+                out_row["asset"],
+                in_row["asset"],
+                bitcoin_rail_carrying_value=profile_bitcoin_rail_carrying_value(profile),
+            )
+        )
     if out_row["asset"] == in_row["asset"] and policy == "taxable":
         raise AppError(
             f"Same-asset taxable pairs are not supported yet "
@@ -552,13 +567,14 @@ def create_transaction_pair(
         )
     if out_row["asset"] != in_row["asset"] and policy == "carrying-value":
         tax_country = str(profile["tax_country"] or "").strip().lower()
-        if tax_country != "at":
+        if not cross_asset_carrying_value_supported(tax_country, out_row["asset"], in_row["asset"]):
             raise AppError(
-                f"Cross-asset carrying-value pairs are only supported for Austrian profiles right now "
+                f"Cross-asset carrying-value pairs are only supported for Austrian profiles "
+                f"or BTC/LBTC rail swaps right now "
                 f"(out={out_row['asset']}, in={in_row['asset']}). "
-                f"Use --policy taxable for other tax countries.",
+                f"Use --policy taxable for other cross-asset swaps.",
                 code="validation",
-                hint="Re-run with --policy taxable, or use an Austrian profile for cross-asset carrying-value swaps.",
+                hint="Re-run with --policy taxable, or pair only BTC/LBTC rail changes as carrying-value outside Austrian profiles.",
             )
     out_amount_msat = None
     if out_amount is not None:
@@ -662,7 +678,7 @@ def create_direct_swap_payout(
     payout_asset,
     payout_amount,
     kind="direct-swap-payout",
-    policy="carrying-value",
+    policy=None,
     payout_occurred_at=None,
     payout_fiat_value=None,
     payout_external_id=None,
@@ -676,7 +692,7 @@ def create_direct_swap_payout(
             f"Unsupported direct payout kind '{kind}'. Supported: {', '.join(DIRECT_SWAP_PAYOUT_KINDS)}",
             code="validation",
         )
-    if policy not in TRANSFER_PAIR_POLICIES:
+    if policy is not None and policy not in TRANSFER_PAIR_POLICIES:
         raise AppError(
             f"Unsupported direct payout policy '{policy}'. Supported: {', '.join(TRANSFER_PAIR_POLICIES)}",
             code="validation",
@@ -701,13 +717,25 @@ def create_direct_swap_payout(
     if payout_value is not None and payout_value < 0:
         raise AppError("--payout-fiat-value must not be negative", code="validation")
 
+    if policy is None:
+        policy = (
+            "carrying-value"
+            if str(out_row["asset"]).upper() == target_asset
+            else core_transfer_matching.default_policy_for(
+                str(profile["tax_country"] or ""),
+                out_row["asset"],
+                target_asset,
+                bitcoin_rail_carrying_value=profile_bitcoin_rail_carrying_value(profile),
+            )
+        )
+
     if out_row["asset"] != target_asset and policy == "carrying-value":
         tax_country = str(profile["tax_country"] or "").strip().lower()
-        if tax_country != "at":
+        if not cross_asset_carrying_value_supported(tax_country, out_row["asset"], target_asset):
             raise AppError(
-                "Cross-asset direct swap payouts with carrying value are only supported for Austrian profiles right now.",
+                "Cross-asset direct swap payouts with carrying value are only supported for Austrian profiles or BTC/LBTC rail swaps right now.",
                 code="validation",
-                hint="Re-run with --policy taxable, or use an Austrian profile for cross-asset carrying-value payouts.",
+                hint="Re-run with --policy taxable, or use carrying-value only for BTC/LBTC rail payouts outside Austrian profiles.",
             )
 
     existing_pair = conn.execute(
@@ -1162,6 +1190,7 @@ def suggest_transfer_candidates(
         fee_pct_max=float(fee_pct_max),
         fee_sats_min=int(fee_sats_min),
         tax_country=str(profile["tax_country"] or ""),
+        bitcoin_rail_carrying_value=profile_bitcoin_rail_carrying_value(profile),
     )
     candidates = _filter_transfer_candidates(
         candidates,
@@ -1233,6 +1262,7 @@ def bulk_pair_transfers(
         fee_pct_max=float(fee_pct_max),
         fee_sats_min=int(fee_sats_min),
         tax_country=str(profile["tax_country"] or ""),
+        bitcoin_rail_carrying_value=profile_bitcoin_rail_carrying_value(profile),
     )
     if confidence not in ("exact", "strong"):
         raise AppError(
@@ -1317,6 +1347,7 @@ def apply_transfer_rules(
         fee_pct_max=float(fee_pct_max),
         fee_sats_min=int(fee_sats_min),
         tax_country=str(profile["tax_country"] or ""),
+        bitcoin_rail_carrying_value=profile_bitcoin_rail_carrying_value(profile),
     )
     candidates = _filter_transfer_candidates(
         candidates,
@@ -1456,6 +1487,15 @@ def list_transfer_rules(conn, workspace_ref, profile_ref):
     return [_rule_row_to_dict(row) for row in rows]
 
 
+def _default_transfer_rule_policy(profile, predicate):
+    return core_transfer_matching.default_policy_for(
+        str(profile["tax_country"] or ""),
+        predicate.get("out_asset"),
+        predicate.get("in_asset"),
+        bitcoin_rail_carrying_value=profile_bitcoin_rail_carrying_value(profile),
+    )
+
+
 def create_transfer_rule(
     conn,
     workspace_ref,
@@ -1464,7 +1504,7 @@ def create_transfer_rule(
     name=None,
     predicate=None,
     kind="manual",
-    policy="carrying-value",
+    policy=None,
     enabled=True,
 ):
     workspace, profile = resolve_scope(conn, workspace_ref, profile_ref)
@@ -1473,14 +1513,16 @@ def create_transfer_rule(
             f"Unsupported pair kind '{kind}'. Supported: {', '.join(TRANSFER_PAIR_KINDS)}",
             code="validation",
         )
+    predicate = predicate or {}
+    if not isinstance(predicate, dict):
+        raise AppError("predicate must be a JSON object", code="validation")
+    if policy is None:
+        policy = _default_transfer_rule_policy(profile, predicate)
     if policy not in TRANSFER_PAIR_POLICIES:
         raise AppError(
             f"Unsupported pair policy '{policy}'. Supported: {', '.join(TRANSFER_PAIR_POLICIES)}",
             code="validation",
         )
-    predicate = predicate or {}
-    if not isinstance(predicate, dict):
-        raise AppError("predicate must be a JSON object", code="validation")
     rule_id = str(uuid.uuid4())
     timestamp = now_iso()
     conn.execute(
@@ -1705,13 +1747,14 @@ def update_transaction_pair(
         )
     if not same_asset and new_policy == "carrying-value":
         tax_country = str(profile["tax_country"] or "").strip().lower()
-        if tax_country != "at":
+        if not cross_asset_carrying_value_supported(tax_country, row["out_asset"], row["in_asset"]):
             raise AppError(
-                f"Cross-asset carrying-value pairs are only supported for Austrian profiles right now "
+                f"Cross-asset carrying-value pairs are only supported for Austrian profiles "
+                f"or BTC/LBTC rail swaps right now "
                 f"(out={row['out_asset']}, in={row['in_asset']}). "
-                f"Use --policy taxable for other tax countries.",
+                f"Use --policy taxable for other cross-asset swaps.",
                 code="validation",
-                hint="Re-run with --policy taxable, or use an Austrian profile for cross-asset carrying-value swaps.",
+                hint="Re-run with --policy taxable, or pair only BTC/LBTC rail changes as carrying-value outside Austrian profiles.",
             )
     new_notes = row["notes"] if notes is _UNSET else notes
     unchanged = (
@@ -5027,6 +5070,7 @@ def get_profile_details(conn, workspace_ref=None, profile_ref=None):
         "tax_country": profile["tax_country"],
         "tax_long_term_days": profile["tax_long_term_days"],
         "gains_algorithm": profile["gains_algorithm"],
+        "bitcoin_rail_carrying_value": profile_bitcoin_rail_carrying_value(profile),
         "last_processed_at": profile["last_processed_at"],
         "last_processed_tx_count": _row_int(profile, "last_processed_tx_count"),
         "journal_input_version": _row_int(profile, "journal_input_version"),
@@ -5045,12 +5089,15 @@ def update_profile(conn, workspace_ref, profile_ref, updates):
     new_country = updates.get("tax_country")
     new_long_term = updates.get("tax_long_term_days")
     new_algo = updates.get("gains_algorithm")
+    new_bitcoin_rail = updates.get("bitcoin_rail_carrying_value")
 
     merged_fiat = new_fiat if new_fiat is not None else profile["fiat_currency"]
     merged_country = new_country if new_country is not None else profile["tax_country"]
     merged_long_term = new_long_term if new_long_term is not None else profile["tax_long_term_days"]
     merged_algo = new_algo if new_algo is not None else profile["gains_algorithm"]
     merged_label = new_label if new_label is not None else profile["label"]
+    current_bitcoin_rail = profile_bitcoin_rail_carrying_value(profile)
+    merged_bitcoin_rail = bool(new_bitcoin_rail) if new_bitcoin_rail is not None else current_bitcoin_rail
 
     if new_long_term is not None and new_long_term < 0:
         raise AppError(
@@ -5082,12 +5129,14 @@ def update_profile(conn, workspace_ref, profile_ref, updates):
         or policy.tax_country != profile["tax_country"]
         or policy.long_term_days != profile["tax_long_term_days"]
         or normalized_algo != profile["gains_algorithm"]
+        or merged_bitcoin_rail != current_bitcoin_rail
     )
 
     conn.execute(
         """
         UPDATE profiles
-        SET label = ?, fiat_currency = ?, tax_country = ?, tax_long_term_days = ?, gains_algorithm = ?
+        SET label = ?, fiat_currency = ?, tax_country = ?, tax_long_term_days = ?,
+            gains_algorithm = ?, bitcoin_rail_carrying_value = ?
         WHERE id = ?
         """,
         (
@@ -5096,6 +5145,7 @@ def update_profile(conn, workspace_ref, profile_ref, updates):
             policy.tax_country,
             policy.long_term_days,
             normalized_algo,
+            1 if merged_bitcoin_rail else 0,
             profile["id"],
         ),
     )

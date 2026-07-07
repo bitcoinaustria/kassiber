@@ -298,10 +298,9 @@ _FAILED_SWAP_REFUND_LINKED_CSV = (
     f"2026-03-05T11:00:00Z,{_REFUND_TXID},inbound,BTC,0.09980000,0,72000,Refund from failed swap,{_LOCKUP_TXID}\n"
 )
 
-# Cross-asset (BTC → LBTC) scenario for the carrying-value rejection +
-# taxable acceptance tests.
+# Cross-asset (BTC → LBTC) scenario for carrying-value rail-change tests.
 _CROSS_BTC_CSV = """date,txid,direction,asset,amount,fee,fiat_rate,description
-2026-04-01T10:00:00Z,cross-fund-1,inbound,BTC,0.10000000,0,80000,BTC acquisition
+2026-04-01T10:00:00Z,cross-fund-1,inbound,BTC,0.10010000,0,80000,BTC acquisition with fee buffer
 2026-04-15T10:00:00Z,cross-out-leg,outbound,BTC,0.10000000,0.0001,82000,Peg-in to Liquid
 """
 
@@ -3077,23 +3076,8 @@ class CliSmokeTest(unittest.TestCase):
             "--file", str(self.cross_lbtc_csv),
         )
 
-        # Carrying-value across BTC ↔ LBTC is not yet supported — the CLI must
-        # reject the pair creation with a clear validation error envelope.
-        payload, code = _run(
-            self.data_root,
-            "transfers", "pair",
-            "--workspace", "Main",
-            "--profile", "CrossAsset",
-            "--tx-out", "cross-out-leg",
-            "--tx-in", "cross-in-leg",
-            "--policy", "carrying-value",
-        )
-        self.assertNotEqual(code, 0)
-        self.assertEqual(payload.get("kind"), "error")
-        self.assertEqual(payload["error"]["code"], "validation")
-        self.assertIn("carrying-value", payload["error"]["message"])
-
-        # Taxable cross-asset pair is accepted and surfaces in the envelope.
+        # BTC ↔ LBTC is the same Bitcoin exposure on different rails, so a
+        # reviewed carrying-value pair is accepted even on a generic profile.
         payload = self._cli(
             "transfers", "pair",
             "--workspace", "Main",
@@ -3101,10 +3085,10 @@ class CliSmokeTest(unittest.TestCase):
             "--tx-out", "cross-out-leg",
             "--tx-in", "cross-in-leg",
             "--kind", "peg-in",
-            "--policy", "taxable",
+            "--policy", "carrying-value",
         )
         self._assert_kind(payload, "transfers.pair")
-        self.assertEqual(payload["data"]["policy"], "taxable")
+        self.assertEqual(payload["data"]["policy"], "carrying-value")
         self.assertEqual(payload["data"]["kind"], "peg-in")
 
         payload = self._cli(
@@ -3113,10 +3097,21 @@ class CliSmokeTest(unittest.TestCase):
             "--profile", "CrossAsset",
         )
         data = payload["data"]
-        # Cross-asset taxable pair: legs processed independently as SELL+BUY,
-        # so transfers_detected stays 0 and cross_asset_pairs reports 1.
         self.assertEqual(data["transfers_detected"], 0)
         self.assertEqual(data["cross_asset_pairs"], 1)
+        self.assertEqual(data["quarantined"], 0)
+
+        payload = self._cli(
+            "reports", "capital-gains",
+            "--workspace", "Main",
+            "--profile", "CrossAsset",
+        )
+        disposals = payload["data"]
+        self.assertEqual(len(disposals), 1)
+        self.assertEqual(disposals[0]["description"], "Peg-in to Liquid")
+        self.assertEqual(disposals[0]["proceeds"], 8008.0)
+        self.assertEqual(disposals[0]["cost_basis"], 8008.0)
+        self.assertEqual(disposals[0]["gain_loss"], 0.0)
 
         payload = self._cli(
             "journals", "transfers", "list",
@@ -3129,7 +3124,7 @@ class CliSmokeTest(unittest.TestCase):
         self.assertEqual(audit["summary"]["cross_asset_pairs"], 1)
         pair = audit["cross_asset_pairs"][0]
         self.assertEqual(pair["kind"], "peg-in")
-        self.assertEqual(pair["policy"], "taxable")
+        self.assertEqual(pair["policy"], "carrying-value")
         self.assertEqual(pair["out_wallet"], "OnchainBTC")
         self.assertEqual(pair["in_wallet"], "Liquid")
 
@@ -3147,7 +3142,7 @@ class CliSmokeTest(unittest.TestCase):
         self.assertIn("Reviewed Transfers and Swaps", csv_text)
         self.assertIn("Swap Fee msat", csv_text)
         self.assertIn("Swap Fee Kind", csv_text)
-        self.assertIn(",swap,peg-in,taxable,", csv_text)
+        self.assertIn(",swap,peg-in,carrying-value,", csv_text)
         self.assertIn("cross-out-leg", csv_text)
         self.assertIn("cross-in-leg", csv_text)
 

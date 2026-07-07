@@ -1104,6 +1104,10 @@ TOOL_CATALOG: tuple[ToolEntry, ...] = (
                     "type": "boolean",
                     "description": "Allow daemon-owned background refresh while the app/daemon is running.",
                 },
+                "bitcoin_rail_carrying_value": {
+                    "type": "boolean",
+                    "description": "When true, BTC/LBTC rail-change suggestions default to carrying-value treatment.",
+                },
                 "source_classes": {
                     "type": "object",
                     "additionalProperties": {"type": "boolean"},

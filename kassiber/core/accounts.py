@@ -22,6 +22,7 @@ from ..tax_policy import (
     supported_tax_countries,
 )
 from ..time_utils import now_iso
+from ..transfers import profile_bitcoin_rail_carrying_value
 from ..wallet_descriptors import normalize_asset_code
 from . import output_inventory as core_output_inventory
 from .repo import invalidate_journals, resolve_profile, resolve_scope, resolve_workspace
@@ -137,6 +138,7 @@ def create_profile(
     tax_country,
     tax_long_term_days,
     *,
+    bitcoin_rail_carrying_value=True,
     commit=True,
 ):
     workspace = resolve_workspace(conn, workspace_ref)
@@ -165,8 +167,9 @@ def create_profile(
         conn.execute(
             """
             INSERT INTO profiles(
-                id, workspace_id, label, fiat_currency, tax_country, tax_long_term_days, gains_algorithm, created_at
-            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?)
+                id, workspace_id, label, fiat_currency, tax_country, tax_long_term_days,
+                gains_algorithm, bitcoin_rail_carrying_value, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 profile_id,
@@ -176,6 +179,7 @@ def create_profile(
                 policy.tax_country,
                 policy.long_term_days,
                 normalized_algo,
+                1 if bitcoin_rail_carrying_value else 0,
                 now_iso(),
             ),
         )
@@ -198,7 +202,8 @@ def list_profiles(conn, workspace_ref=None):
     current = get_setting(conn, "context_profile")
     rows = conn.execute(
         """
-        SELECT id, label, fiat_currency, tax_country, tax_long_term_days, gains_algorithm, created_at
+        SELECT id, label, fiat_currency, tax_country, tax_long_term_days, gains_algorithm,
+               bitcoin_rail_carrying_value, created_at
         FROM profiles
         WHERE workspace_id = ?
         ORDER BY created_at ASC
@@ -213,6 +218,7 @@ def list_profiles(conn, workspace_ref=None):
             "tax_country": row["tax_country"],
             "tax_long_term_days": row["tax_long_term_days"],
             "gains_algorithm": row["gains_algorithm"],
+            "bitcoin_rail_carrying_value": bool(row["bitcoin_rail_carrying_value"]),
             "current": "yes" if row["id"] == current else "",
             "created_at": row["created_at"],
         }
@@ -242,6 +248,7 @@ def get_profile_details(conn, workspace_ref=None, profile_ref=None):
         "tax_long_term_days": profile["tax_long_term_days"],
         "gains_algorithm": profile["gains_algorithm"],
         "require_coarse_review": _profile_require_coarse_review(profile),
+        "bitcoin_rail_carrying_value": profile_bitcoin_rail_carrying_value(profile),
         "last_processed_at": profile["last_processed_at"],
         "last_processed_tx_count": profile["last_processed_tx_count"],
         "created_at": profile["created_at"],
@@ -259,12 +266,15 @@ def update_profile(conn, workspace_ref, profile_ref, updates):
     new_long_term = updates.get("tax_long_term_days")
     new_algo = updates.get("gains_algorithm")
     new_coarse = updates.get("require_coarse_review")
+    new_bitcoin_rail = updates.get("bitcoin_rail_carrying_value")
 
     try:
         current_coarse = bool(profile["require_coarse_review"])
     except (KeyError, IndexError):
         current_coarse = False
     merged_coarse = bool(new_coarse) if new_coarse is not None else current_coarse
+    current_bitcoin_rail = profile_bitcoin_rail_carrying_value(profile)
+    merged_bitcoin_rail = bool(new_bitcoin_rail) if new_bitcoin_rail is not None else current_bitcoin_rail
 
     merged_fiat = new_fiat if new_fiat is not None else profile["fiat_currency"]
     merged_country = new_country if new_country is not None else profile["tax_country"]
@@ -315,13 +325,14 @@ def update_profile(conn, workspace_ref, profile_ref, updates):
         or policy.long_term_days != profile["tax_long_term_days"]
         or normalized_algo != profile["gains_algorithm"]
         or merged_coarse != current_coarse
+        or merged_bitcoin_rail != current_bitcoin_rail
     )
 
     conn.execute(
         """
         UPDATE profiles
         SET label = ?, fiat_currency = ?, tax_country = ?, tax_long_term_days = ?,
-            gains_algorithm = ?, require_coarse_review = ?
+            gains_algorithm = ?, require_coarse_review = ?, bitcoin_rail_carrying_value = ?
         WHERE id = ?
         """,
         (
@@ -331,6 +342,7 @@ def update_profile(conn, workspace_ref, profile_ref, updates):
             policy.long_term_days,
             normalized_algo,
             1 if merged_coarse else 0,
+            1 if merged_bitcoin_rail else 0,
             profile["id"],
         ),
     )

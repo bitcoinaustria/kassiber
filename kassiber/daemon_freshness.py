@@ -36,6 +36,7 @@ from .redaction import redact_operational_text
 from .errors import AppError
 from .log_ring import current_request_id
 from .time_utils import now_iso, parse_iso_datetime_or_none
+from .transfers import profile_bitcoin_rail_carrying_value
 from .util import str_or_none
 
 _LOGGER = logging.getLogger("kassiber.daemon.freshness")
@@ -1594,6 +1595,7 @@ def _maintenance_settings_payload(conn: sqlite3.Connection) -> dict[str, Any]:
                 **_market_rate_provider_settings(conn),
                 "active_rate_pair": None,
                 "auto_sync_before_report_reads": False,
+                "bitcoin_rail_carrying_value": True,
             },
             "freshness": {"sources": [], "jobs": []},
         }
@@ -1610,6 +1612,7 @@ def _maintenance_settings_payload(conn: sqlite3.Connection) -> dict[str, Any]:
             **_market_rate_provider_settings(conn, profile),
             "auto_sync_before_report_reads": policy.report_read_sync,
             "require_coarse_review": _profile_require_coarse_review(profile),
+            "bitcoin_rail_carrying_value": profile_bitcoin_rail_carrying_value(profile),
             "coarse_priced_count": core_rates.count_coarse_priced_transactions(
                 conn, profile["id"]
             ),
@@ -1628,6 +1631,7 @@ def _maintenance_configure_payload(
         - {
             "auto_sync_before_report_reads",
             "background_enabled",
+            "bitcoin_rail_carrying_value",
             "market_rate_provider",
             "report_read_sync",
             "require_coarse_review",
@@ -1649,6 +1653,8 @@ def _maintenance_configure_payload(
             retryable=False,
         )
     require_coarse_review = raw_args.get("require_coarse_review")
+    bitcoin_rail_carrying_value = raw_args.get("bitcoin_rail_carrying_value")
+    profile_updates: dict[str, Any] = {}
     if require_coarse_review is not None:
         if not isinstance(require_coarse_review, bool):
             raise AppError(
@@ -1657,6 +1663,17 @@ def _maintenance_configure_payload(
                 details={"type": type(require_coarse_review).__name__},
                 retryable=False,
             )
+        profile_updates["require_coarse_review"] = require_coarse_review
+    if bitcoin_rail_carrying_value is not None:
+        if not isinstance(bitcoin_rail_carrying_value, bool):
+            raise AppError(
+                "ui.maintenance.configure bitcoin_rail_carrying_value must be a boolean",
+                code="validation",
+                details={"type": type(bitcoin_rail_carrying_value).__name__},
+                retryable=False,
+            )
+        profile_updates["bitcoin_rail_carrying_value"] = bitcoin_rail_carrying_value
+    if profile_updates:
         # Reuse update_profile so the change is journal-invalidated consistently.
         from .core import accounts as core_accounts
 
@@ -1664,9 +1681,13 @@ def _maintenance_configure_payload(
             conn,
             profile["workspace_id"],
             profile["id"],
-            {"require_coarse_review": require_coarse_review},
+            profile_updates,
         )
-    freshness_args = {k: v for k, v in raw_args.items() if k != "require_coarse_review"}
+    freshness_args = {
+        k: v
+        for k, v in raw_args.items()
+        if k not in {"require_coarse_review", "bitcoin_rail_carrying_value"}
+    }
     payload = _freshness_configure_payload(conn, freshness_args)
     return {**_maintenance_settings_payload(conn), "configured": payload["settings"]}
 

@@ -368,8 +368,8 @@ def _swap_review_suggested_action(
             "arguments": base_args,
             "requires_consent": True,
             "reason": (
-                "non-Austrian profiles keep cross-asset swaps as SELL + BUY "
-                "while recording the audit link"
+                "this profile keeps the cross-asset swap as SELL + BUY while "
+                "recording the audit link"
             ),
         }
     if candidate.get("confidence") == "exact":

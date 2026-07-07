@@ -299,6 +299,16 @@
       "countDescription": "Daily rates are accepted for tax and these rows are report-ready. For finer accuracy in volatile periods, use Rebuild cache below to re-price them from precise event-time rates.",
       "reviewToggleLabel": "Hold daily-rate pricing for review",
       "reviewToggleDescription": "Off (default): transactions priced only from daily/coarse rates are booked at the daily price and flagged for optional review. On: they are quarantined until you confirm or fetch a precise price — useful for audits."
+    },
+    "bitcoinRails": {
+      "enabledTitle": "Bitcoin rail carry enabled",
+      "disabledTitle": "Bitcoin rail carry disabled",
+      "enabledBody": "BTC/LBTC rail-change suggestions will default to carrying-value treatment.",
+      "disabledBody": "BTC/LBTC rail-change suggestions will default to taxable treatment unless you override the pair.",
+      "errorTitle": "Could not update Bitcoin rail policy",
+      "errorBody": "Kassiber could not save the Bitcoin rail treatment setting.",
+      "toggleLabel": "Treat Bitcoin rail changes as carrying value",
+      "toggleDescription": "On (default): BTC/LBTC movements between your own rails default to carrying value. Off: suggestions default to taxable treatment; explicit pair overrides still win."
     }
   },
   "security": {

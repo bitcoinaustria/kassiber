@@ -235,6 +235,7 @@ export interface MaintenanceFreshnessSettings {
   active_rate_pair?: string | null;
   auto_sync_before_report_reads?: boolean;
   require_coarse_review?: boolean;
+  bitcoin_rail_carrying_value?: boolean;
   coarse_priced_count?: number;
   setting_key?: string;
 }

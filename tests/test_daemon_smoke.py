@@ -5590,6 +5590,9 @@ class DaemonSmokeTest(unittest.TestCase):
                 settings["data"]["settings"]["market_rate_provider"],
                 "coinbase-exchange",
             )
+            self.assertTrue(
+                settings["data"]["settings"]["bitcoin_rail_carrying_value"]
+            )
 
             _write_payload(
                 proc,
@@ -5598,6 +5601,7 @@ class DaemonSmokeTest(unittest.TestCase):
                     "kind": "ui.maintenance.configure",
                     "args": {
                         "auto_sync_before_report_reads": True,
+                        "bitcoin_rail_carrying_value": False,
                         "market_rate_provider": "coingecko",
                     },
                 },
@@ -5610,6 +5614,9 @@ class DaemonSmokeTest(unittest.TestCase):
             self.assertEqual(
                 configured["data"]["settings"]["market_rate_provider"],
                 "coingecko",
+            )
+            self.assertFalse(
+                configured["data"]["settings"]["bitcoin_rail_carrying_value"]
             )
 
             _write_payload(
