@@ -728,6 +728,26 @@ function connectionResult(
 
 function transactionResult(tx: Tx, query: string): SearchResult {
   const partialTxidMatch = isPartialTransactionQuery(tx, query);
+  const tags = tx.tags ?? [];
+  const normalizedTags = tags.map((tag) => tag.toLowerCase());
+  const btcpayTokens =
+    normalizedTags.includes("btcpay") ||
+    tx.account.toLowerCase().includes("btcpay") ||
+    tx.pricingSourceKind?.toLowerCase().includes("btcpay") ||
+    tx.pricingProvider?.toLowerCase() === "btcpay"
+      ? [
+          "btcpay",
+          "btcpay payment",
+          "btcpay payments",
+          "btcpay invoice",
+          "btcpay invoices",
+          "btcpay payment request",
+          "btcpay payment requests",
+          "merchant payment",
+          "merchant invoice",
+          "merchant payment request",
+        ]
+      : [];
   return {
     id: `tx:recent:${tx.id}`,
     category: "transaction",
@@ -755,6 +775,12 @@ function transactionResult(tx: Tx, query: string): SearchResult {
       tx.counter,
       tx.type,
       tx.tag,
+      ...tags,
+      tx.pricingSourceKind ?? "",
+      tx.pricingProvider ?? "",
+      tx.pricingMethod ?? "",
+      tx.pricingExternalRef ?? "",
+      ...btcpayTokens,
     ],
     iconKey: "transaction",
     route: { to: "/transactions", search: { tx: tx.id } },
@@ -762,7 +788,17 @@ function transactionResult(tx: Tx, query: string): SearchResult {
       transactionId: tx.id,
       externalId: tx.externalId,
       explorerId: tx.explorerId,
-      searchTokens: [tx.account, tx.counter, tx.type, tx.tag],
+      searchTokens: [
+        tx.account,
+        tx.counter,
+        tx.type,
+        tx.tag,
+        ...tags,
+        tx.pricingSourceKind ?? "",
+        tx.pricingProvider ?? "",
+        tx.pricingMethod ?? "",
+        ...btcpayTokens,
+      ],
     },
     privacyTier: "book_private",
     ranking: { priority: partialTxidMatch ? 40 : 0 },
