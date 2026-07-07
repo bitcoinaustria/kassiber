@@ -4,7 +4,10 @@ import { describe, expect, it, vi } from "vitest";
 
 import { MOCK_OVERVIEW } from "@/mocks/seed";
 
-import { WalletsTable } from "./WalletsTable";
+import {
+  compareWalletsTableConnections,
+  WalletsTable,
+} from "./WalletsTable";
 
 describe("wallets table", () => {
   const renderTable = (
@@ -34,6 +37,22 @@ describe("wallets table", () => {
     expect(html).toContain("Tax-free");
     expect(html).toContain("Yes");
     expect(html).toContain("No");
+  });
+
+  it("sorts tax-free wallets before taxable-only wallets", () => {
+    const taxFreeWalletIds = new Set(
+      MOCK_OVERVIEW.taxFreeBalance!.wallets!
+        .filter((wallet) => wallet.hasTaxFreeBalance)
+        .map((wallet) => wallet.walletId),
+    );
+    const sorted = [...MOCK_OVERVIEW.connections].sort(
+      (a, b) =>
+        compareWalletsTableConnections(a, b, "taxFree", taxFreeWalletIds) *
+        -1,
+    );
+
+    expect(sorted[0]?.id).toBe("c1");
+    expect(taxFreeWalletIds.has(sorted[0]!.id)).toBe(true);
   });
 
   it("hides the tax-free column when the tax-free card is absent", () => {

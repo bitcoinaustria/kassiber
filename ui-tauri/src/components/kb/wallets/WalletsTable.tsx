@@ -40,7 +40,13 @@ interface WalletsTableProps {
   totalCount?: number;
 }
 
-type SortKey = "label" | "kind" | "transactions" | "last" | "balance";
+export type WalletsTableSortKey =
+  | "label"
+  | "kind"
+  | "transactions"
+  | "last"
+  | "taxFree"
+  | "balance";
 type SortDir = "asc" | "desc";
 
 const collator = new Intl.Collator(undefined, {
@@ -49,11 +55,12 @@ const collator = new Intl.Collator(undefined, {
 });
 
 /** First click on a column starts in the most useful direction. */
-const defaultSortDir: Record<SortKey, SortDir> = {
+const defaultSortDir: Record<WalletsTableSortKey, SortDir> = {
   label: "asc",
   kind: "asc",
   transactions: "desc",
   last: "desc",
+  taxFree: "desc",
   balance: "desc",
 };
 
@@ -78,7 +85,12 @@ function activityLabel(connection: Connection): string {
 }
 
 /** Ascending comparator per key; a connection without activity counts as oldest. */
-function compareBy(a: Connection, b: Connection, key: SortKey): number {
+export function compareWalletsTableConnections(
+  a: Connection,
+  b: Connection,
+  key: WalletsTableSortKey,
+  taxFreeWalletIds: ReadonlySet<string> = new Set(),
+): number {
   switch (key) {
     case "label":
       return collator.compare(a.label, b.label);
@@ -99,6 +111,11 @@ function compareBy(a: Connection, b: Connection, key: SortKey): number {
       if (mb === null) return 1;
       return ma - mb;
     }
+    case "taxFree": {
+      const rank =
+        Number(taxFreeWalletIds.has(a.id)) - Number(taxFreeWalletIds.has(b.id));
+      return rank || collator.compare(a.label, b.label);
+    }
     case "balance":
       return a.balance - b.balance;
   }
@@ -114,7 +131,7 @@ export function WalletsTable({
   totalBtc,
   totalCount,
 }: WalletsTableProps) {
-  const [sortKey, setSortKey] = useState<SortKey | null>("kind");
+  const [sortKey, setSortKey] = useState<WalletsTableSortKey | null>("kind");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const showTaxFreeColumn = taxFreeBalance != null;
   const taxFreeWalletIds = useMemo(
@@ -130,10 +147,14 @@ export function WalletsTable({
   const sortedConnections = useMemo(() => {
     if (!sortKey) return connections;
     const factor = sortDir === "asc" ? 1 : -1;
-    return [...connections].sort((a, b) => compareBy(a, b, sortKey) * factor);
-  }, [connections, sortKey, sortDir]);
+    return [...connections].sort(
+      (a, b) =>
+        compareWalletsTableConnections(a, b, sortKey, taxFreeWalletIds) *
+        factor,
+    );
+  }, [connections, sortKey, sortDir, taxFreeWalletIds]);
 
-  const onSort = (key: SortKey) => {
+  const onSort = (key: WalletsTableSortKey) => {
     if (key === sortKey) {
       setSortDir((dir) => (dir === "asc" ? "desc" : "asc"));
     } else {
@@ -145,7 +166,7 @@ export function WalletsTable({
   return (
     <div className="border-t">
       <div className="overflow-x-auto px-3 pb-3 pt-3 sm:px-6 sm:pb-4">
-        <Table>
+        <Table className="min-w-[900px] table-fixed">
           <TableHeader>
             <TableRow className="bg-muted/50 hover:bg-muted/50">
               <SortableHead
@@ -154,7 +175,7 @@ export function WalletsTable({
                 activeKey={sortKey}
                 dir={sortDir}
                 onSort={onSort}
-                className="min-w-[200px]"
+                className="w-[24%] min-w-[180px] pr-5"
               />
               <SortableHead
                 label="Kind"
@@ -162,7 +183,7 @@ export function WalletsTable({
                 activeKey={sortKey}
                 dir={sortDir}
                 onSort={onSort}
-                className="w-[100px]"
+                className="w-[108px] px-3"
               />
               <SortableHead
                 label="Transactions"
@@ -171,7 +192,7 @@ export function WalletsTable({
                 dir={sortDir}
                 onSort={onSort}
                 align="right"
-                className="w-[120px] text-right"
+                className="w-[136px] px-3 text-right"
               />
               <SortableHead
                 label="Last activity"
@@ -179,15 +200,20 @@ export function WalletsTable({
                 activeKey={sortKey}
                 dir={sortDir}
                 onSort={onSort}
-                className="w-[110px]"
+                className="w-[122px] px-3"
               />
-              <TableHead className="hidden w-[120px] text-xs font-medium text-muted-foreground sm:text-sm lg:table-cell">
+              <TableHead className="hidden w-[140px] px-3 text-xs font-medium text-muted-foreground sm:text-sm lg:table-cell">
                 Composition
               </TableHead>
               {showTaxFreeColumn ? (
-                <TableHead className="w-[90px] text-xs font-medium text-muted-foreground sm:text-sm">
-                  Tax-free
-                </TableHead>
+                <SortableHead
+                  label="Tax-free"
+                  sortKey="taxFree"
+                  activeKey={sortKey}
+                  dir={sortDir}
+                  onSort={onSort}
+                  className="w-[118px] px-3"
+                />
               ) : null}
               <SortableHead
                 label="Balance"
@@ -196,7 +222,7 @@ export function WalletsTable({
                 dir={sortDir}
                 onSort={onSort}
                 align="right"
-                className="w-[140px] text-right"
+                className="w-[170px] px-3 text-right"
               />
             </TableRow>
           </TableHeader>
@@ -236,10 +262,10 @@ export function WalletsTable({
 
 interface SortableHeadProps {
   label: string;
-  sortKey: SortKey;
-  activeKey: SortKey | null;
+  sortKey: WalletsTableSortKey;
+  activeKey: WalletsTableSortKey | null;
   dir: SortDir;
-  onSort: (key: SortKey) => void;
+  onSort: (key: WalletsTableSortKey) => void;
   align?: "left" | "right";
   className?: string;
 }
@@ -344,7 +370,7 @@ function WalletRow({
       onClick={onSelect}
       onKeyDown={onKeyDown}
     >
-      <TableCell className="min-w-[200px]">
+      <TableCell className="min-w-[180px] pr-5">
         <div className="flex min-w-0 items-start gap-3">
           <ConnectionAssetBadge
             connection={connection}
@@ -362,12 +388,12 @@ function WalletRow({
           </div>
         </div>
       </TableCell>
-      <TableCell>
+      <TableCell className="px-3">
         <Badge variant="outline" className="rounded-md whitespace-nowrap">
           {connectionCategoryLabel(connection)}
         </Badge>
       </TableCell>
-      <TableCell className="text-right">
+      <TableCell className="px-3 text-right">
         {isBackend ? (
           <span className="text-sm text-muted-foreground">—</span>
         ) : (
@@ -376,12 +402,12 @@ function WalletRow({
           </span>
         )}
       </TableCell>
-      <TableCell>
+      <TableCell className="px-3">
         <div className="text-sm whitespace-nowrap">
           <span>{activityLabel(connection)}</span>
         </div>
       </TableCell>
-      <TableCell className="hidden lg:table-cell">
+      <TableCell className="hidden px-3 lg:table-cell">
         {isBackend ? (
           <div
             className="text-xs text-muted-foreground"
@@ -402,7 +428,7 @@ function WalletRow({
         )}
       </TableCell>
       {showTaxFreeColumn ? (
-        <TableCell>
+        <TableCell className="px-3">
           {isBackend ? (
             <span className="text-sm text-muted-foreground">—</span>
           ) : (
@@ -420,7 +446,7 @@ function WalletRow({
           )}
         </TableCell>
       ) : null}
-      <TableCell className="text-right">
+      <TableCell className="px-3 text-right">
         {isBackend ? (
           <>
             <div className="font-medium tabular-nums">
