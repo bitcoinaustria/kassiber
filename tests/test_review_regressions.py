@@ -1168,6 +1168,10 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual(tax_free["taxableQuantitySats"], 40_000_000)
         self.assertEqual(tax_free["totalQuantitySats"], 140_000_000)
         self.assertEqual(
+            tax_free["wallets"],
+            [{"walletId": "wal-tax-free", "hasTaxFreeBalance": True}],
+        )
+        self.assertEqual(
             [bucket["id"] for bucket in tax_free["buckets"]],
             ["altbestand", "neubestand"],
         )
@@ -1258,6 +1262,7 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual(tax_free["taxFreeQuantitySats"], 0)
         self.assertEqual(tax_free["taxableQuantitySats"], 0)
         self.assertEqual(tax_free["totalQuantitySats"], 0)
+        self.assertEqual(tax_free["wallets"], [])
         self.assertEqual(
             [bucket["quantitySats"] for bucket in tax_free["buckets"]],
             [0, 0],

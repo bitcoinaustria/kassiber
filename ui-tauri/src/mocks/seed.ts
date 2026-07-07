@@ -319,6 +319,11 @@ export interface TaxFreeBalanceBucket {
   taxFree: boolean;
 }
 
+export interface TaxFreeBalanceWallet {
+  walletId: string;
+  hasTaxFreeBalance: boolean;
+}
+
 export interface TaxFreeBalanceSnapshot {
   rule: "austrian_altbestand" | string;
   jurisdictionCode: string;
@@ -331,6 +336,7 @@ export interface TaxFreeBalanceSnapshot {
   taxableMarketValue: number | null;
   needsJournals: boolean;
   quarantines: number;
+  wallets?: TaxFreeBalanceWallet[];
   buckets: TaxFreeBalanceBucket[];
 }
 
@@ -931,6 +937,10 @@ export const MOCK_OVERVIEW: OverviewSnapshot = {
     taxableMarketValue: 227_138.55,
     needsJournals: false,
     quarantines: 0,
+    wallets: [
+      { walletId: "c1", hasTaxFreeBalance: true },
+      { walletId: "c2", hasTaxFreeBalance: false },
+    ],
     buckets: [
       {
         id: "altbestand",

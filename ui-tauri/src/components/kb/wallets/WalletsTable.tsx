@@ -24,7 +24,7 @@ import {
 } from "@/lib/connectionDisplay";
 import type { Currency } from "@/lib/currency";
 import { cn } from "@/lib/utils";
-import type { Connection } from "@/mocks/seed";
+import type { Connection, OverviewSnapshot } from "@/mocks/seed";
 
 import { formatBtc, formatEur, hiddenSensitiveClassName } from "./format";
 
@@ -34,6 +34,7 @@ interface WalletsTableProps {
   hideSensitive: boolean;
   onSelectConnection: (id: string) => void;
   priceEur: number;
+  taxFreeBalance?: OverviewSnapshot["taxFreeBalance"];
   totalBtc: number;
   /** Unfiltered wallet count, to distinguish empty book from empty filter. */
   totalCount?: number;
@@ -109,11 +110,22 @@ export function WalletsTable({
   hideSensitive,
   onSelectConnection,
   priceEur,
+  taxFreeBalance,
   totalBtc,
   totalCount,
 }: WalletsTableProps) {
   const [sortKey, setSortKey] = useState<SortKey | null>("kind");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
+  const showTaxFreeColumn = taxFreeBalance != null;
+  const taxFreeWalletIds = useMemo(
+    () =>
+      new Set(
+        (taxFreeBalance?.wallets ?? [])
+          .filter((wallet) => wallet.hasTaxFreeBalance)
+          .map((wallet) => wallet.walletId),
+      ),
+    [taxFreeBalance],
+  );
 
   const sortedConnections = useMemo(() => {
     if (!sortKey) return connections;
@@ -172,6 +184,11 @@ export function WalletsTable({
               <TableHead className="hidden w-[120px] text-xs font-medium text-muted-foreground sm:text-sm lg:table-cell">
                 Composition
               </TableHead>
+              {showTaxFreeColumn ? (
+                <TableHead className="w-[90px] text-xs font-medium text-muted-foreground sm:text-sm">
+                  Tax-free
+                </TableHead>
+              ) : null}
               <SortableHead
                 label="Balance"
                 sortKey="balance"
@@ -187,7 +204,7 @@ export function WalletsTable({
             {sortedConnections.length === 0 ? (
               <TableRow>
                 <TableCell
-                  colSpan={6}
+                  colSpan={showTaxFreeColumn ? 7 : 6}
                   className="h-24 text-center text-sm text-muted-foreground"
                 >
                   {totalCount === 0
@@ -204,6 +221,8 @@ export function WalletsTable({
                   priceEur={priceEur}
                   hideSensitive={hideSensitive}
                   currency={currency}
+                  hasTaxFreeBalance={taxFreeWalletIds.has(connection.id)}
+                  showTaxFreeColumn={showTaxFreeColumn}
                   onSelect={() => onSelectConnection(connection.id)}
                 />
               ))
@@ -273,8 +292,10 @@ interface WalletRowProps {
   connection: Connection;
   currency: Currency;
   hideSensitive: boolean;
+  hasTaxFreeBalance: boolean;
   onSelect: () => void;
   priceEur: number;
+  showTaxFreeColumn: boolean;
   totalBtc: number;
 }
 
@@ -282,8 +303,10 @@ function WalletRow({
   connection,
   currency,
   hideSensitive,
+  hasTaxFreeBalance,
   onSelect,
   priceEur,
+  showTaxFreeColumn,
   totalBtc,
 }: WalletRowProps) {
   const isBackend = connection.role === "backend";
@@ -378,6 +401,25 @@ function WalletRow({
           </div>
         )}
       </TableCell>
+      {showTaxFreeColumn ? (
+        <TableCell>
+          {isBackend ? (
+            <span className="text-sm text-muted-foreground">—</span>
+          ) : (
+            <span
+              className={cn(
+                "text-sm font-medium",
+                hasTaxFreeBalance
+                  ? "text-foreground"
+                  : "text-muted-foreground",
+                hiddenSensitiveClassName(hideSensitive),
+              )}
+            >
+              {hasTaxFreeBalance ? "Yes" : "No"}
+            </span>
+          )}
+        </TableCell>
+      ) : null}
       <TableCell className="text-right">
         {isBackend ? (
           <>

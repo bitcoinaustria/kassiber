@@ -2332,7 +2332,9 @@ def _tax_free_balance_snapshot(
         return None
     rows = conn.execute(
         """
-        SELECT entry_type, asset, occurred_at, quantity, fiat_value, cost_basis, at_category
+        SELECT
+            wallet_id, entry_type, asset, occurred_at, quantity, fiat_value,
+            cost_basis, description, at_category
         FROM journal_entries
         WHERE profile_id = ? AND asset IN ('BTC', 'LBTC')
         ORDER BY occurred_at ASC, created_at ASC, id ASC
@@ -2343,6 +2345,7 @@ def _tax_free_balance_snapshot(
     for row in rows:
         entries.append(
             {
+                "wallet_id": row["wallet_id"],
                 "entry_type": row["entry_type"],
                 "asset": row["asset"],
                 "occurred_at": row["occurred_at"],
@@ -2353,6 +2356,7 @@ def _tax_free_balance_snapshot(
                     if row["cost_basis"] is not None
                     else None
                 ),
+                "description": row["description"],
                 "at_category": row["at_category"],
             }
         )
@@ -2395,6 +2399,7 @@ def _tax_free_balance_snapshot(
         "taxableMarketValue": totals["neuMarketValue"],
         "needsJournals": needs_journals,
         "quarantines": quarantines,
+        "wallets": _tax_free_wallet_summaries(entries),
         "buckets": [
             {
                 "id": "altbestand",
@@ -2414,6 +2419,46 @@ def _tax_free_balance_snapshot(
             },
         ],
     }
+
+
+def _tax_free_wallet_summaries(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    tax_free_by_wallet: dict[str, Decimal] = defaultdict(Decimal)
+    for entry in entries:
+        wallet_id = str(entry.get("wallet_id") or "")
+        if not wallet_id:
+            continue
+        qty = dec(entry.get("quantity") or 0)
+        if qty == 0:
+            continue
+        if _entry_has_alt_regime(entry):
+            tax_free_by_wallet[wallet_id] += qty
+    return [
+        {
+            "walletId": wallet_id,
+            "hasTaxFreeBalance": qty > 0,
+        }
+        for wallet_id, qty in sorted(tax_free_by_wallet.items())
+    ]
+
+
+def _entry_has_alt_regime(entry: dict[str, Any]) -> bool:
+    description = str(entry.get("description") or "")
+    if "at_regime=alt" in description:
+        return True
+    if "at_regime=neu" in description:
+        return False
+    category = entry.get("at_category")
+    if category:
+        return str(category).startswith("alt")
+    occurred_at = entry.get("occurred_at")
+    if not occurred_at:
+        return False
+    try:
+        from .austrian import infer_regime_from_timestamp
+
+        return infer_regime_from_timestamp(str(occurred_at)) == "alt"
+    except ValueError:
+        return False
 
 
 def _profile_readiness(
