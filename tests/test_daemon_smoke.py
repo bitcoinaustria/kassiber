@@ -3572,6 +3572,35 @@ class DaemonSmokeTest(unittest.TestCase):
                 _write_payload(
                     proc,
                     {
+                        "request_id": "inline-btcpay-duplicate-credentials",
+                        "kind": "ui.connections.btcpay.create",
+                        "args": {
+                            "label": "BTCPay Inline UI 3",
+                            "backend_label": "Duplicate Shop BTCPay",
+                            "server_url": "https://shop-btcpay.example/",
+                            "api_key": "inline-secret",
+                            "store_id": "store789",
+                            "payment_method_id": "BTC-CHAIN",
+                        },
+                    },
+                )
+                duplicate_credentials = _read_payload_timeout(proc)
+                self.assertEqual(duplicate_credentials["kind"], "error")
+                self.assertEqual(
+                    duplicate_credentials["error"]["code"], "conflict"
+                )
+                self.assertEqual(
+                    duplicate_credentials["error"]["details"]["existing_backend"],
+                    "shop-btcpay",
+                )
+                self.assertIn(
+                    "saved instance",
+                    duplicate_credentials["error"]["hint"].lower(),
+                )
+
+                _write_payload(
+                    proc,
+                    {
                         "request_id": "update-no-changes",
                         "kind": "ui.wallets.update",
                         "args": {

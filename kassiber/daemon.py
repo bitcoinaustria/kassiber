@@ -7208,6 +7208,33 @@ def _inline_btcpay_backend_args(args: dict[str, Any]) -> tuple[str, str, str]:
     return backend_name, server_url, api_key
 
 
+def _normalize_btcpay_instance_url_for_match(url: str | None) -> str:
+    return str(url or "").strip().rstrip("/")
+
+
+def _matching_btcpay_instance_name(
+    ctx: "DaemonContext",
+    *,
+    server_url: str,
+    api_key: str,
+    exclude_name: str,
+) -> str | None:
+    target_url = _normalize_btcpay_instance_url_for_match(server_url)
+    for name, raw_backend in ctx.runtime_config.get("backends", {}).items():
+        if name == exclude_name or not isinstance(raw_backend, dict):
+            continue
+        if str(raw_backend.get("kind") or "").strip().lower() != "btcpay":
+            continue
+        if _normalize_btcpay_instance_url_for_match(
+            backend_value(raw_backend, "url")
+        ) != target_url:
+            continue
+        if backend_value(raw_backend, "token") != api_key:
+            continue
+        return str(raw_backend.get("name") or name)
+    return None
+
+
 def _resolve_btcpay_backend_for_setup(
     ctx: "DaemonContext",
     args: dict[str, Any],
@@ -7257,6 +7284,22 @@ def _resolve_btcpay_backend_for_setup(
                 "Pick that saved instance, or enter a different instance name."
             ),
             details={"existing_backend": backend_name},
+            retryable=False,
+        )
+    matching_backend = _matching_btcpay_instance_name(
+        ctx,
+        server_url=server_url,
+        api_key=api_key,
+        exclude_name=backend_name,
+    )
+    if matching_backend:
+        raise AppError(
+            f"BTCPay instance '{matching_backend}' already uses this server URL and API key",
+            code="conflict",
+            hint=(
+                "Pick that saved instance, then choose or discover another store."
+            ),
+            details={"existing_backend": matching_backend},
             retryable=False,
         )
 
