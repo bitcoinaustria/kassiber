@@ -133,7 +133,7 @@ Current rules:
 - same-asset `--policy taxable` is rejected; leave those legs unpaired if you want normal SELL + BUY treatment
 - cross-asset pairs are always stored for audit
 - cross-asset `--policy carrying-value` is supported for BTC ↔ LBTC rail changes on every profile, because both assets represent the same Bitcoin exposure; Austrian books (`tax_country=at`) additionally use rp2's native multi-asset hook for reviewed carrying-value swaps
-- generic books default BTC ↔ LBTC suggestions and omitted-policy manual pairs to `carrying-value` while `bitcoin_rail_carrying_value` is enabled (default); turn it off with `profiles set --no-bitcoin-rail-carrying-value` when an adviser wants taxable-by-default rail changes
+- generic books default BTC ↔ LBTC suggestions, omitted-policy manual pairs, and omitted-policy asset-specific auto-pair rules to `carrying-value` while `bitcoin_rail_carrying_value` is enabled (default); turn it off with `profiles set --no-bitcoin-rail-carrying-value` when an adviser wants taxable-by-default rail changes
 - explicit per-pair policy still wins: `--policy taxable` keeps SELL + BUY treatment, and `--policy carrying-value` remains available for BTC ↔ LBTC rail changes
 - cross-asset `--policy taxable` keeps the normal SELL + BUY treatment
 - non-Austrian books still reject `--policy carrying-value` for other cross-asset swaps

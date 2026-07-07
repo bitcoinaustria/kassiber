@@ -1482,6 +1482,15 @@ def list_transfer_rules(conn, workspace_ref, profile_ref):
     return [_rule_row_to_dict(row) for row in rows]
 
 
+def _default_transfer_rule_policy(profile, predicate):
+    return core_transfer_matching.default_policy_for(
+        str(profile["tax_country"] or ""),
+        predicate.get("out_asset"),
+        predicate.get("in_asset"),
+        bitcoin_rail_carrying_value=profile_bitcoin_rail_carrying_value(profile),
+    )
+
+
 def create_transfer_rule(
     conn,
     workspace_ref,
@@ -1490,7 +1499,7 @@ def create_transfer_rule(
     name=None,
     predicate=None,
     kind="manual",
-    policy="carrying-value",
+    policy=None,
     enabled=True,
 ):
     workspace, profile = resolve_scope(conn, workspace_ref, profile_ref)
@@ -1499,14 +1508,16 @@ def create_transfer_rule(
             f"Unsupported pair kind '{kind}'. Supported: {', '.join(TRANSFER_PAIR_KINDS)}",
             code="validation",
         )
+    predicate = predicate or {}
+    if not isinstance(predicate, dict):
+        raise AppError("predicate must be a JSON object", code="validation")
+    if policy is None:
+        policy = _default_transfer_rule_policy(profile, predicate)
     if policy not in TRANSFER_PAIR_POLICIES:
         raise AppError(
             f"Unsupported pair policy '{policy}'. Supported: {', '.join(TRANSFER_PAIR_POLICIES)}",
             code="validation",
         )
-    predicate = predicate or {}
-    if not isinstance(predicate, dict):
-        raise AppError("predicate must be a JSON object", code="validation")
     rule_id = str(uuid.uuid4())
     timestamp = now_iso()
     conn.execute(

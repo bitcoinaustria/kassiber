@@ -10379,6 +10379,154 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual(disposals["lbtc-sale-after-carry"]["proceeds"], 8300.0)
         self.assertEqual(disposals["lbtc-sale-after-carry"]["gain_loss"], 292.0)
 
+    def test_direct_generic_bitcoin_rail_chained_carry_stays_stable(self):
+        profile = {
+            "id": "profile-generic-chain",
+            "workspace_id": "workspace-main",
+            "label": "FixtureGenericRailChain",
+            "fiat_currency": "USD",
+            "tax_country": "generic",
+            "tax_long_term_days": 365,
+            "gains_algorithm": "FIFO",
+        }
+        wallet_refs_by_id = {
+            "wallet-btc": {
+                "id": "wallet-btc",
+                "label": "Bitcoin",
+                "wallet_account_id": "account-treasury",
+                "account_code": "treasury",
+                "account_label": "Treasury",
+            },
+            "wallet-liquid": {
+                "id": "wallet-liquid",
+                "label": "Liquid",
+                "wallet_account_id": "account-treasury",
+                "account_code": "treasury",
+                "account_label": "Treasury",
+            },
+        }
+
+        def row(rid, wallet_id, direction, asset, occurred_at, fiat_rate, description):
+            wallet = wallet_refs_by_id[wallet_id]
+            return {
+                "id": rid,
+                "wallet_id": wallet_id,
+                "wallet_label": wallet["label"],
+                "wallet_account_id": wallet["wallet_account_id"],
+                "account_code": wallet["account_code"],
+                "account_label": wallet["account_label"],
+                "occurred_at": occurred_at,
+                "direction": direction,
+                "asset": asset,
+                "amount": 100_000_000_000,
+                "fee": 0,
+                "fiat_rate": fiat_rate,
+                "fiat_value": fiat_rate,
+                "kind": "buy" if direction == "inbound" else "sell",
+                "description": description,
+                "note": None,
+                "external_id": rid,
+                "created_at": occurred_at,
+            }
+
+        inputs = TaxEngineLedgerInputs(
+            rows=[
+                row("btc-buy-10k", "wallet-btc", "inbound", "BTC", "2026-01-01T00:00:00Z", 10000, "BTC buy"),
+                row("btc-to-lbtc-out", "wallet-btc", "outbound", "BTC", "2026-02-01T00:00:00Z", 20000, "BTC rail out"),
+                row("btc-to-lbtc-in", "wallet-liquid", "inbound", "LBTC", "2026-02-01T00:01:00Z", 20000, "LBTC rail in"),
+                row("lbtc-to-btc-out", "wallet-liquid", "outbound", "LBTC", "2026-03-01T00:00:00Z", 30000, "LBTC rail out"),
+                row("lbtc-to-btc-in", "wallet-btc", "inbound", "BTC", "2026-03-01T00:01:00Z", 30000, "BTC rail in"),
+                row("btc-sale-40k", "wallet-btc", "outbound", "BTC", "2026-04-01T00:00:00Z", 40000, "BTC sale"),
+            ],
+            wallet_refs_by_id=wallet_refs_by_id,
+            manual_pair_records=[
+                {
+                    "id": "pair-btc-lbtc",
+                    "out_transaction_id": "btc-to-lbtc-out",
+                    "in_transaction_id": "btc-to-lbtc-in",
+                    "kind": "peg-in",
+                    "policy": "carrying-value",
+                },
+                {
+                    "id": "pair-lbtc-btc",
+                    "out_transaction_id": "lbtc-to-btc-out",
+                    "in_transaction_id": "lbtc-to-btc-in",
+                    "kind": "peg-out",
+                    "policy": "carrying-value",
+                },
+            ],
+        )
+        actual = self._direct_engine_snapshot(profile, inputs)
+        self.assertEqual(actual["quarantines"], [])
+        self.assertEqual(actual["account_holdings"], [])
+        disposals = {
+            entry["transaction_id"]: entry
+            for entry in actual["entries"]
+            if entry["entry_type"] == "disposal"
+        }
+        self.assertEqual(disposals["btc-to-lbtc-out"]["cost_basis"], 10000.0)
+        self.assertEqual(disposals["btc-to-lbtc-out"]["proceeds"], 10000.0)
+        self.assertEqual(disposals["btc-to-lbtc-out"]["gain_loss"], 0.0)
+        self.assertEqual(disposals["lbtc-to-btc-out"]["cost_basis"], 10000.0)
+        self.assertEqual(disposals["lbtc-to-btc-out"]["proceeds"], 10000.0)
+        self.assertEqual(disposals["lbtc-to-btc-out"]["gain_loss"], 0.0)
+        self.assertEqual(disposals["btc-sale-40k"]["cost_basis"], 10000.0)
+        self.assertEqual(disposals["btc-sale-40k"]["proceeds"], 40000.0)
+        self.assertEqual(disposals["btc-sale-40k"]["gain_loss"], 30000.0)
+
+    def test_direct_generic_bitcoin_rail_carry_quarantines_when_source_basis_missing(self):
+        profile, inputs = self._direct_cross_asset_pair_engine_inputs()
+        carry_inputs = TaxEngineLedgerInputs(
+            rows=[row for row in inputs.rows if row["id"] != "cross-fund-1"],
+            wallet_refs_by_id=inputs.wallet_refs_by_id,
+            manual_pair_records=[
+                {**dict(inputs.manual_pair_records[0]), "policy": "carrying-value"},
+            ],
+        )
+        actual = self._direct_engine_snapshot(profile, carry_inputs)
+        self.assertEqual(actual["entries"], [])
+        self.assertEqual(actual["account_holdings"], [])
+        self.assertEqual(actual["wallet_holdings"], [])
+        quarantines = {row["transaction_id"]: row for row in actual["quarantines"]}
+        self.assertEqual(set(quarantines), {"cross-out-leg", "cross-in-leg"})
+        for quarantine in quarantines.values():
+            self.assertEqual(quarantine["reason"], "bitcoin_rail_carry_basis_unresolved")
+            self.assertEqual(quarantine["detail"]["reason_code"], "insufficient_lots")
+            self.assertEqual(quarantine["detail"]["rail_pair"], "pair-cross-1")
+
+    def test_direct_generic_bitcoin_rail_carry_clears_coarse_pricing_review(self):
+        profile, inputs = self._direct_cross_asset_pair_engine_inputs()
+        profile = {**dict(profile), "require_coarse_review": 1}
+        rows = []
+        for row in inputs.rows:
+            if row["id"] == "cross-in-leg":
+                rows.append(
+                    {
+                        **dict(row),
+                        "pricing_source_kind": pricing.SOURCE_FMV_PROVIDER,
+                        "pricing_quality": pricing.QUALITY_COARSE_FALLBACK,
+                        "pricing_granularity": "daily",
+                    }
+                )
+            else:
+                rows.append(row)
+        carry_inputs = TaxEngineLedgerInputs(
+            rows=rows,
+            wallet_refs_by_id=inputs.wallet_refs_by_id,
+            manual_pair_records=[
+                {**dict(inputs.manual_pair_records[0]), "policy": "carrying-value"},
+            ],
+        )
+        actual = self._direct_engine_snapshot(profile, carry_inputs)
+        self.assertEqual(actual["quarantines"], [])
+        acquisition = next(
+            entry
+            for entry in actual["entries"]
+            if entry["entry_type"] == "acquisition"
+            and entry["transaction_id"] == "cross-in-leg"
+        )
+        self.assertEqual(acquisition["fiat_value"], 8008.0)
+
     def test_generic_rp2_transfer_snapshot_matches_fixture(self):
         payload, result = self._run_json(
             "init",

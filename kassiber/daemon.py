@@ -1521,7 +1521,7 @@ def _ui_swap_matching_payload_from_conn(
             name=args.get("name"),
             predicate=predicate,
             kind=str(args.get("kind") or "manual"),
-            policy=str(args.get("policy") or "carrying-value"),
+            policy=str(args["policy"]) if args.get("policy") is not None else None,
             enabled=bool(args.get("enabled", True)),
         )
     if kind == "ui.transfers.rules.delete":

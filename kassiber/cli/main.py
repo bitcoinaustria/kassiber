@@ -1930,9 +1930,7 @@ def build_parser() -> argparse.ArgumentParser:
         "min_confidence)",
     )
     tr_rules_create.add_argument("--kind", choices=list(TRANSFER_PAIR_KINDS), default="manual")
-    tr_rules_create.add_argument(
-        "--policy", choices=list(TRANSFER_PAIR_POLICIES), default="carrying-value"
-    )
+    tr_rules_create.add_argument("--policy", choices=list(TRANSFER_PAIR_POLICIES))
     tr_rules_create.add_argument("--disabled", action="store_true")
     tr_rules_delete = transfers_rules_sub.add_parser("delete")
     tr_rules_delete.add_argument("--workspace")

@@ -45,6 +45,7 @@ from ..loans import (
 from .base import TaxEngineLedgerInputs, TaxEngineLedgerResult
 
 _RP2_MODULES = None
+GENERIC_BITCOIN_RAIL_QUARANTINE_REASON = "bitcoin_rail_carry_basis_unresolved"
 _RP2_EARN_TRANSACTION_TYPES = {
     "airdrop",
     "hardfork",
@@ -2120,10 +2121,21 @@ def _decimal_to_row_value(value: Decimal) -> str:
 
 def _with_carried_fiat_value(row: Mapping[str, Any], carried_basis: Decimal) -> dict[str, Any]:
     value = _decimal_to_row_value(carried_basis)
+    quantity = msat_to_btc(int(_row_get(row, "amount") or 0))
+    rate = _decimal_to_row_value(carried_basis / quantity) if quantity > 0 else None
     return {
         **dict(row),
+        "fiat_rate": float(rate) if rate is not None else None,
         "fiat_value": value,
+        "fiat_rate_exact": rate,
         "fiat_value_exact": value,
+        "fiat_price_source": pricing.legacy_source_for(pricing.SOURCE_MANUAL_OVERRIDE),
+        "pricing_source_kind": pricing.SOURCE_MANUAL_OVERRIDE,
+        "pricing_quality": pricing.QUALITY_EXACT,
+        "pricing_provider": None,
+        "pricing_pair": None,
+        "pricing_granularity": None,
+        "pricing_method": "carrying_value",
     }
 
 
@@ -2139,6 +2151,54 @@ def _computed_cost_basis_by_transaction_id(asset_states: Mapping[str, _RP2AssetS
     return dict(basis_by_id)
 
 
+@dataclass(frozen=True)
+class _GenericRailCarryResult:
+    rows: list[Mapping[str, Any]]
+    blocked_row_ids: set[str]
+    quarantines: list[dict[str, Any]]
+
+
+def _generic_bitcoin_rail_blocked_row_ids(pair: Mapping[str, Any]) -> set[str]:
+    out_id = str(pair["out_id"])
+    in_id = str(pair["in_id"])
+    blocked = {out_id, in_id}
+    pair_id = str(pair.get("pair_id") or "")
+    if pair_id.startswith("direct-payout:"):
+        blocked.add(f"{pair_id}:out")
+    return blocked
+
+
+def _generic_bitcoin_rail_pair_quarantines(
+    profile: Mapping[str, Any],
+    pair: Mapping[str, Any],
+    rows_by_id: Mapping[str, Mapping[str, Any]],
+    reason_code: str,
+) -> list[dict[str, Any]]:
+    out_id = str(pair["out_id"])
+    in_id = str(pair["in_id"])
+    pair_id = str(pair.get("pair_id") or f"{out_id}->{in_id}")
+    detail = {
+        "outgoing_asset": pair.get("out_asset") or rows_by_id.get(out_id, {}).get("asset"),
+        "incoming_asset": pair.get("in_asset") or rows_by_id.get(in_id, {}).get("asset"),
+        "rail_pair": pair_id,
+        "policy": "carrying-value",
+        "reason_code": reason_code,
+    }
+    quarantines: list[dict[str, Any]] = []
+    for row_id in (out_id, in_id):
+        row = rows_by_id.get(row_id)
+        if row is not None:
+            quarantines.append(
+                build_tax_quarantine(
+                    profile,
+                    row,
+                    GENERIC_BITCOIN_RAIL_QUARANTINE_REASON,
+                    detail,
+                )
+            )
+    return quarantines
+
+
 def _apply_generic_bitcoin_rail_carry_values(
     profile: Mapping[str, Any],
     rows_for_engine: list[Mapping[str, Any]],
@@ -2149,7 +2209,7 @@ def _apply_generic_bitcoin_rail_carry_values(
     *,
     excluded_row_ids: set[str],
     loan_leg_by_transaction_id: Mapping[str, str],
-) -> list[Mapping[str, Any]]:
+) -> _GenericRailCarryResult:
     """Carry BTC/LBTC basis for non-AT profiles without duplicating lot logic.
 
     Generic RP2 has no country-level multi-asset hook, so first let RP2 price the
@@ -2159,7 +2219,7 @@ def _apply_generic_bitcoin_rail_carry_values(
     """
 
     if _profile_str(profile, "tax_country").lower() == "at":
-        return rows_for_engine
+        return _GenericRailCarryResult(list(rows_for_engine), set(), [])
     rows_by_id = {str(row["id"]): row for row in rows_for_engine}
     eligible_pairs = [
         pair
@@ -2170,35 +2230,86 @@ def _apply_generic_bitcoin_rail_carry_values(
         and str(pair.get("in_id")) in rows_by_id
     ]
     if not eligible_pairs:
-        return rows_for_engine
+        return _GenericRailCarryResult(list(rows_for_engine), set(), [])
 
-    rows_by_asset: dict[str, list[Mapping[str, Any]]] = defaultdict(list)
-    for row in rows_for_engine:
-        rows_by_asset[row["asset"]].append(row)
-    prepared_by_asset = _prepare_assets(
-        profile,
-        rows_by_asset,
-        wallet_refs_by_id,
-        pairs_by_asset,
-        configuration,
-        excluded_row_ids=excluded_row_ids,
-        loan_leg_by_transaction_id=loan_leg_by_transaction_id,
-    )
-    asset_states = _rp2_asset_states_from_prepared(prepared_by_asset, profile, configuration)
-    basis_by_id = _computed_cost_basis_by_transaction_id(asset_states)
+    current_rows = list(rows_for_engine)
+    blocked_pair_reasons: dict[str, str] = {}
+    blocked_row_ids: set[str] = set()
+    # Chained rail moves need the second hop to see the first hop's carried
+    # basis, not the first hop's market-priced acquisition. Recompute until the
+    # BTC/LBTC carry overrides are stable.
+    max_passes = max(1, len(eligible_pairs) + 1)
+    for _ in range(max_passes):
+        rows_by_id = {str(row["id"]): row for row in current_rows}
+        rows_by_asset: dict[str, list[Mapping[str, Any]]] = defaultdict(list)
+        for row in current_rows:
+            rows_by_asset[row["asset"]].append(row)
+        prepared_by_asset = _prepare_assets(
+            profile,
+            rows_by_asset,
+            wallet_refs_by_id,
+            pairs_by_asset,
+            configuration,
+            excluded_row_ids=excluded_row_ids | blocked_row_ids,
+            loan_leg_by_transaction_id=loan_leg_by_transaction_id,
+        )
+        asset_states = _rp2_asset_states_from_prepared(prepared_by_asset, profile, configuration)
+        basis_by_id = _computed_cost_basis_by_transaction_id(asset_states)
+        quarantine_reasons = _prepared_quarantine_reasons(prepared_by_asset)
 
-    overrides: dict[str, Mapping[str, Any]] = {}
+        overrides: dict[str, Mapping[str, Any]] = {}
+        rows_changed = False
+        blocks_changed = False
+        for pair in eligible_pairs:
+            out_id = str(pair["out_id"])
+            in_id = str(pair["in_id"])
+            if out_id not in rows_by_id or in_id not in rows_by_id:
+                continue
+            pair_key = str(pair.get("pair_id") or f"{out_id}->{in_id}")
+            if out_id in blocked_row_ids or in_id in blocked_row_ids:
+                continue
+            carried_basis = basis_by_id.get(out_id)
+            if carried_basis is None or carried_basis <= 0:
+                reason_code = (
+                    quarantine_reasons.get(out_id)
+                    or quarantine_reasons.get(in_id)
+                    or "source_basis_unavailable"
+                )
+                pair_blocked_ids = _generic_bitcoin_rail_blocked_row_ids(pair)
+                if not pair_blocked_ids <= blocked_row_ids:
+                    blocks_changed = True
+                    blocked_row_ids.update(pair_blocked_ids)
+                blocked_pair_reasons[pair_key] = reason_code
+                continue
+            for row_id in (out_id, in_id):
+                row = rows_by_id[row_id]
+                override = _with_carried_fiat_value(row, carried_basis)
+                if dict(row) != override:
+                    rows_changed = True
+                overrides[row_id] = override
+        if overrides and rows_changed:
+            current_rows = [overrides.get(str(row["id"]), row) for row in current_rows]
+        if not rows_changed and not blocks_changed:
+            break
+
+    final_rows_by_id = {str(row["id"]): row for row in current_rows}
+    quarantines: list[dict[str, Any]] = []
     for pair in eligible_pairs:
         out_id = str(pair["out_id"])
         in_id = str(pair["in_id"])
-        carried_basis = basis_by_id.get(out_id)
-        if carried_basis is None or carried_basis <= 0:
+        pair_key = str(pair.get("pair_id") or f"{out_id}->{in_id}")
+        reason_code = blocked_pair_reasons.get(pair_key)
+        if reason_code is None:
             continue
-        overrides[out_id] = _with_carried_fiat_value(rows_by_id[out_id], carried_basis)
-        overrides[in_id] = _with_carried_fiat_value(rows_by_id[in_id], carried_basis)
-    if not overrides:
-        return rows_for_engine
-    return [overrides.get(str(row["id"]), row) for row in rows_for_engine]
+        quarantines.extend(
+            _generic_bitcoin_rail_pair_quarantines(
+                profile,
+                pair,
+                final_rows_by_id,
+                reason_code,
+            )
+        )
+    return _GenericRailCarryResult(current_rows, blocked_row_ids, quarantines)
 
 
 class GenericRP2TaxEngine:
@@ -2586,7 +2697,7 @@ class GenericRP2TaxEngine:
             for tx_id, role in (inputs.channel_roles or {}).items():
                 loan_leg_by_transaction_id.setdefault(str(tx_id), str(role))
 
-            carried_rows_for_engine = _apply_generic_bitcoin_rail_carry_values(
+            generic_rail_carry = _apply_generic_bitcoin_rail_carry_values(
                 self.profile,
                 rows_for_engine,
                 engine_cross_asset_pairs,
@@ -2596,11 +2707,12 @@ class GenericRP2TaxEngine:
                 excluded_row_ids=blocked_payout_row_ids,
                 loan_leg_by_transaction_id=loan_leg_by_transaction_id,
             )
-            if carried_rows_for_engine is not rows_for_engine:
-                rows_for_engine = list(carried_rows_for_engine)
-                rows_by_asset = defaultdict(list)
-                for row in rows_for_engine:
-                    rows_by_asset[row["asset"]].append(row)
+            quarantines.extend(generic_rail_carry.quarantines)
+            blocked_generic_rail_row_ids = generic_rail_carry.blocked_row_ids
+            rows_for_engine = list(generic_rail_carry.rows)
+            rows_by_asset = defaultdict(list)
+            for row in rows_for_engine:
+                rows_by_asset[row["asset"]].append(row)
 
             # Phase 1: normalize + build RP2 `InputData` for every asset. No `compute_tax`
             # runs here so the country's cross-asset validator can see every asset's
@@ -2611,7 +2723,7 @@ class GenericRP2TaxEngine:
                 inputs.wallet_refs_by_id,
                 pairs_by_asset,
                 configuration,
-                excluded_row_ids=blocked_payout_row_ids,
+                excluded_row_ids=blocked_payout_row_ids | blocked_generic_rail_row_ids,
                 loan_leg_by_transaction_id=loan_leg_by_transaction_id,
             )
             swap_link_by_row_id, quarantined_row_ids, swap_quarantines = _select_at_cross_asset_swap_links(
@@ -2637,7 +2749,12 @@ class GenericRP2TaxEngine:
                 )
                 for synthetic_id in (str(pair["in_id"]), f"{pair['pair_id']}:out")
             }
-            excluded_row_ids = blocked_payout_row_ids | quarantined_row_ids | (payout_synthetic_ids - selected_payout_synthetic_ids)
+            excluded_row_ids = (
+                blocked_payout_row_ids
+                | blocked_generic_rail_row_ids
+                | quarantined_row_ids
+                | (payout_synthetic_ids - selected_payout_synthetic_ids)
+            )
             if swap_link_by_row_id or excluded_row_ids:
                 prepared_by_asset = _prepare_assets(
                     self.profile,
