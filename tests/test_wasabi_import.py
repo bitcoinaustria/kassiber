@@ -16,6 +16,17 @@ ROOT = Path(__file__).resolve().parent.parent
 IN_TXID = "aa" * 32
 COINJOIN_TXID = "bb" * 32
 SPEND_TXID = "cc" * 32
+WASABI_SECRET_MARKERS = (
+    "must-drop",
+    "EncryptedSecret",
+    "ExtPubKey",
+    "ChainCode",
+    "publicKey",
+    "m/84'/0'/0'/0/7",
+    "m/84'/0'/0'/1/8",
+    "m/84'/0'/0'",
+    "m/86'/0'/0'",
+)
 
 
 def _run_cli(data_root: Path, *args: str) -> dict:
@@ -228,6 +239,11 @@ def _write_bundle(path: Path) -> None:
     path.write_text(json.dumps(_wasabi_bundle_payload()), encoding="utf-8")
 
 
+def _assert_wasabi_secret_markers_absent(testcase: unittest.TestCase, text: str) -> None:
+    for secret in WASABI_SECRET_MARKERS:
+        testcase.assertNotIn(secret, text)
+
+
 class WasabiBundleParserTest(unittest.TestCase):
     def test_parser_normalizes_activity_inventory_and_redacts_wallet_material(self):
         with tempfile.TemporaryDirectory(prefix="kassiber-wasabi-parser-") as tmp:
@@ -319,8 +335,7 @@ class WasabiImportFlowTest(unittest.TestCase):
                 config = json.loads(wallet["config_json"])
                 self.assertEqual(config["source_format"], "wasabi_bundle")
                 config_text = json.dumps(config, sort_keys=True)
-                for secret in ("must-drop", "EncryptedSecret", "ExtPubKey", "ChainCode", "publicKey"):
-                    self.assertNotIn(secret, config_text)
+                _assert_wasabi_secret_markers_absent(self, config_text)
                 coin_rows = conn.execute(
                     "SELECT * FROM wallet_utxos WHERE wallet_id = ? ORDER BY txid, vout",
                     (wallet["id"],),
@@ -439,6 +454,41 @@ class WasabiImportFlowTest(unittest.TestCase):
                 self.assertEqual(inline_import["data"]["input_format"], "wasabi_bundle")
             finally:
                 _stop_daemon(daemon)
+
+            conn = open_db(data_root)
+            try:
+                wallet = conn.execute("SELECT * FROM wallets WHERE label = 'Wasabi'").fetchone()
+                config_text = json.dumps(json.loads(wallet["config_json"]), sort_keys=True)
+                transaction_raw_text = json.dumps(
+                    [
+                        row["raw_json"]
+                        for row in conn.execute(
+                            "SELECT raw_json FROM transactions WHERE wallet_id = ? ORDER BY id",
+                            (wallet["id"],),
+                        )
+                    ],
+                    sort_keys=True,
+                )
+                utxo_raw_text = json.dumps(
+                    [
+                        row["raw_json"]
+                        for row in conn.execute(
+                            "SELECT raw_json FROM wallet_utxos WHERE wallet_id = ? ORDER BY id",
+                            (wallet["id"],),
+                        )
+                    ],
+                    sort_keys=True,
+                )
+                ai_snapshot = build_wallet_utxos_snapshot_for_ai(
+                    conn,
+                    None,
+                    {"wallet": "Wasabi"},
+                )
+                ai_text = json.dumps(ai_snapshot, sort_keys=True, default=str)
+            finally:
+                conn.close()
+            for text in (config_text, transaction_raw_text, utxo_raw_text, ai_text):
+                _assert_wasabi_secret_markers_absent(self, text)
 
     def test_empty_wasabi_coin_snapshot_marks_previous_inventory_spent(self):
         with tempfile.TemporaryDirectory(prefix="kassiber-wasabi-empty-coins-") as tmp:
