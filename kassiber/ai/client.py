@@ -487,6 +487,14 @@ def _safe_model_capabilities(item: dict[str, Any]) -> dict[str, Any]:
     return metadata
 
 
+def _structured_reasoning_from_payload(payload: dict[str, Any]) -> str | None:
+    for key in ("reasoning", "reasoning_content", "thinking"):
+        raw = payload.get(key)
+        if isinstance(raw, str) and raw:
+            return raw
+    return None
+
+
 @dataclass
 class OpenAICompatClient:
     """Minimal OpenAI-compatible HTTP client.
@@ -630,7 +638,7 @@ class OpenAICompatClient:
                 ) from exc
         choice = ((payload.get("choices") or [{}])[0]) if isinstance(payload, dict) else {}
         message = (choice.get("message") or {}) if isinstance(choice, dict) else {}
-        reasoning = message.get("reasoning")
+        reasoning = _structured_reasoning_from_payload(message)
         result: dict[str, Any] = {
             "role": message.get("role") or "assistant",
             "content": message.get("content") or "",
@@ -681,7 +689,15 @@ class OpenAICompatClient:
                     delta = choice.get("delta")
                     if not isinstance(delta, dict):
                         delta = {}
-                    elif isinstance(delta.get("tool_calls"), list):
+                    else:
+                        normalized_reasoning = _structured_reasoning_from_payload(delta)
+                        current_reasoning = delta.get("reasoning")
+                        if normalized_reasoning is not None and not (
+                            isinstance(current_reasoning, str) and current_reasoning
+                        ):
+                            delta = dict(delta)
+                            delta["reasoning"] = normalized_reasoning
+                    if isinstance(delta.get("tool_calls"), list):
                         delta = dict(delta)
                         delta["tool_calls"] = tool_call_accumulator.add_delta(
                             delta.get("tool_calls")

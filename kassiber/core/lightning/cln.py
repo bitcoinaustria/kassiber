@@ -46,6 +46,7 @@ from ...time_utils import UNKNOWN_OCCURRED_AT, now_iso, timestamp_to_iso
 from ...util import str_or_none
 from .. import imports as core_imports
 from ..repo import invalidate_journals
+from .capabilities import LightningCapabilities
 from .registry import register_adapter
 from .types import (
     NodeChannel,
@@ -74,6 +75,7 @@ CLN_ALLOWED_METHODS: tuple[str, ...] = (
     "listinvoices",
     "bkpr-listincome",
     "bkpr-listbalances",
+    "bkpr-listaccountevents",
 )
 
 #: Suggested restriction list for a least-privilege commando rune. Pair it
@@ -116,6 +118,9 @@ class CoreLightningSnapshot:
     income_events: tuple[Mapping[str, Any], ...]
     balance_accounts: tuple[Mapping[str, Any], ...]
     errors: Mapping[str, str]
+    # bkpr-listaccountevents rows (channel_open/channel_close carry the on-chain
+    # funding/closing txids). Defaulted so older constructions/tests still work.
+    account_events: tuple[Mapping[str, Any], ...] = ()
 
 
 # --- Helpers ---------------------------------------------------------------
@@ -225,13 +230,7 @@ def _base_command(backend: Mapping[str, Any], method: str, args: Sequence[str] |
 def _commando_invocation(
     backend: Mapping[str, Any], base_command: Sequence[str]
 ) -> tuple[list[str], dict[str, str], str | None, str | None]:
-    """Decide whether the call needs commando and how to pass the rune.
-
-    Returns ``(command, env, stdin_payload, redacted_marker)`` so the caller
-    can reuse a single ``subprocess.run`` code path. The rune is passed via
-    the ``LIGHTNING_RUNE`` environment variable instead of argv so it does
-    not appear in ``/proc/<pid>/cmdline`` on Linux.
-    """
+    """Decide whether the call needs commando and how to pass the rune."""
     peer_id = backend_value(backend, "commando_peer_id")
     rune = backend_value(backend, "token")
     wants_commando = (
@@ -247,25 +246,23 @@ def _commando_invocation(
             code="validation",
             hint="Pipe a restricted rune through --token-stdin or --token-fd FD.",
         )
-    # `lightning-cli --commando-peer=<id> --commando-rune=$LIGHTNING_RUNE` is
-    # supported by Core Lightning since 23.05; passing the rune via an env
-    # variable keeps it out of argv. Older builds that only accept
-    # `--commando=<peer>:<rune>` will refuse the env path, in which case the
-    # operator must use the local RPC socket instead.
     command = list(base_command)
     insert_at = 3  # after [binary, "--json", "--raw"]
     command[insert_at:insert_at] = [
         f"--commando-peer={peer_id}",
-        "--commando-rune=${LIGHTNING_RUNE}",
+        f"--commando-rune={rune}",
     ]
-    env = {"LIGHTNING_RUNE": str(rune)}
-    return command, env, None, "<commando rune redacted>"
+    return command, {}, None, "<commando rune redacted>"
 
 
 def _redacted_command(command: Sequence[str]) -> list[str]:
     return [
         "<commando rune redacted>"
-        if "${LIGHTNING_RUNE}" in part or part.startswith("--commando=")
+        if (
+            "${LIGHTNING_RUNE}" in part
+            or part.startswith("--commando-rune=")
+            or part.startswith("--commando=")
+        )
         else part
         for part in command
     ]
@@ -502,6 +499,26 @@ def _sanitize_income_event(row: Mapping[str, Any]) -> dict[str, Any]:
     return _pick(row, _INCOME_KEEP)
 
 
+_ACCOUNT_EVENT_KEEP: tuple[str, ...] = (
+    "account",
+    "type",
+    "tag",
+    "txid",
+    "outpoint",
+    "timestamp",
+)
+
+
+def _sanitize_account_event(row: Mapping[str, Any]) -> dict[str, Any]:
+    """Curate one bkpr-listaccountevents row.
+
+    We only use ``channel_open`` / ``channel_close`` rows to harvest the
+    on-chain funding/closing txids for channel-lifecycle netting, so keep the
+    account, tag and txid and drop amounts / descriptions / blockheights.
+    """
+    return _pick(row, _ACCOUNT_EVENT_KEEP)
+
+
 def _sanitize_balance_account(row: Mapping[str, Any]) -> dict[str, Any]:
     """Curate one bkpr-listbalances account entry.
 
@@ -574,6 +591,7 @@ def fetch_core_lightning_snapshot(
     invoices_payload = _safe_call("listinvoices")
     income_payload = _safe_call("bkpr-listincome")
     balances_payload = _safe_call("bkpr-listbalances")
+    account_events_payload = _safe_call("bkpr-listaccountevents")
 
     return CoreLightningSnapshot(
         node_id=node_id,
@@ -589,6 +607,7 @@ def fetch_core_lightning_snapshot(
         invoices=_sanitize_list(invoices_payload, "invoices", _sanitize_invoice),
         income_events=_sanitize_list(income_payload, "income_events", _sanitize_income_event),
         balance_accounts=_sanitize_list(balances_payload, "accounts", _sanitize_balance_account),
+        account_events=_sanitize_list(account_events_payload, "events", _sanitize_account_event),
         errors=errors,
     )
 
@@ -616,6 +635,8 @@ def _coerce_channel_state(value: Any, connected: bool | None = None) -> NodeChan
     text = (str_or_none(value) or "").lower()
     if not text:
         return "inactive"
+    if "breach" in text:
+        return "force_closed"
     if text in _CHANNEL_STATE_MAP:
         return _CHANNEL_STATE_MAP[text]
     if "onchain" in text:
@@ -631,6 +652,17 @@ def _coerce_channel_state(value: Any, connected: bool | None = None) -> NodeChan
     if "close" in text:
         return "closed"
     return "inactive"
+
+
+def _channel_close_kind(state_raw: Any, state: NodeChannelState) -> str | None:
+    text = (str_or_none(state_raw) or "").lower()
+    if "breach" in text:
+        return "breach"
+    if state == "force_closed":
+        return "force"
+    if state == "closed":
+        return "cooperative"
+    return None
 
 
 def _channel_short_id(channel: Mapping[str, Any]) -> str | None:
@@ -694,6 +726,7 @@ def _node_channel(channel: Mapping[str, Any], peer_alias_map: Mapping[str, str])
         fee_rate_ppm=int(channel.get("fee_proportional_millionths") or 0) or None,
         opened_at=_timestamp(channel.get("opened_at")) if channel.get("opened_at") else None,
         closed_at=_timestamp(channel.get("closed_at")) if channel.get("closed_at") else None,
+        close_kind=_channel_close_kind(state_raw, state),
     )
 
 
@@ -958,6 +991,16 @@ class CoreLightningAdapter:
     """Scaffold-compatible Core Lightning adapter."""
 
     kind = "coreln"
+    capabilities = LightningCapabilities(
+        node_snapshot=True,
+        routing_profitability=True,
+        channel_balances=True,
+        channel_lifecycle=True,
+        forward_events=True,
+        invoice_activity=True,
+        payment_activity=True,
+        onchain_balance=True,
+    )
 
     def fetch_node_snapshot(
         self,
@@ -1186,13 +1229,85 @@ def _balance_snapshot_records(
     return records
 
 
+def _channel_record(tag: str, txid: str, account: str | None) -> dict[str, Any]:
+    """A ``channel`` metadata record carrying one channel-lifecycle txid.
+
+    ``tag`` is ``channel_open`` (funding) or ``channel_close`` (closing). These
+    are NOT promoted to wallet transactions (``_record_to_import`` ignores
+    them) — they let the tax engine recognize a separately-synced on-chain
+    wallet's channel funding/close txs as non-taxable intra-node moves. No
+    amount is stored; the record exists only to carry the txid.
+    """
+    return {
+        "record_type": "channel",
+        "external_id": _stable_hash(("channel", tag, txid)),
+        "occurred_at": UNKNOWN_OCCURRED_AT,
+        "account": account,
+        "peer_id": None,
+        "channel_id": account,
+        "direction": "",
+        "amount_msat": 0,
+        "fee_msat": 0,
+        "tag": tag,
+        "status": "",
+        "currency": "bc",
+        "payment_hash": None,
+        "txid": txid,
+        "outpoint": None,
+        "raw_json": "{}",
+    }
+
+
+def _channel_lifecycle_records(snapshot: CoreLightningSnapshot) -> list[dict[str, Any]]:
+    """Emit ``channel`` metadata records carrying channel funding/closing txids.
+
+    Funding txids come from open channels' ``funding_outpoint`` AND bookkeeper
+    ``channel_open`` events; closing txids come from bookkeeper ``channel_close``
+    events (``listpeerchannels`` does not retain a channel once fully closed, so
+    ``bkpr-listaccountevents`` is the reliable source for the closing tx).
+    """
+    open_txids: dict[str, str | None] = {}
+    close_txids: dict[str, str | None] = {}
+    for channel in snapshot.channels:
+        outpoint = _channel_funding_outpoint(channel)
+        funding_txid = outpoint.split(":", 1)[0] if outpoint else None
+        if funding_txid:
+            account = (
+                str_or_none(channel.get("channel_id"))
+                or _channel_short_id(channel)
+                or funding_txid
+            )
+            open_txids.setdefault(funding_txid, account)
+    for event in snapshot.account_events:
+        tag = (str_or_none(event.get("tag")) or "").lower()
+        outpoint = str_or_none(event.get("outpoint"))
+        txid = str_or_none(event.get("txid")) or (
+            outpoint.split(":", 1)[0] if outpoint else None
+        )
+        if not txid:
+            continue
+        account = str_or_none(event.get("account")) or txid
+        if tag == "channel_open":
+            open_txids.setdefault(txid, account)
+        elif tag == "channel_close":
+            close_txids.setdefault(txid, account)
+
+    records: list[dict[str, Any]] = []
+    for txid, account in sorted(open_txids.items()):
+        records.append(_channel_record("channel_open", txid, account))
+    for txid, account in sorted(close_txids.items()):
+        records.append(_channel_record("channel_close", txid, account))
+    return records
+
+
 def snapshot_records(snapshot: CoreLightningSnapshot, synced_at: str) -> list[dict[str, Any]]:
     """Reshape ``snapshot`` into the curated persistence rows.
 
     The list is intentionally narrow: aggregated forwards, paid invoices,
-    completed pays, daily balance snapshots, and invoice-only bookkeeper
-    income rows that become wallet transactions. No raw RPC payloads, no
-    per-forward rows, no preimages, no bolt11 strings, no onion routes.
+    completed pays, daily balance snapshots, channel funding/closing txids, and
+    invoice-only bookkeeper income rows that become wallet transactions. No raw
+    RPC payloads, no per-forward rows, no preimages, no bolt11 strings, no onion
+    routes.
     """
     peer_alias_map = _build_peer_alias_map(snapshot)
     records: list[dict[str, Any]] = []
@@ -1210,6 +1325,7 @@ def snapshot_records(snapshot: CoreLightningSnapshot, synced_at: str) -> list[di
         if record is not None:
             records.append(record)
     records.extend(_balance_snapshot_records(snapshot, synced_at))
+    records.extend(_channel_lifecycle_records(snapshot))
     return records
 
 
@@ -1314,14 +1430,54 @@ def _upsert_lightning_record(
     return False, changed
 
 
-def _record_to_import(record: Mapping[str, Any]) -> dict[str, Any] | None:
-    """Promote an invoice income row to a wallet transaction.
+def _pay_to_import(record: Mapping[str, Any]) -> dict[str, Any] | None:
+    """Promote a completed outbound pay row to a wallet transaction.
 
-    P1 fix #1: only ``tag=="invoice"`` rows reach this point because
-    :func:`_income_invoice_record` already filters them. The defensive check
-    here is kept so a future caller can't accidentally feed us a routed-event
-    row that would double-count.
+    Mirror of the invoice-income promotion for the outbound leg. Without this,
+    Core Lightning spends never reach the ledger at all, and a payment between
+    the operator's own nodes (e.g. CLN -> LND) leaves only the inbound invoice
+    booked as income — a phantom taxable event with no offsetting outflow.
+
+    The promoted row carries the ``payment_hash`` so
+    :func:`kassiber.core.transfer_matching` can pair it with the matching
+    inbound invoice on another owned wallet and reclassify the pair as an
+    internal transfer, leaving only the routing fee as the taxable component.
+    ``amount_msat`` here is the principal (``_pay_record`` already splits the
+    routing fee into ``fee_msat``).
     """
+    amount_msat = int(record.get("amount_msat") or 0)
+    if amount_msat <= 0:
+        return None
+    fee_msat = int(record.get("fee_msat") or 0)
+    payment_hash = record.get("payment_hash")
+    return {
+        "id": f"cln:pay:{record['external_id']}",
+        "occurred_at": record.get("occurred_at") or UNKNOWN_OCCURRED_AT,
+        "confirmed_at": record.get("occurred_at") or UNKNOWN_OCCURRED_AT,
+        "direction": "outbound",
+        "asset": "BTC",
+        "amount": msat_to_btc(amount_msat),
+        "fee": msat_to_btc(fee_msat),
+        "kind": "cln_pay",
+        "description": record.get("status") or "Core Lightning payment",
+        "counterparty": record.get("peer_id"),
+        "payment_hash": payment_hash,
+        "payment_hash_source": "core_lightning" if payment_hash else None,
+        "raw_json": "{}",
+    }
+
+
+def _record_to_import(record: Mapping[str, Any]) -> dict[str, Any] | None:
+    """Promote invoice-income and completed-pay rows to wallet transactions.
+
+    P1 fix #1: only ``tag=="invoice"`` income rows reach the income branch
+    because :func:`_income_invoice_record` already filters them. The defensive
+    checks here are kept so a future caller can't accidentally feed us a
+    routed-event row that would double-count. Outbound ``pay`` rows are promoted
+    via :func:`_pay_to_import` so own-node payments can pair by payment hash.
+    """
+    if record.get("record_type") == "pay" and record.get("direction") == "outbound":
+        return _pay_to_import(record)
     if record.get("record_type") != "income":
         return None
     if (record.get("tag") or "").lower() != "invoice":
@@ -1336,6 +1492,10 @@ def _record_to_import(record: Mapping[str, Any]) -> dict[str, Any] | None:
     return {
         "id": f"cln:income:{record['external_id']}",
         "occurred_at": record.get("occurred_at") or UNKNOWN_OCCURRED_AT,
+        # Lightning invoice rows are promoted only after CLN reports them as
+        # paid/settled. They do not have an L1 confirmation, but the desktop
+        # status badge uses confirmed_at as the generic finality signal.
+        "confirmed_at": record.get("occurred_at") or UNKNOWN_OCCURRED_AT,
         "direction": "inbound",
         "asset": "BTC",
         "amount": msat_to_btc(amount_msat),

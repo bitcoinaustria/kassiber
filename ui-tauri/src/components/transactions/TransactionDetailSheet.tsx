@@ -59,7 +59,6 @@ import {
   DirtyDot,
   QuarantineBanner,
   balanceImpactDirection,
-  confirmationsLabel,
   countDirty,
   diffDraft,
   rateChangePct,
@@ -461,10 +460,6 @@ export function TransactionDetailSheet({
     hasJournalQuarantine && quarantineTargetTab === "tax";
   const showReviewBanner =
     hasJournalQuarantine || (activeTab !== "pricing" && hasPricingBlocker);
-  const confLabel = confirmationsLabel(
-    transaction.confirmations,
-    t as (key: string, opts?: Record<string, unknown>) => string, // loose translator
-  );
   const dirtyTags = dirty.tags;
   const dirtyLabel = dirty.label;
   const dirtyNote = dirty.note;
@@ -844,7 +839,6 @@ export function TransactionDetailSheet({
             valueAtTimeEur={valueAtTimeEur}
             valueNowEur={valueNowEur}
             pricedChange={pricedChange}
-            confLabel={confLabel}
             timelineSteps={timelineSteps}
             explorer={explorer}
             onOpenExplorer={onOpenExplorer}

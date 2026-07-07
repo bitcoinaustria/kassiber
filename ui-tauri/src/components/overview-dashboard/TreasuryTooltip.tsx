@@ -56,14 +56,22 @@ export function TreasuryTooltip({
     : 0;
   const eventFlow = point.eventFlow;
   const hasEvent = point.isActivityEvent && eventFlow !== undefined;
+  const groupedPoints = point.markerGroupedPoints ?? [];
+  const markerCount = point.markerCount ?? groupedPoints.length;
+  const groupedPreview = [...groupedPoints]
+    .sort(
+      (a, b) =>
+        (b.eventSize || b.activityBtc || 0) - (a.eventSize || a.activityBtc || 0),
+    )
+    .slice(0, 5);
   const eventTone =
-    eventFlow === "incoming" || eventFlow === "swap"
+    eventFlow === "incoming"
       ? "good"
       : eventFlow === "outgoing" || eventFlow === "fee"
         ? "bad"
         : "neutral";
   const eventAmount =
-    eventFlow === "swap"
+    eventFlow === "movement"
       ? t("tooltip.volume", {
           value: formatBtc(point.activityBtc, { precision: 8 }),
         })
@@ -92,6 +100,11 @@ export function TreasuryTooltip({
               <span className="font-semibold text-foreground">
                 {t(activityFlowLabelKeys[eventFlow])}
               </span>
+              {markerCount > 1 && (
+                <span className="rounded border bg-muted/30 px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                  {markerCount} events
+                </span>
+              )}
               {point.eventType && (
                 <span className="rounded border bg-muted/30 px-1.5 py-0.5 text-[10px] text-muted-foreground">
                   {point.eventType}
@@ -115,6 +128,61 @@ export function TreasuryTooltip({
         </div>
 
         <div className="mt-3 space-y-1.5">
+          {groupedPreview.length > 1 && (
+            <div className="mb-2 rounded-md border bg-muted/20 p-2">
+              <div className="mb-1.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                {t("tooltip.groupedEvents")}
+              </div>
+              <div className="space-y-1.5">
+                {groupedPreview.map((eventPoint, index) => {
+                  const flow = eventPoint.eventFlow ?? eventFlow;
+                  const signedAmount =
+                    flow === "movement"
+                      ? formatBtc(eventPoint.activityBtc, { precision: 6 })
+                      : flow === "fee"
+                        ? formatBtc(
+                            -(eventPoint.eventFeeBtc || eventPoint.activityBtc),
+                            { precision: 6, sign: true },
+                          )
+                        : formatBtc(eventPoint.eventSignedBtc ?? 0, {
+                            precision: 6,
+                            sign: true,
+                          });
+                  return (
+                    <div
+                      key={eventPoint.eventTransactionId ?? eventPoint.eventId ?? index}
+                      className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-1.5"
+                    >
+                      <span
+                        className="size-2 rounded-full"
+                        style={{ backgroundColor: flowColors[flow] }}
+                        aria-hidden="true"
+                      />
+                      <span className="truncate text-muted-foreground">
+                        {t(activityFlowLabelKeys[flow])}
+                        {eventPoint.eventCounter ? ` · ${eventPoint.eventCounter}` : ""}
+                      </span>
+                      <span
+                        className={cn(
+                          "font-medium tabular-nums",
+                          blurClass(hideSensitive),
+                        )}
+                      >
+                        {signedAmount}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+              {markerCount > groupedPreview.length && (
+                <div className="mt-1.5 text-[10px] text-muted-foreground">
+                  {t("tooltip.groupedMore", {
+                    count: markerCount - groupedPreview.length,
+                  })}
+                </div>
+              )}
+            </div>
+          )}
           {point.eventAccount && (
             <TooltipMetricRow
               label={t("tooltip.source")}

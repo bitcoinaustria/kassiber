@@ -240,6 +240,18 @@ class SilentPaymentsTests(unittest.TestCase):
         )
         self.assertEqual(revealed["sp_descriptor"], SP_DESCRIPTOR)
 
+        copy_payload = core_wallets.reveal_wallet_descriptor_material(
+            conn,
+            workspace["id"],
+            profile["id"],
+            created["id"],
+        )
+        self.assertEqual(copy_payload["wallet_material"], SP_DESCRIPTOR)
+        self.assertEqual(
+            set(copy_payload),
+            {"id", "label", "kind", "wallet_material"},
+        )
+
     def test_rejects_spending_material_and_requires_scan_start(self):
         checksummed = silent_payments.validate_watch_only_descriptor(
             SP_DESCRIPTOR + "#abcd1234",

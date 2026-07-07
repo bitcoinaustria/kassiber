@@ -7,6 +7,7 @@ import sqlite3
 import sys
 import uuid
 from collections import defaultdict
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from functools import lru_cache
 from pathlib import Path
@@ -36,8 +37,11 @@ from ..core import accounts as core_accounts
 from ..core import attachments as core_attachments
 from ..core import commercial as core_commercial
 from ..core import freshness as core_freshness
+from ..core import exchange_imports as core_exchange_imports
 from ..core import imports as core_imports
+from ..core.lightning import channel_lifecycle
 from ..core.lightning import cln as core_lightning_cln
+from ..core.lightning import lnd as core_lightning_lnd
 from ..core import loans as core_loans
 from ..core import metadata as core_metadata
 from ..core import output_inventory as core_output_inventory
@@ -111,6 +115,10 @@ from ..tax_policy import (
     require_tax_country_supported_for_profile_mutation,
     require_tax_processing_supported,
 )
+from ..transfers import (
+    cross_asset_carrying_value_supported,
+    profile_bitcoin_rail_carrying_value,
+)
 from ..wallet_descriptors import (
     DEFAULT_DESCRIPTOR_GAP_LIMIT,
     MAX_DESCRIPTOR_GAP_LIMIT,
@@ -155,6 +163,10 @@ WALLET_KINDS = [
     "21bitcoin",
     "pocketbitcoin",
     "strike",
+    "ledgerlive",
+    "kraken",
+    "coinbase",
+    "binance",
     "wasabi",
     "custom",
 ]
@@ -193,30 +205,76 @@ def resolve_workspace(conn, ref=None):
     ref = ref or get_setting(conn, "context_workspace")
     if not ref:
         raise AppError("No workspace selected. Create one or run `kassiber context set --workspace ...`.")
+    ref = str(ref).strip()
+    if not ref:
+        raise AppError("No workspace selected. Create one or run `kassiber context set --workspace ...`.")
     row = conn.execute(
-        "SELECT * FROM workspaces WHERE id = ? OR lower(label) = lower(?) LIMIT 1",
-        (ref, ref),
+        "SELECT * FROM workspaces WHERE id = ? LIMIT 1",
+        (ref,),
     ).fetchone()
-    if not row:
-        raise AppError(f"Workspace '{ref}' not found")
-    return row
+    if row:
+        return row
+    rows = conn.execute(
+        "SELECT * FROM workspaces WHERE lower(label) = lower(?) ORDER BY label ASC, id ASC",
+        (ref,),
+    ).fetchall()
+    if len(rows) == 1:
+        return rows[0]
+    if len(rows) > 1:
+        raise AppError(
+            f"Workspace label '{ref}' is ambiguous",
+            code="validation",
+            hint="Use the workspace id instead of the non-unique label.",
+            details={
+                "matches": [
+                    {"id": row["id"], "label": row["label"]}
+                    for row in rows
+                ]
+            },
+        )
+    raise AppError(f"Workspace '{ref}' not found", code="not_found")
 
 
 def resolve_profile(conn, workspace_id, ref=None):
     ref = ref or get_setting(conn, "context_profile")
     if not ref:
         raise AppError("No profile selected. Create one or run `kassiber context set --profile ...`.")
+    ref = str(ref).strip()
+    if not ref:
+        raise AppError("No profile selected. Create one or run `kassiber context set --profile ...`.")
     row = conn.execute(
         """
         SELECT * FROM profiles
-        WHERE workspace_id = ? AND (id = ? OR lower(label) = lower(?))
+        WHERE workspace_id = ? AND id = ?
         LIMIT 1
         """,
-        (workspace_id, ref, ref),
+        (workspace_id, ref),
     ).fetchone()
-    if not row:
-        raise AppError(f"Profile '{ref}' not found in the selected workspace")
-    return row
+    if row:
+        return row
+    rows = conn.execute(
+        """
+        SELECT * FROM profiles
+        WHERE workspace_id = ? AND lower(label) = lower(?)
+        ORDER BY label ASC, id ASC
+        """,
+        (workspace_id, ref),
+    ).fetchall()
+    if len(rows) == 1:
+        return rows[0]
+    if len(rows) > 1:
+        raise AppError(
+            f"Profile label '{ref}' is ambiguous in the selected workspace",
+            code="validation",
+            hint="Use the profile id instead of the non-unique label.",
+            details={
+                "matches": [
+                    {"id": row["id"], "label": row["label"]}
+                    for row in rows
+                ]
+            },
+        )
+    raise AppError(f"Profile '{ref}' not found in the selected workspace", code="not_found")
 
 
 def resolve_scope(conn, workspace_ref=None, profile_ref=None):
@@ -240,19 +298,48 @@ def cache_swap_candidate_count(conn, workspace_ref, profile_ref, total):
 
 
 def resolve_wallet(conn, profile_id, ref):
+    normalized_ref = str(ref).strip()
     row = conn.execute(
         """
         SELECT w.*, a.code AS account_code, a.label AS account_label
         FROM wallets w
         LEFT JOIN accounts a ON a.id = w.account_id
-        WHERE w.profile_id = ? AND (w.id = ? OR lower(w.label) = lower(?))
+        WHERE w.profile_id = ? AND w.id = ?
         LIMIT 1
         """,
-        (profile_id, ref, ref),
+        (profile_id, normalized_ref),
     ).fetchone()
-    if not row:
-        raise AppError(f"Wallet '{ref}' not found")
-    return row
+    if row:
+        return row
+    rows = conn.execute(
+        """
+        SELECT w.*, a.code AS account_code, a.label AS account_label
+        FROM wallets w
+        LEFT JOIN accounts a ON a.id = w.account_id
+        WHERE w.profile_id = ? AND lower(w.label) = lower(?)
+        ORDER BY w.label ASC, w.id ASC
+        """,
+        (profile_id, normalized_ref),
+    ).fetchall()
+    if len(rows) == 1:
+        return rows[0]
+    if len(rows) > 1:
+        raise AppError(
+            f"Wallet label '{ref}' is ambiguous",
+            code="validation",
+            hint="Use the wallet id instead of the non-unique label.",
+            details={
+                "matches": [
+                    {
+                        "id": row["id"],
+                        "label": row["label"],
+                        "account_code": row["account_code"],
+                    }
+                    for row in rows
+                ]
+            },
+        )
+    raise AppError(f"Wallet '{ref}' not found", code="not_found")
 
 
 def resolve_transaction(conn, profile_id, ref, direction=None):
@@ -353,12 +440,113 @@ BITCOIN_LAYER_TRANSITION_PAIR_KINDS = (
     "submarine-swap",
     "swap-refund",
 )
-TRANSFER_PAIR_KINDS = ("manual", "coinjoin", *BITCOIN_LAYER_TRANSITION_PAIR_KINDS)
+TRANSFER_PAIR_KINDS = (
+    "manual",
+    "coinjoin",
+    "whirlpool",
+    *BITCOIN_LAYER_TRANSITION_PAIR_KINDS,
+)
 TRANSFER_PAIR_POLICIES = ("carrying-value", "taxable")
 DIRECT_SWAP_PAYOUT_KINDS = ("direct-swap-payout",)
+REUSABLE_SAME_ASSET_PAIR_KINDS = ("manual", "coinjoin", "whirlpool")
 
 
 _PAIR_SOURCE_VALUES = ("manual", "bulk_exact", "bulk_selected", "rule_auto")
+
+
+def _pair_stores_swap_fee(out_row, in_row, kind):
+    if out_row["asset"] != in_row["asset"]:
+        return True
+    return kind in BITCOIN_LAYER_TRANSITION_PAIR_KINDS
+
+
+def _pair_allows_leg_reuse(out_asset, in_asset, kind, policy):
+    return (
+        str(out_asset).upper() == str(in_asset).upper()
+        and policy == "carrying-value"
+        and kind in REUSABLE_SAME_ASSET_PAIR_KINDS
+    )
+
+
+def _active_pairs_reusing_leg(
+    conn,
+    profile_id,
+    out_transaction_id,
+    in_transaction_id,
+    *,
+    exclude_pair_id=None,
+):
+    params = [profile_id, out_transaction_id, in_transaction_id]
+    exclude_sql = ""
+    if exclude_pair_id is not None:
+        exclude_sql = " AND transaction_pairs.id != ?"
+        params.append(exclude_pair_id)
+    return conn.execute(
+        f"""
+        SELECT
+          transaction_pairs.id,
+          transaction_pairs.out_transaction_id,
+          transaction_pairs.in_transaction_id,
+          transaction_pairs.kind,
+          transaction_pairs.policy,
+          out_tx.asset AS out_asset,
+          in_tx.asset AS in_asset
+        FROM transaction_pairs
+        JOIN transactions AS out_tx ON out_tx.id = transaction_pairs.out_transaction_id
+        JOIN transactions AS in_tx ON in_tx.id = transaction_pairs.in_transaction_id
+        WHERE transaction_pairs.profile_id = ? AND transaction_pairs.deleted_at IS NULL
+          AND (out_transaction_id = ? OR in_transaction_id = ?)
+          {exclude_sql}
+        ORDER BY transaction_pairs.created_at, transaction_pairs.id
+        """,
+        tuple(params),
+    ).fetchall()
+
+
+def _reject_disallowed_leg_reuse(
+    conn,
+    profile_id,
+    out_transaction_id,
+    in_transaction_id,
+    out_asset,
+    in_asset,
+    kind,
+    policy,
+    *,
+    exclude_pair_id=None,
+):
+    new_pair_allows_reuse = _pair_allows_leg_reuse(out_asset, in_asset, kind, policy)
+    for existing_pair in _active_pairs_reusing_leg(
+        conn,
+        profile_id,
+        out_transaction_id,
+        in_transaction_id,
+        exclude_pair_id=exclude_pair_id,
+    ):
+        existing_pair_allows_reuse = _pair_allows_leg_reuse(
+            existing_pair["out_asset"],
+            existing_pair["in_asset"],
+            existing_pair["kind"],
+            existing_pair["policy"],
+        )
+        if not (new_pair_allows_reuse and existing_pair_allows_reuse):
+            _raise_leg_reuse_conflict(existing_pair, out_transaction_id)
+
+
+def _raise_leg_reuse_conflict(existing_pair, out_transaction_id):
+    reused_leg = (
+        "--tx-out"
+        if existing_pair["out_transaction_id"] == out_transaction_id
+        else "--tx-in"
+    )
+    raise AppError(
+        f"{reused_leg} already belongs to active pair id={existing_pair['id']}. "
+        "Only same-asset manual, coinjoin, or whirlpool carrying-value links "
+        "may reuse a transaction leg; cross-asset and layer-transition pairs "
+        "must remain one-to-one.",
+        code="conflict",
+        hint=f"Unpair `{existing_pair['id']}` first, or use a same-asset privacy/manual pair kind.",
+    )
 
 
 def _pair_to_dict(row):
@@ -430,7 +618,7 @@ def create_transaction_pair(
     out_ref,
     in_ref,
     kind="manual",
-    policy="carrying-value",
+    policy=None,
     notes=None,
     *,
     pair_source="manual",
@@ -444,7 +632,7 @@ def create_transaction_pair(
             f"Unsupported pair kind '{kind}'. Supported: {', '.join(TRANSFER_PAIR_KINDS)}",
             code="validation",
         )
-    if policy not in TRANSFER_PAIR_POLICIES:
+    if policy is not None and policy not in TRANSFER_PAIR_POLICIES:
         raise AppError(
             f"Unsupported pair policy '{policy}'. Supported: {', '.join(TRANSFER_PAIR_POLICIES)}",
             code="validation",
@@ -458,6 +646,17 @@ def create_transaction_pair(
     in_row = resolve_transaction(conn, profile["id"], in_ref, direction="inbound")
     if out_row["id"] == in_row["id"]:
         raise AppError("--tx-out and --tx-in must reference different transactions", code="validation")
+    if policy is None:
+        policy = (
+            "carrying-value"
+            if str(out_row["asset"]).upper() == str(in_row["asset"]).upper()
+            else core_transfer_matching.default_policy_for(
+                str(profile["tax_country"] or ""),
+                out_row["asset"],
+                in_row["asset"],
+                bitcoin_rail_carrying_value=profile_bitcoin_rail_carrying_value(profile),
+            )
+        )
     if out_row["asset"] == in_row["asset"] and policy == "taxable":
         raise AppError(
             f"Same-asset taxable pairs are not supported yet "
@@ -469,13 +668,14 @@ def create_transaction_pair(
         )
     if out_row["asset"] != in_row["asset"] and policy == "carrying-value":
         tax_country = str(profile["tax_country"] or "").strip().lower()
-        if tax_country != "at":
+        if not cross_asset_carrying_value_supported(tax_country, out_row["asset"], in_row["asset"]):
             raise AppError(
-                f"Cross-asset carrying-value pairs are only supported for Austrian profiles right now "
+                f"Cross-asset carrying-value pairs are only supported for Austrian profiles "
+                f"or BTC/LBTC rail swaps right now "
                 f"(out={out_row['asset']}, in={in_row['asset']}). "
-                f"Use --policy taxable for other tax countries.",
+                f"Use --policy taxable for other cross-asset swaps.",
                 code="validation",
-                hint="Re-run with --policy taxable, or use an Austrian profile for cross-asset carrying-value swaps.",
+                hint="Re-run with --policy taxable, or pair only BTC/LBTC rail changes as carrying-value outside Austrian profiles.",
             )
     out_amount_msat = None
     if out_amount is not None:
@@ -498,17 +698,27 @@ def create_transaction_pair(
         """
         SELECT id FROM transaction_pairs
         WHERE profile_id = ? AND deleted_at IS NULL
-          AND (out_transaction_id IN (?, ?) OR in_transaction_id IN (?, ?))
+          AND out_transaction_id = ? AND in_transaction_id = ?
         LIMIT 1
         """,
-        (profile["id"], out_row["id"], in_row["id"], out_row["id"], in_row["id"]),
+        (profile["id"], out_row["id"], in_row["id"]),
     ).fetchone()
     if existing:
         raise AppError(
-            f"One of the transactions is already paired (pair id={existing['id']}). "
+            f"Those transactions are already paired (pair id={existing['id']}). "
             f"Run `kassiber transfers unpair --pair-id {existing['id']}` first.",
             code="conflict",
         )
+    _reject_disallowed_leg_reuse(
+        conn,
+        profile["id"],
+        out_row["id"],
+        in_row["id"],
+        out_row["asset"],
+        in_row["asset"],
+        kind,
+        policy,
+    )
     existing_payout = conn.execute(
         """
         SELECT id FROM direct_swap_payouts
@@ -526,16 +736,19 @@ def create_transaction_pair(
             hint="Run `kassiber transfers payouts delete --payout-id "
             f"{existing_payout['id']}` first.",
         )
-    # On a split pair only the swapped portion (`out_amount`) crosses to the
-    # other asset, so the persisted swap fee must be measured against that, not
-    # the full outbound (the remainder is a same-asset self-transfer).
-    split_pair = out_amount_msat is not None
-    swap_fee_out_msat = out_amount_msat if split_pair else int(out_row["amount"] or 0)
-    swap_fee_msat, swap_fee_kind = core_transfer_matching.compute_swap_fee(
-        swap_fee_out_msat,
-        int(in_row["amount"] or 0),
-        _outbound_pair_fee_component_msat(out_row, split_pair=split_pair),
-    )
+    if _pair_stores_swap_fee(out_row, in_row, kind):
+        # On a split pair only the swapped portion (`out_amount`) crosses to the
+        # other asset, so the persisted swap fee must be measured against that,
+        # not the full outbound (the remainder is a same-asset self-transfer).
+        split_pair = out_amount_msat is not None
+        swap_fee_out_msat = out_amount_msat if split_pair else int(out_row["amount"] or 0)
+        swap_fee_msat, swap_fee_kind = core_transfer_matching.compute_swap_fee(
+            swap_fee_out_msat,
+            int(in_row["amount"] or 0),
+            _outbound_pair_fee_component_msat(out_row, split_pair=split_pair),
+        )
+    else:
+        swap_fee_msat, swap_fee_kind = None, None
     pair_id = str(uuid.uuid4())
     conn.execute(
         """
@@ -579,7 +792,7 @@ def create_direct_swap_payout(
     payout_asset,
     payout_amount,
     kind="direct-swap-payout",
-    policy="carrying-value",
+    policy=None,
     payout_occurred_at=None,
     payout_fiat_value=None,
     payout_external_id=None,
@@ -593,7 +806,7 @@ def create_direct_swap_payout(
             f"Unsupported direct payout kind '{kind}'. Supported: {', '.join(DIRECT_SWAP_PAYOUT_KINDS)}",
             code="validation",
         )
-    if policy not in TRANSFER_PAIR_POLICIES:
+    if policy is not None and policy not in TRANSFER_PAIR_POLICIES:
         raise AppError(
             f"Unsupported direct payout policy '{policy}'. Supported: {', '.join(TRANSFER_PAIR_POLICIES)}",
             code="validation",
@@ -618,13 +831,25 @@ def create_direct_swap_payout(
     if payout_value is not None and payout_value < 0:
         raise AppError("--payout-fiat-value must not be negative", code="validation")
 
+    if policy is None:
+        policy = (
+            "carrying-value"
+            if str(out_row["asset"]).upper() == target_asset
+            else core_transfer_matching.default_policy_for(
+                str(profile["tax_country"] or ""),
+                out_row["asset"],
+                target_asset,
+                bitcoin_rail_carrying_value=profile_bitcoin_rail_carrying_value(profile),
+            )
+        )
+
     if out_row["asset"] != target_asset and policy == "carrying-value":
         tax_country = str(profile["tax_country"] or "").strip().lower()
-        if tax_country != "at":
+        if not cross_asset_carrying_value_supported(tax_country, out_row["asset"], target_asset):
             raise AppError(
-                "Cross-asset direct swap payouts with carrying value are only supported for Austrian profiles right now.",
+                "Cross-asset direct swap payouts with carrying value are only supported for Austrian profiles or BTC/LBTC rail swaps right now.",
                 code="validation",
-                hint="Re-run with --policy taxable, or use an Austrian profile for cross-asset carrying-value payouts.",
+                hint="Re-run with --policy taxable, or use carrying-value only for BTC/LBTC rail payouts outside Austrian profiles.",
             )
 
     existing_pair = conn.execute(
@@ -1079,6 +1304,7 @@ def suggest_transfer_candidates(
         fee_pct_max=float(fee_pct_max),
         fee_sats_min=int(fee_sats_min),
         tax_country=str(profile["tax_country"] or ""),
+        bitcoin_rail_carrying_value=profile_bitcoin_rail_carrying_value(profile),
     )
     candidates = _filter_transfer_candidates(
         candidates,
@@ -1150,6 +1376,7 @@ def bulk_pair_transfers(
         fee_pct_max=float(fee_pct_max),
         fee_sats_min=int(fee_sats_min),
         tax_country=str(profile["tax_country"] or ""),
+        bitcoin_rail_carrying_value=profile_bitcoin_rail_carrying_value(profile),
     )
     if confidence not in ("exact", "strong"):
         raise AppError(
@@ -1234,6 +1461,7 @@ def apply_transfer_rules(
         fee_pct_max=float(fee_pct_max),
         fee_sats_min=int(fee_sats_min),
         tax_country=str(profile["tax_country"] or ""),
+        bitcoin_rail_carrying_value=profile_bitcoin_rail_carrying_value(profile),
     )
     candidates = _filter_transfer_candidates(
         candidates,
@@ -1310,35 +1538,28 @@ def dismiss_transfer_candidate(
             datetime.now(timezone.utc) + timedelta(days=int(expires_in_days))
         ).replace(microsecond=0).isoformat().replace("+00:00", "Z")
     dismissal_id = str(uuid.uuid4())
-    try:
-        conn.execute(
-            """
-            INSERT INTO transaction_pair_dismissals(
-                id, workspace_id, profile_id, out_transaction_id, in_transaction_id,
-                reason, created_at, expires_at
-            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                dismissal_id,
-                workspace["id"],
-                profile["id"],
-                out_row["id"],
-                in_row["id"],
-                reason,
-                now_iso(),
-                expires_at,
-            ),
-        )
-    except sqlite3.IntegrityError:
-        # Update the existing dismissal to refresh the expiry instead.
-        conn.execute(
-            """
-            UPDATE transaction_pair_dismissals
-            SET reason = COALESCE(?, reason), expires_at = ?
-            WHERE profile_id = ? AND out_transaction_id = ? AND in_transaction_id = ?
-            """,
-            (reason, expires_at, profile["id"], out_row["id"], in_row["id"]),
-        )
+    conn.execute(
+        """
+        INSERT INTO transaction_pair_dismissals(
+            id, workspace_id, profile_id, out_transaction_id, in_transaction_id,
+            reason, created_at, expires_at
+        ) VALUES(?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(profile_id, out_transaction_id, in_transaction_id)
+        DO UPDATE SET
+            reason = COALESCE(excluded.reason, transaction_pair_dismissals.reason),
+            expires_at = excluded.expires_at
+        """,
+        (
+            dismissal_id,
+            workspace["id"],
+            profile["id"],
+            out_row["id"],
+            in_row["id"],
+            reason,
+            now_iso(),
+            expires_at,
+        ),
+    )
     conn.commit()
     row = conn.execute(
         "SELECT * FROM transaction_pair_dismissals "
@@ -1373,6 +1594,15 @@ def list_transfer_rules(conn, workspace_ref, profile_ref):
     return [_rule_row_to_dict(row) for row in rows]
 
 
+def _default_transfer_rule_policy(profile, predicate):
+    return core_transfer_matching.default_policy_for(
+        str(profile["tax_country"] or ""),
+        predicate.get("out_asset"),
+        predicate.get("in_asset"),
+        bitcoin_rail_carrying_value=profile_bitcoin_rail_carrying_value(profile),
+    )
+
+
 def create_transfer_rule(
     conn,
     workspace_ref,
@@ -1381,7 +1611,7 @@ def create_transfer_rule(
     name=None,
     predicate=None,
     kind="manual",
-    policy="carrying-value",
+    policy=None,
     enabled=True,
 ):
     workspace, profile = resolve_scope(conn, workspace_ref, profile_ref)
@@ -1390,14 +1620,16 @@ def create_transfer_rule(
             f"Unsupported pair kind '{kind}'. Supported: {', '.join(TRANSFER_PAIR_KINDS)}",
             code="validation",
         )
+    predicate = predicate or {}
+    if not isinstance(predicate, dict):
+        raise AppError("predicate must be a JSON object", code="validation")
+    if policy is None:
+        policy = _default_transfer_rule_policy(profile, predicate)
     if policy not in TRANSFER_PAIR_POLICIES:
         raise AppError(
             f"Unsupported pair policy '{policy}'. Supported: {', '.join(TRANSFER_PAIR_POLICIES)}",
             code="validation",
         )
-    predicate = predicate or {}
-    if not isinstance(predicate, dict):
-        raise AppError("predicate must be a JSON object", code="validation")
     rule_id = str(uuid.uuid4())
     timestamp = now_iso()
     conn.execute(
@@ -1622,14 +1854,26 @@ def update_transaction_pair(
         )
     if not same_asset and new_policy == "carrying-value":
         tax_country = str(profile["tax_country"] or "").strip().lower()
-        if tax_country != "at":
+        if not cross_asset_carrying_value_supported(tax_country, row["out_asset"], row["in_asset"]):
             raise AppError(
-                f"Cross-asset carrying-value pairs are only supported for Austrian profiles right now "
+                f"Cross-asset carrying-value pairs are only supported for Austrian profiles "
+                f"or BTC/LBTC rail swaps right now "
                 f"(out={row['out_asset']}, in={row['in_asset']}). "
-                f"Use --policy taxable for other tax countries.",
+                f"Use --policy taxable for other cross-asset swaps.",
                 code="validation",
-                hint="Re-run with --policy taxable, or use an Austrian profile for cross-asset carrying-value swaps.",
+                hint="Re-run with --policy taxable, or pair only BTC/LBTC rail changes as carrying-value outside Austrian profiles.",
             )
+    _reject_disallowed_leg_reuse(
+        conn,
+        profile["id"],
+        row["out_transaction_id"],
+        row["in_transaction_id"],
+        row["out_asset"],
+        row["in_asset"],
+        new_kind,
+        new_policy,
+        exclude_pair_id=pair_id,
+    )
     new_notes = row["notes"] if notes is _UNSET else notes
     unchanged = (
         new_kind == row["kind"]
@@ -1826,6 +2070,26 @@ WALLET_KIND_CATALOG = {
         "config_fields": ["source_file", "source_format"],
         "requires": [],
     },
+    "ledgerlive": {
+        "summary": "Ledger Live CSV importer for BTC/LBTC wallet movement only.",
+        "config_fields": ["source_file", "source_format"],
+        "requires": [],
+    },
+    "kraken": {
+        "summary": "Kraken exchange import wallet for API or CSV execution evidence.",
+        "config_fields": ["backend", "source_file", "source_format"],
+        "requires": [],
+    },
+    "coinbase": {
+        "summary": "Coinbase exchange import wallet for API execution and wallet movement evidence.",
+        "config_fields": ["backend", "source_file", "source_format"],
+        "requires": [],
+    },
+    "binance": {
+        "summary": "Binance exchange import wallet for API rows and BTC supplemental CSVs.",
+        "config_fields": ["backend", "source_file", "source_format"],
+        "requires": [],
+    },
     "wasabi": {
         "summary": "Wasabi Wallet sanitized RPC/export bundle importer with CoinJoin and anonymity evidence.",
         "config_fields": ["source_file", "source_format", "wasabi_metadata"],
@@ -1844,6 +2108,9 @@ DEFAULT_COINFINITY_WALLET_LABEL = "Coinfinity"
 DEFAULT_TWENTYONEBITCOIN_WALLET_LABEL = "21bitcoin"
 DEFAULT_POCKETBITCOIN_WALLET_LABEL = "Pocket Bitcoin"
 DEFAULT_STRIKE_WALLET_LABEL = "Strike"
+DEFAULT_BINANCE_WALLET_LABEL = "Binance"
+DEFAULT_KRAKEN_WALLET_LABEL = "Kraken"
+DEFAULT_COINBASE_WALLET_LABEL = "Coinbase"
 
 
 def _get_or_create_provider_import_wallet(conn, profile, input_format, wallet_ref=None):
@@ -1861,6 +2128,9 @@ def _get_or_create_provider_import_wallet(conn, profile, input_format, wallet_re
     elif input_format == "strike_csv":
         default_label = DEFAULT_STRIKE_WALLET_LABEL
         wallet_kind = "strike"
+    elif input_format == "binance_supplemental_csv":
+        default_label = DEFAULT_BINANCE_WALLET_LABEL
+        wallet_kind = "binance"
     else:
         default_label = DEFAULT_BULLBITCOIN_WALLET_LABEL
         wallet_kind = "bullbitcoin"
@@ -1887,6 +2157,92 @@ def _get_or_create_provider_import_wallet(conn, profile, input_format, wallet_re
     return resolve_wallet(conn, profile["id"], created["id"])
 
 
+def _get_or_create_exchange_api_wallet(conn, profile, provider_kind, backend_name, wallet_ref=None):
+    if wallet_ref:
+        return resolve_wallet(conn, profile["id"], wallet_ref)
+    labels = {
+        "binance": DEFAULT_BINANCE_WALLET_LABEL,
+        "coinbase": DEFAULT_COINBASE_WALLET_LABEL,
+        "kraken": DEFAULT_KRAKEN_WALLET_LABEL,
+    }
+    default_label = labels.get(provider_kind, provider_kind.title())
+    existing = conn.execute(
+        """
+        SELECT w.*, a.code AS account_code, a.label AS account_label
+        FROM wallets w
+        LEFT JOIN accounts a ON a.id = w.account_id
+        WHERE w.profile_id = ? AND lower(w.label) = lower(?)
+        LIMIT 1
+        """,
+        (profile["id"], default_label),
+    ).fetchone()
+    if existing:
+        return existing
+    created = core_wallets.create_wallet(
+        conn,
+        profile["workspace_id"],
+        profile["id"],
+        default_label,
+        provider_kind if provider_kind in {"binance", "coinbase", "kraken"} else "custom",
+        config={"backend": backend_name},
+    )
+    return resolve_wallet(conn, profile["id"], created["id"])
+
+
+def import_exchange_api(
+    conn,
+    runtime_config,
+    workspace_ref,
+    profile_ref,
+    backend_ref,
+    wallet_ref=None,
+    *,
+    expected_backend_kind=None,
+    commit=True,
+):
+    _, profile = resolve_scope(conn, workspace_ref, profile_ref)
+    backend = resolve_backend(runtime_config, backend_ref)
+    provider_kind = str(backend.get("kind") or "").strip().lower()
+    if provider_kind not in {"binance", "coinbase", "kraken"}:
+        raise AppError(
+            f"Backend '{backend['name']}' has kind '{provider_kind}', expected an exchange API kind",
+            code="validation",
+            hint="Use a backend kind of kraken, coinbase, or binance.",
+            retryable=False,
+        )
+    if expected_backend_kind and provider_kind != expected_backend_kind:
+        raise AppError(
+            f"Backend '{backend['name']}' has kind '{provider_kind}', expected '{expected_backend_kind}'",
+            code="validation",
+            retryable=False,
+        )
+    wallet = _get_or_create_exchange_api_wallet(
+        conn,
+        profile,
+        provider_kind,
+        backend["name"],
+        wallet_ref,
+    )
+    records = core_exchange_imports.fetch_exchange_records(backend)
+    outcome = core_imports.import_records_into_wallet(
+        conn,
+        profile,
+        wallet,
+        records,
+        f"{provider_kind}:api:{backend['name']}",
+        _import_coordinator_hooks(),
+        report_updates=True,
+        commit=commit,
+    )
+    outcome["backend"] = backend["name"]
+    outcome["backend_kind"] = provider_kind
+    outcome["backend_url"] = redact_backend_url(backend.get("url"))
+    outcome["wallet"] = wallet["label"]
+    outcome["fetched"] = len(records)
+    outcome["input_format"] = f"{provider_kind}_api"
+    return outcome
+
+
 def import_into_wallet(
     conn,
     workspace_ref,
@@ -1898,7 +2254,11 @@ def import_into_wallet(
 ):
     _, profile = resolve_scope(conn, workspace_ref, profile_ref)
     if input_format in {"21bitcoin_csv", "strike_csv"}:
-        default_mode = core_imports.BULLBITCOIN_IMPORT_MODE_FULL if input_format == "strike_csv" else None
+        default_mode = (
+            core_imports.BULLBITCOIN_IMPORT_MODE_FULL
+            if input_format == "strike_csv"
+            else None
+        )
         mode = core_imports.normalize_bullbitcoin_import_mode(import_mode or default_mode)
         if input_format == "21bitcoin_csv" and mode == core_imports.BULLBITCOIN_IMPORT_MODE_RELEVANT:
             if wallet_ref:
@@ -2200,6 +2560,17 @@ def _wallet_sync_hooks(commit=True):
             commit=commit,
         ),
         sync_core_lightning_wallet=lambda conn, runtime_config, profile, wallet: core_lightning_cln.sync_core_lightning_wallet(
+            conn,
+            profile,
+            wallet,
+            resolve_backend(
+                runtime_config,
+                json.loads(wallet["config_json"] or "{}").get("backend"),
+            ),
+            _import_coordinator_hooks(),
+            commit=commit,
+        ),
+        sync_lnd_wallet=lambda conn, runtime_config, profile, wallet: core_lightning_lnd.sync_lnd_wallet(
             conn,
             profile,
             wallet,
@@ -2989,6 +3360,162 @@ TRANSACTION_SORT_COLUMNS = {
     "fee": "t.fee",
 }
 MAX_TRANSACTION_PAGE_SIZE = 1000
+TRANSACTION_FLOW_KINDS = {
+    "chain-swap",
+    "peg-in",
+    "peg-out",
+    "reverse-submarine-swap",
+    "submarine-swap",
+    "swap",
+    "swap-refund",
+}
+TRANSACTION_LAYER_TRANSITION_KINDS = {
+    "chain-swap",
+    "peg-in",
+    "peg-out",
+    "reverse-submarine-swap",
+    "submarine-swap",
+    "swap-refund",
+}
+TRANSACTION_PAYMENT_METHODS = {
+    "exchange": "Exchange",
+    "lightning": "Lightning",
+    "liquid": "Liquid",
+    "on-chain": "On-chain",
+    "onchain": "On-chain",
+    "on chain": "On-chain",
+}
+TRANSACTION_PERIOD_DAYS = {
+    "30days": 29,
+    "30day": 29,
+    "30d": 29,
+    "3months": 92,
+    "3month": 92,
+    "3m": 92,
+    "6months": 183,
+    "6month": 183,
+    "6m": 183,
+    "1year": 365,
+    "1years": 365,
+    "1y": 365,
+    "5years": 365 * 5,
+    "5year": 365 * 5,
+    "5y": 365 * 5,
+    "10years": 365 * 10,
+    "10year": 365 * 10,
+    "10y": 365 * 10,
+    "15years": 365 * 15,
+    "15year": 365 * 15,
+    "15y": 365 * 15,
+}
+
+
+def _coerce_transaction_txids(values):
+    output = []
+    seen = set()
+    for raw in values or ():
+        for part in str(raw).split(","):
+            value = part.strip()
+            if not value:
+                continue
+            normalized = value.lower()
+            if normalized in seen:
+                continue
+            seen.add(normalized)
+            output.append(normalized)
+    return output
+
+
+def _transaction_since_for_period(period):
+    normalized = str(period).strip().lower()
+    if normalized == "all":
+        return None
+    if normalized == "ytd":
+        now = datetime.now(timezone.utc)
+        return _iso_z(datetime(now.year, 1, 1, tzinfo=timezone.utc))
+    days = TRANSACTION_PERIOD_DAYS.get(normalized)
+    if days is None:
+        raise AppError(
+            "--period must be one of: 30days, 3months, 6months, ytd, 1year, 5years, 10years, 15years, all",
+            code="validation",
+        )
+    return _iso_z(datetime.now(timezone.utc) - timedelta(days=days))
+
+
+def _normalize_transaction_payment_method(value):
+    normalized = str(value).strip().lower()
+    payment_method = TRANSACTION_PAYMENT_METHODS.get(normalized)
+    if payment_method:
+        return payment_method
+    raise AppError(
+        "--payment-method must be one of: On-chain, Exchange, Lightning, Liquid",
+        code="validation",
+    )
+
+
+def _transaction_pair_exists_sql(pair_type=None):
+    if pair_type == "swap":
+        type_predicate = "AND tout.asset <> tin.asset"
+    elif pair_type == "transfer":
+        type_predicate = "AND tout.asset = tin.asset"
+    else:
+        type_predicate = ""
+    return f"""
+        EXISTS (
+          SELECT 1
+          FROM transaction_pairs p
+          JOIN transactions tout ON tout.id = p.out_transaction_id
+          JOIN transactions tin ON tin.id = p.in_transaction_id
+          WHERE p.deleted_at IS NULL
+            AND (p.out_transaction_id = t.id OR p.in_transaction_id = t.id)
+            {type_predicate}
+        )
+    """
+
+
+def _transaction_payment_method_sql():
+    return """
+        CASE
+          WHEN lower(t.asset) = 'lbtc'
+            OR lower(w.kind) IN ('liquid')
+            OR lower(w.config_json) LIKE '%"chain"%liquid%'
+            OR lower(w.label) LIKE '%liquid%'
+            OR lower(w.label) LIKE '%lbtc%'
+            THEN 'Liquid'
+          WHEN lower(w.kind) IN ('lnd', 'core-ln', 'coreln', 'nwc', 'phoenix')
+            OR lower(w.label) LIKE '%lightning%'
+            OR lower(w.label) LIKE '%phoenix%'
+            OR lower(w.label) LIKE '% ln%'
+            OR lower(w.label) LIKE 'ln %'
+            OR lower(w.label) LIKE '%(ln)%'
+            THEN 'Lightning'
+          WHEN lower(w.kind) IN (
+              'kraken', 'bitstamp', 'coinbase', 'bitpanda', 'river',
+              'bullbitcoin', 'coinfinity', 'strike', 'exchange'
+            )
+            OR lower(w.label) LIKE '%exchange%'
+            THEN 'Exchange'
+          ELSE 'On-chain'
+        END
+    """.strip()
+
+
+def _transaction_status_sql():
+    return """
+        CASE
+          WHEN lower(COALESCE(t.review_status, '')) IN
+               ('review', 'needs_review', 'needs-review', 'blocked', 'quarantined')
+            OR jq.reason IS NOT NULL
+            THEN 'review'
+          WHEN lower(COALESCE(t.review_status, '')) IN ('failed', 'error')
+            THEN 'failed'
+          WHEN lower(COALESCE(t.review_status, '')) IN ('completed', 'complete')
+            THEN 'completed'
+          WHEN t.confirmed_at IS NULL
+            THEN 'pending'
+          ELSE 'completed'
+        END
+    """.strip()
 
 
 def _transaction_cursor_filters(
@@ -2999,6 +3526,14 @@ def _transaction_cursor_filters(
     asset=None,
     start_ts=None,
     end_ts=None,
+    txids=None,
+    period=None,
+    status=None,
+    flow=None,
+    payment_method=None,
+    network=None,
+    with_fees=False,
+    quick=None,
 ):
     return {
         "workspace_id": workspace_id,
@@ -3008,6 +3543,14 @@ def _transaction_cursor_filters(
         "asset": asset.upper() if asset else "",
         "start": start_ts or "",
         "end": end_ts or "",
+        "txids": ",".join(txids or []),
+        "period": period or "",
+        "status": status or "",
+        "flow": flow or "",
+        "payment_method": payment_method or "",
+        "network": network or "",
+        "with_fees": "1" if with_fees else "",
+        "quick": quick or "",
     }
 
 
@@ -3075,6 +3618,14 @@ def list_transactions(
     asset=None,
     start=None,
     end=None,
+    txids=None,
+    period=None,
+    status=None,
+    flow=None,
+    payment_method=None,
+    network=None,
+    with_fees=False,
+    quick=None,
     cursor=None,
     sort="occurred-at",
     order="desc",
@@ -3107,8 +3658,12 @@ def list_transactions(
 
     params = [profile["id"]]
     filters = ["t.profile_id = ?"]
+    period_filter = period.strip().lower() if isinstance(period, str) and period.strip() else None
     start_ts = _iso_z(_parse_iso_datetime(start, "start")) if start else None
+    if start_ts is None and period_filter:
+        start_ts = _transaction_since_for_period(period_filter)
     end_ts = _iso_z(_parse_iso_datetime(end, "end")) if end else None
+    txid_terms = _coerce_transaction_txids(txids)
     wallet_id = ""
     if wallet_ref:
         wallet = resolve_wallet(conn, profile["id"], wallet_ref)
@@ -3127,17 +3682,137 @@ def list_transactions(
     if end_ts:
         filters.append("t.occurred_at <= ?")
         params.append(end_ts)
+    if txid_terms:
+        placeholders = ", ".join("?" for _ in txid_terms)
+        filters.append(
+            f"""(
+              lower(t.id) IN ({placeholders})
+              OR lower(COALESCE(t.external_id, '')) IN ({placeholders})
+              OR (
+                length(COALESCE(t.external_id, '')) = 64
+                AND lower(COALESCE(t.external_id, '')) IN ({placeholders})
+              )
+            )"""
+        )
+        params.extend([*txid_terms, *txid_terms, *txid_terms])
+    if status:
+        filters.append(f"({_transaction_status_sql()}) = ?")
+        params.append(status)
+    if flow == "incoming":
+        flow_kinds = sorted(TRANSACTION_FLOW_KINDS | {"transfer"})
+        filters.append(
+            f"""(
+              t.direction = 'inbound'
+              AND lower(COALESCE(t.kind, '')) NOT IN ({", ".join("?" for _ in flow_kinds)})
+              AND NOT {_transaction_pair_exists_sql()}
+            )"""
+        )
+        params.extend(flow_kinds)
+    elif flow == "outgoing":
+        flow_kinds = sorted(TRANSACTION_FLOW_KINDS | {"transfer"})
+        filters.append(
+            f"""(
+              t.direction = 'outbound'
+              AND lower(COALESCE(t.kind, '')) NOT IN ({", ".join("?" for _ in flow_kinds)})
+              AND NOT {_transaction_pair_exists_sql()}
+            )"""
+        )
+        params.extend(flow_kinds)
+    elif flow == "transfer":
+        filters.append(
+            f"(lower(COALESCE(t.kind, '')) = 'transfer' OR {_transaction_pair_exists_sql('transfer')})"
+        )
+    elif flow == "swap":
+        filters.append(
+            f"""(
+              lower(COALESCE(t.kind, '')) IN ({", ".join("?" for _ in TRANSACTION_FLOW_KINDS)})
+              OR {_transaction_pair_exists_sql('swap')}
+            )"""
+        )
+        params.extend(sorted(TRANSACTION_FLOW_KINDS))
+    elif flow == "layer-transition":
+        filters.append(
+            f"lower(COALESCE(t.kind, '')) IN ({', '.join('?' for _ in TRANSACTION_LAYER_TRANSITION_KINDS)})"
+        )
+        params.extend(sorted(TRANSACTION_LAYER_TRANSITION_KINDS))
+    if payment_method:
+        payment_filter = _normalize_transaction_payment_method(payment_method)
+        filters.append(f"({_transaction_payment_method_sql()}) = ?")
+        params.append(payment_filter)
+    if network:
+        normalized_network = network.strip().lower()
+        maybe_payment = TRANSACTION_PAYMENT_METHODS.get(normalized_network)
+        if maybe_payment:
+            filters.append(f"({_transaction_payment_method_sql()}) = ?")
+            params.append(maybe_payment)
+        else:
+            filters.append(
+                """(
+                  lower(w.kind) = ?
+                  OR lower(w.config_json) LIKE ?
+                  OR lower(w.label) LIKE ?
+                  OR upper(t.asset) = ?
+                )"""
+            )
+            params.extend(
+                [
+                    normalized_network,
+                    f"%{normalized_network}%",
+                    f"%{normalized_network}%",
+                    "LBTC" if normalized_network == "liquid" else normalized_network.upper(),
+                ]
+            )
+    if with_fees:
+        filters.append("COALESCE(t.fee, 0) <> 0")
+    if quick == "external_flow":
+        filters.append("t.direction IN ('inbound', 'outbound')")
+        filters.append("lower(COALESCE(t.kind, '')) <> 'transfer'")
+    elif quick == "review_queue":
+        filters.append(f"({_transaction_status_sql()}) <> 'completed'")
+    elif quick == "no_explorer_id":
+        filters.append(
+            """(
+              t.external_id IS NULL
+              OR length(trim(t.external_id)) <> 64
+              OR lower(trim(t.external_id)) GLOB '*[^0-9a-f]*'
+            )"""
+        )
+    elif quick == "missing_price":
+        filters.append(core_rates.transaction_price_missing_sql())
+    elif quick == "failed_import":
+        filters.append(f"({_transaction_status_sql()}) = 'failed'")
 
+    cursor_start_ts = "" if period_filter and not start else start_ts
     cursor_filters = _transaction_cursor_filters(
         workspace["id"],
         profile["id"],
         wallet_id,
         direction,
         asset,
-        start_ts,
+        cursor_start_ts,
         end_ts,
+        txid_terms,
+        period_filter,
+        status,
+        flow,
+        payment_method,
+        network,
+        with_fees,
+        quick,
     )
     cursor_data = _decode_transaction_cursor(cursor, sort, order, cursor_filters)
+    count_filters = list(filters)
+    count_params = list(params)
+    filtered_count = conn.execute(
+        f"""
+        SELECT COUNT(*) AS count
+        FROM transactions t
+        JOIN wallets w ON w.id = t.wallet_id
+        LEFT JOIN journal_quarantines jq ON jq.transaction_id = t.id
+        WHERE {' AND '.join(count_filters)}
+        """,
+        count_params,
+    ).fetchone()["count"]
     if cursor_data:
         if sort == "occurred-at":
             op = ">" if order == "asc" else "<"
@@ -3211,6 +3886,7 @@ def list_transactions(
             t.excluded
         FROM transactions t
         JOIN wallets w ON w.id = t.wallet_id
+        LEFT JOIN journal_quarantines jq ON jq.transaction_id = t.id
         WHERE {' AND '.join(filters)}
         ORDER BY {order_by}
         LIMIT ?
@@ -3254,6 +3930,8 @@ def list_transactions(
     return results, {
         "next_cursor": next_cursor,
         "has_more": has_more,
+        "count": filtered_count,
+        "total": filtered_count,
         "limit": limit,
         "sort": sort,
         "order": order,
@@ -3509,6 +4187,28 @@ def build_ledger_state(conn, profile):
         "SELECT transaction_id, role FROM loan_legs WHERE profile_id = ? AND deleted_at IS NULL",
         (profile["id"],),
     ).fetchall()
+    # Lightning channel-lifecycle roles: a channel funding tx that a separately
+    # synced on-chain wallet recorded is not a disposal (the coins stay owned in
+    # the channel), and a close is not an acquisition. Persisted channel records
+    # (record_type='channel') carry the funding/closing txids; match them to the
+    # on-chain rows so the engine suppresses them as non-events.
+    channel_records = conn.execute(
+        """
+        SELECT txid, tag
+        FROM lightning_node_records
+        WHERE profile_id = ? AND record_type = 'channel'
+        """,
+        (profile["id"],),
+    ).fetchall()
+    channel_rows = []
+    for record in channel_records:
+        if not record["txid"]:
+            continue
+        if record["tag"] == "channel_close":
+            channel_rows.append({"closing_txid": record["txid"]})
+        else:
+            channel_rows.append({"funding_txid": record["txid"]})
+    channel_roles = channel_lifecycle.channel_role_map(channel_rows, rows)
     engine_state = tax_engine.build_ledger_state(
         TaxEngineLedgerInputs(
             rows=rows,
@@ -3517,6 +4217,7 @@ def build_ledger_state(conn, profile):
             direct_payout_records=direct_payout_records,
             owned_index=owned_index,
             loan_legs=loan_legs,
+            channel_roles=channel_roles,
         )
     )
     return {
@@ -4490,6 +5191,7 @@ def get_profile_details(conn, workspace_ref=None, profile_ref=None):
         "tax_country": profile["tax_country"],
         "tax_long_term_days": profile["tax_long_term_days"],
         "gains_algorithm": profile["gains_algorithm"],
+        "bitcoin_rail_carrying_value": profile_bitcoin_rail_carrying_value(profile),
         "last_processed_at": profile["last_processed_at"],
         "last_processed_tx_count": _row_int(profile, "last_processed_tx_count"),
         "journal_input_version": _row_int(profile, "journal_input_version"),
@@ -4508,12 +5210,15 @@ def update_profile(conn, workspace_ref, profile_ref, updates):
     new_country = updates.get("tax_country")
     new_long_term = updates.get("tax_long_term_days")
     new_algo = updates.get("gains_algorithm")
+    new_bitcoin_rail = updates.get("bitcoin_rail_carrying_value")
 
     merged_fiat = new_fiat if new_fiat is not None else profile["fiat_currency"]
     merged_country = new_country if new_country is not None else profile["tax_country"]
     merged_long_term = new_long_term if new_long_term is not None else profile["tax_long_term_days"]
     merged_algo = new_algo if new_algo is not None else profile["gains_algorithm"]
     merged_label = new_label if new_label is not None else profile["label"]
+    current_bitcoin_rail = profile_bitcoin_rail_carrying_value(profile)
+    merged_bitcoin_rail = bool(new_bitcoin_rail) if new_bitcoin_rail is not None else current_bitcoin_rail
 
     if new_long_term is not None and new_long_term < 0:
         raise AppError(
@@ -4545,12 +5250,14 @@ def update_profile(conn, workspace_ref, profile_ref, updates):
         or policy.tax_country != profile["tax_country"]
         or policy.long_term_days != profile["tax_long_term_days"]
         or normalized_algo != profile["gains_algorithm"]
+        or merged_bitcoin_rail != current_bitcoin_rail
     )
 
     conn.execute(
         """
         UPDATE profiles
-        SET label = ?, fiat_currency = ?, tax_country = ?, tax_long_term_days = ?, gains_algorithm = ?
+        SET label = ?, fiat_currency = ?, tax_country = ?, tax_long_term_days = ?,
+            gains_algorithm = ?, bitcoin_rail_carrying_value = ?
         WHERE id = ?
         """,
         (
@@ -4559,6 +5266,7 @@ def update_profile(conn, workspace_ref, profile_ref, updates):
             policy.tax_country,
             policy.long_term_days,
             normalized_algo,
+            1 if merged_bitcoin_rail else 0,
             profile["id"],
         ),
     )
@@ -4576,6 +5284,8 @@ def cmd_init(conn, args):
         args,
         {
             "version": __version__,
+            "project_id": getattr(args, "project_id", None),
+            "project_root": getattr(args, "project_root", None),
             "state_root": str(state_root),
             "data_root": str(effective_data_root),
             "database": str(resolve_database_path(effective_data_root)),

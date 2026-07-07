@@ -2,13 +2,17 @@ import {
   AlertTriangle,
   ArrowRight,
   ArrowRightLeft,
+  ChevronDown,
+  ChevronUp,
   Info,
   Maximize2,
 } from "lucide-react";
 import type { TFunction } from "i18next";
-import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
 import { useTranslation } from "react-i18next";
 
+import bitcoinIcon from "@/assets/integrations/bitcoin.svg";
+import liquidIcon from "@/assets/integrations/liquid.svg";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -17,118 +21,46 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { openExternalUrl } from "@/daemon/transport";
 import { formatBtc } from "@/lib/currency";
+import {
+  connectionAssetIconKind,
+  type ConnectionAssetLabel,
+} from "@/lib/connectionDisplay";
+import {
+  explorerTargetForAddress,
+  explorerTargetForTransaction,
+  type ExplorerNetwork,
+  type ExplorerSettings,
+  type ExplorerTarget,
+} from "@/lib/explorer";
 import { cn } from "@/lib/utils";
+import { useUiStore } from "@/store/ui";
 
 import { copyText, formatShortTxid } from "./model";
+import {
+  compactGraphRows,
+  nodeTooltipTitle,
+  sensitiveGraphText,
+  type GraphRow,
+  type TransactionGraphAnnotation,
+  type TransactionGraphIssueTarget,
+  type TransactionGraphNode,
+  type TransactionGraphPayload,
+  type TransactionSwapRoute,
+  type TransactionSwapRouteLeg,
+  type TransactionSwapRouteLegKey,
+} from "./TransactionGraphModel";
 
-export type TransactionGraphAnnotation = {
-  code: string;
-  label?: string;
-  severity?: "info" | "warning" | "error";
-  groupId?: string | null;
-  amountMsat?: number;
-  amountBtc?: number;
-  residualMsat?: number;
-  residualBtc?: number;
-};
-
-export type TransactionGraphNode = {
-  id: string;
-  index?: number;
-  outpoint?: string;
-  txid?: string;
-  vout?: number;
-  address?: string;
-  scriptType?: string;
-  valueSats?: number | null;
-  valueBtc?: number | null;
-  valueState?: "known" | "missing" | "confidential";
-  label?: string;
-  wallet?: string;
-  walletId?: string | null;
-  ownership?: string;
-  role?: string;
-  overflow?: boolean;
-  overflowCount?: number;
-  annotations?: TransactionGraphAnnotation[];
-};
-
-export type TransactionSwapRouteLeg = {
-  id?: string;
-  externalId?: string | null;
-  txid?: string | null;
-  direction?: string | null;
-  role?: "consolidation" | "spend" | "receive" | null;
-  asset?: string | null;
-  network?: string | null;
-  amountMsat?: number | null;
-  amountBtc?: number | null;
-  feeMsat?: number | null;
-  feeBtc?: number | null;
-  occurredAt?: string | null;
-  confirmedAt?: string | null;
-  kind?: string | null;
-  counterparty?: string | null;
-  description?: string | null;
-  wallet?: {
-    id?: string | null;
-    label?: string | null;
-    kind?: string | null;
-  } | null;
-};
-
-export type TransactionSwapRoute = {
-  id?: string;
-  kind?: string | null;
-  routeKind?: string | null;
-  policy?: string | null;
-  pairSource?: string | null;
-  confidence?: string | null;
-  createdAt?: string | null;
-  currentLeg?: "out" | "in" | null;
-  swapFeeMsat?: number | null;
-  swapFeeBtc?: number | null;
-  swapFeeKind?: string | null;
-  outAmountMsat?: number | null;
-  outAmountBtc?: number | null;
-  outFullAmountMsat?: number | null;
-  outFullAmountBtc?: number | null;
-  out: TransactionSwapRouteLeg;
-  in: TransactionSwapRouteLeg;
-};
-
-export type TransactionGraphPayload = {
-  transaction: {
-    id: string;
-    txid?: string | null;
-    externalId?: string | null;
-    asset?: string | null;
-    inputCount?: number | null;
-    outputCount?: number | null;
-    version?: number | null;
-    locktime?: number | null;
-    size?: number | null;
-    vsize?: number | null;
-    weight?: number | null;
-    feeRateSatVb?: number | null;
-  } | null;
-  supportLevel: "full" | "partial" | "graphless" | "unsupported";
-  unsupportedReason?: string | null;
-  warnings?: Array<{ code: string; level?: string; message: string }>;
-  inputs: TransactionGraphNode[];
-  outputs: TransactionGraphNode[];
-  fee?: TransactionGraphNode | null;
-  annotations?: TransactionGraphAnnotation[];
-  accounting?: {
-    quarantine?: { reason?: string | null; detail?: Record<string, unknown> } | null;
-    linkedPairs?: TransactionGraphAnnotation[];
-    transferGroupIds?: string[];
-  };
-  swapRoute?: TransactionSwapRoute | null;
-};
-
-export type TransactionGraphIssueTarget = "bitcoin" | "liquid";
+export type {
+  TransactionGraphAnnotation,
+  TransactionGraphIssueTarget,
+  TransactionGraphNode,
+  TransactionGraphPayload,
+  TransactionSwapRoute,
+  TransactionSwapRouteLeg,
+  TransactionSwapRouteLegKey,
+} from "./TransactionGraphModel";
 
 type TransactionGraphIssueLabelKey =
   | "graph.addBitcoinBackend"
@@ -141,61 +73,11 @@ type TransactionGraphIssueAction = {
   labelKey: TransactionGraphIssueLabelKey;
 };
 
-type GraphRow = TransactionGraphNode & { side: "input" | "output" | "fee" };
-
 const MAX_COMPACT_ROWS = 24;
 // The expanded dialog shows far more strands, but still caps so a fan-out
 // transaction cannot render thousands of paths. Matches the backend node cap.
 const MAX_EXPANDED_ROWS = 250;
-
-export function compactGraphRows(
-  nodes: TransactionGraphNode[],
-  side: "input" | "output",
-  maxRows = MAX_COMPACT_ROWS,
-): GraphRow[] {
-  const rows = nodes.map((node) => ({ ...node, side }));
-  if (rows.length <= maxRows) return rows;
-  const visible = rows.slice(0, Math.max(1, maxRows - 1));
-  const hidden = rows.slice(visible.length);
-  // A hidden node may itself be a server-side overflow node, so count the legs
-  // it represents rather than the strand.
-  const hiddenCount = hidden.reduce((sum, node) => sum + (node.overflowCount ?? 1), 0);
-  // Only advertise a concrete value when every hidden leg has a known amount;
-  // otherwise leave it amountless so a partial sum isn't shown as a total.
-  const allKnown = hidden.every((node) => typeof node.valueSats === "number");
-  const totalSats = allKnown
-    ? hidden.reduce((sum, node) => sum + (node.valueSats ?? 0), 0)
-    : null;
-  return [
-    ...visible,
-    {
-      id: `${side}-overflow`,
-      side,
-      label: `+${hiddenCount} more`,
-      role: "overflow",
-      ownership: "overflow",
-      overflow: true,
-      overflowCount: hiddenCount,
-      valueSats: totalSats,
-      valueBtc: totalSats != null ? totalSats / 100_000_000 : null,
-      annotations: [
-        {
-          code: "overflow",
-          label: `${hiddenCount} compacted ${side} rows`,
-        },
-      ],
-    },
-  ];
-}
-
-export function sensitiveGraphText(
-  value: string | null | undefined,
-  hidden: boolean,
-  hiddenLabel = "Hidden",
-) {
-  if (!value) return "";
-  return hidden ? hiddenLabel : value;
-}
+const MAX_DETAIL_COLLAPSED_ROWS = 8;
 
 function formatNodeAmount(node: TransactionGraphNode, hidden: boolean, t: TFunction<"transactions">) {
   if (hidden) return t("graph.hidden");
@@ -207,18 +89,6 @@ function formatNodeAmount(node: TransactionGraphNode, hidden: boolean, t: TFunct
     return `${node.valueSats.toLocaleString("de-AT")} sats`;
   }
   return "";
-}
-
-function nodeTitle(node: TransactionGraphNode) {
-  if (node.overflow) return node.label ?? "More";
-  return node.wallet || node.address || node.outpoint || node.label || "Transaction leg";
-}
-
-export function nodeTooltipTitle(node: TransactionGraphNode) {
-  const title = nodeTitle(node);
-  if (node.outpoint && title === node.outpoint) return formatShortTxid(node.outpoint);
-  if (title.length > 48) return formatShortTxid(title);
-  return title;
 }
 
 function nodeDisplayTitle(node: TransactionGraphNode, t: TFunction<"transactions">) {
@@ -258,6 +128,405 @@ function ownershipBoundaryLabel(node: TransactionGraphNode, t: TFunction<"transa
   return t("graph.ownership.unknown");
 }
 
+function nodeReference(node: TransactionGraphNode) {
+  return node.address || node.outpoint || node.txid || node.label || "";
+}
+
+function nodeDetailReference(
+  node: TransactionGraphNode,
+  hidden: boolean,
+  t: TFunction<"transactions">,
+) {
+  const reference = nodeReference(node);
+  if (!reference) return t("graph.inputsOutputs.unknownReference");
+  return sensitiveGraphText(formatShortTxid(reference), hidden, t("graph.hidden"));
+}
+
+function conciseScriptType(scriptType: string | undefined) {
+  if (!scriptType) return "";
+  const normalized = scriptType.replace(/[_-]/g, " ").replace(/\s+/g, " ").trim();
+  const lower = normalized.toLowerCase();
+  if (lower.includes("taproot")) return "taproot";
+  if (lower.includes("witness v0") && lower.includes("keyhash")) return "segwit v0";
+  if (lower.includes("witness v0") && lower.includes("scripthash")) return "segwit script";
+  return normalized;
+}
+
+function nodeDetailMeta(
+  node: TransactionGraphNode,
+  side: "input" | "output",
+  hidden: boolean,
+  t: TFunction<"transactions">,
+) {
+  const parts = [];
+  if (node.role && node.role !== side) {
+    parts.push(roleLabel(node.role, t));
+  }
+  parts.push(ownershipBoundaryLabel(node, t));
+  const scriptType = conciseScriptType(node.scriptType);
+  if (scriptType) parts.push(scriptType);
+  if (typeof node.index === "number") {
+    parts.push(t("graph.inputsOutputs.index", { index: node.index }));
+  }
+  if (!hidden && node.address && node.outpoint) {
+    parts.push(formatShortTxid(node.outpoint));
+  }
+  return parts;
+}
+
+function graphExplorerNetwork(graph: TransactionGraphPayload): ExplorerNetwork {
+  const text = `${graph.transaction?.network ?? ""} ${graph.transaction?.asset ?? ""}`.toLowerCase();
+  return text.includes("liquid") || text.includes("lbtc") || text.includes("l-btc")
+    ? "liquid"
+    : "bitcoin";
+}
+
+function explorerTargetForGraphNode({
+  graph,
+  node,
+  settings,
+}: {
+  graph: TransactionGraphPayload;
+  node: TransactionGraphNode;
+  settings: ExplorerSettings;
+}): ExplorerTarget | null {
+  const network = graphExplorerNetwork(graph);
+  if (node.address) {
+    return explorerTargetForAddress({
+      address: node.address,
+      network,
+      settings,
+    });
+  }
+  const txid = node.txid || node.outpoint?.split(":")[0];
+  return explorerTargetForTransaction({
+    txid,
+    network,
+    settings,
+  });
+}
+
+function amountSummary(nodes: TransactionGraphNode[]) {
+  return nodes.reduce(
+    (summary, node) => {
+      if (node.valueState === "confidential") {
+        summary.confidentialCount += 1;
+      } else if (typeof node.valueSats === "number") {
+        summary.knownCount += 1;
+        summary.knownSats += node.valueSats;
+      } else {
+        summary.unknownCount += 1;
+      }
+      return summary;
+    },
+    {
+      knownSats: 0,
+      knownCount: 0,
+      unknownCount: 0,
+      confidentialCount: 0,
+    },
+  );
+}
+
+function hasCompleteTotal(nodes: TransactionGraphNode[]) {
+  if (!nodes.length) return true;
+  return nodes.every(
+    (node) =>
+      node.valueState !== "confidential" &&
+      typeof node.valueSats === "number",
+  );
+}
+
+function formatTotal(nodes: TransactionGraphNode[], t: TFunction<"transactions">) {
+  const summary = amountSummary(nodes);
+  if (summary.knownCount > 0) return formatBtc(summary.knownSats / 100_000_000);
+  if (summary.confidentialCount > 0) {
+    return t("graph.confidentialAmount");
+  }
+  return t("graph.inputsOutputs.unknownAmount");
+}
+
+function TransactionIoMarker({
+  side,
+}: {
+  side: "input" | "output";
+}) {
+  const { t } = useTranslation("transactions");
+  const isInput = side === "input";
+  return (
+    <span
+      role="img"
+      aria-label={
+        isInput
+          ? t("graph.inputsOutputs.spentInput")
+          : t("graph.inputsOutputs.createdOutput")
+      }
+      className={cn(
+        "mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full border",
+        isInput
+          ? "border-red-500/30 bg-red-500/10 text-red-600 dark:text-red-400"
+          : "border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
+      )}
+    >
+      <ArrowRight className="size-3" aria-hidden="true" />
+    </span>
+  );
+}
+
+function TransactionIoRow({
+  node,
+  side,
+  hideSensitive,
+  explorerTarget,
+  onOpenExplorer,
+}: {
+  node: TransactionGraphNode;
+  side: "input" | "output";
+  hideSensitive: boolean;
+  explorerTarget: ExplorerTarget | null;
+  onOpenExplorer: (target: ExplorerTarget) => void;
+}) {
+  const { t } = useTranslation("transactions");
+  const amount =
+    formatNodeAmount(node, hideSensitive, t) ||
+    t("graph.inputsOutputs.unknownAmount");
+  const canOpenExplorer = Boolean(explorerTarget && !hideSensitive && !node.overflow);
+  const content = (
+    <>
+      <TransactionIoMarker side={side} />
+      <div className="min-w-0">
+        <div
+          className={cn(
+            "truncate font-mono text-xs font-medium",
+            hideSensitive && "sensitive",
+          )}
+        >
+          {nodeDetailReference(node, hideSensitive, t)}
+        </div>
+        <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-muted-foreground">
+          {nodeDetailMeta(node, side, hideSensitive, t).map((part, index) => (
+            <span
+              key={`${node.id}-${part}-${index}`}
+              className={cn(index > 3 && "hidden sm:inline")}
+            >
+              {part}
+            </span>
+          ))}
+        </div>
+      </div>
+      <div
+        className={cn(
+          "flex shrink-0 items-start gap-1 self-start pt-0.5 text-right text-xs font-medium tabular-nums",
+          hideSensitive && "sensitive",
+        )}
+      >
+        <span>{amount}</span>
+      </div>
+    </>
+  );
+  if (canOpenExplorer && explorerTarget) {
+    const openLabel = t("graph.inputsOutputs.openExplorer", {
+      explorer: explorerTarget.label,
+      reference: nodeDetailReference(node, false, t),
+    });
+    return (
+      <button
+        type="button"
+        className="grid w-full min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] gap-2 border-t py-2 text-left first:border-t-0 hover:bg-muted/35 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        aria-label={openLabel}
+        title={openLabel}
+        onClick={() => onOpenExplorer(explorerTarget)}
+      >
+        {content}
+      </button>
+    );
+  }
+  return (
+    <div className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] gap-2 border-t py-2 first:border-t-0">
+      {content}
+    </div>
+  );
+}
+
+function TransactionIoColumn({
+  title,
+  nodes,
+  side,
+  hideSensitive,
+  expanded,
+  onToggleExpanded,
+  explorerSettings,
+  graph,
+  onOpenExplorer,
+}: {
+  title: string;
+  nodes: TransactionGraphNode[];
+  side: "input" | "output";
+  hideSensitive: boolean;
+  expanded: boolean;
+  onToggleExpanded: () => void;
+  explorerSettings: ExplorerSettings;
+  graph: TransactionGraphPayload;
+  onOpenExplorer: (target: ExplorerTarget) => void;
+}) {
+  const { t } = useTranslation("transactions");
+  const visibleNodes = expanded ? nodes : nodes.slice(0, MAX_DETAIL_COLLAPSED_ROWS);
+  const hiddenCount = Math.max(0, nodes.length - visibleNodes.length);
+  return (
+    <div className="min-w-0">
+      <div className="flex items-center justify-between gap-2 border-b pb-1.5">
+        <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+          {title}
+        </div>
+        <div className="text-[10px] text-muted-foreground">
+          {nodes.length.toLocaleString("de-AT")}
+        </div>
+      </div>
+      <div className={cn("overflow-auto pr-1", expanded ? "max-h-[520px]" : "max-h-[360px]")}>
+        {visibleNodes.map((node) => (
+          <TransactionIoRow
+            key={`${side}-${node.id}`}
+            node={node}
+            side={side}
+            hideSensitive={hideSensitive}
+            explorerTarget={
+              hideSensitive
+                ? null
+                : explorerTargetForGraphNode({ graph, node, settings: explorerSettings })
+            }
+            onOpenExplorer={onOpenExplorer}
+          />
+        ))}
+        {nodes.length > MAX_DETAIL_COLLAPSED_ROWS ? (
+          <button
+            type="button"
+            className="flex w-full items-center gap-1 border-t py-2 text-left text-xs text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            onClick={onToggleExpanded}
+          >
+            {expanded ? (
+              <ChevronUp className="size-3.5" aria-hidden="true" />
+            ) : (
+              <ChevronDown className="size-3.5" aria-hidden="true" />
+            )}
+            {expanded
+              ? t("graph.inputsOutputs.showFewer")
+              : t("graph.inputsOutputs.showAll", { count: hiddenCount })}
+          </button>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function TransactionIoTotalsPane({
+  graph,
+  hideSensitive,
+}: {
+  graph: TransactionGraphPayload;
+  hideSensitive: boolean;
+}) {
+  const { t } = useTranslation("transactions");
+  const rows: Array<{
+    id: "input" | "output";
+    label: string;
+    nodes: TransactionGraphNode[];
+  }> = [
+    { id: "input", label: t("graph.inputsOutputs.inputs"), nodes: graph.inputs },
+    { id: "output", label: t("graph.inputsOutputs.outputs"), nodes: graph.outputs },
+  ];
+  return (
+    <div
+      className="mt-2 grid gap-4 border-t pt-2 md:grid-cols-2"
+      data-testid="transaction-inputs-outputs-totals"
+    >
+      {rows.map((row) => (
+        <div
+          key={row.id}
+          className="flex min-w-0 items-center justify-between gap-3 text-xs"
+        >
+          <div className="min-w-0">
+            <div className="text-muted-foreground">
+              {t(
+                hasCompleteTotal(row.nodes)
+                  ? "graph.inputsOutputs.total"
+                  : "graph.inputsOutputs.knownTotal",
+              )}
+            </div>
+          </div>
+          <div
+            className={cn(
+              "min-w-0 break-words text-right font-medium tabular-nums",
+              hideSensitive && "sensitive",
+            )}
+          >
+            {hideSensitive ? t("graph.hidden") : formatTotal(row.nodes, t)}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+export function TransactionInputsOutputsPanel({
+  graph,
+  hideSensitive,
+}: {
+  graph: TransactionGraphPayload;
+  hideSensitive: boolean;
+}) {
+  const { t } = useTranslation("transactions");
+  const explorerSettings = useUiStore((state) => state.explorerSettings);
+  const [expandedColumns, setExpandedColumns] = useState({
+    input: false,
+    output: false,
+  });
+  const handleOpenExplorer = (target: ExplorerTarget) => {
+    void openExternalUrl(target.url).catch((error) => {
+      console.warn("Failed to open explorer URL", error);
+    });
+  };
+  if (!graph.inputs.length && !graph.outputs.length) return null;
+  return (
+    <section className="border-t pt-3" data-testid="transaction-inputs-outputs-panel">
+      <div className="grid gap-4 md:grid-cols-2">
+        <TransactionIoColumn
+          title={t("graph.inputsOutputs.inputs")}
+          nodes={graph.inputs}
+          side="input"
+          hideSensitive={hideSensitive}
+          expanded={expandedColumns.input}
+          onToggleExpanded={() =>
+            setExpandedColumns((current) => ({
+              ...current,
+              input: !current.input,
+            }))
+          }
+          explorerSettings={explorerSettings}
+          graph={graph}
+          onOpenExplorer={handleOpenExplorer}
+        />
+        <TransactionIoColumn
+          title={t("graph.inputsOutputs.outputs")}
+          nodes={graph.outputs}
+          side="output"
+          hideSensitive={hideSensitive}
+          expanded={expandedColumns.output}
+          onToggleExpanded={() =>
+            setExpandedColumns((current) => ({
+              ...current,
+              output: !current.output,
+            }))
+          }
+          explorerSettings={explorerSettings}
+          graph={graph}
+          onOpenExplorer={handleOpenExplorer}
+        />
+      </div>
+      <TransactionIoTotalsPane graph={graph} hideSensitive={hideSensitive} />
+    </section>
+  );
+}
+
 type DrawableGraphRow = GraphRow & {
   outerY: number;
   innerY: number;
@@ -266,13 +535,16 @@ type DrawableGraphRow = GraphRow & {
   offset: number;
   visualValueSats: number;
   estimatedVisualValue: boolean;
+  zeroValue: boolean;
 };
 
 type GraphHoverDetail = {
   node: DrawableGraphRow;
 };
 
-export type TransactionSwapRouteLegKey = "out" | "in";
+const AMOUNTLESS_FEE_STRAND_THICKNESS = 0.5;
+const GRAPH_ROW_HEIGHT = 29;
+const GRAPH_MULTI_LEG_GAP = 4;
 
 function positiveKnownSats(node: TransactionGraphNode) {
   return typeof node.valueSats === "number" && node.valueSats > 0
@@ -280,8 +552,24 @@ function positiveKnownSats(node: TransactionGraphNode) {
     : 0;
 }
 
+function visualTotalSatsForSides(inputRows: GraphRow[], destinationRows: GraphRow[]) {
+  // Drawing only: confidential and missing values still render as confidential
+  // text, but the bowtie needs a stable visual total to size unknown legs.
+  const inputKnownTotal = inputRows.reduce((sum, node) => sum + positiveKnownSats(node), 0);
+  const outputKnownTotal = destinationRows.reduce((sum, node) => sum + positiveKnownSats(node), 0);
+  return Math.max(inputKnownTotal, outputKnownTotal, 1);
+}
+
+function fallbackVisualSats(visualTotalSats: number, rowCount: number) {
+  return Math.max(1, visualTotalSats / Math.max(1, rowCount));
+}
+
 function hasAmountlessGeometryValue(node: TransactionGraphNode) {
   return typeof node.valueSats !== "number" || node.valueState === "confidential";
+}
+
+function hasKnownZeroGeometryValue(node: TransactionGraphNode) {
+  return !hasAmountlessGeometryValue(node) && typeof node.valueSats === "number" && node.valueSats <= 0;
 }
 
 function visualSatsForNode(node: TransactionGraphNode, fallbackSats: number) {
@@ -296,15 +584,12 @@ function visualSatsForNode(node: TransactionGraphNode, fallbackSats: number) {
 
 function visualKnownSatsForNode(
   node: GraphRow,
-  fallbackSats: number,
   hasAmountlessNonFeeRows: boolean,
 ) {
   const valueSats = node.valueSats;
   if (typeof valueSats !== "number" || node.valueState === "confidential") return null;
   const value = Math.max(0, valueSats);
-  if (node.side === "fee" && hasAmountlessNonFeeRows && value > 0) {
-    return Math.min(value, Math.max(1, fallbackSats));
-  }
+  if (node.side === "fee" && hasAmountlessNonFeeRows && value > 0) return 1;
   return value;
 }
 
@@ -335,7 +620,7 @@ function buildDrawableRows(
     (node) => node.side !== "fee" && hasAmountlessGeometryValue(node),
   );
   const knownVisualValues = rows.map((node) =>
-    visualKnownSatsForNode(node, fallbackSats, hasAmountlessNonFeeRows),
+    visualKnownSatsForNode(node, hasAmountlessNonFeeRows),
   );
   const visualValues = rows.map((node, index) =>
     knownVisualValues[index] ?? visualSatsForNode(node, fallbackSats),
@@ -355,29 +640,34 @@ function buildDrawableRows(
     return (combinedWeight * value) / Math.max(1, totalSats);
   });
   const lines = rows.map((node, index) => {
-    const knownZero =
-      !hasAmountlessGeometryValue(node) &&
-      typeof node.valueSats === "number" &&
-      node.valueSats <= 0;
+    const knownZero = hasKnownZeroGeometryValue(node);
     const weight = weights[index] ?? 0;
+    const amountlessPeerFee =
+      node.side === "fee" && hasAmountlessNonFeeRows && weight > 0;
     return {
       ...node,
       outerY: centerY,
       innerY: centerY,
-      thickness: knownZero
+      thickness: amountlessPeerFee
+        ? AMOUNTLESS_FEE_STRAND_THICKNESS
+        : knownZero
         ? 3
         : Math.min(combinedWeight + 0.5, Math.max(2, weight) + 1),
       weight,
       offset: 0,
       visualValueSats: visualValues[index] ?? 0,
       estimatedVisualValue: hasAmountlessGeometryValue(node),
+      zeroValue: knownZero,
     };
   });
   const visibleWeight = lines.reduce((sum, line) => sum + line.thickness, 0);
   const spacing =
     lines.length <= 1
       ? 0
-      : Math.max(8, (Math.max(120, height - 80) - visibleWeight) / Math.max(1, lines.length - 1));
+      : Math.max(
+          GRAPH_MULTI_LEG_GAP,
+          (Math.max(120, height - 80) - visibleWeight) / Math.max(1, lines.length - 1),
+        );
   const innerTop = centerY - combinedWeight / 2;
   const innerBottom = innerTop + combinedWeight + 0.5;
   let lastOuter = 40;
@@ -421,20 +711,50 @@ function buildDrawableRows(
   }));
 }
 
-function strandStroke(node: GraphRow, active = false) {
+type StrandGradientIds = {
+  input: string;
+  inputHover: string;
+  output: string;
+  outputHover: string;
+  fee: string;
+  feeHover: string;
+};
+
+type StrandMarkerIds = {
+  input: string;
+  inputHover: string;
+  output: string;
+  outputHover: string;
+};
+
+function gradientUrl(id: string) {
+  return `url(#${id})`;
+}
+
+function strandStroke(node: GraphRow, gradientIds: StrandGradientIds, active = false) {
   if (node.role === "fee") {
-    return active
-      ? "url(#transaction-flow-fee-hover-gradient)"
-      : "url(#transaction-flow-fee-gradient)";
+    return gradientUrl(active ? gradientIds.feeHover : gradientIds.fee);
   }
   if (node.side === "input") {
-    return active
-      ? "url(#transaction-flow-input-hover-gradient)"
-      : "url(#transaction-flow-input-gradient)";
+    return gradientUrl(active ? gradientIds.inputHover : gradientIds.input);
   }
-  return active
-    ? "url(#transaction-flow-output-hover-gradient)"
-    : "url(#transaction-flow-output-gradient)";
+  return gradientUrl(active ? gradientIds.outputHover : gradientIds.output);
+}
+
+function visibleStrandStrokeWidth(node: DrawableGraphRow) {
+  return node.thickness + 1;
+}
+
+const STRAND_MARKER_WIDTH = 1.5;
+const STRAND_MARKER_LEAD_RATIO = 0.5;
+
+function hasStrandTip(node: DrawableGraphRow) {
+  return node.side !== "fee" && !node.zeroValue;
+}
+
+function strandMarkerLead(node: DrawableGraphRow) {
+  if (!hasStrandTip(node)) return 0;
+  return visibleStrandStrokeWidth(node) * STRAND_MARKER_LEAD_RATIO;
 }
 
 function makeBowtiePath(
@@ -444,7 +764,7 @@ function makeBowtiePath(
   edgePadding: number,
   centerX: number,
 ) {
-  const start = edgePadding;
+  const start = edgePadding + strandMarkerLead(node);
   const end = centerX + 1;
   const maxOffset = Math.max(0, end - start - 44);
   const offset = Math.min(node.offset, maxOffset);
@@ -466,6 +786,23 @@ function makeBowtiePath(
   } L ${canvasWidth - end} ${node.innerY}`;
 }
 
+function makeZeroValuePath(
+  node: DrawableGraphRow,
+  side: "input" | "output",
+  canvasWidth: number,
+  edgePadding: number,
+  centerX: number,
+) {
+  const halfWidth = Math.max(1.5, visibleStrandStrokeWidth(node) / 2);
+  const start = edgePadding + halfWidth;
+  const length = Math.min(60, Math.max(20, centerX - edgePadding - 110));
+  const y = node.outerY;
+  if (side === "input") {
+    return `M ${start} ${y} L ${start + length} ${y}`;
+  }
+  return `M ${canvasWidth - start} ${y} L ${canvasWidth - start - length} ${y}`;
+}
+
 function copyReference(node: GraphRow) {
   return node.outpoint || node.address || node.txid || null;
 }
@@ -476,12 +813,26 @@ function copyAriaLabel(side: GraphRow["side"], t: TFunction<"transactions">) {
   return t("graph.copyOutput");
 }
 
+function strandMarkerId(
+  node: DrawableGraphRow,
+  markerIds: StrandMarkerIds,
+  active = false,
+) {
+  if (!hasStrandTip(node)) return undefined;
+  if (node.side === "input") {
+    return active ? markerIds.inputHover : markerIds.input;
+  }
+  return active ? markerIds.outputHover : markerIds.output;
+}
+
 function GraphStrand({
   node,
   path,
   markerPath,
   testId,
   active,
+  gradientIds,
+  markerIds,
   hideSensitive,
   onHover,
   onLeave,
@@ -491,6 +842,8 @@ function GraphStrand({
   markerPath: string;
   testId?: string;
   active?: boolean;
+  gradientIds: StrandGradientIds;
+  markerIds: StrandMarkerIds;
   hideSensitive: boolean;
   onHover: (node: DrawableGraphRow) => void;
   onLeave: () => void;
@@ -512,6 +865,7 @@ function GraphStrand({
       handleCopy();
     }
   };
+  const markerId = strandMarkerId(node, markerIds, active);
 
   return (
     <>
@@ -530,7 +884,8 @@ function GraphStrand({
         onKeyDown={handleKeyDown}
         onPointerEnter={() => onHover(node)}
         onPointerMove={() => onHover(node)}
-        onMouseLeave={onLeave}
+        onPointerLeave={onLeave}
+        onPointerCancel={onLeave}
         onFocus={() => onHover(node)}
         onBlur={onLeave}
       />
@@ -539,34 +894,12 @@ function GraphStrand({
         data-testid={testId}
         aria-hidden="true"
         className="pointer-events-none fill-none opacity-100 transition-opacity"
-        stroke={strandStroke(node, active)}
-        strokeWidth={active ? node.thickness + 1.5 : node.thickness + 1}
-        strokeLinecap="butt"
+        stroke={strandStroke(node, gradientIds, active)}
+        strokeWidth={visibleStrandStrokeWidth(node)}
+        strokeLinecap={node.zeroValue ? "round" : "butt"}
+        markerStart={markerId ? `url(#${markerId})` : undefined}
       />
     </>
-  );
-}
-
-function GraphStrandHoverHighlight({
-  node,
-  path,
-  testId,
-}: {
-  node: DrawableGraphRow;
-  path: string;
-  testId?: string;
-}) {
-  return (
-    <path
-      d={path}
-      data-testid={testId}
-      aria-hidden="true"
-      className="pointer-events-none fill-none opacity-100"
-      stroke={strandStroke(node, true)}
-      strokeWidth={node.thickness + 4}
-      strokeLinecap="butt"
-      filter="url(#transaction-flow-hover-glow)"
-    />
   );
 }
 
@@ -600,30 +933,106 @@ function formatRouteAmount(
   asset: string | null | undefined,
   hidden: boolean,
   hiddenLabel = "Hidden",
+  showAsset = true,
 ) {
   if (hidden) return hiddenLabel;
   if (typeof amountBtc !== "number") return "";
-  const assetText = asset ? ` ${asset}` : "";
+  const assetText = showAsset && asset ? ` ${asset}` : "";
   return `${formatBtc(amountBtc)}${assetText}`;
 }
 
-function legReference(leg: TransactionSwapRouteLeg) {
-  return leg.txid || leg.externalId || leg.id || "";
+function formatRouteFeePercent(
+  feeBtc: number | null | undefined,
+  baseBtc: number | null | undefined,
+  hidden: boolean,
+  hiddenLabel = "Hidden",
+) {
+  if (hidden) return hiddenLabel;
+  if (
+    typeof feeBtc !== "number" ||
+    typeof baseBtc !== "number" ||
+    !Number.isFinite(feeBtc) ||
+    !Number.isFinite(baseBtc) ||
+    baseBtc === 0
+  ) {
+    return "";
+  }
+  const percent = (Math.abs(feeBtc) / Math.abs(baseBtc)) * 100;
+  const precision = percent < 0.1 ? 3 : percent < 1 ? 2 : 1;
+  return `${percent.toFixed(precision)}%`;
+}
+
+function routeLegAssetLabel(leg: TransactionSwapRouteLeg): ConnectionAssetLabel | null {
+  const text = [
+    leg.asset,
+    leg.network,
+    leg.wallet?.kind,
+    leg.wallet?.label,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+  if (!text) return null;
+  if (text.includes("liquid") || text.includes("lbtc") || text.includes("l-btc")) {
+    return "LBTC";
+  }
+  if (text.includes("lightning") || text.includes("ln-btc")) {
+    return "LN-BTC";
+  }
+  if (text.includes("btc") || text.includes("bitcoin") || text.includes("descriptor")) {
+    return "BTC";
+  }
+  return null;
+}
+
+function RouteLegAssetIcon({ leg }: { leg: TransactionSwapRouteLeg }) {
+  const asset = routeLegAssetLabel(leg);
+  if (!asset) return null;
+  const iconKind = connectionAssetIconKind(asset);
+  const icon = iconKind === "liquid" ? liquidIcon : bitcoinIcon;
+  return (
+    <span
+      className={cn(
+        "inline-flex size-4 shrink-0 items-center justify-center rounded-sm border border-border/60 bg-muted/40",
+        iconKind === "bitcoin" && "p-0.5",
+      )}
+      data-testid="swap-route-leg-asset-icon"
+      data-asset={asset}
+      aria-label={asset}
+      title={asset}
+    >
+      <img src={icon} alt="" className="max-h-full max-w-full object-contain" />
+    </span>
+  );
 }
 
 function legGraphReference(leg: TransactionSwapRouteLeg) {
   return leg.id || leg.txid || leg.externalId || "";
 }
 
-function routeCounterparty(route: TransactionSwapRoute) {
-  return (
-    route.out.counterparty ||
-    route.in.counterparty ||
-    route.out.description ||
-    route.in.description ||
-    route.kind ||
-    ""
-  );
+function isSyncProvenanceLabel(value: string) {
+  return /^synced from\b/i.test(value.trim());
+}
+
+function routeCounterparty(
+  route: TransactionSwapRoute,
+  kind: ReturnType<typeof pairedRouteKind>,
+) {
+  const candidates = [
+    route.out.counterparty,
+    route.in.counterparty,
+    route.out.description,
+    route.in.description,
+    route.kind,
+  ];
+  for (const candidate of candidates) {
+    const value = candidate?.trim();
+    if (!value) continue;
+    if (["swap", "coinjoin", "transfer", "pair"].includes(value.toLowerCase())) continue;
+    if (kind === "swap" && isSyncProvenanceLabel(value)) continue;
+    return value;
+  }
+  return "";
 }
 
 function pairedRouteKind(route: TransactionSwapRoute): "swap" | "coinjoin" | "transfer" | "pair" {
@@ -678,9 +1087,13 @@ function SwapRouteLeg({
 }) {
   const { t } = useTranslation("transactions");
   const hiddenLabel = t("graph.hidden");
-  const amount = formatRouteAmount(leg.amountBtc, leg.asset, hideSensitive, hiddenLabel);
-  const wallet = sensitiveGraphText(leg.wallet?.label, hideSensitive, hiddenLabel);
-  const reference = sensitiveGraphText(formatShortTxid(legReference(leg)), hideSensitive, hiddenLabel);
+  const amount = formatRouteAmount(
+    leg.amountBtc,
+    leg.asset,
+    hideSensitive,
+    hiddenLabel,
+    false,
+  );
   return (
     <button
       type="button"
@@ -692,18 +1105,14 @@ function SwapRouteLeg({
         active && "border-primary/60 bg-primary/10",
       )}
     >
-      <div className="flex min-w-0 items-center justify-between gap-2">
+      <div className="flex min-w-0 items-start justify-between gap-2">
         <div className="min-w-0">
           <div className="text-[10px] font-medium uppercase text-muted-foreground">
             {label}
           </div>
           <div className="mt-1 flex min-w-0 items-center gap-1.5 text-sm font-medium">
             <span>{leg.network || leg.asset || unknownLabel}</span>
-            {leg.asset ? (
-              <Badge variant="secondary" className="rounded-md px-1.5 py-0 text-[10px]">
-                {leg.asset}
-              </Badge>
-            ) : null}
+            <RouteLegAssetIcon leg={leg} />
           </div>
         </div>
         {active ? (
@@ -713,18 +1122,8 @@ function SwapRouteLeg({
         ) : null}
       </div>
       {amount ? (
-        <div className={cn("mt-1 text-sm tabular-nums", hideSensitive && "sensitive")}>
+        <div className={cn("mt-1 text-sm font-medium tabular-nums", hideSensitive && "sensitive")}>
           {amount}
-        </div>
-      ) : null}
-      {wallet ? (
-        <div className={cn("mt-1 truncate text-xs text-muted-foreground", hideSensitive && "sensitive")}>
-          {wallet}
-        </div>
-      ) : null}
-      {reference ? (
-        <div className={cn("mt-1 truncate font-mono text-[11px] text-muted-foreground", hideSensitive && "sensitive")}>
-          {reference}
         </div>
       ) : null}
     </button>
@@ -743,17 +1142,31 @@ function SwapRouteStrip({
   onSelectLeg?: (leg: TransactionSwapRouteLegKey) => void;
 }) {
   const { t } = useTranslation("transactions");
+  const [feeMode, setFeeMode] = useState<"relative" | "absolute">("relative");
   if (!route) return null;
   const activeLeg = selectedLeg ?? route.currentLeg ?? "out";
   const canSelectOut = Boolean(onSelectLeg && legGraphReference(route.out));
   const canSelectIn = Boolean(onSelectLeg && legGraphReference(route.in));
   const hiddenLabel = t("graph.hidden");
-  const counterparty = sensitiveGraphText(routeCounterparty(route), hideSensitive, hiddenLabel);
-  const fee = formatRouteAmount(route.swapFeeBtc, route.out.asset, hideSensitive, hiddenLabel);
   const kind = pairedRouteKind(route);
-  const routeLabel = `${route.out.asset || t("graph.swapRouteAsset")} -> ${
-    route.in.asset || t("graph.swapRouteAsset")
-  }`;
+  const counterparty = sensitiveGraphText(routeCounterparty(route, kind), hideSensitive, hiddenLabel);
+  const feeBaseBtc =
+    route.outFullAmountBtc ?? route.outAmountBtc ?? route.out.amountBtc ?? route.in.amountBtc;
+  const feeAbsolute = formatRouteAmount(
+    route.swapFeeBtc,
+    route.out.asset,
+    hideSensitive,
+    hiddenLabel,
+    false,
+  );
+  const feeRelative = formatRouteFeePercent(
+    route.swapFeeBtc,
+    feeBaseBtc,
+    hideSensitive,
+    hiddenLabel,
+  );
+  const fee = feeMode === "absolute" ? feeAbsolute : feeRelative || feeAbsolute;
+  const hasFeeToggle = Boolean(feeAbsolute && feeRelative);
   const title =
     kind === "coinjoin"
       ? t("graph.coinjoinRouteTitle")
@@ -762,14 +1175,6 @@ function SwapRouteStrip({
         : kind === "pair"
           ? t("graph.pairRouteTitle")
           : t("graph.swapRouteTitle");
-  const middleLabel =
-    kind === "coinjoin"
-      ? t("graph.coinjoinRouteMiddle")
-      : kind === "transfer"
-        ? t("graph.transferRouteMiddle")
-        : kind === "pair"
-          ? t("graph.pairRouteMiddle")
-          : t("graph.swapRouteMiddle");
   const pairFallback =
     kind === "coinjoin"
       ? t("graph.coinjoinRoutePair")
@@ -793,14 +1198,8 @@ function SwapRouteStrip({
           <ArrowRightLeft className="size-4 shrink-0 text-sky-500" aria-hidden="true" />
           <div className="min-w-0">
             <div className="text-sm font-medium">{title}</div>
-            <div className="truncate text-xs text-muted-foreground">{routeLabel}</div>
           </div>
         </div>
-        {fee ? (
-          <Badge variant="secondary" className={cn("rounded-md", hideSensitive && "sensitive")}>
-            {t("graph.swapRouteFee", { fee })}
-          </Badge>
-        ) : null}
       </div>
       <div className="mt-3 grid items-stretch gap-2 md:grid-cols-[minmax(0,1fr)_minmax(190px,0.9fr)_minmax(0,1fr)]">
         <SwapRouteLeg
@@ -815,16 +1214,32 @@ function SwapRouteStrip({
         <div className="flex min-w-0 items-center justify-center gap-2 px-3 py-2 text-center">
           <ArrowRight className="hidden size-4 shrink-0 text-muted-foreground md:block" aria-hidden="true" />
           <div className="min-w-0">
-            <div className="text-[10px] font-medium uppercase text-muted-foreground">
-              {middleLabel}
-            </div>
-            <div className={cn("mt-1 text-sm font-medium leading-snug", hideSensitive && "sensitive")}>
+            <div className={cn("text-sm font-medium leading-snug", hideSensitive && "sensitive")}>
               {counterparty || pairFallback}
             </div>
             {route.policy ? (
               <div className="mt-1 truncate text-[11px] text-muted-foreground">
                 {route.policy}
               </div>
+            ) : null}
+            {fee ? (
+              <button
+                type="button"
+                className={cn(
+                  "mt-2 inline-flex max-w-full items-center justify-center rounded border border-border/70 bg-muted/35 px-1.5 py-0.5 text-[10px] font-medium tabular-nums text-muted-foreground transition-colors hover:border-primary/40 hover:bg-primary/10 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                  hideSensitive && "sensitive",
+                )}
+                aria-pressed={feeMode === "absolute"}
+                title={feeMode === "absolute" ? feeRelative : feeAbsolute}
+                onClick={() =>
+                  hasFeeToggle &&
+                  setFeeMode((current) =>
+                    current === "relative" ? "absolute" : "relative",
+                  )
+                }
+              >
+                {t("graph.swapRouteFee", { fee })}
+              </button>
             ) : null}
           </div>
           <ArrowRight className="hidden size-4 shrink-0 text-muted-foreground md:block" aria-hidden="true" />
@@ -853,6 +1268,21 @@ export function TransactionFlowDiagram({
   expanded?: boolean;
 }) {
   const { t } = useTranslation("transactions");
+  const graphInstanceId = useId().replace(/[^a-zA-Z0-9_-]/g, "");
+  const gradientIds: StrandGradientIds = {
+    input: `transaction-flow-${graphInstanceId}-input-gradient`,
+    inputHover: `transaction-flow-${graphInstanceId}-input-hover-gradient`,
+    output: `transaction-flow-${graphInstanceId}-output-gradient`,
+    outputHover: `transaction-flow-${graphInstanceId}-output-hover-gradient`,
+    fee: `transaction-flow-${graphInstanceId}-fee-gradient`,
+    feeHover: `transaction-flow-${graphInstanceId}-fee-hover-gradient`,
+  };
+  const markerIds: StrandMarkerIds = {
+    input: `transaction-flow-${graphInstanceId}-input-marker`,
+    inputHover: `transaction-flow-${graphInstanceId}-input-hover-marker`,
+    output: `transaction-flow-${graphInstanceId}-output-marker`,
+    outputHover: `transaction-flow-${graphInstanceId}-output-hover-marker`,
+  };
   const preferredCanvasWidth = expanded ? 1120 : 960;
   const shellRef = useRef<HTMLDivElement | null>(null);
   const [hoverDetail, setHoverDetail] = useState<GraphHoverDetail | null>(null);
@@ -875,7 +1305,7 @@ export function TransactionFlowDiagram({
     ? redactRowsForGeometry(destinationRows)
     : destinationRows;
   const rowCount = Math.max(inputRows.length, destinationRows.length, 2);
-  const height = Math.max(280, rowCount * 58 + 90);
+  const height = Math.max(280, rowCount * GRAPH_ROW_HEIGHT + 90);
   const viewportHeight = expanded
     ? `min(72vh, ${Math.max(440, Math.min(height + 24, 760))}px)`
     : `${Math.max(340, Math.min(height + 8, 430))}px`;
@@ -897,16 +1327,8 @@ export function TransactionFlowDiagram({
   const centerX = canvasWidth / 2;
   const edgePadding = expanded ? 84 : 64;
   const curveWidth = centerX - edgePadding - 12;
-  const inputKnownTotal = layoutInputRows.reduce(
-    (sum, node) => sum + positiveKnownSats(node),
-    0,
-  );
-  const outputKnownTotal = layoutDestinationRows.reduce(
-    (sum, node) => sum + positiveKnownSats(node),
-    0,
-  );
-  const visualTotal = Math.max(inputKnownTotal, outputKnownTotal, 1);
-  const fallbackSats = Math.max(1, visualTotal / rowCount);
+  const visualTotal = visualTotalSatsForSides(layoutInputRows, layoutDestinationRows);
+  const fallbackSats = fallbackVisualSats(visualTotal, rowCount);
   const combinedWeight = Math.min(expanded ? 96 : 82, Math.max(26, Math.floor((canvasWidth - 2 * edgePadding) / 9)));
   const inputDrawRows = buildDrawableRows(
     layoutInputRows,
@@ -924,31 +1346,39 @@ export function TransactionFlowDiagram({
     curveWidth,
     fallbackSats,
   );
-  const activeNode =
-    hoverDetail
-      ? [...inputDrawRows, ...outputDrawRows].find(
-          (node) =>
-            node.id === hoverDetail.node.id &&
-            node.side === hoverDetail.node.side,
-        )
-      : undefined;
   const pathFor = (node: DrawableGraphRow) =>
-    makeBowtiePath(node, node.side === "input" ? "input" : "output", canvasWidth, edgePadding, centerX);
+    node.zeroValue
+      ? makeZeroValuePath(
+          node,
+          node.side === "input" ? "input" : "output",
+          canvasWidth,
+          edgePadding,
+          centerX,
+        )
+      : makeBowtiePath(node, node.side === "input" ? "input" : "output", canvasWidth, edgePadding, centerX);
   const markerPathFor = (node: DrawableGraphRow) =>
-    makeBowtiePath(
-      { ...node, thickness: Math.max(18, node.thickness + 12) },
-      node.side === "input" ? "input" : "output",
-      canvasWidth,
-      edgePadding,
-      centerX,
-    );
+    node.zeroValue
+      ? makeZeroValuePath(
+          node,
+          node.side === "input" ? "input" : "output",
+          canvasWidth,
+          edgePadding,
+          centerX,
+        )
+      : makeBowtiePath(
+          node,
+          node.side === "input" ? "input" : "output",
+          canvasWidth,
+          edgePadding,
+          centerX,
+        );
   const showHoverDetail = (node: DrawableGraphRow) => {
     setHoverDetail({ node });
   };
   return (
     <div
       ref={shellRef}
-      className="relative overflow-hidden bg-transparent"
+      className="relative min-w-0 overflow-hidden bg-transparent"
       style={{ height: viewportHeight }}
       data-testid="transaction-flow-diagram"
     >
@@ -957,15 +1387,15 @@ export function TransactionFlowDiagram({
           ? t("graph.hiddenReferences")
           : t("graph.availableReferences")}
       </span>
-      <div className="h-full overflow-auto">
+      <div className="h-full min-w-0 overflow-y-auto overflow-x-hidden">
         <div
-          className="relative"
+          className="relative min-w-0"
           data-testid="transaction-flow-canvas"
           data-transaction-flow-canvas
-          style={{ width: canvasWidth, height }}
+          style={{ width: "100%", height }}
         >
           <svg
-            className="absolute inset-0"
+            className="absolute inset-0 h-full w-full"
             width={canvasWidth}
             height={height}
             viewBox={`0 0 ${canvasWidth} ${height}`}
@@ -973,55 +1403,96 @@ export function TransactionFlowDiagram({
             aria-label={t("graph.diagramAria")}
           >
             <defs>
-              <linearGradient id="transaction-flow-input-gradient" x1="0%" y1="0%" x2="100%" y2="0%">
+              <marker
+                id={markerIds.input}
+                viewBox="-5 -5 10 10"
+                refX="0"
+                refY="0"
+                markerUnits="strokeWidth"
+                markerWidth={STRAND_MARKER_WIDTH}
+                markerHeight="1"
+                orient="auto"
+              >
+                <path
+                  d="M -5 -5 L 0 0 L -5 5 L 1 5 L 1 -5 Z"
+                  strokeWidth="0"
+                  fill="rgb(59 130 246)"
+                />
+              </marker>
+              <marker
+                id={markerIds.inputHover}
+                viewBox="-5 -5 10 10"
+                refX="0"
+                refY="0"
+                markerUnits="strokeWidth"
+                markerWidth={STRAND_MARKER_WIDTH}
+                markerHeight="1"
+                orient="auto"
+              >
+                <path
+                  d="M -5 -5 L 0 0 L -5 5 L 1 5 L 1 -5 Z"
+                  strokeWidth="0"
+                  fill="rgb(96 165 250)"
+                />
+              </marker>
+              <marker
+                id={markerIds.output}
+                viewBox="-5 -5 10 10"
+                refX="0"
+                refY="0"
+                markerUnits="strokeWidth"
+                markerWidth={STRAND_MARKER_WIDTH}
+                markerHeight="1"
+                orient="auto"
+              >
+                <path
+                  d="M 1 -5 L 0 -5 L -5 0 L 0 5 L 1 5 Z"
+                  strokeWidth="0"
+                  fill="rgb(59 130 246)"
+                />
+              </marker>
+              <marker
+                id={markerIds.outputHover}
+                viewBox="-5 -5 10 10"
+                refX="0"
+                refY="0"
+                markerUnits="strokeWidth"
+                markerWidth={STRAND_MARKER_WIDTH}
+                markerHeight="1"
+                orient="auto"
+              >
+                <path
+                  d="M 1 -5 L 0 -5 L -5 0 L 0 5 L 1 5 Z"
+                  strokeWidth="0"
+                  fill="rgb(96 165 250)"
+                />
+              </marker>
+              <linearGradient id={gradientIds.input} x1="0%" y1="0%" x2="100%" y2="0%">
                 <stop offset="0%" stopColor="rgb(59 130 246)" />
                 <stop offset="100%" stopColor="rgb(14 165 233)" />
               </linearGradient>
-              <linearGradient id="transaction-flow-input-hover-gradient" x1="0%" y1="0%" x2="100%" y2="0%">
+              <linearGradient id={gradientIds.inputHover} x1="0%" y1="0%" x2="100%" y2="0%">
                 <stop offset="0%" stopColor="rgb(96 165 250)" />
                 <stop offset="100%" stopColor="rgb(34 211 238)" />
               </linearGradient>
-              <linearGradient id="transaction-flow-output-gradient" x1="0%" y1="0%" x2="100%" y2="0%">
+              <linearGradient id={gradientIds.output} x1="0%" y1="0%" x2="100%" y2="0%">
                 <stop offset="0%" stopColor="rgb(14 165 233)" />
                 <stop offset="100%" stopColor="rgb(59 130 246)" />
               </linearGradient>
-              <linearGradient id="transaction-flow-output-hover-gradient" x1="0%" y1="0%" x2="100%" y2="0%">
+              <linearGradient id={gradientIds.outputHover} x1="0%" y1="0%" x2="100%" y2="0%">
                 <stop offset="0%" stopColor="rgb(34 211 238)" />
                 <stop offset="100%" stopColor="rgb(96 165 250)" />
               </linearGradient>
-              <linearGradient id="transaction-flow-fee-gradient" x1="0%" y1="0%" x2="100%" y2="0%">
+              <linearGradient id={gradientIds.fee} x1="0%" y1="0%" x2="100%" y2="0%">
                 <stop offset="0%" stopColor="rgb(14 165 233)" />
                 <stop offset="52%" stopColor="rgb(245 158 11)" />
                 <stop offset="100%" stopColor="transparent" />
               </linearGradient>
-              <linearGradient id="transaction-flow-fee-hover-gradient" x1="0%" y1="0%" x2="100%" y2="0%">
+              <linearGradient id={gradientIds.feeHover} x1="0%" y1="0%" x2="100%" y2="0%">
                 <stop offset="0%" stopColor="rgb(34 211 238)" />
                 <stop offset="58%" stopColor="rgb(251 191 36)" />
                 <stop offset="100%" stopColor="transparent" />
               </linearGradient>
-              <filter
-                id="transaction-flow-hover-glow"
-                x="-18%"
-                y="-70%"
-                width="136%"
-                height="240%"
-                colorInterpolationFilters="sRGB"
-              >
-                <feDropShadow
-                  dx="0"
-                  dy="0"
-                  stdDeviation="3.2"
-                  floodColor="rgb(125 211 252)"
-                  floodOpacity="0.7"
-                />
-                <feDropShadow
-                  dx="0"
-                  dy="0"
-                  stdDeviation="1"
-                  floodColor="rgb(255 255 255)"
-                  floodOpacity="0.55"
-                />
-              </filter>
             </defs>
           {inputDrawRows.map((node) => (
             <GraphStrand
@@ -1031,6 +1502,8 @@ export function TransactionFlowDiagram({
               markerPath={markerPathFor(node)}
               testId="transaction-input-strand"
               active={hoverDetail?.node.id === node.id && hoverDetail.node.side === node.side}
+              gradientIds={gradientIds}
+              markerIds={markerIds}
               hideSensitive={hideSensitive}
               onHover={showHoverDetail}
               onLeave={() => setHoverDetail(null)}
@@ -1044,18 +1517,13 @@ export function TransactionFlowDiagram({
               markerPath={markerPathFor(node)}
               testId={node.side === "fee" ? "transaction-fee-strand" : "transaction-output-strand"}
               active={hoverDetail?.node.id === node.id && hoverDetail.node.side === node.side}
+              gradientIds={gradientIds}
+              markerIds={markerIds}
               hideSensitive={hideSensitive}
               onHover={showHoverDetail}
               onLeave={() => setHoverDetail(null)}
             />
           ))}
-          {activeNode ? (
-            <GraphStrandHoverHighlight
-              node={activeNode}
-              path={pathFor(activeNode)}
-              testId="transaction-hover-strand"
-            />
-          ) : null}
         </svg>
         </div>
       </div>
@@ -1237,6 +1705,12 @@ export function TransactionGraphPanel({
 
   return (
     <div className="space-y-4">
+      <SwapRouteStrip
+        route={graph?.swapRoute}
+        hideSensitive={hideSensitive}
+        selectedLeg={selectedSwapLeg}
+        onSelectLeg={onSelectSwapLeg}
+      />
       {showDiagram ? (
         <>
           <div className="flex flex-wrap items-center justify-between gap-2">
@@ -1248,9 +1722,15 @@ export function TransactionGraphPanel({
             </div>
             <Dialog>
               <DialogTrigger asChild>
-                <Button type="button" variant="outline" size="sm" className="gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  className="size-8 shrink-0"
+                  aria-label={t("graph.expand")}
+                  title={t("graph.expand")}
+                >
                   <Maximize2 className="size-4" aria-hidden="true" />
-                  {t("graph.expand")}
                 </Button>
               </DialogTrigger>
               <DialogContent className="w-[min(1180px,calc(100vw-2rem))] max-w-none sm:max-w-none">
@@ -1259,14 +1739,9 @@ export function TransactionGraphPanel({
               </DialogContent>
             </Dialog>
           </div>
-          <SwapRouteStrip
-            route={graph.swapRoute}
-            hideSensitive={hideSensitive}
-            selectedLeg={selectedSwapLeg}
-            onSelectLeg={onSelectSwapLeg}
-          />
           <AnnotationStrip annotations={graph.annotations} hideSensitive={hideSensitive} />
           <TransactionFlowDiagram graph={graph} hideSensitive={hideSensitive} />
+          <TransactionInputsOutputsPanel graph={graph} hideSensitive={hideSensitive} />
           {alertWarnings.length ? (
             <div className="space-y-2">
               {alertWarnings.map((warning) => (

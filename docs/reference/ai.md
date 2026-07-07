@@ -79,11 +79,15 @@ explicitly backed by a local or confidential provider.
 
 Local inference is the recommended default.
 
-[Ollama](https://ollama.com/) is a good fit because it runs locally and exposes
-an OpenAI-compatible API at `http://localhost:11434/v1`. The first time the
-in-app assistant or CLI is invoked, Kassiber seeds a default `ollama` provider
-pointing at that endpoint. Run `ollama serve` (or have Ollama auto-start) and
-the assistant Just Works.
+Kassiber seeds first-class local provider rows for:
+
+- [Ollama](https://ollama.com/) at `http://localhost:11434/v1`
+- [oMLX](https://omlx.ai/) at `http://127.0.0.1:8000/v1`
+
+Ollama remains the default provider for compatibility, but oMLX appears as a
+built-in local provider and Settings preset. Run the server (`ollama serve`, or
+`omlx start` / the oMLX menu-bar app) and use **Test connection** in Settings
+before saving a provider change.
 
 If Kassiber itself is running inside a container and Ollama is running on the
 host, seed the provider with the Docker host alias instead:
@@ -94,6 +98,20 @@ KASSIBER_DEFAULT_AI_BASE_URL=http://host.docker.internal:11434/v1
 
 This only affects first-time provider seeding. For an existing book, update the
 `ollama` provider's `base_url` instead.
+
+To make oMLX the default for a brand-new book, set:
+
+```bash
+KASSIBER_DEFAULT_AI_PROVIDER=omlx
+KASSIBER_DEFAULT_AI_BASE_URL=http://127.0.0.1:8000/v1
+```
+
+Per-provider seed overrides are also supported:
+
+```bash
+KASSIBER_OMLX_AI_BASE_URL=http://127.0.0.1:8000/v1
+KASSIBER_OLLAMA_AI_BASE_URL=http://host.docker.internal:11434/v1
+```
 
 Example:
 
@@ -441,6 +459,23 @@ surfaces:
 - `ui_reports_balance_history` maps to daemon kind
   `ui.reports.balance_history`; it returns processed balance-history buckets
   for trend questions
+- `ui_reports_privacy_hygiene` maps to daemon kind
+  `ui.reports.privacy_hygiene`; it returns the same redacted local-only
+  privacy facts shown by Settings -> Privacy and `kassiber reports
+  privacy-hygiene`, with `evidence_level` on findings and no addresses,
+  scripts, descriptors, xpubs, backend URLs/tokens, wallet config, raw JSON,
+  branch/index values, or derivation paths. The GUI may separately show
+  operator-facing endpoint rows through backend settings permissions; the AI
+  tool receives only this redacted payload.
+- `ui_reports_privacy_mirror` maps to daemon kind
+  `ui.reports.privacy_mirror`; it returns the redacted Privacy Mirror payload
+  used by the dedicated page and `kassiber reports privacy-mirror`, including
+  exposure summary, adversary cards, wallet/transaction/UTXO views, timeline,
+  coverage, unknowns, evidence drilldowns, and the computed worst local privacy
+  risk. It is read-only, local-only, advisory-only, and every result carries
+  `evidence_level`. The AI tool does not receive raw PSBT text; PSBT preflight
+  is reduced locally in the GUI/CLI before any assistant-facing summary can be
+  discussed. See [`privacy-mirror.md`](privacy-mirror.md).
 - `ui_journals_snapshot` maps to daemon kind `ui.journals.snapshot`; recent
   rows include reviewed pair context for swap/peg journal rows when available
 - `ui_journals_quarantine` maps to daemon kind `ui.journals.quarantine`
@@ -531,8 +566,10 @@ covers review-queue actions exposed to chat: `ui_transfers_pair`,
 `ui_transfers_rules_create`, `ui_transfers_rules_delete`,
 `ui_transfers_rules_set_enabled`, `ui_transfers_rules_apply`,
 `ui_saved_views_create`, and `ui_saved_views_delete`. `ui_transfers_pair`
-supports a generic `coinjoin` kind for user-reviewed same-asset ownership hops;
-the AI may propose it, but the write still requires explicit user consent.
+supports `coinjoin` and `whirlpool` kinds for user-reviewed same-asset
+ownership hops, including reviewed one-to-many / many-to-one same-asset links.
+Cross-asset and layer-transition links remain one-to-one. The AI may propose
+these pairings, but the write still requires explicit user consent.
 Source-funds evidence writes are also consent-gated:
 `ui_source_funds_sources_create`,
 `ui_source_funds_links_create`, `ui_source_funds_links_review`,

@@ -526,6 +526,46 @@ class SwapMatchingCliTest(unittest.TestCase):
         )
         self.assertEqual(payload["data"]["deleted"], rule_id)
 
+    def test_rule_create_omitted_policy_uses_bitcoin_rail_profile_default(self):
+        data_root = self._fresh_root("rules-policy")
+        _run(data_root, "init")
+        _run(data_root, "workspaces", "create", "Main")
+        _run(
+            data_root, "profiles", "create",
+            "--workspace", "Main",
+            "--fiat-currency", "USD",
+            "--tax-country", "generic",
+            "P",
+        )
+        rail_predicate = json.dumps({"out_asset": "BTC", "in_asset": "LBTC"})
+
+        payload, code = _run(
+            data_root, "transfers", "rules", "create",
+            "--workspace", "Main", "--profile", "P",
+            "--name", "Bitcoin rail",
+            "--predicate", rail_predicate,
+        )
+        self.assertEqual(code, 0, payload)
+        self.assertEqual(payload["data"]["policy"], "carrying-value")
+
+        payload, code = _run(
+            data_root, "profiles", "set",
+            "--workspace", "Main",
+            "--profile", "P",
+            "--no-bitcoin-rail-carrying-value",
+        )
+        self.assertEqual(code, 0, payload)
+        self.assertFalse(payload["data"]["bitcoin_rail_carrying_value"])
+
+        payload, code = _run(
+            data_root, "transfers", "rules", "create",
+            "--workspace", "Main", "--profile", "P",
+            "--name", "Bitcoin rail taxable",
+            "--predicate", rail_predicate,
+        )
+        self.assertEqual(code, 0, payload)
+        self.assertEqual(payload["data"]["policy"], "taxable")
+
     def test_rules_apply_pairs_matching_candidates(self):
         data_root = self._fresh_root("rules-apply")
         _bootstrap_profile(data_root, self.phoenix_csv, self.liquid_csv)

@@ -19,6 +19,7 @@ from __future__ import annotations
 
 from typing import Any, Protocol
 
+from .capabilities import LightningCapabilities
 from .types import NodeSnapshot
 
 
@@ -33,9 +34,14 @@ class LightningAdapter(Protocol):
     The ``window_days`` argument bounds the routing/forwards window the
     snapshot should cover; adapters may ignore it and return their own
     natural window, but the desktop assumes 30 days by default.
+
+    ``capabilities`` is a safe, coarse feature declaration used by the
+    daemon and desktop to decide whether a feature should run or be disabled
+    before contacting the backend.
     """
 
     kind: str
+    capabilities: LightningCapabilities
 
     def fetch_node_snapshot(
         self,

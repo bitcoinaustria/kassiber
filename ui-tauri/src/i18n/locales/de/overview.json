@@ -129,6 +129,10 @@
       "estimate": "Schätzung",
       "loaded": "Geladen",
       "configured": "Konfiguriert",
+      "needsJournals": "Journale nötig",
+      "reviewQuarantines_one": "{{count}} Quarantäne",
+      "reviewQuarantines_other": "{{count}} Quarantänen",
+      "reviewRequired": "Prüfung nötig",
       "open": "Offen"
     }
   },
@@ -234,6 +238,7 @@
     "aria": "Bestände nach Quelle",
     "btcAllocation": "BTC-Aufteilung",
     "vsCostBasis": "vs. Anschaffungskosten",
+    "viewConnections": "Verbindungen anzeigen",
     "moreOptions": "Weitere Optionen",
     "onlyActiveSource": "Einzige aktive Quelle",
     "total": "Gesamt",
@@ -252,10 +257,7 @@
     "filterByStatus": "Nach Status filtern",
     "allStatuses": "Alle Status",
     "empty": "Keine Transaktionen gefunden.",
-    "unassigned": "Nicht zugeordnet",
-    "rangeOfTotal": "{{start}}-{{end}} von {{total}}",
-    "previousPage": "Zur vorherigen Seite",
-    "nextPage": "Zur nächsten Seite"
+    "unassigned": "Nicht zugeordnet"
   },
   "txStatus": {
     "confirmed": "Bestätigt",
@@ -272,11 +274,11 @@
   "activityFlow": {
     "incoming": "Erhalten",
     "outgoing": "Ausgegeben",
-    "swap": "Swap",
-    "transfer": "Transfer",
+    "movement": "Bewegung",
     "fee": "Gebühr"
   },
   "period": {
+    "auto": "Auto",
     "30days": "30 Tage",
     "3months": "3 Monate",
     "6months": "6 Monate",
@@ -285,6 +287,7 @@
     "5years": "5 Jahre",
     "all": "Gesamte Zeit",
     "short": {
+      "auto": "Auto",
       "30days": "30T",
       "3months": "3M",
       "6months": "6M",
@@ -310,8 +313,9 @@
   "treasury": {
     "series": {
       "bitcoinBalance": "Bitcoin-Guthaben",
+      "portfolioValue": "Portfoliowert",
       "btcPrice": "BTC-Kurs",
-      "avgBasis": "Ø Anschaffungskosten",
+      "avgBasis": "Ø Kosten / BTC",
       "activity": "Aktivität"
     },
     "chartLabel": "BTC-Aktivitätsdiagramm",
@@ -344,15 +348,18 @@
     "btcPrice": "BTC-Kurs",
     "fee": "Gebühr",
     "positionAfter": "Position danach",
-    "avgBasisAfter": "Ø Anschaffungskosten danach",
+    "avgBasisAfter": "Ø Kosten / BTC danach",
     "status": "Status",
     "confirmations_one": "{{count}} Bestätigung",
     "confirmations_other": "{{count}} Bestätigungen",
     "unknown": "Unbekannt",
     "btcBalance": "BTC-Guthaben",
-    "avgBasis": "Ø Anschaffungskosten",
+    "avgBasis": "Ø Kosten / BTC",
     "unrealized": "Unrealisiert",
-    "volume": "{{value}} Volumen"
+    "volume": "{{value}} Volumen",
+    "groupedEvents": "Gruppierte Ereignisse",
+    "groupedMore_one": "+ {{count}} weiteres Ereignis",
+    "groupedMore_other": "+ {{count}} weitere Ereignisse"
   },
   "controls": {
     "title": "Diagramm-Steuerung",
@@ -380,6 +387,8 @@
     "minSizeWithCount": "Mindestgröße in BTC · {{visible}} von {{total}} Punkten gezeigt",
     "incomingSliderAria": "Mindestgröße eingehender Zahlungspunkte in BTC",
     "outgoingSliderAria": "Mindestgröße ausgehender Aktivitätspunkte in BTC",
+    "groupActivityMarkers": "Nahe Ereignisse gruppieren",
+    "groupActivityMarkersHint": "Überlappende Punkte clustern; per Hover prüfen, per Klick die Tabelle filtern.",
     "customMinTitle": "Klicke, um eine eigene BTC-Mindestgröße einzugeben",
     "customMinAria": "Eigene Marker-Mindestgröße in BTC"
   },
@@ -388,10 +397,8 @@
     "noDateSelected": "Kein Datum ausgewählt",
     "value": "Wert",
     "btc": "BTC",
-    "costBasis": "Anschaffungskosten",
+    "costBasis": "Gesamtkostenbasis",
     "unrealized": "Unrealisiert",
-    "sincePrevious": "Seit dem vorherigen Datum",
-    "startOfRange": "Beginn des ausgewählten Zeitraums",
     "collapseAria": "Panel einklappen",
     "expandAria": "Panel ausklappen"
   },

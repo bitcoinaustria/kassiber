@@ -24,10 +24,11 @@ existing row-matching + quarantine behavior, never mis-booked):
   to the spend, per-wallet sync double-counts the network fee (each wallet's
   outbound row carries the whole ``fee``), so the amounts are unreliable. Such
   transactions are declined and left for the existing fan-out quarantine.
-* **esplora/mempool shape.** The split needs per-output values; the Electrum
-  decode form stores scripts without values, and Liquid / all CSV imports
-  store no ``vin``/``vout`` at all. Those parse to ``None`` and are skipped
-  (this is also what cleanly excludes cross-asset pegs).
+* **Bitcoin graph shape.** The split needs per-output values; Esplora,
+  Core-derived, and current Electrum/Fulcrum sync rows carry enough graph data.
+  Legacy graphless Electrum rows, Liquid component rows, and CSV imports parse
+  to ``None`` and are skipped (this is also what cleanly excludes cross-asset
+  pegs).
 * **Owned outputs only.** External recipients and OP_RETURN are never legs;
   the residual ``amount - Σ(legs)`` stays on the source as a real disposal.
 
@@ -39,11 +40,12 @@ existing ``transfer_fee_implausible`` quarantine (a safe review flag, not a
 mis-booking). Fully-recorded fan-outs (1-out/N-in, which ``detect_intra``
 skips) and fully sync-gapped ones are decomposed normally.
 
-Amount model (from ``record_from_bitcoin_esplora_tx``): an outbound row's
-``amount`` is the sum of its non-change output values (change-to-self and the
-miner fee are both excluded), and ``fee`` is the miner fee. So for every
-derived pair ``out_leg.amount == in_leg.amount`` by construction, which keeps
-each leg under the journal pipeline's implausible-fee guard.
+Amount model: an outbound row's spend capacity is ``amount + fee`` unless
+``amount_includes_fee`` is set. Esplora-style rows usually have ``amount`` as
+the sum of non-change output values and ``fee`` as the miner fee, while some
+Core wallet shapes report ``amount`` net of the fee. The deriver therefore
+matches owned outputs against total capacity and assigns only the fee still
+available after those outputs are covered.
 
 Pure-ish: no SQLite. The caller builds the :class:`OwnedIndex` once and passes
 it in alongside the already-fetched rows; raw transaction JSON is read from the
@@ -57,7 +59,7 @@ from dataclasses import dataclass, field
 from decimal import Decimal
 from typing import Any, Mapping, Optional, Sequence
 
-from ..msat import msat_to_btc
+from ..msat import SATS_PER_BTC, dec, msat_to_btc
 from ..transfers import normalize_group_txid
 from ..wallet_descriptors import normalize_chain, normalize_network
 
@@ -72,6 +74,23 @@ _SYNTHETIC_ID_PREFIXES = (
     "direct-payout:",
     "multi-consol:",
 )
+
+
+def _stored_graph_value_sats(value: Any, *, explicit_sats: bool) -> int | None:
+    if value is None or value == "":
+        return None
+    try:
+        if isinstance(value, bool):
+            return None
+        if explicit_sats:
+            return int(value)
+        if isinstance(value, int):
+            return value
+        if isinstance(value, str) and "." not in value:
+            return int(value)
+        return int((dec(value, "0") * SATS_PER_BTC).to_integral_value())
+    except (TypeError, ValueError, ArithmeticError):
+        return None
 
 
 @dataclass(frozen=True)
@@ -233,11 +252,16 @@ def derive_ownership_transfers(
             continue
 
         source_amount_msat = int(_get(row, "amount") or 0)
+        source_fee_msat = int(_get(row, "fee") or 0)
+        source_total_msat = source_amount_msat
+        if not _get(row, "amount_includes_fee"):
+            source_total_msat += source_fee_msat
         legs_value_msat = sum(slot["value_sats"] * SATS_TO_MSAT for slot in by_dest.values())
-        # The owned legs cannot exceed what the row says left the wallet; a
-        # mismatch means the parsed graph and the recorded amount disagree
-        # (re-org/RBF stale json, odd sync) — decline rather than guess.
-        if legs_value_msat > source_amount_msat:
+        # The owned legs cannot exceed what the row says left the wallet. Some
+        # Core rows carry a net amount (owned outputs minus fee) plus a fee
+        # column; comparing against amount alone would falsely reject pure
+        # fan-outs where amount + fee exactly equals the owned outputs.
+        if legs_value_msat > source_total_msat:
             _block_source(
                 result,
                 row,
@@ -248,6 +272,7 @@ def derive_ownership_transfers(
                     "asset": _get(row, "asset"),
                     "external_id": _get(row, "external_id"),
                     "row_amount_msat": source_amount_msat,
+                    "row_total_outflow_msat": source_total_msat,
                     "owned_outputs_msat": legs_value_msat,
                 },
             )
@@ -255,7 +280,10 @@ def derive_ownership_transfers(
 
         txid = str(parsed.get("txid") or _get(row, "external_id") or source_id)
         transfer_group_id = f"owned-derive:{txid}" if len(by_dest) > 1 else None
-        source_fee_msat = int(_get(row, "fee") or 0)
+        fee_budget_msat = min(
+            source_fee_msat,
+            max(0, source_total_msat - legs_value_msat),
+        )
         legs = sorted(by_dest.items(), key=lambda item: (item[1]["min_n"], item[0]))
         leg_pairs: list[dict[str, Any]] = []
         leg_synthetic_rows: list[dict[str, Any]] = []
@@ -267,7 +295,7 @@ def derive_ownership_transfers(
             if leg_msat <= 0:
                 ok = False
                 break
-            fee_for_leg = source_fee_msat if position == 0 else 0
+            fee_for_leg = fee_budget_msat if position == 0 else 0
             out_leg = _clone_row(
                 row,
                 amount=leg_msat,
@@ -348,10 +376,10 @@ def derive_ownership_transfers(
 
         result.derived_pairs.extend(leg_pairs)
         result.synthetic_rows.extend(leg_synthetic_rows)
-        residual_msat = source_amount_msat - legs_value_msat
+        residual_msat = source_total_msat - legs_value_msat - fee_budget_msat
         if residual_msat > 0:
             # The spend also paid a real external recipient; keep the residual
-            # portion as a disposal of the source row. The whole miner fee is
+            # portion as a disposal of the source row. Any available miner fee is
             # already attributed to the first MOVE leg above, so the residual
             # disposal must carry fee=0 — otherwise the fee leaves the source
             # pool twice (phantom fee disposal + a spurious over-sell).
@@ -1120,12 +1148,13 @@ def _lookup_outpoint(index: Any, outpoint: Any) -> list[Any]:
 
 
 def _parse_onchain_tx(raw_json: Any) -> Optional[dict[str, Any]]:
-    """Parse stored esplora/mempool tx JSON into inputs + valued outputs.
+    """Parse stored Bitcoin tx JSON into inputs + valued outputs.
 
     Returns ``None`` for anything without a usable ``vin``/``vout`` carrying
-    per-output values: the Electrum decode form (scripts only, no value),
-    Liquid (no vin/vout), and every CSV import. That ``None`` is exactly the
-    clean skip for cross-asset pegs and non-on-chain sources.
+    per-output values: legacy Electrum decode rows that were stored before
+    graph normalization, Liquid (no vin/vout), and every CSV import. That
+    ``None`` is exactly the clean skip for cross-asset pegs and non-on-chain
+    sources.
     """
     try:
         raw = json.loads(raw_json or "{}")
@@ -1155,14 +1184,13 @@ def _parse_onchain_tx(raw_json: Any) -> Optional[dict[str, Any]]:
     for position, entry in enumerate(vout):
         if not isinstance(entry, dict):
             return None
-        script = entry.get("scriptpubkey")
-        value = entry.get("value")
-        if value is None:
-            # Electrum decode form: scripts but no value — cannot split.
-            return None
-        try:
-            value_sats = int(value)
-        except (TypeError, ValueError):
+        script = entry.get("scriptpubkey") or entry.get("script_hex")
+        if entry.get("value_sats") is not None:
+            value_sats = _stored_graph_value_sats(entry.get("value_sats"), explicit_sats=True)
+        else:
+            value_sats = _stored_graph_value_sats(entry.get("value"), explicit_sats=False)
+        if value_sats is None:
+            # Legacy Electrum decode rows may have scripts but no sats value.
             return None
         try:
             output_index = int(entry.get("n", position))

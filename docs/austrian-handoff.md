@@ -172,10 +172,10 @@ only the payout portion of the source spend; journal processing derives the
 remaining same-asset self-transfer from the imported owned inbound leg.
 The model is country-neutral: the reviewed `payout_fiat_value`, when
 present, becomes the taxable source-row proceeds for ordinary direct
-payout reviews. The Austrian-specific part is only the cross-asset
-carrying-value treatment below.
+payout reviews. Cross-asset carrying-value treatment is available for
+Austrian profiles and for BTC/LBTC Bitcoin-rail moves in generic profiles.
 
-For Austrian cross-asset `policy=carrying-value` payouts, Kassiber
+For cross-asset `policy=carrying-value` payouts, Kassiber
 synthesizes the target-asset settlement legs only inside journal
 processing:
 

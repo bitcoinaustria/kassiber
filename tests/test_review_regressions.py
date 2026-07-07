@@ -31,6 +31,7 @@ from kassiber.cli.handlers import (
     latest_rates_for_profile,
     list_transaction_pairs,
     process_journals,
+    suggest_transfer_candidates,
     update_transaction_pair,
 )
 from kassiber.core import attachments as core_attachments
@@ -45,6 +46,7 @@ from kassiber.core.reports import (
     _holdings_quantity_delta,
     latest_transaction_rates_for_profile,
     report_austrian_e1kv,
+    report_balance_history,
     report_balance_sheet,
     report_portfolio_summary,
     report_tax_summary,
@@ -52,6 +54,7 @@ from kassiber.core.reports import (
 from kassiber.core.runtime import bootstrap_runtime, close_runtime
 from kassiber.core.tax_events import normalize_tax_asset_inputs
 from kassiber.core.ui_snapshot import (
+    _tax_free_wallet_summaries,
     build_capital_gains_snapshot,
     build_journal_events_list_snapshot,
     build_journals_snapshot,
@@ -970,6 +973,302 @@ class ReviewRegressionTest(unittest.TestCase):
             build_transactions_resolve_snapshot(conn, {"query": "tx-ui-spend", "limit": 1})
         self.assertEqual(unknown_filter.exception.code, "validation")
         self.assertEqual(unknown_filter.exception.details, {"unknown": ["limit"]})
+
+    def test_overview_snapshot_exposes_austrian_tax_free_balance(self):
+        conn = open_db(self.data_root)
+        self.addCleanup(conn.close)
+        now = "2026-01-01T00:00:00Z"
+        conn.execute(
+            "INSERT INTO workspaces(id, label, created_at) VALUES(?, ?, ?)",
+            ("ws-tax-free", "AT Workspace", now),
+        )
+        conn.execute(
+            """
+            INSERT INTO profiles(
+                id, workspace_id, label, fiat_currency, tax_country,
+                tax_long_term_days, gains_algorithm, last_processed_at,
+                last_processed_tx_count, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "pf-tax-free",
+                "ws-tax-free",
+                "AT Profile",
+                "EUR",
+                "at",
+                9223372036854775807,
+                "MOVING_AVERAGE_AT",
+                "2026-02-02T00:00:00Z",
+                3,
+                now,
+            ),
+        )
+        conn.execute(
+            """
+            INSERT INTO wallets(
+                id, workspace_id, profile_id, label, kind, config_json, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?)
+            """,
+            ("wal-tax-free", "ws-tax-free", "pf-tax-free", "Cold", "address", "{}", now),
+        )
+        tx_rows = [
+            ("tx-alt", "2020-06-01T00:00:00Z", "inbound", btc_to_msat("1.0"), 0, 8000),
+            ("tx-neu", "2022-01-01T00:00:00Z", "inbound", btc_to_msat("0.5"), 0, 20000),
+            ("tx-neu-sale", "2023-03-01T00:00:00Z", "outbound", btc_to_msat("0.1"), 0, 5000),
+        ]
+        for tx_id, occurred_at, direction, amount, fee, fiat_value in tx_rows:
+            conn.execute(
+                """
+                INSERT INTO transactions(
+                    id, workspace_id, profile_id, wallet_id, external_id, fingerprint,
+                    occurred_at, confirmed_at, direction, asset, amount, fee,
+                    fiat_currency, fiat_rate, fiat_value, fiat_price_source, kind,
+                    description, counterparty, note, excluded, raw_json, created_at
+                ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    tx_id,
+                    "ws-tax-free",
+                    "pf-tax-free",
+                    "wal-tax-free",
+                    tx_id,
+                    f"fp-{tx_id}",
+                    occurred_at,
+                    occurred_at,
+                    direction,
+                    "BTC",
+                    amount,
+                    fee,
+                    "EUR",
+                    60_000,
+                    fiat_value,
+                    "manual",
+                    "trade",
+                    tx_id,
+                    "",
+                    None,
+                    0,
+                    "{}",
+                    occurred_at,
+                ),
+            )
+        conn.executemany(
+            """
+            INSERT INTO journal_entries(
+                id, workspace_id, profile_id, transaction_id, wallet_id, account_id,
+                occurred_at, entry_type, asset, quantity, fiat_value, unit_cost,
+                cost_basis, proceeds, gain_loss, description, at_category,
+                at_kennzahl, capital_gains_type, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                (
+                    "je-alt",
+                    "ws-tax-free",
+                    "pf-tax-free",
+                    "tx-alt",
+                    "wal-tax-free",
+                    None,
+                    "2020-06-01T00:00:00Z",
+                    "acquisition",
+                    "BTC",
+                    btc_to_msat("1.0"),
+                    8000,
+                    8000,
+                    None,
+                    None,
+                    None,
+                    "Alt buy",
+                    None,
+                    None,
+                    None,
+                    now,
+                ),
+                (
+                    "je-neu",
+                    "ws-tax-free",
+                    "pf-tax-free",
+                    "tx-neu",
+                    "wal-tax-free",
+                    None,
+                    "2022-01-01T00:00:00Z",
+                    "acquisition",
+                    "BTC",
+                    btc_to_msat("0.5"),
+                    20000,
+                    40000,
+                    None,
+                    None,
+                    None,
+                    "Neu buy",
+                    None,
+                    None,
+                    None,
+                    now,
+                ),
+                (
+                    "je-neu-sale",
+                    "ws-tax-free",
+                    "pf-tax-free",
+                    "tx-neu-sale",
+                    "wal-tax-free",
+                    None,
+                    "2023-03-01T00:00:00Z",
+                    "disposal",
+                    "BTC",
+                    btc_to_msat("-0.1"),
+                    -5000,
+                    50000,
+                    4000,
+                    5000,
+                    1000,
+                    "Neu sale",
+                    "neu_gain",
+                    174,
+                    "short",
+                    now,
+                ),
+            ],
+        )
+        conn.execute(
+            """
+            INSERT INTO journal_wallet_holdings(
+                id, workspace_id, profile_id, wallet_id, wallet_label,
+                account_code, asset, quantity, cost_basis, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "holding-tax-free",
+                "ws-tax-free",
+                "pf-tax-free",
+                "wal-tax-free",
+                "Cold",
+                "treasury",
+                "BTC",
+                btc_to_msat("1.4"),
+                24000,
+                now,
+            ),
+        )
+        conn.execute(
+            """
+            INSERT INTO rates_cache(pair, timestamp, rate, source, fetched_at)
+            VALUES(?, ?, ?, ?, ?)
+            """,
+            ("BTC-EUR", "2026-06-15T12:00:00Z", 60_000, "manual", now),
+        )
+        set_setting(conn, "context_workspace", "ws-tax-free")
+        set_setting(conn, "context_profile", "pf-tax-free")
+        conn.commit()
+
+        overview = build_overview_snapshot(conn)
+        tax_free = overview["taxFreeBalance"]
+
+        self.assertEqual(tax_free["rule"], "austrian_altbestand")
+        self.assertEqual(tax_free["jurisdictionCode"], "AT")
+        self.assertEqual(tax_free["taxFreeQuantitySats"], 100_000_000)
+        self.assertEqual(tax_free["taxableQuantitySats"], 40_000_000)
+        self.assertEqual(tax_free["totalQuantitySats"], 140_000_000)
+        self.assertEqual(
+            tax_free["wallets"],
+            [{"walletId": "wal-tax-free", "hasTaxFreeBalance": True}],
+        )
+        self.assertEqual(
+            [bucket["id"] for bucket in tax_free["buckets"]],
+            ["altbestand", "neubestand"],
+        )
+        self.assertEqual(tax_free["status"], "current")
+        self.assertFalse(tax_free["needsJournals"])
+        self.assertEqual(tax_free["quarantines"], 0)
+
+        conn.execute(
+            "UPDATE profiles SET last_processed_tx_count = ? WHERE id = ?",
+            (2, "pf-tax-free"),
+        )
+        conn.commit()
+
+        stale_overview = build_overview_snapshot(conn)
+        stale_tax_free = stale_overview["taxFreeBalance"]
+
+        self.assertEqual(stale_tax_free["status"], "needs_journals")
+        self.assertTrue(stale_tax_free["needsJournals"])
+        self.assertEqual(stale_tax_free["taxFreeQuantitySats"], 100_000_000)
+
+        conn.execute(
+            "UPDATE profiles SET last_processed_tx_count = ? WHERE id = ?",
+            (3, "pf-tax-free"),
+        )
+        conn.execute(
+            """
+            INSERT INTO journal_quarantines(
+                transaction_id, workspace_id, profile_id, reason,
+                detail_json, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "tx-neu-sale",
+                "ws-tax-free",
+                "pf-tax-free",
+                "missing_price",
+                "{}",
+                now,
+            ),
+        )
+        conn.commit()
+
+        quarantine_overview = build_overview_snapshot(conn)
+        quarantine_tax_free = quarantine_overview["taxFreeBalance"]
+
+        self.assertEqual(quarantine_tax_free["status"], "quarantines")
+        self.assertFalse(quarantine_tax_free["needsJournals"])
+        self.assertEqual(quarantine_tax_free["quarantines"], 1)
+
+    def test_overview_snapshot_exposes_zero_austrian_tax_free_balance(self):
+        conn = open_db(self.data_root)
+        self.addCleanup(conn.close)
+        now = "2026-01-01T00:00:00Z"
+        conn.execute(
+            "INSERT INTO workspaces(id, label, created_at) VALUES(?, ?, ?)",
+            ("ws-tax-free-zero", "AT Workspace", now),
+        )
+        conn.execute(
+            """
+            INSERT INTO profiles(
+                id, workspace_id, label, fiat_currency, tax_country,
+                tax_long_term_days, gains_algorithm, last_processed_at,
+                last_processed_tx_count, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "pf-tax-free-zero",
+                "ws-tax-free-zero",
+                "AT Profile",
+                "EUR",
+                "at",
+                9223372036854775807,
+                "MOVING_AVERAGE_AT",
+                None,
+                0,
+                now,
+            ),
+        )
+        set_setting(conn, "context_workspace", "ws-tax-free-zero")
+        set_setting(conn, "context_profile", "pf-tax-free-zero")
+        conn.commit()
+
+        overview = build_overview_snapshot(conn)
+        tax_free = overview["taxFreeBalance"]
+
+        self.assertEqual(tax_free["rule"], "austrian_altbestand")
+        self.assertEqual(tax_free["status"], "current")
+        self.assertEqual(tax_free["taxFreeQuantitySats"], 0)
+        self.assertEqual(tax_free["taxableQuantitySats"], 0)
+        self.assertEqual(tax_free["totalQuantitySats"], 0)
+        self.assertEqual(tax_free["wallets"], [])
+        self.assertEqual(
+            [bucket["quantitySats"] for bucket in tax_free["buckets"]],
+            [0, 0],
+        )
 
     def test_overview_wallet_balance_prefers_processed_book_quantity(self):
         conn = open_db(self.data_root)
@@ -6498,6 +6797,21 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual(payload["data"]["records"][0]["tags"], [{"code": "merchant", "label": "merchant"}])
 
         payload, result = self._run_json(
+            "metadata", "records", "history", "list",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--transaction", "demo-bip329-tx",
+        )
+        self._assert_ok(payload, result, "metadata.records.history.list")
+        self.assertTrue(
+            any(
+                event["reason"] == "Imported BIP329 label for demo-bip329-tx"
+                and any(field["field"] == "tags" for field in event["fields"])
+                for event in payload["data"]["events"]
+            )
+        )
+
+        payload, result = self._run_json(
             "metadata", "bip329", "list",
             "--workspace", "Main",
             "--profile", "Default",
@@ -6536,21 +6850,19 @@ class ReviewRegressionTest(unittest.TestCase):
         self._assert_ok(payload, result, "metadata.bip329.export")
         self.assertEqual(payload["data"]["exported"], 2)
         exported = [json.loads(line) for line in export_file.read_text(encoding="utf-8").splitlines() if line.strip()]
-        self.assertEqual(
-            exported,
-            [
-                {
-                    "type": "output",
-                    "ref": "demo-bip329-tx:0",
-                    "label": "change",
-                    "origin": "wallet",
-                    "spendable": False,
-                },
-                {"type": "tx", "ref": "demo-bip329-tx", "label": "merchant"},
-            ],
-        )
+        self.assertEqual(exported[0]["type"], "output")
+        self.assertEqual(exported[0]["ref"], "demo-bip329-tx:0")
+        self.assertEqual(exported[0]["label"], "change")
+        self.assertEqual(exported[0]["origin"], "wallet")
+        self.assertFalse(exported[0]["spendable"])
+        self.assertEqual(exported[0]["kassiber"]["wallet_match"]["status"], "unmatched")
+        self.assertEqual(exported[1]["type"], "tx")
+        self.assertEqual(exported[1]["ref"], "demo-bip329-tx")
+        self.assertEqual(exported[1]["label"], "merchant")
+        self.assertEqual(exported[1]["kassiber"]["wallet_match"]["status"], "exact")
+        self.assertEqual(exported[1]["kassiber"]["wallet_match"]["wallets"], ["Labels"])
 
-    def test_bip329_import_bridges_transaction_tags_across_wallets(self):
+    def test_bip329_import_preserves_ambiguous_transaction_labels_until_opt_in(self):
         self._bootstrap_wallet(label="LabelsA")
         payload, result = self._run_json(
             "wallets",
@@ -6595,6 +6907,33 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual(payload["data"]["records"], 1)
         self.assertEqual(payload["data"]["imported"], 1)
         self.assertEqual(payload["data"]["updated"], 0)
+        self.assertEqual(payload["data"]["transaction_tags_created"], 0)
+        self.assertEqual(payload["data"]["transaction_tags_added"], 0)
+        self.assertEqual(payload["data"]["preview"]["counts"]["ambiguous"], 1)
+        self.assertEqual(payload["data"]["preview"]["counts"]["tag_skipped_ambiguous"], 2)
+
+        for wallet_label in ("LabelsA", "LabelsB"):
+            payload, result = self._run_json(
+                "metadata", "records", "list",
+                "--workspace", "Main",
+                "--profile", "Default",
+                "--wallet", wallet_label,
+            )
+            self._assert_ok(payload, result, "metadata.records.list")
+            self.assertEqual(len(payload["data"]["records"]), 1)
+            self.assertEqual(payload["data"]["records"][0]["tags"], [])
+
+        payload, result = self._run_json(
+            "metadata", "bip329", "import",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--file", str(bip329_file),
+            "--apply-ambiguous",
+        )
+        self._assert_ok(payload, result, "metadata.bip329.import")
+        self.assertEqual(payload["data"]["records"], 1)
+        self.assertEqual(payload["data"]["imported"], 0)
+        self.assertEqual(payload["data"]["updated"], 1)
         self.assertEqual(payload["data"]["transaction_tags_created"], 1)
         self.assertEqual(payload["data"]["transaction_tags_added"], 2)
 
@@ -6702,21 +7041,257 @@ class ReviewRegressionTest(unittest.TestCase):
         )
         self._assert_ok(payload, result, "metadata.bip329.export")
         exported = [json.loads(line) for line in export_file.read_text(encoding="utf-8").splitlines()]
-        self.assertEqual(
-            exported,
-            [
-                {
-                    "type": "output",
-                    "ref": "dedupe-tx:0",
-                    "label": "reserve",
-                    "origin": "wallet",
-                    "spendable": False,
-                    "color": "blue",
-                    "note": "second import wins",
-                },
-                {"type": "tx", "ref": "dedupe-tx", "label": "final-tx-label"},
-            ],
+        self.assertEqual(exported[0]["type"], "output")
+        self.assertEqual(exported[0]["ref"], "dedupe-tx:0")
+        self.assertEqual(exported[0]["label"], "reserve")
+        self.assertEqual(exported[0]["origin"], "wallet")
+        self.assertFalse(exported[0]["spendable"])
+        self.assertEqual(exported[0]["color"], "blue")
+        self.assertEqual(exported[0]["note"], "second import wins")
+        self.assertEqual(exported[0]["kassiber"]["wallet_match"]["status"], "unmatched")
+        self.assertEqual(exported[1]["type"], "tx")
+        self.assertEqual(exported[1]["ref"], "dedupe-tx")
+        self.assertEqual(exported[1]["label"], "final-tx-label")
+        self.assertEqual(exported[1]["kassiber"]["wallet_match"]["status"], "exact")
+
+    def test_bip329_preview_reports_match_buckets_duplicates_and_conflicts(self):
+        self._bootstrap_wallet(label="LabelsA")
+        payload, result = self._run_json(
+            "wallets",
+            "create",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--label", "LabelsB",
+            "--kind", "phoenix",
         )
+        self._assert_ok(payload, result, "wallets.create")
+        self._insert_transaction(
+            wallet_label="LabelsA",
+            tx_id="exact-preview",
+            occurred_at="2024-05-01T12:00:00Z",
+            amount_msat=100_000_000,
+        )
+        self._insert_transaction(
+            wallet_label="LabelsA",
+            tx_id="shared-preview-a",
+            external_id="shared-preview",
+            occurred_at="2024-05-01T12:01:00Z",
+            amount_msat=100_000_000,
+        )
+        self._insert_transaction(
+            wallet_label="LabelsB",
+            tx_id="shared-preview-b",
+            external_id="shared-preview",
+            occurred_at="2024-05-01T12:02:00Z",
+            amount_msat=100_000_000,
+        )
+        existing_file = self.case_dir / "preview-existing.jsonl"
+        existing_file.write_text(
+            json.dumps({"type": "tx", "ref": "exact-preview", "label": "old-label"}) + "\n",
+            encoding="utf-8",
+        )
+        payload, result = self._run_json(
+            "metadata", "bip329", "import",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--file", str(existing_file),
+        )
+        self._assert_ok(payload, result, "metadata.bip329.import")
+
+        preview_file = self.case_dir / "preview-labels.jsonl"
+        preview_file.write_text(
+            "\n".join(
+                [
+                    json.dumps({"type": "tx", "ref": "exact-preview", "label": "old-label"}),
+                    json.dumps({"type": "tx", "ref": "shared-preview", "label": "shared-label"}),
+                    json.dumps({"type": "tx", "ref": "missing-preview", "label": "missing-label"}),
+                    json.dumps({"type": "tx", "ref": "exact-preview", "label": "new-label"}),
+                ]
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        payload, result = self._run_json(
+            "metadata", "bip329", "preview",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--file", str(preview_file),
+        )
+        self._assert_ok(payload, result, "metadata.bip329.preview")
+        counts = payload["data"]["counts"]
+        self.assertEqual(counts["exact"], 2)
+        self.assertEqual(counts["ambiguous"], 1)
+        self.assertEqual(counts["unmatched"], 1)
+        self.assertEqual(counts["duplicate_refs"], 1)
+        self.assertEqual(counts["duplicate_records"], 2)
+        self.assertEqual(counts["conflicts"], 1)
+        self.assertEqual(counts["tag_additions"], 1)
+        self.assertEqual(counts["tag_skipped_ambiguous"], 2)
+        conflict_rows = [row for row in payload["data"]["rows"] if row["conflicts"]]
+        self.assertEqual(conflict_rows[0]["ref"], "exact-preview")
+        self.assertEqual(conflict_rows[0]["conflicts"], ["label"])
+
+    def test_bip329_import_accepts_spscan_and_preserves_unknown_fields(self):
+        self._bootstrap_wallet(label="Labels")
+        spscan = "spscan1q" + ("p" * 40)
+        bip329_file = self.case_dir / "spscan-labels.jsonl"
+        bip329_file.write_text(
+            json.dumps(
+                {
+                    "type": "spscan",
+                    "ref": spscan,
+                    "label": "silent-payment scanner",
+                    "note": "round-trip me",
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        payload, result = self._run_json(
+            "metadata", "bip329", "import",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--file", str(bip329_file),
+        )
+        self._assert_ok(payload, result, "metadata.bip329.import")
+        self.assertEqual(payload["data"]["records"], 1)
+        self.assertEqual(payload["data"]["preview"]["counts"]["preserved"], 1)
+
+        export_file = self.case_dir / "spscan-export.jsonl"
+        payload, result = self._run_json(
+            "metadata", "bip329", "export",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--file", str(export_file),
+        )
+        self._assert_ok(payload, result, "metadata.bip329.export")
+        exported = [json.loads(line) for line in export_file.read_text(encoding="utf-8").splitlines()]
+        self.assertEqual(exported[0]["type"], "spscan")
+        self.assertEqual(exported[0]["ref"], spscan)
+        self.assertEqual(exported[0]["label"], "silent-payment scanner")
+        self.assertEqual(exported[0]["note"], "round-trip me")
+        self.assertEqual(exported[0]["kassiber"]["wallet_match"]["status"], "preserved")
+        third_party_view = {key: value for key, value in exported[0].items() if key != "kassiber"}
+        self.assertEqual(third_party_view["type"], "spscan")
+        self.assertEqual(third_party_view["ref"], spscan)
+
+    def test_bip329_wallet_scoped_and_synthesized_exports(self):
+        self._bootstrap_wallet(label="LabelsA")
+        payload, result = self._run_json(
+            "wallets",
+            "create",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--label", "LabelsB",
+            "--kind", "phoenix",
+        )
+        self._assert_ok(payload, result, "wallets.create")
+        self._insert_transaction(
+            wallet_label="LabelsA",
+            tx_id="exact-export",
+            occurred_at="2024-05-01T12:00:00Z",
+            amount_msat=100_000_000,
+        )
+        self._insert_transaction(
+            wallet_label="LabelsA",
+            tx_id="shared-export-a",
+            external_id="shared-export",
+            occurred_at="2024-05-01T12:01:00Z",
+            amount_msat=100_000_000,
+        )
+        self._insert_transaction(
+            wallet_label="LabelsB",
+            tx_id="shared-export-b",
+            external_id="shared-export",
+            occurred_at="2024-05-01T12:02:00Z",
+            amount_msat=100_000_000,
+        )
+        bip329_file = self.case_dir / "wallet-scope-labels.jsonl"
+        bip329_file.write_text(
+            "\n".join(
+                [
+                    json.dumps({"type": "tx", "ref": "exact-export", "label": "exact label"}),
+                    json.dumps({"type": "tx", "ref": "shared-export", "label": "shared label"}),
+                    json.dumps({"type": "tx", "ref": "missing-export", "label": "missing label"}),
+                ]
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        payload, result = self._run_json(
+            "metadata", "bip329", "import",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--file", str(bip329_file),
+        )
+        self._assert_ok(payload, result, "metadata.bip329.import")
+
+        profile_export = self.case_dir / "profile-export.jsonl"
+        payload, result = self._run_json(
+            "metadata", "bip329", "export",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--file", str(profile_export),
+        )
+        self._assert_ok(payload, result, "metadata.bip329.export")
+        self.assertEqual(payload["data"]["exported"], 3)
+
+        wallet_export = self.case_dir / "wallet-export.jsonl"
+        payload, result = self._run_json(
+            "metadata", "bip329", "export",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--wallet", "LabelsA",
+            "--file", str(wallet_export),
+        )
+        self._assert_ok(payload, result, "metadata.bip329.export")
+        exported = [json.loads(line) for line in wallet_export.read_text(encoding="utf-8").splitlines()]
+        self.assertEqual([row["ref"] for row in exported], ["exact-export"])
+
+        payload, result = self._run_json(
+            "metadata", "tags", "create",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--code", "reviewed-source",
+            "--label", "reviewed-source",
+        )
+        self._assert_ok(payload, result, "metadata.tags.create")
+        payload, result = self._run_json(
+            "metadata", "tags", "add",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--transaction", "exact-export",
+            "--tag", "reviewed-source",
+        )
+        self._assert_ok(payload, result, "metadata.tags.add")
+        payload, result = self._run_json(
+            "metadata", "notes", "set",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--transaction", "exact-export",
+            "--note", "Known merchant payout",
+        )
+        self._assert_ok(payload, result, "metadata.notes.set")
+        synth_export = self.case_dir / "synth-export.jsonl"
+        payload, result = self._run_json(
+            "metadata", "bip329", "export",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--wallet", "LabelsA",
+            "--mode", "synthesized",
+            "--file", str(synth_export),
+        )
+        self._assert_ok(payload, result, "metadata.bip329.export")
+        self.assertEqual(payload["data"]["exported_synthesized"], 1)
+        synthesized = [json.loads(line) for line in synth_export.read_text(encoding="utf-8").splitlines()]
+        self.assertEqual(synthesized[0]["type"], "tx")
+        self.assertEqual(synthesized[0]["ref"], "exact-export")
+        self.assertIn("reviewed-source", synthesized[0]["label"])
+        self.assertEqual(synthesized[0]["value"], 100000)
+        self.assertEqual(synthesized[0]["kassiber"]["source"], "synthesized")
+        third_party_view = {key: value for key, value in synthesized[0].items() if key != "kassiber"}
+        self.assertEqual(third_party_view["type"], "tx")
+        self.assertIn("label", third_party_view)
 
     def _insert_transaction(
         self,
@@ -8921,6 +9496,428 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual(payload.get("kind"), "error")
         self.assertEqual(payload["error"]["code"], "validation")
 
+    def test_transactions_list_supports_extended_cli_filters(self):
+        self._bootstrap_wallet(label="Cold", kind="custom")
+        payload, result = self._run_json(
+            "wallets",
+            "create",
+            "--workspace",
+            "Main",
+            "--profile",
+            "Default",
+            "--label",
+            "Liquid Pocket",
+            "--kind",
+            "custom",
+        )
+        self._assert_ok(payload, result, "wallets.create")
+
+        public_txid = "ab" * 32
+        self._insert_transaction(
+            wallet_label="Cold",
+            tx_id="internal-receipt",
+            external_id="invoice-1",
+            occurred_at="2026-01-10T00:00:00Z",
+            amount_msat=100_000_000,
+            direction="inbound",
+        )
+        self._insert_transaction(
+            wallet_label="Cold",
+            tx_id="public-spend",
+            external_id=public_txid,
+            occurred_at="2026-02-10T00:00:00Z",
+            amount_msat=200_000_000,
+            direction="outbound",
+        )
+        self._insert_transaction(
+            wallet_label="Cold",
+            tx_id="failed-import",
+            external_id="failed-import-source",
+            occurred_at="2026-03-10T00:00:00Z",
+            amount_msat=300_000_000,
+            direction="inbound",
+        )
+        self._insert_transaction(
+            wallet_label="Liquid Pocket",
+            tx_id="liquid-row",
+            external_id="liquid-row-source",
+            occurred_at="2026-04-10T00:00:00Z",
+            amount_msat=400_000_000,
+            direction="inbound",
+            asset="LBTC",
+        )
+
+        conn = open_db(self.data_root)
+        self.addCleanup(conn.close)
+        conn.execute(
+            """
+            UPDATE wallets
+            SET config_json = ?
+            WHERE label = 'Liquid Pocket'
+            """,
+            (json.dumps({"chain": "liquid", "network": "regtest"}),),
+        )
+        conn.execute(
+            """
+            UPDATE transactions
+            SET fiat_rate = 70000, fiat_value = 140, fee = 1000
+            WHERE id = 'public-spend'
+            """,
+        )
+        conn.execute(
+            """
+            UPDATE transactions
+            SET review_status = 'failed'
+            WHERE id = 'failed-import'
+            """,
+        )
+        conn.execute(
+            """
+            UPDATE transactions
+            SET fiat_rate = 71000, fiat_value = 284
+            WHERE id = 'liquid-row'
+            """,
+        )
+        conn.commit()
+
+        payload, result = self._run_json(
+            "transactions",
+            "list",
+            "--workspace",
+            "Main",
+            "--profile",
+            "Default",
+            "--txid",
+            "internal-receipt",
+            "--txid",
+            public_txid,
+            "--period",
+            "15years",
+        )
+        self._assert_ok(payload, result, "transactions.list")
+        self.assertEqual(payload["count"], 2)
+        self.assertEqual(payload["total"], 2)
+        self.assertEqual({row["id"] for row in payload["data"]}, {"internal-receipt", "public-spend"})
+
+        payload, result = self._run_json(
+            "transactions",
+            "list",
+            "--workspace",
+            "Main",
+            "--profile",
+            "Default",
+            "--period",
+            "6months",
+            "--limit",
+            "1",
+        )
+        self._assert_ok(payload, result, "transactions.list")
+
+        payload, result = self._run_json(
+            "transactions",
+            "list",
+            "--workspace",
+            "Main",
+            "--profile",
+            "Default",
+            "--quick",
+            "missing_price",
+        )
+        self._assert_ok(payload, result, "transactions.list")
+        self.assertEqual({row["id"] for row in payload["data"]}, {"internal-receipt", "failed-import"})
+
+        payload, result = self._run_json(
+            "transactions",
+            "list",
+            "--workspace",
+            "Main",
+            "--profile",
+            "Default",
+            "--quick",
+            "no_explorer_id",
+        )
+        self._assert_ok(payload, result, "transactions.list")
+        self.assertEqual(
+            {row["id"] for row in payload["data"]},
+            {"internal-receipt", "failed-import", "liquid-row"},
+        )
+
+        payload, result = self._run_json(
+            "transactions",
+            "list",
+            "--workspace",
+            "Main",
+            "--profile",
+            "Default",
+            "--status",
+            "failed",
+        )
+        self._assert_ok(payload, result, "transactions.list")
+        self.assertEqual([row["id"] for row in payload["data"]], ["failed-import"])
+
+        payload, result = self._run_json(
+            "transactions",
+            "list",
+            "--workspace",
+            "Main",
+            "--profile",
+            "Default",
+            "--payment-method",
+            "Liquid",
+        )
+        self._assert_ok(payload, result, "transactions.list")
+        self.assertEqual([row["id"] for row in payload["data"]], ["liquid-row"])
+
+        payload, result = self._run_json(
+            "transactions",
+            "list",
+            "--workspace",
+            "Main",
+            "--profile",
+            "Default",
+            "--network",
+            "regtest",
+        )
+        self._assert_ok(payload, result, "transactions.list")
+        self.assertEqual([row["id"] for row in payload["data"]], ["liquid-row"])
+
+        payload, result = self._run_json(
+            "transactions",
+            "list",
+            "--workspace",
+            "Main",
+            "--profile",
+            "Default",
+            "--with-fees",
+        )
+        self._assert_ok(payload, result, "transactions.list")
+        self.assertEqual([row["id"] for row in payload["data"]], ["public-spend"])
+
+        payload, result = self._run_json(
+            "transactions",
+            "list",
+            "--workspace",
+            "Main",
+            "--profile",
+            "Default",
+            "--flow",
+            "incoming",
+            "--limit",
+            "2",
+        )
+        self._assert_ok(payload, result, "transactions.list")
+        self.assertEqual(payload["count"], 3)
+        self.assertTrue(payload["has_more"])
+        first_cursor = payload["next_cursor"]
+
+        payload, result = self._run_json(
+            "transactions",
+            "list",
+            "--workspace",
+            "Main",
+            "--profile",
+            "Default",
+            "--flow",
+            "incoming",
+            "--limit",
+            "2",
+            "--cursor",
+            first_cursor,
+        )
+        self._assert_ok(payload, result, "transactions.list")
+        self.assertFalse(payload["has_more"])
+        self.assertEqual(len(payload["data"]), 1)
+
+        payload, result = self._run_json(
+            "transactions",
+            "list",
+            "--workspace",
+            "Main",
+            "--profile",
+            "Default",
+            "--flow",
+            "outgoing",
+            "--limit",
+            "2",
+            "--cursor",
+            first_cursor,
+        )
+        self.assertEqual(result.returncode, 1, msg=payload)
+        self.assertEqual(payload.get("kind"), "error")
+        self.assertEqual(payload["error"]["code"], "validation")
+
+    def test_ui_transactions_snapshot_filters_count_and_paginate_server_side(self):
+        self._bootstrap_wallet(label="Cold", kind="custom")
+        payload, result = self._run_json(
+            "wallets",
+            "create",
+            "--workspace",
+            "Main",
+            "--profile",
+            "Default",
+            "--label",
+            "Liquid Pocket",
+            "--kind",
+            "custom",
+        )
+        self._assert_ok(payload, result, "wallets.create")
+
+        public_txid = "ab" * 32
+        self._insert_transaction(
+            wallet_label="Cold",
+            tx_id="internal-receipt",
+            external_id="invoice-1",
+            occurred_at="2024-01-10T00:00:00Z",
+            amount_msat=100_000_000,
+            direction="inbound",
+        )
+        self._insert_transaction(
+            wallet_label="Cold",
+            tx_id="public-spend",
+            external_id=public_txid,
+            occurred_at="2024-02-10T00:00:00Z",
+            amount_msat=200_000_000,
+            direction="outbound",
+        )
+        self._insert_transaction(
+            wallet_label="Cold",
+            tx_id="failed-import",
+            external_id="failed-import-source",
+            occurred_at="2024-03-10T00:00:00Z",
+            amount_msat=300_000_000,
+            direction="inbound",
+        )
+        self._insert_transaction(
+            wallet_label="Liquid Pocket",
+            tx_id="liquid-row",
+            external_id="liquid-row-source",
+            occurred_at="2024-04-10T00:00:00Z",
+            amount_msat=400_000_000,
+            direction="inbound",
+            asset="LBTC",
+        )
+
+        conn = open_db(self.data_root)
+        self.addCleanup(conn.close)
+        conn.execute(
+            """
+            UPDATE wallets
+            SET config_json = ?
+            WHERE label = 'Liquid Pocket'
+            """,
+            (json.dumps({"chain": "liquid", "network": "regtest"}),),
+        )
+        conn.execute(
+            """
+            UPDATE transactions
+            SET fiat_rate = 70000, fiat_value = 140, fee = 1000
+            WHERE id = 'public-spend'
+            """,
+        )
+        conn.execute(
+            """
+            UPDATE transactions
+            SET review_status = 'failed'
+            WHERE id = 'failed-import'
+            """,
+        )
+        conn.execute(
+            """
+            UPDATE transactions
+            SET fiat_rate = 71000, fiat_value = 284
+            WHERE id = 'liquid-row'
+            """,
+        )
+        conn.commit()
+
+        by_txids = build_transactions_snapshot(
+            conn,
+            {"txids": ["internal-receipt", public_txid], "limit": 10},
+        )
+        self.assertEqual(by_txids["count"], 2)
+        self.assertEqual(
+            {row["id"] for row in by_txids["txs"]},
+            {"internal-receipt", "public-spend"},
+        )
+
+        missing_price = build_transactions_snapshot(
+            conn,
+            {"quick": "missing_price", "limit": 10},
+        )
+        self.assertEqual(missing_price["count"], 2)
+        self.assertEqual(
+            {row["id"] for row in missing_price["txs"]},
+            {"internal-receipt", "failed-import"},
+        )
+
+        no_explorer = build_transactions_snapshot(
+            conn,
+            {"quick": "no_explorer_id", "limit": 10},
+        )
+        self.assertEqual(no_explorer["count"], 3)
+        self.assertNotIn("public-spend", {row["id"] for row in no_explorer["txs"]})
+
+        failed = build_transactions_snapshot(conn, {"status": "failed", "limit": 10})
+        self.assertEqual(failed["count"], 1)
+        self.assertEqual(failed["txs"][0]["id"], "failed-import")
+
+        liquid = build_transactions_snapshot(
+            conn,
+            {"payment_method": "Liquid", "network": "regtest", "limit": 10},
+        )
+        self.assertEqual(liquid["count"], 1)
+        self.assertEqual(liquid["txs"][0]["id"], "liquid-row")
+
+        with_fees = build_transactions_snapshot(
+            conn,
+            {"withFees": True, "limit": 10},
+        )
+        self.assertEqual(with_fees["count"], 1)
+        self.assertEqual(with_fees["txs"][0]["id"], "public-spend")
+
+        incoming_page = build_transactions_snapshot(
+            conn,
+            {
+                "flow": "incoming",
+                "since": "2024-01-01T00:00:00Z",
+                "until": "2024-12-31T23:59:59Z",
+                "limit": 1,
+                "sort": "occurred-at",
+                "order": "asc",
+            },
+        )
+        self.assertEqual(incoming_page["count"], 3)
+        self.assertEqual(incoming_page["txs"][0]["id"], "internal-receipt")
+        self.assertTrue(incoming_page["hasMore"])
+        next_page = build_transactions_snapshot(
+            conn,
+            {
+                "flow": "incoming",
+                "since": "2024-01-01T00:00:00Z",
+                "until": "2024-12-31T23:59:59Z",
+                "limit": 1,
+                "sort": "occurred-at",
+                "order": "asc",
+                "cursor": incoming_page["nextCursor"],
+            },
+        )
+        self.assertEqual(next_page["count"], 3)
+        self.assertEqual(next_page["txs"][0]["id"], "failed-import")
+
+        with self.assertRaises(AppError):
+            build_transactions_snapshot(
+                conn,
+                {
+                    "flow": "outgoing",
+                    "since": "2024-01-01T00:00:00Z",
+                    "until": "2024-12-31T23:59:59Z",
+                    "limit": 1,
+                    "sort": "occurred-at",
+                    "order": "asc",
+                    "cursor": incoming_page["nextCursor"],
+                },
+            )
+
     def test_report_journal_entries_is_not_truncated_to_internal_page_size(self):
         self._bootstrap_wallet(label="Ledger")
         self._insert_transaction(
@@ -9647,6 +10644,200 @@ class ReviewRegressionTest(unittest.TestCase):
         expected = self._load_fixture("generic_rp2_cross_asset_pair_snapshot.json")
         self.assertEqual(actual, expected)
 
+    def test_direct_generic_bitcoin_rail_carrying_value_pair_carries_basis(self):
+        profile, inputs = self._direct_cross_asset_pair_engine_inputs()
+        carry_inputs = TaxEngineLedgerInputs(
+            rows=[
+                *inputs.rows,
+                {
+                    "id": "lbtc-sale-after-carry",
+                    "wallet_id": "wallet-liquid",
+                    "wallet_label": "Liquid",
+                    "wallet_account_id": "account-treasury",
+                    "account_code": "treasury",
+                    "account_label": "Treasury",
+                    "occurred_at": "2026-04-20T10:00:00Z",
+                    "direction": "outbound",
+                    "asset": "LBTC",
+                    "amount": 10_000_000_000,
+                    "fee": 0,
+                    "fiat_rate": 83000,
+                    "fiat_value": 8300,
+                    "kind": "sell",
+                    "description": "Sell carried LBTC",
+                    "note": None,
+                    "external_id": "lbtc-sale-after-carry",
+                    "created_at": "2026-04-20T10:00:00Z",
+                },
+            ],
+            wallet_refs_by_id=inputs.wallet_refs_by_id,
+            manual_pair_records=[
+                {**dict(inputs.manual_pair_records[0]), "policy": "carrying-value"},
+            ],
+        )
+        actual = self._direct_engine_snapshot(profile, carry_inputs)
+        self.assertEqual(actual["quarantines"], [])
+        self.assertEqual(actual["account_holdings"], [])
+        disposals = {
+            entry["transaction_id"]: entry
+            for entry in actual["entries"]
+            if entry["entry_type"] == "disposal"
+        }
+        self.assertEqual(disposals["cross-out-leg"]["gain_loss"], 0.0)
+        self.assertEqual(disposals["cross-out-leg"]["cost_basis"], 8008.0)
+        self.assertEqual(disposals["cross-out-leg"]["proceeds"], 8008.0)
+        self.assertEqual(disposals["lbtc-sale-after-carry"]["cost_basis"], 8008.0)
+        self.assertEqual(disposals["lbtc-sale-after-carry"]["proceeds"], 8300.0)
+        self.assertEqual(disposals["lbtc-sale-after-carry"]["gain_loss"], 292.0)
+
+    def test_direct_generic_bitcoin_rail_chained_carry_stays_stable(self):
+        profile = {
+            "id": "profile-generic-chain",
+            "workspace_id": "workspace-main",
+            "label": "FixtureGenericRailChain",
+            "fiat_currency": "USD",
+            "tax_country": "generic",
+            "tax_long_term_days": 365,
+            "gains_algorithm": "FIFO",
+        }
+        wallet_refs_by_id = {
+            "wallet-btc": {
+                "id": "wallet-btc",
+                "label": "Bitcoin",
+                "wallet_account_id": "account-treasury",
+                "account_code": "treasury",
+                "account_label": "Treasury",
+            },
+            "wallet-liquid": {
+                "id": "wallet-liquid",
+                "label": "Liquid",
+                "wallet_account_id": "account-treasury",
+                "account_code": "treasury",
+                "account_label": "Treasury",
+            },
+        }
+
+        def row(rid, wallet_id, direction, asset, occurred_at, fiat_rate, description):
+            wallet = wallet_refs_by_id[wallet_id]
+            return {
+                "id": rid,
+                "wallet_id": wallet_id,
+                "wallet_label": wallet["label"],
+                "wallet_account_id": wallet["wallet_account_id"],
+                "account_code": wallet["account_code"],
+                "account_label": wallet["account_label"],
+                "occurred_at": occurred_at,
+                "direction": direction,
+                "asset": asset,
+                "amount": 100_000_000_000,
+                "fee": 0,
+                "fiat_rate": fiat_rate,
+                "fiat_value": fiat_rate,
+                "kind": "buy" if direction == "inbound" else "sell",
+                "description": description,
+                "note": None,
+                "external_id": rid,
+                "created_at": occurred_at,
+            }
+
+        inputs = TaxEngineLedgerInputs(
+            rows=[
+                row("btc-buy-10k", "wallet-btc", "inbound", "BTC", "2026-01-01T00:00:00Z", 10000, "BTC buy"),
+                row("btc-to-lbtc-out", "wallet-btc", "outbound", "BTC", "2026-02-01T00:00:00Z", 20000, "BTC rail out"),
+                row("btc-to-lbtc-in", "wallet-liquid", "inbound", "LBTC", "2026-02-01T00:01:00Z", 20000, "LBTC rail in"),
+                row("lbtc-to-btc-out", "wallet-liquid", "outbound", "LBTC", "2026-03-01T00:00:00Z", 30000, "LBTC rail out"),
+                row("lbtc-to-btc-in", "wallet-btc", "inbound", "BTC", "2026-03-01T00:01:00Z", 30000, "BTC rail in"),
+                row("btc-sale-40k", "wallet-btc", "outbound", "BTC", "2026-04-01T00:00:00Z", 40000, "BTC sale"),
+            ],
+            wallet_refs_by_id=wallet_refs_by_id,
+            manual_pair_records=[
+                {
+                    "id": "pair-btc-lbtc",
+                    "out_transaction_id": "btc-to-lbtc-out",
+                    "in_transaction_id": "btc-to-lbtc-in",
+                    "kind": "peg-in",
+                    "policy": "carrying-value",
+                },
+                {
+                    "id": "pair-lbtc-btc",
+                    "out_transaction_id": "lbtc-to-btc-out",
+                    "in_transaction_id": "lbtc-to-btc-in",
+                    "kind": "peg-out",
+                    "policy": "carrying-value",
+                },
+            ],
+        )
+        actual = self._direct_engine_snapshot(profile, inputs)
+        self.assertEqual(actual["quarantines"], [])
+        self.assertEqual(actual["account_holdings"], [])
+        disposals = {
+            entry["transaction_id"]: entry
+            for entry in actual["entries"]
+            if entry["entry_type"] == "disposal"
+        }
+        self.assertEqual(disposals["btc-to-lbtc-out"]["cost_basis"], 10000.0)
+        self.assertEqual(disposals["btc-to-lbtc-out"]["proceeds"], 10000.0)
+        self.assertEqual(disposals["btc-to-lbtc-out"]["gain_loss"], 0.0)
+        self.assertEqual(disposals["lbtc-to-btc-out"]["cost_basis"], 10000.0)
+        self.assertEqual(disposals["lbtc-to-btc-out"]["proceeds"], 10000.0)
+        self.assertEqual(disposals["lbtc-to-btc-out"]["gain_loss"], 0.0)
+        self.assertEqual(disposals["btc-sale-40k"]["cost_basis"], 10000.0)
+        self.assertEqual(disposals["btc-sale-40k"]["proceeds"], 40000.0)
+        self.assertEqual(disposals["btc-sale-40k"]["gain_loss"], 30000.0)
+
+    def test_direct_generic_bitcoin_rail_carry_quarantines_when_source_basis_missing(self):
+        profile, inputs = self._direct_cross_asset_pair_engine_inputs()
+        carry_inputs = TaxEngineLedgerInputs(
+            rows=[row for row in inputs.rows if row["id"] != "cross-fund-1"],
+            wallet_refs_by_id=inputs.wallet_refs_by_id,
+            manual_pair_records=[
+                {**dict(inputs.manual_pair_records[0]), "policy": "carrying-value"},
+            ],
+        )
+        actual = self._direct_engine_snapshot(profile, carry_inputs)
+        self.assertEqual(actual["entries"], [])
+        self.assertEqual(actual["account_holdings"], [])
+        self.assertEqual(actual["wallet_holdings"], [])
+        quarantines = {row["transaction_id"]: row for row in actual["quarantines"]}
+        self.assertEqual(set(quarantines), {"cross-out-leg", "cross-in-leg"})
+        for quarantine in quarantines.values():
+            self.assertEqual(quarantine["reason"], "bitcoin_rail_carry_basis_unresolved")
+            self.assertEqual(quarantine["detail"]["reason_code"], "insufficient_lots")
+            self.assertEqual(quarantine["detail"]["rail_pair"], "pair-cross-1")
+
+    def test_direct_generic_bitcoin_rail_carry_clears_coarse_pricing_review(self):
+        profile, inputs = self._direct_cross_asset_pair_engine_inputs()
+        profile = {**dict(profile), "require_coarse_review": 1}
+        rows = []
+        for row in inputs.rows:
+            if row["id"] == "cross-in-leg":
+                rows.append(
+                    {
+                        **dict(row),
+                        "pricing_source_kind": pricing.SOURCE_FMV_PROVIDER,
+                        "pricing_quality": pricing.QUALITY_COARSE_FALLBACK,
+                        "pricing_granularity": "daily",
+                    }
+                )
+            else:
+                rows.append(row)
+        carry_inputs = TaxEngineLedgerInputs(
+            rows=rows,
+            wallet_refs_by_id=inputs.wallet_refs_by_id,
+            manual_pair_records=[
+                {**dict(inputs.manual_pair_records[0]), "policy": "carrying-value"},
+            ],
+        )
+        actual = self._direct_engine_snapshot(profile, carry_inputs)
+        self.assertEqual(actual["quarantines"], [])
+        acquisition = next(
+            entry
+            for entry in actual["entries"]
+            if entry["entry_type"] == "acquisition"
+            and entry["transaction_id"] == "cross-in-leg"
+        )
+        self.assertEqual(acquisition["fiat_value"], 8008.0)
+
     def test_generic_rp2_transfer_snapshot_matches_fixture(self):
         payload, result = self._run_json(
             "init",
@@ -9966,6 +11157,110 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual(state.intra_audit[0]["from_wallet_id"], "wallet-a")
         self.assertEqual(state.intra_audit[0]["to_wallet_id"], "wallet-b")
 
+    def test_austrian_alt_transfer_journal_rows_preserve_wallet_tax_free_regime(self):
+        profile = {
+            "id": "profile-at-transfer-alt",
+            "workspace_id": "workspace-main",
+            "label": "FixtureAustrianAltTransfer",
+            "fiat_currency": "EUR",
+            "tax_country": "at",
+            "tax_long_term_days": 9223372036854775807,
+            "gains_algorithm": "MOVING_AVERAGE_AT",
+        }
+        wallet_refs_by_id = {
+            "wallet-a": {
+                "id": "wallet-a",
+                "label": "Vienna",
+                "wallet_account_id": "account-treasury",
+                "account_code": "treasury",
+                "account_label": "Treasury",
+            },
+            "wallet-b": {
+                "id": "wallet-b",
+                "label": "Cold",
+                "wallet_account_id": "account-cold",
+                "account_code": "cold",
+                "account_label": "Cold",
+            },
+        }
+
+        def _row(rid, wid, direction, amount, occurred_at, *, description, external_id):
+            ref = wallet_refs_by_id[wid]
+            return {
+                "id": rid,
+                "wallet_id": wid,
+                "wallet_label": ref["label"],
+                "wallet_account_id": ref["wallet_account_id"],
+                "account_code": ref["account_code"],
+                "account_label": ref["account_label"],
+                "occurred_at": occurred_at,
+                "direction": direction,
+                "asset": "BTC",
+                "amount": amount,
+                "fee": 0,
+                "fiat_rate": 60000,
+                "fiat_value": 60000,
+                "kind": "transfer",
+                "note": None,
+                "description": description,
+                "external_id": external_id,
+                "created_at": occurred_at,
+            }
+
+        state = build_tax_engine(profile).build_ledger_state(
+            TaxEngineLedgerInputs(
+                rows=[
+                    _row(
+                        "alt-buy",
+                        "wallet-a",
+                        "inbound",
+                        100_000_000_000,
+                        "2020-06-01T10:00:00Z",
+                        description="Alt buy",
+                        external_id="alt-buy",
+                    ),
+                    _row(
+                        "xfer-out",
+                        "wallet-a",
+                        "outbound",
+                        100_000_000_000,
+                        "2024-07-01T10:00:00Z",
+                        description="Move A->B",
+                        external_id="xfer-alt",
+                    ),
+                    _row(
+                        "xfer-in",
+                        "wallet-b",
+                        "inbound",
+                        100_000_000_000,
+                        "2024-07-01T10:00:00Z",
+                        description="Move A->B",
+                        external_id="xfer-alt",
+                    ),
+                ],
+                wallet_refs_by_id=wallet_refs_by_id,
+                manual_pair_records=[],
+            )
+        )
+
+        self.assertEqual(state.quarantines, [])
+        transfer_entries = [
+            entry
+            for entry in _normalize_engine_entries(state.entries)
+            if entry["entry_type"] in {"transfer_in", "transfer_out"}
+        ]
+        self.assertEqual(len(transfer_entries), 2)
+        self.assertTrue(
+            all("at_regime=alt" in entry["description"] for entry in transfer_entries),
+        )
+        self.assertEqual(
+            _tax_free_wallet_summaries(state.entries),
+            [
+                {"walletId": "wallet-a", "hasTaxFreeBalance": False},
+                {"walletId": "wallet-b", "hasTaxFreeBalance": True},
+            ],
+        )
+
     def test_austrian_direct_swap_payout_carries_then_disposes(self):
         profile, inputs = self._direct_austrian_swap_payout_inputs()
         state = build_tax_engine(profile).build_ledger_state(inputs)
@@ -10019,6 +11314,37 @@ class ReviewRegressionTest(unittest.TestCase):
                 "cost_basis": 15000.0,
             }
         ])
+
+    def test_generic_bitcoin_rail_direct_swap_payout_carries_then_disposes(self):
+        profile, inputs = self._direct_austrian_swap_payout_inputs()
+        profile = {
+            **profile,
+            "id": "profile-generic-rail-payout",
+            "label": "FixtureGenericRailPayout",
+            "tax_country": "generic",
+            "tax_long_term_days": 365,
+            "gains_algorithm": "FIFO",
+        }
+        state = build_tax_engine(profile).build_ledger_state(inputs)
+        entries = _normalize_engine_entries(state.entries)
+
+        self.assertEqual(state.quarantines, [])
+        self.assertEqual(state.direct_swap_payouts[0]["policy"], "carrying-value")
+        disposals = [
+            entry
+            for entry in entries
+            if entry["transaction_id"] == "swap-payout-source"
+            and entry["entry_type"] == "disposal"
+        ]
+        self.assertEqual(len(disposals), 2)
+        neutral_source = next(entry for entry in disposals if entry["asset"] == "LBTC")
+        taxable_payout = next(entry for entry in disposals if entry["asset"] == "BTC")
+        self.assertAlmostEqual(neutral_source["cost_basis"], 15000.0)
+        self.assertAlmostEqual(neutral_source["proceeds"], 15000.0)
+        self.assertAlmostEqual(neutral_source["gain_loss"], 0.0)
+        self.assertAlmostEqual(taxable_payout["cost_basis"], 15000.0)
+        self.assertAlmostEqual(taxable_payout["proceeds"], 24995.0)
+        self.assertAlmostEqual(taxable_payout["gain_loss"], 9995.0)
 
     def test_austrian_direct_swap_payout_sorts_synthetic_rows(self):
         profile, inputs = self._direct_austrian_swap_payout_inputs()
@@ -10263,7 +11589,7 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual(pairs[0]["kind"], "manual")
         self.assertEqual(pairs[0]["policy"], "carrying-value")
 
-    def test_update_cross_asset_carrying_value_gated_by_tax_country(self):
+    def test_update_cross_asset_carrying_value_allows_generic_bitcoin_rails_only(self):
         self._bootstrap_wallet(label="HotLN", kind="phoenix")
         self._create_second_wallet("LiquidVault", kind="custom")
         self._insert_transaction(
@@ -10282,20 +11608,130 @@ class ReviewRegressionTest(unittest.TestCase):
             conn, "Main", "Default", "ln-out", "lbtc-in",
             kind="manual", policy="taxable",
         )
-        # Generic profile: cross-asset carrying-value is not allowed.
-        with self.assertRaises(AppError) as ctx:
-            update_transaction_pair(
-                conn, "Main", "Default", pair["id"], policy="carrying-value",
-            )
-        self.assertEqual(ctx.exception.code, "validation")
-        # Flip the profile to Austrian and the same edit succeeds.
-        self._set_profile_tax_country("Default", "at")
-        conn_at = open_db(self.data_root)
-        self.addCleanup(conn_at.close)
         updated = update_transaction_pair(
-            conn_at, "Main", "Default", pair["id"], policy="carrying-value",
+            conn, "Main", "Default", pair["id"], policy="carrying-value",
         )
         self.assertEqual(updated["policy"], "carrying-value")
+        self._create_second_wallet("AltRail", kind="custom")
+        self._insert_transaction(
+            wallet_label="HotLN", tx_id="btc-out",
+            asset="BTC", occurred_at="2025-04-05T10:00:00Z",
+            amount_msat=100_000_000, direction="outbound",
+        )
+        self._insert_transaction(
+            wallet_label="AltRail", tx_id="xyz-in",
+            asset="XYZ", occurred_at="2025-04-05T10:05:00Z",
+            amount_msat=99_500_000, direction="inbound",
+        )
+        generic_pair = create_transaction_pair(
+            conn, "Main", "Default", "btc-out", "xyz-in",
+            kind="manual", policy="taxable",
+        )
+        with self.assertRaises(AppError) as ctx:
+            update_transaction_pair(
+                conn, "Main", "Default", generic_pair["id"], policy="carrying-value",
+            )
+        self.assertEqual(ctx.exception.code, "validation")
+
+    def test_bitcoin_rail_carrying_value_setting_controls_generic_defaults(self):
+        self._bootstrap_wallet(label="HotLN", kind="phoenix")
+        self._create_second_wallet("LiquidVault", kind="custom")
+        self._insert_transaction(
+            wallet_label="HotLN", tx_id="ln-out-default-on", asset="BTC",
+            occurred_at="2025-04-06T10:00:00Z",
+            amount_msat=100_000_000, direction="outbound",
+        )
+        self._insert_transaction(
+            wallet_label="LiquidVault", tx_id="lbtc-in-default-on", asset="LBTC",
+            occurred_at="2025-04-06T10:05:00Z",
+            amount_msat=99_500_000, direction="inbound",
+        )
+        conn = open_db(self.data_root)
+        self.addCleanup(conn.close)
+        default_pair = create_transaction_pair(
+            conn, "Main", "Default", "ln-out-default-on", "lbtc-in-default-on",
+        )
+        self.assertEqual(default_pair["policy"], "carrying-value")
+        self._insert_transaction(
+            wallet_label="LiquidVault", tx_id="lbtc-payout-default-on", asset="LBTC",
+            occurred_at="2025-04-06T11:00:00Z",
+            amount_msat=50_000_000, direction="outbound",
+        )
+        default_payout = create_direct_swap_payout(
+            conn,
+            "Main",
+            "Default",
+            "lbtc-payout-default-on",
+            payout_asset="BTC",
+            payout_amount="0.00049",
+            payout_fiat_value="25",
+            payout_external_id="btc-recipient-default-on",
+            counterparty="external-recipient",
+        )
+        self.assertEqual(default_payout["policy"], "carrying-value")
+
+        payload, result = self._run_json(
+            "profiles", "set",
+            "--profile", "Default",
+            "--no-bitcoin-rail-carrying-value",
+        )
+        self._assert_ok(payload, result, "profiles.set")
+        self.assertFalse(payload["data"]["bitcoin_rail_carrying_value"])
+        self._insert_transaction(
+            wallet_label="HotLN", tx_id="ln-out-default-off", asset="BTC",
+            occurred_at="2025-04-07T10:00:00Z",
+            amount_msat=100_000_000, direction="outbound",
+        )
+        self._insert_transaction(
+            wallet_label="LiquidVault", tx_id="lbtc-in-default-off", asset="LBTC",
+            occurred_at="2025-04-07T10:05:00Z",
+            amount_msat=99_500_000, direction="inbound",
+        )
+        candidates = suggest_transfer_candidates(conn, "Main", "Default")
+        candidate = next(
+            c for c in candidates["candidates"]
+            if c["out_id"] == "ln-out-default-off"
+        )
+        self.assertEqual(candidate["default_policy"], "taxable")
+        taxable_default_pair = create_transaction_pair(
+            conn, "Main", "Default", "ln-out-default-off", "lbtc-in-default-off",
+        )
+        self.assertEqual(taxable_default_pair["policy"], "taxable")
+        self._insert_transaction(
+            wallet_label="LiquidVault", tx_id="lbtc-payout-default-off", asset="LBTC",
+            occurred_at="2025-04-07T11:00:00Z",
+            amount_msat=50_000_000, direction="outbound",
+        )
+        taxable_default_payout = create_direct_swap_payout(
+            conn,
+            "Main",
+            "Default",
+            "lbtc-payout-default-off",
+            payout_asset="BTC",
+            payout_amount="0.00049",
+            payout_fiat_value="25",
+            payout_external_id="btc-recipient-default-off",
+            counterparty="external-recipient",
+        )
+        self.assertEqual(taxable_default_payout["policy"], "taxable")
+        self._insert_transaction(
+            wallet_label="HotLN", tx_id="btc-payout-explicit-carry", asset="BTC",
+            occurred_at="2025-04-07T12:00:00Z",
+            amount_msat=100_000_000, direction="outbound",
+        )
+        explicit_carry_payout = create_direct_swap_payout(
+            conn,
+            "Main",
+            "Default",
+            "btc-payout-explicit-carry",
+            payout_asset="LBTC",
+            payout_amount="0.00099",
+            payout_fiat_value="50",
+            payout_external_id="lbtc-recipient-explicit",
+            counterparty="external-recipient",
+            policy="carrying-value",
+        )
+        self.assertEqual(explicit_carry_payout["policy"], "carrying-value")
 
     def test_austrian_same_timestamp_swap_chain_reaches_rp2(self):
         profile, inputs = self._direct_austrian_same_timestamp_swap_chain_inputs()
@@ -10842,6 +12278,27 @@ class ReviewRegressionTest(unittest.TestCase):
         # the CLI) must agree with the live BalanceSet path: Cold 0.499, Hot 0.5.
         conn = open_db(self.data_root)
         self.addCleanup(conn.close)
+        core_rates.upsert_rate(
+            conn,
+            "BTC-USD",
+            "2026-12-31T00:00:00Z",
+            "70000",
+            "manual",
+            fetched_at="2026-12-31T00:00:01Z",
+            granularity="manual",
+            method="regression",
+        )
+        core_rates.upsert_rate(
+            conn,
+            "BTC-USD",
+            "2026-12-31T00:00:00Z",
+            "65000",
+            "coinbase-exchange",
+            fetched_at="2026-12-31T00:00:02Z",
+            granularity="manual",
+            method="regression-provider",
+        )
+        conn.commit()
         as_of_rows = {
             row["wallet"]: row
             for row in report_portfolio_summary(
@@ -10856,6 +12313,27 @@ class ReviewRegressionTest(unittest.TestCase):
         }
         self.assertAlmostEqual(as_of_rows["Cold"]["quantity"], 0.499, places=8)
         self.assertAlmostEqual(as_of_rows["Hot"]["quantity"], 0.5, places=8)
+        # Historical/as-of market value is the summary-PDF holdings path. It
+        # must use the cached market rate at the as-of timestamp, not the last
+        # transaction import price.
+        self.assertAlmostEqual(as_of_rows["Cold"]["market_value"], 34930.0, places=4)
+        self.assertAlmostEqual(as_of_rows["Hot"]["market_value"], 35000.0, places=4)
+        december_history = [
+            row
+            for row in report_balance_history(
+                conn,
+                "Main",
+                "FixtureTransfer",
+                _report_hooks(),
+                interval="month",
+                start="2026-12-01T00:00:00Z",
+                end="2026-12-31T23:59:59Z",
+            )
+            if row["asset"] == "BTC"
+        ]
+        self.assertEqual(len(december_history), 1)
+        self.assertAlmostEqual(december_history[0]["quantity"], 0.999, places=8)
+        self.assertAlmostEqual(december_history[0]["market_value"], 69930.0, places=4)
 
         # Per-wallet basis is allocated from the asset's pooled average (matching
         # the live report), so the moved basis follows the coins to Hot instead
@@ -10898,7 +12376,10 @@ class ReviewRegressionTest(unittest.TestCase):
             cwd=repo_dir,
         )
         self._assert_ok(payload, result, "init")
-        expected_root = home_dir / ".kassiber"
+        app_root = home_dir / ".kassiber"
+        expected_root = app_root / "projects" / "default"
+        self.assertEqual(payload["data"]["project_id"], "default")
+        self.assertEqual(payload["data"]["project_root"], str(expected_root))
         self.assertEqual(payload["data"]["state_root"], str(expected_root))
         self.assertEqual(payload["data"]["data_root"], str(expected_root / "data"))
         self.assertEqual(payload["data"]["database"], str(expected_root / "data" / "kassiber.sqlite3"))
@@ -10909,6 +12390,7 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual(payload["data"]["env_file"], str(expected_root / "config" / "backends.env"))
         self.assertTrue((expected_root / "data" / "kassiber.sqlite3").exists())
         self.assertTrue((expected_root / "config" / "settings.json").exists())
+        self.assertTrue((app_root / "config" / "projects.json").exists())
         settings_payload = json.loads((expected_root / "config" / "settings.json").read_text(encoding="utf-8"))
         self.assertEqual(settings_payload["paths"]["state_root"], str(expected_root))
         self.assertEqual(settings_payload["paths"]["data_root"], str(expected_root / "data"))
@@ -10923,6 +12405,7 @@ class ReviewRegressionTest(unittest.TestCase):
             cwd=repo_dir,
         )
         self._assert_ok(payload, result, "status")
+        self.assertEqual(payload["data"]["project_id"], "default")
         self.assertEqual(payload["data"]["state_root"], str(expected_root))
         self.assertEqual(payload["data"]["data_root"], str(expected_root / "data"))
         self.assertEqual(payload["data"]["config_root"], str(expected_root / "config"))
@@ -11475,14 +12958,20 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertIn("at-e1kv-staking", notes_text)
         self.assertNotIn("NFT", notes_text)
 
-    def test_pdf_report_substitutes_non_latin1_glyphs(self):
-        # Pin the remaining generic text-PDF limitation.
-        # Austrian E 1kv and source-funds PDFs use ReportLab renderers instead.
+    def test_pdf_report_transliterates_non_latin1_glyphs(self):
+        # The generic text PDF transliterates common non-Latin-1 glyphs to
+        # legible ASCII instead of silently dropping them to "?" (the exit-tax
+        # lines emit em dashes and a warning sign). Austrian E 1kv and
+        # source-funds PDFs use ReportLab renderers instead.
         from kassiber.pdf_report import _ascii_text
 
-        self.assertEqual(_ascii_text("€"), "?")
-        self.assertEqual(_ascii_text("₿"), "?")
-        self.assertEqual(_ascii_text("↔"), "?")
+        self.assertEqual(_ascii_text("€"), "EUR")
+        self.assertEqual(_ascii_text("₿"), "BTC")
+        self.assertEqual(_ascii_text("↔"), "<->")
+        self.assertEqual(_ascii_text("estimate — value"), "estimate - value")
+        self.assertEqual(_ascii_text("⚠ 3 quarantined"), "(!) 3 quarantined")
+        # Anything still outside Latin-1 degrades to "?" rather than crashing.
+        self.assertEqual(_ascii_text("中"), "?")
         # Latin-1 covers German umlauts and ß, so they survive today.
         self.assertEqual(_ascii_text("Übersicht"), "Übersicht")
         self.assertEqual(_ascii_text("Größe ä ö ü ß"), "Größe ä ö ü ß")

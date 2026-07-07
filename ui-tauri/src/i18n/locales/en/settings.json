@@ -15,7 +15,7 @@
     },
     "scale": {
       "title": "Interface scale",
-      "description": "Make every screen denser or larger. Applies across the whole app.",
+      "description": "Kassiber fits the interface to your screen automatically. Use −/+ to fine-tune the density — it applies across the whole app.",
       "decrease": "Decrease interface scale",
       "increase": "Increase interface scale",
       "value": "{{percent}}%"
@@ -207,17 +207,17 @@
   "marketData": {
     "intro": "Fiat reference rates are sourced independently of wallet sync. Kassiber keeps a local price cache so reports never have to query an exchange for every transaction. These lookups reveal pricing interest, not your wallet addresses.",
     "priceSourceLabel": "Price source",
-    "priceSourceHint": "Used for automatic latest-price refresh and default pricing cache rebuilds.",
-    "autoRefreshLabel": "Keep BTC price current while the app is open",
-    "autoRefreshHint": "Fetches a small latest {{provider}} market window roughly hourly and uses the existing rate-limit backoff if the provider asks Kassiber to wait.",
-    "autoRefreshFootnote": "Wallet/source refresh remains controlled from Connections; this setting only updates market-rate cache rows used for fiat balance display and missing transaction pricing coverage.",
+    "priceSourceHint": "Used only after live market-rate lookups are enabled for this book.",
+    "autoRefreshLabel": "Allow live minute-rate lookups",
+    "autoRefreshHint": "Lets Kassiber contact {{provider}} for latest BTC prices and missing transaction-time minute windows. The provider sees pair and time-window requests, not wallet addresses or txids.",
+    "autoRefreshFootnote": "Bundled hourly candles and local Kraken imports stay offline. Wallet/source refresh remains controlled from Connections.",
     "providersHeading": "Rate providers",
     "primary": "Primary",
     "fallback": "Fallback",
     "rebuildHeading": "Rebuild pricing cache",
-    "rebuildDescription": "Clear selected provider samples, checked-empty minutes, and cached provider-generated transaction prices, then fetch fresh market rates for {{pair}}.",
+    "rebuildDescription": "Clear selected provider samples, checked-empty minutes, and cached provider-generated transaction prices, then fetch fresh live market rates for {{pair}}.",
     "rebuildButton": "Rebuild cache",
-    "rebuildFootnote": "Manual overrides and imported exchange execution prices are kept. Large wallets can take a while because Kassiber refetches missing windows and reprocesses journals afterward.",
+    "rebuildFootnote": "Manual overrides and imported exchange execution prices are kept. Large wallets can take a while because Kassiber refetches missing minute windows and reprocesses journals afterward.",
     "rebuildingTitle": "Rebuilding provider rates",
     "rebuildingCounting": "Counting transaction rates…",
     "rebuildProgressAria": "Pricing cache rebuild progress",
@@ -230,7 +230,7 @@
     "txRefreshAria": "Transaction rate refresh progress",
     "resultRemoved": "Removed {{rates}} rate rows, {{minutes}} checked minutes, and {{prices}} cached transaction prices.",
     "krakenHeading": "Kraken offline history",
-    "krakenDescription": "Bitcoin EUR/USD minute candles from a local Kraken CSV/ZIP archive, plus bundled daily values for fallback coverage.",
+    "krakenDescription": "Bitcoin EUR/USD minute candles from a local Kraken CSV/ZIP archive, plus bundled hourly values for fallback coverage.",
     "krakenGetArchive": "Get Kraken archive",
     "krakenBlog": "Kraken market data blog",
     "krakenMinuteHeading": "Kraken offline history: minute data",
@@ -244,9 +244,9 @@
     "filePickerUnavailable": "Use the path field in browser mode",
     "fullMinuteHistory": "Full minute history",
     "incrementalMinuteUpdate": "Incremental minute update",
-    "bundledHeading": "Bundled daily values fallback",
-    "bundledDescription": "Import bundled Kraken BTC-EUR and BTC-USD daily values from 2013 through Q1 2026 for coarse fallback coverage.",
-    "importDailyValues": "Import daily values",
+    "bundledHeading": "Bundled hourly values",
+    "bundledDescription": "Import bundled Kraken BTC-EUR and BTC-USD hourly values backdated to 2011. The pre-Kraken section is daily-derived and stays local.",
+    "importDailyValues": "Import hourly values",
     "importedTotals": "{{rows}} rows across {{pairs}} pairs",
     "importedTotals_one": "{{rows}} rows across {{pairs}} pair",
     "noRowsImported": "No Bitcoin rows imported",
@@ -270,20 +270,21 @@
     "rebuiltBodyFallback": "{{provider}} pricing cache was rebuilt.",
     "rebuildFailedTitle": "Pricing cache rebuild failed",
     "rebuildFailedError": "Could not rebuild pricing cache.",
-    "autoEnabledTitle": "Automatic price refresh enabled",
-    "autoDisabledTitle": "Automatic price refresh disabled",
-    "autoEnabledBody": "Kassiber will refresh the latest BTC price while the app is open.",
-    "autoDisabledBody": "Kassiber will stop scheduling background BTC price refreshes.",
+    "autoEnabledTitle": "Live minute-rate lookups enabled",
+    "autoDisabledTitle": "Live minute-rate lookups disabled",
+    "autoEnabledBody": "Kassiber may contact the selected provider for latest prices and missing transaction-time minute windows.",
+    "autoDisabledBody": "Kassiber will use bundled or imported local rate history and will not contact live market-rate providers for this book.",
     "autoFailedTitle": "Could not update price refresh",
     "autoFailedBody": "Kassiber could not save the market-rate refresh setting.",
     "providerUpdatedTitle": "Market-rate provider updated",
-    "providerUpdatedBody": "Automatic price refresh and default rebuilds will use {{provider}}.",
+    "providerUpdatedBody": "Live market-rate lookups and default rebuilds will use {{provider}}.",
     "providerFailedTitle": "Could not update price provider",
     "providerFailedBody": "Kassiber could not save the market-rate provider.",
     "rebuildDialogTitle": "Rebuild pricing cache?",
     "rebuildDialogDescription": "Kassiber will delete {{provider}} provider cache rows and refetch market rates for {{pair}}.",
     "rebuildDialogWarningTitle": "Large wallets can take a while.",
     "rebuildDialogWarningBody": "The rebuild also clears provider-generated transaction prices and reprocesses journals. Manual overrides and imported execution prices are preserved.",
+    "rebuildOptInRequired": "Enable live minute-rate lookups above before rebuilding from a provider. Bundled hourly values and local Kraken imports stay available without this opt-in.",
     "rebuildDialogPending": "Rebuilding…",
     "rebuildDialogSubmit": "Rebuild",
     "coarse": {
@@ -298,6 +299,16 @@
       "countDescription": "Daily rates are accepted for tax and these rows are report-ready. For finer accuracy in volatile periods, use Rebuild cache below to re-price them from precise event-time rates.",
       "reviewToggleLabel": "Hold daily-rate pricing for review",
       "reviewToggleDescription": "Off (default): transactions priced only from daily/coarse rates are booked at the daily price and flagged for optional review. On: they are quarantined until you confirm or fetch a precise price — useful for audits."
+    },
+    "bitcoinRails": {
+      "enabledTitle": "Bitcoin rail carry enabled",
+      "disabledTitle": "Bitcoin rail carry disabled",
+      "enabledBody": "BTC/LBTC rail-change suggestions will default to carrying-value treatment.",
+      "disabledBody": "BTC/LBTC rail-change suggestions will default to taxable treatment unless you override the pair.",
+      "errorTitle": "Could not update Bitcoin rail policy",
+      "errorBody": "Kassiber could not save the Bitcoin rail treatment setting.",
+      "toggleLabel": "Treat Bitcoin rail changes as carrying value",
+      "toggleDescription": "On (default): BTC/LBTC movements between your own rails default to carrying value. Off: suggestions default to taxable treatment; explicit pair overrides still win."
     }
   },
   "security": {
@@ -314,7 +325,7 @@
     "lockAfter": "Lock after",
     "minutes": "{{count}}m",
     "requireOnLaunchLabel": "Require passphrase on launch",
-    "requireOnLaunchEncrypted": "Prompt immediately when Kassiber opens; cold starts still need the database passphrase when the daemon is locked.",
+    "requireOnLaunchEncrypted": "Encrypted books always unlock before the dashboard opens.",
     "requireOnLaunchPlaintext": "Prompt every time Kassiber opens.",
     "lockOnCloseLabel": "Lock on window close",
     "lockOnCloseDescription": "Clear in-memory decrypted state when the app window closes.",
@@ -334,6 +345,166 @@
     "offerBiometricDescription": "Remember this device's biometric unlock preference between sessions."
   },
   "privacy": {
+    "scoreHeading": "Privacy tells",
+    "scoreDescription": "Local advisory tells from synced transaction shapes and wallet UTXOs. No public lookup, entity lookup, or accounting mutation.",
+    "scoreLoading": "Scanning local privacy tells...",
+    "scoreUnavailable": "Privacy tells are unavailable.",
+    "scoreLocalOnly": "Local only",
+    "scoreSummary": "{{wallets}} wallets · {{transactions}} transactions checked with local data only",
+    "scoreTopFindings": "Tells and unknowns",
+    "scoreNoFindings": "No local tells in the available data yet.",
+    "scoreWallets": "Wallet rollup",
+    "scoreTransactions": "Transactions to review",
+    "scoreNoWallets": "No wallets in this book yet.",
+    "scoreNoTransactions": "No transactions in this book yet.",
+    "scoreWalletMeta": "{{txs}} txs · {{utxos}} active UTXOs",
+    "scoreReuse": "{{count}} reused addresses",
+    "scoreDust": "{{count}} dust UTXOs",
+    "unknownCount": "{{count}} unknowns",
+    "summaryRisks": "Risk tells",
+    "summaryUnknowns": "Unknowns",
+    "summaryWallets": "Wallets",
+    "riskLevel": {
+      "none": "No local risk tells",
+      "low": "Low risk tells",
+      "medium": "Medium risk tells",
+      "high": "High risk tells",
+      "critical": "Critical risk tells"
+    },
+    "evidence": {
+      "ground_truth": "Ground truth",
+      "reviewed": "Reviewed",
+      "imported": "Imported",
+      "heuristic": "Heuristic",
+      "unavailable": "Unavailable"
+    },
+    "scoreState": {
+      "full": "Full local coverage",
+      "partial": "Partial local coverage",
+      "address_only": "Address-level only",
+      "not_analysable": "Not analysable",
+      "not_enough_data": "Not enough data",
+      "no_wallets": "No wallets",
+      "no_active_profile": "No active book"
+    },
+    "coverage": {
+      "full": "Full tx scans",
+      "partial": "Partial tx scans",
+      "notAnalysable": "Not analysable",
+      "activeUtxos": "Active UTXOs"
+    },
+    "findings": {
+      "address_reuse": {
+        "title": "Address reuse",
+        "detail": "{{count}} reused address groups found.",
+        "remediation": "Review the receive-address context and keep affected rows labelled; Kassiber does not change wallet state from this tell."
+      },
+      "change_position_fingerprint": {
+        "title": "Change position pattern",
+        "detail": "{{count}} transaction has owned change at a predictable edge.",
+        "remediation": "Treat this as advisory change-shape context and confirm intent from first-party wallet records."
+      },
+      "change_type_fingerprint": {
+        "title": "Change type mismatch",
+        "detail": "{{count}} transaction reveals likely change by script type.",
+        "remediation": "Review the script-type mismatch as context only; no tax, balance, or transfer state is changed."
+      },
+      "coin_anonymity_evidence": {
+        "title": "Imported anonymity evidence",
+        "detail": "{{count}} UTXOs carry imported anonymity evidence.",
+        "remediation": "Keep the imported wallet evidence attached and treat it as boundary context, not proof of a complete privacy graph."
+      },
+      "coinjoin_pattern": {
+        "title": "CoinJoin pattern",
+        "detail": "{{count}} equal-output participants or imported CoinJoin evidence.",
+        "remediation": "Document the CoinJoin boundary locally and do not infer unrelated participant ownership from this tell."
+      },
+      "common_input_ownership": {
+        "title": "Common-input link",
+        "detail": "{{count}} inputs are linked by the transaction.",
+        "remediation": "Use this as an advisory common-input tell only; confirm ownership with first-party wallet evidence before relying on it."
+      },
+      "dust_utxo_exposure": {
+        "title": "Dust UTXOs",
+        "detail": "{{count}} active dust outputs increase review noise.",
+        "remediation": "Label or review small-output provenance when it matters; Kassiber leaves balances and UTXO state untouched."
+      },
+      "large_utxo_set": {
+        "title": "Large UTXO set",
+        "detail": "{{count}} active UTXOs are visible in the local inventory.",
+        "remediation": "Use the count as review context for the wallet inventory; no spending or consolidation advice is implied."
+      },
+      "legacy_address_type": {
+        "title": "Legacy script type",
+        "detail": "{{count}} outputs use older address types.",
+        "remediation": "Record this as an older script-type observation; it is not an accounting action or a privacy verdict."
+      },
+      "op_return_metadata": {
+        "title": "OP_RETURN metadata",
+        "detail": "{{count}} outputs publish permanent metadata.",
+        "remediation": "Review the transaction context knowing permanent metadata exists; Kassiber does not inspect or enrich external entities."
+      },
+      "payjoin_boundary": {
+        "title": "PayJoin boundary",
+        "detail": "{{count}} imported or reviewed PayJoin boundary breaks simple input ownership.",
+        "remediation": "Keep the PayJoin boundary documented locally; Kassiber does not cross it or infer the counterparty graph."
+      },
+      "rbf_signal": {
+        "title": "RBF signal",
+        "detail": "{{count}} inputs use replace-by-fee signaling.",
+        "remediation": "Treat replace-by-fee signalling as transaction-shape context only."
+      },
+      "round_fee_rate": {
+        "title": "Round fee rate",
+        "detail": "{{count}} transaction uses a round fee-rate fingerprint.",
+        "remediation": "Treat the rounded fee rate as a weak wallet-shape tell and verify with first-party records if it matters."
+      },
+      "round_output_amount": {
+        "title": "Round output amount",
+        "detail": "{{count}} outputs look like human-entered payment amounts.",
+        "remediation": "Keep the round amount as payment-shape context; attach invoice or counterparty records if the distinction matters."
+      },
+      "script_type_mix": {
+        "title": "Mixed script types",
+        "detail": "{{count}} script families appear in one transaction.",
+        "remediation": "Review mixed script families as a local transaction-shape tell, not as proof of ownership."
+      },
+      "taproot_usage": {
+        "title": "Taproot usage",
+        "detail": "{{count}} Taproot outputs are visible in the local data.",
+        "remediation": "Treat Taproot usage as a local script-type observation; it is not a standing privacy guarantee."
+      },
+      "transaction_coverage_gap": {
+        "title": "Coverage gap",
+        "detail": "{{count}} transactions lack local vin/vout detail.",
+        "remediation": "Import or sync local vin/vout detail if you need this transaction analysed; otherwise keep the gap explicit."
+      },
+      "transaction_not_analysable": {
+        "title": "No local tx graph",
+        "detail": "{{count}} transaction has no local vin/vout graph to analyse.",
+        "remediation": "Leave this transaction as unknown unless local first-party transaction graph data is imported or synced."
+      },
+      "unnecessary_input_heuristic": {
+        "title": "Unnecessary input tell",
+        "detail": "{{count}} outputs could have been funded without every input.",
+        "remediation": "Treat this as an advisory input-shape tell and review the source-wallet record before relying on it."
+      },
+      "wallet_fingerprint_locktime": {
+        "title": "nLockTime fingerprint",
+        "detail": "{{count}} transaction carries a wallet-style locktime.",
+        "remediation": "Use the locktime pattern as weak wallet-fingerprint context only."
+      },
+      "wallet_fingerprint_version": {
+        "title": "Version fingerprint",
+        "detail": "{{count}} transaction uses an unusual version.",
+        "remediation": "Use the version pattern as weak wallet-fingerprint context only."
+      },
+      "wallet_fingerprint_witness": {
+        "title": "Witness fingerprint",
+        "detail": "{{count}} inputs share the same witness shape.",
+        "remediation": "Use the witness-shape pattern as weak wallet-fingerprint context only."
+      }
+    },
     "exposure": {
       "firstParty": "First-party",
       "firstPartyHint": "On your machine or infrastructure you operate",
@@ -372,7 +543,83 @@
     "assistantDescription": "Prompt content — which can include book data — leaves only if you enable a remote or CLI provider.",
     "assistantEnabled": "Enabled. Local providers keep prompts on this machine; remote and CLI providers can see prompt content.",
     "assistantDisabled": "Disabled. Provider settings stay saved without sending prompts.",
-    "reviewAi": "Review AI providers"
+    "reviewAi": "Review AI providers",
+    "hygieneHeading": "Privacy hygiene",
+    "hygieneDescription": "A local, read-only snapshot of privacy-relevant facts. The assistant sees the same redacted payload.",
+    "hygieneRefresh": "Refresh privacy hygiene",
+    "hygieneLoading": "Reading privacy hygiene…",
+    "hygieneError": "Could not load privacy hygiene: {{error}}",
+    "hygieneNoFindings": "No reportable findings in the redacted local payload.",
+    "metric": {
+      "findings": "Findings",
+      "database": "Database",
+      "remoteBackends": "Remote backends",
+      "offDeviceAi": "Off-device AI"
+    },
+    "severity": {
+      "none": "none",
+      "info": "info",
+      "warning": "warning",
+      "alert": "alert"
+    },
+    "evidence": {
+      "exact": "exact evidence",
+      "derived": "derived evidence",
+      "unknown": "unknown evidence"
+    },
+    "database": {
+      "plaintext": "plaintext",
+      "encrypted_like": "encrypted-like",
+      "missing_or_empty": "empty",
+      "unknown": "unknown"
+    },
+    "limitation": {
+      "local_only_no_probe": "No network request was made; endpoint posture is inferred from local configuration only.",
+      "redacted_payload": "Addresses, scripts, descriptors, xpubs, backend URLs/tokens, wallet config, raw JSON, branch/index values, and derivation paths are omitted from this payload.",
+      "unknown": "A limitation was reported without a recognized code."
+    },
+    "finding": {
+      "database_plaintext": {
+        "title": "Database file is plaintext SQLite",
+        "detail": "The active database header is plaintext SQLite; SQLCipher encryption is not active for this data root."
+      },
+      "database_encryption_unknown": {
+        "title": "Database encryption status is unknown",
+        "detail": "Kassiber could not classify the active database header from the local file."
+      },
+      "remote_backend_endpoints": {
+        "title": "Third-party backend endpoints are configured",
+        "detail": "{{remote_backend_count}} configured backend endpoint(s) are inferred as third-party and can observe wallet/indexer queries."
+      },
+      "unacknowledged_off_device_ai_provider": {
+        "title": "Off-device AI provider needs acknowledgement",
+        "detail": "{{unacknowledged_off_device_provider_count}} off-device AI provider(s) lack an acknowledgement timestamp."
+      },
+      "off_device_ai_provider_configured": {
+        "title": "Off-device AI providers are configured",
+        "detail": "{{off_device_ai_provider_count}} configured AI provider(s) may send prompt content outside this machine when selected."
+      },
+      "watch_only_wallet_material_present": {
+        "title": "Watch-only wallet material is stored locally",
+        "detail": "{{watch_only_material_wallet_count}} wallet(s) have watch-only material in the local database."
+      },
+      "privacy_boundary_transactions_present": {
+        "title": "Privacy-boundary transaction markers are present",
+        "detail": "{{privacy_boundary_transaction_count}} transaction(s) carry a privacy-boundary marker; provenance across those hops remains opaque unless reviewed with stronger evidence."
+      },
+      "import_raw_json_present": {
+        "title": "Imported raw metadata is present",
+        "detail": "{{transaction_raw_json_count}} transaction(s) retain importer raw JSON inside the local database; this payload reports only the count."
+      },
+      "local_utxo_location_metadata_present": {
+        "title": "Local UTXO location metadata is present",
+        "detail": "The local output inventory contains address, script, or derivation metadata; this payload reports counts only."
+      },
+      "privacy_quarantines_present": {
+        "title": "Privacy-related journal quarantines are present",
+        "detail": "{{privacy_quarantine_count}} journal quarantine(s) are privacy-related and need review before derived reports are complete."
+      }
+    }
   },
   "data": {
     "importHeading": "Import data",
@@ -409,7 +656,7 @@
     "featuresDescription": "Show the Assistant screen and floating chat. Turning this off keeps provider settings saved.",
     "featuresAria": "Enable AI features",
     "providerConfigHeading": "Provider configuration",
-    "providerConfigDescription": "Configure OpenAI-compatible endpoints or Claude/Codex CLI adapters for the in-app assistant. Local Ollama runs without a key; remote and CLI providers may see prompt content.",
+    "providerConfigDescription": "Configure OpenAI-compatible endpoints or Claude/Codex CLI adapters for the in-app assistant. Local providers such as Ollama and oMLX usually run without a key; remote and CLI providers may see prompt content.",
     "addProvider": "Add provider",
     "loadingProviders": "Loading providers…",
     "loadError": "Could not load AI providers.",
@@ -471,7 +718,7 @@
     "addTitle": "Add AI provider",
     "dialogDescription": "Use an OpenAI-compatible endpoint, or route through Claude/Codex CLI. CLI providers may still send prompts to their configured model service.",
     "presetLabel": "Preset",
-    "presetNoteLocal": "Local Ollama endpoint.",
+    "presetNoteLocal": "Local {{label}} endpoint.",
     "presetNoteRemote": "{{label}}; prompts may leave this device.",
     "nameLabel": "Name",
     "urlLabel": "Base URL or CLI locator",

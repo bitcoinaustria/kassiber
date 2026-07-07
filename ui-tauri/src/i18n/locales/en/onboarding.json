@@ -246,7 +246,7 @@
   "ai": {
     "local": {
       "title": "Use a local endpoint",
-      "description": "Default to Ollama on this machine. You can point this at another local OpenAI-compatible server."
+      "description": "Use Ollama, oMLX, or another local OpenAI-compatible server on this machine."
     },
     "remote": {
       "title": "Use a remote provider",
@@ -259,7 +259,7 @@
     "providerPrivacy": "Provider privacy",
     "providerPrivacyDescription": "TEE means the provider claims a trusted-execution path; Kassiber still treats it as off-device.",
     "providerName": "Provider name",
-    "providerNamePlaceholderLocal": "ollama",
+    "providerNamePlaceholderLocal": "ollama or omlx",
     "providerNamePlaceholderRemote": "openai or maple",
     "providerNameDescription": "A short label shown in AI provider settings.",
     "baseUrl": "Base URL",
@@ -294,7 +294,7 @@
       "lead": "The assistant helps categorize transactions, draft notes, and answer questions about your books. It is optional and can be changed anytime in Settings.",
       "local": {
         "title": "Local endpoint",
-        "body": "Runs against a model on this machine (Ollama by default). Prompts and accounting context stay on-device."
+        "body": "Runs against a model on this machine, such as Ollama or oMLX. Prompts and accounting context stay on-device."
       },
       "remote": {
         "title": "Remote provider",

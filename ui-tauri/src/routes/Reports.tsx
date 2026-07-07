@@ -72,7 +72,13 @@ import {
 } from "@/lib/reportExportStatus";
 import { reportYearFromSearch } from "@/lib/reportYear";
 import { exportBasename } from "@/lib/exportFile";
-import { screenPanelClassName, screenShellClassName } from "@/lib/screen-layout";
+import {
+  pageHeaderActionClassName,
+  pageHeaderActionsClassName,
+  pageHeaderClassName,
+  screenPanelClassName,
+  screenShellClassName,
+} from "@/lib/screen-layout";
 import { cn } from "@/lib/utils";
 import {
   JURISDICTIONS,
@@ -308,7 +314,7 @@ export function Reports() {
   if (reportYearMismatch) {
     return (
       <div className={screenPanelClassName}>
-        <div className="rounded-xl border bg-card p-4">
+        <div className="rounded-lg border bg-card p-4">
           <h2 className="text-base font-semibold">Reports unavailable</h2>
           <p className="mt-1 text-sm text-muted-foreground">
             The daemon returned {returnedReportYear} while the selected tax year is{" "}
@@ -322,7 +328,7 @@ export function Reports() {
   if (isError || data?.error || !data?.data) {
     return (
       <div className={screenPanelClassName}>
-        <div className="rounded-xl border bg-card p-4">
+        <div className="rounded-lg border bg-card p-4">
           <h2 className="text-base font-semibold">Reports unavailable</h2>
           <p className="mt-1 text-sm text-muted-foreground">
             {error instanceof Error
@@ -677,9 +683,8 @@ function ReportsView({
         periodLabel={periodLabel}
         jurisdiction={jurisdiction}
         method={method}
+        readiness={readiness}
       />
-
-      <ReportReadinessStrip readiness={readiness} />
 
       <ReportMetricStrip
         hideSensitive={hideSensitive}
@@ -789,6 +794,7 @@ function ReportPackageHeader({
   periodLabel,
   jurisdiction,
   method,
+  readiness,
 }: {
   selectedYear: number;
   availableYears: number[];
@@ -796,9 +802,11 @@ function ReportPackageHeader({
   periodLabel: string;
   jurisdiction: (typeof JURISDICTIONS)[string];
   method: CostBasisMethod;
+  readiness: ReportReadiness;
 }) {
   const methodLabel = METHOD_LABELS[method] ?? METHOD_LABELS[jurisdiction.defaultMethod];
   const methodName = methodLabel.fullName ?? methodLabel.name;
+  const ReadinessIcon = readiness.icon;
   const [rulesExpanded, setRulesExpanded] = useState(false);
   const handleYearChange = (value: string) => {
     const nextYear = Number(value);
@@ -816,12 +824,12 @@ function ReportPackageHeader({
     onYearChange(nextYear);
   };
   return (
-    <div className="rounded-xl border bg-card px-3 py-3 sm:px-4">
-      <div className="flex min-w-0 flex-wrap items-center gap-2 sm:gap-3">
+    <div className="space-y-2">
+      <div className={pageHeaderClassName}>
         <div className="flex min-w-0 flex-wrap items-center gap-2 sm:gap-3">
-          <span className="text-base font-semibold">Tax report</span>
+          <span className="text-sm font-semibold sm:text-base">Tax report</span>
           <Select value={String(selectedYear)} onValueChange={handleYearChange}>
-            <SelectTrigger className="h-7 w-[88px] rounded-md text-xs" aria-label="Tax year">
+            <SelectTrigger className="h-8 w-[88px] rounded-md text-xs" aria-label="Tax year">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -838,12 +846,32 @@ function ReportPackageHeader({
             <span className="truncate">{periodLabel}</span>
           </span>
         </div>
-        <div className="ml-auto min-w-0">
+        <div className={cn(pageHeaderActionsClassName, "min-w-0 lg:justify-end")}>
+          <span
+            className={cn(
+              "inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md border px-2 text-xs font-medium",
+              readinessToneStyles[readiness.tone],
+            )}
+          >
+            <ReadinessIcon className="size-4" aria-hidden="true" />
+            {readiness.title}
+          </span>
+          {readiness.action ? (
+            <Button
+              asChild
+              size="sm"
+              variant="outline"
+              className={cn(pageHeaderActionClassName, "shrink-0 px-2 text-xs")}
+            >
+              <Link to={readiness.action.href}>{readiness.action.label}</Link>
+            </Button>
+          ) : null}
           <Button
             type="button"
             variant="outline"
             size="sm"
-            className="h-8 max-w-full gap-2"
+            className={cn(pageHeaderActionClassName, "max-w-full px-2 text-xs")}
+            title={`Profile rules · ${jurisdiction.code} · ${methodName}`}
             aria-label={
               rulesExpanded ? "Collapse profile rules" : "Expand profile rules"
             }
@@ -852,7 +880,7 @@ function ReportPackageHeader({
           >
             <ShieldAlert className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
             <span className="min-w-0 truncate">
-              Profile rules · {jurisdiction.code} · {methodName}
+              Rules · {jurisdiction.code} · {methodLabel.name}
             </span>
             <ChevronDown
               className={cn(
@@ -865,38 +893,12 @@ function ReportPackageHeader({
         </div>
       </div>
       {rulesExpanded ? (
-        <ReportPolicyDetails
-          jurisdiction={jurisdiction}
-          methodName={methodName}
-        />
-      ) : null}
-    </div>
-  );
-}
-
-function ReportReadinessStrip({ readiness }: { readiness: ReportReadiness }) {
-  const Icon = readiness.icon;
-
-  return (
-    <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
-      <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
-        <span
-          className={cn(
-            "inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md border px-2 text-xs font-medium",
-            readinessToneStyles[readiness.tone],
-          )}
-        >
-          <Icon className="size-4" aria-hidden="true" />
-          {readiness.title}
-        </span>
-        <span className="min-w-0 truncate text-xs text-muted-foreground sm:text-sm">
-          {readiness.detail}
-        </span>
-      </div>
-      {readiness.action ? (
-        <Button asChild size="sm" variant="outline" className="h-8 self-start sm:self-auto">
-          <Link to={readiness.action.href}>{readiness.action.label}</Link>
-        </Button>
+        <div className="rounded-lg border bg-card p-3">
+          <ReportPolicyDetails
+            jurisdiction={jurisdiction}
+            methodName={methodName}
+          />
+        </div>
       ) : null}
     </div>
   );
@@ -970,19 +972,24 @@ function ReportMetricStrip({
   ];
 
   return (
-    <div className="min-w-0 overflow-hidden rounded-xl border bg-card">
+    <div className="min-w-0 overflow-hidden rounded-lg border bg-card">
       <div className="grid grid-cols-1 divide-x-0 divide-y divide-border sm:grid-cols-2 sm:divide-y-0 lg:grid-cols-4 lg:divide-x">
         {metrics.map((metric) => (
-          <div key={metric.label} className="space-y-2 p-3 sm:p-4">
+          <div
+            key={metric.label}
+            className="group relative isolate overflow-hidden p-3 transition-colors before:absolute before:inset-0 before:z-0 before:origin-left before:scale-x-0 before:bg-muted/45 before:content-[''] before:transition-transform before:duration-200 before:ease-out hover:before:scale-x-100 focus-within:before:scale-x-100"
+          >
+            <div className="pointer-events-none relative z-20 space-y-1.5">
             <p className="text-xs font-medium text-muted-foreground">
               {metric.label}
             </p>
-            <p className="min-w-0 text-xl leading-tight font-semibold tracking-tight tabular-nums">
+            <p className="min-w-0 text-lg leading-tight font-semibold tracking-tight tabular-nums sm:text-xl">
               {metric.value}
             </p>
             <p className="text-[10px] text-muted-foreground sm:text-xs">
               {metric.sub}
             </p>
+            </div>
           </div>
         ))}
       </div>
@@ -1001,14 +1008,9 @@ function KennzahlOverviewPanel({
   hideSensitive: boolean;
   formatNumber: (value: number) => string;
 }) {
-  const [showEmptyFields, setShowEmptyFields] = useState(false);
-  const hasMockRows = rows.some((row) => row.source === "mock");
-  const hasPendingRows = rows.some((row) => row.source === "pending");
-  const sourceLabel = hasPendingRows ? "Pending" : hasMockRows ? "Preview" : "Daemon";
   const isEmptyField = (row: KennzahlRow) =>
     row.amount !== null && row.rowCount === 0 && Math.abs(row.amount) < 0.005;
-  const emptyFieldCount = rows.filter(isEmptyField).length;
-  const visibleRows = showEmptyFields ? rows : rows.filter((row) => !isEmptyField(row));
+  const visibleRows = rows;
   const rowGroups = visibleRows.reduce<Array<{ form: string; rows: KennzahlRow[] }>>(
     (groups, row) => {
       const fallbackForm = AUSTRIAN_TAX_FIELD_COPY[row.code]?.form ?? "E 1kv";
@@ -1025,12 +1027,12 @@ function KennzahlOverviewPanel({
   );
 
   return (
-    <div className="min-w-0 overflow-hidden rounded-xl border bg-card">
-      <div className="flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-start sm:justify-between sm:px-5">
+    <div className="min-w-0 overflow-hidden rounded-lg border bg-card">
+      <div className="flex flex-col gap-3 p-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex min-w-0 items-center gap-2">
           <span
             aria-hidden="true"
-            className="flex size-8 shrink-0 items-center justify-center rounded-md border"
+            className="flex size-7 shrink-0 items-center justify-center rounded-md border"
           >
             <Landmark className="size-4 text-muted-foreground" aria-hidden="true" />
           </span>
@@ -1045,34 +1047,12 @@ function KennzahlOverviewPanel({
         </div>
         <div className="flex shrink-0 items-center gap-2">
           <Badge variant="outline" className="rounded-md">
-            {sourceLabel}
-          </Badge>
-          <Badge variant="outline" className="rounded-md">
             {visibleRows.length} of {rows.length} fields
           </Badge>
         </div>
       </div>
 
-      {emptyFieldCount ? (
-        <div className="mx-4 mb-3 flex items-center justify-between gap-3 rounded-lg border bg-background/50 px-3 py-2 sm:mx-5">
-          <span className="min-w-0 truncate text-xs text-muted-foreground">
-            {showEmptyFields
-              ? "Showing empty filing fields"
-              : `${emptyFieldCount} empty filing field${emptyFieldCount === 1 ? "" : "s"} hidden`}
-          </span>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="h-8 shrink-0"
-            onClick={() => setShowEmptyFields((value) => !value)}
-          >
-            {showEmptyFields ? "Hide empty" : "Show empty"}
-          </Button>
-        </div>
-      ) : null}
-
-      <div className="grid gap-2 px-4 pb-4 sm:grid-cols-2 sm:px-5">
+      <div className="grid gap-2 px-3 pb-3 sm:grid-cols-2">
         {rowGroups.length ? (
           rowGroups.map((group) => (
             <Fragment key={group.form}>
@@ -1170,12 +1150,12 @@ function SummaryPdfPanel({
 }) {
   const selectedCount = showWalletPicker ? selectedWalletIds.length : wallets.length;
   return (
-    <div className="min-w-0 overflow-hidden rounded-xl border bg-card">
-      <div className="flex items-start justify-between gap-3 px-4 pt-4 sm:px-5">
+    <div className="min-w-0 overflow-hidden rounded-lg border bg-card">
+      <div className="flex items-start justify-between gap-3 p-3 pb-0">
         <div className="flex min-w-0 items-center gap-2">
           <span
             aria-hidden="true"
-            className="flex size-8 shrink-0 items-center justify-center rounded-md border"
+            className="flex size-7 shrink-0 items-center justify-center rounded-md border"
           >
             <PieChart className="size-4 text-muted-foreground" aria-hidden="true" />
           </span>
@@ -1192,8 +1172,9 @@ function SummaryPdfPanel({
           type="button"
           size="sm"
           variant={success ? "default" : "outline"}
-          className="h-8 shrink-0 gap-2"
+          className="size-8 shrink-0"
           disabled={disabled || (showWalletPicker && selectedWalletIds.length === 0)}
+          aria-label="Export summary snapshot"
           onClick={onExport}
         >
           {loading ? (
@@ -1203,18 +1184,10 @@ function SummaryPdfPanel({
           ) : (
             <Download className="size-4" aria-hidden="true" />
           )}
-          <span className="hidden sm:grid">
-            <span className="invisible col-start-1 row-start-1" aria-hidden="true">
-              Export
-            </span>
-            <span className="col-start-1 row-start-1">
-              {success ? "Done" : "Export"}
-            </span>
-          </span>
         </Button>
       </div>
 
-      <div className="space-y-3 px-4 pt-3 pb-4 sm:px-5">
+      <div className="space-y-3 p-3">
         <div className="flex items-center justify-between gap-3 rounded-lg border bg-background/50 px-3 py-2">
           <div className="flex min-w-0 items-center gap-2">
             <CalendarDays className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
@@ -1285,12 +1258,12 @@ function ReportFilesPanel({
     useState(false);
 
   return (
-    <div className="min-w-0 overflow-hidden rounded-xl border bg-card">
-      <div className="flex items-center justify-between gap-3 px-4 pt-4 sm:px-5">
+    <div className="min-w-0 overflow-hidden rounded-lg border bg-card">
+      <div className="flex items-center justify-between gap-3 p-3 pb-0">
         <div className="flex items-center gap-2">
           <span
             aria-hidden="true"
-            className="flex size-8 shrink-0 items-center justify-center rounded-md border"
+            className="flex size-7 shrink-0 items-center justify-center rounded-md border"
           >
             <FolderOpen className="size-4 text-muted-foreground" />
           </span>
@@ -1299,13 +1272,13 @@ function ReportFilesPanel({
               Report package
             </h2>
             <p className="text-[10px] text-muted-foreground sm:text-xs">
-              Filing exports · no descriptors or xpubs
+              Filing exports
             </p>
           </div>
         </div>
       </div>
 
-      <div className="space-y-3 px-4 pt-3 pb-4 sm:px-5">
+      <div className="space-y-3 p-3">
         {exportStatus ? (
           <ExportNotice
             exportStatus={exportStatus}
@@ -1367,14 +1340,14 @@ function ReportFilesPanel({
             onExport={onExport}
           />
         </div>
-        <div className="overflow-hidden rounded-lg border bg-background/50">
-          <div className="flex items-center justify-between gap-3 px-3 py-3">
+        <div className="overflow-hidden rounded-md border bg-background/50">
+          <div className="flex items-center justify-between gap-3 px-3 py-2.5">
             <div className="min-w-0">
               <h3 className="truncate text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                 Transaction ledger
               </h3>
-              <p className="mt-1 line-clamp-2 text-xs leading-5 text-muted-foreground">
-                Raw profile transactions with notes, tags, counterparties, and attachment references.
+              <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                Raw transactions with notes and references
               </p>
             </div>
             <Button
@@ -1474,19 +1447,17 @@ function HandoffScopePanel({
   onIncludeEditHistoryChange: (value: boolean) => void;
   onExport: (format: ReportExportFormatId) => void;
 }) {
-  // Open by default: the audit-package export is a real, available action,
-  // not informational copy — burying it cost discoverability.
-  const [expanded, setExpanded] = useState(true);
+  const [expanded, setExpanded] = useState(false);
   const auditExportDisabled =
     Boolean(activeExport) ||
     (auditScope === "source_funds_case" && !auditCaseId);
 
   return (
-    <div className="min-w-0 overflow-hidden rounded-xl border bg-card">
-      <div className="flex items-center justify-between gap-3 px-4 py-4 sm:px-5">
+    <div className="min-w-0 overflow-hidden rounded-lg border bg-card">
+      <div className="flex items-center justify-between gap-3 p-3">
         <div className="flex min-w-0 items-center gap-2">
           <span
-            className="flex size-8 shrink-0 items-center justify-center rounded-md border bg-background text-muted-foreground"
+            className="flex size-7 shrink-0 items-center justify-center rounded-md border bg-background text-muted-foreground"
             aria-hidden="true"
           >
             <ShieldCheck className="size-4 text-muted-foreground" aria-hidden="true" />
@@ -1522,8 +1493,8 @@ function HandoffScopePanel({
       </div>
 
       {expanded ? (
-        <div className="space-y-3 px-4 pb-4 sm:px-5">
-          <div className="divide-y rounded-lg border bg-background/50">
+        <div className="space-y-3 p-3 pt-0">
+          <div className="divide-y rounded-md border bg-background/50">
             {HANDOFF_EXPORT_MODES.map((mode) => (
               <HandoffModeRow
                 key={mode.id}
@@ -1535,7 +1506,7 @@ function HandoffScopePanel({
               />
             ))}
           </div>
-          <div className="flex gap-2 rounded-lg border bg-muted/30 px-3 py-2 text-xs leading-5 text-muted-foreground">
+          <div className="flex gap-2 rounded-md border bg-muted/30 px-3 py-2 text-xs leading-5 text-muted-foreground">
             <ShieldAlert className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
             <span>
               Normal handoffs never include {NORMAL_HANDOFF_EXCLUSIONS.join(", ")}.
@@ -1593,8 +1564,8 @@ function HandoffModeRow({
     mode.availability === "planned" ? "Planned" : "Separate approval";
 
   return (
-    <div className="grid gap-3 px-3 py-3 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-center">
-      <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground ring-1 ring-inset ring-border">
+    <div className="grid gap-2 px-3 py-2.5 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-center">
+      <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground ring-1 ring-inset ring-border">
         <Icon className="size-4" aria-hidden="true" />
       </span>
       <div className="min-w-0 space-y-1">
@@ -1611,8 +1582,8 @@ function HandoffModeRow({
             </Badge>
           ) : null}
         </div>
-        <p className="text-xs leading-5 text-muted-foreground">
-          {mode.summary} {mode.includes.join(" · ")}
+        <p className="truncate text-xs text-muted-foreground">
+          {mode.summary}
         </p>
       </div>
       {mode.id === "audit_package" ? (
@@ -1620,8 +1591,9 @@ function HandoffModeRow({
           type="button"
           size="sm"
           variant={auditSuccess ? "default" : "outline"}
-          className="h-8 shrink-0 justify-self-start gap-2 sm:justify-self-end"
+          className="size-8 shrink-0 justify-self-start sm:justify-self-end"
           disabled={auditExportDisabled}
+          aria-label="Export audit package"
           onClick={() => onExport("audit_package")}
         >
           {activeExport === "audit_package" ? (
@@ -1631,7 +1603,6 @@ function HandoffModeRow({
           ) : (
             <Download className="size-4" aria-hidden="true" />
           )}
-          <span className="hidden sm:inline">{auditSuccess ? "Done" : "Export"}</span>
         </Button>
       ) : null}
     </div>
@@ -1848,8 +1819,8 @@ function ReportFileRow({
   onExport: (format: ReportExportFormatId) => void;
 }) {
   return (
-    <div className="flex items-center gap-3 px-3 py-3">
-      <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground ring-1 ring-inset ring-border">
+    <div className="flex items-center gap-3 px-3 py-2.5">
+      <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground ring-1 ring-inset ring-border">
         <Icon className="size-4" aria-hidden="true" />
       </span>
       <span className="min-w-0 flex-1">
@@ -1864,8 +1835,9 @@ function ReportFileRow({
         type="button"
         size="sm"
         variant={id === "pdf" || success ? "default" : "outline"}
-        className="h-8 shrink-0 gap-2"
+        className="size-8 shrink-0"
         disabled={disabled}
+        aria-label={`Export ${title}`}
         onClick={() => onExport(id)}
       >
         {loading ? (
@@ -1875,14 +1847,6 @@ function ReportFileRow({
         ) : (
           <Download className="size-4" aria-hidden="true" />
         )}
-        <span className="hidden sm:grid">
-          <span className="invisible col-start-1 row-start-1" aria-hidden="true">
-            Export
-          </span>
-          <span className="col-start-1 row-start-1">
-            {success ? "Done" : "Export"}
-          </span>
-        </span>
       </Button>
     </div>
   );
@@ -1967,17 +1931,17 @@ function LotAuditPanel({
   const [expanded, setExpanded] = useState(false);
 
   return (
-    <div className="min-w-0 overflow-hidden rounded-xl border bg-card">
+    <div className="min-w-0 overflow-hidden rounded-lg border bg-card">
       <div
         className={cn(
-          "flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5",
+          "flex flex-col gap-3 p-3 sm:flex-row sm:items-center sm:justify-between",
           expanded && "border-b",
         )}
       >
         <div className="flex min-w-0 items-center gap-2">
           <span
             aria-hidden="true"
-            className="flex size-8 shrink-0 items-center justify-center rounded-md border"
+            className="flex size-7 shrink-0 items-center justify-center rounded-md border"
           >
             <Sigma className="size-4 text-muted-foreground" />
           </span>
@@ -2102,17 +2066,17 @@ function NeutralSwapAuditPanel({
   const totalFeeSats = swaps.reduce((sum, swap) => sum + swap.feeSats, 0);
 
   return (
-    <div className="min-w-0 overflow-hidden rounded-xl border bg-card">
+    <div className="min-w-0 overflow-hidden rounded-lg border bg-card">
       <div
         className={cn(
-          "flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5",
+          "flex flex-col gap-3 p-3 sm:flex-row sm:items-center sm:justify-between",
           expanded && "border-b",
         )}
       >
         <div className="flex min-w-0 items-center gap-2">
           <span
             aria-hidden="true"
-            className="flex size-8 shrink-0 items-center justify-center rounded-md border"
+            className="flex size-7 shrink-0 items-center justify-center rounded-md border"
           >
             <RefreshCw className="size-4 text-muted-foreground" />
           </span>

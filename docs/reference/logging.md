@@ -52,10 +52,13 @@ AI prompts before insert.
 database is unlocked it returns captured rows and the SQLCipher header proof
 while marking allowlist matching incomplete. After unlock, rows are annotated
 against configured backend hosts, configured AI provider hosts, and built-in
-price-provider hosts. The `update` subsystem is reported in the summary and
-should remain zero unless an explicit updater is added later. The auditor never
-opens sockets itself, so it must not become a health checker or background
-probe.
+price-provider hosts. The desktop table rows are expandable, but the expanded
+view still shows only the stored metadata and a copy of the stored record. It
+does not reconstruct raw paths, query values, bodies, headers, credentials,
+descriptors, or AI prompts because those fields were discarded before the RAM
+buffer. The `update` subsystem is reported in the summary and should remain
+zero unless an explicit updater is added later. The auditor never opens sockets
+itself, so it must not become a health checker or background probe.
 
 ## Two-stage redaction
 

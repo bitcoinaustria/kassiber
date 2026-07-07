@@ -45,21 +45,24 @@ carries a working Austrian (§ 27b EStG) plugin with E 1kv exports.
 - **No remote honeypot** — there is no Kassiber server holding your
   addresses, balances, and identity. Crypto tax SaaS providers have been
   breached; the dumps become targeting lists for phishing and physical
-  attacks. Kassiber's database is one file on your machine.
+  attacks. Kassiber stores each project/book-set in a local project
+  container on your machine.
 - **Wrench-attack resistant** — watch-only by design (no spending keys to
   coerce), and optional SQLCipher 4 at-rest encryption keyed by a
-  passphrase that lives only in your head. On a stolen, customs-seized, or
-  border-searched cold device, the encrypted database — descriptors,
-  xpubs, transactions, stored tokens — is unreadable. Attachments and a
-  couple of config files sit outside the SQLCipher boundary, so pair with
-  full-disk encryption for the full picture; the caveats are in
+  per-project passphrase that lives only in your head. On a stolen,
+  customs-seized, or border-searched cold device, the encrypted project
+  database — descriptors, xpubs, transactions, stored tokens — is
+  unreadable. Attachments, exports, the project catalog, and a couple of
+  config files sit outside the SQLCipher boundary, so pair with full-disk
+  encryption for the full picture; the caveats are in
   [SECURITY.md](SECURITY.md). The
   [jlopp/physical-bitcoin-attacks](https://github.com/jlopp/physical-bitcoin-attacks)
   catalog covers the threats this addresses.
-- **Local AI Chat** — assistant defaults to local
-  [Ollama](https://ollama.com/); the desktop Assistant and `kassiber chat`
-  both use the same daemon tool loop. Off-device providers require explicit
-  per-provider acknowledgement and mutating tools require consent.
+- **Local AI Chat** — assistant ships with local
+  [Ollama](https://ollama.com/) and [oMLX](https://omlx.ai/) provider presets;
+  the desktop Assistant and `kassiber chat` both use the same daemon tool loop.
+  Off-device providers require explicit per-provider acknowledgement and
+  mutating tools require consent.
 - **AGPL 3.0** — auditable, forkable, no vendor lock-in.
 
 ## Highlights
@@ -86,12 +89,14 @@ carries a working Austrian (§ 27b EStG) plugin with E 1kv exports.
   (`--no-verify` for the lean workbook); local
   BTC-USD / BTC-EUR rates cache (configurable live provider, Coinbase by
   default, CoinGecko supported, plus Kraken OHLCVT local archive and
-  auto-seeded bundled BTC-only offline history for daily values, backfilled to
-  2011-01-01 with Coin Metrics + ECB-derived rows) and
+  auto-seeded bundled BTC-only offline history for hourly values, backfilled to
+  2011-01-01 with daily-derived Coin Metrics + ECB rows before Kraken hourly
+  coverage begins) and
   opt-in desktop background refresh for the latest BTC price.
-- **Sovereign storage** — SQLite system of record; optional SQLCipher 4
-  passphrase encryption; single-file `tar | age` backups recoverable with
-  stock `age` + `tar` + `sqlcipher` even if Kassiber disappears.
+- **Sovereign storage** — one SQLite system of record per project/book-set;
+  optional SQLCipher 4 passphrase encryption; single-project `tar | age`
+  backups recoverable with stock `age` + `tar` + `sqlcipher` even if
+  Kassiber disappears.
 - **Optional Touch ID unlock** — macOS desktop builds can save the database
   passphrase in Keychain behind local user presence. This is a convenience,
   not a recovery path or a replacement for the SQLCipher passphrase.
@@ -113,7 +118,8 @@ SmartScreen first-launch handling lives in
 **From source** (CLI use or development, Python `>=3.10`):
 
 ```bash
-uv sync                       # or: python3 -m venv .venv && pip install -e .
+./scripts/bootstrap-dev-env.sh
+export KASSIBER_PYTHON="$PWD/.venv/bin/python"
 ```
 
 ## Quick start
@@ -164,6 +170,12 @@ screen) checks whether pasted addresses / transaction ids belong to any of your
 wallets — receive or change — and flags the externals, classifying each
 transaction as a self-transfer, outbound payment, or inbound receipt.
 
+Exchange and wallet imports include Bitcoin-focused CSV/API paths for River,
+Bull Bitcoin, Coinfinity, 21bitcoin, Pocket Bitcoin, Strike, Ledger Live,
+Kraken, Coinbase, and Binance. Exact exchange executions are stored as pricing
+provenance, while wallet movement remains separate reconciliation evidence; see
+[docs/reference/imports.md](docs/reference/imports.md) for commands and limits.
+
 For transfer pairing, swap matching, source-of-funds, Austrian E 1kv,
 BTCPay reconciliation, and the concept model, see
 [docs/quickstart.md](docs/quickstart.md). The desktop GUI is optional:
@@ -211,6 +223,10 @@ overview.
 Before pointing Kassiber at real wallets, read [SECURITY.md](SECURITY.md) —
 it covers built-in backend trust, the SQLCipher boundary, AI provider
 tiers, and the incomplete Tor story.
+The desktop Privacy & security panel also includes local privacy tells for
+synced wallets and transactions. It uses already-stored transaction and UTXO
+data, reports risks and unknowns as advisory context, and does not query public
+explorers or mutate accounting state from privacy heuristics.
 
 For public bug reports, run `kassiber diagnostics collect` (or
 `--diagnostics-out auto` on a failing command) — the output is safe to
@@ -223,6 +239,15 @@ public posting; both modes always strip wallet and credential material such as
 descriptors, private keys, recovery phrases, API keys, passwords, and bearer
 tokens. Report security-impacting issues to the maintainer privately, not in
 the public tracker.
+
+For the north-star local privacy view, open Privacy Mirror or run
+`kassiber reports privacy-mirror`. It shows what is linkable, who can infer it,
+what proves it, what is unknown, and what a future spend would worsen. The
+posture-only snapshot remains available with `kassiber reports privacy-hygiene`
+and Settings -> Privacy. GUI, CLI, and assistant read tools share redacted facts
+with `evidence_level`, without addresses, scripts, descriptors, xpubs, backend
+URLs/tokens, wallet config, raw JSON, branch/index values, or derivation paths.
+See [Privacy Mirror](docs/reference/privacy-mirror.md).
 
 ## Contributing & license
 

@@ -8,6 +8,9 @@ record of how that provider's rows are interpreted.
 - **Worked example:** [strike.md](strike.md) — the shipped Strike importer
   written up as a filled spec (illustrative reference; the code is the source of
   truth).
+- **Implemented specs:** [binance.md](binance.md),
+  [coinbase.md](coinbase.md), [kraken.md](kraken.md), and
+  [ledger-live.md](ledger-live.md).
 - **How to add one:** run the intake interview in
   [skills/kassiber/references/add-exchange.md](../../skills/kassiber/references/add-exchange.md)
   (or invoke the `/add-exchange` command), which fills a copy of the template at

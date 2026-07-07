@@ -12,13 +12,16 @@ import tempfile
 import unittest
 from collections.abc import Mapping
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
+from unittest.mock import patch
 
 from kassiber.backends import get_db_backend
 from kassiber.core import accounts as core_accounts
 from kassiber.core import imports as core_imports
 from kassiber.core import wallets as core_wallets
 from kassiber.core.lightning import (
+    LightningCapabilities,
     NodeSnapshot,
     build_profitability_report,
     register_adapter,
@@ -81,6 +84,34 @@ def _canned_payloads(extra: dict[str, Any] | None = None) -> dict[str, Any]:
                     "to_us_msat": "500000000msat",
                     "their_amount_msat": "0msat",
                     "opener": "remote",
+                },
+                {
+                    "peer_id": "02" + "ce" * 32,
+                    "peer_alias": "closed-coop-peer",
+                    "peer_connected": False,
+                    "private": False,
+                    "channel_id": "ch-closed-coop",
+                    "short_channel_id": "742x3x0",
+                    "state": "CLOSINGD_COMPLETE",
+                    "total_msat": "700000000msat",
+                    "to_us_msat": "0msat",
+                    "their_amount_msat": "0msat",
+                    "opener": "local",
+                    "closed_at": 1_700_000_090,
+                },
+                {
+                    "peer_id": "02" + "cf" * 32,
+                    "peer_alias": "closed-force-peer",
+                    "peer_connected": False,
+                    "private": False,
+                    "channel_id": "ch-closed-force",
+                    "short_channel_id": "742x4x0",
+                    "state": "ONCHAIND_OUR_UNILATERAL",
+                    "total_msat": "900000000msat",
+                    "to_us_msat": "0msat",
+                    "their_amount_msat": "0msat",
+                    "opener": "local",
+                    "closed_at": 1_700_000_100,
                 },
             ]
         },
@@ -202,6 +233,22 @@ class AdapterRegistrationTest(unittest.TestCase):
         self.assertIsInstance(adapter, CoreLightningAdapter)
         self.assertEqual(adapter.kind, "coreln")
 
+    def test_core_lightning_declares_real_read_capabilities(self) -> None:
+        adapter = resolve_adapter("coreln")
+        self.assertEqual(
+            adapter.capabilities,
+            LightningCapabilities(
+                node_snapshot=True,
+                routing_profitability=True,
+                channel_balances=True,
+                channel_lifecycle=True,
+                forward_events=True,
+                invoice_activity=True,
+                payment_activity=True,
+                onchain_balance=True,
+            ),
+        )
+
 
 class FetchNodeSnapshotTest(unittest.TestCase):
     def _snapshot(self, payloads: dict[str, Any] | None = None) -> NodeSnapshot:
@@ -227,6 +274,23 @@ class FetchNodeSnapshotTest(unittest.TestCase):
         self.assertEqual(snapshot.completed_payment_count, 1)
         self.assertIsNotNone(snapshot.routing)
         self.assertEqual(snapshot.routing.forward_count, 1)
+
+    def test_closed_channels_preserve_close_kind(self) -> None:
+        snapshot = self._snapshot()
+        self.assertEqual(len(snapshot.closed_channels), 2)
+        closed_by_scid = {
+            channel.short_channel_id: channel for channel in snapshot.closed_channels
+        }
+
+        cooperative = closed_by_scid["742x3x0"]
+        self.assertEqual(cooperative.state, "closed")
+        self.assertEqual(cooperative.close_kind, "cooperative")
+        self.assertEqual(cooperative.closed_at, "2023-11-14T22:14:50Z")
+
+        forced = closed_by_scid["742x4x0"]
+        self.assertEqual(forced.state, "force_closed")
+        self.assertEqual(forced.close_kind, "force")
+        self.assertEqual(forced.closed_at, "2023-11-14T22:15:00Z")
 
     def test_private_channel_peer_pubkey_is_none(self) -> None:
         snapshot = self._snapshot()
@@ -301,13 +365,77 @@ class FetchNodeSnapshotTest(unittest.TestCase):
             for payload in (core_cln._record_to_import(record) for record in records)
             if payload is not None
         ]
-        # Only the invoice income row should be imported as a wallet tx.
-        self.assertEqual(len(import_payloads), 1)
-        self.assertEqual(import_payloads[0]["kind"], "cln_invoice")
+        # The invoice income row and the completed outbound pay are imported as
+        # wallet transactions; the routed forwarding event is NOT (it is already
+        # in the routing aggregate — the P1 double-count guard).
+        kinds = sorted(payload["kind"] for payload in import_payloads)
+        self.assertEqual(kinds, ["cln_invoice", "cln_pay"])
+        routed_payment_id = "11" * 32
+        self.assertNotIn(
+            routed_payment_id,
+            {payload.get("payment_hash") for payload in import_payloads},
+        )
+        invoice_payload = next(p for p in import_payloads if p["kind"] == "cln_invoice")
+        self.assertEqual(invoice_payload["confirmed_at"], "2023-11-14T22:14:10Z")
+        pay_payload = next(p for p in import_payloads if p["kind"] == "cln_pay")
+        self.assertEqual(pay_payload["direction"], "outbound")
+        self.assertEqual(pay_payload["payment_hash"], "22" * 32)
         # And the routed event should not appear as a forward_day record's
         # source either — it should only contribute to the aggregate.
         forward_day_rows = [r for r in records if r["record_type"] == "forward_day"]
         self.assertEqual(len(forward_day_rows), 1)
+
+    def test_channel_lifecycle_records_funding_and_closing_txids(self) -> None:
+        from types import SimpleNamespace
+
+        channel = {
+            "channel_id": "ch-1",
+            "short_channel_id": "742x1x0",
+            "state": "CHANNELD_NORMAL",
+            "peer_connected": True,
+            "funding": {"txid": "aa" * 32, "outnum": 0},
+            "opened_at": 1_700_000_000,
+        }
+        # The closing txid comes from bkpr-listaccountevents (listpeerchannels
+        # drops fully-closed channels).
+        account_events = [
+            {"account": "742x9x0", "tag": "channel_close", "txid": "bb" * 32},
+            {"account": "wallet", "tag": "onchain_fee", "txid": "cc" * 32},
+        ]
+        records = core_cln._channel_lifecycle_records(
+            SimpleNamespace(channels=[channel], account_events=account_events)
+        )
+        by_tag = {rec["tag"]: rec for rec in records}
+        self.assertEqual(set(by_tag), {"channel_open", "channel_close"})
+        self.assertEqual(by_tag["channel_open"]["txid"], "aa" * 32)
+        self.assertEqual(by_tag["channel_close"]["txid"], "bb" * 32)
+        # An onchain_fee event is not a channel lifecycle tx.
+        self.assertNotIn("cc" * 32, {rec["txid"] for rec in records})
+        # Channel metadata records are NOT wallet transactions.
+        for rec in records:
+            self.assertEqual(rec["record_type"], "channel")
+            self.assertIsNone(core_cln._record_to_import(rec))
+
+    def test_outbound_pay_promoted_with_principal_and_routing_fee(self) -> None:
+        # The completed listpays row (amount_msat=40000, amount_sent_msat=40500)
+        # becomes an outbound cln_pay: principal 40000 msat, routing fee 500 msat.
+        from kassiber.msat import msat_to_btc
+
+        snapshot_blob = core_cln.fetch_core_lightning_snapshot(
+            {"kind": "coreln", "name": "cln", "url": "cln://local"},
+            rpc_call=_rpc(_canned_payloads()),
+        )
+        records = core_cln.snapshot_records(snapshot_blob, "2026-05-18T12:00:00Z")
+        pay_record = next(r for r in records if r["record_type"] == "pay")
+        payload = core_cln._record_to_import(pay_record)
+        self.assertIsNotNone(payload)
+        assert payload is not None
+        self.assertEqual(payload["kind"], "cln_pay")
+        self.assertEqual(payload["direction"], "outbound")
+        self.assertEqual(payload["amount"], msat_to_btc(40_000))
+        self.assertEqual(payload["fee"], msat_to_btc(500))
+        self.assertEqual(payload["payment_hash"], "22" * 32)
+        self.assertEqual(payload["payment_hash_source"], "core_lightning")
 
 
 class AdapterContractTest(unittest.TestCase):
@@ -334,6 +462,30 @@ class RpcAllowlistTest(unittest.TestCase):
                 or method.startswith("bkpr-"),
                 msg=f"non-read method allowed: {method}",
             )
+
+    def test_commando_rune_is_passed_without_shell_placeholder_and_redacted(self) -> None:
+        backend = {
+            "kind": "coreln",
+            "name": "cln",
+            "url": "cln://commando",
+            "token": "secret-rune-value",
+            "commando_peer_id": "02" + "ab" * 32,
+        }
+        seen = {}
+
+        def _fake_run(command, **_kwargs):
+            seen["command"] = command
+            return SimpleNamespace(returncode=1, stdout="", stderr="denied")
+
+        with patch("kassiber.core.lightning.cln.subprocess.run", side_effect=_fake_run):
+            with self.assertRaises(AppError) as ctx:
+                core_cln.call_core_lightning(backend, "getinfo")
+
+        command = seen["command"]
+        self.assertNotIn("--commando-rune=${LIGHTNING_RUNE}", command)
+        self.assertIn("--commando-rune=secret-rune-value", command)
+        self.assertNotIn("secret-rune-value", str(ctx.exception.details))
+        self.assertIn("<commando rune redacted>", str(ctx.exception.details))
 
 
 class PersistenceIdempotenceTest(unittest.TestCase):

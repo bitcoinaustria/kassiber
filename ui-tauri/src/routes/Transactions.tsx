@@ -33,6 +33,13 @@ const TRANSACTIONS_PAGE_LIMIT = 100;
 const TRANSACTIONS_WORKBENCH_LIMIT = 500;
 const TRANSACTIONS_WORKBENCH_PAGE_CAP = 4;
 
+function sameDaemonArgs(
+  left: Record<string, unknown>,
+  right: Record<string, unknown>,
+) {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
 export function Transactions() {
   const { t } = useTranslation("transactions");
   const dataMode = useUiStore((state) => state.dataMode);
@@ -58,6 +65,9 @@ export function Transactions() {
   const [walletScope, setWalletScope] = React.useState<string | null>(
     scopeParams.wallet ?? null,
   );
+  const [tableFilterArgs, setTableFilterArgs] = React.useState<
+    Record<string, unknown>
+  >({});
   // Same-route navigations that change only the search string — the sidebar
   // Transactions link, browser back/forward, or a different wallet deep link —
   // don't remount this route, so re-sync the query scope from the URL whenever
@@ -71,8 +81,17 @@ export function Transactions() {
     () => ({
       limit: TRANSACTIONS_PAGE_LIMIT,
       ...(walletScope ? { wallet: walletScope } : {}),
+      ...tableFilterArgs,
     }),
-    [walletScope],
+    [tableFilterArgs, walletScope],
+  );
+  const updateTableFilterArgs = React.useCallback(
+    (nextArgs: Record<string, unknown>) => {
+      setTableFilterArgs((current) =>
+        sameDaemonArgs(current, nextArgs) ? current : nextArgs,
+      );
+    },
+    [],
   );
   const transactionsQuery = useDaemonInfinite<TransactionsList>(
     "ui.transactions.list",
@@ -235,7 +254,7 @@ export function Transactions() {
       swapCandidateTotal={swapCandidateTotal}
       isDataRefreshing={
         hasLiveTransactions &&
-        workbenchQuery.isFetching &&
+        (workbenchQuery.isFetching || transactionsQuery.isFetching) &&
         !isFetchingNextTransactionsPage
       }
       hasMoreTransactions={hasMoreTransactions}
@@ -250,7 +269,9 @@ export function Transactions() {
       deepLinkedTransactionTab={detailParams.tab}
       deepLinkedWallet={scopeParams.wallet}
       deepLinkedQuickFilter={scopeParams.quick}
+      deepLinkedTransactionIds={scopeParams.transactionIds}
       onWalletScopeChange={setWalletScope}
+      onTableFilterArgsChange={updateTableFilterArgs}
     />
   );
 }

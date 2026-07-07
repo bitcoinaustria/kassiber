@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import csv
+import ipaddress
+import json
 import sqlite3
 from collections import defaultdict
 from dataclasses import dataclass
@@ -8,6 +10,7 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal, ROUND_HALF_UP
 from pathlib import Path
 from typing import Any, Callable, Mapping, Sequence
+from urllib.parse import urlparse
 
 from . import pricing
 from . import rates as core_rates
@@ -18,13 +21,24 @@ from .exit_tax import (  # re-exported so CLI/daemon reach exit-tax via core_rep
     format_exit_tax_lines,
     report_exit_tax,
 )
+from .privacy_linkage import analyze_psbt_privacy, build_privacy_linkage_graph
 from ..errors import AppError
 from ..msat import btc_to_msat, dec, msat_to_btc
+from ..secrets.sqlcipher import looks_like_plaintext_sqlite
 from ..tax_policy import require_tax_processing_supported
+from ..wallet_descriptors import normalize_asset_code
 
 INTERVAL_CHOICES = ("hour", "day", "week", "month")
 DEFAULT_BALANCE_HISTORY_INTERVAL = "month"
 EUR_CENT = Decimal("0.01")
+SWAP_FEE_PAIR_KINDS = (
+    "chain-swap",
+    "peg-in",
+    "peg-out",
+    "reverse-submarine-swap",
+    "submarine-swap",
+    "swap-refund",
+)
 
 AUSTRIAN_E1KV_REVIEW_GATE = (
     "Review this Austrian E 1kv export with a Steuerberater before filing; "
@@ -200,6 +214,37 @@ NowIso = Callable[[], str]
 FormatTable = Callable[..., list[str]]
 WriteTextPdf = Callable[[str, str, Sequence[str]], Mapping[str, Any]]
 
+PRIVACY_HYGIENE_SCHEMA_VERSION = 1
+PRIVACY_HYGIENE_REDACTION = "ai_export_safe"
+_PRIVACY_POSTURES = ("on_device", "self_hosted", "shielded", "remote", "unknown")
+_PRIVACY_PROXY_AWARE_TRANSPORTS = {
+    "bitcoinrpc",
+    "btcpay",
+    "electrum",
+    "esplora",
+    "liquid-esplora",
+    "mempool",
+}
+_PRIVACY_SEVERITY_RANK = {"info": 1, "warning": 2, "alert": 3}
+_BACKEND_SECRET_CONFIG_KEYS = {
+    "certificate",
+    "cookiefile",
+    "commando_peer_id",
+    "lightning_cli",
+    "lightning_dir",
+    "password",
+    "rpc_file",
+    "username",
+}
+_WALLET_WATCH_ONLY_CONFIG_KEYS = {
+    "addresses",
+    "change_descriptor",
+    "descriptor",
+    "samourai",
+    "sp_descriptor",
+    "xpub",
+}
+
 
 @dataclass(frozen=True)
 class ReportHooks:
@@ -221,6 +266,1383 @@ def _resolve_report_scope(conn, workspace_ref, profile_ref, hooks: ReportHooks):
     workspace, profile = hooks.resolve_scope(conn, workspace_ref, profile_ref)
     require_tax_processing_supported(profile)
     return workspace, profile
+
+
+def _json_object(raw_json: Any) -> dict[str, Any]:
+    try:
+        value = json.loads(raw_json or "{}")
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return {}
+    return value if isinstance(value, dict) else {}
+
+
+def _safe_count(
+    conn: sqlite3.Connection,
+    sql: str,
+    params: Sequence[Any] = (),
+    *,
+    limitations: list[dict[str, Any]] | None = None,
+    code: str | None = None,
+) -> int | None:
+    try:
+        row = conn.execute(sql, tuple(params)).fetchone()
+    except sqlite3.OperationalError as exc:
+        if limitations is not None:
+            limitations.append(
+                {
+                    "code": code or "count_unavailable",
+                    "message": "A local database count could not be read.",
+                    "evidence_level": "unknown",
+                    "details": {"error": str(exc)},
+                }
+            )
+        return None
+    if row is None:
+        return 0
+    try:
+        return int(row["count"] if "count" in row.keys() else row[0])
+    except (KeyError, TypeError, ValueError, IndexError):
+        return 0
+
+
+def _main_database_path(conn: sqlite3.Connection) -> Path | None:
+    try:
+        rows = conn.execute("PRAGMA database_list").fetchall()
+    except sqlite3.DatabaseError:
+        return None
+    for row in rows:
+        try:
+            name = row["name"]
+            filename = row["file"]
+        except (KeyError, TypeError, IndexError):
+            name = row[1] if len(row) > 1 else None
+            filename = row[2] if len(row) > 2 else None
+        if name == "main" and filename:
+            return Path(str(filename))
+    return None
+
+
+def _database_encryption_fact(conn: sqlite3.Connection) -> dict[str, Any]:
+    db_path = _main_database_path(conn)
+    if db_path is None:
+        return {"status": "unknown", "evidence_level": "unknown"}
+    try:
+        exists = db_path.exists()
+        size = db_path.stat().st_size if exists else 0
+    except OSError:
+        return {"status": "unknown", "evidence_level": "unknown"}
+    if not exists or size == 0:
+        return {"status": "missing_or_empty", "evidence_level": "exact"}
+    plaintext = looks_like_plaintext_sqlite(db_path)
+    return {
+        "status": "plaintext" if plaintext else "encrypted_like",
+        "evidence_level": "exact",
+    }
+
+
+def _endpoint_host(url: Any) -> str:
+    raw = str(url or "").strip()
+    if not raw:
+        return ""
+    parse_value = raw if "://" in raw else f"https://{raw}"
+    try:
+        parsed = urlparse(parse_value)
+    except ValueError:
+        return raw.lower().strip("[]")
+    return (parsed.hostname or raw).lower().strip("[]")
+
+
+def _is_onion_host(host: str) -> bool:
+    return host.lower().endswith(".onion")
+
+
+def _is_local_or_private_host(host: str) -> bool:
+    normalized = (host or "").lower().strip("[]")
+    if not normalized:
+        return False
+    if normalized in {"localhost", "0.0.0.0", "::1"}:
+        return True
+    if normalized.endswith(".local") or normalized.endswith(".localhost"):
+        return True
+    try:
+        ip = ipaddress.ip_address(normalized)
+    except ValueError:
+        return False
+    return bool(ip.is_loopback or ip.is_private or ip.is_link_local)
+
+
+def _backend_privacy_posture(
+    url: Any,
+    *,
+    has_proxy: bool,
+    kind: str,
+    ownership: Any,
+) -> str:
+    host = _endpoint_host(url)
+    normalized_kind = str(kind or "").strip().lower()
+    normalized_ownership = str(ownership or "").strip().lower()
+    if _is_local_or_private_host(host):
+        return "on_device"
+    if normalized_ownership == "self":
+        return "self_hosted"
+    proxy_honored = bool(has_proxy) and (
+        not normalized_kind or normalized_kind in _PRIVACY_PROXY_AWARE_TRANSPORTS
+    )
+    if _is_onion_host(host) or proxy_honored:
+        return "shielded"
+    if host:
+        return "remote"
+    return "unknown"
+
+
+def _empty_posture_counts() -> dict[str, int]:
+    return {posture: 0 for posture in _PRIVACY_POSTURES}
+
+
+def _highest_privacy_severity(findings: Sequence[Mapping[str, Any]]) -> str:
+    highest = "none"
+    rank = 0
+    for finding in findings:
+        severity = str(finding.get("severity") or "")
+        severity_rank = _PRIVACY_SEVERITY_RANK.get(severity, 0)
+        if severity_rank > rank:
+            highest = severity
+            rank = severity_rank
+    return highest
+
+
+def _privacy_finding(
+    findings: list[dict[str, Any]],
+    *,
+    finding_id: str,
+    category: str,
+    severity: str,
+    title: str,
+    detail: str,
+    evidence_level: str,
+    evidence: Mapping[str, Any],
+    recommendation: str | None = None,
+) -> None:
+    findings.append(
+        {
+            "id": finding_id,
+            "category": category,
+            "severity": severity,
+            "title": title,
+            "detail": detail,
+            "evidence_level": evidence_level,
+            "evidence": dict(evidence),
+            "recommendation": recommendation,
+        }
+    )
+
+
+def _journal_freshness_fact(
+    profile: Mapping[str, Any],
+    active_transaction_count: int,
+    journal_entry_count: int,
+    quarantine_count: int,
+) -> dict[str, Any]:
+    last_processed_at = profile["last_processed_at"]
+    last_processed_tx_count = int(profile["last_processed_tx_count"] or 0)
+    journal_input_version = int(profile["journal_input_version"] or 0)
+    last_processed_input_version = int(profile["last_processed_input_version"] or 0)
+    if active_transaction_count == 0:
+        status = "no_transactions"
+    elif not last_processed_at:
+        status = "not_processed"
+    elif last_processed_tx_count != active_transaction_count:
+        status = "stale"
+    elif journal_input_version != last_processed_input_version:
+        status = "stale"
+    else:
+        status = "current"
+    return {
+        "status": status,
+        "needs_processing": status in {"not_processed", "stale"},
+        "active_transaction_count": active_transaction_count,
+        "journal_entry_count": journal_entry_count,
+        "quarantine_count": quarantine_count,
+        "evidence_level": "exact",
+    }
+
+
+def _backend_privacy_facts(conn: sqlite3.Connection) -> dict[str, Any]:
+    postures = _empty_posture_counts()
+    by_surface = {
+        "bitcoin": _empty_posture_counts(),
+        "liquid": _empty_posture_counts(),
+        "lightning": _empty_posture_counts(),
+        "market": _empty_posture_counts(),
+        "other": _empty_posture_counts(),
+    }
+    credentialed = 0
+    proxy_count = 0
+    total = 0
+    rows = conn.execute(
+        """
+        SELECT kind, chain, network, url, auth_header, token, tor_proxy, config_json
+        FROM backends
+        ORDER BY name ASC
+        """
+    ).fetchall()
+    for row in rows:
+        total += 1
+        config = _json_object(row["config_json"])
+        has_proxy = bool(str(row["tor_proxy"] or "").strip())
+        proxy_count += 1 if has_proxy else 0
+        if row["auth_header"] or row["token"] or any(config.get(key) for key in _BACKEND_SECRET_CONFIG_KEYS):
+            credentialed += 1
+        posture = _backend_privacy_posture(
+            row["url"],
+            has_proxy=has_proxy,
+            kind=str(row["kind"] or ""),
+            ownership=config.get("infrastructure_owner"),
+        )
+        postures[posture] = postures.get(posture, 0) + 1
+        chain = str(row["chain"] or "").strip().lower()
+        kind = str(row["kind"] or "").strip().lower()
+        if kind in {"lnd", "coreln", "nwc"}:
+            surface = "lightning"
+        elif kind in {"coinbase-exchange", "coingecko", "mempool-rates"}:
+            surface = "market"
+        elif chain == "liquid" or kind == "liquid-esplora":
+            surface = "liquid"
+        elif chain == "bitcoin" or kind in {"bitcoinrpc", "btcpay", "electrum", "esplora", "mempool"}:
+            surface = "bitcoin"
+        else:
+            surface = "other"
+        by_surface.setdefault(surface, _empty_posture_counts())[posture] += 1
+    return {
+        "backend_count": total,
+        "posture_counts": postures,
+        "by_surface": by_surface,
+        "credentialed_backend_count": credentialed,
+        "proxy_configured_backend_count": proxy_count,
+        "evidence_level": "derived",
+    }
+
+
+def _ai_provider_privacy_facts(conn: sqlite3.Connection) -> dict[str, Any]:
+    provider_count = 0
+    local_count = 0
+    remote_count = 0
+    tee_count = 0
+    cli_count = 0
+    credentialed_count = 0
+    unacknowledged_off_device = 0
+    rows = conn.execute(
+        """
+        SELECT name, base_url, api_key, kind, acknowledged_at
+        FROM ai_providers
+        ORDER BY name ASC
+        """
+    ).fetchall()
+    for row in rows:
+        provider_count += 1
+        kind = str(row["kind"] or "").strip().lower()
+        base_url = str(row["base_url"] or "").strip().lower()
+        if base_url in {"claude-cli://default", "codex-cli://default"}:
+            cli_count += 1
+        elif kind == "local":
+            local_count += 1
+        elif kind == "tee":
+            tee_count += 1
+        else:
+            remote_count += 1
+        if row["api_key"]:
+            credentialed_count += 1
+        if kind != "local" and not row["acknowledged_at"]:
+            unacknowledged_off_device += 1
+    return {
+        "provider_count": provider_count,
+        "local_provider_count": local_count,
+        "remote_provider_count": remote_count,
+        "tee_provider_count": tee_count,
+        "cli_provider_count": cli_count,
+        "credentialed_provider_count": credentialed_count,
+        "unacknowledged_off_device_provider_count": unacknowledged_off_device,
+        "evidence_level": "exact",
+    }
+
+
+def _wallet_privacy_facts(
+    conn: sqlite3.Connection,
+    profile_id: str,
+) -> dict[str, Any]:
+    wallet_count = 0
+    watch_only_material_wallet_count = 0
+    backend_linked_wallet_count = 0
+    descriptor_wallet_count = 0
+    xpub_wallet_count = 0
+    address_wallet_count = 0
+    silent_payment_wallet_count = 0
+    source_file_wallet_count = 0
+    rows = conn.execute(
+        """
+        SELECT kind, config_json
+        FROM wallets
+        WHERE profile_id = ?
+        ORDER BY kind ASC
+        """,
+        (profile_id,),
+    ).fetchall()
+    for row in rows:
+        wallet_count += 1
+        config = _json_object(row["config_json"])
+        if config.get("backend"):
+            backend_linked_wallet_count += 1
+        if config.get("descriptor") or config.get("change_descriptor"):
+            descriptor_wallet_count += 1
+        if config.get("xpub"):
+            xpub_wallet_count += 1
+        if config.get("addresses"):
+            address_wallet_count += 1
+        if config.get("sp_descriptor"):
+            silent_payment_wallet_count += 1
+        if config.get("source_file"):
+            source_file_wallet_count += 1
+        if any(config.get(key) for key in _WALLET_WATCH_ONLY_CONFIG_KEYS):
+            watch_only_material_wallet_count += 1
+    return {
+        "wallet_count": wallet_count,
+        "watch_only_material_wallet_count": watch_only_material_wallet_count,
+        "backend_linked_wallet_count": backend_linked_wallet_count,
+        "descriptor_wallet_count": descriptor_wallet_count,
+        "xpub_wallet_count": xpub_wallet_count,
+        "address_wallet_count": address_wallet_count,
+        "silent_payment_wallet_count": silent_payment_wallet_count,
+        "source_file_wallet_count": source_file_wallet_count,
+        "evidence_level": "exact",
+    }
+
+
+def report_privacy_hygiene(
+    conn: sqlite3.Connection,
+    workspace_ref,
+    profile_ref,
+    hooks: ReportHooks,
+) -> dict[str, Any]:
+    """Return a redacted local privacy-hygiene payload for CLI/UI/AI parity.
+
+    The payload is intentionally count- and category-only. It never includes
+    addresses, scripts, descriptors, xpubs, backend URLs/tokens, wallet config,
+    raw importer JSON, branch/index values, or derivation paths.
+    """
+
+    workspace, profile = hooks.resolve_scope(conn, workspace_ref, profile_ref)
+    profile_id = profile["id"]
+    limitations: list[dict[str, Any]] = [
+        {
+            "code": "local_only_no_probe",
+            "message": "No network request was made; endpoint posture is inferred from local configuration only.",
+            "evidence_level": "derived",
+        },
+        {
+            "code": "redacted_payload",
+            "message": (
+                "Addresses, scripts, descriptors, xpubs, backend URLs/tokens, "
+                "wallet config, raw_json, branch/index values, and derivation "
+                "paths are omitted from this payload."
+            ),
+            "evidence_level": "exact",
+        },
+    ]
+    findings: list[dict[str, Any]] = []
+
+    database = _database_encryption_fact(conn)
+    if database["status"] == "plaintext":
+        _privacy_finding(
+            findings,
+            finding_id="database_plaintext",
+            category="storage",
+            severity="warning",
+            title="Database file is plaintext SQLite",
+            detail=(
+                "The active database header is plaintext SQLite; SQLCipher "
+                "encryption is not active for this data root."
+            ),
+            evidence_level="exact",
+            evidence={"database_encryption": "plaintext"},
+            recommendation="Use `kassiber secrets init` if this book should be encrypted at rest.",
+        )
+    elif database["status"] == "unknown":
+        _privacy_finding(
+            findings,
+            finding_id="database_encryption_unknown",
+            category="storage",
+            severity="info",
+            title="Database encryption status is unknown",
+            detail="Kassiber could not classify the active database header from the local file.",
+            evidence_level="unknown",
+            evidence={"database_encryption": "unknown"},
+        )
+
+    network = _backend_privacy_facts(conn)
+    remote_backends = int(network["posture_counts"].get("remote", 0))
+    if remote_backends:
+        _privacy_finding(
+            findings,
+            finding_id="remote_backend_endpoints",
+            category="network",
+            severity="warning",
+            title="Third-party backend endpoints are configured",
+            detail=(
+                f"{remote_backends} configured backend endpoint(s) are inferred "
+                "as third-party and can observe wallet/indexer queries."
+            ),
+            evidence_level="derived",
+            evidence={"remote_backend_count": remote_backends},
+            recommendation="Use your own node/backend or a per-backend proxy when that exposure is not acceptable.",
+        )
+
+    ai = _ai_provider_privacy_facts(conn)
+    off_device_ai = int(ai["remote_provider_count"]) + int(ai["tee_provider_count"]) + int(ai["cli_provider_count"])
+    if int(ai["unacknowledged_off_device_provider_count"]):
+        _privacy_finding(
+            findings,
+            finding_id="unacknowledged_off_device_ai_provider",
+            category="ai",
+            severity="alert",
+            title="Off-device AI provider needs acknowledgement",
+            detail=(
+                f"{ai['unacknowledged_off_device_provider_count']} off-device "
+                "AI provider(s) lack an acknowledgement timestamp."
+            ),
+            evidence_level="exact",
+            evidence={
+                "unacknowledged_off_device_provider_count": ai[
+                    "unacknowledged_off_device_provider_count"
+                ]
+            },
+            recommendation="Review the provider posture before sending assistant prompts.",
+        )
+    elif off_device_ai:
+        _privacy_finding(
+            findings,
+            finding_id="off_device_ai_provider_configured",
+            category="ai",
+            severity="warning",
+            title="Off-device AI providers are configured",
+            detail=(
+                f"{off_device_ai} configured AI provider(s) may send prompt "
+                "content outside this machine when selected."
+            ),
+            evidence_level="exact",
+            evidence={"off_device_ai_provider_count": off_device_ai},
+            recommendation="Keep the assistant on a local provider for local-only inference.",
+        )
+
+    wallets = _wallet_privacy_facts(conn, profile_id)
+    if int(wallets["watch_only_material_wallet_count"]):
+        _privacy_finding(
+            findings,
+            finding_id="watch_only_wallet_material_present",
+            category="wallets",
+            severity="info",
+            title="Watch-only wallet material is stored locally",
+            detail=(
+                f"{wallets['watch_only_material_wallet_count']} wallet(s) have "
+                "watch-only material in the local database."
+            ),
+            evidence_level="exact",
+            evidence={
+                "watch_only_material_wallet_count": wallets[
+                    "watch_only_material_wallet_count"
+                ]
+            },
+        )
+
+    active_transactions = _safe_count(
+        conn,
+        "SELECT COUNT(*) AS count FROM transactions WHERE profile_id = ? AND excluded = 0",
+        (profile_id,),
+        limitations=limitations,
+        code="transactions_count_unavailable",
+    ) or 0
+    excluded_transactions = _safe_count(
+        conn,
+        "SELECT COUNT(*) AS count FROM transactions WHERE profile_id = ? AND excluded != 0",
+        (profile_id,),
+        limitations=limitations,
+        code="excluded_transactions_count_unavailable",
+    ) or 0
+    raw_json_transactions = _safe_count(
+        conn,
+        """
+        SELECT COUNT(*) AS count
+        FROM transactions
+        WHERE profile_id = ?
+          AND raw_json IS NOT NULL
+          AND trim(raw_json) NOT IN ('', '{}', 'null')
+        """,
+        (profile_id,),
+        limitations=limitations,
+        code="transaction_raw_json_count_unavailable",
+    ) or 0
+    privacy_boundary_transactions = _safe_count(
+        conn,
+        """
+        SELECT COUNT(*) AS count
+        FROM transactions
+        WHERE profile_id = ?
+          AND privacy_boundary IS NOT NULL
+          AND trim(privacy_boundary) != ''
+        """,
+        (profile_id,),
+        limitations=limitations,
+        code="privacy_boundary_count_unavailable",
+    ) or 0
+    if privacy_boundary_transactions:
+        _privacy_finding(
+            findings,
+            finding_id="privacy_boundary_transactions_present",
+            category="transactions",
+            severity="info",
+            title="Privacy-boundary transaction markers are present",
+            detail=(
+                f"{privacy_boundary_transactions} transaction(s) carry a "
+                "privacy-boundary marker; provenance across those hops remains "
+                "opaque unless reviewed with stronger evidence."
+            ),
+            evidence_level="exact",
+            evidence={"privacy_boundary_transaction_count": privacy_boundary_transactions},
+        )
+    if raw_json_transactions:
+        _privacy_finding(
+            findings,
+            finding_id="import_raw_json_present",
+            category="transactions",
+            severity="info",
+            title="Imported raw metadata is present",
+            detail=(
+                f"{raw_json_transactions} transaction(s) retain importer raw_json "
+                "inside the local database; this payload reports only the count."
+            ),
+            evidence_level="exact",
+            evidence={"transaction_raw_json_count": raw_json_transactions},
+        )
+
+    utxo_count = _safe_count(
+        conn,
+        "SELECT COUNT(*) AS count FROM wallet_utxos WHERE profile_id = ?",
+        (profile_id,),
+        limitations=limitations,
+        code="utxo_count_unavailable",
+    ) or 0
+    active_utxo_count = _safe_count(
+        conn,
+        "SELECT COUNT(*) AS count FROM wallet_utxos WHERE profile_id = ? AND spent_at IS NULL",
+        (profile_id,),
+        limitations=limitations,
+        code="active_utxo_count_unavailable",
+    ) or 0
+    utxos_with_address = _safe_count(
+        conn,
+        """
+        SELECT COUNT(*) AS count
+        FROM wallet_utxos
+        WHERE profile_id = ?
+          AND address IS NOT NULL
+          AND trim(address) != ''
+        """,
+        (profile_id,),
+        limitations=limitations,
+        code="utxo_address_count_unavailable",
+    ) or 0
+    utxos_with_script = _safe_count(
+        conn,
+        """
+        SELECT COUNT(*) AS count
+        FROM wallet_utxos
+        WHERE profile_id = ?
+          AND script_pubkey IS NOT NULL
+          AND trim(script_pubkey) != ''
+        """,
+        (profile_id,),
+        limitations=limitations,
+        code="utxo_script_count_unavailable",
+    ) or 0
+    utxos_with_derivation = _safe_count(
+        conn,
+        """
+        SELECT COUNT(*) AS count
+        FROM wallet_utxos
+        WHERE profile_id = ?
+          AND (branch_index IS NOT NULL OR address_index IS NOT NULL)
+        """,
+        (profile_id,),
+        limitations=limitations,
+        code="utxo_derivation_count_unavailable",
+    ) or 0
+    if utxos_with_address or utxos_with_script or utxos_with_derivation:
+        _privacy_finding(
+            findings,
+            finding_id="local_utxo_location_metadata_present",
+            category="inventory",
+            severity="info",
+            title="Local UTXO location metadata is present",
+            detail=(
+                "The local output inventory contains address, script, or "
+                "derivation metadata; this payload reports counts only."
+            ),
+            evidence_level="exact",
+            evidence={
+                "utxos_with_address_count": utxos_with_address,
+                "utxos_with_script_count": utxos_with_script,
+                "utxos_with_derivation_metadata_count": utxos_with_derivation,
+            },
+        )
+
+    journal_entry_count = _safe_count(
+        conn,
+        "SELECT COUNT(*) AS count FROM journal_entries WHERE profile_id = ?",
+        (profile_id,),
+        limitations=limitations,
+        code="journal_entry_count_unavailable",
+    ) or 0
+    quarantine_count = _safe_count(
+        conn,
+        "SELECT COUNT(*) AS count FROM journal_quarantines WHERE profile_id = ?",
+        (profile_id,),
+        limitations=limitations,
+        code="quarantine_count_unavailable",
+    ) or 0
+    privacy_quarantine_count = _safe_count(
+        conn,
+        """
+        SELECT COUNT(*) AS count
+        FROM journal_quarantines
+        WHERE profile_id = ?
+          AND reason LIKE 'privacy%'
+        """,
+        (profile_id,),
+        limitations=limitations,
+        code="privacy_quarantine_count_unavailable",
+    ) or 0
+    if privacy_quarantine_count:
+        _privacy_finding(
+            findings,
+            finding_id="privacy_quarantines_present",
+            category="journals",
+            severity="warning",
+            title="Privacy-related journal quarantines are present",
+            detail=(
+                f"{privacy_quarantine_count} journal quarantine(s) are "
+                "privacy-related and need review before derived reports are complete."
+            ),
+            evidence_level="exact",
+            evidence={"privacy_quarantine_count": privacy_quarantine_count},
+        )
+    journal_freshness = _journal_freshness_fact(
+        profile,
+        active_transactions,
+        journal_entry_count,
+        quarantine_count,
+    )
+
+    inventory = {
+        "utxo_count": utxo_count,
+        "active_utxo_count": active_utxo_count,
+        "utxos_with_address_count": utxos_with_address,
+        "utxos_with_script_count": utxos_with_script,
+        "utxos_with_derivation_metadata_count": utxos_with_derivation,
+        "evidence_level": "exact",
+    }
+    transactions = {
+        "active_transaction_count": active_transactions,
+        "excluded_transaction_count": excluded_transactions,
+        "transaction_raw_json_count": raw_json_transactions,
+        "privacy_boundary_transaction_count": privacy_boundary_transactions,
+        "evidence_level": "exact",
+    }
+    journals = {
+        **journal_freshness,
+        "privacy_quarantine_count": privacy_quarantine_count,
+    }
+    summary = {
+        "finding_count": len(findings),
+        "highest_severity": _highest_privacy_severity(findings),
+        "remote_backend_count": remote_backends,
+        "off_device_ai_provider_count": off_device_ai,
+        "wallet_count": wallets["wallet_count"],
+        "watch_only_material_wallet_count": wallets["watch_only_material_wallet_count"],
+        "active_transaction_count": active_transactions,
+        "privacy_boundary_transaction_count": privacy_boundary_transactions,
+        "privacy_quarantine_count": privacy_quarantine_count,
+    }
+    return {
+        "payload_schema_version": PRIVACY_HYGIENE_SCHEMA_VERSION,
+        "redaction": PRIVACY_HYGIENE_REDACTION,
+        "local_only": True,
+        "read_only": True,
+        "scope": {
+            "workspace": "active",
+            "profile": "active",
+            "workspace_selected": bool(workspace["id"]),
+            "profile_selected": bool(profile["id"]),
+        },
+        "summary": summary,
+        "facts": {
+            "database": database,
+            "network": network,
+            "ai": ai,
+            "wallets": wallets,
+            "transactions": transactions,
+            "inventory": inventory,
+            "journals": journals,
+        },
+        "findings": findings,
+        "limitations": limitations,
+    }
+
+
+def privacy_hygiene_table_rows(payload: Mapping[str, Any]) -> list[dict[str, Any]]:
+    rows = []
+    for finding in payload.get("findings", []) or []:
+        if not isinstance(finding, Mapping):
+            continue
+        rows.append(
+            {
+                "severity": finding.get("severity"),
+                "category": finding.get("category"),
+                "finding": finding.get("id"),
+                "evidence_level": finding.get("evidence_level"),
+                "detail": finding.get("detail"),
+            }
+        )
+    return rows
+
+
+def _mirror_evidence_level(items: Sequence[Mapping[str, Any]]) -> str:
+    levels = [str(item.get("evidence_level") or "exact") for item in items]
+    if any(level == "unknown" for level in levels):
+        return "unknown"
+    if any(level == "derived" for level in levels):
+        return "derived"
+    return "exact"
+
+
+def _mirror_severity_rank(value: Any) -> int:
+    return {"alert": 3, "warning": 2, "info": 1}.get(str(value or ""), 0)
+
+
+def _mirror_finding_candidates(
+    graph_payload: Mapping[str, Any],
+    hygiene_payload: Mapping[str, Any],
+) -> list[dict[str, Any]]:
+    candidates: list[dict[str, Any]] = []
+    for finding in graph_payload.get("findings", []) or []:
+        if not isinstance(finding, Mapping):
+            continue
+        candidates.append(
+            {
+                "source": "linkage_graph",
+                "id": finding.get("id"),
+                "kind": finding.get("kind"),
+                "severity": finding.get("severity"),
+                "title": finding.get("title"),
+                "detail": finding.get("detail"),
+                "evidence_level": finding.get("evidence_level"),
+                "evidence": finding.get("evidence") if isinstance(finding.get("evidence"), Mapping) else {},
+            }
+        )
+    for finding in hygiene_payload.get("findings", []) or []:
+        if not isinstance(finding, Mapping):
+            continue
+        candidates.append(
+            {
+                "source": "privacy_hygiene",
+                "id": finding.get("id"),
+                "kind": finding.get("category"),
+                "severity": finding.get("severity"),
+                "title": finding.get("title"),
+                "detail": finding.get("detail"),
+                "evidence_level": finding.get("evidence_level"),
+                "evidence": finding.get("evidence") if isinstance(finding.get("evidence"), Mapping) else {},
+            }
+        )
+    return candidates
+
+
+def _privacy_mirror_worst_risk(
+    graph_payload: Mapping[str, Any],
+    hygiene_payload: Mapping[str, Any],
+    unknowns: Sequence[Mapping[str, Any]],
+) -> dict[str, Any]:
+    candidates = _mirror_finding_candidates(graph_payload, hygiene_payload)
+    ranked = sorted(
+        candidates,
+        key=lambda item: (
+            _mirror_severity_rank(item.get("severity")),
+            str(item.get("id") or ""),
+        ),
+        reverse=True,
+    )
+    if ranked:
+        top = ranked[0]
+        title = str(top.get("title") or top.get("id") or "Privacy finding")
+        detail = str(top.get("detail") or "A local privacy finding is present.")
+        return {
+            "kind": top.get("kind"),
+            "severity": top.get("severity"),
+            "title": title,
+            "answer": f"Worst local privacy risk: {title}. {detail}",
+            "evidence_level": top.get("evidence_level") or "unknown",
+            "source": top.get("source"),
+            "finding_id": top.get("id"),
+            "evidence": dict(top.get("evidence") or {}),
+        }
+    if unknowns:
+        first = unknowns[0]
+        title = str(first.get("title") or first.get("code") or "Coverage gap")
+        return {
+            "kind": "unknown_coverage",
+            "severity": "info",
+            "title": title,
+            "answer": (
+                "Worst local privacy risk is unresolved coverage: Kassiber lacks "
+                "enough local evidence to rule in or rule out stronger linkage."
+            ),
+            "evidence_level": "unknown",
+            "source": first.get("source") or "privacy_mirror_unknowns",
+            "finding_id": first.get("id") or first.get("code"),
+            "evidence": {"unknown_count": len(unknowns)},
+        }
+    return {
+        "kind": "bounded_local_model",
+        "severity": "info",
+        "title": "No stronger local finding in reduced model",
+        "answer": (
+            "No stronger local privacy finding is present in this reduced model; "
+            "this is not a safety guarantee and does not include external lookup."
+        ),
+        "evidence_level": "derived",
+        "source": "privacy_mirror_summary",
+        "finding_id": None,
+        "evidence": {"external_lookup": False},
+    }
+
+
+def _privacy_mirror_wallet_rows(graph_payload: Mapping[str, Any]) -> list[dict[str, Any]]:
+    nodes = [node for node in graph_payload.get("nodes", []) or [] if isinstance(node, Mapping)]
+    edges = [edge for edge in graph_payload.get("edges", []) or [] if isinstance(edge, Mapping)]
+    clusters_by_wallet: dict[str, set[str]] = defaultdict(set)
+    linked_edges_by_wallet: dict[str, int] = defaultdict(int)
+    wallet_rows: dict[str, dict[str, Any]] = {}
+    node_wallet = {str(node.get("node_id")): str(node.get("wallet_id") or "") for node in nodes}
+    for node in nodes:
+        wallet_id = str(node.get("wallet_id") or "")
+        row = wallet_rows.setdefault(
+            wallet_id,
+            {
+                "wallet_id": wallet_id,
+                "coin_count": 0,
+                "amount_msat": 0,
+                "change_like_coin_count": 0,
+                "receive_coin_count": 0,
+                "unknown_role_coin_count": 0,
+                "linkage_edge_count": 0,
+                "cluster_count": 0,
+                "evidence_level": "exact",
+            },
+        )
+        row["coin_count"] += 1
+        row["amount_msat"] += int(node.get("amount_msat") or 0)
+        role = str(node.get("branch_role") or "unknown")
+        if role == "change":
+            row["change_like_coin_count"] += 1
+        elif role == "receive":
+            row["receive_coin_count"] += 1
+        else:
+            row["unknown_role_coin_count"] += 1
+            row["evidence_level"] = "unknown"
+    for cluster in graph_payload.get("adversary_views", []) or []:
+        if not isinstance(cluster, Mapping) or cluster.get("tier") != "passive_chain_watcher":
+            continue
+        for item in cluster.get("clusters", []) or []:
+            if not isinstance(item, Mapping):
+                continue
+            cluster_id = str(item.get("cluster_id") or "")
+            for wallet_id in item.get("wallet_ids", []) or []:
+                clusters_by_wallet[str(wallet_id)].add(cluster_id)
+    for edge in edges:
+        for key in ("from_node_id", "to_node_id"):
+            wallet_id = node_wallet.get(str(edge.get(key) or ""))
+            if wallet_id:
+                linked_edges_by_wallet[wallet_id] += 1
+    for wallet_id, row in wallet_rows.items():
+        row["cluster_count"] = len(clusters_by_wallet.get(wallet_id, set()))
+        row["linkage_edge_count"] = linked_edges_by_wallet.get(wallet_id, 0)
+    return sorted(wallet_rows.values(), key=lambda item: item["wallet_id"])
+
+
+def _privacy_mirror_transaction_rows(graph_payload: Mapping[str, Any]) -> list[dict[str, Any]]:
+    by_txid: dict[str, dict[str, Any]] = {}
+    for tell in graph_payload.get("transaction_tells", []) or []:
+        if not isinstance(tell, Mapping):
+            continue
+        txid = str(tell.get("txid") or "unknown")
+        row = by_txid.setdefault(
+            txid,
+            {
+                "txid": txid,
+                "tell_count": 0,
+                "tell_kinds": [],
+                "wallet_penalty_count": 0,
+                "evidence_level": "exact",
+                "sources": [],
+            },
+        )
+        row["tell_count"] += 1
+        row["tell_kinds"].append(tell.get("kind"))
+        if tell.get("penalizes_wallet"):
+            row["wallet_penalty_count"] += 1
+        row["sources"].append(tell.get("source"))
+        row["evidence_level"] = _mirror_evidence_level([row, tell])
+    rows = []
+    for row in by_txid.values():
+        row["tell_kinds"] = sorted({str(kind) for kind in row["tell_kinds"] if kind})
+        row["sources"] = sorted({str(source) for source in row["sources"] if source})
+        rows.append(row)
+    return sorted(rows, key=lambda item: (-item["tell_count"], item["txid"]))[:100]
+
+
+def _privacy_mirror_utxo_rows(graph_payload: Mapping[str, Any]) -> list[dict[str, Any]]:
+    proximity = {
+        str(fact.get("coin_id")): fact
+        for fact in graph_payload.get("source_proximity", []) or []
+        if isinstance(fact, Mapping)
+    }
+    rows: list[dict[str, Any]] = []
+    for node in graph_payload.get("nodes", []) or []:
+        if not isinstance(node, Mapping):
+            continue
+        fact = proximity.get(str(node.get("node_id")))
+        evidence_items = [node]
+        if isinstance(fact, Mapping):
+            evidence_items.append(fact)
+        rows.append(
+            {
+                "coin_id": node.get("node_id"),
+                "txid": node.get("txid"),
+                "vout": node.get("vout"),
+                "wallet_id": node.get("wallet_id"),
+                "asset": node.get("asset"),
+                "amount_msat": node.get("amount_msat"),
+                "branch_role": node.get("branch_role"),
+                "change_evidence": node.get("change_evidence"),
+                "source_proximity": fact.get("provenance_status") if isinstance(fact, Mapping) else "unknown_provenance",
+                "evidence_level": _mirror_evidence_level(evidence_items),
+            }
+        )
+    return sorted(rows, key=lambda item: str(item.get("coin_id") or ""))[:250]
+
+
+def _privacy_mirror_timeline(graph_payload: Mapping[str, Any]) -> list[dict[str, Any]]:
+    events: list[dict[str, Any]] = []
+    for edge in graph_payload.get("edges", []) or []:
+        if not isinstance(edge, Mapping):
+            continue
+        events.append(
+            {
+                "id": edge.get("edge_id"),
+                "kind": edge.get("kind"),
+                "category": "linkage",
+                "txid": edge.get("txid"),
+                "evidence_level": edge.get("evidence_level"),
+                "detail": edge.get("heuristic"),
+                "new_linkage": bool(edge.get("new_linkage")),
+            }
+        )
+    for tell in graph_payload.get("transaction_tells", []) or []:
+        if not isinstance(tell, Mapping):
+            continue
+        events.append(
+            {
+                "id": tell.get("tell_id"),
+                "kind": tell.get("kind"),
+                "category": "transaction_tell",
+                "txid": tell.get("txid"),
+                "evidence_level": tell.get("evidence_level"),
+                "detail": tell.get("source"),
+                "new_linkage": False,
+            }
+        )
+    return sorted(events, key=lambda item: (str(item.get("txid") or ""), str(item.get("id") or "")))[:200]
+
+
+def _privacy_mirror_unknowns(
+    graph_payload: Mapping[str, Any],
+    hygiene_payload: Mapping[str, Any],
+) -> list[dict[str, Any]]:
+    unknowns: list[dict[str, Any]] = []
+    for source, payload in (
+        ("linkage_graph", graph_payload),
+        ("privacy_hygiene", hygiene_payload),
+    ):
+        for limitation in payload.get("limitations", []) or []:
+            if not isinstance(limitation, Mapping):
+                continue
+            if limitation.get("evidence_level") == "unknown" or "unknown" in str(limitation.get("code") or ""):
+                unknowns.append(
+                    {
+                        "source": source,
+                        "code": limitation.get("code"),
+                        "title": limitation.get("message") or limitation.get("code"),
+                        "evidence_level": limitation.get("evidence_level") or "unknown",
+                        "evidence": limitation.get("evidence") if isinstance(limitation.get("evidence"), Mapping) else {},
+                    }
+                )
+    return unknowns
+
+
+def _privacy_mirror_evidence_drilldowns(graph_payload: Mapping[str, Any]) -> list[dict[str, Any]]:
+    drilldowns: list[dict[str, Any]] = []
+    for section, key in (
+        ("findings", "id"),
+        ("edges", "edge_id"),
+        ("transaction_tells", "tell_id"),
+        ("source_proximity", "coin_id"),
+    ):
+        for item in graph_payload.get(section, []) or []:
+            if not isinstance(item, Mapping):
+                continue
+            drilldowns.append(
+                {
+                    "section": section,
+                    "id": item.get(key),
+                    "kind": item.get("kind") or item.get("provenance_status"),
+                    "evidence_level": item.get("evidence_level") or "unknown",
+                    "evidence": item.get("evidence") if isinstance(item.get("evidence"), Mapping) else {},
+                }
+            )
+    return drilldowns[:250]
+
+
+_PRIVACY_SCORE_LINKAGE_WEIGHT = 0.55
+_PRIVACY_SCORE_LEAK_WEIGHT = 0.45
+
+# Per-transaction leak weights, mirroring am-i-exposed's severity-graded
+# heuristics for the tell kinds Kassiber actually emits into `tell_kinds`
+# (verified in privacy_linkage.py `_load_transaction_tells`). Ownership-proving
+# tells weigh most; wallet-software fingerprints and embedded metadata weigh
+# little. Protective heuristics (CoinJoin, Taproot, entropy) are never leaks and
+# never appear here. Unmapped/new tells get a small non-zero floor.
+_PRIVACY_LEAK_TELL_WEIGHTS = {
+    "sender_common_input": 1.0,  # mirrors h3: strongest same-owner link
+    "fee_fingerprint": 0.3,  # mirrors h6: weak wallet-software fingerprint
+    "sender_rbf": 0.3,  # mirrors h11: RBF wallet-fingerprint signal
+    "op_return_output": 0.25,  # mirrors h7: embedded-metadata intent, not a link
+}
+_PRIVACY_LEAK_TELL_FLOOR = 0.2
+
+
+def _tx_leak_weight(row: Mapping[str, Any]) -> float:
+    kinds = row.get("tell_kinds") or []
+    if not kinds:
+        return 0.0
+    return max(_PRIVACY_LEAK_TELL_WEIGHTS.get(str(kind), _PRIVACY_LEAK_TELL_FLOOR) for kind in kinds)
+
+
+def _privacy_mirror_score(
+    wallet_rows: Sequence[Mapping[str, Any]],
+    transaction_rows: Sequence[Mapping[str, Any]],
+    hygiene_summary: Mapping[str, Any],
+    coverage_known: int,
+    coverage_unknown: int,
+) -> dict[str, Any]:
+    """Grounded 0-100 privacy score (higher = more private).
+
+    Derived from real local quantities via a fixed, documented formula rather
+    than an arbitrary base. Two exposure fractions drive it:
+
+    - wallet linkage: the share of wallets that can be tied to another wallet
+      (a linked wallet has at least one common-input/linkage edge);
+    - transaction leaks: the share of transactions that emit a linking tell.
+
+    The score is ``100 - 100*(0.55*linkage_fraction + 0.45*leak_fraction)``.
+    Uncertainty (coins whose origin is unknown) deliberately does NOT lower the
+    score: it is reported separately as ``coverage_ratio`` so a confident score
+    cannot silently hide missing data. Every factor ships its own counts so the
+    number is fully explainable in the UI rather than opaque.
+    """
+
+    wallet_count = len(wallet_rows)
+    linked_wallets = sum(
+        1 for row in wallet_rows if int(row.get("linkage_edge_count") or 0) > 0
+    )
+    leaking_transactions = sum(
+        1 for row in transaction_rows if int(row.get("tell_count") or 0) > 0
+    )
+    # Weight each transaction's leak by its strongest tell kind (MAX, not sum)
+    # rather than a flat 1.0. MAX because a transaction's tells are correlated
+    # (a multi-input send usually also carries a fee/OP_RETURN tell), so summing
+    # would double-penalise one economic event; MAX = "this tx is at least this
+    # linkable". This mirrors am-i-exposed's severity ordering locally.
+    weighted_leak_sum = sum(_tx_leak_weight(row) for row in transaction_rows)
+    active_transactions = int(hygiene_summary.get("active_transaction_count") or 0)
+    transaction_total = max(active_transactions, leaking_transactions)
+
+    linkage_fraction = (linked_wallets / wallet_count) if wallet_count else 0.0
+    leak_fraction = (
+        (weighted_leak_sum / transaction_total) if transaction_total else 0.0
+    )
+
+    linkage_points = round(100 * _PRIVACY_SCORE_LINKAGE_WEIGHT * linkage_fraction)
+    leak_points = round(100 * _PRIVACY_SCORE_LEAK_WEIGHT * leak_fraction)
+    value = max(0, min(100, 100 - linkage_points - leak_points))
+
+    known_total = coverage_known + coverage_unknown
+    coverage_ratio = (coverage_known / known_total) if known_total else 1.0
+
+    return {
+        "value": value,
+        "base": 100,
+        "evidence_level": "derived",
+        "coverage_ratio": round(coverage_ratio, 3),
+        "factors": [
+            {
+                "key": "wallet_linkage",
+                "linked": linked_wallets,
+                "total": wallet_count,
+                "weight": _PRIVACY_SCORE_LINKAGE_WEIGHT,
+                "points": -linkage_points,
+            },
+            {
+                "key": "transaction_leaks",
+                "leaking": leaking_transactions,
+                "total": transaction_total,
+                "weight": _PRIVACY_SCORE_LEAK_WEIGHT,
+                "points": -leak_points,
+            },
+        ],
+    }
+
+
+def report_privacy_mirror(
+    conn: sqlite3.Connection,
+    workspace_ref,
+    profile_ref,
+    hooks: ReportHooks,
+) -> dict[str, Any]:
+    """Return the north-star redacted Privacy Mirror payload.
+
+    The payload composes local privacy hygiene facts with the Bitcoin UTXO
+    linkage graph. It is advisory-only and omits raw wallet/PSBT/config data.
+    """
+
+    workspace, profile = hooks.resolve_scope(conn, workspace_ref, profile_ref)
+    profile_id = profile["id"]
+    graph_payload = build_privacy_linkage_graph(conn, profile_id).to_redacted_payload()
+    hygiene_payload = report_privacy_hygiene(conn, workspace_ref, profile_ref, hooks)
+    wallet_rows = _privacy_mirror_wallet_rows(graph_payload)
+    transaction_rows = _privacy_mirror_transaction_rows(graph_payload)
+    utxo_rows = _privacy_mirror_utxo_rows(graph_payload)
+    timeline = _privacy_mirror_timeline(graph_payload)
+    unknowns = _privacy_mirror_unknowns(graph_payload, hygiene_payload)
+    evidence_drilldowns = _privacy_mirror_evidence_drilldowns(graph_payload)
+    worst_risk = _privacy_mirror_worst_risk(graph_payload, hygiene_payload, unknowns)
+    graph_summary = graph_payload.get("summary") if isinstance(graph_payload.get("summary"), Mapping) else {}
+    hygiene_summary = hygiene_payload.get("summary") if isinstance(hygiene_payload.get("summary"), Mapping) else {}
+    source_unknown = int(graph_summary.get("source_proximity_unknown_coin_count") or 0)
+    source_known = int(graph_summary.get("source_proximity_known_coin_count") or 0)
+    summary = {
+        "evidence_level": _mirror_evidence_level(
+            [
+                {"evidence_level": graph_payload.get("redaction") and "derived"},
+                worst_risk,
+                *unknowns,
+            ]
+        ),
+        "privacy_score": _privacy_mirror_score(
+            wallet_rows,
+            transaction_rows,
+            hygiene_summary,
+            source_known,
+            source_unknown,
+        ),
+        "linkage_score": int(graph_summary.get("linkage_score") or 0),
+        "linkable_cluster_count": int(graph_summary.get("observer_entity_count") or 0),
+        "adversary_view_count": int(graph_summary.get("adversary_view_count") or 0),
+        "wallet_count": len(wallet_rows),
+        "transaction_tell_count": int(graph_summary.get("transaction_tell_count") or 0),
+        "utxo_count": int(graph_summary.get("node_count") or 0),
+        "unknown_count": len(unknowns) + source_unknown,
+        "finding_count": int(graph_summary.get("finding_count") or 0) + int(hygiene_summary.get("finding_count") or 0),
+        "worst_risk": worst_risk,
+    }
+    return {
+        "payload_schema_version": 1,
+        "redaction": "ai_export_safe",
+        "local_only": True,
+        "read_only": True,
+        "advisory_only": True,
+        "scope": {
+            "workspace": "active",
+            "profile": "active",
+            "workspace_selected": bool(workspace["id"]),
+            "profile_selected": bool(profile["id"]),
+        },
+        "summary": summary,
+        "exposure_summary": {
+            "evidence_level": summary["evidence_level"],
+            "linkage": graph_summary,
+            "hygiene": hygiene_summary,
+        },
+        "adversary_cards": graph_payload.get("adversary_views", []),
+        "wallet_view": wallet_rows,
+        "transaction_view": transaction_rows,
+        "utxo_view": utxo_rows,
+        "timeline": timeline,
+        "psbt_what_if_panel": {
+            "evidence_level": "derived",
+            "status": "available_via_reports_psbt_privacy",
+            "accepted_inputs": ["base64_psbt_text", "local_psbt_file"],
+            "raw_psbt_exposed_to_ai": False,
+            "notes": "Run reports psbt-privacy for a reduced pre-broadcast finding payload.",
+        },
+        "coverage": {
+            "evidence_level": _mirror_evidence_level(unknowns),
+            "source_proximity_known_coin_count": graph_summary.get("source_proximity_known_coin_count", 0),
+            "source_proximity_unknown_coin_count": source_unknown,
+            "unknown_coverage_count": len(unknowns),
+            "degraded": bool(unknowns or source_unknown),
+        },
+        "unknowns": unknowns,
+        "evidence_drilldowns": evidence_drilldowns,
+        "methodology": {
+            "evidence_level": "exact",
+            "inputs": [
+                "local wallet_utxos",
+                "local transactions",
+                "local reviewed source-funds links",
+                "local privacy hygiene configuration counts",
+            ],
+            "heuristics": ["address_reuse", "common_input", "change_output"],
+            "non_goals": [
+                "no external lookup",
+                "no entity attribution database",
+                "no tax or accounting mutation",
+                "no signing or broadcasting",
+                "no transaction input proposal",
+            ],
+        },
+        "limitations": [
+            *graph_payload.get("limitations", []),
+            *hygiene_payload.get("limitations", []),
+        ],
+    }
+
+
+def privacy_mirror_table_rows(payload: Mapping[str, Any]) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    worst = payload.get("summary", {}).get("worst_risk") if isinstance(payload.get("summary"), Mapping) else None
+    if isinstance(worst, Mapping):
+        rows.append(
+            {
+                "surface": "worst_risk",
+                "severity": worst.get("severity"),
+                "item": worst.get("finding_id") or worst.get("kind"),
+                "evidence_level": worst.get("evidence_level"),
+                "detail": worst.get("answer"),
+            }
+        )
+    for card in payload.get("adversary_cards", []) or []:
+        if not isinstance(card, Mapping):
+            continue
+        summary = card.get("summary") if isinstance(card.get("summary"), Mapping) else {}
+        rows.append(
+            {
+                "surface": "adversary",
+                "severity": "info",
+                "item": card.get("tier"),
+                "evidence_level": card.get("evidence_level"),
+                "detail": f"exposed_cluster_count={summary.get('exposed_cluster_count', 0)} wallet_count={summary.get('wallet_count', 0)}",
+            }
+        )
+    for unknown in payload.get("unknowns", []) or []:
+        if not isinstance(unknown, Mapping):
+            continue
+        rows.append(
+            {
+                "surface": "unknown",
+                "severity": "info",
+                "item": unknown.get("code"),
+                "evidence_level": unknown.get("evidence_level"),
+                "detail": unknown.get("title"),
+            }
+        )
+    return rows or [
+        {
+            "surface": "summary",
+            "severity": "info",
+            "item": "privacy_mirror",
+            "evidence_level": payload.get("summary", {}).get("evidence_level") if isinstance(payload.get("summary"), Mapping) else "unknown",
+            "detail": "Privacy Mirror payload is available; no row-level findings were emitted.",
+        }
+    ]
+
+
+def report_psbt_privacy(
+    conn: sqlite3.Connection,
+    workspace_ref,
+    profile_ref,
+    hooks: ReportHooks,
+    *,
+    psbt_text: str,
+) -> dict[str, Any]:
+    workspace, profile = hooks.resolve_scope(conn, workspace_ref, profile_ref)
+    try:
+        analysis = analyze_psbt_privacy(conn, profile["id"], psbt_text)
+    except ValueError as exc:
+        raise AppError(
+            "Could not decode the PSBT",
+            code="validation",
+            hint="Provide a base64 PSBT with a v0 unsigned transaction.",
+            details={"reason": str(exc)},
+            retryable=False,
+        ) from exc
+    payload = analysis.to_redacted_payload()
+    payload["scope"] = {
+        "workspace": "active",
+        "profile": "active",
+        "workspace_bound": bool(workspace["id"]),
+        "profile_bound": bool(profile["id"]),
+    }
+    return payload
+
+
+def psbt_privacy_table_rows(payload: Mapping[str, Any]) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for finding in payload.get("findings", []) or []:
+        if not isinstance(finding, Mapping):
+            continue
+        rows.append(
+            {
+                "severity": finding.get("severity"),
+                "kind": finding.get("kind"),
+                "result": finding.get("id"),
+                "evidence_level": finding.get("evidence_level"),
+                "detail": finding.get("detail"),
+            }
+        )
+    if rows:
+        return rows
+    summary = payload.get("summary") if isinstance(payload.get("summary"), Mapping) else {}
+    return [
+        {
+            "severity": "info",
+            "kind": "psbt_privacy",
+            "result": "summary",
+            "evidence_level": summary.get("evidence_level"),
+            "detail": (
+                "Decoded PSBT privacy analysis produced no finding rows; "
+                f"cluster_merge_delta={summary.get('cluster_merge_delta', 0)}, "
+                f"unknown_input_count={summary.get('unknown_input_count', 0)}."
+            ),
+        }
+    ]
 
 
 def latest_transaction_rates_for_profile(conn, profile_id):
@@ -312,6 +1734,51 @@ def latest_market_rates_for_profile(conn, profile, *, assets=None, fallback_rate
         if pair is not None:
             try:
                 cached_rate = core_rates.get_latest_rate(conn, pair)
+            except sqlite3.OperationalError:
+                cached_rate = None
+            except AppError as exc:
+                if exc.code != "not_found":
+                    raise
+                cached_rate = None
+            if cached_rate is not None:
+                rate = pricing.decimal_from_exact(cached_rate.get("rate_exact"), cached_rate.get("rate"))
+        if rate is None:
+            rate = fallback.get(asset)
+        if rate is not None:
+            market_rates[asset] = rate
+
+    for asset, rate in fallback.items():
+        market_rates.setdefault(asset, rate)
+    return market_rates
+
+
+def market_rates_for_profile_at_or_before(conn, profile, as_of, *, assets=None, fallback_rates=None):
+    """Return market rates at ``as_of``, falling back to transaction prices.
+
+    Historical portfolio views are "as of the selected report date", so cached
+    market rates at or before that date take precedence over the latest
+    transaction-specific import price. Transaction prices remain a fallback for
+    books without a usable rate cache.
+    """
+    profile_id = profile["id"]
+    fiat_currency = profile["fiat_currency"]
+    fallback = dict(fallback_rates or latest_transaction_rates_for_profile(conn, profile_id))
+    if assets is None:
+        asset_list = _profile_market_rate_assets(conn, profile_id)
+        if not asset_list:
+            asset_list = sorted(fallback)
+    else:
+        asset_list = sorted(
+            {str(asset or "").strip().upper() for asset in assets if str(asset or "").strip()}
+        )
+
+    market_rates = {}
+    for asset in asset_list:
+        pair = core_rates.transaction_rate_pair(asset, fiat_currency)
+        rate = None
+        if pair is not None:
+            try:
+                cached_rate = core_rates.get_cached_rate_at_or_before(conn, pair, as_of)
             except sqlite3.OperationalError:
                 cached_rate = None
             except AppError as exc:
@@ -481,7 +1948,7 @@ def _historical_portfolio_summary(conn, profile, hooks: ReportHooks, as_of_dt, *
             "cost_basis": Decimal("0"),
         }
     )
-    latest_rates = {}
+    fallback_rates = {}
     for row in rate_rows:
         rate = None
         if row["fiat_rate"] is not None:
@@ -489,7 +1956,7 @@ def _historical_portfolio_summary(conn, profile, hooks: ReportHooks, as_of_dt, *
         elif row["fiat_value"] is not None and row["amount"]:
             rate = dec(row["fiat_value"]) / msat_to_btc(row["amount"])
         if rate is not None:
-            latest_rates[row["asset"]] = rate
+            fallback_rates[row["asset"]] = rate
 
     for row in rows:
         quantity = msat_to_btc(row["quantity"])
@@ -518,6 +1985,13 @@ def _historical_portfolio_summary(conn, profile, hooks: ReportHooks, as_of_dt, *
         else Decimal("0")
         for pool_asset in pool_quantity
     }
+    latest_rates = market_rates_for_profile_at_or_before(
+        conn,
+        profile,
+        hooks.iso_z(as_of_dt),
+        assets=pool_quantity,
+        fallback_rates=fallback_rates,
+    )
 
     results = []
     for (wallet_id, wallet_label, account_code, asset), value in sorted(
@@ -830,6 +2304,39 @@ def report_balance_history(
     if range_start > range_end:
         return []
 
+    rate_assets = {event[1] for event in events}
+    if asset:
+        rate_assets.add(asset)
+    cached_rate_events = []
+    for rate_asset in sorted(rate_assets):
+        pair = core_rates.transaction_rate_pair(rate_asset, profile["fiat_currency"])
+        if pair is None:
+            continue
+        try:
+            rate_cache_rows = conn.execute(
+                """
+                SELECT timestamp, rate, rate_exact
+                FROM rates_cache
+                WHERE pair = ?
+                  AND timestamp <= ?
+                ORDER BY timestamp ASC,
+                         CASE WHEN source = 'manual' THEN 1 ELSE 0 END ASC,
+                         fetched_at ASC,
+                         source DESC
+                """,
+                (pair, hooks.iso_z(range_end)),
+            ).fetchall()
+        except sqlite3.OperationalError:
+            rate_cache_rows = []
+        for row in rate_cache_rows:
+            rate = pricing.decimal_from_exact(row["rate_exact"], row["rate"])
+            if rate is None:
+                continue
+            cached_rate_events.append(
+                (hooks.parse_iso_datetime(row["timestamp"], "rate_timestamp"), rate_asset, rate)
+            )
+    cached_rate_events.sort(key=lambda item: item[0])
+
     cumulative = defaultdict(lambda: Decimal("0"))
     cumulative_fiat = defaultdict(lambda: Decimal("0"))
     pool_quantity = defaultdict(lambda: Decimal("0"))
@@ -837,7 +2344,9 @@ def report_balance_history(
     event_idx = 0
     pool_event_idx = 0
     rate_idx = 0
+    cached_rate_idx = 0
     current_rates = {}
+    cached_rates = {}
     bucket_start = _floor_to_interval(range_start, interval)
     end_cap = _floor_to_interval(range_end, interval)
 
@@ -868,12 +2377,16 @@ def report_balance_history(
             _, rate_asset, rate = rate_events[rate_idx]
             current_rates[rate_asset] = rate
             rate_idx += 1
+        while cached_rate_idx < len(cached_rate_events) and cached_rate_events[cached_rate_idx][0] < bucket_end:
+            _, rate_asset, rate = cached_rate_events[cached_rate_idx]
+            cached_rates[rate_asset] = rate
+            cached_rate_idx += 1
         emitted_assets = set(cumulative.keys()) if asset is None else {asset}
         for ev_asset in sorted(emitted_assets):
             qty = cumulative.get(ev_asset, Decimal("0"))
             if qty == 0 and asset is None:
                 continue
-            rate = current_rates.get(ev_asset, Decimal("0"))
+            rate = cached_rates.get(ev_asset, current_rates.get(ev_asset, Decimal("0")))
             if scoped_basis_allocation:
                 pool_qty = pool_quantity.get(ev_asset, Decimal("0"))
                 if pool_qty > 0:
@@ -1639,6 +3152,7 @@ def _summary_pdf_wallet_holdings_from_portfolio(wallets, portfolio_rows, tx_coun
             "wallet": row["label"],
             "scope": f"{row['kind']} / {row['chain'] or 'chain'}",
             "assets": set(),
+            "asset_quantities": defaultdict(lambda: Decimal("0")),
             "quantity": Decimal("0"),
             "cost_basis": Decimal("0"),
             "market_value": Decimal("0"),
@@ -1651,7 +3165,9 @@ def _summary_pdf_wallet_holdings_from_portfolio(wallets, portfolio_rows, tx_coun
         if bucket is None:
             continue
         bucket["assets"].add(row["asset"])
-        bucket["quantity"] += dec(row["quantity"])
+        quantity = dec(row["quantity"])
+        bucket["asset_quantities"][row["asset"]] += quantity
+        bucket["quantity"] += quantity
         bucket["cost_basis"] += dec(row["cost_basis"])
         bucket["market_value"] += dec(row["market_value"])
     results = []
@@ -1663,6 +3179,11 @@ def _summary_pdf_wallet_holdings_from_portfolio(wallets, portfolio_rows, tx_coun
                 "wallet": bucket["wallet"],
                 "scope": bucket["scope"],
                 "assets": sorted(bucket["assets"]),
+                "asset_quantities": [
+                    {"asset": asset, "quantity": float(quantity)}
+                    for asset, quantity in sorted(bucket["asset_quantities"].items())
+                    if quantity
+                ],
                 "quantity": float(bucket["quantity"]),
                 "cost_basis": float(bucket["cost_basis"]),
                 "market_value": float(bucket["market_value"]),
@@ -1740,6 +3261,20 @@ def _summary_pdf_total_market_value_from_holdings(rows):
 
 def _summary_pdf_total_quantity_from_holdings(rows):
     return float(sum(dec(row["quantity"]) for row in rows))
+
+
+def _summary_pdf_total_asset_quantities_from_holdings(rows):
+    totals = defaultdict(lambda: Decimal("0"))
+    for row in rows:
+        for item in row.get("asset_quantities") or []:
+            asset = str(item.get("asset") or "").strip().upper()
+            if asset:
+                totals[asset] += dec(item.get("quantity"))
+    return [
+        {"asset": asset, "quantity": float(quantity)}
+        for asset, quantity in sorted(totals.items())
+        if quantity
+    ]
 
 
 def _summary_pdf_int(value):
@@ -2130,6 +3665,7 @@ def build_summary_pdf_report_data(
     wallet_holdings = _summary_pdf_wallet_holdings_from_portfolio(wallets, portfolio_rows, tx_counts)
     holdings_totals = {
         "total_quantity": _summary_pdf_total_quantity_from_holdings(wallet_holdings),
+        "asset_quantities": _summary_pdf_total_asset_quantities_from_holdings(wallet_holdings),
         "total_market_value": _summary_pdf_total_market_value_from_holdings(wallet_holdings),
     }
     history_rows = _summary_pdf_balance_history_from_report(conn, workspace["id"], profile["id"], wallets, hooks, start_dt, end_dt)
@@ -2153,12 +3689,14 @@ def build_summary_pdf_report_data(
         snapshot_holdings = _summary_pdf_wallet_holdings_from_portfolio(wallets, snapshot_rows, tx_counts)
         snapshot_totals = {
             "total_quantity": _summary_pdf_total_quantity_from_holdings(snapshot_holdings),
+            "asset_quantities": _summary_pdf_total_asset_quantities_from_holdings(snapshot_holdings),
             "total_market_value": _summary_pdf_total_market_value_from_holdings(snapshot_holdings),
         }
         snapshot = {
             "as_of": generated_at,
             "wallets": snapshot_holdings,
             "total_quantity": snapshot_totals["total_quantity"],
+            "asset_quantities": snapshot_totals["asset_quantities"],
             "total_market_value": snapshot_totals["total_market_value"],
         }
     return {
@@ -2200,6 +3738,8 @@ def build_summary_pdf_report_data(
                 "wallet": row["wallet"],
                 "scope": row["scope"],
                 "tx_count": row["tx_count"],
+                "assets": row["assets"],
+                "asset_quantities": row["asset_quantities"],
                 "end_quantity": row["quantity"],
                 "end_market_value": row["market_value"],
             }
@@ -2506,9 +4046,12 @@ def _swap_fee_summary_rows(conn, profile_id):
         SELECT p.kind,
                p.policy,
                p.swap_fee_msat,
+               t_out.asset AS out_asset,
+               t_in.asset AS in_asset,
                substr(t_out.occurred_at, 1, 4) AS year
         FROM transaction_pairs p
         JOIN transactions t_out ON t_out.id = p.out_transaction_id
+        JOIN transactions t_in ON t_in.id = p.in_transaction_id
         WHERE p.profile_id = ?
           AND p.deleted_at IS NULL
           AND p.swap_fee_msat IS NOT NULL
@@ -2516,6 +4059,8 @@ def _swap_fee_summary_rows(conn, profile_id):
         SELECT p.kind,
                p.policy,
                p.swap_fee_msat,
+               t_out.asset AS out_asset,
+               p.payout_asset AS in_asset,
                substr(COALESCE(p.payout_occurred_at, t_out.occurred_at), 1, 4) AS year
         FROM direct_swap_payouts p
         JOIN transactions t_out ON t_out.id = p.out_transaction_id
@@ -2531,6 +4076,12 @@ def _swap_fee_summary_rows(conn, profile_id):
     per_year = defaultdict(lambda: {"count": 0, "total_msat": 0})
     grand = {"count": 0, "total_msat": 0}
     for row in rows:
+        try:
+            same_asset = normalize_asset_code(row["out_asset"]) == normalize_asset_code(row["in_asset"])
+        except (TypeError, ValueError):
+            same_asset = False
+        if same_asset and str(row["kind"] or "").strip().lower() not in SWAP_FEE_PAIR_KINDS:
+            continue
         year_str = row["year"] or ""
         if not year_str.isdigit():
             continue
@@ -5452,6 +7003,7 @@ def export_summary_pdf_report(
             "snapshot_totals": (
                 {
                     "total_quantity": report["snapshot"]["total_quantity"],
+                    "asset_quantities": report["snapshot"]["asset_quantities"],
                     "total_market_value": report["snapshot"]["total_market_value"],
                 }
                 if report.get("snapshot")

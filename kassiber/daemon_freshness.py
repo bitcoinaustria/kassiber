@@ -36,6 +36,7 @@ from .redaction import redact_operational_text
 from .errors import AppError
 from .log_ring import current_request_id
 from .time_utils import now_iso, parse_iso_datetime_or_none
+from .transfers import profile_bitcoin_rail_carrying_value
 from .util import str_or_none
 
 _LOGGER = logging.getLogger("kassiber.daemon.freshness")
@@ -704,9 +705,9 @@ def _freshness_handlers(runtime_config: dict[str, object]) -> Mapping[str, core_
     ) -> Mapping[str, Any]:
         progress({"phase": core_freshness.PHASE_RATE_COVERAGE})
         check_cancelled()
-        # The bundled Kraken daily seed is an offline, idempotent local-cache
+        # The bundled Kraken hourly seed is an offline, idempotent local-cache
         # fill, so it always runs regardless of the market-rate policy.
-        archive_path, seed_summary = core_rates.ensure_bundled_kraken_btc_daily_seed(
+        archive_path, seed_summary = core_rates.ensure_bundled_kraken_btc_hourly_seed(
             conn,
             commit=True,
         )
@@ -1134,6 +1135,7 @@ def _start_freshness_background_worker(
     passphrase_handoff: dict[str, str | None] = {
         "value": passphrase if passphrase is not None else ctx.db_passphrase
     }
+    stop_event = ctx.freshness_stop_event
 
     def _worker() -> None:
         current_request_id.set("background:freshness")
@@ -1172,7 +1174,7 @@ def _start_freshness_background_worker(
             )
             return
         try:
-            while not ctx.freshness_stop_event.wait(FRESHNESS_BACKGROUND_POLL_SECONDS):
+            while not stop_event.wait(FRESHNESS_BACKGROUND_POLL_SECONDS):
                 try:
                     _freshness_background_tick(worker_conn, ctx.runtime_config, ctx.out)
                 except Exception as exc:
@@ -1223,8 +1225,9 @@ def _stop_freshness_background_worker(
     worker = ctx.freshness_worker
     if worker is not None:
         worker.join(timeout=2.0)
-    if worker is None or not worker.is_alive():
-        ctx.freshness_worker = None
+    # The worker captured the old event, so a timed-out worker can drain while
+    # the next project/session gets a fresh stop event and worker slot.
+    ctx.freshness_worker = None
     if reset_event:
         ctx.freshness_stop_event = threading.Event()
 
@@ -1594,6 +1597,7 @@ def _maintenance_settings_payload(conn: sqlite3.Connection) -> dict[str, Any]:
                 **_market_rate_provider_settings(conn),
                 "active_rate_pair": None,
                 "auto_sync_before_report_reads": False,
+                "bitcoin_rail_carrying_value": True,
             },
             "freshness": {"sources": [], "jobs": []},
         }
@@ -1610,6 +1614,7 @@ def _maintenance_settings_payload(conn: sqlite3.Connection) -> dict[str, Any]:
             **_market_rate_provider_settings(conn, profile),
             "auto_sync_before_report_reads": policy.report_read_sync,
             "require_coarse_review": _profile_require_coarse_review(profile),
+            "bitcoin_rail_carrying_value": profile_bitcoin_rail_carrying_value(profile),
             "coarse_priced_count": core_rates.count_coarse_priced_transactions(
                 conn, profile["id"]
             ),
@@ -1628,6 +1633,7 @@ def _maintenance_configure_payload(
         - {
             "auto_sync_before_report_reads",
             "background_enabled",
+            "bitcoin_rail_carrying_value",
             "market_rate_provider",
             "report_read_sync",
             "require_coarse_review",
@@ -1649,6 +1655,8 @@ def _maintenance_configure_payload(
             retryable=False,
         )
     require_coarse_review = raw_args.get("require_coarse_review")
+    bitcoin_rail_carrying_value = raw_args.get("bitcoin_rail_carrying_value")
+    profile_updates: dict[str, Any] = {}
     if require_coarse_review is not None:
         if not isinstance(require_coarse_review, bool):
             raise AppError(
@@ -1657,6 +1665,17 @@ def _maintenance_configure_payload(
                 details={"type": type(require_coarse_review).__name__},
                 retryable=False,
             )
+        profile_updates["require_coarse_review"] = require_coarse_review
+    if bitcoin_rail_carrying_value is not None:
+        if not isinstance(bitcoin_rail_carrying_value, bool):
+            raise AppError(
+                "ui.maintenance.configure bitcoin_rail_carrying_value must be a boolean",
+                code="validation",
+                details={"type": type(bitcoin_rail_carrying_value).__name__},
+                retryable=False,
+            )
+        profile_updates["bitcoin_rail_carrying_value"] = bitcoin_rail_carrying_value
+    if profile_updates:
         # Reuse update_profile so the change is journal-invalidated consistently.
         from .core import accounts as core_accounts
 
@@ -1664,9 +1683,13 @@ def _maintenance_configure_payload(
             conn,
             profile["workspace_id"],
             profile["id"],
-            {"require_coarse_review": require_coarse_review},
+            profile_updates,
         )
-    freshness_args = {k: v for k, v in raw_args.items() if k != "require_coarse_review"}
+    freshness_args = {
+        k: v
+        for k, v in raw_args.items()
+        if k not in {"require_coarse_review", "bitcoin_rail_carrying_value"}
+    }
     payload = _freshness_configure_payload(conn, freshness_args)
     return {**_maintenance_settings_payload(conn), "configured": payload["settings"]}
 

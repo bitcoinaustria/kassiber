@@ -2,7 +2,6 @@ import type { ParseKeys } from "i18next";
 import { AlertTriangle } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
-import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -35,7 +34,6 @@ export function TransactionTaxTab({ ctx }: { ctx: TransactionDetailTabContext })
     localDraft,
     dirty,
     dirtyExcluded,
-    dirtyReviewTax,
     flow,
     taxNarrative,
     hideSensitive,
@@ -93,27 +91,8 @@ export function TransactionTaxTab({ ctx }: { ctx: TransactionDetailTabContext })
                       </div>
                     ) : null}
                     <div className="rounded-md border bg-background p-3">
-                      <div className="mb-3 flex items-center justify-between gap-3">
-                        <h3 className="flex items-center gap-1.5 text-sm font-semibold">
-                          {t("tax.handling")}
-                          <DirtyDot active={dirtyExcluded || dirtyReviewTax} />
-                        </h3>
-                        <Badge
-                          variant={
-                            localDraft.taxable && !localDraft.excluded
-                              ? "default"
-                              : "outline"
-                          }
-                        >
-                          {localDraft.excluded
-                            ? t("taxable.excluded")
-                            : localDraft.taxable
-                              ? t("taxable.taxable")
-                              : t("taxable.notTaxable")}
-                        </Badge>
-                      </div>
-                      <div className="grid gap-3 xl:grid-cols-[minmax(220px,0.9fr)_minmax(0,1fr)_minmax(0,1fr)]">
-                        <div className="grid gap-2">
+                      <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
+                        <div className="min-w-0 space-y-1.5">
                           <Label
                             htmlFor="tx-tax-treatment"
                             className="flex items-center gap-1.5"
@@ -137,7 +116,7 @@ export function TransactionTaxTab({ ctx }: { ctx: TransactionDetailTabContext })
                               updateDraft("taxable", option.taxable);
                             }}
                           >
-                            <SelectTrigger id="tx-tax-treatment">
+                            <SelectTrigger id="tx-tax-treatment" className="h-9">
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
@@ -155,32 +134,27 @@ export function TransactionTaxTab({ ctx }: { ctx: TransactionDetailTabContext })
                             </SelectContent>
                           </Select>
                         </div>
-                        <div className="flex min-h-[76px] items-center justify-between gap-3 rounded-md border p-3">
-                          <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+                          <div className="flex h-9 items-center gap-2 rounded-md border px-2.5">
                             <Label
                               htmlFor="tx-taxable"
-                              className="flex items-center gap-1.5"
+                              className="flex items-center gap-1.5 text-xs"
                             >
                               {t("tax.taxable")}
                               <DirtyDot active={dirty.taxable} />
                             </Label>
-                            <p className="text-xs text-muted-foreground">
-                              {t("tax.taxableHint")}
-                            </p>
+                            <Switch
+                              id="tx-taxable"
+                              checked={localDraft.taxable}
+                              onCheckedChange={(checked) =>
+                                updateDraft("taxable", checked)
+                              }
+                            />
                           </div>
-                          <Switch
-                            id="tx-taxable"
-                            checked={localDraft.taxable}
-                            onCheckedChange={(checked) =>
-                              updateDraft("taxable", checked)
-                            }
-                          />
-                        </div>
-                        <div className="flex min-h-[76px] items-center justify-between gap-3 rounded-md border p-3">
-                          <div className="min-w-0">
+                          <div className="flex h-9 items-center gap-2 rounded-md border px-2.5">
                             <Label
                               htmlFor="tx-excluded"
-                              className="flex items-center gap-1.5"
+                              className="flex items-center gap-1.5 text-xs"
                             >
                               {t("tax.excluded")}
                               <DirtyDot active={dirtyExcluded} />
@@ -188,17 +162,14 @@ export function TransactionTaxTab({ ctx }: { ctx: TransactionDetailTabContext })
                                 (<kbd className="rounded border bg-muted px-1">e</kbd>)
                               </span>
                             </Label>
-                            <p className="text-xs text-muted-foreground">
-                              {t("tax.excludedHint")}
-                            </p>
+                            <Switch
+                              id="tx-excluded"
+                              checked={localDraft.excluded}
+                              onCheckedChange={(checked) =>
+                                updateDraft("excluded", checked)
+                              }
+                            />
                           </div>
-                          <Switch
-                            id="tx-excluded"
-                            checked={localDraft.excluded}
-                            onCheckedChange={(checked) =>
-                              updateDraft("excluded", checked)
-                            }
-                          />
                         </div>
                       </div>
                     </div>

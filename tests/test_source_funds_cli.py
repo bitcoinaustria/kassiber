@@ -3853,6 +3853,163 @@ class SourceFundsCliTest(unittest.TestCase):
         )["data"]
         self.assertEqual(reviewed["reviewed"], 0)
 
+    def test_transaction_pair_suggestions_allocate_reused_outbound_leg(self):
+        self._init_default_workspace()
+        for wallet, csv_name, txid, direction, amount in [
+            ("CJ Out", "cj-out.csv", "cj-out", "outbound", "1.00000000"),
+            ("Postmix B", "postmix-b.csv", "postmix-b", "inbound", "0.40000000"),
+            ("Postmix C", "postmix-c.csv", "postmix-c", "inbound", "0.60000000"),
+        ]:
+            self._write_csv(
+                csv_name,
+                "date,txid,direction,asset,amount,fee,fiat_rate,description\n"
+                f"2026-03-01T09:00:00Z,{txid},{direction},BTC,{amount},0,50000,{wallet}\n",
+            )
+            self._create_wallet_and_import(wallet, csv_name)
+        out_id = self._tx_id("CJ Out", "cj-out")
+        in_b_id = self._tx_id("Postmix B", "postmix-b")
+        in_c_id = self._tx_id("Postmix C", "postmix-c")
+        for in_id in (in_b_id, in_c_id):
+            self.cli(
+                "transfers",
+                "pair",
+                "--workspace",
+                "Sof",
+                "--profile",
+                "Default",
+                "--tx-out",
+                out_id,
+                "--tx-in",
+                in_id,
+                "--kind",
+                "whirlpool",
+                "--policy",
+                "carrying-value",
+            )
+
+        self.cli("source-funds", "suggest", "--workspace", "Sof", "--profile", "Default")
+        links = self.cli("source-funds", "links", "list", "--workspace", "Sof", "--profile", "Default")["data"]
+        pair_links = {
+            link["to_transaction_id"]: link
+            for link in links
+            if link["method"] == "transaction_pair"
+        }
+        self.assertEqual(pair_links[in_b_id]["allocation_amount"], 0.4)
+        self.assertEqual(pair_links[in_b_id]["from_allocation_amount"], 0.4)
+        self.assertEqual(pair_links[in_c_id]["allocation_amount"], 0.6)
+        self.assertEqual(pair_links[in_c_id]["from_allocation_amount"], 0.6)
+
+    def test_transaction_pair_suggestions_allocate_reused_inbound_leg(self):
+        self._init_default_workspace()
+        for wallet, csv_name, txid, direction, amount in [
+            ("Premix A", "premix-a.csv", "premix-a", "outbound", "0.40000000"),
+            ("Premix B", "premix-b.csv", "premix-b", "outbound", "0.60000000"),
+            ("Postmix C", "postmix-c.csv", "postmix-c", "inbound", "1.00000000"),
+        ]:
+            self._write_csv(
+                csv_name,
+                "date,txid,direction,asset,amount,fee,fiat_rate,description\n"
+                f"2026-03-01T09:00:00Z,{txid},{direction},BTC,{amount},0,50000,{wallet}\n",
+            )
+            self._create_wallet_and_import(wallet, csv_name)
+        out_a_id = self._tx_id("Premix A", "premix-a")
+        out_b_id = self._tx_id("Premix B", "premix-b")
+        in_id = self._tx_id("Postmix C", "postmix-c")
+        for out_id in (out_a_id, out_b_id):
+            self.cli(
+                "transfers",
+                "pair",
+                "--workspace",
+                "Sof",
+                "--profile",
+                "Default",
+                "--tx-out",
+                out_id,
+                "--tx-in",
+                in_id,
+                "--kind",
+                "whirlpool",
+                "--policy",
+                "carrying-value",
+            )
+
+        self.cli("source-funds", "suggest", "--workspace", "Sof", "--profile", "Default")
+        links = self.cli("source-funds", "links", "list", "--workspace", "Sof", "--profile", "Default")["data"]
+        pair_links = {
+            link["from_transaction_id"]: link
+            for link in links
+            if link["method"] == "transaction_pair"
+        }
+        self.assertEqual(pair_links[out_a_id]["allocation_amount"], 0.4)
+        self.assertEqual(pair_links[out_a_id]["from_allocation_amount"], 0.4)
+        self.assertEqual(pair_links[out_b_id]["allocation_amount"], 0.6)
+        self.assertEqual(pair_links[out_b_id]["from_allocation_amount"], 0.6)
+
+    def test_bulk_review_skips_transaction_pair_with_stale_allocation(self):
+        self._init_default_workspace()
+        for wallet, csv_name, txid, direction, amount in [
+            ("CJ Out", "stale-cj-out.csv", "stale-cj-out", "outbound", "1.00000000"),
+            ("Postmix B", "stale-postmix-b.csv", "stale-postmix-b", "inbound", "0.40000000"),
+            ("Postmix C", "stale-postmix-c.csv", "stale-postmix-c", "inbound", "0.60000000"),
+        ]:
+            self._write_csv(
+                csv_name,
+                "date,txid,direction,asset,amount,fee,fiat_rate,description\n"
+                f"2026-03-01T09:00:00Z,{txid},{direction},BTC,{amount},0,50000,{wallet}\n",
+            )
+            self._create_wallet_and_import(wallet, csv_name)
+        out_id = self._tx_id("CJ Out", "stale-cj-out")
+        in_b_id = self._tx_id("Postmix B", "stale-postmix-b")
+        in_c_id = self._tx_id("Postmix C", "stale-postmix-c")
+        for in_id in (in_b_id, in_c_id):
+            self.cli(
+                "transfers",
+                "pair",
+                "--workspace",
+                "Sof",
+                "--profile",
+                "Default",
+                "--tx-out",
+                out_id,
+                "--tx-in",
+                in_id,
+                "--kind",
+                "whirlpool",
+                "--policy",
+                "carrying-value",
+            )
+        self.cli(
+            "source-funds",
+            "suggest",
+            "--workspace",
+            "Sof",
+            "--profile",
+            "Default",
+            "--target-transaction",
+            in_b_id,
+        )
+        with self._db() as conn:
+            conn.execute(
+                """
+                UPDATE source_funds_links
+                SET from_allocation_amount = ?
+                WHERE method = 'transaction_pair' AND to_transaction_id = ?
+                """,
+                (100_000_000_000, in_b_id),
+            )
+        reviewed = self.cli(
+            "source-funds",
+            "links",
+            "bulk-review",
+            "--workspace",
+            "Sof",
+            "--profile",
+            "Default",
+            "--target-transaction",
+            in_b_id,
+        )["data"]
+        self.assertEqual(reviewed["reviewed"], 0)
+
     def test_suggest_links_with_target_does_not_write_unrelated_suggestions(self):
         self._init_default_workspace()
         for wallet, csv_name, txid, direction in [

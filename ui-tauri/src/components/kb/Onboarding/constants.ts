@@ -57,7 +57,12 @@ export const FIAT_CURRENCIES: FiatCurrency[] = ["EUR", "USD", "CHF", "GBP"];
 export const TAX_COUNTRIES: TaxCountry[] = ["generic", "at"];
 
 // Lot-selection methods shared by both regions.
-const LOT_GAINS_ALGORITHMS: GenericGainsAlgorithm[] = ["FIFO", "LIFO", "HIFO", "LOFO"];
+const LOT_GAINS_ALGORITHMS: GenericGainsAlgorithm[] = [
+  "FIFO",
+  "LIFO",
+  "HIFO",
+  "LOFO",
+];
 
 // The generic region offers the lot methods plus the plain (non-Austrian)
 // moving-average / average-cost method.
@@ -102,7 +107,25 @@ const hasHttpUrl = (raw: string): boolean => {
 
 const hasAiCliLocator = (raw: string): boolean => {
   const normalized = raw.trim().toLowerCase();
-  return normalized === "claude-cli://default" || normalized === "codex-cli://default";
+  return (
+    normalized === "claude-cli://default" ||
+    normalized === "codex-cli://default"
+  );
+};
+
+export const hasLoopbackAiBaseUrl = (raw: string): boolean => {
+  try {
+    const parsed = new URL(raw.trim());
+    const host = parsed.hostname.toLowerCase().replace(/^\[(.*)\]$/, "$1");
+    return (
+      (parsed.protocol === "http:" || parsed.protocol === "https:") &&
+      (host === "localhost" ||
+        host === "::1" ||
+        /^127(?:\.\d{1,3}){3}$/.test(host))
+    );
+  } catch {
+    return false;
+  }
 };
 
 const hasInlineCredential = (raw: string): boolean => {
@@ -180,6 +203,14 @@ export const aiBaseUrlHint = (raw: string): string | null => {
   return hasHttpUrl(trimmed) || hasAiCliLocator(trimmed)
     ? null
     : "Use an http:// or https:// URL, or claude-cli://default / codex-cli://default.";
+};
+
+export const localAiBaseUrlHint = (raw: string): string | null => {
+  const genericHint = aiBaseUrlHint(raw);
+  if (genericHint !== null) return genericHint;
+  return hasLoopbackAiBaseUrl(raw)
+    ? null
+    : "Local AI providers must use http://localhost, http://127.0.0.1, or http://[::1]. Use remote mode for off-device endpoints.";
 };
 
 export const BACKEND_KINDS: BackendKind[] = [

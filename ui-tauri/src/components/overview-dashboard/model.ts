@@ -126,8 +126,13 @@ export type PortfolioChartPoint = {
 };
 
 export type PortfolioChartMetric = "value" | "btc" | "basis" | "unrealized";
-export type ActivityFlow = "incoming" | "outgoing" | "swap" | "transfer" | "fee";
-export type TreasuryChartSeriesKey = "primary" | "price" | "basis" | "events";
+export type ActivityFlow = "incoming" | "outgoing" | "movement" | "fee";
+export type TreasuryChartSeriesKey =
+  | "primary"
+  | "portfolioValue"
+  | "price"
+  | "basis"
+  | "events";
 export type TreasurySeriesVisibility = Record<TreasuryChartSeriesKey, boolean>;
 export type TreasuryLegendItem = {
   key: TreasuryChartSeriesKey;
@@ -147,11 +152,13 @@ export const LEGACY_INCOMING_MARKER_MIN_PARAM = "incomingMin";
 export const LEGACY_OUTGOING_MARKER_MIN_PARAM = "outgoingMin";
 export const Y_SCALE_PARAM = "scale";
 export const Y_AUTO_FIT_PARAM = "fit";
+export const ACTIVITY_MARKER_GROUPING_PARAM = "groupEvents";
 export const TREASURY_BRUSH_MIN_WINDOW_MS = (7 * 24 * 60 * 60 * 1000) / 3;
 export const TREASURY_BRUSH_MIN_INDEX_SPAN = 2;
 
 export const defaultTreasurySeriesVisibility: TreasurySeriesVisibility = {
   primary: true,
+  portfolioValue: false,
   price: true,
   basis: true,
   events: true,
@@ -161,6 +168,7 @@ export type TreasuryChartPoint = PortfolioChartPoint & {
   bitcoinPriceEur: number;
   avgCostEur: number | null;
   lineBalanceBtc?: number;
+  linePortfolioValueEur?: number;
   lineBitcoinPriceEur?: number;
   lineAvgCostEur?: number | null;
   brushBalanceBtc: number;
@@ -184,6 +192,9 @@ export type TreasuryChartPoint = PortfolioChartPoint & {
   eventConfirmations?: number;
   eventId?: string;
   eventTransactionId?: string;
+  markerCount?: number;
+  markerGroupedPoints?: TreasuryChartPoint[];
+  markerMixedFlows?: boolean;
   sortTimeMs: number;
   isActivityEvent?: boolean;
 };
@@ -219,6 +230,10 @@ export type ActivityMarkerView = {
   activityPoints: TreasuryChartPoint[];
   chartDisplayData: TreasuryChartPoint[];
   visibleActivityMarkers: TreasuryChartPoint[];
+};
+
+export type ActivityMarkerClusterOptions = {
+  maxVisibleMarkers?: number;
 };
 
 export type TreasuryActivityEvent = {
@@ -537,6 +552,7 @@ export const palette = {
 export const portfolioChartColors = {
   light: {
     value: "#f7931a",
+    portfolioValue: "#0284c7",
     costBasis: "#2fae79",
     focus: "#2f2f33",
     risk: "#e3000f",
@@ -546,6 +562,7 @@ export const portfolioChartColors = {
   },
   dark: {
     value: "#f6a21a",
+    portfolioValue: "#38bdf8",
     costBasis: "#50c695",
     focus: "#e8e8ec",
     risk: "#ff3341",
@@ -699,6 +716,7 @@ export function buildStatsData(
 }
 
 export type TimePeriod =
+  | "auto"
   | "30days"
   | "3months"
   | "6months"
@@ -707,8 +725,11 @@ export type TimePeriod =
   | "5years"
   | "all";
 
+export type ResolvedTimePeriod = Exclude<TimePeriod, "auto"> | "10years" | "15years";
+
 // i18n keys in the `overview` namespace, resolved via `t()` at the call site.
 export const periodLabelKeys = {
+  auto: "period.auto",
   "30days": "period.30days",
   "3months": "period.3months",
   "6months": "period.6months",
@@ -719,6 +740,7 @@ export const periodLabelKeys = {
 } as const satisfies Record<TimePeriod, string>;
 
 export const periodShortLabelKeys = {
+  auto: "period.short.auto",
   "30days": "period.short.30days",
   "3months": "period.short.3months",
   "6months": "period.short.6months",
@@ -729,6 +751,7 @@ export const periodShortLabelKeys = {
 } as const satisfies Record<TimePeriod, string>;
 
 export const periodKeys: TimePeriod[] = [
+  "auto",
   "30days",
   "3months",
   "6months",
@@ -741,6 +764,7 @@ export const periodKeys: TimePeriod[] = [
 export function normalizeTimePeriodParam(value: string | null): TimePeriod | null {
   if (!value) return null;
   const normalized = value.toLowerCase().replace(/[\s_-]/g, "");
+  if (normalized === "auto" || normalized === "automatic") return "auto";
   if (normalized === "30days" || normalized === "30day" || normalized === "30d") {
     return "30days";
   }
@@ -784,10 +808,10 @@ export function normalizeTimePeriodParam(value: string | null): TimePeriod | nul
   return null;
 }
 
-export function initialTimePeriodFromUrl(): TimePeriod {
-  if (typeof window === "undefined") return "ytd";
+export function initialTimePeriodFromUrl(fallback: TimePeriod = "auto"): TimePeriod {
+  if (typeof window === "undefined") return fallback;
   const params = new URLSearchParams(window.location.search);
-  return normalizeTimePeriodParam(params.get("period")) ?? "ytd";
+  return normalizeTimePeriodParam(params.get("period")) ?? fallback;
 }
 
 export function initialYScaleLogFromUrl(): boolean {
@@ -801,6 +825,13 @@ export function initialYAutoFitFromUrl(): boolean {
   const params = new URLSearchParams(window.location.search);
   const value = params.get(Y_AUTO_FIT_PARAM)?.toLowerCase();
   return value === "auto" || value === "1";
+}
+
+export function initialActivityMarkerGroupingFromUrl(): boolean {
+  if (typeof window === "undefined") return true;
+  const params = new URLSearchParams(window.location.search);
+  const value = params.get(ACTIVITY_MARKER_GROUPING_PARAM)?.toLowerCase();
+  return value !== "0" && value !== "false" && value !== "off";
 }
 
 // A log scale has no place for zero: before the first funding the balance
@@ -817,6 +848,7 @@ export function logSafeTreasuryPoints(
   return points.map((point) => ({
     ...point,
     lineBalanceBtc: positive(point.lineBalanceBtc),
+    linePortfolioValueEur: positive(point.linePortfolioValueEur),
     lineBitcoinPriceEur: positive(point.lineBitcoinPriceEur),
     lineAvgCostEur: positive(point.lineAvgCostEur) ?? null,
   }));
@@ -943,7 +975,11 @@ export function autoFitDomain(
 // the TradingView-style last-value tag on the axis.
 export function lastTreasuryLineValue(
   points: TreasuryChartPoint[],
-  key: "lineBalanceBtc" | "lineBitcoinPriceEur" | "lineAvgCostEur",
+  key:
+    | "lineBalanceBtc"
+    | "linePortfolioValueEur"
+    | "lineBitcoinPriceEur"
+    | "lineAvgCostEur",
 ): number | null {
   for (let index = points.length - 1; index >= 0; index -= 1) {
     const value = points[index][key];
@@ -1013,10 +1049,11 @@ export function getDataForPeriod(
   currency: Currency,
   density: "compact" | "detailed",
 ): PortfolioChartPoint[] {
+  const resolvedPeriod = resolveAutoTimePeriod(snapshot, period);
   if (snapshot.portfolioSeries?.length) {
     const points = buildDatedPortfolioPoints(
       snapshot.portfolioSeries,
-      period,
+      resolvedPeriod,
       metric,
       currency,
       density,
@@ -1031,7 +1068,7 @@ export function getDataForPeriod(
   }
   const fiatRate = activeMarketFiatRate(snapshot);
   const labels =
-    period === "5years"
+    resolvedPeriod === "5years"
       ? ["2022", "2023", "2024", "2025", "2026"]
       : [
           "Jan",
@@ -1072,21 +1109,119 @@ export function getDataForPeriod(
       currency,
     );
   });
-  if (period === "30days") return points.slice(-4);
-  if (period === "3months") return points.slice(-3);
-  if (period === "6months") return points.slice(-6);
-  if (period === "ytd") {
+  if (resolvedPeriod === "30days") return points.slice(-4);
+  if (resolvedPeriod === "3months") return points.slice(-3);
+  if (resolvedPeriod === "6months") return points.slice(-6);
+  if (resolvedPeriod === "ytd") {
     return points.slice(0, Math.max(1, new Date().getMonth() + 1));
   }
-  if (period === "5years") {
+  if (resolvedPeriod === "5years") {
     return points.filter((_, index) => index % 3 === 0).slice(-5);
   }
   return points;
 }
 
+const AUTO_MIN_MEANINGFUL_EVENTS = 3;
+const AUTO_MIN_ACTIVITY_VOLUME_BTC = 0.00001;
+const AUTO_MIN_BALANCE_RANGE_BTC = 0.001;
+const AUTO_MIN_BALANCE_RANGE_RATIO = 0.01;
+const MS_PER_YEAR = 365.25 * 24 * 60 * 60 * 1000;
+
+function autoCandidatePeriodsForHistory(
+  oldestDate: Date,
+  latestDate: Date,
+): ResolvedTimePeriod[] {
+  const historyYears =
+    (latestDate.valueOf() - oldestDate.valueOf()) / MS_PER_YEAR;
+  return [
+    "ytd",
+    "1year",
+    "5years",
+    ...(historyYears >= 8 ? (["10years"] as const) : []),
+    ...(historyYears >= 12 ? (["15years"] as const) : []),
+    "all",
+  ];
+}
+
+function portfolioBalanceValuesForPeriod(
+  snapshot: OverviewSnapshot,
+  events: TreasuryActivityEvent[],
+  latestDate: Date,
+  period: ResolvedTimePeriod,
+): number[] {
+  const seriesValues = (snapshot.portfolioSeries ?? [])
+    .filter((point) => isPointInPeriod(point.date, latestDate, period))
+    .map((point) => point.balanceBtc)
+    .filter((value) => Number.isFinite(value));
+  const eventValues = events
+    .filter((event) => isActivityInTreasuryPeriod(event, latestDate, period))
+    .map((event) => event.postBalanceBtc)
+    .filter((value): value is number => value !== undefined && Number.isFinite(value));
+  return [...seriesValues, ...eventValues];
+}
+
+function hasMeaningfulBalanceRange(values: number[]): boolean {
+  if (values.length < 2) return true;
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const latest = Math.abs(values[values.length - 1] ?? max);
+  const threshold = Math.max(
+    AUTO_MIN_BALANCE_RANGE_BTC,
+    latest * AUTO_MIN_BALANCE_RANGE_RATIO,
+  );
+  return max - min >= threshold;
+}
+
+export function resolveAutoTimePeriod(
+  snapshot: OverviewSnapshot,
+  period: TimePeriod,
+): ResolvedTimePeriod {
+  if (period !== "auto") return period;
+  const events = activityTxs(snapshot);
+  if (!events.length) return "ytd";
+  const candidateTimes = [
+    ...(snapshot.portfolioSeries ?? [])
+      .map((point) => parseSeriesDate(point.date).valueOf())
+      .filter((time) => Number.isFinite(time)),
+    ...events.map((event) => event.occurredAt.valueOf()),
+  ];
+  const latestDate = new Date(
+    candidateTimes.length ? Math.max(...candidateTimes) : Date.now(),
+  );
+  const oldestDate = new Date(
+    candidateTimes.length ? Math.min(...candidateTimes) : latestDate.valueOf(),
+  );
+  const meaningfulEvents = events.filter(
+    (event) => event.volumeBtc >= AUTO_MIN_ACTIVITY_VOLUME_BTC,
+  );
+  if (!meaningfulEvents.length) return "ytd";
+  const targetEventCount = Math.min(
+    AUTO_MIN_MEANINGFUL_EVENTS,
+    meaningfulEvents.length,
+  );
+  return (
+    autoCandidatePeriodsForHistory(oldestDate, latestDate).find(
+      (candidate) => {
+        const visibleEvents = meaningfulEvents.filter((event) =>
+          isActivityInTreasuryPeriod(event, latestDate, candidate),
+        );
+        if (visibleEvents.length < targetEventCount) return false;
+        return hasMeaningfulBalanceRange(
+          portfolioBalanceValuesForPeriod(
+            snapshot,
+            events,
+            latestDate,
+            candidate,
+          ),
+        );
+      },
+    ) ?? "all"
+  );
+}
+
 export function buildDatedPortfolioPoints(
   series: PortfolioPoint[],
-  period: TimePeriod,
+  period: ResolvedTimePeriod,
   metric: PortfolioChartMetric,
   currency: Currency,
   density: "compact" | "detailed",
@@ -1119,8 +1254,9 @@ export function parseSeriesDate(value: string | undefined) {
 export function isPointInPeriod(
   value: string,
   latestDate: Date,
-  period: TimePeriod,
+  period: TimePeriod | ResolvedTimePeriod,
 ) {
+  if (period === "auto") return true;
   const pointDate = parseSeriesDate(value);
   if (period === "ytd") {
     return pointDate.getUTCFullYear() === latestDate.getUTCFullYear();
@@ -1136,6 +1272,10 @@ export function isPointInPeriod(
     start.setUTCFullYear(start.getUTCFullYear() - 1);
   } else if (period === "5years") {
     start.setUTCFullYear(start.getUTCFullYear() - 5);
+  } else if (period === "10years") {
+    start.setUTCFullYear(start.getUTCFullYear() - 10);
+  } else if (period === "15years") {
+    start.setUTCFullYear(start.getUTCFullYear() - 15);
   } else {
     return true;
   }
@@ -1486,7 +1626,8 @@ export function statusForOverviewTx(tx: OverviewTx): TransactionStatus {
 
 export function activityFlowForTx(tx: OverviewTx): ActivityFlow {
   if (tx.type === "Fee") return "fee";
-  return flowForOverviewTx(tx);
+  const flow = flowForOverviewTx(tx);
+  return flow === "swap" || flow === "transfer" ? "movement" : flow;
 }
 
 // i18n keys in the `overview` namespace, indexed by activity flow. Resolved via
@@ -1494,8 +1635,7 @@ export function activityFlowForTx(tx: OverviewTx): ActivityFlow {
 export const activityFlowLabelKeys = {
   incoming: "activityFlow.incoming",
   outgoing: "activityFlow.outgoing",
-  swap: "activityFlow.swap",
-  transfer: "activityFlow.transfer",
+  movement: "activityFlow.movement",
   fee: "activityFlow.fee",
 } as const satisfies Record<ActivityFlow, string>;
 
@@ -1505,14 +1645,14 @@ export const activityFlowLabelKeys = {
 export const activityFlowLabels: Record<ActivityFlow, string> = {
   incoming: "Received",
   outgoing: "Spent",
-  swap: "Swap",
-  transfer: "Transfer",
+  movement: "Movement",
   fee: "Fee",
 };
 
 // Marker colors need different weights per theme: the airy 400-tier hues read
 // well on the dark card but wash out on white, so light mode steps down to
-// the 600-tier of the same hues (fee: zinc-500).
+// the 600-tier of the same hues. Fee remains a flow for summaries/tooltips but
+// is not rendered as its own overview marker.
 export const activityFlowPalettes: Record<
   "light" | "dark",
   Record<ActivityFlow, string>
@@ -1520,15 +1660,13 @@ export const activityFlowPalettes: Record<
   light: {
     incoming: "#059669",
     outgoing: "#dc2626",
-    swap: "#0284c7",
-    transfer: "#d97706",
+    movement: "#0284c7",
     fee: "#71717a",
   },
   dark: {
     incoming: "#34d399",
     outgoing: "#f87171",
-    swap: "#38bdf8",
-    transfer: "#f59e0b",
+    movement: "#38bdf8",
     fee: "#a1a1aa",
   },
 };
@@ -1540,9 +1678,7 @@ export function useActivityFlowColors() {
 export const activityFlowKeys: ActivityFlow[] = [
   "incoming",
   "outgoing",
-  "swap",
-  "transfer",
-  "fee",
+  "movement",
 ];
 
 export function activityTxs(snapshot: OverviewSnapshot): TreasuryActivityEvent[] {
@@ -1562,7 +1698,11 @@ export function activityTxs(snapshot: OverviewSnapshot): TreasuryActivityEvent[]
         satToBtc(Math.abs(tx.pair?.inAmountSat ?? 0)),
       );
       const volumeBtc =
-        flow === "fee" ? Math.max(btc, feeBtc) : flow === "swap" ? pairedVolume : btc;
+        flow === "fee"
+          ? Math.max(btc, feeBtc)
+          : flow === "movement"
+            ? pairedVolume
+            : btc;
       if (volumeBtc <= 0 && feeBtc <= 0) return [];
       const valueEur = Math.abs(tx.eur ?? 0);
       const priceEur =
@@ -1601,8 +1741,9 @@ export function activityTxs(snapshot: OverviewSnapshot): TreasuryActivityEvent[]
 export function isActivityInTreasuryPeriod(
   event: TreasuryActivityEvent,
   latestDate: Date,
-  period: TimePeriod,
+  period: TimePeriod | ResolvedTimePeriod,
 ) {
+  if (period === "auto") return true;
   if (period === "all") return true;
   if (period === "ytd") {
     return event.occurredAt.getUTCFullYear() === latestDate.getUTCFullYear();
@@ -1618,6 +1759,10 @@ export function isActivityInTreasuryPeriod(
     start.setUTCFullYear(start.getUTCFullYear() - 1);
   } else if (period === "5years") {
     start.setUTCFullYear(start.getUTCFullYear() - 5);
+  } else if (period === "10years") {
+    start.setUTCFullYear(start.getUTCFullYear() - 10);
+  } else if (period === "15years") {
+    start.setUTCFullYear(start.getUTCFullYear() - 15);
   }
   return event.occurredAt >= start && event.occurredAt <= latestDate;
 }
@@ -1646,6 +1791,7 @@ export function buildTreasuryBasePoint(
     bitcoinPriceEur,
     avgCostEur,
     lineBalanceBtc: point.balanceBtc,
+    linePortfolioValueEur: point.valueEur,
     lineBitcoinPriceEur: bitcoinPriceEur,
     lineAvgCostEur: avgCostEur,
     brushBalanceBtc: point.balanceBtc,
@@ -1710,6 +1856,7 @@ export function buildTreasuryActivityPoint(
     bitcoinPriceEur: event.priceEur,
     avgCostEur,
     lineBalanceBtc: options.drawLineValues ? balanceBtc : undefined,
+    linePortfolioValueEur: options.drawLineValues ? valueEur : undefined,
     lineBitcoinPriceEur: undefined,
     lineAvgCostEur: options.drawLineValues ? avgCostEur : undefined,
     brushBalanceBtc: balanceBtc,
@@ -1743,9 +1890,10 @@ export function enrichTreasuryChartData(
   snapshot: OverviewSnapshot,
   period: TimePeriod,
 ): TreasuryChartPoint[] {
+  const resolvedPeriod = resolveAutoTimePeriod(snapshot, period);
   const basePoints = points.map((point) => buildTreasuryBasePoint(point, snapshot));
   const events = activityTxs(snapshot);
-  const drawActivityLineValues = period === "30days";
+  const drawActivityLineValues = resolvedPeriod === "30days";
   const basePointsByDay = new Map(
     basePoints.map((point) => [String(point.date).slice(0, 10), point]),
   );
@@ -1767,7 +1915,7 @@ export function enrichTreasuryChartData(
   const latestTime = candidateTimes.length ? Math.max(...candidateTimes) : Date.now();
   const latestDate = new Date(latestTime);
   const eventPoints = events
-    .filter((event) => isActivityInTreasuryPeriod(event, latestDate, period))
+    .filter((event) => isActivityInTreasuryPeriod(event, latestDate, resolvedPeriod))
     .map((event) =>
       buildTreasuryActivityPoint(
         event,
@@ -1825,6 +1973,7 @@ export function activityMarkerView(
   const visibleActivityMarkers = activityPoints.filter(
     (point) =>
       showEvents &&
+      point.eventFlow !== "fee" &&
       (point.eventSize || point.activityBtc) >= markerMinimumForPoint(point),
   );
   const chartDisplayData = plottedData.filter(
@@ -1835,6 +1984,108 @@ export function activityMarkerView(
     chartDisplayData,
     visibleActivityMarkers,
   };
+}
+
+const DEFAULT_ACTIVITY_MARKER_CLUSTER_TARGET = 36;
+
+function markerGroupToleranceBtc(balanceBtc: number) {
+  return Math.max(Math.abs(balanceBtc) * 0.006, 0.00005);
+}
+
+function dominantActivityFlow(points: TreasuryChartPoint[]): ActivityFlow {
+  const totals: Record<ActivityFlow, number> = {
+    incoming: 0,
+    outgoing: 0,
+    movement: 0,
+    fee: 0,
+  };
+  for (const point of points) {
+    if (!point.eventFlow) continue;
+    totals[point.eventFlow] += point.eventSize || point.activityBtc || 0;
+  }
+  return (Object.entries(totals) as Array<[ActivityFlow, number]>).reduce(
+    (winner, entry) => (entry[1] > winner[1] ? entry : winner),
+    ["movement", 0] as [ActivityFlow, number],
+  )[0];
+}
+
+function representativeActivityPoint(points: TreasuryChartPoint[]) {
+  return points.reduce((winner, point) =>
+    (point.eventSize || point.activityBtc || 0) >
+    (winner.eventSize || winner.activityBtc || 0)
+      ? point
+      : winner,
+  );
+}
+
+export function clusterActivityMarkers(
+  markers: TreasuryChartPoint[],
+  options: ActivityMarkerClusterOptions = {},
+): TreasuryChartPoint[] {
+  if (markers.length < 2) return markers;
+  const target = options.maxVisibleMarkers ?? DEFAULT_ACTIVITY_MARKER_CLUSTER_TARGET;
+  const ordered = [...markers].sort((a, b) => {
+    const timeDelta = a.sortTimeMs - b.sortTimeMs;
+    if (timeDelta !== 0) return timeDelta;
+    return (a.markerBalanceBtc ?? 0) - (b.markerBalanceBtc ?? 0);
+  });
+  const firstTime = ordered[0]?.sortTimeMs ?? 0;
+  const lastTime = ordered.at(-1)?.sortTimeMs ?? firstTime;
+  const densityBucketMs =
+    markers.length > target && lastTime > firstTime
+      ? Math.max((lastTime - firstTime) / target, 60 * 60 * 1000)
+      : 0;
+  const groups: TreasuryChartPoint[][] = [];
+
+  for (const marker of ordered) {
+    const markerBalance = marker.markerBalanceBtc ?? marker.balanceBtc;
+    const markerTime = marker.sortTimeMs;
+    const group = groups.find((candidate) => {
+      const anchor = candidate[0];
+      if (!anchor) return false;
+      const anchorBalance = anchor.markerBalanceBtc ?? anchor.balanceBtc;
+      const sameAnchor = String(anchor.date) === String(marker.date);
+      const nearbyDenseTime =
+        densityBucketMs > 0 && Math.abs(markerTime - anchor.sortTimeMs) <= densityBucketMs;
+      return (
+        (sameAnchor || nearbyDenseTime) &&
+        Math.abs(markerBalance - anchorBalance) <=
+          markerGroupToleranceBtc(anchorBalance)
+      );
+    });
+    if (group) {
+      group.push(marker);
+    } else {
+      groups.push([marker]);
+    }
+  }
+
+  const clustered: TreasuryChartPoint[] = [];
+  for (const group of groups) {
+    if (group.length === 1) {
+      clustered.push(group[0]);
+      continue;
+    }
+    const representative = representativeActivityPoint(group);
+    const eventFlow = dominantActivityFlow(group);
+    const eventSize = Math.max(
+      ...group.map((point) => point.eventSize || point.activityBtc || 0),
+    );
+    const flowCount = new Set(group.map((point) => point.eventFlow).filter(Boolean))
+      .size;
+    clustered.push({
+      ...representative,
+      eventFlow,
+      eventSize: eventSize * (1 + Math.min(group.length - 1, 8) * 0.12),
+      markerCount: group.length,
+      markerGroupedPoints: group,
+      markerMixedFlows: flowCount > 1,
+      eventId: undefined,
+      eventTransactionId: undefined,
+    });
+  }
+
+  return clustered.sort((a, b) => a.sortTimeMs - b.sortTimeMs);
 }
 
 export function brushedActivityMarkers(
@@ -1877,12 +2128,15 @@ export function expandFallbackYearData(
 
 export function samplePortfolioPoints(
   points: PortfolioPoint[],
-  period: TimePeriod,
+  period: TimePeriod | ResolvedTimePeriod,
   density: "compact" | "detailed",
 ) {
   const maxPoints =
     density === "detailed"
-      ? period === "all" || period === "5years"
+      ? period === "all" ||
+        period === "5years" ||
+        period === "10years" ||
+        period === "15years"
         ? 720
         : 420
       : period === "30days"
@@ -1898,7 +2152,10 @@ export function samplePortfolioPoints(
   );
 }
 
-export function formatPortfolioTick(value: string, period: TimePeriod) {
+export function formatPortfolioTick(
+  value: string,
+  period: TimePeriod | ResolvedTimePeriod,
+) {
   const date = parseSeriesDate(value);
   if (period === "5years") {
     return date.toLocaleDateString("en-US", {
@@ -1921,12 +2178,20 @@ export function formatPortfolioTick(value: string, period: TimePeriod) {
   });
 }
 
-export function portfolioTickBucket(point: PortfolioChartPoint, period: TimePeriod) {
+export function portfolioTickBucket(
+  point: PortfolioChartPoint,
+  period: TimePeriod | ResolvedTimePeriod,
+) {
   if (point.date.startsWith("fallback-") || point.date.startsWith("series-")) {
     return point.month;
   }
   if (period === "30days" || period === "3months") return point.month;
-  if (period === "5years" || period === "all") {
+  if (
+    period === "5years" ||
+    period === "10years" ||
+    period === "15years" ||
+    period === "all"
+  ) {
     const date = parseSeriesDate(point.date);
     return `${date.getUTCFullYear()}-${Math.floor(date.getUTCMonth() / 3)}`;
   }
@@ -1936,7 +2201,7 @@ export function portfolioTickBucket(point: PortfolioChartPoint, period: TimePeri
 
 export function portfolioAxisTicks(
   points: PortfolioChartPoint[],
-  period: TimePeriod,
+  period: TimePeriod | ResolvedTimePeriod,
   expanded: boolean,
 ) {
   const maxTicks = expanded ? 10 : 8;
@@ -2548,6 +2813,17 @@ export function transactionDetailHref(transactionId: string) {
   }
   params.set("tx", transactionId);
   return `/transactions?${params.toString()}`;
+}
+
+export function transactionSetHref(transactionIds: string[]) {
+  const params = new URLSearchParams();
+  if (typeof window !== "undefined") {
+    const currentParams = new URLSearchParams(window.location.search);
+    const period = currentParams.get("period");
+    if (period) params.set("period", period);
+  }
+  params.set("txids", transactionIds.join(","));
+  return `/transactions?${params.toString()}#transactions-table`;
 }
 
 export function buildOverviewReadiness(snapshot: OverviewSnapshot): OverviewReadiness {

@@ -53,6 +53,7 @@ describe("connection catalog", () => {
         "river",
         "bullbitcoin",
         "coinfinity",
+        "pocket-bitcoin",
         "strike",
       ]),
     );
@@ -134,6 +135,18 @@ describe("connection catalog", () => {
     expect(bullWallet?.image).toContain("bullbitcoin-mark");
     expect(bullWallet?.imageClassName).toContain("size-9");
     expect(bullWallet?.imageClassName).not.toContain("rounded");
+  });
+
+  it("uses bundled official artwork for Pocket Bitcoin", () => {
+    const pocket = CONNECTION_SOURCES.find(
+      (source) => source.id === "pocket-bitcoin",
+    );
+
+    expect(pocket?.status).toBe("ready");
+    expect(pocket?.image).toContain("%239013FE");
+    expect(pocket?.image).not.toContain("font-family");
+    expect(pocket?.image).not.toContain("PKT");
+    expect(pocket?.sourceFormat).toBe("pocketbitcoin_csv");
   });
 
   it("uses bundled Blockstream Green artwork instead of a generated placeholder", () => {

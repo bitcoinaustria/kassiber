@@ -22,6 +22,7 @@ export interface AiProviderSecretRef {
 
 export interface AiProviderRow {
   name: string;
+  display_name?: string | null;
   base_url: string;
   kind: AiProviderKind;
   default_model?: string | null;

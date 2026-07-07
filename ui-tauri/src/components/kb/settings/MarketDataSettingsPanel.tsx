@@ -187,11 +187,10 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
   const isRebuildingRates = rebuildRates.isPending;
   const maintenanceSettings = maintenanceSettingsQuery.data?.data ?? null;
   const freshnessSettings = maintenanceSettings?.settings ?? null;
-  const autoMarketRatesEnabled = Boolean(
-    freshnessSettings?.background_enabled &&
-      freshnessSettings.source_classes?.market_rates,
+  const liveMinuteRatesEnabled = Boolean(
+    freshnessSettings?.source_classes?.market_rates,
   );
-  const autoMarketRatesDisabled =
+  const liveMinuteRatesDisabled =
     maintenanceSettingsQuery.isLoading ||
     configureMaintenance.isPending ||
     !maintenanceSettings?.profile;
@@ -202,6 +201,8 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
       ? freshnessSettings.market_rate_providers
       : ["coinbase-exchange", "coingecko", "mempool"];
   const requireCoarseReview = freshnessSettings?.require_coarse_review ?? false;
+  const bitcoinRailCarryingValue =
+    freshnessSettings?.bitcoin_rail_carrying_value ?? true;
   const coarsePricedCount = freshnessSettings?.coarse_priced_count ?? 0;
   // The coarse-review policy is independent of auto-pricing; gate it only on
   // load/mutation state and an active profile, not the market-rate toggles.
@@ -219,6 +220,7 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
     ) ?? 0;
   const rateRebuildJournalBlocker = rateRebuildJournalError(rateRebuildResult);
   const startRateRebuild = async () => {
+    if (!liveMinuteRatesEnabled) return;
     setRateRebuildError(null);
     setRateRebuildResult(null);
     rebuildNoticeRef.current = addNotification({
@@ -289,7 +291,7 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
       }
     }
   };
-  const setAutoMarketRates = async (enabled: boolean) => {
+  const setLiveMinuteRates = async (enabled: boolean) => {
     if (!freshnessSettings) return;
     const sourceClasses = {
       ...freshnessSettings.source_classes,
@@ -373,6 +375,32 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
       });
     }
   };
+  const setBitcoinRailCarryingValue = async (enabled: boolean) => {
+    if (enabled === bitcoinRailCarryingValue) return;
+    try {
+      await configureMaintenance.mutateAsync({
+        bitcoin_rail_carrying_value: enabled,
+      });
+      addNotification({
+        title: enabled
+          ? t("marketData.bitcoinRails.enabledTitle")
+          : t("marketData.bitcoinRails.disabledTitle"),
+        body: enabled
+          ? t("marketData.bitcoinRails.enabledBody")
+          : t("marketData.bitcoinRails.disabledBody"),
+        tone: "success",
+      });
+    } catch (error) {
+      addNotification({
+        title: t("marketData.bitcoinRails.errorTitle"),
+        body:
+          error instanceof Error
+            ? error.message
+            : t("marketData.bitcoinRails.errorBody"),
+        tone: "error",
+      });
+    }
+  };
   const importedPairs = krakenImportResult?.summary ?? [];
   const importedTotals = krakenImportResult?.totals;
   return (
@@ -404,7 +432,7 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
           </div>
           <Select
             value={marketRateProvider}
-            disabled={autoMarketRatesDisabled}
+            disabled={liveMinuteRatesDisabled}
             onValueChange={(value) => {
               void setMarketRateProvider(value as MarketRateProvider);
             }}
@@ -424,10 +452,10 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
         <div className="flex items-start gap-3">
           <Checkbox
             id="market-data-auto-refresh"
-            checked={autoMarketRatesEnabled}
-            disabled={autoMarketRatesDisabled}
+            checked={liveMinuteRatesEnabled}
+            disabled={liveMinuteRatesDisabled}
             onCheckedChange={(checked) => {
-              void setAutoMarketRates(checked === true);
+              void setLiveMinuteRates(checked === true);
             }}
           />
           <Label
@@ -461,6 +489,25 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
             <span>{t("marketData.coarse.reviewToggleLabel")}</span>
             <span className="font-normal text-muted-foreground">
               {t("marketData.coarse.reviewToggleDescription")}
+            </span>
+          </Label>
+        </div>
+        <div className="mt-3 flex items-start gap-3 border-t pt-3">
+          <Checkbox
+            id="bitcoin-rail-carrying-value"
+            checked={bitcoinRailCarryingValue}
+            disabled={maintenanceBusy}
+            onCheckedChange={(checked) => {
+              void setBitcoinRailCarryingValue(checked === true);
+            }}
+          />
+          <Label
+            htmlFor="bitcoin-rail-carrying-value"
+            className="grid gap-1 text-sm leading-relaxed"
+          >
+            <span>{t("marketData.bitcoinRails.toggleLabel")}</span>
+            <span className="font-normal text-muted-foreground">
+              {t("marketData.bitcoinRails.toggleDescription")}
             </span>
           </Label>
         </div>
@@ -520,7 +567,9 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
               setRateRebuildError(null);
               setRateRebuildOpen(true);
             }}
-            disabled={isRebuildingRates || isImportingKraken}
+            disabled={
+              isRebuildingRates || isImportingKraken || !liveMinuteRatesEnabled
+            }
           >
             {isRebuildingRates ? (
               <RefreshCw className="size-4 animate-spin" aria-hidden="true" />
@@ -533,6 +582,11 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
         <p className="mt-2 text-xs text-muted-foreground">
           {t("marketData.rebuildFootnote")}
         </p>
+        {!liveMinuteRatesEnabled ? (
+          <p className="mt-2 text-xs text-amber-700 dark:text-amber-300">
+            {t("marketData.rebuildOptInRequired")}
+          </p>
+        ) : null}
         {isRebuildingRates ? (
           <div className="mt-3 rounded-md border border-primary/25 bg-primary/5 p-3">
             <div className="flex items-center justify-between gap-3 text-xs">
@@ -873,7 +927,7 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
             <Button
               type="button"
               onClick={() => void startRateRebuild()}
-              disabled={isRebuildingRates}
+              disabled={isRebuildingRates || !liveMinuteRatesEnabled}
             >
               {isRebuildingRates ? (
                 <RefreshCw className="size-4 animate-spin" aria-hidden="true" />

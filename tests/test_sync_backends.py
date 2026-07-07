@@ -908,6 +908,93 @@ class SyncBackendsTest(unittest.TestCase):
         self.assertEqual(records[0]["occurred_at"], timestamp_to_iso(1_700_000_000))
         self.assertEqual(records[0]["confirmed_at"], timestamp_to_iso(1_700_000_000))
 
+    def test_electrum_records_backfill_prevouts_for_local_graph_consumers(self):
+        target = {"address": "bc1qchange", "script_pubkey": "0014deadbeef"}
+        txid = "33" * 32
+        prev_txid = "22" * 32
+        scripthash = scriptpubkey_scripthash(target["script_pubkey"])
+        sync_state = WalletSyncState(
+            chain="bitcoin",
+            network="bitcoin",
+            descriptor_plan=None,
+            policy_asset_id="",
+            targets=[target],
+            tracked_scripts={target["script_pubkey"]: target},
+            history_cache={},
+            checkpoint={
+                "electrum_known_txids": {scripthash: [txid]},
+                "electrum_scripthash_statuses": {scripthash: "status-1"},
+            },
+        )
+        raw_map = {
+            "current-raw": {
+                "txid": txid,
+                "vin": [{"txid": prev_txid, "vout": 0, "sequence": 0xFFFFFFFD}],
+                "vout": [
+                    {"n": 0, "script_hex": "0014" + "aa" * 20, "value_sats": 70_000},
+                    {"n": 1, "script_hex": target["script_pubkey"], "value_sats": 29_000},
+                ],
+                "total_output_sats": 99_000,
+            },
+            "prev-raw": {
+                "txid": prev_txid,
+                "vin": [],
+                "vout": [{"n": 0, "script_hex": target["script_pubkey"], "value": 0.001}],
+            },
+        }
+
+        class FakeElectrumClient:
+            def __init__(self, backend):
+                self.backend = backend
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+            def batch_call(self, requests):
+                responses = []
+                for method, params in requests:
+                    key = (method, tuple(params or ()))
+                    if key == ("blockchain.scripthash.subscribe", (scripthash,)):
+                        responses.append("status-1")
+                    elif key == ("blockchain.scripthash.get_history", (scripthash,)):
+                        responses.append([{"tx_hash": txid, "height": 123}])
+                    elif key == ("blockchain.transaction.get", (txid,)):
+                        responses.append("current-raw")
+                    elif key == ("blockchain.transaction.get", (prev_txid,)):
+                        responses.append("prev-raw")
+                    elif key == ("blockchain.block.header", (123,)):
+                        responses.append(_header_hex(1_700_000_000))
+                    else:
+                        raise AssertionError(f"Unexpected Electrum call: {key!r}")
+                return responses
+
+        with patch("kassiber.core.sync_backends.ElectrumClient", FakeElectrumClient), patch(
+            "kassiber.core.sync_backends.decode_raw_transaction",
+            side_effect=lambda raw_hex: raw_map[raw_hex],
+        ):
+            records, meta = sb.electrum_records_for_wallet(
+                {"name": "fulcrum", "kind": "electrum", "url": "ssl://electrum.example:50002"},
+                sync_state,
+            )
+
+        self.assertEqual(meta["scripts_changed"], 1)
+        self.assertEqual(meta["freshness_checkpoint"]["electrum_stored_graph_version"], 1)
+        self.assertEqual(len(records), 1)
+        self.assertEqual(records[0]["direction"], "outbound")
+        raw = json.loads(records[0]["raw_json"])
+        self.assertEqual(
+            raw["vin"][0]["prevout"],
+            {"scriptpubkey": target["script_pubkey"], "value": 100_000},
+        )
+        self.assertEqual(raw["vout"][0]["scriptpubkey"], "0014" + "aa" * 20)
+        self.assertEqual(raw["vout"][0]["value"], 70_000)
+        self.assertEqual(raw["vout"][1]["scriptpubkey"], target["script_pubkey"])
+        self.assertEqual(raw["vout"][1]["value"], 29_000)
+        self.assertEqual(raw["vout"][0]["script_hex"], "0014" + "aa" * 20)
+
     def test_electrum_checkpoint_skips_unchanged_history_on_second_sync(self):
         target = {"address": "bc1qe1", "script_pubkey": "0014deadbeef"}
         txid = "22" * 32
@@ -2199,7 +2286,7 @@ class SyncBackendsTest(unittest.TestCase):
         # a separate ledger component.
         self.assertAlmostEqual(float(record["amount"]), 0.8, places=8)
 
-    def test_bitcoinrpc_multi_output_send_legacy_fallback_keeps_net_details_amount(self):
+    def test_bitcoinrpc_multi_output_send_legacy_fallback_keeps_fee_separate(self):
         record = record_from_bitcoinrpc_details(
             "66" * 32,
             [
@@ -2210,7 +2297,10 @@ class SyncBackendsTest(unittest.TestCase):
         )
         self.assertEqual(record["direction"], "outbound")
         self.assertAlmostEqual(float(record["fee"]), 0.0001, places=8)
-        self.assertAlmostEqual(float(record["amount"]), 0.7999, places=8)
+        # Core detail amounts are recipient value; the network fee is already
+        # carried separately. Subtracting it here underreports wallet/book
+        # balances and breaks ownership-derived fan-out matching.
+        self.assertAlmostEqual(float(record["amount"]), 0.8, places=8)
 
     def test_bitcoinrpc_fee_only_self_spend_keeps_zero_amount(self):
         record = record_from_bitcoinrpc_details(

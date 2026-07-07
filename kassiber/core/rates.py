@@ -81,6 +81,7 @@ _KRAKEN_SUPPORTED_QUOTES = {"EUR", "USD"}
 _KRAKEN_BATCH_SIZE = 10_000
 _COINBASE_MAX_CANDLES = 300
 _BUNDLED_KRAKEN_BTC_DAILY_PATH = "data/rates/kraken/btc_daily"
+_BUNDLED_KRAKEN_BTC_HOURLY_PATH = "data/rates/kraken/btc_hourly"
 
 
 _RATE_UPSERT_SQL = """
@@ -1802,7 +1803,7 @@ def _kraken_member_pair(member_name):
     pair_code, sep, interval = stem.rpartition("_")
     if not sep or not pair_code or not interval:
         return None, None, "invalid_filename"
-    if interval not in {"1", "1440"}:
+    if interval not in {"1", "60", "1440"}:
         return None, None, "unsupported_interval"
     normalized_pair, skip_reason = _normalize_kraken_pair_code(pair_code)
     return normalized_pair, int(interval), skip_reason
@@ -1917,7 +1918,11 @@ def _sync_rates_kraken_csv(conn, pair=None, path=None, commit=True):
 
     for member_name, handle in _kraken_csv_members(path, selected_names=selected_names):
         normalized_pair, interval_minutes = member_intervals[member_name]
-        granularity = "minute" if interval_minutes == 1 else "daily"
+        granularity = {
+            1: "minute",
+            60: "hourly",
+            1440: "daily",
+        }[interval_minutes]
 
         summary = summaries.setdefault(
             normalized_pair,
@@ -1993,8 +1998,11 @@ def bundled_kraken_btc_daily_path():
     return resources.files("kassiber").joinpath(_BUNDLED_KRAKEN_BTC_DAILY_PATH)
 
 
-def sync_bundled_kraken_btc_daily(conn, pair=None, commit=True):
-    resource = bundled_kraken_btc_daily_path()
+def bundled_kraken_btc_hourly_path():
+    return resources.files("kassiber").joinpath(_BUNDLED_KRAKEN_BTC_HOURLY_PATH)
+
+
+def _sync_bundled_kraken_resource(conn, resource, *, pair=None, commit=True, tmp_prefix):
     if isinstance(resource, Path):
         return str(resource), _sync_rates_kraken_csv(
             conn,
@@ -2003,7 +2011,7 @@ def sync_bundled_kraken_btc_daily(conn, pair=None, commit=True):
             commit=commit,
         )
     display_path = str(resource)
-    with tempfile.TemporaryDirectory(prefix="kassiber-kraken-btc-daily-") as tmp:
+    with tempfile.TemporaryDirectory(prefix=tmp_prefix) as tmp:
         tmp_path = Path(tmp)
         for child in resource.iterdir():
             if child.is_file():
@@ -2016,7 +2024,27 @@ def sync_bundled_kraken_btc_daily(conn, pair=None, commit=True):
         )
 
 
-def _bundled_kraken_seeded_pairs(conn, pairs):
+def sync_bundled_kraken_btc_daily(conn, pair=None, commit=True):
+    return _sync_bundled_kraken_resource(
+        conn,
+        bundled_kraken_btc_daily_path(),
+        pair=pair,
+        commit=commit,
+        tmp_prefix="kassiber-kraken-btc-daily-",
+    )
+
+
+def sync_bundled_kraken_btc_hourly(conn, pair=None, commit=True):
+    return _sync_bundled_kraken_resource(
+        conn,
+        bundled_kraken_btc_hourly_path(),
+        pair=pair,
+        commit=commit,
+        tmp_prefix="kassiber-kraken-btc-hourly-",
+    )
+
+
+def _bundled_kraken_seeded_pairs(conn, pairs, granularity):
     if not pairs:
         return set()
     placeholders = ", ".join("?" for _ in pairs)
@@ -2025,22 +2053,30 @@ def _bundled_kraken_seeded_pairs(conn, pairs):
         SELECT pair, COUNT(*) AS count
         FROM rates_cache
         WHERE source = ?
-          AND granularity = 'daily'
+          AND granularity = ?
           AND method = 'ohlcvt_csv'
           AND pair IN ({placeholders})
         GROUP BY pair
         """,
-        [RATE_SOURCE_KRAKEN_CSV, *pairs],
+        [RATE_SOURCE_KRAKEN_CSV, granularity, *pairs],
     ).fetchall()
     return {row["pair"] for row in rows if int(row["count"] or 0) > 0}
 
 
-def ensure_bundled_kraken_btc_daily_seed(conn, pair=None, commit=True):
+def _ensure_bundled_kraken_btc_seed(
+    conn,
+    *,
+    pair=None,
+    commit=True,
+    granularity,
+    bundled_path,
+    sync_bundled,
+):
     requested_pairs = [require_supported_pair(pair)] if pair else list(SUPPORTED_RATE_PAIRS)
-    seeded_pairs = _bundled_kraken_seeded_pairs(conn, requested_pairs)
+    seeded_pairs = _bundled_kraken_seeded_pairs(conn, requested_pairs, granularity)
     missing_pairs = [requested for requested in requested_pairs if requested not in seeded_pairs]
     if not missing_pairs:
-        return str(bundled_kraken_btc_daily_path()), [
+        return str(bundled_path()), [
             {
                 "pair": requested,
                 "source": RATE_SOURCE_KRAKEN_CSV,
@@ -2049,7 +2085,7 @@ def ensure_bundled_kraken_btc_daily_seed(conn, pair=None, commit=True):
                 "files": 0,
                 "skipped_rows": 0,
                 "skipped_files": 0,
-                "granularity": "daily",
+                "granularity": granularity,
                 "method": "ohlcvt_csv",
                 "already_seeded": True,
                 "fetched_at": None,
@@ -2057,7 +2093,7 @@ def ensure_bundled_kraken_btc_daily_seed(conn, pair=None, commit=True):
             for requested in requested_pairs
         ]
     seed_pair = missing_pairs[0] if len(missing_pairs) == 1 else None
-    archive_path, summary = sync_bundled_kraken_btc_daily(
+    archive_path, summary = sync_bundled(
         conn,
         pair=seed_pair,
         commit=commit,
@@ -2065,6 +2101,28 @@ def ensure_bundled_kraken_btc_daily_seed(conn, pair=None, commit=True):
     for row in summary:
         row["already_seeded"] = False
     return archive_path, summary
+
+
+def ensure_bundled_kraken_btc_daily_seed(conn, pair=None, commit=True):
+    return _ensure_bundled_kraken_btc_seed(
+        conn,
+        pair=pair,
+        commit=commit,
+        granularity="daily",
+        bundled_path=bundled_kraken_btc_daily_path,
+        sync_bundled=sync_bundled_kraken_btc_daily,
+    )
+
+
+def ensure_bundled_kraken_btc_hourly_seed(conn, pair=None, commit=True):
+    return _ensure_bundled_kraken_btc_seed(
+        conn,
+        pair=pair,
+        commit=commit,
+        granularity="hourly",
+        bundled_path=bundled_kraken_btc_hourly_path,
+        sync_bundled=sync_bundled_kraken_btc_hourly,
+    )
 
 
 def sync_rates(
@@ -2163,6 +2221,7 @@ __all__ = [
     "SUPPORTED_RATE_PAIRS",
     "SUPPORTED_RATE_SOURCES",
     "ensure_bundled_kraken_btc_daily_seed",
+    "ensure_bundled_kraken_btc_hourly_seed",
     "fetch_rates_coinbase_exchange",
     "fetch_rates_coingecko",
     "get_cached_rate_at_or_before",
@@ -2180,6 +2239,7 @@ __all__ = [
     "spot_rate_pair",
     "set_manual_rate",
     "sync_bundled_kraken_btc_daily",
+    "sync_bundled_kraken_btc_hourly",
     "sync_latest_rates",
     "sync_rates",
     "transaction_price_missing_sql",

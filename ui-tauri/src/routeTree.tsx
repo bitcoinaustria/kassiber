@@ -47,6 +47,10 @@ const Activity = lazyRouteComponent(
   "Activity",
 );
 const Reports = lazyRouteComponent(() => import("./routes/Reports"), "Reports");
+const PrivacyMirror = lazyRouteComponent(
+  () => import("./routes/PrivacyMirror"),
+  "PrivacyMirror",
+);
 const ExitTax = lazyRouteComponent(() => import("./routes/ExitTax"), "ExitTax");
 const SourceFunds = lazyRouteComponent(
   () => import("./routes/source-funds"),
@@ -164,6 +168,12 @@ const reportsRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: "/reports",
   component: Reports,
+});
+
+const privacyMirrorRoute = createRoute({
+  getParentRoute: () => appLayoutRoute,
+  path: "/privacy-mirror",
+  component: PrivacyMirror,
 });
 
 const exitTaxRoute = createRoute({
@@ -344,6 +354,7 @@ const routeTree = rootRoute.addChildren([
     transactionsRoute,
     activityRoute,
     reportsRoute,
+    privacyMirrorRoute,
     exitTaxRoute,
     sourceFundsRoute,
     journalsRoute,

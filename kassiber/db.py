@@ -30,7 +30,7 @@ from .fingerprints import make_transaction_fingerprint
 from .msat import btc_to_msat, dec, msat_to_btc
 from .secrets import sqlcipher as secrets_sqlcipher
 from .tax_policy import DEFAULT_LONG_TERM_DAYS, DEFAULT_TAX_COUNTRY
-from .wallet_descriptors import LIQUID_POLICY_ASSET_IDS
+from .wallet_descriptors import LIQUID_POLICY_ASSET_IDS, normalize_asset_code
 
 
 APP_NAME = "kassiber"
@@ -63,6 +63,14 @@ DB_CACHE_SIZE_KIB = -16_000
 # SQLCipher connections (mmap is disabled there for security), so it only helps
 # the plaintext store and never interferes with the cipher keying sequence.
 DB_MMAP_SIZE_BYTES = 268_435_456
+SWAP_FEE_PAIR_KINDS = (
+    "chain-swap",
+    "peg-in",
+    "peg-out",
+    "reverse-submarine-swap",
+    "submarine-swap",
+    "swap-refund",
+)
 
 
 SCHEMA = """
@@ -88,6 +96,7 @@ CREATE TABLE IF NOT EXISTS profiles (
     tax_long_term_days INTEGER NOT NULL DEFAULT 365,
     gains_algorithm TEXT NOT NULL DEFAULT 'FIFO',
     require_coarse_review INTEGER NOT NULL DEFAULT 0,
+    bitcoin_rail_carrying_value INTEGER NOT NULL DEFAULT 1,
     journal_input_version INTEGER NOT NULL DEFAULT 0,
     last_processed_input_version INTEGER NOT NULL DEFAULT 0,
     last_processed_at TEXT,
@@ -1012,6 +1021,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_source_funds_recipients_active_label
 
 CREATE TABLE IF NOT EXISTS ai_providers (
     name TEXT PRIMARY KEY,
+    display_name TEXT,
     base_url TEXT NOT NULL,
     api_key TEXT,
     default_model TEXT,
@@ -1332,6 +1342,7 @@ def ensure_schema_compat(conn):
     ensure_column(conn, "profiles", "tax_country", f"TEXT NOT NULL DEFAULT '{DEFAULT_TAX_COUNTRY}'")
     ensure_column(conn, "profiles", "tax_long_term_days", f"INTEGER NOT NULL DEFAULT {DEFAULT_LONG_TERM_DAYS}")
     ensure_column(conn, "profiles", "require_coarse_review", "INTEGER NOT NULL DEFAULT 0")
+    ensure_column(conn, "profiles", "bitcoin_rail_carrying_value", "INTEGER NOT NULL DEFAULT 1")
     ensure_column(conn, "profiles", "journal_input_version", "INTEGER NOT NULL DEFAULT 0")
     ensure_column(conn, "profiles", "last_processed_input_version", "INTEGER NOT NULL DEFAULT 0")
     # Cached count of unresolved swap/transfer candidates, written when the
@@ -1405,6 +1416,11 @@ def ensure_schema_compat(conn):
     ensure_column(conn, "wallet_utxos", "key_state", "TEXT")
     ensure_column(conn, "wallet_utxos", "anon_history_json", "TEXT NOT NULL DEFAULT '[]'")
     ensure_column(conn, "loan_legs", "loan_id", "TEXT")
+    ensure_column(conn, "ai_providers", "display_name", "TEXT")
+    conn.execute(
+        "UPDATE ai_providers SET display_name = name WHERE display_name IS NULL OR TRIM(display_name) = ''"
+    )
+    conn.commit()
     _ensure_ai_provider_secret_refs_schema(conn)
     _ensure_bip329_wallet_agnostic_schema(conn)
     _drop_legacy_source_funds_recipients_unique(conn)
@@ -2026,7 +2042,7 @@ def _repair_attachment_child_fks(conn):
 
 
 def _ensure_swap_matching_schema(conn):
-    """Add swap-matching columns + partial-unique indexes for transaction_pairs.
+    """Add swap-matching columns + active-pair indexes for transaction_pairs.
 
     Splits into four ordered steps:
       1. Drop the legacy table-level ``UNIQUE`` constraints on
@@ -2036,8 +2052,10 @@ def _ensure_swap_matching_schema(conn):
       2. ``ensure_column`` the new nullable columns on existing tables.
       3. Index ``transactions.payment_hash`` for the matcher's exact-lookup
          path.
-      4. Re-create the active-pair partial unique indexes that replace the
-         legacy table-level constraints.
+      4. Re-create active-pair indexes. The per-leg indexes are deliberately
+         non-unique: reviewed CoinJoin / missing-intermediate-wallet flows can
+         link one transaction to several counterparties. A separate exact-pair
+         partial unique index still blocks duplicate active links.
     """
     _migrate_legacy_transaction_pairs_uniques(conn)
     ensure_column(conn, "transactions", "payment_hash", "TEXT")
@@ -2058,20 +2076,61 @@ def _ensure_swap_matching_schema(conn):
         "CREATE INDEX IF NOT EXISTS idx_transactions_payment_hash "
         "ON transactions(payment_hash) WHERE payment_hash IS NOT NULL"
     )
+    conn.execute("DROP INDEX IF EXISTS idx_transaction_pairs_active_out")
+    conn.execute("DROP INDEX IF EXISTS idx_transaction_pairs_active_in")
     conn.execute(
-        "CREATE UNIQUE INDEX IF NOT EXISTS idx_transaction_pairs_active_out "
+        "CREATE INDEX IF NOT EXISTS idx_transaction_pairs_active_out "
         "ON transaction_pairs(profile_id, out_transaction_id) WHERE deleted_at IS NULL"
     )
     conn.execute(
-        "CREATE UNIQUE INDEX IF NOT EXISTS idx_transaction_pairs_active_in "
+        "CREATE INDEX IF NOT EXISTS idx_transaction_pairs_active_in "
         "ON transaction_pairs(profile_id, in_transaction_id) WHERE deleted_at IS NULL"
+    )
+    conn.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_transaction_pairs_active_pair "
+        "ON transaction_pairs(profile_id, out_transaction_id, in_transaction_id) "
+        "WHERE deleted_at IS NULL"
     )
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_transaction_pairs_profile_active "
         "ON transaction_pairs(profile_id) WHERE deleted_at IS NULL"
     )
+    _clear_stale_same_asset_swap_fees(conn)
     conn.commit()
     _backfill_payment_hash_from_raw_json(conn)
+
+
+def _clear_stale_same_asset_swap_fees(conn):
+    rows = conn.execute(
+        """
+        SELECT p.id,
+               p.kind,
+               out_tx.asset AS out_asset,
+               in_tx.asset AS in_asset
+        FROM transaction_pairs p
+        JOIN transactions out_tx ON out_tx.id = p.out_transaction_id
+        JOIN transactions in_tx ON in_tx.id = p.in_transaction_id
+        WHERE p.swap_fee_msat IS NOT NULL
+        """
+    ).fetchall()
+    stale_ids = []
+    for row in rows:
+        try:
+            out_asset = normalize_asset_code(row["out_asset"])
+            in_asset = normalize_asset_code(row["in_asset"])
+        except (TypeError, ValueError):
+            continue
+        if out_asset != in_asset:
+            continue
+        if str(row["kind"] or "").strip().lower() in SWAP_FEE_PAIR_KINDS:
+            continue
+        stale_ids.append((row["id"],))
+    if not stale_ids:
+        return
+    conn.executemany(
+        "UPDATE transaction_pairs SET swap_fee_msat = NULL, swap_fee_kind = NULL WHERE id = ?",
+        stale_ids,
+    )
 
 
 def _ensure_direct_swap_payout_schema(conn):

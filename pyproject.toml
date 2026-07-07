@@ -14,7 +14,7 @@ authors = [
 ]
 dependencies = [
   "embit>=0.8.0",
-  "rp2 @ git+https://github.com/bitcoinaustria/rp2.git@e0a88d8b3ff423cb88e3851fffcd8c08b56c683c",
+  "rp2 @ git+https://github.com/bitcoinaustria/rp2.git@24eeeed5e88d79cedfada9062dbb4fb45f55946c",
   "XlsxWriter>=3.2,<4",
   "openpyxl>=3.1,<4",
   "reportlab>=4.4,<5",
@@ -38,4 +38,6 @@ include = ["kassiber*"]
 kassiber = [
   "data/rates/kraken/btc_daily/*.csv",
   "data/rates/kraken/btc_daily/README.md",
+  "data/rates/kraken/btc_hourly/*.csv",
+  "data/rates/kraken/btc_hourly/README.md",
 ]

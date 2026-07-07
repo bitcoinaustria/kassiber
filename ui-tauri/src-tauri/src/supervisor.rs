@@ -528,6 +528,10 @@ impl DaemonSupervisor {
                 eprintln!("kassiber: failed to emit stream event: {error}");
             }
         })
+        .map(|response| {
+            self.note_project_data_root_from_response(kind, &response);
+            response
+        })
     }
 
     fn invoke_inner<F>(
@@ -692,6 +696,21 @@ impl DaemonSupervisor {
         format!("tauri-{request_id}")
     }
 
+    fn note_project_data_root_from_response(&self, request_kind: &str, response: &Value) {
+        if !matches!(request_kind, "ui.projects.select" | "ui.projects.create") {
+            return;
+        }
+        if response.get("kind").and_then(Value::as_str) != Some(request_kind) {
+            return;
+        }
+        let Some(data_root) = project_data_root_from_response(response) else {
+            return;
+        };
+        if let Ok(mut configured) = self.data_root.lock() {
+            *configured = Some(PathBuf::from(data_root));
+        }
+    }
+
     fn ensure_process(&self) -> Result<Arc<DaemonProcess>, SupervisorError> {
         let mut slot = self.process.lock().map_err(|_| {
             SupervisorError::new("daemon_lock_poisoned", "daemon process lock is poisoned")
@@ -815,6 +834,16 @@ fn timeout_is_safe_to_retry(kind: &str) -> bool {
         || kind.ends_with(".summary")
         || kind.ends_with(".coverage")
         || kind.ends_with(".quarantine")
+}
+
+fn project_data_root_from_response(response: &Value) -> Option<String> {
+    response
+        .get("data")
+        .and_then(|data| data.get("project"))
+        .and_then(|project| project.get("data_root"))
+        .and_then(Value::as_str)
+        .filter(|value| !value.trim().is_empty())
+        .map(ToOwned::to_owned)
 }
 
 impl DaemonProcess {
@@ -2221,6 +2250,32 @@ for line in sys.stdin:
         assert!(!timeout_is_safe_to_retry("ui.transactions.metadata.update"));
         // Mutating kinds the UI calls must never be retryable.
         assert!(!timeout_is_safe_to_retry("ui.transactions.history.revert"));
+    }
+
+    #[test]
+    fn project_data_root_tracks_successful_project_response() {
+        let response = json!({
+            "kind": "ui.projects.select",
+            "schema_version": 1,
+            "data": {
+                "project": {
+                    "id": "family",
+                    "data_root": "/Users/dev/.kassiber/projects/family/data"
+                }
+            }
+        });
+        assert_eq!(
+            project_data_root_from_response(&response),
+            Some("/Users/dev/.kassiber/projects/family/data".to_string())
+        );
+        assert_eq!(
+            project_data_root_from_response(&json!({
+                "kind": "auth_required",
+                "schema_version": 1,
+                "data": {"scope": "unlock_project"}
+            })),
+            None
+        );
     }
 
     #[test]

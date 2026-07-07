@@ -21,6 +21,31 @@ Detection rule (intentionally conservative):
 from collections import defaultdict
 
 _HEX_DIGITS = frozenset("0123456789abcdefABCDEF")
+_BITCOIN_CARRY_ASSETS = frozenset({"BTC", "LBTC"})
+
+
+def is_bitcoin_rail_pair(out_asset, in_asset):
+    """True for BTC/LBTC rail changes of the same Bitcoin exposure."""
+
+    assets = {str(out_asset or "").strip().upper(), str(in_asset or "").strip().upper()}
+    return assets == _BITCOIN_CARRY_ASSETS
+
+
+def cross_asset_carrying_value_supported(tax_country, out_asset, in_asset):
+    """Whether a cross-asset carrying-value pair is supported for this profile."""
+
+    if str(tax_country or "").strip().lower() == "at":
+        return True
+    return is_bitcoin_rail_pair(out_asset, in_asset)
+
+
+def profile_bitcoin_rail_carrying_value(profile):
+    """Profile default for treating Bitcoin rail changes as carrying value."""
+
+    try:
+        return bool(profile["bitcoin_rail_carrying_value"])
+    except (KeyError, IndexError, TypeError):
+        return True
 
 
 def normalize_group_txid(external_id):
@@ -81,7 +106,16 @@ def apply_manual_pairs(rows, auto_pairs, manual_pair_records):
         manually_paired_ids.add(out_id)
         manually_paired_ids.add(in_id)
         if out_row["asset"] == in_row["asset"] and record["policy"] == "carrying-value":
-            manual_same_asset.append({"out": out_row, "in": in_row})
+            manual_same_asset.append(
+                {
+                    "out": out_row,
+                    "in": in_row,
+                    "pair_id": record["id"],
+                    "kind": record["kind"],
+                    "policy": record["policy"],
+                    "source": _row_field(record, "pair_source") or "manual",
+                }
+            )
         elif out_row["asset"] != in_row["asset"]:
             cross_asset_pairs.append(
                 {
@@ -103,18 +137,28 @@ def apply_manual_pairs(rows, auto_pairs, manual_pair_records):
     return manual_same_asset + surviving_auto, cross_asset_pairs
 
 
+def _row_field(row, key):
+    """Read ``key`` from a sqlite3.Row-like or dict row, ``None`` if absent."""
+    try:
+        keys = row.keys()
+    except AttributeError:
+        return row.get(key)
+    return row[key] if key in keys else None
+
+
 def detect_intra_transfers(rows):
     """Return ``(pairs, matched_ids)`` for the given transaction rows.
 
     Args:
         rows: iterable of sqlite3.Row-like records that expose
             ``id``, ``external_id``, ``asset``, ``direction``, ``amount``,
-            ``wallet_id``.
+            ``wallet_id`` (and, for Lightning, ``payment_hash``).
 
     Returns:
         pairs: list of ``{"out": out_row, "in": in_row}`` dicts.
         matched_ids: set of transaction ids covered by any pair.
     """
+    rows = list(rows)
     by_key = defaultdict(list)
     for row in rows:
         external_id = row["external_id"] if "external_id" in row.keys() else None
@@ -144,6 +188,45 @@ def detect_intra_transfers(rows):
             continue
         out_row, in_row = outs[0], ins[0]
         if out_row["wallet_id"] == in_row["wallet_id"]:
+            continue
+        pairs.append({"out": out_row, "in": in_row})
+        matched_ids.add(out_row["id"])
+        matched_ids.add(in_row["id"])
+
+    # Lightning self-transfers pair by ``payment_hash``, not by txid: a payment
+    # from one owned node to an invoice on another owned node shares the payment
+    # hash but has distinct ``external_id`` values (``cln:pay:H`` vs
+    # ``cln:income:H``, or the LND equivalents), so the txid grouping above never
+    # sees them. The hash is a cryptographic commitment to the preimage, so a
+    # match across two owned wallets is deterministic proof of a self-transfer —
+    # the same conservative 1-out/1-in / different-wallet / same-asset rule
+    # applies. External payments (only an outbound leg, no owned receiver) never
+    # pair and stay real disposals.
+    by_hash = defaultdict(list)
+    for row in rows:
+        if _row_field(row, "id") in matched_ids:
+            continue
+        payment_hash = _row_field(row, "payment_hash")
+        if not payment_hash:
+            continue
+        by_hash[(str(payment_hash), row["asset"])].append(row)
+    for group in by_hash.values():
+        outs = [
+            r
+            for r in group
+            if r["direction"] == "outbound" and (r["amount"] or 0) > 0
+        ]
+        ins = [
+            r
+            for r in group
+            if r["direction"] == "inbound" and (r["amount"] or 0) > 0
+        ]
+        if len(outs) != 1 or len(ins) != 1:
+            continue
+        out_row, in_row = outs[0], ins[0]
+        if out_row["wallet_id"] == in_row["wallet_id"]:
+            continue
+        if out_row["id"] in matched_ids or in_row["id"] in matched_ids:
             continue
         pairs.append({"out": out_row, "in": in_row})
         matched_ids.add(out_row["id"])

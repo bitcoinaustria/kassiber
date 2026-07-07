@@ -66,6 +66,7 @@ import {
   type FlowChartSegment,
   type FlowChartSelection,
   type PeriodKey,
+  type ResolvedPeriodKey,
   type SwapCandidateReference,
   type TableQuickFilter,
 } from "./model";
@@ -87,28 +88,35 @@ const PeriodTabs = ({
   activePeriod,
   onPeriodChange,
   periodOptions = periodKeys,
+  resolvedPeriod,
 }: {
   activePeriod: PeriodKey;
   onPeriodChange: (period: PeriodKey) => void;
   periodOptions?: PeriodKey[];
+  resolvedPeriod?: ResolvedPeriodKey | null;
 }) => {
   const { t } = useTranslation("transactions");
+  const translatePeriod = (key: PeriodKey) =>
+    (t as (key: string) => string)(periodLabels[key]);
   return (
-    <div className="flex items-center gap-1 rounded-lg bg-muted p-1">
+    <div className="flex h-8 items-center gap-1 rounded-lg bg-muted p-0.5">
       {periodOptions.map((key) => (
         <button
           key={key}
           type="button"
           onClick={() => onPeriodChange(key)}
           className={cn(
-            "rounded-md px-3 py-1.5 text-xs font-medium transition-all sm:text-sm",
+            "h-7 rounded-md px-2.5 text-xs font-medium transition-all sm:px-3 sm:text-sm",
             activePeriod === key
               ? "bg-card text-foreground shadow-sm"
               : "text-muted-foreground hover:text-foreground",
           )}
         >
-          {/* loose translator */}
-          {(t as (key: string) => string)(periodLabels[key])}
+          {key === "auto" && activePeriod === "auto" && resolvedPeriod
+            ? t("period.autoResolved", {
+                period: translatePeriod(resolvedPeriod),
+              })
+            : translatePeriod(key)}
         </button>
       ))}
     </div>
@@ -185,7 +193,7 @@ const TransactionWorkbench = ({
   swapCandidateTotal,
   isRefreshing,
 }: {
-  period: PeriodKey;
+  period: ResolvedPeriodKey;
   records: Transaction[];
   hideSensitive: boolean;
   currency: Currency;

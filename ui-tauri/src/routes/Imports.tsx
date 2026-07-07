@@ -17,7 +17,11 @@ import {
   CONNECTION_SOURCES,
   connectionCategoryLabel,
 } from "@/lib/connectionCatalog";
-import { screenShellClassName } from "@/lib/screen-layout";
+import {
+  pageHeaderActionClassName,
+  pageHeaderClassName,
+  screenShellClassName,
+} from "@/lib/screen-layout";
 
 export function Imports() {
   const { t } = useTranslation("review");
@@ -49,7 +53,7 @@ export function Imports() {
 
   return (
     <div className={screenShellClassName}>
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+      <div className={pageHeaderClassName}>
         <div className="min-w-0 space-y-1">
           <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
             {t("imports.eyebrow")}
@@ -65,6 +69,7 @@ export function Imports() {
           type="button"
           variant="outline"
           size="sm"
+          className={pageHeaderActionClassName}
           onClick={() => void navigate({ to: "/connections" })}
         >
           <ArrowLeft className="size-4" aria-hidden="true" />

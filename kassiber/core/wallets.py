@@ -52,6 +52,10 @@ WALLET_KINDS = [
     "21bitcoin",
     "pocketbitcoin",
     "strike",
+    "ledgerlive",
+    "kraken",
+    "coinbase",
+    "binance",
     "wasabi",
     "samourai",
     "custom",
@@ -765,6 +769,26 @@ WALLET_KIND_CATALOG = {
         "config_fields": ["source_file", "source_format"],
         "requires": [],
     },
+    "ledgerlive": {
+        "summary": "Ledger Live CSV importer for BTC/LBTC wallet movement only.",
+        "config_fields": ["source_file", "source_format"],
+        "requires": [],
+    },
+    "kraken": {
+        "summary": "Kraken exchange import wallet for API or CSV execution evidence.",
+        "config_fields": ["backend", "source_file", "source_format"],
+        "requires": [],
+    },
+    "coinbase": {
+        "summary": "Coinbase exchange import wallet for API execution and wallet movement evidence.",
+        "config_fields": ["backend", "source_file", "source_format"],
+        "requires": [],
+    },
+    "binance": {
+        "summary": "Binance exchange import wallet for API rows and BTC supplemental CSVs.",
+        "config_fields": ["backend", "source_file", "source_format"],
+        "requires": [],
+    },
     "wasabi": {
         "summary": "Wasabi Wallet sanitized RPC/export bundle importer with CoinJoin and anonymity evidence.",
         "config_fields": ["source_file", "source_format", "wasabi_metadata"],
@@ -850,6 +874,20 @@ def wallet_descriptor_material(config):
     return "\n".join(
         value for value in (descriptor, change_descriptor, sp_descriptor) if value
     )
+
+
+def reveal_wallet_descriptor_material(conn, workspace_ref, profile_ref, wallet_ref):
+    """Return only pasteable descriptor material for the desktop copy flow."""
+
+    _, profile = resolve_scope(conn, workspace_ref, profile_ref)
+    wallet = resolve_wallet(conn, profile["id"], wallet_ref)
+    config = json.loads(wallet["config_json"]) if wallet["config_json"] else {}
+    return {
+        "id": wallet["id"],
+        "label": wallet["label"],
+        "kind": wallet["kind"],
+        "wallet_material": wallet_descriptor_material(config),
+    }
 
 
 def reveal_wallet_secrets(conn, workspace_ref, profile_ref, wallet_ref):
@@ -1000,6 +1038,7 @@ __all__ = [
     "wallet_btcpay_provenance_config",
     "wallet_btcpay_sync_config",
     "wallet_descriptor_material",
+    "reveal_wallet_descriptor_material",
     "wallet_live_chain_config",
     "wallet_policy_asset_id",
     "wallet_row_to_dict",

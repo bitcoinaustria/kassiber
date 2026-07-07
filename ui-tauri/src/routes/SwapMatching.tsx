@@ -12,9 +12,9 @@
  * Heavy-user UX hooks already wired in this commit:
  *  - Status pill header with counts (total / exact / strong / conflicts).
  *  - Filter chips that pin confidence, method, and asset pair.
- *  - Conflict-cluster grouping renders a shared ⚠ banner; bulk-pair
- *    intentionally skips clustered candidates (the user must
- *    disambiguate first).
+ *  - Conflict-cluster grouping renders a shared alert banner. Exact/rule
+ *    auto-pairing skips clusters; selected bulk pairing can commit reviewed
+ *    same-asset privacy clusters.
  *  - "What actually left your custody" — the computed
  *    ``swap_fee_msat`` is the headline number on every card.
  *
@@ -107,13 +107,18 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useDaemon, useDaemonMutation } from "@/daemon/client";
 import { useKeymap, type Keybinding } from "@/lib/keymap";
-import { screenShellClassName } from "@/lib/screen-layout";
+import {
+  pageHeaderActionClassName,
+  pageHeaderClassName,
+  screenShellClassName,
+} from "@/lib/screen-layout";
 import { cn } from "@/lib/utils";
 import { useUiStore } from "@/store/ui";
 
 const PAIR_KIND_OPTIONS = [
   "manual",
   "coinjoin",
+  "whirlpool",
   "chain-swap",
   "peg-in",
   "peg-out",
@@ -122,6 +127,11 @@ const PAIR_KIND_OPTIONS = [
   "swap-refund",
 ] as const;
 const PAIR_POLICY_OPTIONS = ["carrying-value", "taxable"] as const;
+const REUSABLE_CLUSTER_PAIR_KINDS = new Set<PairKind>([
+  "manual",
+  "coinjoin",
+  "whirlpool",
+]);
 // Stable `value` (machine code, used in filter payloads + lookups) paired with a
 // `labelKey` into the `review` namespace; labels are resolved at render.
 const CONFIDENCE_OPTIONS = [
@@ -496,10 +506,12 @@ export function SwapMatching() {
         onValueChange={(value) => setActiveTab(value as PairingReviewTab)}
         className="space-y-3"
       >
-        <TabsList className="w-full justify-start overflow-x-auto sm:w-fit">
-          <TabsTrigger value="transfers">{t("swap.tabs.transfers")}</TabsTrigger>
-          <TabsTrigger value="swaps">{t("swap.tabs.swaps")}</TabsTrigger>
-        </TabsList>
+        <div className={pageHeaderClassName}>
+          <TabsList className="w-full justify-start overflow-x-auto sm:w-fit">
+            <TabsTrigger value="transfers">{t("swap.tabs.transfers")}</TabsTrigger>
+            <TabsTrigger value="swaps">{t("swap.tabs.swaps")}</TabsTrigger>
+          </TabsList>
+        </div>
         <TabsContent value="transfers" className="mt-0">
           {activeTab === "transfers" ? (
             view === "review" ? (
@@ -608,7 +620,7 @@ function PairedSwaps({
 
   return (
     <div className="min-w-0">
-      <div className="overflow-hidden rounded-xl border bg-card">
+      <div className="overflow-hidden rounded-lg border bg-card">
         <header className="flex flex-col gap-3 px-3 py-3 sm:flex-row sm:items-start sm:justify-between sm:px-4">
           <div className="min-w-0 space-y-1">
             <p className="text-[10px] font-medium tracking-[0.18em] text-muted-foreground uppercase">
@@ -620,7 +632,7 @@ function PairedSwaps({
           <Button
             variant="outline"
             size="sm"
-            className="h-9 shrink-0"
+            className={cn(pageHeaderActionClassName, "shrink-0")}
             onClick={onBackToReview}
           >
             <ArrowLeft className="size-3.5" aria-hidden="true" />
@@ -1239,6 +1251,18 @@ function PairingReview({
 
   const candidateKey = (c: SwapCandidate) => `${c.out_id}->${c.in_id}`;
 
+  const canSelectCandidate = useCallback((candidate: SwapCandidate) => {
+    if (candidate.conflict_size <= 1) return true;
+    const override = overrides[candidateKey(candidate)] ?? {};
+    const kind = override.kind ?? bulkKind ?? candidate.default_kind;
+    const policy = override.policy ?? bulkPolicy ?? candidate.default_policy;
+    return (
+      candidate.out_asset === candidate.in_asset &&
+      policy === "carrying-value" &&
+      REUSABLE_CLUSTER_PAIR_KINDS.has(kind)
+    );
+  }, [bulkKind, bulkPolicy, overrides]);
+
   const exactSolo = useMemo(
     () =>
       candidates.filter(
@@ -1256,8 +1280,8 @@ function PairingReview({
   );
 
   const selectableCandidates = useMemo(
-    () => candidates.filter((c) => c.conflict_size <= 1),
-    [candidates],
+    () => candidates.filter(canSelectCandidate),
+    [canSelectCandidate, candidates],
   );
 
   const selectableCandidatesByKey = useMemo(() => {
@@ -1475,8 +1499,7 @@ function PairingReview({
         description: t("swap.keymap.toggleSelection"),
         category: t("swap.keymap.categorySelection"),
         handler: () => {
-          if (!cursorCandidate) return;
-          if (cursorCandidate.conflict_size > 1) return;
+          if (!cursorCandidate || !canSelectCandidate(cursorCandidate)) return;
           toggleSelected(candidateKey(cursorCandidate));
         },
       },
@@ -1527,6 +1550,7 @@ function PairingReview({
     ];
   }, [
     candidates,
+    canSelectCandidate,
     cursorCandidate,
     exactSolo,
     detailCandidate,
@@ -1552,7 +1576,7 @@ function PairingReview({
   return (
     <div className="min-w-0">
       <Collapsible open={rulesExpanded} onOpenChange={setRulesExpanded}>
-        <div className="overflow-hidden rounded-xl border bg-card">
+        <div className="overflow-hidden rounded-lg border bg-card">
           <header className="flex flex-col gap-2.5 px-3 py-3 sm:flex-row sm:items-start sm:justify-between sm:px-4">
             <div className="min-w-0">
               <p className="text-[10px] font-medium tracking-[0.18em] text-muted-foreground uppercase">
@@ -1596,7 +1620,7 @@ function PairingReview({
               {exactSolo.length > 0 ? (
                 <Button
                   size="sm"
-                  className="h-9 whitespace-nowrap"
+                  className={cn(pageHeaderActionClassName, "whitespace-nowrap")}
                   onClick={openExactPreview}
                   disabled={bulkPairMutation.isPending}
                 >
@@ -1607,7 +1631,7 @@ function PairingReview({
               <Button
                 variant="outline"
                 size="sm"
-                className="h-9"
+                className={pageHeaderActionClassName}
                 onClick={() => void refetch()}
                 disabled={isFetching}
               >
@@ -1615,7 +1639,7 @@ function PairingReview({
                 <span className="ml-1">{t("common:actions.refresh")}</span>
               </Button>
               <CollapsibleTrigger asChild>
-                <Button variant="outline" size="sm" className="h-9">
+                <Button variant="outline" size="sm" className={pageHeaderActionClassName}>
                   <SettingsIcon className="size-3.5" />
                   <span>{t("swap.header.rules", { enabled: enabledRuleCount, total: rules.length })}</span>
                 </Button>
@@ -1858,6 +1882,7 @@ function PairingReview({
                   {candidates.map((candidate) => {
                     const key = candidateKey(candidate);
                     const conflicted = candidate.conflict_size > 1;
+                    const selectable = canSelectCandidate(candidate);
                     const hiddenSiblings =
                       candidate.conflict_size -
                       (visibleClusterCounts[candidate.conflict_set_id] ?? 1);
@@ -1874,8 +1899,8 @@ function PairingReview({
                         <TableCell>
                           <Checkbox
                             aria-label={t("swap.table.selectAria")}
-                            disabled={conflicted}
-                            checked={!conflicted && selected.has(key)}
+                            disabled={!selectable}
+                            checked={selectable && selected.has(key)}
                             onClick={(event) => event.stopPropagation()}
                             onCheckedChange={() => toggleSelected(key)}
                           />

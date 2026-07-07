@@ -14,17 +14,20 @@ Mirrors `kassiber.backends` for the `ai_providers` table. The stored shape:
     updated_at        TEXT NOT NULL
 
 Default-provider pointer lives in the existing `settings` table under
-`default_ai_provider`. A one-shot bootstrap seed inserts a local Ollama row
-the first time the table is queried; it leaves a sentinel in `settings`
-(`ai_providers_seeded`) so deleted bootstrap rows do not get re-added.
+`default_ai_provider`. A one-shot bootstrap seed inserts the built-in local
+provider rows the first time the table is queried; it leaves a sentinel in
+`settings` (`ai_providers_seeded`) so deleted bootstrap rows do not get
+re-added.
 """
 
 from __future__ import annotations
 
 import hashlib
+import ipaddress
 import os
 from pathlib import Path
 from typing import Any, Callable, Iterable
+from urllib.parse import urlparse
 
 from ..db import get_setting, set_setting
 from ..errors import AppError
@@ -47,17 +50,32 @@ AI_PROVIDER_SECRET_STATES = ("ok", "missing", "needs_reauth", "unavailable")
 
 CLI_PROVIDER_LOCATORS = ("claude-cli://default", "codex-cli://default")
 
-DEFAULT_BOOTSTRAP_PROVIDER = {
-    "name": "ollama",
-    "base_url": "http://localhost:11434/v1",
-    "api_key": None,
-    "default_model": None,
-    "kind": "local",
-    "notes": "Local Ollama (default OpenAI-compatible endpoint).",
-}
+DEFAULT_BOOTSTRAP_PROVIDER_NAME = "ollama"
+DEFAULT_BOOTSTRAP_PROVIDERS = (
+    {
+        "name": "ollama",
+        "display_name": "Ollama",
+        "base_url": "http://localhost:11434/v1",
+        "api_key": None,
+        "default_model": None,
+        "kind": "local",
+        "notes": "Local Ollama (default OpenAI-compatible endpoint).",
+    },
+    {
+        "name": "omlx",
+        "display_name": "oMLX",
+        "base_url": "http://127.0.0.1:8000/v1",
+        "api_key": None,
+        "default_model": None,
+        "kind": "local",
+        "notes": "Local oMLX (Apple Silicon MLX OpenAI-compatible endpoint).",
+    },
+)
+DEFAULT_BOOTSTRAP_PROVIDER = DEFAULT_BOOTSTRAP_PROVIDERS[0]
 
 AI_PROVIDER_SAFE_OUTPUT_FIELDS = (
     "name",
+    "display_name",
     "base_url",
     "default_model",
     "kind",
@@ -73,6 +91,40 @@ def _normalize_name(value: Any) -> str:
     if name is None:
         raise AppError("AI provider name is required", code="validation")
     return name.strip().lower()
+
+
+def _normalize_display_name(value: Any, fallback: str) -> str:
+    display_name = str_or_none(value)
+    if display_name is None:
+        return fallback
+    return display_name.strip() or fallback
+
+
+def _bootstrap_provider_names() -> set[str]:
+    return {str(provider["name"]) for provider in DEFAULT_BOOTSTRAP_PROVIDERS}
+
+
+def _default_bootstrap_provider_name() -> str:
+    name = (
+        os.environ.get("KASSIBER_DEFAULT_AI_PROVIDER") or DEFAULT_BOOTSTRAP_PROVIDER_NAME
+    ).strip().lower()
+    if name not in _bootstrap_provider_names():
+        raise AppError(
+            f"Unsupported default AI provider '{name}'",
+            code="validation",
+            hint=f"Choose one of: {', '.join(sorted(_bootstrap_provider_names()))}",
+        )
+    return name
+
+
+def _bootstrap_provider_base_url(provider: dict[str, Any], default_name: str) -> str:
+    provider_name = str(provider["name"])
+    specific_env_name = f"KASSIBER_{provider_name.upper().replace('-', '_')}_AI_BASE_URL"
+    if os.environ.get(specific_env_name):
+        return str(os.environ[specific_env_name])
+    if provider_name == default_name and os.environ.get("KASSIBER_DEFAULT_AI_BASE_URL"):
+        return str(os.environ["KASSIBER_DEFAULT_AI_BASE_URL"])
+    return str(provider["base_url"])
 
 
 def _normalize_kind(value: Any) -> str:
@@ -113,14 +165,41 @@ def _normalize_secret_state(value: Any) -> str:
     return state
 
 
+def _is_loopback_ai_http_url(base_url: str) -> bool:
+    if not (base_url.startswith("http://") or base_url.startswith("https://")):
+        return False
+    try:
+        parsed = urlparse(base_url)
+    except ValueError:
+        return False
+    host = (parsed.hostname or "").strip().lower()
+    if host == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return False
+
+
 def _validate_locator_kind(base_url: str, kind: str) -> None:
-    if is_cli_provider_locator(base_url) and kind == "local":
+    if kind != "local":
+        return
+    if is_cli_provider_locator(base_url):
         raise AppError(
             "Claude/Codex CLI providers cannot be marked local",
             code="validation",
             hint=(
                 "Use --kind remote (or tee if your configured CLI path has documented "
                 "confidential inference). These CLIs may send prompts to external model providers."
+            ),
+        )
+    if not _is_loopback_ai_http_url(base_url):
+        raise AppError(
+            "Local AI providers must use a loopback HTTP endpoint",
+            code="validation",
+            hint=(
+                "Use http://localhost, http://127.0.0.1, or http://[::1] for "
+                "local providers. Mark off-device endpoints as remote and acknowledge remote use."
             ),
         )
 
@@ -435,6 +514,7 @@ def redact_ai_provider_for_output(provider: dict, *, default_name: str | None = 
 def _row_to_dict(conn, row) -> dict[str, Any]:
     return {
         "name": row["name"],
+        "display_name": row["display_name"] or row["name"],
         "base_url": row["base_url"],
         "api_key": row["api_key"],
         "default_model": row["default_model"],
@@ -448,9 +528,12 @@ def _row_to_dict(conn, row) -> dict[str, Any]:
 
 
 def seed_default_ai_provider_if_empty(conn) -> None:
-    """One-shot bootstrap: insert a local Ollama row when the table is empty
-    and we have not seeded before. Leaves a sentinel so deleted bootstrap
-    rows are not re-added on subsequent calls."""
+    """One-shot bootstrap for built-in local providers.
+
+    Inserts the built-in rows when the table is empty and we have not seeded
+    before. Leaves a sentinel so deleted bootstrap rows are not re-added on
+    subsequent calls.
+    """
     if get_setting(conn, AI_PROVIDERS_SEEDED_SETTING):
         return
     existing = conn.execute("SELECT 1 FROM ai_providers LIMIT 1").fetchone()
@@ -458,27 +541,34 @@ def seed_default_ai_provider_if_empty(conn) -> None:
         set_setting(conn, AI_PROVIDERS_SEEDED_SETTING, "1")
         conn.commit()
         return
+    default_name = _default_bootstrap_provider_name()
     ts = now_iso()
-    conn.execute(
+    rows = []
+    for provider in DEFAULT_BOOTSTRAP_PROVIDERS:
+        rows.append(
+            (
+                provider["name"],
+                provider["display_name"],
+                _bootstrap_provider_base_url(provider, default_name),
+                provider["api_key"],
+                provider["default_model"],
+                provider["kind"],
+                provider["notes"],
+                now_iso() if provider["kind"] == "local" else None,
+                ts,
+                ts,
+            )
+        )
+    conn.executemany(
         """
         INSERT INTO ai_providers(
-            name, base_url, api_key, default_model, kind, notes, acknowledged_at, created_at, updated_at
-        ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)
+            name, display_name, base_url, api_key, default_model, kind, notes, acknowledged_at, created_at, updated_at
+        ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
-        (
-            DEFAULT_BOOTSTRAP_PROVIDER["name"],
-            os.environ.get("KASSIBER_DEFAULT_AI_BASE_URL", DEFAULT_BOOTSTRAP_PROVIDER["base_url"]),
-            DEFAULT_BOOTSTRAP_PROVIDER["api_key"],
-            DEFAULT_BOOTSTRAP_PROVIDER["default_model"],
-            DEFAULT_BOOTSTRAP_PROVIDER["kind"],
-            DEFAULT_BOOTSTRAP_PROVIDER["notes"],
-            now_iso() if DEFAULT_BOOTSTRAP_PROVIDER["kind"] == "local" else None,
-            ts,
-            ts,
-        ),
+        rows,
     )
     if not get_setting(conn, DEFAULT_AI_PROVIDER_SETTING):
-        set_setting(conn, DEFAULT_AI_PROVIDER_SETTING, DEFAULT_BOOTSTRAP_PROVIDER["name"])
+        set_setting(conn, DEFAULT_AI_PROVIDER_SETTING, default_name)
     set_setting(conn, AI_PROVIDERS_SEEDED_SETTING, "1")
     conn.commit()
 
@@ -561,6 +651,7 @@ def create_db_ai_provider(
     name: str,
     base_url: str,
     *,
+    display_name: str | None = None,
     api_key: str | None = None,
     default_model: str | None = None,
     kind: str = "local",
@@ -569,7 +660,9 @@ def create_db_ai_provider(
 ) -> dict:
     """Insert a new AI provider row. Raises on name conflict or invalid input."""
     seed_default_ai_provider_if_empty(conn)
+    raw_name = str_or_none(name)
     name = _normalize_name(name)
+    display_name = _normalize_display_name(display_name, raw_name or name)
     base_url = normalize_base_url(base_url)
     kind = _normalize_kind(kind)
     _validate_locator_kind(base_url, kind)
@@ -588,10 +681,21 @@ def create_db_ai_provider(
     conn.execute(
         """
         INSERT INTO ai_providers(
-            name, base_url, api_key, default_model, kind, notes, acknowledged_at, created_at, updated_at
-        ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)
+            name, display_name, base_url, api_key, default_model, kind, notes, acknowledged_at, created_at, updated_at
+        ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
-        (name, base_url, api_key, default_model, kind, notes, acknowledged_at, ts, ts),
+        (
+            name,
+            display_name,
+            base_url,
+            api_key,
+            default_model,
+            kind,
+            notes,
+            acknowledged_at,
+            ts,
+            ts,
+        ),
     )
     if api_key:
         _upsert_ai_provider_secret_ref(conn, name, state="ok")
@@ -599,7 +703,7 @@ def create_db_ai_provider(
     return get_db_ai_provider(conn, name)
 
 
-_UPDATE_FIELDS = ("base_url", "api_key", "default_model", "kind", "notes")
+_UPDATE_FIELDS = ("display_name", "base_url", "api_key", "default_model", "kind", "notes")
 _CLEARABLE_FIELDS = {"api_key", "default_model", "notes"}
 
 
@@ -631,7 +735,7 @@ def update_db_ai_provider(conn, name: str, updates: dict) -> dict:
         raise AppError(
             "ai providers update requires at least one field to change",
             code="validation",
-            hint="Pass --base-url, --api-key, --default-model, --kind, --notes, --acknowledge, --clear FIELD, or --revoke-acknowledge",
+            hint="Pass --display-name, --base-url, --api-key, --default-model, --kind, --notes, --acknowledge, --clear FIELD, or --revoke-acknowledge",
         )
     new_kind = updates.get("kind")
     if new_kind is not None:
@@ -656,7 +760,15 @@ def update_db_ai_provider(conn, name: str, updates: dict) -> dict:
     if new_kind == "local" and not new_acknowledged_at:
         new_acknowledged_at = now_iso()
 
+    base_url_changed = new_base_url is not None and new_base_url != row["base_url"]
+    if base_url_changed and updates.get("api_key") is None:
+        # API keys are origin-bound secrets. If a metadata-only update retargets
+        # the provider URL, drop any inline/native secret ref so the next request
+        # cannot silently send an existing bearer token to the new endpoint.
+        clear_fields.add("api_key")
+
     merged = {
+        "display_name": resolved("display_name", row["display_name"] or row["name"]),
         "base_url": new_base_url if new_base_url is not None else row["base_url"],
         "api_key": resolved("api_key", row["api_key"]),
         "default_model": resolved("default_model", row["default_model"]),
@@ -668,10 +780,11 @@ def update_db_ai_provider(conn, name: str, updates: dict) -> dict:
     conn.execute(
         """
         UPDATE ai_providers
-        SET base_url = ?, api_key = ?, default_model = ?, kind = ?, notes = ?, acknowledged_at = ?, updated_at = ?
+        SET display_name = ?, base_url = ?, api_key = ?, default_model = ?, kind = ?, notes = ?, acknowledged_at = ?, updated_at = ?
         WHERE name = ?
         """,
         (
+            merged["display_name"],
             merged["base_url"],
             merged["api_key"],
             merged["default_model"],

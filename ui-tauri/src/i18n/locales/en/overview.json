@@ -129,6 +129,10 @@
       "estimate": "Estimate",
       "loaded": "Loaded",
       "configured": "Configured",
+      "needsJournals": "Needs journals",
+      "reviewQuarantines_one": "{{count}} quarantine",
+      "reviewQuarantines_other": "{{count}} quarantines",
+      "reviewRequired": "Review required",
       "open": "Open"
     }
   },
@@ -234,6 +238,7 @@
     "aria": "Holdings by source",
     "btcAllocation": "BTC allocation",
     "vsCostBasis": "vs cost basis",
+    "viewConnections": "View connections",
     "moreOptions": "More options",
     "onlyActiveSource": "Only active source",
     "total": "Total",
@@ -252,10 +257,7 @@
     "filterByStatus": "Filter by Status",
     "allStatuses": "All Statuses",
     "empty": "No transactions found.",
-    "unassigned": "Unassigned",
-    "rangeOfTotal": "{{start}}-{{end}} of {{total}}",
-    "previousPage": "Go to previous page",
-    "nextPage": "Go to next page"
+    "unassigned": "Unassigned"
   },
   "txStatus": {
     "confirmed": "Confirmed",
@@ -272,11 +274,11 @@
   "activityFlow": {
     "incoming": "Received",
     "outgoing": "Spent",
-    "swap": "Swap",
-    "transfer": "Transfer",
+    "movement": "Movement",
     "fee": "Fee"
   },
   "period": {
+    "auto": "Auto",
     "30days": "30 Days",
     "3months": "3 Months",
     "6months": "6 Months",
@@ -285,6 +287,7 @@
     "5years": "5 Years",
     "all": "All Time",
     "short": {
+      "auto": "Auto",
       "30days": "30D",
       "3months": "3M",
       "6months": "6M",
@@ -310,8 +313,9 @@
   "treasury": {
     "series": {
       "bitcoinBalance": "Bitcoin Balance",
+      "portfolioValue": "Portfolio Value",
       "btcPrice": "BTC Price",
-      "avgBasis": "Avg Basis",
+      "avgBasis": "Avg cost / BTC",
       "activity": "Activity"
     },
     "chartLabel": "BTC activity chart",
@@ -344,15 +348,18 @@
     "btcPrice": "BTC price",
     "fee": "Fee",
     "positionAfter": "Position after",
-    "avgBasisAfter": "Avg basis after",
+    "avgBasisAfter": "Avg cost / BTC after",
     "status": "Status",
     "confirmations_one": "{{count}} confirmation",
     "confirmations_other": "{{count}} confirmations",
     "unknown": "Unknown",
     "btcBalance": "BTC balance",
-    "avgBasis": "Avg basis",
+    "avgBasis": "Avg cost / BTC",
     "unrealized": "Unrealized",
-    "volume": "{{value}} volume"
+    "volume": "{{value}} volume",
+    "groupedEvents": "Grouped events",
+    "groupedMore_one": "+ {{count}} more event",
+    "groupedMore_other": "+ {{count}} more events"
   },
   "controls": {
     "title": "Chart controls",
@@ -380,6 +387,8 @@
     "minSizeWithCount": "Minimum size in BTC · {{visible}} of {{total}} dots shown",
     "incomingSliderAria": "Minimum incoming payment dot size in BTC",
     "outgoingSliderAria": "Minimum outgoing activity dot size in BTC",
+    "groupActivityMarkers": "Group nearby events",
+    "groupActivityMarkersHint": "Cluster overlapping dots; hover to inspect, click a cluster to filter the table.",
     "customMinTitle": "Click to enter a custom BTC minimum",
     "customMinAria": "Custom marker minimum in BTC"
   },
@@ -388,10 +397,8 @@
     "noDateSelected": "No date selected",
     "value": "Value",
     "btc": "BTC",
-    "costBasis": "Cost basis",
+    "costBasis": "Total basis",
     "unrealized": "Unrealized",
-    "sincePrevious": "Since previous date",
-    "startOfRange": "Start of selected range",
     "collapseAria": "Collapse panel",
     "expandAria": "Expand panel"
   },

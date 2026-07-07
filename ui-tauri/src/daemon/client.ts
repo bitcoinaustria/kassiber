@@ -287,6 +287,7 @@ const TARGETED_DAEMON_QUERY_INVALIDATIONS: Record<string, readonly string[]> = {
   "ui.backends.detect_core": [],
   "ui.backends.electrum.test": [],
   "ui.backends.http.test": [],
+  "ui.backends.lightning.test": [],
   "wallets.reveal_descriptor": [],
   "ui.chat.history.configure": [
     "ui.chat.history.configure",

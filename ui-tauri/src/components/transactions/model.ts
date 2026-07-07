@@ -54,6 +54,8 @@ export type Transaction = {
   feeBtc?: number;
   feeEur?: number | null;
   asset?: string;
+  chain?: string | null;
+  network?: string | null;
   rate?: number | null;
   fiatCurrency?: string | null;
   pricingSourceKind?: PricingSourceKind | null;
@@ -347,14 +349,15 @@ export function explorerForTransaction(
   txn: Transaction,
   settings: ExplorerSettings,
 ) {
-  if (txn.paymentMethod === "Liquid") {
+  const chain = txn.chain?.trim().toLowerCase();
+  if (chain === "liquid" || (!chain && txn.paymentMethod === "Liquid")) {
     return explorerTargetForTransaction({
       txid: txn.explorerId,
       network: "liquid",
       settings,
     });
   }
-  if (txn.paymentMethod === "On-chain") {
+  if (chain === "bitcoin" || (!chain && txn.paymentMethod === "On-chain")) {
     return explorerTargetForTransaction({
       txid: txn.explorerId,
       network: "bitcoin",

@@ -21,6 +21,12 @@ class TaxEngineLedgerInputs:
     # collateral lock/release and borrowed-principal receive/repay roles are
     # non-events, while unmarked liquidation falls through to normal disposal.
     loan_legs: Sequence[Mapping[str, Any]] = ()
+    # Derived Lightning channel-lifecycle roles: ``{transaction_id: role}`` where
+    # role is ``channel_open`` / ``channel_close`` (kassiber.core.loans). Built
+    # from owned channels' funding/closing txids matched against on-chain rows;
+    # merged into the same non-event suppression as loan legs so a channel
+    # funding tx is not booked as a disposal nor a close as an acquisition.
+    channel_roles: Mapping[str, str] = None  # type: ignore[assignment]
 
 
 @dataclass(frozen=True)

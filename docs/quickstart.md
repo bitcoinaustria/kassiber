@@ -142,9 +142,8 @@ For a direct swap payout where the provider pays an external recipient and
 no owned inbound leg exists:
 
 ```bash
-# --payout-fiat-value is the reviewed sale/disposal proceeds in every
-# profile. Austrian cross-asset carrying-value additionally keeps the swap
-# leg neutral.
+# --payout-fiat-value is the reviewed sale/disposal proceeds for ordinary
+# taxable reviews. Cross-asset carrying-value keeps supported swap legs neutral.
 python3 -m kassiber transfers payouts create --tx-out <out-id> \
   --payout-asset BTC --payout-amount 0.24990000 \
   --payout-fiat-value 12495 --payout-external-id <recipient-txid> \
@@ -158,8 +157,10 @@ same-transaction-id self-transfer instead of being absorbed as a giant fee.
 
 Cross-asset BTC ↔ LBTC peg-ins/peg-outs and submarine swaps:
 
-- **Generic profiles** — pairs are surfaced and audit-linked, but still
-  process as normal SELL + BUY.
+- **Generic profiles** — BTC/LBTC Bitcoin-rail pairs default to
+  `carrying-value` while the profile's Bitcoin-rail setting is enabled;
+  disable it with `profiles set --no-bitcoin-rail-carrying-value`, or pass
+  `--policy taxable` on a specific pair.
 - **Austrian profiles** — reviewed `--policy carrying-value` pairs get
   Austrian swap markers and run through RP2's native multi-asset hook;
   `--policy taxable` stays on the SELL + BUY path.
@@ -192,16 +193,17 @@ manual overrides (`rates set BTC-USD <ts> <rate>`). Desktop maintenance can use
 the configured live market-rate provider for automatic latest-price refresh and
 default pricing-cache rebuilds; Coinbase Exchange remains the default when no
 provider is configured.
-The repository also ships a small BTC-only Kraken offline history bundle for
-EUR and USD daily values under `kassiber/data/rates/kraken/btc_daily`, which
+The repository also ships a BTC-only Kraken offline history bundle for EUR and
+USD hourly values under `kassiber/data/rates/kraken/btc_hourly`, which
 freshness/rate-coverage jobs seed automatically when missing. It can also be
 imported with the same `kraken-csv` path flow, and Desktop Settings exposes it
-as `Kraken offline history: daily values` for offline fallback coverage. The
-early portion of that bundle is backfilled from Coin Metrics BTC-USD history
-and official ECB USD/EUR FX so cached daily BTC-EUR/BTC-USD coverage starts at
-`2011-01-01`.
-Bundled daily values are stored at candle close timestamps and should be
-treated as prior-close coarse fallback pricing, not exact intraday pricing.
+as `Kraken offline history: hourly values` for offline fallback coverage. The
+earliest rows are daily-derived from the existing bundled daily cache, which
+uses Coin Metrics BTC-USD history and official ECB USD/EUR FX so cached
+BTC-EUR/BTC-USD coverage starts at `2011-01-01`.
+Bundled hourly values are stored at candle close timestamps. Early
+daily-derived rows should be treated as coarse fallback pricing, not exact
+intraday pricing.
 
 ## 5. Austrian E 1kv reports
 

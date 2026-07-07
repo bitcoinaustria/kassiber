@@ -13,7 +13,6 @@ import {
   CartesianGrid,
   ComposedChart,
   Line,
-  ReferenceDot,
   ReferenceLine,
   Scatter,
   Tooltip,
@@ -34,18 +33,24 @@ import {
 import { formatBtc, type Currency } from "@/lib/currency";
 import { cn } from "@/lib/utils";
 import type { OverviewSnapshot } from "@/mocks/seed";
+import {
+  bookIdentityKey,
+  type BookChartPeriod,
+  useUiStore,
+} from "@/store/ui";
 
 import { ActivityScatterDot } from "./ActivityScatterDot";
 import { ChartControlsSheet } from "./ChartControlsSheet";
 import {
   activeMarketFiatCurrency,
   activeMarketFiatRate,
+  ACTIVITY_MARKER_GROUPING_PARAM,
   activityFlowPalettes,
   activityMarkerView,
   autoFitDomain,
   brushedActivityMarkers,
-  buildTreasuryChartStats,
   blurClass,
+  clusterActivityMarkers,
   defaultTreasurySeriesVisibility,
   DEFAULT_INCOMING_MARKER_MIN_BTC,
   DEFAULT_OUTGOING_MARKER_MIN_BTC,
@@ -58,6 +63,7 @@ import {
   fullTreasuryBrushRange,
   getDataForPeriod,
   hasTreasuryChartData,
+  initialActivityMarkerGroupingFromUrl,
   initialActivityMarkerMinimumFromUrl,
   initialTimePeriodFromUrl,
   initialYAutoFitFromUrl,
@@ -79,7 +85,6 @@ import {
   rawTreasuryBrushRange,
   sameTreasuryBrushRange,
   serializeActivityMarkerMinimum,
-  treasuryPrimaryValue,
   useHoverHighlight,
   useResolvedColorMode,
   Y_AUTO_FIT_PARAM,
@@ -95,10 +100,39 @@ import {
   type TreasurySeriesVisibility,
 } from "./model";
 import { ChartRangeToolbar } from "./ChartRangeToolbar";
-import { renderLastValueTag, renderPointValueLabel } from "./LastValueTag";
+import { renderLastValueTag } from "./LastValueTag";
 import { PortfolioInspector } from "./PortfolioInspector";
 import { ActivityLegendSwatch } from "./ChartControlsSheet";
 import { TreasuryTooltip } from "./TreasuryTooltip";
+
+function shouldShowPortfolioValueByDefault(
+  fiatSeriesEnabled: boolean,
+  currency: Currency,
+) {
+  return fiatSeriesEnabled && currency !== "btc";
+}
+
+function overviewTimePeriodFromSharedPeriod(
+  period: BookChartPeriod | undefined,
+): TimePeriod {
+  if (period === "10years" || period === "15years") return "5years";
+  return period ?? "auto";
+}
+
+function hasTimePeriodUrlParam() {
+  if (typeof window === "undefined") return false;
+  return new URLSearchParams(window.location.search).has("period");
+}
+
+function isLossySharedPeriodFallback(
+  sharedPeriod: BookChartPeriod | undefined,
+  overviewPeriod: TimePeriod,
+) {
+  return (
+    (sharedPeriod === "10years" || sharedPeriod === "15years") &&
+    overviewPeriod === overviewTimePeriodFromSharedPeriod(sharedPeriod)
+  );
+}
 
 export const BtcActivityChart = ({
   snapshot,
@@ -123,8 +157,18 @@ export const BtcActivityChart = ({
     [snapshot],
   );
   const to = t as OverviewTranslate;
-  const [period, setPeriod] =
-    React.useState<TimePeriod>(initialTimePeriodFromUrl);
+  const bookKey = useUiStore((state) => bookIdentityKey(state.identity));
+  const storedBookChartPeriod = useUiStore((state) =>
+    bookKey ? state.bookChartPeriods[bookKey] : undefined,
+  );
+  const setStoredBookChartPeriod = useUiStore(
+    (state) => state.setBookChartPeriod,
+  );
+  const [period, setPeriod] = React.useState<TimePeriod>(() =>
+    initialTimePeriodFromUrl(
+      overviewTimePeriodFromSharedPeriod(storedBookChartPeriod),
+    ),
+  );
   const [yScaleLog, setYScaleLog] = React.useState<boolean>(
     initialYScaleLogFromUrl,
   );
@@ -132,12 +176,20 @@ export const BtcActivityChart = ({
     initialYAutoFitFromUrl,
   );
   const [showLastValue, setShowLastValue] = React.useState(true);
+  const [groupActivityMarkers, setGroupActivityMarkers] = React.useState(
+    initialActivityMarkerGroupingFromUrl,
+  );
+  const defaultPortfolioValueVisible = shouldShowPortfolioValueByDefault(
+    fiatSeriesEnabled,
+    currency,
+  );
   const [expandedPointDate, setExpandedPointDate] = React.useState<string | null>(
     null,
   );
   const [seriesVisible, setSeriesVisible] =
     React.useState<TreasurySeriesVisibility>(() => ({
       ...defaultTreasurySeriesVisibility,
+      portfolioValue: defaultPortfolioValueVisible,
       basis: fiatSeriesEnabled,
       price: fiatSeriesEnabled,
     }));
@@ -169,11 +221,22 @@ export const BtcActivityChart = ({
   const [hoveredActivityPoint, setHoveredActivityPoint] =
     React.useState<TreasuryChartPoint | null>(null);
   const previousFiatSeriesEnabled = React.useRef(fiatSeriesEnabled);
+  const previousPortfolioValueDefault = React.useRef(defaultPortfolioValueVisible);
+  const previousBookKey = React.useRef(bookKey);
+  const skipNextPeriodPersist = React.useRef(
+    Boolean(
+      storedBookChartPeriod &&
+        overviewTimePeriodFromSharedPeriod(storedBookChartPeriod) !==
+          storedBookChartPeriod &&
+        !hasTimePeriodUrlParam(),
+    ),
+  );
   const { active: activeSeries, handleHover } =
     useHoverHighlight<TreasuryChartSeriesKey>();
   const colorMode = useResolvedColorMode();
   const chartColors = portfolioChartColors[colorMode];
   const primaryColor = chartColors.value;
+  const portfolioValueColor = chartColors.portfolioValue;
   const secondaryColor = chartColors.costBasis;
   const priceColor = chartColors.price;
   const flowColors = activityFlowPalettes[colorMode];
@@ -183,6 +246,10 @@ export const BtcActivityChart = ({
         primary: {
           label: t("treasury.series.bitcoinBalance"),
           color: primaryColor,
+        },
+        portfolioValue: {
+          label: t("treasury.series.portfolioValue"),
+          color: portfolioValueColor,
         },
         price: {
           label: t("treasury.series.btcPrice"),
@@ -197,7 +264,7 @@ export const BtcActivityChart = ({
           color: "#f97316",
         },
       }) satisfies ChartConfig,
-    [priceColor, primaryColor, secondaryColor, t],
+    [portfolioValueColor, priceColor, primaryColor, secondaryColor, t],
   );
 
   const legendItems: TreasuryLegendItem[] = [
@@ -205,6 +272,12 @@ export const BtcActivityChart = ({
       key: "primary" as const,
       label: t("treasury.series.bitcoinBalance"),
       color: primaryColor,
+      dashed: false,
+    },
+    {
+      key: "portfolioValue" as const,
+      label: t("treasury.series.portfolioValue"),
+      color: portfolioValueColor,
       dashed: false,
     },
     {
@@ -231,8 +304,37 @@ export const BtcActivityChart = ({
   );
 
   React.useEffect(() => {
+    if (previousBookKey.current === bookKey) return;
+    previousBookKey.current = bookKey;
+    skipNextPeriodPersist.current = true;
+    setPeriod(
+      initialTimePeriodFromUrl(
+        overviewTimePeriodFromSharedPeriod(storedBookChartPeriod),
+      ),
+    );
+    setCompactBrushRange(null);
+    setExpandedBrushRange(null);
+    setExpandedPointDate(null);
+    setHoveredActivityPoint(null);
+  }, [bookKey, storedBookChartPeriod]);
+
+  React.useEffect(() => {
+    if (!bookKey) return;
+    if (skipNextPeriodPersist.current) {
+      skipNextPeriodPersist.current = false;
+      return;
+    }
+    setStoredBookChartPeriod(bookKey, period);
+  }, [bookKey, period, setStoredBookChartPeriod]);
+
+  React.useEffect(() => {
     setSeriesVisible((current) => ({
       ...current,
+      portfolioValue: defaultPortfolioValueVisible
+        ? previousPortfolioValueDefault.current
+          ? current.portfolioValue
+          : true
+        : false,
       basis: fiatSeriesEnabled
         ? previousFiatSeriesEnabled.current
           ? current.basis
@@ -245,13 +347,20 @@ export const BtcActivityChart = ({
         : false,
     }));
     previousFiatSeriesEnabled.current = fiatSeriesEnabled;
-  }, [fiatSeriesEnabled]);
+    previousPortfolioValueDefault.current = defaultPortfolioValueVisible;
+  }, [defaultPortfolioValueVisible, fiatSeriesEnabled]);
 
   React.useEffect(() => {
     if (typeof window === "undefined") return;
     const timeout = window.setTimeout(() => {
       const params = new URLSearchParams(window.location.search);
-      params.set("period", period);
+      if (isLossySharedPeriodFallback(storedBookChartPeriod, period)) {
+        params.delete("period");
+      } else if (period === "auto") {
+        params.delete("period");
+      } else {
+        params.set("period", period);
+      }
       params.delete(LEGACY_INCOMING_MARKER_MIN_PARAM);
       params.delete(LEGACY_OUTGOING_MARKER_MIN_PARAM);
       if (incomingMarkerMinimumBtc === DEFAULT_INCOMING_MARKER_MIN_BTC) {
@@ -280,6 +389,11 @@ export const BtcActivityChart = ({
       } else {
         params.delete(Y_AUTO_FIT_PARAM);
       }
+      if (groupActivityMarkers) {
+        params.delete(ACTIVITY_MARKER_GROUPING_PARAM);
+      } else {
+        params.set(ACTIVITY_MARKER_GROUPING_PARAM, "0");
+      }
       const nextQuery = params.toString();
       const nextUrl = nextQuery
         ? `${window.location.pathname}?${nextQuery}`
@@ -287,7 +401,15 @@ export const BtcActivityChart = ({
       window.history.replaceState(null, "", nextUrl);
     }, 150);
     return () => window.clearTimeout(timeout);
-  }, [incomingMarkerMinimumBtc, outgoingMarkerMinimumBtc, period, yAutoFit, yScaleLog]);
+  }, [
+    groupActivityMarkers,
+    incomingMarkerMinimumBtc,
+    outgoingMarkerMinimumBtc,
+    period,
+    storedBookChartPeriod,
+    yAutoFit,
+    yScaleLog,
+  ]);
 
   React.useEffect(() => {
     setExpandedPointDate(null);
@@ -430,12 +552,17 @@ export const BtcActivityChart = ({
       visibleActivityMarkers,
       selectedChartDisplayData,
     );
+    const selectedClusteredActivityMarkers = groupActivityMarkers
+      ? clusterActivityMarkers(selectedActivityMarkers, {
+          maxVisibleMarkers: expanded ? 56 : 32,
+        })
+      : selectedActivityMarkers;
     const plotData = yScaleLog
       ? logSafeTreasuryPoints(selectedChartDisplayData)
       : selectedChartDisplayData;
     const plotMarkers = yScaleLog
-      ? logSafeActivityMarkers(selectedActivityMarkers)
-      : selectedActivityMarkers;
+      ? logSafeActivityMarkers(selectedClusteredActivityMarkers)
+      : selectedClusteredActivityMarkers;
     const btcAxisValues = [
       ...(seriesVisible.primary
         ? plotData.map((point) => point.lineBalanceBtc)
@@ -446,6 +573,9 @@ export const BtcActivityChart = ({
     ];
     const priceAxisValues = fiatSeriesEnabled
       ? [
+          ...(seriesVisible.portfolioValue
+            ? plotData.map((point) => point.linePortfolioValueEur)
+            : []),
           ...(seriesVisible.price
             ? plotData.map((point) => point.lineBitcoinPriceEur)
             : []),
@@ -488,6 +618,17 @@ export const BtcActivityChart = ({
     const lastPriceValue =
       showLastValue && !hideSensitive && fiatSeriesEnabled && seriesVisible.price
         ? lastTreasuryLineValue(plotData, "lineBitcoinPriceEur")
+        : null;
+    const lastPortfolioValue =
+      showLastValue &&
+      !hideSensitive &&
+      fiatSeriesEnabled &&
+      seriesVisible.portfolioValue
+        ? lastTreasuryLineValue(plotData, "linePortfolioValueEur")
+        : null;
+    const lastBasisValue =
+      showLastValue && !hideSensitive && fiatSeriesEnabled && seriesVisible.basis
+        ? lastTreasuryLineValue(plotData, "lineAvgCostEur")
         : null;
     const handleBrushChange = (range: TreasuryBrushChange) => {
       const normalizedRange = normalizeTreasuryBrushRange(
@@ -549,8 +690,9 @@ export const BtcActivityChart = ({
         point.eventFlow === "outgoing" ? sum + point.activityBtc : sum,
       0,
     );
-    const swapBtc = activityPoints.reduce(
-      (sum, point) => (point.eventFlow === "swap" ? sum + point.activityBtc : sum),
+    const movementBtc = activityPoints.reduce(
+      (sum, point) =>
+        point.eventFlow === "movement" ? sum + point.activityBtc : sum,
       0,
     );
     const feeBtc = activityPoints.reduce(
@@ -565,47 +707,6 @@ export const BtcActivityChart = ({
     const balancePoints = selectedChartDisplayData.filter(
       (point) => !point.isActivityEvent,
     );
-    const chartStats = buildTreasuryChartStats(
-      balancePoints.length ? balancePoints : selectedChartDisplayData,
-    );
-    const highPointValue = chartStats
-      ? treasuryPrimaryValue(chartStats.highPoint)
-      : null;
-    const lowPointValue = chartStats
-      ? treasuryPrimaryValue(chartStats.lowPoint)
-      : null;
-    const isDrawableBtcAxisValue = (value: number | null) =>
-      value !== null && Number.isFinite(value) && (!yScaleLog || value > 0);
-    // High/low live on the chart itself (TradingView-style annotations)
-    // instead of as stat-card copy. Skipped when flat — both labels would
-    // stack on the same line.
-    const showHighLowMarks =
-      chartStats !== null &&
-      seriesVisible.primary &&
-      !hideSensitive &&
-      highPointValue !== lowPointValue;
-    // Don't annotate an extreme whose value equals the current balance: the
-    // last-value tag already labels that number on the axis. For a
-    // monotonically growing balance the maximum IS the current value, so the
-    // high annotation would just repeat the tag right next to it.
-    const lastBalancePoint = balancePoints.at(-1);
-    const lastBalanceRaw = lastBalancePoint
-      ? treasuryPrimaryValue(lastBalancePoint)
-      : null;
-    const coincidesWithLast = (point: TreasuryChartPoint) =>
-      lastBalanceValue !== null &&
-      lastBalanceRaw !== null &&
-      treasuryPrimaryValue(point) === lastBalanceRaw;
-    const showHighMark =
-      showHighLowMarks &&
-      !!chartStats &&
-      isDrawableBtcAxisValue(highPointValue) &&
-      !coincidesWithLast(chartStats.highPoint);
-    const showLowMark =
-      showHighLowMarks &&
-      !!chartStats &&
-      isDrawableBtcAxisValue(lowPointValue) &&
-      !coincidesWithLast(chartStats.lowPoint);
     const selectedPoint = expanded
       ? (selectedChartDisplayData.find(
           (point) => point.date === expandedPointDate,
@@ -613,15 +714,6 @@ export const BtcActivityChart = ({
         selectedChartDisplayData.at(-1) ??
         null)
       : null;
-    const selectedPointIndex = selectedPoint
-      ? selectedChartDisplayData.findIndex(
-          (point) => point.date === selectedPoint.date,
-        )
-      : -1;
-    const previousPoint =
-      selectedPointIndex > 0
-        ? selectedChartDisplayData[selectedPointIndex - 1]
-        : null;
     const handleExpandedChartMove = (state: PortfolioChartMouseState) => {
       if (!expanded) return;
       const point = state.activePayload?.find((item) => item.payload)?.payload;
@@ -663,7 +755,7 @@ export const BtcActivityChart = ({
         className={cn(
           "treasury-chart-card relative z-10 flex min-w-0 flex-1 flex-col gap-3 rounded-lg border bg-card p-3",
           expanded
-            ? "h-full overflow-y-auto rounded-none border-0 xl:overflow-visible"
+            ? "h-full min-h-0 overflow-hidden rounded-none border-0"
             : "overflow-visible",
         )}
       >
@@ -689,11 +781,13 @@ export const BtcActivityChart = ({
           outgoingMarkerMinimumBtc={outgoingMarkerMinimumBtc}
           onOutgoingMarkerMinimumChange={setOutgoingMarkerMinimumBtc}
           onResetMarkerMinimums={resetActivityMarkerMinimums}
+          groupActivityMarkers={groupActivityMarkers}
+          onGroupActivityMarkersChange={setGroupActivityMarkers}
           hideSensitive={hideSensitive}
         />
         <div className="flex flex-wrap items-start justify-between gap-2">
           <div
-            className="min-w-0"
+            className="min-w-[220px]"
             aria-label={t("treasury.chartLabel")}
           >
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
@@ -761,7 +855,7 @@ export const BtcActivityChart = ({
                     </span>
                   </span>
                 )}
-                {expanded && swapBtc > 0 && (
+                {expanded && movementBtc > 0 && (
                   <span>
                     {t("treasury.swap")}{" "}
                     <span
@@ -770,7 +864,7 @@ export const BtcActivityChart = ({
                         blurClass(hideSensitive),
                       )}
                     >
-                      {formatBtc(swapBtc, { precision: 4 })}
+                      {formatBtc(movementBtc, { precision: 4 })}
                     </span>
                   </span>
                 )}
@@ -795,7 +889,12 @@ export const BtcActivityChart = ({
             )}
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
+          <div
+            className={cn(
+              "flex min-w-0 flex-wrap items-start justify-end gap-2",
+              expanded && "flex-1",
+            )}
+          >
             {!expanded && (
               <DialogTrigger asChild>
                 <Button
@@ -809,16 +908,26 @@ export const BtcActivityChart = ({
               </DialogTrigger>
             )}
             {expanded && (
-              <DialogClose asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="size-8"
-                  aria-label={t("treasury.closeChart")}
-                >
-                  <X className="size-4" aria-hidden="true" />
-                </Button>
-              </DialogClose>
+              <>
+                <PortfolioInspector
+                  point={selectedPoint}
+                  hideSensitive={hideSensitive}
+                  priceEur={fiatRate}
+                  fiatCurrency={fiatCurrency}
+                  variant="header"
+                  className="max-w-[calc(100vw-5.5rem)] xl:max-w-[920px]"
+                />
+                <DialogClose asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="size-8 shrink-0"
+                    aria-label={t("treasury.closeChart")}
+                  >
+                    <X className="size-4" aria-hidden="true" />
+                  </Button>
+                </DialogClose>
+              </>
             )}
           </div>
         </div>
@@ -874,7 +983,7 @@ export const BtcActivityChart = ({
               className={cn(
                 "min-w-0",
                 expanded
-                  ? "relative flex min-h-0 flex-1 flex-col gap-3"
+                  ? "relative flex min-h-0 flex-1 flex-col gap-2"
                   : "relative",
               )}
             >
@@ -882,7 +991,7 @@ export const BtcActivityChart = ({
             className={cn(
               "relative flex w-full min-w-0 select-none flex-col",
               expanded
-                ? "h-[min(66vh,648px)] xl:h-auto xl:min-h-0 xl:flex-1"
+                ? "min-h-0 flex-1"
                 : "h-[352px] sm:h-[420px]",
             )}
           >
@@ -1004,16 +1113,6 @@ export const BtcActivityChart = ({
                     dataKey="eventSize"
                     range={[80, expanded ? 620 : 480]}
                   />
-                  {expanded && selectedPoint && (
-                    <ReferenceLine
-                      yAxisId="btc"
-                      x={selectedPoint.date}
-                      stroke={chartColors.focus}
-                      strokeDasharray="2 3"
-                      strokeOpacity={0.5}
-                      strokeWidth={1.5}
-                    />
-                  )}
                   {lastBalanceValue !== null && (
                     <ReferenceLine
                       yAxisId="btc"
@@ -1047,39 +1146,33 @@ export const BtcActivityChart = ({
                       })}
                     />
                   )}
-                  {showHighMark && chartStats && (
-                    <ReferenceDot
-                      yAxisId="btc"
-                      x={chartStats.highPoint.date}
-                      y={highPointValue ?? undefined}
-                      r={2.5}
-                      fill={primaryColor}
-                      stroke="var(--background)"
-                      strokeWidth={1}
-                      label={renderPointValueLabel({
-                        text: formatBtc(
-                          highPointValue ?? 0,
-                          { precision: 4 },
-                        ),
-                        side: "above",
+                  {lastPortfolioValue !== null && (
+                    <ReferenceLine
+                      yAxisId="price"
+                      y={lastPortfolioValue}
+                      stroke={portfolioValueColor}
+                      strokeDasharray="2 4"
+                      strokeOpacity={0.45}
+                      zIndex={2100}
+                      label={renderLastValueTag({
+                        text: Math.round(lastPortfolioValue).toLocaleString("en-US"),
+                        fill: portfolioValueColor,
+                        side: "right",
                       })}
                     />
                   )}
-                  {showLowMark && chartStats && (
-                    <ReferenceDot
-                      yAxisId="btc"
-                      x={chartStats.lowPoint.date}
-                      y={lowPointValue ?? undefined}
-                      r={2.5}
-                      fill={primaryColor}
-                      stroke="var(--background)"
-                      strokeWidth={1}
-                      label={renderPointValueLabel({
-                        text: formatBtc(
-                          lowPointValue ?? 0,
-                          { precision: 4 },
-                        ),
-                        side: "below",
+                  {lastBasisValue !== null && (
+                    <ReferenceLine
+                      yAxisId="price"
+                      y={lastBasisValue}
+                      stroke={secondaryColor}
+                      strokeDasharray="2 4"
+                      strokeOpacity={0.45}
+                      zIndex={2100}
+                      label={renderLastValueTag({
+                        text: Math.round(lastBasisValue).toLocaleString("en-US"),
+                        fill: secondaryColor,
+                        side: "right",
                       })}
                     />
                   )}
@@ -1114,6 +1207,25 @@ export const BtcActivityChart = ({
                         activeSeries === null || activeSeries === "primary"
                           ? 1
                           : 0.3
+                      }
+                      dot={false}
+                      activeDot={expanded ? { r: 4 } : { r: 3 }}
+                      connectNulls
+                      isAnimationActive={false}
+                    />
+                  )}
+                  {fiatSeriesEnabled && seriesVisible.portfolioValue && (
+                    <Line
+                      yAxisId="price"
+                      type="stepAfter"
+                      dataKey="linePortfolioValueEur"
+                      name={t("treasury.series.portfolioValue")}
+                      stroke={portfolioValueColor}
+                      strokeWidth={activeSeries === "portfolioValue" ? 3 : 2.15}
+                      strokeOpacity={
+                        activeSeries === null || activeSeries === "portfolioValue"
+                          ? 0.95
+                          : 0.24
                       }
                       dot={false}
                       activeDot={expanded ? { r: 4 } : { r: 3 }}
@@ -1283,23 +1395,11 @@ export const BtcActivityChart = ({
               onYAutoFitChange={setYAutoFit}
               showLastValue={showLastValue}
               onShowLastValueChange={setShowLastValue}
+              groupActivityMarkers={groupActivityMarkers}
+              onGroupActivityMarkersChange={setGroupActivityMarkers}
               onOpenMoreSettings={() => setControlsOpen(true)}
             />
           </div>
-          {expanded && (
-            // Floats over the chart top-right (TradingView-style panel) on
-            // wide screens; stacks below the chart where it would obstruct.
-            <div className="min-h-0 xl:absolute xl:top-0 xl:right-0 xl:z-20 xl:max-h-full xl:w-[300px]">
-              <PortfolioInspector
-                point={selectedPoint}
-                previousPoint={previousPoint}
-                hideSensitive={hideSensitive}
-                priceEur={fiatRate}
-                fiatCurrency={fiatCurrency}
-                chartCurrency={currency}
-              />
-            </div>
-          )}
             </div>
           </>
         ) : (

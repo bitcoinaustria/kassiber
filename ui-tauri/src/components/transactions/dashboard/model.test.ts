@@ -12,12 +12,15 @@ import {
   candidateReferenceReviewType,
   dashboardRecordsFromTxs,
   flowChartSelectionLabel,
+  flowChartSelectionDateWindow,
+  initialPeriodFromUrl,
   isAttachmentListQueryKeyForTransaction,
   matchesFlowChartSelection,
   readTransactionDetailParams,
   readTransactionScopeParams,
   removeAttachmentRecord,
   replaceAttachmentRecord,
+  resolveAutoPeriodForRecords,
   toDashboardTransaction,
   upsertAttachmentRecords,
   type AttachmentRecord,
@@ -97,10 +100,59 @@ describe("transaction dashboard chart selection", () => {
       expect(readTransactionScopeParams()).toEqual({
         wallet: "Satoshi-Liquid -> Satoshi-Onchain-Multi",
         quick: "missing_price",
+        transactionIds: [],
       });
     } finally {
       vi.unstubAllGlobals();
     }
+  });
+
+  it("preserves clustered transaction id filters in scope parameters", () => {
+    vi.stubGlobal("window", {
+      location: {
+        search: "?txids=tx-one,tx-two&quick=review_queue",
+      },
+    });
+
+    try {
+      expect(readTransactionScopeParams()).toEqual({
+        wallet: null,
+        quick: "review_queue",
+        transactionIds: ["tx-one", "tx-two"],
+      });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("maps chart buckets to daemon date windows", () => {
+    expect(
+      flowChartSelectionDateWindow({
+        id: "bucket-1",
+        period: "1year",
+        bucketKey: "2026-04",
+        bucketLabel: "Apr 26",
+        segment: "incoming",
+        mode: "external",
+      }),
+    ).toEqual({
+      since: new Date(2026, 3, 1).toISOString(),
+      until: new Date(2026, 4, 1, 0, 0, 0, -1).toISOString(),
+    });
+
+    expect(
+      flowChartSelectionDateWindow({
+        id: "bucket-2",
+        period: "5years",
+        bucketKey: "2026-Q2",
+        bucketLabel: "Q2 26",
+        segment: "swaps",
+        mode: "all",
+      }),
+    ).toEqual({
+      since: new Date(2026, 3, 1).toISOString(),
+      until: new Date(2026, 6, 1, 0, 0, 0, -1).toISOString(),
+    });
   });
 
   it("hides long-range period tabs for young transaction histories", () => {
@@ -109,7 +161,7 @@ describe("transaction dashboard chart selection", () => {
         transaction({ id: "newer", date: "2100-01-01T12:00:00Z" }),
         transaction({ id: "older", date: "2099-08-01T12:00:00Z" }),
       ]),
-    ).toEqual(["30days", "3months", "ytd", "1year", "all"]);
+    ).toEqual(["30days", "3months", "6months", "ytd", "1year", "all"]);
   });
 
   it("reveals longer period tabs as transaction history gets older", () => {
@@ -121,6 +173,7 @@ describe("transaction dashboard chart selection", () => {
     ).toEqual([
       "30days",
       "3months",
+      "6months",
       "ytd",
       "1year",
       "5years",
@@ -141,6 +194,7 @@ describe("transaction dashboard chart selection", () => {
     expect(availablePeriodKeysForRecords(recentSlice)).toEqual([
       "30days",
       "3months",
+      "6months",
       "ytd",
       "1year",
       "all",
@@ -151,6 +205,41 @@ describe("transaction dashboard chart selection", () => {
         transaction({ id: "oldest-bound", date: "2019-01-15T09:00:00Z" }),
       ]),
     ).toContain("5years");
+  });
+
+  it("parses auto period URLs and falls back to a stored period", () => {
+    vi.stubGlobal("window", { location: { search: "" } });
+    expect(initialPeriodFromUrl("5years")).toBe("5years");
+
+    vi.stubGlobal("window", { location: { search: "?period=auto" } });
+    expect(initialPeriodFromUrl("5years")).toBe("auto");
+
+    vi.stubGlobal("window", { location: { search: "?period=6m" } });
+    expect(initialPeriodFromUrl("5years")).toBe("6months");
+  });
+
+  it("resolves auto to the smallest useful transaction period", () => {
+    expect(
+      resolveAutoPeriodForRecords(
+        [
+          transaction({ id: "recent-1", date: "2026-06-28T12:00:00Z" }),
+          transaction({ id: "recent-2", date: "2026-06-20T12:00:00Z" }),
+          transaction({ id: "recent-3", date: "2026-06-10T12:00:00Z" }),
+        ],
+        "auto",
+      ),
+    ).toBe("ytd");
+
+    expect(
+      resolveAutoPeriodForRecords(
+        [
+          transaction({ id: "old-1", date: "2026-01-20T12:00:00Z" }),
+          transaction({ id: "old-2", date: "2026-01-10T12:00:00Z" }),
+          transaction({ id: "old-3", date: "2025-12-15T12:00:00Z" }),
+        ],
+        "auto",
+      ),
+    ).toBe("1year");
   });
 
   it("does not substitute demo rows for an empty live transaction list", () => {
@@ -179,6 +268,23 @@ describe("transaction dashboard chart selection", () => {
     expect(transaction.amountBtc).toBe(0.0004218);
     expect(transaction.amount).toBe(30.13);
     expect(transaction.feeBtc).toBe(0.0004218);
+  });
+
+  it("preserves daemon asset and chain metadata on transaction rows", () => {
+    const transaction = toDashboardTransaction(
+      rawTx({
+        asset: "LBTC",
+        chain: "liquid",
+        network: "liquidv1",
+        account: "Wallet export",
+      }),
+      0,
+    );
+
+    expect(transaction.asset).toBe("LBTC");
+    expect(transaction.chain).toBe("liquid");
+    expect(transaction.network).toBe("liquidv1");
+    expect(transaction.paymentMethod).toBe("Liquid");
   });
 
   it("normalizes backend review-status variants before detail rendering", () => {

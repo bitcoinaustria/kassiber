@@ -46,17 +46,32 @@ COLLATERAL_ROLES = (
     PRINCIPAL_RECEIVED,
     PRINCIPAL_REPAID,
 )
+
+# Lightning channel-lifecycle roles. Opening a channel moves the operator's own
+# BTC from their on-chain wallet into a 2-of-2 they co-control (still owned —
+# not a disposal); closing returns it (not an acquisition — basis carries). Same
+# suppress semantics as loan collateral lock/release, but these are DERIVED from
+# channel funding/closing txids, never user-marked, so they stay out of
+# ``COLLATERAL_ROLES`` (the loan-mark validator's allow-list).
+CHANNEL_OPEN = "channel_open"
+CHANNEL_CLOSE = "channel_close"
+CHANNEL_ROLES = (CHANNEL_OPEN, CHANNEL_CLOSE)
+
 ROLE_DIRECTIONS = {
     COLLATERAL_LOCK: "outbound",
     COLLATERAL_RELEASE: "inbound",
     PRINCIPAL_RECEIVED: "inbound",
     PRINCIPAL_REPAID: "outbound",
+    CHANNEL_OPEN: "outbound",
+    CHANNEL_CLOSE: "inbound",
 }
 
-# Outbound legs that are loan non-events: suppress disposal booking.
-LOCK_SUPPRESS_ROLES = frozenset({COLLATERAL_LOCK, PRINCIPAL_REPAID})
-# Inbound legs that are loan non-events: suppress acquisition/income booking.
-RELEASE_SUPPRESS_ROLES = frozenset({COLLATERAL_RELEASE, PRINCIPAL_RECEIVED})
+# Outbound legs that are non-events: suppress disposal booking.
+LOCK_SUPPRESS_ROLES = frozenset({COLLATERAL_LOCK, PRINCIPAL_REPAID, CHANNEL_OPEN})
+# Inbound legs that are non-events: suppress acquisition/income booking.
+RELEASE_SUPPRESS_ROLES = frozenset(
+    {COLLATERAL_RELEASE, PRINCIPAL_RECEIVED, CHANNEL_CLOSE}
+)
 
 # Human labels for the CLI / GUI / reconcile hints.
 ROLE_LABELS = {
@@ -64,6 +79,8 @@ ROLE_LABELS = {
     COLLATERAL_RELEASE: "BTC collateral returned (in)",
     PRINCIPAL_RECEIVED: "BTC loan principal received (in)",
     PRINCIPAL_REPAID: "BTC loan principal repaid (out)",
+    CHANNEL_OPEN: "BTC funded into a Lightning channel (out)",
+    CHANNEL_CLOSE: "BTC returned from a Lightning channel close (in)",
 }
 
 

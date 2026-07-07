@@ -15,7 +15,7 @@
     },
     "scale": {
       "title": "Oberflächenskalierung",
-      "description": "Stelle jeden Bildschirm kompakter oder größer dar. Gilt für die gesamte App.",
+      "description": "Kassiber passt die Oberfläche automatisch an deinen Bildschirm an. Mit −/+ justierst du die Dichte fein – gilt für die gesamte App.",
       "decrease": "Oberflächenskalierung verringern",
       "increase": "Oberflächenskalierung erhöhen",
       "value": "{{percent}} %"
@@ -207,17 +207,17 @@
   "marketData": {
     "intro": "Fiat-Referenzkurse werden unabhängig vom Wallet-Sync bezogen. Kassiber führt einen lokalen Preis-Cache, damit Berichte nie für jede Transaktion eine Börse abfragen müssen. Diese Abfragen verraten Preisinteresse, nicht deine Wallet-Adressen.",
     "priceSourceLabel": "Preisquelle",
-    "priceSourceHint": "Wird für die automatische Aktualisierung des aktuellen Preises und für Standard-Neuaufbauten des Preis-Caches verwendet.",
-    "autoRefreshLabel": "BTC-Preis aktuell halten, solange die App geöffnet ist",
-    "autoRefreshHint": "Holt ungefähr stündlich ein kleines aktuelles {{provider}}-Marktfenster und nutzt das bestehende Rate-Limit-Backoff, wenn der Provider Kassiber zum Warten auffordert.",
-    "autoRefreshFootnote": "Die Wallet-/Quellen-Aktualisierung wird weiterhin über Verbindungen gesteuert; diese Einstellung aktualisiert nur die Marktkurs-Cache-Zeilen für die Fiat-Guthaben-Anzeige und die Abdeckung fehlender Transaktionspreise.",
+    "priceSourceHint": "Wird erst verwendet, nachdem Live-Marktkursabfragen für dieses Buch aktiviert wurden.",
+    "autoRefreshLabel": "Live-Minutenkursabfragen erlauben",
+    "autoRefreshHint": "Erlaubt Kassiber, {{provider}} für aktuelle BTC-Preise und fehlende Minutenfenster zum Transaktionszeitpunkt zu kontaktieren. Der Provider sieht Paar- und Zeitfensterabfragen, keine Wallet-Adressen oder Txids.",
+    "autoRefreshFootnote": "Mitgelieferte Stundenkerzen und lokale Kraken-Importe bleiben offline. Wallet-/Quellen-Aktualisierung wird weiterhin über Verbindungen gesteuert.",
     "providersHeading": "Kurs-Provider",
     "primary": "Primär",
     "fallback": "Ausweich",
     "rebuildHeading": "Preis-Cache neu aufbauen",
-    "rebuildDescription": "Lösche ausgewählte Provider-Stichproben, als leer geprüfte Minuten und gecachte providergenerierte Transaktionspreise und hole dann frische Marktkurse für {{pair}}.",
+    "rebuildDescription": "Lösche ausgewählte Provider-Stichproben, als leer geprüfte Minuten und gecachte providergenerierte Transaktionspreise und hole dann frische Live-Marktkurse für {{pair}}.",
     "rebuildButton": "Cache neu aufbauen",
-    "rebuildFootnote": "Manuelle Überschreibungen und importierte Börsen-Ausführungspreise bleiben erhalten. Bei großen Wallets kann das eine Weile dauern, da Kassiber fehlende Fenster neu lädt und danach die Journale neu verarbeitet.",
+    "rebuildFootnote": "Manuelle Überschreibungen und importierte Börsen-Ausführungspreise bleiben erhalten. Bei großen Wallets kann das eine Weile dauern, da Kassiber fehlende Minutenfenster neu lädt und danach die Journale neu verarbeitet.",
     "rebuildingTitle": "Provider-Kurse werden neu aufgebaut",
     "rebuildingCounting": "Transaktionskurse werden gezählt…",
     "rebuildProgressAria": "Fortschritt des Preis-Cache-Neuaufbaus",
@@ -230,7 +230,7 @@
     "txRefreshAria": "Fortschritt der Transaktionskurs-Aktualisierung",
     "resultRemoved": "{{rates}} Kurszeilen, {{minutes}} geprüfte Minuten und {{prices}} gecachte Transaktionspreise entfernt.",
     "krakenHeading": "Kraken-Offline-Historie",
-    "krakenDescription": "Bitcoin-EUR/USD-Minutenkerzen aus einem lokalen Kraken-CSV-/ZIP-Archiv, plus mitgelieferte Tageswerte für die Ausweichabdeckung.",
+    "krakenDescription": "Bitcoin-EUR/USD-Minutenkerzen aus einem lokalen Kraken-CSV-/ZIP-Archiv, plus mitgelieferte Stundenwerte für die Ausweichabdeckung.",
     "krakenGetArchive": "Kraken-Archiv holen",
     "krakenBlog": "Kraken-Marktdaten-Blog",
     "krakenMinuteHeading": "Kraken-Offline-Historie: Minutendaten",
@@ -244,9 +244,9 @@
     "filePickerUnavailable": "Verwende im Browser-Modus das Pfadfeld",
     "fullMinuteHistory": "Vollständige Minutenhistorie",
     "incrementalMinuteUpdate": "Inkrementelles Minuten-Update",
-    "bundledHeading": "Ausweich auf mitgelieferte Tageswerte",
-    "bundledDescription": "Importiere mitgelieferte Kraken-BTC-EUR- und BTC-USD-Tageswerte von 2013 bis Q1 2026 für eine grobe Ausweichabdeckung.",
-    "importDailyValues": "Tageswerte importieren",
+    "bundledHeading": "Mitgelieferte Stundenwerte",
+    "bundledDescription": "Importiere mitgelieferte Kraken-BTC-EUR- und BTC-USD-Stundenwerte rückwirkend bis 2011. Der Vor-Kraken-Abschnitt ist aus Tageswerten abgeleitet und bleibt lokal.",
+    "importDailyValues": "Stundenwerte importieren",
     "importedTotals": "{{rows}} Zeilen über {{pairs}} Paare",
     "importedTotals_one": "{{rows}} Zeilen über {{pairs}} Paar",
     "noRowsImported": "Keine Bitcoin-Zeilen importiert",
@@ -270,20 +270,21 @@
     "rebuiltBodyFallback": "{{provider}}-Preis-Cache wurde neu aufgebaut.",
     "rebuildFailedTitle": "Neuaufbau des Preis-Caches fehlgeschlagen",
     "rebuildFailedError": "Preis-Cache konnte nicht neu aufgebaut werden.",
-    "autoEnabledTitle": "Automatische Preisaktualisierung aktiviert",
-    "autoDisabledTitle": "Automatische Preisaktualisierung deaktiviert",
-    "autoEnabledBody": "Kassiber aktualisiert den aktuellen BTC-Preis, solange die App geöffnet ist.",
-    "autoDisabledBody": "Kassiber plant keine BTC-Preisaktualisierungen im Hintergrund mehr.",
+    "autoEnabledTitle": "Live-Minutenkurse aktiviert",
+    "autoDisabledTitle": "Live-Minutenkurse deaktiviert",
+    "autoEnabledBody": "Kassiber darf den ausgewählten Provider für aktuelle Preise und fehlende Minutenfenster zum Transaktionszeitpunkt kontaktieren.",
+    "autoDisabledBody": "Kassiber nutzt mitgelieferte oder lokal importierte Kurshistorie und kontaktiert für dieses Buch keine Live-Marktkurs-Provider.",
     "autoFailedTitle": "Preisaktualisierung konnte nicht aktualisiert werden",
     "autoFailedBody": "Kassiber konnte die Einstellung zur Marktkurs-Aktualisierung nicht speichern.",
     "providerUpdatedTitle": "Marktkurs-Provider aktualisiert",
-    "providerUpdatedBody": "Die automatische Preisaktualisierung und Standard-Neuaufbauten verwenden {{provider}}.",
+    "providerUpdatedBody": "Live-Marktkursabfragen und Standard-Neuaufbauten verwenden {{provider}}.",
     "providerFailedTitle": "Preis-Provider konnte nicht aktualisiert werden",
     "providerFailedBody": "Kassiber konnte den Marktkurs-Provider nicht speichern.",
     "rebuildDialogTitle": "Preis-Cache neu aufbauen?",
     "rebuildDialogDescription": "Kassiber löscht die {{provider}}-Provider-Cache-Zeilen und holt die Marktkurse für {{pair}} neu.",
     "rebuildDialogWarningTitle": "Bei großen Wallets kann das eine Weile dauern.",
     "rebuildDialogWarningBody": "Der Neuaufbau löscht außerdem providergenerierte Transaktionspreise und verarbeitet die Journale neu. Manuelle Überschreibungen und importierte Ausführungspreise bleiben erhalten.",
+    "rebuildOptInRequired": "Aktiviere oben Live-Minutenkurse, bevor du von einem Provider neu aufbaust. Mitgelieferte Stundenwerte und lokale Kraken-Importe bleiben ohne diese Zustimmung verfügbar.",
     "rebuildDialogPending": "Wird neu aufgebaut…",
     "rebuildDialogSubmit": "Neu aufbauen",
     "coarse": {
@@ -298,6 +299,16 @@
       "countDescription": "Tageskurse werden für die Steuer akzeptiert und diese Zeilen sind berichtsfertig. Für feinere Genauigkeit in volatilen Phasen kannst du unten den Cache neu aufbauen, um sie aus präzisen Kursen zum Ereigniszeitpunkt neu zu bewerten.",
       "reviewToggleLabel": "Bewertung aus Tageskursen zur Prüfung zurückhalten",
       "reviewToggleDescription": "Aus (Standard): Transaktionen, die nur aus Tages-/groben Kursen bewertet sind, werden zum Tageskurs gebucht und zur optionalen Prüfung markiert. An: Sie werden in Quarantäne gestellt, bis du sie bestätigst oder einen präzisen Preis holst — nützlich für Audits."
+    },
+    "bitcoinRails": {
+      "enabledTitle": "Bitcoin-Rail Carry aktiviert",
+      "disabledTitle": "Bitcoin-Rail Carry deaktiviert",
+      "enabledBody": "BTC/LBTC-Rail-Wechsel werden in Vorschlägen standardmäßig als Carrying Value behandelt.",
+      "disabledBody": "BTC/LBTC-Rail-Wechsel werden in Vorschlägen standardmäßig steuerpflichtig behandelt, außer du überschreibst das Paar.",
+      "errorTitle": "Bitcoin-Rail-Richtlinie konnte nicht aktualisiert werden",
+      "errorBody": "Kassiber konnte die Einstellung zur Bitcoin-Rail-Behandlung nicht speichern.",
+      "toggleLabel": "Bitcoin-Rail-Wechsel als Carrying Value behandeln",
+      "toggleDescription": "An (Standard): BTC/LBTC-Bewegungen zwischen eigenen Rails werden standardmäßig als Carrying Value vorgeschlagen. Aus: Vorschläge sind standardmäßig steuerpflichtig; explizite Paar-Überschreibungen gewinnen weiterhin."
     }
   },
   "security": {
@@ -314,7 +325,7 @@
     "lockAfter": "Sperren nach",
     "minutes": "{{count}} Min",
     "requireOnLaunchLabel": "Passwort beim Start verlangen",
-    "requireOnLaunchEncrypted": "Frage sofort beim Öffnen von Kassiber; Kaltstarts benötigen weiterhin das Datenbank-Passwort, wenn der Daemon gesperrt ist.",
+    "requireOnLaunchEncrypted": "Verschlüsselte Bücher werden immer entsperrt, bevor das Dashboard geöffnet wird.",
     "requireOnLaunchPlaintext": "Frage jedes Mal, wenn Kassiber geöffnet wird.",
     "lockOnCloseLabel": "Beim Schließen des Fensters sperren",
     "lockOnCloseDescription": "Lösche den entschlüsselten Zustand aus dem Speicher, wenn das App-Fenster geschlossen wird.",
@@ -334,6 +345,166 @@
     "offerBiometricDescription": "Merke dir die Präferenz für biometrisches Entsperren dieses Geräts zwischen den Sitzungen."
   },
   "privacy": {
+    "scoreHeading": "Privacy-Signale",
+    "scoreDescription": "Lokale, beratende Signale aus synchronisierten Transaktionsformen und Wallet-UTXOs. Keine öffentliche Abfrage, Entity-Abfrage oder Buchhaltungsänderung.",
+    "scoreLoading": "Lokale Privacy-Signale werden geprüft...",
+    "scoreUnavailable": "Privacy-Signale sind nicht verfügbar.",
+    "scoreLocalOnly": "Nur lokal",
+    "scoreSummary": "{{wallets}} Wallets · {{transactions}} Transaktionen nur mit lokalen Daten geprüft",
+    "scoreTopFindings": "Signale und Unbekanntes",
+    "scoreNoFindings": "Noch keine lokalen Signale in den verfügbaren Daten.",
+    "scoreWallets": "Wallet-Rollup",
+    "scoreTransactions": "Transaktionen zum Prüfen",
+    "scoreNoWallets": "In diesem Buch gibt es noch keine Wallets.",
+    "scoreNoTransactions": "In diesem Buch gibt es noch keine Transaktionen.",
+    "scoreWalletMeta": "{{txs}} Tx · {{utxos}} aktive UTXOs",
+    "scoreReuse": "{{count}} wiederverwendete Adressen",
+    "scoreDust": "{{count}} Dust-UTXOs",
+    "unknownCount": "{{count}} Unbekannte",
+    "summaryRisks": "Risikosignale",
+    "summaryUnknowns": "Unbekannt",
+    "summaryWallets": "Wallets",
+    "riskLevel": {
+      "none": "Keine lokalen Risikosignale",
+      "low": "Niedrige Risikosignale",
+      "medium": "Mittlere Risikosignale",
+      "high": "Hohe Risikosignale",
+      "critical": "Kritische Risikosignale"
+    },
+    "evidence": {
+      "ground_truth": "Fakt",
+      "reviewed": "Geprüft",
+      "imported": "Importiert",
+      "heuristic": "Heuristik",
+      "unavailable": "Nicht verfügbar"
+    },
+    "scoreState": {
+      "full": "Volle lokale Abdeckung",
+      "partial": "Teilweise lokale Abdeckung",
+      "address_only": "Nur Adressebene",
+      "not_analysable": "Nicht analysierbar",
+      "not_enough_data": "Nicht genug Daten",
+      "no_wallets": "Keine Wallets",
+      "no_active_profile": "Kein aktives Buch"
+    },
+    "coverage": {
+      "full": "Volle Tx-Scans",
+      "partial": "Teilweise Tx-Scans",
+      "notAnalysable": "Nicht analysierbar",
+      "activeUtxos": "Aktive UTXOs"
+    },
+    "findings": {
+      "address_reuse": {
+        "title": "Adresswiederverwendung",
+        "detail": "{{count}} wiederverwendete Adressgruppen gefunden.",
+        "remediation": "Prüfe den Empfangsadress-Kontext und halte betroffene Zeilen beschriftet; Kassiber ändert aus diesem Signal keinen Wallet-Zustand."
+      },
+      "change_position_fingerprint": {
+        "title": "Change-Positionsmuster",
+        "detail": "{{count}} Transaktion hat eigene Change an einer vorhersehbaren Kante.",
+        "remediation": "Behandle dies als beratenden Change-Kontext und bestätige die Absicht über First-Party-Wallet-Unterlagen."
+      },
+      "change_type_fingerprint": {
+        "title": "Change-Typ-Mismatch",
+        "detail": "{{count}} Transaktion verrät wahrscheinliche Change über den Script-Typ.",
+        "remediation": "Prüfe den Script-Typ-Mismatch nur als Kontext; Steuer-, Saldo- oder Transferzustand wird nicht geändert."
+      },
+      "coin_anonymity_evidence": {
+        "title": "Importierter Anonymitätsnachweis",
+        "detail": "{{count}} UTXOs tragen importierte Anonymitätsnachweise.",
+        "remediation": "Halte den importierten Wallet-Nachweis fest und behandle ihn als Grenzkontext, nicht als Beweis für einen vollständigen Privacy-Graphen."
+      },
+      "coinjoin_pattern": {
+        "title": "CoinJoin-Muster",
+        "detail": "{{count}} Equal-Output-Teilnehmer oder importierter CoinJoin-Nachweis.",
+        "remediation": "Dokumentiere die CoinJoin-Grenze lokal und leite daraus kein Eigentum fremder Teilnehmer ab."
+      },
+      "common_input_ownership": {
+        "title": "Common-Input-Link",
+        "detail": "{{count}} Inputs werden durch die Transaktion verknüpft.",
+        "remediation": "Nutze dies nur als beratendes Common-Input-Signal; bestätige Eigentum mit First-Party-Wallet-Nachweisen, bevor du dich darauf stützt."
+      },
+      "dust_utxo_exposure": {
+        "title": "Dust-UTXOs",
+        "detail": "{{count}} aktive Dust-Outputs erhöhen Review-Rauschen.",
+        "remediation": "Beschrifte oder prüfe die Herkunft kleiner Outputs, wenn sie relevant ist; Kassiber lässt Salden und UTXO-Zustand unverändert."
+      },
+      "large_utxo_set": {
+        "title": "Großes UTXO-Set",
+        "detail": "{{count}} aktive UTXOs sind im lokalen Inventar sichtbar.",
+        "remediation": "Nutze die Anzahl als Review-Kontext für das Wallet-Inventar; daraus folgt keine Spending- oder Konsolidierungsberatung."
+      },
+      "legacy_address_type": {
+        "title": "Legacy-Script-Typ",
+        "detail": "{{count}} Outputs nutzen ältere Adresstypen.",
+        "remediation": "Halte dies als ältere Script-Typ-Beobachtung fest; es ist weder eine Buchhaltungsaktion noch ein Privacy-Urteil."
+      },
+      "op_return_metadata": {
+        "title": "OP_RETURN-Metadaten",
+        "detail": "{{count}} Outputs veröffentlichen permanente Metadaten.",
+        "remediation": "Prüfe den Transaktionskontext mit dem Wissen, dass permanente Metadaten existieren; Kassiber untersucht oder ergänzt keine externen Entities."
+      },
+      "payjoin_boundary": {
+        "title": "PayJoin-Grenze",
+        "detail": "{{count}} importierte oder geprüfte PayJoin-Grenze bricht einfache Input-Zuordnung.",
+        "remediation": "Halte die PayJoin-Grenze lokal dokumentiert; Kassiber überschreitet sie nicht und leitet keinen Counterparty-Graphen ab."
+      },
+      "rbf_signal": {
+        "title": "RBF-Signal",
+        "detail": "{{count}} Inputs nutzen Replace-by-Fee-Signaling.",
+        "remediation": "Behandle Replace-by-Fee-Signaling nur als Transaktionsform-Kontext."
+      },
+      "round_fee_rate": {
+        "title": "Runde Fee-Rate",
+        "detail": "{{count}} Transaktion nutzt einen runden Fee-Rate-Fingerabdruck.",
+        "remediation": "Behandle die gerundete Fee-Rate als schwaches Wallet-Form-Signal und prüfe First-Party-Unterlagen, falls es relevant ist."
+      },
+      "round_output_amount": {
+        "title": "Runder Output-Betrag",
+        "detail": "{{count}} Outputs sehen wie manuell eingegebene Zahlungsbeträge aus.",
+        "remediation": "Halte den runden Betrag als Zahlungsform-Kontext fest; füge Rechnung oder Counterparty-Unterlagen hinzu, wenn die Unterscheidung relevant ist."
+      },
+      "script_type_mix": {
+        "title": "Gemischte Script-Typen",
+        "detail": "{{count}} Script-Familien erscheinen in einer Transaktion.",
+        "remediation": "Prüfe gemischte Script-Familien als lokales Transaktionsform-Signal, nicht als Eigentumsbeweis."
+      },
+      "taproot_usage": {
+        "title": "Taproot-Nutzung",
+        "detail": "{{count}} Taproot-Outputs sind in den lokalen Daten sichtbar.",
+        "remediation": "Behandle Taproot-Nutzung als lokale Script-Typ-Beobachtung; sie ist keine dauerhafte Privacy-Garantie."
+      },
+      "transaction_coverage_gap": {
+        "title": "Abdeckungslücke",
+        "detail": "{{count}} Transaktionen haben keine lokalen vin/vout-Details.",
+        "remediation": "Importiere oder synchronisiere lokale vin/vout-Details, wenn du diese Transaktion analysieren willst; sonst bleibt die Lücke explizit."
+      },
+      "transaction_not_analysable": {
+        "title": "Kein lokaler Tx-Graph",
+        "detail": "{{count}} Transaktion hat keinen lokalen vin/vout-Graphen für die Analyse.",
+        "remediation": "Lass diese Transaktion unbekannt, sofern keine lokalen First-Party-Transaktionsgraphdaten importiert oder synchronisiert werden."
+      },
+      "unnecessary_input_heuristic": {
+        "title": "Unnecessary-Input-Signal",
+        "detail": "{{count}} Outputs hätten ohne jeden Input finanziert werden können.",
+        "remediation": "Behandle dies als beratendes Input-Form-Signal und prüfe den Source-Wallet-Datensatz, bevor du dich darauf stützt."
+      },
+      "wallet_fingerprint_locktime": {
+        "title": "nLockTime-Fingerabdruck",
+        "detail": "{{count}} Transaktion trägt eine wallet-typische Locktime.",
+        "remediation": "Nutze das Locktime-Muster nur als schwachen Wallet-Fingerprint-Kontext."
+      },
+      "wallet_fingerprint_version": {
+        "title": "Versions-Fingerabdruck",
+        "detail": "{{count}} Transaktion nutzt eine ungewöhnliche Version.",
+        "remediation": "Nutze das Versionsmuster nur als schwachen Wallet-Fingerprint-Kontext."
+      },
+      "wallet_fingerprint_witness": {
+        "title": "Witness-Fingerabdruck",
+        "detail": "{{count}} Inputs teilen dieselbe Witness-Form.",
+        "remediation": "Nutze das Witness-Form-Muster nur als schwachen Wallet-Fingerprint-Kontext."
+      }
+    },
     "exposure": {
       "firstParty": "Eigen",
       "firstPartyHint": "Auf deinem Gerät oder einer Infrastruktur, die du betreibst",
@@ -372,7 +543,83 @@
     "assistantDescription": "Prompt-Inhalte — die Buchdaten enthalten können — verlassen das Gerät nur, wenn du einen entfernten oder CLI-Provider aktivierst.",
     "assistantEnabled": "Aktiviert. Lokale Provider halten Prompts auf diesem Gerät; entfernte und CLI-Provider können Prompt-Inhalte sehen.",
     "assistantDisabled": "Deaktiviert. Provider-Einstellungen bleiben gespeichert, ohne Prompts zu senden.",
-    "reviewAi": "AI-Provider prüfen"
+    "reviewAi": "AI-Provider prüfen",
+    "hygieneHeading": "Privatsphäre-Hygiene",
+    "hygieneDescription": "Ein lokaler, read-only Schnappschuss privatsphärerelevanter Fakten. Der Assistent sieht dieselbe redigierte Nutzlast.",
+    "hygieneRefresh": "Privatsphäre-Hygiene aktualisieren",
+    "hygieneLoading": "Privatsphäre-Hygiene wird gelesen …",
+    "hygieneError": "Privatsphäre-Hygiene konnte nicht geladen werden: {{error}}",
+    "hygieneNoFindings": "Keine berichtbaren Befunde in der redigierten lokalen Nutzlast.",
+    "metric": {
+      "findings": "Befunde",
+      "database": "Datenbank",
+      "remoteBackends": "Entfernte Backends",
+      "offDeviceAi": "AI außerhalb"
+    },
+    "severity": {
+      "none": "keine",
+      "info": "Info",
+      "warning": "Warnung",
+      "alert": "Alarm"
+    },
+    "evidence": {
+      "exact": "exakter Nachweis",
+      "derived": "abgeleiteter Nachweis",
+      "unknown": "unbekannter Nachweis"
+    },
+    "database": {
+      "plaintext": "Klartext",
+      "encrypted_like": "verschlüsselt wirkend",
+      "missing_or_empty": "leer",
+      "unknown": "unbekannt"
+    },
+    "limitation": {
+      "local_only_no_probe": "Es wurde keine Netzwerkanfrage ausgeführt; die Endpunkt-Haltung wird nur aus lokaler Konfiguration abgeleitet.",
+      "redacted_payload": "Adressen, Skripte, Deskriptoren, Xpubs, Backend-URLs/-Tokens, Wallet-Konfiguration, Raw JSON, Branch-/Index-Werte und Ableitungspfade fehlen in dieser Nutzlast.",
+      "unknown": "Eine Einschränkung wurde ohne bekannten Code gemeldet."
+    },
+    "finding": {
+      "database_plaintext": {
+        "title": "Datenbankdatei ist Klartext-SQLite",
+        "detail": "Der aktive Datenbank-Header ist Klartext-SQLite; SQLCipher-Verschlüsselung ist für dieses Datenverzeichnis nicht aktiv."
+      },
+      "database_encryption_unknown": {
+        "title": "Verschlüsselungsstatus der Datenbank ist unbekannt",
+        "detail": "Kassiber konnte den aktiven Datenbank-Header nicht aus der lokalen Datei einordnen."
+      },
+      "remote_backend_endpoints": {
+        "title": "Drittanbieter-Backend-Endpunkte sind konfiguriert",
+        "detail": "{{remote_backend_count}} konfigurierte Backend-Endpunkt(e) werden als Drittanbieter eingeordnet und können Wallet-/Indexer-Abfragen beobachten."
+      },
+      "unacknowledged_off_device_ai_provider": {
+        "title": "AI-Provider außerhalb des Geräts braucht Bestätigung",
+        "detail": "{{unacknowledged_off_device_provider_count}} AI-Provider außerhalb des Geräts haben keinen Bestätigungszeitpunkt."
+      },
+      "off_device_ai_provider_configured": {
+        "title": "AI-Provider außerhalb des Geräts sind konfiguriert",
+        "detail": "{{off_device_ai_provider_count}} konfigurierte AI-Provider können Prompt-Inhalte außerhalb dieses Geräts senden, wenn sie ausgewählt werden."
+      },
+      "watch_only_wallet_material_present": {
+        "title": "Watch-only-Wallet-Material ist lokal gespeichert",
+        "detail": "{{watch_only_material_wallet_count}} Wallet(s) haben Watch-only-Material in der lokalen Datenbank."
+      },
+      "privacy_boundary_transactions_present": {
+        "title": "Transaktionsmarker für Privatsphäre-Grenzen sind vorhanden",
+        "detail": "{{privacy_boundary_transaction_count}} Transaktion(en) tragen einen Marker für eine Privatsphäre-Grenze; Herkunft über diese Hops bleibt undurchsichtig, solange sie nicht mit stärkerem Nachweis geprüft wurde."
+      },
+      "import_raw_json_present": {
+        "title": "Importierte Rohmetadaten sind vorhanden",
+        "detail": "{{transaction_raw_json_count}} Transaktion(en) behalten importiertes Raw JSON in der lokalen Datenbank; diese Nutzlast meldet nur die Anzahl."
+      },
+      "local_utxo_location_metadata_present": {
+        "title": "Lokale UTXO-Positionsmetadaten sind vorhanden",
+        "detail": "Das lokale Output-Inventar enthält Adress-, Skript- oder Ableitungsmetadaten; diese Nutzlast meldet nur Anzahlen."
+      },
+      "privacy_quarantines_present": {
+        "title": "Privatsphärebezogene Journal-Quarantänen sind vorhanden",
+        "detail": "{{privacy_quarantine_count}} Journal-Quarantäne(n) sind privatsphärebezogen und brauchen Prüfung, bevor abgeleitete Berichte vollständig sind."
+      }
+    }
   },
   "data": {
     "importHeading": "Daten importieren",
@@ -409,7 +656,7 @@
     "featuresDescription": "Zeige den Assistent-Bildschirm und den schwebenden Chat. Wenn du dies ausschaltest, bleiben die Provider-Einstellungen gespeichert.",
     "featuresAria": "AI-Funktionen aktivieren",
     "providerConfigHeading": "Providerkonfiguration",
-    "providerConfigDescription": "Konfiguriere OpenAI-kompatible Endpunkte oder Claude-/Codex-CLI-Adapter für den integrierten Assistenten. Lokales Ollama läuft ohne Schlüssel; entfernte und CLI-Provider können Prompt-Inhalte sehen.",
+    "providerConfigDescription": "Konfiguriere OpenAI-kompatible Endpunkte oder Claude-/Codex-CLI-Adapter für den integrierten Assistenten. Lokale Provider wie Ollama und oMLX laufen normalerweise ohne Schlüssel; entfernte und CLI-Provider können Prompt-Inhalte sehen.",
     "addProvider": "Provider hinzufügen",
     "loadingProviders": "Provider werden geladen…",
     "loadError": "AI-Provider konnten nicht geladen werden.",
@@ -471,7 +718,7 @@
     "addTitle": "AI-Provider hinzufügen",
     "dialogDescription": "Verwende einen OpenAI-kompatiblen Endpunkt oder route über Claude-/Codex-CLI. CLI-Provider können dennoch Prompts an ihren konfigurierten Modelldienst senden.",
     "presetLabel": "Vorlage",
-    "presetNoteLocal": "Lokaler Ollama-Endpunkt.",
+    "presetNoteLocal": "Lokaler {{label}}-Endpunkt.",
     "presetNoteRemote": "{{label}}; Prompts können dieses Gerät verlassen.",
     "nameLabel": "Name",
     "urlLabel": "Basis-URL oder CLI-Locator",

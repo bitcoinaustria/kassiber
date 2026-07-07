@@ -120,6 +120,7 @@ _TRANSFER_MATCH_METHODS = (
 _TRANSFER_PAIR_KINDS = (
     "manual",
     "coinjoin",
+    "whirlpool",
     "chain-swap",
     "peg-in",
     "peg-out",
@@ -176,6 +177,63 @@ TOOL_CATALOG: tuple[ToolEntry, ...] = (
                 "since": {
                     "type": "string",
                     "description": "Optional RFC3339 lower bound on occurred_at.",
+                },
+                "until": {
+                    "type": "string",
+                    "description": "Optional RFC3339 upper bound on occurred_at.",
+                },
+                "period": {
+                    "type": "string",
+                    "enum": [
+                        "30days",
+                        "3months",
+                        "ytd",
+                        "1year",
+                        "5years",
+                        "10years",
+                        "15years",
+                        "all",
+                    ],
+                    "description": "Optional relative period filter.",
+                },
+                "txids": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Exact internal, external, or public explorer transaction ids.",
+                },
+                "status": {
+                    "type": "string",
+                    "enum": ["completed", "pending", "failed", "review"],
+                    "description": "Optional review/status filter.",
+                },
+                "flow": {
+                    "type": "string",
+                    "enum": ["incoming", "outgoing", "transfer", "swap", "layer-transition"],
+                    "description": "Optional UI flow filter.",
+                },
+                "payment_method": {
+                    "type": "string",
+                    "enum": ["On-chain", "Exchange", "Lightning", "Liquid"],
+                    "description": "Optional payment method / network family filter.",
+                },
+                "network": {
+                    "type": "string",
+                    "description": "Optional wallet network/chain/payment method filter.",
+                },
+                "withFees": {
+                    "type": "boolean",
+                    "description": "Only return transactions with a non-zero fee.",
+                },
+                "quick": {
+                    "type": "string",
+                    "enum": [
+                        "external_flow",
+                        "review_queue",
+                        "no_explorer_id",
+                        "missing_price",
+                        "failed_import",
+                    ],
+                    "description": "Optional desktop quick filter.",
                 },
                 "sort": {
                     "type": "string",
@@ -456,7 +514,8 @@ TOOL_CATALOG: tuple[ToolEntry, ...] = (
             "connection id and per-channel covers-open-cost rows are omitted "
             "because per-channel peer aliases and short channel ids identify "
             "third parties. Requires a registered Lightning adapter; returns an "
-            "error envelope when no LND/CLN sync is installed."
+            "error envelope when no LND/CLN sync is installed or the adapter "
+            "does not support routing profitability."
         ),
         parameters={
             "type": "object",
@@ -493,7 +552,8 @@ TOOL_CATALOG: tuple[ToolEntry, ...] = (
             "funding outpoints, short channel ids, peer pubkeys and peer aliases "
             "(including on forwards) are omitted; the operator's own connection "
             "label is kept. Returns an error envelope when no Lightning adapter "
-            "is registered for the connection's kind."
+            "is registered for the connection's kind or the adapter does not "
+            "support node snapshots."
         ),
         parameters={
             "type": "object",
@@ -589,6 +649,38 @@ TOOL_CATALOG: tuple[ToolEntry, ...] = (
         wire_name="ui_reports_balance_history",
         daemon_kind="ui.reports.balance_history",
         summary_template="Read balance history",
+    ),
+    ToolEntry(
+        name="ui.reports.privacy_hygiene",
+        description=(
+            "Read the active profile's redacted privacy-hygiene payload: local-only "
+            "counts, endpoint/AI posture, storage and wallet metadata findings, "
+            "limitations, and evidence_level on each finding. The payload omits "
+            "addresses, scripts, descriptors, xpubs, backend URLs/tokens, wallet "
+            "config, raw_json, branch/index values, and derivation paths."
+        ),
+        parameters=_EMPTY_OBJECT_SCHEMA,
+        kind_class="read_only",
+        wire_name="ui_reports_privacy_hygiene",
+        daemon_kind="ui.reports.privacy_hygiene",
+        summary_template="Read privacy hygiene",
+    ),
+    ToolEntry(
+        name="ui.reports.privacy_mirror",
+        description=(
+            "Read the active profile's redacted Privacy Mirror payload and its "
+            "precomputed worst-risk answer. Use this for questions such as what "
+            "is linkable, who can infer it, what proves it, what is unknown, or "
+            "what future PSBT/what-if analysis would worsen. The payload is "
+            "local-only, advisory-only, read-only, and omits addresses, scripts, "
+            "descriptors, xpubs, backend URLs/tokens, wallet config, raw_json, "
+            "branch/index values, derivation paths, and raw PSBT bytes."
+        ),
+        parameters=_EMPTY_OBJECT_SCHEMA,
+        kind_class="read_only",
+        wire_name="ui_reports_privacy_mirror",
+        daemon_kind="ui.reports.privacy_mirror",
+        summary_template="Read Privacy Mirror",
     ),
     ToolEntry(
         name="ui.journals.snapshot",
@@ -1013,6 +1105,10 @@ TOOL_CATALOG: tuple[ToolEntry, ...] = (
                     "type": "boolean",
                     "description": "Allow daemon-owned background refresh while the app/daemon is running.",
                 },
+                "bitcoin_rail_carrying_value": {
+                    "type": "boolean",
+                    "description": "When true, BTC/LBTC rail-change suggestions default to carrying-value treatment.",
+                },
                 "source_classes": {
                     "type": "object",
                     "additionalProperties": {"type": "boolean"},
@@ -1363,10 +1459,10 @@ TOOL_CATALOG: tuple[ToolEntry, ...] = (
         name="ui.transfers.pair",
         description=(
             "Pair one outbound + one inbound transaction after explicit "
-            "consent. Use kind='coinjoin' for a reviewed same-asset Coinjoin "
-            "ownership hop. Computes swap_fee_msat at pair time for swap-like "
-            "pairs and invalidates the journal so the next report read "
-            "reflects the change."
+            "consent. Use kind='coinjoin' or kind='whirlpool' for a reviewed "
+            "same-asset Coinjoin ownership hop. Computes swap_fee_msat at pair "
+            "time for swap-like pairs and invalidates the journal so the next "
+            "report read reflects the change."
         ),
         parameters={
             "type": "object",
@@ -1718,6 +1814,7 @@ ui.journals.transfers.list, ui.transfers.review_context, ui.rates.summary,
 ui.rates.coverage, ui.report.blockers, ui.audit.changes_since_last_answer,
 ui.maintenance.settings, ui.reports.summary, ui.reports.balance_sheet,
 ui.reports.portfolio_summary, ui.reports.tax_summary, ui.reports.balance_history,
+ui.reports.privacy_hygiene, ui.reports.privacy_mirror,
 ui.source_funds.sources.list, ui.source_funds.links.list,
 ui.source_funds.preview, and report snapshots. Use
 ui.reports.summary for exact all-time inflow/outflow rollups,
@@ -1727,7 +1824,10 @@ ui.reports.portfolio_summary for current wallet holdings,
 ui.transactions.extremes for largest/smallest transactions, and
 ui.transactions.search for specific notes, counterparties, tags, ids, or txids.
 Use ui.report.blockers before saying reports are ready, ui.rates.coverage for
-missing-price questions, and ui.audit.changes_since_last_answer when checking
+missing-price questions, ui.reports.privacy_mirror for what is linkable, who can
+infer it, unknown coverage, and worst privacy risk questions,
+ui.reports.privacy_hygiene for privacy posture configuration questions, and
+ui.audit.changes_since_last_answer when checking
 whether a previous answer is still current. Do not invent calculations when
 Kassiber can read program-derived output.
 For Boltz/submarine swap, peg, and Bitcoin rail questions, read

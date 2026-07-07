@@ -103,6 +103,11 @@ smoke_py -m kassiber wallets import-river --help >/dev/null
 smoke_py -m kassiber wallets import-21bitcoin --help >/dev/null
 smoke_py -m kassiber wallets import-strike --help >/dev/null
 smoke_py -m kassiber wallets import-ledger --help >/dev/null
+smoke_py -m kassiber wallets import-ledger-live --help >/dev/null
+smoke_py -m kassiber wallets import-binance-supplemental --help >/dev/null
+smoke_py -m kassiber wallets sync-kraken --help >/dev/null
+smoke_py -m kassiber wallets sync-coinbase --help >/dev/null
+smoke_py -m kassiber wallets sync-binance --help >/dev/null
 smoke_py -m kassiber wallets ledger-template --help >/dev/null
 smoke_py -m kassiber profiles create --help >/dev/null
 smoke_py -m kassiber metadata records --help >/dev/null

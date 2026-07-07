@@ -66,7 +66,19 @@ export interface Connection {
   addresses?: number;
   gap?: number;
   channels?: number;
+  lightningCapabilities?: LightningCapabilities;
   node?: NodeSnapshot;
+}
+
+export interface LightningCapabilities {
+  nodeSnapshot: boolean;
+  routingProfitability: boolean;
+  channelBalances: boolean;
+  channelLifecycle: boolean;
+  forwardEvents: boolean;
+  invoiceActivity: boolean;
+  paymentActivity: boolean;
+  onchainBalance: boolean;
 }
 
 export type NodeChannelState =
@@ -219,6 +231,9 @@ export interface Tx {
   date: string;
   occurredAt?: string;
   type: TxType;
+  asset?: string | null;
+  chain?: string | null;
+  network?: string | null;
   account: string;
   counter: string;
   amountSat: number;
@@ -295,6 +310,36 @@ export interface MarketRateSnapshot {
   method: string | null;
 }
 
+export interface TaxFreeBalanceBucket {
+  id: "altbestand" | "neubestand" | string;
+  regime: "alt" | "neu" | string;
+  label: string;
+  quantitySats: number;
+  marketValue: number | null;
+  taxFree: boolean;
+}
+
+export interface TaxFreeBalanceWallet {
+  walletId: string;
+  hasTaxFreeBalance: boolean;
+}
+
+export interface TaxFreeBalanceSnapshot {
+  rule: "austrian_altbestand" | string;
+  jurisdictionCode: string;
+  fiatCurrency: string;
+  status: "current" | "needs_journals" | "quarantines" | string;
+  taxFreeQuantitySats: number;
+  taxableQuantitySats: number;
+  totalQuantitySats: number;
+  taxFreeMarketValue: number | null;
+  taxableMarketValue: number | null;
+  needsJournals: boolean;
+  quarantines: number;
+  wallets?: TaxFreeBalanceWallet[];
+  buckets: TaxFreeBalanceBucket[];
+}
+
 export interface OverviewSnapshot {
   priceEur: number;
   priceUsd: number;
@@ -307,6 +352,7 @@ export interface OverviewSnapshot {
   /** dated portfolio points from the daemon, using real source dates/rates */
   portfolioSeries?: PortfolioPoint[];
   fiat: FiatSnapshot;
+  taxFreeBalance?: TaxFreeBalanceSnapshot | null;
   status?: {
     workspace: string | null;
     profile: string | null;
@@ -371,6 +417,16 @@ export const MOCK_OVERVIEW: OverviewSnapshot = {
       balance: 0.04821309,
       status: "synced",
       channels: 12,
+      lightningCapabilities: {
+        nodeSnapshot: true,
+        routingProfitability: true,
+        channelBalances: true,
+        channelLifecycle: true,
+        forwardEvents: true,
+        invoiceActivity: true,
+        paymentActivity: true,
+        onchainBalance: true,
+      },
       node: {
         alias: "kassiber-home",
         pubkey:
@@ -655,12 +711,22 @@ export const MOCK_OVERVIEW: OverviewSnapshot = {
     {
       id: "c6",
       kind: "lnd",
-      label: "Routing Node (LND)",
+      label: "lnd_merchant_backup",
       last: "44s ago",
       lastSyncAt: "2026-06-26T11:59:16Z",
       balance: 0.02914872,
       status: "syncing",
       channels: 7,
+      lightningCapabilities: {
+        nodeSnapshot: true,
+        routingProfitability: true,
+        channelBalances: true,
+        channelLifecycle: true,
+        forwardEvents: true,
+        invoiceActivity: true,
+        paymentActivity: true,
+        onchainBalance: true,
+      },
       node: {
         alias: "kassiber-routing",
         pubkey:
@@ -819,33 +885,37 @@ export const MOCK_OVERVIEW: OverviewSnapshot = {
       },
     },
   ],
+  // Multi-year activity: on-chain and Lightning receipts, spends, channel
+  // lifecycle and internal transfers spread across 2019→2026 so the ledger
+  // reads like real history instead of a single burst. Newest first — the
+  // overview surfaces slice the leading rows as "recent activity".
   txs: [
     { id: "tx1", externalId: "tx1", explorerId: "0000000000000000000000000000000000000000000000000000000000000001", date: "2026-04-18 14:22", type: "Income", account: "Cold Storage", counter: "Invoice · ACME GmbH", amountSat: 2_450_000, eur: 1749.79, rate: 71420.18, tag: "Revenue", conf: 41 },
-    { id: "tx2", date: "2026-04-17 09:08", type: "Expense", account: "Home Node (CLN)", counter: "Server rental · Hetzner", amountSat: -120_431, eur: -86.0, rate: 71432.10, tag: "Hosting", conf: 140 },
-    { id: "tx3", externalId: "tx3", explorerId: "0000000000000000000000000000000000000000000000000000000000000003", date: "2026-04-16 16:51", type: "Transfer", account: "Cold Storage → Vault", counter: "Internal transfer", amountSat: -50_000_000, eur: -35710.09, rate: 71420.18, tag: "Transfer", conf: 220, internal: true },
-    { id: "tx4", date: "2026-04-15 11:14", type: "Income", account: "NWC · Alby", counter: "Client payment · LN", amountSat: 92_808, eur: 66.27, rate: 71398.42, tag: "Revenue", conf: 1 },
-    { id: "tx5", date: "2026-04-14 22:02", type: "Expense", account: "Multisig Vault", counter: "Equipment · BitcoinStore", amountSat: -890_210, eur: -635.71, rate: 71412.0, tag: "Capex", conf: 420 },
-    { id: "tx6", date: "2026-04-12 08:30", type: "Income", account: "Cold Storage", counter: "Sale · Consulting", amountSat: 3_800_000, eur: 2713.97, rate: 71420.18, tag: "Revenue", conf: 612 },
-    { id: "tx7", date: "2026-04-11 19:45", type: "Expense", account: "Cashu · minibits", counter: "Coffee", amountSat: -8_400, eur: -6.0, rate: 71428.57, tag: "Meals", conf: 1 },
-    { id: "tx8", date: "2026-04-09 10:00", type: "Fee", account: "Home Node (CLN)", counter: "Channel open", amountSat: -18_210, eur: -13.01, rate: 71445.91, tag: "Bank fees", conf: 380 },
-    { id: "tx9", date: "2026-04-07 13:12", type: "Income", account: "Multisig Vault", counter: "Invoice · Globex AG", amountSat: 1_210_000, eur: 864.18, rate: 71420.0, tag: "Revenue", conf: 820 },
-    { id: "tx10", date: "2026-04-06 15:30", type: "Swap", account: "NWC · Alby → Cashu · minibits", counter: "LN → ecash swap", amountSat: 500_000, eur: 357.10, rate: 71420.0, tag: "Swap", conf: 1 },
-    { id: "tx11", date: "2026-04-05 11:08", type: "Swap", account: "Multisig Vault → Home Node (CLN)", counter: "Submarine swap · on-chain → LN", amountSat: 2_000_000, eur: 1428.40, rate: 71420.0, tag: "Swap", conf: 12 },
-    { id: "tx12", date: "2026-04-03 09:22", type: "Consolidation", account: "Cold Storage", counter: "12 UTXOs → 1", amountSat: 0, feeSat: 42_180, eur: -30.13, rate: 71432.0, tag: "Consolidation fee", conf: 210 },
+    { id: "tx2", date: "2025-10-17 09:08", type: "Expense", account: "Home Node (CLN)", counter: "Server rental · Hetzner", amountSat: -120_431, eur: -105.98, rate: 88000.0, tag: "Hosting", conf: 140 },
+    { id: "tx3", externalId: "tx3", explorerId: "0000000000000000000000000000000000000000000000000000000000000003", date: "2025-06-16 16:51", type: "Transfer", account: "Cold Storage → Vault", counter: "Internal transfer", amountSat: -50_000_000, eur: -41000.0, rate: 82000.0, tag: "Transfer", conf: 220, internal: true },
+    { id: "tx4", date: "2024-12-15 11:14", type: "Income", account: "NWC · Alby", counter: "Client payment · LN", amountSat: 92_808, eur: 55.68, rate: 60000.0, tag: "Revenue", conf: 1 },
+    { id: "tx5", date: "2024-05-14 22:02", type: "Expense", account: "Multisig Vault", counter: "Equipment · BitcoinStore", amountSat: -890_210, eur: -462.91, rate: 52000.0, tag: "Capex", conf: 420 },
+    { id: "tx6", date: "2023-10-12 08:30", type: "Income", account: "Cold Storage", counter: "Sale · Consulting", amountSat: 3_800_000, eur: 1140.0, rate: 30000.0, tag: "Revenue", conf: 612 },
+    { id: "tx7", date: "2023-04-11 19:45", type: "Expense", account: "Cashu · minibits", counter: "Coffee", amountSat: -8_400, eur: -2.18, rate: 26000.0, tag: "Meals", conf: 1 },
+    { id: "tx8", date: "2022-09-09 10:00", type: "Fee", account: "Home Node (CLN)", counter: "Channel open", amountSat: -18_210, eur: -3.46, rate: 19000.0, tag: "Bank fees", conf: 380 },
+    { id: "tx9", date: "2022-03-07 13:12", type: "Income", account: "Multisig Vault", counter: "Invoice · Globex AG", amountSat: 1_210_000, eur: 459.8, rate: 38000.0, tag: "Revenue", conf: 820 },
+    { id: "tx10", date: "2021-06-06 15:30", type: "Swap", account: "NWC · Alby → Cashu · minibits", counter: "LN → ecash swap", amountSat: 500_000, eur: 210.0, rate: 42000.0, tag: "Swap", conf: 1 },
+    { id: "tx11", date: "2020-11-05 11:08", type: "Swap", account: "Multisig Vault → Home Node (CLN)", counter: "Submarine swap · on-chain → LN", amountSat: 2_000_000, eur: 260.0, rate: 13000.0, tag: "Swap", conf: 12 },
+    { id: "tx12", date: "2019-06-03 09:22", type: "Consolidation", account: "Cold Storage", counter: "12 UTXOs → 1", amountSat: 0, feeSat: 42_180, eur: -2.95, rate: 7000.0, tag: "Consolidation fee", conf: 210 },
   ],
-  balanceSeries: [0.8, 1.1, 1.6, 1.55, 2.2, 2.4, 2.8, 3.1, 3.6, 4.0, 4.3, 4.38],
+  balanceSeries: [0.6, 0.9, 1.2, 1.6, 2.0, 2.5, 3.1, 3.5, 3.8, 4.1, 4.25, 4.38],
   portfolioSeries: [
-    { date: "2025-05-31", label: "2025-05-31", balanceBtc: 0.8, valueEur: 57_136.14, costBasisEur: 42_880 },
-    { date: "2025-06-30", label: "2025-06-30", balanceBtc: 1.1, valueEur: 78_562.20, costBasisEur: 58_920 },
-    { date: "2025-07-31", label: "2025-07-31", balanceBtc: 1.6, valueEur: 114_272.29, costBasisEur: 86_120 },
-    { date: "2025-08-31", label: "2025-08-31", balanceBtc: 1.55, valueEur: 110_701.28, costBasisEur: 84_450 },
-    { date: "2025-09-30", label: "2025-09-30", balanceBtc: 2.2, valueEur: 157_124.40, costBasisEur: 106_700 },
-    { date: "2025-10-31", label: "2025-10-31", balanceBtc: 2.4, valueEur: 171_408.43, costBasisEur: 118_240 },
-    { date: "2025-11-30", label: "2025-11-30", balanceBtc: 2.8, valueEur: 199_976.50, costBasisEur: 137_980 },
-    { date: "2025-12-31", label: "2025-12-31", balanceBtc: 3.1, valueEur: 221_402.56, costBasisEur: 150_220 },
-    { date: "2026-01-31", label: "2026-01-31", balanceBtc: 3.6, valueEur: 257_112.65, costBasisEur: 167_900 },
-    { date: "2026-02-28", label: "2026-02-28", balanceBtc: 4.0, valueEur: 285_680.72, costBasisEur: 181_430 },
-    { date: "2026-03-31", label: "2026-03-31", balanceBtc: 4.3, valueEur: 307_106.77, costBasisEur: 193_100 },
+    { date: "2019-06-30", label: "2019-06-30", balanceBtc: 0.6, valueEur: 4_200.0, costBasisEur: 3_000 },
+    { date: "2019-12-31", label: "2019-12-31", balanceBtc: 0.9, valueEur: 5_760.0, costBasisEur: 4_600 },
+    { date: "2020-12-31", label: "2020-12-31", balanceBtc: 1.2, valueEur: 28_800.0, costBasisEur: 12_000 },
+    { date: "2021-12-31", label: "2021-12-31", balanceBtc: 1.6, valueEur: 73_600.0, costBasisEur: 30_000 },
+    { date: "2022-12-31", label: "2022-12-31", balanceBtc: 2.0, valueEur: 33_000.0, costBasisEur: 45_000 },
+    { date: "2023-12-31", label: "2023-12-31", balanceBtc: 2.5, valueEur: 95_000.0, costBasisEur: 68_000 },
+    { date: "2024-12-31", label: "2024-12-31", balanceBtc: 3.1, valueEur: 170_500.0, costBasisEur: 95_000 },
+    { date: "2025-06-30", label: "2025-06-30", balanceBtc: 3.5, valueEur: 287_000.0, costBasisEur: 130_000 },
+    { date: "2025-09-30", label: "2025-09-30", balanceBtc: 3.8, valueEur: 326_800.0, costBasisEur: 152_000 },
+    { date: "2025-12-31", label: "2025-12-31", balanceBtc: 4.1, valueEur: 369_000.0, costBasisEur: 175_000 },
+    { date: "2026-02-28", label: "2026-02-28", balanceBtc: 4.25, valueEur: 331_500.0, costBasisEur: 190_000 },
     { date: "2026-04-30", label: "2026-04-30", balanceBtc: 4.38, valueEur: 312_842.77, costBasisEur: 198_502.40 },
   ],
   fiat: {
@@ -854,5 +924,40 @@ export const MOCK_OVERVIEW: OverviewSnapshot = {
     eurCostBasis: 198_502.40,
     eurUnrealized: 114_340.37,
     eurRealizedYTD: 42_118.92,
+  },
+  taxFreeBalance: {
+    rule: "austrian_altbestand",
+    jurisdictionCode: "AT",
+    fiatCurrency: "EUR",
+    status: "current",
+    taxFreeQuantitySats: 120_000_000,
+    taxableQuantitySats: 318_000_000,
+    totalQuantitySats: 438_000_000,
+    taxFreeMarketValue: 85_704.22,
+    taxableMarketValue: 227_138.55,
+    needsJournals: false,
+    quarantines: 0,
+    wallets: [
+      { walletId: "c1", hasTaxFreeBalance: true },
+      { walletId: "c2", hasTaxFreeBalance: false },
+    ],
+    buckets: [
+      {
+        id: "altbestand",
+        regime: "alt",
+        label: "Altbestand",
+        quantitySats: 120_000_000,
+        marketValue: 85_704.22,
+        taxFree: true,
+      },
+      {
+        id: "neubestand",
+        regime: "neu",
+        label: "Neubestand",
+        quantitySats: 318_000_000,
+        marketValue: 227_138.55,
+        taxFree: false,
+      },
+    ],
   },
 };

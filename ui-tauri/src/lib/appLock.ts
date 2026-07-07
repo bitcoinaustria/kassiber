@@ -14,18 +14,12 @@ export function shouldUseDaemonUnlock({
 
 export function shouldLockEncryptedWorkspaceOnLaunch({
   encryptedWorkspace,
-  requirePassphraseOnLaunch,
   hasSessionUnlock,
 }: {
   encryptedWorkspace: boolean;
-  requirePassphraseOnLaunch: boolean;
   hasSessionUnlock: boolean;
 }) {
-  return (
-    encryptedWorkspace &&
-    requirePassphraseOnLaunch &&
-    !hasSessionUnlock
-  );
+  return encryptedWorkspace && !hasSessionUnlock;
 }
 
 export function lockScreenConfig({
@@ -58,4 +52,18 @@ export function shouldStoreTouchIdPassphrase({
     return false;
   }
   return rememberWithTouchId === true || touchIdStatusConfigured;
+}
+
+export function shouldAutoPromptTouchId({
+  autoPromptRequested,
+  canUseTouchId,
+  appVisible,
+  windowFocused,
+}: {
+  autoPromptRequested: boolean;
+  canUseTouchId: boolean;
+  appVisible: boolean;
+  windowFocused: boolean;
+}) {
+  return autoPromptRequested && canUseTouchId && appVisible && windowFocused;
 }

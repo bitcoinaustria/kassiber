@@ -160,6 +160,8 @@ export interface TransactionsList {
   txs: Tx[];
   year: number;
   filters?: Record<string, unknown>;
+  count?: number;
+  total?: number;
   nextCursor?: string | null;
   hasMore?: boolean;
 }

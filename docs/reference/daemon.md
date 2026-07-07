@@ -81,6 +81,9 @@ daemon for the exact current allowlist:
       "ui.workspace.create",
       "ui.workspace.delete",
       "ui.profiles.reset_data",
+      "ui.projects.list",
+      "ui.projects.create",
+      "ui.projects.select",
       "ui.secrets.init",
       "ui.secrets.change_passphrase",
       "ui.next_actions",
@@ -93,7 +96,9 @@ daemon for the exact current allowlist:
       "ui.connections.btcpay.test",
       "ui.connections.node.snapshot",
       "ui.reports.lightning_profitability",
+      "ui.metadata.bip329.preview",
       "ui.metadata.bip329.import",
+      "ui.metadata.bip329.export",
       "ui.wallets.update",
       "ui.wallets.delete",
       "ui.wallets.sync",
@@ -142,6 +147,34 @@ will pass through. Reveal kinds (see below) are included in the list but still
 require their own passphrase round-trip before the daemon returns raw secret
 material.
 
+`ui.reports.privacy_hygiene` is a local-only, read-only privacy facts payload
+shared by Settings -> Privacy, `kassiber reports privacy-hygiene`, and the
+assistant read tool `ui_reports_privacy_hygiene`. It performs no network probe,
+does not sync wallets, and does not refresh or mutate journals. Findings carry
+`evidence_level` (`exact`, `derived`, or `unknown`) plus count-only evidence.
+The payload is AI/export-safe by construction: it omits addresses, scripts,
+descriptors, xpubs, backend URLs/tokens, wallet config JSON, raw importer JSON,
+branch/index values, and derivation paths. The desktop Settings screen may
+still show operator-facing endpoint rows through the existing first-party
+backend-settings permission; that richer local UI view is separate from the
+privacy-hygiene payload and is not what the AI tool receives.
+
+`ui.reports.privacy_mirror` is the north-star local privacy report behind the
+Privacy Mirror page, wallet/transaction detail privacy panels,
+`kassiber reports privacy-mirror`, and the assistant read tool
+`ui_reports_privacy_mirror`. It composes the redacted linkage graph and
+privacy-hygiene facts into exposure summary, adversary cards, wallet,
+transaction, UTXO, timeline, coverage, unknown, evidence-drilldown, and
+worst-risk rows. It is local-only, read-only, advisory-only, and carries
+`evidence_level` on every result. The payload uses the same AI/export redaction
+rules as privacy hygiene: no addresses, scripts, descriptors, xpubs, backend
+URLs/tokens, wallet config JSON, raw JSON, branch/index values, or derivation
+paths. `ui.reports.psbt_privacy` is a desktop/CLI local preflight path for raw
+unsigned PSBT text; it is not in the assistant tool catalog, and raw PSBT
+contents must not be exposed to AI. See
+[`privacy-mirror.md`](privacy-mirror.md) for methodology, degraded states,
+redaction, and non-goals.
+
 `ui.transactions.resolve` is the narrow local lookup used by deep links and
 global search: it accepts a Kassiber transaction id or external transaction id
 scoped to the active profile and returns at most one safe transaction display
@@ -184,6 +217,30 @@ and index details. Unsupported sources return
 `support.status="unsupported_source"`. Liquid wallets return
 `support.status="liquid_unblind_blocked"` unless their descriptor material can
 unblind and account for outputs locally.
+
+`ui.privacy_hygiene.snapshot` is the read-only Phase-1 privacy-tells surface.
+It accepts optional `{"wallet":"<wallet id or label>", "transaction":"<id or
+txid>", "limit": 50}` arguments and returns advisory privacy tells, risk
+counts, unknown counts, wallet rollups, transaction rows to review, and coverage
+counts. Every finding carries `evidence_level` (`ground_truth`, `reviewed`,
+`imported`, `heuristic`, or `unavailable`), remediation text, and attribution
+(`user_wallet`, `counterparty`, or `local_data`). Inbound counterparty-side
+tells remain visible as context but do not increase the receiving wallet's risk
+weight. The engine is local-only over already stored `transactions.raw_json`
+plus `wallet_utxos`: it never fetches missing prevouts, calls explorer/entity
+APIs, or widens exposure through a public backend. Bitcoin rows with local
+`vin`/`vout` get single-transaction heuristics such as common-input, round
+amount, fee/RBF, script-type mix, change, wallet-fingerprint, OP_RETURN, and
+CoinJoin/PayJoin boundary evidence. Graphless imports, current Bitcoin Core
+detail rows, and confidential/incomplete shapes degrade to address-level
+coverage or `not_analysable`; missing transaction refs return explicit
+`not_found`. The daemon does not return raw JSON, addresses, scriptPubKeys,
+descriptors, xpubs, backend URLs, tokens, wallet config, branch/index details,
+or derivation paths. Privacy heuristics are advisory only and never mutate tax
+lots, exclusions, balances, transfer pairs, or source-funds state. Cross-wallet
+adversary reconstruction, peel chains, Boltzmann entropy, coin-selection advice
+or fingerprinting, and PSBT pre-broadcast checks remain out of this Phase-1
+surface.
 
 `ui.transactions.history` and `ui.activity.history` read redacted,
 append-only metadata edit events from the same local database as transactions.
@@ -320,6 +377,9 @@ exchange evidence and enriches only unique matching transactions in the active
 profile. `mode="full"` imports all normalized provider rows into the selected
 or default provider wallet as excluded evidence, then flags each row as
 `matched`, `unmatched`, or `ambiguous` against this book's wallet transactions.
+`source_format="binance_supplemental_csv"` follows the same exchange-evidence
+contract, defaults to a `Binance` provider wallet in full mode, and returns
+`binance_rows`.
 `source_format="bullbitcoin_wallet_csv"` is different: it imports Bull's
 unified mobile wallet transaction export as active wallet-scoped BTC/LBTC/
 Lightning activity, returns `bullbitcoin_wallet_rows`, skips failed/expired and
@@ -339,6 +399,9 @@ timestamp. `source_format="strike_csv"` imports active Strike platform ledger
 rows into the selected or default `Strike` wallet, including exchange buy/sell
 rows plus Lightning and on-chain wallet activity. It keeps Lightning payment
 hashes when exported, skips fiat-only platform rows, and returns `strike_rows`.
+`source_format="ledgerlive_csv"` imports Ledger Live BTC/LBTC `IN`/`OUT` rows
+as wallet movement only, ignores informational countervalues, redacts account
+xpub columns from raw metadata, and returns normal wallet import counters.
 `source_format="wasabi_bundle"` imports sanitized Wasabi RPC/export bundles
 into a wallet-scoped `wasabi` source, returns `wasabi_transactions`,
 `wasabi_coins_observed`, `wasabi_coins_active`,
@@ -413,10 +476,23 @@ BTCPay invoice JSON, rejected matches, payment hashes, destination addresses,
 full origin URLs, payment-method configuration, descriptors, xpubs, or API
 tokens.
 
-`ui.metadata.bip329.import` accepts `file`, then imports BIP329 JSONL labels
-into the active profile. Labels are deduplicated by record type and reference;
-transaction labels are bridged to matching local transactions across the active
-profile.
+`ui.metadata.bip329.preview` accepts `file`, reads a local BIP329 JSONL label
+export, and returns exact/ambiguous/unmatched/preserved counts, duplicate and
+conflict counts, and the transaction-tag effects that would be applied. It does
+not contact a backend or mutate the database.
+
+`ui.metadata.bip329.import` accepts `file` and optional `apply_ambiguous`, then
+imports BIP329 JSONL labels into the active profile. Labels are deduplicated by
+record type and reference. Every valid row is stored/preserved; by default only
+exact transaction matches are bridged into Kassiber tags through the audited
+metadata history path. Ambiguous transaction labels are preserved but skipped
+unless the caller explicitly applies them after review.
+
+`ui.metadata.bip329.export` accepts optional `mode` (`stored`, `synthesized`,
+or `all`) and optional `wallet`, writes a BIP329 JSONL file under the managed
+exports directory, and returns `file` / `filename` for the desktop save-as flow.
+Wallet-scoped export includes only records Kassiber can tie deterministically to
+that wallet.
 
 `ui.transactions.metadata.update` accepts
 `{"transaction":"...","note":"...","tags":["Reviewed"],"excluded":false}` for
@@ -483,9 +559,9 @@ logs event records in the dev-server terminal instead.
 
 `status`, the `ui.*` snapshots, report export kinds, `ui.wallets.sync`,
 `ui.freshness.*`, and `ui.journals.process` are backed by real data today.
-Report export kinds write files under the managed `exports/reports/` state
-directory and return the written path plus metadata. UI kinds not yet wired
-return `daemon_unavailable` instead.
+Report export kinds write files under the active project's managed
+`exports/reports/` directory and return the written path plus metadata. UI
+kinds not yet wired return `daemon_unavailable` instead.
 
 `ui.overview.snapshot` remains scoped to the active book/profile.
 `ui.workspace.health` is also active-context health despite the historical
@@ -521,7 +597,7 @@ Job types are separate so partial success stays usable:
 - `market_rate_coverage` for incremental missing-minute rate coverage.
 - `journal_refresh` for follow-up local journal processing.
 
-Market-rate jobs first seed the bundled Kraken BTC daily BTC-EUR/BTC-USD
+Market-rate jobs first seed the bundled Kraken BTC hourly BTC-EUR/BTC-USD
 archive into `rates_cache` when missing, then fetch a small latest quote from
 the configured live market-rate provider for current BTC price display.
 Coinbase Exchange is the default provider when none is configured; CoinGecko is
@@ -535,11 +611,11 @@ itself also refuses any live provider call (returning `live_refresh: false`,
 off never reaches Coinbase Exchange, CoinGecko, or mempool — only the offline
 bundled seed runs. Background jobs skip the manual 30-day warm-cache fallback
 when no transaction minute is missing, so hourly price refresh stays
-provider-light. The bundled offline Kraken daily seed already includes the
-Coin Metrics + ECB-derived pre-Kraken backfill, so cached daily BTC-EUR/BTC-USD
-coverage starts at `2011-01-01` without adding another live provider. Kraken
-CSV remains an offline archive/import path because it needs a local file or
-bundled archive.
+provider-light. The bundled offline Kraken hourly seed includes a daily-derived
+pre-Kraken backfill from the existing Coin Metrics + ECB-derived daily bundle,
+so cached BTC-EUR/BTC-USD coverage starts at `2011-01-01` without adding
+another live provider. Kraken CSV remains an offline archive/import path
+because it needs a local file or bundled archive.
 
 Source states are `fresh`, `queued`, `syncing`, `paused`, `rate_limited`,
 `partially_stale`, `failed`, and `blocking_reports`. Report reads are blocked
@@ -626,13 +702,27 @@ that the daemon imports at startup. Without a registered adapter the daemon
 returns an `lightning_adapter_unavailable` error envelope so the desktop can
 surface the unavailable-adapter state without inventing data.
 
+Lightning adapters also declare explicit safe capability metadata through
+`LightningCapabilities` (`node_snapshot`, `routing_profitability`,
+`channel_balances`, `channel_lifecycle`, `forward_events`,
+`invoice_activity`, `payment_activity`, `onchain_balance`). The daemon checks
+`node_snapshot` before `ui.connections.node.snapshot` and checks both
+`node_snapshot` and `routing_profitability` before
+`ui.reports.lightning_profitability`. A registered adapter that lacks the
+requested feature returns a deterministic `lightning_capability_unsupported`
+error with safe details (`kind`, requested `capability`, and supported
+capability names). Capability blocks exposed to the desktop use camelCase
+booleans such as `nodeSnapshot` and `routingProfitability`; they never include
+peer pubkeys, channel funding outpoints, short channel ids, descriptors,
+backend URLs/tokens, raw wallet config, or other identity graph data.
+
 ## Encrypted database
 
-When `kassiber.sqlite3` is SQLCipher-encrypted, the daemon still bootstraps
-through the normal runtime path: it accepts the global `--db-passphrase-fd
-<FD>` and falls back to an interactive prompt only if a controlling TTY is
-attached. The Tauri supervisor will eventually hand the passphrase via fd
-inheritance (tracked in `TODO.md`).
+When the active project's `kassiber.sqlite3` is SQLCipher-encrypted, the daemon
+still bootstraps through the normal runtime path: it accepts
+`--db-passphrase-fd <FD>` for that selected project and falls back to an
+interactive prompt only if a controlling TTY is attached. The Tauri supervisor
+will eventually hand the passphrase via fd inheritance (tracked in `TODO.md`).
 
 ## Reveal kinds (local-auth round-trip)
 

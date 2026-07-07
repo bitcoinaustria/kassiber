@@ -10,6 +10,8 @@ from ._pdf_common import (
     BRAND_LINE,
     BRAND_MUTED,
     BRAND_SOFT,
+    build_report_styles,
+    build_report_table,
     decimal_value,
     draw_page_header,
     escape_paragraph_text,
@@ -49,6 +51,25 @@ def _btc(value: Any) -> str:
     return f"{decimal_value(value):,.8f} BTC"
 
 
+def _asset_quantity_text(row: Mapping[str, Any]) -> str:
+    quantities = row.get("asset_quantities") or []
+    parts = []
+    for item in quantities:
+        asset = str(item.get("asset") or "").strip().upper()
+        if asset:
+            parts.append(f"{decimal_value(item.get('quantity')):,.8f} {asset}")
+    if parts:
+        return ", ".join(parts)
+    assets = [str(asset).strip().upper() for asset in row.get("assets") or [] if str(asset).strip()]
+    suffix = assets[0] if len(assets) == 1 else "units"
+    quantity = row.get("quantity")
+    if quantity is None:
+        quantity = row.get("end_quantity")
+    if quantity is None:
+        quantity = row.get("total_quantity")
+    return f"{decimal_value(quantity):,.8f} {suffix}"
+
+
 def _signed_money(currency: str, value: Any) -> str:
     number = decimal_value(value)
     prefix = "+" if number > 0 else ""
@@ -63,6 +84,11 @@ def _compact_money(currency: str, value: Any) -> str:
         return f"{sign}{currency} {amount / Decimal('1000000'):.1f}m"
     if amount >= Decimal("1000"):
         return f"{sign}{currency} {amount / Decimal('1000'):.1f}k"
+    if 0 < amount < Decimal("1"):
+        # Sub-unit values round to "0" under .0f, so the donut centre showed
+        # "EUR 0" for dust holdings (contradicting its own legend) and small
+        # axis ticks collapsed to duplicate labels. Keep two decimals here.
+        return f"{sign}{currency} {amount:.2f}"
     return f"{sign}{currency} {amount:.0f}"
 
 
@@ -77,15 +103,15 @@ def _compact_number(value: Any) -> str:
     return f"{sign}{amount:.0f}"
 
 
-def _compact_btc(value: Any) -> str:
+def _compact_quantity(value: Any) -> str:
     number = decimal_value(value)
     sign = "-" if number < 0 else ""
     amount = abs(number)
     if amount >= Decimal("1"):
-        return f"{sign}{amount:.4f} BTC"
+        return f"{sign}{amount:.4f}"
     if amount >= Decimal("0.01"):
-        return f"{sign}{amount:.3f} BTC"
-    return f"{sign}{amount:.8f} BTC"
+        return f"{sign}{amount:.3f}"
+    return f"{sign}{amount:.8f}"
 
 
 def _pct(value: Decimal, total: Decimal) -> str:
@@ -101,13 +127,13 @@ def _perf_change_text(currency: str, start: Decimal, end: Decimal) -> str:
     return f"{_signed_money(currency, end - start)} vs start"
 
 
-def _btc_stack_change_text(start: Decimal, end: Decimal) -> str:
+def _quantity_change_text(start: Decimal, end: Decimal) -> str:
     if start > 0:
         pct = (end - start) / start * Decimal("100")
         return f"{pct:+.1f}%"
     delta = end - start
     sign = "+" if delta > 0 else ""
-    return f"{sign}{delta:.4f} BTC"
+    return f"{sign}{delta:.4f} units"
 
 
 def _perf_summary_lines(currency: str, metrics: Mapping[str, Any], benchmark: Mapping[str, Any] | None) -> list[str]:
@@ -120,15 +146,24 @@ def _perf_summary_lines(currency: str, metrics: Mapping[str, Any], benchmark: Ma
     if benchmark and benchmark.get("change_pct") is not None:
         fiat_parts[0] += f" (BTC spot {decimal_value(benchmark['change_pct']):+.1f}%)"
     fiat_parts.append(f"Unrealized at close: {_signed_money(currency, unrealized)}")
-    btc_line = (
-        f"BTC stack: {stack_start:.4f} → {stack_end:.4f} BTC ({_btc_stack_change_text(stack_start, stack_end)})"
+    quantity_line = (
+        f"Total quantity: {stack_start:.4f} → {stack_end:.4f} units ({_quantity_change_text(stack_start, stack_end)})"
         f" · Network + venue fees: {_btc(metrics.get('fees_btc'))} · {_money(currency, metrics.get('fees_fiat'))}"
     )
-    return [" · ".join(fiat_parts), btc_line]
+    return [" · ".join(fiat_parts), quantity_line]
 
 
 def _para(rl: dict[str, Any], styles: dict[str, Any], text: Any, style: str = "body"):
     return rl["Paragraph"](escape_paragraph_text(text), styles[style])
+
+
+def _format_generated(value: Any) -> str:
+    text = str(value or "").replace("T", " ")
+    if text.endswith("Z"):
+        text = text[:-1]
+    if len(text) >= 16 and text[4] == "-" and text[7] == "-":
+        return f"{text[:10]} {text[11:16]}"
+    return text
 
 
 def _format_age_days(days: Any) -> str:
@@ -168,34 +203,26 @@ def _direction_label(direction: Any) -> str:
     return text.title() or "—"
 
 
-def _table_cell(cell: Any) -> Any:
-    if hasattr(cell, "wrap") or hasattr(cell, "drawOn"):
-        return cell
-    return str(cell)
-
-
-def _table(rl: dict[str, Any], rows: Sequence[Sequence[Any]], widths: Sequence[float], *, header: bool = True):
-    colors = rl["colors"]
-    table = rl["Table"]([[_table_cell(cell) for cell in row] for row in rows], colWidths=list(widths), repeatRows=1 if header else 0)
-    commands = [
-        ("FONT", (0, 0), (-1, -1), _font(rl, "regular"), 8),
-        ("TEXTCOLOR", (0, 0), (-1, -1), colors.HexColor(BRAND_INK)),
-        ("GRID", (0, 0), (-1, -1), 0.3, colors.HexColor(BRAND_LINE)),
-        ("VALIGN", (0, 0), (-1, -1), "TOP"),
-        ("LEFTPADDING", (0, 0), (-1, -1), 5),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 5),
-        ("TOPPADDING", (0, 0), (-1, -1), 4),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
-    ]
-    if header and rows:
-        commands.extend(
-            [
-                ("FONT", (0, 0), (-1, 0), _font(rl, "bold"), 8),
-                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor(BRAND_SOFT)),
-            ]
-        )
-    table.setStyle(rl["TableStyle"](commands))
-    return table
+def _table(
+    rl: dict[str, Any],
+    styles: dict[str, Any],
+    rows: Sequence[Sequence[Any]],
+    widths: Sequence[float],
+    *,
+    header: bool = True,
+    right_columns: Sequence[int] = (),
+):
+    # Delegates to the shared house table style (framed box, hairline grid,
+    # soft header with ink underline, zebra rows) so the summary matches the
+    # tax and source-of-funds reports. ``widths`` are already in points here.
+    return build_report_table(
+        rl,
+        styles,
+        rows,
+        col_widths=list(widths),
+        header=header,
+        right_columns=right_columns,
+    )
 
 
 def _metric_strip(rl: dict[str, Any], metrics: Sequence[tuple[str, str]]):
@@ -234,9 +261,16 @@ def _series_bounds(values: Sequence[Decimal]) -> tuple[Decimal, Decimal]:
     high = max(values)
     if low == high:
         pad = abs(high) * Decimal("0.1") or Decimal("1")
-        return low - pad, high + pad
-    pad = (high - low) * Decimal("0.06")
-    return low - pad, high + pad
+        low_bound, high_bound = low - pad, high + pad
+    else:
+        pad = (high - low) * Decimal("0.06")
+        low_bound, high_bound = low - pad, high + pad
+    # Never pad a wholly non-negative series below zero: one large outlier
+    # otherwise drives the axis floor negative (e.g. "-EUR 166.6k" under a
+    # positive-only balance history), wasting the plot and implying debt.
+    if low >= 0 and low_bound < 0:
+        low_bound = Decimal("0")
+    return low_bound, high_bound
 
 
 def _tick_values(low: Decimal, high: Decimal, count: int = 5) -> list[Decimal]:
@@ -311,15 +345,20 @@ def _line_chart(rl: dict[str, Any], title: str, rows: Sequence[Mapping[str, Any]
         return drawing
 
     fiat_values = [decimal_value(row.get("market_value")) for row in rows]
+    cost_values = [decimal_value(row.get("cumulative_cost_basis")) for row in rows]
     btc_values = [decimal_value(row.get("quantity")) for row in rows]
-    fiat_low, fiat_high = _series_bounds(fiat_values)
+    # The market-value and cost-basis lines share the left axis, so bound it
+    # over BOTH. Scaling to market value alone let the cost-basis line run off
+    # the plot (and across the page) whenever cost basis exceeded market value
+    # — i.e. for any underwater or early-DCA portfolio.
+    fiat_low, fiat_high = _series_bounds(fiat_values + cost_values)
     btc_low, btc_high = _series_bounds(btc_values)
     for idx, fiat_tick in enumerate(_tick_values(fiat_low, fiat_high)):
         y = bottom + _scale(fiat_tick, fiat_low, fiat_high, plot_h)
         drawing.add(Line(left, y, left + plot_w, y, strokeColor=colors.HexColor(BRAND_LINE), strokeWidth=0.3))
         drawing.add(String(left - 4, y - 2, _compact_money(currency, fiat_tick), fontName=_font(rl, "regular"), fontSize=5.8, fillColor=colors.HexColor(BRAND_MUTED), textAnchor="end"))
-        btc_tick = btc_low + ((btc_high - btc_low) * Decimal(idx) / Decimal(4))
-        drawing.add(String(left + plot_w + 4, y - 2, _compact_btc(btc_tick), fontName=_font(rl, "regular"), fontSize=5.8, fillColor=colors.HexColor(BRAND_MUTED)))
+        quantity_tick = btc_low + ((btc_high - btc_low) * Decimal(idx) / Decimal(4))
+        drawing.add(String(left + plot_w + 4, y - 2, _compact_quantity(quantity_tick), fontName=_font(rl, "regular"), fontSize=5.8, fillColor=colors.HexColor(BRAND_MUTED)))
     drawing.add(Line(left, bottom, left + plot_w, bottom, strokeColor=colors.HexColor(BRAND_LINE), strokeWidth=0.6))
     drawing.add(Line(left, bottom, left, bottom + plot_h, strokeColor=colors.HexColor(BRAND_LINE), strokeWidth=0.6))
     drawing.add(Line(left + plot_w, bottom, left + plot_w, bottom + plot_h, strokeColor=colors.HexColor(BRAND_LINE), strokeWidth=0.6))
@@ -328,7 +367,7 @@ def _line_chart(rl: dict[str, Any], title: str, rows: Sequence[Mapping[str, Any]
     drawing.add(Rect(width - 94, height - 15, 5, 5, strokeColor=colors.HexColor(COLOR_GRAY), fillColor=colors.HexColor(COLOR_GRAY)))
     drawing.add(String(width - 86, height - 15, "Cost basis", fontName=_font(rl, "regular"), fontSize=6.4, fillColor=colors.HexColor(BRAND_MUTED)))
     drawing.add(Rect(width - 39, height - 15, 5, 5, strokeColor=colors.HexColor(COLOR_BALANCE), fillColor=colors.HexColor(COLOR_BALANCE)))
-    drawing.add(String(width - 31, height - 15, "BTC", fontName=_font(rl, "regular"), fontSize=6.4, fillColor=colors.HexColor(BRAND_MUTED)))
+    drawing.add(String(width - 31, height - 15, "Units", fontName=_font(rl, "regular"), fontSize=6.4, fillColor=colors.HexColor(BRAND_MUTED)))
     count = max(len(rows) - 1, 1)
     label_size = _axis_label_font_size(len(rows), 5.2)
     label_indexes = _axis_label_indexes(len(rows))
@@ -357,7 +396,7 @@ def _line_chart(rl: dict[str, Any], title: str, rows: Sequence[Mapping[str, Any]
     last_row = rows[-1]
     drawing.add(String(left + 3, bottom + plot_h + 5, f"Start {_compact_money(currency, first_row.get('market_value'))}", fontName=_font(rl, "regular"), fontSize=6, fillColor=colors.HexColor(BRAND_MUTED)))
     drawing.add(String(left + plot_w - 3, bottom + plot_h + 5, f"End {_compact_money(currency, last_row.get('market_value'))}", fontName=_font(rl, "bold"), fontSize=6, fillColor=colors.HexColor(BRAND_INK), textAnchor="end"))
-    drawing.add(String(left, 5, "Left axis market value · right axis BTC balance", fontName=_font(rl, "regular"), fontSize=6.3, fillColor=colors.HexColor(BRAND_MUTED)))
+    drawing.add(String(left, 5, "Left axis market value · right axis total units", fontName=_font(rl, "regular"), fontSize=6.3, fillColor=colors.HexColor(BRAND_MUTED)))
     if rows and rows[-1].get("period_partial"):
         drawing.add(String(left + 142, 5, f"Final period capped at {str(rows[-1].get('period_end', ''))[:10]}", fontName=_font(rl, "regular"), fontSize=6.3, fillColor=colors.HexColor(BRAND_MUTED)))
     return drawing
@@ -514,7 +553,7 @@ def _cover_flowables(rl, styles, report):
     return [
         _para(rl, styles, report.get("title") or "Kassiber Summary Report", "title"),
         _para(rl, styles, f"{report.get('workspace')} / {report.get('profile')}", "body"),
-        _para(rl, styles, f"Timeframe: {report.get('timeframe', {}).get('label', '')} · Generated: {report.get('generated_at', '')}", "muted"),
+        _para(rl, styles, f"Timeframe: {report.get('timeframe', {}).get('label', '')} · Generated: {_format_generated(report.get('generated_at', ''))}", "muted"),
         rl["Spacer"](1, 6),
     ]
 
@@ -528,12 +567,17 @@ def _snapshot_flowables(rl, styles, report, currency):
         rows.append([
             row.get("wallet", ""),
             ", ".join(row.get("assets") or []),
-            _btc(row.get("quantity")),
+            _asset_quantity_text(row),
             _money(currency, row.get("market_value")),
         ])
     return [
-        _para(rl, styles, f"As of today: {_money(currency, snapshot.get('total_market_value'))} · {_btc(snapshot.get('total_quantity'))}", "h2"),
-        _table(rl, rows, [44 * rl["mm"], 34 * rl["mm"], 38 * rl["mm"], 45 * rl["mm"]]),
+        _para(
+            rl,
+            styles,
+            f"Current snapshot: {_money(currency, snapshot.get('total_market_value'))} · {_asset_quantity_text(snapshot)}",
+            "h2",
+        ),
+        _table(rl, styles, rows, [44 * rl["mm"], 34 * rl["mm"], 38 * rl["mm"], 45 * rl["mm"]], right_columns={2, 3}),
         rl["Spacer"](1, 8),
     ]
 
@@ -582,7 +626,7 @@ def _data_integrity_flowables(rl, styles, report, currency):
         rows.append(["Quarantine reasons", "None in scope"])
     return [
         _para(rl, styles, "Data Integrity", "h2"),
-        _table(rl, rows, [70 * rl["mm"], 92 * rl["mm"]]),
+        _table(rl, styles, rows, [70 * rl["mm"], 92 * rl["mm"]]),
     ]
 
 
@@ -612,7 +656,7 @@ def _disposal_table_flowables(rl, styles, top_disposals, currency):
     for row in top_disposals:
         rows.append([
             str(row.get("occurred_at", ""))[:10],
-            str(row.get("wallet", ""))[:22],
+            str(row.get("wallet", "")),
             _btc(-decimal_value(row.get("quantity"))),
             _money(currency, row.get("proceeds")),
             _money(currency, row.get("cost_basis")),
@@ -621,7 +665,7 @@ def _disposal_table_flowables(rl, styles, top_disposals, currency):
     return [
         rl["Spacer"](1, 4),
         _para(rl, styles, "Largest disposals", "body"),
-        _table(rl, rows, [22 * rl["mm"], 36 * rl["mm"], 30 * rl["mm"], 30 * rl["mm"], 30 * rl["mm"], 34 * rl["mm"]]),
+        _table(rl, styles, rows, [22 * rl["mm"], 36 * rl["mm"], 30 * rl["mm"], 30 * rl["mm"], 30 * rl["mm"], 34 * rl["mm"]], right_columns={2, 3, 4, 5}),
     ]
 
 
@@ -632,17 +676,17 @@ def _movement_table_flowables(rl, styles, top_movements, currency):
     for row in top_movements:
         rows.append([
             str(row.get("occurred_at", ""))[:10],
-            str(row.get("wallet", ""))[:22],
+            str(row.get("wallet", "")),
             _direction_label(row.get("direction")),
             str(row.get("asset", "")),
             _btc(row.get("quantity")),
             _money(currency, row.get("fiat_value")),
-            str(row.get("counterparty", ""))[:28],
+            str(row.get("counterparty", "")),
         ])
     return [
         rl["Spacer"](1, 4),
         _para(rl, styles, "Largest activity", "body"),
-        _table(rl, rows, [22 * rl["mm"], 30 * rl["mm"], 12 * rl["mm"], 14 * rl["mm"], 28 * rl["mm"], 30 * rl["mm"], 46 * rl["mm"]]),
+        _table(rl, styles, rows, [22 * rl["mm"], 30 * rl["mm"], 12 * rl["mm"], 14 * rl["mm"], 28 * rl["mm"], 30 * rl["mm"], 46 * rl["mm"]], right_columns={4, 5}),
     ]
 
 
@@ -665,13 +709,13 @@ def _appendix_flowables(rl, styles, report, currency):
             row.get("wallet", ""),
             row.get("scope", ""),
             row.get("tx_count", 0),
-            _btc(row.get("end_quantity")),
+            _asset_quantity_text(row),
             _money(currency, row.get("end_market_value")),
         ])
     return [
         rl["Spacer"](1, 7),
         _para(rl, styles, "Wallet Appendix", "h2"),
-        _table(rl, rows, [42 * rl["mm"], 38 * rl["mm"], 22 * rl["mm"], 38 * rl["mm"], 42 * rl["mm"]]),
+        _table(rl, styles, rows, [42 * rl["mm"], 38 * rl["mm"], 22 * rl["mm"], 38 * rl["mm"], 42 * rl["mm"]], right_columns={2, 3, 4}),
         rl["Spacer"](1, 8),
         _para(rl, styles, "This summary report is a portfolio and treasury view. It intentionally omits tax tables; use the tax PDF for tax filing support.", "muted"),
     ]
@@ -679,12 +723,19 @@ def _appendix_flowables(rl, styles, report, currency):
 
 def _build_styles(rl, fonts):
     colors = rl["colors"]
-    return {
-        "title": rl["ParagraphStyle"]("Title", fontName=fonts["bold"], fontSize=18, leading=22, textColor=colors.HexColor(BRAND_INK)),
-        "h2": rl["ParagraphStyle"]("H2", fontName=fonts["bold"], fontSize=11.5, leading=15, spaceBefore=8, spaceAfter=5, textColor=colors.HexColor(BRAND_INK)),
-        "body": rl["ParagraphStyle"]("Body", fontName=fonts["regular"], fontSize=8.5, leading=12, textColor=colors.HexColor(BRAND_INK)),
-        "muted": rl["ParagraphStyle"]("Muted", fontName=fonts["regular"], fontSize=8, leading=11, textColor=colors.HexColor(BRAND_MUTED)),
-    }
+    # Shared house scale (also brings the table cell styles + right-aligned
+    # variants the summary tables need), plus a couple of dashboard-specific
+    # aliases used throughout this module.
+    styles = build_report_styles(rl, fonts, prefix="Summary")
+    styles["title"] = rl["ParagraphStyle"](
+        "SummaryTitle", fontName=fonts["bold"], fontSize=23, leading=27,
+        textColor=colors.HexColor(BRAND_INK),
+    )
+    styles["muted"] = rl["ParagraphStyle"](
+        "SummaryMutedBody", fontName=fonts["regular"], fontSize=8, leading=11,
+        textColor=colors.HexColor(BRAND_MUTED),
+    )
+    return styles
 
 
 def _build_doc_template(rl, file_path, report, fonts):

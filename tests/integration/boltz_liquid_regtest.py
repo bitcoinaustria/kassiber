@@ -6,6 +6,7 @@ import binascii
 import csv
 import json
 import os
+import re
 import shlex
 import subprocess
 import sys
@@ -19,6 +20,7 @@ DEFAULT_API_URL = "http://127.0.0.1:9001"
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_SCENARIO = ROOT / "dev" / "regtest" / "scenarios" / "full_accounting.json"
 _DOCKER_BASE_CMD: list[str] | None = None
+_HEX_64_RE = re.compile(r"^[0-9a-fA-F]{64}$")
 
 
 class BoltzProbeError(RuntimeError):
@@ -484,7 +486,158 @@ def _require_kassiber_cli_ready() -> None:
         )
 
 
-def _write_liquid_ledger(path: Path, *, payment: dict[str, Any], swap: dict[str, Any]) -> None:
+def _text(value: Any) -> str:
+    return str(value or "").strip()
+
+
+def _normalize_boltz_asset(value: Any) -> str:
+    text = _text(value).upper().replace("-", "")
+    if text == "LBTC":
+        return "LBTC"
+    return text
+
+
+def _looks_like_placeholder_id(value: str) -> bool:
+    text = value.strip().lower()
+    if not _HEX_64_RE.match(text):
+        return False
+    byte_pairs = {text[index : index + 2] for index in range(0, len(text), 2)}
+    return len(byte_pairs) == 1
+
+
+def _boltz_leg_external_id(leg: dict[str, Any], *, context: str) -> str:
+    external_id = _text(
+        leg.get("txid")
+        or leg.get("external_id")
+        or leg.get("id")
+        or leg.get("payment_hash")
+    )
+    if not external_id:
+        raise BoltzProbeError(f"Boltz v2 evidence {context} has no txid/external_id/id")
+    if _looks_like_placeholder_id(external_id):
+        raise BoltzProbeError(
+            f"Boltz v2 evidence {context} uses placeholder-looking id {external_id}"
+        )
+    return external_id
+
+
+def _required_evidence_text(payload: dict[str, Any], key: str, *, context: str) -> str:
+    value = _text(payload.get(key))
+    if not value:
+        raise BoltzProbeError(f"Boltz v2 evidence {context} is missing {key}")
+    return value
+
+
+def _boltz_v2_kind(flow: str, status: str) -> str:
+    normalized_status = status.strip().lower().replace("_", "-").replace(" ", "-")
+    if "refund" in normalized_status:
+        return "swap-refund"
+    normalized_flow = flow.strip().lower().replace("_", "-").replace(" ", "-")
+    if normalized_flow in {"chain", "chain-swap", "chainswap"}:
+        return "chain-swap"
+    if normalized_flow in {"reverse", "reverse-swap", "reverse-submarine", "reverse-submarine-swap"}:
+        return "reverse-submarine-swap"
+    if normalized_flow in {"submarine", "submarine-swap"}:
+        return "submarine-swap"
+    if normalized_flow in {"refund", "swap-refund", "failed-swap-refund"}:
+        return "swap-refund"
+    raise BoltzProbeError(f"Boltz v2 evidence has unsupported flow {flow!r}")
+
+
+def _boltz_v2_evidence_rows(path: Path) -> dict[str, Any]:
+    """Convert real Boltz wallet/client/provider evidence into Kassiber rows.
+
+    Expected shape:
+      {"swaps": [{"id": "...", "flow": "chain", "status": "completed",
+                  "out": {"txid": "...", "asset": "BTC", "amount": "...", "occurred_at": "..."},
+                  "in": {"txid": "...", "asset": "LBTC", "amount": "...", "occurred_at": "..."}}]}
+
+    `txid` may be `external_id` for non-chain legs. Obvious deterministic
+    placeholder ids are rejected so this path cannot quietly recreate the old
+    fake metadata lane.
+    """
+
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except OSError as exc:
+        raise BoltzProbeError(f"Could not read Boltz v2 evidence {path}: {exc}") from exc
+    except json.JSONDecodeError as exc:
+        raise BoltzProbeError(f"Boltz v2 evidence {path} is not valid JSON") from exc
+    raw_swaps = payload.get("swaps") if isinstance(payload, dict) else payload
+    if not isinstance(raw_swaps, list) or not raw_swaps:
+        raise BoltzProbeError("Boltz v2 evidence must be a non-empty list or object with swaps[]")
+
+    out_rows: list[dict[str, Any]] = []
+    in_rows: list[dict[str, Any]] = []
+    expected: dict[str, dict[str, str]] = {}
+    for index, raw_swap in enumerate(raw_swaps, start=1):
+        if not isinstance(raw_swap, dict):
+            raise BoltzProbeError(f"Boltz v2 evidence swap #{index} is not an object")
+        provider = _text(raw_swap.get("provider") or "boltz").lower()
+        if "boltz" not in provider:
+            raise BoltzProbeError(f"Boltz v2 evidence swap #{index} is not a Boltz swap")
+        swap_id = _required_evidence_text(raw_swap, "id", context=f"swap #{index}")
+        flow = _required_evidence_text(raw_swap, "flow", context=f"swap {swap_id}")
+        status = _text(raw_swap.get("status"))
+        kind = _boltz_v2_kind(flow, status)
+        out_leg = raw_swap.get("out")
+        in_leg = raw_swap.get("in")
+        if not isinstance(out_leg, dict) or not isinstance(in_leg, dict):
+            raise BoltzProbeError(f"Boltz v2 evidence swap {swap_id} must contain out/in objects")
+        out_id = _boltz_leg_external_id(out_leg, context=f"swap {swap_id} out leg")
+        in_id = _boltz_leg_external_id(in_leg, context=f"swap {swap_id} in leg")
+        evidence = {
+            "provider": "boltz",
+            "id": swap_id,
+            "flow": flow,
+            "status": status,
+            "version": _text(raw_swap.get("version") or "2"),
+            "taproot": raw_swap.get("taproot", True),
+            "cooperative": raw_swap.get("cooperative", True),
+            "spend_path": _text(raw_swap.get("spend_path") or raw_swap.get("spendPath") or "key"),
+            "send_txid": out_id,
+            "receive_txid": in_id,
+        }
+        out_asset = _normalize_boltz_asset(out_leg.get("asset") or raw_swap.get("from"))
+        in_asset = _normalize_boltz_asset(in_leg.get("asset") or raw_swap.get("to"))
+        if not out_asset or not in_asset:
+            raise BoltzProbeError(f"Boltz v2 evidence swap {swap_id} must include out/in assets")
+        out_rows.append(
+            {
+                "txid": out_id,
+                "occurred_at": _required_evidence_text(out_leg, "occurred_at", context=f"swap {swap_id} out leg"),
+                "direction": "outbound",
+                "asset": out_asset,
+                "amount": _required_evidence_text(out_leg, "amount", context=f"swap {swap_id} out leg"),
+                "fee": _text(out_leg.get("fee") or "0"),
+                "description": _text(out_leg.get("description") or f"Real Boltz v2 {kind} out leg"),
+                "counterparty": _text(out_leg.get("counterparty") or "Boltz"),
+                "raw_json": evidence,
+            }
+        )
+        in_rows.append(
+            {
+                "txid": in_id,
+                "occurred_at": _required_evidence_text(in_leg, "occurred_at", context=f"swap {swap_id} in leg"),
+                "direction": "inbound",
+                "asset": in_asset,
+                "amount": _required_evidence_text(in_leg, "amount", context=f"swap {swap_id} in leg"),
+                "fee": _text(in_leg.get("fee") or "0"),
+                "description": _text(in_leg.get("description") or f"Real Boltz v2 {kind} in leg"),
+                "counterparty": _text(in_leg.get("counterparty") or "Boltz"),
+                "raw_json": evidence,
+            }
+        )
+        expected[kind] = {"id": swap_id, "out": out_id, "in": in_id}
+    return {"out_rows": out_rows, "in_rows": in_rows, "expected": expected}
+
+
+def _write_json_rows(path: Path, rows: list[dict[str, Any]]) -> None:
+    with path.open("w", encoding="utf-8") as handle:
+        json.dump(rows, handle, indent=2, sort_keys=True)
+
+
+def _write_executed_liquid_import_csv(path: Path, *, payment: dict[str, Any], swap: dict[str, Any]) -> None:
     rows = [
         {
             "Type": "Withdrawal",
@@ -572,178 +725,23 @@ def _write_lightning_csv(path: Path, *, swap: dict[str, Any]) -> None:
         )
 
 
-def _boltz_v2_evidence(
+def _build_accounting_book(
+    data_root: Path,
     *,
-    swap_id: str,
-    flow: str,
-    send_txid: str,
-    receive_txid: str,
-    status: str = "completed",
-    cooperative: bool = True,
-    spend_path: str = "key",
+    payment: dict[str, Any],
+    swap: dict[str, Any],
+    boltz_v2_evidence: Path | None = None,
 ) -> dict[str, Any]:
-    return {
-        "provider": "boltz",
-        "id": swap_id,
-        "flow": flow,
-        "status": status,
-        "version": "2",
-        "taproot": True,
-        "cooperative": cooperative,
-        "spend_path": spend_path,
-        "send_txid": send_txid,
-        "receive_txid": receive_txid,
-    }
-
-
-def _write_metadata_only_boltz_json(import_dir: Path) -> dict[str, Any]:
-    """Write deterministic Boltz v2 metadata fixtures for non-executed flows.
-
-    The live lane executes the low-signing L-BTC -> BTC submarine path. Reverse,
-    chain, and cooperative refund fixtures use the same public JSON import seam a
-    future SDK/client export would use: exact provider id plus route txids, not
-    chain-only inference.
-    """
-
-    chain = _boltz_v2_evidence(
-        swap_id="boltz-v2-chain-btc-lbtc",
-        flow="chain",
-        send_txid="31" * 32,
-        receive_txid="32" * 32,
-    )
-    reverse = _boltz_v2_evidence(
-        swap_id="boltz-v2-reverse-btc-lbtc",
-        flow="reverse-submarine",
-        send_txid="33" * 32,
-        receive_txid="34" * 32,
-    )
-    refund = _boltz_v2_evidence(
-        swap_id="boltz-v2-refund-btc",
-        flow="refund",
-        send_txid="35" * 32,
-        receive_txid="36" * 32,
-        status="transaction.refunded",
-    )
-    btc_rows = [
-        {
-            "txid": chain["send_txid"],
-            "occurred_at": "2026-07-02T11:00:00Z",
-            "direction": "outbound",
-            "asset": "BTC",
-            "amount": "0.01000000",
-            "fee": "0.00000500",
-            "description": "Metadata-only Boltz v2 BTC -> L-BTC chain lockup",
-            "counterparty": "Boltz regtest metadata",
-            "raw_json": chain,
-        },
-        {
-            "txid": refund["send_txid"],
-            "occurred_at": "2026-07-02T11:20:00Z",
-            "direction": "outbound",
-            "asset": "BTC",
-            "amount": "0.00500000",
-            "fee": "0.00000200",
-            "description": "Metadata-only Boltz v2 failed lockup",
-            "counterparty": "Boltz regtest metadata",
-            "raw_json": refund,
-        },
-        {
-            "txid": refund["receive_txid"],
-            "occurred_at": "2026-07-02T12:20:00Z",
-            "direction": "inbound",
-            "asset": "BTC",
-            "amount": "0.00498000",
-            "fee": "0",
-            "description": "Metadata-only Boltz v2 refund return",
-            "counterparty": "Boltz regtest metadata",
-            "raw_json": refund,
-        },
-    ]
-    liquid_rows = [
-        {
-            "txid": chain["receive_txid"],
-            "occurred_at": "2026-07-02T11:04:00Z",
-            "direction": "inbound",
-            "asset": "LBTC",
-            "amount": "0.00990000",
-            "fee": "0",
-            "description": "Metadata-only Boltz v2 L-BTC chain claim",
-            "counterparty": "Boltz regtest metadata",
-            "raw_json": chain,
-        },
-        {
-            "txid": reverse["receive_txid"],
-            "occurred_at": "2026-07-02T11:12:00Z",
-            "direction": "inbound",
-            "asset": "LBTC",
-            "amount": "0.01980000",
-            "fee": "0",
-            "description": "Metadata-only Boltz v2 reverse L-BTC claim",
-            "counterparty": "Boltz regtest metadata",
-            "raw_json": reverse,
-        },
-    ]
-    lightning_rows = [
-        {
-            "txid": reverse["send_txid"],
-            "occurred_at": "2026-07-02T11:10:00Z",
-            "direction": "outbound",
-            "asset": "BTC",
-            "amount": "0.02000000",
-            "fee": "0",
-            "description": "Metadata-only Boltz v2 reverse Lightning payment",
-            "counterparty": "Boltz regtest metadata",
-            "raw_json": reverse,
-        }
-    ]
-    paths = {
-        "btc": import_dir / "boltz-v2-metadata-btc.json",
-        "liquid": import_dir / "boltz-v2-metadata-liquid.json",
-        "lightning": import_dir / "boltz-v2-metadata-lightning.json",
-    }
-    for key, rows in {
-        "btc": btc_rows,
-        "liquid": liquid_rows,
-        "lightning": lightning_rows,
-    }.items():
-        with paths[key].open("w", encoding="utf-8") as handle:
-            json.dump(rows, handle, indent=2, sort_keys=True)
-    return {
-        "paths": paths,
-        "expected": {
-            "chain-swap": {
-                "id": chain["id"],
-                "out": chain["send_txid"],
-                "in": chain["receive_txid"],
-                "out_asset": "BTC",
-                "in_asset": "LBTC",
-            },
-            "reverse-submarine-swap": {
-                "id": reverse["id"],
-                "out": reverse["send_txid"],
-                "in": reverse["receive_txid"],
-                "out_asset": "BTC",
-                "in_asset": "LBTC",
-            },
-            "swap-refund": {
-                "id": refund["id"],
-                "out": refund["send_txid"],
-                "in": refund["receive_txid"],
-                "out_asset": "BTC",
-                "in_asset": "BTC",
-            },
-        },
-    }
-
-
-def _build_accounting_book(data_root: Path, *, payment: dict[str, Any], swap: dict[str, Any]) -> dict[str, Any]:
     import_dir = data_root / "imports"
     import_dir.mkdir(parents=True, exist_ok=True)
     liquid_csv = import_dir / "liquid.csv"
     lightning_csv = import_dir / "lightning.csv"
-    _write_liquid_ledger(liquid_csv, payment=payment, swap=swap)
+    _write_executed_liquid_import_csv(liquid_csv, payment=payment, swap=swap)
     _write_lightning_csv(lightning_csv, swap=swap)
-    metadata = _write_metadata_only_boltz_json(import_dir)
+    v2_evidence_rows = _boltz_v2_evidence_rows(boltz_v2_evidence) if boltz_v2_evidence else None
+    if v2_evidence_rows is not None:
+        _write_json_rows(import_dir / "boltz-v2-out.json", v2_evidence_rows["out_rows"])
+        _write_json_rows(import_dir / "boltz-v2-in.json", v2_evidence_rows["in_rows"])
 
     _run_kassiber(data_root, "init")
     _run_kassiber(data_root, "workspaces", "create", "Boltz")
@@ -785,32 +783,33 @@ def _build_accounting_book(data_root: Path, *, payment: dict[str, Any], swap: di
         "--kind",
         "lnd",
     )
-    _run_kassiber(
-        data_root,
-        "wallets",
-        "create",
-        "--workspace",
-        "Boltz",
-        "--profile",
-        "LiquidSwap",
-        "--label",
-        "boltz-metadata-btc",
-        "--kind",
-        "custom",
-    )
-    _run_kassiber(
-        data_root,
-        "wallets",
-        "create",
-        "--workspace",
-        "Boltz",
-        "--profile",
-        "LiquidSwap",
-        "--label",
-        "boltz-metadata-liquid",
-        "--kind",
-        "custom",
-    )
+    if v2_evidence_rows is not None:
+        _run_kassiber(
+            data_root,
+            "wallets",
+            "create",
+            "--workspace",
+            "Boltz",
+            "--profile",
+            "LiquidSwap",
+            "--label",
+            "boltz-v2-real-out",
+            "--kind",
+            "custom",
+        )
+        _run_kassiber(
+            data_root,
+            "wallets",
+            "create",
+            "--workspace",
+            "Boltz",
+            "--profile",
+            "LiquidSwap",
+            "--label",
+            "boltz-v2-real-in",
+            "--kind",
+            "custom",
+        )
     _run_kassiber(
         data_root,
         "wallets",
@@ -837,94 +836,33 @@ def _build_accounting_book(data_root: Path, *, payment: dict[str, Any], swap: di
         "--file",
         str(lightning_csv),
     )
-    _run_kassiber(
-        data_root,
-        "wallets",
-        "import-json",
-        "--workspace",
-        "Boltz",
-        "--profile",
-        "LiquidSwap",
-        "--wallet",
-        "boltz-metadata-btc",
-        "--file",
-        str(metadata["paths"]["btc"]),
-    )
-    _run_kassiber(
-        data_root,
-        "wallets",
-        "import-json",
-        "--workspace",
-        "Boltz",
-        "--profile",
-        "LiquidSwap",
-        "--wallet",
-        "boltz-metadata-liquid",
-        "--file",
-        str(metadata["paths"]["liquid"]),
-    )
-    _run_kassiber(
-        data_root,
-        "wallets",
-        "import-json",
-        "--workspace",
-        "Boltz",
-        "--profile",
-        "LiquidSwap",
-        "--wallet",
-        "lnd-regtest",
-        "--file",
-        str(metadata["paths"]["lightning"]),
-    )
-
-    provider_suggested = _run_kassiber(
-        data_root,
-        "transfers",
-        "suggest",
-        "--workspace",
-        "Boltz",
-        "--profile",
-        "LiquidSwap",
-        "--confidence",
-        "exact",
-        "--method",
-        "provider_swap_id",
-    )
-    provider_candidates = provider_suggested["data"]["candidates"]
-    provider_by_kind = {candidate["default_kind"]: candidate for candidate in provider_candidates}
-    if set(provider_by_kind) != set(metadata["expected"]):
-        raise BoltzProbeError(
-            "Expected exact provider metadata candidates for "
-            f"{sorted(metadata['expected'])}, got {provider_candidates}"
+    if v2_evidence_rows is not None:
+        _run_kassiber(
+            data_root,
+            "wallets",
+            "import-json",
+            "--workspace",
+            "Boltz",
+            "--profile",
+            "LiquidSwap",
+            "--wallet",
+            "boltz-v2-real-out",
+            "--file",
+            str(import_dir / "boltz-v2-out.json"),
         )
-    for kind, expected in metadata["expected"].items():
-        provider_candidate = provider_by_kind[kind]
-        evidence = provider_candidate.get("evidence") or {}
-        if provider_candidate["method"] != "provider_swap_id":
-            raise BoltzProbeError(f"Expected provider_swap_id method for {kind}, got {provider_candidate}")
-        if evidence.get("provider") != "boltz" or evidence.get("id") != expected["id"]:
-            raise BoltzProbeError(f"Expected redacted Boltz evidence for {kind}, got {provider_candidate}")
-        if (
-            provider_candidate["out_asset"] != expected["out_asset"]
-            or provider_candidate["in_asset"] != expected["in_asset"]
-        ):
-            raise BoltzProbeError(f"Provider metadata candidate route mismatch for {kind}: {provider_candidate}")
-
-    provider_paired = _run_kassiber(
-        data_root,
-        "transfers",
-        "bulk-pair",
-        "--workspace",
-        "Boltz",
-        "--profile",
-        "LiquidSwap",
-        "--confidence",
-        "exact",
-        "--method",
-        "provider_swap_id",
-    )
-    if int(provider_paired["data"]["summary"]["count"]) != len(metadata["expected"]):
-        raise BoltzProbeError(f"Expected provider metadata pairs, got {provider_paired['data']}")
+        _run_kassiber(
+            data_root,
+            "wallets",
+            "import-json",
+            "--workspace",
+            "Boltz",
+            "--profile",
+            "LiquidSwap",
+            "--wallet",
+            "boltz-v2-real-in",
+            "--file",
+            str(import_dir / "boltz-v2-in.json"),
+        )
 
     suggested = _run_kassiber(
         data_root,
@@ -970,6 +908,59 @@ def _build_accounting_book(data_root: Path, *, payment: dict[str, Any], swap: di
     if int(paired["data"]["summary"]["count"]) != 1:
         raise BoltzProbeError(f"Expected one exact Boltz pair, got {paired['data']}")
 
+    v2_pairs: dict[str, Any] = {"count": 0, "kinds": []}
+    if v2_evidence_rows is not None:
+        provider_suggested = _run_kassiber(
+            data_root,
+            "transfers",
+            "suggest",
+            "--workspace",
+            "Boltz",
+            "--profile",
+            "LiquidSwap",
+            "--confidence",
+            "exact",
+            "--method",
+            "provider_swap_id",
+        )
+        provider_candidates = provider_suggested["data"]["candidates"]
+        provider_by_kind = {
+            candidate["default_kind"]: candidate
+            for candidate in provider_candidates
+            if (candidate.get("evidence") or {}).get("provider") == "boltz"
+        }
+        expected = v2_evidence_rows["expected"]
+        if set(provider_by_kind) != set(expected):
+            raise BoltzProbeError(
+                f"Expected real Boltz v2 provider candidates {sorted(expected)}, got {provider_candidates}"
+            )
+        for kind, expected_route in expected.items():
+            provider_candidate = provider_by_kind[kind]
+            if provider_candidate["method"] != "provider_swap_id":
+                raise BoltzProbeError(f"Expected provider_swap_id method for {kind}, got {provider_candidate}")
+            evidence = provider_candidate.get("evidence") or {}
+            if evidence.get("id") != expected_route["id"]:
+                raise BoltzProbeError(f"Expected Boltz evidence id for {kind}, got {provider_candidate}")
+        provider_paired = _run_kassiber(
+            data_root,
+            "transfers",
+            "bulk-pair",
+            "--workspace",
+            "Boltz",
+            "--profile",
+            "LiquidSwap",
+            "--confidence",
+            "exact",
+            "--method",
+            "provider_swap_id",
+        )
+        if int(provider_paired["data"]["summary"]["count"]) != len(expected):
+            raise BoltzProbeError(f"Expected real Boltz v2 pairs, got {provider_paired['data']}")
+        v2_pairs = {
+            "count": provider_paired["data"]["summary"]["count"],
+            "kinds": sorted(expected),
+        }
+
     listed = _run_kassiber(
         data_root,
         "transfers",
@@ -980,20 +971,21 @@ def _build_accounting_book(data_root: Path, *, payment: dict[str, Any], swap: di
         "LiquidSwap",
     )
     pairs = listed["data"]
-    provider_pairs_by_kind = {
-        item.get("kind"): item
-        for item in pairs
-        if item.get("kind") in metadata["expected"]
-    }
-    if set(provider_pairs_by_kind) != set(metadata["expected"]):
-        raise BoltzProbeError(f"Expected listed provider metadata pairs, got {pairs}")
-    for kind, expected in metadata["expected"].items():
-        provider_pair = provider_pairs_by_kind[kind]
-        if (
-            (provider_pair.get("out") or {}).get("external_id") != expected["out"]
-            or (provider_pair.get("in") or {}).get("external_id") != expected["in"]
-        ):
-            raise BoltzProbeError(f"Provider metadata pair route mismatch for {kind}: {provider_pair}")
+    if v2_evidence_rows is not None:
+        pairs_by_kind = {
+            item.get("kind"): item
+            for item in pairs
+            if item.get("kind") in v2_evidence_rows["expected"]
+        }
+        if set(pairs_by_kind) != set(v2_evidence_rows["expected"]):
+            raise BoltzProbeError(f"Expected listed real Boltz v2 pairs, got {pairs}")
+        for kind, expected_route in v2_evidence_rows["expected"].items():
+            provider_pair = pairs_by_kind[kind]
+            if (
+                (provider_pair.get("out") or {}).get("external_id") != expected_route["out"]
+                or (provider_pair.get("in") or {}).get("external_id") != expected_route["in"]
+            ):
+                raise BoltzProbeError(f"Real Boltz v2 pair route mismatch for {kind}: {provider_pair}")
     pair = next(
         (
             item
@@ -1065,16 +1057,19 @@ def _build_accounting_book(data_root: Path, *, payment: dict[str, Any], swap: di
         "imports": {
             "liquid_rows": 2,
             "lightning_rows": 1,
-            "metadata_json_rows": 6,
+            "boltz_v2_evidence_rows": 0
+            if v2_evidence_rows is None
+            else len(v2_evidence_rows["out_rows"]) + len(v2_evidence_rows["in_rows"]),
         },
-        "metadata_pairs": {
-            "count": provider_paired["data"]["summary"]["count"],
-            "kinds": sorted(metadata["expected"]),
-        },
+        "boltz_v2_pairs": v2_pairs,
     }
 
 
-def run_boltz_liquid_scenario(api_url: str | None = None) -> dict[str, Any]:
+def run_boltz_liquid_scenario(
+    api_url: str | None = None,
+    *,
+    boltz_v2_evidence: Path | None = None,
+) -> dict[str, Any]:
     probe = probe_boltz_liquid(api_url)
     coverage = verify_demo_boltz_coverage(probe)
     _require_kassiber_cli_ready()
@@ -1084,12 +1079,22 @@ def run_boltz_liquid_scenario(api_url: str | None = None) -> dict[str, Any]:
     if keep_root:
         data_root = Path(keep_root)
         data_root.mkdir(parents=True, exist_ok=True)
-        accounting = _build_accounting_book(data_root, payment=payment, swap=swap)
+        accounting = _build_accounting_book(
+            data_root,
+            payment=payment,
+            swap=swap,
+            boltz_v2_evidence=boltz_v2_evidence,
+        )
         data_root_value = str(data_root)
     else:
         with tempfile.TemporaryDirectory(prefix="kassiber-boltz-liquid-") as tmp:
             data_root = Path(tmp) / "data"
-            accounting = _build_accounting_book(data_root, payment=payment, swap=swap)
+            accounting = _build_accounting_book(
+                data_root,
+                payment=payment,
+                swap=swap,
+                boltz_v2_evidence=boltz_v2_evidence,
+            )
         data_root_value = None
     return {
         "probe": probe,
@@ -1107,15 +1112,35 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Exercise a local Boltz regtest API for Liquid swap coverage.")
     parser.add_argument("--api-url", default=None, help=f"Boltz API URL, default {DEFAULT_API_URL}")
     parser.add_argument(
+        "--v2-evidence",
+        "--v2-export",
+        dest="v2_evidence",
+        default=os.environ.get("KASSIBER_BOLTZ_V2_EVIDENCE")
+        or os.environ.get("KASSIBER_BOLTZ_V2_EXPORT"),
+        help=(
+            "Optional real Boltz wallet/client/provider evidence JSON for v2 "
+            "chain/reverse/refund coverage. Also read from "
+            "KASSIBER_BOLTZ_V2_EVIDENCE; KASSIBER_BOLTZ_V2_EXPORT is accepted "
+            "as a compatibility alias."
+        ),
+    )
+    parser.add_argument(
         "--execute",
         action="store_true",
-        help="Execute a Liquid payment and Boltz L-BTC -> BTC Lightning submarine swap, then assert Kassiber pairing.",
+        help=(
+            "Execute a Liquid payment and Boltz L-BTC -> BTC Lightning submarine swap, "
+            "then assert Kassiber pairing. If --v2-evidence is supplied, also assert "
+            "provider_swap_id pairing for those real evidence-backed v2 swaps."
+        ),
     )
     parser.add_argument("--json", action="store_true", help="Print the full JSON summary.")
     args = parser.parse_args(argv)
 
     if args.execute:
-        summary = run_boltz_liquid_scenario(args.api_url)
+        summary = run_boltz_liquid_scenario(
+            args.api_url,
+            boltz_v2_evidence=Path(args.v2_evidence) if args.v2_evidence else None,
+        )
         probe = summary["probe"]
         covered = summary["demo_coverage"]
     else:
@@ -1135,6 +1160,7 @@ def main(argv: list[str] | None = None) -> int:
             f"swap_id={swap['id']} "
             f"swap_status={swap.get('status')} "
             f"pair_kind={accounting['pair'].get('kind')} "
+            f"v2_pairs={accounting['boltz_v2_pairs'].get('count')} "
             f"demo_bridges={len(covered)}"
         )
     else:

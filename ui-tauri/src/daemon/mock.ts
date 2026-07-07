@@ -13,7 +13,11 @@ import type {
   DaemonStreamRecord,
   DaemonTransport,
 } from "./transport";
-import { DEFAULT_OPEN_COST_SAT } from "@/lib/lightning";
+import {
+  DEFAULT_OPEN_COST_SAT,
+  connectionSupportsLightningCapability,
+  type LightningCapabilities,
+} from "@/lib/lightning";
 import { accountMatchesLabel } from "@/lib/connectionTransactions";
 import { MOCK_PROFILES } from "@/mocks/profiles";
 import { MOCK_TRANSACTION_GRAPHS } from "@/mocks/transactions";
@@ -495,6 +499,7 @@ type MockConnection = {
   network?: string;
   paymentMethodId?: string;
   gap?: number;
+  lightningCapabilities?: LightningCapabilities;
   /** balance in BTC (float) — present on overview-snapshot connection rows. */
   balance?: number;
 };
@@ -2388,6 +2393,49 @@ export const mockDaemon: DaemonTransport = {
       };
     }
 
+    if (req.kind === "ui.metadata.bip329.preview") {
+      return {
+        kind: "ui.metadata.bip329.preview",
+        schema_version: 1,
+        request_id: req.request_id,
+        data: {
+          file: String((req.args as { file?: string } | undefined)?.file ?? ""),
+          records: 3,
+          counts: {
+            exact: 1,
+            ambiguous: 1,
+            unmatched: 1,
+            preserved: 0,
+            conflicts: 0,
+            duplicate_refs: 0,
+            duplicate_records: 0,
+            tag_additions: 1,
+            tag_unchanged: 0,
+            tag_skipped_ambiguous: 1,
+            tag_skipped_duplicate: 0,
+            tag_skipped_label_too_long: 0,
+          },
+          warnings: [],
+          apply_policy: "exact_only",
+          rows: [
+            {
+              line: 1,
+              type: "tx",
+              ref: "mock-txid",
+              ref_preview: "mock-txid",
+              ref_redacted: false,
+              label: "merchant",
+              match_status: "exact",
+              wallets: ["Treasury"],
+              conflicts: [],
+              duplicate: false,
+              tag_effects: [{ action: "add" }],
+            },
+          ],
+        } as T,
+      };
+    }
+
     if (req.kind === "ui.metadata.bip329.import") {
       return {
         kind: "ui.metadata.bip329.import",
@@ -2398,6 +2446,42 @@ export const mockDaemon: DaemonTransport = {
           imported: 1,
           updated: 0,
           transaction_tags_added: 1,
+          preview: {
+            counts: {
+              exact: 1,
+              ambiguous: 0,
+              unmatched: 0,
+              preserved: 0,
+              conflicts: 0,
+              duplicate_refs: 0,
+              duplicate_records: 0,
+              tag_additions: 1,
+              tag_unchanged: 0,
+              tag_skipped_ambiguous: 0,
+              tag_skipped_duplicate: 0,
+              tag_skipped_label_too_long: 0,
+            },
+            apply_policy: "exact_only",
+          },
+        } as T,
+      };
+    }
+
+    if (req.kind === "ui.metadata.bip329.export") {
+      return {
+        kind: "ui.metadata.bip329.export",
+        schema_version: 1,
+        request_id: req.request_id,
+        data: {
+          file: "/mock/exports/kassiber-bip329-labels.jsonl",
+          filename: "kassiber-bip329-labels.jsonl",
+          exported: 3,
+          exported_stored: 2,
+          exported_synthesized: 1,
+          mode: String((req.args as { mode?: string } | undefined)?.mode ?? "stored"),
+          wallet: String((req.args as { wallet?: string } | undefined)?.wallet ?? ""),
+          format: "jsonl",
+          scope: "bip329",
         } as T,
       };
     }
@@ -3113,7 +3197,12 @@ export const mockDaemon: DaemonTransport = {
             { kind: "bullbitcoin", summary: "Bull Bitcoin CSV importer." },
             { kind: "coinfinity", summary: "Coinfinity CSV importer." },
             { kind: "21bitcoin", summary: "21bitcoin CSV importer." },
+            { kind: "pocketbitcoin", summary: "Pocket Bitcoin CSV importer." },
             { kind: "strike", summary: "Strike CSV importer." },
+            { kind: "ledgerlive", summary: "Ledger Live CSV importer." },
+            { kind: "kraken", summary: "Kraken API/CSV importer." },
+            { kind: "coinbase", summary: "Coinbase API importer." },
+            { kind: "binance", summary: "Binance API/CSV importer." },
             { kind: "wasabi", summary: "Wasabi Wallet sanitized bundle importer." },
           ],
           source_formats: [
@@ -3127,7 +3216,10 @@ export const mockDaemon: DaemonTransport = {
             "bullbitcoin_wallet_csv",
             "coinfinity_csv",
             "21bitcoin_csv",
+            "pocketbitcoin_csv",
             "strike_csv",
+            "ledgerlive_csv",
+            "binance_supplemental_csv",
             "wasabi_bundle",
           ],
         } as T,
@@ -3325,6 +3417,20 @@ export const mockDaemon: DaemonTransport = {
           },
         };
       }
+      if (
+        !connectionSupportsLightningCapability(connection, "nodeSnapshot")
+      ) {
+        return {
+          kind: "error",
+          schema_version: 1,
+          request_id: req.request_id,
+          error: {
+            code: "lightning_capability_unsupported",
+            message: `Lightning adapter for '${connection.label}' does not support node snapshots.`,
+            retryable: false,
+          },
+        };
+      }
       const node = (connection as { node?: unknown }).node;
       if (!node) {
         return {
@@ -3348,7 +3454,9 @@ export const mockDaemon: DaemonTransport = {
             id: connection.id,
             label: connection.label,
             kind: connection.kind,
+            lightningCapabilities: connection.lightningCapabilities,
           },
+          capabilities: connection.lightningCapabilities,
         } as T,
       };
     }
@@ -3380,6 +3488,23 @@ export const mockDaemon: DaemonTransport = {
           error: {
             code: "not_found",
             message: `Lightning connection '${ref}' not found.`,
+            retryable: false,
+          },
+        };
+      }
+      if (
+        !connectionSupportsLightningCapability(
+          connection,
+          "routingProfitability",
+        )
+      ) {
+        return {
+          kind: "error",
+          schema_version: 1,
+          request_id: req.request_id,
+          error: {
+            code: "lightning_capability_unsupported",
+            message: `Lightning adapter for '${connection.label}' does not support routing profitability.`,
             retryable: false,
           },
         };
@@ -3446,6 +3571,7 @@ export const mockDaemon: DaemonTransport = {
             id: connection.id,
             label: connection.label,
             kind: connection.kind,
+            lightningCapabilities: connection.lightningCapabilities,
           },
           windowLabel: routing?.windowLabel ?? "No routing window reported",
           summary,

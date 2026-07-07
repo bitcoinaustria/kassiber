@@ -6,8 +6,9 @@ output paid an address owned by another of the user's wallets. These tests
 feed synthetic rows + a hand-built index so they pin the algorithm without
 SQLite or a real descriptor scan.
 
-Amount convention mirrors production: row ``amount``/``fee`` are in msat,
-esplora ``vout[].value`` is in sats (msat = sats * 1000).
+Amount convention mirrors production: row ``amount``/``fee`` are in msat;
+stored Bitcoin graph outputs use sats, either as ``vout[].value`` or legacy
+Electrum ``vout[].value_sats`` (msat = sats * 1000).
 """
 
 import json
@@ -15,6 +16,7 @@ import unittest
 
 from kassiber.core.ownership import OwnedIndex, OwnedMatch
 from kassiber.core.ownership_transfers import (
+    _parse_onchain_tx,
     derive_multi_source_consolidations,
     derive_ownership_transfers,
     derive_recorded_fanout_transfers,
@@ -121,6 +123,48 @@ class OwnershipDeriverTests(unittest.TestCase):
             wallet_refs_by_id=refs,
             already_paired_ids=already or set(),
         )
+
+    def test_parse_onchain_tx_prefers_electrum_value_sats(self):
+        parsed = _parse_onchain_tx(
+            json.dumps(
+                {
+                    "txid": "electrum-shaped",
+                    "vin": [
+                        {
+                            "txid": "prev",
+                            "vout": 0,
+                            "prevout": {"scriptpubkey": SCRIPT["A"]},
+                        }
+                    ],
+                    "vout": [
+                        {
+                            "n": 0,
+                            "script_hex": SCRIPT["B"],
+                            "value_sats": 70_000,
+                            "value": 0.0007,
+                        }
+                    ],
+                }
+            )
+        )
+
+        self.assertIsNotNone(parsed)
+        self.assertEqual(parsed["outputs"][0]["script"], SCRIPT["B"])
+        self.assertEqual(parsed["outputs"][0]["value_sats"], 70_000)
+
+    def test_parse_onchain_tx_converts_decimal_btc_value_fallback(self):
+        parsed = _parse_onchain_tx(
+            json.dumps(
+                {
+                    "txid": "decimal-value",
+                    "vin": [{"txid": "prev", "vout": 0}],
+                    "vout": [{"n": 0, "scriptpubkey": SCRIPT["B"], "value": 0.0007}],
+                }
+            )
+        )
+
+        self.assertIsNotNone(parsed)
+        self.assertEqual(parsed["outputs"][0]["value_sats"], 70_000)
 
     def test_one_to_one_non_txid_candidate_blocks_for_review(self):
         # A -> B, both rows recorded but with different external_ids (CSV import).
@@ -246,6 +290,35 @@ class OwnershipDeriverTests(unittest.TestCase):
         fees = sorted(pair["out"]["fee"] for pair in result.derived_pairs)
         self.assertEqual(fees, [0, 2000 * SATS])  # fee on exactly one leg
         self.assertEqual({p["in"]["id"] for p in result.derived_pairs}, {"b-in", "c-in"})
+        self.assertEqual(result.dropped_out_ids, {"a-out"})
+
+    def test_fanout_net_of_fee_core_row_uses_total_outflow_capacity(self):
+        # Bitcoin Core wallet details can record the outbound amount net of the
+        # fee while the decoded graph still shows the full owned outputs. The
+        # deriver must compare against amount + fee, then avoid assigning a
+        # second fee that would over-debit the source row.
+        out = _outbound(
+            row_id="a-out",
+            wallet_id="A",
+            amount_sats=79_998_000,
+            fee_sats=2_000,
+            txid="real-txid",
+            input_scripts=[SCRIPT["A"]],
+            outputs=[(SCRIPT["B"], 50_000_000), (SCRIPT["C"], 30_000_000)],
+        )
+        b_in = _inbound(row_id="b-in", wallet_id="B", amount_sats=50_000_000, txid="real-txid")
+        c_in = _inbound(row_id="c-in", wallet_id="C", amount_sats=30_000_000, txid="real-txid")
+        result = self._run(
+            [out, b_in, c_in],
+            {SCRIPT["A"]: ("A", "A"), SCRIPT["B"]: ("B", "B"), SCRIPT["C"]: ("C", "C")},
+            _refs("B", "C"),
+        )
+        self.assertEqual(len(result.derived_pairs), 2)
+        self.assertEqual(sorted(pair["out"]["fee"] for pair in result.derived_pairs), [0, 0])
+        self.assertEqual(
+            sum(pair["out"]["amount"] + pair["out"]["fee"] for pair in result.derived_pairs),
+            (79_998_000 + 2_000) * SATS,
+        )
         self.assertEqual(result.dropped_out_ids, {"a-out"})
 
     def test_multiple_outputs_to_same_wallet_aggregate_to_one_leg(self):

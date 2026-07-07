@@ -5,7 +5,13 @@
  * Connections and Overview screens.
  */
 
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type FormEvent,
+  type ReactNode,
+} from "react";
 import { Trans, useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 import { useQueryClient } from "@tanstack/react-query";
@@ -20,7 +26,6 @@ import {
   CheckCircle2,
   CircleDollarSign,
   Copy,
-  Database,
   ListChecks,
   MoreHorizontal,
   Pencil,
@@ -30,7 +35,6 @@ import {
   Scale,
   ShieldCheck,
   Trash2,
-  Wallet,
 } from "lucide-react";
 
 import { ScreenSkeleton } from "@/components/kb/ScreenSkeleton";
@@ -38,7 +42,6 @@ import { ConnectionAssetBadge } from "@/components/kb/ConnectionAssetBadge";
 import { ConnectionStatusPill } from "@/components/kb/ConnectionStatusPill";
 import { CountBadge } from "@/components/kb/CountBadge";
 import { DetailRow } from "@/components/kb/DetailRow";
-import { MetricCard } from "@/components/kb/MetricCard";
 import {
   UtxosInventoryPanel,
   WalletBalanceHistoryCard,
@@ -90,9 +93,16 @@ import {
   retryRetryableDaemonError,
 } from "@/daemon/client";
 import { connectionKindLabels } from "@/lib/connectionDisplay";
-import { screenShellClassName } from "@/lib/screen-layout";
+import {
+  pageHeaderActionClassName,
+  pageHeaderActionsClassName,
+  pageHeaderClassName,
+  pageHeaderIconButtonClassName,
+  screenShellClassName,
+} from "@/lib/screen-layout";
 import { cn } from "@/lib/utils";
 import { formatShortDate } from "@/lib/date";
+import { connectionSupportsLightningCapability } from "@/lib/lightning";
 import { isFilePickerAvailable, pickFile } from "@/lib/filePicker";
 import { editConfigKindForConnection } from "@/lib/connectionEditKind";
 import { describeWalletSyncResult, type SyncResult } from "@/lib/syncResults";
@@ -115,25 +125,13 @@ import { useSyncProgressNotice } from "@/hooks/useSyncProgressNotice";
 import { useConnectionRefreshState } from "@/hooks/useConnectionRefreshState";
 import type {
   Connection,
-  ConnectionKind,
   NodeSnapshot,
   OverviewSnapshot,
 } from "@/mocks/seed";
 import type { TransactionsList } from "@/mocks/transactions";
 
-// Lightning *node* kinds — sync against a daemon that exposes channels,
-// peers, and routing snapshots. Phoenix is also categorised as "Lightning"
-// in connectionDisplay, but it lives in Kassiber as a CSV-import wallet
-// (`wallets import-phoenix`, setupKind: "file-wallet"), not a node-shaped
-// sync target — so it keeps rendering with the wallet detail layout below.
-const NODE_CONNECTION_KINDS: ReadonlySet<ConnectionKind> = new Set([
-  "lnd",
-  "core-ln",
-  "nwc",
-]);
-
-const isNodeConnection = (kind: ConnectionKind) =>
-  NODE_CONNECTION_KINDS.has(kind);
+const isNodeConnection = (connection: Connection) =>
+  connectionSupportsLightningCapability(connection, "nodeSnapshot");
 
 const blurClass = (hidden: boolean) => (hidden ? "sensitive" : "");
 const MAX_DESCRIPTOR_GAP_LIMIT = 5000;
@@ -150,13 +148,45 @@ const fmtEur = (value: number | null) =>
 const fmtSatSigned = (amountSat: number) =>
   `${amountSat >= 0 ? "+ " : "- "}${Math.abs(amountSat).toLocaleString(
     "en-US",
-  )}`;
+  )} sat`;
 const fmtEurSigned = (amountEur: number | null) =>
   amountEur === null
     ? MISSING_FIAT_LABEL
     : `${amountEur >= 0 ? "+ " : "- "}${fmtEur(Math.abs(amountEur))}`;
 const fmtShortTxid = (value?: string) =>
-  !value ? "no id" : value.length <= 18 ? value : `${value.slice(0, 10)}…${value.slice(-6)}`;
+  !value
+    ? "no id"
+    : value.length <= 18
+      ? value
+      : `${value.slice(0, 10)}…${value.slice(-6)}`;
+
+function WalletOverviewStat({
+  label,
+  value,
+  detail,
+}: {
+  label: string;
+  value: ReactNode;
+  detail?: ReactNode;
+}) {
+  return (
+    <div className="group relative isolate overflow-hidden p-3 transition-colors before:absolute before:inset-0 before:z-0 before:origin-left before:scale-x-0 before:bg-muted/45 before:content-[''] before:transition-transform before:duration-200 before:ease-out hover:before:scale-x-100 focus-within:before:scale-x-100">
+      <div className="pointer-events-none relative z-20 space-y-1.5">
+        <div className="text-muted-foreground">
+          <span className="text-xs font-medium">{label}</span>
+        </div>
+        <p className="text-lg font-semibold tracking-tight tabular-nums sm:text-xl">
+          {value}
+        </p>
+        {detail != null ? (
+          <p className="truncate text-[10px] font-medium leading-tight text-muted-foreground sm:text-xs">
+            {detail}
+          </p>
+        ) : null}
+      </div>
+    </div>
+  );
+}
 
 const relatedViewLinkClass =
   "group flex items-center gap-3 px-4 py-3 transition-colors hover:bg-muted/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring";
@@ -170,7 +200,10 @@ const PLAINTEXT_DELETE_ACK = "DELETE LOCAL DATA";
 const PLAINTEXT_REVEAL_ACK = "COPY LOCAL SECRET";
 const CLEAR_BACKEND_SELECTION = "__kassiber_clear_backend__";
 const DESCRIPTOR_REVEAL_KIND = "wallets.reveal_descriptor";
-const RECENT_TRANSACTION_PREVIEW_LIMIT = 12;
+const RECENT_TRANSACTION_PREVIEW_LIMIT = 100;
+const RECENT_TRANSACTION_SKELETON_COUNT = 12;
+const WALLET_TABLE_VIEWPORT_CLASS =
+  "max-h-[clamp(18rem,36dvh,28rem)] min-h-0 overflow-auto";
 
 interface UpdateWalletResult {
   wallet: {
@@ -395,7 +428,7 @@ export function ConnectionDetail() {
     );
   }
 
-  if (isNodeConnection(connection.kind)) {
+  if (isNodeConnection(connection)) {
     // Node detail intentionally diverges from the wallet detail: it
     // does NOT expose the per-connection edit/remove dropdown menu.
     // The wallet edit dialog edits descriptor / source_file / btcpay
@@ -436,12 +469,7 @@ function NodeConnectionContainer({
   hideSensitive,
 }: NodeConnectionContainerProps) {
   const { t } = useTranslation("connections");
-  const queryClient = useQueryClient();
-  const dataMode = useUiStore((state) => state.dataMode);
   const addNotification = useUiStore((state) => state.addNotification);
-  const updateNotification = useUiStore((state) => state.updateNotification);
-  const syncNoticeIdRef = useRef<string | null>(null);
-  const progressValueRef = useRef(startingSyncProgress().value ?? 5);
   const nodeSnapshotQuery = useDaemon<NodeSnapshot>(
     "ui.connections.node.snapshot",
     { connection: connection.id },
@@ -451,39 +479,17 @@ function NodeConnectionContainer({
   const resolvedConnection = liveSnapshot
     ? { ...connection, node: liveSnapshot }
     : connection;
-  const walletSyncMutationKey = daemonMutationKey(dataMode, "ui.wallets.sync");
-  const connectionRefreshing = useConnectionRefreshState(connection);
-  // TODO: switch to ui.connections.node.sync (or similar) once #154/#155 land
-  // a real node-sync kind. ui.wallets.sync is a mock-only stop-gap — the
-  // Python daemon won't execute it for lnd/core-ln/nwc kinds yet.
-  const syncWallet = useDaemonStreamMutation<
-    { results: SyncResult[] },
-    WalletSyncProgress
-  >("ui.wallets.sync", {
-    onProgress: (record) => {
-      if (!syncNoticeIdRef.current) return;
-      const wallet = record.wallet ?? connection.label;
-      const nextProgress = syncProgressNotification(
-        { ...record, wallet },
-        progressValueRef.current,
-      );
-      progressValueRef.current = nextProgress.value;
-      updateNotification(syncNoticeIdRef.current, {
-        body: nextProgress.body,
-        progress: nextProgress.progress,
-      });
-    },
-  });
-  const { startSyncNotice, clearSyncNotice } = useSyncProgressNotice();
   const nodeSyncDedupeKey = `node-sync-${connection.id}`;
-
-  const isSyncRunning = syncWallet.isPending || connectionRefreshing;
+  const snapshotErrorMessage =
+    nodeSnapshotQuery.error instanceof Error
+      ? nodeSnapshotQuery.error.message
+      : null;
+  const isSyncRunning = nodeSnapshotQuery.isFetching;
+  const isSnapshotLoading =
+    !liveSnapshot && !connection.node && nodeSnapshotQuery.isFetching;
 
   const onSync = () => {
-    if (
-      syncWallet.isPending ||
-      queryClient.isMutating({ mutationKey: walletSyncMutationKey }) > 0
-    ) {
+    if (nodeSnapshotQuery.isFetching) {
       addNotification({
         title: t("node.sync.alreadyRunningTitle"),
         body: t("node.sync.alreadyRunningBody", { label: connection.label }),
@@ -492,64 +498,35 @@ function NodeConnectionContainer({
       });
       return;
     }
-    progressValueRef.current = startingSyncProgress().value ?? 5;
-    syncNoticeIdRef.current = addNotification({
+
+    addNotification({
       title: t("node.sync.startedTitle"),
       body: t("node.sync.startedBody", { label: connection.label }),
-      tone: "warning",
+      tone: "info",
       dedupeKey: nodeSyncDedupeKey,
-      progress: startingSyncProgress(),
     });
-    startSyncNotice(
-      t("node.sync.stillScanning", { label: connection.label }),
-    );
-    syncWallet.mutate(
-      { wallet: connection.label },
-      {
-        onSuccess: (envelope) => {
-          const result = envelope.data?.results?.find(
-            (item) => item.wallet === connection.label,
-          );
-          const status = result?.status ?? "synced";
-          const message = describeWalletSyncResult(result, connection.label);
-          const notification = {
-            title:
-              status === "error"
-                ? t("node.sync.failedTitle")
-                : t("node.sync.finishedTitle"),
-            body: message,
-            tone: status === "error" ? "error" : "success",
-            dedupeKey: nodeSyncDedupeKey,
-            progress: undefined,
-          } as const;
-          if (syncNoticeIdRef.current) {
-            updateNotification(syncNoticeIdRef.current, notification);
-          } else {
-            addNotification(notification);
-          }
-        },
-        onError: (error) => {
-          const message =
-            error instanceof Error ? error.message : t("node.sync.failedFallback");
-          const notification = {
-            title: t("node.sync.failedTitle"),
-            body: message,
-            tone: "error",
-            dedupeKey: nodeSyncDedupeKey,
-            progress: undefined,
-          } as const;
-          if (syncNoticeIdRef.current) {
-            updateNotification(syncNoticeIdRef.current, notification);
-          } else {
-            addNotification(notification);
-          }
-        },
-        onSettled: () => {
-          clearSyncNotice();
-          syncNoticeIdRef.current = null;
-        },
-      },
-    );
+
+    void nodeSnapshotQuery.refetch().then((result) => {
+      if (result.error) {
+        addNotification({
+          title: t("node.sync.failedTitle"),
+          body:
+            result.error instanceof Error
+              ? result.error.message
+              : t("node.sync.failedFallback"),
+          tone: "error",
+          dedupeKey: nodeSyncDedupeKey,
+        });
+        return;
+      }
+
+      addNotification({
+        title: t("node.sync.finishedTitle"),
+        body: t("node.sync.finishedBody", { label: connection.label }),
+        tone: "success",
+        dedupeKey: nodeSyncDedupeKey,
+      });
+    });
   };
 
   return (
@@ -559,6 +536,8 @@ function NodeConnectionContainer({
       hideSensitive={hideSensitive}
       onSync={onSync}
       isSyncRunning={isSyncRunning}
+      isSnapshotLoading={isSnapshotLoading}
+      snapshotErrorMessage={snapshotErrorMessage}
     />
   );
 }
@@ -1222,175 +1201,186 @@ function ConnectionDetailView({
 
   return (
     <div className={screenShellClassName}>
-      <Card className="rounded-xl py-3">
-        <CardContent className="flex flex-col gap-3 px-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex min-w-0 items-center gap-3">
-            <Button asChild variant="outline" size="icon" className="shrink-0">
-              <Link to="/connections" aria-label={t("detail.backToWallets")}>
-                <ArrowLeft className="size-4" aria-hidden="true" />
-              </Link>
-            </Button>
-            <ConnectionAssetBadge
-              connection={connection}
-              size="md"
-              className="hidden sm:flex"
-            />
-            <div className="min-w-0">
-              <h1 className="truncate text-xl font-semibold tracking-tight sm:text-2xl">
-                {connection.label}
-              </h1>
-              <div className="mt-1 flex min-w-0 flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                <span className="truncate">
-                  {connectionKindLabels[connection.kind]}
-                </span>
-                {connection.status !== "synced" ? (
-                  <>
-                    <span aria-hidden="true">·</span>
-                    <ConnectionStatusPill status={connection.status} />
-                  </>
-                ) : null}
-                {isDeprecatedWallet ? (
-                  <>
-                    <span aria-hidden="true">·</span>
-                    <Badge variant="secondary" className="rounded-md">
-                      {t("detail.deprecatedBadge")}
-                    </Badge>
-                  </>
-                ) : null}
-              </div>
-            </div>
-          </div>
-          <div className="flex shrink-0 items-center gap-2 self-start sm:self-center">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={isWalletSyncRunning}
-              aria-busy={isWalletSyncRunning}
-              aria-label={t("detail.refreshAction", {
-                action: refreshButtonLabel,
-                label: connection.label,
-              })}
-              onClick={() => onSync()}
-            >
-              <RefreshCw
-                className={cn("size-4", isWalletSyncRunning && "animate-spin")}
-                aria-hidden="true"
-              />
-              {/*
-                Reserve the width of the widest label so the button never
-                resizes when it flips to the in-progress text. A mid-refresh
-                width change strands a stale composited tile of the spinning
-                icon in WKWebView (the macOS webview), leaving a frozen "ghost"
-                copy of the button overlaid on the live, spinning one. The
-                shift — and the ghost — only showed in locales where the two
-                labels differ in width (e.g. de "Aktualisieren" →
-                "Wird aktualisiert"); English clamped to the same width and
-                stayed clean. Stacking both labels pins the width to the
-                wider one in every locale.
-              */}
-              <span className="grid justify-items-center">
-                <span
-                  aria-hidden="true"
-                  className="invisible col-start-1 row-start-1"
-                >
-                  {t("detail.refresh")}
-                </span>
-                <span
-                  aria-hidden="true"
-                  className="invisible col-start-1 row-start-1"
-                >
-                  {t("detail.refreshing")}
-                </span>
-                <span className="col-start-1 row-start-1">
-                  {refreshButtonLabel}
-                </span>
+      <div className={pageHeaderClassName}>
+        <div className="flex min-w-0 items-center gap-3">
+          <Button
+            asChild
+            variant="outline"
+            size="icon"
+            className={cn(pageHeaderIconButtonClassName, "shrink-0")}
+          >
+            <Link to="/connections" aria-label={t("detail.backToWallets")}>
+              <ArrowLeft className="size-4" aria-hidden="true" />
+            </Link>
+          </Button>
+          <ConnectionAssetBadge
+            connection={connection}
+            size="md"
+            className="hidden sm:flex"
+          />
+          <div className="min-w-0">
+            <h1 className="truncate text-xl font-semibold tracking-tight sm:text-2xl">
+              {connection.label}
+            </h1>
+            <div className="mt-1 flex min-w-0 flex-wrap items-center gap-2 text-xs text-muted-foreground">
+              <span className="truncate">
+                {connectionKindLabels[connection.kind]}
               </span>
-            </Button>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="icon"
-                  aria-label={t("detail.moreActions")}
-                >
-                  <MoreHorizontal className="size-4" aria-hidden="true" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-56">
-                <DropdownMenuItem onClick={openEditDialog}>
-                  <Pencil className="size-4" aria-hidden="true" />
-                  {t("common:actions.edit")}
-                </DropdownMenuItem>
-                {hasStoredDescriptor ? (
-                  <DropdownMenuItem onClick={openRevealDialog}>
-                    <Copy className="size-4" aria-hidden="true" />
-                    {t("detail.reveal.menuItem")}
-                  </DropdownMenuItem>
-                ) : null}
-                <DropdownMenuItem
-                  disabled={isWalletSyncRunning}
-                  onClick={() => onSync({ forceFull: true })}
-                >
-                  <RotateCcw className="size-4" aria-hidden="true" />
-                  {t("detail.fullRescan")}
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  className="text-destructive focus:text-destructive"
-                  onClick={openDeleteDialog}
-                >
-                  <Trash2 className="size-4" aria-hidden="true" />
-                  {t("common:actions.remove")}
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-        </CardContent>
-        {syncErrorMessage && (
-          <div className="px-4 pt-3">
-            <div
-              className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-300"
-              role="status"
-            >
-              {syncErrorMessage}
+              {connection.status !== "synced" ? (
+                <>
+                  <span aria-hidden="true">·</span>
+                  <ConnectionStatusPill status={connection.status} />
+                </>
+              ) : null}
+              {isDeprecatedWallet ? (
+                <>
+                  <span aria-hidden="true">·</span>
+                  <Badge variant="secondary" className="rounded-md">
+                    {t("detail.deprecatedBadge")}
+                  </Badge>
+                </>
+              ) : null}
             </div>
           </div>
-        )}
-      </Card>
-
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <MetricCard
-          label={t("detail.metric.balance")}
-          value={
-            <span className={blurClass(hideSensitive)}>
-              {fmtBtc(connection.balance)}
+        </div>
+        <div className={cn(pageHeaderActionsClassName, "shrink-0 self-start sm:self-center")}>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className={pageHeaderActionClassName}
+            disabled={isWalletSyncRunning}
+            aria-busy={isWalletSyncRunning}
+            aria-label={t("detail.refreshAction", {
+              action: refreshButtonLabel,
+              label: connection.label,
+            })}
+            onClick={() => onSync()}
+          >
+            <RefreshCw
+              className={cn("size-4", isWalletSyncRunning && "animate-spin")}
+              aria-hidden="true"
+            />
+            {/*
+              Reserve the width of the widest label so the button never
+              resizes when it flips to the in-progress text. A mid-refresh
+              width change strands a stale composited tile of the spinning
+              icon in WKWebView (the macOS webview), leaving a frozen "ghost"
+              copy of the button overlaid on the live, spinning one. The
+              shift — and the ghost — only showed in locales where the two
+              labels differ in width (e.g. de "Aktualisieren" →
+              "Wird aktualisiert"); English clamped to the same width and
+              stayed clean. Stacking both labels pins the width to the
+              wider one in every locale.
+            */}
+            <span className="grid justify-items-center">
+              <span
+                aria-hidden="true"
+                className="invisible col-start-1 row-start-1"
+              >
+                {t("detail.refresh")}
+              </span>
+              <span
+                aria-hidden="true"
+                className="invisible col-start-1 row-start-1"
+              >
+                {t("detail.refreshing")}
+              </span>
+              <span className="col-start-1 row-start-1">
+                {refreshButtonLabel}
+              </span>
             </span>
-          }
-          detail={fmtEur(connection.balance * priceEur)}
-          icon={<Wallet className="size-4" aria-hidden="true" />}
-        />
-        <MetricCard
-          label={t("detail.metric.transactions")}
-          value={txCount.toLocaleString("en-US")}
-          detail={t("detail.metric.transactionsDetail")}
-          icon={<ArrowLeftRight className="size-4" aria-hidden="true" />}
-        />
-        <MetricCard
-          label={t("detail.metric.lastSync")}
-          value={connection.last}
-          detail={connection.status}
-          icon={<RefreshCw className="size-4" aria-hidden="true" />}
-        />
-        <MetricCard
-          label={hasGapMetric ? t("detail.metric.gapLimit") : t("detail.metric.source")}
-          value={
-            hasGapMetric ? connection.gap?.toLocaleString("en-US") ?? "—" : sourceValue
-          }
-          detail={hasGapMetric ? t("detail.metric.gapLimitDetail") : sourceDetail}
-          icon={<Database className="size-4" aria-hidden="true" />}
-        />
+          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                className={pageHeaderIconButtonClassName}
+                aria-label={t("detail.moreActions")}
+              >
+                <MoreHorizontal className="size-4" aria-hidden="true" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuItem onClick={openEditDialog}>
+                <Pencil className="size-4" aria-hidden="true" />
+                {t("common:actions.edit")}
+              </DropdownMenuItem>
+              {hasStoredDescriptor ? (
+                <DropdownMenuItem onClick={openRevealDialog}>
+                  <Copy className="size-4" aria-hidden="true" />
+                  {t("detail.reveal.menuItem")}
+                </DropdownMenuItem>
+              ) : null}
+              <DropdownMenuItem
+                disabled={isWalletSyncRunning}
+                onClick={() => onSync({ forceFull: true })}
+              >
+                <RotateCcw className="size-4" aria-hidden="true" />
+                {t("detail.fullRescan")}
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                className="text-destructive focus:text-destructive"
+                onClick={openDeleteDialog}
+              >
+                <Trash2 className="size-4" aria-hidden="true" />
+                {t("common:actions.remove")}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      </div>
+      {syncErrorMessage && (
+        <div
+          className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-300"
+          role="status"
+        >
+          {syncErrorMessage}
+        </div>
+      )}
+
+      <div className="overflow-hidden rounded-lg border bg-card">
+        <div className="grid grid-cols-1 divide-y divide-border sm:grid-cols-2 sm:divide-y-0 xl:grid-cols-4 xl:divide-x">
+          <WalletOverviewStat
+            label={t("detail.metric.balance")}
+            value={
+              <span className={blurClass(hideSensitive)}>
+                {fmtBtc(connection.balance)}
+              </span>
+            }
+            detail={fmtEur(connection.balance * priceEur)}
+          />
+          <WalletOverviewStat
+            label={t("detail.metric.transactions")}
+            value={txCount.toLocaleString("en-US")}
+            detail={t("detail.metric.transactionsDetail")}
+          />
+          <WalletOverviewStat
+            label={t("detail.metric.lastSync")}
+            value={connection.last}
+            detail={connection.status}
+          />
+          <WalletOverviewStat
+            label={
+              hasGapMetric
+                ? t("detail.metric.gapLimit")
+                : t("detail.metric.source")
+            }
+            value={
+              hasGapMetric
+                ? connection.gap?.toLocaleString("en-US") ?? "—"
+                : sourceValue
+            }
+            detail={
+              hasGapMetric
+                ? t("detail.metric.gapLimitDetail")
+                : sourceDetail
+            }
+          />
+        </div>
       </div>
 
       {reconciliation.available && !reconciliation.reconciled ? (
@@ -1703,48 +1693,33 @@ function ConnectionDetailView({
         </Card>
       ) : null}
 
-      <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1.35fr)_minmax(360px,0.85fr)]">
-        <Card>
-          <CardHeader className="border-b px-4 pb-3">
-            <div className="flex items-start justify-between gap-2">
+      <div className="grid grid-cols-1 items-start gap-3 xl:grid-cols-[minmax(0,1.35fr)_minmax(360px,0.85fr)]">
+        <Card className="gap-0 overflow-hidden py-0 shadow-none">
+          <div className="flex flex-col gap-3 border-b p-3 sm:flex-row sm:items-center sm:gap-4 sm:px-6 sm:py-3.5">
+            <div className="flex min-w-0 flex-1 flex-wrap items-center justify-between gap-2">
               <div className="min-w-0">
                 <CardTitle className="flex items-center gap-2 text-sm sm:text-base">
                   {t("detail.recentTransactions.title")}
                   <CountBadge>{txCount.toLocaleString("en-US")}</CountBadge>
                 </CardTitle>
-                <CardDescription>
-                  {txCount > txsForConnection.length
-                    ? t("detail.recentTransactions.showingRecent", {
-                        count: txsForConnection.length,
-                      })
-                    : t("detail.recentTransactions.recent")}
-                </CardDescription>
               </div>
               {txCount > 0 ? (
-                <Button
-                  asChild
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="shrink-0"
+                <Link
+                  to="/transactions"
+                  search={{ wallet: connection.label }}
+                  hash="transactions-table"
+                  className="shrink-0 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
-                  <Link
-                    to="/transactions"
-                    search={{ wallet: connection.label }}
-                    hash="transactions-table"
-                  >
-                    {t("detail.recentTransactions.showAll")}
-                    <ArrowRight className="size-4" aria-hidden="true" />
-                  </Link>
-                </Button>
+                  {t("detail.recentTransactions.showAll")}
+                </Link>
               ) : null}
             </div>
-          </CardHeader>
+          </div>
           <CardContent className="p-0">
             {walletTransactionsLoading ? (
               <div className="divide-y">
                 {Array.from(
-                  { length: RECENT_TRANSACTION_PREVIEW_LIMIT },
+                  { length: RECENT_TRANSACTION_SKELETON_COUNT },
                   (_, index) => (
                     <div
                       key={index}
@@ -1764,7 +1739,7 @@ function ConnectionDetailView({
                 )}
               </div>
             ) : txsForConnection.length ? (
-              <div className="divide-y">
+              <div className={cn(WALLET_TABLE_VIEWPORT_CLASS, "divide-y")}>
                 {txsForConnection.map((tx) => (
                   <ConnectionTransactionRow
                     key={tx.id}
@@ -1831,16 +1806,16 @@ function ConnectionDetailView({
             walletId={connection.id}
             hideSensitive={hideSensitive}
           />
-          <Card>
-            <CardHeader className="border-b px-4 pb-3">
+          <Card className="gap-0 overflow-hidden py-0 shadow-none">
+            <CardHeader className="border-b p-3 sm:px-6 sm:py-3.5 [.border-b]:pb-3 sm:[.border-b]:pb-3.5">
               <CardTitle className="text-sm sm:text-base">
                 {t("detail.connectionDetails.title")}
               </CardTitle>
-              <CardDescription>
+              <CardDescription className="text-xs">
                 {t("detail.connectionDetails.description")}
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-3 px-4 pt-4">
+            <CardContent className="space-y-3 px-3 py-3 sm:px-6">
               <DetailRow
                 label={t("detail.connectionDetails.syncMode")}
                 value={
@@ -1919,12 +1894,12 @@ function ConnectionDetailView({
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader className="border-b px-4 pb-3">
+          <Card className="gap-0 overflow-hidden py-0 shadow-none">
+            <CardHeader className="border-b p-3 sm:px-6 sm:py-3.5 [.border-b]:pb-3 sm:[.border-b]:pb-3.5">
               <CardTitle className="text-sm sm:text-base">
                 {t("detail.relatedViews.title")}
               </CardTitle>
-              <CardDescription>
+              <CardDescription className="text-xs">
                 {t("detail.relatedViews.description")}
               </CardDescription>
             </CardHeader>
@@ -2516,45 +2491,47 @@ function ConnectionTransactionRow({
       : flow === "outgoing"
         ? "border-red-600/20 bg-red-500/10 text-red-700 dark:text-red-300"
         : "border-sky-600/20 bg-sky-500/10 text-sky-700 dark:text-sky-300";
+  const primaryLabel = tx.counter || tx.type;
+  const showTypeBadge = Boolean(tx.counter && tx.counter !== tx.type);
 
   return (
     <Link
       to="/transactions"
       search={{ tx: tx.id }}
-      className="flex min-w-0 items-start gap-3 px-5 py-3 transition-colors hover:bg-muted/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      className="flex min-w-0 items-start gap-3 px-4 py-2.5 transition-colors hover:bg-muted/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
     >
       <span
         className={cn(
-          "mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md border",
+          "mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-md border",
           tone,
         )}
         aria-hidden="true"
       >
-        <Icon className="size-4" />
+        <Icon className="size-3.5" />
       </span>
       <span className="min-w-0 flex-1">
-        <span className="flex min-w-0 items-center gap-1.5">
-          <span className="min-w-0 flex-1 truncate text-sm font-medium">
-            {tx.counter || tx.type}
-          </span>
-          <Badge variant="outline" className="rounded-md whitespace-nowrap">
-            {tx.type}
-          </Badge>
-          {tx.conf > 0 ? null : (
-            <Badge
-              variant="outline"
-              className="rounded-md whitespace-nowrap text-amber-700 ring-amber-600/20 dark:text-amber-300"
-            >
-              {t("detail.recentTransactions.pending")}
-            </Badge>
-          )}
+        <span className="block min-w-0 truncate text-sm font-medium">
+          {primaryLabel}
         </span>
-        <span className="mt-1 flex min-w-0 items-center gap-1.5 text-[10px] text-muted-foreground sm:text-xs">
+        <span className="mt-1 flex min-w-0 flex-wrap items-center gap-1.5 text-[10px] text-muted-foreground sm:text-xs">
           <span className="shrink-0">{tx.date}</span>
           <span aria-hidden="true">·</span>
           <span className={cn("truncate font-mono", blurClass(hideSensitive))}>
             {fmtShortTxid(tx.externalId ?? tx.id)}
           </span>
+          {showTypeBadge ? (
+            <Badge variant="outline" className="h-5 rounded-md px-1.5 text-[10px]">
+              {tx.type}
+            </Badge>
+          ) : null}
+          {tx.conf > 0 ? null : (
+            <Badge
+              variant="outline"
+              className="h-5 rounded-md px-1.5 text-[10px] text-amber-700 ring-amber-600/20 dark:text-amber-300"
+            >
+              {t("detail.recentTransactions.pending")}
+            </Badge>
+          )}
         </span>
       </span>
       <span className="shrink-0 text-right">

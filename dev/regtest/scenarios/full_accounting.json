@@ -2,7 +2,7 @@
   "schema_version": 1,
   "id": "full-accounting-v1",
   "title": "Full accounting regtest demo",
-  "description": "Disposable Bitcoin Core regtest scenario covering multi-address business wallets, regular fiat-expense disposals with deterministic amount/fee variation, self-transfers, ownership-derived fan-out transfers, wallet key rotations, deprecated old wallets, collaborative CoinJoin/PayJoin-shaped transactions, an RBF-replaced payment, halving-shrunk mining income, a dust deposit, a mempool-pending receipt at sync, Bitcoin-backed-loan marks, volatile pricing, local Electrum/mempool-compatible backend endpoints, and deterministic elementsregtest/LBTC bridge/import wallets.",
+  "description": "Disposable Bitcoin Core regtest scenario covering multi-address business wallets, regular fiat-expense disposals with deterministic amount/fee variation, self-transfers, ownership-derived fan-out transfers, wallet key rotations, deprecated old wallets, collaborative CoinJoin/PayJoin-shaped transactions, an RBF-replaced payment, halving-shrunk mining income swept to treasury, a tiny mining-rig wallet, a dust deposit, a mempool-pending receipt at sync, Bitcoin-backed-loan marks, volatile pricing, local Electrum/mempool-compatible backend endpoints, and deterministic elementsregtest/LBTC bridge/import wallets.",
   "base_time": "2019-01-15T09:00:00Z",
   "latest_time": "2026-07-01T00:00:00Z",
   "workspace": "Regtest Demo",
@@ -109,16 +109,16 @@
       {
         "id": "mining_reward_2021",
         "cycle": 40,
-        "role": "miner",
+        "role": "treasury",
         "blocks": 1,
-        "note": "The office mining rig finds a block; the reward lands in the mining wallet."
+        "note": "The office mining rig finds a block; the reward is swept into treasury."
       },
       {
         "id": "mining_reward_2024",
         "cycle": 96,
-        "role": "miner",
+        "role": "treasury",
         "blocks": 1,
-        "note": "A later block reward, visibly smaller after regtest halvings."
+        "note": "A later block reward, visibly smaller after regtest halvings, is swept into treasury."
       }
     ],
     "business_expenses": {
@@ -333,7 +333,7 @@
       "label": "Regtest Mining Rig",
       "account": "mining",
       "addresses": 2,
-      "initial_btc": "0.00000000"
+      "initial_btc": "0.00025000"
     },
     {
       "key": "treasury_2020",
@@ -360,20 +360,24 @@
       "key": "liquid_treasury",
       "label": "Regtest Liquid Treasury",
       "account": "liquid_treasury",
-      "kind": "custom",
+      "kind": "descriptor",
       "chain": "liquid",
       "network": "elementsregtest",
-      "source_format": "generic_ledger",
+      "addresses": 3,
+      "live_receipt_btc": "0.08000000",
+      "live_spend_btc": "0.01050000",
       "initial_btc": "0.00000000"
     },
     {
       "key": "liquid_operations",
       "label": "Regtest Liquid Operations",
       "account": "liquid_operations",
-      "kind": "custom",
+      "kind": "descriptor",
       "chain": "liquid",
       "network": "elementsregtest",
-      "source_format": "generic_ledger",
+      "addresses": 2,
+      "live_receipt_btc": "0.02000000",
+      "live_spend_btc": "0.00600000",
       "initial_btc": "0.00000000"
     },
     {
@@ -392,40 +396,12 @@
       "key": "liquid_treasury_2024",
       "label": "Regtest Liquid Treasury 2024 Rotation",
       "account": "liquid_treasury",
-      "kind": "custom",
+      "kind": "descriptor",
       "chain": "liquid",
       "network": "elementsregtest",
-      "source_format": "generic_ledger",
-      "initial_btc": "0.00000000"
-    },
-    {
-      "key": "boltz_v2_btc_metadata",
-      "label": "Regtest Boltz V2 BTC Metadata",
-      "account": "treasury",
-      "kind": "custom",
-      "chain": "bitcoin",
-      "network": "regtest",
-      "source_format": "json",
-      "initial_btc": "0.00000000"
-    },
-    {
-      "key": "boltz_v2_lightning_metadata",
-      "label": "Regtest Boltz V2 Lightning Metadata",
-      "account": "spending",
-      "kind": "custom",
-      "chain": "bitcoin",
-      "network": "regtest",
-      "source_format": "json",
-      "initial_btc": "0.00000000"
-    },
-    {
-      "key": "boltz_v2_liquid_metadata",
-      "label": "Regtest Boltz V2 Liquid Metadata",
-      "account": "liquid_operations",
-      "kind": "custom",
-      "chain": "liquid",
-      "network": "elementsregtest",
-      "source_format": "json",
+      "addresses": 2,
+      "live_receipt_btc": "0.06000000",
+      "live_spend_btc": "0.00400000",
       "initial_btc": "0.00000000"
     }
   ],
@@ -434,157 +410,6 @@
     "merchant",
     "cold",
     "liquid_treasury"
-  ],
-  "liquid_ledger": {
-    "wallets": {
-      "liquid_treasury": [
-        {
-          "type": "Buy",
-          "date": "2019-06-10T09:00:00Z",
-          "received_amount": "0.08000000",
-          "sent_amount": "3000.00",
-          "sent_asset": "EUR",
-          "fee_amount": "7.50",
-          "fee_asset": "EUR",
-          "counterparty": "SideSwap Test Desk",
-          "note": "Initial LBTC acquisition for treasury testing.",
-          "txid": "liquid_treasury_buy_2019"
-        },
-        {
-          "type": "Spend",
-          "date": "2020-03-12T14:00:00Z",
-          "sent_amount": "0.01050000",
-          "counterparty": "Liquid service vendor",
-          "note": "Liquid-hosted service invoice.",
-          "txid": "liquid_treasury_vendor_2020"
-        },
-        {
-          "type": "Income",
-          "date": "2021-08-01T12:30:00Z",
-          "received_amount": "0.01200000",
-          "counterparty": "Liquid customer",
-          "note": "Customer paid an LBTC invoice.",
-          "txid": "liquid_treasury_income_2021"
-        },
-        {
-          "type": "Withdrawal",
-          "date": "2024-09-01T10:00:00Z",
-          "sent_amount": "0.04500000",
-          "fee_amount": "0.00005000",
-          "fee_asset": "LBTC",
-          "counterparty": "Internal key ceremony",
-          "note": "Liquid treasury rotates to the 2024 key set.",
-          "txid": "liquid_rotation_2024_out"
-        }
-      ],
-      "liquid_operations": [
-        {
-          "type": "Deposit",
-          "date": "2021-11-20T10:00:00Z",
-          "received_amount": "0.02000000",
-          "counterparty": "Operations top-up",
-          "note": "Operations receives LBTC working capital.",
-          "txid": "liquid_operations_topup_2021"
-        },
-        {
-          "type": "Spend",
-          "date": "2022-07-05T15:00:00Z",
-          "sent_amount": "0.00600000",
-          "counterparty": "Liquid SaaS vendor",
-          "note": "Operations pays a Liquid-denominated SaaS invoice.",
-          "txid": "liquid_operations_saas_2022"
-        }
-      ],
-      "liquid_treasury_2024": [
-        {
-          "type": "Deposit",
-          "date": "2024-09-01T11:00:00Z",
-          "received_amount": "0.04495000",
-          "counterparty": "Internal key ceremony",
-          "note": "Rotated Liquid treasury funds land in the upgraded wallet.",
-          "txid": "liquid_rotation_2024_in"
-        },
-        {
-          "type": "Interest",
-          "date": "2025-04-15T08:00:00Z",
-          "received_amount": "0.00300000",
-          "counterparty": "Liquid yield test desk",
-          "note": "Small LBTC interest credit for report coverage.",
-          "txid": "liquid_treasury_interest_2025"
-        },
-        {
-          "type": "Spend",
-          "date": "2025-12-10T16:00:00Z",
-          "sent_amount": "0.00400000",
-          "counterparty": "Security vendor",
-          "note": "Hardware wallet and key ceremony supplies paid over Liquid.",
-          "txid": "liquid_treasury_security_2025"
-        }
-      ]
-    },
-    "transfer_pairs": [
-      {
-        "id": "liquid_rotation_2024",
-        "tx_out": "liquid_rotation_2024_out",
-        "tx_in": "liquid_rotation_2024_in",
-        "kind": "manual",
-        "policy": "carrying-value",
-        "note": "Liquid treasury rotates to the upgraded 2024 wallet."
-      }
-    ]
-  },
-  "boltz_v2_metadata_swaps": [
-    {
-      "id": "boltz_v2_chain_2025",
-      "flow": "chain",
-      "status": "completed",
-      "out_wallet": "boltz_v2_btc_metadata",
-      "in_wallet": "boltz_v2_liquid_metadata",
-      "out_asset": "BTC",
-      "in_asset": "LBTC",
-      "out_btc": "0.01000000",
-      "in_btc": "0.00990000",
-      "fee_btc": "0.00000500",
-      "out_date": "2025-06-03T10:00:00Z",
-      "in_date": "2025-06-03T10:05:00Z",
-      "pair_kind": "chain-swap",
-      "pair_policy": "taxable",
-      "note": "Imported Boltz v2 cooperative BTC to L-BTC chain-swap evidence."
-    },
-    {
-      "id": "boltz_v2_reverse_2025",
-      "flow": "reverse-submarine",
-      "status": "invoice.settled",
-      "out_wallet": "boltz_v2_lightning_metadata",
-      "in_wallet": "boltz_v2_liquid_metadata",
-      "out_asset": "BTC",
-      "in_asset": "LBTC",
-      "out_btc": "0.02000000",
-      "in_btc": "0.01980000",
-      "fee_btc": "0.00000000",
-      "out_date": "2025-06-10T11:00:00Z",
-      "in_date": "2025-06-10T11:04:00Z",
-      "pair_kind": "reverse-submarine-swap",
-      "pair_policy": "taxable",
-      "note": "Imported Boltz v2 reverse swap evidence from Lightning into Liquid."
-    },
-    {
-      "id": "boltz_v2_refund_2025",
-      "flow": "refund",
-      "status": "transaction.refunded",
-      "out_wallet": "boltz_v2_btc_metadata",
-      "in_wallet": "boltz_v2_btc_metadata",
-      "out_asset": "BTC",
-      "in_asset": "BTC",
-      "out_btc": "0.00500000",
-      "in_btc": "0.00498000",
-      "fee_btc": "0.00000200",
-      "out_date": "2025-06-17T12:00:00Z",
-      "in_date": "2025-06-17T13:00:00Z",
-      "pair_kind": "swap-refund",
-      "pair_policy": "carrying-value",
-      "note": "Imported Boltz v2 cooperative refund evidence; the round trip books only the shortfall and network fee."
-    }
   ],
   "operations": [
     {
@@ -767,7 +592,7 @@
     }
   ],
   "expected": {
-    "wallets": 16,
+    "wallets": 13,
     "deprecated_wallets": 4,
     "assets": [
       "BTC",
@@ -778,16 +603,17 @@
       "BTC",
       "LBTC"
     ],
-    "min_transactions": 854,
-    "min_active_transactions": 849,
+    "min_transactions": 842,
+    "min_active_transactions": 837,
     "pending_transactions": 1,
     "collaborative_excluded": 5,
-    "min_transfer_pairs": 12,
+    "min_transfer_pairs": 8,
     "ownership_derived_transfer_pairs": 2,
     "loan_marks": 4,
     "open_collateral_locks": 0,
     "export_files": [
       "full-report.pdf",
+      "wallet-summary.pdf",
       "full-report.csv",
       "full-report.xlsx",
       "transactions.csv",

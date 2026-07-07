@@ -34,7 +34,11 @@ import {
   TableRow,
 } from "@/components/ui/table";
 
-import { screenShellClassName } from "@/lib/screen-layout";
+import {
+  pageHeaderActionsClassName,
+  pageHeaderClassName,
+  screenShellClassName,
+} from "@/lib/screen-layout";
 import { cn } from "@/lib/utils";
 import { useUiStore } from "@/store/ui";
 
@@ -308,7 +312,7 @@ export function ReviewDataTable({
 
   return (
     <div className={cn(shellClassName)}>
-      <div className="flex flex-col gap-2.5 rounded-xl border bg-card px-3 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-4">
+      <div className={pageHeaderClassName}>
         <div className="flex min-w-0 items-start gap-3">
           {Icon ? (
             <span
@@ -331,7 +335,7 @@ export function ReviewDataTable({
             </p>
           </div>
         </div>
-        <div className="flex shrink-0 flex-wrap items-center gap-2">
+        <div className={cn(pageHeaderActionsClassName, "shrink-0")}>
           {actions}
           {showSummaryBadge ? (
             <Badge
@@ -344,7 +348,7 @@ export function ReviewDataTable({
         </div>
       </div>
 
-      <div className="rounded-xl border bg-card">
+      <div className="overflow-hidden rounded-lg border bg-card">
         <div
           className={cn(
             "grid grid-cols-2 divide-x-0 divide-y divide-border sm:divide-x sm:divide-y-0",
@@ -369,7 +373,7 @@ export function ReviewDataTable({
         </div>
       </div>
 
-      <div className="rounded-xl border bg-card">
+      <div className="rounded-lg border bg-card">
         <div className="flex flex-col gap-3 border-b p-3 lg:flex-row lg:items-center lg:justify-between sm:px-4">
           <div className="flex min-w-0 items-center gap-2">
             <FileSearch

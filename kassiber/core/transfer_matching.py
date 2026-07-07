@@ -56,7 +56,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Iterable, Mapping, Optional, Sequence
 
-from ..transfers import normalize_group_txid
+from ..transfers import is_bitcoin_rail_pair, normalize_group_txid
 
 
 LIGHTNING_WALLET_KINDS = frozenset({"phoenix", "coreln", "lnd", "nwc"})
@@ -152,6 +152,7 @@ def suggest_swap_candidates(
     fee_pct_max: float = DEFAULT_FEE_PCT_MAX,
     fee_sats_min: int = DEFAULT_FEE_SATS_MIN,
     tax_country: Optional[str] = None,
+    bitcoin_rail_carrying_value: bool = True,
     now_iso: Optional[str] = None,
 ) -> list[SwapCandidate]:
     """Return the swap candidates the matcher believes form valid pairings.
@@ -175,8 +176,9 @@ def suggest_swap_candidates(
         fee_pct_max: Maximum fractional fee tolerance for the heuristic.
         fee_sats_min: Absolute minimum fee tolerance in sats, applied
             even when ``fee_pct_max * out_amount`` falls below it.
-        tax_country: Profile tax country code; informs the default
-            policy (``carrying-value`` for ``"at"``, ``taxable`` else).
+        tax_country: Profile tax country code; informs the default policy.
+        bitcoin_rail_carrying_value: When true, BTC/LBTC rail movements default
+            to ``carrying-value`` outside country-specific rules.
         now_iso: Override the "current time" used to evaluate dismissal
             expiry. Defaults to ``datetime.now(UTC)`` when omitted.
 
@@ -240,6 +242,7 @@ def suggest_swap_candidates(
             confidence=CONFIDENCE_EXACT,
             method=METHOD_PAYMENT_HASH,
             tax_country=tax_country,
+            bitcoin_rail_carrying_value=bitcoin_rail_carrying_value,
         ))
     for out_row, in_row, evidence in evidence_pairs:
         if (out_row["id"], in_row["id"]) in dismissed_pairs:
@@ -250,6 +253,7 @@ def suggest_swap_candidates(
             confidence=CONFIDENCE_EXACT,
             method=METHOD_PROVIDER_SWAP_ID,
             tax_country=tax_country,
+            bitcoin_rail_carrying_value=bitcoin_rail_carrying_value,
             default_kind=evidence.kind or None,
             evidence=evidence,
         ))
@@ -262,6 +266,7 @@ def suggest_swap_candidates(
             confidence=CONFIDENCE_EXACT,
             method=METHOD_HTLC_REFUND,
             tax_country=tax_country,
+            bitcoin_rail_carrying_value=bitcoin_rail_carrying_value,
             default_kind=KIND_SWAP_REFUND,
         ))
     for out_row, in_row in heuristic_pairs:
@@ -273,6 +278,7 @@ def suggest_swap_candidates(
             confidence=CONFIDENCE_STRONG,
             method=METHOD_HEURISTIC,
             tax_country=tax_country,
+            bitcoin_rail_carrying_value=bitcoin_rail_carrying_value,
         ))
 
     candidates = _stamp_conflict_set_ids(raw_candidates)
@@ -333,14 +339,23 @@ def default_kind_for(
     return KIND_MANUAL
 
 
-def default_policy_for(tax_country: Optional[str]) -> str:
-    """``carrying-value`` for Austrian profiles, ``taxable`` elsewhere.
+def default_policy_for(
+    tax_country: Optional[str],
+    out_asset: Optional[str] = None,
+    in_asset: Optional[str] = None,
+    *,
+    bitcoin_rail_carrying_value: bool = True,
+) -> str:
+    """Return the profile default transfer-pair policy.
 
-    Cross-asset carrying-value pairs only feed the rp2 AT carry hook
-    today; on other tax countries they fall back to SELL + BUY and the
-    "no disposal" framing is wrong. Keep the safe default per profile.
+    BTC/LBTC rail changes are carrying-value candidates for every profile
+    when the profile setting is enabled, because they represent the same
+    Bitcoin exposure on different rails. Other non-Austrian cross-asset
+    candidates keep the taxable default.
     """
     if (tax_country or "").strip().lower() == "at":
+        return POLICY_CARRYING_VALUE
+    if bitcoin_rail_carrying_value and is_bitcoin_rail_pair(out_asset, in_asset):
         return POLICY_CARRYING_VALUE
     return POLICY_TAXABLE
 
@@ -862,6 +877,7 @@ def _build_candidate(
     confidence: str,
     method: str,
     tax_country: Optional[str],
+    bitcoin_rail_carrying_value: bool = True,
     default_kind: Optional[str] = None,
     evidence: Optional[_ProviderSwapEvidence] = None,
 ) -> SwapCandidate:
@@ -879,7 +895,12 @@ def _build_candidate(
     default_policy = (
         POLICY_CARRYING_VALUE
         if out_asset.upper() == in_asset.upper()
-        else default_policy_for(tax_country)
+        else default_policy_for(
+            tax_country,
+            out_asset,
+            in_asset,
+            bitcoin_rail_carrying_value=bitcoin_rail_carrying_value,
+        )
     )
     return SwapCandidate(
         out_id=str(_record_get(out_row, "id")),

@@ -1,6 +1,7 @@
 import json
 import unittest
 
+from kassiber.msat import msat_to_btc
 from kassiber.core.engines.rp2 import _apply_cross_asset_splits
 from kassiber.core.tax_events import (
     build_tax_quarantine,
@@ -23,6 +24,8 @@ def _row(
     raw_json=None,
     privacy_boundary=None,
     amount_includes_fee=False,
+    payment_hash=None,
+    kind=None,
 ):
     return {
         "id": tx_id,
@@ -35,10 +38,11 @@ def _row(
         "amount_includes_fee": amount_includes_fee,
         "fiat_rate": fiat_rate,
         "fiat_value": fiat_value,
-        "kind": "deposit" if direction == "inbound" else "withdrawal",
+        "kind": kind or ("deposit" if direction == "inbound" else "withdrawal"),
         "description": tx_id,
         "note": None,
         "external_id": external_id or tx_id,
+        "payment_hash": payment_hash,
         "privacy_boundary": privacy_boundary,
         "raw_json": raw_json or "{}",
     }
@@ -113,6 +117,182 @@ class NormalizeTaxAssetInputsTest(unittest.TestCase):
         self.assertEqual(float(transfer.received), 0.5)
         self.assertEqual(float(transfer.fee), 0.001)
         self.assertEqual(float(transfer.spot_price), 65000.0)
+
+    def test_manual_one_to_many_pairs_group_and_allocate_fee_once(self):
+        out_row = _row(
+            "premix-out",
+            "wallet-a",
+            "outbound",
+            100_000_000_000,
+            fee=1_000_000,
+            fiat_rate=65_000,
+            external_id="premix-out",
+        )
+        in_one = _row(
+            "postmix-in-1",
+            "wallet-b",
+            "inbound",
+            60_000_000_000,
+            external_id="postmix-1",
+        )
+        in_two = _row(
+            "postmix-in-2",
+            "wallet-b",
+            "inbound",
+            39_999_000_000,
+            external_id="postmix-2",
+        )
+        inputs = normalize_tax_asset_inputs(
+            self.profile,
+            "BTC",
+            [out_row, in_one, in_two],
+            self.wallet_refs_by_id,
+            [
+                {
+                    "out": out_row,
+                    "in": in_one,
+                    "pair_id": "pair-1",
+                    "source": "manual",
+                },
+                {
+                    "out": out_row,
+                    "in": in_two,
+                    "pair_id": "pair-2",
+                    "source": "manual",
+                },
+            ],
+        )
+        self.assertEqual(inputs.events, [])
+        self.assertEqual(inputs.quarantines, [])
+        self.assertEqual(len(inputs.transfers), 2)
+        self.assertEqual(
+            [item[0] for item in inputs.ordered_items],
+            ["transfer", "transfer"],
+        )
+        self.assertEqual(
+            sum(t.sent for t in inputs.transfers),
+            msat_to_btc(100_001_000_000),
+        )
+        self.assertEqual(
+            sum(t.received for t in inputs.transfers),
+            msat_to_btc(99_999_000_000),
+        )
+        self.assertEqual(sum(t.fee for t in inputs.transfers), msat_to_btc(2_000_000))
+        self.assertTrue(all(t.group_id for t in inputs.transfers))
+        self.assertTrue(all(t.transfer_id for t in inputs.transfers))
+
+    def test_reviewed_whirlpool_one_to_many_resolves_privacy_boundary(self):
+        out_row = _row(
+            "premix-out",
+            "wallet-a",
+            "outbound",
+            100_000_000_000,
+            fee=1_000_000,
+            fiat_rate=65_000,
+            external_id="premix-out",
+            privacy_boundary="coinjoin",
+        )
+        in_one = _row(
+            "postmix-in-1",
+            "wallet-b",
+            "inbound",
+            60_000_000_000,
+            external_id="postmix-1",
+        )
+        in_two = _row(
+            "toxic-change-in",
+            "wallet-b",
+            "inbound",
+            39_999_000_000,
+            external_id="toxic-change",
+        )
+        inputs = normalize_tax_asset_inputs(
+            self.profile,
+            "BTC",
+            [out_row, in_one, in_two],
+            self.wallet_refs_by_id,
+            [
+                {
+                    "out": out_row,
+                    "in": in_one,
+                    "pair_id": "pair-1",
+                    "kind": "whirlpool",
+                    "source": "manual",
+                },
+                {
+                    "out": out_row,
+                    "in": in_two,
+                    "pair_id": "pair-2",
+                    "kind": "whirlpool",
+                    "source": "manual",
+                },
+            ],
+        )
+
+        self.assertEqual(inputs.events, [])
+        self.assertEqual(inputs.quarantines, [])
+        self.assertEqual(len(inputs.transfers), 2)
+        self.assertEqual({t.pairing_source for t in inputs.transfers}, {"manual"})
+
+    def test_manual_many_to_one_pairs_group_and_allocate_destination_once(self):
+        out_one = _row(
+            "premix-out-1",
+            "wallet-a",
+            "outbound",
+            40_000_000_000,
+            fee=500_000,
+            fiat_rate=65_000,
+            external_id="premix-out-1",
+        )
+        out_two = _row(
+            "premix-out-2",
+            "wallet-a",
+            "outbound",
+            60_000_000_000,
+            fee=500_000,
+            fiat_rate=65_000,
+            external_id="premix-out-2",
+        )
+        in_row = _row(
+            "postmix-in",
+            "wallet-b",
+            "inbound",
+            99_999_000_000,
+            external_id="postmix-in",
+        )
+        inputs = normalize_tax_asset_inputs(
+            self.profile,
+            "BTC",
+            [out_one, out_two, in_row],
+            self.wallet_refs_by_id,
+            [
+                {
+                    "out": out_one,
+                    "in": in_row,
+                    "pair_id": "pair-1",
+                    "source": "manual",
+                },
+                {
+                    "out": out_two,
+                    "in": in_row,
+                    "pair_id": "pair-2",
+                    "source": "manual",
+                },
+            ],
+        )
+        self.assertEqual(inputs.events, [])
+        self.assertEqual(inputs.quarantines, [])
+        self.assertEqual(len(inputs.transfers), 2)
+        self.assertEqual(
+            sum(t.sent for t in inputs.transfers),
+            msat_to_btc(100_001_000_000),
+        )
+        self.assertEqual(
+            sum(t.received for t in inputs.transfers),
+            msat_to_btc(99_999_000_000),
+        )
+        self.assertEqual(sum(t.fee for t in inputs.transfers), msat_to_btc(2_000_000))
+        self.assertEqual({t.in_transaction_id for t in inputs.transfers}, {"postmix-in"})
 
     def test_negative_fiat_value_falls_back_to_spot_derived_value(self):
         # A malformed negative fiat_value is truthy, so the old `or` fallback let
@@ -331,6 +511,62 @@ class NormalizeTaxAssetInputsTest(unittest.TestCase):
         self.assertFalse(
             any(q["reason"] == "owned_fanout_unresolved" for q in inputs.quarantines)
         )
+
+    def test_detect_intra_transfers_pairs_lightning_by_payment_hash(self):
+        # An own-node LN payment (LND pays a CLN invoice) shares a payment_hash
+        # across two owned wallets but has distinct external_ids, so the txid
+        # grouping never pairs it. The payment_hash pass must recognize it as a
+        # self-transfer so the inbound is not booked as phantom income.
+        from kassiber.transfers import detect_intra_transfers
+
+        payment_hash = "ab" * 32
+        out_row = _row(
+            "lnd:pay:x", "wallet-lnd", "outbound", 1_000_000_000,
+            fee=2_000_000, external_id="lnd:pay:x", payment_hash=payment_hash,
+            kind="lnd_pay",
+        )
+        in_row = _row(
+            "cln:income:y", "wallet-cln", "inbound", 1_000_000_000,
+            external_id="cln:income:y", payment_hash=payment_hash,
+            kind="cln_invoice",
+        )
+        pairs, matched = detect_intra_transfers([out_row, in_row])
+        self.assertEqual(len(pairs), 1)
+        self.assertEqual(pairs[0]["out"]["id"], "lnd:pay:x")
+        self.assertEqual(pairs[0]["in"]["id"], "cln:income:y")
+        self.assertEqual(matched, {"lnd:pay:x", "cln:income:y"})
+
+    def test_lightning_payment_hash_no_owned_receiver_stays_unpaired(self):
+        # A payment to an EXTERNAL node has only an outbound leg; no inbound row
+        # shares the hash, so it must NOT pair and stays a real disposal.
+        from kassiber.transfers import detect_intra_transfers
+
+        out_row = _row(
+            "cln:pay:ext", "wallet-cln", "outbound", 500_000_000,
+            fee=1_000_000, external_id="cln:pay:ext", payment_hash="cd" * 32,
+            kind="cln_pay",
+        )
+        pairs, matched = detect_intra_transfers([out_row])
+        self.assertEqual(pairs, [])
+        self.assertEqual(matched, set())
+
+    def test_lightning_same_wallet_payment_hash_not_paired(self):
+        # Defensive: an out and in on the SAME wallet sharing a hash (e.g. a
+        # self-circular route) must not be treated as a cross-wallet transfer.
+        from kassiber.transfers import detect_intra_transfers
+
+        payment_hash = "ef" * 32
+        out_row = _row(
+            "p:out", "wallet-x", "outbound", 100_000_000,
+            external_id="p:out", payment_hash=payment_hash, kind="cln_pay",
+        )
+        in_row = _row(
+            "p:in", "wallet-x", "inbound", 100_000_000,
+            external_id="p:in", payment_hash=payment_hash, kind="cln_invoice",
+        )
+        pairs, matched = detect_intra_transfers([out_row, in_row])
+        self.assertEqual(pairs, [])
+        self.assertEqual(matched, set())
 
     def test_detect_intra_transfers_folds_mixed_case_txid(self):
         # A txid recorded uppercase in one wallet and lowercase in another is the
@@ -631,6 +867,38 @@ class NormalizeTaxAssetInputsTest(unittest.TestCase):
         detail = json.loads(inputs.quarantines[0]["detail_json"])
         self.assertEqual(detail["privacy_boundary"], "coinjoin")
         self.assertEqual(detail["direction"], "transfer")
+
+    def test_reviewed_whirlpool_pair_resolves_privacy_boundary(self):
+        out_row = _row(
+            "tx-out",
+            "wallet-a",
+            "outbound",
+            50_000_000_000,
+            fee=100_000_000,
+            fiat_rate=65_000,
+            external_id="pair-privacy",
+            privacy_boundary="coinjoin",
+        )
+        in_row = _row(
+            "tx-in",
+            "wallet-b",
+            "inbound",
+            50_000_000_000,
+            external_id="pair-privacy",
+        )
+        inputs = normalize_tax_asset_inputs(
+            self.profile,
+            "BTC",
+            [out_row, in_row],
+            self.wallet_refs_by_id,
+            [{"out": out_row, "in": in_row, "kind": "whirlpool"}],
+        )
+
+        self.assertEqual(inputs.events, [])
+        self.assertEqual(inputs.quarantines, [])
+        self.assertEqual(len(inputs.transfers), 1)
+        self.assertEqual(inputs.transfers[0].out_transaction_id, "tx-out")
+        self.assertEqual(inputs.transfers[0].in_transaction_id, "tx-in")
 
 
 class BuildTaxQuarantineTest(unittest.TestCase):

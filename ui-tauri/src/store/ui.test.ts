@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   DEFAULT_APP_SCALE,
+  DEFAULT_THEME,
   MAX_APP_SCALE,
   MIN_APP_SCALE,
   normalizeAppScale,
@@ -10,6 +11,11 @@ import {
 } from "./ui";
 
 describe("UI persistence", () => {
+  it("defaults new installs to dark mode", () => {
+    expect(DEFAULT_THEME).toBe("dark");
+    expect(useUiStore.getInitialState().theme).toBe("dark");
+  });
+
   it("coalesces notifications with the same dedupe key", () => {
     useUiStore.setState({ notifications: [] });
     const first = useUiStore.getState().addNotification({
@@ -58,6 +64,23 @@ describe("UI persistence", () => {
     expect(encoded).not.toContain("secret-progress");
     expect(encoded).toContain('"theme":"dark"');
     expect(encoded).toContain('"clearClipboard":false');
+  });
+
+  it("persists overview chart periods per book", () => {
+    useUiStore.setState({ bookChartPeriods: {} });
+    useUiStore.getState().setBookChartPeriod("db:/books/a.sqlite3", "5years");
+    useUiStore.getState().setBookChartPeriod("db:/books/b.sqlite3", "30days");
+
+    expect(useUiStore.getState().bookChartPeriods).toMatchObject({
+      "db:/books/a.sqlite3": "5years",
+      "db:/books/b.sqlite3": "30days",
+    });
+
+    const encoded = JSON.stringify(
+      uiStatePartialForStorage(useUiStore.getState()),
+    );
+    expect(encoded).toContain('"bookChartPeriods"');
+    expect(encoded).toContain('"db:/books/a.sqlite3":"5years"');
   });
 
   it("keeps active maintenance progress transient and clears by id", () => {

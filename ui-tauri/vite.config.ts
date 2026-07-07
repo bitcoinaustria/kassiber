@@ -35,6 +35,63 @@ const NODE_MODULES_REALPATH = (() => {
     ? realpathSync(nodeModulesPath)
     : nodeModulesPath;
 })();
+
+function commandWorks(command: string, args: string[] = ["--version"]) {
+  try {
+    execFileSync(command, args, { stdio: "ignore" });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function bridgePythonCommand(repoRoot: string) {
+  const configuredPython = process.env.KASSIBER_PYTHON?.trim();
+  if (configuredPython) {
+    if (commandWorks(configuredPython)) {
+      return {
+        command: configuredPython,
+        args: ["-m", "kassiber"],
+        label: `KASSIBER_PYTHON (${configuredPython})`,
+      };
+    }
+    console.warn(
+      `[kassiber bridge] ignoring unusable KASSIBER_PYTHON=${JSON.stringify(
+        configuredPython,
+      )}`,
+    );
+  }
+
+  const repoVenvPython = path.join(repoRoot, ".venv", "bin", "python");
+  if (existsSync(repoVenvPython)) {
+    return {
+      command: repoVenvPython,
+      args: ["-m", "kassiber"],
+      label: `repo virtualenv (${repoVenvPython})`,
+    };
+  }
+
+  if (commandWorks("uv")) {
+    return {
+      command: "uv",
+      args: ["run", "python", "-m", "kassiber"],
+      label: "uv",
+    };
+  }
+
+  for (const python of ["python3", "python"]) {
+    if (commandWorks(python)) {
+      return {
+        command: python,
+        args: ["-m", "kassiber"],
+        label: python,
+      };
+    }
+  }
+
+  return null;
+}
+
 const ALLOWED_BRIDGE_KINDS = new Set([
   "status",
   "ui.logs.snapshot",
@@ -68,6 +125,7 @@ const ALLOWED_BRIDGE_KINDS = new Set([
   "ui.backends.detect_core",
   "ui.backends.electrum.test",
   "ui.backends.http.test",
+  "ui.backends.lightning.test",
   "ui.profiles.snapshot",
   "ui.onboarding.complete",
   "ui.profiles.create",
@@ -81,6 +139,9 @@ const ALLOWED_BRIDGE_KINDS = new Set([
   "ui.reports.portfolio_summary",
   "ui.reports.balance_history",
   "ui.reports.tax_summary",
+  "ui.reports.privacy_hygiene",
+  "ui.reports.privacy_mirror",
+  "ui.reports.psbt_privacy",
   "ui.reports.exit_tax_preview",
   "ui.reports.export_exit_tax_pdf",
   "ui.reports.export_exit_tax_xlsx",
@@ -132,11 +193,15 @@ const ALLOWED_BRIDGE_KINDS = new Set([
   "ui.workspace.create",
   "ui.workspace.rename",
   "ui.workspace.delete",
+  "ui.projects.list",
+  "ui.projects.create",
+  "ui.projects.select",
   "ui.secrets.init",
   "ui.secrets.change_passphrase",
   "ui.next_actions",
   "ui.review.badges",
   "ui.wallets.utxos",
+  "ui.privacy_hygiene.snapshot",
   "ui.loans.list",
   "ui.loans.link",
   "ui.loans.mark",
@@ -155,7 +220,9 @@ const ALLOWED_BRIDGE_KINDS = new Set([
   "ui.connections.btcpay.test",
   "ui.connections.node.snapshot",
   "ui.reports.lightning_profitability",
+  "ui.metadata.bip329.preview",
   "ui.metadata.bip329.import",
+  "ui.metadata.bip329.export",
   "ui.wallets.update",
   "ui.wallets.delete",
   "ui.wallets.sync",
@@ -473,12 +540,20 @@ class DaemonBridgeSupervisor {
     }
 
     const repoRoot = path.resolve(__dirname, "..");
-    const args = ["run", "python", "-m", "kassiber"];
+    const runner = bridgePythonCommand(repoRoot);
+    if (!runner) {
+      const message =
+        "Kassiber bridge could not find uv, KASSIBER_PYTHON, repo .venv/bin/python, python3, or python. " +
+        "Install uv or run ./scripts/bootstrap-dev-env.sh and restart the preview.";
+      throw new Error(message);
+    }
+    const args = [...runner.args];
     if (this.dataRoot) {
       args.push("--data-root", this.dataRoot);
     }
     args.push("daemon");
-    const child = spawn("uv", args, {
+    console.info(`[kassiber bridge] starting daemon with ${runner.label}`);
+    const child = spawn(runner.command, args, {
       cwd: repoRoot,
       stdio: ["pipe", "pipe", "pipe"],
     });

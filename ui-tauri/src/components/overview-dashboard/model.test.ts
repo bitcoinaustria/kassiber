@@ -10,6 +10,7 @@ import {
   brushedActivityMarkers,
   buildBalanceRailItems,
   buildHoldingsBySource,
+  clusterActivityMarkers,
   enrichTreasuryChartData,
   formatBtcAxisFitted,
   formatCompactDisplayMoney,
@@ -17,6 +18,7 @@ import {
   formatMarketRateValue,
   formatRelativeMarketRateTime,
   getDataForPeriod,
+  initialTimePeriodFromUrl,
   isPointInPeriod,
   lastTreasuryLineValue,
   linearAxisTicks,
@@ -28,6 +30,8 @@ import {
   normalizeTimePeriodParam,
   overviewTransactions,
   positiveLogDomain,
+  resolveAutoTimePeriod,
+  type TreasuryChartPoint,
 } from "./model";
 
 describe("overview market rate display", () => {
@@ -184,6 +188,7 @@ describe("overview treasury chart", () => {
         },
       ],
       activityTxs: [],
+      txs: [],
     };
 
     const points = enrichTreasuryChartData(
@@ -435,9 +440,342 @@ describe("overview treasury chart", () => {
       true,
     );
   });
+
+  it("uses movement markers for swaps and transfers and hides fee-only markers", () => {
+    const snapshot: OverviewSnapshot = {
+      ...MOCK_OVERVIEW,
+      portfolioSeries: [
+        {
+          date: "2026-01-01",
+          label: "2026-01-01",
+          balanceBtc: 1,
+          valueEur: 100_000,
+          costBasisEur: 80_000,
+          priceEur: 100_000,
+        },
+      ],
+      activityTxs: [
+        {
+          id: "tx-transfer",
+          date: "2026-01-01 10:00",
+          occurredAt: "2026-01-01T10:00:00Z",
+          type: "Transfer",
+          account: "Treasury",
+          counter: "Vault",
+          amountSat: -100_000,
+          eur: -1_000,
+          rate: 100_000,
+          tag: "Transfer",
+          conf: 6,
+        },
+        {
+          id: "tx-swap",
+          date: "2026-01-01 11:00",
+          occurredAt: "2026-01-01T11:00:00Z",
+          type: "Swap",
+          account: "Treasury",
+          counter: "Swap",
+          amountSat: 100_000,
+          eur: 1_000,
+          rate: 100_000,
+          tag: "Swap",
+          conf: 6,
+        },
+        {
+          id: "tx-fee",
+          date: "2026-01-01 12:00",
+          occurredAt: "2026-01-01T12:00:00Z",
+          type: "Fee",
+          account: "Treasury",
+          counter: "Fee",
+          amountSat: -10_000,
+          eur: -100,
+          rate: 100_000,
+          tag: "Fee",
+          conf: 6,
+        },
+      ],
+    };
+
+    const points = enrichTreasuryChartData(
+      getDataForPeriod("all", snapshot, "value", "eur", "detailed"),
+      snapshot,
+      "all",
+    );
+    const markerView = activityMarkerView(points, true, () => 0, false);
+
+    expect(points.filter((point) => point.isActivityEvent).map((point) => point.eventFlow))
+      .toEqual(["movement", "movement", "fee"]);
+    expect(markerView.visibleActivityMarkers.map((point) => point.eventTransactionId))
+      .toEqual(["tx-transfer", "tx-swap"]);
+  });
+
+  it("clusters overlapping activity markers on the same chart anchor", () => {
+    const snapshot: OverviewSnapshot = {
+      ...MOCK_OVERVIEW,
+      portfolioSeries: [
+        {
+          date: "2026-01-01",
+          label: "2026-01-01",
+          balanceBtc: 1,
+          valueEur: 100_000,
+          costBasisEur: 80_000,
+          priceEur: 100_000,
+        },
+      ],
+      activityTxs: [
+        {
+          id: "tx-one",
+          date: "2026-01-01 10:00",
+          occurredAt: "2026-01-01T10:00:00Z",
+          type: "Income",
+          account: "Treasury",
+          counter: "Invoice",
+          amountSat: 100_000,
+          eur: 1_000,
+          rate: 100_000,
+          tag: "Revenue",
+          conf: 6,
+        },
+        {
+          id: "tx-two",
+          date: "2026-01-01 11:00",
+          occurredAt: "2026-01-01T11:00:00Z",
+          type: "Expense",
+          account: "Treasury",
+          counter: "Spend",
+          amountSat: -50_000,
+          eur: -500,
+          rate: 100_000,
+          tag: "Spend",
+          conf: 6,
+        },
+      ],
+    };
+
+    const points = enrichTreasuryChartData(
+      getDataForPeriod("all", snapshot, "value", "eur", "detailed"),
+      snapshot,
+      "all",
+    );
+    const markerView = activityMarkerView(points, true, () => 0, false);
+    const clustered = clusterActivityMarkers(markerView.visibleActivityMarkers);
+
+    expect(clustered).toHaveLength(1);
+    expect(clustered[0]?.markerCount).toBe(2);
+    expect(clustered[0]?.markerGroupedPoints?.map((point) => point.eventTransactionId))
+      .toEqual(["tx-one", "tx-two"]);
+  });
+
+  it("density-clusters long near-horizontal marker runs", () => {
+    const baseTime = Date.parse("2026-01-01T00:00:00Z");
+    const markers = Array.from({ length: 64 }, (_, index) => ({
+      date: new Date(baseTime + index * 60 * 60 * 1000).toISOString(),
+      month: "Jan",
+      detailLabel: "Jan",
+      thisYear: 100_000,
+      balanceBtc: 28 + (index % 2) * 0.00002,
+      valueEur: 100_000,
+      costBasisEur: 80_000,
+      unrealizedEur: 20_000,
+      bitcoinPriceEur: 100_000,
+      avgCostEur: 80_000,
+      brushBalanceBtc: 28,
+      reserveValueEur: 100_000,
+      activityBtc: 0.01,
+      activityCount: 1,
+      activityValueEur: 1_000,
+      eventSize: 0.01,
+      eventFlow: index % 3 === 0 ? "incoming" : "outgoing",
+      eventTransactionId: `tx-${index}`,
+      markerBalanceBtc: 28 + (index % 2) * 0.00002,
+      sortTimeMs: baseTime + index * 60 * 60 * 1000,
+      isActivityEvent: true,
+    })) satisfies TreasuryChartPoint[];
+
+    const clustered = clusterActivityMarkers(markers, { maxVisibleMarkers: 16 });
+
+    expect(clustered.length).toBeLessThanOrEqual(16);
+    expect(
+      clustered.flatMap((point) =>
+        (point.markerGroupedPoints ?? [point])
+          .map((groupedPoint) => groupedPoint.eventTransactionId)
+          .filter(Boolean),
+      ),
+    ).toHaveLength(64);
+  });
 });
 
 describe("chart scale helpers", () => {
+  const autoPeriodTx = (id: string, occurredAt: string) => ({
+    id,
+    date: occurredAt.slice(0, 10),
+    occurredAt,
+    type: "Income" as const,
+    account: "Treasury",
+    counter: "External",
+    amountSat: 100_000,
+    eur: 50,
+    rate: 50_000,
+    tag: "income",
+    conf: 1,
+  });
+
+  it("recognizes auto period params and uses YTD as the minimum window", () => {
+    expect(normalizeTimePeriodParam("auto")).toBe("auto");
+    expect(normalizeTimePeriodParam("automatic")).toBe("auto");
+
+    const snapshot: OverviewSnapshot = {
+      ...MOCK_OVERVIEW,
+      portfolioSeries: [
+        {
+          date: "2026-07-05",
+          label: "Jul 5",
+          balanceBtc: 1,
+          valueEur: 50_000,
+          costBasisEur: 45_000,
+        },
+      ],
+      txs: [],
+      activityTxs: [
+        autoPeriodTx("recent-1", "2026-06-28T12:00:00Z"),
+        autoPeriodTx("recent-2", "2026-06-20T12:00:00Z"),
+        autoPeriodTx("recent-3", "2026-06-10T12:00:00Z"),
+      ],
+    };
+
+    expect(resolveAutoTimePeriod(snapshot, "auto")).toBe("ytd");
+  });
+
+  it("lets the URL period override a persisted fallback", () => {
+    vi.stubGlobal("window", { location: { search: "" } });
+    expect(initialTimePeriodFromUrl("5years")).toBe("5years");
+
+    vi.stubGlobal("window", { location: { search: "?period=30d" } });
+    expect(initialTimePeriodFromUrl("5years")).toBe("30days");
+    vi.unstubAllGlobals();
+  });
+
+  it("zooms out when recent periods do not contain enough activity", () => {
+    const snapshot: OverviewSnapshot = {
+      ...MOCK_OVERVIEW,
+      portfolioSeries: [
+        {
+          date: "2026-07-05",
+          label: "Jul 5",
+          balanceBtc: 1,
+          valueEur: 50_000,
+          costBasisEur: 45_000,
+        },
+      ],
+      txs: [],
+      activityTxs: [
+        autoPeriodTx("old-1", "2026-01-20T12:00:00Z"),
+        autoPeriodTx("old-2", "2026-01-10T12:00:00Z"),
+        autoPeriodTx("old-3", "2025-12-15T12:00:00Z"),
+      ],
+    };
+
+    expect(resolveAutoTimePeriod(snapshot, "auto")).toBe("1year");
+  });
+
+  it("zooms out when the YTD balance range is visually quiet", () => {
+    const snapshot: OverviewSnapshot = {
+      ...MOCK_OVERVIEW,
+      portfolioSeries: [
+        {
+          date: "2025-08-01",
+          label: "Aug 1",
+          balanceBtc: 0.4,
+          valueEur: 20_000,
+          costBasisEur: 18_000,
+        },
+        {
+          date: "2026-01-01",
+          label: "Jan 1",
+          balanceBtc: 1.0,
+          valueEur: 50_000,
+          costBasisEur: 45_000,
+        },
+        {
+          date: "2026-07-05",
+          label: "Jul 5",
+          balanceBtc: 1.0002,
+          valueEur: 50_010,
+          costBasisEur: 45_000,
+        },
+      ],
+      txs: [],
+      activityTxs: [
+        autoPeriodTx("recent-1", "2026-06-28T12:00:00Z"),
+        autoPeriodTx("recent-2", "2026-06-20T12:00:00Z"),
+        autoPeriodTx("recent-3", "2026-06-10T12:00:00Z"),
+      ],
+    };
+
+    expect(resolveAutoTimePeriod(snapshot, "auto")).toBe("1year");
+  });
+
+  it("uses a 10-year internal auto window when history is long enough", () => {
+    const snapshot: OverviewSnapshot = {
+      ...MOCK_OVERVIEW,
+      portfolioSeries: [
+        {
+          date: "2017-01-01",
+          label: "Jan 1",
+          balanceBtc: 0.2,
+          valueEur: 2_000,
+          costBasisEur: 1_800,
+        },
+        {
+          date: "2026-07-05",
+          label: "Jul 5",
+          balanceBtc: 1.2,
+          valueEur: 60_000,
+          costBasisEur: 45_000,
+        },
+      ],
+      txs: [],
+      activityTxs: [
+        autoPeriodTx("old-1", "2018-06-28T12:00:00Z"),
+        autoPeriodTx("old-2", "2019-06-20T12:00:00Z"),
+        autoPeriodTx("old-3", "2020-06-10T12:00:00Z"),
+      ],
+    };
+
+    expect(resolveAutoTimePeriod(snapshot, "auto")).toBe("10years");
+  });
+
+  it("uses a 15-year internal auto window when 10 years is still too tight", () => {
+    const snapshot: OverviewSnapshot = {
+      ...MOCK_OVERVIEW,
+      portfolioSeries: [
+        {
+          date: "2012-01-01",
+          label: "Jan 1",
+          balanceBtc: 0.1,
+          valueEur: 500,
+          costBasisEur: 400,
+        },
+        {
+          date: "2026-07-05",
+          label: "Jul 5",
+          balanceBtc: 1.2,
+          valueEur: 60_000,
+          costBasisEur: 45_000,
+        },
+      ],
+      txs: [],
+      activityTxs: [
+        autoPeriodTx("ancient-1", "2013-06-28T12:00:00Z"),
+        autoPeriodTx("ancient-2", "2014-06-20T12:00:00Z"),
+        autoPeriodTx("ancient-3", "2015-06-10T12:00:00Z"),
+      ],
+    };
+
+    expect(resolveAutoTimePeriod(snapshot, "auto")).toBe("15years");
+  });
+
   it("recognizes 6-month period params and windows", () => {
     expect(normalizeTimePeriodParam("6m")).toBe("6months");
     expect(normalizeTimePeriodParam("6months")).toBe("6months");

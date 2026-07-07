@@ -1,11 +1,17 @@
 from __future__ import annotations
 
+import hashlib
+import json
 import tempfile
 import unittest
 from pathlib import Path
 
 from tests.integration import boltz_liquid_regtest
 from tests.integration.env import no_egress_guard, skip_unless_env
+
+
+def _txid(label: str) -> str:
+    return hashlib.sha256(label.encode("utf-8")).hexdigest()
 
 
 class BoltzLiquidRegtestTest(unittest.TestCase):
@@ -46,7 +52,7 @@ class BoltzLiquidRegtestTest(unittest.TestCase):
             {("chain-swap", "BTC", "L-BTC")},
         )
 
-    def test_accounting_builder_covers_metadata_only_v2_flows(self):
+    def test_accounting_builder_covers_executed_swap_and_payment_only(self):
         payment = {
             "txid": "11" * 32,
             "amount_sats": 77777,
@@ -70,15 +76,105 @@ class BoltzLiquidRegtestTest(unittest.TestCase):
                 swap=swap,
             )
 
-        self.assertEqual(accounting["metadata_pairs"]["count"], 3)
-        self.assertEqual(
-            accounting["metadata_pairs"]["kinds"],
-            ["chain-swap", "reverse-submarine-swap", "swap-refund"],
-        )
-        self.assertEqual(accounting["imports"]["metadata_json_rows"], 6)
+        self.assertEqual(accounting["imports"]["liquid_rows"], 2)
+        self.assertEqual(accounting["imports"]["lightning_rows"], 1)
+        self.assertEqual(accounting["imports"]["boltz_v2_evidence_rows"], 0)
+        self.assertEqual(accounting["boltz_v2_pairs"]["count"], 0)
         self.assertEqual(accounting["candidate"]["method"], "payment_hash")
         self.assertEqual(accounting["pair"]["kind"], "submarine-swap")
         self.assertFalse(accounting["plain_payment"]["paired"])
+
+    def test_accounting_builder_pairs_real_boltz_v2_evidence(self):
+        payment = {
+            "txid": _txid("plain liquid payment"),
+            "amount_sats": 77777,
+            "amount": "0.00077777",
+            "asset": "LBTC",
+        }
+        swap = {
+            "id": "unit-submarine",
+            "payment_hash": "ab" * 32,
+            "invoice_sats": 100000,
+            "expected_amount_sats": 101000,
+            "expected_amount": "0.00101000",
+            "lockup_txid": _txid("submarine lockup"),
+            "status": "invoice.paid",
+        }
+        evidence_payload = {
+            "swaps": [
+                {
+                    "provider": "boltz",
+                    "id": "real-v2-chain-evidence",
+                    "flow": "chain",
+                    "status": "completed",
+                    "version": "2",
+                    "taproot": True,
+                    "cooperative": True,
+                    "spend_path": "key",
+                    "out": {
+                        "txid": _txid("real boltz chain send"),
+                        "occurred_at": "2026-07-02T11:00:00Z",
+                        "asset": "BTC",
+                        "amount": "0.01000000",
+                        "fee": "0.00000500",
+                    },
+                    "in": {
+                        "txid": _txid("real boltz chain receive"),
+                        "occurred_at": "2026-07-02T11:04:00Z",
+                        "asset": "LBTC",
+                        "amount": "0.00990000",
+                    },
+                }
+            ]
+        }
+
+        with tempfile.TemporaryDirectory(prefix="kassiber-boltz-accounting-") as tmp:
+            root = Path(tmp)
+            evidence_path = root / "boltz-v2-evidence.json"
+            evidence_path.write_text(json.dumps(evidence_payload), encoding="utf-8")
+            accounting = boltz_liquid_regtest._build_accounting_book(  # noqa: SLF001
+                root / "data",
+                payment=payment,
+                swap=swap,
+                boltz_v2_evidence=evidence_path,
+            )
+
+        self.assertEqual(accounting["imports"]["boltz_v2_evidence_rows"], 2)
+        self.assertEqual(accounting["boltz_v2_pairs"]["count"], 1)
+        self.assertEqual(accounting["boltz_v2_pairs"]["kinds"], ["chain-swap"])
+
+    def test_real_boltz_v2_evidence_rejects_placeholder_route_ids(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-boltz-accounting-") as tmp:
+            evidence_path = Path(tmp) / "boltz-v2-evidence.json"
+            evidence_path.write_text(
+                json.dumps(
+                    {
+                        "swaps": [
+                            {
+                                "provider": "boltz",
+                                "id": "placeholder-chain",
+                                "flow": "chain",
+                                "out": {
+                                    "txid": "aa" * 32,
+                                    "occurred_at": "2026-07-02T11:00:00Z",
+                                    "asset": "BTC",
+                                    "amount": "0.01000000",
+                                },
+                                "in": {
+                                    "txid": _txid("real receive"),
+                                    "occurred_at": "2026-07-02T11:04:00Z",
+                                    "asset": "LBTC",
+                                    "amount": "0.00990000",
+                                },
+                            }
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(boltz_liquid_regtest.BoltzProbeError, "placeholder-looking"):
+                boltz_liquid_regtest._boltz_v2_evidence_rows(evidence_path)  # noqa: SLF001
 
     @skip_unless_env("KASSIBER_BOLTZ_REGTEST", "local Boltz regtest stack is opt-in")
     def test_live_boltz_liquid_execution_covers_swap_and_payment_accounting(self):
@@ -96,6 +192,7 @@ class BoltzLiquidRegtestTest(unittest.TestCase):
         self.assertEqual(accounting["plain_payment"]["asset"], "LBTC")
         self.assertEqual(accounting["plain_payment"]["direction"], "outbound")
         self.assertFalse(accounting["plain_payment"]["paired"])
+        self.assertEqual(accounting["boltz_v2_pairs"]["count"], 0)
 
         candidate = accounting["candidate"]
         self.assertEqual(candidate["confidence"], "exact")
@@ -106,11 +203,6 @@ class BoltzLiquidRegtestTest(unittest.TestCase):
         self.assertEqual(candidate["in_wallet_kind"], "lnd")
         self.assertEqual(candidate["default_kind"], "submarine-swap")
         self.assertEqual(candidate["candidate_type"], "transfer")
-        self.assertEqual(accounting["metadata_pairs"]["count"], 3)
-        self.assertEqual(
-            accounting["metadata_pairs"]["kinds"],
-            ["chain-swap", "reverse-submarine-swap", "swap-refund"],
-        )
 
         pair = accounting["pair"]
         self.assertEqual(pair["kind"], "submarine-swap")

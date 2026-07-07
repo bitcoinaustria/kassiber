@@ -58,4 +58,5 @@ describe("overview stats cards", () => {
     expect(html).toContain("Refreshing");
     expect(html).not.toContain('data-slot="skeleton"');
   });
+
 });

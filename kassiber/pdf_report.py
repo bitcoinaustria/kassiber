@@ -30,8 +30,37 @@ MAX_LINE_CHARS = 138
 LINES_PER_PAGE = int((PAGE_HEIGHT - TOP_MARGIN - BOTTOM_MARGIN) / LINE_HEIGHT)
 
 
+# The generic text PDF encodes bytes as Latin-1 (Courier base-14 font), so
+# characters outside Latin-1 — €, ₿, ↔, the em dash and warning sign that the
+# exit-tax lines emit — would otherwise be replaced with "?" (silent data
+# loss). Transliterate the common ones to legible ASCII first; anything still
+# unrepresentable falls back to the "?" replacement rather than crashing.
+_TRANSLITERATIONS = str.maketrans(
+    {
+        "€": "EUR",
+        "₿": "BTC",
+        "↔": "<->",
+        "→": "->",
+        "←": "<-",
+        "—": "-",  # em dash
+        "–": "-",  # en dash
+        "‑": "-",  # non-breaking hyphen
+        "⚠": "(!)",  # warning sign
+        "…": "...",
+        "’": "'",
+        "‘": "'",
+        "“": '"',
+        "”": '"',
+        "‚": ",",
+        "„": '"',
+        "≈": "~",
+        "•": "-",
+    }
+)
+
+
 def _ascii_text(value):
-    return str(value).encode("latin-1", "replace").decode("latin-1")
+    return str(value).translate(_TRANSLITERATIONS).encode("latin-1", "replace").decode("latin-1")
 
 
 def _escape_pdf_text(value):

@@ -12,45 +12,59 @@ import {
 import { useDaemonMutation } from "@/daemon/client";
 import { cn } from "@/lib/utils";
 import { exportBasename, saveDaemonExport } from "@/lib/exportFile";
-import { screenShellClassName } from "@/lib/screen-layout";
+import {
+  pageHeaderActionClassName,
+  pageHeaderActionsClassName,
+  screenShellClassName,
+} from "@/lib/screen-layout";
 import { useCurrency } from "@/lib/currency";
 import { useWalletSyncAction } from "@/hooks/useWalletSyncAction";
 import { MOCK_TRANSACTIONS, type TransactionsList } from "@/mocks/transactions";
 import { MOCK_OVERVIEW } from "@/mocks/seed";
-import { useUiStore } from "@/store/ui";
+import {
+  bookIdentityKey,
+  type BookChartPeriod,
+  useUiStore,
+} from "@/store/ui";
 import {
   NewTransactionDialog,
   createNewTransactionDraft,
   mockNewTransactionWalletSourceOptions,
   type NewTransactionDraft,
 } from "@/components/transactions";
-import { TransactionsTable } from "./TransactionsTable";
+import {
+  TransactionsTable,
+  type TransactionTableFilterState,
+} from "./TransactionsTable";
 import { PeriodTabs, TransactionWorkbench } from "./TransactionWorkbench";
 import {
   availablePeriodKeysForRecords,
   buildSwapCandidates,
   dashboardRecordsFromTxs,
+  flowChartSelectionDateWindow,
   initialPeriodFromUrl,
   recordsForPeriod,
+  resolveAutoPeriodForRecords,
   sortTransactionsByDateDesc,
   type FlowChartSelection,
   type PeriodKey,
+  type ResolvedPeriodKey,
   type SwapCandidateReference,
   type TableQuickFilter,
   type BreakdownSelection,
 } from "./model";
-
-const workbenchBackedQuickFilters = new Set<TableQuickFilter>([
-  "no_explorer_id",
-  "missing_price",
-  "failed_import",
-]);
 
 interface TransactionsExportResult {
   file?: string;
   rows?: number;
   format?: string;
   filename?: string;
+}
+
+function transactionPeriodFromSharedPeriod(
+  period: BookChartPeriod | undefined,
+): PeriodKey {
+  return period ?? "1year";
 }
 
 const TransactionsDashboard = ({
@@ -69,7 +83,9 @@ const TransactionsDashboard = ({
   deepLinkedTransactionTab,
   deepLinkedWallet,
   deepLinkedQuickFilter,
+  deepLinkedTransactionIds = [],
   onWalletScopeChange,
+  onTableFilterArgsChange,
 }: {
   className?: string;
   transactions?: TransactionsList;
@@ -86,10 +102,23 @@ const TransactionsDashboard = ({
   deepLinkedTransactionTab?: string;
   deepLinkedWallet?: string | null;
   deepLinkedQuickFilter?: TableQuickFilter | null;
+  deepLinkedTransactionIds?: string[];
   onWalletScopeChange?: (wallet: string | null) => void;
+  onTableFilterArgsChange?: (args: Record<string, unknown>) => void;
 }) => {
   const { t } = useTranslation("transactions");
-  const [period, setPeriod] = React.useState<PeriodKey>(initialPeriodFromUrl);
+  const bookKey = useUiStore((state) => bookIdentityKey(state.identity));
+  const storedBookChartPeriod = useUiStore((state) =>
+    bookKey ? state.bookChartPeriods[bookKey] : undefined,
+  );
+  const setStoredBookChartPeriod = useUiStore(
+    (state) => state.setBookChartPeriod,
+  );
+  const [period, setPeriod] = React.useState<PeriodKey>(() =>
+    initialPeriodFromUrl(
+      transactionPeriodFromSharedPeriod(storedBookChartPeriod),
+    ),
+  );
   const [newTxnOpen, setNewTxnOpen] = React.useState(false);
   const [flowChartSelection, setFlowChartSelection] =
     React.useState<FlowChartSelection | null>(null);
@@ -105,6 +134,14 @@ const TransactionsDashboard = ({
         : null,
     );
   const [tableExpanded, setTableExpanded] = React.useState(false);
+  const [tableFilterState, setTableFilterState] =
+    React.useState<TransactionTableFilterState>({
+      status: "all",
+      flow: "all",
+      paymentMethod: "all",
+      fee: "all",
+      sort: null,
+    });
   const [resetTableFiltersToken, setResetTableFiltersToken] = React.useState(0);
   const [newTransactionDraft, setNewTransactionDraft] =
     React.useState<NewTransactionDraft>(createNewTransactionDraft);
@@ -115,6 +152,8 @@ const TransactionsDashboard = ({
   const { isSyncing } = useWalletSyncAction();
   const showRefreshSkeleton = isSyncing || isDataRefreshing;
   const addNotification = useUiStore((s) => s.addNotification);
+  const previousBookKey = React.useRef(bookKey);
+  const skipNextPeriodPersist = React.useRef(false);
   const exportTransactionsXlsx = useDaemonMutation<TransactionsExportResult>(
     "ui.transactions.export_xlsx",
   );
@@ -215,9 +254,9 @@ const TransactionsDashboard = ({
       txs.unshift(focusedTransaction);
     }
     return dashboardRecordsFromTxs(
-        txs,
-        t as (key: string, opts?: Record<string, unknown>) => string,
-      );
+      txs,
+      t as (key: string, opts?: Record<string, unknown>) => string,
+    );
   }, [focusedTransaction, tableTransactions, transactions, t]);
   const allPeriodRecords = React.useMemo(
     () => sortTransactionsByDateDesc(records),
@@ -234,6 +273,14 @@ const TransactionsDashboard = ({
     () => availablePeriodKeysForRecords(records),
     [records],
   );
+  const periodOptions = React.useMemo<PeriodKey[]>(
+    () => ["auto", ...availablePeriods],
+    [availablePeriods],
+  );
+  const resolvedPeriod = React.useMemo<ResolvedPeriodKey>(
+    () => resolveAutoPeriodForRecords(records, period),
+    [period, records],
+  );
   // In daemon-backed (real/regtest) mode the New Transaction picker must not
   // offer fabricated MOCK wallet names; derive single-wallet labels from the
   // loaded book instead (skipping synthesized "A → B" transfer strings).
@@ -247,10 +294,10 @@ const TransactionsDashboard = ({
   }, [records]);
   const periodRecords = React.useMemo(
     () =>
-      period === "all"
+      resolvedPeriod === "all"
         ? allPeriodRecords
-        : recordsForPeriod(records, period),
-    [allPeriodRecords, records, period],
+        : recordsForPeriod(records, resolvedPeriod),
+    [allPeriodRecords, records, resolvedPeriod],
   );
   const focusedRecord = React.useMemo(() => {
     if (!focusedTransaction) return null;
@@ -265,10 +312,10 @@ const TransactionsDashboard = ({
   }, [focusedTransaction, tableSourceRecords]);
   const tablePeriodRecords = React.useMemo(
     () =>
-      period === "all"
+      resolvedPeriod === "all"
         ? sortTransactionsByDateDesc(tableSourceRecords)
-        : recordsForPeriod(tableSourceRecords, period),
-    [period, tableSourceRecords],
+        : recordsForPeriod(tableSourceRecords, resolvedPeriod),
+    [resolvedPeriod, tableSourceRecords],
   );
   const tableRecords = React.useMemo(() => {
     if (
@@ -279,18 +326,9 @@ const TransactionsDashboard = ({
     }
     return [focusedRecord, ...tablePeriodRecords];
   }, [focusedRecord, tablePeriodRecords]);
-  const useWorkbenchRowsForTable =
-    quickFilter !== null && workbenchBackedQuickFilters.has(quickFilter);
   const visibleTableRecords = React.useMemo(() => {
-    if (!useWorkbenchRowsForTable) return tableRecords;
-    if (
-      !focusedRecord ||
-      periodRecords.some((record) => record.id === focusedRecord.id)
-    ) {
-      return periodRecords;
-    }
-    return [focusedRecord, ...periodRecords];
-  }, [focusedRecord, periodRecords, tableRecords, useWorkbenchRowsForTable]);
+    return tableRecords;
+  }, [tableRecords]);
   const tableSwapCandidateIds = React.useMemo(
     () =>
       new Set(
@@ -308,6 +346,31 @@ const TransactionsDashboard = ({
     setResetTableFiltersToken((token) => token + 1);
   }, []);
   React.useEffect(() => {
+    if (previousBookKey.current === bookKey) return;
+    previousBookKey.current = bookKey;
+    skipNextPeriodPersist.current = true;
+    setPeriod(
+      initialPeriodFromUrl(
+        transactionPeriodFromSharedPeriod(storedBookChartPeriod),
+      ),
+    );
+    setFlowChartSelection(null);
+    setQuickFilter(null);
+    setBreakdownSelection(null);
+    setResetTableFiltersToken((token) => token + 1);
+  }, [bookKey, storedBookChartPeriod]);
+
+  React.useEffect(() => {
+    if (!bookKey) return;
+    if (skipNextPeriodPersist.current) {
+      skipNextPeriodPersist.current = false;
+      return;
+    }
+    setStoredBookChartPeriod(bookKey, period);
+  }, [bookKey, period, setStoredBookChartPeriod]);
+
+  React.useEffect(() => {
+    if (period === "auto") return;
     if (availablePeriods.includes(period)) return;
     handlePeriodChange(
       availablePeriods.includes("1year")
@@ -332,6 +395,67 @@ const TransactionsDashboard = ({
         : null,
     );
   }, [breakdownSelection, onWalletScopeChange]);
+
+  React.useEffect(() => {
+    const args: Record<string, unknown> = {};
+    if (resolvedPeriod !== "all") args.period = resolvedPeriod;
+    if (deepLinkedTransactionIds.length > 0) {
+      args.txids = deepLinkedTransactionIds;
+    }
+
+    if (flowChartSelection) {
+      const window = flowChartSelectionDateWindow(flowChartSelection);
+      if (window) {
+        args.since = window.since;
+        args.until = window.until;
+        delete args.period;
+      }
+      if (flowChartSelection.segment === "incoming") args.flow = "incoming";
+      if (flowChartSelection.segment === "outgoing") args.flow = "outgoing";
+      if (flowChartSelection.segment === "transfers") args.flow = "transfer";
+      if (flowChartSelection.segment === "swaps") args.flow = "swap";
+      if (flowChartSelection.mode === "external" && !flowChartSelection.segment) {
+        args.quick = "external_flow";
+      }
+    }
+
+    if (quickFilter) args.quick = quickFilter;
+    if (breakdownSelection?.dimension === "network") {
+      args.payment_method = breakdownSelection.key;
+    }
+    if (
+      breakdownSelection?.dimension === "wallet" &&
+      breakdownSelection.match !== "leg" &&
+      !breakdownSelection.key.includes("→") &&
+      !breakdownSelection.key.includes("->")
+    ) {
+      args.wallet = breakdownSelection.key;
+    }
+
+    if (tableFilterState.status !== "all") args.status = tableFilterState.status;
+    if (tableFilterState.flow !== "all") args.flow = tableFilterState.flow;
+    if (tableFilterState.paymentMethod !== "all") {
+      args.payment_method = tableFilterState.paymentMethod;
+    }
+    if (tableFilterState.fee === "with-fees") args.withFees = true;
+    if (tableFilterState.sort?.key === "date") {
+      args.sort = "occurred-at";
+      args.order = tableFilterState.sort.direction;
+    } else if (tableFilterState.sort?.key === "amount") {
+      args.sort = "amount";
+      args.order = tableFilterState.sort.direction;
+    }
+
+    onTableFilterArgsChange?.(args);
+  }, [
+    breakdownSelection,
+    deepLinkedTransactionIds,
+    flowChartSelection,
+    onTableFilterArgsChange,
+    quickFilter,
+    resolvedPeriod,
+    tableFilterState,
+  ]);
 
   React.useEffect(() => {
     if (typeof window === "undefined") return;
@@ -376,7 +500,8 @@ const TransactionsDashboard = ({
     <div
       className={cn(
         screenShellClassName,
-        tableExpanded && "flex h-full min-h-0 flex-col overflow-hidden",
+        tableExpanded &&
+          "flex h-full min-h-0 flex-col overflow-hidden pt-0 pb-3 sm:pt-0 sm:pb-3 md:pt-0 md:pb-3",
         "relative",
         className,
       )}
@@ -384,21 +509,35 @@ const TransactionsDashboard = ({
     >
       <div
         id="transactions-period-nav"
-        className="-mx-3 flex flex-col gap-3 bg-background px-3 py-2 shadow-[0_12px_18px_-18px_hsl(var(--foreground)/0.55)] sm:-mx-4 sm:flex-row sm:items-center sm:justify-between sm:px-4 md:-mx-5 md:px-5 sticky top-2 z-30 before:pointer-events-none before:absolute before:inset-x-0 before:-top-2 before:h-2 before:bg-background before:content-[''] after:pointer-events-none after:absolute after:inset-x-0 after:-bottom-2 after:h-2 after:bg-background after:content-[''] sm:top-[0.6875rem] sm:before:-top-[0.6875rem] sm:before:h-[0.6875rem] sm:after:-bottom-[0.6875rem] sm:after:h-[0.6875rem] md:top-[0.8125rem] md:before:-top-[0.8125rem] md:before:h-[0.8125rem] md:after:-bottom-[0.8125rem] md:after:h-[0.8125rem]"
+        className={cn(
+          "-mx-3 flex flex-col bg-background px-3 sm:-mx-4 sm:flex-row sm:items-center sm:justify-between sm:px-4 md:-mx-5 md:px-5",
+          tableExpanded
+            ? "gap-2 pt-3 pb-0 sm:pt-4 sm:pb-0 md:pt-5 md:pb-0"
+            : "sticky top-2 z-30 gap-2 py-0 shadow-[0_12px_18px_-18px_hsl(var(--foreground)/0.55)] before:pointer-events-none before:absolute before:inset-x-0 before:-top-2 before:h-2 before:bg-background before:content-[''] after:pointer-events-none after:absolute after:inset-x-0 after:-bottom-2 after:h-2 after:bg-background after:content-[''] sm:top-[0.6875rem] sm:before:-top-[0.6875rem] sm:before:h-[0.6875rem] sm:after:-bottom-[0.6875rem] sm:after:h-[0.6875rem] md:top-[0.8125rem] md:before:-top-[0.8125rem] md:before:h-[0.8125rem] md:after:-bottom-[0.8125rem] md:after:h-[0.8125rem]",
+        )}
       >
         <PeriodTabs
           activePeriod={period}
           onPeriodChange={handlePeriodChange}
-          periodOptions={availablePeriods}
+          periodOptions={periodOptions}
+          resolvedPeriod={period === "auto" ? resolvedPeriod : null}
         />
-        {!tableExpanded && (
-          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+        {tableExpanded ? (
+          <div
+            id="transactions-expanded-table-actions"
+            className={cn(
+              pageHeaderActionsClassName,
+              "min-w-0 flex-1 justify-end",
+            )}
+          />
+        ) : (
+          <div className={pageHeaderActionsClassName}>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button
                   variant="outline"
                   size="sm"
-                  className="h-8 gap-2 sm:h-9"
+                  className={pageHeaderActionClassName}
                   aria-label={t("dashboard.export.label")}
                   disabled={isExporting}
                 >
@@ -442,7 +581,7 @@ const TransactionsDashboard = ({
 
       {!tableExpanded && (
         <TransactionWorkbench
-          period={period}
+          period={resolvedPeriod}
           records={periodRecords}
           hideSensitive={hideSensitive}
           currency={currency}
@@ -461,7 +600,7 @@ const TransactionsDashboard = ({
         id="transactions-table"
         className={cn(
           "scroll-mt-4",
-          tableExpanded && "min-h-0 flex-1 overflow-hidden pt-3",
+          tableExpanded && "min-h-0 flex-1 overflow-hidden",
         )}
       >
         <TransactionsTable
@@ -474,14 +613,16 @@ const TransactionsDashboard = ({
           chartSelection={flowChartSelection}
           quickFilter={quickFilter}
           breakdownSelection={breakdownSelection}
+          transactionIdFilter={deepLinkedTransactionIds}
           onChartSelectionChange={setFlowChartSelection}
           onQuickFilterChange={setQuickFilter}
           onBreakdownSelectionChange={setBreakdownSelection}
           resetTableFiltersToken={resetTableFiltersToken}
           isRefreshing={showRefreshSkeleton}
-          hasMoreRecords={hasMoreTransactions && !useWorkbenchRowsForTable}
+          hasMoreRecords={hasMoreTransactions}
           isLoadingMoreRecords={isLoadingMoreTransactions}
           onLoadMoreRecords={onLoadMoreTransactions}
+          onFilterStateChange={setTableFilterState}
           deepLinkedTransactionId={deepLinkedTransactionId}
           deepLinkedTransactionTab={deepLinkedTransactionTab}
           isExpanded={tableExpanded}

@@ -114,7 +114,9 @@ from .core import imports as core_imports
 from . import importers as importers_module
 from .core import maintenance as core_maintenance
 from .core import metadata as core_metadata
+from .core import privacy_hygiene as core_privacy_hygiene
 from .core import rates as core_rates
+from .core import freshness as core_freshness
 from .core import wallets as core_wallets
 from .core.repo import current_context_snapshot, resolve_wallet as core_resolve_wallet
 from .core.runtime import build_status_payload
@@ -154,11 +156,13 @@ from .core.sync_backends import (
 )
 from .backends import (
     BACKEND_KINDS,
+    BACKEND_RESERVED_FIELDS,
     backend_value,
     load_runtime_config,
     merge_db_backends,
     redact_backend_url,
     resolve_backend,
+    resolve_effective_env_file,
     wallet_backend_references,
 )
 from .db import (
@@ -180,6 +184,15 @@ from .egress_ledger import (
 )
 from .envelope import build_envelope, build_error_envelope, json_ready
 from .errors import AppError
+from .projects import (
+    create_project,
+    get_project,
+    list_projects,
+    mark_project_opened,
+    refresh_project_metadata,
+    set_selected_project,
+    validate_project_migration_after_unlock,
+)
 from .proxy import onion_proxy_failure_hints, urlopen_with_proxy
 from .log_ring import (
     current_request_id,
@@ -189,7 +202,7 @@ from .log_ring import (
 )
 from .redaction import redact_operational_value, redact_secret_text, redact_secret_value
 from .time_utils import iso_to_unix, timestamp_to_iso
-from .util import str_or_none
+from .util import parse_int, str_or_none
 from .daemon_swap_review import (
     SWAP_REVIEW_DEFAULT_LIMIT,
     build_swap_review_context_payload,
@@ -217,7 +230,7 @@ from .daemon_freshness import (
 from .secrets.credentials import migrate_dotenv_credentials
 from .secrets.migration import create_empty_encrypted_database, migrate_plaintext_to_encrypted
 from .secrets.passphrase import change_database_passphrase
-from .secrets.sqlcipher import looks_like_plaintext_sqlite, open_encrypted, sqlcipher_available
+from .secrets.sqlcipher import open_encrypted, require_sqlcipher, sqlcipher_available
 from .sync_btcpay import (
     discover_btcpay_wallet_sources,
     probe_btcpay_wallet,
@@ -283,6 +296,7 @@ SUPPORTED_KINDS = (
     "ui.attachments.open",
     "ui.wallets.list",
     "ui.wallets.utxos",
+    "ui.privacy_hygiene.snapshot",
     "ui.wallets.identify",
     "ui.wallets.identify_onchain",
     "ui.loans.list",
@@ -301,12 +315,16 @@ SUPPORTED_KINDS = (
     "ui.backends.detect_core",
     "ui.backends.electrum.test",
     "ui.backends.http.test",
+    "ui.backends.lightning.test",
     "ui.reports.capital_gains",
     "ui.reports.summary",
     "ui.reports.balance_sheet",
     "ui.reports.portfolio_summary",
     "ui.reports.tax_summary",
     "ui.reports.balance_history",
+    "ui.reports.privacy_hygiene",
+    "ui.reports.privacy_mirror",
+    "ui.reports.psbt_privacy",
     "ui.reports.exit_tax_preview",
     "ui.reports.export_pdf",
     "ui.reports.export_summary_pdf",
@@ -402,6 +420,9 @@ SUPPORTED_KINDS = (
     "ui.workspace.rename",
     "ui.workspace.delete",
     "ui.profiles.reset_data",
+    "ui.projects.list",
+    "ui.projects.create",
+    "ui.projects.select",
     "ui.secrets.init",
     "ui.secrets.change_passphrase",
     "ui.next_actions",
@@ -419,7 +440,9 @@ SUPPORTED_KINDS = (
     "ui.connections.btcpay.test",
     "ui.connections.node.snapshot",
     "ui.reports.lightning_profitability",
+    "ui.metadata.bip329.preview",
     "ui.metadata.bip329.import",
+    "ui.metadata.bip329.export",
     "ui.wallets.update",
     "ui.wallets.delete",
     "ui.wallets.sync",
@@ -773,6 +796,9 @@ class DaemonContext:
     deferred_input_lines: list[str]
     out: Any
     freshness_stop_event: threading.Event
+    project_id: str | None = None
+    project_root: str | None = None
+    select_project_on_open: bool = True
     db_passphrase: str | None = None
     freshness_worker: threading.Thread | None = None
 
@@ -1306,7 +1332,11 @@ def _status_payload_from_parts(
 
 def _status_payload(ctx: DaemonContext) -> dict[str, Any]:
     conn = _require_conn(ctx)
-    return _status_payload_from_parts(conn, ctx.data_root, ctx.runtime_config)
+    payload = _status_payload_from_parts(conn, ctx.data_root, ctx.runtime_config)
+    if ctx.project_id is not None:
+        payload["project_id"] = ctx.project_id
+        payload["project_root"] = ctx.project_root
+    return payload
 
 
 def _require_conn(ctx: DaemonContext) -> sqlite3.Connection:
@@ -1396,7 +1426,7 @@ def _ui_swap_matching_payload_from_conn(
             payout_asset=args.get("payout_asset"),
             payout_amount=args.get("payout_amount"),
             kind=str(args.get("kind") or "direct-swap-payout"),
-            policy=str(args.get("policy") or "carrying-value"),
+            policy=str(args["policy"]) if args.get("policy") is not None else None,
             payout_occurred_at=args.get("payout_occurred_at"),
             payout_fiat_value=args.get("payout_fiat_value"),
             payout_external_id=args.get("payout_external_id"),
@@ -1417,7 +1447,7 @@ def _ui_swap_matching_payload_from_conn(
             args.get("tx_out") or args.get("out_id"),
             args.get("tx_in") or args.get("in_id"),
             kind=str(args.get("kind") or "manual"),
-            policy=str(args.get("policy") or "carrying-value"),
+            policy=str(args["policy"]) if args.get("policy") is not None else None,
             notes=args.get("notes") or args.get("note"),
             pair_source=str(args.get("pair_source") or "manual"),
             confidence_at_pair=args.get("confidence_at_pair"),
@@ -1492,7 +1522,7 @@ def _ui_swap_matching_payload_from_conn(
             name=args.get("name"),
             predicate=predicate,
             kind=str(args.get("kind") or "manual"),
-            policy=str(args.get("policy") or "carrying-value"),
+            policy=str(args["policy"]) if args.get("policy") is not None else None,
             enabled=bool(args.get("enabled", True)),
         )
     if kind == "ui.transfers.rules.delete":
@@ -2548,8 +2578,19 @@ def _open_daemon_connection(
         passphrase=passphrase,
         require_existing_schema=require_existing_schema,
     )
-    merge_db_backends(conn, ctx.runtime_config)
+    try:
+        validate_project_migration_after_unlock(ctx.data_root, conn)
+        merge_db_backends(conn, ctx.runtime_config)
+    except Exception:
+        conn.close()
+        raise
     ctx.conn = conn
+    if ctx.project_id is not None:
+        mark_project_opened(
+            ctx.project_id,
+            data_root=ctx.data_root,
+            select=ctx.select_project_on_open,
+        )
     _remember_unlocked_passphrase(ctx, passphrase)
     _start_freshness_background_worker(ctx, passphrase=passphrase)
     return conn
@@ -2574,6 +2615,181 @@ def _passphrase_from_auth(args: dict[str, Any]) -> str | None:
         return None
     passphrase = auth.get("passphrase_secret")
     return passphrase if isinstance(passphrase, str) and passphrase else None
+
+
+def _project_payload(entry) -> dict[str, Any]:
+    return {
+        "id": entry.id,
+        "name": entry.name,
+        "path": str(entry.root),
+        "data_root": str(entry.data_root),
+        "database": str(entry.database),
+        "encrypted": bool(entry.encrypted),
+        "last_opened_at": entry.last_opened_at,
+    }
+
+
+def _projects_list_payload(ctx: DaemonContext) -> dict[str, Any]:
+    projects = []
+    for entry in list_projects():
+        payload = _project_payload(entry)
+        payload["selected"] = entry.id == ctx.project_id
+        projects.append(payload)
+    return {"selected_project_id": ctx.project_id, "projects": projects}
+
+
+def _close_current_project_for_switch(ctx: DaemonContext) -> None:
+    _stop_freshness_background_worker(ctx, cancel_running=True)
+    if ctx.conn is not None:
+        ctx.conn.close()
+        ctx.conn = None
+    _clear_unlocked_passphrase(ctx)
+
+
+def _set_ctx_project(ctx: DaemonContext, entry) -> None:
+    ctx.project_id = entry.id
+    ctx.project_root = str(entry.root)
+    ctx.data_root = str(entry.data_root)
+    ctx.select_project_on_open = True
+    env_file = resolve_effective_env_file(None, ctx.data_root)
+    ctx.runtime_config = load_runtime_config(env_file)
+    ctx.auth_backoff = AuthAttemptBackoff(
+        str(resolve_config_root(ctx.data_root) / AUTH_BACKOFF_FILENAME)
+    )
+
+
+def _open_project_connection_for_switch(
+    entry: Any,
+    *,
+    passphrase: str | None,
+    require_existing_schema: bool,
+) -> tuple[sqlite3.Connection, dict[str, object]]:
+    data_root = str(entry.data_root)
+    env_file = resolve_effective_env_file(None, data_root)
+    runtime_config = load_runtime_config(env_file)
+    conn = open_db(
+        data_root,
+        passphrase=passphrase,
+        require_existing_schema=require_existing_schema,
+    )
+    try:
+        validate_project_migration_after_unlock(data_root, conn)
+        merge_db_backends(conn, runtime_config)
+    except Exception:
+        conn.close()
+        raise
+    return conn, runtime_config
+
+
+def _select_project_payload(
+    ctx: DaemonContext,
+    args: dict[str, Any],
+    request_id: object,
+) -> tuple[dict[str, Any], bool]:
+    project_id = args.get("project_id") or args.get("id")
+    if not isinstance(project_id, str) or not project_id.strip():
+        raise AppError(
+            "ui.projects.select requires project_id",
+            code="validation",
+            retryable=False,
+        )
+
+    entry = get_project(project_id)
+    switching = ctx.project_id != entry.id or Path(ctx.data_root).expanduser() != entry.data_root
+    if not switching and ctx.conn is not None:
+        entry = mark_project_opened(entry.id, data_root=ctx.data_root)
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.projects.select",
+                    {
+                        "project": _project_payload(entry),
+                        "status": _status_payload(ctx),
+                    },
+                ),
+                request_id,
+            ),
+            False,
+        )
+
+    passphrase = _passphrase_from_auth(args)
+    target_data_root = str(entry.data_root)
+    target_encrypted = _data_root_database_is_encrypted(target_data_root)
+    if target_encrypted:
+        if not passphrase:
+            return (
+                _with_request_id(
+                    build_envelope(
+                        "auth_required",
+                        {
+                            "scope": "unlock_project",
+                            "label": f"Enter the SQLCipher passphrase for project {entry.name!r}.",
+                            "project": _project_payload(entry),
+                        },
+                    ),
+                    request_id,
+                ),
+                False,
+            )
+        verified = (
+            _verify_project_passphrase_with_backoff(entry, "unlock_project", passphrase)
+            if switching
+            else _verify_passphrase_with_backoff(ctx, "unlock_project", passphrase)
+        )
+        if not verified:
+            return (
+                _error_envelope(
+                    "local_auth_denied",
+                    "passphrase verification failed",
+                    request_id=request_id,
+                    retryable=True,
+                ),
+                False,
+            )
+
+    require_existing_schema = bool(args.get("require_existing_project"))
+    if switching:
+        target_conn, target_runtime_config = _open_project_connection_for_switch(
+            entry,
+            passphrase=passphrase if target_encrypted else None,
+            require_existing_schema=require_existing_schema,
+        )
+        try:
+            entry = set_selected_project(entry.id, last_opened_at=_utc_now_iso())
+        except Exception:
+            target_conn.close()
+            raise
+        _close_current_project_for_switch(ctx)
+        _set_ctx_project(ctx, entry)
+        ctx.runtime_config = target_runtime_config
+        ctx.conn = target_conn
+        _remember_unlocked_passphrase(ctx, passphrase)
+        _start_freshness_background_worker(ctx, passphrase=passphrase)
+    elif target_encrypted:
+        _open_daemon_connection(
+            ctx,
+            passphrase=passphrase,
+            require_existing_schema=require_existing_schema,
+        )
+    else:
+        _open_daemon_connection(
+            ctx,
+            require_existing_schema=require_existing_schema,
+        )
+
+    return (
+        _with_request_id(
+            build_envelope(
+                "ui.projects.select",
+                {
+                    "project": _project_payload(mark_project_opened(entry.id, data_root=ctx.data_root)),
+                    "status": _status_payload(ctx),
+                },
+            ),
+            request_id,
+        ),
+        False,
+    )
 
 
 def _validate_new_database_passphrase(passphrase: str) -> None:
@@ -2794,7 +3010,7 @@ def _rates_kraken_csv_import_payload(
         raise AppError(
             "ui.rates.kraken_csv.import requires args.path",
             code="validation",
-            hint="Choose a local Kraken OHLCVT .zip or .csv archive, or use the bundled BTC daily seed.",
+            hint="Choose a local Kraken OHLCVT .zip or .csv archive, or use the bundled BTC hourly seed.",
             retryable=False,
         )
     if use_bundled and path is not None and not isinstance(path, str):
@@ -2827,7 +3043,7 @@ def _rates_kraken_csv_import_payload(
         else None
     )
     if use_bundled:
-        archive_path, summary = core_rates.sync_bundled_kraken_btc_daily(
+        archive_path, summary = core_rates.sync_bundled_kraken_btc_hourly(
             conn,
             pair=pair,
         )
@@ -2913,6 +3129,8 @@ def _rates_rebuild_payload(
                 retryable=False,
                 details={"fiat_currency": active_profile["fiat_currency"]},
             )
+    if source in core_rates.LIVE_MARKET_RATE_SOURCES:
+        active_profile = _require_live_market_rates_opt_in(conn, active_profile)
     profile_id = None
     journal_input_version_before = None
     if reprice_transactions:
@@ -3009,8 +3227,10 @@ def _rates_latest_payload(
         )
     if isinstance(pair_arg, str) and pair_arg.strip():
         pair = core_rates.require_spot_pair(pair_arg)
+        _require_live_market_rates_opt_in(conn)
     else:
         _, profile = resolve_scope(conn, None, None)
+        _require_live_market_rates_opt_in(conn, profile)
         pair = core_rates.spot_rate_pair("BTC", profile["fiat_currency"], source)
         if pair is None:
             raise AppError(
@@ -3039,6 +3259,27 @@ def _rates_latest_payload(
         "latest": latest,
         "marketRate": _market_rate_payload_from_rate(rate),
     }
+
+
+def _require_live_market_rates_opt_in(
+    conn: sqlite3.Connection,
+    profile: Mapping[str, Any] | None = None,
+) -> Mapping[str, Any]:
+    if profile is None:
+        _, profile = resolve_scope(conn, None, None)
+    policy = core_freshness.get_policy(conn, str(profile["id"]))
+    if not policy.source_classes.get(core_freshness.SOURCE_RATES, False):
+        raise AppError(
+            "Live market-rate provider lookups are disabled for this book",
+            code="live_market_rates_disabled",
+            hint=(
+                "Enable live market-rate lookups in Settings > Market data, "
+                "or use the bundled/local Kraken history for offline pricing."
+            ),
+            retryable=False,
+            details={"profile_id": profile["id"]},
+        )
+    return profile
 
 
 def _ai_chat_args(args: dict) -> dict[str, Any]:
@@ -3373,6 +3614,68 @@ def _reports_balance_history_payload(
     }
 
 
+def _reports_privacy_hygiene_payload(
+    conn: sqlite3.Connection,
+    raw_args: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    args = raw_args or {}
+    unknown = sorted(set(args))
+    if unknown:
+        raise AppError(
+            "ui.reports.privacy_hygiene received unsupported arguments",
+            code="validation",
+            details={"unknown": unknown},
+            retryable=False,
+        )
+    return core_reports.report_privacy_hygiene(conn, None, None, _report_hooks())
+
+
+def _reports_privacy_mirror_payload(
+    conn: sqlite3.Connection,
+    raw_args: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    args = raw_args or {}
+    unknown = sorted(set(args))
+    if unknown:
+        raise AppError(
+            "ui.reports.privacy_mirror received unsupported arguments",
+            code="validation",
+            details={"unknown": unknown},
+            retryable=False,
+        )
+    return core_reports.report_privacy_mirror(conn, None, None, _report_hooks())
+
+
+def _reports_psbt_privacy_payload(
+    conn: sqlite3.Connection,
+    raw_args: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    args = raw_args or {}
+    unknown = sorted(set(args) - {"psbt"})
+    if unknown:
+        raise AppError(
+            "ui.reports.psbt_privacy received unsupported arguments",
+            code="validation",
+            details={"unknown": unknown},
+            retryable=False,
+        )
+    psbt_text = args.get("psbt")
+    if not isinstance(psbt_text, str) or not psbt_text.strip():
+        raise AppError(
+            "ui.reports.psbt_privacy requires psbt text",
+            code="validation",
+            details={"required": ["psbt"]},
+            retryable=False,
+        )
+    return core_reports.report_psbt_privacy(
+        conn,
+        None,
+        None,
+        _report_hooks(),
+        psbt_text=psbt_text,
+    )
+
+
 def _coerce_positive_int(raw: Any, label: str, *, maximum: int) -> int:
     try:
         value = int(raw)
@@ -3532,6 +3835,12 @@ def _execute_read_only_ai_tool(call: ParsedAiToolCall, runtime: AiToolRuntime) -
                 payload = _reports_tax_summary_payload(conn, call.arguments)
             elif entry.daemon_kind == "ui.reports.balance_history":
                 payload = _reports_balance_history_payload(conn, call.arguments)
+            elif entry.daemon_kind == "ui.reports.privacy_hygiene":
+                payload = _reports_privacy_hygiene_payload(conn, call.arguments)
+            elif entry.daemon_kind == "ui.reports.privacy_mirror":
+                payload = _reports_privacy_mirror_payload(conn, call.arguments)
+            elif entry.daemon_kind == "ui.reports.psbt_privacy":
+                payload = _reports_psbt_privacy_payload(conn, call.arguments)
             elif entry.daemon_kind == "ui.reports.lightning_profitability":
                 # AI surface: aggregate-only profitability (no connection
                 # identifiers, no per-channel rows). See Tier-3 policy in
@@ -4128,6 +4437,26 @@ def _planned_auto_read_tools(validated: dict[str, Any]) -> list[AutoReadToolCall
         "source",
     ):
         add("ui.backends.list")
+
+    if _message_has_any(
+        text,
+        "privacy",
+        "redaction",
+        "redacted",
+        "hygiene",
+        "local-only",
+        "local only",
+        "addresses exposed",
+        "third-party",
+        "third party",
+        "proxy",
+        "egress",
+        "privatsphäre",
+        "privatsphaere",
+        "datenschutz",
+    ) or _message_has_token(text, "tor"):
+        add("ui.reports.privacy_hygiene")
+        add("ui.reports.privacy_mirror")
 
     transaction_extreme_context = _message_has_any(
         text,
@@ -5092,9 +5421,13 @@ def _verify_passphrase_for_reveal(ctx: "DaemonContext", passphrase: str) -> bool
     cleanly without affecting the live `ctx.conn` handle.
     """
 
+    return _verify_passphrase_for_data_root(ctx.data_root, passphrase)
+
+
+def _verify_passphrase_for_data_root(data_root: str, passphrase: str) -> bool:
     if not sqlcipher_available():
         return False
-    db_path = resolve_database_path(resolve_effective_data_root(ctx.data_root))
+    db_path = resolve_database_path(resolve_effective_data_root(data_root))
     try:
         probe = open_encrypted(db_path, passphrase, quiet_unlock_errors=True)
     except AppError as exc:
@@ -5116,6 +5449,23 @@ def _verify_passphrase_with_backoff(
         ctx.auth_backoff.record_success()
     else:
         ctx.auth_backoff.record_failure()
+    return verified
+
+
+def _verify_project_passphrase_with_backoff(
+    entry: Any,
+    scope: str,
+    passphrase: str,
+) -> bool:
+    backoff = AuthAttemptBackoff(
+        str(resolve_config_root(entry.data_root) / AUTH_BACKOFF_FILENAME)
+    )
+    backoff.check(scope)
+    verified = _verify_passphrase_for_data_root(str(entry.data_root), passphrase)
+    if verified:
+        backoff.record_success()
+    else:
+        backoff.record_failure()
     return verified
 
 
@@ -5394,7 +5744,8 @@ def _profile_defaults_for_workspace(
                 fiat_currency,
                 tax_country,
                 tax_long_term_days,
-                gains_algorithm
+                gains_algorithm,
+                bitcoin_rail_carrying_value
             FROM profiles
             WHERE workspace_id = ?
               AND id = ?
@@ -5414,6 +5765,7 @@ def _profile_defaults_for_workspace(
             "tax_country": row["tax_country"],
             "tax_long_term_days": row["tax_long_term_days"],
             "gains_algorithm": row["gains_algorithm"],
+            "bitcoin_rail_carrying_value": bool(row["bitcoin_rail_carrying_value"]),
         }
 
     context = current_context_snapshot(conn)
@@ -5424,7 +5776,8 @@ def _profile_defaults_for_workspace(
             fiat_currency,
             tax_country,
             tax_long_term_days,
-            gains_algorithm
+            gains_algorithm,
+            bitcoin_rail_carrying_value
         FROM profiles
         WHERE workspace_id = ?
         ORDER BY created_at ASC, label ASC
@@ -5441,12 +5794,14 @@ def _profile_defaults_for_workspace(
             "tax_country": row["tax_country"],
             "tax_long_term_days": row["tax_long_term_days"],
             "gains_algorithm": row["gains_algorithm"],
+            "bitcoin_rail_carrying_value": bool(row["bitcoin_rail_carrying_value"]),
         }
     return {
         "fiat_currency": "EUR",
         "tax_country": "generic",
         "tax_long_term_days": 365,
         "gains_algorithm": "FIFO",
+        "bitcoin_rail_carrying_value": True,
     }
 
 
@@ -5490,6 +5845,7 @@ def _create_profile_payload(
     tax_country = defaults["tax_country"]
     gains_algorithm = defaults["gains_algorithm"]
     tax_long_term_days = int(defaults["tax_long_term_days"])
+    bitcoin_rail_carrying_value = bool(defaults.get("bitcoin_rail_carrying_value", True))
     # The "New book" dialog can pick a region + method explicitly. Copying from a
     # source book inherits its settings verbatim (region/method come from the
     # source), so explicit picks only apply when no source is chosen. core
@@ -5514,6 +5870,7 @@ def _create_profile_payload(
         gains_algorithm,
         tax_country,
         tax_long_term_days,
+        bitcoin_rail_carrying_value=bitcoin_rail_carrying_value,
     )
     workspace = conn.execute(
         "SELECT id, label FROM workspaces WHERE id = ?",
@@ -5802,6 +6159,8 @@ _UI_WALLET_SOURCE_FORMATS = {
     "21bitcoin_csv",
     "pocketbitcoin_csv",
     "strike_csv",
+    "ledgerlive_csv",
+    "binance_supplemental_csv",
     "wasabi_bundle",
     "generic_ledger",
 }
@@ -5875,6 +6234,11 @@ def _backend_options_payload(ctx: "DaemonContext") -> dict[str, Any]:
         safe = {key: value for key, value in row.items() if key in allowed_fields}
         safe["has_url"] = bool(url)
         safe["is_default"] = row.pop("default", "") == "yes"
+        kind = str(safe.get("kind") or "")
+        if kind in core_lightning.LIGHTNING_ADAPTER_KINDS:
+            safe["lightningCapabilities"] = (
+                core_lightning.registered_capabilities(kind).to_wire_dict()
+            )
         rows.append(safe)
     return {
         "backends": rows,
@@ -5948,6 +6312,11 @@ def _backend_settings_list_payload(ctx: "DaemonContext") -> dict[str, Any]:
         if isinstance(name, str) and name:
             backend["is_default"] = name == default_backend
             backend["wallet_refs"] = wallet_backend_references(ctx.conn, name)
+        kind = str(backend.get("kind") or "")
+        if kind in core_lightning.LIGHTNING_ADAPTER_KINDS:
+            backend["lightningCapabilities"] = (
+                core_lightning.registered_capabilities(kind).to_wire_dict()
+            )
     return {
         "backends": backends,
         "summary": {
@@ -5970,6 +6339,43 @@ def _lightning_adapter_unavailable_error(kind: str) -> AppError:
         ),
         retryable=False,
     )
+
+
+def _lightning_adapter_for_capability(
+    kind: str,
+    capability: core_lightning.LightningCapability,
+) -> tuple[core_lightning.LightningAdapter, core_lightning.LightningCapabilities]:
+    adapter = core_lightning.resolve_adapter(kind)
+    if adapter is None:
+        raise _lightning_adapter_unavailable_error(kind)
+    capabilities = core_lightning.require_lightning_capability(
+        kind=kind,
+        adapter=adapter,
+        capability="node_snapshot",
+    )
+    if capability != "node_snapshot":
+        capabilities = core_lightning.require_lightning_capability(
+            kind=kind,
+            adapter=adapter,
+            capability=capability,
+        )
+    return adapter, capabilities
+
+
+def _lightning_connection_block(
+    connection: dict[str, Any],
+    capabilities: core_lightning.LightningCapabilities,
+    *,
+    include_id: bool = True,
+) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "label": connection.get("label"),
+        "kind": connection.get("kind"),
+        "lightningCapabilities": capabilities.to_wire_dict(),
+    }
+    if include_id:
+        payload["id"] = connection.get("id")
+    return payload
 
 
 def _lightning_connection_args(
@@ -5999,9 +6405,9 @@ def _lightning_node_snapshot_payload(
         conn, ref, workspace_ref=workspace_ref, profile_ref=profile_ref
     )
     kind = str(connection["kind"])
-    adapter = core_lightning.resolve_adapter(kind)
-    if adapter is None:
-        raise _lightning_adapter_unavailable_error(kind)
+    adapter, capabilities = _lightning_adapter_for_capability(
+        kind, "node_snapshot"
+    )
     window_days = _coerce_int(args.get("window_days"), default=30, minimum=1, maximum=365)
     snapshot = adapter.fetch_node_snapshot(
         connection,
@@ -6009,11 +6415,8 @@ def _lightning_node_snapshot_payload(
         window_days=window_days,
     )
     payload = core_lightning.snapshot_to_dict(snapshot)
-    payload["connection"] = {
-        "id": connection.get("id"),
-        "label": connection.get("label"),
-        "kind": connection.get("kind"),
-    }
+    payload["capabilities"] = capabilities.to_wire_dict()
+    payload["connection"] = _lightning_connection_block(connection, capabilities)
     return payload
 
 
@@ -6036,9 +6439,9 @@ def _lightning_node_snapshot_payload_for_ai(
         conn, ref, workspace_ref=workspace_ref, profile_ref=profile_ref
     )
     kind = str(connection["kind"])
-    adapter = core_lightning.resolve_adapter(kind)
-    if adapter is None:
-        raise _lightning_adapter_unavailable_error(kind)
+    adapter, capabilities = _lightning_adapter_for_capability(
+        kind, "node_snapshot"
+    )
     window_days = _coerce_int(args.get("window_days"), default=30, minimum=1, maximum=365)
     snapshot = adapter.fetch_node_snapshot(
         connection,
@@ -6046,10 +6449,10 @@ def _lightning_node_snapshot_payload_for_ai(
         window_days=window_days,
     )
     payload = core_lightning.snapshot_to_dict_for_ai(snapshot)
-    payload["connection"] = {
-        "label": connection.get("label"),
-        "kind": connection.get("kind"),
-    }
+    payload["capabilities"] = capabilities.to_wire_dict()
+    payload["connection"] = _lightning_connection_block(
+        connection, capabilities, include_id=False
+    )
     return payload
 
 
@@ -6063,9 +6466,9 @@ def _lightning_profitability_payload(
         conn, ref, workspace_ref=workspace_ref, profile_ref=profile_ref
     )
     kind = str(connection["kind"])
-    adapter = core_lightning.resolve_adapter(kind)
-    if adapter is None:
-        raise _lightning_adapter_unavailable_error(kind)
+    adapter, capabilities = _lightning_adapter_for_capability(
+        kind, "routing_profitability"
+    )
     window_days = _coerce_int(args.get("window_days"), default=30, minimum=1, maximum=365)
     snapshot = adapter.fetch_node_snapshot(
         connection,
@@ -6078,7 +6481,9 @@ def _lightning_profitability_payload(
         connection_kind=kind,
         snapshot=snapshot,
     )
-    return report.to_envelope_payload()
+    payload = report.to_envelope_payload()
+    payload["connection"]["lightningCapabilities"] = capabilities.to_wire_dict()
+    return payload
 
 
 def _lightning_profitability_payload_for_ai(
@@ -6099,9 +6504,9 @@ def _lightning_profitability_payload_for_ai(
         conn, ref, workspace_ref=workspace_ref, profile_ref=profile_ref
     )
     kind = str(connection["kind"])
-    adapter = core_lightning.resolve_adapter(kind)
-    if adapter is None:
-        raise _lightning_adapter_unavailable_error(kind)
+    adapter, _capabilities = _lightning_adapter_for_capability(
+        kind, "routing_profitability"
+    )
     window_days = _coerce_int(args.get("window_days"), default=30, minimum=1, maximum=365)
     snapshot = adapter.fetch_node_snapshot(
         connection,
@@ -6246,6 +6651,51 @@ def _create_backend_payload(ctx: "DaemonContext", args: dict[str, Any]) -> dict[
     return payload
 
 
+def _promote_bootstrap_backend_for_desktop_mutation(
+    ctx: "DaemonContext",
+    name: str,
+    *,
+    commit: bool = False,
+) -> bool:
+    """Copy a bootstrap backend into SQLite so desktop edits can persist.
+
+    Older books can still expose built-in/dotenv backends through the merged
+    runtime config without a corresponding SQLite row. Settings edits are DB
+    mutations, so create the row first instead of asking the user to recreate
+    Kassiber's own default manually.
+    """
+    normalized_name = name.strip().lower()
+    if ctx.conn.execute(
+        "SELECT 1 FROM backends WHERE name = ?",
+        (normalized_name,),
+    ).fetchone():
+        return False
+    bootstrap = ctx.runtime_config.get("bootstrap_backends", {}).get(normalized_name)
+    if not isinstance(bootstrap, dict):
+        return False
+    core_accounts.create_backend(
+        ctx.conn,
+        normalized_name,
+        str(bootstrap.get("kind") or ""),
+        str(bootstrap.get("url") or ""),
+        chain=str_or_none(bootstrap.get("chain")),
+        network=str_or_none(bootstrap.get("network")),
+        auth_header=str_or_none(bootstrap.get("auth_header")),
+        token=str_or_none(bootstrap.get("token")),
+        batch_size=parse_int(bootstrap.get("batch_size"), None),
+        timeout=parse_int(bootstrap.get("timeout"), None),
+        tor_proxy=str_or_none(bootstrap.get("tor_proxy")),
+        config={
+            key: value
+            for key, value in bootstrap.items()
+            if key not in BACKEND_RESERVED_FIELDS
+        },
+        notes=str_or_none(bootstrap.get("notes")),
+        commit=commit,
+    )
+    return True
+
+
 def _update_backend_payload(ctx: "DaemonContext", args: dict[str, Any]) -> dict[str, Any]:
     name = _required_str_arg(args, "name", "Backend name")
     common = _backend_common_args(args)
@@ -6262,7 +6712,13 @@ def _update_backend_payload(ctx: "DaemonContext", args: dict[str, Any]) -> dict[
         effective_url,
         effective_config,
     )
-    payload = core_accounts.update_backend(ctx.conn, name, common)
+    promoted = _promote_bootstrap_backend_for_desktop_mutation(ctx, name)
+    try:
+        payload = core_accounts.update_backend(ctx.conn, name, common)
+    except Exception:
+        if promoted:
+            ctx.conn.rollback()
+        raise
     merge_db_backends(ctx.conn, ctx.runtime_config)
     return payload
 
@@ -6276,7 +6732,14 @@ def _delete_backend_payload(ctx: "DaemonContext", args: dict[str, Any]) -> dict[
 
 def _set_default_backend_payload(ctx: "DaemonContext", args: dict[str, Any]) -> dict[str, Any]:
     name = _required_str_arg(args, "name", "Backend name")
-    payload = core_accounts.set_default_backend(ctx.conn, ctx.runtime_config, name)
+    resolve_backend(ctx.runtime_config, name)
+    promoted = _promote_bootstrap_backend_for_desktop_mutation(ctx, name)
+    try:
+        payload = core_accounts.set_default_backend(ctx.conn, ctx.runtime_config, name)
+    except Exception:
+        if promoted:
+            ctx.conn.rollback()
+        raise
     merge_db_backends(ctx.conn, ctx.runtime_config)
     return payload
 
@@ -6589,7 +7052,7 @@ def _import_wallet_file_payload(
             source_format,
             import_mode,
         )
-    if source_format == "21bitcoin_csv":
+    if source_format in {"21bitcoin_csv", "binance_supplemental_csv"}:
         wallet_ref = _optional_str_arg(args, "wallet")
         import_mode = (
             _optional_str_arg(args, "mode")
@@ -7291,13 +7754,67 @@ def _import_bip329_payload(
             hint="Choose an existing local JSONL label export.",
             retryable=False,
         )
+    apply_ambiguous = _optional_bool_arg(args, "apply_ambiguous", False)
     return core_metadata.import_bip329_labels(
         conn,
         None,
         None,
         str(path.resolve()),
         _metadata_hooks(),
+        apply_ambiguous=apply_ambiguous,
+        source="gui",
     )
+
+
+def _preview_bip329_payload(
+    conn: sqlite3.Connection,
+    args: dict[str, Any],
+) -> dict[str, Any]:
+    file_path = _required_str_arg(args, "file", "BIP329 label file")
+    path = Path(file_path).expanduser()
+    if not path.exists():
+        raise AppError(
+            f"BIP329 label file not found: {file_path}",
+            code="not_found",
+            hint="Choose an existing local JSONL label export.",
+            retryable=False,
+        )
+    return core_metadata.preview_bip329_import(
+        conn,
+        None,
+        None,
+        str(path.resolve()),
+        _metadata_hooks(),
+    )
+
+
+def _export_bip329_payload(
+    ctx: DaemonContext,
+    args: dict[str, Any],
+) -> dict[str, Any]:
+    conn = _require_conn(ctx)
+    mode = (_optional_str_arg(args, "mode") or "stored").strip().lower()
+    wallet = _optional_str_arg(args, "wallet")
+    path = _managed_report_export_path(ctx.data_root, "kassiber-bip329-labels", ".jsonl")
+    payload = dict(
+        core_metadata.export_bip329_labels(
+            conn,
+            None,
+            None,
+            str(path),
+            _metadata_hooks(),
+            wallet_ref=wallet,
+            mode=mode,
+        )
+    )
+    payload.update(
+        {
+            "format": "jsonl",
+            "scope": "bip329",
+            "filename": Path(payload["file"]).name,
+        }
+    )
+    return payload
 
 
 def _handle_transaction_metadata_update(
@@ -7826,6 +8343,86 @@ def _test_http_backend_payload(args: dict[str, Any]) -> dict[str, Any]:
         "ok": 200 <= status < 400,
         "url": url,
         "status": status,
+        "logs": logs,
+    }
+
+
+def _test_lightning_backend_payload(
+    ctx: "DaemonContext",
+    args: dict[str, Any],
+) -> dict[str, Any]:
+    backend_ref = _required_str_arg(args, "backend", "Lightning backend")
+    backend = dict(resolve_backend(ctx.runtime_config, backend_ref))
+    backend_name = str(backend.get("name") or backend_ref).strip() or backend_ref
+    kind = str(backend.get("kind") or "").lower()
+    logs = [f"Opening Lightning connection to backend '{backend_name}'"]
+    if kind not in core_lightning.LIGHTNING_ADAPTER_KINDS:
+        return {
+            "ok": False,
+            "backend": backend_name,
+            "kind": kind or None,
+            "logs": logs
+            + [
+                f"Backend kind '{kind or 'unknown'}' is not a Lightning node backend.",
+            ],
+        }
+    try:
+        adapter, capabilities = _lightning_adapter_for_capability(
+            kind, "node_snapshot"
+        )
+    except AppError as error:
+        return {
+            "ok": False,
+            "backend": backend_name,
+            "kind": kind,
+            "logs": logs + [error.hint or str(error)],
+            "error": {
+                "code": error.code,
+                "message": str(error),
+                "hint": error.hint,
+            },
+        }
+    try:
+        snapshot = adapter.fetch_node_snapshot(
+            {
+                "id": backend_name,
+                "label": backend_name,
+                "kind": kind,
+            },
+            backend,
+            window_days=1,
+        )
+    except Exception as exc:  # pragma: no cover - transport-specific boundary
+        logs.append(f"Connection failed: {exc}")
+        return {
+            "ok": False,
+            "backend": backend_name,
+            "kind": kind,
+            "logs": logs,
+            "error": {
+                "message": str(exc),
+            },
+        }
+    channel_count = len(snapshot.channels)
+    peer_count = snapshot.peer_count
+    logs.append(
+        (
+            f"Connected to {snapshot.alias or backend_name}: "
+            f"{channel_count} channels, {peer_count} peers"
+        )
+    )
+    if snapshot.block_height is not None:
+        logs.append(f"Block height: {snapshot.block_height}")
+    return {
+        "ok": True,
+        "backend": backend_name,
+        "kind": kind,
+        "lightningCapabilities": capabilities.to_wire_dict(),
+        "alias": snapshot.alias,
+        "network": snapshot.network,
+        "block_height": snapshot.block_height,
+        "peer_count": peer_count,
+        "channel_count": channel_count,
         "logs": logs,
     }
 
@@ -9220,6 +9817,78 @@ def handle_request(
             False,
         )
 
+    if kind == "ui.projects.list":
+        return (
+            _with_request_id(
+                build_envelope("ui.projects.list", _projects_list_payload(ctx)),
+                request_id,
+            ),
+            False,
+        )
+
+    if kind == "ui.projects.create":
+        args = _coerce_args_dict(request_id, request.get("args"))
+        name = args.get("name")
+        if not isinstance(name, str) or not name.strip():
+            raise AppError(
+                "ui.projects.create requires a non-empty name",
+                code="validation",
+                retryable=False,
+            )
+        project_id = args.get("project_id")
+        if project_id is not None and not isinstance(project_id, str):
+            raise AppError(
+                "ui.projects.create project_id must be a string",
+                code="validation",
+                retryable=False,
+            )
+        select_created = args.get("select", True) is not False
+        passphrase = _passphrase_from_auth(args)
+        if passphrase is not None:
+            require_sqlcipher()
+            _validate_new_database_passphrase(passphrase)
+        entry = create_project(
+            name,
+            project_id=project_id,
+            select=select_created,
+            replace_existing=False,
+            allow_existing_database=False,
+        )
+        if passphrase is not None:
+            create_empty_encrypted_database(entry.database, passphrase)
+            if select_created:
+                entry = mark_project_opened(entry.id, data_root=entry.data_root)
+            else:
+                entry = refresh_project_metadata(entry.id, data_root=entry.data_root)
+        if select_created:
+            _close_current_project_for_switch(ctx)
+            _set_ctx_project(ctx, entry)
+            if passphrase is not None:
+                _open_daemon_connection(ctx, passphrase=passphrase)
+            else:
+                _open_daemon_connection(ctx)
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.projects.create",
+                    {
+                        "project": _project_payload(entry),
+                        "selected_project_id": ctx.project_id,
+                        "unlocked": ctx.conn is not None and ctx.project_id == entry.id,
+                    },
+                ),
+                request_id,
+            ),
+            False,
+        )
+
+    if kind == "ui.projects.select":
+        return _select_project_payload(
+            ctx,
+            _coerce_args_dict(request_id, request.get("args")),
+            request_id,
+        )
+
     if ctx.conn is None:
         try:
             _open_daemon_connection(ctx)
@@ -9476,6 +10145,21 @@ def handle_request(
             False,
         )
 
+    if kind == "ui.privacy_hygiene.snapshot":
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.privacy_hygiene.snapshot",
+                    core_privacy_hygiene.build_privacy_hygiene_snapshot(
+                        ctx.conn,
+                        request.get("args"),
+                    ),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
     if kind == "ui.wallets.identify":
         return (
             _with_request_id(
@@ -9661,6 +10345,21 @@ def handle_request(
             False,
         )
 
+    if kind == "ui.backends.lightning.test":
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.backends.lightning.test",
+                    _test_lightning_backend_payload(
+                        ctx,
+                        _coerce_args_dict(request_id, request.get("args")),
+                    ),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
     direct_maintenance_metadata: dict[str, Any] = {}
     if kind in _DIRECT_AUTO_JOURNAL_REFRESH_KINDS:
         direct_maintenance_metadata = _auto_maintain_for_read(
@@ -9744,6 +10443,51 @@ def handle_request(
                 build_envelope(
                     "ui.reports.balance_history",
                     _reports_balance_history_payload(
+                        ctx.conn,
+                        _coerce_args_dict(request_id, request.get("args")),
+                    ),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
+    if kind == "ui.reports.privacy_hygiene":
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.reports.privacy_hygiene",
+                    _reports_privacy_hygiene_payload(
+                        ctx.conn,
+                        _coerce_args_dict(request_id, request.get("args")),
+                    ),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
+    if kind == "ui.reports.privacy_mirror":
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.reports.privacy_mirror",
+                    _reports_privacy_mirror_payload(
+                        ctx.conn,
+                        _coerce_args_dict(request_id, request.get("args")),
+                    ),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
+    if kind == "ui.reports.psbt_privacy":
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.reports.psbt_privacy",
+                    _reports_psbt_privacy_payload(
                         ctx.conn,
                         _coerce_args_dict(request_id, request.get("args")),
                     ),
@@ -10667,6 +11411,21 @@ def handle_request(
             False,
         )
 
+    if kind == "ui.metadata.bip329.preview":
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.metadata.bip329.preview",
+                    _preview_bip329_payload(
+                        ctx.conn,
+                        _coerce_args_dict(request_id, request.get("args")),
+                    ),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
     if kind == "ui.metadata.bip329.import":
         return (
             _with_request_id(
@@ -10674,6 +11433,21 @@ def handle_request(
                     "ui.metadata.bip329.import",
                     _import_bip329_payload(
                         ctx.conn,
+                        _coerce_args_dict(request_id, request.get("args")),
+                    ),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
+    if kind == "ui.metadata.bip329.export":
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.metadata.bip329.export",
+                    _export_bip329_payload(
+                        ctx,
                         _coerce_args_dict(request_id, request.get("args")),
                     ),
                 ),
@@ -10788,10 +11562,14 @@ def handle_request(
                 code="validation",
                 hint="Save provider metadata first, then send the key through ai.providers.set_api_key.",
             )
+        display_name = args.get("display_name")
+        if display_name is not None and not isinstance(display_name, str):
+            raise AppError("ai.providers.create display_name must be a string", code="validation")
         created = create_db_ai_provider(
             ctx.conn,
             name,
             base_url,
+            display_name=display_name,
             default_model=args.get("default_model"),
             kind=str(args.get("kind") or "local"),
             notes=args.get("notes"),
@@ -10823,11 +11601,15 @@ def handle_request(
                 code="validation",
                 hint="Update provider metadata separately, then send the key through ai.providers.set_api_key.",
             )
+        display_name = args.get("display_name")
+        if display_name is not None and not isinstance(display_name, str):
+            raise AppError("ai.providers.update display_name must be a string", code="validation")
         updated = update_db_ai_provider(
             ctx.conn,
             name,
             {
                 "base_url": args.get("base_url"),
+                "display_name": display_name,
                 "default_model": args.get("default_model"),
                 "kind": args.get("kind"),
                 "notes": args.get("notes"),
@@ -10982,9 +11764,10 @@ def handle_request(
 
     if kind == "ai.test_connection":
         # Transient connection test against caller-supplied provider metadata —
-        # nothing is persisted. Stored credentials may only be reused for the
-        # stored provider URL; otherwise a compromised renderer could redirect
-        # a saved bearer token to an attacker-controlled OpenAI-compatible URL.
+        # nothing is persisted. A caller-supplied API key may be used for this
+        # one probe. Stored credentials may only be reused for the stored
+        # provider URL; otherwise a compromised renderer could redirect a saved
+        # bearer token to an attacker-controlled OpenAI-compatible URL.
         args = _coerce_args_dict(request_id, request.get("args"))
         base_url_raw = args.get("base_url")
         if not isinstance(base_url_raw, str) or not base_url_raw.strip():
@@ -10994,18 +11777,14 @@ def handle_request(
             )
         canonical_url = normalize_base_url(base_url_raw)
         api_key_raw = args.get("api_key")
+        api_key_text = ""
         if api_key_raw is not None:
             if not isinstance(api_key_raw, str):
                 raise AppError(
                     "ai.test_connection api_key must be a string",
                     code="validation",
                 )
-            raise AppError(
-                "ai.test_connection does not accept api_key; use ai.providers.set_api_key",
-                code="validation",
-                hint="Save or rotate the key through ai.providers.set_api_key, then test the stored provider.",
-            )
-        api_key_text = ""
+            api_key_text = str_or_none(api_key_raw) or ""
         if not api_key_text:
             stored_provider = args.get("provider")
             if isinstance(stored_provider, str) and stored_provider.strip():
@@ -11243,7 +12022,9 @@ def _handle_reveal_request(
     else:
         workspace = args.get("workspace")
         profile = args.get("profile")
-        payload = core_wallets.reveal_wallet_secrets(ctx.conn, workspace, profile, target)
+        payload = core_wallets.reveal_wallet_descriptor_material(
+            ctx.conn, workspace, profile, target
+        )
 
     return (
         _with_request_id(
@@ -11269,6 +12050,11 @@ def run(
     ctx = DaemonContext(
         conn=conn,
         data_root=args.data_root,
+        project_id=getattr(args, "project_id", None),
+        project_root=getattr(args, "project_root", None),
+        select_project_on_open=not bool(
+            getattr(args, "project_selection_explicit", False)
+        ),
         runtime_config=args.runtime_config,
         active_ai_chats=ActiveAiChats(),
         main_thread_tasks=queue.Queue(),
@@ -11281,6 +12067,10 @@ def run(
         freshness_stop_event=threading.Event(),
     )
     if conn is not None:
+        _remember_unlocked_passphrase(
+            ctx,
+            getattr(args, "_db_passphrase_cached", None),
+        )
         _start_freshness_background_worker(ctx)
 
     out.write(

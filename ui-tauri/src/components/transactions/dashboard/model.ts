@@ -16,14 +16,17 @@ import {
 } from "@/components/transactions";
 
 type PeriodKey =
+  | "auto"
   | "ytd"
   | "30days"
   | "3months"
+  | "6months"
   | "1year"
   | "5years"
   | "10years"
   | "15years"
   | "all";
+type ResolvedPeriodKey = Exclude<PeriodKey, "auto">;
 type FlowChartMetric = "amount" | "count";
 type FlowChartMode = "external" | "all";
 type FlowChartSegment = "incoming" | "outgoing" | "transfers" | "swaps";
@@ -54,7 +57,7 @@ type FlowChartSegmentStats = {
 
 type FlowChartSelection = {
   id: string;
-  period: PeriodKey;
+  period: ResolvedPeriodKey;
   bucketKey: string | null;
   bucketLabel: string;
   segment: FlowChartSegment | null;
@@ -178,14 +181,19 @@ function toDashboardTransaction(
         ? "Receive"
         : "Send";
   const status: TransactionStatus = tx.conf > 0 ? "completed" : "pending";
+  const accountLabel = tx.account.toLowerCase();
+  const chain = tx.chain?.trim().toLowerCase();
   const paymentMethod =
-    tx.account.toLowerCase().includes("lightning") ||
-    tx.account.toLowerCase().includes("ln") ||
-    tx.account.toLowerCase().includes("phoenix")
+    accountLabel.includes("lightning") ||
+    accountLabel.includes("ln") ||
+    accountLabel.includes("phoenix")
       ? "Lightning"
-      : tx.account.toLowerCase().includes("liquid") ||
-          tx.account.toLowerCase().includes("lbtc")
+      : chain === "liquid" ||
+          accountLabel.includes("liquid") ||
+          accountLabel.includes("lbtc")
         ? "Liquid"
+        : chain === "bitcoin"
+          ? "On-chain"
         : "On-chain";
   return {
     id: tx.id,
@@ -203,7 +211,9 @@ function toDashboardTransaction(
       tx.feeSat && tx.rate !== null
         ? Math.abs((tx.feeSat / SATS_PER_BTC) * tx.rate)
         : null,
-    asset: "BTC",
+    asset: tx.asset ?? "BTC",
+    chain: tx.chain ?? null,
+    network: tx.network ?? null,
     rate: tx.rate,
     fiatCurrency: tx.fiatCurrency,
     pricingSourceKind: tx.pricingSourceKind as Transaction["pricingSourceKind"],
@@ -486,9 +496,11 @@ function isAttachmentListQueryKeyForTransaction(
 
 // The following label maps hold i18n keys (resolved with t() at the call site).
 const periodLabels = {
+  auto: "transactions:period.auto",
   ytd: "transactions:period.ytd",
   "1year": "transactions:period.1year",
   "3months": "transactions:period.3months",
+  "6months": "transactions:period.6months",
   "30days": "transactions:period.30days",
   "5years": "transactions:period.5years",
   "10years": "transactions:period.10years",
@@ -530,8 +542,10 @@ const emptyFlowChartStats = (): Record<FlowChartSegment, FlowChartSegmentStats> 
 });
 
 const periodKeys: PeriodKey[] = [
+  "auto",
   "30days",
   "3months",
+  "6months",
   "ytd",
   "1year",
   "5years",
@@ -540,15 +554,23 @@ const periodKeys: PeriodKey[] = [
   "all",
 ];
 
-const basePeriodKeys: PeriodKey[] = ["30days", "3months", "ytd", "1year"];
+const basePeriodKeys: ResolvedPeriodKey[] = [
+  "30days",
+  "3months",
+  "6months",
+  "ytd",
+  "1year",
+];
 const longHistoryPeriodKeys = [
   { key: "5years", years: 5 },
   { key: "10years", years: 10 },
   { key: "15years", years: 15 },
-] as const satisfies ReadonlyArray<{ key: PeriodKey; years: number }>;
+] as const satisfies ReadonlyArray<{ key: ResolvedPeriodKey; years: number }>;
 const MS_PER_YEAR = 365.2425 * 24 * 60 * 60 * 1000;
+const AUTO_MIN_MEANINGFUL_TRANSACTIONS = 3;
+const AUTO_MIN_TRANSACTION_VOLUME_BTC = 0.00001;
 
-function isLongHistoryPeriod(period: PeriodKey) {
+function isLongHistoryPeriod(period: PeriodKey | ResolvedPeriodKey) {
   return (
     period === "5years" ||
     period === "10years" ||
@@ -560,6 +582,7 @@ function isLongHistoryPeriod(period: PeriodKey) {
 function normalizePeriodParam(value: string | null): PeriodKey | null {
   if (!value) return null;
   const normalized = value.toLowerCase().replace(/[\s_-]/g, "");
+  if (normalized === "auto" || normalized === "automatic") return "auto";
   if (normalized === "30days" || normalized === "30day" || normalized === "30d") {
     return "30days";
   }
@@ -571,6 +594,15 @@ function normalizePeriodParam(value: string | null): PeriodKey | null {
     normalized === "3m"
   ) {
     return "3months";
+  }
+  if (
+    normalized === "6months" ||
+    normalized === "6month" ||
+    normalized === "6mos" ||
+    normalized === "6mo" ||
+    normalized === "6m"
+  ) {
+    return "6months";
   }
   if (normalized === "ytd") return "ytd";
   if (
@@ -614,15 +646,16 @@ function normalizePeriodParam(value: string | null): PeriodKey | null {
   return null;
 }
 
-function initialPeriodFromUrl(): PeriodKey {
-  if (typeof window === "undefined") return "1year";
+function initialPeriodFromUrl(fallback: PeriodKey = "1year"): PeriodKey {
+  if (typeof window === "undefined") return fallback;
   const params = new URLSearchParams(window.location.search);
-  return normalizePeriodParam(params.get("period")) ?? "1year";
+  return normalizePeriodParam(params.get("period")) ?? fallback;
 }
 
-function periodLimit(period: PeriodKey) {
+function periodLimit(period: ResolvedPeriodKey) {
   if (period === "30days") return 10;
   if (period === "3months") return 18;
+  if (period === "6months") return 24;
   if (period === "ytd") return 40;
   if (period === "5years") return 60;
   if (period === "10years") return 90;
@@ -639,7 +672,7 @@ function sortTransactionsByDateDesc(records: Transaction[]) {
   });
 }
 
-function recordsForPeriod(records: Transaction[], period: PeriodKey) {
+function recordsForPeriod(records: Transaction[], period: ResolvedPeriodKey) {
   if (period === "all") return records;
 
   const dated = records
@@ -662,7 +695,7 @@ function recordsForPeriod(records: Transaction[], period: PeriodKey) {
     .map((entry) => entry.record);
 }
 
-function availablePeriodKeysForRecords(records: Transaction[]): PeriodKey[] {
+function availablePeriodKeysForRecords(records: Transaction[]): ResolvedPeriodKey[] {
   const dated = records
     .map((record) => parseTransactionDate(record.date))
     .filter((date): date is Date => date !== null);
@@ -685,6 +718,42 @@ function availablePeriodKeysForRecords(records: Transaction[]): PeriodKey[] {
   ];
 }
 
+function resolveAutoPeriodForRecords(
+  records: Transaction[],
+  period: PeriodKey,
+): ResolvedPeriodKey {
+  if (period !== "auto") return period;
+  if (!records.length) return "1year";
+
+  const meaningfulRecords = records.filter(
+    (record) => Math.abs(transactionBtc(record)) >= AUTO_MIN_TRANSACTION_VOLUME_BTC,
+  );
+  if (!meaningfulRecords.length) return "ytd";
+
+  const targetCount = Math.min(
+    AUTO_MIN_MEANINGFUL_TRANSACTIONS,
+    meaningfulRecords.length,
+  );
+  const availablePeriods = availablePeriodKeysForRecords(records);
+  const candidates: ResolvedPeriodKey[] = [
+    "ytd",
+    "1year",
+    "5years",
+    "10years",
+    "15years",
+    "all",
+  ].filter((candidate): candidate is ResolvedPeriodKey =>
+    availablePeriods.includes(candidate as ResolvedPeriodKey),
+  );
+
+  return (
+    candidates.find(
+      (candidate) =>
+        recordsForPeriod(meaningfulRecords, candidate).length >= targetCount,
+    ) ?? "all"
+  );
+}
+
 function parseTransactionDate(value: string) {
   const normalized = value.includes("T") ? value : value.replace(" ", "T");
   const parsed = new Date(normalized);
@@ -704,12 +773,18 @@ function periodAnchorDate(dates: Date[]) {
   return latest > now ? latest : now;
 }
 
-function periodStartDate(end: Date, period: PeriodKey, earliest?: Date) {
+function periodStartDate(
+  end: Date,
+  period: ResolvedPeriodKey,
+  earliest?: Date,
+) {
   const start = startOfLocalDay(end);
   if (period === "30days") {
     start.setDate(start.getDate() - 29);
   } else if (period === "3months") {
     start.setMonth(start.getMonth() - 3);
+  } else if (period === "6months") {
+    start.setMonth(start.getMonth() - 6);
   } else if (period === "ytd") {
     start.setMonth(0, 1);
     start.setHours(0, 0, 0, 0);
@@ -756,7 +831,7 @@ function localDateKey(date: Date) {
   ].join("-");
 }
 
-function addBucketStep(date: Date, period: PeriodKey) {
+function addBucketStep(date: Date, period: ResolvedPeriodKey) {
   const next = new Date(date);
   if (period === "30days") {
     next.setDate(next.getDate() + 1);
@@ -770,7 +845,10 @@ function addBucketStep(date: Date, period: PeriodKey) {
   return next;
 }
 
-function bucketTransactionDate(date: Date, period: PeriodKey): FlowBucket {
+function bucketTransactionDate(
+  date: Date,
+  period: ResolvedPeriodKey,
+): FlowBucket {
   if (period === "30days") {
     return {
       key: localDateKey(date),
@@ -804,8 +882,41 @@ function bucketTransactionDate(date: Date, period: PeriodKey): FlowBucket {
   };
 }
 
+function flowChartSelectionDateWindow(selection: FlowChartSelection): {
+  since: string;
+  until: string;
+} | null {
+  const { bucketKey, period } = selection;
+  if (!bucketKey) return null;
+
+  let start: Date | null = null;
+  let end: Date | null = null;
+
+  if (period === "30days" || period === "3months") {
+    start = new Date(`${bucketKey}T00:00:00`);
+    if (Number.isNaN(start.getTime())) return null;
+    end = new Date(start);
+    end.setDate(end.getDate() + (period === "3months" ? 7 : 1));
+  } else if (isLongHistoryPeriod(period)) {
+    const match = bucketKey.match(/^(\d{4})-Q([1-4])$/);
+    if (!match) return null;
+    start = new Date(Number(match[1]), (Number(match[2]) - 1) * 3, 1);
+    end = new Date(start);
+    end.setMonth(end.getMonth() + 3);
+  } else {
+    const match = bucketKey.match(/^(\d{4})-(\d{2})$/);
+    if (!match) return null;
+    start = new Date(Number(match[1]), Number(match[2]) - 1, 1);
+    end = new Date(start);
+    end.setMonth(end.getMonth() + 1);
+  }
+
+  end.setMilliseconds(end.getMilliseconds() - 1);
+  return { since: start.toISOString(), until: end.toISOString() };
+}
+
 function buildEmptyFlowBuckets(
-  period: PeriodKey,
+  period: ResolvedPeriodKey,
   records: Transaction[],
 ): Map<string, FlowChartPoint> {
   const grouped = new Map<string, FlowChartPoint>();
@@ -839,7 +950,7 @@ function buildEmptyFlowBuckets(
   return grouped;
 }
 
-function flowBucketLabel(period: PeriodKey) {
+function flowBucketLabel(period: ResolvedPeriodKey) {
   if (period === "30days") return "day";
   if (period === "3months") return "week";
   if (isLongHistoryPeriod(period)) return "quarter";
@@ -1001,7 +1112,7 @@ function nonConflictedCandidateRefs(
 
 function buildFlowChartRows(
   records: Transaction[],
-  period: PeriodKey,
+  period: ResolvedPeriodKey,
   currency: Currency,
   candidateFlowOverrides = new Map<string, TransactionFlow>(),
   metric: FlowChartMetric = "amount",
@@ -1214,16 +1325,24 @@ const quickFilterValues: TableQuickFilter[] = [
 function readTransactionScopeParams(): {
   wallet: string | null;
   quick: TableQuickFilter | null;
+  transactionIds: string[];
 } {
-  if (typeof window === "undefined") return { wallet: null, quick: null };
+  if (typeof window === "undefined") {
+    return { wallet: null, quick: null, transactionIds: [] };
+  }
   const params = new URLSearchParams(window.location.search);
   const wallet = params.get("wallet");
   const quick = params.get("quick");
+  const transactionIds = (params.get("txids") ?? "")
+    .split(",")
+    .map((id) => id.trim())
+    .filter(Boolean);
   return {
     wallet: wallet && wallet.trim() ? wallet : null,
     quick: quickFilterValues.includes(quick as TableQuickFilter)
       ? (quick as TableQuickFilter)
       : null,
+    transactionIds,
   };
 }
 
@@ -1353,6 +1472,7 @@ export {
   flowChartSegmentForFlow,
   flowChartSegmentFromDataKey,
   flowChartSegmentLabels,
+  flowChartSelectionDateWindow,
   flowChartSelectionLabel,
   flowColorForSegment,
   flowColors,
@@ -1372,6 +1492,7 @@ export {
   readTransactionDetailParams,
   readTransactionScopeParams,
   recordsForPeriod,
+  resolveAutoPeriodForRecords,
   removeAttachmentRecord,
   replaceAttachmentRecord,
   sortTransactionsByDateDesc,
@@ -1398,6 +1519,7 @@ export type {
   FlowChartSelection,
   JournalEventsData,
   PeriodKey,
+  ResolvedPeriodKey,
   SwapCandidate,
   TableQuickFilter,
 };

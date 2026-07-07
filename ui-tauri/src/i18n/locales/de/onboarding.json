@@ -246,7 +246,7 @@
   "ai": {
     "local": {
       "title": "Lokalen Endpunkt nutzen",
-      "description": "Standardmäßig Ollama auf diesem Rechner. Du kannst dies auf einen anderen lokalen OpenAI-kompatiblen Server richten."
+      "description": "Nutze Ollama, oMLX oder einen anderen lokalen OpenAI-kompatiblen Server auf diesem Rechner."
     },
     "remote": {
       "title": "Remote-Provider nutzen",
@@ -259,7 +259,7 @@
     "providerPrivacy": "Provider-Privatsphäre",
     "providerPrivacyDescription": "TEE bedeutet, dass der Provider einen Trusted-Execution-Pfad behauptet; Kassiber behandelt ihn dennoch als off-device.",
     "providerName": "Providername",
-    "providerNamePlaceholderLocal": "ollama",
+    "providerNamePlaceholderLocal": "ollama oder omlx",
     "providerNamePlaceholderRemote": "openai oder maple",
     "providerNameDescription": "Eine kurze Bezeichnung, die in den AI-Provider-Einstellungen angezeigt wird.",
     "baseUrl": "Basis-URL",
@@ -294,7 +294,7 @@
       "lead": "Der Assistent hilft, Transaktionen zu kategorisieren, Notizen zu entwerfen und Fragen zu deinen Büchern zu beantworten. Er ist optional und kann jederzeit in den Einstellungen geändert werden.",
       "local": {
         "title": "Lokaler Endpunkt",
-        "body": "Läuft gegen ein Modell auf diesem Rechner (standardmäßig Ollama). Prompts und Buchhaltungskontext bleiben on-device."
+        "body": "Läuft gegen ein Modell auf diesem Rechner, etwa Ollama oder oMLX. Prompts und Buchhaltungskontext bleiben on-device."
       },
       "remote": {
         "title": "Remote-Provider",

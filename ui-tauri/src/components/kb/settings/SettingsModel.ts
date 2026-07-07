@@ -237,6 +237,7 @@ export interface MaintenanceFreshnessSettings {
   active_rate_pair?: string | null;
   auto_sync_before_report_reads?: boolean;
   require_coarse_review?: boolean;
+  bitcoin_rail_carrying_value?: boolean;
   coarse_priced_count?: number;
   setting_key?: string;
 }
@@ -275,6 +276,7 @@ export interface AiSecretStorePolicy {
 
 export interface AiProviderRow {
   name: string;
+  display_name?: string | null;
   base_url: string;
   kind: "local" | "remote" | "tee";
   default_model?: string | null;
@@ -286,6 +288,10 @@ export interface AiProviderRow {
   };
   is_default: boolean;
   acknowledged_at?: string | null;
+}
+
+export function aiProviderDisplayName(row: Pick<AiProviderRow, "name" | "display_name">): string {
+  return row.display_name?.trim() || row.name;
 }
 
 export interface AiProvidersListData {
@@ -433,7 +439,7 @@ export function marketRateBackends(
 ): Backend[] {
   const selectedProvider = settings?.market_rate_provider ?? "coinbase-exchange";
   const autoMarketRatesEnabled = Boolean(
-    settings?.background_enabled && settings.source_classes?.market_rates,
+    settings?.source_classes?.market_rates,
   );
   const providers = settings?.market_rate_providers?.length
     ? settings.market_rate_providers

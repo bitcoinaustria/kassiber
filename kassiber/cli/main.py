@@ -83,6 +83,7 @@ from .handlers import (
     emit,
     get_journal_event,
     identify_wallet_owners,
+    import_exchange_api,
     import_into_wallet,
     inspect_transfer_audit,
     list_direct_swap_payouts,
@@ -132,13 +133,25 @@ from ..backup.cli import add_backup_parser, dispatch_backup
 from ..backends import preferred_explorer_base
 from ..envelope import write_text
 from ..errors import AppError
+from ..projects import (
+    create_project,
+    get_project,
+    list_projects,
+    load_catalog,
+    mark_project_opened,
+    refresh_project_metadata,
+    set_selected_project,
+)
 from ..log_ring import sanitize_traceback_text
+from ..secrets.migration import create_empty_encrypted_database
 from ..secrets.cli import add_secrets_parser, dispatch_secrets
 from ..secrets.cli_input import (
     add_secret_stdin_options,
     enforce_single_stdin_consumer,
     read_secret_from_args,
 )
+from ..secrets.prompt import read_passphrase_from_fd
+from ..secrets.sqlcipher import require_sqlcipher
 from ..tax_policy import supported_tax_countries
 from ..wallet_descriptors import MAX_DESCRIPTOR_GAP_LIMIT
 from .chat import run_chat_command
@@ -146,6 +159,7 @@ from .chat import run_chat_command
 
 _AI_PROVIDER_KINDS_LIST = AI_PROVIDER_KINDS
 _AI_PROVIDER_CLEARABLE_FIELDS = ("api_key", "default_model", "notes")
+_MIN_PROJECT_PASSPHRASE_CHARS = 12
 
 
 def _ai_provider_redacted(conn: sqlite3.Connection, provider: dict) -> dict:
@@ -238,6 +252,68 @@ def _add_workspace_profile_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--profile")
 
 
+def _project_payload(entry) -> dict[str, object]:
+    return {
+        "id": entry.id,
+        "name": entry.name,
+        "path": str(entry.root),
+        "data_root": str(entry.data_root),
+        "database": str(entry.database),
+        "encrypted": bool(entry.encrypted),
+        "last_opened_at": entry.last_opened_at,
+    }
+
+
+def cmd_projects_list(args: argparse.Namespace) -> dict[str, object]:
+    selected = getattr(args, "project", None) or load_catalog().get("selected_project_id")
+    projects = []
+    for entry in list_projects():
+        payload = _project_payload(entry)
+        payload["selected"] = entry.id == selected
+        projects.append(payload)
+    return {"selected_project_id": selected, "projects": projects}
+
+
+def cmd_projects_show(args: argparse.Namespace) -> dict[str, object]:
+    entry = get_project(args.project_ref)
+    return _project_payload(entry)
+
+
+def cmd_projects_create(args: argparse.Namespace) -> dict[str, object]:
+    passphrase = None
+    passphrase_fd = getattr(args, "new_passphrase_fd", None)
+    if passphrase_fd is not None:
+        require_sqlcipher()
+        passphrase = read_passphrase_from_fd(int(passphrase_fd))
+        if len(passphrase) < _MIN_PROJECT_PASSPHRASE_CHARS:
+            raise AppError(
+                f"passphrase must be at least {_MIN_PROJECT_PASSPHRASE_CHARS} characters long",
+                code="invalid_passphrase",
+                hint="Pick a long passphrase from a password manager.",
+                retryable=False,
+            )
+    entry = create_project(
+        args.name,
+        project_id=args.project_id,
+        root=args.path,
+        select=not args.no_select,
+        replace_existing=False,
+        allow_existing_database=False,
+    )
+    if passphrase is not None:
+        create_empty_encrypted_database(entry.database, passphrase)
+        if args.no_select:
+            entry = refresh_project_metadata(entry.id, data_root=entry.data_root)
+        else:
+            entry = mark_project_opened(entry.id, data_root=entry.data_root)
+    return _project_payload(entry)
+
+
+def cmd_projects_select(args: argparse.Namespace) -> dict[str, object]:
+    entry = set_selected_project(args.project_ref)
+    return _project_payload(entry)
+
+
 def _read_optional_text_file(file_path: str | None, label: str) -> str | None:
     if not file_path:
         return None
@@ -319,6 +395,7 @@ def _cli_build_lightning_snapshot(
     ref: str,
     *,
     window_days: int,
+    required_capability: core_lightning.LightningCapability = "node_snapshot",
     runtime_config: dict[str, object] | None = None,
     workspace_ref: str | None = None,
     profile_ref: str | None = None,
@@ -339,6 +416,17 @@ def _cli_build_lightning_snapshot(
             ),
         )
     backend = core_lightning.resolve_lightning_backend(conn, runtime_config, connection)
+    core_lightning.require_lightning_capability(
+        kind=kind,
+        adapter=adapter,
+        capability="node_snapshot",
+    )
+    if required_capability != "node_snapshot":
+        core_lightning.require_lightning_capability(
+            kind=kind,
+            adapter=adapter,
+            capability=required_capability,
+        )
     snapshot = adapter.fetch_node_snapshot(connection, backend, window_days=window_days)
     return connection, snapshot
 
@@ -356,6 +444,7 @@ def _cli_lightning_profitability_payload(
         conn,
         ref,
         window_days=window_days,
+        required_capability="routing_profitability",
         runtime_config=runtime_config,
         workspace_ref=workspace_ref,
         profile_ref=profile_ref,
@@ -366,7 +455,13 @@ def _cli_lightning_profitability_payload(
         connection_kind=str(connection.get("kind") or ""),
         snapshot=snapshot,
     )
-    return report.to_envelope_payload()
+    payload = report.to_envelope_payload()
+    payload["connection"]["lightningCapabilities"] = (
+        core_lightning.registered_capabilities(
+            str(connection.get("kind") or "")
+        ).to_wire_dict()
+    )
+    return payload
 
 
 def _cli_export_lightning_profitability_csv(
@@ -383,6 +478,7 @@ def _cli_export_lightning_profitability_csv(
         conn,
         ref,
         window_days=window_days,
+        required_capability="routing_profitability",
         runtime_config=runtime_config,
         workspace_ref=workspace_ref,
         profile_ref=profile_ref,
@@ -518,7 +614,19 @@ def build_parser() -> argparse.ArgumentParser:
         prog=APP_NAME,
         description="Open-source, local-first Bitcoin accounting with wallet buckets and multi-wallet support. CLI surface of the Kassiber suite; a desktop GUI is also available.",
     )
-    parser.add_argument("--data-root", default=DEFAULT_DATA_ROOT, help="Data directory for the local SQLite store")
+    parser.add_argument(
+        "--project",
+        default=None,
+        help="Project/book-set id from the global Kassiber project catalog",
+    )
+    parser.add_argument(
+        "--data-root",
+        default=None,
+        help=(
+            "Explicit project data directory for the local SQLite store; "
+            "bypasses the selected project catalog entry"
+        ),
+    )
     parser.add_argument(
         "--env-file",
         default=None,
@@ -565,6 +673,26 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("daemon")
     sub.add_parser("init")
     sub.add_parser("status")
+
+    projects = sub.add_parser("projects", help="List, create, and select encrypted project containers")
+    projects_sub = projects.add_subparsers(dest="projects_command", required=True)
+    projects_sub.add_parser("list")
+    projects_show = projects_sub.add_parser("show")
+    projects_show.add_argument("project_ref")
+    projects_create = projects_sub.add_parser("create")
+    projects_create.add_argument("name")
+    projects_create.add_argument("--project-id", default=None)
+    projects_create.add_argument("--path", default=None, help="Project root path; defaults to ~/.kassiber/projects/<id>")
+    projects_create.add_argument("--no-select", action="store_true", help="Create without making it the selected project")
+    projects_create.add_argument(
+        "--new-passphrase-fd",
+        type=int,
+        default=None,
+        metavar="FD",
+        help="Create the project database encrypted with a passphrase read from this fd",
+    )
+    projects_select = projects_sub.add_parser("select")
+    projects_select.add_argument("project_ref")
 
     chat = sub.add_parser(
         "chat",
@@ -876,6 +1004,13 @@ def build_parser() -> argparse.ArgumentParser:
     )
     profiles_create.add_argument("--tax-long-term-days", type=int, default=DEFAULT_LONG_TERM_DAYS)
     profiles_create.add_argument("--gains-algorithm", choices=list(RP2_ACCOUNTING_METHODS))
+    profiles_create.add_argument(
+        "--bitcoin-rail-carrying-value",
+        dest="bitcoin_rail_carrying_value",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Default BTC/LBTC rail-change suggestions to carrying-value treatment (default: on).",
+    )
 
     profiles_get = profiles_sub.add_parser("get")
     profiles_get.add_argument("--workspace")
@@ -892,6 +1027,13 @@ def build_parser() -> argparse.ArgumentParser:
     )
     profiles_set.add_argument("--tax-long-term-days", type=int)
     profiles_set.add_argument("--gains-algorithm", choices=list(RP2_ACCOUNTING_METHODS))
+    profiles_set.add_argument(
+        "--bitcoin-rail-carrying-value",
+        dest="bitcoin_rail_carrying_value",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="Default BTC/LBTC rail-change suggestions to carrying-value treatment (default: on).",
+    )
     profiles_set.add_argument(
         "--require-coarse-review",
         dest="require_coarse_review",
@@ -1000,7 +1142,26 @@ def build_parser() -> argparse.ArgumentParser:
     wallets_create.add_argument("--config")
     wallets_create.add_argument("--config-file")
     wallets_create.add_argument("--source-file")
-    wallets_create.add_argument("--source-format", choices=["json", "csv", "btcpay_json", "btcpay_csv", "phoenix_csv", "river_csv", "bullbitcoin_csv", "bullbitcoin_wallet_csv", "coinfinity_csv", "21bitcoin_csv", "pocketbitcoin_csv", "strike_csv", "wasabi_bundle"])
+    wallets_create.add_argument(
+        "--source-format",
+        choices=[
+            "json",
+            "csv",
+            "btcpay_json",
+            "btcpay_csv",
+            "phoenix_csv",
+            "river_csv",
+            "bullbitcoin_csv",
+            "bullbitcoin_wallet_csv",
+            "coinfinity_csv",
+            "21bitcoin_csv",
+            "pocketbitcoin_csv",
+            "strike_csv",
+            "ledgerlive_csv",
+            "binance_supplemental_csv",
+            "wasabi_bundle",
+        ],
+    )
 
     wallets_sub.add_parser("kinds")
 
@@ -1112,6 +1273,32 @@ def build_parser() -> argparse.ArgumentParser:
     wallets_import_strike.add_argument("--profile")
     wallets_import_strike.add_argument("--wallet")
     wallets_import_strike.add_argument("--file", required=True)
+    wallets_import_ledgerlive = wallets_sub.add_parser("import-ledger-live")
+    wallets_import_ledgerlive.add_argument("--workspace")
+    wallets_import_ledgerlive.add_argument("--profile")
+    wallets_import_ledgerlive.add_argument("--wallet", required=True)
+    wallets_import_ledgerlive.add_argument("--file", required=True)
+    wallets_import_binance_supplemental = wallets_sub.add_parser("import-binance-supplemental")
+    wallets_import_binance_supplemental.add_argument("--workspace")
+    wallets_import_binance_supplemental.add_argument("--profile")
+    wallets_import_binance_supplemental.add_argument("--wallet")
+    wallets_import_binance_supplemental.add_argument("--file", required=True)
+    wallets_import_binance_supplemental.add_argument("--mode", choices=["relevant", "full"], default="full")
+    wallets_sync_kraken = wallets_sub.add_parser("sync-kraken")
+    wallets_sync_kraken.add_argument("--workspace")
+    wallets_sync_kraken.add_argument("--profile")
+    wallets_sync_kraken.add_argument("--backend", required=True)
+    wallets_sync_kraken.add_argument("--wallet")
+    wallets_sync_coinbase = wallets_sub.add_parser("sync-coinbase")
+    wallets_sync_coinbase.add_argument("--workspace")
+    wallets_sync_coinbase.add_argument("--profile")
+    wallets_sync_coinbase.add_argument("--backend", required=True)
+    wallets_sync_coinbase.add_argument("--wallet")
+    wallets_sync_binance = wallets_sub.add_parser("sync-binance")
+    wallets_sync_binance.add_argument("--workspace")
+    wallets_sync_binance.add_argument("--profile")
+    wallets_sync_binance.add_argument("--backend", required=True)
+    wallets_sync_binance.add_argument("--wallet")
     wallets_import_ledger = wallets_sub.add_parser(
         "import-ledger",
         help="Import a filled-in generic ledger (.xlsx or CSV/TSV) into a wallet",
@@ -1260,8 +1447,37 @@ def build_parser() -> argparse.ArgumentParser:
     tx_list.add_argument("--wallet")
     tx_list.add_argument("--direction", choices=("inbound", "outbound"))
     tx_list.add_argument("--asset")
+    tx_list.add_argument(
+        "--txid",
+        "--txids",
+        action="append",
+        dest="txids",
+        help="Internal id, external txid, or public explorer id to filter; repeat or comma-separate",
+    )
     tx_list.add_argument("--start", help="RFC3339 lower bound (inclusive) on occurred_at")
     tx_list.add_argument("--end", help="RFC3339 upper bound (inclusive) on occurred_at")
+    tx_list.add_argument(
+        "--period",
+        choices=("30days", "3months", "6months", "ytd", "1year", "5years", "10years", "15years", "all"),
+        help="Relative occurred_at window",
+    )
+    tx_list.add_argument("--status", choices=("completed", "pending", "failed", "review"))
+    tx_list.add_argument(
+        "--flow",
+        choices=("incoming", "outgoing", "transfer", "swap", "layer-transition"),
+    )
+    tx_list.add_argument(
+        "--payment-method",
+        choices=("On-chain", "Exchange", "Lightning", "Liquid"),
+        help="Payment method / network family filter",
+    )
+    tx_list.add_argument("--network", help="Wallet network/chain/payment method filter")
+    tx_list.add_argument("--with-fees", action="store_true", help="Only include transactions with non-zero fees")
+    tx_list.add_argument(
+        "--quick",
+        choices=("external_flow", "review_queue", "no_explorer_id", "missing_price", "failed_import"),
+        help="Desktop quick filter",
+    )
     tx_list.add_argument("--cursor", help="Opaque pagination cursor from a previous response")
     tx_list.add_argument(
         "--sort",
@@ -1357,6 +1573,15 @@ def build_parser() -> argparse.ArgumentParser:
     bip329_import.add_argument("--workspace")
     bip329_import.add_argument("--profile")
     bip329_import.add_argument("--file", required=True)
+    bip329_import.add_argument(
+        "--apply-ambiguous",
+        action="store_true",
+        help="Also project ambiguous transaction-label matches into Kassiber tags.",
+    )
+    bip329_preview = bip329_sub.add_parser("preview")
+    bip329_preview.add_argument("--workspace")
+    bip329_preview.add_argument("--profile")
+    bip329_preview.add_argument("--file", required=True)
     bip329_list = bip329_sub.add_parser("list")
     bip329_list.add_argument("--workspace")
     bip329_list.add_argument("--profile")
@@ -1366,6 +1591,13 @@ def build_parser() -> argparse.ArgumentParser:
     bip329_export.add_argument("--workspace")
     bip329_export.add_argument("--profile")
     bip329_export.add_argument("--file", required=True)
+    bip329_export.add_argument("--wallet")
+    bip329_export.add_argument(
+        "--mode",
+        choices=sorted(core_metadata.BIP329_EXPORT_MODES),
+        default="stored",
+        help="Export stored BIP329 rows, synthesized Kassiber labels, or both.",
+    )
     exclude = meta_sub.add_parser("exclude")
     exclude.add_argument("--workspace")
     exclude.add_argument("--profile")
@@ -1620,7 +1852,7 @@ def build_parser() -> argparse.ArgumentParser:
     transfers_pair.add_argument("--tx-out", required=True, dest="tx_out", help="Outbound transaction id or external_id")
     transfers_pair.add_argument("--tx-in", required=True, dest="tx_in", help="Inbound transaction id or external_id")
     transfers_pair.add_argument("--kind", choices=list(TRANSFER_PAIR_KINDS), default="manual")
-    transfers_pair.add_argument("--policy", choices=list(TRANSFER_PAIR_POLICIES), default="carrying-value")
+    transfers_pair.add_argument("--policy", choices=list(TRANSFER_PAIR_POLICIES))
     transfers_pair.add_argument("--note", dest="note")
     transfers_pair.add_argument(
         "--out-amount",
@@ -1664,7 +1896,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Portion of the outbound (BTC) paid through the direct payout; "
         "the remainder can still resolve as a same-asset self-transfer.",
     )
-    transfers_payouts_create.add_argument("--policy", choices=list(TRANSFER_PAIR_POLICIES), default="carrying-value")
+    transfers_payouts_create.add_argument("--policy", choices=list(TRANSFER_PAIR_POLICIES))
     transfers_payouts_create.add_argument("--note", dest="note")
     transfers_payouts_delete = transfers_payouts_sub.add_parser("delete")
     transfers_payouts_delete.add_argument("--workspace")
@@ -1764,9 +1996,7 @@ def build_parser() -> argparse.ArgumentParser:
         "min_confidence)",
     )
     tr_rules_create.add_argument("--kind", choices=list(TRANSFER_PAIR_KINDS), default="manual")
-    tr_rules_create.add_argument(
-        "--policy", choices=list(TRANSFER_PAIR_POLICIES), default="carrying-value"
-    )
+    tr_rules_create.add_argument("--policy", choices=list(TRANSFER_PAIR_POLICIES))
     tr_rules_create.add_argument("--disabled", action="store_true")
     tr_rules_delete = transfers_rules_sub.add_parser("delete")
     tr_rules_delete.add_argument("--workspace")
@@ -2047,12 +2277,18 @@ def build_parser() -> argparse.ArgumentParser:
 
     reports = sub.add_parser("reports")
     reports_sub = reports.add_subparsers(dest="reports_command", required=True)
-    for report_name in ["summary", "tax-summary", "balance-sheet", "portfolio-summary", "capital-gains", "journal-entries"]:
+    for report_name in ["summary", "tax-summary", "balance-sheet", "portfolio-summary", "capital-gains", "journal-entries", "privacy-hygiene", "privacy-mirror"]:
         report = reports_sub.add_parser(report_name)
         report.add_argument("--workspace")
         report.add_argument("--profile")
         if report_name == "summary":
             report.add_argument("--wallet")
+    psbt_privacy = reports_sub.add_parser("psbt-privacy")
+    psbt_privacy.add_argument("--workspace")
+    psbt_privacy.add_argument("--profile")
+    psbt_source = psbt_privacy.add_mutually_exclusive_group(required=True)
+    psbt_source.add_argument("--psbt", help="Base64 PSBT text to analyze locally.")
+    psbt_source.add_argument("--psbt-file", help="Local file containing base64 PSBT text.")
 
     for report_name in ("austrian-e1kv", "austrian-tax-summary"):
         _add_austrian_e1kv_report_args(reports_sub.add_parser(report_name))
@@ -2327,6 +2563,7 @@ def build_parser() -> argparse.ArgumentParser:
     ai_providers_create.add_argument("--api-key", help="Deprecated argv bearer token shim; prefer --api-key-stdin or --api-key-fd")
     add_secret_stdin_options(ai_providers_create, "api-key", label="AI provider API key")
     ai_providers_create.add_argument("--default-model")
+    ai_providers_create.add_argument("--display-name")
     ai_providers_create.add_argument(
         "--kind",
         choices=list(_AI_PROVIDER_KINDS_LIST),
@@ -2346,6 +2583,7 @@ def build_parser() -> argparse.ArgumentParser:
     ai_providers_update.add_argument("--api-key", help="Deprecated argv bearer token shim; prefer --api-key-stdin or --api-key-fd")
     add_secret_stdin_options(ai_providers_update, "api-key", label="AI provider API key")
     ai_providers_update.add_argument("--default-model")
+    ai_providers_update.add_argument("--display-name")
     ai_providers_update.add_argument("--kind", choices=list(_AI_PROVIDER_KINDS_LIST))
     ai_providers_update.add_argument("--notes")
     ai_providers_update.add_argument(
@@ -2385,6 +2623,20 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
         return cmd_init(conn, args)
     if args.command == "status":
         return cmd_status(conn, args)
+    if args.command == "projects":
+        if args.projects_command == "list":
+            return emit(args, cmd_projects_list(args), kind="projects.list")
+        if args.projects_command == "show":
+            return emit(args, cmd_projects_show(args), kind="projects.show")
+        if args.projects_command == "create":
+            return emit(args, cmd_projects_create(args), kind="projects.create")
+        if args.projects_command == "select":
+            return emit(args, cmd_projects_select(args), kind="projects.select")
+        raise AppError(
+            f"unknown projects command: {args.projects_command!r}",
+            code="unknown_command",
+            retryable=False,
+        )
     if args.command == "secrets":
         return emit(args, dispatch_secrets(args))
     if args.command == "backup":
@@ -2475,6 +2727,7 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                         args.gains_algorithm,
                         args.tax_country,
                         args.tax_long_term_days,
+                        bitcoin_rail_carrying_value=args.bitcoin_rail_carrying_value,
                     )
                 ),
             )
@@ -2491,12 +2744,13 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                 "tax_long_term_days": args.tax_long_term_days,
                 "gains_algorithm": args.gains_algorithm,
                 "require_coarse_review": args.require_coarse_review,
+                "bitcoin_rail_carrying_value": args.bitcoin_rail_carrying_value,
             }
             if all(v is None for v in updates.values()):
                 raise AppError(
                     "profiles set requires at least one field to update",
                     code="validation",
-                    hint="Pass one or more of --label, --fiat-currency, --tax-country, --tax-long-term-days, --gains-algorithm, --require-coarse-review",
+                    hint="Pass one or more of --label, --fiat-currency, --tax-country, --tax-long-term-days, --gains-algorithm, --require-coarse-review, --bitcoin-rail-carrying-value",
                 )
             return emit(
                 args,
@@ -2746,6 +3000,43 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                     "full",
                 ),
             )
+        if args.wallets_command == "import-ledger-live":
+            return emit(
+                args,
+                import_into_wallet(
+                    conn,
+                    args.workspace,
+                    args.profile,
+                    args.wallet,
+                    args.file,
+                    "ledgerlive_csv",
+                ),
+            )
+        if args.wallets_command == "import-binance-supplemental":
+            return emit(
+                args,
+                import_into_wallet(
+                    conn,
+                    args.workspace,
+                    args.profile,
+                    args.wallet,
+                    args.file,
+                    "binance_supplemental_csv",
+                    args.mode,
+                ),
+            )
+        if args.wallets_command in {"sync-kraken", "sync-coinbase", "sync-binance"}:
+            expected_kind = args.wallets_command.removeprefix("sync-")
+            payload = import_exchange_api(
+                conn,
+                runtime_config,
+                args.workspace,
+                args.profile,
+                args.backend,
+                args.wallet,
+                expected_backend_kind=expected_kind,
+            )
+            return emit(args, payload)
         if args.wallets_command == "import-ledger":
             if args.dry_run:
                 return emit(
@@ -2870,6 +3161,14 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                 asset=args.asset,
                 start=args.start,
                 end=args.end,
+                txids=args.txids,
+                period=args.period,
+                status=args.status,
+                flow=args.flow,
+                payment_method=args.payment_method,
+                network=args.network,
+                with_fees=args.with_fees,
+                quick=args.quick,
                 cursor=args.cursor,
                 sort=args.sort,
                 order=args.order,
@@ -3039,7 +3338,23 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                 return emit(
                     args,
                     core_metadata.import_bip329_labels(
-                        conn, args.workspace, args.profile, args.file, metadata_hooks
+                        conn,
+                        args.workspace,
+                        args.profile,
+                        args.file,
+                        metadata_hooks,
+                        apply_ambiguous=args.apply_ambiguous,
+                    ),
+                )
+            if args.bip329_command == "preview":
+                return emit(
+                    args,
+                    core_metadata.preview_bip329_import(
+                        conn,
+                        args.workspace,
+                        args.profile,
+                        args.file,
+                        metadata_hooks,
                     ),
                 )
             if args.bip329_command == "list":
@@ -3060,7 +3375,13 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                 return emit(
                     args,
                     core_metadata.export_bip329_labels(
-                        conn, args.workspace, args.profile, args.file, metadata_hooks
+                        conn,
+                        args.workspace,
+                        args.profile,
+                        args.file,
+                        metadata_hooks,
+                        wallet_ref=args.wallet,
+                        mode=args.mode,
                     ),
                 )
         if args.metadata_command == "exclude":
@@ -3973,6 +4294,52 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                     conn, args.workspace, args.profile, report_hooks
                 ),
             )
+        if args.reports_command == "privacy-hygiene":
+            payload = core_reports.report_privacy_hygiene(
+                conn,
+                args.workspace,
+                args.profile,
+                report_hooks,
+            )
+            if args.format in {"table", "plain", "csv"}:
+                return emit(
+                    args,
+                    core_reports.privacy_hygiene_table_rows(payload),
+                    kind="reports.privacy-hygiene",
+                )
+            return emit(args, payload)
+        if args.reports_command == "privacy-mirror":
+            payload = core_reports.report_privacy_mirror(
+                conn,
+                args.workspace,
+                args.profile,
+                report_hooks,
+            )
+            if args.format in {"table", "plain", "csv"}:
+                return emit(
+                    args,
+                    core_reports.privacy_mirror_table_rows(payload),
+                    kind="reports.privacy-mirror",
+                )
+            return emit(args, payload, kind="reports.privacy-mirror")
+        if args.reports_command == "psbt-privacy":
+            psbt_text = args.psbt
+            if psbt_text is None:
+                psbt_text = _read_optional_text_file(args.psbt_file, "PSBT")
+            payload = core_reports.report_psbt_privacy(
+                conn,
+                args.workspace,
+                args.profile,
+                report_hooks,
+                psbt_text=psbt_text or "",
+            )
+            if args.format in {"table", "plain", "csv"}:
+                return emit(
+                    args,
+                    core_reports.psbt_privacy_table_rows(payload),
+                    kind="reports.psbt-privacy",
+                )
+            return emit(args, payload, kind="reports.psbt-privacy")
         if args.reports_command == "balance-history":
             return emit(
                 args,
@@ -4287,6 +4654,7 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                     conn,
                     args.name,
                     args.base_url,
+                    display_name=args.display_name,
                     api_key=api_key,
                     default_model=args.default_model,
                     kind=args.kind,
@@ -4299,6 +4667,7 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                 api_key = read_secret_from_args(args, "api-key", legacy_attr="api_key")
                 updates = {
                     "base_url": args.base_url,
+                    "display_name": args.display_name,
                     "api_key": api_key,
                     "default_model": args.default_model,
                     "kind": args.kind,
@@ -4342,6 +4711,8 @@ def command_needs_db(args: argparse.Namespace) -> bool:
     if args.command == "secrets":
         return False
     if args.command == "backup":
+        return False
+    if args.command == "projects":
         return False
     return True
 
@@ -4398,6 +4769,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 1
 
     try:
+        if args.command == "projects":
+            dispatch(None, args)
+            return 0
         runtime = bootstrap_runtime(
             args,
             needs_db=command_needs_db(args),

@@ -1,10 +1,19 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
+import { ShieldAlert } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { Badge } from "@/components/ui/badge";
 import { TabsContent } from "@/components/ui/tabs";
 import { useDaemon } from "@/daemon/client";
+import {
+  findPrivacyTransactionRow,
+  formatPrivacyInt,
+  privacyEvidenceTone,
+  shortPrivacyId,
+  type EvidenceLevel,
+  type PrivacyMirrorPayload,
+} from "@/lib/privacyMirror";
 import { cn } from "@/lib/utils";
 import { useUiStore } from "@/store/ui";
 
@@ -14,7 +23,6 @@ import {
   LedgerRow,
   networkLabel,
 } from "./TransactionDetailSheetParts";
-import { TransactionLedgerSection } from "./TransactionLedgerSection";
 import { CommercialProvenancePanel } from "./TransactionDetailCommercialPanel";
 import {
   blurClass,
@@ -31,6 +39,10 @@ import {
   type TransactionSwapRoute,
   type TransactionSwapRouteLegKey,
 } from "./TransactionGraphTab";
+import {
+  preloadableSwapLegGraphLookupArgs,
+  transactionGraphLookupReferenceArgs,
+} from "./TransactionGraphLookup";
 
 function graphWithPairFallbackRoute(
   graphData: TransactionGraphPayload | undefined,
@@ -127,62 +139,88 @@ function routeNetwork(asset?: string | null, wallet?: string | null) {
   return asset || undefined;
 }
 
-function normalizedReferenceSet(references: Array<string | null | undefined>) {
-  return new Set(
-    references
-      .map((reference) => reference?.trim().toLowerCase())
-      .filter((reference): reference is string => Boolean(reference)),
+function PrivacyEvidencePill({ level }: { level?: EvidenceLevel }) {
+  const { t } = useTranslation("privacyMirror");
+  const key = level || "unknown";
+  const label =
+    key === "exact"
+      ? t("evidence.exact")
+      : key === "derived"
+        ? t("evidence.derived")
+        : key === "unknown"
+          ? t("evidence.unknown")
+          : key;
+  return (
+    <Badge variant="outline" className={cn("rounded-md", privacyEvidenceTone(key))}>
+      {label}
+    </Badge>
   );
 }
 
-function swapRouteLegReference(
-  route: TransactionSwapRoute | null | undefined,
-  leg: TransactionSwapRouteLegKey,
-) {
-  const routeLeg = route?.[leg];
-  return routeLeg?.id || routeLeg?.txid || routeLeg?.externalId || null;
-}
+function TransactionPrivacyMirrorPanel({
+  payload,
+  loading,
+  errorMessage,
+  transactionRefs,
+}: {
+  payload?: PrivacyMirrorPayload;
+  loading: boolean;
+  errorMessage: string | null;
+  transactionRefs: Array<string | null | undefined>;
+}) {
+  const { t } = useTranslation("privacyMirror");
+  const row = findPrivacyTransactionRow(payload, transactionRefs);
+  const tellKinds = row?.tell_kinds ?? [];
+  const degraded = Boolean(errorMessage) || (!loading && !row);
 
-export function preloadableSwapLegGraphReference(
-  route: TransactionSwapRoute | null | undefined,
-  leg: TransactionSwapRouteLegKey,
-  currentReferences: Array<string | null | undefined>,
-) {
-  const reference = swapRouteLegReference(route, leg)?.trim();
-  if (!reference) return null;
-  if (normalizedReferenceSet(currentReferences).has(reference.toLowerCase())) {
-    return null;
-  }
-  return reference;
-}
-
-function looksLikeTxid(value: string | null | undefined) {
-  return /^[0-9a-f]{64}$/i.test(value?.trim() ?? "");
-}
-
-function hasPublicGraphLookupReference(
-  transaction: TransactionDetailTabContext["transaction"] | null | undefined,
-) {
-  if (!transaction || !looksLikeTxid(transaction.explorerId)) return false;
-  return transaction.paymentMethod === "On-chain" || transaction.paymentMethod === "Liquid";
-}
-
-export function transactionGraphLookupArgs(
-  transaction: TransactionDetailTabContext["transaction"] | null | undefined,
-) {
-  return {
-    transaction: transaction?.id ?? "",
-    allowPublicLookup: hasPublicGraphLookupReference(transaction),
-  };
-}
-
-export function transactionGraphLookupReferenceArgs(
-  transactionRef: string | null | undefined,
-) {
-  return {
-    transaction: transactionRef ?? "",
-    allowPublicLookup: false,
-  };
+  return (
+    <div className="overflow-hidden rounded-md border" data-testid="transaction-privacy-mirror-panel">
+      <div className="flex items-center justify-between gap-3 border-b bg-muted px-3 py-1.5">
+        <div className="flex min-w-0 items-center gap-2">
+          <ShieldAlert className="size-4 text-amber-600" aria-hidden="true" />
+          <span className="truncate text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+            {t("detail.transactionTitle")}
+          </span>
+        </div>
+        <PrivacyEvidencePill level={row?.evidence_level ?? (degraded ? "unknown" : "derived")} />
+      </div>
+      <div className="grid gap-3 p-3 sm:grid-cols-3">
+        <div>
+          <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+            {t("detail.transactionTells")}
+          </p>
+          <p className="font-mono text-lg tabular-nums">
+            {loading && !row ? "..." : formatPrivacyInt(row?.tell_count)}
+          </p>
+        </div>
+        <div>
+          <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+            {t("detail.transactionPenalties")}
+          </p>
+          <p className="font-mono text-lg tabular-nums">
+            {loading && !row ? "..." : formatPrivacyInt(row?.wallet_penalty_count)}
+          </p>
+        </div>
+        <div className="min-w-0">
+          <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+            {t("detail.transactionKinds")}
+          </p>
+          <p className="truncate text-sm">
+            {tellKinds.length ? tellKinds.join(", ") : t("detail.none")}
+          </p>
+        </div>
+      </div>
+      <div className="border-t px-3 py-2 text-xs text-muted-foreground">
+        {errorMessage
+          ? t("detail.queryError", { message: errorMessage })
+          : row
+            ? t("detail.transactionMatched", { id: shortPrivacyId(row.txid) })
+            : loading
+              ? t("detail.loading")
+              : t("detail.degraded")}
+      </div>
+    </div>
+  );
 }
 
 export function TransactionDetailsTab({ ctx }: { ctx: TransactionDetailTabContext }) {
@@ -233,24 +271,31 @@ export function TransactionDetailsTab({ ctx }: { ctx: TransactionDetailTabContex
       transaction.txnId,
     ],
   );
-  const swapOutTransactionRef = useMemo(
-    () => preloadableSwapLegGraphReference(swapRoute, "out", currentGraphReferences),
+  const swapOutGraphArgs = useMemo(
+    () => preloadableSwapLegGraphLookupArgs(swapRoute, "out", currentGraphReferences),
     [currentGraphReferences, swapRoute],
   );
-  const swapInTransactionRef = useMemo(
-    () => preloadableSwapLegGraphReference(swapRoute, "in", currentGraphReferences),
+  const swapInGraphArgs = useMemo(
+    () => preloadableSwapLegGraphLookupArgs(swapRoute, "in", currentGraphReferences),
     [currentGraphReferences, swapRoute],
   );
   const swapOutGraphQuery = useDaemon<TransactionGraphPayload>(
     "ui.transactions.graph",
-    transactionGraphLookupReferenceArgs(swapOutTransactionRef),
-    { enabled: Boolean(swapOutTransactionRef) },
+    transactionGraphLookupReferenceArgs(
+      swapOutGraphArgs.transaction,
+      swapOutGraphArgs.allowPublicLookup,
+    ),
+    { enabled: Boolean(swapOutGraphArgs.transaction) },
   );
   const swapInGraphQuery = useDaemon<TransactionGraphPayload>(
     "ui.transactions.graph",
-    transactionGraphLookupReferenceArgs(swapInTransactionRef),
-    { enabled: Boolean(swapInTransactionRef) },
+    transactionGraphLookupReferenceArgs(
+      swapInGraphArgs.transaction,
+      swapInGraphArgs.allowPublicLookup,
+    ),
+    { enabled: Boolean(swapInGraphArgs.transaction) },
   );
+  const privacyMirrorQuery = useDaemon<PrivacyMirrorPayload>("ui.reports.privacy_mirror");
   const activeSwapGraphQuery =
     activeSwapLeg === "out"
       ? swapOutGraphQuery
@@ -276,9 +321,9 @@ export function TransactionDetailsTab({ ctx }: { ctx: TransactionDetailTabContex
   };
   const activeSwapTransactionRef =
     activeSwapLeg === "out"
-      ? swapOutTransactionRef
+      ? swapOutGraphArgs.transaction
       : activeSwapLeg === "in"
-        ? swapInTransactionRef
+        ? swapInGraphArgs.transaction
         : null;
   const activeGraphData =
     swapRoute && activeSwapLeg && activeSwapTransactionRef
@@ -296,6 +341,8 @@ export function TransactionDetailsTab({ ctx }: { ctx: TransactionDetailTabContex
         ? activeSwapGraphQuery.error.message
         : null
       : graphError;
+  const privacyMirrorError =
+    privacyMirrorQuery.error instanceof Error ? privacyMirrorQuery.error.message : null;
   const graphTx = activeGraphData?.transaction;
   const graphNetworkFeeBtc =
     typeof activeGraphData?.fee?.valueBtc === "number"
@@ -362,7 +409,6 @@ export function TransactionDetailsTab({ ctx }: { ctx: TransactionDetailTabContex
                         hint={t("details.priceAtTimeHint")}
                       />
                     </div>
-                    <TransactionLedgerSection ctx={ctx} />
                     <div className="grid gap-3 lg:grid-cols-2">
                       <div className="overflow-hidden rounded-md border">
                         <div className="border-b bg-muted px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
@@ -494,6 +540,12 @@ export function TransactionDetailsTab({ ctx }: { ctx: TransactionDetailTabContex
                         />
                       </div>
                     </div>
+                    <TransactionPrivacyMirrorPanel
+                      payload={privacyMirrorQuery.data?.data}
+                      loading={privacyMirrorQuery.isLoading}
+                      errorMessage={privacyMirrorError}
+                      transactionRefs={currentGraphReferences}
+                    />
                     {technicalRows.length ? (
                       <div className="overflow-hidden rounded-md border">
                         <div className="border-b bg-muted px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">

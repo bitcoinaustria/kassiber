@@ -205,9 +205,6 @@ class RegtestHarnessTest(unittest.TestCase):
                 "liquid_operations",
                 "liquid_treasury_2024",
                 "liquid_live_sync",
-                "boltz_v2_btc_metadata",
-                "boltz_v2_lightning_metadata",
-                "boltz_v2_liquid_metadata",
             },
         )
         liquid_wallets = {wallet["key"] for wallet in scenario["wallets"] if wallet.get("chain") == "liquid"}
@@ -218,7 +215,6 @@ class RegtestHarnessTest(unittest.TestCase):
                 "liquid_operations",
                 "liquid_treasury_2024",
                 "liquid_live_sync",
-                "boltz_v2_liquid_metadata",
             },
         )
         self.assertEqual(
@@ -259,15 +255,7 @@ class RegtestHarnessTest(unittest.TestCase):
             },
             {("chain-swap", "/v2/swap/chain", "BTC", "L-BTC", "chain-swap")},
         )
-        boltz_v2_swaps = scenario["boltz_v2_metadata_swaps"]
-        self.assertEqual(
-            {(swap["flow"], swap["pair_kind"], swap["pair_policy"]) for swap in boltz_v2_swaps},
-            {
-                ("chain", "chain-swap", "taxable"),
-                ("reverse-submarine", "reverse-submarine-swap", "taxable"),
-                ("refund", "swap-refund", "carrying-value"),
-            },
-        )
+        self.assertNotIn("boltz_v2_metadata_swaps", scenario)
         self.assertEqual(
             scenario["deprecated_wallets"],
             ["treasury", "merchant", "cold", "liquid_treasury"],
@@ -313,11 +301,11 @@ class RegtestHarnessTest(unittest.TestCase):
         self.assertTrue(any(amount < Decimal("0.00001") for amount in dust_amounts))
         pending = scenario["pending_operations"]
         self.assertEqual([op["kind"] for op in pending], ["external_receipt"])
-        self.assertEqual(scenario["expected"]["wallets"], 16)
+        self.assertEqual(scenario["expected"]["wallets"], 13)
         self.assertEqual(scenario["expected"]["deprecated_wallets"], 4)
         self.assertEqual(scenario["expected"]["assets"], ["BTC", "LBTC"])
-        self.assertGreaterEqual(scenario["expected"]["min_transactions"], 847)
-        self.assertGreaterEqual(scenario["expected"]["min_active_transactions"], 842)
+        self.assertGreaterEqual(scenario["expected"]["min_transactions"], 840)
+        self.assertGreaterEqual(scenario["expected"]["min_active_transactions"], 835)
         self.assertEqual(scenario["expected"]["pending_transactions"], 1)
         base_time = datetime.fromisoformat(scenario["base_time"].replace("Z", "+00:00"))
         stress = scenario["stress"]
@@ -340,20 +328,23 @@ class RegtestHarnessTest(unittest.TestCase):
         # Deterministic amount/fee variation keeps the multi-year ledger from
         # looking like a spreadsheet of identical round numbers.
         self.assertGreaterEqual(int(stress["variation_bp"]), 1000)
+        miner_wallet = next(wallet for wallet in scenario["wallets"] if wallet["key"] == "miner")
+        self.assertEqual(miner_wallet["initial_btc"], "0.00025000")
         mining_events = stress["mining_events"]
-        self.assertEqual([event["role"] for event in mining_events], ["miner", "miner"])
+        self.assertEqual([event["role"] for event in mining_events], ["treasury", "treasury"])
         for event in mining_events:
             # Coinbase rewards must have >= 100 blocks left to mature before sync.
             self.assertLessEqual(int(event["cycle"]), stress["cycles"] - 35)
-        liquid_rows = sum(len(rows) for rows in scenario["liquid_ledger"]["wallets"].values())
-        self.assertGreaterEqual(liquid_rows, 9)
-        self.assertEqual(len(scenario["liquid_ledger"]["transfer_pairs"]), 1)
         liquid_live_wallets = [
             wallet for wallet in scenario["wallets"]
             if wallet.get("chain") == "liquid" and wallet.get("kind") == "descriptor"
         ]
-        self.assertEqual([wallet["key"] for wallet in liquid_live_wallets], ["liquid_live_sync"])
-        self.assertGreater(Decimal(liquid_live_wallets[0]["live_receipt_btc"]), Decimal("0"))
+        self.assertEqual(
+            {wallet["key"] for wallet in liquid_live_wallets},
+            {"liquid_treasury", "liquid_operations", "liquid_live_sync", "liquid_treasury_2024"},
+        )
+        self.assertTrue(all(Decimal(wallet["live_receipt_btc"]) > 0 for wallet in liquid_live_wallets))
+        self.assertNotIn("liquid_ledger", scenario)
         self.assertEqual(scenario["pricing"]["source"], "kraken-bundled")
         self.assertEqual(scenario["pricing"]["live_source"], "mempool")
         self.assertEqual(scenario["expected"]["pricing_source"], "kraken-csv")
@@ -363,7 +354,7 @@ class RegtestHarnessTest(unittest.TestCase):
         self.assertNotEqual(rates, sorted(rates))
         self.assertNotEqual(rates, sorted(rates, reverse=True))
         self.assertEqual(scenario["expected"]["collaborative_excluded"], 5)
-        self.assertEqual(scenario["expected"]["min_transfer_pairs"], 12)
+        self.assertEqual(scenario["expected"]["min_transfer_pairs"], 8)
         self.assertEqual(scenario["expected"]["ownership_derived_transfer_pairs"], 2)
         fanouts = [op for op in scenario["operations"] if op["kind"] == "self_transfer_fanout"]
         self.assertEqual(len(fanouts), 1)
@@ -466,35 +457,11 @@ class RegtestHarnessTest(unittest.TestCase):
         self.assertEqual(payload["transfer_pairs"]["rows"][0]["out_external_id"], "bb" * 32)
         self.assertEqual(payload["skipped_txids"][0]["external_id"], "dd" * 32)
 
-    def test_demo_truth_records_liquid_ledger_rows_from_manifest(self):
+    def test_regtest_scenario_rejects_liquid_ledger_fixtures(self):
         scenario = regtest_demo.load_scenario()
-        rows_by_wallet = regtest_demo._liquid_ledger_rows_from_manifest(scenario)
-        wallets = {
-            wallet["key"]: regtest_demo.DemoWallet(
-                key=wallet["key"],
-                label=wallet["label"],
-                account=wallet["account"],
-                kind=regtest_demo._wallet_kind(wallet),
-                chain=regtest_demo._wallet_chain(wallet),
-                network=wallet.get("network") or "elementsregtest",
-                source_format=wallet.get("source_format") or "",
-            )
-            for wallet in scenario["wallets"]
-        }
-        truth = regtest_demo.DemoTruth(scenario["id"])
-
-        regtest_demo._record_liquid_ledger_transactions(truth, rows_by_wallet, wallets)
-
-        expected_rows = sum(
-            1
-            for rows in rows_by_wallet.values()
-            for row in rows
-            if regtest_demo._liquid_ledger_direction(row) is not None
-        )
-        self.assertEqual(len(truth.transaction_rows), expected_rows)
-        self.assertEqual({row["asset"] for row in truth.transaction_rows}, {"LBTC"})
-        self.assertIn("inbound", {row["direction"] for row in truth.transaction_rows})
-        self.assertIn("outbound", {row["direction"] for row in truth.transaction_rows})
+        scenario["liquid_ledger"] = {"wallets": {}}
+        with self.assertRaisesRegex(ValueError, "real elementsregtest Liquid transactions"):
+            regtest_demo.validate_scenario(scenario)
 
     def test_liquid_live_descriptor_selection_prefers_used_wpkh(self):
         descriptors = [
@@ -522,6 +489,8 @@ class RegtestHarnessTest(unittest.TestCase):
         self.assertIn("bitcoin/bitcoin:30.0", compose)
         self.assertIn("zmqpubsequence=tcp://0.0.0.0:28336", compose)
         self.assertIn("Dockerfile.frigate", compose)
+        self.assertIn("Waiting for bitcoind RPC before starting Frigate", compose)
+        self.assertIn("getnetworkinfo", compose)
         self.assertIn("backendElectrumServer = \"tcp://fulcrum:50001\"", compose)
         self.assertNotIn("backend-stack:", compose)
         self.assertIn("KASSIBER_REGTEST_ELEMENTSD_IMAGE", compose)
@@ -560,7 +529,24 @@ class RegtestHarnessTest(unittest.TestCase):
 
         self.assertIn("--no-business-tick", harness)
         self.assertIn("demo_load_rpc_env", harness)
+        self.assertIn("demo_manifest_url_port core_url", harness)
         self.assertIn("KASSIBER_REGTEST_COMPOSE_PROFILES", harness)
+        self.assertIn("deadline = time.monotonic() + 60", harness)
+        self.assertIn("except AppError:", harness)
+
+    def test_demo_up_includes_lightning_by_default_with_opt_out(self):
+        harness = (ROOT / "scripts" / "integration-harness.sh").read_text(encoding="utf-8")
+
+        self.assertIn("demo_lightning_enabled()", harness)
+        self.assertIn("KASSIBER_REGTEST_DEMO_LIGHTNING:-1", harness)
+        self.assertIn("dev/regtest/compose.lightning.yml", harness)
+        self.assertIn("demo_seed_lightning", harness)
+        self.assertIn("demo_write_lightning_cli_wrapper", harness)
+        self.assertIn("KASSIBER_LIGHTNING_BUSINESS_MERCHANT_CLI", harness)
+        self.assertIn('KASSIBER_REGTEST_COMPOSE_PROJECT="${KASSIBER_REGTEST_COMPOSE_PROJECT:-', harness)
+        self.assertIn('KASSIBER_LIGHTNING_BUSINESS_DATA_ROOT="$DEMO_HOME/data"', harness)
+        self.assertIn('KASSIBER_LIGHTNING_BUSINESS_WORKSPACE="Regtest Demo"', harness)
+        self.assertIn('KASSIBER_LIGHTNING_BUSINESS_PROFILE="Full Accounting"', harness)
 
     def test_regtest_lanes_auto_select_free_port_family(self):
         harness = (ROOT / "scripts" / "integration-harness.sh").read_text(encoding="utf-8")
@@ -571,7 +557,7 @@ class RegtestHarnessTest(unittest.TestCase):
         self.assertIn("for candidate in 18443 19443 20443 21443 22443", harness)
         self.assertLess(
             harness.index('export KASSIBER_REGTEST_RPC_PORT="$(choose_regtest_base_port)"'),
-            harness.index('docker_compose -p "$KASSIBER_REGTEST_COMPOSE_PROJECT"'),
+            harness.index("docker_compose_regtest up -d"),
         )
 
     def test_silent_payments_lane_probes_frigate(self):
@@ -597,7 +583,8 @@ class RegtestHarnessTest(unittest.TestCase):
     def test_all_lane_gives_demo_full_a_fresh_chain(self):
         harness = (ROOT / "scripts" / "integration-harness.sh").read_text(encoding="utf-8")
 
-        all_case = harness[harness.index("  all)") : harness.index("  *)")]
+        all_start = harness.rindex("  all)")
+        all_case = harness[all_start : harness.index("  *)", all_start)]
         self.assertIn("run_fast", all_case)
         self.assertIn("( run_bitcoin_core )", all_case)
         self.assertIn("( run_regtest_demo_full )", all_case)
@@ -610,10 +597,15 @@ class RegtestHarnessTest(unittest.TestCase):
         self.assertIn("path is root, user home, a temp root, or root-level", harness)
         self.assertIn("path is too shallow", harness)
         self.assertIn("missing Kassiber regtest demo manifest", harness)
+        down_case = harness[
+            harness.index("run_demo_down()") : harness.index("run_bitcoin_core()")
+        ]
+        self.assertIn('COMPOSE_PROFILES="$KASSIBER_REGTEST_COMPOSE_PROFILES"', down_case)
         self.assertLess(
             harness.index("demo_assert_safe_home rebuild"),
             harness.index('rm -rf "$DEMO_HOME/data"'),
         )
+        self.assertIn('"$DEMO_HOME/lightning"', harness)
         self.assertLess(
             harness.index("demo_assert_safe_home purge"),
             harness.index('rm -rf "$DEMO_HOME"'),

@@ -9,15 +9,16 @@ import {
   Coins,
   Copy,
   Eye,
-  Filter,
   Link2Off,
   Maximize2,
   Minimize2,
   MoreHorizontal,
   Pencil,
+  SlidersHorizontal,
   X,
 } from "lucide-react";
 import * as React from "react";
+import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
@@ -52,10 +53,11 @@ import {
   openExternalUrl,
   type DaemonEnvelope,
 } from "@/daemon/transport";
-import { cn } from "@/lib/utils";
 import { accountLegs, accountMatchesLabel } from "@/lib/connectionTransactions";
+import { confirmAction } from "@/lib/confirmAction";
 import { type Currency } from "@/lib/currency";
 import { type ExplorerSettings } from "@/lib/explorer";
+import { cn } from "@/lib/utils";
 import { useUiStore } from "@/store/ui";
 import { useJournalProcessingAction } from "@/hooks/useJournalProcessingAction";
 import type {
@@ -173,6 +175,15 @@ type TableSortState = {
   key: TableSortKey;
   direction: TableSortDirection;
 } | null;
+export type TransactionTableFilterState = {
+  status: string;
+  flow: string;
+  paymentMethod: string;
+  fee: FeeFilter;
+  sort: TableSortState;
+};
+
+const EMPTY_TRANSACTION_ID_FILTER: string[] = [];
 
 function sortableTransactionDateValue(label: string) {
   const normalized = label.trim().toLowerCase();
@@ -198,6 +209,7 @@ const TransactionsTable = ({
   chartSelection,
   quickFilter,
   breakdownSelection,
+  transactionIdFilter = EMPTY_TRANSACTION_ID_FILTER,
   onChartSelectionChange,
   onQuickFilterChange,
   onBreakdownSelectionChange,
@@ -206,6 +218,7 @@ const TransactionsTable = ({
   hasMoreRecords = false,
   isLoadingMoreRecords = false,
   onLoadMoreRecords,
+  onFilterStateChange,
   deepLinkedTransactionId,
   deepLinkedTransactionTab = "details",
   isExpanded = false,
@@ -220,6 +233,7 @@ const TransactionsTable = ({
   chartSelection: FlowChartSelection | null;
   quickFilter: TableQuickFilter | null;
   breakdownSelection: BreakdownSelection | null;
+  transactionIdFilter?: string[];
   onChartSelectionChange: (selection: FlowChartSelection | null) => void;
   onQuickFilterChange: (filter: TableQuickFilter | null) => void;
   onBreakdownSelectionChange: (selection: BreakdownSelection | null) => void;
@@ -228,6 +242,7 @@ const TransactionsTable = ({
   hasMoreRecords?: boolean;
   isLoadingMoreRecords?: boolean;
   onLoadMoreRecords?: () => void;
+  onFilterStateChange?: (state: TransactionTableFilterState) => void;
   deepLinkedTransactionId?: string | null;
   deepLinkedTransactionTab?: string;
   isExpanded?: boolean;
@@ -248,6 +263,8 @@ const TransactionsTable = ({
   const [detailTransaction, setDetailTransaction] =
     React.useState<Transaction | null>(null);
   const [detailInitialTab, setDetailInitialTab] = React.useState("details");
+  const [expandedActionsHost, setExpandedActionsHost] =
+    React.useState<HTMLElement | null>(null);
   const [attachmentListOverride, setAttachmentListOverride] = React.useState<{
     transactionId: string;
     attachments: AttachmentRecord[];
@@ -681,15 +698,29 @@ const TransactionsTable = ({
     chartSelection !== null ||
     quickFilter !== null ||
     breakdownSelection !== null ||
+    transactionIdFilter.length > 0 ||
     statusFilter !== "all" ||
     flowFilter !== "all" ||
     paymentMethodFilter !== "all" ||
     feeFilter !== "all";
+  const clearTransactionIdFilter = React.useCallback(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      params.delete("txids");
+      const nextQuery = params.toString();
+      void navigate({
+        to: nextQuery
+          ? `${window.location.pathname}?${nextQuery}`
+          : window.location.pathname,
+      });
+    }
+  }, [navigate]);
 
   const clearFilters = () => {
     onChartSelectionChange(null);
     onQuickFilterChange(null);
     onBreakdownSelectionChange(null);
+    clearTransactionIdFilter();
     setStatusFilter("all");
     setFlowFilter("all");
     setPaymentMethodFilter("all");
@@ -703,6 +734,23 @@ const TransactionsTable = ({
     setPaymentMethodFilter("all");
     setFeeFilter("all");
   }, [resetTableFiltersToken]);
+
+  React.useEffect(() => {
+    onFilterStateChange?.({
+      status: statusFilter,
+      flow: flowFilter,
+      paymentMethod: paymentMethodFilter,
+      fee: feeFilter,
+      sort: tableSort,
+    });
+  }, [
+    feeFilter,
+    flowFilter,
+    onFilterStateChange,
+    paymentMethodFilter,
+    statusFilter,
+    tableSort,
+  ]);
 
   React.useEffect(() => {
     if (typeof window === "undefined") return;
@@ -906,9 +954,25 @@ const TransactionsTable = ({
     [],
   );
 
+  React.useEffect(() => {
+    if (!isExpanded || typeof document === "undefined") {
+      setExpandedActionsHost(null);
+      return;
+    }
+    setExpandedActionsHost(
+      document.getElementById("transactions-expanded-table-actions"),
+    );
+  }, [isExpanded]);
+
   const filteredTransactions = React.useMemo(() => {
+    const selectedTransactionIds = new Set(transactionIdFilter);
     const filtered = records.filter((txn) => {
       const draft = getDraft(txn);
+      const matchesTransactionIds =
+        selectedTransactionIds.size === 0 ||
+        selectedTransactionIds.has(txn.id) ||
+        selectedTransactionIds.has(txn.txnId) ||
+        (txn.explorerId ? selectedTransactionIds.has(txn.explorerId) : false);
       const matchesStatus =
         statusFilter === "all" || draft.reviewStatus === statusFilter;
 
@@ -952,6 +1016,7 @@ const TransactionsTable = ({
 
       return (
         matchesChartSelection &&
+        matchesTransactionIds &&
         matchesQuickFilter &&
         matchesBreakdownSelection &&
         matchesStatus &&
@@ -1007,6 +1072,7 @@ const TransactionsTable = ({
     });
   }, [
     records,
+    transactionIdFilter,
     getDraft,
     chartSelection,
     quickFilter,
@@ -1022,7 +1088,10 @@ const TransactionsTable = ({
 
   React.useEffect(() => {
     if (
-      (!chartSelection && !quickFilter && !breakdownSelection) ||
+      (!chartSelection &&
+        !quickFilter &&
+        !breakdownSelection &&
+        transactionIdFilter.length === 0) ||
       typeof window === "undefined"
     ) {
       return;
@@ -1030,7 +1099,13 @@ const TransactionsTable = ({
     window.requestAnimationFrame(() => {
       scrollTableIntoView();
     });
-  }, [chartSelection, quickFilter, breakdownSelection, scrollTableIntoView]);
+  }, [
+    chartSelection,
+    quickFilter,
+    breakdownSelection,
+    transactionIdFilter.length,
+    scrollTableIntoView,
+  ]);
 
   const virtualRowCount = isRefreshing
     ? 10
@@ -1073,6 +1148,7 @@ const TransactionsTable = ({
         const previousCardRect =
           tableHost?.previousElementSibling?.getBoundingClientRect();
         const dashboardShell = tableHost?.parentElement;
+        const dashboardShellRect = dashboardShell?.getBoundingClientRect();
         const appMainRect = appMain.getBoundingClientRect();
         const appMainStyle = window.getComputedStyle(appMain);
         const appMainPaddingBottom =
@@ -1084,15 +1160,19 @@ const TransactionsTable = ({
           ? Math.max(0, tableRect.top - previousCardRect.bottom)
           : 12;
         const bottomGap = isExpanded
-          ? stackGap
+          ? 8
           : stackGap - dashboardShellPaddingBottom;
         const minHeight = Math.floor(window.innerHeight * 0.8);
         // In normal mode AppShell reserves scrollable bottom padding for the
         // assistant dock. Pull the card edge through that padding so the page
         // does not end in blank canvas below the table; expanded mode
         // suppresses the dock at the shell level.
+        const availableBottom =
+          isExpanded && dashboardShellRect
+            ? dashboardShellRect.bottom - dashboardShellPaddingBottom
+            : appMainRect.bottom;
         const availableHeight = Math.floor(
-          appMainRect.bottom - tableRect.top - bottomGap,
+          availableBottom - tableRect.top - bottomGap,
         );
         const nextHeight = Math.max(minHeight, availableHeight);
         const nextMarginBottom = isExpanded
@@ -1355,6 +1435,275 @@ const TransactionsTable = ({
     </>
   );
 
+  const activeFilterChips = hasActiveFilters ? (
+    <div
+      className={cn(
+        "flex min-w-0 flex-wrap items-center gap-2",
+        isExpanded && "mr-3 justify-end sm:mr-4",
+      )}
+    >
+      <span className="text-[10px] text-muted-foreground sm:text-xs">
+        {t("table.filters")}
+      </span>
+      {chartSelection && (
+        <button
+          type="button"
+          className={filterChipClassName}
+          onClick={() => onChartSelectionChange(null)}
+          aria-label={t("table.chip.clearChart", {
+            // loose translator
+            label: flowChartSelectionLabel(
+              chartSelection,
+              t as (key: string, opts?: Record<string, unknown>) => string,
+            ),
+          })}
+        >
+          {t("table.chip.chartPrefix", {
+            // loose translator
+            label: flowChartSelectionLabel(
+              chartSelection,
+              t as (key: string, opts?: Record<string, unknown>) => string,
+            ),
+          })}
+          <X className="size-2.5 sm:size-3" aria-hidden="true" />
+        </button>
+      )}
+      {quickFilter && (
+        <button
+          type="button"
+          className={filterChipClassName}
+          onClick={() => onQuickFilterChange(null)}
+          aria-label={t("table.chip.clearQuick", {
+            // loose translator
+            label: (t as (key: string) => string)(quickFilterLabel(quickFilter)),
+          })}
+        >
+          {/* loose translator */}
+          {(t as (key: string) => string)(quickFilterLabel(quickFilter))}
+          <X className="size-2.5 sm:size-3" aria-hidden="true" />
+        </button>
+      )}
+      {breakdownSelection && (
+        <button
+          type="button"
+          className={filterChipClassName}
+          onClick={() => onBreakdownSelectionChange(null)}
+          aria-label={t("table.chip.clearBreakdown", {
+            // loose translator
+            label: breakdownSelectionLabel(
+              breakdownSelection,
+              t as (key: string, opts?: Record<string, unknown>) => string,
+            ),
+          })}
+        >
+          {/* loose translator */}
+          {breakdownSelectionLabel(
+            breakdownSelection,
+            t as (key: string, opts?: Record<string, unknown>) => string,
+          )}
+          <X className="size-2.5 sm:size-3" aria-hidden="true" />
+        </button>
+      )}
+      {transactionIdFilter.length > 0 && (
+        <button
+          type="button"
+          className={filterChipClassName}
+          onClick={clearTransactionIdFilter}
+          aria-label={t("table.chip.clearTransactionSet", {
+            count: transactionIdFilter.length,
+          })}
+        >
+          {t("table.chip.transactionSet", {
+            count: transactionIdFilter.length,
+          })}
+          <X className="size-2.5 sm:size-3" aria-hidden="true" />
+        </button>
+      )}
+      {statusFilter !== "all" && (
+        <button
+          type="button"
+          className={filterChipClassName}
+          onClick={() => setStatusFilter("all")}
+          aria-label={t("table.chip.clearStatus", {
+            // loose translator
+            label: (t as (key: string) => string)(
+              transactionStatusLabels[statusFilter as TransactionStatus],
+            ),
+          })}
+        >
+          {/* loose translator */}
+          {(t as (key: string) => string)(
+            transactionStatusLabels[statusFilter as TransactionStatus],
+          )}
+          <X className="size-2.5 sm:size-3" aria-hidden="true" />
+        </button>
+      )}
+      {flowFilter !== "all" && (
+        <button
+          type="button"
+          className={filterChipClassName}
+          onClick={() => setFlowFilter("all")}
+          aria-label={t("table.chip.clearFlow", {
+            // loose translator
+            label: (t as (key: string) => string)(
+              transactionFlowLabels[flowFilter as TransactionFlow],
+            ),
+          })}
+        >
+          {/* loose translator */}
+          {(t as (key: string) => string)(
+            transactionFlowLabels[flowFilter as TransactionFlow],
+          )}
+          <X className="size-2.5 sm:size-3" aria-hidden="true" />
+        </button>
+      )}
+      {paymentMethodFilter !== "all" && (
+        <button
+          type="button"
+          className={filterChipClassName}
+          onClick={() => setPaymentMethodFilter("all")}
+          aria-label={t("table.chip.clearPayment", {
+            label: paymentMethodFilter,
+          })}
+        >
+          {paymentMethodFilter}
+          <X className="size-2.5 sm:size-3" aria-hidden="true" />
+        </button>
+      )}
+      {feeFilter === "with-fees" && (
+        <button
+          type="button"
+          className={filterChipClassName}
+          onClick={() => setFeeFilter("all")}
+          aria-label={t("table.chip.clearWithFees")}
+        >
+          {t("table.withFees")}
+          <X className="size-2.5 sm:size-3" aria-hidden="true" />
+        </button>
+      )}
+      <button
+        onClick={clearFilters}
+        className="text-[10px] text-destructive hover:underline sm:text-xs"
+      >
+        {t("table.clearAll")}
+      </button>
+    </div>
+  ) : null;
+
+  const tableActions = (
+    <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
+      {isExpanded ? activeFilterChips : null}
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            variant="outline"
+            size="sm"
+            className={cn(
+              "h-8 gap-1.5 sm:h-9 sm:gap-2",
+              activeFilterCount > 0 && "border-primary",
+            )}
+            aria-label={t("table.filter.menuAria")}
+          >
+            <SlidersHorizontal className="size-3.5 sm:size-4" aria-hidden="true" />
+            <span>{t("table.filter.menuTrigger")}</span>
+            {activeFilterCount > 0 ? (
+              <span className="grid min-w-4 place-items-center rounded-full bg-primary px-1 text-[10px] font-semibold leading-4 text-primary-foreground">
+                {activeFilterCount}
+              </span>
+            ) : null}
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-[220px]">
+          <DropdownMenuLabel>{t("table.filter.menuLabel")}</DropdownMenuLabel>
+          <DropdownMenuSeparator />
+          <DropdownMenuSub>
+            <DropdownMenuSubTrigger>
+              <span>{t("table.filter.statusTrigger")}</span>
+              {statusFilter !== "all" ? (
+                <span className="ml-1 size-1.5 rounded-full bg-primary" />
+              ) : null}
+            </DropdownMenuSubTrigger>
+            <DropdownMenuSubContent className="w-[180px]">
+              {renderStatusFilterItems()}
+            </DropdownMenuSubContent>
+          </DropdownMenuSub>
+          <DropdownMenuSub>
+            <DropdownMenuSubTrigger>
+              <span>{t("table.filter.flowTrigger")}</span>
+              {flowFilter !== "all" ? (
+                <span className="ml-1 size-1.5 rounded-full bg-primary" />
+              ) : null}
+            </DropdownMenuSubTrigger>
+            <DropdownMenuSubContent className="w-[190px]">
+              {renderFlowFilterItems()}
+            </DropdownMenuSubContent>
+          </DropdownMenuSub>
+          <DropdownMenuSub>
+            <DropdownMenuSubTrigger>
+              <span>{t("table.filter.networkTrigger")}</span>
+              {paymentMethodFilter !== "all" ? (
+                <span className="ml-1 size-1.5 rounded-full bg-primary" />
+              ) : null}
+            </DropdownMenuSubTrigger>
+            <DropdownMenuSubContent className="w-[200px]">
+              {renderNetworkFilterItems()}
+            </DropdownMenuSubContent>
+          </DropdownMenuSub>
+          <DropdownMenuSub>
+            <DropdownMenuSubTrigger disabled={walletOptions.length === 0}>
+              <span>{t("table.filter.walletTrigger")}</span>
+              {walletFilterActive ? (
+                <span className="ml-1 size-1.5 rounded-full bg-primary" />
+              ) : null}
+            </DropdownMenuSubTrigger>
+            <DropdownMenuSubContent className="max-h-[320px] w-[220px] overflow-y-auto">
+              {renderWalletFilterItems()}
+            </DropdownMenuSubContent>
+          </DropdownMenuSub>
+          <DropdownMenuSub>
+            <DropdownMenuSubTrigger>
+              <span>{t("table.filter.feesTrigger")}</span>
+              {feeFilter !== "all" ? (
+                <span className="ml-1 size-1.5 rounded-full bg-primary" />
+              ) : null}
+            </DropdownMenuSubTrigger>
+            <DropdownMenuSubContent className="w-[180px]">
+              {renderFeeFilterItems()}
+            </DropdownMenuSubContent>
+          </DropdownMenuSub>
+        </DropdownMenuContent>
+      </DropdownMenu>
+
+      {onExpandedChange ? (
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-8 w-8 p-0 sm:h-9 sm:w-9"
+          aria-label={
+            isExpanded
+              ? t("table.expand.collapseAria")
+              : t("table.expand.expandAria")
+          }
+          title={
+            isExpanded
+              ? t("table.expand.collapseAria")
+              : t("table.expand.expandAria")
+          }
+          onClick={() => onExpandedChange(!isExpanded)}
+        >
+          {isExpanded ? (
+            <Minimize2 className="size-3.5 sm:size-4" aria-hidden="true" />
+          ) : (
+            <Maximize2 className="size-3.5 sm:size-4" aria-hidden="true" />
+          )}
+          <span className="sr-only">
+            {isExpanded ? t("table.expand.collapse") : t("table.expand.expand")}
+          </span>
+        </Button>
+      ) : null}
+    </div>
+  );
+
   const allLoanMarks = loansQuery.data?.data?.marks ?? [];
   const detailLoanMark = detailTransaction
     ? loanMarkByTransaction.get(detailTransaction.id) ?? null
@@ -1391,279 +1740,29 @@ const TransactionsTable = ({
         role={isRefreshing ? "status" : undefined}
         aria-live={isRefreshing ? "polite" : undefined}
       >
-        <div
-          className="flex flex-col gap-3 p-3 sm:flex-row sm:items-center sm:gap-4 sm:px-6 sm:py-3.5"
-          onClick={handleTableToolbarClick}
-          onDoubleClick={handleTableToolbarDoubleClick}
-        >
-          <div className="flex flex-1 items-center gap-2">
-            <span className="text-sm font-medium sm:text-base">
-              {t("table.title")}
-            </span>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className={cn(
-                    "h-8 gap-1.5 sm:h-9 sm:gap-2",
-                    activeFilterCount > 0 && "border-primary",
-                  )}
-                  aria-label={t("table.filter.menuAria")}
-                >
-                  <Filter className="size-3.5 sm:size-4" aria-hidden="true" />
-                  <span>{t("table.filter.menuTrigger")}</span>
-                  {activeFilterCount > 0 ? (
-                    <span className="grid min-w-4 place-items-center rounded-full bg-primary px-1 text-[10px] font-semibold leading-4 text-primary-foreground">
-                      {activeFilterCount}
-                    </span>
-                  ) : null}
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-[220px]">
-                <DropdownMenuLabel>
-                  {t("table.filter.menuLabel")}
-                </DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                <DropdownMenuSub>
-                  <DropdownMenuSubTrigger>
-                    <span>{t("table.filter.statusTrigger")}</span>
-                    {statusFilter !== "all" ? (
-                      <span className="ml-1 size-1.5 rounded-full bg-primary" />
-                    ) : null}
-                  </DropdownMenuSubTrigger>
-                  <DropdownMenuSubContent className="w-[180px]">
-                    {renderStatusFilterItems()}
-                  </DropdownMenuSubContent>
-                </DropdownMenuSub>
-                <DropdownMenuSub>
-                  <DropdownMenuSubTrigger>
-                    <span>{t("table.filter.flowTrigger")}</span>
-                    {flowFilter !== "all" ? (
-                      <span className="ml-1 size-1.5 rounded-full bg-primary" />
-                    ) : null}
-                  </DropdownMenuSubTrigger>
-                  <DropdownMenuSubContent className="w-[190px]">
-                    {renderFlowFilterItems()}
-                  </DropdownMenuSubContent>
-                </DropdownMenuSub>
-                <DropdownMenuSub>
-                  <DropdownMenuSubTrigger>
-                    <span>{t("table.filter.networkTrigger")}</span>
-                    {paymentMethodFilter !== "all" ? (
-                      <span className="ml-1 size-1.5 rounded-full bg-primary" />
-                    ) : null}
-                  </DropdownMenuSubTrigger>
-                  <DropdownMenuSubContent className="w-[200px]">
-                    {renderNetworkFilterItems()}
-                  </DropdownMenuSubContent>
-                </DropdownMenuSub>
-                <DropdownMenuSub>
-                  <DropdownMenuSubTrigger disabled={walletOptions.length === 0}>
-                    <span>{t("table.filter.walletTrigger")}</span>
-                    {walletFilterActive ? (
-                      <span className="ml-1 size-1.5 rounded-full bg-primary" />
-                    ) : null}
-                  </DropdownMenuSubTrigger>
-                  <DropdownMenuSubContent className="max-h-[320px] w-[220px] overflow-y-auto">
-                    {renderWalletFilterItems()}
-                  </DropdownMenuSubContent>
-                </DropdownMenuSub>
-                <DropdownMenuSub>
-                  <DropdownMenuSubTrigger>
-                    <span>{t("table.filter.feesTrigger")}</span>
-                    {feeFilter !== "all" ? (
-                      <span className="ml-1 size-1.5 rounded-full bg-primary" />
-                    ) : null}
-                  </DropdownMenuSubTrigger>
-                  <DropdownMenuSubContent className="w-[180px]">
-                    {renderFeeFilterItems()}
-                  </DropdownMenuSubContent>
-                </DropdownMenuSub>
-              </DropdownMenuContent>
-            </DropdownMenu>
-
-            {onExpandedChange ? (
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-8 w-8 p-0 sm:h-9 sm:w-9"
-                aria-label={
-                  isExpanded
-                    ? t("table.expand.collapseAria")
-                    : t("table.expand.expandAria")
-                }
-                title={
-                  isExpanded
-                    ? t("table.expand.collapseAria")
-                    : t("table.expand.expandAria")
-                }
-                onClick={() => onExpandedChange(!isExpanded)}
-              >
-                {isExpanded ? (
-                  <Minimize2
-                    className="size-3.5 sm:size-4"
-                    aria-hidden="true"
-                  />
-                ) : (
-                  <Maximize2
-                    className="size-3.5 sm:size-4"
-                    aria-hidden="true"
-                  />
-                )}
-                <span className="sr-only">
-                  {isExpanded
-                    ? t("table.expand.collapse")
-                    : t("table.expand.expand")}
-                </span>
-              </Button>
-            ) : null}
-          </div>
-        </div>
-
-      {hasActiveFilters && (
-        <div className="flex flex-wrap items-center gap-2 px-3 pb-3 sm:px-6">
-          <span className="text-[10px] text-muted-foreground sm:text-xs">
-            {t("table.filters")}
-          </span>
-          {chartSelection && (
-            <button
-              type="button"
-              className={filterChipClassName}
-              onClick={() => onChartSelectionChange(null)}
-              aria-label={t("table.chip.clearChart", {
-                // loose translator
-                label: flowChartSelectionLabel(
-                  chartSelection,
-                  t as (key: string, opts?: Record<string, unknown>) => string,
-                ),
-              })}
-            >
-              {t("table.chip.chartPrefix", {
-                // loose translator
-                label: flowChartSelectionLabel(
-                  chartSelection,
-                  t as (key: string, opts?: Record<string, unknown>) => string,
-                ),
-              })}
-              <X className="size-2.5 sm:size-3" aria-hidden="true" />
-            </button>
-          )}
-          {quickFilter && (
-            <button
-              type="button"
-              className={filterChipClassName}
-              onClick={() => onQuickFilterChange(null)}
-              aria-label={t("table.chip.clearQuick", {
-                // loose translator
-                label: (t as (key: string) => string)(
-                  quickFilterLabel(quickFilter),
-                ),
-              })}
-            >
-              {/* loose translator */}
-              {(t as (key: string) => string)(quickFilterLabel(quickFilter))}
-              <X className="size-2.5 sm:size-3" aria-hidden="true" />
-            </button>
-          )}
-          {breakdownSelection && (
-            <button
-              type="button"
-              className={filterChipClassName}
-              onClick={() => onBreakdownSelectionChange(null)}
-              aria-label={t("table.chip.clearBreakdown", {
-                // loose translator
-                label: breakdownSelectionLabel(
-                  breakdownSelection,
-                  t as (key: string, opts?: Record<string, unknown>) => string,
-                ),
-              })}
-            >
-              {/* loose translator */}
-              {breakdownSelectionLabel(
-                breakdownSelection,
-                t as (key: string, opts?: Record<string, unknown>) => string,
-              )}
-              <X className="size-2.5 sm:size-3" aria-hidden="true" />
-            </button>
-          )}
-          {statusFilter !== "all" && (
-            <button
-              type="button"
-              className={filterChipClassName}
-              onClick={() => setStatusFilter("all")}
-              aria-label={t("table.chip.clearStatus", {
-                // loose translator
-                label: (t as (key: string) => string)(
-                  transactionStatusLabels[statusFilter as TransactionStatus],
-                ),
-              })}
-            >
-              {/* loose translator */}
-              {(t as (key: string) => string)(
-                transactionStatusLabels[statusFilter as TransactionStatus],
-              )}
-              <X className="size-2.5 sm:size-3" aria-hidden="true" />
-            </button>
-          )}
-          {flowFilter !== "all" && (
-            <button
-              type="button"
-              className={filterChipClassName}
-              onClick={() => setFlowFilter("all")}
-              aria-label={t("table.chip.clearFlow", {
-                // loose translator
-                label: (t as (key: string) => string)(
-                  transactionFlowLabels[flowFilter as TransactionFlow],
-                ),
-              })}
-            >
-              {/* loose translator */}
-              {(t as (key: string) => string)(
-                transactionFlowLabels[flowFilter as TransactionFlow],
-              )}
-              <X className="size-2.5 sm:size-3" aria-hidden="true" />
-            </button>
-          )}
-          {paymentMethodFilter !== "all" && (
-            <button
-              type="button"
-              className={filterChipClassName}
-              onClick={() => setPaymentMethodFilter("all")}
-              aria-label={t("table.chip.clearPayment", {
-                label: paymentMethodFilter,
-              })}
-            >
-              {paymentMethodFilter}
-              <X className="size-2.5 sm:size-3" aria-hidden="true" />
-            </button>
-          )}
-          {feeFilter === "with-fees" && (
-            <button
-              type="button"
-              className={filterChipClassName}
-              onClick={() => setFeeFilter("all")}
-              aria-label={t("table.chip.clearWithFees")}
-            >
-              {t("table.withFees")}
-              <X className="size-2.5 sm:size-3" aria-hidden="true" />
-            </button>
-          )}
-          <button
-            onClick={clearFilters}
-            className="text-[10px] text-destructive hover:underline sm:text-xs"
+        {!isExpanded && (
+          <div
+            className="flex flex-col gap-3 p-3 sm:flex-row sm:items-center sm:gap-4 sm:px-6 sm:py-3.5"
+            onClick={handleTableToolbarClick}
+            onDoubleClick={handleTableToolbarDoubleClick}
           >
-            {t("table.clearAll")}
-          </button>
-        </div>
-      )}
+            <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+              <span className="text-sm font-medium sm:text-base">
+                {t("table.title")}
+              </span>
+              {activeFilterChips}
+            </div>
+
+            {tableActions}
+          </div>
+        )}
 
       <div
         ref={tableScrollRef}
-        className="min-h-0 flex-1 overflow-auto px-3 pb-3 sm:px-6 sm:pb-4"
+        className={cn(
+          "min-h-0 flex-1 overflow-auto bg-card px-3 pb-3 sm:px-6 sm:pb-4",
+          isExpanded && "pt-3 sm:pt-4",
+        )}
         role="region"
         aria-label={t("table.virtual.scrollRegion")}
         tabIndex={0}
@@ -1750,7 +1849,7 @@ const TransactionsTable = ({
                       title={t("table.filter.paymentAria")}
                     >
                       <span>{t("table.column.network")}</span>
-                      <Filter className="size-3.5" aria-hidden="true" />
+                      <SlidersHorizontal className="size-3.5" aria-hidden="true" />
                       {paymentMethodFilter !== "all" ? (
                         <span className="size-1.5 rounded-full bg-primary" />
                       ) : null}
@@ -1774,7 +1873,7 @@ const TransactionsTable = ({
                       title={t("table.filter.statusAria")}
                     >
                       <span>{t("table.column.status")}</span>
-                      <Filter className="size-3.5" aria-hidden="true" />
+                      <SlidersHorizontal className="size-3.5" aria-hidden="true" />
                       {statusFilter !== "all" ? (
                         <span className="size-1.5 rounded-full bg-primary" />
                       ) : null}
@@ -2306,20 +2405,22 @@ const TransactionsTable = ({
                             onSelect={(event: Event) => {
                               event.preventDefault();
                               if (typeof window === "undefined") return;
-                              const confirmed = window.confirm(
-                                t("table.row.excludeConfirm"),
-                              );
-                              if (!confirmed) return;
-                              void metadataUpdate.mutateAsync({
-                                transaction: txn.id,
-                                excluded: true,
-                              });
-                              useUiStore.getState().addNotification({
-                                title: t("notification.transactionExcluded.title"),
-                                body: t("notification.transactionExcluded.body"),
-                                tone: "info",
-                                dedupeKey: `tx-exclude-${txn.id}`,
-                              });
+                              void (async () => {
+                                const confirmed = await confirmAction(
+                                  t("table.row.excludeConfirm"),
+                                );
+                                if (!confirmed) return;
+                                await metadataUpdate.mutateAsync({
+                                  transaction: txn.id,
+                                  excluded: true,
+                                });
+                                useUiStore.getState().addNotification({
+                                  title: t("notification.transactionExcluded.title"),
+                                  body: t("notification.transactionExcluded.body"),
+                                  tone: "info",
+                                  dedupeKey: `tx-exclude-${txn.id}`,
+                                });
+                              })();
                             }}
                           >
                             <X className="mr-2 size-4" aria-hidden="true" />
@@ -2381,6 +2482,9 @@ const TransactionsTable = ({
         <div aria-hidden="true" />
       </div>
       </div>
+      {isExpanded && expandedActionsHost
+        ? createPortal(tableActions, expandedActionsHost)
+        : null}
       <ExplorerOpenDialog
         transaction={explorerTransaction}
         target={explorerTarget}

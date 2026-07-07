@@ -22,6 +22,16 @@ to put that data so adapters cannot leak it by accident.
 """
 
 from .adapter import LightningAdapter
+from .capabilities import (
+    EMPTY_LIGHTNING_CAPABILITIES,
+    LIGHTNING_CAPABILITY_NAMES,
+    LightningCapabilities,
+    LightningCapability,
+    lightning_capabilities_from_adapter,
+    lightning_capabilities_to_wire,
+    normalize_lightning_capabilities,
+    require_lightning_capability,
+)
 from .connections import (
     LIGHTNING_ADAPTER_KINDS,
     resolve_lightning_backend,
@@ -36,6 +46,7 @@ from .profitability import (
 )
 from .registry import (
     register_adapter,
+    registered_capabilities,
     registered_kinds,
     resolve_adapter,
     unregister_adapter,
@@ -56,12 +67,17 @@ from .types import (
 # at import time. Listing them here ensures the daemon and CLI can resolve
 # the adapter without an explicit import.
 from . import cln as _cln  # noqa: F401  -- register_adapter("coreln", ...)
+from . import lnd as _lnd  # noqa: F401  -- register_adapter("lnd", ...)
 
 __all__ = [
     "ChannelOpenCostCheck",
     "DEFAULT_OPEN_COST_SAT",
+    "EMPTY_LIGHTNING_CAPABILITIES",
     "LIGHTNING_ADAPTER_KINDS",
     "LightningAdapter",
+    "LIGHTNING_CAPABILITY_NAMES",
+    "LightningCapabilities",
+    "LightningCapability",
     "LightningProfitabilityReport",
     "NodeChannel",
     "NodeChannelState",
@@ -71,9 +87,14 @@ __all__ = [
     "NodeRoutingSnapshot",
     "NodeSnapshot",
     "build_profitability_report",
+    "lightning_capabilities_from_adapter",
+    "lightning_capabilities_to_wire",
+    "normalize_lightning_capabilities",
     "profitability_csv_rows",
     "register_adapter",
+    "registered_capabilities",
     "registered_kinds",
+    "require_lightning_capability",
     "resolve_adapter",
     "resolve_lightning_backend",
     "resolve_lightning_connection",

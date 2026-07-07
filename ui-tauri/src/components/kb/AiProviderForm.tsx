@@ -29,6 +29,7 @@ import { cn } from "@/lib/utils";
 
 export interface AiProviderInput {
   name: string;
+  display_name?: string | null;
   base_url: string;
   api_key?: string;
   default_model?: string;
@@ -62,13 +63,23 @@ const CLI_LOCATORS = ["claude-cli://default", "codex-cli://default"] as const;
 const PROVIDER_PRESETS = [
   {
     name: "ollama",
+    display_name: "Ollama",
     label: "Ollama",
     base_url: "http://localhost:11434/v1",
     kind: "local" as const,
     default_model: "qwen3.6:35b",
   },
   {
+    name: "omlx",
+    display_name: "oMLX",
+    label: "oMLX",
+    base_url: "http://127.0.0.1:8000/v1",
+    kind: "local" as const,
+    default_model: "",
+  },
+  {
     name: "claude-cli",
+    display_name: "Claude CLI",
     label: "Claude CLI",
     base_url: "claude-cli://default",
     kind: "remote" as const,
@@ -76,6 +87,7 @@ const PROVIDER_PRESETS = [
   },
   {
     name: "codex-cli",
+    display_name: "Codex CLI",
     label: "Codex CLI",
     base_url: "codex-cli://default",
     kind: "remote" as const,
@@ -94,7 +106,7 @@ export function AiProviderForm({
   onSaved,
 }: AiProviderFormProps) {
   const { t } = useTranslation(["settings", "common"]);
-  const [name, setName] = React.useState(initial?.name ?? "");
+  const [name, setName] = React.useState(initial?.display_name ?? initial?.name ?? "");
   const [baseUrl, setBaseUrl] = React.useState(initial?.base_url ?? "");
   const [apiKey, setApiKey] = React.useState(initial?.api_key ?? "");
   const [defaultModel, setDefaultModel] = React.useState(initial?.default_model ?? "");
@@ -113,7 +125,7 @@ export function AiProviderForm({
 
   React.useEffect(() => {
     if (!open) return;
-    setName(initial?.name ?? "");
+    setName(initial?.display_name ?? initial?.name ?? "");
     setBaseUrl(initial?.base_url ?? "");
     setApiKey("");
     setDefaultModel(initial?.default_model ?? "");
@@ -127,6 +139,19 @@ export function AiProviderForm({
   const createProvider = useDaemonMutation("ai.providers.create");
   const updateProvider = useDaemonMutation("ai.providers.update");
   const setApiKeyMutation = useDaemonMutation("ai.providers.set_api_key");
+  const testFingerprint = React.useMemo(
+    () =>
+      JSON.stringify({
+        provider: editing ? (initial?.name ?? null) : null,
+        baseUrl: baseUrl.trim(),
+        apiKey: apiKey.trim(),
+      }),
+    [apiKey, baseUrl, editing, initial?.name],
+  );
+
+  React.useEffect(() => {
+    setTestStatus({ state: "idle" });
+  }, [testFingerprint]);
 
   const handleTest = async () => {
     setTestStatus({ state: "running" });
@@ -141,7 +166,7 @@ export function AiProviderForm({
       const args: Record<string, unknown> = { base_url: trimmedUrl };
       const trimmedKey = apiKey.trim();
       if (trimmedKey) {
-        throw new Error(t("aiProvider.errorSaveBeforeTest"));
+        args.api_key = trimmedKey;
       }
       if (editing && initial) {
         // Empty API-key field means "keep current key" — let the daemon
@@ -183,6 +208,7 @@ export function AiProviderForm({
       if (editing && initial) {
         const args: Record<string, unknown> = {
           name: initial.name,
+          display_name: name.trim(),
           base_url: baseUrl.trim(),
           default_model: defaultModel.trim() || null,
           kind,
@@ -202,6 +228,7 @@ export function AiProviderForm({
       } else {
         const args: Record<string, unknown> = {
           name: name.trim(),
+          display_name: name.trim(),
           base_url: baseUrl.trim(),
           default_model: defaultModel.trim() || undefined,
           kind,
@@ -213,11 +240,11 @@ export function AiProviderForm({
         await createProvider.mutateAsync(args);
         if (apiKey.trim()) {
           await setApiKeyMutation.mutateAsync({
-            name: name.trim(),
+            name: name.trim().toLowerCase(),
             api_key: apiKey.trim(),
           });
         }
-        onSaved?.(name.trim());
+        onSaved?.(name.trim().toLowerCase());
       }
       onClose();
     } catch (caught) {
@@ -246,19 +273,21 @@ export function AiProviderForm({
           {!editing ? (
             <div className="grid gap-2">
               <Label>{t("aiProvider.presetLabel")}</Label>
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                 {PROVIDER_PRESETS.map((preset) => (
                   <button
                     key={preset.name}
                     type="button"
                     onClick={() => {
-                      setName(preset.name);
+                      setName(preset.display_name);
                       setBaseUrl(preset.base_url);
                       setKind(preset.kind);
                       setDefaultModel(preset.default_model);
                       setNotes(
                         preset.kind === "local"
-                          ? t("aiProvider.presetNoteLocal")
+                          ? t("aiProvider.presetNoteLocal", {
+                              label: preset.label,
+                            })
                           : t("aiProvider.presetNoteRemote", {
                               label: preset.label,
                             }),
@@ -278,10 +307,9 @@ export function AiProviderForm({
             <Input
               id="ai-form-name"
               value={name}
-              onChange={(event) => setName(event.target.value.toLowerCase())}
-              placeholder="ollama"
+              onChange={(event) => setName(event.target.value)}
+              placeholder="oMLX"
               required
-              disabled={editing}
               autoFocus={!editing}
             />
           </div>
@@ -291,7 +319,7 @@ export function AiProviderForm({
               id="ai-form-url"
               value={baseUrl}
               onChange={(event) => setBaseUrl(event.target.value)}
-              placeholder="http://localhost:11434/v1 or claude-cli://default"
+              placeholder="http://127.0.0.1:8000/v1 or claude-cli://default"
               required
             />
           </div>

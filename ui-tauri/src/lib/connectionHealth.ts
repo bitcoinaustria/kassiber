@@ -1,7 +1,12 @@
 import type { Net } from "@/components/kb/settings/SettingsModel";
 import type { NetworkStatus } from "./networkStatus";
 
-export type ConnectionProbeKind = "bitcoinrpc" | "electrum" | "http" | "unsupported";
+export type ConnectionProbeKind =
+  | "bitcoinrpc"
+  | "electrum"
+  | "http"
+  | "lightning"
+  | "unsupported";
 export type ConnectionHealthStatus =
   | "unknown"
   | "checking"
@@ -92,6 +97,9 @@ export function connectionProbeKind(connection: ConnectionHealthInput): Connecti
     (url.startsWith("http://") || url.startsWith("https://"))
   ) {
     return "bitcoinrpc";
+  }
+  if (kind === "coreln" || kind === "lnd") {
+    return "lightning";
   }
   if (
     allowDisplayHttpProbe &&

@@ -1,0 +1,239 @@
+{
+  "title": "Privacy Mirror",
+  "subtitle": "Local linkage, adversary, coverage, and future-spend privacy evidence for the active book.",
+  "refresh": "Refresh Privacy Mirror",
+  "yes": "Yes",
+  "bounded": "Bounded",
+  "guardrail": {
+    "local": "Local only",
+    "advisory": "Advisory",
+    "degraded": "Degraded"
+  },
+  "evidence": {
+    "exact": "Exact",
+    "derived": "Derived",
+    "unknown": "Unknown"
+  },
+  "severity": {
+    "info": "Info",
+    "warning": "Warning",
+    "alert": "Alert"
+  },
+  "question": {
+    "linkable": "What is linkable",
+    "infer": "Who can infer it",
+    "evidence": "The evidence",
+    "future": "What is unknown or worsens on a future spend",
+    "findings": "Findings"
+  },
+  "score": {
+    "of": " / 100",
+    "local": "Computed locally from your book — no chain lookup.",
+    "census": "Findings by severity",
+    "findings": "findings",
+    "waterfall": "How this score is built",
+    "base": "Base",
+    "result": "Score",
+    "coverage": "Origin coverage",
+    "factor": {
+      "wallet_linkage": "Linked wallets",
+      "transaction_leaks": "Leaking transactions",
+      "alert": "Alerts",
+      "warning": "Warnings",
+      "info": "Info"
+    }
+  },
+  "gradeHint": {
+    "A+": "Excellent — little to link",
+    "B": "Good — minor exposure",
+    "C": "Fair — notable exposure",
+    "D": "Poor — significant exposure",
+    "F": "Critical — highly linkable"
+  },
+  "worstKind": {
+    "common_input": "Wallets linked by a shared-input spend",
+    "unknown_coverage": "Some coins couldn't be checked",
+    "bounded_local_model": "Nothing stronger found locally"
+  },
+  "adversaryTier": {
+    "passive_chain_watcher": "Anyone watching the blockchain",
+    "reviewed_kyc_source_funds_anchor_watcher": "An exchange that checked your ID",
+    "known_counterparty_hypothetical": "Someone you paid or were paid by"
+  },
+  "assumption": {
+    "bitcoin_graph_facts_only": "Starts only from public blockchain facts already in your local data.",
+    "reviewed_anchor_starting_knowledge": "Starts from the source-of-funds anchors you've reviewed locally.",
+    "counterparty_starting_knowledge": "Starts from counterparties you've labelled locally."
+  },
+  "action": {
+    "reviewOrigins": "Review coin origins"
+  },
+  "heuristics": {
+    "title": "Heuristics checked",
+    "note": "Mirrors the am-i-exposed heuristic set. Kassiber computes the locally-derivable subset — no chain lookup, no entity database, no entropy engine.",
+    "status": {
+      "computed": "Checked",
+      "partial": "Partial",
+      "not_local": "Not available locally"
+    }
+  },
+  "primary": {
+    "title": "What to fix first"
+  },
+  "finding": {
+    "empty": "No findings in the local model."
+  },
+  "reco": {
+    "sender_common_input": "Avoid spending coins from different clusters in one transaction — a shared input links them.",
+    "common_input": "Avoid spending coins from different clusters in one transaction — a shared input links them.",
+    "fee_fingerprint": "A distinctive fee rate narrows the wallet set. Match common fee rates where you can.",
+    "op_return_output": "OP_RETURN data is public and permanent. Avoid attaching identifying metadata.",
+    "change_output": "Change can reveal wallet structure. Use matching script types and fresh addresses.",
+    "unknown_provenance": "Review where these coins came from so their provenance is known locally.",
+    "source_proximity_coverage_gaps": "Some owned coins lack reviewed source-funds proximity. Import or review their history to complete the picture.",
+    "coverage_degraded": "Analysis is incomplete — sync or import missing transaction detail to strengthen it.",
+    "transaction_tell": "Review this transaction's inputs and outputs for linkage.",
+    "fallback": "Review this item for privacy exposure."
+  },
+  "linkage": {
+    "title": "What's linkable",
+    "observer": "Anyone watching the chain",
+    "edges": "linked to {{count}}",
+    "empty": "No wallets to map.",
+    "legendLinked": "Linkable",
+    "legendIsolated": "Isolated"
+  },
+  "section": {
+    "wallets": "Linked wallet groups",
+    "transactionTells": "Transaction leaks",
+    "coins": "Coins",
+    "timeline": "Timeline",
+    "evidenceItems": "Evidence",
+    "coverage": "Data completeness",
+    "records": "All details",
+    "psbt": "Check a spend before you send (PSBT)"
+  },
+  "flow": {
+    "view": "View flow",
+    "title": "Transaction flow",
+    "subtitle": "Local flow graph — advisory only, never leaves this device."
+  },
+  "tellKind": {
+    "sender_common_input": "Common input",
+    "common_input": "Common input",
+    "fee_fingerprint": "Fee fingerprint",
+    "op_return_output": "OP_RETURN output",
+    "change_output": "Change output",
+    "unknown_provenance": "Unknown coin origin",
+    "known_source_proximity": "Known coin origin",
+    "source_proximity_coverage_gaps": "Unknown coin origins",
+    "coverage_degraded": "Incomplete analysis"
+  },
+  "metric": {
+    "linkageScore": "Linkage score",
+    "clusters": "Linkable clusters",
+    "adversaries": "Adversaries",
+    "utxos": "UTXOs",
+    "unknowns": "Unknowns",
+    "wallets": "Wallets",
+    "transactionTells": "Transaction tells",
+    "findings": "Findings"
+  },
+  "worst": {
+    "title": "Worst privacy risk",
+    "fallback": "No finding selected",
+    "empty": "The reduced local model did not return a stronger finding."
+  },
+  "tab": {
+    "overview": "Overview",
+    "adversaries": "Adversaries",
+    "wallets": "Wallets",
+    "transactions": "Transactions",
+    "utxos": "UTXOs",
+    "timeline": "Timeline",
+    "evidence": "Evidence",
+    "psbt": "PSBT"
+  },
+  "exposure": {
+    "title": "Exposure summary"
+  },
+  "coverage": {
+    "title": "Data completeness",
+    "known": "Coins with known origin",
+    "unknown": "Coins with unknown origin",
+    "degraded": "Some coins couldn't be analyzed"
+  },
+  "unknowns": {
+    "title": "Unknowns and degraded states",
+    "empty": "No unknown coverage row was emitted by the reduced local model."
+  },
+  "adversary": {
+    "unknown": "Unknown observer",
+    "clusters": "Linked groups",
+    "wallets": "Wallets seen"
+  },
+  "table": {
+    "wallet": "Wallet",
+    "transaction": "Transaction",
+    "coin": "Coin",
+    "coins": "Coins",
+    "amount": "Amount",
+    "edges": "Links",
+    "tells": "Leaks",
+    "kinds": "Leak type",
+    "penalties": "Penalties",
+    "role": "Role",
+    "proximity": "Origin",
+    "event": "Event",
+    "category": "Category",
+    "detail": "Detail",
+    "section": "Section",
+    "item": "Item",
+    "kind": "Kind",
+    "evidence": "Evidence",
+    "empty": "No rows in this reduced view."
+  },
+  "timeline": {
+    "newLinkage": "New linkage"
+  },
+  "psbt": {
+    "title": "PSBT and what-if",
+    "intent": "Paste a draft (unsigned) transaction to see what it would link — before you broadcast it.",
+    "placeholder": "Paste base64 PSBT text for local pre-broadcast analysis",
+    "inputAria": "PSBT text",
+    "analyze": "Check this spend",
+    "whatIf": "What-if scenarios",
+    "empty": "No PSBT analysis yet.",
+    "metric": {
+      "merge": "Wallet groups newly linked",
+      "unknown": "Inputs of unknown origin",
+      "blast": "Wallets this would expose"
+    },
+    "scenario": {
+      "fresh_receive_output": "If you received to a fresh address",
+      "hypothetical_input_consolidation": "If you consolidated these inputs"
+    }
+  },
+  "detail": {
+    "walletTitle": "Privacy Mirror for this wallet",
+    "transactionTitle": "Privacy Mirror for this transaction",
+    "source": "Same redacted local facts as the Privacy Mirror page.",
+    "loading": "Reading local privacy evidence...",
+    "degraded": "No matching redacted Privacy Mirror row is available for this local record.",
+    "queryError": "Privacy Mirror could not be read: {{message}}",
+    "none": "None",
+    "walletCoins": "Coins",
+    "walletAmount": "Amount",
+    "walletEdges": "Linkage edges",
+    "walletUnknown": "Unknown-role coins",
+    "walletMatched": "Matched redacted wallet row {{id}}. Advisory-only; it does not select coins or change accounting data.",
+    "transactionTells": "Tells",
+    "transactionKinds": "Tell kinds",
+    "transactionPenalties": "Wallet penalties",
+    "transactionMatched": "Matched redacted transaction row {{id}}. Advisory-only; it does not sign, broadcast, or mutate accounting data."
+  },
+  "unavailable": {
+    "title": "Privacy Mirror unavailable",
+    "body": "The local daemon did not return a Privacy Mirror payload."
+  }
+}

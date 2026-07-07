@@ -6,10 +6,11 @@ transactions and balances.
 
 Backends are stored canonically in SQLite.
 
-- `~/.kassiber/config/backends.env` or your chosen `--env-file` is still
-  accepted as a bootstrap / compatibility input for non-secret addressing
-  fields (`KIND`, `URL`, `CHAIN`, `NETWORK`, `BATCH_SIZE`, `TIMEOUT`,
-  `INSECURE`, `WALLETPREFIX`, `COOKIEFILE`, `KASSIBER_DEFAULT_BACKEND`)
+- `~/.kassiber/projects/<project>/config/backends.env` or your chosen
+  `--env-file` is still accepted as a project-local bootstrap / compatibility
+  input for non-secret addressing fields (`KIND`, `URL`, `CHAIN`, `NETWORK`,
+  `BATCH_SIZE`, `TIMEOUT`, `INSECURE`, `WALLETPREFIX`, `COOKIEFILE`,
+  `KASSIBER_DEFAULT_BACKEND`)
 - the `backends` table in SQLite is the long-term source of truth, and
   it is the only place secret-bearing fields (`TOKEN`, `PASSWORD`,
   `USERNAME`, `AUTH_HEADER`, plus the RPC aliases `RPCUSER` /
