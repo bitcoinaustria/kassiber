@@ -185,6 +185,35 @@ class OwnershipDeriverTests(unittest.TestCase):
             ["ownership_transfer_destination_ambiguous"],
         )
 
+    def test_destination_reuse_folds_txid_case(self):
+        txid_upper = "AB" * 32
+        txid_lower = "ab" * 32
+        out = _outbound(
+            row_id="a-out",
+            wallet_id="A",
+            amount_sats=50_000_000,
+            fee_sats=1000,
+            txid=txid_upper,
+            input_scripts=[SCRIPT["A"]],
+            outputs=[(SCRIPT["B"], 50_000_000)],
+        )
+        b_in = _inbound(
+            row_id="b-in",
+            wallet_id="B",
+            amount_sats=50_000_000,
+            txid=txid_lower,
+        )
+
+        result = self._run(
+            [out, b_in],
+            {SCRIPT["A"]: ("A", "A"), SCRIPT["B"]: ("B", "B")},
+            _refs("B"),
+        )
+
+        self.assertEqual(result.blocked_sources, [])
+        self.assertEqual(len(result.derived_pairs), 1)
+        self.assertEqual(result.derived_pairs[0]["in"]["id"], "b-in")
+
     def test_one_to_one_sync_gap_synthesizes_inbound(self):
         # Destination B recorded NO row (never synced). The deriver synthesizes
         # the inbound leg and resolves its wallet ref from wallet_refs_by_id.

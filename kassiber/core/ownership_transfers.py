@@ -1293,7 +1293,12 @@ def _resolve_destination_inbound(
     ]
 
     exact = [row for row in available if int(_get(row, "amount") or 0) == leg_msat]
-    same_txid = [row for row in exact if str(_get(row, "external_id") or "") == txid]
+    txid_key = normalize_group_txid(txid)
+    same_txid = [
+        row
+        for row in exact
+        if normalize_group_txid(str(_get(row, "external_id") or "")) == txid_key
+    ]
     if len(same_txid) == 1:
         return ("reuse", same_txid[0])
     if len(same_txid) >= 2:
