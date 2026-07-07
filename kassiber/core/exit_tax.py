@@ -159,14 +159,27 @@ def _resolve_departure(departure_date: Optional[str]) -> tuple[str, str]:
     return day, cutoff
 
 
+def _description_at_regime(description: Any) -> Optional[str]:
+    for token in str(description or "").split():
+        if token == "at_regime=alt":
+            return "alt"
+        if token == "at_regime=neu":
+            return "neu"
+    return None
+
+
 def _entry_is_alt(entry: Mapping[str, Any]) -> bool:
     """Regime of a journal entry for inventory accounting.
 
     Disposals/fees carry an `at_category` (e.g. ``neu_gain``, ``alt_taxfree``);
-    its prefix is authoritative. Acquisitions have no category, so fall back to
-    the acquisition-date cutoff — the same rule the engine uses for inflows.
+    its prefix is authoritative. The RP2 adapter serializes explicit Austrian
+    overrides and transfer fee regimes into the description as ``at_regime=...``;
+    honor that marker before falling back to the acquisition-date cutoff.
     """
 
+    marker = _description_at_regime(entry.get("description"))
+    if marker is not None:
+        return marker == "alt"
     category = entry.get("at_category")
     if category:
         return str(category).startswith("alt")
@@ -325,7 +338,11 @@ def compute_deemed_disposal(
             # A disposal the user marked non-reportable carries no at_category, so
             # its regime fell back to the disposal date and may misattribute
             # Altbestand sold after the cutoff — flag it (EXIT-010).
-            if is_at and not entry.get("at_category"):
+            if (
+                is_at
+                and not entry.get("at_category")
+                and _description_at_regime(entry.get("description")) is None
+            ):
                 has_untagged_disposal = True
             basis = dec(entry.get("cost_basis") or 0)
             bucket.remove_outflow(-qty, basis)

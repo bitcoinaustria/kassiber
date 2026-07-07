@@ -54,6 +54,7 @@ from kassiber.core.reports import (
 from kassiber.core.runtime import bootstrap_runtime, close_runtime
 from kassiber.core.tax_events import normalize_tax_asset_inputs
 from kassiber.core.ui_snapshot import (
+    _tax_free_wallet_summaries,
     build_capital_gains_snapshot,
     build_journal_events_list_snapshot,
     build_journals_snapshot,
@@ -11155,6 +11156,110 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual(len(state.intra_audit), 1)
         self.assertEqual(state.intra_audit[0]["from_wallet_id"], "wallet-a")
         self.assertEqual(state.intra_audit[0]["to_wallet_id"], "wallet-b")
+
+    def test_austrian_alt_transfer_journal_rows_preserve_wallet_tax_free_regime(self):
+        profile = {
+            "id": "profile-at-transfer-alt",
+            "workspace_id": "workspace-main",
+            "label": "FixtureAustrianAltTransfer",
+            "fiat_currency": "EUR",
+            "tax_country": "at",
+            "tax_long_term_days": 9223372036854775807,
+            "gains_algorithm": "MOVING_AVERAGE_AT",
+        }
+        wallet_refs_by_id = {
+            "wallet-a": {
+                "id": "wallet-a",
+                "label": "Vienna",
+                "wallet_account_id": "account-treasury",
+                "account_code": "treasury",
+                "account_label": "Treasury",
+            },
+            "wallet-b": {
+                "id": "wallet-b",
+                "label": "Cold",
+                "wallet_account_id": "account-cold",
+                "account_code": "cold",
+                "account_label": "Cold",
+            },
+        }
+
+        def _row(rid, wid, direction, amount, occurred_at, *, description, external_id):
+            ref = wallet_refs_by_id[wid]
+            return {
+                "id": rid,
+                "wallet_id": wid,
+                "wallet_label": ref["label"],
+                "wallet_account_id": ref["wallet_account_id"],
+                "account_code": ref["account_code"],
+                "account_label": ref["account_label"],
+                "occurred_at": occurred_at,
+                "direction": direction,
+                "asset": "BTC",
+                "amount": amount,
+                "fee": 0,
+                "fiat_rate": 60000,
+                "fiat_value": 60000,
+                "kind": "transfer",
+                "note": None,
+                "description": description,
+                "external_id": external_id,
+                "created_at": occurred_at,
+            }
+
+        state = build_tax_engine(profile).build_ledger_state(
+            TaxEngineLedgerInputs(
+                rows=[
+                    _row(
+                        "alt-buy",
+                        "wallet-a",
+                        "inbound",
+                        100_000_000_000,
+                        "2020-06-01T10:00:00Z",
+                        description="Alt buy",
+                        external_id="alt-buy",
+                    ),
+                    _row(
+                        "xfer-out",
+                        "wallet-a",
+                        "outbound",
+                        100_000_000_000,
+                        "2024-07-01T10:00:00Z",
+                        description="Move A->B",
+                        external_id="xfer-alt",
+                    ),
+                    _row(
+                        "xfer-in",
+                        "wallet-b",
+                        "inbound",
+                        100_000_000_000,
+                        "2024-07-01T10:00:00Z",
+                        description="Move A->B",
+                        external_id="xfer-alt",
+                    ),
+                ],
+                wallet_refs_by_id=wallet_refs_by_id,
+                manual_pair_records=[],
+            )
+        )
+
+        self.assertEqual(state.quarantines, [])
+        transfer_entries = [
+            entry
+            for entry in _normalize_engine_entries(state.entries)
+            if entry["entry_type"] in {"transfer_in", "transfer_out"}
+        ]
+        self.assertEqual(len(transfer_entries), 2)
+        self.assertTrue(
+            all("at_regime=alt" in entry["description"] for entry in transfer_entries),
+        )
+        self.assertEqual(
+            _tax_free_wallet_summaries(state.entries),
+            [
+                {"walletId": "wallet-a", "hasTaxFreeBalance": False},
+                {"walletId": "wallet-b", "hasTaxFreeBalance": True},
+            ],
+        )
 
     def test_austrian_direct_swap_payout_carries_then_disposes(self):
         profile, inputs = self._direct_austrian_swap_payout_inputs()

@@ -382,6 +382,26 @@ def _compose_transfer_notes(transfer: Any) -> str:
     return " ".join(tokens)
 
 
+def _compose_transfer_journal_description(audit: Mapping[str, Any]) -> str:
+    tokens: list[str] = []
+    regime = audit.get("at_regime")
+    if regime in ("alt", "neu"):
+        tokens.append(f"at_regime={regime}")
+    pool = audit.get("at_pool")
+    if pool:
+        tokens.append(f"at_pool={pool}")
+    tokens.append(f"Transfer {audit['from_wallet_label']} -> {audit['to_wallet_label']}")
+    pairing_source = audit.get("pairing_source")
+    if pairing_source == "ownership_derived":
+        # Record the basis for the non-taxable treatment on the entry itself,
+        # so the audit/report shows this MOVE was proven from the on-chain
+        # address graph rather than matched on a shared txid.
+        tokens.append("(proven by address ownership)")
+    elif pairing_source == "multi_source_consolidation":
+        tokens.append("(multi-wallet consolidation)")
+    return " ".join(tokens)
+
+
 def _make_rp2_country(profile: Mapping[str, Any]):
     AbstractCountry = _get_rp2_modules()["AbstractCountry"]
     try:
@@ -856,6 +876,10 @@ def _prepare_rp2_asset_input(profile, normalized_inputs: NormalizedTaxAssetInput
             # (None for same-txid / manual pairs).
             "pairing_source": getattr(transfer, "pairing_source", None),
         }
+        if getattr(transfer, "at_regime", None):
+            audit_row["at_regime"] = transfer.at_regime
+        if getattr(transfer, "at_pool", None):
+            audit_row["at_pool"] = transfer.at_pool
         if transfer.group_id:
             audit_row["transfer_group_id"] = transfer.group_id
         if transfer_id != transfer.out_transaction_id:
@@ -1368,14 +1392,7 @@ def _append_rp2_journal_entries(entries, computed_data, wallet_refs_by_label, pr
         to_wallet = wallet_refs_by_label[audit["to_wallet_label"]]
         sent = dec(audit["crypto_sent"])
         received = dec(audit["crypto_received"])
-        description = f"Transfer {from_wallet['label']} -> {to_wallet['label']}"
-        if audit.get("pairing_source") == "ownership_derived":
-            # Record the basis for the non-taxable treatment on the entry itself,
-            # so the audit/report shows this MOVE was proven from the on-chain
-            # address graph rather than matched on a shared txid.
-            description += " (proven by address ownership)"
-        elif audit.get("pairing_source") == "multi_source_consolidation":
-            description += " (multi-wallet consolidation)"
+        description = _compose_transfer_journal_description(audit)
         entries.append(
             {
                 "id": str(uuid.uuid4()),

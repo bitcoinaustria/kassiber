@@ -121,6 +121,14 @@ export function compareWalletsTableConnections(
   }
 }
 
+function taxFreeBalanceIsCurrent(
+  balance: OverviewSnapshot["taxFreeBalance"] | undefined,
+) {
+  if (balance == null) return false;
+  if (balance.status) return balance.status === "current";
+  return !balance.needsJournals && balance.quarantines <= 0;
+}
+
 export function WalletsTable({
   connections,
   currency,
@@ -133,15 +141,17 @@ export function WalletsTable({
 }: WalletsTableProps) {
   const [sortKey, setSortKey] = useState<WalletsTableSortKey | null>("kind");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
-  const showTaxFreeColumn = taxFreeBalance != null;
+  const showTaxFreeColumn = taxFreeBalanceIsCurrent(taxFreeBalance);
   const taxFreeWalletIds = useMemo(
-    () =>
-      new Set(
+    () => {
+      if (!showTaxFreeColumn) return new Set<string>();
+      return new Set(
         (taxFreeBalance?.wallets ?? [])
           .filter((wallet) => wallet.hasTaxFreeBalance)
           .map((wallet) => wallet.walletId),
-      ),
-    [taxFreeBalance],
+      );
+    },
+    [showTaxFreeColumn, taxFreeBalance],
   );
 
   const sortedConnections = useMemo(() => {

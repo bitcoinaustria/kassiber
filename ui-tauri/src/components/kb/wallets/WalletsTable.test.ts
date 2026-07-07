@@ -39,6 +39,22 @@ describe("wallets table", () => {
     expect(html).toContain("No");
   });
 
+  it("hides stale tax-free wallet flags until journals are current", () => {
+    for (const status of ["needs_journals", "quarantines"] as const) {
+      const html = renderTable({
+        taxFreeBalance: {
+          ...MOCK_OVERVIEW.taxFreeBalance!,
+          status,
+          needsJournals: status === "needs_journals",
+          quarantines: status === "quarantines" ? 1 : 0,
+        },
+      });
+
+      expect(html).not.toContain("Tax-free");
+      expect(html).not.toContain("Yes");
+    }
+  });
+
   it("sorts tax-free wallets before taxable-only wallets", () => {
     const taxFreeWalletIds = new Set(
       MOCK_OVERVIEW.taxFreeBalance!.wallets!

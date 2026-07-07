@@ -2428,6 +2428,8 @@ def _tax_free_balance_snapshot(
 def _tax_free_wallet_summaries(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
     tax_free_by_wallet: dict[str, Decimal] = defaultdict(Decimal)
     for entry in entries:
+        if str(entry.get("entry_type") or "") == "transfer_fee":
+            continue
         wallet_id = str(entry.get("wallet_id") or "")
         if not wallet_id:
             continue
@@ -2446,10 +2448,10 @@ def _tax_free_wallet_summaries(entries: list[dict[str, Any]]) -> list[dict[str, 
 
 
 def _entry_has_alt_regime(entry: dict[str, Any]) -> bool:
-    description = str(entry.get("description") or "")
-    if "at_regime=alt" in description:
+    marker = _entry_at_regime_marker(entry)
+    if marker == "alt":
         return True
-    if "at_regime=neu" in description:
+    if marker == "neu":
         return False
     category = entry.get("at_category")
     if category:
@@ -2463,6 +2465,15 @@ def _entry_has_alt_regime(entry: dict[str, Any]) -> bool:
         return infer_regime_from_timestamp(str(occurred_at)) == "alt"
     except ValueError:
         return False
+
+
+def _entry_at_regime_marker(entry: dict[str, Any]) -> str | None:
+    for token in str(entry.get("description") or "").split():
+        if token == "at_regime=alt":
+            return "alt"
+        if token == "at_regime=neu":
+            return "neu"
+    return None
 
 
 def _profile_readiness(

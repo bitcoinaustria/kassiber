@@ -162,6 +162,66 @@ class ExitTaxComputeTests(unittest.TestCase):
         total_sats = report["totals"]["neuQuantitySats"] + report["totals"]["altQuantitySats"]
         self.assertEqual(total_sats, 140_000_000)
 
+    def test_description_regime_marker_overrides_timestamp_for_acquisition(self):
+        conn = _conn_with_rate(Decimal("60000"))
+        state = {
+            "entries": [
+                {
+                    "entry_type": "acquisition",
+                    "asset": "BTC",
+                    "occurred_at": "2024-06-01T00:00:00Z",
+                    "quantity": Decimal("1.0"),
+                    "fiat_value": Decimal("30000"),
+                    "cost_basis": None,
+                    "description": "at_regime=alt user override",
+                },
+            ],
+            "wallet_holdings": {},
+            "account_holdings": {},
+            "quarantines": [],
+            "latest_rates": {"BTC": Decimal("60000")},
+        }
+
+        report = exit_tax.compute_deemed_disposal(conn, _profile("at"), state)
+        totals = report["totals"]
+
+        self.assertEqual(totals["altQuantitySats"], 100_000_000)
+        self.assertEqual(totals["neuQuantitySats"], 0)
+
+    def test_description_regime_marker_keeps_alt_transfer_fee_in_alt_pool(self):
+        conn = _conn_with_rate(Decimal("60000"))
+        state = {
+            "entries": [
+                {
+                    "entry_type": "acquisition",
+                    "asset": "BTC",
+                    "occurred_at": "2020-06-01T00:00:00Z",
+                    "quantity": Decimal("1.0"),
+                    "fiat_value": Decimal("8000"),
+                    "cost_basis": None,
+                    "description": "Alt buy",
+                },
+                {
+                    "entry_type": "transfer_fee",
+                    "asset": "BTC",
+                    "occurred_at": "2024-01-01T00:00:00Z",
+                    "quantity": Decimal("-0.001"),
+                    "cost_basis": Decimal("8"),
+                    "description": "at_regime=alt at_pool=default Transfer Cold -> Hot",
+                },
+            ],
+            "wallet_holdings": {},
+            "account_holdings": {},
+            "quarantines": [],
+            "latest_rates": {"BTC": Decimal("60000")},
+        }
+
+        report = exit_tax.compute_deemed_disposal(conn, _profile("at"), state)
+        totals = report["totals"]
+
+        self.assertEqual(totals["altQuantitySats"], 99_900_000)
+        self.assertEqual(totals["neuQuantitySats"], 0)
+
     def test_wallet_holdings_listed_without_regime(self):
         conn = _conn_with_rate(Decimal("60000"))
         report = exit_tax.compute_deemed_disposal(conn, _profile("at"), _state())
