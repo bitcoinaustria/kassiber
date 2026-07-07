@@ -6,6 +6,7 @@ from types import SimpleNamespace
 
 from embit import bip32, bip39
 
+from kassiber.cli.handlers import process_journals
 from kassiber.core import source_overlap
 from kassiber.core.sync import WalletBackendFetch, WalletSyncHooks, WalletSyncState, sync_wallet_from_backend
 from kassiber.core.ui_snapshot import build_report_blockers_snapshot
@@ -637,6 +638,7 @@ class SourceOverlapTests(unittest.TestCase):
                 blockers = build_report_blockers_snapshot(conn)
                 source_blocker = next(item for item in blockers["blockers"] if item["id"] == "source_overlap")
                 preview = source_blocker["repair_preview"]
+                self.assertEqual(source_blocker["daemon_kind"], "ui.journals.process")
                 self.assertEqual(preview["recommended_exclusions"], ["tx-addr"])
                 self.assertIn("Preview only", preview["repair_policy"])
                 overlap = source_blocker["overlap"]["overlaps"][0]
@@ -655,6 +657,60 @@ class SourceOverlapTests(unittest.TestCase):
                             "requires_confirmation": True,
                         }
                     ],
+                )
+            finally:
+                conn.close()
+
+    def test_journal_processing_repairs_address_list_overlap_before_tax_engine(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-source-overlap-") as tmp:
+            conn = open_db(Path(tmp) / "data")
+            try:
+                _seed_book(conn)
+                config = _descriptor_config(gap_limit=2)
+                target = _descriptor_target(config)
+                self.assertEqual(target.address, ADDR_A)
+                _wallet(conn, "desc", "Descriptor", "descriptor", config)
+                _wallet(
+                    conn,
+                    "addr",
+                    "Address list",
+                    "address",
+                    {"addresses": [ADDR_A], "chain": "bitcoin", "network": "mainnet"},
+                )
+                _tx(conn, "tx-desc", "desc", "cc" * 32)
+                _tx(conn, "tx-addr", "addr", "cc" * 32)
+                conn.commit()
+
+                processed = process_journals(conn, None, None)
+
+                repair = processed["source_overlap_repair"]
+                self.assertEqual(repair["addresses_removed"], 1)
+                self.assertEqual(repair["duplicates_excluded"], 1)
+                self.assertEqual(repair["remaining_overlap_count"], 0)
+                self.assertEqual(repair["excluded_records"][0]["transaction_id"], "tx-addr")
+                self.assertTrue(repair["excluded_records"][0]["history_event_id"])
+
+                addr_config = json.loads(
+                    conn.execute(
+                        "SELECT config_json FROM wallets WHERE id = 'addr'"
+                    ).fetchone()["config_json"]
+                )
+                self.assertEqual(addr_config["addresses"], [])
+                self.assertTrue(addr_config["deprecated"])
+                self.assertEqual(
+                    conn.execute(
+                        "SELECT excluded FROM transactions WHERE id = 'tx-addr'"
+                    ).fetchone()["excluded"],
+                    1,
+                )
+                self.assertGreater(
+                    conn.execute("SELECT COUNT(*) FROM journal_entries").fetchone()[0],
+                    0,
+                )
+                blockers = build_report_blockers_snapshot(conn)
+                self.assertNotIn(
+                    "source_overlap",
+                    [item["id"] for item in blockers["blockers"]],
                 )
             finally:
                 conn.close()

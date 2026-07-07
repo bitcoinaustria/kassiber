@@ -974,6 +974,166 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual(unknown_filter.exception.code, "validation")
         self.assertEqual(unknown_filter.exception.details, {"unknown": ["limit"]})
 
+    def test_overview_balance_defaults_to_chain_inventory_when_available(self):
+        conn = open_db(self.data_root)
+        self.addCleanup(conn.close)
+        now = "2026-01-01T00:00:00Z"
+        conn.execute(
+            "INSERT INTO workspaces(id, label, created_at) VALUES(?, ?, ?)",
+            ("ws-chain-balance", "Chain Balance Workspace", now),
+        )
+        conn.execute(
+            """
+            INSERT INTO profiles(
+                id, workspace_id, label, fiat_currency, tax_country,
+                tax_long_term_days, gains_algorithm, last_processed_at,
+                last_processed_tx_count, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "pf-chain-balance",
+                "ws-chain-balance",
+                "Chain Balance Profile",
+                "EUR",
+                "generic",
+                365,
+                "FIFO",
+                "2026-01-02T00:00:00Z",
+                0,
+                now,
+            ),
+        )
+        conn.execute(
+            """
+            INSERT INTO backends(
+                name, kind, chain, network, url, config_json, created_at, updated_at
+            ) VALUES(?, ?, ?, ?, ?, '{}', ?, ?)
+            """,
+            (
+                "private",
+                "esplora",
+                "bitcoin",
+                "mainnet",
+                "https://private-node.example/api",
+                now,
+                now,
+            ),
+        )
+        conn.execute(
+            """
+            INSERT INTO wallets(
+                id, workspace_id, profile_id, label, kind, config_json, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "wal-chain-balance",
+                "ws-chain-balance",
+                "pf-chain-balance",
+                "Cold Wallet",
+                "address",
+                json.dumps(
+                    {
+                        "addresses": ["bc1qchainbalance"],
+                        "backend": "private",
+                        "chain": "bitcoin",
+                        "network": "mainnet",
+                    }
+                ),
+                now,
+            ),
+        )
+        conn.execute(
+            """
+            INSERT INTO journal_wallet_holdings(
+                id, workspace_id, profile_id, wallet_id, wallet_label,
+                account_code, asset, quantity, cost_basis, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "holding-book-btc",
+                "ws-chain-balance",
+                "pf-chain-balance",
+                "wal-chain-balance",
+                "Cold Wallet",
+                "",
+                "BTC",
+                btc_to_msat("1.0"),
+                20_000,
+                now,
+            ),
+        )
+        conn.execute(
+            """
+            INSERT INTO wallet_utxos(
+                id, workspace_id, profile_id, wallet_id, backend_name,
+                backend_kind, chain, network, asset, amount, txid, vout,
+                outpoint, confirmation_status, confirmations, block_height,
+                block_time, address, first_seen_at, last_seen_at, raw_json
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '{}')
+            """,
+            (
+                "utxo-chain-balance",
+                "ws-chain-balance",
+                "pf-chain-balance",
+                "wal-chain-balance",
+                "private",
+                "esplora",
+                "bitcoin",
+                "mainnet",
+                "BTC",
+                btc_to_msat("0.25"),
+                "aa" * 32,
+                0,
+                f"{'aa' * 32}:0",
+                "confirmed",
+                6,
+                800_000,
+                "2026-01-02T00:00:00Z",
+                "bc1qchainbalance",
+                now,
+                "2026-01-02T00:00:00Z",
+            ),
+        )
+        conn.execute(
+            """
+            INSERT INTO wallet_utxo_refreshes(
+                wallet_id, workspace_id, profile_id, backend_name, backend_kind,
+                chain, network, observed_count, active_count, last_seen_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "wal-chain-balance",
+                "ws-chain-balance",
+                "pf-chain-balance",
+                "private",
+                "esplora",
+                "bitcoin",
+                "mainnet",
+                1,
+                1,
+                "2026-01-02T00:00:00Z",
+            ),
+        )
+        conn.execute(
+            """
+            INSERT INTO rates_cache(pair, timestamp, rate, source, fetched_at)
+            VALUES(?, ?, ?, ?, ?)
+            """,
+            ("BTC-EUR", "2026-01-02T00:00:00Z", 50_000, "manual", now),
+        )
+        set_setting(conn, "context_workspace", "ws-chain-balance")
+        set_setting(conn, "context_profile", "pf-chain-balance")
+        conn.commit()
+
+        overview = build_overview_snapshot(conn)
+        connection = overview["connections"][0]
+
+        self.assertAlmostEqual(connection["bookBalance"], 1.0)
+        self.assertAlmostEqual(connection["chainBalance"], 0.25)
+        self.assertEqual(connection["balanceSource"], "chain")
+        self.assertAlmostEqual(connection["balance"], 0.25)
+        self.assertAlmostEqual(overview["fiat"]["eurBalance"], 12_500)
+
     def test_overview_snapshot_exposes_austrian_tax_free_balance(self):
         conn = open_db(self.data_root)
         self.addCleanup(conn.close)

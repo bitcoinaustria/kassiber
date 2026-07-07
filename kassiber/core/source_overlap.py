@@ -617,6 +617,125 @@ def _target_script_pubkey(target: Mapping[str, Any]) -> str:
     return str(target.get("script_pubkey") or "").strip().lower()
 
 
+def _address_list_repair_scripts(
+    conn: sqlite3.Connection,
+    profile_id: str,
+) -> dict[str, set[str]]:
+    grouped, _filtered = _source_script_groups(conn, profile_id)
+    scripts_by_wallet: dict[str, set[str]] = {}
+    for key, group in grouped.items():
+        wallet_ids = {source.wallet_id for source in group}
+        if len(wallet_ids) < 2:
+            continue
+        overlap = _overlap_payload(key, group)
+        recommended_id = str(overlap.get("recommended_canonical_wallet_id") or "")
+        recommended = next(
+            (
+                wallet
+                for wallet in overlap.get("wallets") or []
+                if str(wallet.get("id") or "") == recommended_id
+            ),
+            None,
+        )
+        if not recommended or str(recommended.get("kind") or "") not in _CANONICAL_WALLET_KINDS:
+            continue
+        for source in group:
+            if source.wallet_id == recommended_id or source.source != "address_list":
+                continue
+            scripts_by_wallet.setdefault(source.wallet_id, set()).add(source.script_pubkey)
+    return scripts_by_wallet
+
+
+def apply_address_list_overlap_repairs(
+    conn: sqlite3.Connection,
+    profile_id: str,
+) -> dict[str, Any]:
+    """Trim address-list entries covered by canonical descriptor/xpub sources.
+
+    This deliberately does not delete transactions. Callers that want to remove
+    already-imported duplicate economic rows must do that through the audited
+    transaction metadata path.
+    """
+    scripts_by_wallet = _address_list_repair_scripts(conn, profile_id)
+    if not scripts_by_wallet:
+        return {"wallets_updated": [], "addresses_removed": 0}
+    rows = conn.execute(
+        """
+        SELECT id, label, config_json
+        FROM wallets
+        WHERE profile_id = ?
+        """,
+        (profile_id,),
+    ).fetchall()
+    wallets_updated: list[dict[str, Any]] = []
+    removed_total = 0
+    for row in rows:
+        wallet_id = str(row["id"])
+        scripts = scripts_by_wallet.get(wallet_id)
+        if not scripts:
+            continue
+        config = _wallet_config(row)
+        addresses = normalize_addresses(config.get("addresses"))
+        kept: list[str] = []
+        removed_addresses: list[str] = []
+        removed = 0
+        for address in addresses:
+            script_pubkey = scriptpubkey_for_address_or_none(address)
+            if script_pubkey and script_pubkey.lower() in scripts:
+                removed += 1
+                removed_addresses.append(address)
+                continue
+            kept.append(address)
+        if removed == 0:
+            continue
+        config["addresses"] = kept
+        deprecated = False
+        if not kept:
+            config["deprecated"] = True
+            deprecated = True
+        conn.execute(
+            "UPDATE wallets SET config_json = ? WHERE id = ?",
+            (json.dumps(config, sort_keys=True), wallet_id),
+        )
+        script_placeholders = ", ".join("?" for _ in scripts)
+        address_placeholders = ", ".join("?" for _ in removed_addresses)
+        conn.execute(
+            f"""
+            DELETE FROM wallet_utxos
+            WHERE profile_id = ?
+              AND wallet_id = ?
+              AND (
+                lower(script_pubkey) IN ({script_placeholders})
+                OR address IN ({address_placeholders})
+              )
+            """,
+            (profile_id, wallet_id, *sorted(scripts), *removed_addresses),
+        )
+        conn.execute(
+            """
+            DELETE FROM freshness_source_states
+            WHERE profile_id = ? AND source_key = ?
+            """,
+            (
+                profile_id,
+                core_freshness.source_key(core_freshness.SOURCE_ONCHAIN, wallet_id),
+            ),
+        )
+        removed_total += removed
+        wallets_updated.append(
+            {
+                "wallet_id": wallet_id,
+                "wallet": str(row["label"] or wallet_id),
+                "addresses_removed": removed,
+                "remaining_addresses": len(kept),
+                "deprecated": deprecated,
+                "output_inventory_cleared": True,
+                "refresh_checkpoint_reset": True,
+            }
+        )
+    return {"wallets_updated": wallets_updated, "addresses_removed": removed_total}
+
+
 def _filter_sync_targets(sync_state: Any, filtered_scripts: set[str]) -> Any:
     targets = list(getattr(sync_state, "targets", []) or [])
     kept_targets = [
@@ -811,6 +930,7 @@ def raise_for_sync_source_overlap(
 
 __all__ = [
     "SourceScript",
+    "apply_address_list_overlap_repairs",
     "detect_profile_source_overlaps",
     "duplicate_transaction_preview",
     "filter_sync_state_for_canonical_owner",

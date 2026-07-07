@@ -4234,9 +4234,96 @@ def build_ledger_state(conn, profile):
     }
 
 
+def _repair_journal_source_overlaps(conn, profile):
+    overlap = core_source_overlap.detect_profile_source_overlaps(conn, profile["id"])
+    if not overlap["overlaps"]:
+        return None
+    repair_preview = core_source_overlap.duplicate_transaction_preview(
+        conn,
+        profile["id"],
+        overlap["overlaps"],
+    )
+    excluded_records = []
+    for tx_id in repair_preview.get("recommended_exclusions") or []:
+        record = core_metadata.update_transaction_metadata(
+            conn,
+            None,
+            None,
+            str(tx_id),
+            _metadata_hooks(),
+            excluded=True,
+            source="cli",
+            reason=(
+                "Auto-resolved overlapping wallet sources: descriptor/xpub "
+                "source kept canonical; duplicate address-list transaction excluded."
+            ),
+            commit=False,
+        )
+        excluded_records.append(
+            {
+                "transaction_id": record["transaction_id"],
+                "wallet": record["wallet_label"],
+                "external_id": record["external_id"],
+                "history_event_id": record["history_event_id"],
+                "updated": record["updated"],
+            }
+        )
+    address_list_repair = core_source_overlap.apply_address_list_overlap_repairs(
+        conn,
+        profile["id"],
+    )
+    if address_list_repair["addresses_removed"] or excluded_records:
+        remaining = core_source_overlap.detect_profile_source_overlaps(conn, profile["id"])
+        return {
+            "addresses_removed": address_list_repair["addresses_removed"],
+            "wallets_updated": address_list_repair["wallets_updated"],
+            "duplicates_excluded": len(
+                [record for record in excluded_records if record["updated"]]
+            ),
+            "excluded_records": excluded_records,
+            "remaining_overlap_count": remaining["overlap_count"],
+            "remaining_overlaps": remaining["overlaps"],
+        }
+    return None
+
+
+def _raise_for_journal_source_overlaps(conn, profile, repair_attempt=None):
+    overlap = core_source_overlap.detect_profile_source_overlaps(conn, profile["id"])
+    if not overlap["overlaps"]:
+        return
+    repair_preview = core_source_overlap.duplicate_transaction_preview(
+        conn,
+        profile["id"],
+        overlap["overlaps"],
+    )
+    details = {
+        "overlap_count": overlap["overlap_count"],
+        "overlap": overlap,
+        "repair_preview": repair_preview,
+        # Background freshness should not hammer deterministic repair work.
+        "retry_after_seconds": 3600,
+    }
+    if repair_attempt is not None:
+        details["repair_attempt"] = repair_attempt
+    raise AppError(
+        "Overlapping wallet sources block journal processing",
+        code="source_overlap",
+        hint=(
+            "Review overlapping wallet sources before processing journals. "
+            "Prefer one canonical source and trim or deprecate duplicate address-list "
+            "targets; exclude already-imported duplicate rows through the audited "
+            "metadata path."
+        ),
+        details=details,
+        retryable=False,
+    )
+
+
 def process_journals(conn, workspace_ref, profile_ref):
     _, profile = resolve_scope(conn, workspace_ref, profile_ref)
     require_tax_processing_supported(profile)
+    source_overlap_repair = _repair_journal_source_overlaps(conn, profile)
+    _raise_for_journal_source_overlaps(conn, profile, source_overlap_repair)
     conn.execute("SAVEPOINT journals_process")
     try:
         auto_priced = auto_price_transactions_from_rates_cache(conn, profile)
@@ -4441,6 +4528,8 @@ def process_journals(conn, workspace_ref, profile_ref):
         result["direct_swap_payouts"] = len(state["direct_swap_payouts"])
     if state.get("warnings"):
         result["warnings"] = state["warnings"]
+    if source_overlap_repair is not None:
+        result["source_overlap_repair"] = source_overlap_repair
     return result
 
 
