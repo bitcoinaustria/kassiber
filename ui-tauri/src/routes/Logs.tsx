@@ -49,6 +49,7 @@ import {
   type AppLogRedactionMode,
   type AppLogRecord,
 } from "@/lib/appLogs";
+import { confirmAction } from "@/lib/confirmAction";
 import { isFilePickerAvailable, saveFile } from "@/lib/filePicker";
 import { appVersionLabel } from "@/lib/appVersion";
 import {
@@ -202,7 +203,7 @@ export function Logs() {
   };
 
   const exportFormat = async (format: "md" | "log" | "jsonl") => {
-    if (!redacted && !window.confirm(t("logs.exportRawConfirm"))) {
+    if (!redacted && !(await confirmAction(t("logs.exportRawConfirm")))) {
       return;
     }
     const redaction = redacted

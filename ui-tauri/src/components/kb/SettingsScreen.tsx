@@ -36,6 +36,7 @@ import {
   type TerminalCommandStatus,
   type TouchIdPassphraseStatus,
 } from "@/daemon/transport";
+import { confirmAction } from "@/lib/confirmAction";
 import { screenPanelClassName } from "@/lib/screen-layout";
 import { setSessionUnlockPassphrase } from "@/store/sessionLock";
 import { useUiStore } from "@/store/ui";
@@ -371,9 +372,9 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
   }, [backendSettingsQuery.isFetched, backends, pendingBackendEditId]);
 
   const onResetWorkspace = () => {
-    const ok = window.confirm(t("resetWelcome.confirm"));
-    if (!ok) return;
     void (async () => {
+      const ok = await confirmAction(t("resetWelcome.confirm"));
+      if (!ok) return;
       if (identity?.importedProject) {
         await clearImportProject();
       }
@@ -426,24 +427,26 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
     dataMode === "regtest" && canResetRegtestDemo(status?.data_root ?? null);
   const onResetRegtestEnv = () => {
     if (resetRegtestPending) return;
-    if (!window.confirm(t("data.resetRegtestConfirm"))) return;
-    setResetRegtestPending(true);
-    void resetRegtestDemo()
-      .then(() => {
+    void (async () => {
+      if (!(await confirmAction(t("data.resetRegtestConfirm")))) return;
+      setResetRegtestPending(true);
+      try {
+        await resetRegtestDemo();
         addNotification({
           tone: "success",
           title: t("data.resetRegtestDoneTitle"),
           body: t("data.resetRegtestDoneBody"),
         });
-      })
-      .catch((error: unknown) => {
+      } catch (error: unknown) {
         addNotification({
           tone: "error",
           title: t("data.resetRegtestErrorTitle"),
           body: error instanceof Error ? error.message : t("data.resetRegtestErrorBody"),
         });
-      })
-      .finally(() => setResetRegtestPending(false));
+      } finally {
+        setResetRegtestPending(false);
+      }
+    })();
   };
 
   const openChangePassphrase = () => {
@@ -518,7 +521,7 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
             wallets: affectedWallets.join("\n- "),
           })}`
         : "";
-    const ok = window.confirm(
+    const ok = await confirmAction(
       `${t("deleteBackend.confirm", { name: backend.name })}${walletWarning}`,
     );
     if (!ok) return;

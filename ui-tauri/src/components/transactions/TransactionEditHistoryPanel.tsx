@@ -14,6 +14,7 @@ import { useTranslation } from "react-i18next";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { confirmAction } from "@/lib/confirmAction";
 import { cn } from "@/lib/utils";
 import {
   formatHistoryDate,
@@ -37,7 +38,7 @@ function hiddenClass(hideSensitive: boolean) {
   return hideSensitive ? "blur-sm select-none" : "";
 }
 
-function confirmRevert(
+async function confirmRevert(
   target: HistoryRevertTarget,
   t: (key: string, opts?: Record<string, unknown>) => string,
   onRevert?: (target: HistoryRevertTarget) => void,
@@ -46,7 +47,7 @@ function confirmRevert(
   const fieldLabel = target.field
     ? target.field.label
     : t("history.confirmRevertAll");
-  const ok = window.confirm(
+  const ok = await confirmAction(
     t("history.confirmRevertField", { label: fieldLabel }),
   );
   if (!ok) return;
@@ -122,7 +123,7 @@ function FieldDiffRow({
           disabled={isReverting}
           aria-label={t("history.revertFieldAria", { label: field.label })}
           onClick={() =>
-            confirmRevert(
+            void confirmRevert(
               { event, field },
               t as (key: string, opts?: Record<string, unknown>) => string, // loose translator
               onRevert,
@@ -236,7 +237,7 @@ export function TransactionHistoryTimeline({
                     aria-label={t("history.revertEditAria")}
                     onClick={(clickEvent) => {
                       clickEvent.preventDefault();
-                      confirmRevert(
+                      void confirmRevert(
                         { event },
                         t as (key: string, opts?: Record<string, unknown>) => string, // loose translator
                         onRevert,
