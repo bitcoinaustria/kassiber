@@ -3,7 +3,11 @@ import unittest
 from unittest.mock import patch
 from urllib.parse import parse_qs, urlsplit
 
-from kassiber.sync_btcpay import fetch_btcpay_invoice_provenance, fetch_btcpay_records
+from kassiber.sync_btcpay import (
+    discover_btcpay_wallet_sources,
+    fetch_btcpay_invoice_provenance,
+    fetch_btcpay_records,
+)
 
 
 class _Response:
@@ -39,6 +43,28 @@ class _Opener:
         return _Response(self.pages.get(skip, []))
 
 
+class _DiscoveryOpener:
+    def __init__(self, stores, payment_methods_by_store):
+        self.stores = stores
+        self.payment_methods_by_store = payment_methods_by_store
+        self.urls = []
+
+    def open(self, request, timeout=30):
+        del timeout
+        url = request.full_url
+        self.urls.append(url)
+        parts = [part for part in urlsplit(url).path.split("/") if part]
+        if parts == ["api", "v1", "stores"]:
+            return _Response(self.stores)
+        if (
+            len(parts) == 5
+            and parts[:3] == ["api", "v1", "stores"]
+            and parts[4] == "payment-methods"
+        ):
+            return _Response(self.payment_methods_by_store.get(parts[3], []))
+        return _Response([])
+
+
 class BtcpayIncrementalTest(unittest.TestCase):
     def _wallet_page(self, index, *, comment=None, labels=None):
         row = {
@@ -62,6 +88,54 @@ class BtcpayIncrementalTest(unittest.TestCase):
                 "payments": [],
             }
         ]
+
+    def test_discovery_fetches_payment_methods_for_every_visible_store(self):
+        backend = {
+            "name": "btcpay",
+            "kind": "btcpay",
+            "url": "https://btcpay.example",
+            "token": "secret",
+        }
+        opener = _DiscoveryOpener(
+            [
+                {"id": "store-one", "name": "Main store", "defaultCurrency": "EUR"},
+                {"id": "store-two", "name": "Membership store", "defaultCurrency": "BTC"},
+            ],
+            {
+                "store-one": [
+                    {"paymentMethodId": "BTC-CHAIN", "name": "Bitcoin on-chain", "enabled": True},
+                    {"paymentMethodId": "BTC-LN", "name": "Lightning", "enabled": True},
+                ],
+                "store-two": [
+                    {"paymentMethodId": "LBTC-CHAIN", "name": "Liquid", "enabled": True},
+                ],
+            },
+        )
+
+        discovered = discover_btcpay_wallet_sources(backend, opener=opener)
+
+        self.assertEqual(
+            [store["id"] for store in discovered["stores"]],
+            ["store-one", "store-two"],
+        )
+        self.assertEqual(
+            [
+                (method["store_id"], method["payment_method_id"], method["sync_supported"])
+                for method in discovered["payment_methods"]
+            ],
+            [
+                ("store-one", "BTC-CHAIN", True),
+                ("store-one", "BTC-LN", False),
+                ("store-two", "LBTC-CHAIN", True),
+            ],
+        )
+        self.assertIn("/api/v1/stores", opener.urls[0])
+        self.assertTrue(
+            any("/api/v1/stores/store-one/payment-methods?" in url for url in opener.urls)
+        )
+        self.assertTrue(
+            any("/api/v1/stores/store-two/payment-methods?" in url for url in opener.urls)
+        )
 
     def test_wallet_history_default_opener_uses_backend_proxy(self):
         backend = {
