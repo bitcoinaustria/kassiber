@@ -146,6 +146,42 @@ def _row_field(row, key):
     return row[key] if key in keys else None
 
 
+_LIGHTNING_PAYMENT_HASH_SOURCES = frozenset({"core_lightning", "lnd"})
+_NON_LIGHTNING_PAYMENT_HASH_SOURCES = frozenset({"chain_script"})
+_LIGHTNING_WALLET_KINDS = frozenset(
+    {"cln", "core-ln", "coreln", "lnd", "lightning", "nwc", "phoenix"}
+)
+_LIGHTNING_TRANSACTION_KINDS = frozenset(
+    {
+        "cln_invoice",
+        "cln_pay",
+        "lightning_received",
+        "lightning_sent",
+        "ln_invoice",
+        "ln_pay",
+        "lnd_invoice",
+        "lnd_pay",
+    }
+)
+
+
+def _normalized_lower(value):
+    return str(value or "").strip().lower()
+
+
+def _is_lightning_payment_hash_row(row):
+    source = _normalized_lower(_row_field(row, "payment_hash_source"))
+    if source in _NON_LIGHTNING_PAYMENT_HASH_SOURCES:
+        return False
+    if source in _LIGHTNING_PAYMENT_HASH_SOURCES:
+        return True
+    kind = _normalized_lower(_row_field(row, "kind"))
+    if kind in _LIGHTNING_TRANSACTION_KINDS:
+        return True
+    wallet_kind = _normalized_lower(_row_field(row, "wallet_kind"))
+    return wallet_kind in _LIGHTNING_WALLET_KINDS
+
+
 def detect_intra_transfers(rows):
     """Return ``(pairs, matched_ids)`` for the given transaction rows.
 
@@ -202,12 +238,19 @@ def detect_intra_transfers(rows):
     # the same conservative 1-out/1-in / different-wallet / same-asset rule
     # applies. External payments (only an outbound leg, no owned receiver) never
     # pair and stay real disposals.
+    #
+    # On-chain HTLC claim/refund rows can also expose payment_hash via
+    # chain_script enrichment. Those are swap evidence, not proof that two
+    # same-asset owned rows are a plain MOVE, so they stay eligible for swap
+    # review instead of being auto-suppressed here.
     by_hash = defaultdict(list)
     for row in rows:
         if _row_field(row, "id") in matched_ids:
             continue
         payment_hash = _row_field(row, "payment_hash")
         if not payment_hash:
+            continue
+        if not _is_lightning_payment_hash_row(row):
             continue
         by_hash[(str(payment_hash), row["asset"])].append(row)
     for group in by_hash.values():

@@ -639,6 +639,25 @@ class NormalizeTaxAssetInputsTest(unittest.TestCase):
         self.assertEqual(float(inputs.transfers[0].fee), 0.00001)
         self.assertEqual(inputs.quarantines, [])
 
+    def test_onchain_payment_hash_rows_do_not_auto_pair_as_internal_move(self):
+        from kassiber.transfers import detect_intra_transfers
+
+        payment_hash = "fa" * 32
+        out_row = _row(
+            "ln-pay", "wallet-a", "outbound", 100_000_000,
+            external_id="ln-pay", payment_hash=payment_hash, kind="cln_pay",
+        )
+        in_row = _row(
+            "chain-claim", "wallet-b", "inbound", 99_500_000,
+            external_id="chain-claim", payment_hash=payment_hash, kind="deposit",
+        )
+        in_row["payment_hash_source"] = "chain_script"
+
+        pairs, matched = detect_intra_transfers([out_row, in_row])
+
+        self.assertEqual(pairs, [])
+        self.assertEqual(matched, set())
+
     def test_detect_intra_transfers_folds_mixed_case_txid(self):
         # A txid recorded uppercase in one wallet and lowercase in another is the
         # same on-chain transaction; the grouping must fold case so the pair is
