@@ -62,6 +62,8 @@ export type SetupKind =
 export type ConnectionSourceFormat =
   | "csv"
   | "json"
+  | "btcpay_csv"
+  | "btcpay_json"
   | "phoenix_csv"
   | "river_csv"
   | "bullbitcoin_csv"
@@ -541,6 +543,26 @@ export const CONNECTION_SOURCES: ConnectionSource[] = [
     details: [
       "Save or reuse a BTCPay instance",
       "Map payment methods to Kassiber wallets",
+    ],
+  },
+  {
+    id: "btcpay-csv",
+    title: "BTCPay CSV",
+    description: "Manual BTCPay wallet export import when API sync is not available.",
+    category: "merchant",
+    image: btcpayIcon,
+    imageClassName: "h-9 w-auto",
+    status: "ready",
+    pathLabel: "CSV import",
+    formatLabel: "btcpay_csv",
+    setupKind: "file-wallet",
+    walletKind: "custom",
+    sourceFormat: "btcpay_csv",
+    details: [
+      "Imports a local BTCPay wallet transaction CSV export",
+      "Comments become notes and labels become Kassiber tags",
+      "Can create a file-backed source wallet or import into an existing settlement wallet",
+      "Use BTCPay Server for repeatable API sync and invoice provenance",
     ],
   },
   {

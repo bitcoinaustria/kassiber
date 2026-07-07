@@ -228,6 +228,25 @@ class ConnectionCatalogDriftTests(unittest.TestCase):
             "BTCPay setup hard-codes a wallet kind that WALLET_KINDS no longer contains",
         )
 
+    def test_btcpay_csv_import_is_manual_file_wallet_source(self):
+        match = re.search(
+            r"CONNECTION_SOURCES[^=]*=\s*\[(?P<body>.*?)\];",
+            self.catalog_text,
+            re.DOTALL,
+        )
+        self.assertIsNotNone(match, "could not find CONNECTION_SOURCES literal")
+        entries = {
+            _extract_field(entry, "id"): entry
+            for entry in _split_entries(match.group("body"))
+        }
+        self.assertEqual(_extract_field(entries["btcpay"], "setupKind"), "btcpay")
+
+        csv_entry = entries.get("btcpay-csv")
+        self.assertIsNotNone(csv_entry, "manual BTCPay CSV source is missing")
+        self.assertEqual(_extract_field(csv_entry, "setupKind"), "file-wallet")
+        self.assertEqual(_extract_field(csv_entry, "walletKind"), "custom")
+        self.assertEqual(_extract_field(csv_entry, "sourceFormat"), "btcpay_csv")
+
     def _rust_allowlist(self) -> set[str]:
         match = re.search(
             r"ALLOWED_DAEMON_KINDS[^=]*=\s*&\[(?P<body>.*?)\];",

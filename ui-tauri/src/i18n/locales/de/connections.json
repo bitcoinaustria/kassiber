@@ -620,6 +620,7 @@
       "saving": "Wird gespeichert…",
       "saveWalletMapping": "Wallet-Zuordnung speichern",
       "createConnections": "Verbindungen erstellen",
+      "importTransactions": "Transaktionen importieren",
       "importPricing": "Bewertung importieren",
       "createConnection": "Verbindung erstellen"
     },
@@ -765,6 +766,8 @@
     },
     "exportFile": {
       "label": "Pfad zur Exportdatei",
+      "btcpayLabel": "Pfad zum BTCPay-CSV-Export",
+      "btcpayHelper": "Wähle einen BTCPay-CSV-Export der Wallet-Transaktionen. Kassiber importiert Kommentare als Notizen und Labels als Tags.",
       "wasabiLabel": "Pfad zum Wasabi-JSON-Bundle",
       "wasabiHelper": "Wähle ein bereinigtes lokales Bundle mit Wasabi gethistory sowie listcoins/listunspentcoins-Daten. Kassiber importiert es als Watch-only-Buchhaltungsnachweis."
     },
@@ -779,6 +782,7 @@
       "strikeCsv": "Strike CSV",
       "ledgerliveCsv": "Ledger Live CSV",
       "binanceSupplementalCsv": "Binance Supplemental CSV",
+      "btcpayCsv": "BTCPay CSV",
       "wasabiBundle": "Wasabi-JSON-Bundle",
       "samouraiSourceSet": "Samourai-Descriptor-Source-Set",
       "csvOrJson": "CSV oder JSON",
@@ -855,6 +859,22 @@
       "formatJson": "JSON",
       "importAfter": "Nach dem Setup importieren",
       "stillImporting": "{{label}} importiert noch aus der ausgewählten Datei. Große Exporte können etwas dauern; Kassiber aktualisiert, sobald der Daemon fertig ist."
+    },
+    "btcpayCsv": {
+      "importBehavior": "Importverhalten",
+      "createWallet": "BTCPay-Wallet erstellen",
+      "importIntoExisting": "In Wallet importieren",
+      "createWalletHelper": "Erstellt aus diesem CSV-Export eine dateibasierte BTCPay-Wallet-Quelle.",
+      "existingWalletHelper": "Nutze das, wenn ein Descriptor, Node oder eine andere Kassiber-Wallet die Settlement-Transaktionen bereits verfolgt.",
+      "walletToImport": "Kassiber-Wallet",
+      "walletToImportHelper": "Wähle die Wallet, die die BTCPay-Settlement-Wallet bereits abbildet.",
+      "chooseWallet": "Wallet wählen",
+      "noWalletsYet": "Noch keine Nicht-BTCPay-Wallets",
+      "errorChooseWallet": "Wähle die Wallet, die diesen BTCPay-CSV-Import erhalten soll.",
+      "errorCreateWalletFirst": "Erstelle zuerst eine Settlement-Wallet oder wechsle zum Erstellen einer BTCPay-Wallet-Quelle.",
+      "importingExisting": "{{wallet}} importiert den BTCPay-CSV-Export.",
+      "importedTitle": "BTCPay CSV importiert",
+      "importedBody": "BTCPay-CSV-Zeilen in {{wallet}} importiert."
     },
     "descriptorWallet": {
       "stillScanning": "{{label}} scannt noch im Watch-only-Modus. Große Descriptors oder langsame Backends können etwas dauern; Kassiber aktualisiert, sobald der Daemon fertig ist."

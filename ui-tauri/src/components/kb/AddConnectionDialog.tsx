@@ -102,6 +102,7 @@ interface SetupFormState {
   coreRpcNetwork: string;
   btcpayInstanceMode: "saved" | "new";
   btcpaySetupMode: "wallet_sources" | "existing_wallets";
+  btcpayCsvImportMode: "wallet_source" | "existing_wallet";
   bullWalletSetupMode: "wallet_sources" | "existing_wallets";
   bullWalletNetworks: BullBitcoinWalletNetwork[];
   bullWalletRouteWallets: Record<BullBitcoinWalletNetwork, string>;
@@ -505,6 +506,12 @@ function fileWalletSourceField(
       helper: t("add.exportFile.wasabiHelper"),
     };
   }
+  if (source.sourceFormat === "btcpay_csv") {
+    return {
+      label: t("add.exportFile.btcpayLabel"),
+      helper: t("add.exportFile.btcpayHelper"),
+    };
+  }
   return {
     label: t("add.exportFile.label"),
     helper: undefined,
@@ -548,6 +555,9 @@ function sourceFileFilters(
   }
   if (source.sourceFormat === "binance_supplemental_csv") {
     return [{ name: t("add.fileFilter.binanceSupplementalCsv"), extensions: ["csv"] }];
+  }
+  if (source.sourceFormat === "btcpay_csv") {
+    return [{ name: t("add.fileFilter.btcpayCsv"), extensions: ["csv"] }];
   }
   if (source.sourceFormat === "wasabi_bundle") {
     return [{ name: t("add.fileFilter.wasabiBundle"), extensions: ["json"] }];
@@ -594,6 +604,7 @@ const formDefaultsFor = (
     coreRpcNetwork: source.network ?? "main",
     btcpayInstanceMode: "new",
     btcpaySetupMode: "wallet_sources",
+    btcpayCsvImportMode: "wallet_source",
     bullWalletSetupMode: "wallet_sources",
     bullWalletNetworks: ["bitcoin", "liquid", "lightning"],
     bullWalletRouteWallets: {
@@ -1187,6 +1198,10 @@ export function AddConnectionDialog({
               : setupKind === "bullbitcoin-wallet" &&
                   form.bullWalletNetworks.length > 1
                 ? t("add.submit.createConnections")
+              : setupKind === "file-wallet" &&
+                  selected.sourceFormat === "btcpay_csv" &&
+                  form.btcpayCsvImportMode === "existing_wallet"
+                ? t("add.submit.importTransactions")
               : setupKind === "file-enrichment"
                 ? t("add.submit.importPricing")
               : t("add.submit.createConnection");
@@ -1323,6 +1338,7 @@ export function AddConnectionDialog({
       key === "wasabiAdditional" ||
       key === "targetWallet" ||
       key === "sourceFormat" ||
+      key === "btcpayCsvImportMode" ||
       key === "bullImportMode" ||
       key === "bullWalletSetupMode" ||
       key === "bullWalletNetworks" ||
@@ -1480,7 +1496,11 @@ export function AddConnectionDialog({
       setupKind === "descriptor" ||
       setupKind === "silent-payment" ||
       setupKind === "address-list" ||
-      setupKind === "file-wallet" ||
+      (setupKind === "file-wallet" &&
+        !(
+          selected.sourceFormat === "btcpay_csv" &&
+          form.btcpayCsvImportMode === "existing_wallet"
+        )) ||
       setupKind === "samourai" ||
       setupKind === "btcpay" ||
       setupKind === "bullbitcoin-wallet" ||
@@ -1642,6 +1662,16 @@ export function AddConnectionDialog({
         genericLedgerPreviewBlocksSubmit
       ) {
         errors.sourceFile = t("add.genericLedger.preview.submitBlocked");
+      }
+      if (
+        selected.sourceFormat === "btcpay_csv" &&
+        form.btcpayCsvImportMode === "existing_wallet"
+      ) {
+        if (existingWalletOptions.length === 0) {
+          errors.targetWallet = t("add.btcpayCsv.errorCreateWalletFirst");
+        } else if (!form.targetWallet.trim()) {
+          errors.targetWallet = t("add.btcpayCsv.errorChooseWallet");
+        }
       }
     }
     if (setupKind === "file-enrichment") {
@@ -1911,60 +1941,88 @@ export function AddConnectionDialog({
       } else if (setupKind === "file-wallet") {
         const sourceFormat =
           selected.id === "csv" ? form.sourceFormat : selected.sourceFormat;
-        await createWallet.mutateAsync({
-          label,
-          kind: selected.walletKind ?? "custom",
-          ...(selected.sourceFormat === "wasabi_bundle" &&
-          form.wasabiImportMode === "rpc"
-            ? {}
-            : { source_file: form.sourceFile.trim() }),
-          source_format: sourceFormat,
-        });
+        if (!sourceFormat) {
+          throw new Error(t("add.enrichment.errorNoFormat"));
+        }
         if (
-          selected.sourceFormat === "wasabi_bundle" &&
-          form.wasabiImportMode === "rpc"
+          selected.sourceFormat === "btcpay_csv" &&
+          form.btcpayCsvImportMode === "existing_wallet"
         ) {
-          const { bundle } = buildWasabiBundle({
-            history: form.wasabiHistory,
-            coins: form.wasabiCoins,
-            walletInfo: form.wasabiWalletInfo,
-            additional: form.wasabiAdditional,
-          });
-          startSyncNotice(t("add.wasabi.importingRpc", { label }));
+          const targetWallet = form.targetWallet.trim();
+          startSyncNotice(
+            t("add.btcpayCsv.importingExisting", { wallet: targetWallet }),
+          );
           try {
             const envelope = await importFile.mutateAsync({
-              wallet: label,
-              source_format: "wasabi_bundle",
-              source_bundle: bundle,
+              wallet: targetWallet,
+              source_file: form.sourceFile.trim(),
+              source_format: sourceFormat,
             });
             setLastImportResult(envelope.data ?? null);
           } finally {
             clearSyncNotice();
           }
-        } else if (form.syncAfterCreate) {
-          startSyncNotice(
-            t("add.fileWallet.stillImporting", { label }),
-          );
-          try {
-            const envelope = await syncWallet.mutateAsync({ wallet: label });
-            const result = envelope.data?.results.find(
-              (item) => item.wallet === label,
-            );
-            const importSummary = importResultFromSyncResult(result);
-            if (importSummary) {
-              setLastImportResult(importSummary);
+          addNotification({
+            title: t("add.btcpayCsv.importedTitle"),
+            body: t("add.btcpayCsv.importedBody", { wallet: targetWallet }),
+            tone: "success",
+          });
+        } else {
+          await createWallet.mutateAsync({
+            label,
+            kind: selected.walletKind ?? "custom",
+            ...(selected.sourceFormat === "wasabi_bundle" &&
+            form.wasabiImportMode === "rpc"
+              ? {}
+              : { source_file: form.sourceFile.trim() }),
+            source_format: sourceFormat,
+          });
+          if (
+            selected.sourceFormat === "wasabi_bundle" &&
+            form.wasabiImportMode === "rpc"
+          ) {
+            const { bundle } = buildWasabiBundle({
+              history: form.wasabiHistory,
+              coins: form.wasabiCoins,
+              walletInfo: form.wasabiWalletInfo,
+              additional: form.wasabiAdditional,
+            });
+            startSyncNotice(t("add.wasabi.importingRpc", { label }));
+            try {
+              const envelope = await importFile.mutateAsync({
+                wallet: label,
+                source_format: "wasabi_bundle",
+                source_bundle: bundle,
+              });
+              setLastImportResult(envelope.data ?? null);
+            } finally {
+              clearSyncNotice();
             }
-          } finally {
-            clearSyncNotice();
+          } else if (form.syncAfterCreate) {
+            startSyncNotice(
+              t("add.fileWallet.stillImporting", { label }),
+            );
+            try {
+              const envelope = await syncWallet.mutateAsync({ wallet: label });
+              const result = envelope.data?.results.find(
+                (item) => item.wallet === label,
+              );
+              const importSummary = importResultFromSyncResult(result);
+              if (importSummary) {
+                setLastImportResult(importSummary);
+              }
+            } finally {
+              clearSyncNotice();
+            }
           }
+          addNotification({
+            title: t("add.added.title"),
+            body: form.syncAfterCreate
+              ? t("add.added.bodyImported", { label })
+              : t("add.added.body", { label }),
+            tone: "success",
+          });
         }
-        addNotification({
-          title: t("add.added.title"),
-          body: form.syncAfterCreate
-            ? t("add.added.bodyImported", { label })
-            : t("add.added.body", { label }),
-          tone: "success",
-        });
       } else if (setupKind === "file-enrichment") {
         const sourceFormat = selected.sourceFormat;
         if (!sourceFormat) {
@@ -3267,6 +3325,90 @@ export function AddConnectionDialog({
               </div>
             ) : (
               renderSourceFileSetup(t("add.wasabi.importAfter"))
+            )}
+          </>
+        );
+      }
+      if (selected.sourceFormat === "btcpay_csv") {
+        const importIntoExisting =
+          form.btcpayCsvImportMode === "existing_wallet";
+        return (
+          <>
+            <SetupField
+              id="connection-btcpay-csv-mode"
+              label={t("add.btcpayCsv.importBehavior")}
+              helper={
+                importIntoExisting
+                  ? t("add.btcpayCsv.existingWalletHelper")
+                  : t("add.btcpayCsv.createWalletHelper")
+              }
+            >
+              <div className="grid grid-cols-2 gap-2">
+                <Button
+                  type="button"
+                  variant={
+                    form.btcpayCsvImportMode === "wallet_source"
+                      ? "secondary"
+                      : "outline"
+                  }
+                  onClick={() => updateForm("btcpayCsvImportMode", "wallet_source")}
+                >
+                  {t("add.btcpayCsv.createWallet")}
+                </Button>
+                <Button
+                  type="button"
+                  variant={importIntoExisting ? "secondary" : "outline"}
+                  onClick={() => {
+                    setForm((current) => ({
+                      ...current,
+                      btcpayCsvImportMode: "existing_wallet",
+                      targetWallet:
+                        current.targetWallet ||
+                        existingWalletOptions[0]?.label ||
+                        "",
+                    }));
+                    setLastImportResult(null);
+                  }}
+                >
+                  {t("add.btcpayCsv.importIntoExisting")}
+                </Button>
+              </div>
+            </SetupField>
+            {importIntoExisting ? (
+              <SetupField
+                id="connection-btcpay-csv-target-wallet"
+                label={t("add.btcpayCsv.walletToImport")}
+                error={fieldErrors.targetWallet}
+                helper={t("add.btcpayCsv.walletToImportHelper")}
+              >
+                <select
+                  id="connection-btcpay-csv-target-wallet"
+                  className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                  value={form.targetWallet}
+                  onChange={(event) =>
+                    updateForm("targetWallet", event.target.value)
+                  }
+                  disabled={existingWalletOptions.length === 0}
+                  required
+                >
+                  {existingWalletOptions.length === 0 ? (
+                    <option value="">{t("add.btcpayCsv.noWalletsYet")}</option>
+                  ) : (
+                    <option value="">{t("add.btcpayCsv.chooseWallet")}</option>
+                  )}
+                  {existingWalletOptions.map((wallet) => (
+                    <option key={wallet.label} value={wallet.label}>
+                      {wallet.label}
+                      {wallet.chain ? ` (${wallet.chain})` : ""}
+                    </option>
+                  ))}
+                </select>
+              </SetupField>
+            ) : (
+              renderConnectionLabelField()
+            )}
+            {renderSourceFileSetup(
+              importIntoExisting ? undefined : t("add.fileWallet.importAfter"),
             )}
           </>
         );
