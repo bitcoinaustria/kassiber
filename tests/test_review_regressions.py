@@ -6119,6 +6119,78 @@ class ReviewRegressionTest(unittest.TestCase):
         self._assert_ok(payload, result, "wallets.get")
         self.assertNotIn("backend", payload["data"]["config"])
 
+    def test_backends_delete_removes_btcpay_account_routes(self):
+        self._bootstrap_profile()
+
+        payload, result = self._run_json(
+            "backends",
+            "create",
+            "btcpay1",
+            "--kind",
+            "btcpay",
+            "--url",
+            "http://127.0.0.1:9",
+            "--token",
+            "testkey",
+        )
+        self._assert_ok(payload, result, "backends.create")
+
+        conn = sqlite3.connect(self.data_root / "kassiber.sqlite3")
+        conn.row_factory = sqlite3.Row
+        workspace = conn.execute("SELECT * FROM workspaces WHERE label = 'Main'").fetchone()
+        profile = conn.execute("SELECT * FROM profiles WHERE label = 'Default'").fetchone()
+        conn.execute(
+            """
+            INSERT INTO btcpay_account_routes(
+                id, workspace_id, profile_id, backend_name, store_id,
+                payment_method_id, action, label, created_at, updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "route-delete-regression",
+                workspace["id"],
+                profile["id"],
+                "btcpay1",
+                "STORE1",
+                "BTC-LN",
+                "provenance_only",
+                "Store route",
+                "2026-01-01T00:00:00+00:00",
+                "2026-01-01T00:00:00+00:00",
+            ),
+        )
+        conn.commit()
+        conn.close()
+
+        payload, result = self._run_json("backends", "delete", "btcpay1")
+        self._assert_ok(payload, result, "backends.delete")
+        self.assertTrue(payload["data"]["deleted"])
+        self.assertEqual(payload["data"]["detached_btcpay_account_routes"], 1)
+
+        conn = sqlite3.connect(self.data_root / "kassiber.sqlite3")
+        route_count = conn.execute("SELECT COUNT(*) FROM btcpay_account_routes").fetchone()[0]
+        conn.close()
+        self.assertEqual(route_count, 0)
+
+        payload, result = self._run_json(
+            "backends",
+            "create",
+            "btcpay1",
+            "--kind",
+            "btcpay",
+            "--url",
+            "http://127.0.0.1:9",
+            "--token",
+            "replacement",
+        )
+        self._assert_ok(payload, result, "backends.create")
+
+        conn = sqlite3.connect(self.data_root / "kassiber.sqlite3")
+        route_count = conn.execute("SELECT COUNT(*) FROM btcpay_account_routes").fetchone()[0]
+        conn.close()
+        self.assertEqual(route_count, 0)
+
     def test_metadata_record_mutations_roundtrip_and_invalidate_journals(self):
         self._bootstrap_wallet(label="Meta")
         json_file = self.case_dir / "meta-import.json"

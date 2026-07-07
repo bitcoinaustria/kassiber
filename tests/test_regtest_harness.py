@@ -581,6 +581,7 @@ class RegtestHarnessTest(unittest.TestCase):
         self.assertIn("bitcoin_mempool_ui_url", harness)
         self.assertIn("mempool/frontend", compose)
         self.assertIn("mempool/backend", compose)
+        self.assertNotIn(":latest", compose)
         self.assertIn("MEMPOOL_CACHE_DIR: /tmp/mempool-cache", compose)
         self.assertIn("mariadb:10.5.21", compose)
         self.assertIn("MEMPOOL_NETWORK: regtest", compose)

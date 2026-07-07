@@ -491,6 +491,7 @@ export function NetworkStatusIndicator({
                     : row.probeKind === "btcpay"
                       ? await testBtcpay.mutateAsync({
                           backend: row.backendId,
+                          timeout: 5,
                         })
                       : await testHttp.mutateAsync({
                           url: row.rawUrl,

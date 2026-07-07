@@ -638,7 +638,7 @@ def _exercise_btcpay_invoice(
                 _pay_regtest_invoice_from_core(destination, _format_btc_amount(amount_btc), payer_wallet)
             )
             if index < len(payment_plan) - 1:
-                method = _wait_for_payment_method_update(
+                _wait_for_payment_method_update(
                     base_url=base_url,
                     api_key=api_key,
                     store_id=store_id,

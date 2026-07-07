@@ -1356,11 +1356,12 @@ run_lightning_business() {
   py -m unittest tests.integration.test_live_lightning_business_regtest -v
 }
 
-run_btcpay_seed_smoke() {
+run_btcpay_seed_smoke() (
   local seed_path
   local data_root
   seed_path="${TMPDIR:-/tmp}/kassiber-btcpay-regtest-seed-${KASSIBER_REGTEST_COMPOSE_PROJECT}.json"
   data_root="${TMPDIR:-/tmp}/kassiber-btcpay-regtest-data-${KASSIBER_REGTEST_COMPOSE_PROJECT}"
+  trap 'if [ -z "${KASSIBER_REGTEST_KEEP:-}" ]; then rm -rf "$data_root" "$seed_path"; fi' EXIT
   rm -rf "$data_root"
   py -m dev.regtest.btcpay_seed \
     --base-url "http://127.0.0.1:$KASSIBER_REGTEST_BTCPAY_PORT" \
@@ -1389,7 +1390,7 @@ print(
     f"seed={os.environ['KASSIBER_BTCPAY_SEED_PATH']}"
 )
 PY
-}
+)
 
 run_btcpay_regtest() {
   export KASSIBER_REGTEST_USE_BTCPAY_COMPOSE=1

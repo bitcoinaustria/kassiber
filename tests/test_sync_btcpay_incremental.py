@@ -455,6 +455,121 @@ class BtcpayIncrementalTest(unittest.TestCase):
         payment_method_urls = [url for url in opener.urls if "/payment-methods" in url]
         self.assertEqual(len(payment_method_urls), 1)
 
+    def test_invoice_provenance_uses_inlined_payment_methods_without_extra_fetch(self):
+        backend = {
+            "name": "btcpay",
+            "kind": "btcpay",
+            "url": "https://btcpay.example",
+            "token": "secret",
+        }
+        txid = "cd" * 32
+        page0 = [
+            {
+                "id": "invoice-1",
+                "status": "Settled",
+                "paymentMethods": [
+                    {
+                        "paymentMethodId": "BTC-CHAIN",
+                        "destination": "bcrt1qinline",
+                        "payments": [{"id": f"{txid}-0", "value": "0.001"}],
+                    }
+                ],
+            }
+        ]
+        opener = _Opener({0: page0, 1: []})
+
+        records = fetch_btcpay_invoice_provenance(
+            backend,
+            "store",
+            page_size=1,
+            opener=opener,
+        )
+
+        self.assertEqual(records[0]["payments"][0]["txid"], txid)
+        self.assertEqual(records[0]["payments"][0]["payment_method_id"], "BTC-CHAIN")
+        self.assertEqual(records[0]["payments"][0]["destination"], "bcrt1qinline")
+        payment_method_urls = [url for url in opener.urls if "/payment-methods" in url]
+        self.assertEqual(payment_method_urls, [])
+
+    def test_invoice_provenance_inlined_payment_methods_affect_page_fingerprint(self):
+        backend = {
+            "name": "btcpay",
+            "kind": "btcpay",
+            "url": "https://btcpay.example",
+            "token": "secret",
+        }
+        invoice = {
+            "id": "invoice-1",
+            "status": "Settled",
+            "paymentMethods": [],
+        }
+        metadata = {}
+        records = fetch_btcpay_invoice_provenance(
+            backend,
+            "store",
+            page_size=1,
+            opener=_Opener({0: [invoice], 1: []}),
+            metadata=metadata,
+        )
+        self.assertEqual(len(records), 1)
+
+        txid = "ef" * 32
+        updated = {
+            **invoice,
+            "paymentMethods": [
+                {
+                    "paymentMethodId": "BTC-CHAIN",
+                    "payments": [{"id": f"{txid}-0", "value": "0.001"}],
+                }
+            ],
+        }
+        second_metadata = {}
+        records = fetch_btcpay_invoice_provenance(
+            backend,
+            "store",
+            page_size=1,
+            opener=_Opener({0: [updated], 1: []}),
+            checkpoint={"btcpay_invoice_pages": metadata["btcpay_invoice_pages"]},
+            metadata=second_metadata,
+        )
+
+        self.assertEqual(records[0]["payments"][0]["txid"], txid)
+        self.assertIn(0, second_metadata["changed_pages"])
+
+    def test_invoice_provenance_does_not_treat_lightning_payment_hash_as_txid(self):
+        backend = {
+            "name": "btcpay",
+            "kind": "btcpay",
+            "url": "https://btcpay.example",
+            "token": "secret",
+        }
+        payment_hash = "12" * 32
+        page0 = [
+            {
+                "id": "invoice-ln",
+                "status": "Settled",
+                "payments": [
+                    {
+                        "id": payment_hash,
+                        "paymentMethod": "BTC-LN",
+                        "value": "0.001",
+                    }
+                ],
+            }
+        ]
+
+        records = fetch_btcpay_invoice_provenance(
+            backend,
+            "store",
+            page_size=1,
+            opener=_Opener({0: page0, 1: []}),
+        )
+
+        payment = records[0]["payments"][0]
+        self.assertEqual(payment["payment_id"], payment_hash)
+        self.assertEqual(payment["payment_method_id"], "BTC-LN")
+        self.assertIsNone(payment["txid"])
+
     def test_invoice_provenance_reimports_when_metadata_changes_with_same_id(self):
         backend = {"name": "btcpay", "kind": "btcpay", "url": "https://btcpay.example", "token": "secret"}
         page0 = [

@@ -636,6 +636,7 @@ def _invoice_page_fingerprint_rows(page):
                 or metadata.get("paymentRequestId")
                 or metadata.get("payment_request_id"),
                 "metadata": metadata,
+                "paymentMethods": invoice.get("paymentMethods"),
                 "payments": invoice.get("payments"),
             }
         )
@@ -653,6 +654,12 @@ def _hydrate_invoice_payment_methods(base, store_id, invoices, http_opener, toke
     for invoice in invoices:
         if not isinstance(invoice, dict):
             hydrated.append(invoice)
+            continue
+        methods = invoice.get("paymentMethods")
+        if isinstance(methods, list):
+            copy = dict(invoice)
+            copy["payments"] = _payments_from_invoice_payment_methods(methods)
+            hydrated.append(copy)
             continue
         payments = invoice.get("payments")
         if isinstance(payments, list) and payments:
@@ -701,7 +708,7 @@ def _payments_from_invoice_payment_methods(methods):
             if method.get("destination") is not None:
                 enriched.setdefault("destination", method.get("destination"))
             payment_id = str(enriched.get("id") or "")
-            txid = _txid_from_payment_id(payment_id)
+            txid = _txid_from_payment_id(payment_id, payment_method_id)
             if not enriched.get("transactionId") and txid:
                 enriched["transactionId"] = txid
             payments.append(enriched)
@@ -712,9 +719,13 @@ def _looks_like_txid(value):
     return len(value) == 64 and all(char in "0123456789abcdefABCDEF" for char in value)
 
 
-def _txid_from_payment_id(value):
+def _is_chain_payment_method(payment_method_id):
+    return str(payment_method_id or "").strip().upper().endswith("-CHAIN")
+
+
+def _txid_from_payment_id(value, payment_method_id=None):
     raw = str(value or "").strip()
-    if _looks_like_txid(raw):
+    if _looks_like_txid(raw) and _is_chain_payment_method(payment_method_id):
         return raw
     first, separator, _ = raw.partition("-")
     if separator and _looks_like_txid(first):
@@ -944,7 +955,7 @@ def _normalize_invoice_payment(invoice, payment):
             or payment.get("transactionHash")
             or details.get("transactionId")
             or details.get("transactionHash")
-            or _txid_from_payment_id(payment_id)
+            or _txid_from_payment_id(payment_id, method)
         ),
         "payment_hash": _str_or_none(
             payment.get("paymentHash")

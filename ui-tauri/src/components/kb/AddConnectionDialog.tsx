@@ -4422,6 +4422,10 @@ export function AddConnectionDialog({
                       </div>
                       <div className="space-y-2">
                         <select
+                          aria-label={t("add.btcpay.routeActionLabel", {
+                            method: method.payment_method_id,
+                            store: storeLabel,
+                          })}
                           className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
                           value={action}
                           onChange={(event) => {
@@ -4459,6 +4463,10 @@ export function AddConnectionDialog({
                         </select>
                         {action === "existing_wallet" ? (
                           <select
+                            aria-label={t("add.btcpay.routeWalletLabel", {
+                              method: method.payment_method_id,
+                              store: storeLabel,
+                            })}
                             className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
                             value={wallet}
                             onChange={(event) => {

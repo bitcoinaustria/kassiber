@@ -685,7 +685,6 @@
   "commercial": {
     "title": "Commercial provenance",
     "loading": "Loading…",
-    "empty": "No linked BTCPay context.",
     "btcpayPayment": "BTCPay payment",
     "linked": "Linked",
     "invoice": "Invoice",

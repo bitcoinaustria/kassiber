@@ -704,7 +704,6 @@
   "commercial": {
     "title": "Kommerzielle Herkunft",
     "loading": "Wird geladen…",
-    "empty": "Kein verknüpfter BTCPay-Kontext.",
     "btcpayPayment": "BTCPay-Zahlung",
     "linked": "Verknüpft",
     "invoice": "Rechnung",

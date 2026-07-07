@@ -10,7 +10,6 @@ import json
 import sqlite3
 import tempfile
 import unittest
-import json
 from datetime import datetime, timezone
 from pathlib import Path
 

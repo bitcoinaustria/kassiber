@@ -968,6 +968,8 @@
       "walletHistorySupported": "Kann bestätigte BTCPay-Wallet-Historie importieren.",
       "provenanceOnlyRecommended": "Rechnungs-/Payment-Request-Herkunft verwenden; keine künstliche Wallet erstellen.",
       "alreadyConfigured": "Konfiguriert",
+      "routeActionLabel": "BTCPay-Routenaktion für {{store}} {{method}}",
+      "routeWalletLabel": "BTCPay-Settlement-Wallet für {{store}} {{method}}",
       "actionWalletSource": "Kassiber-Wallet-Quelle erstellen",
       "actionExistingWallet": "Settlement-Wallet zuordnen",
       "actionProvenanceOnly": "Nur Rechnungsherkunft",

@@ -202,7 +202,7 @@ from .log_ring import (
 )
 from .redaction import redact_operational_value, redact_secret_text, redact_secret_value
 from .time_utils import iso_to_unix, timestamp_to_iso
-from .util import parse_int, str_or_none
+from .util import parse_bool, parse_int, str_or_none
 from .daemon_swap_review import (
     SWAP_REVIEW_DEFAULT_LIMIT,
     build_swap_review_context_payload,
@@ -6724,13 +6724,6 @@ def _update_backend_payload(ctx: "DaemonContext", args: dict[str, Any]) -> dict[
 def _delete_backend_payload(ctx: "DaemonContext", args: dict[str, Any]) -> dict[str, Any]:
     name = _required_str_arg(args, "name", "Backend name")
     payload = core_accounts.delete_backend(ctx.conn, name)
-    removed_account_routes = core_commercial.delete_btcpay_account_routes_for_backend(
-        ctx.conn,
-        name,
-    )
-    if removed_account_routes:
-        ctx.conn.commit()
-        payload["detached_btcpay_account_routes"] = removed_account_routes
     merge_db_backends(ctx.conn, ctx.runtime_config)
     return payload
 
@@ -7800,7 +7793,7 @@ def _create_btcpay_account_setup_payload(
             continue
 
     provenance_results = []
-    if args.get("sync_provenance", True) is not False:
+    if parse_bool(args.get("sync_provenance"), default=True):
         for store_id in sorted(provenance_store_ids):
             provenance_results.append(
                 sync_btcpay_commercial_provenance(

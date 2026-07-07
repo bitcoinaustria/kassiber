@@ -968,6 +968,8 @@
       "walletHistorySupported": "Can import confirmed BTCPay wallet history.",
       "provenanceOnlyRecommended": "Use invoice/payment-request provenance; do not create a fake wallet.",
       "alreadyConfigured": "Configured",
+      "routeActionLabel": "BTCPay route action for {{store}} {{method}}",
+      "routeWalletLabel": "BTCPay settlement wallet for {{store}} {{method}}",
       "actionWalletSource": "Create Kassiber wallet source",
       "actionExistingWallet": "Map to settlement wallet",
       "actionProvenanceOnly": "Invoice provenance only",

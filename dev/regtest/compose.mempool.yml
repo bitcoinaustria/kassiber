@@ -16,7 +16,7 @@ services:
       - mempool-db-regtest:/var/lib/mysql
 
   mempool-api:
-    image: ${KASSIBER_REGTEST_MEMPOOL_BACKEND_IMAGE:-mempool/backend:latest}
+    image: ${KASSIBER_REGTEST_MEMPOOL_BACKEND_IMAGE:-mempool/backend:v3.3.1}
     depends_on:
       bitcoind:
         condition: service_started
@@ -49,7 +49,7 @@ services:
     command: "sh -c 'mkdir -p /tmp/mempool-cache && ./wait-for-it.sh mempool-db:3306 --timeout=720 --strict -- ./start.sh'"
 
   mempool-web:
-    image: ${KASSIBER_REGTEST_MEMPOOL_FRONTEND_IMAGE:-mempool/frontend:latest}
+    image: ${KASSIBER_REGTEST_MEMPOOL_FRONTEND_IMAGE:-mempool/frontend:v3.3.1}
     depends_on:
       mempool-api:
         condition: service_started
