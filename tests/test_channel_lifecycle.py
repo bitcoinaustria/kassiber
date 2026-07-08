@@ -430,6 +430,45 @@ class ChannelLifecycleEngineTest(unittest.TestCase):
         self.assertEqual(wallet_quantities.get("node", Decimal("0")), Decimal("0"))
 
 
+    def test_channel_close_carries_alt_availability_back_to_onchain_wallet(self) -> None:
+        received = ONE_BTC - FEE_MSAT
+        rows = [
+            _row("buy", "inbound", ONE_BTC, "2021-02-01T00:00:00Z"),
+            _row("fund", "outbound", ONE_BTC, "2025-06-01T00:00:00Z", external_id=FUNDING_TXID),
+            _row("close", "inbound", received, "2025-07-01T00:00:00Z", external_id=CLOSING_TXID),
+            _row("sell", "outbound", received // 2, "2025-08-01T00:00:00Z"),
+        ]
+        channel_rows = [
+            {
+                "funding_txid": FUNDING_TXID,
+                "closing_txid": CLOSING_TXID,
+                "wallet_id": "node",
+                "close_balance_msat": ONE_BTC,
+            }
+        ]
+        result = _run(
+            rows,
+            channel_role_map(channel_rows, rows),
+            channel_transfer_pairs(channel_rows, rows, _wallet_refs()),
+        )
+
+        self.assertEqual(result.quarantines, [])
+        close_fee = [
+            entry
+            for entry in result.entries
+            if entry["transaction_id"] == "close"
+            and entry["entry_type"] == "transfer_fee"
+        ]
+        self.assertEqual(len(close_fee), 1)
+        self.assertIn("at_regime=alt", close_fee[0]["description"])
+        sale = next(
+            entry for entry in result.entries
+            if entry["transaction_id"] == "sell"
+            and entry["entry_type"] == "disposal"
+        )
+        self.assertEqual(sale["at_category"], "alt_taxfree")
+
+
     def test_funding_with_external_payment_quarantines_for_split(self) -> None:
         # 1.0 BTC funded into the channel, but the funding tx spent 1.3 BTC —
         # 0.3 went to an external recipient. Suppression would untax the

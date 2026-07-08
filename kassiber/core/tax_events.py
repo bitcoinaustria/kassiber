@@ -1367,7 +1367,9 @@ def normalize_tax_asset_inputs(
             # Quarantined below (channel funding/close mismatch): nothing
             # books, so the still-owned channel value must not move pools.
             continue
-        if loan_role in LOCK_SUPPRESS_ROLES or loan_role in RELEASE_SUPPRESS_ROLES:
+        if (
+            loan_role in LOCK_SUPPRESS_ROLES or loan_role in RELEASE_SUPPRESS_ROLES
+        ) and row_id not in paired_regime_row_ids:
             # Suppressed loan legs should not consume/add Austrian regime
             # availability. A Lightning channel-open miner fee is the one
             # taxable slice: principal remains owned, but the fee left the

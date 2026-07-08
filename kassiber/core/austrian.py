@@ -260,6 +260,7 @@ def _intra_pair_components(
 
 def _transfer_actions_for_intra_pairs(
     intra_pairs: Optional[Sequence[Mapping[str, Mapping[str, Any]]]],
+    row_ids: Optional[set[str]] = None,
 ) -> tuple[
     dict[str, list[tuple[Mapping[str, Any], Mapping[str, Any], str]]],
     set[str],
@@ -280,6 +281,7 @@ def _transfer_actions_for_intra_pairs(
         group_row_ids = set(out_rows_by_id) | set(in_rows_by_id)
         transfer_row_ids.update(group_row_ids)
 
+        trigger_by_out_id = all(row_id in (row_ids or set()) for row_id in out_rows_by_id)
         if len(out_rows_by_id) > 1 and len(in_rows_by_id) > 1:
             # The tax normalizer quarantines these as ambiguous; inference must
             # not also treat their legs as ordinary acquisitions/disposals.
@@ -325,7 +327,8 @@ def _transfer_actions_for_intra_pairs(
                     amount_msat=received_msat,
                     fee_msat=fee_allocation,
                 )
-                actions_by_trigger_id[str(out_row["id"])].append(
+                trigger_id = str(out_row["id"]) if trigger_by_out_id else str(in_row["id"])
+                actions_by_trigger_id[trigger_id].append(
                     (action_out, in_row, str(out_row["id"]))
                 )
             continue
@@ -344,7 +347,8 @@ def _transfer_actions_for_intra_pairs(
             out_row = pair["out"]
             in_row = pair["in"]
             action_in = _copy_row_with_amount(in_row, amount_msat=received_msat)
-            actions_by_trigger_id[str(out_row["id"])].append(
+            trigger_id = str(out_row["id"]) if trigger_by_out_id else str(in_row["id"])
+            actions_by_trigger_id[trigger_id].append(
                 (out_row, action_in, str(out_row["id"]))
             )
 
@@ -370,7 +374,10 @@ def infer_outbound_regimes(
     alt_available_msat_by_key: dict[str, int] = defaultdict(int)
     neu_available_msat_by_key: dict[str, int] = defaultdict(int)
     regimes_by_row_id: dict[str, Literal["alt", "neu"]] = {}
-    transfer_actions_by_row_id, transfer_row_ids = _transfer_actions_for_intra_pairs(intra_pairs)
+    row_ids = {str(row["id"]) for row in rows}
+    transfer_actions_by_row_id, transfer_row_ids = _transfer_actions_for_intra_pairs(
+        intra_pairs, row_ids
+    )
 
     for row in rows:
         row_id = str(row["id"])
