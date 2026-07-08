@@ -356,6 +356,36 @@ class ChannelLifecycleEngineTest(unittest.TestCase):
         self.assertEqual(wallet_quantities["onchain"], Decimal("1"))
         self.assertEqual(wallet_quantities.get("node", Decimal("0")), Decimal("0"))
 
+    def test_split_persisted_channel_rows_link_close_to_open_by_channel_id(self) -> None:
+        rows = [
+            _row("buy", "inbound", ONE_BTC, "2025-05-01T00:00:00Z"),
+            _row("fund", "outbound", ONE_BTC, "2025-06-01T00:00:00Z", external_id=FUNDING_TXID),
+            _row("close", "inbound", ONE_BTC, "2025-07-01T00:00:00Z", external_id=CLOSING_TXID),
+        ]
+        channel_rows = [
+            {
+                "funding_txid": FUNDING_TXID,
+                "wallet_id": "node",
+                "channel_id": "chan-1",
+            },
+            {
+                "closing_txid": CLOSING_TXID,
+                "wallet_id": "node",
+                "channel_id": "chan-1",
+            },
+        ]
+        pairs = channel_transfer_pairs(channel_rows, rows, _wallet_refs())
+        self.assertEqual([pair["kind"] for pair in pairs], [CHANNEL_OPEN, CHANNEL_CLOSE])
+
+        result = _run(rows, channel_role_map(channel_rows, rows), pairs)
+
+        self.assertEqual(result.quarantines, [])
+        wallet_quantities = {
+            key[1]: totals["quantity"] for key, totals in result.wallet_holdings.items()
+        }
+        self.assertEqual(wallet_quantities["onchain"], Decimal("1"))
+        self.assertEqual(wallet_quantities.get("node", Decimal("0")), Decimal("0"))
+
     def test_close_only_window_does_not_synthesize_node_outflow(self) -> None:
         rows = [
             _row("close", "inbound", ONE_BTC, "2025-07-01T00:00:00Z", external_id=CLOSING_TXID),

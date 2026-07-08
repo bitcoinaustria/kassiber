@@ -4235,7 +4235,7 @@ def build_ledger_state(conn, profile):
     # on-chain rows so the engine suppresses them as non-events.
     channel_records = conn.execute(
         """
-        SELECT txid, tag, wallet_id, amount_msat
+        SELECT txid, tag, wallet_id, channel_id, amount_msat
         FROM lightning_node_records
         WHERE profile_id = ? AND record_type = 'channel'
         """,
@@ -4250,6 +4250,7 @@ def build_ledger_state(conn, profile):
                 {
                     "closing_txid": record["txid"],
                     "wallet_id": record["wallet_id"],
+                    "channel_id": record["channel_id"],
                     # Our settled channel balance at close (bkpr debit); the
                     # gap vs the on-chain receipt books as the close fee.
                     "close_balance_msat": record["amount_msat"],
@@ -4260,6 +4261,7 @@ def build_ledger_state(conn, profile):
                 {
                     "funding_txid": record["txid"],
                     "wallet_id": record["wallet_id"],
+                    "channel_id": record["channel_id"],
                     # Our balance funded into the channel; a recorded outflow
                     # clearly above it means the tx also paid someone external.
                     "funding_amount_msat": record["amount_msat"],

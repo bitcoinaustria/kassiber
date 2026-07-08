@@ -270,6 +270,8 @@ def channel_transfer_pairs(
     close_balance_by_txid: dict[str, int] = {}
     funding_amount_by_txid: dict[str, int] = {}
     close_funding_by_txid: dict[str, set[str]] = {}
+    channel_funding_by_owner: dict[tuple[str, str], set[str]] = {}
+    close_channels_by_txid: dict[str, set[tuple[str, str]]] = {}
 
     def _remember_owner(
         owners: dict[str, str], ambiguous: set[str], key: str, wallet_id: str
@@ -287,6 +289,13 @@ def channel_transfer_pairs(
         wallet_id = _field(row, "wallet_id")
         if not wallet_id or str(wallet_id) not in wallet_refs_by_id:
             continue
+        wallet_id = str(wallet_id)
+        channel_id = _field(row, "channel_id")
+        channel_owner = (
+            (wallet_id, str(channel_id))
+            if channel_id not in (None, "")
+            else None
+        )
         fund = _txid_from_outpoint(
             _field(row, "funding_txid") or _field(row, "funding_outpoint")
         )
@@ -296,8 +305,10 @@ def channel_transfer_pairs(
                 funding_wallet_by_txid,
                 ambiguous_funding_txids,
                 fund_key,
-                str(wallet_id),
+                wallet_id,
             )
+            if channel_owner is not None:
+                channel_funding_by_owner.setdefault(channel_owner, set()).add(fund_key)
             funded = int(_field(row, "funding_amount_msat") or 0)
             if funded > 0:
                 # A batched open (multifundchannel) shares one funding tx
@@ -313,10 +324,12 @@ def channel_transfer_pairs(
                 closing_wallet_by_txid,
                 ambiguous_closing_txids,
                 close_key,
-                str(wallet_id),
+                wallet_id,
             )
             if fund_key:
                 close_funding_by_txid.setdefault(close_key, set()).add(fund_key)
+            if channel_owner is not None:
+                close_channels_by_txid.setdefault(close_key, set()).add(channel_owner)
             balance = int(_field(row, "close_balance_msat") or 0)
             if balance > 0:
                 # Several channels can share one close/sweep txid (batched
@@ -324,6 +337,13 @@ def channel_transfer_pairs(
                 close_balance_by_txid[close_key] = (
                     close_balance_by_txid.get(close_key, 0) + balance
                 )
+
+    for close_key, channel_owners in close_channels_by_txid.items():
+        linked_funding: set[str] = set()
+        for channel_owner in channel_owners:
+            linked_funding.update(channel_funding_by_owner.get(channel_owner, set()))
+        if linked_funding:
+            close_funding_by_txid.setdefault(close_key, set()).update(linked_funding)
 
     tx_rows = list(tx_rows)
     pairs: list[dict[str, Any]] = []
