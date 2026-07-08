@@ -757,6 +757,7 @@ def _prepare_rp2_asset_input(profile, normalized_inputs: NormalizedTaxAssetInput
         if transfer.group_id:
             transfers_by_group[transfer.group_id].append(transfer)
     processed_transfer_groups: set[str] = set()
+    approved_transfer_groups: set[str] = set()
 
     def _transfer_gate_failure(
         transfer: NormalizedTaxTransfer,
@@ -931,6 +932,15 @@ def _prepare_rp2_asset_input(profile, normalized_inputs: NormalizedTaxAssetInput
         if item_kind == "transfer":
             transfer = transfers_by_id[item_id]
             if transfer.group_id:
+                if transfer.group_id in approved_transfer_groups:
+                    # Preflight passed at the first leg; apply THIS leg at its
+                    # own chronological position. Crediting the whole group at
+                    # the first leg's position would let an intermediate
+                    # destination spend pass this gate and then abort the whole
+                    # asset inside rp2's strictly chronological BalanceSet
+                    # (multi-timestamp manual N:1 groups).
+                    _apply_transfer_to_rp2(transfer)
+                    continue
                 if transfer.group_id in processed_transfer_groups:
                     continue
                 processed_transfer_groups.add(transfer.group_id)
@@ -955,8 +965,8 @@ def _prepare_rp2_asset_input(profile, normalized_inputs: NormalizedTaxAssetInput
                         group, failed_transfer, reason, detail
                     )
                     continue
-                for candidate in group:
-                    _apply_transfer_to_rp2(candidate)
+                approved_transfer_groups.add(transfer.group_id)
+                _apply_transfer_to_rp2(transfer)
                 continue
 
             failure = _transfer_gate_failure(
