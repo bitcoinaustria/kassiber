@@ -16,7 +16,12 @@ from typing import Any, Iterable, Iterator, Mapping, Sequence
 from ...errors import AppError
 from ...msat import btc_to_msat, dec, msat_to_btc
 from ...tax_policy import build_tax_policy
-from ...transfers import apply_manual_pairs, detect_intra_transfers, is_bitcoin_rail_pair
+from ...transfers import (
+    apply_manual_pairs,
+    detect_intra_transfers,
+    is_bitcoin_rail_pair,
+    normalize_group_txid,
+)
 from .. import pricing
 from ..ownership_transfers import (
     derive_multi_source_consolidations,
@@ -2638,17 +2643,21 @@ class GenericRP2TaxEngine:
             # whole balanced group, so a second quarantine would be redundant.
             if ownership_result.blocked_sources:
                 inbound_group_wallets: dict[tuple[Any, Any], set[str]] = {}
+                group_row_ids: dict[tuple[Any, Any], set[str]] = {}
                 for candidate in rows_for_engine:
-                    if _row_get(candidate, "direction") == "inbound" and _row_get(
-                        candidate, "external_id"
-                    ):
-                        inbound_group_wallets.setdefault(
-                            (
-                                str(_row_get(candidate, "external_id")),
-                                _row_get(candidate, "asset"),
-                            ),
-                            set(),
-                        ).add(str(_row_get(candidate, "wallet_id")))
+                    if not _row_get(candidate, "external_id"):
+                        continue
+                    candidate_key = (
+                        normalize_group_txid(str(_row_get(candidate, "external_id"))),
+                        _row_get(candidate, "asset"),
+                    )
+                    group_row_ids.setdefault(candidate_key, set()).add(
+                        str(_row_get(candidate, "id"))
+                    )
+                    if _row_get(candidate, "direction") == "inbound":
+                        inbound_group_wallets.setdefault(candidate_key, set()).add(
+                            str(_row_get(candidate, "wallet_id"))
+                        )
                 surfaced_blocks: list[Mapping[str, Any]] = []
                 for blocked in ownership_result.blocked_sources:
                     row = blocked.get("row")
@@ -2657,12 +2666,21 @@ class GenericRP2TaxEngine:
                     row_id = str(_row_get(row, "id"))
                     source_wallet_id = str(_row_get(row, "wallet_id"))
                     group_key = (
-                        str(_row_get(row, "external_id")),
+                        normalize_group_txid(str(_row_get(row, "external_id") or "")),
                         _row_get(row, "asset"),
                     )
+                    # The owned-fanout guard only holds a group NO pair touches
+                    # (a paired leg means "handled elsewhere" to it). A blocked
+                    # source in a partially-paired group would book a standalone
+                    # disposal with neither guard nor quarantine — so the
+                    # suppression premise requires both a recorded cross-wallet
+                    # destination AND a pair-free group.
                     fanout_holds = any(
                         wallet_id != source_wallet_id
                         for wallet_id in inbound_group_wallets.get(group_key, ())
+                    ) and not any(
+                        member_id in already_paired_ids
+                        for member_id in group_row_ids.get(group_key, ())
                     )
                     # A restored withheld pair is re-paired as a self-transfer
                     # below, so its source must not also be quarantined here.

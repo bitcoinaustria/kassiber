@@ -655,6 +655,64 @@ class OwnershipDeriverAmbiguityTest(unittest.TestCase):
         # The held-back group books nothing into B — no inflation.
         self.assertAlmostEqual(holdings.get("Hot", 0.0), 0.0, places=6)
 
+    def test_blocked_source_in_partially_paired_group_still_quarantines(self):
+        # A manual pair on one leg of a blocked source's txid group disables
+        # the owned-fanout guard (a paired leg means "handled" to it), so the
+        # old fanout_holds premise suppressed the blocked source's quarantine
+        # while it booked a full standalone disposal — silent, no review row.
+        # The suppression now additionally requires a pair-free group.
+        index = OwnedIndex()
+        index.add_script(SCRIPT_A, _match("A", "Cold"))
+        index.add_script(SCRIPT_B, _match("B", "Hot"))
+        index.add_script(SCRIPT_C, _match("C", "Savings"))
+        spend = json.dumps(
+            {
+                "txid": "multi-source",
+                "vin": [
+                    {"txid": "prev-a", "vout": 0, "prevout": {"scriptpubkey": SCRIPT_A}},
+                    {"txid": "prev-b", "vout": 1, "prevout": {"scriptpubkey": SCRIPT_B}},
+                ],
+                "vout": [
+                    {"n": 0, "scriptpubkey": SCRIPT_C, "value": 80_000_000},
+                    {"n": 1, "scriptpubkey": SCRIPT_B, "value": 10_000_000},
+                ],
+            }
+        )
+        rows = [
+            _row("A", "inbound", BTC, external_id="acqA"),
+            _row("B", "inbound", BTC, external_id="acqB"),
+            _row(
+                "A",
+                "outbound",
+                90 * BTC // 100,
+                external_id="multi-source",
+                raw_json=spend,
+            ),
+            _row("C", "inbound", 80 * BTC // 100, external_id="multi-source"),
+            _row("B", "inbound", 10 * BTC // 100, external_id="multi-source"),
+            _row("B", "outbound", 80 * BTC // 100, external_id="other-payment"),
+        ]
+        state = build_tax_engine(PROFILE).build_ledger_state(
+            TaxEngineLedgerInputs(
+                rows=rows,
+                wallet_refs_by_id=WALLET_REFS,
+                # The user mis-paired the Savings receipt with an unrelated
+                # outbound — enough to disable the fanout guard for the group.
+                manual_pair_records=[
+                    {
+                        "id": "pair-mispaired",
+                        "out_transaction_id": "B-outbound-other-payment",
+                        "in_transaction_id": "C-inbound-multi-source",
+                        "kind": "manual",
+                        "policy": "carrying-value",
+                    }
+                ],
+                owned_index=index,
+            )
+        )
+        reasons = [q["reason"] for q in state.quarantines]
+        self.assertIn("ownership_transfer_source_ambiguous", reasons)
+
     def test_multi_source_sync_gap_quarantines_source(self):
         index = OwnedIndex()
         index.add_script(SCRIPT_A, _match("A", "Cold"))
