@@ -136,6 +136,13 @@ def _wallet_refs():
             "account_code": "LN",
             "account_label": "Lightning",
         },
+        "node-2": {
+            "id": "node-2",
+            "label": "node-2",
+            "wallet_account_id": "acct-node-2",
+            "account_code": "LN2",
+            "account_label": "Lightning 2",
+        },
     }
 
 
@@ -369,6 +376,75 @@ class ChannelLifecycleEngineTest(unittest.TestCase):
         self.assertFalse(_has_disposal(result))
         self.assertEqual(_btc_quantity(result), Decimal("0"))
 
+    def test_ambiguous_channel_open_owner_does_not_pick_first_wallet(self) -> None:
+        rows = [
+            _row("buy", "inbound", ONE_BTC, "2025-05-01T00:00:00Z"),
+            _row("fund", "outbound", ONE_BTC, "2025-06-01T00:00:00Z", external_id=FUNDING_TXID),
+        ]
+        channel_rows = [
+            {"funding_txid": FUNDING_TXID, "wallet_id": "node"},
+            {"funding_txid": FUNDING_TXID, "wallet_id": "node-2"},
+        ]
+
+        result = _run(
+            rows,
+            channel_role_map(channel_rows, rows),
+            channel_transfer_pairs(channel_rows, rows, _wallet_refs()),
+        )
+
+        self.assertEqual(result.quarantines, [])
+        self.assertFalse(_has_disposal(result))
+        wallet_quantities = {
+            key[1]: totals["quantity"] for key, totals in result.wallet_holdings.items()
+        }
+        self.assertEqual(wallet_quantities["onchain"], Decimal("1"))
+        self.assertEqual(wallet_quantities.get("node", Decimal("0")), Decimal("0"))
+        self.assertEqual(wallet_quantities.get("node-2", Decimal("0")), Decimal("0"))
+        self.assertFalse(
+            any(
+                row.get("pairing_source") == "channel_lifecycle"
+                for row in result.intra_audit
+            )
+        )
+
+    def test_ambiguous_channel_close_owner_does_not_pick_first_wallet(self) -> None:
+        other_funding_txid = "cc" * 32
+        rows = [
+            _row("buy", "inbound", 2 * ONE_BTC, "2025-05-01T00:00:00Z"),
+            _row("fund-1", "outbound", ONE_BTC, "2025-06-01T00:00:00Z", external_id=FUNDING_TXID),
+            _row("fund-2", "outbound", ONE_BTC, "2025-06-02T00:00:00Z", external_id=other_funding_txid),
+            _row("close", "inbound", 2 * ONE_BTC, "2025-07-01T00:00:00Z", external_id=CLOSING_TXID),
+        ]
+        channel_rows = [
+            {
+                "funding_txid": FUNDING_TXID,
+                "closing_txid": CLOSING_TXID,
+                "wallet_id": "node",
+            },
+            {
+                "funding_txid": other_funding_txid,
+                "closing_txid": CLOSING_TXID,
+                "wallet_id": "node-2",
+            },
+        ]
+        pairs = channel_transfer_pairs(channel_rows, rows, _wallet_refs())
+
+        self.assertEqual([p["kind"] for p in pairs], [CHANNEL_OPEN, CHANNEL_OPEN])
+
+        result = _run(rows, channel_role_map(channel_rows, rows), pairs)
+        self.assertEqual(result.quarantines, [])
+        wallet_quantities = {
+            key[1]: totals["quantity"] for key, totals in result.wallet_holdings.items()
+        }
+        self.assertEqual(wallet_quantities.get("onchain", Decimal("0")), Decimal("0"))
+        self.assertEqual(wallet_quantities.get("node", Decimal("0")), Decimal("1"))
+        self.assertEqual(wallet_quantities.get("node-2", Decimal("0")), Decimal("1"))
+        close_pairs = [
+            row
+            for row in result.intra_audit
+            if row.get("loan_role") == CHANNEL_CLOSE
+        ]
+        self.assertEqual(close_pairs, [])
 
     def test_force_close_sweep_round_trip_is_net_zero(self) -> None:
         # A force-close pays the wallet via a separate timelocked SWEEP tx: its

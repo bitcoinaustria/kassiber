@@ -265,9 +265,24 @@ def channel_transfer_pairs(
     """
     funding_wallet_by_txid: dict[str, str] = {}
     closing_wallet_by_txid: dict[str, str] = {}
+    ambiguous_funding_txids: set[str] = set()
+    ambiguous_closing_txids: set[str] = set()
     close_balance_by_txid: dict[str, int] = {}
     funding_amount_by_txid: dict[str, int] = {}
     close_funding_by_txid: dict[str, set[str]] = {}
+
+    def _remember_owner(
+        owners: dict[str, str], ambiguous: set[str], key: str, wallet_id: str
+    ) -> None:
+        existing = owners.get(key)
+        if existing is None:
+            if key not in ambiguous:
+                owners[key] = wallet_id
+            return
+        if existing != wallet_id:
+            ambiguous.add(key)
+            owners.pop(key, None)
+
     for row in channel_rows:
         wallet_id = _field(row, "wallet_id")
         if not wallet_id or str(wallet_id) not in wallet_refs_by_id:
@@ -277,7 +292,12 @@ def channel_transfer_pairs(
         )
         fund_key = normalize_group_txid(fund) if fund else None
         if fund:
-            funding_wallet_by_txid.setdefault(fund_key, str(wallet_id))
+            _remember_owner(
+                funding_wallet_by_txid,
+                ambiguous_funding_txids,
+                fund_key,
+                str(wallet_id),
+            )
             funded = int(_field(row, "funding_amount_msat") or 0)
             if funded > 0:
                 # A batched open (multifundchannel) shares one funding tx
@@ -289,7 +309,12 @@ def channel_transfer_pairs(
         close = _field(row, "closing_txid")
         if close:
             close_key = normalize_group_txid(str(close))
-            closing_wallet_by_txid.setdefault(close_key, str(wallet_id))
+            _remember_owner(
+                closing_wallet_by_txid,
+                ambiguous_closing_txids,
+                close_key,
+                str(wallet_id),
+            )
             if fund_key:
                 close_funding_by_txid.setdefault(close_key, set()).add(fund_key)
             balance = int(_field(row, "close_balance_msat") or 0)
@@ -341,7 +366,8 @@ def channel_transfer_pairs(
     eligible_closing_wallet_by_txid = {
         close_key: wallet_id
         for close_key, wallet_id in closing_wallet_by_txid.items()
-        if bool(close_funding_by_txid.get(close_key, set()) & opened_funding_txids)
+        if close_key not in ambiguous_closing_txids
+        and bool(close_funding_by_txid.get(close_key, set()) & opened_funding_txids)
     }
     if not eligible_closing_wallet_by_txid:
         return pairs
