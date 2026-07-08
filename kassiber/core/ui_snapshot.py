@@ -4245,6 +4245,31 @@ _JOURNAL_PAIR_JOIN_SQL = """
              AND p_in.in_transaction_id = je.transaction_id
 """
 
+_JOURNAL_PAIR_ID_SQL = (
+    "CASE WHEN p_out.id IS NOT NULL THEN p_out.id ELSE p_in.id END"
+)
+_JOURNAL_PAIR_KIND_SQL = (
+    "CASE WHEN p_out.id IS NOT NULL THEN p_out.kind ELSE p_in.kind END"
+)
+_JOURNAL_PAIR_POLICY_SQL = (
+    "CASE WHEN p_out.id IS NOT NULL THEN p_out.policy ELSE p_in.policy END"
+)
+_JOURNAL_PAIR_SWAP_FEE_SQL = (
+    "CASE WHEN p_out.id IS NOT NULL THEN p_out.swap_fee_msat "
+    "ELSE p_in.swap_fee_msat END"
+)
+_JOURNAL_PAIR_OUT_TRANSACTION_SQL = (
+    "CASE WHEN p_out.id IS NOT NULL THEN p_out.out_transaction_id "
+    "ELSE p_in.out_transaction_id END"
+)
+_JOURNAL_PAIR_OUT_AMOUNT_SQL = (
+    "CASE WHEN p_out.id IS NOT NULL THEN p_out.out_amount ELSE p_in.out_amount END"
+)
+_JOURNAL_PAIR_IN_TRANSACTION_SQL = (
+    "CASE WHEN p_out.id IS NOT NULL THEN p_out.in_transaction_id "
+    "ELSE p_in.in_transaction_id END"
+)
+
 
 def build_journals_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
     context = current_context_snapshot(conn)
@@ -4314,16 +4339,16 @@ def build_journals_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
                 {_JOURNAL_DISPLAY_GAIN_LOSS_SQL} AS gain_loss,
                 je.at_category,
                 w.label AS wallet,
-                COALESCE(p_out.id, p_in.id) AS pair_id,
-                COALESCE(p_out.kind, p_in.kind) AS pair_kind,
-                COALESCE(p_out.policy, p_in.policy) AS pair_policy,
-                COALESCE(p_out.swap_fee_msat, p_in.swap_fee_msat, 0) AS pair_swap_fee_msat,
-                COALESCE(p_out.out_transaction_id, p_in.out_transaction_id) AS pair_out_transaction_id,
+                {_JOURNAL_PAIR_ID_SQL} AS pair_id,
+                {_JOURNAL_PAIR_KIND_SQL} AS pair_kind,
+                {_JOURNAL_PAIR_POLICY_SQL} AS pair_policy,
+                COALESCE({_JOURNAL_PAIR_SWAP_FEE_SQL}, 0) AS pair_swap_fee_msat,
+                {_JOURNAL_PAIR_OUT_TRANSACTION_SQL} AS pair_out_transaction_id,
                 tout.external_id AS pair_out_external_id,
                 wout.label AS pair_out_wallet,
                 tout.asset AS pair_out_asset,
-                COALESCE(p_out.out_amount, p_in.out_amount, tout.amount) AS pair_out_amount,
-                COALESCE(p_out.in_transaction_id, p_in.in_transaction_id) AS pair_in_transaction_id,
+                COALESCE({_JOURNAL_PAIR_OUT_AMOUNT_SQL}, tout.amount) AS pair_out_amount,
+                {_JOURNAL_PAIR_IN_TRANSACTION_SQL} AS pair_in_transaction_id,
                 tin.external_id AS pair_in_external_id,
                 win.label AS pair_in_wallet,
                 tin.asset AS pair_in_asset,
@@ -4332,8 +4357,8 @@ def build_journals_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
             JOIN wallets w ON w.id = je.wallet_id
             LEFT JOIN transactions t ON t.id = je.transaction_id
             {_JOURNAL_PAIR_JOIN_SQL}
-            LEFT JOIN transactions tout ON tout.id = COALESCE(p_out.out_transaction_id, p_in.out_transaction_id)
-            LEFT JOIN transactions tin ON tin.id = COALESCE(p_out.in_transaction_id, p_in.in_transaction_id)
+            LEFT JOIN transactions tout ON tout.id = {_JOURNAL_PAIR_OUT_TRANSACTION_SQL}
+            LEFT JOIN transactions tin ON tin.id = {_JOURNAL_PAIR_IN_TRANSACTION_SQL}
             LEFT JOIN wallets wout ON wout.id = tout.wallet_id
             LEFT JOIN wallets win ON win.id = tin.wallet_id
             WHERE je.profile_id = ?
@@ -4363,16 +4388,16 @@ def build_journals_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
                     {_JOURNAL_DISPLAY_GAIN_LOSS_SQL} AS gain_loss,
                     je.at_category,
                     w.label AS wallet,
-                    COALESCE(p_out.id, p_in.id) AS pair_id,
-                    COALESCE(p_out.kind, p_in.kind) AS pair_kind,
-                    COALESCE(p_out.policy, p_in.policy) AS pair_policy,
-                    COALESCE(p_out.swap_fee_msat, p_in.swap_fee_msat, 0) AS pair_swap_fee_msat,
-                    COALESCE(p_out.out_transaction_id, p_in.out_transaction_id) AS pair_out_transaction_id,
+                    {_JOURNAL_PAIR_ID_SQL} AS pair_id,
+                    {_JOURNAL_PAIR_KIND_SQL} AS pair_kind,
+                    {_JOURNAL_PAIR_POLICY_SQL} AS pair_policy,
+                    COALESCE({_JOURNAL_PAIR_SWAP_FEE_SQL}, 0) AS pair_swap_fee_msat,
+                    {_JOURNAL_PAIR_OUT_TRANSACTION_SQL} AS pair_out_transaction_id,
                     tout.external_id AS pair_out_external_id,
                     wout.label AS pair_out_wallet,
                     tout.asset AS pair_out_asset,
-                    COALESCE(p_out.out_amount, p_in.out_amount, tout.amount) AS pair_out_amount,
-                    COALESCE(p_out.in_transaction_id, p_in.in_transaction_id) AS pair_in_transaction_id,
+                    COALESCE({_JOURNAL_PAIR_OUT_AMOUNT_SQL}, tout.amount) AS pair_out_amount,
+                    {_JOURNAL_PAIR_IN_TRANSACTION_SQL} AS pair_in_transaction_id,
                     tin.external_id AS pair_in_external_id,
                     win.label AS pair_in_wallet,
                     tin.asset AS pair_in_asset,
@@ -4381,8 +4406,8 @@ def build_journals_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
                 JOIN wallets w ON w.id = je.wallet_id
                 LEFT JOIN transactions t ON t.id = je.transaction_id
                 {_JOURNAL_PAIR_JOIN_SQL}
-                LEFT JOIN transactions tout ON tout.id = COALESCE(p_out.out_transaction_id, p_in.out_transaction_id)
-                LEFT JOIN transactions tin ON tin.id = COALESCE(p_out.in_transaction_id, p_in.in_transaction_id)
+                LEFT JOIN transactions tout ON tout.id = {_JOURNAL_PAIR_OUT_TRANSACTION_SQL}
+                LEFT JOIN transactions tin ON tin.id = {_JOURNAL_PAIR_IN_TRANSACTION_SQL}
                 LEFT JOIN wallets wout ON wout.id = tout.wallet_id
                 LEFT JOIN wallets win ON win.id = tin.wallet_id
                 WHERE je.profile_id = ?
@@ -4525,16 +4550,16 @@ def build_journal_events_list_snapshot(
             COALESCE(a.label, '') AS account_label,
             t.external_id AS transaction_external_id,
             t.direction AS transaction_direction,
-            COALESCE(p_out.id, p_in.id) AS pair_id,
-            COALESCE(p_out.kind, p_in.kind) AS pair_kind,
-            COALESCE(p_out.policy, p_in.policy) AS pair_policy,
-            COALESCE(p_out.swap_fee_msat, p_in.swap_fee_msat, 0) AS pair_swap_fee_msat,
-            COALESCE(p_out.out_transaction_id, p_in.out_transaction_id) AS pair_out_transaction_id,
+            {_JOURNAL_PAIR_ID_SQL} AS pair_id,
+            {_JOURNAL_PAIR_KIND_SQL} AS pair_kind,
+            {_JOURNAL_PAIR_POLICY_SQL} AS pair_policy,
+            COALESCE({_JOURNAL_PAIR_SWAP_FEE_SQL}, 0) AS pair_swap_fee_msat,
+            {_JOURNAL_PAIR_OUT_TRANSACTION_SQL} AS pair_out_transaction_id,
             tout.external_id AS pair_out_external_id,
             wout.label AS pair_out_wallet,
             tout.asset AS pair_out_asset,
-            COALESCE(p_out.out_amount, p_in.out_amount, tout.amount) AS pair_out_amount,
-            COALESCE(p_out.in_transaction_id, p_in.in_transaction_id) AS pair_in_transaction_id,
+            COALESCE({_JOURNAL_PAIR_OUT_AMOUNT_SQL}, tout.amount) AS pair_out_amount,
+            {_JOURNAL_PAIR_IN_TRANSACTION_SQL} AS pair_in_transaction_id,
             tin.external_id AS pair_in_external_id,
             win.label AS pair_in_wallet,
             tin.asset AS pair_in_asset,
@@ -4544,8 +4569,8 @@ def build_journal_events_list_snapshot(
         LEFT JOIN accounts a ON a.id = je.account_id
         LEFT JOIN transactions t ON t.id = je.transaction_id
         {_JOURNAL_PAIR_JOIN_SQL}
-        LEFT JOIN transactions tout ON tout.id = COALESCE(p_out.out_transaction_id, p_in.out_transaction_id)
-        LEFT JOIN transactions tin ON tin.id = COALESCE(p_out.in_transaction_id, p_in.in_transaction_id)
+        LEFT JOIN transactions tout ON tout.id = {_JOURNAL_PAIR_OUT_TRANSACTION_SQL}
+        LEFT JOIN transactions tin ON tin.id = {_JOURNAL_PAIR_IN_TRANSACTION_SQL}
         LEFT JOIN wallets wout ON wout.id = tout.wallet_id
         LEFT JOIN wallets win ON win.id = tin.wallet_id
         {where_sql}

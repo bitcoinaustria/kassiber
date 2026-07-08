@@ -3260,8 +3260,8 @@ class ReviewRegressionTest(unittest.TestCase):
             """
             INSERT INTO transaction_pairs(
                 id, workspace_id, profile_id, out_transaction_id, in_transaction_id,
-                kind, policy, swap_fee_msat, pair_source, created_at
-            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                kind, policy, swap_fee_msat, pair_source, out_amount, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             [
                 (
@@ -3274,6 +3274,7 @@ class ReviewRegressionTest(unittest.TestCase):
                     "carrying-value",
                     btc_to_msat("0.01"),
                     "manual",
+                    123,
                     now,
                 ),
                 (
@@ -3286,6 +3287,7 @@ class ReviewRegressionTest(unittest.TestCase):
                     "carrying-value",
                     btc_to_msat("0.01"),
                     "manual",
+                    None,
                     now,
                 ),
             ],
@@ -3319,10 +3321,18 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual(events["summary"]["count"], 1)
         self.assertEqual(len(events["events"]), 1)
         self.assertEqual(events["events"][0]["pair"]["pairId"], "pair-middle-as-out")
+        self.assertEqual(
+            events["events"][0]["pair"]["out"]["amountMsat"],
+            btc_to_msat("0.49"),
+        )
 
         journals = build_journals_snapshot(conn)
         self.assertEqual(len(journals["recent"]), 1)
         self.assertEqual(journals["recent"][0]["pair"]["pairId"], "pair-middle-as-out")
+        self.assertEqual(
+            journals["recent"][0]["pair"]["out"]["amountMsat"],
+            btc_to_msat("0.49"),
+        )
 
     def test_ui_snapshots_show_reviewed_swap_movement_with_fee(self):
         conn = open_db(self.data_root)
