@@ -25,6 +25,7 @@ from .pair_allocation import (
     allocate_fee_msat,
     clamped_component_receipts_msat,
     connected_pair_components,
+    is_component_member,
     ordered_pair_component,
 )
 
@@ -250,11 +251,12 @@ def _intra_pair_components(
             return None
         return (out_row["id"], in_row["id"])
 
-    # Unlike booking's multi-pair builder, ALL pairs (auto, derived,
-    # samourai regime pairs) form components here: a shared inbound must be
-    # allocated ONCE across the pairs that feed it, whatever their origin.
-    # (Booking handles derived groups through their own per-pair path.)
-    return connected_pair_components(intra_pairs, _leg_ids)
+    # Match booking's multi-pair component boundary exactly. Derived pairs are
+    # booked through their own group path; folding them into reviewed manual
+    # components here would allocate fees over a different pair set.
+    return connected_pair_components(
+        intra_pairs, _leg_ids, membership=is_component_member
+    )
 
 def _transfer_actions_for_intra_pairs(
     intra_pairs: Optional[Sequence[Mapping[str, Mapping[str, Any]]]],
