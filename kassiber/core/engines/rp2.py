@@ -16,7 +16,12 @@ from typing import Any, Iterable, Iterator, Mapping, Sequence
 from ...errors import AppError
 from ...msat import btc_to_msat, dec, msat_to_btc
 from ...tax_policy import build_tax_policy
-from ...transfers import apply_manual_pairs, detect_intra_transfers, is_bitcoin_rail_pair
+from ...transfers import (
+    apply_manual_pairs,
+    detect_intra_transfers,
+    is_bitcoin_rail_pair,
+    normalize_group_txid,
+)
 from .. import pricing
 from ..ownership_transfers import (
     derive_multi_source_consolidations,
@@ -30,6 +35,15 @@ from ..austrian import (
     AT_SWAP_QUARANTINE_REASON,
     REGIME_NEU,
     kennzahl_for_disposal_category,
+)
+from ..journal_markers import (
+    MARKER_ALT_IN,
+    MARKER_ALT_OUT,
+    MARKER_POOL,
+    MARKER_REGIME,
+    MARKER_REGIME_BASIS,
+    MARKER_SWAP_LINK,
+    marker_token,
 )
 from ..tax_events import (
     NormalizedTaxAssetInputs,
@@ -276,13 +290,18 @@ def _compose_event_notes(event: Any) -> str:
     tokens: list[str] = []
     regime = getattr(event, "at_regime", None)
     if regime:
-        tokens.append(f"at_regime={regime}")
+        tokens.append(marker_token(MARKER_REGIME, regime))
+    regime_basis = getattr(event, "at_regime_basis", None)
+    if regime_basis:
+        # Audit-only provenance of the regime choice (exercised Wahlrecht vs
+        # forced); rp2 does not read it, the journal/GUI marker channel does.
+        tokens.append(marker_token(MARKER_REGIME_BASIS, regime_basis))
     pool = getattr(event, "at_pool", None)
     if pool:
-        tokens.append(f"at_pool={pool}")
+        tokens.append(marker_token(MARKER_POOL, pool))
     swap_link = getattr(event, "at_swap_link", None)
     if swap_link:
-        tokens.append(f"at_swap_link={swap_link}")
+        tokens.append(marker_token(MARKER_SWAP_LINK, swap_link))
     description = getattr(event, "description", "") or ""
     if description:
         tokens.append(description)
@@ -362,10 +381,10 @@ def _compose_transfer_notes(transfer: Any) -> str:
     # exist. Emit it first (matching _compose_event_notes' fixed marker order).
     regime = getattr(transfer, "at_regime", None)
     if regime:
-        tokens.append(f"at_regime={regime}")
+        tokens.append(marker_token(MARKER_REGIME, regime))
     pool = getattr(transfer, "at_pool", None)
     if pool:
-        tokens.append(f"at_pool={pool}")
+        tokens.append(marker_token(MARKER_POOL, pool))
     pairing_source = getattr(transfer, "pairing_source", None)
     if pairing_source == "ownership_derived":
         # Make the basis for the non-taxable treatment auditable: this leg was
@@ -386,10 +405,21 @@ def _compose_transfer_journal_description(audit: Mapping[str, Any]) -> str:
     tokens: list[str] = []
     regime = audit.get("at_regime")
     if regime in ("alt", "neu"):
-        tokens.append(f"at_regime={regime}")
+        tokens.append(marker_token(MARKER_REGIME, regime))
+    flows = audit.get("regime_flows")
+    if flows:
+        # at_regime above describes only the FEE slice; a mixed move carries
+        # lots from several regimes. Emit the tax-free (alt) quantity per side
+        # so balance-hint consumers classify quantities, not whole MOVEs.
+        tokens.append(
+            marker_token(MARKER_ALT_OUT, int(flows.get("out", {}).get("alt", 0)))
+        )
+        tokens.append(
+            marker_token(MARKER_ALT_IN, int(flows.get("in", {}).get("alt", 0)))
+        )
     pool = audit.get("at_pool")
     if pool:
-        tokens.append(f"at_pool={pool}")
+        tokens.append(marker_token(MARKER_POOL, pool))
     tokens.append(f"Transfer {audit['from_wallet_label']} -> {audit['to_wallet_label']}")
     pairing_source = audit.get("pairing_source")
     if pairing_source == "ownership_derived":
@@ -744,7 +774,10 @@ def _prepare_rp2_asset_input(profile, normalized_inputs: NormalizedTaxAssetInput
         transfer = transfers_by_id[item_id]
         if transfer.group_id:
             transfers_by_group[transfer.group_id].append(transfer)
-    processed_transfer_groups: set[str] = set()
+    # Group gate state machine: absent -> not yet preflighted; "approved" ->
+    # preflight passed, legs apply (and re-check) at their own positions;
+    # "failed" -> preflight or a mid-group re-check failed, remaining legs skip.
+    transfer_group_state: dict[str, str] = {}
 
     def _transfer_gate_failure(
         transfer: NormalizedTaxTransfer,
@@ -780,6 +813,28 @@ def _prepare_rp2_asset_input(profile, normalized_inputs: NormalizedTaxAssetInput
         detail: Mapping[str, Any],
     ) -> None:
         quarantines.append(build_tax_quarantine(profile, transfer.out_row, reason, detail))
+        out_transaction_id = str(
+            _row_get(transfer.out_row, "journal_transaction_id")
+            or transfer.out_row["id"]
+        )
+        in_transaction_id = str(
+            _row_get(transfer.in_row, "journal_transaction_id")
+            or transfer.in_row["id"]
+        )
+        if in_transaction_id == out_transaction_id:
+            return
+        quarantines.append(
+            build_tax_quarantine(
+                profile,
+                transfer.in_row,
+                reason,
+                {
+                    **dict(detail),
+                    "paired_leg": "inbound",
+                    "blocked_by_transaction_id": out_transaction_id,
+                },
+            )
+        )
 
     def _append_group_gate_quarantines(
         group: Sequence[NormalizedTaxTransfer],
@@ -878,6 +933,8 @@ def _prepare_rp2_asset_input(profile, normalized_inputs: NormalizedTaxAssetInput
         }
         if getattr(transfer, "at_regime", None):
             audit_row["at_regime"] = transfer.at_regime
+        if getattr(transfer, "regime_flows", None):
+            audit_row["regime_flows"] = transfer.regime_flows
         if getattr(transfer, "at_pool", None):
             audit_row["at_pool"] = transfer.at_pool
         if transfer.group_id:
@@ -895,10 +952,43 @@ def _prepare_rp2_asset_input(profile, normalized_inputs: NormalizedTaxAssetInput
         if item_kind == "transfer":
             transfer = transfers_by_id[item_id]
             if transfer.group_id:
-                if transfer.group_id in processed_transfer_groups:
+                group_id = str(transfer.group_id)
+                state = transfer_group_state.get(group_id)
+                if state == "approved":
+                    # Preflight passed at the first leg; apply THIS leg at its
+                    # own chronological position. Crediting the whole group at
+                    # the first leg's position would let an intermediate
+                    # destination spend pass this gate and then abort the whole
+                    # asset inside rp2's strictly chronological BalanceSet
+                    # (multi-timestamp manual N:1 groups). The preflight cannot
+                    # see intermediate debits either, so re-check each leg at
+                    # its own position: an intermediate spend that drained the
+                    # source must downgrade the REST of the group to quarantine
+                    # instead of driving the BalanceSet negative (earlier legs
+                    # are already booked and stay booked).
+                    failure = _transfer_gate_failure(
+                        transfer, account_available, priced_available
+                    )
+                    if failure is not None:
+                        reason, detail = failure
+                        transfer_group_state[group_id] = "failed"
+                        group = transfers_by_group[group_id]
+                        position = next(
+                            index
+                            for index, leg in enumerate(group)
+                            if leg is transfer
+                        )
+                        remaining = group[position:]
+                        _append_group_gate_quarantines(
+                            remaining, transfer, reason, detail
+                        )
+                        continue
+                    _apply_transfer_to_rp2(transfer)
                     continue
-                processed_transfer_groups.add(transfer.group_id)
-                group = transfers_by_group[transfer.group_id]
+                if state is not None:
+                    continue
+                transfer_group_state[group_id] = "failed"
+                group = transfers_by_group[group_id]
                 temp_account = defaultdict(lambda: Decimal("0"), account_available)
                 temp_priced = priced_available
                 failed: tuple[NormalizedTaxTransfer, str, dict[str, Any]] | None = None
@@ -919,8 +1009,8 @@ def _prepare_rp2_asset_input(profile, normalized_inputs: NormalizedTaxAssetInput
                         group, failed_transfer, reason, detail
                     )
                     continue
-                for candidate in group:
-                    _apply_transfer_to_rp2(candidate)
+                transfer_group_state[group_id] = "approved"
+                _apply_transfer_to_rp2(transfer)
                 continue
 
             failure = _transfer_gate_failure(
@@ -2507,11 +2597,37 @@ class GenericRP2TaxEngine:
                         direct_payout_suppressed_in_ids.add(str(withheld["in"]["id"]))
             if direct_payout_suppressed_in_ids:
                 already_paired_ids |= direct_payout_suppressed_in_ids
-                rows_for_engine = [
-                    row
-                    for row in rows_for_engine
-                    if str(row["id"]) not in direct_payout_suppressed_in_ids
-                ]
+                kept_rows = []
+                for row in rows_for_engine:
+                    if str(row["id"]) not in direct_payout_suppressed_in_ids:
+                        kept_rows.append(row)
+                        continue
+                    # The suppressed row is a real synced receipt that
+                    # contradicts the whole-row payout review (part of the tx
+                    # demonstrably came back to an owned wallet). Dropping it
+                    # silently would understate holdings with no review trace.
+                    # Rows here can be sqlite3.Row (no .get) — use _row_get.
+                    wallet_id = str(_row_get(row, "wallet_id") or "")
+                    wallet_ref = inputs.wallet_refs_by_id.get(wallet_id)
+                    quarantines.append(
+                        build_tax_quarantine(
+                            self.profile,
+                            row,
+                            "direct_payout_conflicting_receipt",
+                            {
+                                "asset": _row_get(row, "asset"),
+                                "wallet": (
+                                    wallet_ref["label"]
+                                    if wallet_ref and wallet_ref.get("label")
+                                    else wallet_id
+                                ),
+                                "direction": _row_get(row, "direction"),
+                                "external_id": str(_row_get(row, "external_id") or ""),
+                                "required_for": "direct_payout_review",
+                            },
+                        )
+                    )
+                rows_for_engine = kept_rows
             # Multi-source consolidation deriver (N owned wallets -> 1, graph
             # readable): the one case detect_intra and the single-source deriver
             # both decline because per-wallet sync double-counts the fee. It
@@ -2590,17 +2706,21 @@ class GenericRP2TaxEngine:
             # whole balanced group, so a second quarantine would be redundant.
             if ownership_result.blocked_sources:
                 inbound_group_wallets: dict[tuple[Any, Any], set[str]] = {}
+                group_row_ids: dict[tuple[Any, Any], set[str]] = {}
                 for candidate in rows_for_engine:
-                    if _row_get(candidate, "direction") == "inbound" and _row_get(
-                        candidate, "external_id"
-                    ):
-                        inbound_group_wallets.setdefault(
-                            (
-                                str(_row_get(candidate, "external_id")),
-                                _row_get(candidate, "asset"),
-                            ),
-                            set(),
-                        ).add(str(_row_get(candidate, "wallet_id")))
+                    if not _row_get(candidate, "external_id"):
+                        continue
+                    candidate_key = (
+                        normalize_group_txid(str(_row_get(candidate, "external_id"))),
+                        _row_get(candidate, "asset"),
+                    )
+                    group_row_ids.setdefault(candidate_key, set()).add(
+                        str(_row_get(candidate, "id"))
+                    )
+                    if _row_get(candidate, "direction") == "inbound":
+                        inbound_group_wallets.setdefault(candidate_key, set()).add(
+                            str(_row_get(candidate, "wallet_id"))
+                        )
                 surfaced_blocks: list[Mapping[str, Any]] = []
                 for blocked in ownership_result.blocked_sources:
                     row = blocked.get("row")
@@ -2609,12 +2729,21 @@ class GenericRP2TaxEngine:
                     row_id = str(_row_get(row, "id"))
                     source_wallet_id = str(_row_get(row, "wallet_id"))
                     group_key = (
-                        str(_row_get(row, "external_id")),
+                        normalize_group_txid(str(_row_get(row, "external_id") or "")),
                         _row_get(row, "asset"),
                     )
+                    # The owned-fanout guard only holds a group NO pair touches
+                    # (a paired leg means "handled elsewhere" to it). A blocked
+                    # source in a partially-paired group would book a standalone
+                    # disposal with neither guard nor quarantine — so the
+                    # suppression premise requires both a recorded cross-wallet
+                    # destination AND a pair-free group.
                     fanout_holds = any(
                         wallet_id != source_wallet_id
                         for wallet_id in inbound_group_wallets.get(group_key, ())
+                    ) and not any(
+                        member_id in already_paired_ids
+                        for member_id in group_row_ids.get(group_key, ())
                     )
                     # A restored withheld pair is re-paired as a self-transfer
                     # below, so its source must not also be quarantined here.
@@ -2684,6 +2813,7 @@ class GenericRP2TaxEngine:
                 + consolidation_result.derived_pairs
                 + ownership_result.derived_pairs
                 + fanout_result.derived_pairs
+                + list(inputs.channel_transfer_pairs or ())
             )
             # The engine carries the synthetic split leg (so it can mark the
             # cross-asset swap-out without touching the self-transfer remainder),

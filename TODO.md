@@ -1112,6 +1112,54 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
     cross-chain blanks (if any are reachable) stay distinguishable from
     legacy-mainnet blanks. Likely unreachable today (chain force-normalization on
     wallet add/edit), hence P3 / deferred.
+  - [x] **Round-3 self-transfer batch (2026-07-08).** ~30 one-bug-per-commit
+    fixes across the transfer machinery: Samourai tx0 group atomicity +
+    manual-pair collision quarantines, multi-pair fee ceiling + privacy-leg
+    quarantines + display dedup (journals list, summary PDF, per-(leg, role)
+    pair counts), SoF fee-bearing N:1 allocation, pair kind-edit fee
+    reconciliation, LN sub-sat clamp (booking + regime inference in lockstep
+    via `pair_allocation.clamped_receipt_msat`), matcher mirror for
+    journal-netted LN hash pairs, blocked-source suppression premise,
+    per-leg group gate application with re-check (both intermediate-spend
+    abort directions), tax-free hints classifying per-regime quantity flows
+    (`at_alt_out`/`at_alt_in` markers via the new `journal_markers` module),
+    Lightning channel lifecycle (force-close sweep matching, grouped
+    multi-sweep close fee with an explicit CHANNEL_CLOSE_MISMATCH ceiling —
+    the generic `unrecognized_outflow` guard is definitionally zero for
+    cloned-amount synthesized pairs — funding-with-external-payment
+    quarantine, batched-open sums, bkpr sanitizer keeping
+    credit_msat/debit_msat), and shared infrastructure in
+    `pair_allocation.py` (ordering, allocator, clamp, component builder).
+  - [x] **Round-3 accepted remainders (P3).** Multi-leg components now clamp
+    sub-sat receipt excess through the shared `pair_allocation.py` helper in
+    both booking and Austrian inference; journal pair payloads select one
+    representative pair before reading pair columns, so chain-reused legs cannot
+    mix fields from different pairs; Austrian inference now uses the same
+    reviewed-pair component membership as booking, leaving derived pairs to
+    their own group path.
+  - [ ] **Make the Austrian disposal-ordering election configurable.** For a
+    disposal from a wallet holding both Alt and Neu inventory, Kassiber picks
+    Neu-first; the KryptowährungsVO presumption absent a designation is
+    earliest-acquired-first (usually Alt). The choice is now recorded in the
+    audit trail (`at_regime_basis=wahlrecht` on the journal disposal, emitted
+    from `infer_outbound_regimes`' election set), so the exercised Wahlrecht is
+    documentable — but it should become a profile-level setting with
+    earliest-first available as the statutory default, and the basis marker
+    should extend to swap legs and self-transfer fee slices (today only
+    standalone disposals carry it). Changing the default silently would change
+    existing users' tax outcomes, so it needs an explicit migration story.
+  - [ ] **Plumb LND channel-lifecycle data (open Codex threads on #405).**
+    `_persist_lnd_channel_records` writes `channel_id=NULL` and
+    `amount_msat=0`, so on LND the close→open link never forms (close
+    capacity-MOVEs are dropped and the node wallet strands phantom holdings),
+    `_funding_amount_mismatch` / `_close_balance_mismatch` can never fire
+    (funding txs that also pay external recipients are absorbed untaxed;
+    vin-matched close sweeps are unbounded), and the whole round-3 channel
+    hardening only takes effect for CLN-with-bkpr balances. Populate
+    channel ids + funded/settled balances from LND `ListChannels` /
+    `ClosedChannels`, and fix the CLN `multifundchannel` first-wins account
+    collapse (`open_txids.setdefault`) that strands closes of channels 2..N
+    in a batched open.
 - [x] Austrian E 1kv PDF export no longer uses the Latin-1 text writer:
   `reports export-austrian-e1kv-pdf` / `reports export-austrian` now render a
   ReportLab-backed Steuerbericht with cover, summary/detail sections,

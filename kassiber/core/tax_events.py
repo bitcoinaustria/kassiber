@@ -9,8 +9,24 @@ from ..msat import msat_to_btc
 from ..transfers import normalize_group_txid
 from . import pricing
 from .austrian import infer_outbound_regimes, infer_regime_from_timestamp, resolve_pool_id
-from .loans import LOCK_SUPPRESS_ROLES, RELEASE_SUPPRESS_ROLES
+from .journal_markers import REGIME_BASIS_ELECTION
+from .loans import (
+    CHANNEL_CLOSE_MISMATCH,
+    CHANNEL_OPEN,
+    CHANNEL_OPEN_MISMATCH,
+    LOCK_SUPPRESS_ROLES,
+    RELEASE_SUPPRESS_ROLES,
+)
 from .ownership_transfers import detect_conflicting_spend_ids
+from .pair_allocation import (
+    allocate_fee_msat,
+    clamped_component_receipts_msat,
+    clamped_receipt_msat,
+    connected_pair_components,
+    is_component_member,
+    ordered_pair_component,
+    pair_record_id,
+)
 from .privacy_hops import privacy_hop_evidence_from_row
 from .transfer_matching import (
     DEFAULT_FEE_PCT_MAX,
@@ -47,6 +63,12 @@ class NormalizedTaxEvent:
     # profile's tax_country is "at"; None for non-AT profiles or when rp2's
     # date-based inference should decide.
     at_regime: Optional[AtRegime] = None
+    # Why the disposal carries its at_regime. "wahlrecht" = the disposing
+    # wallet held both Alt and Neu inventory, so Neu-first was an exercised
+    # KryptowährungsVO designation (not forced by the holdings); None = forced
+    # by the wallet's holdings, set by explicit user override, or not AT.
+    # Audit-trail only — rp2 ignores the serialized marker.
+    at_regime_basis: Optional[str] = None
     # Moving-average pool partition id (Neu only; ignored by rp2 for Alt).
     # Kassiber decides what a pool is — v1 uses wallet_id. None means
     # "absent marker", which rp2 treats as the `AT_DEFAULT_POOL` bucket.
@@ -91,6 +113,12 @@ class NormalizedTaxTransfer:
     # rp2's moving-average aborts the whole asset on "Ambiguous Austrian
     # disposal" when the wallet holds both Alt and Neu lots. None outside AT.
     at_regime: Optional[AtRegime] = None
+    # Per-regime quantity flows of the MOVE ({"out": {regime: msat}, "in":
+    # {regime: msat}}). A mixed-regime move carries lots from SEVERAL regimes;
+    # any consumer classifying moved quantities (tax-free balance hints) needs
+    # this split — at_regime above only describes the fee slice. The mapping is
+    # regime-name keyed, so future country modules reuse the same channel.
+    regime_flows: Optional[Mapping[str, Mapping[str, int]]] = None
     # Optional stable id for one logical movement split out of a multi-output
     # wallet transaction. Journal rows still point at the real out/in rows.
     transfer_id: Optional[str] = None
@@ -487,6 +515,46 @@ def _samourai_internal_privacy_row_ids(
     return {str(row["id"]) for group in groups for row, _ in group}
 
 
+def _samourai_pair_id(out_row: Mapping[str, Any], in_row: Mapping[str, Any]) -> str:
+    return f"samourai:{out_row['id']}->{in_row['id']}"
+
+
+def _samourai_internal_regime_pairs(
+    groups: Sequence[Sequence[SamouraiGroupEntry]],
+) -> list[dict[str, Any]]:
+    pairs: list[dict[str, Any]] = []
+    for entries in groups:
+        out_rows = [
+            row
+            for row, _ in entries
+            if _row_get(row, "direction") == "outbound"
+        ]
+        in_rows = [
+            row
+            for row, _ in entries
+            if _row_get(row, "direction") == "inbound"
+        ]
+        if len(out_rows) == 1:
+            pairs.extend(
+                {
+                    "out": out_rows[0],
+                    "in": in_row,
+                    "pair_id": _samourai_pair_id(out_rows[0], in_row),
+                }
+                for in_row in in_rows
+            )
+        elif len(in_rows) == 1:
+            pairs.extend(
+                {
+                    "out": out_row,
+                    "in": in_rows[0],
+                    "pair_id": _samourai_pair_id(out_row, in_rows[0]),
+                }
+                for out_row in out_rows
+            )
+    return pairs
+
+
 def _collect_samourai_internal_transfers(
     profile: Mapping[str, Any],
     asset: str,
@@ -495,10 +563,13 @@ def _collect_samourai_internal_transfers(
     is_at: bool,
     quarantines: list[dict[str, Any]],
     outbound_regimes: Optional[Mapping[str, AtRegime]] = None,
-) -> tuple[dict[str, list[NormalizedTaxTransfer]], dict[str, NormalizedTaxEvent]]:
+    transfer_regime_flows: Optional[
+        Mapping[tuple[str, str], dict[str, dict[str, int]]]
+    ] = None,
+) -> dict[str, list[NormalizedTaxTransfer]]:
     collected: dict[str, list[NormalizedTaxTransfer]] = {}
-    fee_events: dict[str, NormalizedTaxEvent] = {}
     regime_by_row = outbound_regimes or {}
+    flows_by_leg = transfer_regime_flows or {}
 
     def _samourai_fee_regime(out_row: Mapping[str, Any]) -> Optional[AtRegime]:
         # The Whirlpool privacy MOVE's miner fee is a taxable disposal; under AT
@@ -608,6 +679,47 @@ def _collect_samourai_internal_transfers(
             wallet_refs_by_id[row["wallet_id"]]["label"] for row in in_rows
         }
         if len(in_rows) > 1 or len(to_wallet_labels) > 1:
+            # The whole group must book or quarantine atomically: a shared
+            # group_id lets the RP2 gate preflight all legs together, exactly
+            # like the graph derivers. For the 1-out/N-in Samourai shape,
+            # booking must use the same canonical order and greedy allocator as
+            # Austrian regime inference or the transfer and its regime_flows
+            # describe different fee-bearing legs.
+            group_id = f"samourai-internal:{first_out['id']}"
+            fee_by_in_id: dict[str, Decimal] = {}
+            if fee > 0:
+                if len(out_rows) == 1:
+                    component_pairs = [
+                        {
+                            "out": first_out,
+                            "in": in_row,
+                            "pair_id": _samourai_pair_id(first_out, in_row),
+                        }
+                        for in_row in in_rows
+                    ]
+                    ordered_pairs = ordered_pair_component(component_pairs)
+                    fee_msat = max(
+                        0,
+                        sum(
+                            int(row["amount"] or 0) + int(row["fee"] or 0)
+                            for row in out_rows
+                        )
+                        - sum(int(row["amount"] or 0) for row in in_rows),
+                    )
+                    fee_allocations = allocate_fee_msat(
+                        fee_msat,
+                        [int(pair["in"]["amount"] or 0) for pair in ordered_pairs],
+                    )
+                    fee_by_in_id = {
+                        str(pair["in"]["id"]): msat_to_btc(fee_allocation)
+                        for pair, fee_allocation in zip(ordered_pairs, fee_allocations)
+                    }
+                else:
+                    fee_leg_id = max(
+                        in_rows,
+                        key=lambda row: (int(row["amount"] or 0), str(row["id"])),
+                    )["id"]
+                    fee_by_in_id[str(fee_leg_id)] = fee
             collected[str(first_out["id"])] = [
                 NormalizedTaxTransfer(
                     asset=asset,
@@ -618,9 +730,10 @@ def _collect_samourai_internal_transfers(
                     from_wallet_label=from_wallet["label"],
                     to_wallet_id=wallet_refs_by_id[in_row["wallet_id"]]["id"],
                     to_wallet_label=wallet_refs_by_id[in_row["wallet_id"]]["label"],
-                    sent=msat_to_btc(in_row["amount"]),
+                    sent=msat_to_btc(in_row["amount"])
+                    + fee_by_in_id.get(str(in_row["id"]), Decimal("0")),
                     received=msat_to_btc(in_row["amount"]),
-                    fee=Decimal("0"),
+                    fee=fee_by_in_id.get(str(in_row["id"]), Decimal("0")),
                     spot_price=spot_price,
                     description=(
                         first_out["note"]
@@ -633,32 +746,14 @@ def _collect_samourai_internal_transfers(
                     in_row=in_row,
                     at_pool=resolve_pool_id(from_wallet["id"]) if is_at else None,
                     at_regime=_samourai_fee_regime(first_out),
+                    regime_flows=flows_by_leg.get(
+                        (str(first_out["id"]), str(in_row["id"]))
+                    ),
                     transfer_id=f"{first_out['id']}::{in_row['id']}",
+                    group_id=group_id,
                 )
                 for in_row in in_rows
             ]
-            if fee > 0:
-                fee_events[str(first_out["id"])] = NormalizedTaxEvent(
-                    transaction_id=first_out["id"],
-                    asset=asset,
-                    occurred_at=first_out["occurred_at"],
-                    wallet_id=from_wallet["id"],
-                    wallet_label=from_wallet["label"],
-                    direction="outbound",
-                    amount=Decimal("0"),
-                    fee=fee,
-                    spot_price=spot_price,
-                    fiat_value=None,
-                    description=(
-                        first_out["note"]
-                        or first_out["description"]
-                        or first_out["kind"]
-                        or "Coinjoin privacy fee"
-                    ),
-                    raw_row=first_out,
-                    at_pool=resolve_pool_id(from_wallet["id"]) if is_at else None,
-                    at_regime=_samourai_fee_regime(first_out),
-                )
             continue
 
         collected[str(first_out["id"])] = [
@@ -686,9 +781,12 @@ def _collect_samourai_internal_transfers(
                 in_row=first_in,
                 at_pool=resolve_pool_id(from_wallet["id"]) if is_at else None,
                 at_regime=_samourai_fee_regime(first_out),
+                regime_flows=flows_by_leg.get(
+                    (str(first_out["id"]), str(first_in["id"]))
+                ),
             )
         ]
-    return collected, fee_events
+    return collected
 
 
 def _owned_fanout_row_ids(
@@ -771,13 +869,7 @@ def _owned_fanout_row_ids(
     return fanout_ids
 
 
-def _pair_record_id(pair: Mapping[str, Any]) -> str | None:
-    raw = pair.get("pair_id") if hasattr(pair, "get") else None
-    if raw in (None, ""):
-        raw = pair.get("id") if hasattr(pair, "get") else None
-    if raw in (None, ""):
-        return None
-    return str(raw)
+_pair_record_id = pair_record_id
 
 
 def _pair_source(pair: Mapping[str, Any]) -> str | None:
@@ -803,20 +895,6 @@ def _row_msat(row: Mapping[str, Any], key: str) -> int:
     return int(_row_get(row, key) or 0)
 
 
-def _allocate_fee_msat(total_fee_msat: int, bases: Sequence[int]) -> list[int]:
-    """Allocate an aggregate multi-link fee deterministically across legs."""
-    remaining = max(0, int(total_fee_msat))
-    allocated: list[int] = []
-    for base in bases:
-        if remaining <= 0:
-            allocated.append(0)
-            continue
-        portion = min(int(base), remaining)
-        allocated.append(portion)
-        remaining -= portion
-    if remaining and allocated:
-        allocated[-1] += remaining
-    return allocated
 
 
 def _append_manual_multi_pair_quarantines(
@@ -838,49 +916,12 @@ def _append_manual_multi_pair_quarantines(
 def _manual_multi_pair_components(
     pairs: Sequence[Mapping[str, Any]],
 ) -> list[list[Mapping[str, Any]]]:
-    candidates = [
-        pair
-        for pair in pairs
-        if _pair_record_id(pair) is not None and _pair_group_id(pair) is None
-    ]
-    if not candidates:
-        return []
-
-    usage: dict[str, int] = {}
-    row_to_indexes: dict[str, list[int]] = {}
-    for index, pair in enumerate(candidates):
-        for side in ("out", "in"):
-            row_id = str(pair[side]["id"])
-            usage[row_id] = usage.get(row_id, 0) + 1
-            row_to_indexes.setdefault(row_id, []).append(index)
-
-    multi_indexes = {
-        index
-        for index, pair in enumerate(candidates)
-        if usage[str(pair["out"]["id"])] > 1 or usage[str(pair["in"]["id"])] > 1
-    }
-    components: list[list[Mapping[str, Any]]] = []
-    seen: set[int] = set()
-    for start in sorted(multi_indexes):
-        if start in seen:
-            continue
-        stack = [start]
-        component_indexes: set[int] = set()
-        while stack:
-            index = stack.pop()
-            if index in seen:
-                continue
-            seen.add(index)
-            component_indexes.add(index)
-            pair = candidates[index]
-            for row_id in (str(pair["out"]["id"]), str(pair["in"]["id"])):
-                for linked_index in row_to_indexes.get(row_id, ()):
-                    if linked_index in multi_indexes and linked_index not in seen:
-                        stack.append(linked_index)
-        component = [candidates[index] for index in sorted(component_indexes)]
-        if len(component) > 1:
-            components.append(component)
-    return components
+    components = connected_pair_components(
+        pairs,
+        lambda pair: (pair["out"]["id"], pair["in"]["id"]),
+        membership=is_component_member,
+    )
+    return [component for component in components if len(component) > 1]
 
 
 def _build_manual_multi_pair_transfers(
@@ -890,6 +931,9 @@ def _build_manual_multi_pair_transfers(
     wallet_refs_by_id: Mapping[str, Mapping[str, Any]],
     is_at: bool,
     outbound_regimes: Mapping[str, AtRegime],
+    transfer_regime_flows: Optional[
+        Mapping[tuple[str, str], dict[str, dict[str, int]]]
+    ] = None,
 ) -> tuple[
     dict[str, list[NormalizedTaxTransfer]],
     set[str],
@@ -900,15 +944,9 @@ def _build_manual_multi_pair_transfers(
     quarantines: list[dict[str, Any]] = []
 
     for component in _manual_multi_pair_components(pairs):
-        ordered_pairs = sorted(
-            component,
-            key=lambda pair: (
-                str(_row_get(pair["out"], "occurred_at") or ""),
-                str(_pair_record_id(pair) or ""),
-                str(pair["out"]["id"]),
-                str(pair["in"]["id"]),
-            ),
-        )
+        # The shared chronological order keeps the greedy fee allocation in
+        # lockstep with every regime-inference consumer of the same component.
+        ordered_pairs = ordered_pair_component(component)
         pair_ids = [
             _pair_record_id(pair) or f"{pair['out']['id']}->{pair['in']['id']}"
             for pair in ordered_pairs
@@ -949,12 +987,24 @@ def _build_manual_multi_pair_transfers(
             _pair_is_reviewed_privacy_link(pair) for pair in ordered_pairs
         )
         if privacy_rows and not reviewed_privacy_component:
+            # Every group row was consumed, so every group row must surface:
+            # quarantining only the evidence-bearing rows would silently drop
+            # the clean sibling legs from booking with no review trace.
+            privacy_row_ids = {str(row["id"]) for row in privacy_rows}
+            for row in privacy_rows:
+                _append_manual_multi_pair_quarantines(
+                    quarantines,
+                    profile,
+                    [row],
+                    "privacy_hop_unresolved",
+                    {**detail_base, **(_privacy_hop_evidence(row) or {})},
+                )
             _append_manual_multi_pair_quarantines(
                 quarantines,
                 profile,
-                privacy_rows,
-                "privacy_hop_unresolved",
-                detail_base,
+                [row for row in group_rows if str(row["id"]) not in privacy_row_ids],
+                "derived_transfer_group_blocked",
+                {**detail_base, "blocked_by_reason": "privacy_hop_unresolved"},
             )
             continue
 
@@ -962,9 +1012,19 @@ def _build_manual_multi_pair_transfers(
             _row_msat(row, "amount") + _row_msat(row, "fee")
             for row in out_rows_by_id.values()
         )
-        total_received_msat = sum(
-            _row_msat(row, "amount") for row in in_rows_by_id.values()
+        received_amounts_by_in_id = {
+            row_id: _row_msat(row, "amount")
+            for row_id, row in in_rows_by_id.items()
+        }
+        adjusted_received_by_in_id = dict(
+            zip(
+                received_amounts_by_in_id,
+                clamped_component_receipts_msat(
+                    total_sent_msat, list(received_amounts_by_in_id.values())
+                ),
+            )
         )
+        total_received_msat = sum(adjusted_received_by_in_id.values())
         if total_sent_msat < total_received_msat:
             _append_manual_multi_pair_quarantines(
                 quarantines,
@@ -980,6 +1040,56 @@ def _build_manual_multi_pair_transfers(
             continue
 
         fee_msat = total_sent_msat - total_received_msat
+        total_out_amount_msat = sum(
+            _row_msat(row, "amount") for row in out_rows_by_id.values()
+        )
+        if all(
+            _row_get(row, "amount_includes_fee")
+            for row in out_rows_by_id.values()
+        ):
+            unrecognized_outflow_msat = 0
+        else:
+            unrecognized_outflow_msat = max(
+                0, total_out_amount_msat - total_received_msat
+            )
+        fee_ceiling_msat = fee_threshold_msat(
+            total_out_amount_msat,
+            DEFAULT_FEE_PCT_MAX,
+            DEFAULT_FEE_SATS_MIN,
+        )
+        if unrecognized_outflow_msat > fee_ceiling_msat:
+            from_wallets = sorted(
+                {
+                    wallet_refs_by_id[row["wallet_id"]]["label"]
+                    for row in out_rows_by_id.values()
+                }
+            )
+            to_wallets = sorted(
+                {
+                    wallet_refs_by_id[row["wallet_id"]]["label"]
+                    for row in in_rows_by_id.values()
+                }
+            )
+            _append_manual_multi_pair_quarantines(
+                quarantines,
+                profile,
+                group_rows,
+                "transfer_fee_implausible",
+                {
+                    **detail_base,
+                    "from_wallets": from_wallets,
+                    "to_wallets": to_wallets,
+                    "sent": float(msat_to_btc(total_sent_msat)),
+                    "received": float(msat_to_btc(total_received_msat)),
+                    "implied_fee": float(msat_to_btc(fee_msat)),
+                    "unrecognized_outflow": float(
+                        msat_to_btc(unrecognized_outflow_msat)
+                    ),
+                    "fee_ceiling": float(msat_to_btc(fee_ceiling_msat)),
+                    "required_for": "transfer_fee_review",
+                },
+            )
+            continue
         spot_price_row = next(iter(out_rows_by_id.values()))
         spot_price_wallet_label = wallet_refs_by_id[spot_price_row["wallet_id"]]["label"]
         spot_price = None
@@ -1030,14 +1140,18 @@ def _build_manual_multi_pair_transfers(
 
         transfers: list[NormalizedTaxTransfer] = []
         if len(out_rows_by_id) == 1:
-            fee_allocations = _allocate_fee_msat(
-                fee_msat, [_row_msat(pair["in"], "amount") for pair in ordered_pairs]
+            fee_allocations = allocate_fee_msat(
+                fee_msat,
+                [
+                    adjusted_received_by_in_id[str(pair["in"]["id"])]
+                    for pair in ordered_pairs
+                ],
             )
             for pair, fee_allocation in zip(ordered_pairs, fee_allocations):
                 out_row = pair["out"]
                 in_row = pair["in"]
-                sent_msat = _row_msat(in_row, "amount") + fee_allocation
-                received_msat = _row_msat(in_row, "amount")
+                received_msat = adjusted_received_by_in_id[str(in_row["id"])]
+                sent_msat = received_msat + fee_allocation
                 transfer_id = f"{group_id}:{pair['out']['id']}->{pair['in']['id']}"
                 from_wallet = wallet_refs_by_id[out_row["wallet_id"]]
                 to_wallet = wallet_refs_by_id[in_row["wallet_id"]]
@@ -1074,6 +1188,9 @@ def _build_manual_multi_pair_transfers(
                         in_row=in_row,
                         at_pool=resolve_pool_id(from_wallet["id"]) if is_at else None,
                         at_regime=at_regime,
+                        regime_flows=(transfer_regime_flows or {}).get(
+                            (str(out_row["id"]), str(in_row["id"]))
+                        ),
                         transfer_id=transfer_id,
                         group_id=group_id,
                         group_block_rows=tuple(group_rows),
@@ -1085,7 +1202,7 @@ def _build_manual_multi_pair_transfers(
                 _row_msat(pair["out"], "amount") + _row_msat(pair["out"], "fee")
                 for pair in ordered_pairs
             ]
-            fee_allocations = _allocate_fee_msat(fee_msat, sent_amounts)
+            fee_allocations = allocate_fee_msat(fee_msat, sent_amounts)
             for pair, sent_msat, fee_allocation in zip(
                 ordered_pairs, sent_amounts, fee_allocations
             ):
@@ -1142,6 +1259,9 @@ def _build_manual_multi_pair_transfers(
                         in_row=in_row,
                         at_pool=resolve_pool_id(from_wallet["id"]) if is_at else None,
                         at_regime=at_regime,
+                        regime_flows=(transfer_regime_flows or {}).get(
+                            (str(out_row["id"]), str(in_row["id"]))
+                        ),
                         transfer_id=transfer_id,
                         group_id=group_id,
                         group_block_rows=tuple(group_rows),
@@ -1174,16 +1294,65 @@ def normalize_tax_asset_inputs(
     regime_map = at_regime_by_row_id or {}
     swap_link_map = at_swap_link_by_row_id or {}
     loan_leg_map = loan_leg_by_transaction_id or {}
+    samourai_internal_groups = _samourai_internal_privacy_groups(rows)
+    # A manual multi-pair component can claim the same outbound a tracked
+    # Samourai group decomposes (the splitter's rows and the user's pairs both
+    # cover parts of one tx). Booking either side alone silently drops the
+    # other's receipts, and merging the two decompositions under one fee is not
+    # modeled — quarantine the union for explicit review instead.
+    samourai_manual_conflict_row_ids: set[str] = set()
+    if intra_pairs and samourai_internal_groups:
+        # A pair with exactly ONE leg inside a tracked Samourai group claims
+        # part of the same outflow the splitter decomposes: booking both would
+        # dispose the outbound twice (or vanish the outside receipt). A pair
+        # with BOTH legs inside is harmless — its rows are consumed by the
+        # splitter before pair booking can reach them — so it must not
+        # quarantine the common single-output case.
+        pair_leg_ids = [
+            (str(pair["out"]["id"]), str(pair["in"]["id"])) for pair in intra_pairs
+        ]
+        kept_groups = []
+        for group in samourai_internal_groups:
+            group_ids = {str(_row_get(row, "id")) for row, _ in group}
+            conflict_ids: set[str] = set()
+            for out_id, in_id in pair_leg_ids:
+                if (out_id in group_ids) != (in_id in group_ids):
+                    conflict_ids |= {out_id, in_id}
+            if conflict_ids:
+                samourai_manual_conflict_row_ids |= group_ids | conflict_ids
+            else:
+                kept_groups.append(group)
+        samourai_internal_groups = kept_groups
+        if samourai_manual_conflict_row_ids:
+            # Dropping a pair below strands its partner leg as a standalone
+            # SELL/BUY with no review trace, so every dropped pair's rows
+            # join the quarantine union. Iterate to a fixpoint: pulling a
+            # reused leg in can drop further pairs.
+            changed = True
+            while changed:
+                changed = False
+                for out_id, in_id in pair_leg_ids:
+                    in_union = (
+                        out_id in samourai_manual_conflict_row_ids,
+                        in_id in samourai_manual_conflict_row_ids,
+                    )
+                    if any(in_union) and not all(in_union):
+                        samourai_manual_conflict_row_ids |= {out_id, in_id}
+                        changed = True
+            intra_pairs = [
+                pair
+                for pair in intra_pairs
+                if str(pair["out"]["id"]) not in samourai_manual_conflict_row_ids
+                and str(pair["in"]["id"]) not in samourai_manual_conflict_row_ids
+            ]
+    samourai_internal_row_ids = _samourai_internal_privacy_row_ids(
+        samourai_internal_groups
+    )
     # Suppressed loan legs (collateral lock/release and friends) are non-events:
     # the coins never leave the owned pool. Exclude them from regime/inventory
     # inference so a lock does not "consume" Alt inventory and a release does not
     # add phantom Neu inventory — otherwise a later real sale is assigned a regime
     # whose pool is empty and rp2 aborts with "in < taxable".
-    suppressed_loan_ids = {
-        str(tx_id)
-        for tx_id, role in loan_leg_map.items()
-        if role in LOCK_SUPPRESS_ROLES or role in RELEASE_SUPPRESS_ROLES
-    }
     # Shared-prevout conflicts (RBF / reorg / double-spend) must be excluded from
     # Austrian regime inference below: an unconfirmed loser sorted ahead of the
     # confirmed winner would otherwise deplete the Alt/Neu availability pool and
@@ -1205,12 +1374,50 @@ def normalize_tax_asset_inputs(
         if str(pair["out"]["id"]) not in conflict_row_ids
         and str(pair["in"]["id"]) not in conflict_row_ids
     ]
-    regime_rows = [
-        row
-        for row in rows
-        if str(row["id"]) not in suppressed_loan_ids
-        and str(row["id"]) not in conflict_row_ids
+    paired_regime_row_ids = {
+        str(row["id"])
+        for pair in non_conflict_pairs
+        for row in (pair["out"], pair["in"])
+    }
+    samourai_regime_pairs = [
+        pair
+        for pair in _samourai_internal_regime_pairs(samourai_internal_groups)
+        if str(pair["out"]["id"]) not in conflict_row_ids
+        and str(pair["in"]["id"]) not in conflict_row_ids
+        and str(pair["out"]["id"]) not in paired_regime_row_ids
+        and str(pair["in"]["id"]) not in paired_regime_row_ids
     ]
+    regime_rows: list[Mapping[str, Any]] = []
+    for row in rows:
+        row_id = str(row["id"])
+        if row_id in conflict_row_ids:
+            continue
+        if row_id in samourai_manual_conflict_row_ids:
+            # Quarantined below (samourai/manual-multi collision): the rows
+            # book nothing, so they must not deplete/credit Alt/Neu pools as
+            # standalone acquisitions/disposals either.
+            continue
+        loan_role = loan_leg_map.get(row_id)
+        if loan_role in (CHANNEL_OPEN_MISMATCH, CHANNEL_CLOSE_MISMATCH):
+            # Quarantined below (channel funding/close mismatch): nothing
+            # books, so the still-owned channel value must not move pools.
+            continue
+        if (
+            loan_role in LOCK_SUPPRESS_ROLES or loan_role in RELEASE_SUPPRESS_ROLES
+        ) and row_id not in paired_regime_row_ids:
+            # Suppressed loan legs should not consume/add Austrian regime
+            # availability. A Lightning channel-open miner fee is the one
+            # taxable slice: principal remains owned, but the fee left the
+            # wallet and needs a regime so rp2 can book it against the right
+            # Alt/Neu pool.
+            fee_msat = int(_row_get(row, "fee") or 0)
+            if loan_role == CHANNEL_OPEN and fee_msat > 0:
+                fee_row = dict(row)
+                fee_row["amount"] = 0
+                fee_row["fee"] = fee_msat
+                regime_rows.append(fee_row)
+            continue
+        regime_rows.append(row)
     # Austrian regime inference walks rows in order and depletes the Alt/Neu
     # pools positionally, so feed it a CHRONOLOGICAL, economically-meaningful
     # order — acquisitions before disposals at an equal timestamp — instead of
@@ -1228,25 +1435,32 @@ def normalize_tax_asset_inputs(
                 str(_row_get(r, "id")),
             ),
         )
-    outbound_regimes = infer_outbound_regimes(regime_rows, non_conflict_pairs) if is_at else {}
+    regime_pairs = [*non_conflict_pairs, *samourai_regime_pairs]
+    transfer_regime_flows: dict[tuple[str, str], dict[str, dict[str, int]]] = {}
+    regime_election_row_ids: set[str] = set()
+    outbound_regimes = (
+        infer_outbound_regimes(
+            regime_rows,
+            regime_pairs,
+            transfer_regime_flows,
+            election_row_ids=regime_election_row_ids,
+        )
+        if is_at
+        else {}
+    )
     events: list[NormalizedTaxEvent] = []
     transfers: list[NormalizedTaxTransfer] = []
     ordered_items: list[tuple[str, str]] = []
     quarantines: list[dict[str, Any]] = []
-    samourai_internal_groups = _samourai_internal_privacy_groups(rows)
-    samourai_internal_row_ids = _samourai_internal_privacy_row_ids(
-        samourai_internal_groups
-    )
-    samourai_transfer_by_out_id, samourai_fee_event_by_out_id = (
-        _collect_samourai_internal_transfers(
-            profile,
-            asset,
-            samourai_internal_groups,
-            wallet_refs_by_id,
-            is_at,
-            quarantines,
-            outbound_regimes,
-        )
+    samourai_transfer_by_out_id = _collect_samourai_internal_transfers(
+        profile,
+        asset,
+        samourai_internal_groups,
+        wallet_refs_by_id,
+        is_at,
+        quarantines,
+        outbound_regimes,
+        transfer_regime_flows,
     )
 
     pair_refs_by_row: dict[str, list[tuple[str, Mapping[str, Any]]]] = {}
@@ -1273,6 +1487,7 @@ def normalize_tax_asset_inputs(
         wallet_refs_by_id,
         is_at,
         outbound_regimes,
+        transfer_regime_flows,
     )
     quarantines.extend(manual_multi_quarantines)
     handled_pairs: set[tuple[str, str]] = set()
@@ -1298,16 +1513,57 @@ def normalize_tax_asset_inputs(
                 )
             )
             continue
+        channel_mismatch_role = loan_leg_map.get(row["id"])
+        if channel_mismatch_role in (CHANNEL_OPEN_MISMATCH, CHANNEL_CLOSE_MISMATCH):
+            # A channel funding tx whose recorded outflow exceeds the funded
+            # amount also paid an external recipient; a close whose settled-
+            # balance gap is not a plausible fee (unsynced sweep, HTLC value
+            # lost to the peer) cannot book that gap as a fee. Neither
+            # suppressing the row nor booking it standalone is right — review
+            # must resolve it.
+            if channel_mismatch_role == CHANNEL_OPEN_MISMATCH:
+                reason = "channel_open_unresolved"
+                required_for = "channel_funding_split_review"
+            else:
+                reason = "channel_close_unresolved"
+                required_for = "channel_close_review"
+            quarantines.append(
+                build_tax_quarantine(
+                    profile,
+                    row,
+                    reason,
+                    {
+                        "asset": asset,
+                        "wallet": wallet_refs_by_id[row["wallet_id"]]["label"],
+                        "direction": _row_get(row, "direction"),
+                        "external_id": str(_row_get(row, "external_id") or ""),
+                        "required_for": required_for,
+                    },
+                )
+            )
+            continue
+        if row["id"] in samourai_manual_conflict_row_ids:
+            quarantines.append(
+                build_tax_quarantine(
+                    profile,
+                    row,
+                    "manual_multi_pair_ambiguous",
+                    {
+                        "asset": asset,
+                        "wallet": wallet_refs_by_id[row["wallet_id"]]["label"],
+                        "direction": _row_get(row, "direction"),
+                        "conflict": "samourai_internal_group",
+                        "required_for": "manual_transfer_review",
+                    },
+                )
+            )
+            continue
         if row["id"] in samourai_internal_row_ids:
             for transfer in samourai_transfer_by_out_id.get(row["id"], []):
                 transfers.append(transfer)
                 ordered_items.append(
                     ("transfer", transfer.transfer_id or transfer.out_transaction_id)
                 )
-            event = samourai_fee_event_by_out_id.get(row["id"])
-            if event is not None:
-                events.append(event)
-                ordered_items.append(("event", row["id"]))
             continue
         manual_multi_transfers = manual_multi_transfers_by_trigger.get(row["id"])
         if manual_multi_transfers is not None:
@@ -1376,8 +1632,15 @@ def normalize_tax_asset_inputs(
                         in_privacy_hop,
                     )
                 continue
-            sent = msat_to_btc(out_row["amount"]) + msat_to_btc(out_row["fee"])
-            received = msat_to_btc(in_row["amount"])
+            sent_msat = int(out_row["amount"] or 0) + int(out_row["fee"] or 0)
+            # Sub-sat receipt excess is a precision artifact (sat-truncated
+            # LND import vs msat-exact partner leg), clamped identically in
+            # Austrian regime inference — see pair_allocation.
+            received_msat = clamped_receipt_msat(
+                sent_msat, int(in_row["amount"] or 0)
+            )
+            sent = msat_to_btc(sent_msat)
+            received = msat_to_btc(received_msat)
             if sent < received:
                 if group_id:
                     blocked_transfer_group_reasons.setdefault(
@@ -1574,6 +1837,9 @@ def normalize_tax_asset_inputs(
                     in_row=in_row,
                     at_pool=resolve_pool_id(from_wallet["id"]) if is_at else None,
                     at_regime=at_regime,
+                    regime_flows=transfer_regime_flows.get(
+                        (str(out_row["id"]), str(in_row["id"]))
+                    ),
                     group_id=group_id,
                     group_block_rows=_pair_group_block_rows(pair),
                     pairing_source=(
@@ -1676,6 +1942,7 @@ def normalize_tax_asset_inputs(
             continue
 
         at_regime = None
+        at_regime_basis = None
         at_pool = None
         at_swap_link = None
         if is_at:
@@ -1688,8 +1955,16 @@ def normalize_tax_asset_inputs(
                     row["id"],
                     outbound_regimes.get(row["id"], infer_regime_from_timestamp(row["occurred_at"])),
                 )
+                if (
+                    row["id"] not in regime_map
+                    and str(row["id"]) in regime_election_row_ids
+                ):
+                    # Mixed Alt+Neu holdings in the disposing wallet: record
+                    # that Neu-first was a designation, not a forced outcome.
+                    at_regime_basis = REGIME_BASIS_ELECTION
             if regime_override in ("alt", "neu"):
                 at_regime = regime_override
+                at_regime_basis = None
             linked = swap_link_map.get(row["id"])
             if linked:
                 at_swap_link = linked
@@ -1710,6 +1985,7 @@ def normalize_tax_asset_inputs(
                 description=description,
                 raw_row=row,
                 at_regime=at_regime,
+                at_regime_basis=at_regime_basis,
                 at_pool=at_pool,
                 at_swap_link=at_swap_link,
                 loan_leg_role=loan_leg_role,

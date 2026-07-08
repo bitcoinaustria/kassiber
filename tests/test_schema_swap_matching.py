@@ -306,6 +306,129 @@ class FreshSchemaTests(unittest.TestCase):
             finally:
                 conn.close()
 
+    def test_update_pair_kind_reconciles_stored_swap_fee(self):
+        # Fee storage is kind-dependent: a same-asset manual pair stores no
+        # fee, a submarine swap does. Editing the kind must recompute or clear
+        # swap_fee_msat in place, not leave it stale until the next migration.
+        with tempfile.TemporaryDirectory() as data_root:
+            conn = open_db(data_root)
+            try:
+                workspace_id, profile_id, wallet_id = _seed_minimal_scope(conn)
+                _insert_tx(
+                    conn,
+                    tx_id="tx-out",
+                    workspace_id=workspace_id,
+                    profile_id=profile_id,
+                    wallet_id=wallet_id,
+                    asset="BTC",
+                    direction="outbound",
+                    amount_msat=100_000,
+                )
+                _insert_tx(
+                    conn,
+                    tx_id="tx-in",
+                    workspace_id=workspace_id,
+                    profile_id=profile_id,
+                    wallet_id=wallet_id,
+                    asset="BTC",
+                    direction="inbound",
+                    amount_msat=99_000,
+                )
+                pair = create_transaction_pair(
+                    conn,
+                    workspace_id,
+                    profile_id,
+                    "tx-out",
+                    "tx-in",
+                    kind="manual",
+                )
+                self.assertIsNone(pair["swap_fee_msat"])
+
+                updated = update_transaction_pair(
+                    conn,
+                    workspace_id,
+                    profile_id,
+                    pair["id"],
+                    kind="submarine-swap",
+                )
+                self.assertEqual(updated["kind"], "submarine-swap")
+                self.assertEqual(updated["swap_fee_msat"], 1_000)
+
+                reverted = update_transaction_pair(
+                    conn,
+                    workspace_id,
+                    profile_id,
+                    pair["id"],
+                    kind="manual",
+                )
+                self.assertEqual(reverted["kind"], "manual")
+                self.assertIsNone(reverted["swap_fee_msat"])
+                self.assertIsNone(reverted["swap_fee_kind"])
+            finally:
+                conn.close()
+
+    def test_summary_internal_transfers_count_multi_pair_spend_once(self):
+        # A whirlpool 1->N multi-pair repeats the SAME out leg on every pair
+        # row; the summary-PDF internal-transfer volume must count that spend
+        # once, not once per receipt leg.
+        from types import SimpleNamespace
+
+        from kassiber.core.reports import _summary_pdf_internal_transfers
+
+        with tempfile.TemporaryDirectory() as data_root:
+            conn = open_db(data_root)
+            try:
+                workspace_id, profile_id, wallet_id = _seed_minimal_scope(conn)
+                _insert_tx(
+                    conn,
+                    tx_id="tx-out",
+                    workspace_id=workspace_id,
+                    profile_id=profile_id,
+                    wallet_id=wallet_id,
+                    asset="BTC",
+                    direction="outbound",
+                    amount_msat=100_000,
+                )
+                conn.execute(
+                    "UPDATE transactions SET fiat_value = 60 WHERE id = 'tx-out'"
+                )
+                for tx_id, amount in (("tx-in-1", 50_000), ("tx-in-2", 49_000)):
+                    _insert_tx(
+                        conn,
+                        tx_id=tx_id,
+                        workspace_id=workspace_id,
+                        profile_id=profile_id,
+                        wallet_id=wallet_id,
+                        asset="BTC",
+                        direction="inbound",
+                        amount_msat=amount,
+                    )
+                for pair_id, in_id in (("pair-1", "tx-in-1"), ("pair-2", "tx-in-2")):
+                    create_transaction_pair(
+                        conn,
+                        workspace_id,
+                        profile_id,
+                        "tx-out",
+                        in_id,
+                        kind="whirlpool",
+                    )
+                hooks = SimpleNamespace(iso_z=lambda value: value)
+                summary = _summary_pdf_internal_transfers(
+                    conn,
+                    profile_id,
+                    [{"id": wallet_id}],
+                    hooks,
+                    "2000-01-01T00:00:00Z",
+                    "2100-01-01T00:00:00Z",
+                )
+                self.assertEqual(summary["count"], 1)
+                self.assertAlmostEqual(summary["fiat_volume"], 60.0, places=6)
+                self.assertAlmostEqual(
+                    summary["btc_volume"], 100_000 / 100_000_000_000, places=12
+                )
+            finally:
+                conn.close()
+
     def test_schema_compat_clears_stale_same_asset_privacy_swap_fees(self):
         with tempfile.TemporaryDirectory() as data_root:
             conn = open_db(data_root)
@@ -351,6 +474,27 @@ class FreshSchemaTests(unittest.TestCase):
                     INSERT INTO transaction_pairs(id, workspace_id, profile_id,
                         out_transaction_id, in_transaction_id, kind, policy,
                         swap_fee_msat, swap_fee_kind, deleted_at, created_at)
+                    VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        "deleted-same-pair",
+                        workspace_id,
+                        profile_id,
+                        "same-out",
+                        "same-in",
+                        "whirlpool",
+                        "carrying-value",
+                        789,
+                        "loss",
+                        _now(),
+                        _now(),
+                    ),
+                )
+                conn.execute(
+                    """
+                    INSERT INTO transaction_pairs(id, workspace_id, profile_id,
+                        out_transaction_id, in_transaction_id, kind, policy,
+                        swap_fee_msat, swap_fee_kind, deleted_at, created_at)
                     VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)
                     """,
                     (
@@ -381,6 +525,8 @@ class FreshSchemaTests(unittest.TestCase):
                 }
                 self.assertIsNone(rows["same-pair"]["swap_fee_msat"])
                 self.assertIsNone(rows["same-pair"]["swap_fee_kind"])
+                self.assertEqual(rows["deleted-same-pair"]["swap_fee_msat"], 789)
+                self.assertEqual(rows["deleted-same-pair"]["swap_fee_kind"], "loss")
                 self.assertEqual(rows["cross-pair"]["swap_fee_msat"], 456)
                 self.assertEqual(rows["cross-pair"]["swap_fee_kind"], "loss")
             finally:

@@ -137,8 +137,8 @@ class InferOutboundRegimesTest(unittest.TestCase):
             _row("sell-from-c", "wallet-c", "outbound", 10_000_000, occurred_at="2025-06-02T00:00:00Z"),
         ]
         intra_pairs = [
-            {"out": rows[3], "in": rows[1]},
-            {"out": rows[3], "in": rows[2]},
+            {"out": rows[3], "in": rows[1], "pair_id": "pair-b"},
+            {"out": rows[3], "in": rows[2], "pair_id": "pair-c"},
         ]
 
         self.assertEqual(
@@ -161,8 +161,8 @@ class InferOutboundRegimesTest(unittest.TestCase):
             _row("sell-from-c-after", "wallet-c", "outbound", 10_000_000, occurred_at="2025-06-02T00:00:00Z"),
         ]
         intra_pairs = [
-            {"out": rows[3], "in": rows[2]},
-            {"out": rows[4], "in": rows[2]},
+            {"out": rows[3], "in": rows[2], "pair_id": "pair-a"},
+            {"out": rows[4], "in": rows[2], "pair_id": "pair-b"},
         ]
 
         self.assertEqual(
@@ -173,6 +173,29 @@ class InferOutboundRegimesTest(unittest.TestCase):
                 "sell-from-c-large": REGIME_ALT,
                 "sell-from-c-after": REGIME_NEU,
             },
+        )
+
+    def test_manual_component_ignores_derived_pair_sharing_a_leg(self):
+        rows = [
+            _row("buy-alt-a", "wallet-a", "inbound", 100_000_000, occurred_at="2020-06-01T00:00:00Z"),
+            _row("buy-alt-c", "wallet-c", "inbound", 1_000_000, occurred_at="2020-06-01T00:00:00Z"),
+            _row("shared-in", "wallet-b", "inbound", 99_000_000, occurred_at="2025-01-01T00:00:00Z"),
+            _row("manual-out-a", "wallet-a", "outbound", 50_000_000, occurred_at="2025-01-01T00:00:00Z"),
+            _row("manual-out-b", "wallet-a", "outbound", 50_000_000, occurred_at="2025-01-01T00:00:00Z"),
+            _row("derived-out-c", "wallet-c", "outbound", 1_000_000, occurred_at="2025-01-01T00:00:00Z"),
+        ]
+        intra_pairs = [
+            {"out": rows[3], "in": rows[2], "pair_id": "manual-a"},
+            {"out": rows[4], "in": rows[2], "pair_id": "manual-b"},
+            {"out": rows[5], "in": rows[2], "group_id": "derived-group"},
+        ]
+        transfer_flows = {}
+
+        infer_outbound_regimes(rows, intra_pairs, transfer_flows)
+
+        self.assertEqual(
+            transfer_flows[("manual-out-a", "shared-in")]["in"]["alt"],
+            49_000_000,
         )
 
     def test_self_transfer_fee_is_fee_first_when_neu_covers_fee_only(self):

@@ -159,6 +159,28 @@ def derive_ownership_transfers(
             continue
         inbound_by_wallet.setdefault(str(_get(row, "wallet_id")), []).append(row)
     consumed_in_ids: set[str] = set()
+    parsed_by_out_id: dict[str, Optional[dict[str, Any]]] = {}
+    source_groups: dict[tuple[str, Any], list[Mapping[str, Any]]] = {}
+    for row in rows:
+        if _get(row, "direction") != "outbound":
+            continue
+        source_id = str(_get(row, "id"))
+        if source_id.startswith(_SYNTHETIC_ID_PREFIXES):
+            continue
+        if int(_get(row, "amount") or 0) <= 0:
+            continue
+        parsed = _parse_onchain_tx(_get(row, "raw_json"))
+        parsed_by_out_id[source_id] = parsed
+        group_txid = (parsed or {}).get("txid") or _get(row, "external_id")
+        if not group_txid:
+            continue
+        source_groups.setdefault(
+            (normalize_group_txid(str(group_txid)), _get(row, "asset")),
+            [],
+        ).append(row)
+    duplicate_source_groups = {
+        key: group for key, group in source_groups.items() if len(group) > 1
+    }
 
     for row in rows:
         source_id = str(_get(row, "id"))
@@ -170,7 +192,7 @@ def derive_ownership_transfers(
             continue
         if int(_get(row, "amount") or 0) <= 0:
             continue
-        parsed = _parse_onchain_tx(_get(row, "raw_json"))
+        parsed = parsed_by_out_id.get(source_id)
         if parsed is None:
             continue
         source_wallet_id = str(_get(row, "wallet_id"))
@@ -247,6 +269,26 @@ def derive_ownership_transfers(
                     "wallet": _get(row, "wallet_label") or source_wallet_id,
                     "asset": _get(row, "asset"),
                     "external_id": _get(row, "external_id"),
+                },
+            )
+            continue
+        group_key = (
+            normalize_group_txid(str(parsed.get("txid") or _get(row, "external_id"))),
+            _get(row, "asset"),
+        )
+        duplicate_group = duplicate_source_groups.get(group_key)
+        if duplicate_group is not None:
+            _block_source(
+                result,
+                row,
+                "ownership_transfer_duplicate_outbound",
+                {
+                    "required_for": "ownership_transfer_review",
+                    "wallet": _get(row, "wallet_label") or source_wallet_id,
+                    "asset": _get(row, "asset"),
+                    "external_id": _get(row, "external_id"),
+                    "outbound_count": len(duplicate_group),
+                    "outbound_ids": sorted(str(_get(item, "id")) for item in duplicate_group),
                 },
             )
             continue
@@ -1251,7 +1293,12 @@ def _resolve_destination_inbound(
     ]
 
     exact = [row for row in available if int(_get(row, "amount") or 0) == leg_msat]
-    same_txid = [row for row in exact if str(_get(row, "external_id") or "") == txid]
+    txid_key = normalize_group_txid(txid)
+    same_txid = [
+        row
+        for row in exact
+        if normalize_group_txid(str(_get(row, "external_id") or "")) == txid_key
+    ]
     if len(same_txid) == 1:
         return ("reuse", same_txid[0])
     if len(same_txid) >= 2:

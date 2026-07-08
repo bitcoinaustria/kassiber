@@ -416,6 +416,46 @@ class FetchNodeSnapshotTest(unittest.TestCase):
             self.assertEqual(rec["record_type"], "channel")
             self.assertIsNone(core_cln._record_to_import(rec))
 
+    def test_channel_records_carry_amounts_through_the_sanitizer(self) -> None:
+        # The production path sanitizes every bkpr-listaccountevents row
+        # BEFORE _channel_lifecycle_records reads it. The funded/settled
+        # balances (channel_open credit / channel_close debit) must survive
+        # that curation, or the close-fee booking and open-mismatch detection
+        # are silent no-ops on real nodes.
+        from types import SimpleNamespace
+
+        raw_events = [
+            {
+                "account": "ch-1",
+                "type": "chain",
+                "tag": "channel_open",
+                "txid": "aa" * 32,
+                "credit_msat": "100000000000msat",
+                "debit_msat": 0,
+                "timestamp": 1_700_000_000,
+                "blockheight": 800_000,
+            },
+            {
+                "account": "ch-1",
+                "type": "chain",
+                "tag": "channel_close",
+                "txid": "bb" * 32,
+                "credit_msat": 0,
+                "debit_msat": "99900000000msat",
+                "timestamp": 1_710_000_000,
+                "blockheight": 810_000,
+            },
+        ]
+        sanitized = [core_cln._sanitize_account_event(event) for event in raw_events]
+        for event in sanitized:
+            self.assertNotIn("blockheight", event)
+        records = core_cln._channel_lifecycle_records(
+            SimpleNamespace(channels=[], account_events=sanitized)
+        )
+        by_tag = {rec["tag"]: rec for rec in records}
+        self.assertEqual(by_tag["channel_open"]["amount_msat"], 100_000_000_000)
+        self.assertEqual(by_tag["channel_close"]["amount_msat"], 99_900_000_000)
+
     def test_outbound_pay_promoted_with_principal_and_routing_fee(self) -> None:
         # The completed listpays row (amount_msat=40000, amount_sent_msat=40500)
         # becomes an outbound cln_pay: principal 40000 msat, routing fee 500 msat.

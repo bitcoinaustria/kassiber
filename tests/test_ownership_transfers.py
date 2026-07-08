@@ -185,6 +185,35 @@ class OwnershipDeriverTests(unittest.TestCase):
             ["ownership_transfer_destination_ambiguous"],
         )
 
+    def test_destination_reuse_folds_txid_case(self):
+        txid_upper = "AB" * 32
+        txid_lower = "ab" * 32
+        out = _outbound(
+            row_id="a-out",
+            wallet_id="A",
+            amount_sats=50_000_000,
+            fee_sats=1000,
+            txid=txid_upper,
+            input_scripts=[SCRIPT["A"]],
+            outputs=[(SCRIPT["B"], 50_000_000)],
+        )
+        b_in = _inbound(
+            row_id="b-in",
+            wallet_id="B",
+            amount_sats=50_000_000,
+            txid=txid_lower,
+        )
+
+        result = self._run(
+            [out, b_in],
+            {SCRIPT["A"]: ("A", "A"), SCRIPT["B"]: ("B", "B")},
+            _refs("B"),
+        )
+
+        self.assertEqual(result.blocked_sources, [])
+        self.assertEqual(len(result.derived_pairs), 1)
+        self.assertEqual(result.derived_pairs[0]["in"]["id"], "b-in")
+
     def test_one_to_one_sync_gap_synthesizes_inbound(self):
         # Destination B recorded NO row (never synced). The deriver synthesizes
         # the inbound leg and resolves its wallet ref from wallet_refs_by_id.
@@ -320,6 +349,56 @@ class OwnershipDeriverTests(unittest.TestCase):
             (79_998_000 + 2_000) * SATS,
         )
         self.assertEqual(result.dropped_out_ids, {"a-out"})
+
+    def test_duplicate_outbound_group_declined_before_deriving(self):
+        # Source-overlap repair can leave a stale duplicate outbound sharing the
+        # same graph txid. The single-source deriver must not synthesize a MOVE
+        # from either row, or duplicate synthetic ids can hide one outflow while
+        # the sibling row books as a phantom disposal.
+        a_out = _outbound(
+            row_id="a-out",
+            wallet_id="A",
+            amount_sats=85_000_000,
+            fee_sats=0,
+            txid="dup-tx",
+            input_scripts=[SCRIPT["A"]],
+            outputs=[(SCRIPT["C"], 85_000_000)],
+        )
+        b_out = _outbound(
+            row_id="b-out",
+            wallet_id="B",
+            amount_sats=85_000_000,
+            fee_sats=0,
+            txid="dup-tx",
+            input_scripts=[SCRIPT["A"]],
+            outputs=[(SCRIPT["C"], 85_000_000)],
+        )
+        c_in = _inbound(
+            row_id="c-in",
+            wallet_id="C",
+            amount_sats=85_000_000,
+            txid="dup-tx",
+        )
+        index = _index({SCRIPT["A"]: ("A", "A"), SCRIPT["C"]: ("C", "C")})
+        index.note_txid("prev-0", "B", "B")
+
+        result = derive_ownership_transfers(
+            [a_out, b_out, c_in],
+            index=index,
+            wallet_refs_by_id=_refs("A", "B", "C"),
+            already_paired_ids=set(),
+        )
+
+        self.assertEqual(result.derived_pairs, [])
+        self.assertEqual(result.synthetic_rows, [])
+        self.assertEqual(result.dropped_out_ids, set())
+        self.assertEqual(
+            [item["reason"] for item in result.blocked_sources],
+            [
+                "ownership_transfer_duplicate_outbound",
+                "ownership_transfer_duplicate_outbound",
+            ],
+        )
 
     def test_multiple_outputs_to_same_wallet_aggregate_to_one_leg(self):
         # A wallet that receives two outputs in one tx records a single inbound

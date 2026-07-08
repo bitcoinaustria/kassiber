@@ -459,21 +459,32 @@ class SamouraiImportTest(unittest.TestCase):
             wallet_refs,
             [],
         )
-        self.assertEqual(len(normalized.events), 1)
-        self.assertEqual(normalized.events[0].amount, 0)
-        self.assertGreater(normalized.events[0].fee, 0)
-        self.assertEqual(normalized.events[0].spot_price, 60_000)
+        self.assertEqual(normalized.events, [])
         self.assertEqual(len(normalized.transfers), 2)
         self.assertEqual(
             normalized.ordered_items,
             [
                 ("transfer", "tx0-out::tx0-premix"),
                 ("transfer", "tx0-out::tx0-badbank"),
-                ("event", "tx0-out"),
             ],
         )
         self.assertEqual(normalized.transfers[0].to_wallet_label, "Premix")
         self.assertEqual(normalized.transfers[1].to_wallet_label, "Badbank")
+        # The whole group is atomic in the gate. The fee lands on the first
+        # canonical leg (chronological, then row id — here tx0-badbank), the
+        # same ordered_pair_component + allocate_fee_msat walk Austrian regime
+        # inference uses, so booking and regime_flows describe the same
+        # fee-bearing leg.
+        group_ids = {transfer.group_id for transfer in normalized.transfers}
+        self.assertEqual(group_ids, {"samourai-internal:tx0-out"})
+        by_dest = {t.to_wallet_label: t for t in normalized.transfers}
+        self.assertGreater(by_dest["Badbank"].fee, 0)
+        self.assertEqual(by_dest["Badbank"].spot_price, 60_000)
+        self.assertEqual(
+            by_dest["Badbank"].sent,
+            by_dest["Badbank"].received + by_dest["Badbank"].fee,
+        )
+        self.assertEqual(by_dest["Premix"].fee, 0)
         self.assertEqual(normalized.quarantines, [])
 
         missing_price = normalize_tax_asset_inputs(
@@ -686,13 +697,123 @@ class SamouraiImportTest(unittest.TestCase):
             entry_types,
             [
                 "acquisition",
-                "fee",
+                "transfer_fee",
                 "transfer_in",
                 "transfer_in",
                 "transfer_out",
                 "transfer_out",
             ],
         )
+
+    def test_tx0_group_quarantines_atomically_when_one_leg_fails_gate(self):
+        # A tx0's N MOVE legs carry a shared group_id: when the source can fund
+        # the first leg but not the second, no leg may book — previously the
+        # premix leg booked while the badbank receipt was silently dropped.
+        profile = {
+            "id": "profile-1",
+            "workspace_id": "ws-1",
+            "label": "Default",
+            "fiat_currency": "EUR",
+            "tax_country": "generic",
+            "tax_long_term_days": 365,
+            "gains_algorithm": "FIFO",
+        }
+        wallet_refs = {
+            "wallet-deposit": {
+                "id": "wallet-deposit",
+                "label": "Deposit",
+                "wallet_account_id": "acct-1",
+                "account_code": "treasury",
+                "account_label": "Treasury",
+            },
+            "wallet-premix": {
+                "id": "wallet-premix",
+                "label": "Premix",
+                "wallet_account_id": "acct-1",
+                "account_code": "treasury",
+                "account_label": "Treasury",
+            },
+            "wallet-badbank": {
+                "id": "wallet-badbank",
+                "label": "Badbank",
+                "wallet_account_id": "acct-1",
+                "account_code": "treasury",
+                "account_label": "Treasury",
+            },
+        }
+
+        def engine_row(row):
+            wallet = wallet_refs[row["wallet_id"]]
+            return {
+                **row,
+                "wallet_label": wallet["label"],
+                "wallet_account_id": wallet["wallet_account_id"],
+                "account_code": wallet["account_code"],
+                "account_label": wallet["account_label"],
+                "created_at": row["occurred_at"],
+            }
+
+        rows = [
+            engine_row(
+                _tax_row(
+                    "deposit-acquisition",
+                    "deposit",
+                    "inbound",
+                    external_id="deposit-acquisition",
+                    amount=85_000_000,
+                    fiat_rate=60_000,
+                )
+            ),
+            engine_row(
+                _tax_row(
+                    "tx0-out",
+                    "deposit",
+                    "outbound",
+                    external_id="tx0",
+                    amount=100_000_000,
+                    fee=1_000,
+                    fiat_rate=60_000,
+                )
+            ),
+            engine_row(
+                _tax_row(
+                    "tx0-premix",
+                    "premix",
+                    "inbound",
+                    external_id="tx0",
+                    amount=80_000_000,
+                )
+            ),
+            engine_row(
+                _tax_row(
+                    "tx0-badbank",
+                    "badbank",
+                    "inbound",
+                    external_id="tx0",
+                    amount=19_999_000,
+                )
+            ),
+        ]
+        state = build_tax_engine(profile).build_ledger_state(
+            TaxEngineLedgerInputs(
+                rows=rows,
+                wallet_refs_by_id=wallet_refs,
+                manual_pair_records=[],
+            )
+        )
+
+        reasons = sorted(q["reason"] for q in state.quarantines)
+        self.assertIn("insufficient_lots", reasons)
+        self.assertIn("derived_transfer_group_blocked", reasons)
+        entry_types = sorted(entry["entry_type"] for entry in state.entries)
+        self.assertEqual(entry_types, ["acquisition"])
+        holdings = {
+            wallet_label: totals["quantity"]
+            for (_, wallet_label, _, _), totals in state.wallet_holdings.items()
+        }
+        self.assertNotIn("Premix", holdings)
+        self.assertNotIn("Badbank", holdings)
+        self.assertAlmostEqual(float(holdings["Deposit"]), 0.00085, places=8)
 
     def test_source_funds_suggests_whirlpool_as_coinjoin_boundary(self):
         with tempfile.TemporaryDirectory(prefix="kassiber-samourai-sof-") as tmp:

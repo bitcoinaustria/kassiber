@@ -27,6 +27,11 @@ class TaxEngineLedgerInputs:
     # merged into the same non-event suppression as loan legs so a channel
     # funding tx is not booked as a disposal nor a close as an acquisition.
     channel_roles: Mapping[str, str] = None  # type: ignore[assignment]
+    # Derived Lightning channel capacity moves. When channel metadata identifies
+    # the node wallet, the funding tx becomes an explicit on-chain-wallet -> node
+    # MOVE (and a cooperative close can become node -> on-chain-wallet). The role
+    # map above remains a fallback for unmatched lifecycle rows.
+    channel_transfer_pairs: Sequence[Mapping[str, Any]] = ()
 
 
 @dataclass(frozen=True)

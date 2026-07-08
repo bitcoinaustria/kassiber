@@ -51,7 +51,7 @@
       "at_category": "neu_gain",
       "at_kennzahl": 174,
       "cost_basis": 9000.0,
-      "description": "at_regime=neu at_pool=default Vienna Neu sell",
+      "description": "at_regime=neu at_regime_basis=wahlrecht at_pool=default Vienna Neu sell",
       "entry_type": "disposal",
       "fiat_value": 15000.0,
       "gain_loss": 6000.0,

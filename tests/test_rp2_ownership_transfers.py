@@ -163,6 +163,52 @@ class OwnershipDeriverEngineTest(unittest.TestCase):
         self.assertAlmostEqual(holdings.get("Hot", 0.0), 0.5, places=6)
         self.assertAlmostEqual(holdings.get("Savings", 0.0), 0.3, places=6)
 
+    def test_duplicate_outbound_group_quarantines_instead_of_deriving(self):
+        # A stale duplicate source-overlap row can pass the source fallback via
+        # txid_wallets. The deriver must decline the whole multi-outbound group
+        # so the fanout quarantine blocks every leg instead of synthesizing a MOVE
+        # and leaving a sibling disposal or duplicate synthetic id behind.
+        index = OwnedIndex()
+        index.add_script(SCRIPT_A, _match("A", "Cold"))
+        index.add_script(SCRIPT_B, _match("B", "Hot"))
+        index.add_script(SCRIPT_C, _match("C", "Savings"))
+        index.note_txid("prevtx", "B", "Hot")
+        dup_json = json.dumps(
+            {
+                "txid": "dup-tx",
+                "vin": [{"txid": "prevtx", "vout": 0, "prevout": {"scriptpubkey": SCRIPT_A}}],
+                "vout": [{"n": 0, "scriptpubkey": SCRIPT_C, "value": 85_000_000}],
+            }
+        )
+        rows = [
+            _row("A", "inbound", BTC, external_id="acqA"),
+            _row("B", "inbound", BTC, external_id="acqB"),
+            _row("A", "outbound", 85 * BTC // 100, external_id="dup-tx", raw_json=dup_json),
+            _row("B", "outbound", 85 * BTC // 100, external_id="dup-tx", raw_json=dup_json),
+            _row("C", "inbound", 85 * BTC // 100, external_id="dup-tx"),
+        ]
+
+        state = build_tax_engine(PROFILE).build_ledger_state(
+            TaxEngineLedgerInputs(
+                rows=rows,
+                wallet_refs_by_id=WALLET_REFS,
+                manual_pair_records=[],
+                owned_index=index,
+            )
+        )
+
+        self.assertEqual(
+            sorted(q["reason"] for q in state.quarantines),
+            ["owned_fanout_unresolved"] * 3,
+        )
+        self.assertFalse(
+            any(audit.get("pairing_source") == "ownership_derived" for audit in state.intra_audit)
+        )
+        entry_types = [entry["entry_type"] for entry in state.entries]
+        self.assertNotIn("disposal", entry_types)
+        self.assertNotIn("transfer_out", entry_types)
+        self.assertNotIn("transfer_in", entry_types)
+
     def test_derived_move_provenance_is_surfaced(self):
         # The non-taxable treatment must be auditable: every leg the deriver
         # proved from the on-chain graph is tagged "ownership_derived" in the
@@ -378,6 +424,80 @@ class OwnershipDeriverMixedSpendTest(unittest.TestCase):
         self.assertEqual(len(disposals), 1)
         self.assertAlmostEqual(float(disposals[0]["quantity"]), -0.5, places=6)
         self.assertAlmostEqual(float(disposals[0]["proceeds"]), 20000, places=2)
+        # The suppressed sibling receipt is a real synced row contradicting the
+        # whole-row review — it must surface for review, not vanish silently.
+        conflicts = [
+            q
+            for q in state.quarantines
+            if q["reason"] == "direct_payout_conflicting_receipt"
+        ]
+        self.assertEqual(len(conflicts), 1)
+        self.assertEqual(conflicts[0]["transaction_id"], "B-inbound-payout-tx")
+
+    def test_conflicting_receipt_quarantine_survives_sqlite_rows(self):
+        # The real CLI/daemon path feeds sqlite3.Row objects (no .get) into the
+        # engine; the conflict-quarantine block must use _row_get accessors.
+        import sqlite3
+
+        def _as_sqlite_rows(dict_rows):
+            conn = sqlite3.connect(":memory:")
+            conn.row_factory = sqlite3.Row
+            cols = list(dict_rows[0].keys())
+            conn.execute(
+                "CREATE TABLE t (%s)" % ", ".join(f'"{c}"' for c in cols)
+            )
+            for row in dict_rows:
+                conn.execute(
+                    "INSERT INTO t VALUES (%s)" % ", ".join("?" for _ in cols),
+                    [row[c] for c in cols],
+                )
+            return conn.execute("SELECT * FROM t").fetchall()
+
+        index = OwnedIndex()
+        index.add_script(SCRIPT_A, _match("A", "Cold"))
+        index.add_script(SCRIPT_B, _match("B", "Hot"))
+        rows = _as_sqlite_rows(
+            [
+                _row("A", "inbound", BTC, external_id="acqA"),
+                _row("A", "outbound", 50 * BTC // 100, external_id="payout-tx"),
+                _row("B", "inbound", 50 * BTC // 100, external_id="payout-tx"),
+            ]
+        )
+        direct_payouts = [
+            {
+                "id": "direct-payout-sqlite",
+                "out_transaction_id": "A-outbound-payout-tx",
+                "kind": "direct-swap-payout",
+                "policy": "taxable",
+                "payout_asset": "BTC",
+                "payout_amount": 50 * BTC // 100,
+                "payout_occurred_at": NOW,
+                "payout_fiat_value": 20000,
+                "payout_external_id": "provider-payout",
+                "counterparty": "external-recipient",
+                "notes": "direct payout",
+                "swap_fee_msat": 0,
+                "swap_fee_kind": "combined",
+                "created_at": NOW,
+                "out_amount": 50 * BTC // 100,
+            }
+        ]
+        state = build_tax_engine(PROFILE).build_ledger_state(
+            TaxEngineLedgerInputs(
+                rows=rows,
+                wallet_refs_by_id=WALLET_REFS,
+                manual_pair_records=[],
+                direct_payout_records=direct_payouts,
+                owned_index=index,
+            )
+        )
+        conflicts = [
+            q
+            for q in state.quarantines
+            if q["reason"] == "direct_payout_conflicting_receipt"
+        ]
+        self.assertEqual(len(conflicts), 1)
+        self.assertEqual(conflicts[0]["transaction_id"], "B-inbound-payout-tx")
 
     def test_invalid_payout_does_not_prune_self_transfer_pair(self):
         # Codex review: a direct payout whose out_amount EXCEEDS the source amount
@@ -599,6 +719,64 @@ class OwnershipDeriverAmbiguityTest(unittest.TestCase):
         }
         # The held-back group books nothing into B — no inflation.
         self.assertAlmostEqual(holdings.get("Hot", 0.0), 0.0, places=6)
+
+    def test_blocked_source_in_partially_paired_group_still_quarantines(self):
+        # A manual pair on one leg of a blocked source's txid group disables
+        # the owned-fanout guard (a paired leg means "handled" to it), so the
+        # old fanout_holds premise suppressed the blocked source's quarantine
+        # while it booked a full standalone disposal — silent, no review row.
+        # The suppression now additionally requires a pair-free group.
+        index = OwnedIndex()
+        index.add_script(SCRIPT_A, _match("A", "Cold"))
+        index.add_script(SCRIPT_B, _match("B", "Hot"))
+        index.add_script(SCRIPT_C, _match("C", "Savings"))
+        spend = json.dumps(
+            {
+                "txid": "multi-source",
+                "vin": [
+                    {"txid": "prev-a", "vout": 0, "prevout": {"scriptpubkey": SCRIPT_A}},
+                    {"txid": "prev-b", "vout": 1, "prevout": {"scriptpubkey": SCRIPT_B}},
+                ],
+                "vout": [
+                    {"n": 0, "scriptpubkey": SCRIPT_C, "value": 80_000_000},
+                    {"n": 1, "scriptpubkey": SCRIPT_B, "value": 10_000_000},
+                ],
+            }
+        )
+        rows = [
+            _row("A", "inbound", BTC, external_id="acqA"),
+            _row("B", "inbound", BTC, external_id="acqB"),
+            _row(
+                "A",
+                "outbound",
+                90 * BTC // 100,
+                external_id="multi-source",
+                raw_json=spend,
+            ),
+            _row("C", "inbound", 80 * BTC // 100, external_id="multi-source"),
+            _row("B", "inbound", 10 * BTC // 100, external_id="multi-source"),
+            _row("B", "outbound", 80 * BTC // 100, external_id="other-payment"),
+        ]
+        state = build_tax_engine(PROFILE).build_ledger_state(
+            TaxEngineLedgerInputs(
+                rows=rows,
+                wallet_refs_by_id=WALLET_REFS,
+                # The user mis-paired the Savings receipt with an unrelated
+                # outbound — enough to disable the fanout guard for the group.
+                manual_pair_records=[
+                    {
+                        "id": "pair-mispaired",
+                        "out_transaction_id": "B-outbound-other-payment",
+                        "in_transaction_id": "C-inbound-multi-source",
+                        "kind": "manual",
+                        "policy": "carrying-value",
+                    }
+                ],
+                owned_index=index,
+            )
+        )
+        reasons = [q["reason"] for q in state.quarantines]
+        self.assertIn("ownership_transfer_source_ambiguous", reasons)
 
     def test_multi_source_sync_gap_quarantines_source(self):
         index = OwnedIndex()
@@ -1429,6 +1607,216 @@ class PartialPaymentWithholdingEngineTest(unittest.TestCase):
         self.assertAlmostEqual(holdings.get("Cold", 0.0), 0.0, places=6)
         # No silent phantom: total holdings == acquired - fee-absorbed outflow.
         self.assertLessEqual(sum(holdings.values()), 0.5021)
+
+
+class MultiTimestampGroupGateTest(unittest.TestCase):
+    def test_intermediate_spend_between_group_legs_quarantines_not_aborts(self):
+        # Manual N:1 multi-pair whose legs sit at DIFFERENT timestamps, with a
+        # destination spend between them exceeding the first leg's credit. The
+        # gate used to credit the WHOLE group at the first leg's walk position,
+        # so the intermediate spend passed the gate and rp2's chronological
+        # BalanceSet aborted the entire asset ("went negative", no quarantine).
+        # Group legs now apply at their own positions after the atomic
+        # preflight, so the intermediate spend quarantines instead.
+        refs = {
+            wid: {
+                "id": wid,
+                "label": label,
+                "wallet_account_id": "acct-1",
+                "account_code": "treasury",
+                "account_label": "Treasury",
+            }
+            for wid, label in (("A", "Cold"), ("B", "Hot"))
+        }
+        profile = {
+            "id": "profile-1",
+            "workspace_id": "ws-1",
+            "label": "Default",
+            "fiat_currency": "USD",
+            "tax_country": "generic",
+            "tax_long_term_days": 365,
+            "gains_algorithm": "FIFO",
+        }
+
+        def _mt_row(wid, direction, amount_msat, occurred_at, ext, fee=0):
+            ref = refs[wid]
+            return {
+                "id": f"{wid}-{direction}-{ext}",
+                "workspace_id": "ws-1",
+                "profile_id": "profile-1",
+                "wallet_id": wid,
+                "wallet_label": ref["label"],
+                "wallet_account_id": ref["wallet_account_id"],
+                "account_code": ref["account_code"],
+                "account_label": ref["account_label"],
+                "external_id": ext,
+                "occurred_at": occurred_at,
+                "created_at": occurred_at,
+                "direction": direction,
+                "asset": "BTC",
+                "amount": amount_msat,
+                "fee": fee,
+                "fiat_currency": "USD",
+                "fiat_rate": 40000.0,
+                "fiat_rate_exact": "40000",
+                "fiat_value": None,
+                "kind": "withdrawal" if direction == "outbound" else "deposit",
+                "description": f"{wid} {direction}",
+                "note": None,
+                "raw_json": "{}",
+                "excluded": 0,
+            }
+
+        rows = [
+            _mt_row("A", "inbound", 100_100_000_000, "2024-01-01T00:00:00Z", "acq"),
+            _mt_row(
+                "A", "outbound", 40_000_000_000, "2025-01-01T10:00:00Z", "mix1",
+                fee=500_000,
+            ),
+            _mt_row(
+                "A", "outbound", 60_000_000_000, "2025-01-03T10:00:00Z", "mix2",
+                fee=500_000,
+            ),
+            _mt_row("B", "inbound", 99_999_000_000, "2025-01-03T10:00:00Z", "postmix"),
+            _mt_row("B", "outbound", 50_000_000_000, "2025-01-02T10:00:00Z", "spend"),
+        ]
+        manual_pairs = [
+            {
+                "id": "pair-1",
+                "out_transaction_id": "A-outbound-mix1",
+                "in_transaction_id": "B-inbound-postmix",
+                "policy": "carrying-value",
+                "kind": "whirlpool",
+                "pair_source": "manual",
+            },
+            {
+                "id": "pair-2",
+                "out_transaction_id": "A-outbound-mix2",
+                "in_transaction_id": "B-inbound-postmix",
+                "policy": "carrying-value",
+                "kind": "whirlpool",
+                "pair_source": "manual",
+            },
+        ]
+        state = build_tax_engine(profile).build_ledger_state(
+            TaxEngineLedgerInputs(
+                rows=rows,
+                wallet_refs_by_id=refs,
+                manual_pair_records=manual_pairs,
+                owned_index=None,
+            )
+        )
+        reasons = [(q["reason"], q["transaction_id"]) for q in state.quarantines]
+        self.assertIn(("insufficient_lots", "B-outbound-spend"), reasons)
+        entry_types = [e["entry_type"] for e in state.entries]
+        # Both MOVE legs still book (the group itself is fundable).
+        self.assertEqual(entry_types.count("transfer_out"), 2)
+        self.assertEqual(entry_types.count("transfer_in"), 2)
+
+
+class GroupSourceDrainGateTest(unittest.TestCase):
+    def test_intermediate_source_drain_quarantines_remaining_legs(self):
+        # Mirror direction of the multi-timestamp fix: a NON-quarantined
+        # intermediate spend from a LATER leg's source between the leg
+        # timestamps passes its own gate, then the later leg used to apply
+        # unchecked and drive rp2's BalanceSet negative (whole-asset abort).
+        # Approved legs now re-check the gate at their own positions and
+        # downgrade the remaining group to quarantine.
+        refs = {
+            wid: {
+                "id": wid,
+                "label": label,
+                "wallet_account_id": "acct-1",
+                "account_code": "treasury",
+                "account_label": "Treasury",
+            }
+            for wid, label in (("A", "Cold"), ("B", "Hot"))
+        }
+        profile = {
+            "id": "profile-1",
+            "workspace_id": "ws-1",
+            "label": "Default",
+            "fiat_currency": "USD",
+            "tax_country": "generic",
+            "tax_long_term_days": 365,
+            "gains_algorithm": "FIFO",
+        }
+
+        def _mt_row(wid, direction, amount_msat, occurred_at, ext, fee=0):
+            ref = refs[wid]
+            return {
+                "id": f"{wid}-{direction}-{ext}",
+                "workspace_id": "ws-1",
+                "profile_id": "profile-1",
+                "wallet_id": wid,
+                "wallet_label": ref["label"],
+                "wallet_account_id": ref["wallet_account_id"],
+                "account_code": ref["account_code"],
+                "account_label": ref["account_label"],
+                "external_id": ext,
+                "occurred_at": occurred_at,
+                "created_at": occurred_at,
+                "direction": direction,
+                "asset": "BTC",
+                "amount": amount_msat,
+                "fee": fee,
+                "fiat_currency": "USD",
+                "fiat_rate": 40000.0,
+                "fiat_rate_exact": "40000",
+                "fiat_value": None,
+                "kind": "withdrawal" if direction == "outbound" else "deposit",
+                "description": f"{wid} {direction}",
+                "note": None,
+                "raw_json": "{}",
+                "excluded": 0,
+            }
+
+        rows = [
+            _mt_row("A", "inbound", 100_100_000_000, "2024-01-01T00:00:00Z", "acq"),
+            _mt_row(
+                "A", "outbound", 40_000_000_000, "2025-01-01T10:00:00Z", "mix1",
+                fee=500_000,
+            ),
+            # Unpaired A spend between the leg timestamps drains the source.
+            _mt_row("A", "outbound", 30_000_000_000, "2025-01-02T10:00:00Z", "drain"),
+            _mt_row(
+                "A", "outbound", 60_000_000_000, "2025-01-03T10:00:00Z", "mix2",
+                fee=500_000,
+            ),
+            _mt_row("B", "inbound", 99_999_000_000, "2025-01-03T10:00:00Z", "postmix"),
+        ]
+        manual_pairs = [
+            {
+                "id": "pair-1",
+                "out_transaction_id": "A-outbound-mix1",
+                "in_transaction_id": "B-inbound-postmix",
+                "policy": "carrying-value",
+                "kind": "whirlpool",
+                "pair_source": "manual",
+            },
+            {
+                "id": "pair-2",
+                "out_transaction_id": "A-outbound-mix2",
+                "in_transaction_id": "B-inbound-postmix",
+                "policy": "carrying-value",
+                "kind": "whirlpool",
+                "pair_source": "manual",
+            },
+        ]
+        state = build_tax_engine(profile).build_ledger_state(
+            TaxEngineLedgerInputs(
+                rows=rows,
+                wallet_refs_by_id=refs,
+                manual_pair_records=manual_pairs,
+                owned_index=None,
+            )
+        )
+        reasons = {(q["reason"], q["transaction_id"]) for q in state.quarantines}
+        self.assertIn(("insufficient_lots", "A-outbound-mix2"), reasons)
+        # No abort: leg 1 stays booked; leg 2 quarantines instead of applying.
+        entry_types = [e["entry_type"] for e in state.entries]
+        self.assertEqual(entry_types.count("transfer_out"), 1)
+        self.assertEqual(entry_types.count("transfer_in"), 1)
 
 
 class AustrianSelfTransferEngineTest(unittest.TestCase):

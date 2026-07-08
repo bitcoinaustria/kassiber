@@ -16,6 +16,7 @@ from ..source_funds_pdf_report import write_source_funds_pdf
 from ..time_utils import UNKNOWN_OCCURRED_AT, now_iso, parse_timestamp
 from ..wallet_descriptors import normalize_asset_code, normalize_chain, normalize_network
 from .attachments import attachment_display_label
+from .pair_allocation import connected_pair_components
 from .privacy_hops import privacy_hop_type_from_row
 from .source_funds_assembly import (
     build_owned_outpoint_index,
@@ -1209,38 +1210,14 @@ def _transaction_pair_components(
     pair_rows: Sequence[Mapping[str, Any]],
     rows_by_id: Mapping[str, Mapping[str, Any]],
 ) -> list[list[Mapping[str, Any]]]:
-    candidates = [
-        pair
-        for pair in pair_rows
-        if rows_by_id.get(pair["out_transaction_id"])
-        and rows_by_id.get(pair["in_transaction_id"])
-    ]
-    row_to_indexes: dict[str, list[int]] = defaultdict(list)
-    for index, pair in enumerate(candidates):
-        row_to_indexes[str(pair["out_transaction_id"])].append(index)
-        row_to_indexes[str(pair["in_transaction_id"])].append(index)
+    def _leg_ids(pair):
+        out_id = pair["out_transaction_id"]
+        in_id = pair["in_transaction_id"]
+        if not rows_by_id.get(out_id) or not rows_by_id.get(in_id):
+            return None
+        return (out_id, in_id)
 
-    components: list[list[Mapping[str, Any]]] = []
-    seen: set[int] = set()
-    for start in range(len(candidates)):
-        if start in seen:
-            continue
-        stack = [start]
-        indexes: list[int] = []
-        seen.add(start)
-        while stack:
-            index = stack.pop()
-            indexes.append(index)
-            pair = candidates[index]
-            for row_id in (str(pair["out_transaction_id"]), str(pair["in_transaction_id"])):
-                for linked_index in row_to_indexes.get(row_id, ()):
-                    if linked_index in seen:
-                        continue
-                    seen.add(linked_index)
-                    stack.append(linked_index)
-        components.append([candidates[index] for index in indexes])
-    return components
-
+    return connected_pair_components(pair_rows, _leg_ids)
 
 def _transaction_pair_allocation_map(
     pair_rows: Sequence[Mapping[str, Any]],
@@ -1305,8 +1282,14 @@ def _transaction_pair_allocation_map(
 
         in_tx = next(iter(in_rows_by_id.values()))
         total_to_msat = int(in_tx["amount"] or 0)
+        # An out row's spend capacity is amount + fee: a same-tx node-backed
+        # consolidation stamps the WHOLE network fee on every contributor's
+        # row (amount = net outflow - fee), so summing bare amounts comes up
+        # (N-1)*fee short of the recorded receipt and the component would be
+        # skipped entirely for any fee > 0.
         bases = [
             int(rows_by_id[pair["out_transaction_id"]]["amount"] or 0)
+            + int(_row_value(rows_by_id[pair["out_transaction_id"]], "fee") or 0)
             for pair in ordered_pairs
         ]
         if sum(bases) < total_to_msat:

@@ -2149,6 +2149,7 @@ def _clear_stale_same_asset_swap_fees(conn):
         JOIN transactions out_tx ON out_tx.id = p.out_transaction_id
         JOIN transactions in_tx ON in_tx.id = p.in_transaction_id
         WHERE p.swap_fee_msat IS NOT NULL
+          AND p.deleted_at IS NULL
         """
     ).fetchall()
     stale_ids = []

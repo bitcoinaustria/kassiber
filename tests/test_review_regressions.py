@@ -55,6 +55,7 @@ from kassiber.core.runtime import bootstrap_runtime, close_runtime
 from kassiber.core.tax_events import normalize_tax_asset_inputs
 from kassiber.core.ui_snapshot import (
     _tax_free_wallet_summaries,
+    _transaction_pair_display_meta,
     build_capital_gains_snapshot,
     build_journal_events_list_snapshot,
     build_journals_snapshot,
@@ -2883,6 +2884,243 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual(priced["pricing_source_kind"], pricing.SOURCE_FMV_PROVIDER)
         self.assertEqual(priced["pricing_provider"], core_rates.RATE_SOURCE_COINBASE_EXCHANGE)
 
+    def test_multi_pair_leg_does_not_multiply_journal_events(self):
+        # A whirlpool-style out leg carries N active pairs since the multi-pair
+        # feature dropped the per-leg UNIQUE indexes. The journal event list
+        # joins pair metadata per leg — it must pick ONE representative pair,
+        # not multiply every journal entry of the transaction N times.
+        conn = open_db(self.data_root)
+        self.addCleanup(conn.close)
+        now = "2026-01-01T00:00:00Z"
+        conn.execute(
+            "INSERT INTO workspaces(id, label, created_at) VALUES(?, ?, ?)",
+            ("ws-multi-pair", "Multi Pair Workspace", now),
+        )
+        conn.execute(
+            """
+            INSERT INTO profiles(
+                id, workspace_id, label, fiat_currency, tax_country,
+                tax_long_term_days, gains_algorithm, last_processed_at,
+                last_processed_tx_count, journal_input_version,
+                last_processed_input_version, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "pf-multi-pair",
+                "ws-multi-pair",
+                "Multi Pair Profile",
+                "EUR",
+                "generic",
+                365,
+                "FIFO",
+                now,
+                3,
+                0,
+                0,
+                now,
+            ),
+        )
+        conn.execute(
+            """
+            INSERT INTO wallets(
+                id, workspace_id, profile_id, label, kind, config_json, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "wal-multi-pair",
+                "ws-multi-pair",
+                "pf-multi-pair",
+                "Multi Pair Wallet",
+                "address",
+                "{}",
+                now,
+            ),
+        )
+        conn.executemany(
+            """
+            INSERT INTO transactions(
+                id, workspace_id, profile_id, wallet_id, external_id, fingerprint,
+                occurred_at, confirmed_at, direction, asset, amount, fee,
+                fiat_currency, fiat_rate, fiat_value, fiat_price_source, kind,
+                description, counterparty, note, excluded, raw_json, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                (
+                    "tx-mp-out",
+                    "ws-multi-pair",
+                    "pf-multi-pair",
+                    "wal-multi-pair",
+                    "mp-out",
+                    "fp-mp-out",
+                    "2026-01-01T00:00:00Z",
+                    "2026-01-01T00:00:00Z",
+                    "outbound",
+                    "BTC",
+                    btc_to_msat("1.0"),
+                    0,
+                    "EUR",
+                    50_000,
+                    50_000,
+                    None,
+                    "payment",
+                    None,
+                    None,
+                    None,
+                    0,
+                    "{}",
+                    now,
+                ),
+                (
+                    "tx-mp-in-1",
+                    "ws-multi-pair",
+                    "pf-multi-pair",
+                    "wal-multi-pair",
+                    "mp-in-1",
+                    "fp-mp-in-1",
+                    "2026-01-01T00:01:00Z",
+                    "2026-01-01T00:01:00Z",
+                    "inbound",
+                    "BTC",
+                    btc_to_msat("0.5"),
+                    0,
+                    "EUR",
+                    50_000,
+                    25_000,
+                    None,
+                    "receive",
+                    None,
+                    None,
+                    None,
+                    0,
+                    "{}",
+                    now,
+                ),
+                (
+                    "tx-mp-in-2",
+                    "ws-multi-pair",
+                    "pf-multi-pair",
+                    "wal-multi-pair",
+                    "mp-in-2",
+                    "fp-mp-in-2",
+                    "2026-01-01T00:01:00Z",
+                    "2026-01-01T00:01:00Z",
+                    "inbound",
+                    "BTC",
+                    btc_to_msat("0.4999"),
+                    0,
+                    "EUR",
+                    50_000,
+                    24_995,
+                    None,
+                    "receive",
+                    None,
+                    None,
+                    None,
+                    0,
+                    "{}",
+                    now,
+                ),
+            ],
+        )
+        conn.executemany(
+            """
+            INSERT INTO transaction_pairs(
+                id, workspace_id, profile_id, out_transaction_id,
+                in_transaction_id, kind, policy, swap_fee_msat, pair_source,
+                created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                (
+                    "pair-mp-1",
+                    "ws-multi-pair",
+                    "pf-multi-pair",
+                    "tx-mp-out",
+                    "tx-mp-in-1",
+                    "whirlpool",
+                    "carrying-value",
+                    None,
+                    "manual",
+                    now,
+                ),
+                (
+                    "pair-mp-2",
+                    "ws-multi-pair",
+                    "pf-multi-pair",
+                    "tx-mp-out",
+                    "tx-mp-in-2",
+                    "whirlpool",
+                    "carrying-value",
+                    None,
+                    "manual",
+                    "2026-01-01T00:00:01Z",
+                ),
+            ],
+        )
+        conn.executemany(
+            """
+            INSERT INTO journal_entries(
+                id, workspace_id, profile_id, transaction_id, wallet_id,
+                occurred_at, entry_type, asset, quantity, fiat_value, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                (
+                    "je-mp-out",
+                    "ws-multi-pair",
+                    "pf-multi-pair",
+                    "tx-mp-out",
+                    "wal-multi-pair",
+                    "2026-01-01T00:00:00Z",
+                    "transfer_out",
+                    "BTC",
+                    -btc_to_msat("1.0"),
+                    -50_000,
+                    now,
+                ),
+                (
+                    "je-mp-fee",
+                    "ws-multi-pair",
+                    "pf-multi-pair",
+                    "tx-mp-out",
+                    "wal-multi-pair",
+                    "2026-01-01T00:00:00Z",
+                    "transfer_fee",
+                    "BTC",
+                    -btc_to_msat("0.0001"),
+                    -5,
+                    now,
+                ),
+            ],
+        )
+        set_setting(conn, "context_workspace", "ws-multi-pair")
+        set_setting(conn, "context_profile", "pf-multi-pair")
+        conn.commit()
+
+        events = build_journal_events_list_snapshot(conn, {"limit": 10})
+        # Two journal entries on the out tx, NOT multiplied by the two pairs.
+        self.assertEqual(events["summary"]["count"], 2)
+        self.assertEqual(len(events["events"]), 2)
+        # Deterministic representative pair: the oldest by (created_at, id).
+        self.assertEqual(
+            {event["pair"]["pairId"] for event in events["events"]},
+            {"pair-mp-1"},
+        )
+
+        journals = build_journals_snapshot(conn)
+        self.assertEqual(len(journals["recent"]), 2)
+
+        # Window coupling: a fetch window holding only ONE receipt of the
+        # multi-pair must still suppress the giant out-in fee fallback (the
+        # counts come from the DB, not the window) — and pick a deterministic
+        # representative pair.
+        window_rows = conn.execute(
+            "SELECT id FROM transactions WHERE id = 'tx-mp-in-1'"
+        ).fetchall()
+        meta = _transaction_pair_display_meta(conn, window_rows)
+        self.assertEqual(meta["tx-mp-in-1"]["fee_msat"], 0)
+
     def test_journal_pair_payload_picks_one_pair_for_chain_edge_case(self):
         conn = open_db(self.data_root)
         self.addCleanup(conn.close)
@@ -3022,8 +3260,8 @@ class ReviewRegressionTest(unittest.TestCase):
             """
             INSERT INTO transaction_pairs(
                 id, workspace_id, profile_id, out_transaction_id, in_transaction_id,
-                kind, policy, swap_fee_msat, pair_source, created_at
-            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                kind, policy, swap_fee_msat, pair_source, out_amount, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             [
                 (
@@ -3036,6 +3274,7 @@ class ReviewRegressionTest(unittest.TestCase):
                     "carrying-value",
                     btc_to_msat("0.01"),
                     "manual",
+                    123,
                     now,
                 ),
                 (
@@ -3048,6 +3287,7 @@ class ReviewRegressionTest(unittest.TestCase):
                     "carrying-value",
                     btc_to_msat("0.01"),
                     "manual",
+                    None,
                     now,
                 ),
             ],
@@ -3081,10 +3321,18 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual(events["summary"]["count"], 1)
         self.assertEqual(len(events["events"]), 1)
         self.assertEqual(events["events"][0]["pair"]["pairId"], "pair-middle-as-out")
+        self.assertEqual(
+            events["events"][0]["pair"]["out"]["amountMsat"],
+            btc_to_msat("0.49"),
+        )
 
         journals = build_journals_snapshot(conn)
         self.assertEqual(len(journals["recent"]), 1)
         self.assertEqual(journals["recent"][0]["pair"]["pairId"], "pair-middle-as-out")
+        self.assertEqual(
+            journals["recent"][0]["pair"]["out"]["amountMsat"],
+            btc_to_msat("0.49"),
+        )
 
     def test_ui_snapshots_show_reviewed_swap_movement_with_fee(self):
         conn = open_db(self.data_root)
@@ -11493,6 +11741,115 @@ class ReviewRegressionTest(unittest.TestCase):
             ],
         )
 
+    def test_mixed_regime_transfer_carries_tax_free_share_to_destination(self):
+        # A mixed Alt+Neu wallet moving MORE than its Neu stack carries Alt
+        # coins to the destination even though the MOVE's fee-slice marker says
+        # at_regime=neu. The tax-free hint must classify the moved QUANTITIES
+        # (at_alt_out/at_alt_in flows), not the whole MOVE by the fee regime.
+        profile = {
+            "id": "profile-at-mixed-move",
+            "workspace_id": "workspace-main",
+            "label": "FixtureAustrianMixedMove",
+            "fiat_currency": "EUR",
+            "tax_country": "at",
+            "tax_long_term_days": 9223372036854775807,
+            "gains_algorithm": "MOVING_AVERAGE_AT",
+        }
+        wallet_refs_by_id = {
+            "wallet-a": {
+                "id": "wallet-a",
+                "label": "Vienna",
+                "wallet_account_id": "account-treasury",
+                "account_code": "treasury",
+                "account_label": "Treasury",
+            },
+            "wallet-b": {
+                "id": "wallet-b",
+                "label": "Cold",
+                "wallet_account_id": "account-cold",
+                "account_code": "cold",
+                "account_label": "Cold",
+            },
+        }
+
+        def _row(rid, wid, direction, amount, occurred_at, *, description, external_id):
+            ref = wallet_refs_by_id[wid]
+            return {
+                "id": rid,
+                "wallet_id": wid,
+                "wallet_label": ref["label"],
+                "wallet_account_id": ref["wallet_account_id"],
+                "account_code": ref["account_code"],
+                "account_label": ref["account_label"],
+                "occurred_at": occurred_at,
+                "direction": direction,
+                "asset": "BTC",
+                "amount": amount,
+                "fee": 0,
+                "fiat_rate": 60000,
+                "fiat_value": 60000,
+                "kind": "transfer",
+                "note": None,
+                "description": description,
+                "external_id": external_id,
+                "created_at": occurred_at,
+            }
+
+        state = build_tax_engine(profile).build_ledger_state(
+            TaxEngineLedgerInputs(
+                rows=[
+                    _row(
+                        "alt-buy",
+                        "wallet-a",
+                        "inbound",
+                        30_000_000_000,
+                        "2020-06-01T10:00:00Z",
+                        description="Alt buy",
+                        external_id="alt-buy",
+                    ),
+                    _row(
+                        "neu-buy",
+                        "wallet-a",
+                        "inbound",
+                        40_000_000_000,
+                        "2024-01-01T10:00:00Z",
+                        description="Neu buy",
+                        external_id="neu-buy",
+                    ),
+                    _row(
+                        "xfer-out",
+                        "wallet-a",
+                        "outbound",
+                        50_000_000_000,
+                        "2024-07-01T10:00:00Z",
+                        description="Move A->B",
+                        external_id="xfer-mixed",
+                    ),
+                    _row(
+                        "xfer-in",
+                        "wallet-b",
+                        "inbound",
+                        50_000_000_000,
+                        "2024-07-01T10:00:00Z",
+                        description="Move A->B",
+                        external_id="xfer-mixed",
+                    ),
+                ],
+                wallet_refs_by_id=wallet_refs_by_id,
+                manual_pair_records=[],
+            )
+        )
+
+        self.assertEqual(state.quarantines, [])
+        # 0.5 moved: 0.4 Neu (preferred) + 0.1 Alt carried to the destination.
+        self.assertEqual(
+            _tax_free_wallet_summaries(state.entries),
+            [
+                {"walletId": "wallet-a", "hasTaxFreeBalance": True},
+                {"walletId": "wallet-b", "hasTaxFreeBalance": True},
+            ],
+        )
+
     def test_austrian_direct_swap_payout_carries_then_disposes(self):
         profile, inputs = self._direct_austrian_swap_payout_inputs()
         state = build_tax_engine(profile).build_ledger_state(inputs)
@@ -12097,8 +12454,20 @@ class ReviewRegressionTest(unittest.TestCase):
         )
         state = build_tax_engine(profile).build_ledger_state(inputs)
         self.assertEqual(state.entries, [])
-        self.assertEqual(len(state.quarantines), 1)
-        self.assertEqual(state.quarantines[0]["reason"], "insufficient_lots")
+        self.assertEqual(len(state.quarantines), 2)
+        reasons_by_id = {q["transaction_id"]: q["reason"] for q in state.quarantines}
+        self.assertEqual(
+            reasons_by_id,
+            {"transfer-out": "insufficient_lots", "transfer-in": "insufficient_lots"},
+        )
+        inbound_detail = json.loads(
+            next(
+                q["detail_json"]
+                for q in state.quarantines
+                if q["transaction_id"] == "transfer-in"
+            )
+        )
+        self.assertEqual(inbound_detail["paired_leg"], "inbound")
 
     def test_transfer_pricing_review_targets_used_price_leg(self):
         profile, inputs = self._direct_transfer_engine_inputs()

@@ -55,6 +55,7 @@ def _tx(
     external_id: str | None = None,
     occurred_at: str = NOW,
     payment_hash: str | None = None,
+    payment_hash_source: str | None = None,
     raw_json: dict | None = None,
 ) -> None:
     amount = btc_to_msat(amount_btc)
@@ -87,7 +88,7 @@ def _tx(
             fiat_value,
             json.dumps(raw_json or {}, sort_keys=True),
             payment_hash,
-            "importer" if payment_hash else None,
+            payment_hash_source if payment_hash else None,
             NOW,
         ),
     )
@@ -223,6 +224,42 @@ class SwapCandidateReportBlockerTests(unittest.TestCase):
             blocker = next(item for item in payload["blockers"] if item["id"] == "unreviewed_swap_candidates")
             self.assertEqual(blocker["counts"], {"total": 1, "exact": 0, "strong": 1})
             self.assertEqual(blocker["routes"][0]["default_kind"], "peg-in")
+        finally:
+            conn.close()
+
+    def test_chain_script_payment_hash_blocks_even_for_lightning_wallet_kind(self):
+        conn = self._with_conn()
+        try:
+            _seed_book(conn)
+            _wallet(conn, "node", "Node", "lnd")
+            _wallet(conn, "chain", "Chain", "descriptor")
+            payment_hash = "ab" * 32
+            _tx(
+                conn,
+                "out",
+                "node",
+                direction="outbound",
+                amount_btc="0.01000000",
+                payment_hash=payment_hash,
+                payment_hash_source="chain_script",
+            )
+            _tx(
+                conn,
+                "in",
+                "chain",
+                direction="inbound",
+                amount_btc="0.00999000",
+                occurred_at="2026-07-03T10:05:00Z",
+                payment_hash=payment_hash,
+                payment_hash_source="chain_script",
+            )
+            _mark_processed(conn)
+
+            payload = build_report_blockers_snapshot(conn)
+
+            blocker = next(item for item in payload["blockers"] if item["id"] == "unreviewed_swap_candidates")
+            self.assertEqual(blocker["counts"], {"total": 1, "exact": 1, "strong": 0})
+            self.assertEqual(blocker["routes"][0]["method"], "payment_hash")
         finally:
             conn.close()
 

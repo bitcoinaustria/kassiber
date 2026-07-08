@@ -17,6 +17,13 @@ from ..backends import (
 from ..db import get_setting
 from ..errors import AppError
 from ..msat import dec, msat_to_btc
+from .journal_markers import (
+    MARKER_ALT_IN,
+    MARKER_ALT_OUT,
+    MARKER_REGIME,
+    parse_marker,
+    parse_marker_int,
+)
 from ..time_utils import _iso_z, _parse_iso_datetime
 from ..transfers import profile_bitcoin_rail_carrying_value
 from ..wallet_descriptors import (
@@ -1783,16 +1790,52 @@ def _transaction_pair_display_meta(
         WHERE p.deleted_at IS NULL
           AND (p.out_transaction_id IN ({placeholders})
                OR p.in_transaction_id IN ({placeholders}))
+        ORDER BY p.created_at, p.id
         """,
         [*ids, *ids],
     ).fetchall()
+    # Multi-pair components (whirlpool N-leg reviews) reuse a leg across
+    # several active pairs ON THE SAME SIDE. The per-pair out/in gap is
+    # meaningless there — the shared out leg dwarfs each receipt — so the
+    # NULL-fee fallback must not invent a giant per-pair "fee". Count from
+    # the DB, not the fetched window: a filtered/paginated window holding one
+    # leg of a multi-pair would otherwise resurface the giant fee. Counting
+    # per (leg, role) keeps ordinary transfer CHAINS (a tx that is the in-leg
+    # of one pair and the out-leg of another) out of the suppression.
+    leg_ids = sorted(
+        {pair["out_transaction_id"] for pair in pair_rows}
+        | {pair["in_transaction_id"] for pair in pair_rows}
+    )
+    out_pair_count: dict[str, int] = {}
+    in_pair_count: dict[str, int] = {}
+    if leg_ids:
+        leg_placeholders = ", ".join("?" for _ in leg_ids)
+        for leg_id, role, count in conn.execute(
+            f"""
+            SELECT out_transaction_id AS leg, 'out' AS role, COUNT(*) AS n
+            FROM transaction_pairs
+            WHERE deleted_at IS NULL AND out_transaction_id IN ({leg_placeholders})
+            GROUP BY out_transaction_id
+            UNION ALL
+            SELECT in_transaction_id AS leg, 'in' AS role, COUNT(*) AS n
+            FROM transaction_pairs
+            WHERE deleted_at IS NULL AND in_transaction_id IN ({leg_placeholders})
+            GROUP BY in_transaction_id
+            """,
+            [*leg_ids, *leg_ids],
+        ):
+            (out_pair_count if role == "out" else in_pair_count)[leg_id] = count
     pair_meta: dict[str, dict[str, Any]] = {}
     for pair in pair_rows:
         out_asset = pair["out_asset"]
         in_asset = pair["in_asset"]
         pair_type = "transfer" if out_asset == in_asset else "swap"
+        multi_pair_leg = (
+            out_pair_count.get(pair["out_transaction_id"], 0) > 1
+            or in_pair_count.get(pair["in_transaction_id"], 0) > 1
+        )
         raw_fee_msat = pair["swap_fee_msat"]
-        if raw_fee_msat is None:
+        if raw_fee_msat is None and not multi_pair_leg:
             raw_fee_msat = int(pair["out_amount"] or 0) - int(pair["in_amount"] or 0)
         fee_msat = int(raw_fee_msat or 0)
         label = "Transfer" if pair_type == "transfer" else "Swap"
@@ -1825,8 +1868,10 @@ def _transaction_pair_display_meta(
             "tag": label,
             "display_rate": display_rate,
         }
-        pair_meta[pair["out_transaction_id"]] = {**base, "role": "out"}
-        pair_meta[pair["in_transaction_id"]] = {**base, "role": "in"}
+        # First pair wins (rows are ordered by created_at, id) so a
+        # multi-paired leg renders one deterministic representative.
+        pair_meta.setdefault(pair["out_transaction_id"], {**base, "role": "out"})
+        pair_meta.setdefault(pair["in_transaction_id"], {**base, "role": "in"})
     for transaction_id, meta in _journal_transfer_display_meta(conn, rows).items():
         pair_meta.setdefault(transaction_id, meta)
     return pair_meta
@@ -2614,7 +2659,8 @@ def _tax_free_balance_snapshot(
 def _tax_free_wallet_summaries(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
     tax_free_by_wallet: dict[str, Decimal] = defaultdict(Decimal)
     for entry in entries:
-        if str(entry.get("entry_type") or "") == "transfer_fee":
+        entry_type = str(entry.get("entry_type") or "")
+        if entry_type == "transfer_fee":
             continue
         wallet_id = str(entry.get("wallet_id") or "")
         if not wallet_id:
@@ -2622,6 +2668,21 @@ def _tax_free_wallet_summaries(entries: list[dict[str, Any]]) -> list[dict[str, 
         qty = dec(entry.get("quantity") or 0)
         if qty == 0:
             continue
+        # Transfers carry a per-regime quantity split (at_alt_out/at_alt_in):
+        # a mixed-regime MOVE carries tax-free lots even when its fee-slice
+        # at_regime marker says "neu", so classify the QUANTITIES when the
+        # split is available and fall back to the whole-entry regime otherwise.
+        if entry_type in ("transfer_out", "transfer_in"):
+            alt_msat = _entry_alt_flow_msat(
+                entry, MARKER_ALT_OUT if entry_type == "transfer_out" else MARKER_ALT_IN
+            )
+            if alt_msat is not None:
+                alt_qty = dec(msat_to_btc(alt_msat))
+                if entry_type == "transfer_out":
+                    tax_free_by_wallet[wallet_id] -= alt_qty
+                else:
+                    tax_free_by_wallet[wallet_id] += alt_qty
+                continue
         if _entry_has_alt_regime(entry):
             tax_free_by_wallet[wallet_id] += qty
     return [
@@ -2631,6 +2692,10 @@ def _tax_free_wallet_summaries(entries: list[dict[str, Any]]) -> list[dict[str, 
         }
         for wallet_id, qty in sorted(tax_free_by_wallet.items())
     ]
+
+
+def _entry_alt_flow_msat(entry: dict[str, Any], marker: str) -> int | None:
+    return parse_marker_int(entry.get("description"), marker)
 
 
 def _entry_has_alt_regime(entry: dict[str, Any]) -> bool:
@@ -2654,12 +2719,8 @@ def _entry_has_alt_regime(entry: dict[str, Any]) -> bool:
 
 
 def _entry_at_regime_marker(entry: dict[str, Any]) -> str | None:
-    for token in str(entry.get("description") or "").split():
-        if token == "at_regime=alt":
-            return "alt"
-        if token == "at_regime=neu":
-            return "neu"
-    return None
+    marker = parse_marker(entry.get("description"), MARKER_REGIME)
+    return marker if marker in ("alt", "neu") else None
 
 
 def _profile_readiness(
@@ -4162,16 +4223,66 @@ def _journal_pair_payload(row: sqlite3.Row) -> dict[str, Any] | None:
     }
 
 
+# A leg can carry SEVERAL active pairs since the multi-pair feature dropped
+# the per-leg UNIQUE indexes (a whirlpool out leg pairs with N postmix
+# receipts). Joining the raw table would multiply every journal entry of that
+# transaction N times, so each side picks one deterministic representative
+# pair (oldest, then smallest id) — display metadata only, never accounting.
 _JOURNAL_PAIR_JOIN_SQL = """
-            LEFT JOIN transaction_pairs p_out
+            LEFT JOIN (
+                SELECT * FROM transaction_pairs tp
+                WHERE tp.deleted_at IS NULL
+                  AND tp.id = (
+                    SELECT tp2.id FROM transaction_pairs tp2
+                    WHERE tp2.profile_id = tp.profile_id
+                      AND tp2.out_transaction_id = tp.out_transaction_id
+                      AND tp2.deleted_at IS NULL
+                    ORDER BY tp2.created_at, tp2.id
+                    LIMIT 1
+                  )
+            ) p_out
               ON p_out.profile_id = je.profile_id
-             AND p_out.deleted_at IS NULL
              AND p_out.out_transaction_id = je.transaction_id
-            LEFT JOIN transaction_pairs p_in
+            LEFT JOIN (
+                SELECT * FROM transaction_pairs tp
+                WHERE tp.deleted_at IS NULL
+                  AND tp.id = (
+                    SELECT tp2.id FROM transaction_pairs tp2
+                    WHERE tp2.profile_id = tp.profile_id
+                      AND tp2.in_transaction_id = tp.in_transaction_id
+                      AND tp2.deleted_at IS NULL
+                    ORDER BY tp2.created_at, tp2.id
+                    LIMIT 1
+                  )
+            ) p_in
               ON p_in.profile_id = je.profile_id
-             AND p_in.deleted_at IS NULL
              AND p_in.in_transaction_id = je.transaction_id
 """
+
+_JOURNAL_PAIR_ID_SQL = (
+    "CASE WHEN p_out.id IS NOT NULL THEN p_out.id ELSE p_in.id END"
+)
+_JOURNAL_PAIR_KIND_SQL = (
+    "CASE WHEN p_out.id IS NOT NULL THEN p_out.kind ELSE p_in.kind END"
+)
+_JOURNAL_PAIR_POLICY_SQL = (
+    "CASE WHEN p_out.id IS NOT NULL THEN p_out.policy ELSE p_in.policy END"
+)
+_JOURNAL_PAIR_SWAP_FEE_SQL = (
+    "CASE WHEN p_out.id IS NOT NULL THEN p_out.swap_fee_msat "
+    "ELSE p_in.swap_fee_msat END"
+)
+_JOURNAL_PAIR_OUT_TRANSACTION_SQL = (
+    "CASE WHEN p_out.id IS NOT NULL THEN p_out.out_transaction_id "
+    "ELSE p_in.out_transaction_id END"
+)
+_JOURNAL_PAIR_OUT_AMOUNT_SQL = (
+    "CASE WHEN p_out.id IS NOT NULL THEN p_out.out_amount ELSE p_in.out_amount END"
+)
+_JOURNAL_PAIR_IN_TRANSACTION_SQL = (
+    "CASE WHEN p_out.id IS NOT NULL THEN p_out.in_transaction_id "
+    "ELSE p_in.in_transaction_id END"
+)
 
 
 def build_journals_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
@@ -4242,16 +4353,16 @@ def build_journals_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
                 {_JOURNAL_DISPLAY_GAIN_LOSS_SQL} AS gain_loss,
                 je.at_category,
                 w.label AS wallet,
-                COALESCE(p_out.id, p_in.id) AS pair_id,
-                COALESCE(p_out.kind, p_in.kind) AS pair_kind,
-                COALESCE(p_out.policy, p_in.policy) AS pair_policy,
-                COALESCE(p_out.swap_fee_msat, p_in.swap_fee_msat, 0) AS pair_swap_fee_msat,
-                COALESCE(p_out.out_transaction_id, p_in.out_transaction_id) AS pair_out_transaction_id,
+                {_JOURNAL_PAIR_ID_SQL} AS pair_id,
+                {_JOURNAL_PAIR_KIND_SQL} AS pair_kind,
+                {_JOURNAL_PAIR_POLICY_SQL} AS pair_policy,
+                COALESCE({_JOURNAL_PAIR_SWAP_FEE_SQL}, 0) AS pair_swap_fee_msat,
+                {_JOURNAL_PAIR_OUT_TRANSACTION_SQL} AS pair_out_transaction_id,
                 tout.external_id AS pair_out_external_id,
                 wout.label AS pair_out_wallet,
                 tout.asset AS pair_out_asset,
-                COALESCE(p_out.out_amount, p_in.out_amount, tout.amount) AS pair_out_amount,
-                COALESCE(p_out.in_transaction_id, p_in.in_transaction_id) AS pair_in_transaction_id,
+                COALESCE({_JOURNAL_PAIR_OUT_AMOUNT_SQL}, tout.amount) AS pair_out_amount,
+                {_JOURNAL_PAIR_IN_TRANSACTION_SQL} AS pair_in_transaction_id,
                 tin.external_id AS pair_in_external_id,
                 win.label AS pair_in_wallet,
                 tin.asset AS pair_in_asset,
@@ -4260,8 +4371,8 @@ def build_journals_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
             JOIN wallets w ON w.id = je.wallet_id
             LEFT JOIN transactions t ON t.id = je.transaction_id
             {_JOURNAL_PAIR_JOIN_SQL}
-            LEFT JOIN transactions tout ON tout.id = COALESCE(p_out.out_transaction_id, p_in.out_transaction_id)
-            LEFT JOIN transactions tin ON tin.id = COALESCE(p_out.in_transaction_id, p_in.in_transaction_id)
+            LEFT JOIN transactions tout ON tout.id = {_JOURNAL_PAIR_OUT_TRANSACTION_SQL}
+            LEFT JOIN transactions tin ON tin.id = {_JOURNAL_PAIR_IN_TRANSACTION_SQL}
             LEFT JOIN wallets wout ON wout.id = tout.wallet_id
             LEFT JOIN wallets win ON win.id = tin.wallet_id
             WHERE je.profile_id = ?
@@ -4291,16 +4402,16 @@ def build_journals_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
                     {_JOURNAL_DISPLAY_GAIN_LOSS_SQL} AS gain_loss,
                     je.at_category,
                     w.label AS wallet,
-                    COALESCE(p_out.id, p_in.id) AS pair_id,
-                    COALESCE(p_out.kind, p_in.kind) AS pair_kind,
-                    COALESCE(p_out.policy, p_in.policy) AS pair_policy,
-                    COALESCE(p_out.swap_fee_msat, p_in.swap_fee_msat, 0) AS pair_swap_fee_msat,
-                    COALESCE(p_out.out_transaction_id, p_in.out_transaction_id) AS pair_out_transaction_id,
+                    {_JOURNAL_PAIR_ID_SQL} AS pair_id,
+                    {_JOURNAL_PAIR_KIND_SQL} AS pair_kind,
+                    {_JOURNAL_PAIR_POLICY_SQL} AS pair_policy,
+                    COALESCE({_JOURNAL_PAIR_SWAP_FEE_SQL}, 0) AS pair_swap_fee_msat,
+                    {_JOURNAL_PAIR_OUT_TRANSACTION_SQL} AS pair_out_transaction_id,
                     tout.external_id AS pair_out_external_id,
                     wout.label AS pair_out_wallet,
                     tout.asset AS pair_out_asset,
-                    COALESCE(p_out.out_amount, p_in.out_amount, tout.amount) AS pair_out_amount,
-                    COALESCE(p_out.in_transaction_id, p_in.in_transaction_id) AS pair_in_transaction_id,
+                    COALESCE({_JOURNAL_PAIR_OUT_AMOUNT_SQL}, tout.amount) AS pair_out_amount,
+                    {_JOURNAL_PAIR_IN_TRANSACTION_SQL} AS pair_in_transaction_id,
                     tin.external_id AS pair_in_external_id,
                     win.label AS pair_in_wallet,
                     tin.asset AS pair_in_asset,
@@ -4309,8 +4420,8 @@ def build_journals_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
                 JOIN wallets w ON w.id = je.wallet_id
                 LEFT JOIN transactions t ON t.id = je.transaction_id
                 {_JOURNAL_PAIR_JOIN_SQL}
-                LEFT JOIN transactions tout ON tout.id = COALESCE(p_out.out_transaction_id, p_in.out_transaction_id)
-                LEFT JOIN transactions tin ON tin.id = COALESCE(p_out.in_transaction_id, p_in.in_transaction_id)
+                LEFT JOIN transactions tout ON tout.id = {_JOURNAL_PAIR_OUT_TRANSACTION_SQL}
+                LEFT JOIN transactions tin ON tin.id = {_JOURNAL_PAIR_IN_TRANSACTION_SQL}
                 LEFT JOIN wallets wout ON wout.id = tout.wallet_id
                 LEFT JOIN wallets win ON win.id = tin.wallet_id
                 WHERE je.profile_id = ?
@@ -4453,16 +4564,16 @@ def build_journal_events_list_snapshot(
             COALESCE(a.label, '') AS account_label,
             t.external_id AS transaction_external_id,
             t.direction AS transaction_direction,
-            COALESCE(p_out.id, p_in.id) AS pair_id,
-            COALESCE(p_out.kind, p_in.kind) AS pair_kind,
-            COALESCE(p_out.policy, p_in.policy) AS pair_policy,
-            COALESCE(p_out.swap_fee_msat, p_in.swap_fee_msat, 0) AS pair_swap_fee_msat,
-            COALESCE(p_out.out_transaction_id, p_in.out_transaction_id) AS pair_out_transaction_id,
+            {_JOURNAL_PAIR_ID_SQL} AS pair_id,
+            {_JOURNAL_PAIR_KIND_SQL} AS pair_kind,
+            {_JOURNAL_PAIR_POLICY_SQL} AS pair_policy,
+            COALESCE({_JOURNAL_PAIR_SWAP_FEE_SQL}, 0) AS pair_swap_fee_msat,
+            {_JOURNAL_PAIR_OUT_TRANSACTION_SQL} AS pair_out_transaction_id,
             tout.external_id AS pair_out_external_id,
             wout.label AS pair_out_wallet,
             tout.asset AS pair_out_asset,
-            COALESCE(p_out.out_amount, p_in.out_amount, tout.amount) AS pair_out_amount,
-            COALESCE(p_out.in_transaction_id, p_in.in_transaction_id) AS pair_in_transaction_id,
+            COALESCE({_JOURNAL_PAIR_OUT_AMOUNT_SQL}, tout.amount) AS pair_out_amount,
+            {_JOURNAL_PAIR_IN_TRANSACTION_SQL} AS pair_in_transaction_id,
             tin.external_id AS pair_in_external_id,
             win.label AS pair_in_wallet,
             tin.asset AS pair_in_asset,
@@ -4472,8 +4583,8 @@ def build_journal_events_list_snapshot(
         LEFT JOIN accounts a ON a.id = je.account_id
         LEFT JOIN transactions t ON t.id = je.transaction_id
         {_JOURNAL_PAIR_JOIN_SQL}
-        LEFT JOIN transactions tout ON tout.id = COALESCE(p_out.out_transaction_id, p_in.out_transaction_id)
-        LEFT JOIN transactions tin ON tin.id = COALESCE(p_out.in_transaction_id, p_in.in_transaction_id)
+        LEFT JOIN transactions tout ON tout.id = {_JOURNAL_PAIR_OUT_TRANSACTION_SQL}
+        LEFT JOIN transactions tin ON tin.id = {_JOURNAL_PAIR_IN_TRANSACTION_SQL}
         LEFT JOIN wallets wout ON wout.id = tout.wallet_id
         LEFT JOIN wallets win ON win.id = tin.wallet_id
         {where_sql}
@@ -5811,6 +5922,7 @@ def _load_swap_report_matcher_rows(
         """
         SELECT
             t.id, t.profile_id, t.wallet_id, t.external_id, t.payment_hash,
+            t.payment_hash_source,
             t.swap_refund_funding_txid,
             t.occurred_at, t.direction, t.asset, t.amount, t.amount_includes_fee,
             t.fee, t.kind, t.raw_json, t.excluded,

@@ -3575,21 +3575,27 @@ def _summary_pdf_top_disposals(conn, profile_id, wallets, hooks: ReportHooks, st
 
 def _summary_pdf_internal_transfers(conn, profile_id, wallets, hooks: ReportHooks, start_dt, end_dt):
     wallet_filter, wallet_params = _wallet_scope_sql("tout.wallet_id", wallets)
+    # A multi-pair component (whirlpool 1->N review) repeats the SAME out leg
+    # on every pair row, so aggregate over distinct out transactions — one
+    # spend is one internal transfer, whatever the number of receipt legs.
     rows = conn.execute(
         f"""
         SELECT COUNT(*) AS count,
-               COALESCE(SUM(COALESCE(tout.fiat_value, 0)), 0) AS fiat_volume,
-               COALESCE(SUM(tout.amount), 0) AS amount_msat
-        FROM transaction_pairs p
-        JOIN transactions tout ON tout.id = p.out_transaction_id
-        JOIN transactions tin ON tin.id = p.in_transaction_id
-        WHERE p.profile_id = ?
-          AND p.deleted_at IS NULL
-          AND p.policy = 'carrying-value'
-          AND tout.asset = tin.asset
-          AND {wallet_filter}
-          AND tout.occurred_at >= ?
-          AND tout.occurred_at <= ?
+               COALESCE(SUM(COALESCE(fiat_value, 0)), 0) AS fiat_volume,
+               COALESCE(SUM(amount), 0) AS amount_msat
+        FROM (
+            SELECT DISTINCT tout.id, tout.fiat_value, tout.amount
+            FROM transaction_pairs p
+            JOIN transactions tout ON tout.id = p.out_transaction_id
+            JOIN transactions tin ON tin.id = p.in_transaction_id
+            WHERE p.profile_id = ?
+              AND p.deleted_at IS NULL
+              AND p.policy = 'carrying-value'
+              AND tout.asset = tin.asset
+              AND {wallet_filter}
+              AND tout.occurred_at >= ?
+              AND tout.occurred_at <= ?
+        )
         """,
         [profile_id, *wallet_params, hooks.iso_z(start_dt), hooks.iso_z(end_dt)],
     ).fetchone()

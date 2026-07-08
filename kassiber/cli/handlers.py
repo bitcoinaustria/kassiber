@@ -1160,6 +1160,7 @@ def _load_matcher_rows(conn, profile_id):
         """
         SELECT
             t.id, t.profile_id, t.wallet_id, t.external_id, t.payment_hash,
+            t.payment_hash_source,
             t.swap_refund_funding_txid,
             t.occurred_at, t.direction, t.asset, t.amount, t.amount_includes_fee,
             t.fee, t.kind, t.raw_json, t.excluded,
@@ -1881,10 +1882,50 @@ def update_transaction_pair(
         and new_notes == row["notes"]
     )
     if not unchanged:
+        # Whether a pair persists a swap fee is kind-dependent
+        # (_pair_stores_swap_fee), so a kind edit must reconcile the stored
+        # fee the same way create_transaction_pair would: a pair moving into
+        # a fee-storing kind gains the computed fee, one moving out of it
+        # drops the now-stale fee (instead of keeping it until the next DB
+        # open's migration wipes it).
+        new_fee_msat = row["swap_fee_msat"]
+        new_fee_kind = row["swap_fee_kind"]
+        if new_kind != row["kind"]:
+            out_row = conn.execute(
+                "SELECT * FROM transactions WHERE id = ?",
+                (row["out_transaction_id"],),
+            ).fetchone()
+            in_row = conn.execute(
+                "SELECT * FROM transactions WHERE id = ?",
+                (row["in_transaction_id"],),
+            ).fetchone()
+            if out_row and in_row and _pair_stores_swap_fee(out_row, in_row, new_kind):
+                split_pair = row["out_amount"] is not None
+                swap_fee_out_msat = (
+                    int(row["out_amount"])
+                    if split_pair
+                    else int(out_row["amount"] or 0)
+                )
+                new_fee_msat, new_fee_kind = core_transfer_matching.compute_swap_fee(
+                    swap_fee_out_msat,
+                    int(in_row["amount"] or 0),
+                    _outbound_pair_fee_component_msat(out_row, split_pair=split_pair),
+                )
+            else:
+                new_fee_msat, new_fee_kind = None, None
         conn.execute(
-            "UPDATE transaction_pairs SET kind = ?, policy = ?, notes = ? "
+            "UPDATE transaction_pairs SET kind = ?, policy = ?, notes = ?, "
+            "swap_fee_msat = ?, swap_fee_kind = ? "
             "WHERE id = ? AND profile_id = ?",
-            (new_kind, new_policy, new_notes, pair_id, profile["id"]),
+            (
+                new_kind,
+                new_policy,
+                new_notes,
+                new_fee_msat,
+                new_fee_kind,
+                pair_id,
+                profile["id"],
+            ),
         )
         invalidate_journals(conn, profile["id"])
         if commit:
@@ -4194,7 +4235,7 @@ def build_ledger_state(conn, profile):
     # on-chain rows so the engine suppresses them as non-events.
     channel_records = conn.execute(
         """
-        SELECT txid, tag
+        SELECT txid, tag, wallet_id, channel_id, amount_msat
         FROM lightning_node_records
         WHERE profile_id = ? AND record_type = 'channel'
         """,
@@ -4205,10 +4246,33 @@ def build_ledger_state(conn, profile):
         if not record["txid"]:
             continue
         if record["tag"] == "channel_close":
-            channel_rows.append({"closing_txid": record["txid"]})
+            channel_rows.append(
+                {
+                    "closing_txid": record["txid"],
+                    "wallet_id": record["wallet_id"],
+                    "channel_id": record["channel_id"],
+                    # Our settled channel balance at close (bkpr debit); the
+                    # gap vs the on-chain receipt books as the close fee.
+                    "close_balance_msat": record["amount_msat"],
+                }
+            )
         else:
-            channel_rows.append({"funding_txid": record["txid"]})
+            channel_rows.append(
+                {
+                    "funding_txid": record["txid"],
+                    "wallet_id": record["wallet_id"],
+                    "channel_id": record["channel_id"],
+                    # Our balance funded into the channel; a recorded outflow
+                    # clearly above it means the tx also paid someone external.
+                    "funding_amount_msat": record["amount_msat"],
+                }
+            )
     channel_roles = channel_lifecycle.channel_role_map(channel_rows, rows)
+    channel_transfer_pairs = channel_lifecycle.channel_transfer_pairs(
+        channel_rows,
+        rows,
+        wallet_refs_by_id,
+    )
     engine_state = tax_engine.build_ledger_state(
         TaxEngineLedgerInputs(
             rows=rows,
@@ -4218,6 +4282,7 @@ def build_ledger_state(conn, profile):
             owned_index=owned_index,
             loan_legs=loan_legs,
             channel_roles=channel_roles,
+            channel_transfer_pairs=channel_transfer_pairs,
         )
     )
     return {

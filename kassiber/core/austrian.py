@@ -21,6 +21,14 @@ from datetime import datetime
 from typing import Any, Literal, Mapping, Optional, Sequence
 from zoneinfo import ZoneInfo
 
+from .pair_allocation import (
+    allocate_fee_msat,
+    clamped_component_receipts_msat,
+    connected_pair_components,
+    is_component_member,
+    ordered_pair_component,
+)
+
 # Altvermögen / Neuvermögen cutoff per § 27b EStG. Acquisitions on or before
 # 2021-02-28 Europe/Vienna are Altvermögen; after that, Neuvermögen.
 # Matches `rp2.plugin.country.at.AT_NEU_CUTOFF` — if rp2 ever revises the
@@ -106,9 +114,15 @@ def _move_transfer_availability(
     neu_available_msat_by_key: dict[str, int],
     out_row: Mapping[str, Any],
     in_row: Mapping[str, Any],
-) -> Literal["alt", "neu"]:
-    """Move regime availability for a self-transfer and return the regime the
-    disposed network fee is drawn from.
+) -> tuple[Literal["alt", "neu"], dict[str, dict[str, int]]]:
+    """Move regime availability for a self-transfer.
+
+    Returns ``(fee_regime, flows)``: the regime the disposed network fee is
+    drawn from, plus the per-regime quantity flows —
+    ``flows["out"]`` = what left the source per regime (carried + fee slice),
+    ``flows["in"]`` = what the destination received per regime. Consumers
+    that classify whole MOVE quantities (tax-free balance hints) need the
+    split; the single fee regime is NOT representative of the carried coins.
 
     The MOVE itself is non-taxable, but its miner fee IS a disposal, so under the
     Austrian moving-average method it must be tagged with a regime — otherwise
@@ -125,8 +139,12 @@ def _move_transfer_availability(
     received_msat = int(_row_value(in_row, "amount") or 0)
 
     preferred_regime = infer_regime_from_timestamp(str(out_row["occurred_at"]))
+    empty_flows = {
+        "out": {REGIME_ALT: 0, REGIME_NEU: 0},
+        "in": {REGIME_ALT: 0, REGIME_NEU: 0},
+    }
     if sent_msat <= 0 or received_msat <= 0:
-        return preferred_regime
+        return preferred_regime, empty_flows
     if (
         preferred_regime == REGIME_NEU
         and alt_available_msat_by_key.get(from_key, 0) > 0
@@ -166,6 +184,7 @@ def _move_transfer_availability(
         if remaining_fee <= 0:
             break
 
+    carried_by_regime: dict[str, int] = {REGIME_ALT: 0, REGIME_NEU: 0}
     remaining_received = received_msat
     for regime in regime_order:
         carried = min(moved[regime], remaining_received)
@@ -177,20 +196,28 @@ def _move_transfer_availability(
             else alt_available_msat_by_key
         )
         bucket[to_key] += carried
+        carried_by_regime[regime] += carried
         remaining_received -= carried
         if remaining_received <= 0:
             break
 
+    flows = {
+        "out": {
+            regime: fee_by_regime[regime] + carried_by_regime[regime]
+            for regime in (REGIME_ALT, REGIME_NEU)
+        },
+        "in": dict(carried_by_regime),
+    }
     # The fee is the first taxable slice of `sent`; only the remaining moved
     # quantity is carried to the destination. Fall back to the first moved regime
     # (or the timestamp regime) for zero-fee / out-of-scope inventory cases.
     for regime in regime_order:
         if fee_by_regime[regime] > 0:
-            return regime
+            return regime, flows
     for regime in regime_order:
         if moved[regime] > 0:
-            return regime
-    return preferred_regime
+            return regime, flows
+    return preferred_regime, flows
 
 
 def _row_msat(row: Mapping[str, Any], key: str) -> int:
@@ -211,74 +238,29 @@ def _copy_row_with_amount(
     return copied
 
 
-def _allocate_fee_msat(total_fee_msat: int, bases: Sequence[int]) -> list[int]:
-    remaining = max(0, int(total_fee_msat))
-    allocated: list[int] = []
-    for base in bases:
-        if remaining <= 0:
-            allocated.append(0)
-            continue
-        portion = min(max(0, int(base)), remaining)
-        allocated.append(portion)
-        remaining -= portion
-    if remaining and allocated:
-        allocated[-1] += remaining
-    return allocated
 
-
-def _ordered_pair_component(
-    component: Sequence[Mapping[str, Mapping[str, Any]]],
-) -> list[Mapping[str, Mapping[str, Any]]]:
-    return sorted(
-        component,
-        key=lambda pair: (
-            str(_row_value(pair["out"], "occurred_at") or ""),
-            str(_row_value(pair["in"], "occurred_at") or ""),
-            str(pair["out"]["id"]),
-            str(pair["in"]["id"]),
-        ),
-    )
 
 
 def _intra_pair_components(
     intra_pairs: Sequence[Mapping[str, Mapping[str, Any]]],
 ) -> list[list[Mapping[str, Mapping[str, Any]]]]:
-    candidates: list[Mapping[str, Mapping[str, Any]]] = []
-    row_to_indexes: dict[str, list[int]] = defaultdict(list)
-    for pair in intra_pairs:
+    def _leg_ids(pair):
         out_row = pair.get("out") if hasattr(pair, "get") else None
         in_row = pair.get("in") if hasattr(pair, "get") else None
         if out_row is None or in_row is None:
-            continue
-        index = len(candidates)
-        candidates.append(pair)
-        row_to_indexes[str(out_row["id"])].append(index)
-        row_to_indexes[str(in_row["id"])].append(index)
+            return None
+        return (out_row["id"], in_row["id"])
 
-    components: list[list[Mapping[str, Mapping[str, Any]]]] = []
-    seen: set[int] = set()
-    for start in range(len(candidates)):
-        if start in seen:
-            continue
-        queue: deque[int] = deque([start])
-        indexes: list[int] = []
-        seen.add(start)
-        while queue:
-            index = queue.popleft()
-            indexes.append(index)
-            pair = candidates[index]
-            for row_id in (str(pair["out"]["id"]), str(pair["in"]["id"])):
-                for linked_index in row_to_indexes.get(row_id, ()):
-                    if linked_index in seen:
-                        continue
-                    seen.add(linked_index)
-                    queue.append(linked_index)
-        components.append([candidates[index] for index in indexes])
-    return components
-
+    # Match booking's multi-pair component boundary exactly. Derived pairs are
+    # booked through their own group path; folding them into reviewed manual
+    # components here would allocate fees over a different pair set.
+    return connected_pair_components(
+        intra_pairs, _leg_ids, membership=is_component_member
+    )
 
 def _transfer_actions_for_intra_pairs(
     intra_pairs: Optional[Sequence[Mapping[str, Mapping[str, Any]]]],
+    row_ids: Optional[set[str]] = None,
 ) -> tuple[
     dict[str, list[tuple[Mapping[str, Any], Mapping[str, Any], str]]],
     set[str],
@@ -289,7 +271,7 @@ def _transfer_actions_for_intra_pairs(
     transfer_row_ids: set[str] = set()
 
     for component in _intra_pair_components(intra_pairs or ()):
-        ordered_pairs = _ordered_pair_component(component)
+        ordered_pairs = ordered_pair_component(component)
         out_rows_by_id = {
             str(pair["out"]["id"]): pair["out"] for pair in ordered_pairs
         }
@@ -299,6 +281,7 @@ def _transfer_actions_for_intra_pairs(
         group_row_ids = set(out_rows_by_id) | set(in_rows_by_id)
         transfer_row_ids.update(group_row_ids)
 
+        trigger_by_out_id = all(row_id in (row_ids or set()) for row_id in out_rows_by_id)
         if len(out_rows_by_id) > 1 and len(in_rows_by_id) > 1:
             # The tax normalizer quarantines these as ambiguous; inference must
             # not also treat their legs as ordinary acquisitions/disposals.
@@ -308,7 +291,19 @@ def _transfer_actions_for_intra_pairs(
             _row_msat(row, "amount") + _row_msat(row, "fee")
             for row in out_rows_by_id.values()
         )
-        total_received_msat = sum(_row_msat(row, "amount") for row in in_rows_by_id.values())
+        received_amounts_by_in_id = {
+            row_id: _row_msat(row, "amount")
+            for row_id, row in in_rows_by_id.items()
+        }
+        adjusted_received_by_in_id = dict(
+            zip(
+                received_amounts_by_in_id,
+                clamped_component_receipts_msat(
+                    total_sent_msat, list(received_amounts_by_in_id.values())
+                ),
+            )
+        )
+        total_received_msat = sum(adjusted_received_by_in_id.values())
         if total_sent_msat < total_received_msat:
             # The normalizer will quarantine transfer_mismatch. Do not poison
             # wallet availability by crediting any side as a normal row.
@@ -316,19 +311,24 @@ def _transfer_actions_for_intra_pairs(
 
         fee_msat = total_sent_msat - total_received_msat
         if len(out_rows_by_id) == 1:
-            fee_allocations = _allocate_fee_msat(
-                fee_msat, [_row_msat(pair["in"], "amount") for pair in ordered_pairs]
+            fee_allocations = allocate_fee_msat(
+                fee_msat,
+                [
+                    adjusted_received_by_in_id[str(pair["in"]["id"])]
+                    for pair in ordered_pairs
+                ],
             )
             for pair, fee_allocation in zip(ordered_pairs, fee_allocations):
                 out_row = pair["out"]
                 in_row = pair["in"]
-                received_msat = _row_msat(in_row, "amount")
+                received_msat = adjusted_received_by_in_id[str(in_row["id"])]
                 action_out = _copy_row_with_amount(
                     out_row,
                     amount_msat=received_msat,
                     fee_msat=fee_allocation,
                 )
-                actions_by_trigger_id[str(out_row["id"])].append(
+                trigger_id = str(out_row["id"]) if trigger_by_out_id else str(in_row["id"])
+                actions_by_trigger_id[trigger_id].append(
                     (action_out, in_row, str(out_row["id"]))
                 )
             continue
@@ -337,7 +337,7 @@ def _transfer_actions_for_intra_pairs(
             _row_msat(pair["out"], "amount") + _row_msat(pair["out"], "fee")
             for pair in ordered_pairs
         ]
-        fee_allocations = _allocate_fee_msat(fee_msat, sent_amounts)
+        fee_allocations = allocate_fee_msat(fee_msat, sent_amounts)
         for pair, sent_msat, fee_allocation in zip(
             ordered_pairs, sent_amounts, fee_allocations
         ):
@@ -347,7 +347,8 @@ def _transfer_actions_for_intra_pairs(
             out_row = pair["out"]
             in_row = pair["in"]
             action_in = _copy_row_with_amount(in_row, amount_msat=received_msat)
-            actions_by_trigger_id[str(out_row["id"])].append(
+            trigger_id = str(out_row["id"]) if trigger_by_out_id else str(in_row["id"])
+            actions_by_trigger_id[trigger_id].append(
                 (out_row, action_in, str(out_row["id"]))
             )
 
@@ -357,6 +358,8 @@ def _transfer_actions_for_intra_pairs(
 def infer_outbound_regimes(
     rows: Sequence[Mapping[str, Any]],
     intra_pairs: Optional[Sequence[Mapping[str, Mapping[str, Any]]]] = None,
+    transfer_flows: Optional[dict[tuple[str, str], dict[str, dict[str, int]]]] = None,
+    election_row_ids: Optional[set[str]] = None,
 ) -> dict[str, Literal["alt", "neu"]]:
     """Infer Austrian disposal regimes from the rows seen so far.
 
@@ -367,12 +370,22 @@ def infer_outbound_regimes(
     and explicit same-asset internal transfers move availability between wallets.
     The result is a best-effort per-row map that callers can reuse both for
     normal outbound events and for cross-asset swap classification.
+
+    When the disposing wallet holds BOTH Alt and Neu inventory, picking Neu is
+    not forced by the holdings — it is Kassiber exercising the taxpayer's
+    KryptowährungsVO designation right (Wahlrecht) on their behalf (the
+    statutory presumption absent a designation would be earliest-acquired
+    first). Such row ids are added to ``election_row_ids`` (when provided) so
+    the journal can record the choice instead of leaving it silent.
     """
 
     alt_available_msat_by_key: dict[str, int] = defaultdict(int)
     neu_available_msat_by_key: dict[str, int] = defaultdict(int)
     regimes_by_row_id: dict[str, Literal["alt", "neu"]] = {}
-    transfer_actions_by_row_id, transfer_row_ids = _transfer_actions_for_intra_pairs(intra_pairs)
+    row_ids = {str(row["id"]) for row in rows}
+    transfer_actions_by_row_id, transfer_row_ids = _transfer_actions_for_intra_pairs(
+        intra_pairs, row_ids
+    )
 
     for row in rows:
         row_id = str(row["id"])
@@ -384,7 +397,7 @@ def infer_outbound_regimes(
             # land. Multi-pair groups are sliced here the same way the tax
             # normalizer later emits their transfer rows.
             for out_row, in_row, regime_row_id in transfer_actions:
-                fee_regime = _move_transfer_availability(
+                fee_regime, flows = _move_transfer_availability(
                     alt_available_msat_by_key,
                     neu_available_msat_by_key,
                     out_row,
@@ -394,6 +407,13 @@ def infer_outbound_regimes(
                 # disposal carries a regime; without it rp2's AT moving-average
                 # aborts the whole asset on "Ambiguous Austrian disposal".
                 regimes_by_row_id.setdefault(regime_row_id, fee_regime)
+                if transfer_flows is not None:
+                    # Per-leg regime flows so downstream consumers (tax-free
+                    # balance hints) classify the moved QUANTITIES, not the
+                    # whole MOVE by the fee's single regime.
+                    transfer_flows[
+                        (str(out_row["id"]), str(in_row["id"]))
+                    ] = flows
             continue
         if row_id in transfer_row_ids:
             continue
@@ -413,12 +433,13 @@ def infer_outbound_regimes(
             continue
 
         regime = infer_regime_from_timestamp(str(row["occurred_at"]))
-        if (
-            regime == REGIME_NEU
-            and alt_available_msat_by_key.get(availability_key, 0) > 0
-            and neu_available_msat_by_key.get(availability_key, 0) <= 0
-        ):
-            regime = REGIME_ALT
+        if regime == REGIME_NEU and alt_available_msat_by_key.get(availability_key, 0) > 0:
+            if neu_available_msat_by_key.get(availability_key, 0) <= 0:
+                regime = REGIME_ALT
+            elif election_row_ids is not None:
+                # Both regimes are available in the disposing wallet: Neu-first
+                # is an exercised designation, not a forced outcome.
+                election_row_ids.add(str(row["id"]))
         regimes_by_row_id[str(row["id"])] = regime
 
         needed_msat = amount_msat + fee_msat
