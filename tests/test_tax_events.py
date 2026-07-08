@@ -1715,6 +1715,9 @@ class AustrianSelfTransferRegimeTest(unittest.TestCase):
         )
         self.assertEqual(len(inputs.transfers), 1)
         self.assertIn(inputs.transfers[0].at_regime, ("alt", "neu"))
+        # The legs carry per-regime quantity flows, so the tax-free hint can
+        # classify moved QUANTITIES instead of the fee's single regime.
+        self.assertIsNotNone(inputs.transfers[0].regime_flows)
 
     def test_samourai_internal_transfer_carries_alt_availability_to_destination(self):
         def _cfg(section):

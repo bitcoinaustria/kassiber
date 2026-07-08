@@ -534,9 +534,13 @@ def _collect_samourai_internal_transfers(
     is_at: bool,
     quarantines: list[dict[str, Any]],
     outbound_regimes: Optional[Mapping[str, AtRegime]] = None,
+    transfer_regime_flows: Optional[
+        Mapping[tuple[str, str], dict[str, dict[str, int]]]
+    ] = None,
 ) -> dict[str, list[NormalizedTaxTransfer]]:
     collected: dict[str, list[NormalizedTaxTransfer]] = {}
     regime_by_row = outbound_regimes or {}
+    flows_by_leg = transfer_regime_flows or {}
 
     def _samourai_fee_regime(out_row: Mapping[str, Any]) -> Optional[AtRegime]:
         # The Whirlpool privacy MOVE's miner fee is a taxable disposal; under AT
@@ -685,6 +689,9 @@ def _collect_samourai_internal_transfers(
                     in_row=in_row,
                     at_pool=resolve_pool_id(from_wallet["id"]) if is_at else None,
                     at_regime=_samourai_fee_regime(first_out),
+                    regime_flows=flows_by_leg.get(
+                        (str(first_out["id"]), str(in_row["id"]))
+                    ),
                     transfer_id=f"{first_out['id']}::{in_row['id']}",
                     group_id=group_id,
                 )
@@ -717,6 +724,9 @@ def _collect_samourai_internal_transfers(
                 in_row=first_in,
                 at_pool=resolve_pool_id(from_wallet["id"]) if is_at else None,
                 at_regime=_samourai_fee_regime(first_out),
+                regime_flows=flows_by_leg.get(
+                    (str(first_out["id"]), str(first_in["id"]))
+                ),
             )
         ]
     return collected
@@ -1394,6 +1404,7 @@ def normalize_tax_asset_inputs(
         is_at,
         quarantines,
         outbound_regimes,
+        transfer_regime_flows,
     )
 
     pair_refs_by_row: dict[str, list[tuple[str, Mapping[str, Any]]]] = {}
