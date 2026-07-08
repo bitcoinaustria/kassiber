@@ -273,13 +273,16 @@ the report's Transactions sheet, so a user can verify each row by hand:
   into it), `fmv` (market value of the amount: amount × price when a price is
   recorded, else the recorded value) and `fiat_fee` (the crypto network fee at
   that price; a fiat service fee shows as the `fiat_value` − `fmv` difference);
-- `cost_basis` and `gain_loss` from the processed journal — blank for rows with
-  no realized figure (e.g. a plain acquisition) and blank export-wide while
-  journals are unprocessed or stale, so outdated figures are never presented as
-  current;
-- `transfer` — for a hop between the user's own wallets, the counterparty wallet
-  label (empty for external sends/receipts), so internal transfers are visible
-  and sortable;
+- `cost_basis` and `gain_loss` — the realized figures from the processed
+  journal, restricted to the same disposal/income rows as the capital-gains
+  report so each row reconciles against the Capital Detail sheet. Blank for
+  rows with no realized figure (e.g. a plain acquisition, or a network-fee
+  basis reduction) and blank export-wide while journals are unprocessed or
+  stale, so outdated figures are never presented as current;
+- `transfer` — for a hop between the user's own wallets, the counterparty
+  wallet label (empty for external sends/receipts). With current journals the
+  label follows what the engine actually booked as a transfer (plus reviewed
+  carrying-value swap pairs); taxable-policy swap pairs are never labeled;
 - description, note, counterparty, tags, `references` (attachment URLs), and the
   linked-file/URL Attachments column (single URLs render as clickable links).
 

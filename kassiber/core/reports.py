@@ -2566,14 +2566,23 @@ def _transaction_journal_values(conn, profile, wallet=None):
     value is ``None`` when no journal entry for that transaction carries the
     figure (e.g. a plain acquisition has no realized basis or gain yet), so the
     export leaves those cells blank rather than showing a misleading ``0``.
-    Stale journals (never processed, or invalidated by later edits/imports)
-    return an empty map: exporting the leftover ``journal_entries`` rows would
-    present outdated figures as current, so the columns stay blank until the
-    user reprocesses.
+    The caller must gate on ``_journals_current``: stale journals (never
+    processed, or invalidated by later edits/imports) still have leftover
+    ``journal_entries`` rows, and exporting those would present outdated
+    figures as current.
+
+    Only realized tax rows count, with the same filters as
+    ``report_capital_gains``: ``fee`` / ``transfer_fee`` entries carry a basis
+    reduction with proceeds set equal to it and zero gain, so summing them
+    would inflate ``cost_basis`` without moving ``gain_loss`` and the row
+    would no longer reconcile against the Capital Detail sheet.
     """
-    if not _journals_current(conn, profile["id"]):
-        return {}
-    filters = ["je.profile_id = ?"]
+    filters = [
+        "je.profile_id = ?",
+        "je.entry_type IN ('disposal', 'income')",
+        "COALESCE(t.taxability_override, 1) != 0",
+        "COALESCE(je.at_category, '') != 'neu_swap'",
+    ]
     params: list[Any] = [profile["id"]]
     if wallet:
         filters.append("je.wallet_id = ?")
@@ -2588,6 +2597,7 @@ def _transaction_journal_values(conn, profile, wallet=None):
             SUM(CASE WHEN je.cost_basis IS NOT NULL THEN 1 ELSE 0 END) AS basis_entries,
             SUM(CASE WHEN je.gain_loss IS NOT NULL THEN 1 ELSE 0 END) AS gain_entries
         FROM journal_entries je
+        LEFT JOIN transactions t ON t.id = je.transaction_id
         WHERE {where}
         GROUP BY je.transaction_id
         """,
@@ -2602,7 +2612,7 @@ def _transaction_journal_values(conn, profile, wallet=None):
     return values
 
 
-def _self_transfer_legs_by_transaction(conn, profile):
+def _self_transfer_legs_by_transaction(conn, profile, journals_current=False):
     """Map each transaction that is one leg of a transfer between the user's own
     wallets to the counterparty wallet label.
 
@@ -2611,9 +2621,15 @@ def _self_transfer_legs_by_transaction(conn, profile):
     cannot drift from what the engine treats as an internal transfer. Detection
     spans the whole profile (a transfer is two wallets), so this always loads the
     full profile row set even when the export is wallet-scoped; the caller only
-    surfaces the column for the transactions it renders. Advanced
-    ownership-derived / consolidation transfers that only exist as journal legs
-    are not reconstructed here.
+    surfaces the column for the transactions it renders.
+
+    With current journals the engine's bookings are authoritative: same-asset
+    labels are kept only for transactions that actually carry transfer journal
+    entries, so pairs the engine withheld (e.g. a same-txid change output on a
+    payment whose graph also pays a non-owned recipient) are not overstated as
+    MOVEs. Without processed journals the detection result stands alone as a
+    best-effort label. Advanced ownership-derived / consolidation transfers that
+    only exist as journal legs are not reconstructed here.
     """
     rows = conn.execute(
         """
@@ -2681,11 +2697,19 @@ def _self_transfer_legs_by_transaction(conn, profile):
 
     for pair in same_asset_pairs:
         _record(pair["out"], pair["in"])
+    # Only carrying-value cross-asset pairs are reviewed as own-wallet moves;
+    # `--policy taxable` pairs stay SELL + BUY in the engine and must not be
+    # labeled as internal transfers.
+    carrying_cross_asset_ids = set()
     for pair in cross_asset_pairs:
+        if pair.get("policy") != "carrying-value":
+            continue
         out_row = rows_by_id.get(pair["out_id"])
         in_row = rows_by_id.get(pair["in_id"])
         if out_row is not None and in_row is not None:
             _record(out_row, in_row)
+            carrying_cross_asset_ids.add(out_row["id"])
+            carrying_cross_asset_ids.add(in_row["id"])
     # A partial cross-asset pair (split swap: part swapped, part change back to
     # an owned wallet) suppresses the same-txid auto pair in apply_manual_pairs,
     # but the engine splits the source row so the change leg stays a
@@ -2696,6 +2720,25 @@ def _self_transfer_legs_by_transaction(conn, profile):
             if leg["id"] in legs or leg["id"] in manual_leg_ids:
                 continue
             legs[leg["id"]] = other["wallet_label"]
+    if journals_current:
+        # The processed journal is authoritative for same-asset moves: keep a
+        # label only where the engine actually booked transfer entries (the
+        # withheld-pair / partial-payment cases have none). Carrying-value
+        # cross-asset pairs never book transfer entries — they carry through
+        # the swap path — so the reviewed pair keeps its label.
+        booked_ids = {
+            row["transaction_id"]
+            for row in conn.execute(
+                "SELECT DISTINCT transaction_id FROM journal_entries "
+                "WHERE profile_id = ? AND entry_type IN ('transfer_out', 'transfer_in')",
+                (profile["id"],),
+            ).fetchall()
+        }
+        legs = {
+            tx_id: label
+            for tx_id, label in legs.items()
+            if tx_id in booked_ids or tx_id in carrying_cross_asset_ids
+        }
     return legs
 
 
@@ -2877,8 +2920,13 @@ def _report_query_rows(conn, profile, wallet=None):
     ).fetchall()
     tags_by_tx = _tags_by_transaction(conn, tx_where, tx_params)
     attachments_by_tx = _attachment_entries_by_transaction(conn, tx_where, tx_params)
-    journal_values = _transaction_journal_values(conn, profile, wallet=wallet)
-    transfer_legs = _self_transfer_legs_by_transaction(conn, profile)
+    journals_current = _journals_current(conn, profile["id"])
+    journal_values = (
+        _transaction_journal_values(conn, profile, wallet=wallet) if journals_current else {}
+    )
+    transfer_legs = _self_transfer_legs_by_transaction(
+        conn, profile, journals_current=journals_current
+    )
     transactions = []
     for row in transaction_rows:
         entries = attachments_by_tx.get(row["row_id"], [])
