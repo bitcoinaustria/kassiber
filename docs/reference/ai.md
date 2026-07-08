@@ -2,7 +2,7 @@
 
 Kassiber has three AI-related layers:
 
-- a repo-local skill bundle for AI coding and terminal assistants
+- an external Agent Skill for AI coding and terminal assistants
 - the in-app assistant that ships with the desktop UI (and a CLI surface that
   reuses the same provider config)
 - planned in-product AI help for OCR, extraction, and reconciliation workflows
@@ -13,15 +13,15 @@ These are related, but they are not the same thing.
 
 Two surfaces ship today:
 
-- The repo-local Kassiber skill in
-  [`../../skills/kassiber/`](../../skills/kassiber/) for AI coding and terminal
-  assistants.
+- The Kassiber CLI Agent Skill at
+  [bitcoinaustria/kassiber-skill](https://github.com/bitcoinaustria/kassiber-skill) for AI
+  coding and terminal assistants.
 - An **in-app assistant** in the desktop UI that streams chat from an
   OpenAI-compatible endpoint or fixed Claude/Codex CLI adapter, plus a
   parallel CLI surface (`kassiber chat`, `kassiber ai providers …`,
   `kassiber ai models`) that reuses the same provider config.
 
-The repo-local skill helps an AI assistant use the Kassiber CLI safely and
+The external skill helps an AI assistant use the Kassiber CLI safely and
 correctly for:
 
 - onboarding and context checks
@@ -399,8 +399,7 @@ Bounded edit-history reads are available only through the safe
 `ui.transactions.history` and `ui.activity.history` daemon tools; the assistant
 does not get raw SQLite or CLI access.
 
-The in-app prompt is a digest, not a full dump of
-`skills/kassiber/SKILL.md`. It teaches the model the local-first accounting
+The in-app prompt is a digest, not a full Agent Skill dump. It teaches the model the local-first accounting
 role, the normal workflow order, the journal reprocessing rule, and the
 boundary between read-only information and mutating actions. The assistant is
 skill-aware, but it is not shell-powered or CLI-powered: there is no raw command
@@ -549,7 +548,8 @@ quarantine, or run reports. It only advises; it does not execute those actions.
 `read_skill_reference` is a virtual tool. `read_skill_reference("index")`
 returns a compact routing document derived from the Kassiber skill concepts and
 points the model to deeper allowlisted references. The deeper references are
-restricted to files under `skills/kassiber/references/`: `command-templates`,
+restricted to packaged files under `kassiber/ai/skill_references/`:
+`command-templates`,
 `journal-processing`, `metadata`, `onboarding`, `reports`,
 `secrets-and-backup`, `swap-matching`, `troubleshooting`, `verification`, and
 `wallets-backends`.
@@ -655,6 +655,6 @@ These are directionally in scope, but should remain optional and review-gated:
 
 ## Related files
 
-- [`../../skills/kassiber/SKILL.md`](../../skills/kassiber/SKILL.md)
+- [Kassiber CLI Agent Skill](https://github.com/bitcoinaustria/kassiber-skill)
 - [`../plan/08-external-document-reconciliation.md`](../plan/08-external-document-reconciliation.md)
 - [`../../SECURITY.md`](../../SECURITY.md)

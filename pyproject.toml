@@ -36,6 +36,7 @@ include = ["kassiber*"]
 
 [tool.setuptools.package-data]
 kassiber = [
+  "ai/skill_references/*.md",
   "data/rates/kraken/btc_daily/*.csv",
   "data/rates/kraken/btc_daily/README.md",
   "data/rates/kraken/btc_hourly/*.csv",

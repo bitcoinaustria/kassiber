@@ -4,7 +4,7 @@ This supplements the root `AGENTS.md` with Codex-specific workflow guidance.
 
 ## Default posture
 
-- Prefer the repo-local kassiber skill surface under `skills/kassiber/` before generic habits.
+- Prefer the Kassiber CLI Agent Skill from `bitcoinaustria/kassiber-skill` when it is installed; this repository does not carry the general skill bundle.
 - For non-trivial changes, gather evidence first, then restate the requirement, risks, and steps before editing.
 - Run `./scripts/quality-gate.sh` before calling work push-ready.
 - Review diffs as a separate pass after implementation.
@@ -21,7 +21,7 @@ This supplements the root `AGENTS.md` with Codex-specific workflow guidance.
 2. tax and reporting correctness
 3. security/privacy disclosure changes
 4. missing test coverage for changed behavior
-5. README / AGENTS / TODO / skill reference drift
+5. README / AGENTS / TODO / AI reference drift
 
 ## What not to do
 

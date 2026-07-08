@@ -441,7 +441,7 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
   terminal chat envelope reports `finish_reason: "cancelled"`.
 - [x] AI read-only tool use (PR 3): expose typed safe daemon snapshots as the
   assistant's tool surface, seed the system prompt from compact
-  `skills/kassiber/` guidance, add tool cards, and start with a bounded
+  Kassiber skill guidance, add tool cards, and start with a bounded
   read-only-by-default tool loop.
 - [x] AI mutating tool consent (PR 4): require explicit per-call/session
   approval before executing mutating tools such as source refresh.
@@ -877,7 +877,8 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
   equivalent remember-me affordances for Windows/Linux where the platform
   policy can support them. These remain convenience over the SQLCipher
   passphrase, never a cryptographic substitute.
-- [x] Kassiber skill bundle for agents (`skills/kassiber`)
+- [x] Kassiber skill bundle for agents (moved to
+  https://github.com/bitcoinaustria/kassiber-skill)
 - [ ] Optional server/REST mode, still local-first and opt-in
 
 ## Open bugs and debt
@@ -1153,8 +1154,9 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
 - [ ] Keep the machine envelope boundary centralized and explicit
 - [ ] Keep docs and examples Bitcoin-only
 - [ ] Add a narrow docs-drift check for shared command / verification /
-  safe-to-record surfaces so `README.md`, `AGENTS.md`, `SECURITY.md`, and
-  `skills/kassiber/` do not quietly diverge
+  safe-to-record surfaces so `README.md`, `AGENTS.md`, `SECURITY.md`, the
+  in-app AI references, and the external Kassiber Agent Skill do not quietly
+  diverge
 - [x] Run Vitest from `scripts/quality-gate.sh`; CI installs
   `ui-tauri/node_modules` with `pnpm --dir ui-tauri install --frozen-lockfile`
   before running the gate, and the gate fails clearly if dependencies are

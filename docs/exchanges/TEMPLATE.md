@@ -1,8 +1,8 @@
 # Exchange spec: <Display Name>
 
 > Copy this file to `docs/exchanges/<slug>.md` and fill every section before
-> any importer code is written. Driven by the intake interview in
-> [skills/kassiber/references/add-exchange.md](../../skills/kassiber/references/add-exchange.md).
+> any importer code is written. Use the worked exchange specs in this directory
+> and the closest existing importer as references.
 > See [strike.md](strike.md) for a filled worked example. Keep secrets and
 > personal data out of this file.
 

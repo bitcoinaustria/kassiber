@@ -1862,7 +1862,7 @@ for SQLCipher, passphrase/fd handling, credential migration, and backups.
 
 
 def skill_reference_root() -> Path:
-    return Path(__file__).resolve().parents[2] / "skills" / "kassiber" / "references"
+    return Path(__file__).resolve().parent / "skill_references"
 
 
 def skill_reference_roots(*, root: Path | None = None) -> list[Path]:
@@ -1870,10 +1870,10 @@ def skill_reference_roots(*, root: Path | None = None) -> list[Path]:
     if root is not None:
         roots.append(root)
     roots.append(skill_reference_root())
-    roots.append(Path.cwd() / "skills" / "kassiber" / "references")
+    roots.append(Path.cwd() / "kassiber" / "ai" / "skill_references")
     bundle_root = getattr(sys, "_MEIPASS", None)
     if bundle_root:
-        roots.append(Path(bundle_root) / "skills" / "kassiber" / "references")
+        roots.append(Path(bundle_root) / "kassiber" / "ai" / "skill_references")
 
     unique: list[Path] = []
     seen: set[Path] = set()

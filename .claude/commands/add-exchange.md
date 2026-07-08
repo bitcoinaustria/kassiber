@@ -2,9 +2,9 @@
 description: Add support for a new exchange / broker / custodial platform — guided intake interview, then implementation.
 ---
 
-Onboard a new exchange into Kassiber by following the playbook in
-[skills/kassiber/references/add-exchange.md](../../skills/kassiber/references/add-exchange.md).
-Read that file first; it is the source of truth for both halves of this flow.
+Onboard a new exchange into Kassiber by filling
+`docs/exchanges/TEMPLATE.md`, comparing against existing specs, and then
+implementing the fixed importer touchpoints in the source tree.
 
 Steps:
 

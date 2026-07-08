@@ -11,10 +11,9 @@ record of how that provider's rows are interpreted.
 - **Implemented specs:** [binance.md](binance.md),
   [coinbase.md](coinbase.md), [kraken.md](kraken.md), and
   [ledger-live.md](ledger-live.md).
-- **How to add one:** run the intake interview in
-  [skills/kassiber/references/add-exchange.md](../../skills/kassiber/references/add-exchange.md)
-  (or invoke the `/add-exchange` command), which fills a copy of the template at
-  `docs/exchanges/<slug>.md`.
+- **How to add one:** copy [TEMPLATE.md](TEMPLATE.md) to
+  `docs/exchanges/<slug>.md`, fill the intake sections, and use the closest
+  implemented importer as the code reference.
 - **Implemented importers** and their CLI/behavior live in
   [docs/reference/imports.md](../reference/imports.md).
 

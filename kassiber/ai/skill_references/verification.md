@@ -27,7 +27,7 @@ This skill bundles a verification helper:
 Requirements:
 
 - `jq` must be installed
-- if `kassiber` is not on `PATH`, the Kassiber repo needs to be available relative to the skill bundle so the script can resolve the repo root and run `uv`
+- if `kassiber` is not on `PATH`, run this from a Kassiber repo checkout or set `KASSIBER_REPO` so helper scripts can resolve the repo root and run `uv`
 
 It checks:
 
