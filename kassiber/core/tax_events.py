@@ -1275,30 +1275,27 @@ def normalize_tax_asset_inputs(
     # modeled — quarantine the union for explicit review instead.
     samourai_manual_conflict_row_ids: set[str] = set()
     if intra_pairs and samourai_internal_groups:
-        component_id_sets = [
-            {
-                str(pair[side]["id"])
-                for pair in component
-                for side in ("out", "in")
-            }
-            for component in _manual_multi_pair_components(intra_pairs)
+        # A pair with exactly ONE leg inside a tracked Samourai group claims
+        # part of the same outflow the splitter decomposes: booking both would
+        # dispose the outbound twice (or vanish the outside receipt). A pair
+        # with BOTH legs inside is harmless — its rows are consumed by the
+        # splitter before pair booking can reach them — so it must not
+        # quarantine the common single-output case.
+        pair_leg_ids = [
+            (str(pair["out"]["id"]), str(pair["in"]["id"])) for pair in intra_pairs
         ]
-        if component_id_sets:
-            kept_groups = []
-            for group in samourai_internal_groups:
-                group_ids = {str(_row_get(row, "id")) for row, _ in group}
-                overlapping = [
-                    component_ids
-                    for component_ids in component_id_sets
-                    if component_ids & group_ids
-                ]
-                if overlapping:
-                    samourai_manual_conflict_row_ids |= group_ids
-                    for component_ids in overlapping:
-                        samourai_manual_conflict_row_ids |= component_ids
-                else:
-                    kept_groups.append(group)
-            samourai_internal_groups = kept_groups
+        kept_groups = []
+        for group in samourai_internal_groups:
+            group_ids = {str(_row_get(row, "id")) for row, _ in group}
+            conflict_ids: set[str] = set()
+            for out_id, in_id in pair_leg_ids:
+                if (out_id in group_ids) != (in_id in group_ids):
+                    conflict_ids |= {out_id, in_id}
+            if conflict_ids:
+                samourai_manual_conflict_row_ids |= group_ids | conflict_ids
+            else:
+                kept_groups.append(group)
+        samourai_internal_groups = kept_groups
         if samourai_manual_conflict_row_ids:
             intra_pairs = [
                 pair

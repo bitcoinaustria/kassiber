@@ -515,6 +515,105 @@ class NormalizeTaxAssetInputsTest(unittest.TestCase):
         self.assertGreater(by_in["in-early"].fee, 0)
         self.assertEqual(by_in["in-late"].fee, 0)
 
+    def test_single_manual_pair_colliding_with_samourai_group_quarantines(self):
+        # A SINGLE manual pair whose out row belongs to a tracked Samourai
+        # group (in row outside it) claims the same outflow the splitter
+        # books — previously it slipped past the multi-pair-only conflict
+        # detection and the outbound was disposed twice.
+        def _cfg(section):
+            return json.dumps(
+                {"samourai": {"role": "child", "group_id": "wp", "section": section}}
+            )
+
+        out_row = _row(
+            "wp-out",
+            "wallet-a",
+            "outbound",
+            100_000_000_000,
+            fee=100_000,
+            fiat_rate=65_000,
+            external_id="wptx",
+        )
+        out_row["config_json"] = _cfg("deposit")
+        tracked_child = _row(
+            "wp-premix",
+            "wallet-b",
+            "inbound",
+            20_000_000_000,
+            external_id="wptx",
+        )
+        tracked_child["config_json"] = _cfg("premix")
+        outside_receipt = _row(
+            "manual-in",
+            "wallet-b",
+            "inbound",
+            79_899_900_000,
+            external_id="manual-outside",
+        )
+        inputs = normalize_tax_asset_inputs(
+            self.profile,
+            "BTC",
+            [out_row, tracked_child, outside_receipt],
+            self.wallet_refs_by_id,
+            [
+                {
+                    "out": out_row,
+                    "in": outside_receipt,
+                    "pair_id": "pair-1",
+                    "source": "manual",
+                }
+            ],
+        )
+        self.assertEqual(inputs.events, [])
+        self.assertEqual(inputs.transfers, [])
+        reasons = {q["transaction_id"]: q["reason"] for q in inputs.quarantines}
+        for tx_id in ("wp-out", "wp-premix", "manual-in"):
+            self.assertEqual(reasons.get(tx_id), "manual_multi_pair_ambiguous", tx_id)
+
+    def test_pair_fully_inside_samourai_group_does_not_quarantine(self):
+        # Both legs inside the group: the splitter books the group once and
+        # the redundant pair never reaches booking — no conflict, no
+        # quarantine (the common single-output whirlpool case).
+        def _cfg(section):
+            return json.dumps(
+                {"samourai": {"role": "child", "group_id": "wp", "section": section}}
+            )
+
+        out_row = _row(
+            "wp-out",
+            "wallet-a",
+            "outbound",
+            100_000_000_000,
+            fee=100_000,
+            fiat_rate=65_000,
+            external_id="wptx",
+        )
+        out_row["config_json"] = _cfg("deposit")
+        tracked_child = _row(
+            "wp-premix",
+            "wallet-b",
+            "inbound",
+            99_899_900_000,
+            external_id="wptx",
+        )
+        tracked_child["config_json"] = _cfg("premix")
+        inputs = normalize_tax_asset_inputs(
+            self.profile,
+            "BTC",
+            [out_row, tracked_child],
+            self.wallet_refs_by_id,
+            [
+                {
+                    "out": out_row,
+                    "in": tracked_child,
+                    "pair_id": "pair-1",
+                    "source": "manual",
+                }
+            ],
+        )
+        self.assertEqual(inputs.quarantines, [])
+        self.assertEqual(len(inputs.transfers), 1)
+
     def test_manual_many_to_one_pairs_group_and_allocate_destination_once(self):
         out_one = _row(
             "premix-out-1",
