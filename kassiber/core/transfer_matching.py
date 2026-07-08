@@ -547,12 +547,6 @@ def _deterministic_self_transfer_ids(
         out_row, in_row = outs[0], ins[0]
         if _record_get(out_row, "wallet_id") == _record_get(in_row, "wallet_id"):
             continue
-        out_amount = int(_record_get(out_row, "amount") or 0)
-        in_amount = int(_record_get(in_row, "amount") or 0)
-        if out_amount - in_amount > fee_threshold_msat(
-            out_amount, fee_pct_max, fee_sats_min
-        ):
-            continue
         deterministic_ids.add(_record_get(out_row, "id"))
         deterministic_ids.add(_record_get(in_row, "id"))
     return deterministic_ids

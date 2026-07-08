@@ -982,6 +982,32 @@ class ExcludedRowsTests(unittest.TestCase):
         self.assertEqual(suggest_swap_candidates([out, inbound], tax_country="at"), [])
 
 
+class LightningPaymentHashSuppressionTests(unittest.TestCase):
+    def test_node_sourced_payment_hash_suppressed_even_with_large_route_fee(self):
+        out = _row(
+            id="ln-out",
+            wallet_id="node-a",
+            wallet_kind="lnd",
+            kind="lnd_payment",
+            payment_hash=_PAY_HASH,
+            payment_hash_source="lnd",
+            direction="outbound",
+            amount=100_000_000,
+        )
+        inbound = _row(
+            id="ln-in",
+            wallet_id="node-b",
+            wallet_kind="coreln",
+            kind="cln_invoice",
+            payment_hash=_PAY_HASH,
+            payment_hash_source="core_lightning",
+            direction="inbound",
+            amount=50_000_000,
+        )
+
+        self.assertEqual(suggest_swap_candidates([out, inbound], tax_country="at"), [])
+
+
 class RefundLinkMatchingTests(unittest.TestCase):
     def test_same_wallet_refund_paired_by_funding_link(self):
         lockup = _row(
