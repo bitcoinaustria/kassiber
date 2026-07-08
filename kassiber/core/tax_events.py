@@ -1508,6 +1508,17 @@ def normalize_tax_asset_inputs(
             sent = msat_to_btc(out_row["amount"]) + msat_to_btc(out_row["fee"])
             received = msat_to_btc(in_row["amount"])
             if sent < received:
+                # Sub-sat shortfall is a precision artifact, not real value
+                # creation: LND's REST fields fall back to sat-truncated
+                # values (up to 999 msat below the true amount) while a CLN
+                # partner leg stores msat-exact amounts. Clamp the receipt to
+                # the sent total instead of quarantining the netted pair.
+                gap_msat = int(in_row["amount"] or 0) - (
+                    int(out_row["amount"] or 0) + int(out_row["fee"] or 0)
+                )
+                if 0 < gap_msat < 1000:
+                    received = sent
+            if sent < received:
                 if group_id:
                     blocked_transfer_group_reasons.setdefault(
                         group_id, "transfer_mismatch"

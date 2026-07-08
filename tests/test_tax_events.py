@@ -289,6 +289,40 @@ class NormalizeTaxAssetInputsTest(unittest.TestCase):
         self.assertAlmostEqual(detail["implied_fee"], 0.2, places=8)
         self.assertGreater(detail["implied_fee"], detail["fee_ceiling"])
 
+    def test_sub_sat_receipt_gap_is_precision_not_mismatch(self):
+        # LND REST sat-fallback truncates up to 999 msat off the true payment
+        # amount while the CLN invoice leg is msat-exact: sent < received by a
+        # sub-sat gap is a representation artifact and must net as a MOVE, not
+        # quarantine both legs as transfer_mismatch.
+        out_row = _row(
+            "ln-pay",
+            "wallet-a",
+            "outbound",
+            99_999_000,  # sat-truncated
+            fiat_rate=65_000,
+            external_id="lnd:pay:h1",
+        )
+        in_row = _row(
+            "ln-invoice",
+            "wallet-b",
+            "inbound",
+            99_999_500,  # msat-exact
+            external_id="cln:income:h1",
+        )
+        inputs = normalize_tax_asset_inputs(
+            self.profile,
+            "BTC",
+            [out_row, in_row],
+            self.wallet_refs_by_id,
+            [{"out": out_row, "in": in_row}],
+        )
+
+        self.assertEqual(inputs.quarantines, [])
+        self.assertEqual(len(inputs.transfers), 1)
+        transfer = inputs.transfers[0]
+        self.assertEqual(transfer.fee, 0)
+        self.assertEqual(transfer.sent, transfer.received)
+
     def test_manual_multi_pair_privacy_block_quarantines_clean_legs_too(self):
         # Privacy evidence on one group row blocks the whole component; the
         # evidence-free receipt legs were consumed with it, so they must get
