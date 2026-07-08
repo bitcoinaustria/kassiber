@@ -38,6 +38,26 @@ def ordered_pair_component(
     )
 
 
+#: Below one satoshi, a receipt "excess" can only be representation noise:
+#: LND's REST fallback stores sat-truncated values (up to 999 msat under the
+#: true amount) while a CLN partner leg is msat-exact.
+SUB_SAT_MSAT = 1000
+
+
+def clamped_receipt_msat(sent_msat: int, received_msat: int) -> int:
+    """Clamp a sub-sat receipt excess down to the sent total.
+
+    Booking and regime inference MUST apply this identically wherever they
+    accept a transfer pair: clamping in one model but not the other either
+    books a MOVE that inference never saw (regimes/pools desync) or vice
+    versa. Anything >= 1 sat of excess is returned unchanged so real
+    mismatches still fail the caller's sent < received guard.
+    """
+    if 0 < received_msat - sent_msat < SUB_SAT_MSAT:
+        return sent_msat
+    return received_msat
+
+
 def allocate_fee_msat(total_fee_msat: int, bases: Sequence[int]) -> list[int]:
     """Allocate an aggregate multi-link fee greedily across legs.
 

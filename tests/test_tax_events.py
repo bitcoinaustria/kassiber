@@ -1669,6 +1669,30 @@ class AustrianSelfTransferRegimeTest(unittest.TestCase):
             any(q["reason"] == "conflicting_spend" for q in inputs.quarantines)
         )
 
+    def test_sub_sat_gap_pair_keeps_regime_and_flows(self):
+        # Booking clamps a sub-sat receipt excess and BOOKS the move; regime
+        # inference must accept the identical pair (shared clamp helper) or
+        # the legs vanish from availability and the MOVE books with no regime,
+        # mis-tagging later disposals from the destination.
+        alt = _row("alt", "wallet-a", "inbound", 100_000_000_000,
+                   occurred_at="2020-06-01T00:00:00Z", fiat_rate=10_000)
+        out_row = _row("mv-out", "wallet-a", "outbound", 49_999_999_000,
+                       occurred_at="2025-02-01T00:00:00Z",
+                       fiat_rate=60_000, external_id="lnd:pay:h9")
+        in_row = _row("mv-in", "wallet-b", "inbound", 49_999_999_500,
+                      occurred_at="2025-02-01T00:00:00Z",
+                      external_id="cln:income:h9")
+        inputs = normalize_tax_asset_inputs(
+            self.AT_PROFILE, "BTC", [alt, out_row, in_row], self.REFS,
+            [{"out": out_row, "in": in_row}],
+        )
+        self.assertEqual(inputs.quarantines, [])
+        self.assertEqual(len(inputs.transfers), 1)
+        transfer = inputs.transfers[0]
+        self.assertEqual(transfer.at_regime, "alt")
+        self.assertIsNotNone(transfer.regime_flows)
+        self.assertGreater(transfer.regime_flows["in"]["alt"], 0)
+
     def test_samourai_internal_transfer_fee_carries_regime(self):
         # #5: a Whirlpool tx0 (samourai child rows) under AT with mixed Alt/Neu
         # must stamp at_regime on its MOVE fee disposal, or rp2 aborts the whole

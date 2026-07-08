@@ -17,7 +17,11 @@ from .loans import (
     RELEASE_SUPPRESS_ROLES,
 )
 from .ownership_transfers import detect_conflicting_spend_ids
-from .pair_allocation import allocate_fee_msat, ordered_pair_component
+from .pair_allocation import (
+    allocate_fee_msat,
+    clamped_receipt_msat,
+    ordered_pair_component,
+)
 from .privacy_hops import privacy_hop_evidence_from_row
 from .transfer_matching import (
     DEFAULT_FEE_PCT_MAX,
@@ -1561,19 +1565,15 @@ def normalize_tax_asset_inputs(
                         in_privacy_hop,
                     )
                 continue
-            sent = msat_to_btc(out_row["amount"]) + msat_to_btc(out_row["fee"])
-            received = msat_to_btc(in_row["amount"])
-            if sent < received:
-                # Sub-sat shortfall is a precision artifact, not real value
-                # creation: LND's REST fields fall back to sat-truncated
-                # values (up to 999 msat below the true amount) while a CLN
-                # partner leg stores msat-exact amounts. Clamp the receipt to
-                # the sent total instead of quarantining the netted pair.
-                gap_msat = int(in_row["amount"] or 0) - (
-                    int(out_row["amount"] or 0) + int(out_row["fee"] or 0)
-                )
-                if 0 < gap_msat < 1000:
-                    received = sent
+            sent_msat = int(out_row["amount"] or 0) + int(out_row["fee"] or 0)
+            # Sub-sat receipt excess is a precision artifact (sat-truncated
+            # LND import vs msat-exact partner leg), clamped identically in
+            # Austrian regime inference — see pair_allocation.
+            received_msat = clamped_receipt_msat(
+                sent_msat, int(in_row["amount"] or 0)
+            )
+            sent = msat_to_btc(sent_msat)
+            received = msat_to_btc(received_msat)
             if sent < received:
                 if group_id:
                     blocked_transfer_group_reasons.setdefault(

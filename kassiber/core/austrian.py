@@ -21,7 +21,11 @@ from datetime import datetime
 from typing import Any, Literal, Mapping, Optional, Sequence
 from zoneinfo import ZoneInfo
 
-from .pair_allocation import allocate_fee_msat, ordered_pair_component
+from .pair_allocation import (
+    allocate_fee_msat,
+    clamped_receipt_msat,
+    ordered_pair_component,
+)
 
 # Altvermögen / Neuvermögen cutoff per § 27b EStG. Acquisitions on or before
 # 2021-02-28 Europe/Vienna are Altvermögen; after that, Neuvermögen.
@@ -309,6 +313,15 @@ def _transfer_actions_for_intra_pairs(
             for row in out_rows_by_id.values()
         )
         total_received_msat = sum(_row_msat(row, "amount") for row in in_rows_by_id.values())
+        if len(ordered_pairs) == 1:
+            # Booking clamps a sub-sat receipt excess on single pairs and
+            # BOOKS the move (sat-truncated LND import vs msat-exact partner
+            # leg). Inference must accept the identical pair or the legs
+            # vanish from availability entirely — the MOVE then books with no
+            # regime and a later disposal from the destination is mis-tagged.
+            total_received_msat = clamped_receipt_msat(
+                total_sent_msat, total_received_msat
+            )
         if total_sent_msat < total_received_msat:
             # The normalizer will quarantine transfer_mismatch. Do not poison
             # wallet availability by crediting any side as a normal row.
@@ -322,7 +335,11 @@ def _transfer_actions_for_intra_pairs(
             for pair, fee_allocation in zip(ordered_pairs, fee_allocations):
                 out_row = pair["out"]
                 in_row = pair["in"]
-                received_msat = _row_msat(in_row, "amount")
+                # min() carries the single-pair sub-sat clamp into the leg
+                # (a no-op for genuine multi-leg components).
+                received_msat = min(
+                    _row_msat(in_row, "amount"), total_received_msat
+                )
                 action_out = _copy_row_with_amount(
                     out_row,
                     amount_msat=received_msat,
