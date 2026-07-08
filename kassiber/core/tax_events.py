@@ -517,9 +517,8 @@ def _collect_samourai_internal_transfers(
     is_at: bool,
     quarantines: list[dict[str, Any]],
     outbound_regimes: Optional[Mapping[str, AtRegime]] = None,
-) -> tuple[dict[str, list[NormalizedTaxTransfer]], dict[str, NormalizedTaxEvent]]:
+) -> dict[str, list[NormalizedTaxTransfer]]:
     collected: dict[str, list[NormalizedTaxTransfer]] = {}
-    fee_events: dict[str, NormalizedTaxEvent] = {}
     regime_by_row = outbound_regimes or {}
 
     def _samourai_fee_regime(out_row: Mapping[str, Any]) -> Optional[AtRegime]:
@@ -630,6 +629,19 @@ def _collect_samourai_internal_transfers(
             wallet_refs_by_id[row["wallet_id"]]["label"] for row in in_rows
         }
         if len(in_rows) > 1 or len(to_wallet_labels) > 1:
+            # The whole group must book or quarantine atomically: a shared
+            # group_id lets the RP2 gate preflight all legs together, exactly
+            # like the graph derivers. The network fee rides on the largest
+            # leg (same convention as derive_multi_source_consolidations)
+            # instead of a standalone FEE event, which the group machinery
+            # could not hold back with its legs.
+            group_id = f"samourai-internal:{first_out['id']}"
+            fee_leg_id = None
+            if fee > 0:
+                fee_leg_id = max(
+                    in_rows,
+                    key=lambda row: (int(row["amount"] or 0), str(row["id"])),
+                )["id"]
             collected[str(first_out["id"])] = [
                 NormalizedTaxTransfer(
                     asset=asset,
@@ -640,9 +652,10 @@ def _collect_samourai_internal_transfers(
                     from_wallet_label=from_wallet["label"],
                     to_wallet_id=wallet_refs_by_id[in_row["wallet_id"]]["id"],
                     to_wallet_label=wallet_refs_by_id[in_row["wallet_id"]]["label"],
-                    sent=msat_to_btc(in_row["amount"]),
+                    sent=msat_to_btc(in_row["amount"])
+                    + (fee if in_row["id"] == fee_leg_id else Decimal("0")),
                     received=msat_to_btc(in_row["amount"]),
-                    fee=Decimal("0"),
+                    fee=fee if in_row["id"] == fee_leg_id else Decimal("0"),
                     spot_price=spot_price,
                     description=(
                         first_out["note"]
@@ -656,31 +669,10 @@ def _collect_samourai_internal_transfers(
                     at_pool=resolve_pool_id(from_wallet["id"]) if is_at else None,
                     at_regime=_samourai_fee_regime(first_out),
                     transfer_id=f"{first_out['id']}::{in_row['id']}",
+                    group_id=group_id,
                 )
                 for in_row in in_rows
             ]
-            if fee > 0:
-                fee_events[str(first_out["id"])] = NormalizedTaxEvent(
-                    transaction_id=first_out["id"],
-                    asset=asset,
-                    occurred_at=first_out["occurred_at"],
-                    wallet_id=from_wallet["id"],
-                    wallet_label=from_wallet["label"],
-                    direction="outbound",
-                    amount=Decimal("0"),
-                    fee=fee,
-                    spot_price=spot_price,
-                    fiat_value=None,
-                    description=(
-                        first_out["note"]
-                        or first_out["description"]
-                        or first_out["kind"]
-                        or "Coinjoin privacy fee"
-                    ),
-                    raw_row=first_out,
-                    at_pool=resolve_pool_id(from_wallet["id"]) if is_at else None,
-                    at_regime=_samourai_fee_regime(first_out),
-                )
             continue
 
         collected[str(first_out["id"])] = [
@@ -710,7 +702,7 @@ def _collect_samourai_internal_transfers(
                 at_regime=_samourai_fee_regime(first_out),
             )
         ]
-    return collected, fee_events
+    return collected
 
 
 def _owned_fanout_row_ids(
@@ -1332,16 +1324,14 @@ def normalize_tax_asset_inputs(
     transfers: list[NormalizedTaxTransfer] = []
     ordered_items: list[tuple[str, str]] = []
     quarantines: list[dict[str, Any]] = []
-    samourai_transfer_by_out_id, samourai_fee_event_by_out_id = (
-        _collect_samourai_internal_transfers(
-            profile,
-            asset,
-            samourai_internal_groups,
-            wallet_refs_by_id,
-            is_at,
-            quarantines,
-            outbound_regimes,
-        )
+    samourai_transfer_by_out_id = _collect_samourai_internal_transfers(
+        profile,
+        asset,
+        samourai_internal_groups,
+        wallet_refs_by_id,
+        is_at,
+        quarantines,
+        outbound_regimes,
     )
 
     pair_refs_by_row: dict[str, list[tuple[str, Mapping[str, Any]]]] = {}
@@ -1399,10 +1389,6 @@ def normalize_tax_asset_inputs(
                 ordered_items.append(
                     ("transfer", transfer.transfer_id or transfer.out_transaction_id)
                 )
-            event = samourai_fee_event_by_out_id.get(row["id"])
-            if event is not None:
-                events.append(event)
-                ordered_items.append(("event", row["id"]))
             continue
         manual_multi_transfers = manual_multi_transfers_by_trigger.get(row["id"])
         if manual_multi_transfers is not None:
