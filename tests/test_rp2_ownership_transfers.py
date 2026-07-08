@@ -434,6 +434,71 @@ class OwnershipDeriverMixedSpendTest(unittest.TestCase):
         self.assertEqual(len(conflicts), 1)
         self.assertEqual(conflicts[0]["transaction_id"], "B-inbound-payout-tx")
 
+    def test_conflicting_receipt_quarantine_survives_sqlite_rows(self):
+        # The real CLI/daemon path feeds sqlite3.Row objects (no .get) into the
+        # engine; the conflict-quarantine block must use _row_get accessors.
+        import sqlite3
+
+        def _as_sqlite_rows(dict_rows):
+            conn = sqlite3.connect(":memory:")
+            conn.row_factory = sqlite3.Row
+            cols = list(dict_rows[0].keys())
+            conn.execute(
+                "CREATE TABLE t (%s)" % ", ".join(f'"{c}"' for c in cols)
+            )
+            for row in dict_rows:
+                conn.execute(
+                    "INSERT INTO t VALUES (%s)" % ", ".join("?" for _ in cols),
+                    [row[c] for c in cols],
+                )
+            return conn.execute("SELECT * FROM t").fetchall()
+
+        index = OwnedIndex()
+        index.add_script(SCRIPT_A, _match("A", "Cold"))
+        index.add_script(SCRIPT_B, _match("B", "Hot"))
+        rows = _as_sqlite_rows(
+            [
+                _row("A", "inbound", BTC, external_id="acqA"),
+                _row("A", "outbound", 50 * BTC // 100, external_id="payout-tx"),
+                _row("B", "inbound", 50 * BTC // 100, external_id="payout-tx"),
+            ]
+        )
+        direct_payouts = [
+            {
+                "id": "direct-payout-sqlite",
+                "out_transaction_id": "A-outbound-payout-tx",
+                "kind": "direct-swap-payout",
+                "policy": "taxable",
+                "payout_asset": "BTC",
+                "payout_amount": 50 * BTC // 100,
+                "payout_occurred_at": NOW,
+                "payout_fiat_value": 20000,
+                "payout_external_id": "provider-payout",
+                "counterparty": "external-recipient",
+                "notes": "direct payout",
+                "swap_fee_msat": 0,
+                "swap_fee_kind": "combined",
+                "created_at": NOW,
+                "out_amount": 50 * BTC // 100,
+            }
+        ]
+        state = build_tax_engine(PROFILE).build_ledger_state(
+            TaxEngineLedgerInputs(
+                rows=rows,
+                wallet_refs_by_id=WALLET_REFS,
+                manual_pair_records=[],
+                direct_payout_records=direct_payouts,
+                owned_index=index,
+            )
+        )
+        conflicts = [
+            q
+            for q in state.quarantines
+            if q["reason"] == "direct_payout_conflicting_receipt"
+        ]
+        self.assertEqual(len(conflicts), 1)
+        self.assertEqual(conflicts[0]["transaction_id"], "B-inbound-payout-tx")
+
     def test_invalid_payout_does_not_prune_self_transfer_pair(self):
         # Codex review: a direct payout whose out_amount EXCEEDS the source amount
         # is rejected (direct_payout_out_amount_invalid, no proceeds row). It must

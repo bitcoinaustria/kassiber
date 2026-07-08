@@ -2562,23 +2562,23 @@ class GenericRP2TaxEngine:
                     # contradicts the whole-row payout review (part of the tx
                     # demonstrably came back to an owned wallet). Dropping it
                     # silently would understate holdings with no review trace.
-                    wallet_ref = inputs.wallet_refs_by_id.get(
-                        str(row.get("wallet_id") or "")
-                    )
+                    # Rows here can be sqlite3.Row (no .get) — use _row_get.
+                    wallet_id = str(_row_get(row, "wallet_id") or "")
+                    wallet_ref = inputs.wallet_refs_by_id.get(wallet_id)
                     quarantines.append(
                         build_tax_quarantine(
                             self.profile,
                             row,
                             "direct_payout_conflicting_receipt",
                             {
-                                "asset": row.get("asset"),
+                                "asset": _row_get(row, "asset"),
                                 "wallet": (
                                     wallet_ref["label"]
                                     if wallet_ref and wallet_ref.get("label")
-                                    else str(row.get("wallet_id") or "")
+                                    else wallet_id
                                 ),
-                                "direction": row.get("direction"),
-                                "external_id": str(row.get("external_id") or ""),
+                                "direction": _row_get(row, "direction"),
+                                "external_id": str(_row_get(row, "external_id") or ""),
                                 "required_for": "direct_payout_review",
                             },
                         )
