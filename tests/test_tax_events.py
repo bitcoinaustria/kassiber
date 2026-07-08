@@ -349,6 +349,81 @@ class NormalizeTaxAssetInputsTest(unittest.TestCase):
         blocked_detail = json.loads(by_id["postmix-in-1"]["detail_json"])
         self.assertEqual(blocked_detail["blocked_by_reason"], "privacy_hop_unresolved")
 
+    def test_samourai_group_conflicting_with_manual_multi_pair_quarantines_union(self):
+        # The Samourai splitter and a manual multi-pair component can claim the
+        # SAME outbound row. Booking either decomposition alone silently drops
+        # the other side's receipts (previously the splitter won and the
+        # manually paired receipts vanished without a quarantine).
+        def _cfg(section):
+            return json.dumps(
+                {"samourai": {"role": "child", "group_id": "wp", "section": section}}
+            )
+
+        out_row = _row(
+            "wp-out",
+            "wallet-a",
+            "outbound",
+            100_000_000_000,
+            fee=100_000,
+            fiat_rate=65_000,
+            external_id="wptx",
+        )
+        out_row["config_json"] = _cfg("deposit")
+        tracked_child = _row(
+            "wp-premix",
+            "wallet-b",
+            "inbound",
+            20_000_000_000,
+            external_id="wptx",
+        )
+        tracked_child["config_json"] = _cfg("premix")
+        manual_one = _row(
+            "manual-in-1",
+            "wallet-b",
+            "inbound",
+            50_000_000_000,
+            external_id="manual-1",
+        )
+        manual_two = _row(
+            "manual-in-2",
+            "wallet-b",
+            "inbound",
+            29_899_900_000,
+            external_id="manual-2",
+        )
+        inputs = normalize_tax_asset_inputs(
+            self.profile,
+            "BTC",
+            [out_row, tracked_child, manual_one, manual_two],
+            self.wallet_refs_by_id,
+            [
+                {
+                    "out": out_row,
+                    "in": manual_one,
+                    "pair_id": "pair-1",
+                    "source": "manual",
+                },
+                {
+                    "out": out_row,
+                    "in": manual_two,
+                    "pair_id": "pair-2",
+                    "source": "manual",
+                },
+            ],
+        )
+
+        self.assertEqual(inputs.events, [])
+        self.assertEqual(inputs.transfers, [])
+        reasons = {q["transaction_id"]: q["reason"] for q in inputs.quarantines}
+        for tx_id in ("wp-out", "wp-premix", "manual-in-1", "manual-in-2"):
+            self.assertEqual(reasons.get(tx_id), "manual_multi_pair_ambiguous", tx_id)
+        detail = json.loads(
+            next(
+                q for q in inputs.quarantines if q["transaction_id"] == "manual-in-1"
+            )["detail_json"]
+        )
+        self.assertEqual(detail["conflict"], "samourai_internal_group")
+
     def test_manual_many_to_one_pairs_group_and_allocate_destination_once(self):
         out_one = _row(
             "premix-out-1",

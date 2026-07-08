@@ -1251,6 +1251,44 @@ def normalize_tax_asset_inputs(
     swap_link_map = at_swap_link_by_row_id or {}
     loan_leg_map = loan_leg_by_transaction_id or {}
     samourai_internal_groups = _samourai_internal_privacy_groups(rows)
+    # A manual multi-pair component can claim the same outbound a tracked
+    # Samourai group decomposes (the splitter's rows and the user's pairs both
+    # cover parts of one tx). Booking either side alone silently drops the
+    # other's receipts, and merging the two decompositions under one fee is not
+    # modeled — quarantine the union for explicit review instead.
+    samourai_manual_conflict_row_ids: set[str] = set()
+    if intra_pairs and samourai_internal_groups:
+        component_id_sets = [
+            {
+                str(pair[side]["id"])
+                for pair in component
+                for side in ("out", "in")
+            }
+            for component in _manual_multi_pair_components(intra_pairs)
+        ]
+        if component_id_sets:
+            kept_groups = []
+            for group in samourai_internal_groups:
+                group_ids = {str(_row_get(row, "id")) for row, _ in group}
+                overlapping = [
+                    component_ids
+                    for component_ids in component_id_sets
+                    if component_ids & group_ids
+                ]
+                if overlapping:
+                    samourai_manual_conflict_row_ids |= group_ids
+                    for component_ids in overlapping:
+                        samourai_manual_conflict_row_ids |= component_ids
+                else:
+                    kept_groups.append(group)
+            samourai_internal_groups = kept_groups
+        if samourai_manual_conflict_row_ids:
+            intra_pairs = [
+                pair
+                for pair in intra_pairs
+                if str(pair["out"]["id"]) not in samourai_manual_conflict_row_ids
+                and str(pair["in"]["id"]) not in samourai_manual_conflict_row_ids
+            ]
     samourai_internal_row_ids = _samourai_internal_privacy_row_ids(
         samourai_internal_groups
     )
@@ -1391,6 +1429,22 @@ def normalize_tax_asset_inputs(
                         "asset": asset,
                         "direction": _row_get(row, "direction"),
                         "external_id": str(_row_get(row, "external_id") or ""),
+                    },
+                )
+            )
+            continue
+        if row["id"] in samourai_manual_conflict_row_ids:
+            quarantines.append(
+                build_tax_quarantine(
+                    profile,
+                    row,
+                    "manual_multi_pair_ambiguous",
+                    {
+                        "asset": asset,
+                        "wallet": wallet_refs_by_id[row["wallet_id"]]["label"],
+                        "direction": _row_get(row, "direction"),
+                        "conflict": "samourai_internal_group",
+                        "required_for": "manual_transfer_review",
                     },
                 )
             )
