@@ -306,6 +306,67 @@ class FreshSchemaTests(unittest.TestCase):
             finally:
                 conn.close()
 
+    def test_update_pair_kind_reconciles_stored_swap_fee(self):
+        # Fee storage is kind-dependent: a same-asset manual pair stores no
+        # fee, a submarine swap does. Editing the kind must recompute or clear
+        # swap_fee_msat in place, not leave it stale until the next migration.
+        with tempfile.TemporaryDirectory() as data_root:
+            conn = open_db(data_root)
+            try:
+                workspace_id, profile_id, wallet_id = _seed_minimal_scope(conn)
+                _insert_tx(
+                    conn,
+                    tx_id="tx-out",
+                    workspace_id=workspace_id,
+                    profile_id=profile_id,
+                    wallet_id=wallet_id,
+                    asset="BTC",
+                    direction="outbound",
+                    amount_msat=100_000,
+                )
+                _insert_tx(
+                    conn,
+                    tx_id="tx-in",
+                    workspace_id=workspace_id,
+                    profile_id=profile_id,
+                    wallet_id=wallet_id,
+                    asset="BTC",
+                    direction="inbound",
+                    amount_msat=99_000,
+                )
+                pair = create_transaction_pair(
+                    conn,
+                    workspace_id,
+                    profile_id,
+                    "tx-out",
+                    "tx-in",
+                    kind="manual",
+                )
+                self.assertIsNone(pair["swap_fee_msat"])
+
+                updated = update_transaction_pair(
+                    conn,
+                    workspace_id,
+                    profile_id,
+                    pair["id"],
+                    kind="submarine-swap",
+                )
+                self.assertEqual(updated["kind"], "submarine-swap")
+                self.assertEqual(updated["swap_fee_msat"], 1_000)
+
+                reverted = update_transaction_pair(
+                    conn,
+                    workspace_id,
+                    profile_id,
+                    pair["id"],
+                    kind="manual",
+                )
+                self.assertEqual(reverted["kind"], "manual")
+                self.assertIsNone(reverted["swap_fee_msat"])
+                self.assertIsNone(reverted["swap_fee_kind"])
+            finally:
+                conn.close()
+
     def test_schema_compat_clears_stale_same_asset_privacy_swap_fees(self):
         with tempfile.TemporaryDirectory() as data_root:
             conn = open_db(data_root)

@@ -1881,10 +1881,50 @@ def update_transaction_pair(
         and new_notes == row["notes"]
     )
     if not unchanged:
+        # Whether a pair persists a swap fee is kind-dependent
+        # (_pair_stores_swap_fee), so a kind edit must reconcile the stored
+        # fee the same way create_transaction_pair would: a pair moving into
+        # a fee-storing kind gains the computed fee, one moving out of it
+        # drops the now-stale fee (instead of keeping it until the next DB
+        # open's migration wipes it).
+        new_fee_msat = row["swap_fee_msat"]
+        new_fee_kind = row["swap_fee_kind"]
+        if new_kind != row["kind"]:
+            out_row = conn.execute(
+                "SELECT * FROM transactions WHERE id = ?",
+                (row["out_transaction_id"],),
+            ).fetchone()
+            in_row = conn.execute(
+                "SELECT * FROM transactions WHERE id = ?",
+                (row["in_transaction_id"],),
+            ).fetchone()
+            if out_row and in_row and _pair_stores_swap_fee(out_row, in_row, new_kind):
+                split_pair = row["out_amount"] is not None
+                swap_fee_out_msat = (
+                    int(row["out_amount"])
+                    if split_pair
+                    else int(out_row["amount"] or 0)
+                )
+                new_fee_msat, new_fee_kind = core_transfer_matching.compute_swap_fee(
+                    swap_fee_out_msat,
+                    int(in_row["amount"] or 0),
+                    _outbound_pair_fee_component_msat(out_row, split_pair=split_pair),
+                )
+            else:
+                new_fee_msat, new_fee_kind = None, None
         conn.execute(
-            "UPDATE transaction_pairs SET kind = ?, policy = ?, notes = ? "
+            "UPDATE transaction_pairs SET kind = ?, policy = ?, notes = ?, "
+            "swap_fee_msat = ?, swap_fee_kind = ? "
             "WHERE id = ? AND profile_id = ?",
-            (new_kind, new_policy, new_notes, pair_id, profile["id"]),
+            (
+                new_kind,
+                new_policy,
+                new_notes,
+                new_fee_msat,
+                new_fee_kind,
+                pair_id,
+                profile["id"],
+            ),
         )
         invalidate_journals(conn, profile["id"])
         if commit:
