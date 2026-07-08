@@ -1305,8 +1305,14 @@ def _transaction_pair_allocation_map(
 
         in_tx = next(iter(in_rows_by_id.values()))
         total_to_msat = int(in_tx["amount"] or 0)
+        # An out row's spend capacity is amount + fee: a same-tx node-backed
+        # consolidation stamps the WHOLE network fee on every contributor's
+        # row (amount = net outflow - fee), so summing bare amounts comes up
+        # (N-1)*fee short of the recorded receipt and the component would be
+        # skipped entirely for any fee > 0.
         bases = [
             int(rows_by_id[pair["out_transaction_id"]]["amount"] or 0)
+            + int(_row_value(rows_by_id[pair["out_transaction_id"]], "fee") or 0)
             for pair in ordered_pairs
         ]
         if sum(bases) < total_to_msat:
