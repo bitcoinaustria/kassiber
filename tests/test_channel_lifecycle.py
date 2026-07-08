@@ -349,6 +349,26 @@ class ChannelLifecycleEngineTest(unittest.TestCase):
         self.assertEqual(wallet_quantities["onchain"], Decimal("1"))
         self.assertEqual(wallet_quantities.get("node", Decimal("0")), Decimal("0"))
 
+    def test_close_only_window_does_not_synthesize_node_outflow(self) -> None:
+        rows = [
+            _row("close", "inbound", ONE_BTC, "2025-07-01T00:00:00Z", external_id=CLOSING_TXID),
+        ]
+        channel_rows = [
+            {
+                "funding_txid": FUNDING_TXID,
+                "closing_txid": CLOSING_TXID,
+                "wallet_id": "node",
+            }
+        ]
+        roles = channel_role_map(channel_rows, rows)
+        self.assertEqual(roles["close"], CHANNEL_CLOSE)
+        self.assertEqual(channel_transfer_pairs(channel_rows, rows, _wallet_refs()), [])
+
+        result = _run(rows, roles, [])
+        self.assertEqual(result.quarantines, [])
+        self.assertFalse(_has_disposal(result))
+        self.assertEqual(_btc_quantity(result), Decimal("0"))
+
 
     def test_force_close_sweep_round_trip_is_net_zero(self) -> None:
         # A force-close pays the wallet via a separate timelocked SWEEP tx: its

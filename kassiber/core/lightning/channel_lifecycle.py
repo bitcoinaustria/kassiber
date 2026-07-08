@@ -267,6 +267,7 @@ def channel_transfer_pairs(
     closing_wallet_by_txid: dict[str, str] = {}
     close_balance_by_txid: dict[str, int] = {}
     funding_amount_by_txid: dict[str, int] = {}
+    close_funding_by_txid: dict[str, set[str]] = {}
     for row in channel_rows:
         wallet_id = _field(row, "wallet_id")
         if not wallet_id or str(wallet_id) not in wallet_refs_by_id:
@@ -274,8 +275,8 @@ def channel_transfer_pairs(
         fund = _txid_from_outpoint(
             _field(row, "funding_txid") or _field(row, "funding_outpoint")
         )
+        fund_key = normalize_group_txid(fund) if fund else None
         if fund:
-            fund_key = normalize_group_txid(fund)
             funding_wallet_by_txid.setdefault(fund_key, str(wallet_id))
             funded = int(_field(row, "funding_amount_msat") or 0)
             if funded > 0:
@@ -289,6 +290,8 @@ def channel_transfer_pairs(
         if close:
             close_key = normalize_group_txid(str(close))
             closing_wallet_by_txid.setdefault(close_key, str(wallet_id))
+            if fund_key:
+                close_funding_by_txid.setdefault(close_key, set()).add(fund_key)
             balance = int(_field(row, "close_balance_msat") or 0)
             if balance > 0:
                 # Several channels can share one close/sweep txid (batched
@@ -299,6 +302,7 @@ def channel_transfer_pairs(
 
     tx_rows = list(tx_rows)
     pairs: list[dict[str, Any]] = []
+    opened_funding_txids: set[str] = set()
     for tx in tx_rows:
         external_id = _field(tx, "external_id")
         if not external_id:
@@ -314,6 +318,7 @@ def channel_transfer_pairs(
                 # role map flags this row CHANNEL_OPEN_MISMATCH; a synthesized
                 # MOVE would absorb the external payment as channel capacity.
                 continue
+            opened_funding_txids.add(key)
             node_wallet_id = funding_wallet_by_txid[key]
             in_row = _clone_channel_leg(
                 tx,
@@ -333,8 +338,15 @@ def channel_transfer_pairs(
 
     if not closing_wallet_by_txid:
         return pairs
+    eligible_closing_wallet_by_txid = {
+        close_key: wallet_id
+        for close_key, wallet_id in closing_wallet_by_txid.items()
+        if bool(close_funding_by_txid.get(close_key, set()) & opened_funding_txids)
+    }
+    if not eligible_closing_wallet_by_txid:
+        return pairs
     for close_key, group in _close_leg_groups(
-        closing_wallet_by_txid, close_balance_by_txid, tx_rows
+        eligible_closing_wallet_by_txid, close_balance_by_txid, tx_rows
     ).items():
         if group["mismatch"]:
             # role map flags these legs CHANNEL_CLOSE_MISMATCH for quarantine;
@@ -342,7 +354,7 @@ def channel_transfer_pairs(
             # "fee" (the generic implausibility guard cannot fire on a
             # cloned-amount pair).
             continue
-        node_wallet_id = closing_wallet_by_txid[close_key]
+        node_wallet_id = eligible_closing_wallet_by_txid[close_key]
         # When our settled channel balance at close is known, the gap to the
         # GROUP's total receipt is the single close fee (commitment + sweep
         # miner fees). It rides on the largest leg so the node wallet is
