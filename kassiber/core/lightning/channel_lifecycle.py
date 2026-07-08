@@ -139,14 +139,23 @@ def channel_role_map(
             funding.add(fund_key)
             funded = int(_field(row, "funding_amount_msat") or 0)
             if funded > 0:
-                funding_amount_by_txid.setdefault(fund_key, funded)
+                # A batched open (multifundchannel) shares one funding tx
+                # across N channel records: SUM the funded amounts, or a
+                # clean batched open false-positives the mismatch guard.
+                funding_amount_by_txid[fund_key] = (
+                    funding_amount_by_txid.get(fund_key, 0) + funded
+                )
         close = _field(row, "closing_txid")
         if close:
             close_key = normalize_group_txid(str(close))
             closing.add(close_key)
             balance = int(_field(row, "close_balance_msat") or 0)
             if balance > 0:
-                close_balance_by_txid.setdefault(close_key, balance)
+                # Several channels can share one close/sweep txid (batched
+                # opens closing together): sum our settled balances.
+                close_balance_by_txid[close_key] = (
+                    close_balance_by_txid.get(close_key, 0) + balance
+                )
 
     roles: dict[str, str] = {}
     for tx in tx_rows:
@@ -218,14 +227,23 @@ def channel_transfer_pairs(
             funding_wallet_by_txid.setdefault(fund_key, str(wallet_id))
             funded = int(_field(row, "funding_amount_msat") or 0)
             if funded > 0:
-                funding_amount_by_txid.setdefault(fund_key, funded)
+                # A batched open (multifundchannel) shares one funding tx
+                # across N channel records: SUM the funded amounts, or a
+                # clean batched open false-positives the mismatch guard.
+                funding_amount_by_txid[fund_key] = (
+                    funding_amount_by_txid.get(fund_key, 0) + funded
+                )
         close = _field(row, "closing_txid")
         if close:
             close_key = normalize_group_txid(str(close))
             closing_wallet_by_txid.setdefault(close_key, str(wallet_id))
             balance = int(_field(row, "close_balance_msat") or 0)
             if balance > 0:
-                close_balance_by_txid.setdefault(close_key, balance)
+                # Several channels can share one close/sweep txid (batched
+                # opens closing together): sum our settled balances.
+                close_balance_by_txid[close_key] = (
+                    close_balance_by_txid.get(close_key, 0) + balance
+                )
 
     pairs: list[dict[str, Any]] = []
     paired_real_ids: set[str] = set()

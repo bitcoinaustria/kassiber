@@ -75,6 +75,25 @@ class ChannelRoleMapTest(unittest.TestCase):
             channel_role_map(channels, txs), {"open": CHANNEL_OPEN_MISMATCH}
         )
 
+    def test_batched_open_sums_funded_amounts_per_txid(self) -> None:
+        # multifundchannel: one funding tx opens N channels — the recorded
+        # outflow equals the SUM of the per-channel funded amounts, so
+        # first-wins capture would false-positive the mismatch guard.
+        channels = [
+            {"funding_txid": FUNDING_TXID, "funding_amount_msat": 60_000_000_000},
+            {"funding_txid": FUNDING_TXID, "funding_amount_msat": 40_000_000_000},
+        ]
+        txs = [
+            {
+                "id": "open",
+                "external_id": FUNDING_TXID,
+                "direction": "outbound",
+                "amount": 100_000_000_000,
+                "fee": 500_000,
+            }
+        ]
+        self.assertEqual(channel_role_map(channels, txs), {"open": CHANNEL_OPEN})
+
     def test_funding_amount_within_tolerance_still_opens(self) -> None:
         channels = [
             {"funding_txid": FUNDING_TXID, "funding_amount_msat": 100_000_000_000}

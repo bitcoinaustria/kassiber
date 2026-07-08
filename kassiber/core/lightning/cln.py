@@ -1308,7 +1308,9 @@ def _channel_lifecycle_records(snapshot: CoreLightningSnapshot) -> list[dict[str
             # whole row as a non-event.
             funded = _parse_msat(event.get("credit_msat"))
             if funded > 0:
-                open_balance_msat.setdefault(txid, funded)
+                # A batched open funds several channel accounts from one tx:
+                # sum our per-channel contributions per funding txid.
+                open_balance_msat[txid] = open_balance_msat.get(txid, 0) + funded
         elif tag == "channel_close":
             close_txids.setdefault(txid, account)
             # Our settled balance leaving the channel account. The engine
@@ -1316,7 +1318,7 @@ def _channel_lifecycle_records(snapshot: CoreLightningSnapshot) -> list[dict[str
             # close fee (commitment + sweep fees), instead of stranding it.
             balance = _parse_msat(event.get("debit_msat"))
             if balance > 0:
-                close_balance_msat.setdefault(txid, balance)
+                close_balance_msat[txid] = close_balance_msat.get(txid, 0) + balance
 
     records: list[dict[str, Any]] = []
     for txid, account in sorted(open_txids.items()):
