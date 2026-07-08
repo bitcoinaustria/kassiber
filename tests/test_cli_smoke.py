@@ -1522,6 +1522,7 @@ class CliSmokeTest(unittest.TestCase):
             # user can verify each row manually.
             "Fiat Currency",
             "Fiat Price",
+            "Fiat Value",
             "FMV",
             "Fiat Fee",
             "Cost Basis",

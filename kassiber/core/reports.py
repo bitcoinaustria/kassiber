@@ -2530,6 +2530,34 @@ def _attachment_entry(row):
     }
 
 
+def _journals_current(conn, profile_id):
+    """Whether the profile's journals reflect the current transaction inputs.
+
+    Mirrors the CLI's freshness check (``last_processed_at`` set, active
+    transaction count unchanged, input version unchanged) without a back-edge
+    into the CLI layer. ``invalidate_journals`` leaves old ``journal_entries``
+    rows in place, so a stale profile still has entries that must not be
+    exported as current figures.
+    """
+    row = conn.execute(
+        """
+        SELECT last_processed_at, last_processed_tx_count,
+               journal_input_version, last_processed_input_version
+        FROM profiles WHERE id = ?
+        """,
+        (profile_id,),
+    ).fetchone()
+    if row is None or not row["last_processed_at"]:
+        return False
+    current_count = conn.execute(
+        "SELECT COUNT(*) AS count FROM transactions WHERE profile_id = ? AND excluded = 0",
+        (profile_id,),
+    ).fetchone()["count"]
+    return int(current_count or 0) == int(row["last_processed_tx_count"] or 0) and int(
+        row["journal_input_version"] or 0
+    ) == int(row["last_processed_input_version"] or 0)
+
+
 def _transaction_journal_values(conn, profile, wallet=None):
     """Aggregate per-transaction cost basis and realized gain/loss from the
     processed journal.
@@ -2537,10 +2565,14 @@ def _transaction_journal_values(conn, profile, wallet=None):
     Returns a map of transaction id -> ``{"cost_basis", "gain_loss"}`` where each
     value is ``None`` when no journal entry for that transaction carries the
     figure (e.g. a plain acquisition has no realized basis or gain yet), so the
-    export leaves those cells blank rather than showing a misleading ``0``. This
-    is best-effort: if journals have not been processed the map is empty and the
-    columns stay blank until the user reprocesses.
+    export leaves those cells blank rather than showing a misleading ``0``.
+    Stale journals (never processed, or invalidated by later edits/imports)
+    return an empty map: exporting the leftover ``journal_entries`` rows would
+    present outdated figures as current, so the columns stay blank until the
+    user reprocesses.
     """
+    if not _journals_current(conn, profile["id"]):
+        return {}
     filters = ["je.profile_id = ?"]
     params: list[Any] = [profile["id"]]
     if wallet:
@@ -2602,10 +2634,42 @@ def _self_transfer_legs_by_transaction(conn, profile):
     ).fetchall()
     rows_by_id = {row["id"]: row for row in rows}
     auto_pairs, _ = detect_intra_transfers(rows)
+
+    # A reviewed whole-row direct payout books its outbound as a taxable
+    # disposal, and the engine prunes any auto self-transfer pair touching it
+    # before apply_manual_pairs so the disposal cannot be relabelled as a MOVE.
+    # Mirror that here or the export would label the payout's source as a
+    # transfer to the owned change wallet. Partial and over-amount (rejected)
+    # payouts keep their auto pair, matching the engine.
+    payout_records = conn.execute(
+        "SELECT out_transaction_id, out_amount FROM direct_swap_payouts "
+        "WHERE profile_id = ? AND deleted_at IS NULL",
+        (profile["id"],),
+    ).fetchall()
+    payout_claimed_ids = set()
+    for record in payout_records:
+        out_row = rows_by_id.get(record["out_transaction_id"])
+        if out_row is None:
+            continue
+        reviewed = record["out_amount"]
+        full_amount = int(out_row["amount"] or 0)
+        if reviewed in (None, "") or int(reviewed) == full_amount:
+            payout_claimed_ids.add(out_row["id"])
+    auto_pairs = [
+        pair
+        for pair in auto_pairs
+        if pair["out"]["id"] not in payout_claimed_ids
+        and pair["in"]["id"] not in payout_claimed_ids
+    ]
+
     manual_records = conn.execute(
         "SELECT * FROM transaction_pairs WHERE profile_id = ? AND deleted_at IS NULL",
         (profile["id"],),
     ).fetchall()
+    manual_leg_ids = set()
+    for record in manual_records:
+        manual_leg_ids.add(record["out_transaction_id"])
+        manual_leg_ids.add(record["in_transaction_id"])
     same_asset_pairs, cross_asset_pairs = apply_manual_pairs(rows, auto_pairs, manual_records)
 
     legs: dict[str, str] = {}
@@ -2622,6 +2686,16 @@ def _self_transfer_legs_by_transaction(conn, profile):
         in_row = rows_by_id.get(pair["in_id"])
         if out_row is not None and in_row is not None:
             _record(out_row, in_row)
+    # A partial cross-asset pair (split swap: part swapped, part change back to
+    # an owned wallet) suppresses the same-txid auto pair in apply_manual_pairs,
+    # but the engine splits the source row so the change leg stays a
+    # self-transfer. Recover the label for suppressed legs that are not
+    # themselves part of any reviewed pair.
+    for pair in auto_pairs:
+        for leg, other in ((pair["out"], pair["in"]), (pair["in"], pair["out"])):
+            if leg["id"] in legs or leg["id"] in manual_leg_ids:
+                continue
+            legs[leg["id"]] = other["wallet_label"]
     return legs
 
 
@@ -5951,15 +6025,18 @@ def _generic_report_transaction_rows(context):
         fee_msat = int(row["fee"] or 0)
         amount_btc = msat_to_btc(amount_msat)
         fee_btc = msat_to_btc(fee_msat)
-        # Fiat price (per-unit) and fair market value (of the whole amount) are
-        # the recorded transaction pricing; derive one from the other when only
-        # one is stored so users always see both for manual verification.
+        # `fiat_price` is the recorded execution/market price, `fiat_value` the
+        # recorded cash leg. Exchange imports fold fiat service fees into
+        # `fiat_value` (e.g. Coinfinity/Strike buy = cash paid incl. fee), so
+        # FMV — the market value of the BTC amount — is amount * price when a
+        # price is recorded, with the fee-adjusted cash value kept in its own
+        # column. `fiat_fee` prices the crypto-denominated network fee; a fiat
+        # service fee shows as the fiat_value − fmv difference.
         price = _optional_decimal_pref(row, "fiat_rate_exact", "fiat_rate")
-        fmv = _optional_decimal_pref(row, "fiat_value_exact", "fiat_value")
-        if price is None and fmv is not None and amount_btc:
-            price = fmv / amount_btc
-        if fmv is None and price is not None:
-            fmv = amount_btc * price
+        value = _optional_decimal_pref(row, "fiat_value_exact", "fiat_value")
+        if price is None and value is not None and amount_btc:
+            price = value / amount_btc
+        fmv = amount_btc * price if price is not None else value
         fiat_fee = fee_btc * price if price is not None else None
         rows.append(
             {
@@ -5974,6 +6051,7 @@ def _generic_report_transaction_rows(context):
                 "fee_msat": fee_msat,
                 "fiat_currency": row.get("fiat_currency") or "",
                 "fiat_price": float(price) if price is not None else None,
+                "fiat_value": float(value) if value is not None else None,
                 "fmv": float(fmv) if fmv is not None else None,
                 "fiat_fee": float(fiat_fee) if fiat_fee is not None else None,
                 "cost_basis": row.get("cost_basis"),
@@ -6237,6 +6315,7 @@ GENERIC_REPORT_MONEY_FIELDS = {
     "cumulative_cost_basis",
     "fiat_fee",
     "fiat_price",
+    "fiat_value",
     "fmv",
     "gain_loss",
     "market_value",
@@ -6692,6 +6771,7 @@ TRANSACTIONS_EXPORT_HEADERS = (
     "fee_msat",
     "fiat_currency",
     "fiat_price",
+    "fiat_value",
     "fmv",
     "fiat_fee",
     "cost_basis",

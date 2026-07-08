@@ -268,12 +268,15 @@ It writes a single styled Transactions sheet (or CSV) with the same columns as
 the report's Transactions sheet, so a user can verify each row by hand:
 
 - amount / fee in BTC and msat;
-- `fiat_currency`, `fiat_price` (per-unit), `fmv` (fair market value of the
-  amount) and `fiat_fee` — the recorded transaction pricing (one is derived from
-  the other when only one is stored);
-- `cost_basis` and `gain_loss` from the last processed journal (blank for rows
-  with no realized figure, e.g. a plain acquisition, or until journals are
-  processed);
+- `fiat_currency`, `fiat_price` (recorded execution/market price per unit),
+  `fiat_value` (recorded cash leg — exchange imports fold fiat service fees
+  into it), `fmv` (market value of the amount: amount × price when a price is
+  recorded, else the recorded value) and `fiat_fee` (the crypto network fee at
+  that price; a fiat service fee shows as the `fiat_value` − `fmv` difference);
+- `cost_basis` and `gain_loss` from the processed journal — blank for rows with
+  no realized figure (e.g. a plain acquisition) and blank export-wide while
+  journals are unprocessed or stale, so outdated figures are never presented as
+  current;
 - `transfer` — for a hop between the user's own wallets, the counterparty wallet
   label (empty for external sends/receipts), so internal transfers are visible
   and sortable;
