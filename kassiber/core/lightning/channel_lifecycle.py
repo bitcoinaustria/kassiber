@@ -62,13 +62,73 @@ def _close_balance_mismatch(received_msat: int, balance_msat: int) -> bool:
     transfer-fee implausibility guard (out.amount - in.amount) is
     definitionally zero for it and can never fire — this check is the ONLY
     ceiling between a mis-captured close balance (unsynced sweep, HTLC value
-    lost to the peer) and an unbounded silent "fee" disposal.
+    lost to the peer) and an unbounded silent "fee" disposal. Symmetric:
+    receiving clearly MORE than the settled balance is just as much a data
+    problem as receiving less.
     """
     if balance_msat <= 0:
         return False
-    return balance_msat - received_msat > fee_threshold_msat(
+    tolerance = fee_threshold_msat(
         balance_msat, DEFAULT_FEE_PCT_MAX, DEFAULT_FEE_SATS_MIN
     )
+    return abs(balance_msat - received_msat) > tolerance
+
+
+def _close_leg_groups(
+    closing_keys,
+    close_balance_by_txid: Mapping[str, int],
+    tx_rows,
+) -> dict[str, dict[str, Any]]:
+    """Group inbound close candidates per closing txid, classified TOGETHER.
+
+    A close can pay the wallet in several legs (coop payout + timelocked
+    to_local sweep + per-HTLC sweeps). The settled balance minus the group's
+    TOTAL receipt is the single close fee — evaluating legs one at a time
+    would book every other leg's amount as a "fee" once per leg.
+
+    vin-matched legs (sweeps) are accepted in chronological order only while
+    the group total is below the settled balance: once the close is fully
+    accounted, a later inbound spending the commitment tx is the PEER's
+    swept output coming back as an ordinary payment and must not be
+    reclassified as our close leg (that would untax income). With no balance
+    on record the txid/vin match stands alone (nothing to bound against).
+    """
+    candidates: dict[str, list[tuple[tuple, bool, Any]]] = {}
+    for tx in tx_rows:
+        if _field(tx, "direction") != "inbound":
+            continue
+        external_id = _field(tx, "external_id")
+        key = normalize_group_txid(str(external_id)) if external_id else None
+        close_key = key if key is not None and key in closing_keys else None
+        matched_by_txid = close_key is not None
+        if close_key is None and closing_keys:
+            for vin_txid in _vin_txids(tx):
+                if vin_txid in closing_keys:
+                    close_key = vin_txid
+                    break
+        if close_key is None:
+            continue
+        sort_key = (str(_field(tx, "occurred_at") or ""), str(_field(tx, "id")))
+        candidates.setdefault(close_key, []).append((sort_key, matched_by_txid, tx))
+
+    groups: dict[str, dict[str, Any]] = {}
+    for close_key, entries in candidates.items():
+        entries.sort(key=lambda item: item[0])
+        balance = int(close_balance_by_txid.get(close_key, 0))
+        legs: list[Any] = []
+        total = 0
+        for _sort_key, matched_by_txid, tx in entries:
+            if not matched_by_txid and balance > 0 and total >= balance:
+                continue
+            legs.append(tx)
+            total += int(_field(tx, "amount") or 0)
+        groups[close_key] = {
+            "legs": legs,
+            "total_msat": total,
+            "balance_msat": balance,
+            "mismatch": _close_balance_mismatch(total, balance),
+        }
+    return groups
 
 
 def _funding_amount_mismatch(tx: Any, funded_msat: int) -> bool:
@@ -157,7 +217,18 @@ def channel_role_map(
                     close_balance_by_txid.get(close_key, 0) + balance
                 )
 
+    tx_rows = list(tx_rows)
     roles: dict[str, str] = {}
+    # Direct payout from the close tx (coop close / to_remote) matches by
+    # txid; a force-close's timelocked sweep matches by spending the
+    # commitment tx. All legs of one close are classified TOGETHER.
+    if closing:
+        for group in _close_leg_groups(
+            closing, close_balance_by_txid, tx_rows
+        ).values():
+            role = CHANNEL_CLOSE_MISMATCH if group["mismatch"] else CHANNEL_CLOSE
+            for tx in group["legs"]:
+                roles[str(_field(tx, "id"))] = role
     for tx in tx_rows:
         external_id = _field(tx, "external_id")
         if not external_id:
@@ -165,9 +236,9 @@ def channel_role_map(
         key = normalize_group_txid(str(external_id))
         direction = _field(tx, "direction")
         tx_id = str(_field(tx, "id"))
-        # The funding tx leaves the on-chain wallet (outbound); the close tx
-        # returns funds (inbound). Guarding on direction avoids mislabeling a
-        # change/receive leg that happens to share the txid.
+        # The funding tx leaves the on-chain wallet (outbound). Guarding on
+        # direction avoids mislabeling a change/receive leg that happens to
+        # share the txid.
         if direction == "outbound" and key in funding:
             if _funding_amount_mismatch(tx, funding_amount_by_txid.get(key, 0)):
                 # The recorded outflow clearly exceeds the funded amount: the
@@ -176,25 +247,6 @@ def channel_role_map(
                 roles[tx_id] = CHANNEL_OPEN_MISMATCH
                 continue
             roles[tx_id] = CHANNEL_OPEN
-        elif direction == "inbound":
-            # Direct payout from the close tx (coop close / to_remote) matches
-            # by txid; a force-close's timelocked sweep matches by spending the
-            # commitment tx.
-            close_key = key if key in closing else None
-            if close_key is None and closing:
-                for vin_txid in _vin_txids(tx):
-                    if vin_txid in closing:
-                        close_key = vin_txid
-                        break
-            if close_key is None:
-                continue
-            received = int(_field(tx, "amount") or 0)
-            if _close_balance_mismatch(
-                received, close_balance_by_txid.get(close_key, 0)
-            ):
-                roles[tx_id] = CHANNEL_CLOSE_MISMATCH
-                continue
-            roles[tx_id] = CHANNEL_CLOSE
     return roles
 
 
@@ -245,15 +297,13 @@ def channel_transfer_pairs(
                     close_balance_by_txid.get(close_key, 0) + balance
                 )
 
+    tx_rows = list(tx_rows)
     pairs: list[dict[str, Any]] = []
-    paired_real_ids: set[str] = set()
     for tx in tx_rows:
         external_id = _field(tx, "external_id")
         if not external_id:
             continue
         tx_id = str(_field(tx, "id"))
-        if tx_id in paired_real_ids:
-            continue
         key = normalize_group_txid(str(external_id))
         direction = _field(tx, "direction")
         amount = int(_field(tx, "amount") or 0)
@@ -280,40 +330,52 @@ def channel_transfer_pairs(
                     "kind": CHANNEL_OPEN,
                 }
             )
-            paired_real_ids.add(tx_id)
-        elif direction == "inbound":
-            close_key = key if key in closing_wallet_by_txid else None
-            if close_key is None and closing_wallet_by_txid:
-                # Force-close sweep: the receiving tx's inputs spend the
-                # commitment tx recorded as the closing txid.
-                for vin_txid in _vin_txids(tx):
-                    if vin_txid in closing_wallet_by_txid:
-                        close_key = vin_txid
-                        break
-            if close_key is None:
+
+    if not closing_wallet_by_txid:
+        return pairs
+    for close_key, group in _close_leg_groups(
+        closing_wallet_by_txid, close_balance_by_txid, tx_rows
+    ).items():
+        if group["mismatch"]:
+            # role map flags these legs CHANNEL_CLOSE_MISMATCH for quarantine;
+            # a synthesized MOVE would book the whole gap as an unbounded
+            # "fee" (the generic implausibility guard cannot fire on a
+            # cloned-amount pair).
+            continue
+        node_wallet_id = closing_wallet_by_txid[close_key]
+        # When our settled channel balance at close is known, the gap to the
+        # GROUP's total receipt is the single close fee (commitment + sweep
+        # miner fees). It rides on the largest leg so the node wallet is
+        # debited fully instead of stranding the difference — booking it per
+        # leg would count every other leg's amount as a "fee" once each.
+        close_fee = 0
+        balance = group["balance_msat"]
+        if balance > group["total_msat"]:
+            close_fee = balance - group["total_msat"]
+        fee_leg_id = None
+        if close_fee > 0 and group["legs"]:
+            fee_leg_id = str(
+                _field(
+                    max(
+                        group["legs"],
+                        key=lambda leg: (
+                            int(_field(leg, "amount") or 0),
+                            str(_field(leg, "id")),
+                        ),
+                    ),
+                    "id",
+                )
+            )
+        for tx in group["legs"]:
+            if int(_field(tx, "amount") or 0) <= 0:
                 continue
-            balance = close_balance_by_txid.get(close_key, 0)
-            if _close_balance_mismatch(amount, balance):
-                # channel_role_map flags this row CHANNEL_CLOSE_MISMATCH for
-                # quarantine; a synthesized MOVE would book the whole gap as
-                # an unbounded "fee" (the generic implausibility guard cannot
-                # fire on a cloned-amount pair).
-                continue
-            node_wallet_id = closing_wallet_by_txid[close_key]
-            # When our settled channel balance at close is known, the gap to
-            # the on-chain receipt IS the close fee (commitment + sweep
-            # miner fees): put it on the synthesized node-side out leg so the
-            # MOVE books it as a taxable fee disposal and the node wallet is
-            # debited fully instead of stranding the difference forever.
-            close_fee = 0
-            if balance > amount:
-                close_fee = balance - amount
+            tx_id = str(_field(tx, "id"))
             out_row = _clone_channel_leg(
                 tx,
                 wallet_refs_by_id[node_wallet_id],
                 row_id=f"channel-close:{tx_id}:out:{node_wallet_id}",
                 direction="outbound",
-                fee=close_fee,
+                fee=close_fee if tx_id == fee_leg_id else 0,
             )
             pairs.append(
                 {
@@ -323,7 +385,6 @@ def channel_transfer_pairs(
                     "kind": CHANNEL_CLOSE,
                 }
             )
-            paired_real_ids.add(tx_id)
     return pairs
 
 

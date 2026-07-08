@@ -500,5 +500,83 @@ class ChannelLifecycleEngineTest(unittest.TestCase):
         self.assertEqual(fee_entries, [])
 
 
+class MultiSweepCloseTest(unittest.TestCase):
+    def test_multi_sweep_close_books_one_fee_for_the_group(self) -> None:
+        # A force close pays back in several legs (to_local sweep + HTLC
+        # sweep). The single close fee is balance - SUM(legs); per-leg
+        # evaluation would book each other leg's amount as a "fee" once each
+        # and double-debit the node wallet.
+        sweep_one = json.dumps(
+            {"txid": "dd" * 32, "vin": [{"txid": CLOSING_TXID, "vout": 0}]}
+        )
+        sweep_two = json.dumps(
+            {"txid": "ee" * 32, "vin": [{"txid": CLOSING_TXID, "vout": 1}]}
+        )
+        rows = [
+            _row("buy", "inbound", ONE_BTC, "2025-05-01T00:00:00Z"),
+            _row("fund", "outbound", ONE_BTC, "2025-06-01T00:00:00Z", external_id=FUNDING_TXID),
+            _row("sweep-1", "inbound", 60_000_000_000, "2025-08-01T00:00:00Z", external_id="dd" * 32),
+            _row("sweep-2", "inbound", 39_900_000_000, "2025-08-02T00:00:00Z", external_id="ee" * 32),
+        ]
+        rows[2]["raw_json"] = sweep_one
+        rows[3]["raw_json"] = sweep_two
+        channel_rows = [
+            {
+                "funding_txid": FUNDING_TXID,
+                "closing_txid": CLOSING_TXID,
+                "wallet_id": "node",
+                "close_balance_msat": ONE_BTC,
+            }
+        ]
+        roles = channel_role_map(channel_rows, rows)
+        self.assertEqual(roles["sweep-1"], CHANNEL_CLOSE)
+        self.assertEqual(roles["sweep-2"], CHANNEL_CLOSE)
+        pairs = channel_transfer_pairs(channel_rows, rows, _wallet_refs())
+        close_fees = sorted(
+            int(p["out"]["fee"]) for p in pairs if p["kind"] == CHANNEL_CLOSE
+        )
+        # One group fee (0.001 BTC), on one leg only.
+        self.assertEqual(close_fees, [0, 100_000_000])
+
+        result = _run(rows, roles, pairs)
+        self.assertEqual(result.quarantines, [])
+        wallet_quantities = {
+            key[1]: totals["quantity"] for key, totals in result.wallet_holdings.items()
+        }
+        self.assertEqual(wallet_quantities["onchain"], Decimal("0.999"))
+        self.assertEqual(wallet_quantities.get("node", Decimal("0")), Decimal("0"))
+
+    def test_vin_match_after_full_recovery_is_not_a_close_leg(self) -> None:
+        # The peer's to_remote output pays them directly from the commitment
+        # tx; if they later pay US spending that output, our inbound must not
+        # be reclassified as a close leg once the close is fully accounted —
+        # that would suppress taxable income.
+        payout = json.dumps({"txid": "dd" * 32, "vin": [{"txid": CLOSING_TXID, "vout": 0}]})
+        peer_payment = json.dumps(
+            {"txid": "ee" * 32, "vin": [{"txid": CLOSING_TXID, "vout": 1}]}
+        )
+        rows = [
+            _row("buy", "inbound", ONE_BTC, "2025-05-01T00:00:00Z"),
+            _row("fund", "outbound", ONE_BTC, "2025-06-01T00:00:00Z", external_id=FUNDING_TXID),
+            # Our full settled balance came back in the first sweep.
+            _row("sweep", "inbound", ONE_BTC, "2025-08-01T00:00:00Z", external_id="dd" * 32),
+            # Later inbound funded by the peer's swept commitment output.
+            _row("peer-pay", "inbound", 30_000_000_000, "2025-09-01T00:00:00Z", external_id="ee" * 32),
+        ]
+        rows[2]["raw_json"] = payout
+        rows[3]["raw_json"] = peer_payment
+        channel_rows = [
+            {
+                "funding_txid": FUNDING_TXID,
+                "closing_txid": CLOSING_TXID,
+                "wallet_id": "node",
+                "close_balance_msat": ONE_BTC,
+            }
+        ]
+        roles = channel_role_map(channel_rows, rows)
+        self.assertEqual(roles.get("sweep"), CHANNEL_CLOSE)
+        self.assertNotIn("peer-pay", roles)
+
+
 if __name__ == "__main__":  # pragma: no cover
     unittest.main()
