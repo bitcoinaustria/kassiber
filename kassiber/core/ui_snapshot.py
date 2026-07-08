@@ -1769,16 +1769,29 @@ def _transaction_pair_display_meta(
         WHERE p.deleted_at IS NULL
           AND (p.out_transaction_id IN ({placeholders})
                OR p.in_transaction_id IN ({placeholders}))
+        ORDER BY p.created_at, p.id
         """,
         [*ids, *ids],
     ).fetchall()
+    # Multi-pair components (whirlpool N-leg reviews) reuse a leg across
+    # several active pairs. The per-pair out/in gap is meaningless there —
+    # the shared out leg dwarfs each receipt — so the NULL-fee fallback must
+    # not invent a giant per-pair "fee".
+    legs_pair_count: dict[str, int] = {}
+    for pair in pair_rows:
+        for leg_id in (pair["out_transaction_id"], pair["in_transaction_id"]):
+            legs_pair_count[leg_id] = legs_pair_count.get(leg_id, 0) + 1
     pair_meta: dict[str, dict[str, Any]] = {}
     for pair in pair_rows:
         out_asset = pair["out_asset"]
         in_asset = pair["in_asset"]
         pair_type = "transfer" if out_asset == in_asset else "swap"
+        multi_pair_leg = (
+            legs_pair_count.get(pair["out_transaction_id"], 0) > 1
+            or legs_pair_count.get(pair["in_transaction_id"], 0) > 1
+        )
         raw_fee_msat = pair["swap_fee_msat"]
-        if raw_fee_msat is None:
+        if raw_fee_msat is None and not multi_pair_leg:
             raw_fee_msat = int(pair["out_amount"] or 0) - int(pair["in_amount"] or 0)
         fee_msat = int(raw_fee_msat or 0)
         label = "Transfer" if pair_type == "transfer" else "Swap"
@@ -1811,8 +1824,10 @@ def _transaction_pair_display_meta(
             "tag": label,
             "display_rate": display_rate,
         }
-        pair_meta[pair["out_transaction_id"]] = {**base, "role": "out"}
-        pair_meta[pair["in_transaction_id"]] = {**base, "role": "in"}
+        # First pair wins (rows are ordered by created_at, id) so a
+        # multi-paired leg renders one deterministic representative.
+        pair_meta.setdefault(pair["out_transaction_id"], {**base, "role": "out"})
+        pair_meta.setdefault(pair["in_transaction_id"], {**base, "role": "in"})
     for transaction_id, meta in _journal_transfer_display_meta(conn, rows).items():
         pair_meta.setdefault(transaction_id, meta)
     return pair_meta
@@ -4148,14 +4163,39 @@ def _journal_pair_payload(row: sqlite3.Row) -> dict[str, Any] | None:
     }
 
 
+# A leg can carry SEVERAL active pairs since the multi-pair feature dropped
+# the per-leg UNIQUE indexes (a whirlpool out leg pairs with N postmix
+# receipts). Joining the raw table would multiply every journal entry of that
+# transaction N times, so each side picks one deterministic representative
+# pair (oldest, then smallest id) — display metadata only, never accounting.
 _JOURNAL_PAIR_JOIN_SQL = """
-            LEFT JOIN transaction_pairs p_out
+            LEFT JOIN (
+                SELECT * FROM transaction_pairs tp
+                WHERE tp.deleted_at IS NULL
+                  AND tp.id = (
+                    SELECT tp2.id FROM transaction_pairs tp2
+                    WHERE tp2.profile_id = tp.profile_id
+                      AND tp2.out_transaction_id = tp.out_transaction_id
+                      AND tp2.deleted_at IS NULL
+                    ORDER BY tp2.created_at, tp2.id
+                    LIMIT 1
+                  )
+            ) p_out
               ON p_out.profile_id = je.profile_id
-             AND p_out.deleted_at IS NULL
              AND p_out.out_transaction_id = je.transaction_id
-            LEFT JOIN transaction_pairs p_in
+            LEFT JOIN (
+                SELECT * FROM transaction_pairs tp
+                WHERE tp.deleted_at IS NULL
+                  AND tp.id = (
+                    SELECT tp2.id FROM transaction_pairs tp2
+                    WHERE tp2.profile_id = tp.profile_id
+                      AND tp2.in_transaction_id = tp.in_transaction_id
+                      AND tp2.deleted_at IS NULL
+                    ORDER BY tp2.created_at, tp2.id
+                    LIMIT 1
+                  )
+            ) p_in
               ON p_in.profile_id = je.profile_id
-             AND p_in.deleted_at IS NULL
              AND p_in.in_transaction_id = je.transaction_id
 """
 

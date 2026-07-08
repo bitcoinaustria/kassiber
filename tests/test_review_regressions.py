@@ -2883,6 +2883,233 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual(priced["pricing_source_kind"], pricing.SOURCE_FMV_PROVIDER)
         self.assertEqual(priced["pricing_provider"], core_rates.RATE_SOURCE_COINBASE_EXCHANGE)
 
+    def test_multi_pair_leg_does_not_multiply_journal_events(self):
+        # A whirlpool-style out leg carries N active pairs since the multi-pair
+        # feature dropped the per-leg UNIQUE indexes. The journal event list
+        # joins pair metadata per leg — it must pick ONE representative pair,
+        # not multiply every journal entry of the transaction N times.
+        conn = open_db(self.data_root)
+        self.addCleanup(conn.close)
+        now = "2026-01-01T00:00:00Z"
+        conn.execute(
+            "INSERT INTO workspaces(id, label, created_at) VALUES(?, ?, ?)",
+            ("ws-multi-pair", "Multi Pair Workspace", now),
+        )
+        conn.execute(
+            """
+            INSERT INTO profiles(
+                id, workspace_id, label, fiat_currency, tax_country,
+                tax_long_term_days, gains_algorithm, last_processed_at,
+                last_processed_tx_count, journal_input_version,
+                last_processed_input_version, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "pf-multi-pair",
+                "ws-multi-pair",
+                "Multi Pair Profile",
+                "EUR",
+                "generic",
+                365,
+                "FIFO",
+                now,
+                3,
+                0,
+                0,
+                now,
+            ),
+        )
+        conn.execute(
+            """
+            INSERT INTO wallets(
+                id, workspace_id, profile_id, label, kind, config_json, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "wal-multi-pair",
+                "ws-multi-pair",
+                "pf-multi-pair",
+                "Multi Pair Wallet",
+                "address",
+                "{}",
+                now,
+            ),
+        )
+        conn.executemany(
+            """
+            INSERT INTO transactions(
+                id, workspace_id, profile_id, wallet_id, external_id, fingerprint,
+                occurred_at, confirmed_at, direction, asset, amount, fee,
+                fiat_currency, fiat_rate, fiat_value, fiat_price_source, kind,
+                description, counterparty, note, excluded, raw_json, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                (
+                    "tx-mp-out",
+                    "ws-multi-pair",
+                    "pf-multi-pair",
+                    "wal-multi-pair",
+                    "mp-out",
+                    "fp-mp-out",
+                    "2026-01-01T00:00:00Z",
+                    "2026-01-01T00:00:00Z",
+                    "outbound",
+                    "BTC",
+                    btc_to_msat("1.0"),
+                    0,
+                    "EUR",
+                    50_000,
+                    50_000,
+                    None,
+                    "payment",
+                    None,
+                    None,
+                    None,
+                    0,
+                    "{}",
+                    now,
+                ),
+                (
+                    "tx-mp-in-1",
+                    "ws-multi-pair",
+                    "pf-multi-pair",
+                    "wal-multi-pair",
+                    "mp-in-1",
+                    "fp-mp-in-1",
+                    "2026-01-01T00:01:00Z",
+                    "2026-01-01T00:01:00Z",
+                    "inbound",
+                    "BTC",
+                    btc_to_msat("0.5"),
+                    0,
+                    "EUR",
+                    50_000,
+                    25_000,
+                    None,
+                    "receive",
+                    None,
+                    None,
+                    None,
+                    0,
+                    "{}",
+                    now,
+                ),
+                (
+                    "tx-mp-in-2",
+                    "ws-multi-pair",
+                    "pf-multi-pair",
+                    "wal-multi-pair",
+                    "mp-in-2",
+                    "fp-mp-in-2",
+                    "2026-01-01T00:01:00Z",
+                    "2026-01-01T00:01:00Z",
+                    "inbound",
+                    "BTC",
+                    btc_to_msat("0.4999"),
+                    0,
+                    "EUR",
+                    50_000,
+                    24_995,
+                    None,
+                    "receive",
+                    None,
+                    None,
+                    None,
+                    0,
+                    "{}",
+                    now,
+                ),
+            ],
+        )
+        conn.executemany(
+            """
+            INSERT INTO transaction_pairs(
+                id, workspace_id, profile_id, out_transaction_id,
+                in_transaction_id, kind, policy, swap_fee_msat, pair_source,
+                created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                (
+                    "pair-mp-1",
+                    "ws-multi-pair",
+                    "pf-multi-pair",
+                    "tx-mp-out",
+                    "tx-mp-in-1",
+                    "whirlpool",
+                    "carrying-value",
+                    None,
+                    "manual",
+                    now,
+                ),
+                (
+                    "pair-mp-2",
+                    "ws-multi-pair",
+                    "pf-multi-pair",
+                    "tx-mp-out",
+                    "tx-mp-in-2",
+                    "whirlpool",
+                    "carrying-value",
+                    None,
+                    "manual",
+                    "2026-01-01T00:00:01Z",
+                ),
+            ],
+        )
+        conn.executemany(
+            """
+            INSERT INTO journal_entries(
+                id, workspace_id, profile_id, transaction_id, wallet_id,
+                occurred_at, entry_type, asset, quantity, fiat_value, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                (
+                    "je-mp-out",
+                    "ws-multi-pair",
+                    "pf-multi-pair",
+                    "tx-mp-out",
+                    "wal-multi-pair",
+                    "2026-01-01T00:00:00Z",
+                    "transfer_out",
+                    "BTC",
+                    -btc_to_msat("1.0"),
+                    -50_000,
+                    now,
+                ),
+                (
+                    "je-mp-fee",
+                    "ws-multi-pair",
+                    "pf-multi-pair",
+                    "tx-mp-out",
+                    "wal-multi-pair",
+                    "2026-01-01T00:00:00Z",
+                    "transfer_fee",
+                    "BTC",
+                    -btc_to_msat("0.0001"),
+                    -5,
+                    now,
+                ),
+            ],
+        )
+        set_setting(conn, "context_workspace", "ws-multi-pair")
+        set_setting(conn, "context_profile", "pf-multi-pair")
+        conn.commit()
+
+        events = build_journal_events_list_snapshot(conn, {"limit": 10})
+        # Two journal entries on the out tx, NOT multiplied by the two pairs.
+        self.assertEqual(events["summary"]["count"], 2)
+        self.assertEqual(len(events["events"]), 2)
+        # Deterministic representative pair: the oldest by (created_at, id).
+        self.assertEqual(
+            {event["pair"]["pairId"] for event in events["events"]},
+            {"pair-mp-1"},
+        )
+
+        journals = build_journals_snapshot(conn)
+        self.assertEqual(len(journals["recent"]), 2)
+
     def test_journal_pair_payload_picks_one_pair_for_chain_edge_case(self):
         conn = open_db(self.data_root)
         self.addCleanup(conn.close)
