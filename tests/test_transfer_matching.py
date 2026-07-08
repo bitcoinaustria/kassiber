@@ -230,6 +230,35 @@ class PaymentHashExactMatchTests(unittest.TestCase):
         inbound = _row(id="b", wallet_id="w", payment_hash=_PAY_HASH, direction="inbound")
         self.assertEqual(suggest_swap_candidates([out, inbound]), [])
 
+    def test_own_node_lightning_hash_pair_suppressed_from_review(self):
+        # The journal nets a cross-node own payment (CLN pay -> LND invoice,
+        # same hash, same asset) as a MOVE, so the matcher must not surface it
+        # as an exact payment_hash swap candidate — lockstep with
+        # transfers.detect_intra_transfers' Lightning hash pass.
+        out = _row(
+            id="cln-pay",
+            wallet_id="cln-node",
+            wallet_label="CLN",
+            wallet_kind="cln",
+            kind="cln_pay",
+            payment_hash=_PAY_HASH,
+            direction="outbound",
+            amount=100_000_000,
+            fee=100_000,
+        )
+        inbound = _row(
+            id="lnd-invoice",
+            wallet_id="lnd-node",
+            wallet_label="LND",
+            wallet_kind="lnd",
+            kind="lnd_invoice",
+            payment_hash=_PAY_HASH,
+            direction="inbound",
+            occurred_at="2026-03-14T17:31:00Z",
+            amount=100_000_000,
+        )
+        self.assertEqual(suggest_swap_candidates([out, inbound]), [])
+
     def test_same_asset_transfer_defaults_to_carrying_value_for_generic_profile(self):
         out = _row(
             id="cold-out",

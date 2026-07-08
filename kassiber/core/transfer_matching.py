@@ -56,7 +56,11 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Iterable, Mapping, Optional, Sequence
 
-from ..transfers import is_bitcoin_rail_pair, normalize_group_txid
+from ..transfers import (
+    is_bitcoin_rail_pair,
+    is_lightning_payment_hash_row,
+    normalize_group_txid,
+)
 
 
 LIGHTNING_WALLET_KINDS = frozenset({"phoenix", "coreln", "lnd", "nwc"})
@@ -503,6 +507,51 @@ def _deterministic_self_transfer_ids(
         ):
             # Implausible implied fee — likely an unrecognized peg/payment leg.
             # Don't claim it as a proven self-transfer; let it reach swap review.
+            continue
+        deterministic_ids.add(_record_get(out_row, "id"))
+        deterministic_ids.add(_record_get(in_row, "id"))
+
+    # Mirror of the journal's Lightning payment-hash pass
+    # (transfers.detect_intra_transfers): an own-node payment whose hash
+    # matches another owned node's invoice is netted as a MOVE by the journal,
+    # so it must not surface as an exact payment_hash swap candidate. ONLY
+    # node-sourced hashes qualify — a chain_script HTLC hash (reverse swap
+    # claim) is swap evidence and stays reviewable.
+    by_hash: dict[tuple[str, str], list[Mapping]] = {}
+    for row in rows:
+        if _record_get(row, "id") in deterministic_ids:
+            continue
+        payment_hash = _record_get(row, "payment_hash")
+        if not payment_hash:
+            continue
+        if not is_lightning_payment_hash_row(row):
+            continue
+        by_hash.setdefault(
+            (str(payment_hash), _record_get(row, "asset")), []
+        ).append(row)
+    for group in by_hash.values():
+        outs = [
+            row
+            for row in group
+            if _record_get(row, "direction") == "outbound"
+            and int(_record_get(row, "amount") or 0) > 0
+        ]
+        ins = [
+            row
+            for row in group
+            if _record_get(row, "direction") == "inbound"
+            and int(_record_get(row, "amount") or 0) > 0
+        ]
+        if len(outs) != 1 or len(ins) != 1:
+            continue
+        out_row, in_row = outs[0], ins[0]
+        if _record_get(out_row, "wallet_id") == _record_get(in_row, "wallet_id"):
+            continue
+        out_amount = int(_record_get(out_row, "amount") or 0)
+        in_amount = int(_record_get(in_row, "amount") or 0)
+        if out_amount - in_amount > fee_threshold_msat(
+            out_amount, fee_pct_max, fee_sats_min
+        ):
             continue
         deterministic_ids.add(_record_get(out_row, "id"))
         deterministic_ids.add(_record_get(in_row, "id"))

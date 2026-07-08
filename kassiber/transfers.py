@@ -169,7 +169,14 @@ def _normalized_lower(value):
     return str(value or "").strip().lower()
 
 
-def _is_lightning_payment_hash_row(row):
+def is_lightning_payment_hash_row(row):
+    """True when a row's payment_hash comes from a Lightning node itself.
+
+    Shared with the swap matcher: rows this predicate accepts auto-pair in
+    the journal (detect_intra_transfers hash pass), so the matcher must
+    suppress the same pairs from swap review — and ONLY those (chain_script
+    HTLC hashes are swap evidence and stay reviewable).
+    """
     source = _normalized_lower(_row_field(row, "payment_hash_source"))
     if source in _NON_LIGHTNING_PAYMENT_HASH_SOURCES:
         return False
@@ -180,6 +187,9 @@ def _is_lightning_payment_hash_row(row):
         return True
     wallet_kind = _normalized_lower(_row_field(row, "wallet_kind"))
     return wallet_kind in _LIGHTNING_WALLET_KINDS
+
+
+_is_lightning_payment_hash_row = is_lightning_payment_hash_row
 
 
 def detect_intra_transfers(rows):
