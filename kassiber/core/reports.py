@@ -26,6 +26,7 @@ from ..errors import AppError
 from ..msat import btc_to_msat, dec, msat_to_btc
 from ..secrets.sqlcipher import looks_like_plaintext_sqlite
 from ..tax_policy import require_tax_processing_supported
+from ..transfers import apply_manual_pairs, detect_intra_transfers
 from ..wallet_descriptors import normalize_asset_code
 
 INTERVAL_CHOICES = ("hour", "day", "week", "month")
@@ -2529,6 +2530,101 @@ def _attachment_entry(row):
     }
 
 
+def _transaction_journal_values(conn, profile, wallet=None):
+    """Aggregate per-transaction cost basis and realized gain/loss from the
+    processed journal.
+
+    Returns a map of transaction id -> ``{"cost_basis", "gain_loss"}`` where each
+    value is ``None`` when no journal entry for that transaction carries the
+    figure (e.g. a plain acquisition has no realized basis or gain yet), so the
+    export leaves those cells blank rather than showing a misleading ``0``. This
+    is best-effort: if journals have not been processed the map is empty and the
+    columns stay blank until the user reprocesses.
+    """
+    filters = ["je.profile_id = ?"]
+    params: list[Any] = [profile["id"]]
+    if wallet:
+        filters.append("je.wallet_id = ?")
+        params.append(wallet["id"])
+    where = " AND ".join(filters)
+    rows = conn.execute(
+        f"""
+        SELECT
+            je.transaction_id AS tx_id,
+            SUM(COALESCE(je.cost_basis, 0)) AS cost_basis,
+            SUM(COALESCE(je.gain_loss, 0)) AS gain_loss,
+            SUM(CASE WHEN je.cost_basis IS NOT NULL THEN 1 ELSE 0 END) AS basis_entries,
+            SUM(CASE WHEN je.gain_loss IS NOT NULL THEN 1 ELSE 0 END) AS gain_entries
+        FROM journal_entries je
+        WHERE {where}
+        GROUP BY je.transaction_id
+        """,
+        params,
+    ).fetchall()
+    values = {}
+    for row in rows:
+        values[row["tx_id"]] = {
+            "cost_basis": float(row["cost_basis"]) if row["basis_entries"] else None,
+            "gain_loss": float(row["gain_loss"]) if row["gain_entries"] else None,
+        }
+    return values
+
+
+def _self_transfer_legs_by_transaction(conn, profile):
+    """Map each transaction that is one leg of a transfer between the user's own
+    wallets to the counterparty wallet label.
+
+    Reuses the same pure detection + manual-pair layer as the journal pipeline
+    (``detect_intra_transfers`` + ``apply_manual_pairs``) so the ledger export
+    cannot drift from what the engine treats as an internal transfer. Detection
+    spans the whole profile (a transfer is two wallets), so this always loads the
+    full profile row set even when the export is wallet-scoped; the caller only
+    surfaces the column for the transactions it renders. Advanced
+    ownership-derived / consolidation transfers that only exist as journal legs
+    are not reconstructed here.
+    """
+    rows = conn.execute(
+        """
+        SELECT
+            t.id AS id,
+            t.external_id AS external_id,
+            t.asset AS asset,
+            t.direction AS direction,
+            t.amount AS amount,
+            t.wallet_id AS wallet_id,
+            t.payment_hash AS payment_hash,
+            w.label AS wallet_label
+        FROM transactions t
+        JOIN wallets w ON w.id = t.wallet_id
+        WHERE t.profile_id = ? AND t.excluded = 0
+        """,
+        (profile["id"],),
+    ).fetchall()
+    rows_by_id = {row["id"]: row for row in rows}
+    auto_pairs, _ = detect_intra_transfers(rows)
+    manual_records = conn.execute(
+        "SELECT * FROM transaction_pairs WHERE profile_id = ? AND deleted_at IS NULL",
+        (profile["id"],),
+    ).fetchall()
+    same_asset_pairs, cross_asset_pairs = apply_manual_pairs(rows, auto_pairs, manual_records)
+
+    legs: dict[str, str] = {}
+
+    def _record(out_row, in_row):
+        # The out leg's counterparty is the destination wallet, and vice versa.
+        legs[out_row["id"]] = in_row["wallet_label"]
+        legs[in_row["id"]] = out_row["wallet_label"]
+
+    for pair in same_asset_pairs:
+        _record(pair["out"], pair["in"])
+    for pair in cross_asset_pairs:
+        out_row = rows_by_id.get(pair["out_id"])
+        in_row = rows_by_id.get(pair["in_id"])
+        if out_row is not None and in_row is not None:
+            _record(out_row, in_row)
+    return legs
+
+
 def _tags_by_transaction(conn, tx_where, tx_params):
     rows = conn.execute(
         f"""
@@ -2690,6 +2786,11 @@ def _report_query_rows(conn, profile, wallet=None):
             t.asset,
             t.amount,
             t.fee,
+            t.fiat_currency,
+            t.fiat_rate,
+            t.fiat_value,
+            t.fiat_rate_exact,
+            t.fiat_value_exact,
             COALESCE(t.description, '') AS description,
             COALESCE(t.note, '') AS note,
             COALESCE(t.counterparty, '') AS counterparty
@@ -2702,13 +2803,21 @@ def _report_query_rows(conn, profile, wallet=None):
     ).fetchall()
     tags_by_tx = _tags_by_transaction(conn, tx_where, tx_params)
     attachments_by_tx = _attachment_entries_by_transaction(conn, tx_where, tx_params)
+    journal_values = _transaction_journal_values(conn, profile, wallet=wallet)
+    transfer_legs = _self_transfer_legs_by_transaction(conn, profile)
     transactions = []
     for row in transaction_rows:
         entries = attachments_by_tx.get(row["row_id"], [])
+        journal = journal_values.get(row["row_id"], {})
+        references = [entry["url"] for entry in entries if entry.get("url")]
         transactions.append(
             {
                 **dict(row),
+                "cost_basis": journal.get("cost_basis"),
+                "gain_loss": journal.get("gain_loss"),
+                "transfer": transfer_legs.get(row["row_id"], ""),
                 "tags": tags_by_tx.get(row["row_id"], ""),
+                "references": "\n".join(references),
                 "attachments": "\n".join(entry["display_name"] for entry in entries),
                 "attachments_list": entries,
             }
@@ -5817,11 +5926,41 @@ def _generic_report_data_quality_rows(context):
     ]
 
 
+def _optional_decimal(value):
+    """Return ``Decimal(value)`` or ``None`` when the value is absent, so a real
+    ``0`` price/value stays distinct from a missing one."""
+    if value is None or value == "":
+        return None
+    return dec(value)
+
+
+def _optional_decimal_pref(row, exact_key, legacy_key):
+    """Prefer the exact decimal string over the lossy float column, mirroring the
+    transaction editor's canonical view so the tax ledger shows the precise
+    recorded price/value users are meant to verify."""
+    value = _optional_decimal(row.get(exact_key))
+    if value is None:
+        value = _optional_decimal(row.get(legacy_key))
+    return value
+
+
 def _generic_report_transaction_rows(context):
     rows = []
     for row in context["query_rows"]["transactions"]:
         amount_msat = int(row["amount"] or 0)
         fee_msat = int(row["fee"] or 0)
+        amount_btc = msat_to_btc(amount_msat)
+        fee_btc = msat_to_btc(fee_msat)
+        # Fiat price (per-unit) and fair market value (of the whole amount) are
+        # the recorded transaction pricing; derive one from the other when only
+        # one is stored so users always see both for manual verification.
+        price = _optional_decimal_pref(row, "fiat_rate_exact", "fiat_rate")
+        fmv = _optional_decimal_pref(row, "fiat_value_exact", "fiat_value")
+        if price is None and fmv is not None and amount_btc:
+            price = fmv / amount_btc
+        if fmv is None and price is not None:
+            fmv = amount_btc * price
+        fiat_fee = fee_btc * price if price is not None else None
         rows.append(
             {
                 "occurred_at": row["occurred_at"],
@@ -5829,14 +5968,22 @@ def _generic_report_transaction_rows(context):
                 "transaction_id": row["transaction_id"],
                 "direction": row["direction"],
                 "asset": row["asset"],
-                "amount": float(msat_to_btc(amount_msat)),
+                "amount": float(amount_btc),
                 "amount_msat": amount_msat,
-                "fee": float(msat_to_btc(fee_msat)),
+                "fee": float(fee_btc),
                 "fee_msat": fee_msat,
+                "fiat_currency": row.get("fiat_currency") or "",
+                "fiat_price": float(price) if price is not None else None,
+                "fmv": float(fmv) if fmv is not None else None,
+                "fiat_fee": float(fiat_fee) if fiat_fee is not None else None,
+                "cost_basis": row.get("cost_basis"),
+                "gain_loss": row.get("gain_loss"),
                 "description": row["description"],
                 "note": row.get("note", ""),
                 "counterparty": row.get("counterparty", ""),
+                "transfer": row.get("transfer", ""),
                 "tags": row.get("tags", ""),
+                "references": row.get("references", ""),
                 "attachments": row.get("attachments", ""),
                 "attachments_list": row.get("attachments_list", []),
             }
@@ -6006,22 +6153,7 @@ def _generic_report_section_specs(context):
         {
             "sheet_name": "Transactions",
             "title": "Transactions",
-            "headers": (
-                "occurred_at",
-                "wallet",
-                "transaction_id",
-                "direction",
-                "asset",
-                "amount",
-                "amount_msat",
-                "fee",
-                "fee_msat",
-                "description",
-                "note",
-                "counterparty",
-                "tags",
-                "attachments",
-            ),
+            "headers": TRANSACTIONS_EXPORT_HEADERS,
             "rows": _generic_report_transaction_rows(context),
         },
     ]
@@ -6035,6 +6167,7 @@ def _report_column_label(header):
         .replace(" Msat", " msat")
         .replace(" Sat", " sat")
         .replace(" Pnl", " PnL")
+        .replace("Fmv", "FMV")
     )
 
 
@@ -6102,6 +6235,9 @@ GENERIC_REPORT_MONEY_FIELDS = {
     "avg_cost",
     "cost_basis",
     "cumulative_cost_basis",
+    "fiat_fee",
+    "fiat_price",
+    "fmv",
     "gain_loss",
     "market_value",
     "proceeds",
@@ -6554,10 +6690,18 @@ TRANSACTIONS_EXPORT_HEADERS = (
     "amount_msat",
     "fee",
     "fee_msat",
+    "fiat_currency",
+    "fiat_price",
+    "fmv",
+    "fiat_fee",
+    "cost_basis",
+    "gain_loss",
     "description",
     "note",
     "counterparty",
+    "transfer",
     "tags",
+    "references",
     "attachments",
 )
 

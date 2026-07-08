@@ -1511,7 +1511,24 @@ class CliSmokeTest(unittest.TestCase):
         self.assertEqual(xlsx_path.read_bytes()[:2], b"PK")
         sheets = _load_xlsx_sheets(xlsx_path)
         headers = {label for label in sheets["Transactions"].get(2, {}).values()}
-        for column in ("Wallet", "Direction", "Asset", "Description", "Tags", "Attachments"):
+        for column in (
+            "Wallet",
+            "Direction",
+            "Asset",
+            "Description",
+            "Tags",
+            "Attachments",
+            # Fiat pricing, tax figures, self-transfer and reference columns so a
+            # user can verify each row manually.
+            "Fiat Currency",
+            "Fiat Price",
+            "FMV",
+            "Fiat Fee",
+            "Cost Basis",
+            "Gain Loss",
+            "Transfer",
+            "References",
+        ):
             self.assertIn(column, headers)
 
         payload = self._cli(
@@ -1525,6 +1542,8 @@ class CliSmokeTest(unittest.TestCase):
         csv_text = csv_path.read_text(encoding="utf-8")
         self.assertIn("Kassiber Transactions - Default", csv_text)
         self.assertIn("Transaction ID", csv_text)
+        self.assertIn("FMV", csv_text)
+        self.assertIn("Cost Basis", csv_text)
 
     def test_07af_verify_transfer_fee_and_traceable_ids(self):
         # A self-transfer with a network fee: the engine records transfer_out for

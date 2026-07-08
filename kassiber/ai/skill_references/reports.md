@@ -265,12 +265,27 @@ kassiber transactions export --wallet satoshi-cold --export-format xlsx --file c
 ```
 
 It writes a single styled Transactions sheet (or CSV) with the same columns as
-the report's Transactions sheet — description, note, counterparty, tags, and the
-linked-file/URL Attachments column (single URLs render as clickable links). In
-the desktop GUI this is the **Export** button on the Transactions screen toolbar
-(Excel / CSV), backed by the daemon kinds `ui.transactions.export_csv` /
+the report's Transactions sheet, so a user can verify each row by hand:
+
+- amount / fee in BTC and msat;
+- `fiat_currency`, `fiat_price` (per-unit), `fmv` (fair market value of the
+  amount) and `fiat_fee` — the recorded transaction pricing (one is derived from
+  the other when only one is stored);
+- `cost_basis` and `gain_loss` from the last processed journal (blank for rows
+  with no realized figure, e.g. a plain acquisition, or until journals are
+  processed);
+- `transfer` — for a hop between the user's own wallets, the counterparty wallet
+  label (empty for external sends/receipts), so internal transfers are visible
+  and sortable;
+- description, note, counterparty, tags, `references` (attachment URLs), and the
+  linked-file/URL Attachments column (single URLs render as clickable links).
+
+In the desktop GUI this is the **Export** button on the Transactions screen
+toolbar (Excel / CSV), backed by the daemon kinds `ui.transactions.export_csv` /
 `ui.transactions.export_xlsx`. It exports the profile's transactions (wallet
-scope when given), not the screen's transient view filters.
+scope when given), not the screen's transient view filters. Fiat columns reflect
+the currency each transaction was priced in (shown in `fiat_currency`), not a
+forced conversion.
 
 ### Self-verifying XLSX (default)
 
