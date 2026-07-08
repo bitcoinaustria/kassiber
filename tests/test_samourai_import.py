@@ -470,17 +470,21 @@ class SamouraiImportTest(unittest.TestCase):
         )
         self.assertEqual(normalized.transfers[0].to_wallet_label, "Premix")
         self.assertEqual(normalized.transfers[1].to_wallet_label, "Badbank")
-        # The whole group is atomic in the gate and the fee rides on the
-        # largest leg, mirroring the graph derivers' convention.
+        # The whole group is atomic in the gate. The fee lands on the first
+        # canonical leg (chronological, then row id — here tx0-badbank), the
+        # same ordered_pair_component + allocate_fee_msat walk Austrian regime
+        # inference uses, so booking and regime_flows describe the same
+        # fee-bearing leg.
         group_ids = {transfer.group_id for transfer in normalized.transfers}
         self.assertEqual(group_ids, {"samourai-internal:tx0-out"})
         by_dest = {t.to_wallet_label: t for t in normalized.transfers}
-        self.assertGreater(by_dest["Premix"].fee, 0)
-        self.assertEqual(by_dest["Premix"].spot_price, 60_000)
+        self.assertGreater(by_dest["Badbank"].fee, 0)
+        self.assertEqual(by_dest["Badbank"].spot_price, 60_000)
         self.assertEqual(
-            by_dest["Premix"].sent, by_dest["Premix"].received + by_dest["Premix"].fee
+            by_dest["Badbank"].sent,
+            by_dest["Badbank"].received + by_dest["Badbank"].fee,
         )
-        self.assertEqual(by_dest["Badbank"].fee, 0)
+        self.assertEqual(by_dest["Premix"].fee, 0)
         self.assertEqual(normalized.quarantines, [])
 
         missing_price = normalize_tax_asset_inputs(
