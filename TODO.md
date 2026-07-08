@@ -1136,6 +1136,29 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
     mix fields from different pairs; Austrian inference now uses the same
     reviewed-pair component membership as booking, leaving derived pairs to
     their own group path.
+  - [ ] **Make the Austrian disposal-ordering election configurable.** For a
+    disposal from a wallet holding both Alt and Neu inventory, Kassiber picks
+    Neu-first; the KryptowährungsVO presumption absent a designation is
+    earliest-acquired-first (usually Alt). The choice is now recorded in the
+    audit trail (`at_regime_basis=wahlrecht` on the journal disposal, emitted
+    from `infer_outbound_regimes`' election set), so the exercised Wahlrecht is
+    documentable — but it should become a profile-level setting with
+    earliest-first available as the statutory default, and the basis marker
+    should extend to swap legs and self-transfer fee slices (today only
+    standalone disposals carry it). Changing the default silently would change
+    existing users' tax outcomes, so it needs an explicit migration story.
+  - [ ] **Plumb LND channel-lifecycle data (open Codex threads on #405).**
+    `_persist_lnd_channel_records` writes `channel_id=NULL` and
+    `amount_msat=0`, so on LND the close→open link never forms (close
+    capacity-MOVEs are dropped and the node wallet strands phantom holdings),
+    `_funding_amount_mismatch` / `_close_balance_mismatch` can never fire
+    (funding txs that also pay external recipients are absorbed untaxed;
+    vin-matched close sweeps are unbounded), and the whole round-3 channel
+    hardening only takes effect for CLN-with-bkpr balances. Populate
+    channel ids + funded/settled balances from LND `ListChannels` /
+    `ClosedChannels`, and fix the CLN `multifundchannel` first-wins account
+    collapse (`open_txids.setdefault`) that strands closes of channels 2..N
+    in a batched open.
 - [x] Austrian E 1kv PDF export no longer uses the Latin-1 text writer:
   `reports export-austrian-e1kv-pdf` / `reports export-austrian` now render a
   ReportLab-backed Steuerbericht with cover, summary/detail sections,

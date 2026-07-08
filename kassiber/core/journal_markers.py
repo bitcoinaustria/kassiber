@@ -14,6 +14,14 @@ itself is country-agnostic — a future country module adds its markers here.
 from __future__ import annotations
 
 MARKER_REGIME = "at_regime"
+#: Why a disposal carries its at_regime. ``wahlrecht`` = the disposing wallet
+#: held BOTH Alt and Neu inventory and Kassiber exercised the
+#: KryptowährungsVO designation right (Neu-first) on the taxpayer's behalf;
+#: absent = the regime was forced by the wallet's holdings or set by an
+#: explicit user override. Kassiber-side audit marker only — rp2 matches its
+#: own markers by exact token / distinct prefix and ignores this one.
+MARKER_REGIME_BASIS = "at_regime_basis"
+REGIME_BASIS_ELECTION = "wahlrecht"
 MARKER_POOL = "at_pool"
 MARKER_SWAP_LINK = "at_swap_link"
 #: Tax-free (alt) share of a transfer's quantities, in msat: what left the

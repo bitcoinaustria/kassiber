@@ -359,6 +359,7 @@ def infer_outbound_regimes(
     rows: Sequence[Mapping[str, Any]],
     intra_pairs: Optional[Sequence[Mapping[str, Mapping[str, Any]]]] = None,
     transfer_flows: Optional[dict[tuple[str, str], dict[str, dict[str, int]]]] = None,
+    election_row_ids: Optional[set[str]] = None,
 ) -> dict[str, Literal["alt", "neu"]]:
     """Infer Austrian disposal regimes from the rows seen so far.
 
@@ -369,6 +370,13 @@ def infer_outbound_regimes(
     and explicit same-asset internal transfers move availability between wallets.
     The result is a best-effort per-row map that callers can reuse both for
     normal outbound events and for cross-asset swap classification.
+
+    When the disposing wallet holds BOTH Alt and Neu inventory, picking Neu is
+    not forced by the holdings — it is Kassiber exercising the taxpayer's
+    KryptowährungsVO designation right (Wahlrecht) on their behalf (the
+    statutory presumption absent a designation would be earliest-acquired
+    first). Such row ids are added to ``election_row_ids`` (when provided) so
+    the journal can record the choice instead of leaving it silent.
     """
 
     alt_available_msat_by_key: dict[str, int] = defaultdict(int)
@@ -425,12 +433,13 @@ def infer_outbound_regimes(
             continue
 
         regime = infer_regime_from_timestamp(str(row["occurred_at"]))
-        if (
-            regime == REGIME_NEU
-            and alt_available_msat_by_key.get(availability_key, 0) > 0
-            and neu_available_msat_by_key.get(availability_key, 0) <= 0
-        ):
-            regime = REGIME_ALT
+        if regime == REGIME_NEU and alt_available_msat_by_key.get(availability_key, 0) > 0:
+            if neu_available_msat_by_key.get(availability_key, 0) <= 0:
+                regime = REGIME_ALT
+            elif election_row_ids is not None:
+                # Both regimes are available in the disposing wallet: Neu-first
+                # is an exercised designation, not a forced outcome.
+                election_row_ids.add(str(row["id"]))
         regimes_by_row_id[str(row["id"])] = regime
 
         needed_msat = amount_msat + fee_msat

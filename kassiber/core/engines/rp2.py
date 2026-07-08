@@ -41,6 +41,7 @@ from ..journal_markers import (
     MARKER_ALT_OUT,
     MARKER_POOL,
     MARKER_REGIME,
+    MARKER_REGIME_BASIS,
     MARKER_SWAP_LINK,
     marker_token,
 )
@@ -290,6 +291,11 @@ def _compose_event_notes(event: Any) -> str:
     regime = getattr(event, "at_regime", None)
     if regime:
         tokens.append(marker_token(MARKER_REGIME, regime))
+    regime_basis = getattr(event, "at_regime_basis", None)
+    if regime_basis:
+        # Audit-only provenance of the regime choice (exercised Wahlrecht vs
+        # forced); rp2 does not read it, the journal/GUI marker channel does.
+        tokens.append(marker_token(MARKER_REGIME_BASIS, regime_basis))
     pool = getattr(event, "at_pool", None)
     if pool:
         tokens.append(marker_token(MARKER_POOL, pool))

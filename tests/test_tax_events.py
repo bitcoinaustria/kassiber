@@ -2064,5 +2064,70 @@ class AustrianSelfTransferRegimeTest(unittest.TestCase):
         self.assertGreater(by_in["wp-in-2"].regime_flows["in"]["alt"], 0)
 
 
+class AustrianRegimeElectionAuditTest(unittest.TestCase):
+    """Mixed-holding Neu-first is a KryptowährungsVO designation, not a forced
+    outcome — the event must say so; forced/override regimes must not."""
+
+    AT_PROFILE = {"id": "p", "workspace_id": "ws", "tax_country": "at"}
+    REFS = {"wallet-a": {"id": "wallet-a", "label": "Wallet A"}}
+
+    def _sell_event(self, rows):
+        inputs = normalize_tax_asset_inputs(
+            self.AT_PROFILE, "BTC", rows, self.REFS, []
+        )
+        return {e.transaction_id: e for e in inputs.events}["sell"]
+
+    @staticmethod
+    def _alt_acquisition():
+        return _row("alt-in", "wallet-a", "inbound", 30_000_000_000,
+                    occurred_at="2020-06-01T00:00:00Z", fiat_rate=10_000)
+
+    @staticmethod
+    def _neu_acquisition():
+        return _row("neu-in", "wallet-a", "inbound", 40_000_000_000,
+                    occurred_at="2025-02-01T00:00:00Z", fiat_rate=60_000)
+
+    @staticmethod
+    def _sell_row():
+        return _row("sell", "wallet-a", "outbound", 10_000_000_000,
+                    occurred_at="2025-06-01T00:00:00Z", fiat_rate=60_000)
+
+    def test_mixed_holdings_disposal_records_wahlrecht_election(self):
+        event = self._sell_event(
+            [self._alt_acquisition(), self._neu_acquisition(), self._sell_row()]
+        )
+        self.assertEqual(event.at_regime, "neu")
+        self.assertEqual(event.at_regime_basis, "wahlrecht")
+
+    def test_election_marker_reaches_the_notes_channel(self):
+        from kassiber.core.engines.rp2 import _compose_event_notes
+
+        event = self._sell_event(
+            [self._alt_acquisition(), self._neu_acquisition(), self._sell_row()]
+        )
+        notes = _compose_event_notes(event)
+        self.assertIn("at_regime=neu", notes.split())
+        self.assertIn("at_regime_basis=wahlrecht", notes.split())
+
+    def test_pure_alt_wallet_disposal_is_forced_not_election(self):
+        event = self._sell_event([self._alt_acquisition(), self._sell_row()])
+        self.assertEqual(event.at_regime, "alt")
+        self.assertIsNone(event.at_regime_basis)
+
+    def test_pure_neu_wallet_disposal_is_forced_not_election(self):
+        event = self._sell_event([self._neu_acquisition(), self._sell_row()])
+        self.assertEqual(event.at_regime, "neu")
+        self.assertIsNone(event.at_regime_basis)
+
+    def test_explicit_override_suppresses_election_marker(self):
+        sell = self._sell_row()
+        sell["at_regime_override"] = "alt"
+        event = self._sell_event(
+            [self._alt_acquisition(), self._neu_acquisition(), sell]
+        )
+        self.assertEqual(event.at_regime, "alt")
+        self.assertIsNone(event.at_regime_basis)
+
+
 if __name__ == "__main__":
     unittest.main()

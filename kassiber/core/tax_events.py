@@ -9,6 +9,7 @@ from ..msat import msat_to_btc
 from ..transfers import normalize_group_txid
 from . import pricing
 from .austrian import infer_outbound_regimes, infer_regime_from_timestamp, resolve_pool_id
+from .journal_markers import REGIME_BASIS_ELECTION
 from .loans import (
     CHANNEL_CLOSE_MISMATCH,
     CHANNEL_OPEN,
@@ -62,6 +63,12 @@ class NormalizedTaxEvent:
     # profile's tax_country is "at"; None for non-AT profiles or when rp2's
     # date-based inference should decide.
     at_regime: Optional[AtRegime] = None
+    # Why the disposal carries its at_regime. "wahlrecht" = the disposing
+    # wallet held both Alt and Neu inventory, so Neu-first was an exercised
+    # KryptowährungsVO designation (not forced by the holdings); None = forced
+    # by the wallet's holdings, set by explicit user override, or not AT.
+    # Audit-trail only — rp2 ignores the serialized marker.
+    at_regime_basis: Optional[str] = None
     # Moving-average pool partition id (Neu only; ignored by rp2 for Alt).
     # Kassiber decides what a pool is — v1 uses wallet_id. None means
     # "absent marker", which rp2 treats as the `AT_DEFAULT_POOL` bucket.
@@ -1430,8 +1437,14 @@ def normalize_tax_asset_inputs(
         )
     regime_pairs = [*non_conflict_pairs, *samourai_regime_pairs]
     transfer_regime_flows: dict[tuple[str, str], dict[str, dict[str, int]]] = {}
+    regime_election_row_ids: set[str] = set()
     outbound_regimes = (
-        infer_outbound_regimes(regime_rows, regime_pairs, transfer_regime_flows)
+        infer_outbound_regimes(
+            regime_rows,
+            regime_pairs,
+            transfer_regime_flows,
+            election_row_ids=regime_election_row_ids,
+        )
         if is_at
         else {}
     )
@@ -1929,6 +1942,7 @@ def normalize_tax_asset_inputs(
             continue
 
         at_regime = None
+        at_regime_basis = None
         at_pool = None
         at_swap_link = None
         if is_at:
@@ -1941,8 +1955,16 @@ def normalize_tax_asset_inputs(
                     row["id"],
                     outbound_regimes.get(row["id"], infer_regime_from_timestamp(row["occurred_at"])),
                 )
+                if (
+                    row["id"] not in regime_map
+                    and str(row["id"]) in regime_election_row_ids
+                ):
+                    # Mixed Alt+Neu holdings in the disposing wallet: record
+                    # that Neu-first was a designation, not a forced outcome.
+                    at_regime_basis = REGIME_BASIS_ELECTION
             if regime_override in ("alt", "neu"):
                 at_regime = regime_override
+                at_regime_basis = None
             linked = swap_link_map.get(row["id"])
             if linked:
                 at_swap_link = linked
@@ -1963,6 +1985,7 @@ def normalize_tax_asset_inputs(
                 description=description,
                 raw_row=row,
                 at_regime=at_regime,
+                at_regime_basis=at_regime_basis,
                 at_pool=at_pool,
                 at_swap_link=at_swap_link,
                 loan_leg_role=loan_leg_role,
