@@ -4,6 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from kassiber import daemon
 from kassiber.core import commercial
 from kassiber.db import _migrate_attachment_table_shape, open_db
 from kassiber.errors import AppError
@@ -1171,6 +1172,57 @@ class BtcpayCommercialProvenanceTest(unittest.TestCase):
 
 def btcpay_to_msat(value):
     return btc_to_msat(value)
+
+
+class BtcpayAccountRouteValidationTest(unittest.TestCase):
+    def setUp(self):
+        self._dir = tempfile.TemporaryDirectory()
+        self.addCleanup(self._dir.cleanup)
+        self.conn = open_db(str(Path(self._dir.name)))
+        self.addCleanup(self.conn.close)
+        now = now_iso()
+        self.conn.execute(
+            "INSERT INTO workspaces(id, label, created_at) VALUES('ws', 'Default', ?)",
+            (now,),
+        )
+        self.conn.execute(
+            """
+            INSERT INTO profiles(id, workspace_id, label, fiat_currency, created_at)
+            VALUES('p1', 'ws', 'Default', 'EUR', ?)
+            """,
+            (now,),
+        )
+        self.conn.execute(
+            """
+            INSERT INTO wallets(id, workspace_id, profile_id, label, kind, created_at)
+            VALUES('settle-1', 'ws', 'p1', 'Settlement Wallet', 'custom', ?)
+            """,
+            (now,),
+        )
+        self.conn.execute(
+            "INSERT INTO settings(key, value) VALUES('context_workspace', 'ws')"
+        )
+        self.conn.execute(
+            "INSERT INTO settings(key, value) VALUES('context_profile', 'p1')"
+        )
+        self.conn.commit()
+
+    def test_unresolvable_settlement_reference_raises_before_mutating(self):
+        routes = [
+            {"action": "wallet_source", "wallet": None},
+            {"action": "existing_wallet", "wallet": "does-not-exist"},
+        ]
+        with self.assertRaises(AppError):
+            daemon._validate_btcpay_account_route_wallets(self.conn, routes)
+
+    def test_resolvable_settlement_reference_passes(self):
+        routes = [
+            {"action": "existing_wallet", "wallet": "settle-1"},
+            {"action": "provenance_only", "wallet": None},
+            {"action": "wallet_source", "wallet": None},
+        ]
+        # A resolvable reference (plus non-settlement routes) must not raise.
+        daemon._validate_btcpay_account_route_wallets(self.conn, routes)
 
 
 if __name__ == "__main__":

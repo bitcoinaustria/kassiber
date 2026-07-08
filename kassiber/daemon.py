@@ -7633,6 +7633,18 @@ def _create_or_reuse_btcpay_wallet_source(
     return wallet, False
 
 
+def _validate_btcpay_account_route_wallets(
+    conn: sqlite3.Connection,
+    routes: list[dict[str, Any]],
+) -> None:
+    """Resolve every settlement-wallet reference so the account-setup wizard
+    fails fast, before any route creates or mutates a wallet. get_wallet_details
+    raises AppError(not_found) for an unknown reference."""
+    for route in routes:
+        if route["action"] == "existing_wallet":
+            core_wallets.get_wallet_details(conn, None, None, route["wallet"])
+
+
 def _create_btcpay_account_setup_payload(
     ctx: "DaemonContext",
     args: dict[str, Any],
@@ -7641,6 +7653,13 @@ def _create_btcpay_account_setup_payload(
     wallet_label = _required_str_arg(args, "label", "Connection label")
     routes = _btcpay_account_routes(args)
     workspace, profile = resolve_scope(conn, None, None)
+    # Fail fast on unresolvable settlement-wallet references before anything is
+    # written. The route loop below commits as it goes (create_wallet and
+    # update_wallet commit internally, so the wizard is not a single
+    # transaction) and inline backend creation happens next; validating every
+    # existing_wallet reference up front means a renamed/deleted wallet aborts
+    # the request before it can leave a half-provisioned account behind.
+    _validate_btcpay_account_route_wallets(conn, routes)
     _backend, safe_backend = _resolve_btcpay_backend_for_setup(
         ctx,
         args,
