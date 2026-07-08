@@ -2036,6 +2036,31 @@ class AustrianSelfTransferRegimeTest(unittest.TestCase):
         by_id = {event.transaction_id: event for event in inputs.events}
         self.assertEqual(by_id["sell"].at_regime, "alt")
 
+    def test_samourai_tx0_regime_pairs_group_multiple_receipts(self):
+        def _cfg(section):
+            return json.dumps({"samourai": {"role": "child", "group_id": "wp", "section": section}})
+
+        alt = _row("alt", "wallet-a", "inbound", 50_000_000_000,
+                   occurred_at="2020-06-01T00:00:00Z", fiat_rate=10_000)
+        out_row = _row("wp-out", "wallet-a", "outbound", 50_000_000_000,
+                       occurred_at="2025-02-01T00:00:00Z", fee=100_000_000,
+                       fiat_rate=60_000, external_id="wptx")
+        out_row["config_json"] = _cfg("deposit")
+        in_one = _row("wp-in-1", "wallet-b", "inbound", 20_000_000_000,
+                      occurred_at="2025-02-01T00:00:00Z", external_id="wptx")
+        in_one["config_json"] = _cfg("premix")
+        in_two = _row("wp-in-2", "wallet-b", "inbound", 29_900_000_000,
+                      occurred_at="2025-02-01T00:00:00Z", external_id="wptx")
+        in_two["config_json"] = _cfg("badbank")
+
+        inputs = normalize_tax_asset_inputs(
+            self.AT_PROFILE, "BTC", [alt, out_row, in_one, in_two], self.REFS, [],
+        )
+
+        by_in = {transfer.in_transaction_id: transfer for transfer in inputs.transfers}
+        self.assertEqual(len(by_in), 2)
+        self.assertGreater(by_in["wp-in-2"].regime_flows["in"]["alt"], 0)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -508,10 +508,14 @@ def _samourai_internal_privacy_row_ids(
     return {str(row["id"]) for group in groups for row, _ in group}
 
 
+def _samourai_pair_id(out_row: Mapping[str, Any], in_row: Mapping[str, Any]) -> str:
+    return f"samourai:{out_row['id']}->{in_row['id']}"
+
+
 def _samourai_internal_regime_pairs(
     groups: Sequence[Sequence[SamouraiGroupEntry]],
-) -> list[dict[str, Mapping[str, Any]]]:
-    pairs: list[dict[str, Mapping[str, Any]]] = []
+) -> list[dict[str, Any]]:
+    pairs: list[dict[str, Any]] = []
     for entries in groups:
         out_rows = [
             row
@@ -524,9 +528,23 @@ def _samourai_internal_regime_pairs(
             if _row_get(row, "direction") == "inbound"
         ]
         if len(out_rows) == 1:
-            pairs.extend({"out": out_rows[0], "in": in_row} for in_row in in_rows)
+            pairs.extend(
+                {
+                    "out": out_rows[0],
+                    "in": in_row,
+                    "pair_id": _samourai_pair_id(out_rows[0], in_row),
+                }
+                for in_row in in_rows
+            )
         elif len(in_rows) == 1:
-            pairs.extend({"out": out_row, "in": in_rows[0]} for out_row in out_rows)
+            pairs.extend(
+                {
+                    "out": out_row,
+                    "in": in_rows[0],
+                    "pair_id": _samourai_pair_id(out_row, in_rows[0]),
+                }
+                for out_row in out_rows
+            )
     return pairs
 
 
