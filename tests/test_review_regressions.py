@@ -55,6 +55,7 @@ from kassiber.core.runtime import bootstrap_runtime, close_runtime
 from kassiber.core.tax_events import normalize_tax_asset_inputs
 from kassiber.core.ui_snapshot import (
     _tax_free_wallet_summaries,
+    _transaction_pair_display_meta,
     build_capital_gains_snapshot,
     build_journal_events_list_snapshot,
     build_journals_snapshot,
@@ -3109,6 +3110,16 @@ class ReviewRegressionTest(unittest.TestCase):
 
         journals = build_journals_snapshot(conn)
         self.assertEqual(len(journals["recent"]), 2)
+
+        # Window coupling: a fetch window holding only ONE receipt of the
+        # multi-pair must still suppress the giant out-in fee fallback (the
+        # counts come from the DB, not the window) — and pick a deterministic
+        # representative pair.
+        window_rows = conn.execute(
+            "SELECT id FROM transactions WHERE id = 'tx-mp-in-1'"
+        ).fetchall()
+        meta = _transaction_pair_display_meta(conn, window_rows)
+        self.assertEqual(meta["tx-mp-in-1"]["fee_msat"], 0)
 
     def test_journal_pair_payload_picks_one_pair_for_chain_edge_case(self):
         conn = open_db(self.data_root)
