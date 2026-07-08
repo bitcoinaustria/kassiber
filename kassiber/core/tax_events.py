@@ -674,17 +674,45 @@ def _collect_samourai_internal_transfers(
         if len(in_rows) > 1 or len(to_wallet_labels) > 1:
             # The whole group must book or quarantine atomically: a shared
             # group_id lets the RP2 gate preflight all legs together, exactly
-            # like the graph derivers. The network fee rides on the largest
-            # leg (same convention as derive_multi_source_consolidations)
-            # instead of a standalone FEE event, which the group machinery
-            # could not hold back with its legs.
+            # like the graph derivers. For the 1-out/N-in Samourai shape,
+            # booking must use the same canonical order and greedy allocator as
+            # Austrian regime inference or the transfer and its regime_flows
+            # describe different fee-bearing legs.
             group_id = f"samourai-internal:{first_out['id']}"
-            fee_leg_id = None
+            fee_by_in_id: dict[str, Decimal] = {}
             if fee > 0:
-                fee_leg_id = max(
-                    in_rows,
-                    key=lambda row: (int(row["amount"] or 0), str(row["id"])),
-                )["id"]
+                if len(out_rows) == 1:
+                    component_pairs = [
+                        {
+                            "out": first_out,
+                            "in": in_row,
+                            "pair_id": _samourai_pair_id(first_out, in_row),
+                        }
+                        for in_row in in_rows
+                    ]
+                    ordered_pairs = ordered_pair_component(component_pairs)
+                    fee_msat = max(
+                        0,
+                        sum(
+                            int(row["amount"] or 0) + int(row["fee"] or 0)
+                            for row in out_rows
+                        )
+                        - sum(int(row["amount"] or 0) for row in in_rows),
+                    )
+                    fee_allocations = allocate_fee_msat(
+                        fee_msat,
+                        [int(pair["in"]["amount"] or 0) for pair in ordered_pairs],
+                    )
+                    fee_by_in_id = {
+                        str(pair["in"]["id"]): msat_to_btc(fee_allocation)
+                        for pair, fee_allocation in zip(ordered_pairs, fee_allocations)
+                    }
+                else:
+                    fee_leg_id = max(
+                        in_rows,
+                        key=lambda row: (int(row["amount"] or 0), str(row["id"])),
+                    )["id"]
+                    fee_by_in_id[str(fee_leg_id)] = fee
             collected[str(first_out["id"])] = [
                 NormalizedTaxTransfer(
                     asset=asset,
@@ -696,9 +724,9 @@ def _collect_samourai_internal_transfers(
                     to_wallet_id=wallet_refs_by_id[in_row["wallet_id"]]["id"],
                     to_wallet_label=wallet_refs_by_id[in_row["wallet_id"]]["label"],
                     sent=msat_to_btc(in_row["amount"])
-                    + (fee if in_row["id"] == fee_leg_id else Decimal("0")),
+                    + fee_by_in_id.get(str(in_row["id"]), Decimal("0")),
                     received=msat_to_btc(in_row["amount"]),
-                    fee=fee if in_row["id"] == fee_leg_id else Decimal("0"),
+                    fee=fee_by_in_id.get(str(in_row["id"]), Decimal("0")),
                     spot_price=spot_price,
                     description=(
                         first_out["note"]

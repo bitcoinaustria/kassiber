@@ -2059,6 +2059,8 @@ class AustrianSelfTransferRegimeTest(unittest.TestCase):
 
         by_in = {transfer.in_transaction_id: transfer for transfer in inputs.transfers}
         self.assertEqual(len(by_in), 2)
+        self.assertEqual(by_in["wp-in-1"].fee, msat_to_btc(200_000_000))
+        self.assertEqual(by_in["wp-in-2"].fee, msat_to_btc(0))
         self.assertGreater(by_in["wp-in-2"].regime_flows["in"]["alt"], 0)
 
 
