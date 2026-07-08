@@ -1129,16 +1129,13 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
     quarantine, batched-open sums, bkpr sanitizer keeping
     credit_msat/debit_msat), and shared infrastructure in
     `pair_allocation.py` (ordering, allocator, clamp, component builder).
-  - [ ] **Round-3 accepted remainders (P3).** Multi-leg components still
-    quarantine `transfer_mismatch` on a per-leg sub-sat truncation (safe but
-    noisy; the single-pair clamp does not extend to the multi path on either
-    side). Journal pair payloads COALESCE(p_out.x, p_in.x) can mix columns
-    from two different pairs for a chain-reused leg (pre-existing; pick one
-    whole pair row instead). Booking's multi-pair component membership
-    (reviewed pairs only) intentionally differs from Austrian inference
-    (all pairs; shared inbound allocated once) — a derived pair sharing a
-    row with manual pairs can allocate the fee over different pair sets in
-    the two models (rare, structural).
+  - [x] **Round-3 accepted remainders (P3).** Multi-leg components now clamp
+    sub-sat receipt excess through the shared `pair_allocation.py` helper in
+    both booking and Austrian inference; journal pair payloads select one
+    representative pair before reading pair columns, so chain-reused legs cannot
+    mix fields from different pairs; Austrian inference now uses the same
+    reviewed-pair component membership as booking, leaving derived pairs to
+    their own group path.
 - [x] Austrian E 1kv PDF export no longer uses the Latin-1 text writer:
   `reports export-austrian-e1kv-pdf` / `reports export-austrian` now render a
   ReportLab-backed Steuerbericht with cover, summary/detail sections,
