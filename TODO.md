@@ -1111,6 +1111,34 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
     cross-chain blanks (if any are reachable) stay distinguishable from
     legacy-mainnet blanks. Likely unreachable today (chain force-normalization on
     wallet add/edit), hence P3 / deferred.
+  - [x] **Round-3 self-transfer batch (2026-07-08).** ~30 one-bug-per-commit
+    fixes across the transfer machinery: Samourai tx0 group atomicity +
+    manual-pair collision quarantines, multi-pair fee ceiling + privacy-leg
+    quarantines + display dedup (journals list, summary PDF, per-(leg, role)
+    pair counts), SoF fee-bearing N:1 allocation, pair kind-edit fee
+    reconciliation, LN sub-sat clamp (booking + regime inference in lockstep
+    via `pair_allocation.clamped_receipt_msat`), matcher mirror for
+    journal-netted LN hash pairs, blocked-source suppression premise,
+    per-leg group gate application with re-check (both intermediate-spend
+    abort directions), tax-free hints classifying per-regime quantity flows
+    (`at_alt_out`/`at_alt_in` markers via the new `journal_markers` module),
+    Lightning channel lifecycle (force-close sweep matching, grouped
+    multi-sweep close fee with an explicit CHANNEL_CLOSE_MISMATCH ceiling —
+    the generic `unrecognized_outflow` guard is definitionally zero for
+    cloned-amount synthesized pairs — funding-with-external-payment
+    quarantine, batched-open sums, bkpr sanitizer keeping
+    credit_msat/debit_msat), and shared infrastructure in
+    `pair_allocation.py` (ordering, allocator, clamp, component builder).
+  - [ ] **Round-3 accepted remainders (P3).** Multi-leg components still
+    quarantine `transfer_mismatch` on a per-leg sub-sat truncation (safe but
+    noisy; the single-pair clamp does not extend to the multi path on either
+    side). Journal pair payloads COALESCE(p_out.x, p_in.x) can mix columns
+    from two different pairs for a chain-reused leg (pre-existing; pick one
+    whole pair row instead). Booking's multi-pair component membership
+    (reviewed pairs only) intentionally differs from Austrian inference
+    (all pairs; shared inbound allocated once) — a derived pair sharing a
+    row with manual pairs can allocate the fee over different pair sets in
+    the two models (rare, structural).
 - [x] Austrian E 1kv PDF export no longer uses the Latin-1 text writer:
   `reports export-austrian-e1kv-pdf` / `reports export-austrian` now render a
   ReportLab-backed Steuerbericht with cover, summary/detail sections,
