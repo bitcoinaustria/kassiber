@@ -424,6 +424,63 @@ class NormalizeTaxAssetInputsTest(unittest.TestCase):
         )
         self.assertEqual(detail["conflict"], "samourai_internal_group")
 
+    def test_multi_pair_fee_lands_on_chronologically_first_leg(self):
+        # The greedy allocator and Austrian regime inference share one
+        # canonical component order (pair_allocation.ordered_pair_component).
+        # Pair-record ids sort AGAINST the leg timestamps here: the fee must
+        # still land on the chronologically-first in leg, not the first pair id.
+        out_row = _row(
+            "split-out",
+            "wallet-a",
+            "outbound",
+            100_000_000_000,
+            fee=100_000,
+            fiat_rate=65_000,
+            external_id="split-out",
+        )
+        in_late = _row(
+            "in-late",
+            "wallet-b",
+            "inbound",
+            50_000_000_000,
+            occurred_at="2026-01-02T00:00:00Z",
+            external_id="in-late",
+        )
+        in_early = _row(
+            "in-early",
+            "wallet-b",
+            "inbound",
+            49_950_000_000,
+            occurred_at="2026-01-01T00:00:00Z",
+            external_id="in-early",
+        )
+        inputs = normalize_tax_asset_inputs(
+            self.profile,
+            "BTC",
+            [out_row, in_late, in_early],
+            self.wallet_refs_by_id,
+            [
+                # pair ids sort "a..." (late leg) before "b..." (early leg)
+                {
+                    "out": out_row,
+                    "in": in_late,
+                    "pair_id": "a-pair-late",
+                    "source": "manual",
+                },
+                {
+                    "out": out_row,
+                    "in": in_early,
+                    "pair_id": "b-pair-early",
+                    "source": "manual",
+                },
+            ],
+        )
+
+        self.assertEqual(len(inputs.transfers), 2)
+        by_in = {t.in_transaction_id: t for t in inputs.transfers}
+        self.assertGreater(by_in["in-early"].fee, 0)
+        self.assertEqual(by_in["in-late"].fee, 0)
+
     def test_manual_many_to_one_pairs_group_and_allocate_destination_once(self):
         out_one = _row(
             "premix-out-1",

@@ -11,6 +11,7 @@ from . import pricing
 from .austrian import infer_outbound_regimes, infer_regime_from_timestamp, resolve_pool_id
 from .loans import CHANNEL_OPEN, LOCK_SUPPRESS_ROLES, RELEASE_SUPPRESS_ROLES
 from .ownership_transfers import detect_conflicting_spend_ids
+from .pair_allocation import allocate_fee_msat, ordered_pair_component
 from .privacy_hops import privacy_hop_evidence_from_row
 from .transfer_matching import (
     DEFAULT_FEE_PCT_MAX,
@@ -817,20 +818,7 @@ def _row_msat(row: Mapping[str, Any], key: str) -> int:
     return int(_row_get(row, key) or 0)
 
 
-def _allocate_fee_msat(total_fee_msat: int, bases: Sequence[int]) -> list[int]:
-    """Allocate an aggregate multi-link fee deterministically across legs."""
-    remaining = max(0, int(total_fee_msat))
-    allocated: list[int] = []
-    for base in bases:
-        if remaining <= 0:
-            allocated.append(0)
-            continue
-        portion = min(int(base), remaining)
-        allocated.append(portion)
-        remaining -= portion
-    if remaining and allocated:
-        allocated[-1] += remaining
-    return allocated
+_allocate_fee_msat = allocate_fee_msat
 
 
 def _append_manual_multi_pair_quarantines(
@@ -914,15 +902,9 @@ def _build_manual_multi_pair_transfers(
     quarantines: list[dict[str, Any]] = []
 
     for component in _manual_multi_pair_components(pairs):
-        ordered_pairs = sorted(
-            component,
-            key=lambda pair: (
-                str(_row_get(pair["out"], "occurred_at") or ""),
-                str(_pair_record_id(pair) or ""),
-                str(pair["out"]["id"]),
-                str(pair["in"]["id"]),
-            ),
-        )
+        # The shared chronological order keeps the greedy fee allocation in
+        # lockstep with every regime-inference consumer of the same component.
+        ordered_pairs = ordered_pair_component(component)
         pair_ids = [
             _pair_record_id(pair) or f"{pair['out']['id']}->{pair['in']['id']}"
             for pair in ordered_pairs

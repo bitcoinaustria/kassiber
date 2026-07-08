@@ -21,6 +21,8 @@ from datetime import datetime
 from typing import Any, Literal, Mapping, Optional, Sequence
 from zoneinfo import ZoneInfo
 
+from .pair_allocation import allocate_fee_msat, ordered_pair_component
+
 # Altvermögen / Neuvermögen cutoff per § 27b EStG. Acquisitions on or before
 # 2021-02-28 Europe/Vienna are Altvermögen; after that, Neuvermögen.
 # Matches `rp2.plugin.country.at.AT_NEU_CUTOFF` — if rp2 ever revises the
@@ -211,33 +213,12 @@ def _copy_row_with_amount(
     return copied
 
 
-def _allocate_fee_msat(total_fee_msat: int, bases: Sequence[int]) -> list[int]:
-    remaining = max(0, int(total_fee_msat))
-    allocated: list[int] = []
-    for base in bases:
-        if remaining <= 0:
-            allocated.append(0)
-            continue
-        portion = min(max(0, int(base)), remaining)
-        allocated.append(portion)
-        remaining -= portion
-    if remaining and allocated:
-        allocated[-1] += remaining
-    return allocated
-
-
-def _ordered_pair_component(
-    component: Sequence[Mapping[str, Mapping[str, Any]]],
-) -> list[Mapping[str, Mapping[str, Any]]]:
-    return sorted(
-        component,
-        key=lambda pair: (
-            str(_row_value(pair["out"], "occurred_at") or ""),
-            str(_row_value(pair["in"], "occurred_at") or ""),
-            str(pair["out"]["id"]),
-            str(pair["in"]["id"]),
-        ),
-    )
+# Fee allocation and component ordering are shared with the booking path
+# (kassiber.core.pair_allocation): the allocator is greedy, so regime
+# inference must walk legs in the exact order booking does or the fee
+# lands on different legs in the two models.
+_allocate_fee_msat = allocate_fee_msat
+_ordered_pair_component = ordered_pair_component
 
 
 def _intra_pair_components(
