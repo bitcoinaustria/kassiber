@@ -289,6 +289,66 @@ class NormalizeTaxAssetInputsTest(unittest.TestCase):
         self.assertAlmostEqual(detail["implied_fee"], 0.2, places=8)
         self.assertGreater(detail["implied_fee"], detail["fee_ceiling"])
 
+    def test_manual_multi_pair_privacy_block_quarantines_clean_legs_too(self):
+        # Privacy evidence on one group row blocks the whole component; the
+        # evidence-free receipt legs were consumed with it, so they must get
+        # their own review rows instead of vanishing from booking silently.
+        out_row = _row(
+            "coinjoin-out",
+            "wallet-a",
+            "outbound",
+            100_000_000_000,
+            fiat_rate=65_000,
+            external_id="coinjoin-out",
+            privacy_boundary="coinjoin",
+        )
+        in_one = _row(
+            "postmix-in-1",
+            "wallet-b",
+            "inbound",
+            50_000_000_000,
+            external_id="postmix-1",
+        )
+        in_two = _row(
+            "postmix-in-2",
+            "wallet-b",
+            "inbound",
+            49_999_000_000,
+            external_id="postmix-2",
+        )
+        inputs = normalize_tax_asset_inputs(
+            self.profile,
+            "BTC",
+            [out_row, in_one, in_two],
+            self.wallet_refs_by_id,
+            [
+                {
+                    "out": out_row,
+                    "in": in_one,
+                    "pair_id": "pair-1",
+                    "source": "manual",
+                },
+                {
+                    "out": out_row,
+                    "in": in_two,
+                    "pair_id": "pair-2",
+                    "source": "manual",
+                },
+            ],
+        )
+
+        self.assertEqual(inputs.events, [])
+        self.assertEqual(inputs.transfers, [])
+        reasons = {q["transaction_id"]: q["reason"] for q in inputs.quarantines}
+        self.assertEqual(reasons["coinjoin-out"], "privacy_hop_unresolved")
+        self.assertEqual(reasons["postmix-in-1"], "derived_transfer_group_blocked")
+        self.assertEqual(reasons["postmix-in-2"], "derived_transfer_group_blocked")
+        by_id = {q["transaction_id"]: q for q in inputs.quarantines}
+        privacy_detail = json.loads(by_id["coinjoin-out"]["detail_json"])
+        self.assertEqual(privacy_detail["privacy_boundary"], "coinjoin")
+        blocked_detail = json.loads(by_id["postmix-in-1"]["detail_json"])
+        self.assertEqual(blocked_detail["blocked_by_reason"], "privacy_hop_unresolved")
+
     def test_manual_many_to_one_pairs_group_and_allocate_destination_once(self):
         out_one = _row(
             "premix-out-1",

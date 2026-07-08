@@ -963,12 +963,24 @@ def _build_manual_multi_pair_transfers(
             _pair_is_reviewed_privacy_link(pair) for pair in ordered_pairs
         )
         if privacy_rows and not reviewed_privacy_component:
+            # Every group row was consumed, so every group row must surface:
+            # quarantining only the evidence-bearing rows would silently drop
+            # the clean sibling legs from booking with no review trace.
+            privacy_row_ids = {str(row["id"]) for row in privacy_rows}
+            for row in privacy_rows:
+                _append_manual_multi_pair_quarantines(
+                    quarantines,
+                    profile,
+                    [row],
+                    "privacy_hop_unresolved",
+                    {**detail_base, **(_privacy_hop_evidence(row) or {})},
+                )
             _append_manual_multi_pair_quarantines(
                 quarantines,
                 profile,
-                privacy_rows,
-                "privacy_hop_unresolved",
-                detail_base,
+                [row for row in group_rows if str(row["id"]) not in privacy_row_ids],
+                "derived_transfer_group_blocked",
+                {**detail_base, "blocked_by_reason": "privacy_hop_unresolved"},
             )
             continue
 
