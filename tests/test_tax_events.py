@@ -1693,6 +1693,28 @@ class AustrianSelfTransferRegimeTest(unittest.TestCase):
         self.assertIsNotNone(transfer.regime_flows)
         self.assertGreater(transfer.regime_flows["in"]["alt"], 0)
 
+    def test_channel_mismatch_row_does_not_deplete_regime_pool(self):
+        # A quarantined channel-open-mismatch row books nothing, so it must
+        # not deplete the Alt pool in regime inference — otherwise a later
+        # real disposal of Altbestand is mis-tagged neu (27.5%).
+        alt = _row("alt", "wallet-a", "inbound", 100_000_000_000,
+                   occurred_at="2020-06-01T00:00:00Z", fiat_rate=10_000)
+        mismatch = _row("chan-open", "wallet-a", "outbound", 100_000_000_000,
+                        occurred_at="2025-02-01T00:00:00Z", fiat_rate=60_000,
+                        external_id="chan-open")
+        sale = _row("sale", "wallet-a", "outbound", 50_000_000_000,
+                    occurred_at="2025-03-01T00:00:00Z", fiat_rate=60_000,
+                    external_id="sale")
+        inputs = normalize_tax_asset_inputs(
+            self.AT_PROFILE, "BTC", [alt, mismatch, sale], self.REFS, [],
+            loan_leg_by_transaction_id={"chan-open": "channel_open_mismatch"},
+        )
+        reasons = {q["transaction_id"]: q["reason"] for q in inputs.quarantines}
+        self.assertEqual(reasons.get("chan-open"), "channel_open_unresolved")
+        sale_events = [e for e in inputs.events if e.transaction_id == "sale"]
+        self.assertEqual(len(sale_events), 1)
+        self.assertEqual(sale_events[0].at_regime, "alt")
+
     def test_samourai_internal_transfer_fee_carries_regime(self):
         # #5: a Whirlpool tx0 (samourai child rows) under AT with mixed Alt/Neu
         # must stamp at_regime on its MOVE fee disposal, or rp2 aborts the whole

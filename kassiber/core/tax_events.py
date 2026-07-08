@@ -1353,7 +1353,16 @@ def normalize_tax_asset_inputs(
         row_id = str(row["id"])
         if row_id in conflict_row_ids:
             continue
+        if row_id in samourai_manual_conflict_row_ids:
+            # Quarantined below (samourai/manual-multi collision): the rows
+            # book nothing, so they must not deplete/credit Alt/Neu pools as
+            # standalone acquisitions/disposals either.
+            continue
         loan_role = loan_leg_map.get(row_id)
+        if loan_role in (CHANNEL_OPEN_MISMATCH, CHANNEL_CLOSE_MISMATCH):
+            # Quarantined below (channel funding/close mismatch): nothing
+            # books, so the still-owned channel value must not move pools.
+            continue
         if loan_role in LOCK_SUPPRESS_ROLES or loan_role in RELEASE_SUPPRESS_ROLES:
             # Suppressed loan legs should not consume/add Austrian regime
             # availability. A Lightning channel-open miner fee is the one
