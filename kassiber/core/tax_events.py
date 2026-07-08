@@ -1297,6 +1297,21 @@ def normalize_tax_asset_inputs(
                 kept_groups.append(group)
         samourai_internal_groups = kept_groups
         if samourai_manual_conflict_row_ids:
+            # Dropping a pair below strands its partner leg as a standalone
+            # SELL/BUY with no review trace, so every dropped pair's rows
+            # join the quarantine union. Iterate to a fixpoint: pulling a
+            # reused leg in can drop further pairs.
+            changed = True
+            while changed:
+                changed = False
+                for out_id, in_id in pair_leg_ids:
+                    in_union = (
+                        out_id in samourai_manual_conflict_row_ids,
+                        in_id in samourai_manual_conflict_row_ids,
+                    )
+                    if any(in_union) and not all(in_union):
+                        samourai_manual_conflict_row_ids |= {out_id, in_id}
+                        changed = True
             intra_pairs = [
                 pair
                 for pair in intra_pairs

@@ -570,6 +570,75 @@ class NormalizeTaxAssetInputsTest(unittest.TestCase):
         for tx_id in ("wp-out", "wp-premix", "manual-in"):
             self.assertEqual(reasons.get(tx_id), "manual_multi_pair_ambiguous", tx_id)
 
+    def test_conflict_filtered_pair_partner_leg_is_quarantined_not_stranded(self):
+        # A second pair reusing the conflicting receipt: dropping it must pull
+        # its OTHER leg into the review union too, not leave it to book a
+        # standalone acquisition with no trace.
+        def _cfg(section):
+            return json.dumps(
+                {"samourai": {"role": "child", "group_id": "wp", "section": section}}
+            )
+
+        out_row = _row(
+            "wp-out",
+            "wallet-a",
+            "outbound",
+            100_000_000_000,
+            fee=100_000,
+            fiat_rate=65_000,
+            external_id="wptx",
+        )
+        out_row["config_json"] = _cfg("deposit")
+        tracked_child = _row(
+            "wp-premix",
+            "wallet-b",
+            "inbound",
+            20_000_000_000,
+            external_id="wptx",
+        )
+        tracked_child["config_json"] = _cfg("premix")
+        outside_receipt = _row(
+            "manual-in",
+            "wallet-b",
+            "inbound",
+            79_899_900_000,
+            external_id="manual-outside",
+        )
+        chained_out = _row(
+            "chained-out",
+            "wallet-a",
+            "outbound",
+            79_899_900_000,
+            fiat_rate=65_000,
+            external_id="chained-out",
+        )
+        inputs = normalize_tax_asset_inputs(
+            self.profile,
+            "BTC",
+            [out_row, tracked_child, outside_receipt, chained_out],
+            self.wallet_refs_by_id,
+            [
+                {
+                    "out": out_row,
+                    "in": outside_receipt,
+                    "pair_id": "pair-1",
+                    "source": "manual",
+                },
+                # Reuses the conflicting receipt as its in leg.
+                {
+                    "out": chained_out,
+                    "in": outside_receipt,
+                    "pair_id": "pair-2",
+                    "source": "manual",
+                },
+            ],
+        )
+        self.assertEqual(inputs.transfers, [])
+        reasons = {q["transaction_id"]: q["reason"] for q in inputs.quarantines}
+        # The chained pair's other leg joins the union instead of booking a
+        # standalone disposal.
+        self.assertEqual(reasons.get("chained-out"), "manual_multi_pair_ambiguous")
+
     def test_pair_fully_inside_samourai_group_does_not_quarantine(self):
         # Both legs inside the group: the splitter books the group once and
         # the redundant pair never reaches booking — no conflict, no
