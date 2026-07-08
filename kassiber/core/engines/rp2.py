@@ -756,8 +756,10 @@ def _prepare_rp2_asset_input(profile, normalized_inputs: NormalizedTaxAssetInput
         transfer = transfers_by_id[item_id]
         if transfer.group_id:
             transfers_by_group[transfer.group_id].append(transfer)
-    processed_transfer_groups: set[str] = set()
-    approved_transfer_groups: set[str] = set()
+    # Group gate state machine: absent -> not yet preflighted; "approved" ->
+    # preflight passed, legs apply (and re-check) at their own positions;
+    # "failed" -> preflight or a mid-group re-check failed, remaining legs skip.
+    transfer_group_state: dict[str, str] = {}
 
     def _transfer_gate_failure(
         transfer: NormalizedTaxTransfer,
@@ -932,19 +934,43 @@ def _prepare_rp2_asset_input(profile, normalized_inputs: NormalizedTaxAssetInput
         if item_kind == "transfer":
             transfer = transfers_by_id[item_id]
             if transfer.group_id:
-                if transfer.group_id in approved_transfer_groups:
+                group_id = str(transfer.group_id)
+                state = transfer_group_state.get(group_id)
+                if state == "approved":
                     # Preflight passed at the first leg; apply THIS leg at its
                     # own chronological position. Crediting the whole group at
                     # the first leg's position would let an intermediate
                     # destination spend pass this gate and then abort the whole
                     # asset inside rp2's strictly chronological BalanceSet
-                    # (multi-timestamp manual N:1 groups).
+                    # (multi-timestamp manual N:1 groups). The preflight cannot
+                    # see intermediate debits either, so re-check each leg at
+                    # its own position: an intermediate spend that drained the
+                    # source must downgrade the REST of the group to quarantine
+                    # instead of driving the BalanceSet negative (earlier legs
+                    # are already booked and stay booked).
+                    failure = _transfer_gate_failure(
+                        transfer, account_available, priced_available
+                    )
+                    if failure is not None:
+                        reason, detail = failure
+                        transfer_group_state[group_id] = "failed"
+                        group = transfers_by_group[group_id]
+                        position = next(
+                            index
+                            for index, leg in enumerate(group)
+                            if leg is transfer
+                        )
+                        remaining = group[position:]
+                        _append_group_gate_quarantines(
+                            remaining, transfer, reason, detail
+                        )
+                        continue
                     _apply_transfer_to_rp2(transfer)
                     continue
-                if transfer.group_id in processed_transfer_groups:
+                if state is not None:
                     continue
-                processed_transfer_groups.add(transfer.group_id)
-                group = transfers_by_group[transfer.group_id]
+                transfer_group_state[group_id] = "failed"
+                group = transfers_by_group[group_id]
                 temp_account = defaultdict(lambda: Decimal("0"), account_available)
                 temp_priced = priced_available
                 failed: tuple[NormalizedTaxTransfer, str, dict[str, Any]] | None = None
@@ -965,7 +991,7 @@ def _prepare_rp2_asset_input(profile, normalized_inputs: NormalizedTaxAssetInput
                         group, failed_transfer, reason, detail
                     )
                     continue
-                approved_transfer_groups.add(transfer.group_id)
+                transfer_group_state[group_id] = "approved"
                 _apply_transfer_to_rp2(transfer)
                 continue
 

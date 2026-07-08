@@ -1714,6 +1714,111 @@ class MultiTimestampGroupGateTest(unittest.TestCase):
         self.assertEqual(entry_types.count("transfer_in"), 2)
 
 
+class GroupSourceDrainGateTest(unittest.TestCase):
+    def test_intermediate_source_drain_quarantines_remaining_legs(self):
+        # Mirror direction of the multi-timestamp fix: a NON-quarantined
+        # intermediate spend from a LATER leg's source between the leg
+        # timestamps passes its own gate, then the later leg used to apply
+        # unchecked and drive rp2's BalanceSet negative (whole-asset abort).
+        # Approved legs now re-check the gate at their own positions and
+        # downgrade the remaining group to quarantine.
+        refs = {
+            wid: {
+                "id": wid,
+                "label": label,
+                "wallet_account_id": "acct-1",
+                "account_code": "treasury",
+                "account_label": "Treasury",
+            }
+            for wid, label in (("A", "Cold"), ("B", "Hot"))
+        }
+        profile = {
+            "id": "profile-1",
+            "workspace_id": "ws-1",
+            "label": "Default",
+            "fiat_currency": "USD",
+            "tax_country": "generic",
+            "tax_long_term_days": 365,
+            "gains_algorithm": "FIFO",
+        }
+
+        def _mt_row(wid, direction, amount_msat, occurred_at, ext, fee=0):
+            ref = refs[wid]
+            return {
+                "id": f"{wid}-{direction}-{ext}",
+                "workspace_id": "ws-1",
+                "profile_id": "profile-1",
+                "wallet_id": wid,
+                "wallet_label": ref["label"],
+                "wallet_account_id": ref["wallet_account_id"],
+                "account_code": ref["account_code"],
+                "account_label": ref["account_label"],
+                "external_id": ext,
+                "occurred_at": occurred_at,
+                "created_at": occurred_at,
+                "direction": direction,
+                "asset": "BTC",
+                "amount": amount_msat,
+                "fee": fee,
+                "fiat_currency": "USD",
+                "fiat_rate": 40000.0,
+                "fiat_rate_exact": "40000",
+                "fiat_value": None,
+                "kind": "withdrawal" if direction == "outbound" else "deposit",
+                "description": f"{wid} {direction}",
+                "note": None,
+                "raw_json": "{}",
+                "excluded": 0,
+            }
+
+        rows = [
+            _mt_row("A", "inbound", 100_100_000_000, "2024-01-01T00:00:00Z", "acq"),
+            _mt_row(
+                "A", "outbound", 40_000_000_000, "2025-01-01T10:00:00Z", "mix1",
+                fee=500_000,
+            ),
+            # Unpaired A spend between the leg timestamps drains the source.
+            _mt_row("A", "outbound", 30_000_000_000, "2025-01-02T10:00:00Z", "drain"),
+            _mt_row(
+                "A", "outbound", 60_000_000_000, "2025-01-03T10:00:00Z", "mix2",
+                fee=500_000,
+            ),
+            _mt_row("B", "inbound", 99_999_000_000, "2025-01-03T10:00:00Z", "postmix"),
+        ]
+        manual_pairs = [
+            {
+                "id": "pair-1",
+                "out_transaction_id": "A-outbound-mix1",
+                "in_transaction_id": "B-inbound-postmix",
+                "policy": "carrying-value",
+                "kind": "whirlpool",
+                "pair_source": "manual",
+            },
+            {
+                "id": "pair-2",
+                "out_transaction_id": "A-outbound-mix2",
+                "in_transaction_id": "B-inbound-postmix",
+                "policy": "carrying-value",
+                "kind": "whirlpool",
+                "pair_source": "manual",
+            },
+        ]
+        state = build_tax_engine(profile).build_ledger_state(
+            TaxEngineLedgerInputs(
+                rows=rows,
+                wallet_refs_by_id=refs,
+                manual_pair_records=manual_pairs,
+                owned_index=None,
+            )
+        )
+        reasons = {(q["reason"], q["transaction_id"]) for q in state.quarantines}
+        self.assertIn(("insufficient_lots", "A-outbound-mix2"), reasons)
+        # No abort: leg 1 stays booked; leg 2 quarantines instead of applying.
+        entry_types = [e["entry_type"] for e in state.entries]
+        self.assertEqual(entry_types.count("transfer_out"), 1)
+        self.assertEqual(entry_types.count("transfer_in"), 1)
+
+
 class AustrianSelfTransferEngineTest(unittest.TestCase):
     """AT MOVE-fee disposal must carry a regime or rp2 aborts the whole asset."""
 
