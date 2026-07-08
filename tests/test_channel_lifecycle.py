@@ -333,5 +333,44 @@ class ChannelLifecycleEngineTest(unittest.TestCase):
         self.assertEqual(wallet_quantities.get("node", Decimal("0")), Decimal("0"))
 
 
+    def test_close_fee_gap_books_as_move_fee_disposal(self) -> None:
+        # The settled channel balance at close (bkpr debit) exceeds the
+        # on-chain receipt by the commitment fee. Without booking that gap the
+        # node wallet keeps a phantom residual forever and the fee is never
+        # taxed.
+        received = ONE_BTC - 100_000_000  # 0.999 BTC
+        rows = [
+            _row("buy", "inbound", ONE_BTC, "2025-05-01T00:00:00Z"),
+            _row("fund", "outbound", ONE_BTC, "2025-06-01T00:00:00Z", external_id=FUNDING_TXID),
+            _row("close", "inbound", received, "2025-07-01T00:00:00Z", external_id=CLOSING_TXID),
+        ]
+        channel_rows = [
+            {
+                "funding_txid": FUNDING_TXID,
+                "closing_txid": CLOSING_TXID,
+                "wallet_id": "node",
+                "close_balance_msat": ONE_BTC,
+            }
+        ]
+        pairs = channel_transfer_pairs(channel_rows, rows, _wallet_refs())
+        close_pair = next(p for p in pairs if p["kind"] == CHANNEL_CLOSE)
+        self.assertEqual(int(close_pair["out"]["fee"]), 100_000_000)
+
+        result = _run(rows, channel_role_map(channel_rows, rows), pairs)
+        self.assertEqual(result.quarantines, [])
+        # The close fee books as a real fee disposal on the MOVE.
+        fee_entries = [
+            entry for entry in result.entries if entry["entry_type"] == "transfer_fee"
+        ]
+        self.assertEqual(len(fee_entries), 1)
+        self.assertEqual(Decimal(str(fee_entries[0]["quantity"])), Decimal("-0.001"))
+        wallet_quantities = {
+            key[1]: totals["quantity"] for key, totals in result.wallet_holdings.items()
+        }
+        self.assertEqual(wallet_quantities["onchain"], Decimal("0.999"))
+        # No phantom residual stranded in the node wallet.
+        self.assertEqual(wallet_quantities.get("node", Decimal("0")), Decimal("0"))
+
+
 if __name__ == "__main__":  # pragma: no cover
     unittest.main()

@@ -138,6 +138,7 @@ def channel_transfer_pairs(
     """
     funding_wallet_by_txid: dict[str, str] = {}
     closing_wallet_by_txid: dict[str, str] = {}
+    close_balance_by_txid: dict[str, int] = {}
     for row in channel_rows:
         wallet_id = _field(row, "wallet_id")
         if not wallet_id or str(wallet_id) not in wallet_refs_by_id:
@@ -149,9 +150,11 @@ def channel_transfer_pairs(
             funding_wallet_by_txid.setdefault(normalize_group_txid(fund), str(wallet_id))
         close = _field(row, "closing_txid")
         if close:
-            closing_wallet_by_txid.setdefault(
-                normalize_group_txid(str(close)), str(wallet_id)
-            )
+            close_key = normalize_group_txid(str(close))
+            closing_wallet_by_txid.setdefault(close_key, str(wallet_id))
+            balance = int(_field(row, "close_balance_msat") or 0)
+            if balance > 0:
+                close_balance_by_txid.setdefault(close_key, balance)
 
     pairs: list[dict[str, Any]] = []
     paired_real_ids: set[str] = set()
@@ -197,12 +200,23 @@ def channel_transfer_pairs(
             if close_key is None:
                 continue
             node_wallet_id = closing_wallet_by_txid[close_key]
+            # When our settled channel balance at close is known, the gap to
+            # the on-chain receipt IS the close fee (commitment + sweep
+            # miner fees): put it on the synthesized node-side out leg so the
+            # MOVE books it as a taxable fee disposal and the node wallet is
+            # debited fully instead of stranding the difference forever. An
+            # implausibly large gap (bad capture / partial sweep) trips the
+            # normalizer's transfer_fee_implausible ceiling and quarantines.
+            close_fee = 0
+            balance = close_balance_by_txid.get(close_key, 0)
+            if balance > amount:
+                close_fee = balance - amount
             out_row = _clone_channel_leg(
                 tx,
                 wallet_refs_by_id[node_wallet_id],
                 row_id=f"channel-close:{tx_id}:out:{node_wallet_id}",
                 direction="outbound",
-                fee=0,
+                fee=close_fee,
             )
             pairs.append(
                 {

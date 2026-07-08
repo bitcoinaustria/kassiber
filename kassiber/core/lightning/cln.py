@@ -1229,14 +1229,18 @@ def _balance_snapshot_records(
     return records
 
 
-def _channel_record(tag: str, txid: str, account: str | None) -> dict[str, Any]:
+def _channel_record(
+    tag: str, txid: str, account: str | None, amount_msat: int = 0
+) -> dict[str, Any]:
     """A ``channel`` metadata record carrying one channel-lifecycle txid.
 
     ``tag`` is ``channel_open`` (funding) or ``channel_close`` (closing). These
     are NOT promoted to wallet transactions (``_record_to_import`` ignores
     them) — they let the tax engine recognize a separately-synced on-chain
-    wallet's channel funding/close txs as non-taxable intra-node moves. No
-    amount is stored; the record exists only to carry the txid.
+    wallet's channel funding/close txs as non-taxable intra-node moves.
+    ``channel_close`` records carry our settled balance leaving the channel
+    (bookkeeper ``debit_msat``) so the engine can book the close fee — the gap
+    between that balance and what the on-chain wallet actually received.
     """
     return {
         "record_type": "channel",
@@ -1246,7 +1250,7 @@ def _channel_record(tag: str, txid: str, account: str | None) -> dict[str, Any]:
         "peer_id": None,
         "channel_id": account,
         "direction": "",
-        "amount_msat": 0,
+        "amount_msat": int(amount_msat or 0),
         "fee_msat": 0,
         "tag": tag,
         "status": "",
@@ -1268,6 +1272,7 @@ def _channel_lifecycle_records(snapshot: CoreLightningSnapshot) -> list[dict[str
     """
     open_txids: dict[str, str | None] = {}
     close_txids: dict[str, str | None] = {}
+    close_balance_msat: dict[str, int] = {}
     for channel in snapshot.channels:
         outpoint = _channel_funding_outpoint(channel)
         funding_txid = outpoint.split(":", 1)[0] if outpoint else None
@@ -1291,12 +1296,22 @@ def _channel_lifecycle_records(snapshot: CoreLightningSnapshot) -> list[dict[str
             open_txids.setdefault(txid, account)
         elif tag == "channel_close":
             close_txids.setdefault(txid, account)
+            # Our settled balance leaving the channel account. The engine
+            # books the gap between this and the on-chain receipt as the
+            # close fee (commitment + sweep fees), instead of stranding it.
+            balance = _parse_msat(event.get("debit_msat"))
+            if balance > 0:
+                close_balance_msat.setdefault(txid, balance)
 
     records: list[dict[str, Any]] = []
     for txid, account in sorted(open_txids.items()):
         records.append(_channel_record("channel_open", txid, account))
     for txid, account in sorted(close_txids.items()):
-        records.append(_channel_record("channel_close", txid, account))
+        records.append(
+            _channel_record(
+                "channel_close", txid, account, close_balance_msat.get(txid, 0)
+            )
+        )
     return records
 
 
