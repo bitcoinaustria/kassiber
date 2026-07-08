@@ -274,14 +274,13 @@ function eventEvidenceHint(
 }
 
 function stripJournalMarkers(description: string) {
+  // Machine markers the engine embeds in journal descriptions (at_regime=,
+  // at_pool=, at_swap_link=, at_alt_out=, at_alt_in=, ...) share the at_
+  // prefix by convention — strip generically so new markers never leak into
+  // the rendered text.
   return description
     .split(/\s+/)
-    .filter(
-      (token) =>
-        !token.startsWith("at_regime=") &&
-        !token.startsWith("at_pool=") &&
-        !token.startsWith("at_swap_link="),
-    )
+    .filter((token) => !/^at_[a-z_]+=/.test(token))
     .join(" ");
 }
 
