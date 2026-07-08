@@ -2529,11 +2529,37 @@ class GenericRP2TaxEngine:
                         direct_payout_suppressed_in_ids.add(str(withheld["in"]["id"]))
             if direct_payout_suppressed_in_ids:
                 already_paired_ids |= direct_payout_suppressed_in_ids
-                rows_for_engine = [
-                    row
-                    for row in rows_for_engine
-                    if str(row["id"]) not in direct_payout_suppressed_in_ids
-                ]
+                kept_rows = []
+                for row in rows_for_engine:
+                    if str(row["id"]) not in direct_payout_suppressed_in_ids:
+                        kept_rows.append(row)
+                        continue
+                    # The suppressed row is a real synced receipt that
+                    # contradicts the whole-row payout review (part of the tx
+                    # demonstrably came back to an owned wallet). Dropping it
+                    # silently would understate holdings with no review trace.
+                    wallet_ref = inputs.wallet_refs_by_id.get(
+                        str(row.get("wallet_id") or "")
+                    )
+                    quarantines.append(
+                        build_tax_quarantine(
+                            self.profile,
+                            row,
+                            "direct_payout_conflicting_receipt",
+                            {
+                                "asset": row.get("asset"),
+                                "wallet": (
+                                    wallet_ref["label"]
+                                    if wallet_ref and wallet_ref.get("label")
+                                    else str(row.get("wallet_id") or "")
+                                ),
+                                "direction": row.get("direction"),
+                                "external_id": str(row.get("external_id") or ""),
+                                "required_for": "direct_payout_review",
+                            },
+                        )
+                    )
+                rows_for_engine = kept_rows
             # Multi-source consolidation deriver (N owned wallets -> 1, graph
             # readable): the one case detect_intra and the single-source deriver
             # both decline because per-wallet sync double-counts the fee. It

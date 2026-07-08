@@ -424,6 +424,15 @@ class OwnershipDeriverMixedSpendTest(unittest.TestCase):
         self.assertEqual(len(disposals), 1)
         self.assertAlmostEqual(float(disposals[0]["quantity"]), -0.5, places=6)
         self.assertAlmostEqual(float(disposals[0]["proceeds"]), 20000, places=2)
+        # The suppressed sibling receipt is a real synced row contradicting the
+        # whole-row review — it must surface for review, not vanish silently.
+        conflicts = [
+            q
+            for q in state.quarantines
+            if q["reason"] == "direct_payout_conflicting_receipt"
+        ]
+        self.assertEqual(len(conflicts), 1)
+        self.assertEqual(conflicts[0]["transaction_id"], "B-inbound-payout-tx")
 
     def test_invalid_payout_does_not_prune_self_transfer_pair(self):
         # Codex review: a direct payout whose out_amount EXCEEDS the source amount
