@@ -34,6 +34,7 @@ from ..tax_policy import build_tax_policy
 from ..time_utils import parse_timestamp
 from . import pricing
 from . import rates as core_rates
+from .journal_markers import MARKER_REGIME, parse_marker
 from .austrian import infer_regime_from_timestamp, kennzahl_for_disposal_category
 from ..msat import dec
 
@@ -160,12 +161,8 @@ def _resolve_departure(departure_date: Optional[str]) -> tuple[str, str]:
 
 
 def _description_at_regime(description: Any) -> Optional[str]:
-    for token in str(description or "").split():
-        if token == "at_regime=alt":
-            return "alt"
-        if token == "at_regime=neu":
-            return "neu"
-    return None
+    marker = parse_marker(description, MARKER_REGIME)
+    return marker if marker in ("alt", "neu") else None
 
 
 def _entry_is_alt(entry: Mapping[str, Any]) -> bool:

@@ -36,6 +36,14 @@ from ..austrian import (
     REGIME_NEU,
     kennzahl_for_disposal_category,
 )
+from ..journal_markers import (
+    MARKER_ALT_IN,
+    MARKER_ALT_OUT,
+    MARKER_POOL,
+    MARKER_REGIME,
+    MARKER_SWAP_LINK,
+    marker_token,
+)
 from ..tax_events import (
     NormalizedTaxAssetInputs,
     NormalizedTaxTransfer,
@@ -281,13 +289,13 @@ def _compose_event_notes(event: Any) -> str:
     tokens: list[str] = []
     regime = getattr(event, "at_regime", None)
     if regime:
-        tokens.append(f"at_regime={regime}")
+        tokens.append(marker_token(MARKER_REGIME, regime))
     pool = getattr(event, "at_pool", None)
     if pool:
-        tokens.append(f"at_pool={pool}")
+        tokens.append(marker_token(MARKER_POOL, pool))
     swap_link = getattr(event, "at_swap_link", None)
     if swap_link:
-        tokens.append(f"at_swap_link={swap_link}")
+        tokens.append(marker_token(MARKER_SWAP_LINK, swap_link))
     description = getattr(event, "description", "") or ""
     if description:
         tokens.append(description)
@@ -367,10 +375,10 @@ def _compose_transfer_notes(transfer: Any) -> str:
     # exist. Emit it first (matching _compose_event_notes' fixed marker order).
     regime = getattr(transfer, "at_regime", None)
     if regime:
-        tokens.append(f"at_regime={regime}")
+        tokens.append(marker_token(MARKER_REGIME, regime))
     pool = getattr(transfer, "at_pool", None)
     if pool:
-        tokens.append(f"at_pool={pool}")
+        tokens.append(marker_token(MARKER_POOL, pool))
     pairing_source = getattr(transfer, "pairing_source", None)
     if pairing_source == "ownership_derived":
         # Make the basis for the non-taxable treatment auditable: this leg was
@@ -391,17 +399,21 @@ def _compose_transfer_journal_description(audit: Mapping[str, Any]) -> str:
     tokens: list[str] = []
     regime = audit.get("at_regime")
     if regime in ("alt", "neu"):
-        tokens.append(f"at_regime={regime}")
+        tokens.append(marker_token(MARKER_REGIME, regime))
     flows = audit.get("regime_flows")
     if flows:
         # at_regime above describes only the FEE slice; a mixed move carries
         # lots from several regimes. Emit the tax-free (alt) quantity per side
         # so balance-hint consumers classify quantities, not whole MOVEs.
-        tokens.append(f"at_alt_out={int(flows.get('out', {}).get('alt', 0))}")
-        tokens.append(f"at_alt_in={int(flows.get('in', {}).get('alt', 0))}")
+        tokens.append(
+            marker_token(MARKER_ALT_OUT, int(flows.get("out", {}).get("alt", 0)))
+        )
+        tokens.append(
+            marker_token(MARKER_ALT_IN, int(flows.get("in", {}).get("alt", 0)))
+        )
     pool = audit.get("at_pool")
     if pool:
-        tokens.append(f"at_pool={pool}")
+        tokens.append(marker_token(MARKER_POOL, pool))
     tokens.append(f"Transfer {audit['from_wallet_label']} -> {audit['to_wallet_label']}")
     pairing_source = audit.get("pairing_source")
     if pairing_source == "ownership_derived":

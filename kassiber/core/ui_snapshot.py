@@ -17,6 +17,13 @@ from ..backends import (
 from ..db import get_setting
 from ..errors import AppError
 from ..msat import dec, msat_to_btc
+from .journal_markers import (
+    MARKER_ALT_IN,
+    MARKER_ALT_OUT,
+    MARKER_REGIME,
+    parse_marker,
+    parse_marker_int,
+)
 from ..time_utils import _iso_z, _parse_iso_datetime
 from ..transfers import profile_bitcoin_rail_carrying_value
 from ..wallet_descriptors import (
@@ -2653,7 +2660,7 @@ def _tax_free_wallet_summaries(entries: list[dict[str, Any]]) -> list[dict[str, 
         # split is available and fall back to the whole-entry regime otherwise.
         if entry_type in ("transfer_out", "transfer_in"):
             alt_msat = _entry_alt_flow_msat(
-                entry, "at_alt_out" if entry_type == "transfer_out" else "at_alt_in"
+                entry, MARKER_ALT_OUT if entry_type == "transfer_out" else MARKER_ALT_IN
             )
             if alt_msat is not None:
                 alt_qty = dec(msat_to_btc(alt_msat))
@@ -2674,14 +2681,7 @@ def _tax_free_wallet_summaries(entries: list[dict[str, Any]]) -> list[dict[str, 
 
 
 def _entry_alt_flow_msat(entry: dict[str, Any], marker: str) -> int | None:
-    prefix = f"{marker}="
-    for token in str(entry.get("description") or "").split():
-        if token.startswith(prefix):
-            try:
-                return int(token[len(prefix):])
-            except ValueError:
-                return None
-    return None
+    return parse_marker_int(entry.get("description"), marker)
 
 
 def _entry_has_alt_regime(entry: dict[str, Any]) -> bool:
@@ -2705,12 +2705,8 @@ def _entry_has_alt_regime(entry: dict[str, Any]) -> bool:
 
 
 def _entry_at_regime_marker(entry: dict[str, Any]) -> str | None:
-    for token in str(entry.get("description") or "").split():
-        if token == "at_regime=alt":
-            return "alt"
-        if token == "at_regime=neu":
-            return "neu"
-    return None
+    marker = parse_marker(entry.get("description"), MARKER_REGIME)
+    return marker if marker in ("alt", "neu") else None
 
 
 def _profile_readiness(
