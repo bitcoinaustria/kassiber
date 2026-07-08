@@ -10,6 +10,7 @@ from ..transfers import normalize_group_txid
 from . import pricing
 from .austrian import infer_outbound_regimes, infer_regime_from_timestamp, resolve_pool_id
 from .loans import (
+    CHANNEL_CLOSE_MISMATCH,
     CHANNEL_OPEN,
     CHANNEL_OPEN_MISMATCH,
     LOCK_SUPPRESS_ROLES,
@@ -1441,23 +1442,31 @@ def normalize_tax_asset_inputs(
                 )
             )
             continue
-        if loan_leg_map.get(row["id"]) == CHANNEL_OPEN_MISMATCH:
+        channel_mismatch_role = loan_leg_map.get(row["id"])
+        if channel_mismatch_role in (CHANNEL_OPEN_MISMATCH, CHANNEL_CLOSE_MISMATCH):
             # A channel funding tx whose recorded outflow exceeds the funded
-            # amount also paid an external recipient. Neither suppressing the
-            # whole row (untaxes the payment) nor booking it standalone
-            # (disposes the still-owned channel capacity) is right — review
-            # must split it.
+            # amount also paid an external recipient; a close whose settled-
+            # balance gap is not a plausible fee (unsynced sweep, HTLC value
+            # lost to the peer) cannot book that gap as a fee. Neither
+            # suppressing the row nor booking it standalone is right — review
+            # must resolve it.
+            if channel_mismatch_role == CHANNEL_OPEN_MISMATCH:
+                reason = "channel_open_unresolved"
+                required_for = "channel_funding_split_review"
+            else:
+                reason = "channel_close_unresolved"
+                required_for = "channel_close_review"
             quarantines.append(
                 build_tax_quarantine(
                     profile,
                     row,
-                    "channel_open_unresolved",
+                    reason,
                     {
                         "asset": asset,
                         "wallet": wallet_refs_by_id[row["wallet_id"]]["label"],
                         "direction": _row_get(row, "direction"),
                         "external_id": str(_row_get(row, "external_id") or ""),
-                        "required_for": "channel_funding_split_review",
+                        "required_for": required_for,
                     },
                 )
             )

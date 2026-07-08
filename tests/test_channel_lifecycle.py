@@ -16,7 +16,12 @@ from decimal import Decimal
 from kassiber.core.engines.base import TaxEngineLedgerInputs
 from kassiber.core.engines.rp2 import GenericRP2TaxEngine
 from kassiber.core.lightning.channel_lifecycle import channel_role_map, channel_transfer_pairs
-from kassiber.core.loans import CHANNEL_CLOSE, CHANNEL_OPEN, CHANNEL_OPEN_MISMATCH
+from kassiber.core.loans import (
+    CHANNEL_CLOSE,
+    CHANNEL_CLOSE_MISMATCH,
+    CHANNEL_OPEN,
+    CHANNEL_OPEN_MISMATCH,
+)
 
 FUNDING_TXID = "aa" * 32
 CLOSING_TXID = "bb" * 32
@@ -439,6 +444,41 @@ class ChannelLifecycleEngineTest(unittest.TestCase):
         entry_types = [entry["entry_type"] for entry in result.entries]
         self.assertNotIn("transfer_out", entry_types)
         self.assertFalse(_has_disposal(result))
+
+
+    def test_implausible_close_gap_quarantines_instead_of_booking_fee(self) -> None:
+        # The synthesized close pair clones the receipt row, so the generic
+        # transfer-fee implausibility guard (out.amount - in.amount == 0) can
+        # never fire for it — a mis-captured close balance (unsynced sweep,
+        # HTLC value lost to the peer) would book an UNBOUNDED silent fee.
+        # The lifecycle ceiling must quarantine instead.
+        received = ONE_BTC - 10_000_000_000  # 0.9 BTC: 10% gap, 10x tolerance
+        rows = [
+            _row("buy", "inbound", ONE_BTC, "2025-05-01T00:00:00Z"),
+            _row("fund", "outbound", ONE_BTC, "2025-06-01T00:00:00Z", external_id=FUNDING_TXID),
+            _row("close", "inbound", received, "2025-07-01T00:00:00Z", external_id=CLOSING_TXID),
+        ]
+        channel_rows = [
+            {
+                "funding_txid": FUNDING_TXID,
+                "closing_txid": CLOSING_TXID,
+                "wallet_id": "node",
+                "close_balance_msat": ONE_BTC,
+            }
+        ]
+        roles = channel_role_map(channel_rows, rows)
+        self.assertEqual(roles["close"], CHANNEL_CLOSE_MISMATCH)
+        pairs = channel_transfer_pairs(channel_rows, rows, _wallet_refs())
+        self.assertFalse(any(p["kind"] == CHANNEL_CLOSE for p in pairs))
+
+        result = _run(rows, roles, pairs)
+        reasons = [q["reason"] for q in result.quarantines]
+        self.assertIn("channel_close_unresolved", reasons)
+        # No silent 0.1 BTC "fee" disposal books.
+        fee_entries = [
+            entry for entry in result.entries if entry["entry_type"] == "transfer_fee"
+        ]
+        self.assertEqual(fee_entries, [])
 
 
 if __name__ == "__main__":  # pragma: no cover

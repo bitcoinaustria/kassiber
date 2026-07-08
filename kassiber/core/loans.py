@@ -61,6 +61,11 @@ CHANNEL_ROLES = (CHANNEL_OPEN, CHANNEL_CLOSE)
 # silently untax that payment, so the row is quarantined for explicit review
 # instead (NOT in the suppress sets below).
 CHANNEL_OPEN_MISMATCH = "channel_open_mismatch"
+# A close whose settled-balance gap to the on-chain receipt(s) exceeds the fee
+# tolerance: the gap is NOT a plausible close fee (mis-captured balance,
+# unsynced sweep, or HTLC value lost to the peer — a loss, not a fee).
+# Booking it silently would mis-tax an unbounded amount; quarantine instead.
+CHANNEL_CLOSE_MISMATCH = "channel_close_mismatch"
 
 ROLE_DIRECTIONS = {
     COLLATERAL_LOCK: "outbound",
