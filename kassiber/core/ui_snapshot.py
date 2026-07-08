@@ -1408,30 +1408,44 @@ def _chain_duplicate_outpoint_adjustment_btc(
     )
     if len(chain_wallet_ids) < 2:
         return 0.0
-    wallet_placeholders = ", ".join("?" for _ in chain_wallet_ids)
-    asset_placeholders = ", ".join("?" for _ in DISPLAY_BALANCE_ASSETS)
+    placeholders = ", ".join("?" for _ in chain_wallet_ids)
     rows = conn.execute(
         f"""
-        SELECT
-            UPPER(asset) AS asset,
-            COALESCE(NULLIF(outpoint, ''), lower(txid) || ':' || vout) AS outpoint_key,
-            SUM(amount) AS total_msat,
-            MAX(amount) AS kept_msat,
-            COUNT(DISTINCT wallet_id) AS wallet_count
-        FROM wallet_utxos
+        SELECT id, kind, config_json
+        FROM wallets
         WHERE profile_id = ?
-          AND wallet_id IN ({wallet_placeholders})
-          AND spent_at IS NULL
-          AND UPPER(asset) IN ({asset_placeholders})
-        GROUP BY UPPER(asset), outpoint_key
-        HAVING COUNT(DISTINCT wallet_id) > 1
+          AND id IN ({placeholders})
         """,
-        (profile_id, *chain_wallet_ids, *sorted(DISPLAY_BALANCE_ASSETS)),
+        (profile_id, *chain_wallet_ids),
     ).fetchall()
-    duplicate_msat = sum(
-        max(0, int(row["total_msat"] or 0) - int(row["kept_msat"] or 0))
-        for row in rows
+    default_backend = (
+        _string_or_empty(get_setting(conn, DEFAULT_BACKEND_SETTING)) or None
     )
+    # Only outpoints that actually feed a wallet's displayed chain balance may be
+    # deduped. Apply the same per-wallet source filter as _chain_balance_for_wallet
+    # so stale wallet_utxos rows (e.g. left behind by a backends update that
+    # changed chain/network/kind) are never subtracted from the aggregate even
+    # though they were never added to it.
+    amounts_by_outpoint: dict[tuple[str, str], list[int]] = {}
+    for row in rows:
+        wallet_id = str(row["id"])
+        config = _json_config(row["config_json"])
+        backend_summary = _wallet_backend_summary(row["kind"], config, default_backend)
+        backend = _db_backend_for_wallet_balance(conn, backend_summary["name"])
+        source_filter = _wallet_utxo_source_filter(config, backend_summary, backend)
+        for entry in core_output_inventory.wallet_unspent_outpoint_amounts(
+            conn,
+            wallet_id,
+            assets=sorted(DISPLAY_BALANCE_ASSETS),
+            **source_filter,
+        ):
+            key = (entry["asset"], entry["outpoint_key"])
+            amounts_by_outpoint.setdefault(key, []).append(entry["amount_msat"])
+    duplicate_msat = 0
+    for amounts in amounts_by_outpoint.values():
+        if len(amounts) < 2:
+            continue
+        duplicate_msat += max(0, sum(amounts) - max(amounts))
     return float(msat_to_btc(duplicate_msat))
 
 

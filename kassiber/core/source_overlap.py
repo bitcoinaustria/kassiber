@@ -913,10 +913,21 @@ def duplicate_transaction_preview(
     for row in rows:
         if not _row_has_overlap_script_evidence(row, scripts_by_wallet):
             continue
+        # Group by the full economic fingerprint, not just the transaction id.
+        # A single chain transaction can pay the canonical overlapped script and
+        # also a distinct output that only the address-list wallet owns (a batch
+        # payment). Because rows store the whole transaction as raw_json, such a
+        # row still carries the overlap script (so the evidence guard above
+        # passes), yet its net amount is larger than the canonical duplicate.
+        # Keying on amount and fee keeps a batch row in its own group so it never
+        # shares a group with the canonical row, is never auto-excluded, and its
+        # distinct value survives into journals.
         key = (
             str(row["external_id"] or "").strip().lower(),
             row["direction"],
             row["asset"],
+            int(row["amount"] or 0),
+            int(row["fee"] or 0),
         )
         groups.setdefault(key, []).append(row)
     duplicate_groups = []

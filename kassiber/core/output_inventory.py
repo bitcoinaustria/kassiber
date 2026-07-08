@@ -726,6 +726,62 @@ def wallet_output_inventory_totals(
     ]
 
 
+def wallet_unspent_outpoint_amounts(
+    conn: sqlite3.Connection,
+    wallet_id: str,
+    *,
+    backend_name: str | Sequence[str] | None = None,
+    backend_kind: str | Sequence[str] | None = None,
+    chain: str | Sequence[str] | None = None,
+    network: str | Sequence[str] | None = None,
+    assets: Sequence[str] | None = None,
+) -> list[dict[str, Any]]:
+    """Unspent amount per outpoint for a wallet, restricted to a source filter.
+
+    Mirrors the source filtering used by ``wallet_output_inventory_totals`` so
+    callers that dedupe outpoints across wallets only ever see the rows that
+    actually feed a wallet's displayed chain balance. Rows left behind by an old
+    backend/chain/network (for example after a ``backends update`` that does not
+    clear ``wallet_utxos``) are excluded, exactly as they are for the balance.
+    """
+    source_where, source_params = _source_filter_sql(
+        backend_name=backend_name,
+        backend_kind=backend_kind,
+        chain=chain,
+        network=network,
+    )
+    asset_where = ""
+    asset_params: list[Any] = []
+    asset_values = [str(asset).upper() for asset in (assets or []) if str_or_none(asset)]
+    if asset_values:
+        placeholders = ", ".join("?" for _ in asset_values)
+        asset_where = f"AND UPPER(asset) IN ({placeholders})"
+        asset_params = sorted(set(asset_values))
+    rows = conn.execute(
+        f"""
+        SELECT
+            UPPER(asset) AS asset,
+            COALESCE(NULLIF(outpoint, ''), lower(txid) || ':' || vout) AS outpoint_key,
+            SUM(amount) AS amount_msat
+        FROM wallet_utxos
+        WHERE wallet_id = ?
+          AND spent_at IS NULL
+          {asset_where}
+          {source_where}
+        GROUP BY UPPER(asset), outpoint_key
+        """,
+        (wallet_id, *asset_params, *source_params),
+    ).fetchall()
+    return [
+        {
+            "asset": row["asset"],
+            "outpoint_key": row["outpoint_key"],
+            "amount_msat": int(row["amount_msat"] or 0),
+        }
+        for row in rows
+    ]
+
+
 def list_wallet_output_inventory(
     conn: sqlite3.Connection,
     wallet_id: str,

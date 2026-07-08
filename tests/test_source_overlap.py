@@ -87,7 +87,18 @@ def _wallet(conn, wallet_id, label, kind, config):
     return conn.execute("SELECT * FROM wallets WHERE id = ?", (wallet_id,)).fetchone()
 
 
-def _utxo(conn, wallet_id, address, txid="aa"):
+def _utxo(
+    conn,
+    wallet_id,
+    address,
+    txid="aa",
+    *,
+    backend_name="esplora",
+    backend_kind="esplora",
+    chain="bitcoin",
+    network="mainnet",
+    amount_btc="0.01",
+):
     now = "2026-01-01T00:00:00Z"
     conn.execute(
         """
@@ -100,16 +111,16 @@ def _utxo(conn, wallet_id, address, txid="aa"):
         ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
-            f"utxo-{wallet_id}-{txid}",
+            f"utxo-{wallet_id}-{txid}-{network}",
             "ws",
             "pf",
             wallet_id,
-            "esplora",
-            "esplora",
-            "bitcoin",
-            "mainnet",
+            backend_name,
+            backend_kind,
+            chain,
+            network,
             "BTC",
-            btc_to_msat("0.01"),
+            btc_to_msat(amount_btc),
             txid * 32,
             0,
             f"{txid * 32}:0",
@@ -138,6 +149,7 @@ def _tx(
     direction="inbound",
     amount_btc="0.01",
     script_pubkey: str | None = None,
+    extra_outputs: list[tuple[str, str]] | None = None,
 ):
     now = "2026-01-01T00:00:00Z"
     amount = btc_to_msat(amount_btc)
@@ -152,6 +164,16 @@ def _tx(
             ]
         else:
             raw_payload["vout"] = [{"scriptpubkey": script_pubkey, "value": amount_sat}]
+    # Additional distinct outputs let a test model a batch payment whose stored
+    # raw_json also carries the overlap script even though this row's economic
+    # value is larger than the canonical duplicate.
+    for extra_script, extra_value_btc in extra_outputs or []:
+        raw_payload["vout"].append(
+            {
+                "scriptpubkey": extra_script,
+                "value": btc_to_msat(extra_value_btc) // 1000,
+            }
+        )
     fingerprint = make_transaction_fingerprint(
         wallet_id,
         external_id,
@@ -921,6 +943,112 @@ class SourceOverlapTests(unittest.TestCase):
                 }
                 self.assertAlmostEqual(balances["w1"], 0.01)
                 self.assertAlmostEqual(balances["w2"], 0.01)
+            finally:
+                conn.close()
+
+    def test_overview_chain_balance_ignores_stale_source_duplicate_outpoints(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-source-overlap-") as tmp:
+            conn = open_db(Path(tmp) / "data")
+            try:
+                _seed_book(conn)
+                _wallet(
+                    conn,
+                    "w1",
+                    "Wallet One",
+                    "address",
+                    {"addresses": [ADDR_A], "chain": "bitcoin", "network": "mainnet"},
+                )
+                _wallet(
+                    conn,
+                    "w2",
+                    "Wallet Two",
+                    "address",
+                    {"addresses": [ADDR_B], "chain": "bitcoin", "network": "mainnet"},
+                )
+                # w1 and w2 hold genuinely distinct mainnet outpoints.
+                _utxo(conn, "w1", ADDR_A, txid="aa")
+                _utxo(conn, "w2", ADDR_B, txid="bb")
+                # A stale row on w2 shares w1's outpoint but belongs to an old
+                # network the current config no longer syncs, so it never feeds
+                # w2's displayed chain balance and must not be deduped away.
+                _utxo(conn, "w2", ADDR_A, txid="aa", network="testnet")
+                _tx(conn, "tx-w1", "w1", "aa" * 32)
+                _tx(conn, "tx-w2", "w2", "bb" * 32)
+                conn.commit()
+
+                snapshot = build_overview_snapshot(conn)
+
+                # No true cross-wallet duplicate exists in the displayed balances,
+                # so the adjustment key is omitted (it is only emitted when > 0).
+                self.assertNotIn(
+                    "chainDuplicateOutpointAdjustmentBtc", snapshot["fiat"]
+                )
+                balances = {row["id"]: row["balance"] for row in snapshot["connections"]}
+                self.assertAlmostEqual(balances["w1"], 0.01)
+                self.assertAlmostEqual(balances["w2"], 0.01)
+                self.assertAlmostEqual(snapshot["fiat"]["eurBalance"], 1000.0)
+            finally:
+                conn.close()
+
+    def test_journal_overlap_repair_keeps_batch_row_with_distinct_output(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-source-overlap-") as tmp:
+            conn = open_db(Path(tmp) / "data")
+            try:
+                profile = _seed_book(conn)
+                config = _descriptor_config(gap_limit=2)
+                target = _descriptor_target(config)
+                self.assertEqual(target.address, ADDR_A)
+                _wallet(conn, "desc", "Descriptor", "descriptor", config)
+                _wallet(
+                    conn,
+                    "addr",
+                    "Address list",
+                    "address",
+                    {"addresses": [ADDR_A], "chain": "bitcoin", "network": "mainnet"},
+                )
+                # One chain transaction pays the canonical overlap script (ADDR_A)
+                # plus a distinct output (ADDR_C) that only the address-list wallet
+                # owns. The address-list row's raw_json still carries ADDR_A, so it
+                # passes the script-evidence guard, but its net amount is larger
+                # than the descriptor's duplicate. It must stay active and block the
+                # trim instead of being auto-excluded, which would drop the ADDR_C
+                # receipt from journals.
+                _tx(conn, "tx-desc", "desc", "ee" * 32, amount_btc="0.01")
+                _tx(
+                    conn,
+                    "tx-addr",
+                    "addr",
+                    "ee" * 32,
+                    amount_btc="0.03",
+                    extra_outputs=[(_script(ADDR_C), "0.02")],
+                )
+                conn.commit()
+
+                repair = _repair_journal_source_overlaps(conn, profile)
+
+                self.assertEqual(repair["duplicates_excluded"], 0)
+                self.assertEqual(repair["addresses_removed"], 0)
+                self.assertTrue(repair["address_list_trim_skipped"])
+                self.assertEqual(repair["remaining_overlap_count"], 1)
+                self.assertEqual(
+                    [
+                        wallet["wallet_id"]
+                        for wallet in repair["unresolved_address_list_wallets"]
+                    ],
+                    ["addr"],
+                )
+                self.assertEqual(
+                    conn.execute(
+                        "SELECT excluded FROM transactions WHERE id = 'tx-addr'"
+                    ).fetchone()["excluded"],
+                    0,
+                )
+                config_after = json.loads(
+                    conn.execute(
+                        "SELECT config_json FROM wallets WHERE id = 'addr'"
+                    ).fetchone()["config_json"]
+                )
+                self.assertEqual(config_after["addresses"], [ADDR_A])
             finally:
                 conn.close()
 
