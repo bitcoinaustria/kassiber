@@ -2157,7 +2157,7 @@ def _annotate_graph(
         else {source_wallet_id}
     )
     inferred_incoming_payment_ids = _inferred_incoming_payment_output_ids(
-        row, graph["outputs"]
+        row, graph["outputs"], owned_index, row_chain_network
     )
     for node in graph["outputs"]:
         script = node.get("_script")
@@ -2218,6 +2218,8 @@ def _annotate_graph(
 def _inferred_incoming_payment_output_ids(
     row: Mapping[str, Any],
     outputs: Sequence[Mapping[str, Any]],
+    owned_index: Any,
+    row_chain_network: Any,
 ) -> set[Any]:
     if not _row_is_inbound(row):
         return set()
@@ -2225,9 +2227,21 @@ def _inferred_incoming_payment_output_ids(
     if amount_msat is None or amount_msat <= 0 or amount_msat % SATS_TO_MSAT != 0:
         return set()
     amount_sats = amount_msat // SATS_TO_MSAT
+    # Only rescue the case where no output is recognised as owned (e.g. the
+    # receiving wallet's descriptor does not yet cover this script). Once an
+    # owned output has matched, the real receive is already labelled through
+    # the normal path, and an unmatched output that merely equals the recorded
+    # amount is far more likely to be change or a coincidence than a second
+    # incoming payment — so we must not relabel it as owned.
+    spendable = [node for node in outputs if not _is_unspendable(node.get("_script"))]
+    for node in spendable:
+        if _filter_matches_to_chain_network(
+            owned_index.lookup_script(node.get("_script")), row_chain_network
+        ):
+            return set()
     candidates = [
         node.get("id")
-        for node in outputs
+        for node in spendable
         if node.get("id") is not None and node.get("valueSats") == amount_sats
     ]
     if len(candidates) != 1:

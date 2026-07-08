@@ -478,6 +478,53 @@ class TransactionGraphTest(unittest.TestCase):
             ["external_recipient", "external_recipient"],
         )
 
+    def test_inbound_amount_inference_skips_when_owned_output_matched(self):
+        # The receiving wallet already covers ADDR_B, so the real incoming
+        # output is matched through the normal owned-index path. A *different*
+        # external output that merely equals the recorded amount must not be
+        # relabelled as an owned incoming payment.
+        self._utxo("wallet-b", ADDR_B, "coincidence-tx", 0, amount=30_000)
+        txid = "84" * 32
+        raw = {
+            "txid": txid,
+            "vin": [
+                {
+                    "txid": "57" * 32,
+                    "vout": 0,
+                    "prevout": {
+                        "scriptpubkey": "0014" + "88" * 20,
+                        "value": 312_414_797,
+                    },
+                }
+            ],
+            "vout": [
+                {
+                    "n": 0,
+                    "scriptpubkey": SCRIPT_B,
+                    "scriptpubkey_address": ADDR_B,
+                    "value": 30_000,
+                },
+                {"n": 1, "scriptpubkey": "0014" + "99" * 20, "value": 26_705},
+            ],
+        }
+        self._tx(
+            "coincidental-inbound-amount-row",
+            "wallet-b",
+            "inbound",
+            26_705_000,
+            txid,
+            raw,
+        )
+
+        payload = self._graph("coincidental-inbound-amount-row")
+
+        # Owned output is the genuine receive; the coincidental external output
+        # stays external and is never inferred as owned.
+        self.assertEqual(payload["outputs"][0]["role"], "incoming_payment")
+        self.assertEqual(payload["outputs"][0]["ownership"], "owned")
+        self.assertEqual(payload["outputs"][1]["role"], "external_recipient")
+        self.assertEqual(payload["outputs"][1]["ownership"], "external")
+
     def test_bitcoin_missing_prevout_values_are_enriched_from_public_lookup(self):
         txid = "33" * 32
         raw = {
