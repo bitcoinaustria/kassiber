@@ -11720,6 +11720,115 @@ class ReviewRegressionTest(unittest.TestCase):
             ],
         )
 
+    def test_mixed_regime_transfer_carries_tax_free_share_to_destination(self):
+        # A mixed Alt+Neu wallet moving MORE than its Neu stack carries Alt
+        # coins to the destination even though the MOVE's fee-slice marker says
+        # at_regime=neu. The tax-free hint must classify the moved QUANTITIES
+        # (at_alt_out/at_alt_in flows), not the whole MOVE by the fee regime.
+        profile = {
+            "id": "profile-at-mixed-move",
+            "workspace_id": "workspace-main",
+            "label": "FixtureAustrianMixedMove",
+            "fiat_currency": "EUR",
+            "tax_country": "at",
+            "tax_long_term_days": 9223372036854775807,
+            "gains_algorithm": "MOVING_AVERAGE_AT",
+        }
+        wallet_refs_by_id = {
+            "wallet-a": {
+                "id": "wallet-a",
+                "label": "Vienna",
+                "wallet_account_id": "account-treasury",
+                "account_code": "treasury",
+                "account_label": "Treasury",
+            },
+            "wallet-b": {
+                "id": "wallet-b",
+                "label": "Cold",
+                "wallet_account_id": "account-cold",
+                "account_code": "cold",
+                "account_label": "Cold",
+            },
+        }
+
+        def _row(rid, wid, direction, amount, occurred_at, *, description, external_id):
+            ref = wallet_refs_by_id[wid]
+            return {
+                "id": rid,
+                "wallet_id": wid,
+                "wallet_label": ref["label"],
+                "wallet_account_id": ref["wallet_account_id"],
+                "account_code": ref["account_code"],
+                "account_label": ref["account_label"],
+                "occurred_at": occurred_at,
+                "direction": direction,
+                "asset": "BTC",
+                "amount": amount,
+                "fee": 0,
+                "fiat_rate": 60000,
+                "fiat_value": 60000,
+                "kind": "transfer",
+                "note": None,
+                "description": description,
+                "external_id": external_id,
+                "created_at": occurred_at,
+            }
+
+        state = build_tax_engine(profile).build_ledger_state(
+            TaxEngineLedgerInputs(
+                rows=[
+                    _row(
+                        "alt-buy",
+                        "wallet-a",
+                        "inbound",
+                        30_000_000_000,
+                        "2020-06-01T10:00:00Z",
+                        description="Alt buy",
+                        external_id="alt-buy",
+                    ),
+                    _row(
+                        "neu-buy",
+                        "wallet-a",
+                        "inbound",
+                        40_000_000_000,
+                        "2024-01-01T10:00:00Z",
+                        description="Neu buy",
+                        external_id="neu-buy",
+                    ),
+                    _row(
+                        "xfer-out",
+                        "wallet-a",
+                        "outbound",
+                        50_000_000_000,
+                        "2024-07-01T10:00:00Z",
+                        description="Move A->B",
+                        external_id="xfer-mixed",
+                    ),
+                    _row(
+                        "xfer-in",
+                        "wallet-b",
+                        "inbound",
+                        50_000_000_000,
+                        "2024-07-01T10:00:00Z",
+                        description="Move A->B",
+                        external_id="xfer-mixed",
+                    ),
+                ],
+                wallet_refs_by_id=wallet_refs_by_id,
+                manual_pair_records=[],
+            )
+        )
+
+        self.assertEqual(state.quarantines, [])
+        # 0.5 moved: 0.4 Neu (preferred) + 0.1 Alt carried to the destination.
+        self.assertEqual(
+            _tax_free_wallet_summaries(state.entries),
+            [
+                {"walletId": "wallet-a", "hasTaxFreeBalance": True},
+                {"walletId": "wallet-b", "hasTaxFreeBalance": True},
+            ],
+        )
+
     def test_austrian_direct_swap_payout_carries_then_disposes(self):
         profile, inputs = self._direct_austrian_swap_payout_inputs()
         state = build_tax_engine(profile).build_ledger_state(inputs)

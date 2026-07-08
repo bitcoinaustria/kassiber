@@ -108,9 +108,15 @@ def _move_transfer_availability(
     neu_available_msat_by_key: dict[str, int],
     out_row: Mapping[str, Any],
     in_row: Mapping[str, Any],
-) -> Literal["alt", "neu"]:
-    """Move regime availability for a self-transfer and return the regime the
-    disposed network fee is drawn from.
+) -> tuple[Literal["alt", "neu"], dict[str, dict[str, int]]]:
+    """Move regime availability for a self-transfer.
+
+    Returns ``(fee_regime, flows)``: the regime the disposed network fee is
+    drawn from, plus the per-regime quantity flows —
+    ``flows["out"]`` = what left the source per regime (carried + fee slice),
+    ``flows["in"]`` = what the destination received per regime. Consumers
+    that classify whole MOVE quantities (tax-free balance hints) need the
+    split; the single fee regime is NOT representative of the carried coins.
 
     The MOVE itself is non-taxable, but its miner fee IS a disposal, so under the
     Austrian moving-average method it must be tagged with a regime — otherwise
@@ -127,8 +133,12 @@ def _move_transfer_availability(
     received_msat = int(_row_value(in_row, "amount") or 0)
 
     preferred_regime = infer_regime_from_timestamp(str(out_row["occurred_at"]))
+    empty_flows = {
+        "out": {REGIME_ALT: 0, REGIME_NEU: 0},
+        "in": {REGIME_ALT: 0, REGIME_NEU: 0},
+    }
     if sent_msat <= 0 or received_msat <= 0:
-        return preferred_regime
+        return preferred_regime, empty_flows
     if (
         preferred_regime == REGIME_NEU
         and alt_available_msat_by_key.get(from_key, 0) > 0
@@ -168,6 +178,7 @@ def _move_transfer_availability(
         if remaining_fee <= 0:
             break
 
+    carried_by_regime: dict[str, int] = {REGIME_ALT: 0, REGIME_NEU: 0}
     remaining_received = received_msat
     for regime in regime_order:
         carried = min(moved[regime], remaining_received)
@@ -179,20 +190,28 @@ def _move_transfer_availability(
             else alt_available_msat_by_key
         )
         bucket[to_key] += carried
+        carried_by_regime[regime] += carried
         remaining_received -= carried
         if remaining_received <= 0:
             break
 
+    flows = {
+        "out": {
+            regime: fee_by_regime[regime] + carried_by_regime[regime]
+            for regime in (REGIME_ALT, REGIME_NEU)
+        },
+        "in": dict(carried_by_regime),
+    }
     # The fee is the first taxable slice of `sent`; only the remaining moved
     # quantity is carried to the destination. Fall back to the first moved regime
     # (or the timestamp regime) for zero-fee / out-of-scope inventory cases.
     for regime in regime_order:
         if fee_by_regime[regime] > 0:
-            return regime
+            return regime, flows
     for regime in regime_order:
         if moved[regime] > 0:
-            return regime
-    return preferred_regime
+            return regime, flows
+    return preferred_regime, flows
 
 
 def _row_msat(row: Mapping[str, Any], key: str) -> int:
@@ -338,6 +357,7 @@ def _transfer_actions_for_intra_pairs(
 def infer_outbound_regimes(
     rows: Sequence[Mapping[str, Any]],
     intra_pairs: Optional[Sequence[Mapping[str, Mapping[str, Any]]]] = None,
+    transfer_flows: Optional[dict[tuple[str, str], dict[str, dict[str, int]]]] = None,
 ) -> dict[str, Literal["alt", "neu"]]:
     """Infer Austrian disposal regimes from the rows seen so far.
 
@@ -365,7 +385,7 @@ def infer_outbound_regimes(
             # land. Multi-pair groups are sliced here the same way the tax
             # normalizer later emits their transfer rows.
             for out_row, in_row, regime_row_id in transfer_actions:
-                fee_regime = _move_transfer_availability(
+                fee_regime, flows = _move_transfer_availability(
                     alt_available_msat_by_key,
                     neu_available_msat_by_key,
                     out_row,
@@ -375,6 +395,13 @@ def infer_outbound_regimes(
                 # disposal carries a regime; without it rp2's AT moving-average
                 # aborts the whole asset on "Ambiguous Austrian disposal".
                 regimes_by_row_id.setdefault(regime_row_id, fee_regime)
+                if transfer_flows is not None:
+                    # Per-leg regime flows so downstream consumers (tax-free
+                    # balance hints) classify the moved QUANTITIES, not the
+                    # whole MOVE by the fee's single regime.
+                    transfer_flows[
+                        (str(out_row["id"]), str(in_row["id"]))
+                    ] = flows
             continue
         if row_id in transfer_row_ids:
             continue

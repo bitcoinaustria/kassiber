@@ -92,6 +92,12 @@ class NormalizedTaxTransfer:
     # rp2's moving-average aborts the whole asset on "Ambiguous Austrian
     # disposal" when the wallet holds both Alt and Neu lots. None outside AT.
     at_regime: Optional[AtRegime] = None
+    # Per-regime quantity flows of the MOVE ({"out": {regime: msat}, "in":
+    # {regime: msat}}). A mixed-regime move carries lots from SEVERAL regimes;
+    # any consumer classifying moved quantities (tax-free balance hints) needs
+    # this split — at_regime above only describes the fee slice. The mapping is
+    # regime-name keyed, so future country modules reuse the same channel.
+    regime_flows: Optional[Mapping[str, Mapping[str, int]]] = None
     # Optional stable id for one logical movement split out of a multi-output
     # wallet transaction. Journal rows still point at the real out/in rows.
     transfer_id: Optional[str] = None
@@ -892,6 +898,9 @@ def _build_manual_multi_pair_transfers(
     wallet_refs_by_id: Mapping[str, Mapping[str, Any]],
     is_at: bool,
     outbound_regimes: Mapping[str, AtRegime],
+    transfer_regime_flows: Optional[
+        Mapping[tuple[str, str], dict[str, dict[str, int]]]
+    ] = None,
 ) -> tuple[
     dict[str, list[NormalizedTaxTransfer]],
     set[str],
@@ -1132,6 +1141,9 @@ def _build_manual_multi_pair_transfers(
                         in_row=in_row,
                         at_pool=resolve_pool_id(from_wallet["id"]) if is_at else None,
                         at_regime=at_regime,
+                        regime_flows=(transfer_regime_flows or {}).get(
+                            (str(out_row["id"]), str(in_row["id"]))
+                        ),
                         transfer_id=transfer_id,
                         group_id=group_id,
                         group_block_rows=tuple(group_rows),
@@ -1200,6 +1212,9 @@ def _build_manual_multi_pair_transfers(
                         in_row=in_row,
                         at_pool=resolve_pool_id(from_wallet["id"]) if is_at else None,
                         at_regime=at_regime,
+                        regime_flows=(transfer_regime_flows or {}).get(
+                            (str(out_row["id"]), str(in_row["id"]))
+                        ),
                         transfer_id=transfer_id,
                         group_id=group_id,
                         group_block_rows=tuple(group_rows),
@@ -1351,7 +1366,12 @@ def normalize_tax_asset_inputs(
             ),
         )
     regime_pairs = [*non_conflict_pairs, *samourai_regime_pairs]
-    outbound_regimes = infer_outbound_regimes(regime_rows, regime_pairs) if is_at else {}
+    transfer_regime_flows: dict[tuple[str, str], dict[str, dict[str, int]]] = {}
+    outbound_regimes = (
+        infer_outbound_regimes(regime_rows, regime_pairs, transfer_regime_flows)
+        if is_at
+        else {}
+    )
     events: list[NormalizedTaxEvent] = []
     transfers: list[NormalizedTaxTransfer] = []
     ordered_items: list[tuple[str, str]] = []
@@ -1390,6 +1410,7 @@ def normalize_tax_asset_inputs(
         wallet_refs_by_id,
         is_at,
         outbound_regimes,
+        transfer_regime_flows,
     )
     quarantines.extend(manual_multi_quarantines)
     handled_pairs: set[tuple[str, str]] = set()
@@ -1714,6 +1735,9 @@ def normalize_tax_asset_inputs(
                     in_row=in_row,
                     at_pool=resolve_pool_id(from_wallet["id"]) if is_at else None,
                     at_regime=at_regime,
+                    regime_flows=transfer_regime_flows.get(
+                        (str(out_row["id"]), str(in_row["id"]))
+                    ),
                     group_id=group_id,
                     group_block_rows=_pair_group_block_rows(pair),
                     pairing_source=(

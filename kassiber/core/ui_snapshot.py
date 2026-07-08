@@ -2615,7 +2615,8 @@ def _tax_free_balance_snapshot(
 def _tax_free_wallet_summaries(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
     tax_free_by_wallet: dict[str, Decimal] = defaultdict(Decimal)
     for entry in entries:
-        if str(entry.get("entry_type") or "") == "transfer_fee":
+        entry_type = str(entry.get("entry_type") or "")
+        if entry_type == "transfer_fee":
             continue
         wallet_id = str(entry.get("wallet_id") or "")
         if not wallet_id:
@@ -2623,6 +2624,21 @@ def _tax_free_wallet_summaries(entries: list[dict[str, Any]]) -> list[dict[str, 
         qty = dec(entry.get("quantity") or 0)
         if qty == 0:
             continue
+        # Transfers carry a per-regime quantity split (at_alt_out/at_alt_in):
+        # a mixed-regime MOVE carries tax-free lots even when its fee-slice
+        # at_regime marker says "neu", so classify the QUANTITIES when the
+        # split is available and fall back to the whole-entry regime otherwise.
+        if entry_type in ("transfer_out", "transfer_in"):
+            alt_msat = _entry_alt_flow_msat(
+                entry, "at_alt_out" if entry_type == "transfer_out" else "at_alt_in"
+            )
+            if alt_msat is not None:
+                alt_qty = dec(msat_to_btc(alt_msat))
+                if entry_type == "transfer_out":
+                    tax_free_by_wallet[wallet_id] -= alt_qty
+                else:
+                    tax_free_by_wallet[wallet_id] += alt_qty
+                continue
         if _entry_has_alt_regime(entry):
             tax_free_by_wallet[wallet_id] += qty
     return [
@@ -2632,6 +2648,17 @@ def _tax_free_wallet_summaries(entries: list[dict[str, Any]]) -> list[dict[str, 
         }
         for wallet_id, qty in sorted(tax_free_by_wallet.items())
     ]
+
+
+def _entry_alt_flow_msat(entry: dict[str, Any], marker: str) -> int | None:
+    prefix = f"{marker}="
+    for token in str(entry.get("description") or "").split():
+        if token.startswith(prefix):
+            try:
+                return int(token[len(prefix):])
+            except ValueError:
+                return None
+    return None
 
 
 def _entry_has_alt_regime(entry: dict[str, Any]) -> bool:

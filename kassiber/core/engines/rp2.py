@@ -392,6 +392,13 @@ def _compose_transfer_journal_description(audit: Mapping[str, Any]) -> str:
     regime = audit.get("at_regime")
     if regime in ("alt", "neu"):
         tokens.append(f"at_regime={regime}")
+    flows = audit.get("regime_flows")
+    if flows:
+        # at_regime above describes only the FEE slice; a mixed move carries
+        # lots from several regimes. Emit the tax-free (alt) quantity per side
+        # so balance-hint consumers classify quantities, not whole MOVEs.
+        tokens.append(f"at_alt_out={int(flows.get('out', {}).get('alt', 0))}")
+        tokens.append(f"at_alt_in={int(flows.get('in', {}).get('alt', 0))}")
     pool = audit.get("at_pool")
     if pool:
         tokens.append(f"at_pool={pool}")
@@ -905,6 +912,8 @@ def _prepare_rp2_asset_input(profile, normalized_inputs: NormalizedTaxAssetInput
         }
         if getattr(transfer, "at_regime", None):
             audit_row["at_regime"] = transfer.at_regime
+        if getattr(transfer, "regime_flows", None):
+            audit_row["regime_flows"] = transfer.regime_flows
         if getattr(transfer, "at_pool", None):
             audit_row["at_pool"] = transfer.at_pool
         if transfer.group_id:
