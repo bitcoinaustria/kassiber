@@ -367,6 +367,68 @@ class FreshSchemaTests(unittest.TestCase):
             finally:
                 conn.close()
 
+    def test_summary_internal_transfers_count_multi_pair_spend_once(self):
+        # A whirlpool 1->N multi-pair repeats the SAME out leg on every pair
+        # row; the summary-PDF internal-transfer volume must count that spend
+        # once, not once per receipt leg.
+        from types import SimpleNamespace
+
+        from kassiber.core.reports import _summary_pdf_internal_transfers
+
+        with tempfile.TemporaryDirectory() as data_root:
+            conn = open_db(data_root)
+            try:
+                workspace_id, profile_id, wallet_id = _seed_minimal_scope(conn)
+                _insert_tx(
+                    conn,
+                    tx_id="tx-out",
+                    workspace_id=workspace_id,
+                    profile_id=profile_id,
+                    wallet_id=wallet_id,
+                    asset="BTC",
+                    direction="outbound",
+                    amount_msat=100_000,
+                )
+                conn.execute(
+                    "UPDATE transactions SET fiat_value = 60 WHERE id = 'tx-out'"
+                )
+                for tx_id, amount in (("tx-in-1", 50_000), ("tx-in-2", 49_000)):
+                    _insert_tx(
+                        conn,
+                        tx_id=tx_id,
+                        workspace_id=workspace_id,
+                        profile_id=profile_id,
+                        wallet_id=wallet_id,
+                        asset="BTC",
+                        direction="inbound",
+                        amount_msat=amount,
+                    )
+                for pair_id, in_id in (("pair-1", "tx-in-1"), ("pair-2", "tx-in-2")):
+                    create_transaction_pair(
+                        conn,
+                        workspace_id,
+                        profile_id,
+                        "tx-out",
+                        in_id,
+                        kind="whirlpool",
+                    )
+                hooks = SimpleNamespace(iso_z=lambda value: value)
+                summary = _summary_pdf_internal_transfers(
+                    conn,
+                    profile_id,
+                    [{"id": wallet_id}],
+                    hooks,
+                    "2000-01-01T00:00:00Z",
+                    "2100-01-01T00:00:00Z",
+                )
+                self.assertEqual(summary["count"], 1)
+                self.assertAlmostEqual(summary["fiat_volume"], 60.0, places=6)
+                self.assertAlmostEqual(
+                    summary["btc_volume"], 100_000 / 100_000_000_000, places=12
+                )
+            finally:
+                conn.close()
+
     def test_schema_compat_clears_stale_same_asset_privacy_swap_fees(self):
         with tempfile.TemporaryDirectory() as data_root:
             conn = open_db(data_root)
