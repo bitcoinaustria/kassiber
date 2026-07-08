@@ -189,8 +189,6 @@ def is_lightning_payment_hash_row(row):
     return wallet_kind in _LIGHTNING_WALLET_KINDS
 
 
-_is_lightning_payment_hash_row = is_lightning_payment_hash_row
-
 
 def detect_intra_transfers(rows):
     """Return ``(pairs, matched_ids)`` for the given transaction rows.
@@ -260,7 +258,7 @@ def detect_intra_transfers(rows):
         payment_hash = _row_field(row, "payment_hash")
         if not payment_hash:
             continue
-        if not _is_lightning_payment_hash_row(row):
+        if not is_lightning_payment_hash_row(row):
             continue
         by_hash[(str(payment_hash), row["asset"])].append(row)
     for group in by_hash.values():

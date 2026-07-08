@@ -20,7 +20,10 @@ from .ownership_transfers import detect_conflicting_spend_ids
 from .pair_allocation import (
     allocate_fee_msat,
     clamped_receipt_msat,
+    connected_pair_components,
+    is_component_member,
     ordered_pair_component,
+    pair_record_id,
 )
 from .privacy_hops import privacy_hop_evidence_from_row
 from .transfer_matching import (
@@ -812,13 +815,7 @@ def _owned_fanout_row_ids(
     return fanout_ids
 
 
-def _pair_record_id(pair: Mapping[str, Any]) -> str | None:
-    raw = pair.get("pair_id") if hasattr(pair, "get") else None
-    if raw in (None, ""):
-        raw = pair.get("id") if hasattr(pair, "get") else None
-    if raw in (None, ""):
-        return None
-    return str(raw)
+_pair_record_id = pair_record_id
 
 
 def _pair_source(pair: Mapping[str, Any]) -> str | None:
@@ -844,7 +841,6 @@ def _row_msat(row: Mapping[str, Any], key: str) -> int:
     return int(_row_get(row, key) or 0)
 
 
-_allocate_fee_msat = allocate_fee_msat
 
 
 def _append_manual_multi_pair_quarantines(
@@ -866,49 +862,12 @@ def _append_manual_multi_pair_quarantines(
 def _manual_multi_pair_components(
     pairs: Sequence[Mapping[str, Any]],
 ) -> list[list[Mapping[str, Any]]]:
-    candidates = [
-        pair
-        for pair in pairs
-        if _pair_record_id(pair) is not None and _pair_group_id(pair) is None
-    ]
-    if not candidates:
-        return []
-
-    usage: dict[str, int] = {}
-    row_to_indexes: dict[str, list[int]] = {}
-    for index, pair in enumerate(candidates):
-        for side in ("out", "in"):
-            row_id = str(pair[side]["id"])
-            usage[row_id] = usage.get(row_id, 0) + 1
-            row_to_indexes.setdefault(row_id, []).append(index)
-
-    multi_indexes = {
-        index
-        for index, pair in enumerate(candidates)
-        if usage[str(pair["out"]["id"])] > 1 or usage[str(pair["in"]["id"])] > 1
-    }
-    components: list[list[Mapping[str, Any]]] = []
-    seen: set[int] = set()
-    for start in sorted(multi_indexes):
-        if start in seen:
-            continue
-        stack = [start]
-        component_indexes: set[int] = set()
-        while stack:
-            index = stack.pop()
-            if index in seen:
-                continue
-            seen.add(index)
-            component_indexes.add(index)
-            pair = candidates[index]
-            for row_id in (str(pair["out"]["id"]), str(pair["in"]["id"])):
-                for linked_index in row_to_indexes.get(row_id, ()):
-                    if linked_index in multi_indexes and linked_index not in seen:
-                        stack.append(linked_index)
-        component = [candidates[index] for index in sorted(component_indexes)]
-        if len(component) > 1:
-            components.append(component)
-    return components
+    components = connected_pair_components(
+        pairs,
+        lambda pair: (pair["out"]["id"], pair["in"]["id"]),
+        membership=is_component_member,
+    )
+    return [component for component in components if len(component) > 1]
 
 
 def _build_manual_multi_pair_transfers(
@@ -1117,7 +1076,7 @@ def _build_manual_multi_pair_transfers(
 
         transfers: list[NormalizedTaxTransfer] = []
         if len(out_rows_by_id) == 1:
-            fee_allocations = _allocate_fee_msat(
+            fee_allocations = allocate_fee_msat(
                 fee_msat, [_row_msat(pair["in"], "amount") for pair in ordered_pairs]
             )
             for pair, fee_allocation in zip(ordered_pairs, fee_allocations):
@@ -1175,7 +1134,7 @@ def _build_manual_multi_pair_transfers(
                 _row_msat(pair["out"], "amount") + _row_msat(pair["out"], "fee")
                 for pair in ordered_pairs
             ]
-            fee_allocations = _allocate_fee_msat(fee_msat, sent_amounts)
+            fee_allocations = allocate_fee_msat(fee_msat, sent_amounts)
             for pair, sent_msat, fee_allocation in zip(
                 ordered_pairs, sent_amounts, fee_allocations
             ):

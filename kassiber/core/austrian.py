@@ -24,6 +24,7 @@ from zoneinfo import ZoneInfo
 from .pair_allocation import (
     allocate_fee_msat,
     clamped_receipt_msat,
+    connected_pair_components,
     ordered_pair_component,
 )
 
@@ -236,50 +237,24 @@ def _copy_row_with_amount(
     return copied
 
 
-# Fee allocation and component ordering are shared with the booking path
-# (kassiber.core.pair_allocation): the allocator is greedy, so regime
-# inference must walk legs in the exact order booking does or the fee
-# lands on different legs in the two models.
-_allocate_fee_msat = allocate_fee_msat
-_ordered_pair_component = ordered_pair_component
+
 
 
 def _intra_pair_components(
     intra_pairs: Sequence[Mapping[str, Mapping[str, Any]]],
 ) -> list[list[Mapping[str, Mapping[str, Any]]]]:
-    candidates: list[Mapping[str, Mapping[str, Any]]] = []
-    row_to_indexes: dict[str, list[int]] = defaultdict(list)
-    for pair in intra_pairs:
+    def _leg_ids(pair):
         out_row = pair.get("out") if hasattr(pair, "get") else None
         in_row = pair.get("in") if hasattr(pair, "get") else None
         if out_row is None or in_row is None:
-            continue
-        index = len(candidates)
-        candidates.append(pair)
-        row_to_indexes[str(out_row["id"])].append(index)
-        row_to_indexes[str(in_row["id"])].append(index)
+            return None
+        return (out_row["id"], in_row["id"])
 
-    components: list[list[Mapping[str, Mapping[str, Any]]]] = []
-    seen: set[int] = set()
-    for start in range(len(candidates)):
-        if start in seen:
-            continue
-        queue: deque[int] = deque([start])
-        indexes: list[int] = []
-        seen.add(start)
-        while queue:
-            index = queue.popleft()
-            indexes.append(index)
-            pair = candidates[index]
-            for row_id in (str(pair["out"]["id"]), str(pair["in"]["id"])):
-                for linked_index in row_to_indexes.get(row_id, ()):
-                    if linked_index in seen:
-                        continue
-                    seen.add(linked_index)
-                    queue.append(linked_index)
-        components.append([candidates[index] for index in indexes])
-    return components
-
+    # Unlike booking's multi-pair builder, ALL pairs (auto, derived,
+    # samourai regime pairs) form components here: a shared inbound must be
+    # allocated ONCE across the pairs that feed it, whatever their origin.
+    # (Booking handles derived groups through their own per-pair path.)
+    return connected_pair_components(intra_pairs, _leg_ids)
 
 def _transfer_actions_for_intra_pairs(
     intra_pairs: Optional[Sequence[Mapping[str, Mapping[str, Any]]]],
@@ -293,7 +268,7 @@ def _transfer_actions_for_intra_pairs(
     transfer_row_ids: set[str] = set()
 
     for component in _intra_pair_components(intra_pairs or ()):
-        ordered_pairs = _ordered_pair_component(component)
+        ordered_pairs = ordered_pair_component(component)
         out_rows_by_id = {
             str(pair["out"]["id"]): pair["out"] for pair in ordered_pairs
         }
@@ -329,7 +304,7 @@ def _transfer_actions_for_intra_pairs(
 
         fee_msat = total_sent_msat - total_received_msat
         if len(out_rows_by_id) == 1:
-            fee_allocations = _allocate_fee_msat(
+            fee_allocations = allocate_fee_msat(
                 fee_msat, [_row_msat(pair["in"], "amount") for pair in ordered_pairs]
             )
             for pair, fee_allocation in zip(ordered_pairs, fee_allocations):
@@ -354,7 +329,7 @@ def _transfer_actions_for_intra_pairs(
             _row_msat(pair["out"], "amount") + _row_msat(pair["out"], "fee")
             for pair in ordered_pairs
         ]
-        fee_allocations = _allocate_fee_msat(fee_msat, sent_amounts)
+        fee_allocations = allocate_fee_msat(fee_msat, sent_amounts)
         for pair, sent_msat, fee_allocation in zip(
             ordered_pairs, sent_amounts, fee_allocations
         ):
