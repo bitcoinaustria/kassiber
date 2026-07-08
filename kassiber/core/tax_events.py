@@ -19,6 +19,7 @@ from .loans import (
 from .ownership_transfers import detect_conflicting_spend_ids
 from .pair_allocation import (
     allocate_fee_msat,
+    clamped_component_receipts_msat,
     clamped_receipt_msat,
     connected_pair_components,
     is_component_member,
@@ -958,9 +959,19 @@ def _build_manual_multi_pair_transfers(
             _row_msat(row, "amount") + _row_msat(row, "fee")
             for row in out_rows_by_id.values()
         )
-        total_received_msat = sum(
-            _row_msat(row, "amount") for row in in_rows_by_id.values()
+        received_amounts_by_in_id = {
+            row_id: _row_msat(row, "amount")
+            for row_id, row in in_rows_by_id.items()
+        }
+        adjusted_received_by_in_id = dict(
+            zip(
+                received_amounts_by_in_id,
+                clamped_component_receipts_msat(
+                    total_sent_msat, list(received_amounts_by_in_id.values())
+                ),
+            )
         )
+        total_received_msat = sum(adjusted_received_by_in_id.values())
         if total_sent_msat < total_received_msat:
             _append_manual_multi_pair_quarantines(
                 quarantines,
@@ -1077,13 +1088,17 @@ def _build_manual_multi_pair_transfers(
         transfers: list[NormalizedTaxTransfer] = []
         if len(out_rows_by_id) == 1:
             fee_allocations = allocate_fee_msat(
-                fee_msat, [_row_msat(pair["in"], "amount") for pair in ordered_pairs]
+                fee_msat,
+                [
+                    adjusted_received_by_in_id[str(pair["in"]["id"])]
+                    for pair in ordered_pairs
+                ],
             )
             for pair, fee_allocation in zip(ordered_pairs, fee_allocations):
                 out_row = pair["out"]
                 in_row = pair["in"]
-                sent_msat = _row_msat(in_row, "amount") + fee_allocation
-                received_msat = _row_msat(in_row, "amount")
+                received_msat = adjusted_received_by_in_id[str(in_row["id"])]
+                sent_msat = received_msat + fee_allocation
                 transfer_id = f"{group_id}:{pair['out']['id']}->{pair['in']['id']}"
                 from_wallet = wallet_refs_by_id[out_row["wallet_id"]]
                 to_wallet = wallet_refs_by_id[in_row["wallet_id"]]

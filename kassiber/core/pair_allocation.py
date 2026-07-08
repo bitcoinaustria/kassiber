@@ -58,6 +58,24 @@ def clamped_receipt_msat(sent_msat: int, received_msat: int) -> int:
     return received_msat
 
 
+def clamped_component_receipts_msat(
+    sent_msat: int, received_amounts_msat: Sequence[int]
+) -> list[int]:
+    """Clamp aggregate sub-sat receipt excess across a multi-leg component."""
+    adjusted = [max(0, int(amount)) for amount in received_amounts_msat]
+    clamped_total = clamped_receipt_msat(int(sent_msat), sum(adjusted))
+    excess = sum(adjusted) - clamped_total
+    if excess <= 0:
+        return adjusted
+    for index in range(len(adjusted) - 1, -1, -1):
+        if excess <= 0:
+            break
+        reduction = min(adjusted[index], excess)
+        adjusted[index] -= reduction
+        excess -= reduction
+    return adjusted
+
+
 def allocate_fee_msat(total_fee_msat: int, bases: Sequence[int]) -> list[int]:
     """Allocate an aggregate multi-link fee greedily across legs.
 
@@ -150,4 +168,3 @@ def connected_pair_components(items, leg_ids, membership=None):
         components.append([member_items[i][0] for i in sorted(indexes)])
     components.extend([item] for item in singletons)
     return components
-

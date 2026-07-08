@@ -182,6 +182,57 @@ class NormalizeTaxAssetInputsTest(unittest.TestCase):
         self.assertTrue(all(t.group_id for t in inputs.transfers))
         self.assertTrue(all(t.transfer_id for t in inputs.transfers))
 
+    def test_manual_one_to_many_clamps_sub_sat_receipt_excess(self):
+        out_row = _row(
+            "ln-out",
+            "wallet-a",
+            "outbound",
+            100_000_000_000,
+            fiat_rate=65_000,
+            external_id="ln-out",
+        )
+        in_one = _row(
+            "ln-in-1",
+            "wallet-b",
+            "inbound",
+            60_000_000_500,
+            external_id="ln-in-1",
+        )
+        in_two = _row(
+            "ln-in-2",
+            "wallet-b",
+            "inbound",
+            39_999_999_999,
+            external_id="ln-in-2",
+        )
+        inputs = normalize_tax_asset_inputs(
+            self.profile,
+            "BTC",
+            [out_row, in_one, in_two],
+            self.wallet_refs_by_id,
+            [
+                {
+                    "out": out_row,
+                    "in": in_one,
+                    "pair_id": "pair-1",
+                    "source": "manual",
+                },
+                {
+                    "out": out_row,
+                    "in": in_two,
+                    "pair_id": "pair-2",
+                    "source": "manual",
+                },
+            ],
+        )
+        self.assertEqual(inputs.quarantines, [])
+        self.assertEqual(len(inputs.transfers), 2)
+        self.assertEqual(
+            sum(t.received for t in inputs.transfers),
+            msat_to_btc(100_000_000_000),
+        )
+        self.assertEqual(sum(t.fee for t in inputs.transfers), msat_to_btc(0))
+
     def test_reviewed_whirlpool_one_to_many_resolves_privacy_boundary(self):
         out_row = _row(
             "premix-out",
@@ -742,6 +793,58 @@ class NormalizeTaxAssetInputsTest(unittest.TestCase):
         )
         self.assertEqual(sum(t.fee for t in inputs.transfers), msat_to_btc(2_000_000))
         self.assertEqual({t.in_transaction_id for t in inputs.transfers}, {"postmix-in"})
+
+    def test_manual_many_to_one_clamps_sub_sat_receipt_excess(self):
+        out_one = _row(
+            "ln-out-1",
+            "wallet-a",
+            "outbound",
+            40_000_000_000,
+            fiat_rate=65_000,
+            external_id="ln-out-1",
+        )
+        out_two = _row(
+            "ln-out-2",
+            "wallet-a",
+            "outbound",
+            60_000_000_000,
+            fiat_rate=65_000,
+            external_id="ln-out-2",
+        )
+        in_row = _row(
+            "ln-in",
+            "wallet-b",
+            "inbound",
+            100_000_000_499,
+            external_id="ln-in",
+        )
+        inputs = normalize_tax_asset_inputs(
+            self.profile,
+            "BTC",
+            [out_one, out_two, in_row],
+            self.wallet_refs_by_id,
+            [
+                {
+                    "out": out_one,
+                    "in": in_row,
+                    "pair_id": "pair-1",
+                    "source": "manual",
+                },
+                {
+                    "out": out_two,
+                    "in": in_row,
+                    "pair_id": "pair-2",
+                    "source": "manual",
+                },
+            ],
+        )
+        self.assertEqual(inputs.quarantines, [])
+        self.assertEqual(len(inputs.transfers), 2)
+        self.assertEqual(
+            sum(t.received for t in inputs.transfers),
+            msat_to_btc(100_000_000_000),
+        )
+        self.assertEqual(sum(t.fee for t in inputs.transfers), msat_to_btc(0))
 
     def test_negative_fiat_value_falls_back_to_spot_derived_value(self):
         # A malformed negative fiat_value is truthy, so the old `or` fallback let
