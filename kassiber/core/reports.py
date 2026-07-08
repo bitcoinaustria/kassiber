@@ -2614,22 +2614,25 @@ def _transaction_journal_values(conn, profile, wallet=None):
 
 def _self_transfer_legs_by_transaction(conn, profile, journals_current=False):
     """Map each transaction that is one leg of a transfer between the user's own
-    wallets to the counterparty wallet label.
+    wallets to the counterparty wallet label(s).
 
-    Reuses the same pure detection + manual-pair layer as the journal pipeline
-    (``detect_intra_transfers`` + ``apply_manual_pairs``) so the ledger export
-    cannot drift from what the engine treats as an internal transfer. Detection
-    spans the whole profile (a transfer is two wallets), so this always loads the
-    full profile row set even when the export is wallet-scoped; the caller only
-    surfaces the column for the transactions it renders.
+    With current journals the processed ledger is authoritative: labels come
+    from the booked ``transfer_out`` / ``transfer_in`` entries themselves
+    (written pairwise per transfer audit with a shared ``occurred_at`` +
+    description that embeds the wallet pair), which covers every MOVE the
+    engine actually accepted — same-txid pairs, Lightning hash pairs,
+    ownership-derived pairs, consolidations, and split-swap change legs — and
+    nothing it withheld, quarantined, or replaced with a direct-payout
+    disposal. Reviewed carrying-value cross-asset pairs never book transfer
+    entries (they carry through the swap path), so those are labeled from the
+    pair records unless a leg quarantined.
 
-    With current journals the engine's bookings are authoritative: same-asset
-    labels are kept only for transactions that actually carry transfer journal
-    entries, so pairs the engine withheld (e.g. a same-txid change output on a
-    payment whose graph also pays a non-owned recipient) are not overstated as
-    MOVEs. Without processed journals the detection result stands alone as a
-    best-effort label. Advanced ownership-derived / consolidation transfers that
-    only exist as journal legs are not reconstructed here.
+    Without current journals a best-effort heuristic reuses the same pure
+    detection + manual-pair layer as the journal pipeline
+    (``detect_intra_transfers`` + ``apply_manual_pairs``), including the
+    engine's whole-row direct-payout pruning. Detection spans the whole
+    profile (a transfer is two wallets), so this always works on the full
+    profile row set even when the export is wallet-scoped.
     """
     rows = conn.execute(
         """
@@ -2649,6 +2652,76 @@ def _self_transfer_legs_by_transaction(conn, profile, journals_current=False):
         (profile["id"],),
     ).fetchall()
     rows_by_id = {row["id"]: row for row in rows}
+    manual_records = conn.execute(
+        "SELECT * FROM transaction_pairs WHERE profile_id = ? AND deleted_at IS NULL",
+        (profile["id"],),
+    ).fetchall()
+
+    # A transaction can be the counterparty of several legs (consolidations,
+    # fan-outs, a split swap's change + swap), so collect label sets and render
+    # a deterministic comma-joined cell.
+    label_sets: dict[str, set[str]] = {}
+
+    def _add(tx_id, labels):
+        label_sets.setdefault(tx_id, set()).update(labels)
+
+    def _carrying_value_cross_asset_pairs():
+        # Only carrying-value cross-asset pairs are reviewed as own-wallet
+        # moves; `--policy taxable` pairs stay SELL + BUY in the engine and
+        # must not be labeled as internal transfers.
+        for record in manual_records:
+            if record["policy"] != "carrying-value":
+                continue
+            out_row = rows_by_id.get(record["out_transaction_id"])
+            in_row = rows_by_id.get(record["in_transaction_id"])
+            if out_row is None or in_row is None or out_row["asset"] == in_row["asset"]:
+                continue
+            yield out_row, in_row
+
+    if journals_current:
+        entry_rows = conn.execute(
+            """
+            SELECT je.transaction_id AS tx_id, je.entry_type, je.occurred_at,
+                   COALESCE(je.description, '') AS description,
+                   w.label AS wallet_label
+            FROM journal_entries je
+            JOIN wallets w ON w.id = je.wallet_id
+            WHERE je.profile_id = ?
+              AND je.entry_type IN ('transfer_out', 'transfer_in')
+            """,
+            (profile["id"],),
+        ).fetchall()
+        audit_groups: dict[tuple[str, str], list] = {}
+        for row in entry_rows:
+            audit_groups.setdefault((row["occurred_at"], row["description"]), []).append(row)
+        for group in audit_groups.values():
+            outs = [row for row in group if row["entry_type"] == "transfer_out"]
+            ins = [row for row in group if row["entry_type"] == "transfer_in"]
+            if not outs or not ins:
+                continue
+            out_wallets = {row["wallet_label"] for row in outs}
+            in_wallets = {row["wallet_label"] for row in ins}
+            for row in outs:
+                _add(row["tx_id"], in_wallets)
+            for row in ins:
+                _add(row["tx_id"], out_wallets)
+        quarantined_ids = {
+            row["transaction_id"]
+            for row in conn.execute(
+                "SELECT transaction_id FROM journal_quarantines WHERE profile_id = ?",
+                (profile["id"],),
+            ).fetchall()
+        }
+        for out_row, in_row in _carrying_value_cross_asset_pairs():
+            # A pair the engine rejected during processing (e.g. the swap
+            # validator quarantined a leg) was not booked as a carry, so do
+            # not present it as an internal move.
+            if out_row["id"] in quarantined_ids or in_row["id"] in quarantined_ids:
+                continue
+            _add(out_row["id"], {in_row["wallet_label"]})
+            _add(in_row["id"], {out_row["wallet_label"]})
+        return {tx_id: ", ".join(sorted(labels)) for tx_id, labels in label_sets.items()}
+
     auto_pairs, _ = detect_intra_transfers(rows)
 
     # A reviewed whole-row direct payout books its outbound as a taxable
@@ -2678,38 +2751,19 @@ def _self_transfer_legs_by_transaction(conn, profile, journals_current=False):
         and pair["in"]["id"] not in payout_claimed_ids
     ]
 
-    manual_records = conn.execute(
-        "SELECT * FROM transaction_pairs WHERE profile_id = ? AND deleted_at IS NULL",
-        (profile["id"],),
-    ).fetchall()
     manual_leg_ids = set()
     for record in manual_records:
         manual_leg_ids.add(record["out_transaction_id"])
         manual_leg_ids.add(record["in_transaction_id"])
-    same_asset_pairs, cross_asset_pairs = apply_manual_pairs(rows, auto_pairs, manual_records)
-
-    legs: dict[str, str] = {}
-
-    def _record(out_row, in_row):
-        # The out leg's counterparty is the destination wallet, and vice versa.
-        legs[out_row["id"]] = in_row["wallet_label"]
-        legs[in_row["id"]] = out_row["wallet_label"]
+    same_asset_pairs, _cross_asset = apply_manual_pairs(rows, auto_pairs, manual_records)
 
     for pair in same_asset_pairs:
-        _record(pair["out"], pair["in"])
-    # Only carrying-value cross-asset pairs are reviewed as own-wallet moves;
-    # `--policy taxable` pairs stay SELL + BUY in the engine and must not be
-    # labeled as internal transfers.
-    carrying_cross_asset_ids = set()
-    for pair in cross_asset_pairs:
-        if pair.get("policy") != "carrying-value":
-            continue
-        out_row = rows_by_id.get(pair["out_id"])
-        in_row = rows_by_id.get(pair["in_id"])
-        if out_row is not None and in_row is not None:
-            _record(out_row, in_row)
-            carrying_cross_asset_ids.add(out_row["id"])
-            carrying_cross_asset_ids.add(in_row["id"])
+        # The out leg's counterparty is the destination wallet, and vice versa.
+        _add(pair["out"]["id"], {pair["in"]["wallet_label"]})
+        _add(pair["in"]["id"], {pair["out"]["wallet_label"]})
+    for out_row, in_row in _carrying_value_cross_asset_pairs():
+        _add(out_row["id"], {in_row["wallet_label"]})
+        _add(in_row["id"], {out_row["wallet_label"]})
     # A partial cross-asset pair (split swap: part swapped, part change back to
     # an owned wallet) suppresses the same-txid auto pair in apply_manual_pairs,
     # but the engine splits the source row so the change leg stays a
@@ -2717,29 +2771,10 @@ def _self_transfer_legs_by_transaction(conn, profile, journals_current=False):
     # themselves part of any reviewed pair.
     for pair in auto_pairs:
         for leg, other in ((pair["out"], pair["in"]), (pair["in"], pair["out"])):
-            if leg["id"] in legs or leg["id"] in manual_leg_ids:
+            if leg["id"] in label_sets or leg["id"] in manual_leg_ids:
                 continue
-            legs[leg["id"]] = other["wallet_label"]
-    if journals_current:
-        # The processed journal is authoritative for same-asset moves: keep a
-        # label only where the engine actually booked transfer entries (the
-        # withheld-pair / partial-payment cases have none). Carrying-value
-        # cross-asset pairs never book transfer entries — they carry through
-        # the swap path — so the reviewed pair keeps its label.
-        booked_ids = {
-            row["transaction_id"]
-            for row in conn.execute(
-                "SELECT DISTINCT transaction_id FROM journal_entries "
-                "WHERE profile_id = ? AND entry_type IN ('transfer_out', 'transfer_in')",
-                (profile["id"],),
-            ).fetchall()
-        }
-        legs = {
-            tx_id: label
-            for tx_id, label in legs.items()
-            if tx_id in booked_ids or tx_id in carrying_cross_asset_ids
-        }
-    return legs
+            _add(leg["id"], {other["wallet_label"]})
+    return {tx_id: ", ".join(sorted(labels)) for tx_id, labels in label_sets.items()}
 
 
 def _tags_by_transaction(conn, tx_where, tx_params):
@@ -6082,8 +6117,14 @@ def _generic_report_transaction_rows(context):
         # service fee shows as the fiat_value − fmv difference.
         price = _optional_decimal_pref(row, "fiat_rate_exact", "fiat_rate")
         value = _optional_decimal_pref(row, "fiat_value_exact", "fiat_value")
-        if price is None and value is not None and amount_btc:
-            price = value / amount_btc
+        if price is None and value is not None:
+            if amount_btc:
+                price = value / amount_btc
+            elif fee_btc:
+                # Fee-only rows (zero amount, crypto fee, recorded value): the
+                # recorded value prices the fee, mirroring the tax normalizer,
+                # so FMV correctly reads 0 and fiat_fee carries the value.
+                price = value / fee_btc
         fmv = amount_btc * price if price is not None else value
         fiat_fee = fee_btc * price if price is not None else None
         rows.append(

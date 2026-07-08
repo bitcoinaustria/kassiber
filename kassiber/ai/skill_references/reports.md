@@ -281,8 +281,11 @@ the report's Transactions sheet, so a user can verify each row by hand:
   stale, so outdated figures are never presented as current;
 - `transfer` — for a hop between the user's own wallets, the counterparty
   wallet label (empty for external sends/receipts). With current journals the
-  label follows what the engine actually booked as a transfer (plus reviewed
-  carrying-value swap pairs); taxable-policy swap pairs are never labeled;
+  labels come from the booked transfer journal entries themselves (covering
+  ownership-derived moves and consolidations too) plus reviewed carrying-value
+  swap pairs whose legs were not quarantined; taxable-policy swap pairs are
+  never labeled. Without processed journals a best-effort detection labels
+  same-txid / payment-hash hops;
 - description, note, counterparty, tags, `references` (attachment URLs), and the
   linked-file/URL Attachments column (single URLs render as clickable links).
 
