@@ -26,7 +26,8 @@ import json
 from typing import Any, Iterable, Mapping
 
 from ...transfers import normalize_group_txid
-from ..loans import CHANNEL_CLOSE, CHANNEL_OPEN
+from ..loans import CHANNEL_CLOSE, CHANNEL_OPEN, CHANNEL_OPEN_MISMATCH
+from ..transfer_matching import DEFAULT_FEE_PCT_MAX, DEFAULT_FEE_SATS_MIN, fee_threshold_msat
 
 CHANNEL_RECORD_TYPE = "channel"
 
@@ -47,6 +48,22 @@ def _txid_from_outpoint(value: Any) -> str | None:
     if not value:
         return None
     return str(value).split(":", 1)[0] or None
+
+
+def _funding_amount_mismatch(tx: Any, funded_msat: int) -> bool:
+    """True when the outbound's amount exceeds the funded amount implausibly.
+
+    ``amount`` on node-backed rows excludes change and the miner fee, so any
+    excess over the funded channel balance is value to a non-channel output.
+    The tolerance mirrors the transfer-fee ceiling so ordinary rounding and
+    fee-convention noise never trips it.
+    """
+    if funded_msat <= 0:
+        return False
+    recorded = int(_field(tx, "amount") or 0)
+    return recorded - funded_msat > fee_threshold_msat(
+        funded_msat, DEFAULT_FEE_PCT_MAX, DEFAULT_FEE_SATS_MIN
+    )
 
 
 def _vin_txids(row: Any) -> set[str]:
@@ -90,12 +107,17 @@ def channel_role_map(
     """
     funding: set[str] = set()
     closing: set[str] = set()
+    funding_amount_by_txid: dict[str, int] = {}
     for row in channel_rows:
         fund = _txid_from_outpoint(
             _field(row, "funding_txid") or _field(row, "funding_outpoint")
         )
         if fund:
-            funding.add(normalize_group_txid(fund))
+            fund_key = normalize_group_txid(fund)
+            funding.add(fund_key)
+            funded = int(_field(row, "funding_amount_msat") or 0)
+            if funded > 0:
+                funding_amount_by_txid.setdefault(fund_key, funded)
         close = _field(row, "closing_txid")
         if close:
             closing.add(normalize_group_txid(str(close)))
@@ -112,6 +134,12 @@ def channel_role_map(
         # returns funds (inbound). Guarding on direction avoids mislabeling a
         # change/receive leg that happens to share the txid.
         if direction == "outbound" and key in funding:
+            if _funding_amount_mismatch(tx, funding_amount_by_txid.get(key, 0)):
+                # The recorded outflow clearly exceeds the funded amount: the
+                # tx ALSO paid an external recipient. Suppressing the whole
+                # row would silently untax that payment — flag for review.
+                roles[tx_id] = CHANNEL_OPEN_MISMATCH
+                continue
             roles[tx_id] = CHANNEL_OPEN
         elif direction == "inbound" and (
             key in closing or (closing and _vin_txids(tx) & closing)
@@ -139,6 +167,7 @@ def channel_transfer_pairs(
     funding_wallet_by_txid: dict[str, str] = {}
     closing_wallet_by_txid: dict[str, str] = {}
     close_balance_by_txid: dict[str, int] = {}
+    funding_amount_by_txid: dict[str, int] = {}
     for row in channel_rows:
         wallet_id = _field(row, "wallet_id")
         if not wallet_id or str(wallet_id) not in wallet_refs_by_id:
@@ -147,7 +176,11 @@ def channel_transfer_pairs(
             _field(row, "funding_txid") or _field(row, "funding_outpoint")
         )
         if fund:
-            funding_wallet_by_txid.setdefault(normalize_group_txid(fund), str(wallet_id))
+            fund_key = normalize_group_txid(fund)
+            funding_wallet_by_txid.setdefault(fund_key, str(wallet_id))
+            funded = int(_field(row, "funding_amount_msat") or 0)
+            if funded > 0:
+                funding_amount_by_txid.setdefault(fund_key, funded)
         close = _field(row, "closing_txid")
         if close:
             close_key = normalize_group_txid(str(close))
@@ -171,6 +204,10 @@ def channel_transfer_pairs(
         if amount <= 0:
             continue
         if direction == "outbound" and key in funding_wallet_by_txid:
+            if _funding_amount_mismatch(tx, funding_amount_by_txid.get(key, 0)):
+                # role map flags this row CHANNEL_OPEN_MISMATCH; a synthesized
+                # MOVE would absorb the external payment as channel capacity.
+                continue
             node_wallet_id = funding_wallet_by_txid[key]
             in_row = _clone_channel_leg(
                 tx,

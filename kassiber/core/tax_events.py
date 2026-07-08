@@ -9,7 +9,12 @@ from ..msat import msat_to_btc
 from ..transfers import normalize_group_txid
 from . import pricing
 from .austrian import infer_outbound_regimes, infer_regime_from_timestamp, resolve_pool_id
-from .loans import CHANNEL_OPEN, LOCK_SUPPRESS_ROLES, RELEASE_SUPPRESS_ROLES
+from .loans import (
+    CHANNEL_OPEN,
+    CHANNEL_OPEN_MISMATCH,
+    LOCK_SUPPRESS_ROLES,
+    RELEASE_SUPPRESS_ROLES,
+)
 from .ownership_transfers import detect_conflicting_spend_ids
 from .pair_allocation import allocate_fee_msat, ordered_pair_component
 from .privacy_hops import privacy_hop_evidence_from_row
@@ -1432,6 +1437,27 @@ def normalize_tax_asset_inputs(
                         "asset": asset,
                         "direction": _row_get(row, "direction"),
                         "external_id": str(_row_get(row, "external_id") or ""),
+                    },
+                )
+            )
+            continue
+        if loan_leg_map.get(row["id"]) == CHANNEL_OPEN_MISMATCH:
+            # A channel funding tx whose recorded outflow exceeds the funded
+            # amount also paid an external recipient. Neither suppressing the
+            # whole row (untaxes the payment) nor booking it standalone
+            # (disposes the still-owned channel capacity) is right — review
+            # must split it.
+            quarantines.append(
+                build_tax_quarantine(
+                    profile,
+                    row,
+                    "channel_open_unresolved",
+                    {
+                        "asset": asset,
+                        "wallet": wallet_refs_by_id[row["wallet_id"]]["label"],
+                        "direction": _row_get(row, "direction"),
+                        "external_id": str(_row_get(row, "external_id") or ""),
+                        "required_for": "channel_funding_split_review",
                     },
                 )
             )

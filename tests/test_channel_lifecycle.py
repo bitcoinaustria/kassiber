@@ -16,7 +16,7 @@ from decimal import Decimal
 from kassiber.core.engines.base import TaxEngineLedgerInputs
 from kassiber.core.engines.rp2 import GenericRP2TaxEngine
 from kassiber.core.lightning.channel_lifecycle import channel_role_map, channel_transfer_pairs
-from kassiber.core.loans import CHANNEL_CLOSE, CHANNEL_OPEN
+from kassiber.core.loans import CHANNEL_CLOSE, CHANNEL_OPEN, CHANNEL_OPEN_MISMATCH
 
 FUNDING_TXID = "aa" * 32
 CLOSING_TXID = "bb" * 32
@@ -50,6 +50,40 @@ class ChannelRoleMapTest(unittest.TestCase):
     def test_no_channels_is_empty(self) -> None:
         txs = [{"id": "x", "external_id": FUNDING_TXID, "direction": "outbound"}]
         self.assertEqual(channel_role_map([], txs), {})
+
+    def test_funding_with_external_payment_flags_mismatch(self) -> None:
+        # The recorded outflow (channel + external payment) clearly exceeds the
+        # funded balance: suppressing the whole row would untax the payment.
+        channels = [
+            {"funding_txid": FUNDING_TXID, "funding_amount_msat": 100_000_000_000}
+        ]
+        txs = [
+            {
+                "id": "open",
+                "external_id": FUNDING_TXID,
+                "direction": "outbound",
+                "amount": 130_000_000_000,  # 0.3 BTC beyond the channel
+                "fee": 500_000,
+            }
+        ]
+        self.assertEqual(
+            channel_role_map(channels, txs), {"open": CHANNEL_OPEN_MISMATCH}
+        )
+
+    def test_funding_amount_within_tolerance_still_opens(self) -> None:
+        channels = [
+            {"funding_txid": FUNDING_TXID, "funding_amount_msat": 100_000_000_000}
+        ]
+        txs = [
+            {
+                "id": "open",
+                "external_id": FUNDING_TXID,
+                "direction": "outbound",
+                "amount": 100_000_000_000,
+                "fee": 500_000,
+            }
+        ]
+        self.assertEqual(channel_role_map(channels, txs), {"open": CHANNEL_OPEN})
 
 
 def _profile():
@@ -370,6 +404,41 @@ class ChannelLifecycleEngineTest(unittest.TestCase):
         self.assertEqual(wallet_quantities["onchain"], Decimal("0.999"))
         # No phantom residual stranded in the node wallet.
         self.assertEqual(wallet_quantities.get("node", Decimal("0")), Decimal("0"))
+
+
+    def test_funding_with_external_payment_quarantines_for_split(self) -> None:
+        # 1.0 BTC funded into the channel, but the funding tx spent 1.3 BTC —
+        # 0.3 went to an external recipient. Suppression would untax the
+        # payment; standalone booking would dispose the owned capacity. The
+        # engine must quarantine the row for an explicit split review.
+        rows = [
+            _row("buy", "inbound", 2 * ONE_BTC, "2025-05-01T00:00:00Z"),
+            _row(
+                "fund",
+                "outbound",
+                ONE_BTC + 30_000_000_000,
+                "2025-06-01T00:00:00Z",
+                external_id=FUNDING_TXID,
+            ),
+        ]
+        channel_rows = [
+            {
+                "funding_txid": FUNDING_TXID,
+                "wallet_id": "node",
+                "funding_amount_msat": ONE_BTC,
+            }
+        ]
+        result = _run(
+            rows,
+            channel_role_map(channel_rows, rows),
+            channel_transfer_pairs(channel_rows, rows, _wallet_refs()),
+        )
+        reasons = [q["reason"] for q in result.quarantines]
+        self.assertEqual(reasons, ["channel_open_unresolved"])
+        # Neither a disposal of the whole outflow nor a capacity MOVE books.
+        entry_types = [entry["entry_type"] for entry in result.entries]
+        self.assertNotIn("transfer_out", entry_types)
+        self.assertFalse(_has_disposal(result))
 
 
 if __name__ == "__main__":  # pragma: no cover

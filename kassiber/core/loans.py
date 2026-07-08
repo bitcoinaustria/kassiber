@@ -56,6 +56,11 @@ COLLATERAL_ROLES = (
 CHANNEL_OPEN = "channel_open"
 CHANNEL_CLOSE = "channel_close"
 CHANNEL_ROLES = (CHANNEL_OPEN, CHANNEL_CLOSE)
+# A funding tx whose recorded outflow clearly exceeds the channel's funded
+# amount also paid an external recipient. Suppressing the whole row would
+# silently untax that payment, so the row is quarantined for explicit review
+# instead (NOT in the suppress sets below).
+CHANNEL_OPEN_MISMATCH = "channel_open_mismatch"
 
 ROLE_DIRECTIONS = {
     COLLATERAL_LOCK: "outbound",

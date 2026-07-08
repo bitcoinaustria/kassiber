@@ -4256,7 +4256,13 @@ def build_ledger_state(conn, profile):
             )
         else:
             channel_rows.append(
-                {"funding_txid": record["txid"], "wallet_id": record["wallet_id"]}
+                {
+                    "funding_txid": record["txid"],
+                    "wallet_id": record["wallet_id"],
+                    # Our balance funded into the channel; a recorded outflow
+                    # clearly above it means the tx also paid someone external.
+                    "funding_amount_msat": record["amount_msat"],
+                }
             )
     channel_roles = channel_lifecycle.channel_role_map(channel_rows, rows)
     channel_transfer_pairs = channel_lifecycle.channel_transfer_pairs(

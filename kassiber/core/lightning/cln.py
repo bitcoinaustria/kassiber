@@ -1272,6 +1272,7 @@ def _channel_lifecycle_records(snapshot: CoreLightningSnapshot) -> list[dict[str
     """
     open_txids: dict[str, str | None] = {}
     close_txids: dict[str, str | None] = {}
+    open_balance_msat: dict[str, int] = {}
     close_balance_msat: dict[str, int] = {}
     for channel in snapshot.channels:
         outpoint = _channel_funding_outpoint(channel)
@@ -1294,6 +1295,13 @@ def _channel_lifecycle_records(snapshot: CoreLightningSnapshot) -> list[dict[str
         account = str_or_none(event.get("account")) or txid
         if tag == "channel_open":
             open_txids.setdefault(txid, account)
+            # Our balance funded into the channel account. The engine uses it
+            # to detect a funding tx that ALSO paid an external recipient
+            # (recorded outflow >> funded amount) instead of suppressing the
+            # whole row as a non-event.
+            funded = _parse_msat(event.get("credit_msat"))
+            if funded > 0:
+                open_balance_msat.setdefault(txid, funded)
         elif tag == "channel_close":
             close_txids.setdefault(txid, account)
             # Our settled balance leaving the channel account. The engine
@@ -1305,7 +1313,11 @@ def _channel_lifecycle_records(snapshot: CoreLightningSnapshot) -> list[dict[str
 
     records: list[dict[str, Any]] = []
     for txid, account in sorted(open_txids.items()):
-        records.append(_channel_record("channel_open", txid, account))
+        records.append(
+            _channel_record(
+                "channel_open", txid, account, open_balance_msat.get(txid, 0)
+            )
+        )
     for txid, account in sorted(close_txids.items()):
         records.append(
             _channel_record(
