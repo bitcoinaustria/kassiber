@@ -506,15 +506,22 @@ _ACCOUNT_EVENT_KEEP: tuple[str, ...] = (
     "txid",
     "outpoint",
     "timestamp",
+    # channel_open credit / channel_close debit: our funded / settled channel
+    # balance. The lifecycle engine needs them to book the close fee and to
+    # detect a funding tx that also paid an external recipient. These amounts
+    # are already public on-chain (the funding output / close outputs), so
+    # keeping them is consistent with the curation rationale.
+    "credit_msat",
+    "debit_msat",
 )
 
 
 def _sanitize_account_event(row: Mapping[str, Any]) -> dict[str, Any]:
     """Curate one bkpr-listaccountevents row.
 
-    We only use ``channel_open`` / ``channel_close`` rows to harvest the
-    on-chain funding/closing txids for channel-lifecycle netting, so keep the
-    account, tag and txid and drop amounts / descriptions / blockheights.
+    We use ``channel_open`` / ``channel_close`` rows to harvest the on-chain
+    funding/closing txids plus our funded/settled channel balances for
+    channel-lifecycle netting; descriptions / blockheights are dropped.
     """
     return _pick(row, _ACCOUNT_EVENT_KEEP)
 
