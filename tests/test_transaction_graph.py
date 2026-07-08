@@ -525,6 +525,45 @@ class TransactionGraphTest(unittest.TestCase):
         self.assertEqual(payload["outputs"][1]["role"], "external_recipient")
         self.assertEqual(payload["outputs"][1]["ownership"], "external")
 
+    def test_inbound_amount_inference_skips_sub_sat_recorded_amount(self):
+        # A recorded amount that is not a whole number of sats cannot map to an
+        # integer output value; the modulo guard must reject it rather than
+        # infer against the truncated (floored) sat amount.
+        txid = "85" * 32
+        raw = {
+            "txid": txid,
+            "vin": [
+                {
+                    "txid": "58" * 32,
+                    "vout": 0,
+                    "prevout": {
+                        "scriptpubkey": "0014" + "88" * 20,
+                        "value": 312_414_797,
+                    },
+                }
+            ],
+            "vout": [
+                {"n": 0, "scriptpubkey": "0014" + "aa" * 20, "value": 26_705},
+                {"n": 1, "scriptpubkey": "0014" + "99" * 20, "value": 312_387_078},
+            ],
+        }
+        # 26_705_500 msat == 26_705.5 sat: floor would collide with output 0.
+        self._tx(
+            "sub-sat-inbound-amount-row",
+            "wallet-b",
+            "inbound",
+            26_705_500,
+            txid,
+            raw,
+        )
+
+        payload = self._graph("sub-sat-inbound-amount-row")
+
+        self.assertEqual(
+            [output["role"] for output in payload["outputs"]],
+            ["external_recipient", "external_recipient"],
+        )
+
     def test_bitcoin_missing_prevout_values_are_enriched_from_public_lookup(self):
         txid = "33" * 32
         raw = {
