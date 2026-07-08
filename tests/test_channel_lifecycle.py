@@ -9,6 +9,7 @@ loan collateral lock/release uses.
 
 from __future__ import annotations
 
+import json
 import unittest
 from decimal import Decimal
 
@@ -284,6 +285,47 @@ class ChannelLifecycleEngineTest(unittest.TestCase):
 
         self.assertEqual(result.quarantines, [])
         self.assertFalse(_has_disposal(result))
+        wallet_quantities = {
+            key[1]: totals["quantity"] for key, totals in result.wallet_holdings.items()
+        }
+        self.assertEqual(wallet_quantities["onchain"], Decimal("1"))
+        self.assertEqual(wallet_quantities.get("node", Decimal("0")), Decimal("0"))
+
+
+    def test_force_close_sweep_round_trip_is_net_zero(self) -> None:
+        # A force-close pays the wallet via a separate timelocked SWEEP tx: its
+        # own txid never equals the recorded closing txid, but its inputs spend
+        # the commitment tx. Without the vin match the open stays suppressed
+        # while the sweep books a fresh market-priced acquisition — channel
+        # capacity double-counted plus a phantom basis reset.
+        sweep_txid = "dd" * 32
+        sweep_raw = json.dumps(
+            {"txid": sweep_txid, "vin": [{"txid": CLOSING_TXID, "vout": 0}]}
+        )
+        rows = [
+            _row("buy", "inbound", ONE_BTC, "2025-05-01T00:00:00Z"),
+            _row("fund", "outbound", ONE_BTC, "2025-06-01T00:00:00Z", external_id=FUNDING_TXID),
+            _row("sweep", "inbound", ONE_BTC, "2025-08-01T00:00:00Z", external_id=sweep_txid),
+        ]
+        rows[2]["raw_json"] = sweep_raw
+        channel_rows = [
+            {
+                "funding_txid": FUNDING_TXID,
+                "closing_txid": CLOSING_TXID,
+                "wallet_id": "node",
+            }
+        ]
+        roles = channel_role_map(channel_rows, rows)
+        self.assertEqual(roles["sweep"], CHANNEL_CLOSE)
+        result = _run(
+            rows,
+            roles,
+            channel_transfer_pairs(channel_rows, rows, _wallet_refs()),
+        )
+
+        self.assertEqual(result.quarantines, [])
+        self.assertFalse(_has_disposal(result))
+        self.assertEqual(_btc_quantity(result), Decimal("1"))
         wallet_quantities = {
             key[1]: totals["quantity"] for key, totals in result.wallet_holdings.items()
         }

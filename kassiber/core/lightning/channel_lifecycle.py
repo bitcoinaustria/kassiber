@@ -22,6 +22,7 @@ close side only fires when a closing txid is known.
 
 from __future__ import annotations
 
+import json
 from typing import Any, Iterable, Mapping
 
 from ...transfers import normalize_group_txid
@@ -46,6 +47,34 @@ def _txid_from_outpoint(value: Any) -> str | None:
     if not value:
         return None
     return str(value).split(":", 1)[0] or None
+
+
+def _vin_txids(row: Any) -> set[str]:
+    """Normalized txids the row's transaction spends from (raw_json vin).
+
+    A force-close pays the wallet via a separate timelocked SWEEP tx whose own
+    txid never equals the recorded closing txid — but its inputs spend the
+    commitment tx, so the vin reference is the deterministic close signal.
+    """
+    raw = _field(row, "raw_json")
+    if not raw:
+        return set()
+    if isinstance(raw, str):
+        try:
+            payload = json.loads(raw)
+        except ValueError:
+            return set()
+    else:
+        payload = raw
+    if not isinstance(payload, Mapping):
+        return set()
+    vin = payload.get("vin")
+    txids: set[str] = set()
+    if isinstance(vin, list):
+        for entry in vin:
+            if isinstance(entry, Mapping) and entry.get("txid"):
+                txids.add(normalize_group_txid(str(entry["txid"])))
+    return txids
 
 
 def channel_role_map(
@@ -84,7 +113,12 @@ def channel_role_map(
         # change/receive leg that happens to share the txid.
         if direction == "outbound" and key in funding:
             roles[tx_id] = CHANNEL_OPEN
-        elif direction == "inbound" and key in closing:
+        elif direction == "inbound" and (
+            key in closing or (closing and _vin_txids(tx) & closing)
+        ):
+            # Direct payout from the close tx (coop close / to_remote) matches
+            # by txid; a force-close's timelocked sweep matches by spending the
+            # commitment tx.
             roles[tx_id] = CHANNEL_CLOSE
     return roles
 
@@ -151,8 +185,18 @@ def channel_transfer_pairs(
                 }
             )
             paired_real_ids.add(tx_id)
-        elif direction == "inbound" and key in closing_wallet_by_txid:
-            node_wallet_id = closing_wallet_by_txid[key]
+        elif direction == "inbound":
+            close_key = key if key in closing_wallet_by_txid else None
+            if close_key is None and closing_wallet_by_txid:
+                # Force-close sweep: the receiving tx's inputs spend the
+                # commitment tx recorded as the closing txid.
+                for vin_txid in _vin_txids(tx):
+                    if vin_txid in closing_wallet_by_txid:
+                        close_key = vin_txid
+                        break
+            if close_key is None:
+                continue
+            node_wallet_id = closing_wallet_by_txid[close_key]
             out_row = _clone_channel_leg(
                 tx,
                 wallet_refs_by_id[node_wallet_id],
