@@ -39,9 +39,10 @@ import {
 import { PeriodTabs, TransactionWorkbench } from "./TransactionWorkbench";
 import {
   availablePeriodKeysForRecords,
-  buildSwapCandidates,
+  buildCandidateFlowOverrides,
   dashboardRecordsFromTxs,
   flowChartSelectionDateWindow,
+  flowChartSelectionServerFlow,
   initialPeriodFromUrl,
   recordsForPeriod,
   resolveAutoPeriodForRecords,
@@ -72,7 +73,7 @@ const TransactionsDashboard = ({
   transactions = MOCK_TRANSACTIONS,
   tableTransactions,
   nowRate = MOCK_OVERVIEW.priceEur,
-  swapCandidates,
+  pairingCandidateRefs,
   swapCandidateTotal,
   isDataRefreshing = false,
   hasMoreTransactions = false,
@@ -91,7 +92,7 @@ const TransactionsDashboard = ({
   transactions?: TransactionsList;
   tableTransactions?: TransactionsList;
   nowRate?: number | null;
-  swapCandidates?: SwapCandidateReference[];
+  pairingCandidateRefs?: SwapCandidateReference[];
   swapCandidateTotal?: number | null;
   isDataRefreshing?: boolean;
   hasMoreTransactions?: boolean;
@@ -329,14 +330,10 @@ const TransactionsDashboard = ({
   const visibleTableRecords = React.useMemo(() => {
     return tableRecords;
   }, [tableRecords]);
-  const tableSwapCandidateIds = React.useMemo(
+  const tableCandidateFlows = React.useMemo(
     () =>
-      new Set(
-        buildSwapCandidates(visibleTableRecords, swapCandidates).flatMap(
-          (candidate) => [candidate.in.id, candidate.out.id],
-        ),
-      ),
-    [visibleTableRecords, swapCandidates],
+      buildCandidateFlowOverrides(visibleTableRecords, pairingCandidateRefs),
+    [visibleTableRecords, pairingCandidateRefs],
   );
   const handlePeriodChange = React.useCallback((nextPeriod: PeriodKey) => {
     setPeriod(nextPeriod);
@@ -410,10 +407,8 @@ const TransactionsDashboard = ({
         args.until = window.until;
         delete args.period;
       }
-      if (flowChartSelection.segment === "incoming") args.flow = "incoming";
-      if (flowChartSelection.segment === "outgoing") args.flow = "outgoing";
-      if (flowChartSelection.segment === "transfers") args.flow = "transfer";
-      if (flowChartSelection.segment === "swaps") args.flow = "swap";
+      const serverFlow = flowChartSelectionServerFlow(flowChartSelection);
+      if (serverFlow) args.flow = serverFlow;
       if (flowChartSelection.mode === "external" && !flowChartSelection.segment) {
         args.quick = "external_flow";
       }
@@ -590,7 +585,7 @@ const TransactionsDashboard = ({
           onBreakdownSelectionChange={setBreakdownSelection}
           onTableFiltersReset={resetTableFilters}
           chartSelection={flowChartSelection}
-          swapCandidateRefs={swapCandidates}
+          pairingCandidateRefs={pairingCandidateRefs}
           swapCandidateTotal={swapCandidateTotal}
           isRefreshing={showRefreshSkeleton}
         />
@@ -609,7 +604,8 @@ const TransactionsDashboard = ({
           currency={currency}
           nowRate={nowRate}
           explorerSettings={explorerSettings}
-          swapCandidateIds={tableSwapCandidateIds}
+          swapCandidateIds={tableCandidateFlows.swapCandidateIds}
+          transferCandidateIds={tableCandidateFlows.transferCandidateIds}
           chartSelection={flowChartSelection}
           quickFilter={quickFilter}
           breakdownSelection={breakdownSelection}

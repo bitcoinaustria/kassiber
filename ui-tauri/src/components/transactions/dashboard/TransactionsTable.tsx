@@ -88,7 +88,6 @@ import {
   pricingSourceLabel,
   pricingSourceStyles,
   transactionBtc,
-  transactionFlow,
   transactionFlowLabels,
   transactionFlowStyles,
   transactionStatusIcons,
@@ -116,6 +115,7 @@ import {
   readTransactionDetailParams,
   removeAttachmentRecord,
   replaceAttachmentRecord,
+  transactionFlowWithCandidateOverrides,
   updateTransactionDetailParams,
   upsertAttachmentRecords,
   type AttachmentOpenData,
@@ -206,6 +206,7 @@ const TransactionsTable = ({
   nowRate,
   explorerSettings,
   swapCandidateIds = new Set<string>(),
+  transferCandidateIds = new Set<string>(),
   chartSelection,
   quickFilter,
   breakdownSelection,
@@ -230,6 +231,7 @@ const TransactionsTable = ({
   nowRate: number | null;
   explorerSettings: ExplorerSettings;
   swapCandidateIds?: Set<string>;
+  transferCandidateIds?: Set<string>;
   chartSelection: FlowChartSelection | null;
   quickFilter: TableQuickFilter | null;
   breakdownSelection: BreakdownSelection | null;
@@ -357,8 +359,12 @@ const TransactionsTable = ({
     : null;
   const displayFlow = React.useCallback(
     (txn: Transaction): TransactionFlow =>
-      swapCandidateIds.has(txn.id) ? "swap" : transactionFlow(txn),
-    [swapCandidateIds],
+      transactionFlowWithCandidateOverrides(
+        txn,
+        swapCandidateIds,
+        transferCandidateIds,
+      ),
+    [swapCandidateIds, transferCandidateIds],
   );
   // The Wallet dropdown owns leg-mode wallet selections only — it shares
   // `breakdownSelection` with the breakdown chart and the "Show all" deep link

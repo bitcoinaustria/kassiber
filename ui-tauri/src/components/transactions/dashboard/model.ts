@@ -101,6 +101,15 @@ type SwapCandidate = {
   btc: number;
 };
 
+type CandidateFlowOverrides = {
+  swapCandidates: SwapCandidate[];
+  transferCandidates: SwapCandidate[];
+  swapCandidateIds: Set<string>;
+  transferCandidateIds: Set<string>;
+  pairingCandidateIds: Set<string>;
+  flowById: Map<string, TransactionFlow>;
+};
+
 export type SwapCandidateReference = {
   in_id: string;
   out_id: string;
@@ -980,6 +989,36 @@ function buildTransferCandidates(
   return buildPairingCandidates(records, candidateRefs, "transfer");
 }
 
+function candidateLegIds(candidates: SwapCandidate[]): Set<string> {
+  return new Set(
+    candidates.flatMap((candidate) => [candidate.in.id, candidate.out.id]),
+  );
+}
+
+function buildCandidateFlowOverrides(
+  records: Transaction[],
+  candidateRefs?: SwapCandidateReference[],
+  {
+    transferFlow = "transfer",
+  }: { transferFlow?: Extract<TransactionFlow, "transfer" | "layer-transition"> } = {},
+): CandidateFlowOverrides {
+  const swapCandidates = buildSwapCandidates(records, candidateRefs);
+  const transferCandidates = buildTransferCandidates(records, candidateRefs);
+  const swapCandidateIds = candidateLegIds(swapCandidates);
+  const transferCandidateIds = candidateLegIds(transferCandidates);
+  const flowById = new Map<string, TransactionFlow>();
+  for (const id of swapCandidateIds) flowById.set(id, "swap");
+  for (const id of transferCandidateIds) flowById.set(id, transferFlow);
+  return {
+    swapCandidates,
+    transferCandidates,
+    swapCandidateIds,
+    transferCandidateIds,
+    pairingCandidateIds: new Set([...swapCandidateIds, ...transferCandidateIds]),
+    flowById,
+  };
+}
+
 function buildPairingCandidates(
   records: Transaction[],
   candidateRefs: SwapCandidateReference[] | undefined,
@@ -1449,6 +1488,25 @@ function matchesFlowChartSelection(
   return flow === selection.segment;
 }
 
+function flowChartSelectionServerFlow(
+  selection: FlowChartSelection,
+): "incoming" | "outgoing" | null {
+  if (selection.segment === "incoming" || selection.segment === "outgoing") {
+    return selection.segment;
+  }
+  return null;
+}
+
+function transactionFlowWithCandidateOverrides(
+  txn: Transaction,
+  swapCandidateIds: ReadonlySet<string>,
+  transferCandidateIds: ReadonlySet<string>,
+): TransactionFlow {
+  if (swapCandidateIds.has(txn.id)) return "swap";
+  if (transferCandidateIds.has(txn.id)) return "transfer";
+  return transactionFlow(txn);
+}
+
 
 export {
   PAGE_SIZE_OPTIONS,
@@ -1458,6 +1516,7 @@ export {
   breakdownSelectionLabel,
   bucketTransactionDate,
   buildBreakdown,
+  buildCandidateFlowOverrides,
   buildFlowChartRows,
   buildSwapCandidates,
   buildTransferCandidates,
@@ -1474,6 +1533,7 @@ export {
   flowChartSegmentLabels,
   flowChartSelectionDateWindow,
   flowChartSelectionLabel,
+  flowChartSelectionServerFlow,
   flowColorForSegment,
   flowColors,
   flowPointSegmentValue,
@@ -1498,6 +1558,7 @@ export {
   sortTransactionsByDateDesc,
   sumByFlow,
   toDashboardTransaction,
+  transactionFlowWithCandidateOverrides,
   upsertAttachmentRecords,
   transactionRecords,
   updateTransactionDetailParams,

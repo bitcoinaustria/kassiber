@@ -38,9 +38,8 @@ import {
   type TransactionFlow,
 } from "@/components/transactions";
 import {
+  buildCandidateFlowOverrides,
   buildFlowChartRows,
-  buildSwapCandidates,
-  buildTransferCandidates,
   flowAxisDomain,
   flowBucketLabel,
   flowChartConfig,
@@ -189,7 +188,7 @@ const TransactionWorkbench = ({
   onBreakdownSelectionChange,
   onTableFiltersReset,
   chartSelection,
-  swapCandidateRefs,
+  pairingCandidateRefs,
   swapCandidateTotal,
   isRefreshing,
 }: {
@@ -202,7 +201,7 @@ const TransactionWorkbench = ({
   onBreakdownSelectionChange: (selection: BreakdownSelection | null) => void;
   onTableFiltersReset: () => void;
   chartSelection: FlowChartSelection | null;
-  swapCandidateRefs?: SwapCandidateReference[];
+  pairingCandidateRefs?: SwapCandidateReference[];
   swapCandidateTotal?: number | null;
   isRefreshing?: boolean;
 }) => {
@@ -211,38 +210,19 @@ const TransactionWorkbench = ({
   const [chartMetric, setChartMetric] =
     React.useState<FlowChartMetric>("amount");
   const [chartMode, setChartMode] = React.useState<FlowChartMode>("all");
-  const swapCandidates = React.useMemo(
-    () => buildSwapCandidates(records, swapCandidateRefs),
-    [records, swapCandidateRefs],
-  );
-  const transferCandidates = React.useMemo(
-    () => buildTransferCandidates(records, swapCandidateRefs),
-    [records, swapCandidateRefs],
-  );
-  const swapCandidateIds = React.useMemo(
+  const candidateFlows = React.useMemo(
     () =>
-      new Set(
-        swapCandidates.flatMap((candidate) => [
-          candidate.in.id,
-          candidate.out.id,
-        ]),
-      ),
-    [swapCandidates],
+      buildCandidateFlowOverrides(records, pairingCandidateRefs, {
+        transferFlow: "layer-transition",
+      }),
+    [records, pairingCandidateRefs],
   );
-  const transferCandidateIds = React.useMemo(
-    () =>
-      new Set(
-        transferCandidates.flatMap((candidate) => [
-          candidate.in.id,
-          candidate.out.id,
-        ]),
-      ),
-    [transferCandidates],
-  );
-  const pairingCandidateIds = React.useMemo(
-    () => new Set([...swapCandidateIds, ...transferCandidateIds]),
-    [swapCandidateIds, transferCandidateIds],
-  );
+  const {
+    swapCandidates,
+    transferCandidates,
+    pairingCandidateIds,
+    flowById: candidateFlowOverrides,
+  } = candidateFlows;
   const externalRecords = records.filter((txn) => !pairingCandidateIds.has(txn.id));
   const incoming = sumByFlow(externalRecords, "incoming");
   const outgoing = sumByFlow(externalRecords, "outgoing");
@@ -292,12 +272,6 @@ const TransactionWorkbench = ({
             ["incoming", "outgoing"].includes(transactionFlow(txn)),
         )
       : records;
-  const candidateFlowOverrides = React.useMemo(() => {
-    const next = new Map<string, TransactionFlow>();
-    for (const id of swapCandidateIds) next.set(id, "swap");
-    for (const id of transferCandidateIds) next.set(id, "layer-transition");
-    return next;
-  }, [swapCandidateIds, transferCandidateIds]);
   const chartRows = buildFlowChartRows(
     chartRecords,
     period,

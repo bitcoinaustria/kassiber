@@ -225,7 +225,7 @@ export function Transactions() {
   const hasLiveSwapSuggestions =
     swapQuery.data?.kind === "ui.transfers.suggest" &&
     Boolean(swapQuery.data.data);
-  const swapCandidates =
+  const pairingCandidateRefs =
     hasLiveSwapSuggestions && swapQuery.data?.data
       ? swapQuery.data.data.candidates
       : hasLiveTransactions
@@ -250,7 +250,7 @@ export function Transactions() {
       transactions={transactions}
       tableTransactions={tableTransactions}
       nowRate={nowRate}
-      swapCandidates={swapCandidates}
+      pairingCandidateRefs={pairingCandidateRefs}
       swapCandidateTotal={swapCandidateTotal}
       isDataRefreshing={
         hasLiveTransactions &&

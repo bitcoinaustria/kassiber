@@ -5,6 +5,7 @@ import i18n from "@/i18n";
 import {
   attachmentRecordToItem,
   availablePeriodKeysForRecords,
+  buildCandidateFlowOverrides,
   buildFlowChartRows,
   buildSwapCandidates,
   buildTransferCandidates,
@@ -12,6 +13,7 @@ import {
   candidateReferenceReviewType,
   dashboardRecordsFromTxs,
   flowChartSelectionLabel,
+  flowChartSelectionServerFlow,
   flowChartSelectionDateWindow,
   initialPeriodFromUrl,
   isAttachmentListQueryKeyForTransaction,
@@ -22,6 +24,7 @@ import {
   replaceAttachmentRecord,
   resolveAutoPeriodForRecords,
   toDashboardTransaction,
+  transactionFlowWithCandidateOverrides,
   upsertAttachmentRecords,
   type AttachmentRecord,
   type FlowChartSelection,
@@ -411,6 +414,67 @@ describe("transaction dashboard chart selection", () => {
     ).toBe(false);
   });
 
+  it("does not push candidate-backed chart segments into daemon flow filters", () => {
+    const baseSelection: FlowChartSelection = {
+      id: "all:all:transfers:all",
+      period: "all",
+      bucketKey: null,
+      bucketLabel: "All",
+      segment: "transfers",
+      mode: "all",
+    };
+
+    expect(flowChartSelectionServerFlow(baseSelection)).toBeNull();
+    expect(
+      flowChartSelectionServerFlow({
+        ...baseSelection,
+        id: "all:all:swaps:all",
+        segment: "swaps",
+      }),
+    ).toBeNull();
+    expect(
+      flowChartSelectionServerFlow({
+        ...baseSelection,
+        id: "all:all:incoming:all",
+        segment: "incoming",
+      }),
+    ).toBe("incoming");
+    expect(
+      flowChartSelectionServerFlow({
+        ...baseSelection,
+        id: "all:all:outgoing:all",
+        segment: "outgoing",
+      }),
+    ).toBe("outgoing");
+  });
+
+  it("treats transfer candidate legs as transfers in table chart filters", () => {
+    const selection: FlowChartSelection = {
+      id: "all:all:transfers:all",
+      period: "all",
+      bucketKey: null,
+      bucketLabel: "All",
+      segment: "transfers",
+      mode: "all",
+    };
+    const outgoingLeg = transaction({
+      id: "tx-out",
+      direction: "Send",
+      flow: "outgoing",
+    });
+    const incomingLeg = transaction({
+      id: "tx-in",
+      direction: "Receive",
+      flow: "incoming",
+    });
+    const transferCandidateIds = new Set(["tx-out", "tx-in"]);
+    const displayFlow = (txn: Transaction) =>
+      transactionFlowWithCandidateOverrides(txn, new Set(), transferCandidateIds);
+
+    expect(matchesFlowChartSelection(outgoingLeg, selection, displayFlow)).toBe(true);
+    expect(matchesFlowChartSelection(incomingLeg, selection, displayFlow)).toBe(true);
+  });
+
   it("treats BTC to Liquid BTC candidates as carrying-value Bitcoin swaps", () => {
     const out = transaction({
       id: "tx-out",
@@ -441,14 +505,18 @@ describe("transaction dashboard chart selection", () => {
     expect(buildSwapCandidates([out, input], [candidate])).toEqual([]);
     expect(buildTransferCandidates([out, input], [candidate])).toHaveLength(1);
 
+    const candidateFlows = buildCandidateFlowOverrides([out, input], [candidate], {
+      transferFlow: "layer-transition",
+    });
+    expect(candidateFlows.transferCandidateIds).toEqual(
+      new Set(["tx-out", "tx-in"]),
+    );
+
     const rows = buildFlowChartRows(
       [out, input],
       "1year",
       "btc",
-      new Map<string, TransactionFlow>([
-        ["tx-out", "layer-transition"],
-        ["tx-in", "layer-transition"],
-      ]),
+      candidateFlows.flowById,
       "count",
     );
     expect(rows.find((row) => row.transfers === 2)?.swaps).toBe(0);
