@@ -24,6 +24,7 @@ import {
   linearAxisTicks,
   logAxisTicks,
   logSafeTreasuryPoints,
+  latestPortfolioBalanceBtc,
   marketRateCompactLabel,
   marketRateDetailLabel,
   marketRateSyncLabel,
@@ -136,6 +137,31 @@ describe("overview market rate display", () => {
         ["Home Node", 35_000],
       ]);
     expect(buildBalanceRailItems(snapshot).total).toBe(175_000);
+  });
+
+  it("prefers the real display valuation over journal balance fallback", () => {
+    const snapshot: OverviewSnapshot = {
+      ...MOCK_OVERVIEW,
+      portfolioSeries: [],
+      balanceSeries: [1],
+      fiat: {
+        ...MOCK_OVERVIEW.fiat,
+        eurBalance: 12_500,
+      },
+      marketRate: {
+        asset: "BTC",
+        fiatCurrency: "EUR",
+        pair: "BTC-EUR",
+        rate: 50_000,
+        timestamp: "2026-03-01T00:00:00Z",
+        source: "coinbase-exchange",
+        fetchedAt: "2026-03-01T00:02:00Z",
+        granularity: "daily",
+        method: "close",
+      },
+    };
+
+    expect(latestPortfolioBalanceBtc(snapshot)).toBe(0.25);
   });
 
   it("uses friendly labels for known rate sources", () => {

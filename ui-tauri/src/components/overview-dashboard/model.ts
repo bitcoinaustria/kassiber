@@ -657,9 +657,14 @@ export function latestPortfolioBalanceBtc(snapshot: OverviewSnapshot) {
     )[snapshot.portfolioSeries.length - 1];
     if (latest) return latest.balanceBtc;
   }
+  const fiatBalance = btcFromEur(
+    snapshot.fiat.eurBalance,
+    activeMarketFiatRate(snapshot),
+  );
+  if (fiatBalance > 0) return fiatBalance;
   const latestBalance = snapshot.balanceSeries[snapshot.balanceSeries.length - 1];
   if (typeof latestBalance === "number") return latestBalance;
-  return btcFromEur(snapshot.fiat.eurBalance, activeMarketFiatRate(snapshot));
+  return fiatBalance;
 }
 
 export function buildStatsData(
