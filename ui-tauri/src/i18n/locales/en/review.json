@@ -330,7 +330,7 @@
     }
   },
   "egress": {
-    "title": "Egress auditor",
+    "title": "Network Monitor",
     "subtitle": "Live RAM-only outbound ledger",
     "refresh": "Refresh",
     "loadFailed": "Failed to load egress ledger: {{error}}",

@@ -330,7 +330,7 @@
     }
   },
   "egress": {
-    "title": "Egress-Auditor",
+    "title": "Network Monitor",
     "subtitle": "Live-RAM-Ledger für ausgehende Verbindungen",
     "refresh": "Aktualisieren",
     "loadFailed": "Egress-Ledger konnte nicht geladen werden: {{error}}",
