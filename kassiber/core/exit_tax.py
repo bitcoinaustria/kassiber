@@ -10,12 +10,15 @@ Design (see docs/plan/11-exit-tax-deemed-disposal.md):
 
 - This module owns NO tax math. It reads the journal state RP2 already computed
   (`hooks.build_ledger_state`) and reconstructs the remaining inventory and its
-  cost basis per regime directly from those entries: acquisitions/income add
-  (by acquisition-date regime), disposals subtract (by their `at_category`
-  regime and the engine's own consumed cost basis). Internal transfers create no
-  acquisition/disposal entry, so they never touch the global pool. The number is
-  therefore consistent by construction with "what your capital-gains report would
-  show if you sold everything at FMV on the departure date".
+  cost basis per regime directly from those entries: acquisitions add (by
+  acquisition-date regime), disposals subtract (by their `at_category` regime
+  and the engine's own consumed cost basis). Income recognition lines are
+  skipped for quantity/basis — RP2 already books the matching acquisition lot
+  for earn receipts, so counting income again would double the pool (same skip
+  as holdings reports). Internal transfers create no acquisition/disposal
+  entry, so they never touch the global pool. The number is therefore
+  consistent by construction with "what your capital-gains report would show if
+  you sold everything at FMV on the departure date".
 - The 27.5 % rate is the only Austrian constant here; it is not file-ready tax,
   it is a headline estimate a Steuerberater reviews and stamps.
 
@@ -90,9 +93,10 @@ _ASSUMPTION_RATE = (
     "beyond the same income type is out of scope)."
 )
 _ASSUMPTION_DERIVED_TOKENS = (
-    "EXIT-004: Income-type receipts (staking/mining/airdrop) are treated as "
-    "Neubestand with zero acquisition cost regardless of when the underlying coins "
-    "were acquired — confirm the product mechanics with your adviser."
+    "EXIT-004: Income-type receipts (staking/mining/airdrop) are present in this "
+    "book. Inventory uses the matching acquisition lots (income recognition "
+    "lines are not counted again); confirm the product mechanics with your "
+    "adviser."
 )
 _ASSUMPTION_UNTAGGED_DISPOSAL = (
     "EXIT-010: A disposal marked non-reportable carries no Alt/Neu tag; its regime "
@@ -277,12 +281,14 @@ def compute_deemed_disposal(
     these, the drift guard test in ``tests/test_exit_tax.py`` is the safety net:
 
     - ``entry_type``: one of ``RECOGNIZED_ENTRY_TYPES``. ``transfer_in`` /
-      ``transfer_out`` are skipped (net-zero across owned wallets); everything
-      else is bucketed by the sign of ``quantity``.
-    - ``quantity`` (Decimal, signed): ``>= 0`` is an inflow (acquisition/income),
+      ``transfer_out`` are skipped (net-zero across owned wallets);
+      ``income`` is skipped for inventory (RP2 already books the matching
+      acquisition lot) but still flags EXIT-004; everything else is bucketed
+      by the sign of ``quantity``.
+    - ``quantity`` (Decimal, signed): ``>= 0`` is an inflow (acquisition),
       ``< 0`` is an outflow (disposal/fee). The sign is authoritative.
     - inflow cost: acquisitions carry it in ``fiat_value`` (``cost_basis`` is
-      ``None``); income carries its engine ``cost_basis`` (``0`` for AT staking).
+      ``None``).
     - outflow basis: the engine-computed consumed ``cost_basis``.
     - ``at_category`` (AT only): ``None``, or a string whose prefix (``alt`` /
       ``neu`` / ``income``) is the regime; acquisitions/transfers carry ``None``.
@@ -315,6 +321,12 @@ def compute_deemed_disposal(
         entry_type = str(entry.get("entry_type") or "")
         if entry_type in ("transfer_in", "transfer_out"):
             continue  # net-zero across owned wallets; never touches the pool
+        if entry_type == "income":
+            # Earn receipts already have an acquisition lot with the same
+            # quantity; counting income again would double holdings (see
+            # _HOLDINGS_QUANTITY_SKIP_ENTRY_TYPES). Still flag EXIT-004.
+            has_income = True
+            continue
         asset = str(entry.get("asset") or "")
         if not asset:
             continue
@@ -323,10 +335,7 @@ def compute_deemed_disposal(
         alt = _entry_is_alt(entry) if is_at else False
         bucket = _bucket(asset, alt)
         if qty >= 0:
-            # Inflow: acquisition cost is in fiat_value (cost_basis is None);
-            # income carries its engine cost_basis (0 for classic AT staking).
-            if entry_type == "income":
-                has_income = True
+            # Inflow: acquisition cost is in fiat_value (cost_basis is None).
             cost = entry.get("cost_basis")
             cost = dec(cost) if cost is not None else dec(entry.get("fiat_value") or 0)
             bucket.add_inflow(qty, cost)
