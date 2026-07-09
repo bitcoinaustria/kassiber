@@ -142,9 +142,13 @@ export function AssistantSessionProvider({
         .map((message) => ({ role: message.role, content: message.content }));
       setQueuedPrompts([]);
       setIncognito(false);
+      // Drop any half-typed draft before binding the resumed (persisted)
+      // session — otherwise text typed while Incognito would ride into the
+      // loaded chat and be stored on the next submit.
+      setAssistantDraft("");
       loadConversation(entries, envelope.data?.id ?? targetSessionId);
     },
-    [dataMode, isStreaming, loadConversation],
+    [dataMode, isStreaming, loadConversation, setAssistantDraft],
   );
 
   const branchFromMessage = React.useCallback(
