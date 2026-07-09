@@ -4990,6 +4990,22 @@ def _ui_chat_sessions_payload(
     raise AppError(f"Unsupported chat-session kind '{kind}'", code="validation")
 
 
+def _ai_chat_seed_prefix(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Return the turns before the current prompt (a branch/edit seed).
+
+    The client sends the full transcript each turn; the final user message is
+    the current prompt (persisted via ``append_exchange``). Everything before
+    it is the seeded prefix — empty for an ordinary first message.
+    """
+    last_user = -1
+    for index, message in enumerate(messages):
+        if message.get("role") == "user":
+            last_user = index
+    if last_user <= 0:
+        return []
+    return messages[:last_user]
+
+
 def _persist_ai_chat_exchange(
     runtime: AiToolRuntime,
     provider_snapshot: dict[str, Any],
@@ -5046,6 +5062,18 @@ def _persist_ai_chat_exchange(
                 model=validated["model"],
                 commit=False,
             )["id"]
+            # Branched/edited chats seed a fresh (null-session) conversation
+            # with prior turns. Backfill that prefix before the first live
+            # exchange so re-opening the session keeps the full transcript;
+            # an ordinary first message carries no prefix and is unaffected.
+            seed_prefix = _ai_chat_seed_prefix(validated["messages"])
+            if seed_prefix:
+                core_chat_history.append_messages(
+                    conn,
+                    target_session_id,
+                    seed_prefix,
+                    commit=False,
+                )
         core_chat_history.append_exchange(
             conn,
             profile["id"],

@@ -317,6 +317,49 @@ describe("mock daemon chat sessions", () => {
     expect(deleted.data?.deleted).toBe(sessionId);
   });
 
+  it("round-trips a branched conversation's full seeded transcript", async () => {
+    // A branch/edit fork sends the seed (prior turns) plus the new prompt with
+    // a null session_id — the whole transcript must persist, not just the last
+    // exchange.
+    const terminal = await mockDaemon.stream<{ session_id?: string | null }>(
+      {
+        kind: "ai.chat",
+        request_id: "chat-mock-branch",
+        args: {
+          model: "mock-model",
+          messages: [
+            { role: "user", content: "seed question" },
+            { role: "assistant", content: "seed answer" },
+            { role: "user", content: "branched follow-up" },
+          ],
+          persist: "auto",
+        },
+      },
+      { onRecord() {} },
+    );
+    const sessionId = terminal.data?.session_id;
+    expect(typeof sessionId).toBe("string");
+
+    const stored = await mockDaemon.invoke<{
+      messages: Array<{ role: string; content: string }>;
+    }>({ kind: "ui.chat.sessions.get", args: { session_id: sessionId } });
+    const transcript = (stored.data?.messages ?? []).map((m) => ({
+      role: m.role,
+      content: m.content,
+    }));
+    expect(transcript.slice(0, 3)).toEqual([
+      { role: "user", content: "seed question" },
+      { role: "assistant", content: "seed answer" },
+      { role: "user", content: "branched follow-up" },
+    ]);
+    expect(transcript[3]?.role).toBe("assistant");
+
+    await mockDaemon.invoke({
+      kind: "ui.chat.sessions.delete",
+      args: { session_id: sessionId },
+    });
+  });
+
   it("keeps requests without persist intent ephemeral and honors off", async () => {
     const noIntent = await mockDaemon.stream<{ session_id?: string | null }>(
       {
