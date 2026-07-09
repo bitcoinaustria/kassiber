@@ -1794,50 +1794,14 @@ def _transaction_pair_display_meta(
         """,
         [*ids, *ids],
     ).fetchall()
-    # Multi-pair components (whirlpool N-leg reviews) reuse a leg across
-    # several active pairs ON THE SAME SIDE. The per-pair out/in gap is
-    # meaningless there — the shared out leg dwarfs each receipt — so the
-    # NULL-fee fallback must not invent a giant per-pair "fee". Count from
-    # the DB, not the fetched window: a filtered/paginated window holding one
-    # leg of a multi-pair would otherwise resurface the giant fee. Counting
-    # per (leg, role) keeps ordinary transfer CHAINS (a tx that is the in-leg
-    # of one pair and the out-leg of another) out of the suppression.
-    leg_ids = sorted(
-        {pair["out_transaction_id"] for pair in pair_rows}
-        | {pair["in_transaction_id"] for pair in pair_rows}
-    )
-    out_pair_count: dict[str, int] = {}
-    in_pair_count: dict[str, int] = {}
-    if leg_ids:
-        leg_placeholders = ", ".join("?" for _ in leg_ids)
-        for leg_id, role, count in conn.execute(
-            f"""
-            SELECT out_transaction_id AS leg, 'out' AS role, COUNT(*) AS n
-            FROM transaction_pairs
-            WHERE deleted_at IS NULL AND out_transaction_id IN ({leg_placeholders})
-            GROUP BY out_transaction_id
-            UNION ALL
-            SELECT in_transaction_id AS leg, 'in' AS role, COUNT(*) AS n
-            FROM transaction_pairs
-            WHERE deleted_at IS NULL AND in_transaction_id IN ({leg_placeholders})
-            GROUP BY in_transaction_id
-            """,
-            [*leg_ids, *leg_ids],
-        ):
-            (out_pair_count if role == "out" else in_pair_count)[leg_id] = count
     pair_meta: dict[str, dict[str, Any]] = {}
     for pair in pair_rows:
         out_asset = pair["out_asset"]
         in_asset = pair["in_asset"]
         pair_type = "transfer" if out_asset == in_asset else "swap"
-        multi_pair_leg = (
-            out_pair_count.get(pair["out_transaction_id"], 0) > 1
-            or in_pair_count.get(pair["in_transaction_id"], 0) > 1
-        )
-        raw_fee_msat = pair["swap_fee_msat"]
-        if raw_fee_msat is None and not multi_pair_leg:
-            raw_fee_msat = int(pair["out_amount"] or 0) - int(pair["in_amount"] or 0)
-        fee_msat = int(raw_fee_msat or 0)
+        # Same-asset transfers store swap_fee_msat=NULL on purpose; do not
+        # invent out-in as a fee (matches reports._pair_swap_fee_msat).
+        fee_msat = int(pair["swap_fee_msat"] or 0)
         label = "Transfer" if pair_type == "transfer" else "Swap"
         counter = f"{label} fee - {out_asset} -> {in_asset}"
         account = f"{pair['out_wallet']} -> {pair['in_wallet']}"

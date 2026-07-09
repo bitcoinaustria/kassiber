@@ -5937,10 +5937,17 @@ def _generic_report_wallet_flow_rows(context):
 
 
 def _pair_swap_fee_msat(row):
+    """Return the persisted swap fee, or 0 when the pair stores NULL.
+
+    Same-asset carrying-value transfers intentionally leave ``swap_fee_msat``
+    NULL (they are not swaps). Inventing ``out_amount - in_amount`` would
+    report network/amount deltas as swap fees and disagree with tax-summary,
+    which only counts rows where ``swap_fee_msat IS NOT NULL``.
+    """
     raw_fee_msat = row["swap_fee_msat"]
-    if raw_fee_msat is not None:
-        return int(raw_fee_msat or 0)
-    return int(row["out_amount"] or 0) - int(row["in_amount"] or 0)
+    if raw_fee_msat is None:
+        return 0
+    return int(raw_fee_msat or 0)
 
 
 def _generic_report_transfer_pair_rows(context):
