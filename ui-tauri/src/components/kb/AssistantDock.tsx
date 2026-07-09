@@ -17,6 +17,7 @@ import {
   Maximize2,
   MessageSquareText,
   Minus,
+  MoreHorizontal,
   Sparkles,
   Trash2,
 } from "lucide-react";
@@ -27,6 +28,13 @@ import { ChatThread } from "@/components/ai/ChatThread";
 import { ToolConsentDialog } from "@/components/ai/ToolConsentDialog";
 import { useSupportedReasoningEffort } from "@/components/ai/useReasoningEffortSupport";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import { useAssistantDraftStore } from "@/store/assistantDraft";
 import { useUiStore, type AssistantDockPosition } from "@/store/ui";
@@ -199,10 +207,11 @@ export function AssistantDock({
         <div
           className={cn(
             // `relative` keeps the hover buffer (absolute -inset-4) scoped to
-            // the card. In dark mode `backdrop-blur-none` removes the only
-            // other containing block, so without this the buffer would lay out
-            // against the full-width section and swallow clicks at the bottom.
-            "pointer-events-auto relative flex border border-white/70 bg-muted/85 shadow-[0_24px_90px_rgba(15,23,42,0.26),0_3px_18px_rgba(15,23,42,0.12),inset_0_1px_0_rgba(255,255,255,0.80)] ring-1 ring-zinc-950/10 backdrop-blur-2xl backdrop-saturate-150 dark:border-border dark:bg-card dark:shadow-[0_18px_48px_rgba(0,0,0,0.28)] dark:ring-border/70 dark:backdrop-blur-none dark:backdrop-saturate-100",
+            // the card (its only reliable containing block across themes).
+            // Surface matches the assistant page's flat language: a plain
+            // background panel with a hairline border and one soft shadow —
+            // no glass/ring/backdrop tricks, identical in light and dark.
+            "pointer-events-auto relative flex border border-border/60 bg-background shadow-[0_16px_50px_rgba(0,0,0,0.16),0_2px_10px_rgba(0,0,0,0.08)] dark:bg-card dark:shadow-[0_16px_48px_rgba(0,0,0,0.45)]",
             DOCK_POSITION_CLASS[position],
             showHandle
               ? "w-fit flex-row items-center rounded-full p-1"
@@ -271,10 +280,12 @@ export function AssistantDock({
           ) : (
             <>
               {showThread ? (
-                <div className="min-h-0 overflow-hidden rounded-2xl border border-border/70 bg-background/92 shadow-none backdrop-blur-md">
-                  <div className="flex items-center gap-2 border-b border-border/60 px-3 py-2 text-xs text-muted-foreground">
+                // Thread sits directly on the card (assistant-page style):
+                // no nested box, just a hairline divider under the header.
+                <div className="min-h-0 overflow-hidden">
+                  <div className="flex items-center gap-2 border-b border-border/40 px-2 pb-2 pt-1 text-xs text-muted-foreground">
                     <MessageSquareText
-                      className="h-3.5 w-3.5"
+                      className="ml-1 h-3.5 w-3.5"
                       aria-hidden="true"
                     />
                     <span className="font-medium text-foreground">
@@ -310,28 +321,6 @@ export function AssistantDock({
                       type="button"
                       variant="ghost"
                       size="icon-xs"
-                      className="rounded-full text-muted-foreground hover:text-destructive"
-                      onClick={reset}
-                      aria-label={t("page.clearChat")}
-                      title={t("page.clearChat")}
-                    >
-                      <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon-xs"
-                      className="rounded-full"
-                      onClick={() => setIsThreadCollapsed(true)}
-                      aria-label={t("dock.collapseConversation")}
-                      title={t("dock.collapseConversation")}
-                    >
-                      <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon-xs"
                       className="rounded-full"
                       onClick={() => setIsMinimized(true)}
                       aria-label={t("dock.minimize")}
@@ -339,15 +328,50 @@ export function AssistantDock({
                     >
                       <Minus className="h-3.5 w-3.5" aria-hidden="true" />
                     </Button>
+                    {/* Rare actions live behind "…", mirroring the page toolbar. */}
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon-xs"
+                          className="rounded-full"
+                          aria-label={t("page.moreActions")}
+                          title={t("page.moreActions")}
+                        >
+                          <MoreHorizontal
+                            className="h-3.5 w-3.5"
+                            aria-hidden="true"
+                          />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="min-w-52">
+                        <DropdownMenuItem
+                          onSelect={() => setIsThreadCollapsed(true)}
+                        >
+                          <ChevronDown className="size-4" aria-hidden="true" />
+                          {t("dock.collapseConversation")}
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                          variant="destructive"
+                          onSelect={reset}
+                        >
+                          <Trash2 className="size-4" aria-hidden="true" />
+                          {t("page.clearChat")}
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </div>
                   <ChatThread
                     messages={messages}
-                    className="max-h-[min(52vh,520px)] max-w-none p-3 pt-2"
+                    className="max-h-[min(52vh,520px)] max-w-none"
+                    contentClassName="px-3 py-3"
                   />
                 </div>
               ) : null}
               {hasThread && isThreadCollapsed ? (
-                <div className="flex w-full items-center gap-1.5 rounded-2xl border border-border/70 bg-background/92 px-2 py-1.5 text-xs text-muted-foreground shadow-none">
+                <div className="flex w-full items-center gap-1.5 rounded-2xl bg-muted/60 px-2 py-1.5 text-xs text-muted-foreground">
                   <button
                     type="button"
                     className="flex min-w-0 flex-1 items-center gap-2 rounded-xl px-1 py-1 text-left transition-colors hover:bg-muted/60"
@@ -414,6 +438,8 @@ export function AssistantDock({
               ) : null}
               <Ai02
                 className="max-w-none border-0 bg-transparent p-0 shadow-none ring-0 backdrop-blur-0"
+                // Same borderless bg-muted input box as the assistant page.
+                composerClassName="border-0 bg-muted shadow-none backdrop-blur-0 dark:bg-muted"
                 compact={compact}
                 selection={selection}
                 onSelectionChange={setSelection}
@@ -431,6 +457,9 @@ export function AssistantDock({
                 modelPickerEnabled={
                   modelPickerEnabled || Boolean(selection?.provider)
                 }
+                // Page parity: once a conversation exists the quick-prompt
+                // chips disappear — they only help start a chat.
+                {...(hasThread ? { prompts: [] } : {})}
               />
             </>
           )}
