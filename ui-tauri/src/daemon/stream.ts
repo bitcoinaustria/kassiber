@@ -89,6 +89,12 @@ export interface AiChatRequest {
    * Absent means no persistence, which keeps legacy callers unchanged.
    */
   persist?: boolean | "auto";
+  /**
+   * Explicit branch/edit fork: persist the seeded prefix (prior on-screen
+   * turns) when this creates a new session. Only set for the first turn after
+   * a fork — a null session id alone must not backfill detached history.
+   */
+  seedHistory?: boolean;
 }
 
 /** One stored exchange row from ui.chat.sessions.get. */
@@ -111,6 +117,7 @@ export function buildAiChatStreamArgs(
     system_prompt: request.systemPrompt,
     session_id: request.sessionId ?? undefined,
     persist: request.persist,
+    seed_history: request.seedHistory ? true : undefined,
   };
 }
 

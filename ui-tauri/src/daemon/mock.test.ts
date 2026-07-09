@@ -333,6 +333,7 @@ describe("mock daemon chat sessions", () => {
             { role: "user", content: "branched follow-up" },
           ],
           persist: "auto",
+          seed_history: true,
         },
       },
       { onRecord() {} },
@@ -353,6 +354,41 @@ describe("mock daemon chat sessions", () => {
       { role: "user", content: "branched follow-up" },
     ]);
     expect(transcript[3]?.role).toBe("assistant");
+
+    await mockDaemon.invoke({
+      kind: "ui.chat.sessions.delete",
+      args: { session_id: sessionId },
+    });
+  });
+
+  it("does not backfill prior turns without an explicit seed_history flag", async () => {
+    // A detached conversation (history re-enabled, or a deleted session with
+    // messages still on screen) sends a prefix with a null session but no
+    // seed_history — only the current exchange must be stored.
+    const terminal = await mockDaemon.stream<{ session_id?: string | null }>(
+      {
+        kind: "ai.chat",
+        request_id: "chat-mock-detached",
+        args: {
+          model: "mock-model",
+          messages: [
+            { role: "user", content: "old private turn" },
+            { role: "assistant", content: "old private answer" },
+            { role: "user", content: "new turn" },
+          ],
+          persist: "auto",
+        },
+      },
+      { onRecord() {} },
+    );
+    const sessionId = terminal.data?.session_id;
+    const stored = await mockDaemon.invoke<{
+      messages: Array<{ role: string; content: string }>;
+    }>({ kind: "ui.chat.sessions.get", args: { session_id: sessionId } });
+    const contents = (stored.data?.messages ?? []).map((m) => m.content);
+    expect(contents).not.toContain("old private turn");
+    expect(contents).not.toContain("old private answer");
+    expect(contents[0]).toBe("new turn");
 
     await mockDaemon.invoke({
       kind: "ui.chat.sessions.delete",

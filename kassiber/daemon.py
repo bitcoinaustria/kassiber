@@ -3392,6 +3392,12 @@ def _ai_chat_args(args: dict) -> dict[str, Any]:
             "ai.chat persist must be true, false, or \"auto\"",
             code="validation",
         )
+    seed_history = args.get("seed_history")
+    if seed_history not in (None, True, False):
+        raise AppError(
+            "ai.chat seed_history must be a boolean",
+            code="validation",
+        )
     return {
         "provider": provider,
         "model": model.strip(),
@@ -3403,6 +3409,10 @@ def _ai_chat_args(args: dict) -> dict[str, Any]:
         "system_prompt": system_prompt,
         "session_id": session_id,
         "persist": persist,
+        # Only an explicit branch/edit fork asks to persist its seeded prefix;
+        # other detached conversations (history re-enabled, a deleted/forgotten
+        # session) must not have prior turns backfilled into a new session.
+        "seed_history": bool(seed_history),
         "_desktop_secret_store_bridge": args.get("_desktop_secret_store_bridge"),
     }
 
@@ -5063,10 +5073,16 @@ def _persist_ai_chat_exchange(
                 commit=False,
             )["id"]
             # Branched/edited chats seed a fresh (null-session) conversation
-            # with prior turns. Backfill that prefix before the first live
-            # exchange so re-opening the session keeps the full transcript;
-            # an ordinary first message carries no prefix and is unaffected.
-            seed_prefix = _ai_chat_seed_prefix(validated["messages"])
+            # with prior turns and set seed_history so we backfill that prefix
+            # before the first live exchange. A null session_id alone is not
+            # enough — history re-enabled mid-conversation, or a deleted/
+            # forgotten session with messages still on screen, must NOT have
+            # prior turns written into the new session.
+            seed_prefix = (
+                _ai_chat_seed_prefix(validated["messages"])
+                if validated.get("seed_history")
+                else []
+            )
             if seed_prefix:
                 core_chat_history.append_messages(
                     conn,

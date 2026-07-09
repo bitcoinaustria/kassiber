@@ -4522,6 +4522,7 @@ async function mockAiChatStream<T, R>(
     messages?: { role?: string; content?: string }[];
     persist?: boolean | "auto";
     session_id?: string;
+    seed_history?: boolean;
   };
   if (
     typeof args.session_id === "string" &&
@@ -4618,10 +4619,11 @@ async function mockAiChatStream<T, R>(
           updated_at: now,
           entries: [],
         };
-        // Backfill a branched/edited seed: the turns before the current prompt
-        // (mirrors the daemon's append_messages) so a forked chat round-trips
-        // its full transcript from ui.chat.sessions.get.
-        const messages = args.messages ?? [];
+        // Backfill a branched/edited seed only when the fork explicitly asked
+        // for it (seed_history) — mirrors the daemon. A bare new session (e.g.
+        // history re-enabled, or a deleted session with messages on screen)
+        // must not have its prior turns written in.
+        const messages = args.seed_history ? (args.messages ?? []) : [];
         let lastUser = -1;
         messages.forEach((message, index) => {
           if (message.role === "user") lastUser = index;

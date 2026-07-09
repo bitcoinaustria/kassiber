@@ -198,7 +198,11 @@ export function AssistantDock({
         */}
         <div
           className={cn(
-            "pointer-events-auto flex border border-white/70 bg-muted/85 shadow-[0_24px_90px_rgba(15,23,42,0.26),0_3px_18px_rgba(15,23,42,0.12),inset_0_1px_0_rgba(255,255,255,0.80)] ring-1 ring-zinc-950/10 backdrop-blur-2xl backdrop-saturate-150 dark:border-border dark:bg-card dark:shadow-[0_18px_48px_rgba(0,0,0,0.28)] dark:ring-border/70 dark:backdrop-blur-none dark:backdrop-saturate-100",
+            // `relative` keeps the hover buffer (absolute -inset-4) scoped to
+            // the card. In dark mode `backdrop-blur-none` removes the only
+            // other containing block, so without this the buffer would lay out
+            // against the full-width section and swallow clicks at the bottom.
+            "pointer-events-auto relative flex border border-white/70 bg-muted/85 shadow-[0_24px_90px_rgba(15,23,42,0.26),0_3px_18px_rgba(15,23,42,0.12),inset_0_1px_0_rgba(255,255,255,0.80)] ring-1 ring-zinc-950/10 backdrop-blur-2xl backdrop-saturate-150 dark:border-border dark:bg-card dark:shadow-[0_18px_48px_rgba(0,0,0,0.28)] dark:ring-border/70 dark:backdrop-blur-none dark:backdrop-saturate-100",
             DOCK_POSITION_CLASS[position],
             showHandle
               ? "w-fit flex-row items-center rounded-full p-1"

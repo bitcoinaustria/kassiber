@@ -53,6 +53,11 @@ export function AssistantSessionProvider({
   const setAssistantDraft = useAssistantDraftStore((state) => state.setDraft);
   const [queuedPrompts, setQueuedPrompts] = React.useState<string[]>([]);
   const [incognito, setIncognito] = React.useState(false);
+  // Set by branch/edit; consumed on the next send so the daemon persists the
+  // seeded prefix for that fork only. A bare detached conversation (history
+  // toggled, session deleted) never carries it, so its prior turns are not
+  // backfilled into a new session.
+  const seedHistoryPendingRef = React.useRef(false);
 
   const dispatchPrompt = React.useCallback(
     (prompt: string) => {
@@ -67,6 +72,8 @@ export function AssistantSessionProvider({
         ...userMessages,
         { role: "user", content: prompt },
       ];
+      const seedHistory = seedHistoryPendingRef.current && sessionId === null;
+      seedHistoryPendingRef.current = false;
       void send(
         {
           provider: selection.provider,
@@ -81,6 +88,7 @@ export function AssistantSessionProvider({
           systemPromptKind: "kassiber",
           sessionId,
           persist: incognito && sessionId === null ? false : "auto",
+          seedHistory,
         },
         prompt,
       );
@@ -116,6 +124,7 @@ export function AssistantSessionProvider({
 
   const clearChat = React.useCallback(() => {
     setQueuedPrompts([]);
+    seedHistoryPendingRef.current = false;
     reset();
   }, [reset]);
 
@@ -146,6 +155,7 @@ export function AssistantSessionProvider({
       // session — otherwise text typed while Incognito would ride into the
       // loaded chat and be stored on the next submit.
       setAssistantDraft("");
+      seedHistoryPendingRef.current = false;
       loadConversation(entries, envelope.data?.id ?? targetSessionId);
     },
     [dataMode, isStreaming, loadConversation, setAssistantDraft],
@@ -174,6 +184,8 @@ export function AssistantSessionProvider({
       // Preserve the current Incognito choice — forking must never silently
       // flip a private conversation into one that persists.
       setQueuedPrompts([]);
+      // Explicit fork: the next send may persist this seeded prefix.
+      seedHistoryPendingRef.current = true;
       loadConversation(entries, null);
     },
     [isStreaming, messages, loadConversation],
@@ -202,6 +214,8 @@ export function AssistantSessionProvider({
         .map((message) => ({ role: message.role, content: message.content }));
       // Preserve the current Incognito choice (see branchFromMessage).
       setQueuedPrompts([]);
+      // Explicit fork: the next send may persist this seeded prefix.
+      seedHistoryPendingRef.current = true;
       loadConversation(entries, null);
       setAssistantDraft(target.content);
     },
