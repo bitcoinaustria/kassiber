@@ -99,6 +99,11 @@ def tax_year_in_vienna(occurred_at: str) -> int:
     return _parse_occurred_at(occurred_at).astimezone(AT_TAX_TZ).year
 
 
+def vienna_local_date(occurred_at: str) -> str:
+    """Return ``YYYY-MM-DD`` in Europe/Vienna for an RFC3339 timestamp."""
+    return _parse_occurred_at(occurred_at).astimezone(AT_TAX_TZ).date().isoformat()
+
+
 def vienna_tax_year_utc_window(tax_year: int) -> tuple[str, str]:
     """Loose UTC bounds that cover every Europe/Vienna local date in ``tax_year``.
 
@@ -511,5 +516,6 @@ __all__ = [
     "kennzahl_for_disposal_category",
     "resolve_pool_id",
     "tax_year_in_vienna",
+    "vienna_local_date",
     "vienna_tax_year_utc_window",
 ]

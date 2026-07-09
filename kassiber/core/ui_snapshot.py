@@ -4145,6 +4145,8 @@ def build_capital_gains_snapshot(
     else:
         where.append("substr(je.occurred_at, 1, 4) = ?")
         params.append(str(latest_year))
+    # Fetch without a tight LIMIT first when using the loose Vienna UTC window,
+    # then filter to the exact local year and keep the newest 200 lots.
     rows = conn.execute(
         f"""
         SELECT je.occurred_at, je.entry_type, je.quantity, je.cost_basis,
@@ -4153,7 +4155,6 @@ def build_capital_gains_snapshot(
         LEFT JOIN transactions t ON t.id = je.transaction_id
         WHERE {' AND '.join(where)}
         ORDER BY je.occurred_at DESC, je.created_at DESC, je.id DESC
-        LIMIT 400
         """,
         params,
     ).fetchall()
@@ -4162,9 +4163,8 @@ def build_capital_gains_snapshot(
             row
             for row in rows
             if tax_year_in_vienna(str(row["occurred_at"])) == int(latest_year)
-        ][:200]
-    else:
-        rows = rows[:200]
+        ]
+    rows = rows[:200]
     lots = [
         {
             "acquired": "",

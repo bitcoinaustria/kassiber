@@ -17,6 +17,7 @@ from . import rates as core_rates
 from .austrian import (
     kennzahl_for_disposal_category,
     tax_year_in_vienna,
+    vienna_local_date,
     vienna_tax_year_utc_window,
 )
 from .exit_tax import (  # re-exported so CLI/daemon reach exit-tax via core_reports.*
@@ -4119,18 +4120,18 @@ def _tax_summary_capital_gains_type(value):
     return str(value or "short").strip().lower() or "short"
 
 
-def _non_reportable_tax_summary_adjustments(conn, profile_id):
+def _non_reportable_tax_summary_adjustments(conn, profile_id, *, use_vienna_year=False):
     rows = conn.execute(
         """
-        SELECT substr(je.occurred_at, 1, 4) AS year,
+        SELECT je.occurred_at,
                je.asset,
                je.entry_type,
                t.kind AS transaction_kind,
                COALESCE(je.capital_gains_type, '') AS capital_gains_type,
-               SUM(ABS(je.quantity)) AS quantity_msat,
-               SUM(COALESCE(je.proceeds, 0)) AS proceeds,
-               SUM(COALESCE(je.cost_basis, 0)) AS cost_basis,
-               SUM(COALESCE(je.gain_loss, 0)) AS gain_loss
+               ABS(je.quantity) AS quantity_msat,
+               COALESCE(je.proceeds, 0) AS proceeds,
+               COALESCE(je.cost_basis, 0) AS cost_basis,
+               COALESCE(je.gain_loss, 0) AS gain_loss
         FROM journal_entries je
         LEFT JOIN transactions t ON t.id = je.transaction_id
         WHERE je.profile_id = ?
@@ -4141,15 +4142,21 @@ def _non_reportable_tax_summary_adjustments(conn, profile_id):
               AND je.entry_type IN ('disposal', 'income')
             )
           )
-        GROUP BY substr(je.occurred_at, 1, 4), je.asset, je.entry_type, t.kind, je.capital_gains_type
         """,
         (profile_id,),
     ).fetchall()
     adjustments = {}
     for row in rows:
-        year = str(row["year"] or "")
+        occurred_at = str(row["occurred_at"] or "")
+        if use_vienna_year:
+            year = tax_year_in_vienna(occurred_at)
+        else:
+            year_str = occurred_at[:4]
+            if not year_str.isdigit():
+                continue
+            year = int(year_str)
         asset = str(row["asset"] or "")
-        if not year.isdigit() or not asset:
+        if not asset:
             continue
         quantity_msat = int(row["quantity_msat"] or 0)
         if row["entry_type"] == "income":
@@ -4160,7 +4167,7 @@ def _non_reportable_tax_summary_adjustments(conn, profile_id):
         else:
             transaction_type = "sell"
         capital_gains_type = _tax_summary_capital_gains_type(row["capital_gains_type"])
-        key = (int(year), asset, transaction_type, capital_gains_type)
+        key = (year, asset, transaction_type, capital_gains_type)
         adjustment = adjustments.setdefault(
             key,
             {
@@ -4191,8 +4198,10 @@ def _tax_summary_row_is_zero(row):
     )
 
 
-def _exclude_non_reportable_tax_summary_rows(conn, profile_id, rows):
-    adjustments = _non_reportable_tax_summary_adjustments(conn, profile_id)
+def _exclude_non_reportable_tax_summary_rows(conn, profile_id, rows, *, use_vienna_year=False):
+    adjustments = _non_reportable_tax_summary_adjustments(
+        conn, profile_id, use_vienna_year=use_vienna_year
+    )
     if not adjustments:
         return [dict(row) for row in rows]
 
@@ -4232,42 +4241,138 @@ def _exclude_non_reportable_tax_summary_rows(conn, profile_id, rows):
     return adjusted_rows
 
 
+def _tax_summary_from_journal_entries(conn, profile_id, *, use_vienna_year=False):
+    """Build tax-summary detail rows from journal entries.
+
+    Used for Austrian profiles so year buckets follow Europe/Vienna instead of
+    the UTC year stamped into ``journal_tax_summary`` by the engine.
+    """
+    rows = conn.execute(
+        """
+        SELECT je.occurred_at,
+               je.asset,
+               je.entry_type,
+               t.kind AS transaction_kind,
+               COALESCE(je.capital_gains_type, '') AS capital_gains_type,
+               ABS(je.quantity) AS quantity_msat,
+               COALESCE(je.proceeds, 0) AS proceeds,
+               COALESCE(je.cost_basis, 0) AS cost_basis,
+               COALESCE(je.gain_loss, 0) AS gain_loss
+        FROM journal_entries je
+        LEFT JOIN transactions t ON t.id = je.transaction_id
+        WHERE je.profile_id = ?
+          AND je.entry_type IN ('disposal', 'income')
+          AND COALESCE(t.taxability_override, 1) != 0
+          AND COALESCE(je.at_category, '') != 'neu_swap'
+        """,
+        (profile_id,),
+    ).fetchall()
+    grouped: dict[tuple[int, str, str, str], dict[str, Any]] = {}
+    for row in rows:
+        occurred_at = str(row["occurred_at"] or "")
+        if use_vienna_year:
+            year = tax_year_in_vienna(occurred_at)
+        else:
+            year_str = occurred_at[:4]
+            if not year_str.isdigit():
+                continue
+            year = int(year_str)
+        asset = str(row["asset"] or "")
+        if not asset:
+            continue
+        if row["entry_type"] == "income":
+            transaction_type = _TAX_SUMMARY_INCOME_TRANSACTION_TYPE_BY_KIND.get(
+                str(row["transaction_kind"] or "").strip().lower(),
+                "income",
+            )
+        else:
+            transaction_type = "sell"
+        capital_gains_type = _tax_summary_capital_gains_type(row["capital_gains_type"])
+        key = (year, asset, transaction_type, capital_gains_type)
+        bucket = grouped.setdefault(
+            key,
+            {
+                "year": year,
+                "asset": asset,
+                "transaction_type": transaction_type,
+                "capital_gains_type": capital_gains_type,
+                "quantity": Decimal("0"),
+                "quantity_msat": 0,
+                "proceeds": Decimal("0"),
+                "cost_basis": Decimal("0"),
+                "gain_loss": Decimal("0"),
+            },
+        )
+        quantity_msat = int(row["quantity_msat"] or 0)
+        bucket["quantity"] += msat_to_btc(quantity_msat)
+        bucket["quantity_msat"] += quantity_msat
+        bucket["proceeds"] += dec(row["proceeds"])
+        bucket["cost_basis"] += dec(row["cost_basis"])
+        bucket["gain_loss"] += dec(row["gain_loss"])
+    return [
+        {
+            "year": bucket["year"],
+            "asset": bucket["asset"],
+            "transaction_type": bucket["transaction_type"],
+            "capital_gains_type": bucket["capital_gains_type"],
+            "quantity": float(bucket["quantity"]),
+            "quantity_msat": bucket["quantity_msat"],
+            "proceeds": float(bucket["proceeds"]),
+            "cost_basis": float(bucket["cost_basis"]),
+            "gain_loss": float(bucket["gain_loss"]),
+        }
+        for bucket in grouped.values()
+    ]
+
+
 def report_tax_summary(conn, workspace_ref, profile_ref, hooks: ReportHooks):
     _, profile = _resolve_report_scope(conn, workspace_ref, profile_ref, hooks)
     hooks.require_processed_journals(conn, profile)
-    try:
-        stored_rows = conn.execute(
-            """
-            SELECT year, asset, transaction_type, capital_gains_type, quantity,
-                   proceeds, cost_basis, gain_loss
-            FROM journal_tax_summary
-            WHERE profile_id = ?
-            """,
-            (profile["id"],),
-        ).fetchall()
-        tax_summary_rows = [
-            {
-                "year": int(row["year"]),
-                "asset": row["asset"],
-                "transaction_type": row["transaction_type"],
-                "capital_gains_type": row["capital_gains_type"],
-                "quantity": float(msat_to_btc(row["quantity"])),
-                "quantity_msat": int(row["quantity"]),
-                "proceeds": row["proceeds"],
-                "cost_basis": row["cost_basis"],
-                "gain_loss": row["gain_loss"],
-            }
-            for row in stored_rows
-        ]
-    except sqlite3.OperationalError:
-        tax_summary_rows = None
-    if tax_summary_rows is None or (not tax_summary_rows and _profile_has_journal_entries(conn, profile["id"])):
-        tax_summary_rows = hooks.build_ledger_state(conn, profile)["tax_summary"]
-    taxable_summary_rows = _exclude_non_reportable_tax_summary_rows(
-        conn,
-        profile["id"],
-        tax_summary_rows,
-    )
+    use_vienna_year = str(profile.get("tax_country") or "").lower() == "at"
+    if use_vienna_year:
+        # Rebuild from journal entries so year buckets follow Europe/Vienna
+        # rather than the UTC year stamped into journal_tax_summary.
+        tax_summary_rows = _tax_summary_from_journal_entries(
+            conn, profile["id"], use_vienna_year=True
+        )
+        taxable_summary_rows = tax_summary_rows
+    else:
+        try:
+            stored_rows = conn.execute(
+                """
+                SELECT year, asset, transaction_type, capital_gains_type, quantity,
+                       proceeds, cost_basis, gain_loss
+                FROM journal_tax_summary
+                WHERE profile_id = ?
+                """,
+                (profile["id"],),
+            ).fetchall()
+            tax_summary_rows = [
+                {
+                    "year": int(row["year"]),
+                    "asset": row["asset"],
+                    "transaction_type": row["transaction_type"],
+                    "capital_gains_type": row["capital_gains_type"],
+                    "quantity": float(msat_to_btc(row["quantity"])),
+                    "quantity_msat": int(row["quantity"]),
+                    "proceeds": row["proceeds"],
+                    "cost_basis": row["cost_basis"],
+                    "gain_loss": row["gain_loss"],
+                }
+                for row in stored_rows
+            ]
+        except sqlite3.OperationalError:
+            tax_summary_rows = None
+        if tax_summary_rows is None or (
+            not tax_summary_rows and _profile_has_journal_entries(conn, profile["id"])
+        ):
+            tax_summary_rows = hooks.build_ledger_state(conn, profile)["tax_summary"]
+        taxable_summary_rows = _exclude_non_reportable_tax_summary_rows(
+            conn,
+            profile["id"],
+            tax_summary_rows,
+            use_vienna_year=False,
+        )
     detail_rows = sorted(
         taxable_summary_rows,
         key=lambda row: (
@@ -4277,7 +4382,9 @@ def report_tax_summary(conn, workspace_ref, profile_ref, hooks: ReportHooks):
             row["capital_gains_type"],
         ),
     )
-    swap_fee_rows = _swap_fee_summary_rows(conn, profile["id"])
+    swap_fee_rows = _swap_fee_summary_rows(
+        conn, profile["id"], use_vienna_year=use_vienna_year
+    )
     if not detail_rows and not swap_fee_rows:
         return []
 
@@ -4346,7 +4453,7 @@ def report_tax_summary(conn, workspace_ref, profile_ref, hooks: ReportHooks):
     return [_normalize_tax_summary_row(row) for row in rows]
 
 
-def _swap_fee_summary_rows(conn, profile_id):
+def _swap_fee_summary_rows(conn, profile_id, *, use_vienna_year=False):
     """Aggregate ``transaction_pairs.swap_fee_msat`` per tax year and per
     grand total, returning rows shaped to slot into the tax-summary list.
 
@@ -4363,7 +4470,7 @@ def _swap_fee_summary_rows(conn, profile_id):
                p.swap_fee_msat,
                t_out.asset AS out_asset,
                t_in.asset AS in_asset,
-               substr(t_out.occurred_at, 1, 4) AS year
+               t_out.occurred_at AS occurred_at
         FROM transaction_pairs p
         JOIN transactions t_out ON t_out.id = p.out_transaction_id
         JOIN transactions t_in ON t_in.id = p.in_transaction_id
@@ -4376,7 +4483,7 @@ def _swap_fee_summary_rows(conn, profile_id):
                p.swap_fee_msat,
                t_out.asset AS out_asset,
                p.payout_asset AS in_asset,
-               substr(COALESCE(p.payout_occurred_at, t_out.occurred_at), 1, 4) AS year
+               COALESCE(p.payout_occurred_at, t_out.occurred_at) AS occurred_at
         FROM direct_swap_payouts p
         JOIN transactions t_out ON t_out.id = p.out_transaction_id
         WHERE p.profile_id = ?
@@ -4397,10 +4504,14 @@ def _swap_fee_summary_rows(conn, profile_id):
             same_asset = False
         if same_asset and str(row["kind"] or "").strip().lower() not in SWAP_FEE_PAIR_KINDS:
             continue
-        year_str = row["year"] or ""
-        if not year_str.isdigit():
-            continue
-        year = int(year_str)
+        occurred_at = str(row["occurred_at"] or "")
+        if use_vienna_year:
+            year = tax_year_in_vienna(occurred_at)
+        else:
+            year_str = occurred_at[:4]
+            if not year_str.isdigit():
+                continue
+            year = int(year_str)
         fee = int(row["swap_fee_msat"] or 0)
         per_year[year]["count"] += 1
         per_year[year]["total_msat"] += fee
@@ -4529,7 +4640,7 @@ def _austrian_e1kv_detail_row(row):
     note = row["transaction_note"] or row["description"] or ""
     return {
         "tax_year": tax_year_in_vienna(occurred_at),
-        "date": occurred_at[:10],
+        "date": vienna_local_date(occurred_at),
         "tx_id": row["transaction_external_id"] or row["transaction_id"],
         "transaction_id": row["transaction_id"],
         "wallet": row["wallet"],

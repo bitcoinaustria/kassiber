@@ -12,6 +12,12 @@ class AustrianTaxYearTests(unittest.TestCase):
         # 2024-12-31 23:30 UTC == 2025-01-01 00:30 Vienna.
         self.assertEqual(tax_year_in_vienna("2024-12-31T23:30:00Z"), 2025)
 
+    def test_vienna_local_date_matches_tax_year(self):
+        from kassiber.core.austrian import vienna_local_date
+
+        self.assertEqual(vienna_local_date("2024-12-31T23:30:00Z"), "2025-01-01")
+        self.assertEqual(vienna_local_date("2025-01-01T12:00:00Z"), "2025-01-01")
+
     def test_utc_new_years_day_afternoon_stays_same_year(self):
         self.assertEqual(tax_year_in_vienna("2025-01-01T12:00:00Z"), 2025)
 
