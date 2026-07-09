@@ -208,15 +208,18 @@ export function AssistantDock({
           className={cn(
             // `relative` keeps the hover buffer (absolute -inset-4) scoped to
             // the card (its only reliable containing block across themes).
-            // Surface matches the assistant page's flat language: a plain
-            // background panel with a hairline border and one soft shadow —
-            // no glass/ring/backdrop tricks, identical in light and dark.
-            "pointer-events-auto relative flex border border-border/60 bg-background shadow-[0_16px_50px_rgba(0,0,0,0.16),0_2px_10px_rgba(0,0,0,0.08)] dark:bg-card dark:shadow-[0_16px_48px_rgba(0,0,0,0.45)]",
+            // Flat page language, but floating: `bg-card` lifts it off the
+            // `bg-background` page (they're distinct tokens), a full-strength
+            // hairline separates it from same-tone content cards, and a
+            // layered shadow carries the elevation. No glass/backdrop tricks.
+            "pointer-events-auto relative flex border border-border bg-card shadow-[0_24px_70px_rgba(15,23,42,0.18),0_6px_20px_rgba(15,23,42,0.10)] dark:border-white/12 dark:shadow-[0_24px_70px_rgba(0,0,0,0.6),0_4px_16px_rgba(0,0,0,0.4)]",
             DOCK_POSITION_CLASS[position],
             showHandle
               ? "w-fit flex-row items-center rounded-full p-1"
               : cn(
-                  "w-full flex-col rounded-[28px] p-2",
+                  // rounded-3xl (24px) − p-2 (8px) = the composer's
+                  // rounded-2xl (16px): concentric corners, no uneven lip.
+                  "w-full flex-col rounded-3xl p-2",
                   showThread
                     ? "max-w-5xl gap-2"
                     : compact
