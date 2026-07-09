@@ -265,12 +265,36 @@ kassiber transactions export --wallet satoshi-cold --export-format xlsx --file c
 ```
 
 It writes a single styled Transactions sheet (or CSV) with the same columns as
-the report's Transactions sheet — description, note, counterparty, tags, and the
-linked-file/URL Attachments column (single URLs render as clickable links). In
-the desktop GUI this is the **Export** button on the Transactions screen toolbar
-(Excel / CSV), backed by the daemon kinds `ui.transactions.export_csv` /
+the report's Transactions sheet, so a user can verify each row by hand:
+
+- amount / fee in BTC and msat;
+- `fiat_currency`, `fiat_price` (recorded execution/market price per unit),
+  `fiat_value` (recorded cash leg — exchange imports fold fiat service fees
+  into it), `fmv` (market value of the amount: amount × price when a price is
+  recorded, else the recorded value) and `fiat_fee` (the crypto network fee at
+  that price; a fiat service fee shows as the `fiat_value` − `fmv` difference);
+- `cost_basis` and `gain_loss` — the realized figures from the processed
+  journal, restricted to the same disposal/income rows as the capital-gains
+  report so each row reconciles against the Capital Detail sheet. Blank for
+  rows with no realized figure (e.g. a plain acquisition, or a network-fee
+  basis reduction) and blank export-wide while journals are unprocessed or
+  stale, so outdated figures are never presented as current;
+- `transfer` — for a hop between the user's own wallets, the counterparty
+  wallet label (empty for external sends/receipts). With current journals the
+  labels come from the booked transfer journal entries themselves (covering
+  ownership-derived moves and consolidations too) plus reviewed carrying-value
+  swap pairs whose legs were not quarantined; taxable-policy swap pairs are
+  never labeled. Without processed journals a best-effort detection labels
+  same-txid / payment-hash hops;
+- description, note, counterparty, tags, `references` (attachment URLs), and the
+  linked-file/URL Attachments column (single URLs render as clickable links).
+
+In the desktop GUI this is the **Export** button on the Transactions screen
+toolbar (Excel / CSV), backed by the daemon kinds `ui.transactions.export_csv` /
 `ui.transactions.export_xlsx`. It exports the profile's transactions (wallet
-scope when given), not the screen's transient view filters.
+scope when given), not the screen's transient view filters. Fiat columns reflect
+the currency each transaction was priced in (shown in `fiat_currency`), not a
+forced conversion.
 
 ### Self-verifying XLSX (default)
 
