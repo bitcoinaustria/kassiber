@@ -3845,8 +3845,10 @@ def _capital_gains_available_years(
         "((je.entry_type = 'disposal' AND COALESCE(je.at_category, '') != 'neu_swap') "
         "OR (je.entry_type NOT IN ('fee', 'transfer_fee') AND je.at_kennzahl IS NOT NULL))"
         if primary_only
-        else "(je.entry_type IN ('disposal', 'income') "
-        "OR (je.entry_type NOT IN ('fee', 'transfer_fee') AND je.at_kennzahl IS NOT NULL))"
+        else "((je.entry_type IN ('disposal', 'income') "
+        "AND COALESCE(je.at_category, '') != 'neu_swap') "
+        "OR (je.entry_type NOT IN ('fee', 'transfer_fee', 'disposal') "
+        "AND je.at_kennzahl IS NOT NULL))"
     )
     rows = conn.execute(
         f"""
@@ -4128,7 +4130,7 @@ def build_capital_gains_snapshot(
         available_years = [latest_year, *available_years]
     where = [
         "je.profile_id = ?",
-        "je.entry_type = 'disposal'",
+        "je.entry_type IN ('disposal', 'income')",
         "COALESCE(t.taxability_override, 1) != 0",
         "COALESCE(je.at_category, '') != 'neu_swap'",
     ]
@@ -4145,7 +4147,8 @@ def build_capital_gains_snapshot(
         params.append(str(latest_year))
     rows = conn.execute(
         f"""
-        SELECT je.occurred_at, je.quantity, je.cost_basis, je.proceeds, je.gain_loss
+        SELECT je.occurred_at, je.entry_type, je.quantity, je.cost_basis,
+               je.proceeds, je.gain_loss, je.capital_gains_type
         FROM journal_entries je
         LEFT JOIN transactions t ON t.id = je.transaction_id
         WHERE {' AND '.join(where)}
@@ -4168,8 +4171,16 @@ def build_capital_gains_snapshot(
             "disposed": (row["occurred_at"] or "")[:10],
             "sats": int(round(abs(float(msat_to_btc(row["quantity"] or 0))) * 100_000_000)),
             "costEur": float(row["cost_basis"] or 0),
-            "proceedsEur": float(row["proceeds"] or 0),
-            "type": "ST",
+            "proceedsEur": float(
+                row["proceeds"]
+                if row["entry_type"] != "income"
+                else (row["gain_loss"] or row["proceeds"] or 0)
+            ),
+            "type": (
+                "LT"
+                if str(row["capital_gains_type"] or "").lower() == "long"
+                else "ST"
+            ),
         }
         for row in reversed(rows)
     ]
