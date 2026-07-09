@@ -20,6 +20,14 @@
       "increase": "Oberflächenskalierung erhöhen",
       "value": "{{percent}} %"
     },
+    "assistantDock": {
+      "title": "Assistent-Dock",
+      "description": "Der schwebende Assistent am unteren Rand der App. Mit automatischem Ausblenden parkt er an der Unterkante und fährt hoch, sobald du den Mauszeiger dorthin bewegst.",
+      "autoHide": "Automatisch ausblenden",
+      "positionLeft": "Links",
+      "positionCenter": "Mittig",
+      "positionRight": "Rechts"
+    },
     "language": {
       "title": "Sprache",
       "description": "Wähle die Sprache für die gesamte Oberfläche."

@@ -7,7 +7,17 @@
  * text lands.
  */
 
-import { Wrench } from "lucide-react";
+import * as React from "react";
+import {
+  Check,
+  Copy,
+  MoreHorizontal,
+  Pencil,
+  Split,
+  Square,
+  Volume2,
+  Wrench,
+} from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 
@@ -20,21 +30,48 @@ import {
   ChainOfThoughtContent,
   ChainOfThoughtHeader,
 } from "@/components/ai-elements";
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { copyTextWithPolicy } from "@/lib/clipboard";
 import type { AiChatMessage } from "@/daemon/stream";
 import { cn } from "@/lib/utils";
 
 interface ChatMessageProps {
   message: AiChatMessage;
+  /** When set, assistant answers offer "Branch in new chat" (assistant page). */
+  onBranch?: (messageId: string) => void;
+  /** When set, user messages offer an "Edit" action (assistant page). */
+  onEdit?: (messageId: string) => void;
 }
 
-export function ChatMessage({ message }: ChatMessageProps) {
+export function ChatMessage({ message, onBranch, onEdit }: ChatMessageProps) {
   const { t } = useTranslation("assistant");
   if (message.role === "user") {
     return (
-      <div className="flex w-full justify-end">
+      <div className="group/user flex w-full flex-col items-end gap-1">
         <div className="max-w-[82%] rounded-2xl rounded-tr-sm bg-primary px-3 py-2 text-sm text-primary-foreground shadow-sm sm:max-w-[72%]">
           <p className="whitespace-pre-wrap break-words">{message.content}</p>
         </div>
+        {onEdit && message.content ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-xs"
+            className="rounded-full text-muted-foreground opacity-0 transition-opacity hover:text-foreground focus-visible:opacity-100 group-hover/user:opacity-100"
+            onClick={() => onEdit(message.id)}
+            aria-label={t("message.edit")}
+            title={t("message.edit")}
+          >
+            <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
+          </Button>
+        ) : null}
       </div>
     );
   }
@@ -106,7 +143,158 @@ export function ChatMessage({ message }: ChatMessageProps) {
             {t("message.stoppedByUser")}
           </p>
         ) : null}
+        {hasAnswer && !isStreaming ? (
+          <ChatMessageActions
+            message={message}
+            t={t}
+            onBranch={onBranch ? () => onBranch(message.id) : undefined}
+          />
+        ) : null}
       </div>
+    </div>
+  );
+}
+
+function ChatMessageActions({
+  message,
+  t,
+  onBranch,
+}: {
+  message: AiChatMessage;
+  t: TFunction<"assistant">;
+  onBranch?: () => void;
+}) {
+  const [copied, setCopied] = React.useState(false);
+  const [speaking, setSpeaking] = React.useState(false);
+  const copiedTimerRef = React.useRef<number | null>(null);
+
+  const canSpeak =
+    typeof window !== "undefined" && "speechSynthesis" in window;
+
+  React.useEffect(() => {
+    return () => {
+      if (copiedTimerRef.current !== null) {
+        window.clearTimeout(copiedTimerRef.current);
+      }
+      if (canSpeak) window.speechSynthesis.cancel();
+    };
+  }, [canSpeak]);
+
+  const handleCopy = React.useCallback(() => {
+    void copyTextWithPolicy(message.content);
+    setCopied(true);
+    if (copiedTimerRef.current !== null) {
+      window.clearTimeout(copiedTimerRef.current);
+    }
+    copiedTimerRef.current = window.setTimeout(() => {
+      setCopied(false);
+      copiedTimerRef.current = null;
+    }, 1500);
+  }, [message.content]);
+
+  const toggleReadAloud = React.useCallback(() => {
+    if (!canSpeak) return;
+    if (speaking) {
+      window.speechSynthesis.cancel();
+      setSpeaking(false);
+      return;
+    }
+    const utterance = new SpeechSynthesisUtterance(message.content);
+    utterance.onend = () => setSpeaking(false);
+    utterance.onerror = () => setSpeaking(false);
+    window.speechSynthesis.cancel();
+    window.speechSynthesis.speak(utterance);
+    setSpeaking(true);
+  }, [canSpeak, speaking, message.content]);
+
+  const answeredAt = message.provenance?.generated_at
+    ? shortTime(message.provenance.generated_at)
+    : null;
+
+  return (
+    <div className="mt-2 flex items-center gap-0.5 text-muted-foreground">
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon-xs"
+        className="rounded-full hover:text-foreground"
+        onClick={handleCopy}
+        aria-label={copied ? t("message.copied") : t("message.copy")}
+        title={copied ? t("message.copied") : t("message.copy")}
+      >
+        {copied ? (
+          <Check className="h-3.5 w-3.5" aria-hidden="true" />
+        ) : (
+          <Copy className="h-3.5 w-3.5" aria-hidden="true" />
+        )}
+      </Button>
+      {canSpeak ? (
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-xs"
+          className={cn(
+            "rounded-full hover:text-foreground",
+            speaking && "text-primary",
+          )}
+          onClick={toggleReadAloud}
+          aria-label={speaking ? t("message.stopReading") : t("message.readAloud")}
+          title={speaking ? t("message.stopReading") : t("message.readAloud")}
+        >
+          {speaking ? (
+            <Square className="h-3.5 w-3.5" aria-hidden="true" />
+          ) : (
+            <Volume2 className="h-3.5 w-3.5" aria-hidden="true" />
+          )}
+        </Button>
+      ) : null}
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-xs"
+            className="rounded-full hover:text-foreground"
+            aria-label={t("message.moreOptions")}
+            title={t("message.moreOptions")}
+          >
+            <MoreHorizontal className="h-3.5 w-3.5" aria-hidden="true" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start" className="min-w-44">
+          {answeredAt ? (
+            <>
+              <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">
+                {answeredAt}
+              </DropdownMenuLabel>
+              <DropdownMenuSeparator />
+            </>
+          ) : null}
+          <DropdownMenuItem onSelect={handleCopy}>
+            <Copy className="h-4 w-4" aria-hidden="true" />
+            {t("message.copy")}
+          </DropdownMenuItem>
+          {canSpeak ? (
+            <DropdownMenuItem onSelect={toggleReadAloud}>
+              {speaking ? (
+                <Square className="h-4 w-4" aria-hidden="true" />
+              ) : (
+                <Volume2 className="h-4 w-4" aria-hidden="true" />
+              )}
+              {speaking ? t("message.stopReading") : t("message.readAloud")}
+            </DropdownMenuItem>
+          ) : null}
+          {onBranch ? (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onSelect={onBranch}>
+                <Split className="h-4 w-4" aria-hidden="true" />
+                {t("message.branch")}
+              </DropdownMenuItem>
+            </>
+          ) : null}
+        </DropdownMenuContent>
+      </DropdownMenu>
     </div>
   );
 }

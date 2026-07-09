@@ -11,6 +11,7 @@ import { useSupportedReasoningEffort } from "@/components/ai/useReasoningEffortS
 import { Button } from "@/components/ui/button";
 import { saveChatExport } from "@/lib/chatExport";
 import { cn } from "@/lib/utils";
+import { useUiStore } from "@/store/ui";
 
 export function Assistant() {
   const { t } = useTranslation("assistant");
@@ -28,10 +29,14 @@ export function Assistant() {
     sendConsent,
     abort,
     reset,
+    branchFromMessage,
+    editUserMessage,
     incognito,
     setIncognito,
     sessionId,
   } = useAssistantSession();
+  const assistantDraft = useUiStore((s) => s.assistantDraft);
+  const setAssistantDraft = useUiStore((s) => s.setAssistantDraft);
   const hasMessages = messages.length > 0;
   const queuedPromptCount = queuedPrompts.length;
   const showIncognitoToggle = sessionId === null;
@@ -52,13 +57,24 @@ export function Assistant() {
 
   const composer = (
     <Ai02
+      // No outer card: the composer is a single borderless box in a shade
+      // above the page background, with the suggestion chips sitting below it
+      // (outside the box), mirroring the reference layout.
       className={cn(
-        "max-w-none rounded-[28px] border-border/80 bg-muted/75 shadow-[0_18px_55px_rgba(15,23,42,0.16)] ring-0",
-        hasMessages &&
-          "rounded-[24px] border-border bg-background! shadow-none! ring-0!",
+        "max-w-none border-0 bg-transparent p-0 shadow-none ring-0 backdrop-blur-0",
+        !hasMessages && "gap-4",
       )}
+      composerClassName={cn(
+        "border-0 bg-muted shadow-none backdrop-blur-0 dark:bg-muted",
+        // The empty "agenda" hero gets a larger, squarer box to sit with the
+        // suggestion chips; the docked-thread composer stays compact.
+        hasMessages ? "rounded-2xl" : "min-h-[112px] rounded-3xl",
+      )}
+      alwaysShowSuggestions={!hasMessages}
       selection={selection}
       onSelectionChange={setSelection}
+      value={assistantDraft}
+      onValueChange={setAssistantDraft}
       onSubmit={sendPrompt}
       onAbort={abort}
       isStreaming={isStreaming}
@@ -166,6 +182,8 @@ export function Assistant() {
               <ChatThread
                 messages={messages}
                 className="min-h-0 p-1 sm:p-2"
+                onBranchMessage={branchFromMessage}
+                onEditMessage={editUserMessage}
               />
             ) : (
               <>
@@ -185,7 +203,7 @@ export function Assistant() {
         ) : null}
 
         {hasMessages ? (
-          <div className="sticky bottom-0 z-20 -mx-4 mt-3 shrink-0 border-t border-border/60 bg-background/95 px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur sm:-mx-6 sm:px-6">
+          <div className="sticky bottom-0 z-20 -mx-4 mt-3 shrink-0 bg-gradient-to-t from-background via-background/95 to-transparent px-4 pt-6 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:-mx-6 sm:px-6">
             <div className="mx-auto w-full max-w-4xl">{composer}</div>
           </div>
         ) : null}

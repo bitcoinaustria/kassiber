@@ -1,13 +1,25 @@
-import { Minus, Monitor, Moon, Plus, Sun } from "lucide-react";
+import {
+  AlignCenter,
+  AlignLeft,
+  AlignRight,
+  Minus,
+  Monitor,
+  Moon,
+  Plus,
+  Sun,
+} from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SUPPORTED_LANGUAGES, type LanguageCode } from "@/i18n/config";
 import {
   DEFAULT_APP_SCALE,
   MAX_APP_SCALE,
   MIN_APP_SCALE,
+  useUiStore,
+  type AssistantDockPosition,
   type ThemePreference,
 } from "@/store/ui";
 
@@ -39,6 +51,15 @@ export function AppearanceSettingsPanel({
   setLang: (lang: LanguageCode) => void;
 }) {
   const { t } = useTranslation(["settings", "common"]);
+  const aiFeaturesEnabled = useUiStore((s) => s.aiFeaturesEnabled);
+  const assistantDockAutoHide = useUiStore((s) => s.assistantDockAutoHide);
+  const setAssistantDockAutoHide = useUiStore(
+    (s) => s.setAssistantDockAutoHide,
+  );
+  const assistantDockPosition = useUiStore((s) => s.assistantDockPosition);
+  const setAssistantDockPosition = useUiStore(
+    (s) => s.setAssistantDockPosition,
+  );
   // The number the user actually perceives is the effective root scale
   // (automatic screen-fit × manual nudge), not the manual nudge alone.
   const scalePercent = Math.round(appAutoScale * appScale * 100);
@@ -144,6 +165,50 @@ export function AppearanceSettingsPanel({
           </Button>
         </div>
       </section>
+
+      {aiFeaturesEnabled ? (
+        <section className="space-y-2">
+          <div>
+            <h3 className="text-sm font-semibold">
+              {t("appearance.assistantDock.title")}
+            </h3>
+            <p className="text-sm text-muted-foreground">
+              {t("appearance.assistantDock.description")}
+            </p>
+          </div>
+          <label className="flex max-w-md items-center justify-between gap-3 rounded-md border bg-background px-3 py-2">
+            <span className="text-sm">
+              {t("appearance.assistantDock.autoHide")}
+            </span>
+            <Switch
+              checked={assistantDockAutoHide}
+              onCheckedChange={setAssistantDockAutoHide}
+              aria-label={t("appearance.assistantDock.autoHide")}
+            />
+          </label>
+          <Tabs
+            value={assistantDockPosition}
+            onValueChange={(value) =>
+              setAssistantDockPosition(value as AssistantDockPosition)
+            }
+          >
+            <TabsList>
+              <TabsTrigger value="left">
+                <AlignLeft className="size-4" aria-hidden="true" />
+                {t("appearance.assistantDock.positionLeft")}
+              </TabsTrigger>
+              <TabsTrigger value="center">
+                <AlignCenter className="size-4" aria-hidden="true" />
+                {t("appearance.assistantDock.positionCenter")}
+              </TabsTrigger>
+              <TabsTrigger value="right">
+                <AlignRight className="size-4" aria-hidden="true" />
+                {t("appearance.assistantDock.positionRight")}
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
+        </section>
+      ) : null}
 
       <section className="space-y-2">
         <div>

@@ -19,13 +19,17 @@
     "expandConversation": "Erhaltene Unterhaltung ausklappen",
     "conversationHidden": "Unterhaltung verborgen",
     "preservedForContext_one": "{{count}} Nachricht für den Kontext erhalten",
-    "preservedForContext_other": "{{count}} Nachrichten für den Kontext erhalten"
+    "preservedForContext_other": "{{count}} Nachrichten für den Kontext erhalten",
+    "handleHint": "Kassiber fragen",
+    "minimize": "Assistent minimieren",
+    "restore": "Unterhaltung öffnen"
   },
   "composer": {
     "placeholder": "Frag mich etwas",
     "stopGenerating": "Generierung stoppen",
     "sendMessage": "Nachricht senden",
     "queueMessage": "Nachricht in Warteschlange stellen",
+    "attach": "Dateien anhängen",
     "modelContext": "Modell-Kontext",
     "thinking": "Nachdenken",
     "effort": {
@@ -50,14 +54,22 @@
     }
   },
   "thread": {
-    "scrollToLatest": "Zur neuesten Nachricht scrollen"
+    "scrollToLatest": "Zur neuesten Nachricht scrollen",
+    "scrollToTop": "Nach oben scrollen"
   },
   "message": {
     "toolUsage": "Tool-Nutzung",
     "thinking": "Wird nachgedacht",
     "generating": "Wird generiert",
     "chatFailed": "Chat fehlgeschlagen",
-    "stoppedByUser": "Von dir gestoppt."
+    "stoppedByUser": "Von dir gestoppt.",
+    "copy": "Kopieren",
+    "copied": "Kopiert",
+    "readAloud": "Vorlesen",
+    "stopReading": "Vorlesen stoppen",
+    "moreOptions": "Weitere Optionen",
+    "branch": "In neuem Chat verzweigen",
+    "edit": "Nachricht bearbeiten"
   },
   "facts": {
     "asset": "Asset",

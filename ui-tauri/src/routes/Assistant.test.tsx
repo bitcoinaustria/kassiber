@@ -53,6 +53,8 @@ function makeAssistantSession(
     abort: vi.fn(),
     reset: vi.fn(),
     resumeSession: vi.fn(),
+    branchFromMessage: vi.fn(),
+    editUserMessage: vi.fn(),
     forgetSession: vi.fn(),
     ...overrides,
   };

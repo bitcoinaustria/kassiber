@@ -10,7 +10,7 @@
 
 import * as React from "react";
 import { useTranslation } from "react-i18next";
-import { ArrowDown } from "lucide-react";
+import { ArrowDown, ArrowUp } from "lucide-react";
 
 import { ChatMessage } from "./ChatMessage";
 import { Conversation, ConversationContent } from "@/components/ai-elements";
@@ -21,6 +21,16 @@ interface ChatThreadProps {
   messages: AiChatMessage[];
   className?: string;
   scrollable?: boolean;
+  /**
+   * When provided, assistant messages expose a "Branch in new chat" action.
+   * Only wired on the full assistant page — the shell dock omits it.
+   */
+  onBranchMessage?: (messageId: string) => void;
+  /**
+   * When provided, user messages expose an "Edit" action that rewinds to that
+   * prompt. Only wired on the full assistant page.
+   */
+  onEditMessage?: (messageId: string) => void;
 }
 
 const STICKY_THRESHOLD_PX = 32;
@@ -29,12 +39,15 @@ export function ChatThread({
   messages,
   className,
   scrollable = true,
+  onBranchMessage,
+  onEditMessage,
 }: ChatThreadProps) {
   const { t } = useTranslation("assistant");
   const containerRef = React.useRef<HTMLDivElement>(null);
   const messageCountRef = React.useRef(messages.length);
   const stickyRef = React.useRef(true);
   const [isAtBottom, setIsAtBottom] = React.useState(true);
+  const [isAtTop, setIsAtTop] = React.useState(true);
 
   const scrollToBottom = React.useCallback(
     (behavior: ScrollBehavior = "auto") => {
@@ -47,6 +60,17 @@ export function ChatThread({
     [scrollable],
   );
 
+  const scrollToTop = React.useCallback(
+    (behavior: ScrollBehavior = "smooth") => {
+      const node = containerRef.current;
+      if (!node || !scrollable) return;
+      // Leaving the bottom: stop auto-sticking so streaming doesn't yank back.
+      stickyRef.current = false;
+      node.scrollTo({ top: 0, behavior });
+    },
+    [scrollable],
+  );
+
   const handleScroll = React.useCallback(() => {
     const node = containerRef.current;
     if (!node) return;
@@ -54,6 +78,7 @@ export function ChatThread({
     const atBottom = distance <= STICKY_THRESHOLD_PX;
     stickyRef.current = atBottom;
     setIsAtBottom(atBottom);
+    setIsAtTop(node.scrollTop <= STICKY_THRESHOLD_PX);
   }, []);
 
   React.useLayoutEffect(() => {
@@ -79,9 +104,27 @@ export function ChatThread({
         scrollable={scrollable}
       >
         {messages.map((message) => (
-          <ChatMessage key={message.id} message={message} />
+          <ChatMessage
+            key={message.id}
+            message={message}
+            onBranch={onBranchMessage}
+            onEdit={onEditMessage}
+          />
         ))}
       </ConversationContent>
+      {scrollable && !isAtTop ? (
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="absolute top-3 left-1/2 z-10 size-9 -translate-x-1/2 rounded-full border border-border/70 bg-background/90 text-foreground shadow-[0_12px_30px_rgba(15,23,42,0.18)] backdrop-blur hover:bg-muted dark:bg-zinc-950/80"
+          onClick={() => scrollToTop("smooth")}
+          aria-label={t("thread.scrollToTop")}
+          title={t("thread.scrollToTop")}
+        >
+          <ArrowUp className="h-4 w-4" aria-hidden="true" />
+        </Button>
+      ) : null}
       {scrollable && !isAtBottom ? (
         <Button
           type="button"

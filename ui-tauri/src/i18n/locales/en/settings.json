@@ -20,6 +20,14 @@
       "increase": "Increase interface scale",
       "value": "{{percent}}%"
     },
+    "assistantDock": {
+      "title": "Assistant dock",
+      "description": "The floating assistant at the bottom of the app. With auto-hide it parks at the bottom edge and slides up when you move the pointer there.",
+      "autoHide": "Hide automatically",
+      "positionLeft": "Left",
+      "positionCenter": "Center",
+      "positionRight": "Right"
+    },
     "language": {
       "title": "Language",
       "description": "Choose the language used across the interface."

@@ -599,6 +599,9 @@ export function AppShell() {
   const addNotification = useUiStore((s) => s.addNotification);
   const appNotifications = useUiStore((s) => s.notifications);
   const aiFeaturesEnabled = useUiStore((s) => s.aiFeaturesEnabled);
+  const assistantDockAutoHide = useUiStore((s) => s.assistantDockAutoHide);
+  const assistantDockPosition = useUiStore((s) => s.assistantDockPosition);
+  const assistantDockMinimized = useUiStore((s) => s.assistantDockMinimized);
   const developerToolsEnabled = useUiStore((s) => s.developerToolsEnabled);
   const bumpDaemonSession = useUiStore((s) => s.bumpDaemonSession);
   const activeMaintenanceProgress = useUiStore(
@@ -1684,11 +1687,15 @@ export function AppShell() {
                           appMainClassName,
                           // Reserve dock space only while the dock is
                           // expanded; the collapsed pill needs a sliver.
+                          // With auto-hide the dock overlays content
+                          // macOS-Dock-style, so only the sliver is reserved.
                           isAssistantRoute || assistantDockSuppressed
                             ? "pb-0"
-                            : assistantCollapsed
-                              ? "pb-16"
-                              : "pb-[240px]",
+                            : assistantDockAutoHide || assistantDockMinimized
+                              ? "pb-6"
+                              : assistantCollapsed
+                                ? "pb-16"
+                                : "pb-[240px]",
                         )}
                       >
                         <Outlet />
@@ -1696,6 +1703,8 @@ export function AppShell() {
                       {isAssistantRoute || assistantDockSuppressed ? null : (
                         <AssistantDock
                           collapsed={assistantCollapsed}
+                          autoHide={assistantDockAutoHide}
+                          position={assistantDockPosition}
                           className="absolute inset-x-0 bottom-0 z-20"
                         />
                       )}

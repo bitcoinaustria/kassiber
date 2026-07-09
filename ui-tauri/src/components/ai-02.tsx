@@ -22,6 +22,7 @@ import {
   Cloud,
   Cpu,
   FileSpreadsheet,
+  Plus,
   RefreshCw,
   ShieldCheck,
   Square,
@@ -39,11 +40,18 @@ interface PromptOption {
 
 interface Ai02Props {
   className?: string;
+  /** Extra classes for the inner composer surface (border/fill/shadow). */
+  composerClassName?: string;
   compact?: boolean;
+  /** Keep the suggestion chips visible even while the composer has text. */
+  alwaysShowSuggestions?: boolean;
   placeholder?: string;
   prompts?: PromptOption[];
   selection: { provider: string; model: string } | null;
   onSelectionChange: (next: { provider: string; model: string } | null) => void;
+  /** Controlled composer text; pair with onValueChange to persist drafts. */
+  value?: string;
+  onValueChange?: (value: string) => void;
   onSubmit: (prompt: string) => void;
   onAbort?: () => void;
   isStreaming?: boolean;
@@ -64,11 +72,15 @@ const TEXTAREA_MAX_HEIGHT_PX = 176;
 
 export default function Ai02({
   className,
+  composerClassName,
   compact = false,
+  alwaysShowSuggestions = false,
   placeholder,
   prompts,
   selection,
   onSelectionChange,
+  value,
+  onValueChange,
   onSubmit,
   onAbort,
   isStreaming = false,
@@ -79,7 +91,12 @@ export default function Ai02({
   modelPickerEnabled = true,
 }: Ai02Props) {
   const { t } = useTranslation("assistant");
-  const [inputValue, setInputValue] = useState("");
+  const [internalValue, setInternalValue] = useState("");
+  const inputValue = value ?? internalValue;
+  const setInputValue = (next: string) => {
+    if (value === undefined) setInternalValue(next);
+    onValueChange?.(next);
+  };
   const [activeProviderKind, setActiveProviderKind] =
     useState<AiProviderKind | null>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -108,7 +125,9 @@ export default function Ai02({
   const canSend = canSubmit && !isStreaming;
   const canQueue = canSubmit && isStreaming;
   const showSuggestions =
-    !trimmedInput && !isStreaming && resolvedPrompts.length > 0;
+    (alwaysShowSuggestions || !trimmedInput) &&
+    !isStreaming &&
+    resolvedPrompts.length > 0;
   const ModelIcon =
     activeProviderKind === "remote"
       ? Cloud
@@ -157,6 +176,7 @@ export default function Ai02({
           compact
             ? "min-h-[52px] rounded-[18px] group-focus-within/assistant:min-h-[72px] group-focus-within/assistant:rounded-2xl"
             : "min-h-[72px] rounded-2xl",
+          composerClassName,
         )}
       >
         <div className="relative min-h-0 flex-1">
@@ -222,6 +242,17 @@ export default function Ai02({
               : "min-h-[42px] pb-2",
           )}
         >
+          {/* Attachment entry point. Mock for now — no upload wired yet. */}
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            className="size-8 shrink-0 rounded-full text-muted-foreground hover:text-foreground"
+            aria-label={t("composer.attach")}
+            title={t("composer.attach")}
+          >
+            <Plus className="h-4 w-4" />
+          </Button>
           <Context className="min-w-0 flex-1">
             <ContextItem
               icon={<ModelIcon className="h-4 w-4 text-muted-foreground" />}

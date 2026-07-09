@@ -49,6 +49,7 @@ export function AssistantSessionProvider({
     forgetSession,
   } = useAiChatStream();
   const dataMode = useUiStore((state) => state.dataMode);
+  const setAssistantDraft = useUiStore((state) => state.setAssistantDraft);
   const [queuedPrompts, setQueuedPrompts] = React.useState<string[]>([]);
   const [incognito, setIncognito] = React.useState(false);
 
@@ -145,6 +146,62 @@ export function AssistantSessionProvider({
     [dataMode, isStreaming, loadConversation],
   );
 
+  const branchFromMessage = React.useCallback(
+    (messageId: string) => {
+      if (isStreaming) return;
+      const index = messages.findIndex((message) => message.id === messageId);
+      if (index < 0) return;
+      // Seed a fresh, unsaved conversation with history up to and including the
+      // selected message. A null sessionId means the next turn spins up a new
+      // persisted session, so the original chat stays intact in History.
+      const entries: StoredChatEntry[] = messages
+        .slice(0, index + 1)
+        .filter(
+          (message): message is (typeof messages)[number] & {
+            role: "user" | "assistant";
+          } =>
+            (message.role === "user" || message.role === "assistant") &&
+            typeof message.content === "string" &&
+            message.content.length > 0,
+        )
+        .map((message) => ({ role: message.role, content: message.content }));
+      if (entries.length === 0) return;
+      setQueuedPrompts([]);
+      setIncognito(false);
+      loadConversation(entries, null);
+    },
+    [isStreaming, messages, loadConversation],
+  );
+
+  const editUserMessage = React.useCallback(
+    (messageId: string) => {
+      if (isStreaming) return;
+      const index = messages.findIndex((message) => message.id === messageId);
+      if (index < 0) return;
+      const target = messages[index];
+      if (target.role !== "user") return;
+      // Rewind to just before the edited prompt and drop its text back into the
+      // composer. Resending starts a fresh, unsaved turn (null session), so the
+      // original conversation stays intact in History.
+      const entries: StoredChatEntry[] = messages
+        .slice(0, index)
+        .filter(
+          (message): message is (typeof messages)[number] & {
+            role: "user" | "assistant";
+          } =>
+            (message.role === "user" || message.role === "assistant") &&
+            typeof message.content === "string" &&
+            message.content.length > 0,
+        )
+        .map((message) => ({ role: message.role, content: message.content }));
+      setQueuedPrompts([]);
+      setIncognito(false);
+      loadConversation(entries, null);
+      setAssistantDraft(target.content);
+    },
+    [isStreaming, messages, loadConversation, setAssistantDraft],
+  );
+
   const value = React.useMemo<AssistantSessionContextValue>(
     () => ({
       messages,
@@ -165,10 +222,14 @@ export function AssistantSessionProvider({
       abort,
       reset: clearChat,
       resumeSession,
+      branchFromMessage,
+      editUserMessage,
       forgetSession,
     }),
     [
       abort,
+      branchFromMessage,
+      editUserMessage,
       clearChat,
       error,
       forgetSession,
