@@ -10,7 +10,9 @@
     "incognitoTitle": "Incognito: Diese Unterhaltung wird nicht gespeichert",
     "exportChat": "Exportieren",
     "clearChat": "Chat leeren",
-    "moreActions": "Weitere Aktionen"
+    "moreActions": "Weitere Aktionen",
+    "incognitoActiveTitle": "Incognito ist aktiv - diese Unterhaltung wird nicht gespeichert. Klicken zum Ausschalten.",
+    "recentChats": "Letzte Unterhaltungen"
   },
   "dock": {
     "label": "Kassiber-Assistent",

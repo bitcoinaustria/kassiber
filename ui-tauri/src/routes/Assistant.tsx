@@ -6,6 +6,7 @@ import Ai02 from "@/components/ai-02";
 import { useAssistantSession } from "@/components/ai/assistantSession";
 import { ChatHistoryPanel } from "@/components/ai/ChatHistoryPanel";
 import { ChatThread } from "@/components/ai/ChatThread";
+import { RecentChats } from "@/components/ai/RecentChats";
 import { ToolConsentDialog } from "@/components/ai/ToolConsentDialog";
 import { useSupportedReasoningEffort } from "@/components/ai/useReasoningEffortSupport";
 import { Button } from "@/components/ui/button";
@@ -103,21 +104,34 @@ export function Assistant() {
     >
       {/* Full-width toolbar: sibling to the centered conversation column, not capped by max-w-6xl. */}
       <div className="flex w-full shrink-0 items-center justify-end gap-2 px-4 pb-3 pt-3 sm:px-6 sm:pt-4">
-        {hasMessages ? (
-          isStreaming ? (
-            <span className="mr-auto min-w-0 truncate rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
-              {queuedPromptCount > 0
-                ? t("page.generatingQueued", { count: queuedPromptCount })
-                : t("page.generating")}
-            </span>
-          ) : (
-            <span className="mr-auto min-w-0 truncate text-xs text-muted-foreground">
-              {t("page.messageCount", { count: messages.length })}
-            </span>
-          )
-        ) : (
-          <span className="mr-auto" />
-        )}
+        <span className="mr-auto flex min-w-0 items-center gap-2">
+          {incognito ? (
+            // Signal only in the notable state: a standing marker while
+            // nothing is being stored, gone the moment Incognito is off.
+            <button
+              type="button"
+              className="flex shrink-0 items-center gap-1.5 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary outline-none transition-colors hover:bg-primary/15 focus-visible:ring-2 focus-visible:ring-ring"
+              onClick={() => setIncognito(false)}
+              title={t("page.incognitoActiveTitle")}
+            >
+              <EyeOff className="size-3.5" aria-hidden="true" />
+              {t("page.incognito")}
+            </button>
+          ) : null}
+          {hasMessages ? (
+            isStreaming ? (
+              <span className="min-w-0 truncate rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
+                {queuedPromptCount > 0
+                  ? t("page.generatingQueued", { count: queuedPromptCount })
+                  : t("page.generating")}
+              </span>
+            ) : (
+              <span className="min-w-0 truncate text-xs text-muted-foreground">
+                {t("page.messageCount", { count: messages.length })}
+              </span>
+            )
+          ) : null}
+        </span>
         {hasMessages ? (
           <Button
             type="button"
@@ -202,6 +216,7 @@ export function Assistant() {
                 {t("page.heading")}
               </h2>
               <div className="w-full">{composer}</div>
+              <RecentChats />
             </div>
           )}
         </div>

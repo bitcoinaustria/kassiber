@@ -17,6 +17,10 @@ vi.mock("@/components/ai/ChatThread", () => ({
   ChatThread: () => <div>Conversation</div>,
 }));
 
+vi.mock("@/components/ai/RecentChats", () => ({
+  RecentChats: () => null,
+}));
+
 vi.mock("@/components/ai/ToolConsentDialog", () => ({
   ToolConsentDialog: () => null,
 }));

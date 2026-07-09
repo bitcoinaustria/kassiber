@@ -10,7 +10,9 @@
     "incognitoTitle": "Incognito: do not store this conversation",
     "exportChat": "Export",
     "clearChat": "Clear chat",
-    "moreActions": "More actions"
+    "moreActions": "More actions",
+    "incognitoActiveTitle": "Incognito is on - this conversation is not stored. Click to turn off.",
+    "recentChats": "Recent chats"
   },
   "dock": {
     "label": "Kassiber assistant",
