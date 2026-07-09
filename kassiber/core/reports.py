@@ -2708,6 +2708,8 @@ def _self_transfer_legs_by_transaction(conn, profile, journals_current=False):
             """
             SELECT je.transaction_id AS tx_id, je.entry_type, je.occurred_at,
                    COALESCE(je.description, '') AS description,
+                   je.asset AS asset,
+                   ABS(je.quantity) AS quantity_msat,
                    w.label AS wallet_label
             FROM journal_entries je
             JOIN wallets w ON w.id = je.wallet_id
@@ -2716,20 +2718,27 @@ def _self_transfer_legs_by_transaction(conn, profile, journals_current=False):
             """,
             (profile["id"],),
         ).fetchall()
-        audit_groups: dict[tuple[str, str], list] = {}
+        # Pair one out to one in by the same audit key the engine writes
+        # (occurred_at + description) plus asset/amount. Grouping only by
+        # (occurred_at, description) would cross-contaminate two transfers that
+        # share a blank/identical description at the same timestamp.
+        audit_groups: dict[tuple[str, str, str, int], list] = {}
         for row in entry_rows:
-            audit_groups.setdefault((row["occurred_at"], row["description"]), []).append(row)
+            key = (
+                row["occurred_at"],
+                row["description"],
+                str(row["asset"] or ""),
+                int(row["quantity_msat"] or 0),
+            )
+            audit_groups.setdefault(key, []).append(row)
         for group in audit_groups.values():
             outs = [row for row in group if row["entry_type"] == "transfer_out"]
             ins = [row for row in group if row["entry_type"] == "transfer_in"]
-            if not outs or not ins:
-                continue
-            out_wallets = {row["wallet_label"] for row in outs}
-            in_wallets = {row["wallet_label"] for row in ins}
-            for row in outs:
-                _add(row["tx_id"], in_wallets)
-            for row in ins:
-                _add(row["tx_id"], out_wallets)
+            # Pair in order within the amount-matched group so N:N consolidations
+            # still label each leg without broadcasting every in-wallet onto every out.
+            for out_row, in_row in zip(outs, ins):
+                _add(out_row["tx_id"], {in_row["wallet_label"]})
+                _add(in_row["tx_id"], {out_row["wallet_label"]})
         quarantined_ids = {
             row["transaction_id"]
             for row in conn.execute(
