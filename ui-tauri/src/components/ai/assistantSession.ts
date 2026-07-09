@@ -48,6 +48,19 @@ export interface AssistantSessionContextValue {
   reset: () => void;
   /** Load a persisted session into the conversation. */
   resumeSession: (sessionId: string) => Promise<void>;
+  /**
+   * Fork a fresh, unsaved conversation seeded with history up to and including
+   * the given message. The original chat is left intact in History.
+   */
+  branchFromMessage: (messageId: string) => void;
+  /**
+   * Edit a user message in place. When `nextContent` is provided (inline
+   * editor confirm), the conversation is rewound to just before that prompt
+   * and regenerated from the edited text in a fresh, unsaved turn. When it is
+   * omitted, the prompt text is dropped back into the composer for a manual
+   * resend (legacy rollback path).
+   */
+  editUserMessage: (messageId: string, nextContent?: string) => void;
   /** Drop the session binding (all sessions, or only when it matches id). */
   forgetSession: (id?: string) => void;
 }

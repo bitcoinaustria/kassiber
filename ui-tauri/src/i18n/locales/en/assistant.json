@@ -8,8 +8,9 @@
     "messageCount_other": "{{count}} messages",
     "incognito": "Incognito",
     "incognitoTitle": "Incognito: do not store this conversation",
-    "exportChat": "Export chat",
-    "clearChat": "Clear chat"
+    "exportChat": "Export",
+    "clearChat": "Clear chat",
+    "moreActions": "More actions"
   },
   "dock": {
     "label": "Kassiber assistant",
@@ -19,13 +20,17 @@
     "expandConversation": "Expand preserved conversation",
     "conversationHidden": "Conversation hidden",
     "preservedForContext_one": "{{count}} message preserved for context",
-    "preservedForContext_other": "{{count}} messages preserved for context"
+    "preservedForContext_other": "{{count}} messages preserved for context",
+    "handleHint": "Ask Kassiber",
+    "minimize": "Minimize assistant",
+    "restore": "Open conversation"
   },
   "composer": {
     "placeholder": "Ask anything",
     "stopGenerating": "Stop generating",
     "sendMessage": "Send message",
     "queueMessage": "Queue message",
+    "attach": "Attach files",
     "modelContext": "Model context",
     "thinking": "Thinking",
     "effort": {
@@ -50,14 +55,26 @@
     }
   },
   "thread": {
-    "scrollToLatest": "Scroll to latest message"
+    "scrollToLatest": "Scroll to latest message",
+    "scrollToTop": "Scroll to top"
   },
   "message": {
     "toolUsage": "Tool usage",
     "thinking": "Thinking",
+    "thoughts": "Thoughts",
+    "thoughtFor": "Thought for {{duration}}",
     "generating": "Generating",
     "chatFailed": "Chat failed",
-    "stoppedByUser": "Stopped by user."
+    "stoppedByUser": "Stopped by user.",
+    "copy": "Copy",
+    "copied": "Copied",
+    "readAloud": "Read aloud",
+    "stopReading": "Stop reading",
+    "moreOptions": "More options",
+    "branch": "Branch in new chat",
+    "edit": "Edit message",
+    "confirmEdit": "Confirm edit",
+    "cancelEdit": "Cancel edit"
   },
   "facts": {
     "asset": "Asset",

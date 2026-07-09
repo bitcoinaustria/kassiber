@@ -1,35 +1,19 @@
 import { Button } from "@/components/ui/button";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  Context,
-  ContextItem,
-  Suggestion,
-  Suggestions,
-} from "@/components/ai-elements";
+import { Suggestion, Suggestions } from "@/components/ai-elements";
 import { ProviderModelPicker } from "@/components/ai/ProviderModelPicker";
 import { cn } from "@/lib/utils";
 import {
   AlertTriangle,
   ArrowUp,
-  Brain,
-  Cloud,
-  Cpu,
   FileSpreadsheet,
+  Plus,
   RefreshCw,
-  ShieldCheck,
   Square,
   type LucideIcon,
 } from "lucide-react";
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import type { AiProviderKind } from "@/lib/aiCapabilities";
 
 interface PromptOption {
   icon: LucideIcon;
@@ -39,11 +23,18 @@ interface PromptOption {
 
 interface Ai02Props {
   className?: string;
+  /** Extra classes for the inner composer surface (border/fill/shadow). */
+  composerClassName?: string;
   compact?: boolean;
+  /** Keep the suggestion chips visible even while the composer has text. */
+  alwaysShowSuggestions?: boolean;
   placeholder?: string;
   prompts?: PromptOption[];
   selection: { provider: string; model: string } | null;
   onSelectionChange: (next: { provider: string; model: string } | null) => void;
+  /** Controlled composer text; pair with onValueChange to persist drafts. */
+  value?: string;
+  onValueChange?: (value: string) => void;
   onSubmit: (prompt: string) => void;
   onAbort?: () => void;
   isStreaming?: boolean;
@@ -64,11 +55,15 @@ const TEXTAREA_MAX_HEIGHT_PX = 176;
 
 export default function Ai02({
   className,
+  composerClassName,
   compact = false,
+  alwaysShowSuggestions = false,
   placeholder,
   prompts,
   selection,
   onSelectionChange,
+  value,
+  onValueChange,
   onSubmit,
   onAbort,
   isStreaming = false,
@@ -79,9 +74,12 @@ export default function Ai02({
   modelPickerEnabled = true,
 }: Ai02Props) {
   const { t } = useTranslation("assistant");
-  const [inputValue, setInputValue] = useState("");
-  const [activeProviderKind, setActiveProviderKind] =
-    useState<AiProviderKind | null>(null);
+  const [internalValue, setInternalValue] = useState("");
+  const inputValue = value ?? internalValue;
+  const setInputValue = (next: string) => {
+    if (value === undefined) setInternalValue(next);
+    onValueChange?.(next);
+  };
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   const resolvedPlaceholder = placeholder ?? t("composer.placeholder");
@@ -108,13 +106,9 @@ export default function Ai02({
   const canSend = canSubmit && !isStreaming;
   const canQueue = canSubmit && isStreaming;
   const showSuggestions =
-    !trimmedInput && !isStreaming && resolvedPrompts.length > 0;
-  const ModelIcon =
-    activeProviderKind === "remote"
-      ? Cloud
-      : activeProviderKind === "tee"
-        ? ShieldCheck
-        : Cpu;
+    (alwaysShowSuggestions || !trimmedInput) &&
+    !isStreaming &&
+    resolvedPrompts.length > 0;
 
   useLayoutEffect(() => {
     const input = inputRef.current;
@@ -157,6 +151,7 @@ export default function Ai02({
           compact
             ? "min-h-[52px] rounded-[18px] group-focus-within/assistant:min-h-[72px] group-focus-within/assistant:rounded-2xl"
             : "min-h-[72px] rounded-2xl",
+          composerClassName,
         )}
       >
         <div className="relative min-h-0 flex-1">
@@ -222,57 +217,30 @@ export default function Ai02({
               : "min-h-[42px] pb-2",
           )}
         >
-          <Context className="min-w-0 flex-1">
-            <ContextItem
-              icon={<ModelIcon className="h-4 w-4 text-muted-foreground" />}
-              label={t("composer.modelContext")}
-              className="max-w-full"
-            >
-              <ProviderModelPicker
-                value={selection}
-                onChange={onSelectionChange}
-                enabled={modelPickerEnabled}
-                onActiveProviderKindChange={setActiveProviderKind}
-              />
-            </ContextItem>
-
-            {showThinkingEffort ? (
-              <ContextItem
-                icon={<Brain className="h-3.5 w-3.5" aria-hidden="true" />}
-                label={t("composer.thinking")}
-                className="shrink-0"
-              >
-                <Select
-                  value={thinkingEffort}
-                  onValueChange={(value) =>
-                    onThinkingEffortChange?.(
-                      value as "auto" | "low" | "medium" | "high",
-                    )
-                  }
-                  disabled={isStreaming || !onThinkingEffortChange}
-                >
-                  <SelectTrigger className="h-auto! min-h-0 w-14 border-none bg-transparent! p-0 text-xs leading-none text-muted-foreground shadow-none hover:text-foreground focus:ring-0 focus-visible:border-transparent focus-visible:ring-0 [&_svg]:size-3">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent align="end">
-                    <SelectItem value="auto">
-                      {t("composer.effort.auto")}
-                    </SelectItem>
-                    <SelectItem value="low">
-                      {t("composer.effort.low")}
-                    </SelectItem>
-                    <SelectItem value="medium">
-                      {t("composer.effort.medium")}
-                    </SelectItem>
-                    <SelectItem value="high">
-                      {t("composer.effort.high")}
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-              </ContextItem>
-            ) : null}
-
-          </Context>
+          {/* Attachment entry point. Mock for now — no upload wired yet. */}
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            className="size-8 shrink-0 rounded-full text-muted-foreground hover:text-foreground"
+            aria-label={t("composer.attach")}
+            title={t("composer.attach")}
+          >
+            <Plus className="h-4 w-4" />
+          </Button>
+          {/* Combined model + reasoning-effort control (one dropdown). */}
+          <div className="flex min-w-0 flex-1 items-center">
+            <ProviderModelPicker
+              value={selection}
+              onChange={onSelectionChange}
+              enabled={modelPickerEnabled}
+              thinkingEffort={thinkingEffort}
+              onThinkingEffortChange={
+                isStreaming ? undefined : onThinkingEffortChange
+              }
+              showThinkingEffort={showThinkingEffort}
+            />
+          </div>
 
           <div className="ml-auto flex items-center gap-2">
             {isStreaming && onAbort ? (

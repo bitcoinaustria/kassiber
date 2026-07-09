@@ -6,11 +6,13 @@
  */
 
 import * as React from "react";
+import { Sparkles } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import {
-  Reasoning,
-  ReasoningContent,
-  ReasoningTrigger,
+  ChainOfThought,
+  ChainOfThoughtContent,
+  ChainOfThoughtHeader,
 } from "@/components/ai-elements";
 
 import { ChatMarkdown } from "./ChatMarkdown";
@@ -33,15 +35,38 @@ const reasoningMarkdownClassName = [
   "[&_p]:my-2 [&_pre]:my-2 [&_table]:text-xs",
 ].join(" ");
 
+function ThinkingHeaderLabel({ label }: { label: string }) {
+  return (
+    <span className="inline-flex min-w-0 items-center">
+      <span className="thinking-label-active truncate">{label}</span>
+      <span className="inline-flex w-[1.25em] shrink-0" aria-hidden="true">
+        <span className="thinking-dot">.</span>
+        <span className="thinking-dot">.</span>
+        <span className="thinking-dot">.</span>
+      </span>
+    </span>
+  );
+}
+
 export function ChatReasoning({
   thinking,
   isStreaming,
   hasAnswer,
   defaultOpen = false,
 }: ChatReasoningProps) {
+  const { t } = useTranslation("assistant");
   const [open, setOpen] = React.useState(defaultOpen);
   const [elapsedSeconds, setElapsedSeconds] = React.useState(0);
   const startedAt = React.useRef(Date.now());
+  const wasStreamingRef = React.useRef(false);
+
+  const streaming = isStreaming && !hasAnswer;
+
+  React.useEffect(() => {
+    if (streaming) {
+      wasStreamingRef.current = true;
+    }
+  }, [streaming]);
 
   React.useEffect(() => {
     if (!isStreaming || hasAnswer) return;
@@ -55,27 +80,31 @@ export function ChatReasoning({
 
   if (!thinking) return null;
 
-  const elapsedLabel = elapsedSeconds > 0 ? `${elapsedSeconds}s` : "<1s";
+  const durationLabel = elapsedSeconds > 0 ? `${elapsedSeconds}s` : "<1s";
+
+  const headerLabel = streaming ? (
+    <ThinkingHeaderLabel label={t("message.thinking")} />
+  ) : wasStreamingRef.current ? (
+    t("message.thoughtFor", { duration: durationLabel })
+  ) : (
+    t("message.thoughts")
+  );
 
   return (
-    <Reasoning
+    <ChainOfThought
       open={open}
       onOpenChange={setOpen}
-      className="mb-4 w-full min-w-0"
+      className="mb-2 w-full min-w-0"
     >
-      <ReasoningTrigger isStreaming={isStreaming && !hasAnswer}>
-        {isStreaming && !hasAnswer
-          ? `Thinking ${elapsedLabel}`
-          : "Thoughts"}
-      </ReasoningTrigger>
-      <ReasoningContent>
-        <div className="mt-2 max-w-full border-l border-border/70 py-1 pl-4">
+      <ChainOfThoughtHeader icon={Sparkles}>{headerLabel}</ChainOfThoughtHeader>
+      <ChainOfThoughtContent>
+        <div className="mt-1 max-w-full border-l border-border/70 py-0.5 pl-3">
           <ChatMarkdown
             content={thinking}
             className={reasoningMarkdownClassName}
           />
         </div>
-      </ReasoningContent>
-    </Reasoning>
+      </ChainOfThoughtContent>
+    </ChainOfThought>
   );
 }

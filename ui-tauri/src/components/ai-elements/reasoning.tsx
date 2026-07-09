@@ -33,21 +33,21 @@ function ReasoningTrigger({
     <CollapsibleTrigger
       data-slot="reasoning-trigger"
       className={cn(
-        "group inline-flex max-w-full min-w-0 items-center gap-2 rounded-md py-1 text-sm text-muted-foreground transition-colors hover:text-foreground",
+        "group inline-flex max-w-full min-w-0 items-center gap-1.5 rounded-md py-0.5 text-xs text-muted-foreground transition-colors hover:text-foreground",
         className,
       )}
       {...props}
     >
       <Sparkles
         className={cn(
-          "h-3.5 w-3.5 shrink-0",
+          "h-3 w-3 shrink-0",
           isStreaming && "animate-pulse text-primary",
         )}
         aria-hidden="true"
       />
       <span className="min-w-0 flex-1 truncate text-left font-medium">{children}</span>
       <ChevronDown
-        className="h-3.5 w-3.5 shrink-0 transition-transform duration-200 group-data-[state=open]:rotate-180"
+        className="h-3 w-3 shrink-0 transition-transform duration-200 group-data-[state=open]:rotate-180"
         aria-hidden="true"
       />
     </CollapsibleTrigger>

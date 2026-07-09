@@ -208,7 +208,7 @@ wheels = [
 
 [[package]]
 name = "kassiber"
-version = "0.22.4"
+version = "0.22.54"
 source = { editable = "." }
 dependencies = [
     { name = "certifi" },

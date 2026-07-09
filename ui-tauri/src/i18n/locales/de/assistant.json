@@ -8,8 +8,9 @@
     "messageCount_other": "{{count}} Nachrichten",
     "incognito": "Incognito",
     "incognitoTitle": "Incognito: Diese Unterhaltung wird nicht gespeichert",
-    "exportChat": "Chat exportieren",
-    "clearChat": "Chat leeren"
+    "exportChat": "Exportieren",
+    "clearChat": "Chat leeren",
+    "moreActions": "Weitere Aktionen"
   },
   "dock": {
     "label": "Kassiber-Assistent",
@@ -19,13 +20,17 @@
     "expandConversation": "Erhaltene Unterhaltung ausklappen",
     "conversationHidden": "Unterhaltung verborgen",
     "preservedForContext_one": "{{count}} Nachricht für den Kontext erhalten",
-    "preservedForContext_other": "{{count}} Nachrichten für den Kontext erhalten"
+    "preservedForContext_other": "{{count}} Nachrichten für den Kontext erhalten",
+    "handleHint": "Kassiber fragen",
+    "minimize": "Assistent minimieren",
+    "restore": "Unterhaltung öffnen"
   },
   "composer": {
     "placeholder": "Frag mich etwas",
     "stopGenerating": "Generierung stoppen",
     "sendMessage": "Nachricht senden",
     "queueMessage": "Nachricht in Warteschlange stellen",
+    "attach": "Dateien anhängen",
     "modelContext": "Modell-Kontext",
     "thinking": "Nachdenken",
     "effort": {
@@ -50,14 +55,26 @@
     }
   },
   "thread": {
-    "scrollToLatest": "Zur neuesten Nachricht scrollen"
+    "scrollToLatest": "Zur neuesten Nachricht scrollen",
+    "scrollToTop": "Nach oben scrollen"
   },
   "message": {
     "toolUsage": "Tool-Nutzung",
     "thinking": "Wird nachgedacht",
+    "thoughts": "Gedanken",
+    "thoughtFor": "Nachgedacht für {{duration}}",
     "generating": "Wird generiert",
     "chatFailed": "Chat fehlgeschlagen",
-    "stoppedByUser": "Von dir gestoppt."
+    "stoppedByUser": "Von dir gestoppt.",
+    "copy": "Kopieren",
+    "copied": "Kopiert",
+    "readAloud": "Vorlesen",
+    "stopReading": "Vorlesen stoppen",
+    "moreOptions": "Weitere Optionen",
+    "branch": "In neuem Chat verzweigen",
+    "edit": "Nachricht bearbeiten",
+    "confirmEdit": "Bearbeitung bestätigen",
+    "cancelEdit": "Bearbeitung abbrechen"
   },
   "facts": {
     "asset": "Asset",

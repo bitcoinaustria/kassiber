@@ -53,21 +53,30 @@ function makeAssistantSession(
     abort: vi.fn(),
     reset: vi.fn(),
     resumeSession: vi.fn(),
+    branchFromMessage: vi.fn(),
+    editUserMessage: vi.fn(),
     forgetSession: vi.fn(),
     ...overrides,
   };
 }
 
 describe("Assistant toolbar", () => {
-  it("shows the incognito toggle for a fresh chat", () => {
+  it("always exposes the more-actions menu", () => {
     assistantSession = makeAssistantSession();
 
     const html = renderToStaticMarkup(<Assistant />);
 
-    expect(html).toContain("Incognito");
+    // Incognito/History/Clear now live behind the collapsed "…" menu, so the
+    // trigger is present even though its portaled items are not in the DOM
+    // until it opens.
+    expect(html).toContain("More actions");
   });
 
-  it("hides the incognito toggle for an existing saved chat", () => {
+  it("shows Export only once a conversation exists", () => {
+    assistantSession = makeAssistantSession();
+
+    expect(renderToStaticMarkup(<Assistant />)).not.toContain("Export");
+
     assistantSession = makeAssistantSession({
       sessionId: "chat-session-1",
       messages: [
@@ -80,8 +89,24 @@ describe("Assistant toolbar", () => {
       ],
     });
 
+    expect(renderToStaticMarkup(<Assistant />)).toContain("Export");
+  });
+
+  it("keeps the toolbar full-width while the thread stays max-w-4xl", () => {
+    assistantSession = makeAssistantSession({
+      messages: [
+        {
+          id: "message-1",
+          role: "user",
+          content: "Hello",
+          status: "done",
+        },
+      ],
+    });
+
     const html = renderToStaticMarkup(<Assistant />);
 
-    expect(html).not.toContain("Incognito");
+    expect(html).not.toContain("max-w-6xl");
+    expect(html).toContain("max-w-4xl");
   });
 });

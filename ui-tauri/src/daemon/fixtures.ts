@@ -2590,7 +2590,15 @@ export const fixtures: Record<string, unknown> = {
   "ai.list_models": {
     provider: "ollama",
     models: [
-      { id: "qwen3.6:35b", owned_by: "library" },
+      // qwen3 emits reasoning in the mock stream, so advertise effort support
+      // — this is what lets the composer show the reasoning-effort levels. The
+      // explicit list drives which levels the picker offers.
+      {
+        id: "qwen3.6:35b",
+        owned_by: "library",
+        supports_reasoning_effort: true,
+        reasoning_efforts: ["low", "medium", "high"],
+      },
       { id: "llama3.3:70b", owned_by: "library" },
     ],
   },

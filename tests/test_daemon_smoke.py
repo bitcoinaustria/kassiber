@@ -21,6 +21,7 @@ from kassiber.daemon import (
     AiToolRuntime,
     MAX_REQUEST_LINE_CHARS,
     ParsedAiToolCall,
+    _ai_chat_seed_prefix,
     _auto_tool_context_for_model,
     _execute_mutating_ai_tool,
     _execute_read_only_ai_tool,
@@ -7798,6 +7799,26 @@ class DaemonSmokeTest(unittest.TestCase):
             code, stderr = _close_daemon(proc)
             self.assertEqual(code, 0, stderr)
             self.assertEqual(stderr, "")
+
+    def test_ai_chat_seed_prefix_extracts_forked_history(self):
+        # An ordinary first message carries no prefix.
+        self.assertEqual(
+            _ai_chat_seed_prefix([{"role": "user", "content": "hi"}]),
+            [],
+        )
+        # A branched/edited fork sends prior turns before the current prompt.
+        messages = [
+            {"role": "user", "content": "seed q"},
+            {"role": "assistant", "content": "seed a"},
+            {"role": "user", "content": "current prompt"},
+        ]
+        self.assertEqual(
+            _ai_chat_seed_prefix(messages),
+            [
+                {"role": "user", "content": "seed q"},
+                {"role": "assistant", "content": "seed a"},
+            ],
+        )
 
     def test_ai_chat_cli_provider_auto_disables_tool_loop(self):
         validated = {

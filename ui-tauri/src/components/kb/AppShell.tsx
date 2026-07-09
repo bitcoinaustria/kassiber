@@ -599,6 +599,10 @@ export function AppShell() {
   const addNotification = useUiStore((s) => s.addNotification);
   const appNotifications = useUiStore((s) => s.notifications);
   const aiFeaturesEnabled = useUiStore((s) => s.aiFeaturesEnabled);
+  const assistantDockAutoHide = useUiStore((s) => s.assistantDockAutoHide);
+  const assistantDockPosition = useUiStore((s) => s.assistantDockPosition);
+  const assistantDockMinimized = useUiStore((s) => s.assistantDockMinimized);
+  const assistantDockExpanded = useUiStore((s) => s.assistantDockExpanded);
   const developerToolsEnabled = useUiStore((s) => s.developerToolsEnabled);
   const bumpDaemonSession = useUiStore((s) => s.bumpDaemonSession);
   const activeMaintenanceProgress = useUiStore(
@@ -1682,13 +1686,22 @@ export function AppShell() {
                         tabIndex={-1}
                         className={cn(
                           appMainClassName,
-                          // Reserve dock space only while the dock is
-                          // expanded; the collapsed pill needs a sliver.
+                          // A live conversation expands the dock (even under
+                          // auto-hide), so reserve real space for it. Otherwise
+                          // the parked pill / minimized chip only needs a
+                          // sliver; the legacy scroll-collapse path applies when
+                          // auto-hide is off and there is no thread.
                           isAssistantRoute || assistantDockSuppressed
                             ? "pb-0"
-                            : assistantCollapsed
-                              ? "pb-16"
-                              : "pb-[240px]",
+                            : assistantDockMinimized
+                              ? "pb-6"
+                              : assistantDockExpanded
+                                ? "pb-[240px]"
+                                : assistantDockAutoHide
+                                  ? "pb-6"
+                                  : assistantCollapsed
+                                    ? "pb-16"
+                                    : "pb-[240px]",
                         )}
                       >
                         <Outlet />
@@ -1696,6 +1709,8 @@ export function AppShell() {
                       {isAssistantRoute || assistantDockSuppressed ? null : (
                         <AssistantDock
                           collapsed={assistantCollapsed}
+                          autoHide={assistantDockAutoHide}
+                          position={assistantDockPosition}
                           className="absolute inset-x-0 bottom-0 z-20"
                         />
                       )}

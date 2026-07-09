@@ -4618,6 +4618,28 @@ async function mockAiChatStream<T, R>(
           updated_at: now,
           entries: [],
         };
+        // Backfill a branched/edited seed: the turns before the current prompt
+        // (mirrors the daemon's append_messages) so a forked chat round-trips
+        // its full transcript from ui.chat.sessions.get.
+        const messages = args.messages ?? [];
+        let lastUser = -1;
+        messages.forEach((message, index) => {
+          if (message.role === "user") lastUser = index;
+        });
+        if (lastUser > 0) {
+          for (const message of messages.slice(0, lastUser)) {
+            if (
+              (message.role === "user" || message.role === "assistant") &&
+              typeof message.content === "string" &&
+              message.content
+            ) {
+              session.entries.push({
+                role: message.role,
+                content: message.content,
+              });
+            }
+          }
+        }
         mockChatSessions.push(session);
       }
       session.entries.push(

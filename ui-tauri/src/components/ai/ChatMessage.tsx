@@ -7,7 +7,18 @@
  * text lands.
  */
 
-import { Wrench } from "lucide-react";
+import * as React from "react";
+import {
+  Check,
+  Copy,
+  MoreHorizontal,
+  Pencil,
+  Split,
+  Square,
+  Volume2,
+  Wrench,
+  X,
+} from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 
@@ -20,42 +31,55 @@ import {
   ChainOfThoughtContent,
   ChainOfThoughtHeader,
 } from "@/components/ai-elements";
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { copyTextWithPolicy } from "@/lib/clipboard";
 import type { AiChatMessage } from "@/daemon/stream";
 import { cn } from "@/lib/utils";
 
 interface ChatMessageProps {
   message: AiChatMessage;
+  /** When set, assistant answers offer "Branch in new chat" (assistant page). */
+  onBranch?: (messageId: string) => void;
+  /**
+   * When set, user messages offer an inline "Edit" action (assistant page).
+   * Confirming an edit calls this with the edited text so the conversation
+   * regenerates from that prompt onward.
+   */
+  onEdit?: (messageId: string, nextContent?: string) => void;
 }
 
-export function ChatMessage({ message }: ChatMessageProps) {
+export function ChatMessage({ message, onBranch, onEdit }: ChatMessageProps) {
   const { t } = useTranslation("assistant");
   if (message.role === "user") {
-    return (
-      <div className="flex w-full justify-end">
-        <div className="max-w-[82%] rounded-2xl rounded-tr-sm bg-primary px-3 py-2 text-sm text-primary-foreground shadow-sm sm:max-w-[72%]">
-          <p className="whitespace-pre-wrap break-words">{message.content}</p>
-        </div>
-      </div>
-    );
+    return <UserMessage message={message} onEdit={onEdit} />;
   }
 
   const isStreaming =
     message.status === "streaming" || message.status === "pending";
   const hasAnswer = Boolean(message.content);
   const hasToolCalls = Boolean(message.toolCalls?.length);
+  const hasThinking = Boolean(message.thinking);
   const showLoader =
     !hasAnswer &&
+    !hasThinking &&
     (message.status === "pending" || message.status === "streaming");
-  const loaderLabel =
-    message.activityLabel ??
-    (message.thinking ? t("message.thinking") : t("message.generating"));
+  const loaderLabel = message.activityLabel ?? t("message.generating");
 
   return (
     <div className="flex w-full justify-start">
       <div className="w-full min-w-0 px-1 py-1 text-sm">
-        {message.thinking ? (
+        {hasThinking ? (
           <ChatReasoning
-            thinking={message.thinking}
+            thinking={message.thinking!}
             isStreaming={isStreaming}
             hasAnswer={hasAnswer}
           />
@@ -63,8 +87,8 @@ export function ChatMessage({ message }: ChatMessageProps) {
         {hasToolCalls ? (
           <div
             className={cn(
-              message.thinking ? "mt-3" : undefined,
-              "mb-4 w-full min-w-0",
+              hasThinking ? "mt-2" : undefined,
+              "mb-2 w-full min-w-0",
             )}
           >
             <ChainOfThought>
@@ -72,7 +96,7 @@ export function ChatMessage({ message }: ChatMessageProps) {
                 {t("message.toolUsage")}
               </ChainOfThoughtHeader>
               <ChainOfThoughtContent>
-                <div className="mt-2 space-y-3 border-l border-border/70 py-1 pl-4">
+                <div className="mt-1 space-y-1 border-l border-border/70 py-0.5 pl-3">
                   {message.toolCalls?.map((toolCall) => (
                     <ChatToolCall key={toolCall.callId} toolCall={toolCall} />
                   ))}
@@ -81,12 +105,20 @@ export function ChatMessage({ message }: ChatMessageProps) {
             </ChainOfThought>
           </div>
         ) : null}
-        {hasAnswer ? <ChatMarkdown content={message.content} /> : null}
+        {hasAnswer ? (
+          <div
+            className={cn(
+              hasThinking || hasToolCalls ? "mt-4" : undefined,
+            )}
+          >
+            <ChatMarkdown content={message.content} />
+          </div>
+        ) : null}
         {hasAnswer ? (
           <DeterministicAnswerFacts message={message} t={t} />
         ) : null}
         {message.provenance ? (
-          <AnswerProvenance provenance={message.provenance} t={t} />
+          <AnswerProvenance message={message} t={t} />
         ) : null}
         {showLoader ? (
           <ChatLoader className="mt-1" label={loaderLabel} />
@@ -106,7 +138,283 @@ export function ChatMessage({ message }: ChatMessageProps) {
             {t("message.stoppedByUser")}
           </p>
         ) : null}
+        {hasAnswer && !isStreaming ? (
+          <ChatMessageActions
+            message={message}
+            t={t}
+            onBranch={onBranch ? () => onBranch(message.id) : undefined}
+          />
+        ) : null}
       </div>
+    </div>
+  );
+}
+
+function UserMessage({
+  message,
+  onEdit,
+}: {
+  message: AiChatMessage;
+  onEdit?: (messageId: string, nextContent?: string) => void;
+}) {
+  const { t } = useTranslation("assistant");
+  const [isEditing, setIsEditing] = React.useState(false);
+  const [draft, setDraft] = React.useState(message.content);
+  const textareaRef = React.useRef<HTMLTextAreaElement>(null);
+  const canEdit = Boolean(onEdit) && Boolean(message.content);
+
+  const startEditing = React.useCallback(() => {
+    setDraft(message.content);
+    setIsEditing(true);
+  }, [message.content]);
+
+  const cancelEditing = React.useCallback(() => {
+    setIsEditing(false);
+    setDraft(message.content);
+  }, [message.content]);
+
+  const confirmEditing = React.useCallback(() => {
+    const trimmed = draft.trim();
+    if (!trimmed) return;
+    setIsEditing(false);
+    onEdit?.(message.id, trimmed);
+  }, [draft, message.id, onEdit]);
+
+  React.useEffect(() => {
+    if (!isEditing) return;
+    const node = textareaRef.current;
+    if (!node) return;
+    node.focus();
+    const end = node.value.length;
+    node.setSelectionRange(end, end);
+  }, [isEditing]);
+
+  const handleKeyDown = React.useCallback(
+    (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        cancelEditing();
+        return;
+      }
+      // Enter confirms (matching the composer), while Shift+Enter still inserts
+      // a newline. Cmd/Ctrl+Enter always confirms even with Shift held.
+      if (
+        event.key === "Enter" &&
+        (!event.shiftKey || event.metaKey || event.ctrlKey)
+      ) {
+        event.preventDefault();
+        confirmEditing();
+      }
+    },
+    [cancelEditing, confirmEditing],
+  );
+
+  if (isEditing) {
+    const canConfirm = Boolean(draft.trim());
+    return (
+      <div className="flex w-full flex-col items-end gap-1">
+        <div className="w-full max-w-[82%] sm:max-w-[72%]">
+          <Textarea
+            ref={textareaRef}
+            rows={2}
+            value={draft}
+            onChange={(event) => setDraft(event.target.value)}
+            onKeyDown={handleKeyDown}
+            aria-label={t("message.edit")}
+            className="min-h-[60px] w-full resize-none rounded-2xl rounded-tr-sm bg-muted text-sm"
+          />
+          <div className="mt-1 flex items-center justify-end gap-0.5 text-muted-foreground">
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-xs"
+              className="rounded-full hover:text-foreground"
+              onClick={confirmEditing}
+              disabled={!canConfirm}
+              aria-label={t("message.confirmEdit")}
+              title={t("message.confirmEdit")}
+            >
+              <Check className="h-3.5 w-3.5" aria-hidden="true" />
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-xs"
+              className="rounded-full hover:text-foreground"
+              onClick={cancelEditing}
+              aria-label={t("message.cancelEdit")}
+              title={t("message.cancelEdit")}
+            >
+              <X className="h-3.5 w-3.5" aria-hidden="true" />
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="group/user flex w-full flex-col items-end gap-1">
+      <div className="max-w-[82%] rounded-2xl rounded-tr-sm bg-primary px-3 py-2 text-sm text-primary-foreground shadow-sm sm:max-w-[72%]">
+        <p className="whitespace-pre-wrap break-words">{message.content}</p>
+      </div>
+      {canEdit ? (
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-xs"
+          className="rounded-full text-muted-foreground opacity-0 transition-opacity hover:text-foreground focus-visible:opacity-100 group-hover/user:opacity-100"
+          onClick={startEditing}
+          aria-label={t("message.edit")}
+          title={t("message.edit")}
+        >
+          <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
+        </Button>
+      ) : null}
+    </div>
+  );
+}
+
+function ChatMessageActions({
+  message,
+  t,
+  onBranch,
+}: {
+  message: AiChatMessage;
+  t: TFunction<"assistant">;
+  onBranch?: () => void;
+}) {
+  const [copied, setCopied] = React.useState(false);
+  const [speaking, setSpeaking] = React.useState(false);
+  const copiedTimerRef = React.useRef<number | null>(null);
+
+  const canSpeak =
+    typeof window !== "undefined" && "speechSynthesis" in window;
+
+  React.useEffect(() => {
+    return () => {
+      if (copiedTimerRef.current !== null) {
+        window.clearTimeout(copiedTimerRef.current);
+      }
+      if (canSpeak) window.speechSynthesis.cancel();
+    };
+  }, [canSpeak]);
+
+  const handleCopy = React.useCallback(() => {
+    void copyTextWithPolicy(message.content);
+    setCopied(true);
+    if (copiedTimerRef.current !== null) {
+      window.clearTimeout(copiedTimerRef.current);
+    }
+    copiedTimerRef.current = window.setTimeout(() => {
+      setCopied(false);
+      copiedTimerRef.current = null;
+    }, 1500);
+  }, [message.content]);
+
+  const toggleReadAloud = React.useCallback(() => {
+    if (!canSpeak) return;
+    if (speaking) {
+      window.speechSynthesis.cancel();
+      setSpeaking(false);
+      return;
+    }
+    const utterance = new SpeechSynthesisUtterance(message.content);
+    utterance.onend = () => setSpeaking(false);
+    utterance.onerror = () => setSpeaking(false);
+    window.speechSynthesis.cancel();
+    window.speechSynthesis.speak(utterance);
+    setSpeaking(true);
+  }, [canSpeak, speaking, message.content]);
+
+  const answeredAt = message.provenance?.generated_at
+    ? shortTime(message.provenance.generated_at)
+    : null;
+
+  return (
+    <div className="mt-2 flex items-center gap-0.5 text-muted-foreground">
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon-xs"
+        className="rounded-full hover:text-foreground"
+        onClick={handleCopy}
+        aria-label={copied ? t("message.copied") : t("message.copy")}
+        title={copied ? t("message.copied") : t("message.copy")}
+      >
+        {copied ? (
+          <Check className="h-3.5 w-3.5" aria-hidden="true" />
+        ) : (
+          <Copy className="h-3.5 w-3.5" aria-hidden="true" />
+        )}
+      </Button>
+      {canSpeak ? (
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-xs"
+          className={cn(
+            "rounded-full hover:text-foreground",
+            speaking && "text-primary",
+          )}
+          onClick={toggleReadAloud}
+          aria-label={speaking ? t("message.stopReading") : t("message.readAloud")}
+          title={speaking ? t("message.stopReading") : t("message.readAloud")}
+        >
+          {speaking ? (
+            <Square className="h-3.5 w-3.5" aria-hidden="true" />
+          ) : (
+            <Volume2 className="h-3.5 w-3.5" aria-hidden="true" />
+          )}
+        </Button>
+      ) : null}
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-xs"
+            className="rounded-full hover:text-foreground"
+            aria-label={t("message.moreOptions")}
+            title={t("message.moreOptions")}
+          >
+            <MoreHorizontal className="h-3.5 w-3.5" aria-hidden="true" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start" className="min-w-44">
+          {answeredAt ? (
+            <>
+              <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">
+                {answeredAt}
+              </DropdownMenuLabel>
+              <DropdownMenuSeparator />
+            </>
+          ) : null}
+          <DropdownMenuItem onSelect={handleCopy}>
+            <Copy className="h-4 w-4" aria-hidden="true" />
+            {t("message.copy")}
+          </DropdownMenuItem>
+          {canSpeak ? (
+            <DropdownMenuItem onSelect={toggleReadAloud}>
+              {speaking ? (
+                <Square className="h-4 w-4" aria-hidden="true" />
+              ) : (
+                <Volume2 className="h-4 w-4" aria-hidden="true" />
+              )}
+              {speaking ? t("message.stopReading") : t("message.readAloud")}
+            </DropdownMenuItem>
+          ) : null}
+          {onBranch ? (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onSelect={onBranch}>
+                <Split className="h-4 w-4" aria-hidden="true" />
+                {t("message.branch")}
+              </DropdownMenuItem>
+            </>
+          ) : null}
+        </DropdownMenuContent>
+      </DropdownMenu>
     </div>
   );
 }
@@ -145,25 +453,22 @@ function DeterministicAnswerFacts({
 }
 
 function AnswerProvenance({
-  provenance,
+  message,
   t,
 }: {
-  provenance: NonNullable<AiChatMessage["provenance"]>;
+  message: AiChatMessage;
   t: TFunction<"assistant">;
 }) {
-  const parts = provenanceParts(provenance, t);
+  const provenance = message.provenance;
+  if (!provenance) return null;
+  const parts = provenanceParts(
+    provenance,
+    t,
+    suppressedProvenanceKeys(message),
+  );
   if (parts.length === 0) return null;
   return (
-    <div className="mt-3 flex flex-wrap gap-1.5 text-[11px] text-muted-foreground">
-      {parts.map((part) => (
-        <span
-          key={part}
-          className="rounded-md border border-border/70 bg-background px-2 py-1"
-        >
-          {part}
-        </span>
-      ))}
-    </div>
+    <p className="mt-2 text-[11px] text-muted-foreground">{parts.join(" · ")}</p>
   );
 }
 
@@ -178,11 +483,13 @@ function collectDeterministicFacts(
   t: TFunction<"assistant">,
 ): DeterministicFact[] {
   const facts: DeterministicFact[] = [];
+  const seenKinds = new Set<string>();
   for (const toolCall of message.toolCalls ?? []) {
     const envelope = asRecord(toolCall.result);
     const kind = typeof envelope?.kind === "string" ? envelope.kind : "";
     const data = asRecord(envelope?.data);
-    if (!kind || !data) continue;
+    if (!kind || !data || seenKinds.has(kind)) continue;
+    seenKinds.add(kind);
     if (kind === "ui.report.blockers") {
       const blockers = Array.isArray(data.blockers) ? data.blockers : [];
       facts.push({
@@ -285,9 +592,35 @@ function collectDeterministicFacts(
   return facts;
 }
 
+type ProvenanceMetricKey =
+  | "active_transactions"
+  | "quarantines"
+  | "missing_price_transactions";
+
+function suppressedProvenanceKeys(
+  message: AiChatMessage,
+): Set<ProvenanceMetricKey> {
+  const suppressed = new Set<ProvenanceMetricKey>();
+  for (const toolCall of message.toolCalls ?? []) {
+    const envelope = asRecord(toolCall.result);
+    const kind = typeof envelope?.kind === "string" ? envelope.kind : "";
+    if (kind === "ui.reports.summary") {
+      suppressed.add("active_transactions");
+    }
+    if (kind === "ui.rates.coverage") {
+      suppressed.add("missing_price_transactions");
+    }
+    if (kind === "ui.journals.quarantine") {
+      suppressed.add("quarantines");
+    }
+  }
+  return suppressed;
+}
+
 function provenanceParts(
   provenance: NonNullable<AiChatMessage["provenance"]>,
   t: TFunction<"assistant">,
+  suppressed: Set<ProvenanceMetricKey>,
 ): string[] {
   const parts: string[] = [];
   const toolCount = provenance.tools_used?.length ?? 0;
@@ -295,6 +628,7 @@ function provenanceParts(
     parts.push(t("provenance.localTools", { count: toolCount }));
   }
   if (
+    !suppressed.has("active_transactions") &&
     provenance.active_transactions !== null &&
     provenance.active_transactions !== undefined
   ) {
@@ -304,12 +638,17 @@ function provenanceParts(
       }),
     );
   }
-  if (provenance.quarantines !== null && provenance.quarantines !== undefined) {
+  if (
+    !suppressed.has("quarantines") &&
+    provenance.quarantines !== null &&
+    provenance.quarantines !== undefined
+  ) {
     parts.push(
       t("provenance.quarantine", { count: Number(provenance.quarantines) }),
     );
   }
   if (
+    !suppressed.has("missing_price_transactions") &&
     provenance.missing_price_transactions !== null &&
     provenance.missing_price_transactions !== undefined
   ) {

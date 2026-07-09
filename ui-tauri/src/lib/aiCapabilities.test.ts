@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   modelSupportsReasoningEffort,
   providerSupportsReasoningEffort,
+  selectedModelReasoningEfforts,
   selectedModelSupportsReasoningEffort,
 } from "./aiCapabilities";
 
@@ -77,5 +78,43 @@ describe("AI reasoning effort capability detection", () => {
         ],
       }),
     ).toBe(true);
+  });
+
+  it("reads the advertised reasoning-effort levels for the selected model", () => {
+    const providers = [
+      {
+        name: "ollama",
+        base_url: "http://localhost:11434/v1",
+        kind: "local" as const,
+        has_api_key: false,
+        is_default: true,
+      },
+    ];
+    const models = [
+      {
+        id: "qwen",
+        supports_reasoning_effort: true,
+        reasoning_efforts: ["Low", "HIGH", "low"],
+      },
+      { id: "plain" },
+    ];
+
+    // Normalized to lower-case, de-duplicated, advertised order preserved.
+    expect(
+      selectedModelReasoningEfforts({
+        selection: { provider: "ollama", model: "qwen" },
+        providers,
+        models,
+      }),
+    ).toEqual(["low", "high"]);
+
+    // No advertised list → empty (callers fall back to their default set).
+    expect(
+      selectedModelReasoningEfforts({
+        selection: { provider: "ollama", model: "plain" },
+        providers,
+        models,
+      }),
+    ).toEqual([]);
   });
 });

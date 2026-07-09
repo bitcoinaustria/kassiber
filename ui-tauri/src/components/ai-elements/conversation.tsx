@@ -17,19 +17,44 @@ function Conversation({
 
 const ConversationContent = React.forwardRef<
   HTMLDivElement,
-  React.ComponentProps<"div"> & { scrollable?: boolean }
->(({ className, scrollable = true, ...props }, ref) => (
-  <div
-    ref={ref}
-    data-slot="conversation-content"
-    className={cn(
-      "flex min-h-0 w-full flex-1 flex-col gap-6 px-1",
-      scrollable ? "overflow-y-auto" : "overflow-visible",
+  React.ComponentProps<"div"> & {
+    scrollable?: boolean;
+    /** When set, messages render inside this inner wrapper while the outer
+     *  element stays full-width so the scrollbar aligns with the pane edge. */
+    contentClassName?: string;
+  }
+>(
+  (
+    {
       className,
-    )}
-    {...props}
-  />
-));
+      scrollable = true,
+      contentClassName,
+      children,
+      ...props
+    },
+    ref,
+  ) => (
+    <div
+      ref={ref}
+      data-slot="conversation-content"
+      className={cn(
+        "flex min-h-0 w-full flex-1 flex-col",
+        contentClassName ? "gap-0 px-0" : "gap-6 px-1",
+        scrollable ? "overflow-y-auto" : "overflow-visible",
+        className,
+      )}
+      {...props}
+    >
+      {contentClassName ? (
+        <div className={cn("flex flex-col gap-6", contentClassName)}>
+          {children}
+        </div>
+      ) : (
+        children
+      )}
+    </div>
+  ),
+);
 ConversationContent.displayName = "ConversationContent";
 
 export { Conversation, ConversationContent };

@@ -184,6 +184,49 @@ def append_exchange(
     return {"session_id": session["id"], "appended": 2}
 
 
+def append_messages(
+    conn: sqlite3.Connection,
+    session_id: str,
+    messages: list[dict[str, Any]],
+    *,
+    commit: bool = True,
+) -> dict:
+    """Append prior messages verbatim, preserving order.
+
+    Used to backfill the seed of a branched/edited conversation before its
+    first live exchange, so re-opening the session from History keeps the full
+    context rather than only the turns sent after the fork. Only user/assistant
+    string content is stored; anything else is skipped.
+    """
+    next_seq = conn.execute(
+        "SELECT COALESCE(MAX(seq), -1) + 1 FROM ai_chat_messages WHERE session_id = ?",
+        (session_id,),
+    ).fetchone()[0]
+    timestamp = now_iso()
+    appended = 0
+    for message in messages:
+        role = message.get("role")
+        content = message.get("content")
+        if role not in ("user", "assistant"):
+            continue
+        if not isinstance(content, str) or not content:
+            continue
+        conn.execute(
+            """
+            INSERT INTO ai_chat_messages(id, session_id, seq, role, content,
+                                         tool_calls_json, provenance_json,
+                                         finish_reason, created_at)
+            VALUES(?, ?, ?, ?, ?, NULL, NULL, NULL, ?)
+            """,
+            (str(uuid.uuid4()), session_id, next_seq, role, content, timestamp),
+        )
+        next_seq += 1
+        appended += 1
+    if commit:
+        conn.commit()
+    return {"appended": appended}
+
+
 def list_sessions(
     conn: sqlite3.Connection,
     profile_id: str,

@@ -10,31 +10,41 @@
 import * as React from "react";
 import { useQueries } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import { RefreshCw } from "lucide-react";
+import {
+  Check,
+  ChevronDown,
+  Cloud,
+  Cpu,
+  RefreshCw,
+  ShieldCheck,
+  type LucideIcon,
+} from "lucide-react";
 
 import {
-  ModelSelector,
-  ModelSelectorContent,
-  ModelSelectorEmpty,
-  ModelSelectorGroup,
-  ModelSelectorItem,
-  ModelSelectorLabel,
-  ModelSelectorName,
-  ModelSelectorTrigger,
-  ModelSelectorValue,
-} from "@/components/ai-elements";
-import { Button } from "@/components/ui/button";
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuPortal,
+  DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import type { AssistantThinkingEffort } from "./assistantSession";
 import {
   DaemonRequestError,
   daemonQueryKey,
   useDaemon,
 } from "@/daemon/client";
 import { getTransport, type DaemonEnvelope } from "@/daemon/transport";
-import type {
-  AiProviderKind,
-  AiModelsListData,
-  AiProviderRow,
-  AiProvidersListData,
+import {
+  selectedModelReasoningEfforts,
+  type AiProviderKind,
+  type AiModelsListData,
+  type AiProviderRow,
+  type AiProvidersListData,
 } from "@/lib/aiCapabilities";
 import { useUiStore, type DataMode } from "@/store/ui";
 import { cn } from "@/lib/utils";
@@ -44,6 +54,49 @@ interface ProviderModelPickerProps {
   onChange: (next: { provider: string; model: string } | null) => void;
   enabled?: boolean;
   onActiveProviderKindChange?: (kind: AiProviderKind | null) => void;
+  /** When supported, the dropdown also offers reasoning-effort levels. */
+  thinkingEffort?: AssistantThinkingEffort;
+  onThinkingEffortChange?: (effort: AssistantThinkingEffort) => void;
+  showThinkingEffort?: boolean;
+}
+
+// Levels we can label/type. When a model advertises a specific subset we show
+// only those; otherwise we offer all of them. "auto" is the default and means
+// "don't override the model" — it is intentionally not a selectable row, so
+// until the user picks a level nothing is checked.
+const KNOWN_EFFORTS: AssistantThinkingEffort[] = ["low", "medium", "high"];
+
+const KIND_ICON: Record<AiProviderKind, LucideIcon> = {
+  local: Cpu,
+  remote: Cloud,
+  tee: ShieldCheck,
+};
+
+const KIND_TONE: Record<AiProviderKind, string> = {
+  local: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300",
+  remote: "bg-amber-500/15 text-amber-700 dark:text-amber-300",
+  tee: "bg-sky-500/15 text-sky-700 dark:text-sky-300",
+};
+
+const KIND_BADGE_LABEL: Record<AiProviderKind, string> = {
+  local: "local",
+  remote: "remote",
+  tee: "TEE",
+};
+
+function ProviderKindBadge({ kind }: { kind: AiProviderKind }) {
+  const Icon = KIND_ICON[kind];
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-medium uppercase",
+        KIND_TONE[kind],
+      )}
+    >
+      <Icon className="h-3 w-3" aria-hidden="true" />
+      {KIND_BADGE_LABEL[kind]}
+    </span>
+  );
 }
 
 function rowValue(provider: string, model: string): string {
@@ -86,6 +139,9 @@ export function ProviderModelPicker({
   onChange,
   enabled = true,
   onActiveProviderKindChange,
+  thinkingEffort = "auto",
+  onThinkingEffortChange,
+  showThinkingEffort = false,
 }: ProviderModelPickerProps) {
   const { t } = useTranslation("assistant");
   const dataMode = useUiStore((state) => state.dataMode);
@@ -156,9 +212,13 @@ export function ProviderModelPicker({
     });
     return next;
   }, [providers, modelQueries]);
-  const models = selectedProvider
-    ? (modelsByProvider.get(selectedProvider.name) ?? [])
-    : [];
+  const models = React.useMemo(
+    () =>
+      selectedProvider
+        ? (modelsByProvider.get(selectedProvider.name) ?? [])
+        : [],
+    [selectedProvider, modelsByProvider],
+  );
 
   // Once providers (and, if needed, models) land, seed a selection so the
   // user can send a chat without first opening Settings. Prefer the saved
@@ -257,84 +317,148 @@ export function ProviderModelPicker({
 
   const isRefreshing =
     providersQuery.isFetching || modelQueries.some((query) => query.isFetching);
-  const handleRefresh = (event: React.MouseEvent<HTMLButtonElement>) => {
-    event.preventDefault();
-    event.stopPropagation();
-
+  const refreshModels = () => {
     void (async () => {
       await providersQuery.refetch();
       await Promise.allSettled(modelQueries.map((query) => query.refetch()));
     })();
   };
 
-  const refreshModelsButton = (
-    <Button
-      type="button"
-      variant="ghost"
-      size="icon-xs"
-      className="-mr-1 size-6 text-muted-foreground hover:text-foreground"
-      onClick={handleRefresh}
+  // Show only the reasoning levels the selected model advertises; fall back to
+  // the full set when it advertises none.
+  const advertisedEfforts = React.useMemo(
+    () => selectedModelReasoningEfforts({ selection: value, providers, models }),
+    [value, providers, models],
+  );
+  const effortOptions = React.useMemo<AssistantThinkingEffort[]>(() => {
+    const advertisedKnown = KNOWN_EFFORTS.filter((effort) =>
+      advertisedEfforts.includes(effort),
+    );
+    return advertisedKnown.length > 0 ? advertisedKnown : KNOWN_EFFORTS;
+  }, [advertisedEfforts]);
+
+  // If a model switch leaves the current level unsupported, drop back to auto.
+  React.useEffect(() => {
+    if (!showThinkingEffort || !onThinkingEffortChange) return;
+    if (thinkingEffort !== "auto" && !effortOptions.includes(thinkingEffort)) {
+      onThinkingEffortChange("auto");
+    }
+  }, [showThinkingEffort, onThinkingEffortChange, thinkingEffort, effortOptions]);
+
+  const triggerLabel = value?.model ?? currentLabel;
+  const TriggerKindIcon = KIND_ICON[selectedProvider?.kind ?? "local"];
+
+  // Grouped provider/model list, shared by the top level (no reasoning
+  // support) and the "model" submenu (reasoning support).
+  const modelList =
+    groupedRows.length === 0 ? (
+      <DropdownMenuItem disabled>{t("modelPicker.noProviders")}</DropdownMenuItem>
+    ) : (
+      groupedRows.map(({ provider, models: rows }) => (
+        <React.Fragment key={provider.name}>
+          <DropdownMenuLabel className="flex items-center gap-2 text-muted-foreground">
+            <span>{providerDisplayName(provider)}</span>
+            <ProviderKindBadge kind={provider.kind} />
+          </DropdownMenuLabel>
+          {rows.length === 0 ? (
+            <DropdownMenuItem disabled className="font-mono text-xs">
+              {t("modelPicker.noModels")}
+            </DropdownMenuItem>
+          ) : (
+            rows.map((model) => {
+              const selected =
+                value?.provider === provider.name && value.model === model.id;
+              return (
+                <DropdownMenuItem
+                  key={`${provider.name}-${model.id}`}
+                  className="font-mono text-xs"
+                  onSelect={() => handleChange(rowValue(provider.name, model.id))}
+                >
+                  <span className="flex-1 truncate">{model.id}</span>
+                  {selected ? (
+                    <Check className="size-4" aria-hidden="true" />
+                  ) : null}
+                </DropdownMenuItem>
+              );
+            })
+          )}
+        </React.Fragment>
+      ))
+    );
+
+  const refreshItem = (
+    <DropdownMenuItem
       disabled={isRefreshing}
-      aria-label={t("modelPicker.refreshModels")}
-      title={t("modelPicker.refreshModels")}
+      onSelect={(event) => {
+        event.preventDefault();
+        refreshModels();
+      }}
     >
       <RefreshCw
-        className={cn("h-3.5 w-3.5", isRefreshing && "animate-spin")}
+        className={cn("size-4", isRefreshing && "animate-spin")}
         aria-hidden="true"
       />
-    </Button>
+      {t("modelPicker.refreshModels")}
+    </DropdownMenuItem>
   );
 
   return (
-    <ModelSelector
-      value={value ? rowValue(value.provider, value.model) : ""}
-      onValueChange={handleChange}
-    >
-      <ModelSelectorTrigger>
-        <ModelSelectorValue>{currentLabel}</ModelSelectorValue>
-      </ModelSelectorTrigger>
-      <ModelSelectorContent>
-        <ModelSelectorGroup>
-          <ModelSelectorLabel trailing={refreshModelsButton}>
-            {t("modelPicker.models")}
-          </ModelSelectorLabel>
-        </ModelSelectorGroup>
-        {groupedRows.length === 0 ? (
-          <ModelSelectorGroup>
-            <ModelSelectorEmpty className="block px-2 py-1.5 text-xs">
-              {t("modelPicker.noProviders")}
-            </ModelSelectorEmpty>
-          </ModelSelectorGroup>
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild disabled={!enabled}>
+        <button
+          type="button"
+          className="flex w-fit max-w-full items-center gap-1.5 rounded-full text-sm leading-none text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-60"
+          aria-label={t("modelPicker.models")}
+        >
+          <TriggerKindIcon className="size-4 shrink-0" aria-hidden="true" />
+          <span className="truncate">{triggerLabel}</span>
+          <ChevronDown className="size-3.5 shrink-0 opacity-70" aria-hidden="true" />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent
+        align="start"
+        side="top"
+        sideOffset={8}
+        className="min-w-56 max-w-[min(20rem,90vw)]"
+      >
+        {showThinkingEffort && onThinkingEffortChange ? (
+          <>
+            <DropdownMenuLabel className="text-muted-foreground">
+              {t("composer.thinking")}
+            </DropdownMenuLabel>
+            {effortOptions.map((effort) => (
+              <DropdownMenuItem
+                key={effort}
+                onSelect={() => onThinkingEffortChange(effort)}
+              >
+                <span className="flex-1">{t(`composer.effort.${effort}`)}</span>
+                {thinkingEffort === effort ? (
+                  <Check className="size-4" aria-hidden="true" />
+                ) : null}
+              </DropdownMenuItem>
+            ))}
+            <DropdownMenuSeparator />
+            <DropdownMenuSub>
+              <DropdownMenuSubTrigger>
+                <span className="truncate">{triggerLabel}</span>
+              </DropdownMenuSubTrigger>
+              <DropdownMenuPortal>
+                <DropdownMenuSubContent className="max-h-[min(60vh,22rem)] min-w-56 max-w-[min(20rem,90vw)] overflow-y-auto">
+                  {modelList}
+                  <DropdownMenuSeparator />
+                  {refreshItem}
+                </DropdownMenuSubContent>
+              </DropdownMenuPortal>
+            </DropdownMenuSub>
+          </>
         ) : (
-          groupedRows.map(({ provider, models: rows }) => (
-            <ModelSelectorGroup key={provider.name}>
-              <ModelSelectorLabel
-                provider={providerDisplayName(provider)}
-                kind={provider.kind}
-              />
-              {rows.length === 0 ? (
-                <ModelSelectorItem
-                  value={rowValue(provider.name, "__placeholder__")}
-                  disabled
-                >
-                  <ModelSelectorEmpty>
-                    {t("modelPicker.noModels")}
-                  </ModelSelectorEmpty>
-                </ModelSelectorItem>
-              ) : (
-                rows.map((model) => (
-                  <ModelSelectorItem
-                    key={`${provider.name}-${model.id}`}
-                    value={rowValue(provider.name, model.id)}
-                  >
-                    <ModelSelectorName>{model.id}</ModelSelectorName>
-                  </ModelSelectorItem>
-                ))
-              )}
-            </ModelSelectorGroup>
-          ))
+          <>
+            {modelList}
+            <DropdownMenuSeparator />
+            {refreshItem}
+          </>
         )}
-      </ModelSelectorContent>
-    </ModelSelector>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }

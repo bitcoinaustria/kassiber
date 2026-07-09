@@ -176,6 +176,8 @@ export interface DeferredConnectionSetup {
   backendKind?: string;
 }
 
+export type AssistantDockPosition = "left" | "center" | "right";
+
 export interface UiState {
   lang: Lang;
   currency: Currency;
@@ -197,6 +199,25 @@ export interface UiState {
   aiFeaturesEnabled: boolean;
   developerToolsEnabled: boolean;
   assistantModelSelection: AiModelSelection | null;
+  /**
+   * macOS-Dock-style auto-hide for the shell assistant dock: parked at the
+   * bottom edge with a slim sliver visible, revealed by hovering the edge.
+   * An active conversation or focus pins the dock regardless.
+   */
+  assistantDockAutoHide: boolean;
+  assistantDockPosition: AssistantDockPosition;
+  /**
+   * User collapsed an in-progress conversation to the docked pill. Ephemeral
+   * (not persisted) — a reload always restores the full dock, and clearing the
+   * thread or new activity (streaming/consent) resets it.
+   */
+  assistantDockMinimized: boolean;
+  /**
+   * The dock is showing a live conversation (expanded, not minimized), so the
+   * shell must reserve real bottom padding instead of just the parked-pill
+   * sliver. Ephemeral — the dock reports it; it is never persisted.
+   */
+  assistantDockExpanded: boolean;
   daemonSession: number;
   notifications: AppNotification[];
   activeMaintenanceProgress: ActiveMaintenanceProgress | null;
@@ -238,6 +259,10 @@ export interface UiState {
   setAiFeaturesEnabled: (enabled: boolean) => void;
   setDeveloperToolsEnabled: (enabled: boolean) => void;
   setAssistantModelSelection: (selection: AiModelSelection | null) => void;
+  setAssistantDockAutoHide: (enabled: boolean) => void;
+  setAssistantDockPosition: (position: AssistantDockPosition) => void;
+  setAssistantDockMinimized: (minimized: boolean) => void;
+  setAssistantDockExpanded: (expanded: boolean) => void;
   bumpDaemonSession: () => void;
   addNotification: (
     notification: Omit<AppNotification, "id" | "createdAt">,
@@ -386,6 +411,8 @@ export function uiStatePartialForStorage(state: UiState) {
     aiFeaturesEnabled: state.aiFeaturesEnabled,
     developerToolsEnabled: state.developerToolsEnabled,
     assistantModelSelection: state.assistantModelSelection,
+    assistantDockAutoHide: state.assistantDockAutoHide,
+    assistantDockPosition: state.assistantDockPosition,
     daemonSession: state.daemonSession,
     notifications: stripNotificationProgress(state.notifications),
     firstSyncDone: state.firstSyncDone,
@@ -411,6 +438,10 @@ export const useUiStore = create<UiState>()(
       aiFeaturesEnabled: true,
       developerToolsEnabled: true,
       assistantModelSelection: null,
+      assistantDockAutoHide: true,
+      assistantDockPosition: "center",
+      assistantDockMinimized: false,
+      assistantDockExpanded: false,
       daemonSession: 0,
       notifications: [],
       activeMaintenanceProgress: null,
@@ -462,6 +493,14 @@ export const useUiStore = create<UiState>()(
         set({ developerToolsEnabled: enabled }),
       setAssistantModelSelection: (assistantModelSelection) =>
         set({ assistantModelSelection }),
+      setAssistantDockAutoHide: (assistantDockAutoHide) =>
+        set({ assistantDockAutoHide }),
+      setAssistantDockPosition: (assistantDockPosition) =>
+        set({ assistantDockPosition }),
+      setAssistantDockMinimized: (assistantDockMinimized) =>
+        set({ assistantDockMinimized }),
+      setAssistantDockExpanded: (assistantDockExpanded) =>
+        set({ assistantDockExpanded }),
       bumpDaemonSession: () =>
         set((state) => ({ daemonSession: state.daemonSession + 1 })),
       addNotification: (notification) => {
@@ -615,6 +654,10 @@ export const useUiStore = create<UiState>()(
           assistantModelSelection:
             restored.assistantModelSelection ??
             current.assistantModelSelection,
+          assistantDockAutoHide:
+            restored.assistantDockAutoHide ?? current.assistantDockAutoHide,
+          assistantDockPosition:
+            restored.assistantDockPosition ?? current.assistantDockPosition,
           notifications: stripNotificationProgress(
             restored.notifications ?? current.notifications,
           ),

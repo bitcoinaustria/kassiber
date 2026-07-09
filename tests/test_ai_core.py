@@ -63,6 +63,8 @@ from kassiber.ai.tools import (
     summarize_tool_call,
 )
 from kassiber.ai.providers import ai_provider_secret_service_id, list_with_default
+from kassiber.core import accounts as core_accounts
+from kassiber.core import chat_history as core_chat_history
 from kassiber.db import open_db
 from kassiber.errors import AppError
 from kassiber.redaction import redact_secret_text, redact_secret_value
@@ -1723,6 +1725,76 @@ class ProvidersCrudTest(unittest.TestCase):
             try:
                 with self.assertRaises(AppError):
                     create_db_ai_provider(conn, "x", "no-scheme", kind="local")
+            finally:
+                conn.close()
+
+
+class ChatHistorySeedTest(unittest.TestCase):
+    """A branched/edited fork must round-trip its full seeded transcript."""
+
+    def test_seeded_prefix_round_trips_via_get_session(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-chat-seed-") as tmp:
+            conn = open_db(str(Path(tmp) / "data"))
+            try:
+                workspace = core_accounts.create_workspace(
+                    conn, "Demo", commit=False
+                )
+                profile = core_accounts.create_profile(
+                    conn,
+                    workspace["id"],
+                    "Main",
+                    "EUR",
+                    None,
+                    "generic",
+                    365,
+                    commit=False,
+                )
+                session = core_chat_history.create_session(
+                    conn,
+                    workspace["id"],
+                    profile["id"],
+                    title="branched chat",
+                    provider="ollama",
+                    model="qwen",
+                    commit=False,
+                )
+                # Backfill the fork's seed (prior turns before the new prompt),
+                # then append the live exchange — mirrors _persist_ai_chat_exchange
+                # for a null-session branch/edit. Non user/assistant or empty
+                # content is skipped.
+                core_chat_history.append_messages(
+                    conn,
+                    session["id"],
+                    [
+                        {"role": "user", "content": "seed question"},
+                        {"role": "assistant", "content": "seed answer"},
+                        {"role": "system", "content": "ignored"},
+                        {"role": "assistant", "content": ""},
+                    ],
+                    commit=False,
+                )
+                core_chat_history.append_exchange(
+                    conn,
+                    profile["id"],
+                    session["id"],
+                    user_content="follow-up",
+                    assistant_content="reply",
+                    commit=True,
+                )
+
+                stored = core_chat_history.get_session(
+                    conn, profile["id"], session["id"]
+                )
+                self.assertEqual(stored["message_count"], 4)
+                self.assertEqual(
+                    [(m["role"], m["content"]) for m in stored["messages"]],
+                    [
+                        ("user", "seed question"),
+                        ("assistant", "seed answer"),
+                        ("user", "follow-up"),
+                        ("assistant", "reply"),
+                    ],
+                )
             finally:
                 conn.close()
 

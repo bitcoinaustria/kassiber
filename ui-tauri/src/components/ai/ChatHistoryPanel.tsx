@@ -5,12 +5,11 @@ import { History, Trash2 } from "lucide-react";
 import { useAssistantSession } from "@/components/ai/assistantSession";
 import { Button } from "@/components/ui/button";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
-  DropdownMenuTrigger,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useDaemon, useDaemonMutation } from "@/daemon/client";
 
@@ -36,6 +35,11 @@ function formatUpdatedAt(value: string): string {
   });
 }
 
+/**
+ * Saved-chat history rendered as a submenu so it can nest inside the
+ * assistant's "more actions" (…) menu instead of taking a top-level toolbar
+ * slot. The sessions query only runs while the submenu is open.
+ */
 export function ChatHistoryPanel() {
   const { t } = useTranslation("assistant");
   const { isStreaming, resumeSession, sessionId, forgetSession } =
@@ -67,14 +71,12 @@ export function ChatHistoryPanel() {
   );
 
   return (
-    <DropdownMenu open={open} onOpenChange={setOpen}>
-      <DropdownMenuTrigger asChild>
-        <Button type="button" variant="ghost" size="sm" className="gap-2">
-          <History className="size-4" aria-hidden="true" />
-          {t("history.trigger")}
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-80">
+    <DropdownMenuSub open={open} onOpenChange={setOpen}>
+      <DropdownMenuSubTrigger>
+        <History className="size-4" aria-hidden="true" />
+        {t("history.trigger")}
+      </DropdownMenuSubTrigger>
+      <DropdownMenuSubContent className="max-h-96 w-80 overflow-y-auto">
         <DropdownMenuLabel>{t("history.savedChats")}</DropdownMenuLabel>
         <DropdownMenuSeparator />
         {list.isLoading ? (
@@ -88,16 +90,16 @@ export function ChatHistoryPanel() {
           </div>
         ) : null}
         {sessions.map((session) => (
-          <DropdownMenuItem
+          <div
             key={session.id}
-            disabled={isStreaming}
-            onSelect={(event) => {
-              event.preventDefault();
-              onResume(session.id);
-            }}
-            className="flex items-start gap-2"
+            className="flex items-start gap-2 rounded-sm px-2 py-1.5 hover:bg-accent"
           >
-            <div className="min-w-0 flex-1">
+            <button
+              type="button"
+              disabled={isStreaming}
+              onClick={() => onResume(session.id)}
+              className="min-w-0 flex-1 text-left outline-none disabled:pointer-events-none disabled:opacity-50"
+            >
               <div className="truncate text-sm font-medium">
                 {session.title}
                 {session.id === sessionId ? ` ${t("history.current")}` : ""}
@@ -110,7 +112,7 @@ export function ChatHistoryPanel() {
                   }),
                 })}
               </div>
-            </div>
+            </button>
             <Button
               type="button"
               variant="ghost"
@@ -128,14 +130,14 @@ export function ChatHistoryPanel() {
             >
               <Trash2 className="size-3.5" aria-hidden="true" />
             </Button>
-          </DropdownMenuItem>
+          </div>
         ))}
         {resumeError ? (
           <div className="px-2 py-2 text-xs text-destructive">
             {resumeError}
           </div>
         ) : null}
-      </DropdownMenuContent>
-    </DropdownMenu>
+      </DropdownMenuSubContent>
+    </DropdownMenuSub>
   );
 }

@@ -122,3 +122,42 @@ export function selectedModelSupportsReasoningEffort({
   const model = models.find((row) => row.id === selection.model);
   return modelSupportsReasoningEffort(model);
 }
+
+function normalizeEffortList(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter(
+    (item): item is string => typeof item === "string" && item.trim().length > 0,
+  );
+}
+
+function reasoningEffortsFromCapabilityObject(value: unknown): string[] {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return [];
+  return normalizeEffortList(
+    (value as Record<string, unknown>).reasoning_efforts,
+  );
+}
+
+/**
+ * The specific reasoning-effort levels a model (or its provider) advertises,
+ * lower-cased and de-duplicated in advertised order. Empty when nothing is
+ * advertised — callers should fall back to their default level set.
+ */
+export function selectedModelReasoningEfforts({
+  selection,
+  providers,
+  models,
+}: {
+  selection: AssistantModelSelection;
+  providers: AiProviderRow[];
+  models: AiModelRow[];
+}): string[] {
+  if (!selection) return [];
+  const model = models.find((row) => row.id === selection.model);
+  const provider = providers.find((row) => row.name === selection.provider);
+  const advertised = [
+    ...(model ? normalizeEffortList(model.reasoning_efforts) : []),
+    ...(model ? reasoningEffortsFromCapabilityObject(model.capabilities) : []),
+    ...(provider ? reasoningEffortsFromCapabilityObject(provider.capabilities) : []),
+  ].map((effort) => effort.toLowerCase());
+  return [...new Set(advertised)];
+}
