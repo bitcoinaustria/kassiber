@@ -33,7 +33,8 @@ from .pair_allocation import (
 # 2021-02-28 Europe/Vienna are Altvermögen; after that, Neuvermögen.
 # Matches `rp2.plugin.country.at.AT_NEU_CUTOFF` — if rp2 ever revises the
 # cutoff we must update this constant in lockstep.
-AT_NEU_CUTOFF = datetime(2021, 3, 1, 0, 0, 0, tzinfo=ZoneInfo("Europe/Vienna"))
+AT_TAX_TZ = ZoneInfo("Europe/Vienna")
+AT_NEU_CUTOFF = datetime(2021, 3, 1, 0, 0, 0, tzinfo=AT_TAX_TZ)
 
 REGIME_ALT: Literal["alt"] = "alt"
 REGIME_NEU: Literal["neu"] = "neu"
@@ -87,6 +88,24 @@ def _parse_occurred_at(value: str) -> datetime:
 def infer_regime_from_timestamp(occurred_at: str) -> Literal["alt", "neu"]:
     when = _parse_occurred_at(occurred_at)
     return REGIME_ALT if when < AT_NEU_CUTOFF else REGIME_NEU
+
+
+def tax_year_in_vienna(occurred_at: str) -> int:
+    """Return the Austrian calendar tax year for an RFC3339 timestamp.
+
+    Austrian reports follow the Europe/Vienna local calendar. Stored timestamps
+    are UTC, so a disposal at ``2024-12-31T23:30:00Z`` is tax year **2025**.
+    """
+    return _parse_occurred_at(occurred_at).astimezone(AT_TAX_TZ).year
+
+
+def vienna_tax_year_utc_window(tax_year: int) -> tuple[str, str]:
+    """Loose UTC bounds that cover every Europe/Vienna local date in ``tax_year``.
+
+    Callers should still apply :func:`tax_year_in_vienna` for the exact year.
+    """
+    year = int(tax_year)
+    return (f"{year - 1}-12-31T00:00:00Z", f"{year + 1}-01-02T00:00:00Z")
 
 
 def _availability_key(wallet_id: Any) -> str:
@@ -484,10 +503,13 @@ __all__ = [
     "AT_DEFAULT_POOL",
     "AT_NEU_CUTOFF",
     "AT_SWAP_QUARANTINE_REASON",
+    "AT_TAX_TZ",
     "REGIME_ALT",
     "REGIME_NEU",
     "infer_outbound_regimes",
     "infer_regime_from_timestamp",
     "kennzahl_for_disposal_category",
     "resolve_pool_id",
+    "tax_year_in_vienna",
+    "vienna_tax_year_utc_window",
 ]

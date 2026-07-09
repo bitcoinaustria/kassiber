@@ -14,7 +14,11 @@ from urllib.parse import urlparse
 
 from . import pricing
 from . import rates as core_rates
-from .austrian import kennzahl_for_disposal_category
+from .austrian import (
+    kennzahl_for_disposal_category,
+    tax_year_in_vienna,
+    vienna_tax_year_utc_window,
+)
 from .exit_tax import (  # re-exported so CLI/daemon reach exit-tax via core_reports.*
     build_exit_tax_report_lines,
     compute_deemed_disposal,
@@ -2110,10 +2114,18 @@ def report_capital_gains(conn, workspace_ref, profile_ref, hooks: ReportHooks, t
         "COALESCE(je.at_category, '') != 'neu_swap'",
     ]
     params: list[Any] = [profile["id"]]
+    use_vienna_year = str(profile.get("tax_country") or "").lower() == "at"
+    normalized_year = None
     if tax_year is not None:
         normalized_year = _normalize_tax_year(tax_year)
-        where.append("substr(je.occurred_at, 1, 4) = ?")
-        params.append(str(normalized_year))
+        if use_vienna_year:
+            start, end = vienna_tax_year_utc_window(normalized_year)
+            where.append("je.occurred_at >= ?")
+            where.append("je.occurred_at < ?")
+            params.extend([start, end])
+        else:
+            where.append("substr(je.occurred_at, 1, 4) = ?")
+            params.append(str(normalized_year))
     rows = conn.execute(
         f"""
         SELECT
@@ -2140,6 +2152,12 @@ def report_capital_gains(conn, workspace_ref, profile_ref, hooks: ReportHooks, t
     ).fetchall()
     results = []
     for row in rows:
+        if (
+            use_vienna_year
+            and normalized_year is not None
+            and tax_year_in_vienna(str(row["occurred_at"])) != normalized_year
+        ):
+            continue
         entry = dict(row)
         entry["quantity_msat"] = int(entry["quantity"])
         entry["quantity"] = float(msat_to_btc(entry["quantity"]))
@@ -4501,7 +4519,7 @@ def _austrian_e1kv_detail_row(row):
     occurred_at = str(row["occurred_at"])
     note = row["transaction_note"] or row["description"] or ""
     return {
-        "tax_year": int(occurred_at[:4]),
+        "tax_year": tax_year_in_vienna(occurred_at),
         "date": occurred_at[:10],
         "tx_id": row["transaction_external_id"] or row["transaction_id"],
         "transaction_id": row["transaction_id"],
@@ -4529,6 +4547,17 @@ def _austrian_e1kv_detail_row(row):
     }
 
 
+def _filter_rows_by_vienna_tax_year(rows, tax_year, occurred_at_key="occurred_at"):
+    if tax_year is None:
+        return list(rows)
+    year = int(tax_year)
+    return [
+        row
+        for row in rows
+        if tax_year_in_vienna(str(row[occurred_at_key])) == year
+    ]
+
+
 def _austrian_e1kv_rows(conn, profile, tax_year):
     where = [
         "je.profile_id = ?",
@@ -4539,8 +4568,10 @@ def _austrian_e1kv_rows(conn, profile, tax_year):
     ]
     params: list[Any] = [profile["id"]]
     if tax_year is not None:
-        where.append("substr(je.occurred_at, 1, 4) = ?")
-        params.append(str(tax_year))
+        start, end = vienna_tax_year_utc_window(tax_year)
+        where.append("je.occurred_at >= ?")
+        where.append("je.occurred_at < ?")
+        params.extend([start, end])
     rows = conn.execute(
         f"""
         SELECT
@@ -4568,6 +4599,7 @@ def _austrian_e1kv_rows(conn, profile, tax_year):
         """,
         params,
     ).fetchall()
+    rows = _filter_rows_by_vienna_tax_year(rows, tax_year)
     return [_austrian_e1kv_detail_row(row) for row in rows]
 
 
@@ -4575,21 +4607,26 @@ def _austrian_e1kv_quarantines(conn, profile, tax_year):
     where = ["jq.profile_id = ?"]
     params: list[Any] = [profile["id"]]
     if tax_year is not None:
-        where.append("substr(t.occurred_at, 1, 4) = ?")
-        params.append(str(tax_year))
+        start, end = vienna_tax_year_utc_window(tax_year)
+        where.append("t.occurred_at >= ?")
+        where.append("t.occurred_at < ?")
+        params.extend([start, end])
+    quarantine_rows = conn.execute(
+        f"""
+        SELECT jq.reason, t.occurred_at
+        FROM journal_quarantines jq
+        JOIN transactions t ON t.id = jq.transaction_id
+        WHERE {' AND '.join(where)}
+        """,
+        params,
+    ).fetchall()
+    quarantine_rows = _filter_rows_by_vienna_tax_year(quarantine_rows, tax_year)
+    counts: dict[str, int] = defaultdict(int)
+    for row in quarantine_rows:
+        counts[str(row["reason"] or "")] += 1
     return [
-        {"reason": row["reason"], "count": int(row["count"] or 0)}
-        for row in conn.execute(
-            f"""
-            SELECT jq.reason, COUNT(*) AS count
-            FROM journal_quarantines jq
-            JOIN transactions t ON t.id = jq.transaction_id
-            WHERE {' AND '.join(where)}
-            GROUP BY jq.reason
-            ORDER BY count DESC, jq.reason ASC
-            """,
-            params,
-        ).fetchall()
+        {"reason": reason, "count": count}
+        for reason, count in sorted(counts.items(), key=lambda item: (-item[1], item[0]))
     ]
 
 
@@ -4597,8 +4634,10 @@ def _austrian_e1kv_transaction_rows(conn, profile, tax_year):
     where = ["t.profile_id = ?", "t.excluded = 0"]
     params: list[Any] = [profile["id"]]
     if tax_year is not None:
-        where.append("substr(t.occurred_at, 1, 4) = ?")
-        params.append(str(tax_year))
+        start, end = vienna_tax_year_utc_window(tax_year)
+        where.append("t.occurred_at >= ?")
+        where.append("t.occurred_at < ?")
+        params.extend([start, end])
     rows = conn.execute(
         f"""
         SELECT
@@ -4625,6 +4664,7 @@ def _austrian_e1kv_transaction_rows(conn, profile, tax_year):
         """,
         params,
     ).fetchall()
+    rows = _filter_rows_by_vienna_tax_year(rows, tax_year)
     return [
         {
             "transaction_id": row["transaction_id"],

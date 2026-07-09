@@ -3839,6 +3839,7 @@ def _capital_gains_available_years(
     profile_id: str,
     *,
     primary_only: bool = False,
+    use_vienna_year: bool = False,
 ) -> list[int]:
     reportable_filter = (
         "((je.entry_type = 'disposal' AND COALESCE(je.at_category, '') != 'neu_swap') "
@@ -3849,7 +3850,7 @@ def _capital_gains_available_years(
     )
     rows = conn.execute(
         f"""
-        SELECT DISTINCT substr(je.occurred_at, 1, 4) AS year
+        SELECT je.occurred_at
         FROM journal_entries je
         LEFT JOIN transactions t ON t.id = je.transaction_id
         WHERE je.profile_id = ?
@@ -3857,40 +3858,52 @@ def _capital_gains_available_years(
           AND {reportable_filter}
           AND je.occurred_at IS NOT NULL
           AND length(je.occurred_at) >= 4
-        ORDER BY year DESC
         """,
         (profile_id,),
     ).fetchall()
-    years: list[int] = []
-    for row in rows:
-        year = row["year"] or ""
-        if str(year).isdigit():
-            years.append(int(year))
-    return years
+    years: set[int] = set()
+    if use_vienna_year:
+        from .austrian import tax_year_in_vienna
+
+        for row in rows:
+            years.add(tax_year_in_vienna(str(row["occurred_at"])))
+    else:
+        for row in rows:
+            year = str(row["occurred_at"] or "")[:4]
+            if year.isdigit():
+                years.add(int(year))
+    return sorted(years, reverse=True)
 
 
 def _capital_gains_transaction_years(
     conn: sqlite3.Connection,
     profile_id: str,
+    *,
+    use_vienna_year: bool = False,
 ) -> list[int]:
     rows = conn.execute(
         """
-        SELECT DISTINCT substr(occurred_at, 1, 4) AS year
+        SELECT occurred_at
         FROM transactions
         WHERE profile_id = ?
           AND excluded = 0
           AND occurred_at IS NOT NULL
           AND length(occurred_at) >= 4
-        ORDER BY year DESC
         """,
         (profile_id,),
     ).fetchall()
-    years: list[int] = []
-    for row in rows:
-        year = row["year"] or ""
-        if str(year).isdigit():
-            years.append(int(year))
-    return years
+    years: set[int] = set()
+    if use_vienna_year:
+        from .austrian import tax_year_in_vienna
+
+        for row in rows:
+            years.add(tax_year_in_vienna(str(row["occurred_at"])))
+    else:
+        for row in rows:
+            year = str(row["occurred_at"] or "")[:4]
+            if year.isdigit():
+                years.add(int(year))
+    return sorted(years, reverse=True)
 
 
 def _merge_report_years(*year_lists: list[int]) -> list[int]:
@@ -3937,9 +3950,28 @@ def _capital_gains_neutral_swap_rows(
     conn: sqlite3.Connection,
     profile_id: str,
     tax_year: int,
+    *,
+    use_vienna_year: bool = False,
 ) -> list[dict[str, Any]]:
+    where = [
+        "je.profile_id = ?",
+        "je.entry_type = 'disposal'",
+        "je.at_category = 'neu_swap'",
+        "COALESCE(tout.taxability_override, 1) != 0",
+    ]
+    params: list[Any] = [profile_id]
+    if use_vienna_year:
+        from .austrian import tax_year_in_vienna, vienna_tax_year_utc_window
+
+        start, end = vienna_tax_year_utc_window(tax_year)
+        where.append("je.occurred_at >= ?")
+        where.append("je.occurred_at < ?")
+        params.extend([start, end])
+    else:
+        where.append("substr(je.occurred_at, 1, 4) = ?")
+        params.append(str(tax_year))
     rows = conn.execute(
-        """
+        f"""
         SELECT
             je.occurred_at,
             je.quantity,
@@ -3968,15 +4000,17 @@ def _capital_gains_neutral_swap_rows(
         LEFT JOIN transactions tin ON tin.id = p.in_transaction_id
         LEFT JOIN wallets wout ON wout.id = tout.wallet_id
         LEFT JOIN wallets win ON win.id = tin.wallet_id
-        WHERE je.profile_id = ?
-          AND je.entry_type = 'disposal'
-          AND je.at_category = 'neu_swap'
-          AND COALESCE(tout.taxability_override, 1) != 0
-          AND substr(je.occurred_at, 1, 4) = ?
+        WHERE {' AND '.join(where)}
         ORDER BY je.occurred_at ASC, je.created_at ASC, je.id ASC
         """,
-        (profile_id, str(tax_year)),
+        params,
     ).fetchall()
+    if use_vienna_year:
+        rows = [
+            row
+            for row in rows
+            if tax_year_in_vienna(str(row["occurred_at"])) == int(tax_year)
+        ]
     output = []
     for row in rows:
         quantity_msat = abs(int(row["quantity"] or 0))
@@ -4067,14 +4101,20 @@ def build_capital_gains_snapshot(
         "SELECT COUNT(*) AS count FROM journal_quarantines WHERE profile_id = ?",
         (profile["id"],),
     ).fetchone()["count"]
+    use_vienna_year = str(profile["tax_country"] or "").lower() == "at"
     available_years = _merge_report_years(
-        _capital_gains_available_years(conn, profile["id"]),
-        _capital_gains_transaction_years(conn, profile["id"]),
+        _capital_gains_available_years(
+            conn, profile["id"], use_vienna_year=use_vienna_year
+        ),
+        _capital_gains_transaction_years(
+            conn, profile["id"], use_vienna_year=use_vienna_year
+        ),
     )
     primary_years = _capital_gains_available_years(
         conn,
         profile["id"],
         primary_only=True,
+        use_vienna_year=use_vienna_year,
     )
     if tax_year is not None:
         latest_year = _normalize_snapshot_tax_year(tax_year)
@@ -4086,21 +4126,42 @@ def build_capital_gains_snapshot(
         latest_year = datetime.now(timezone.utc).year
     if latest_year not in available_years:
         available_years = [latest_year, *available_years]
+    where = [
+        "je.profile_id = ?",
+        "je.entry_type = 'disposal'",
+        "COALESCE(t.taxability_override, 1) != 0",
+        "COALESCE(je.at_category, '') != 'neu_swap'",
+    ]
+    params: list[Any] = [profile["id"]]
+    if use_vienna_year:
+        from .austrian import tax_year_in_vienna, vienna_tax_year_utc_window
+
+        start, end = vienna_tax_year_utc_window(latest_year)
+        where.append("je.occurred_at >= ?")
+        where.append("je.occurred_at < ?")
+        params.extend([start, end])
+    else:
+        where.append("substr(je.occurred_at, 1, 4) = ?")
+        params.append(str(latest_year))
     rows = conn.execute(
-        """
+        f"""
         SELECT je.occurred_at, je.quantity, je.cost_basis, je.proceeds, je.gain_loss
         FROM journal_entries je
         LEFT JOIN transactions t ON t.id = je.transaction_id
-        WHERE je.profile_id = ?
-          AND je.entry_type = 'disposal'
-          AND COALESCE(t.taxability_override, 1) != 0
-          AND COALESCE(je.at_category, '') != 'neu_swap'
-          AND substr(je.occurred_at, 1, 4) = ?
+        WHERE {' AND '.join(where)}
         ORDER BY je.occurred_at DESC, je.created_at DESC, je.id DESC
-        LIMIT 200
+        LIMIT 400
         """,
-        (profile["id"], str(latest_year)),
+        params,
     ).fetchall()
+    if use_vienna_year:
+        rows = [
+            row
+            for row in rows
+            if tax_year_in_vienna(str(row["occurred_at"])) == int(latest_year)
+        ][:200]
+    else:
+        rows = rows[:200]
     lots = [
         {
             "acquired": "",
@@ -4122,6 +4183,7 @@ def build_capital_gains_snapshot(
             conn,
             profile["id"],
             latest_year,
+            use_vienna_year=use_vienna_year,
         ),
         "kennzahlRows": _austrian_kennzahl_snapshot_rows(conn, profile, latest_year),
         "status": {
