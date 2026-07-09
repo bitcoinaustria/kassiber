@@ -18,7 +18,6 @@ import {
   Bell,
   BookOpen,
   Bug,
-  Calculator,
   ChevronDown,
   ChevronRight,
   ChevronsUpDown,
@@ -318,7 +317,6 @@ const NAV_GROUPS: NavGroup[] = [
       { labelKey: "book.transactions", icon: ClipboardList, href: "/transactions" },
       { labelKey: "book.wallets", icon: WalletCards, href: "/connections" },
       { labelKey: "book.reports", icon: BarChart3, href: "/reports" },
-      { labelKey: "book.privacyMirror", icon: Eye, href: "/privacy-mirror" },
       { labelKey: "book.assistant", icon: MessageSquareText, href: "/assistant" },
     ],
   },
@@ -327,7 +325,6 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { labelKey: "book.quarantine", icon: ShieldAlert, href: "/quarantine" },
       { labelKey: "book.reconcile", icon: Fingerprint, href: "/reconcile" },
-      { labelKey: "book.egress", icon: Plane, href: "/egress" },
       { labelKey: "book.sourceFunds", icon: BadgeCheck, href: "/source-of-funds" },
       { labelKey: "book.swaps", icon: ArrowLeftRight, href: "/swaps" },
       { labelKey: "book.ledger", icon: BookOpen, href: "/journals" },
@@ -2081,22 +2078,33 @@ function SidebarActions({
                 <SidebarMenuSubItem>
                   <SidebarMenuSubButton
                     asChild
-                    className="w-full cursor-default"
-                  >
-                    <button type="button" disabled>
-                      <Calculator className="size-3.5" aria-hidden="true" />
-                      <span>{t("shell.extras.manySats")}</span>
-                    </button>
-                  </SidebarMenuSubButton>
-                </SidebarMenuSubItem>
-                <SidebarMenuSubItem>
-                  <SidebarMenuSubButton
-                    asChild
                     isActive={pathname === "/exit-tax"}
                   >
                     <Link to="/exit-tax">
                       <LogOut className="size-3.5" aria-hidden="true" />
                       <span>{t("shell.extras.exitCalculator")}</span>
+                    </Link>
+                  </SidebarMenuSubButton>
+                </SidebarMenuSubItem>
+                <SidebarMenuSubItem>
+                  <SidebarMenuSubButton
+                    asChild
+                    isActive={pathname === "/privacy-mirror"}
+                  >
+                    <Link to="/privacy-mirror">
+                      <Eye className="size-3.5" aria-hidden="true" />
+                      <span>{t("shell.extras.privacyMirror")}</span>
+                    </Link>
+                  </SidebarMenuSubButton>
+                </SidebarMenuSubItem>
+                <SidebarMenuSubItem>
+                  <SidebarMenuSubButton
+                    asChild
+                    isActive={pathname === "/egress"}
+                  >
+                    <Link to="/egress">
+                      <Plane className="size-3.5" aria-hidden="true" />
+                      <span>{t("shell.extras.egress")}</span>
                     </Link>
                   </SidebarMenuSubButton>
                 </SidebarMenuSubItem>

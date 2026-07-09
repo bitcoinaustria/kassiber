@@ -176,6 +176,49 @@
     filter: drop-shadow(0 1px 1px rgba(16, 30, 44, 0.08));
   }
 
+  /* Assistant chat conversation scroll — narrower than the ~15px native bar. */
+  .conversation-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in oklch, var(--muted-foreground) 40%, transparent)
+      transparent;
+  }
+
+  .conversation-scrollbar::-webkit-scrollbar {
+    width: 10px;
+  }
+
+  .conversation-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .conversation-scrollbar::-webkit-scrollbar-thumb {
+    background-color: color-mix(in oklch, var(--muted-foreground) 35%, transparent);
+    border: 2px solid transparent;
+    border-radius: 9999px;
+    background-clip: padding-box;
+  }
+
+  .conversation-scrollbar::-webkit-scrollbar-thumb:hover {
+    background-color: color-mix(in oklch, var(--muted-foreground) 55%, transparent);
+  }
+
+  /* Assistant reasoning header — ChatGPT-style streaming label. */
+  .thinking-label-active {
+    animation: thinking-pulse 2.2s ease-in-out infinite;
+  }
+
+  .thinking-dot {
+    animation: thinking-dot 1.4s ease-in-out infinite;
+  }
+
+  .thinking-dot:nth-child(2) {
+    animation-delay: 0.2s;
+  }
+
+  .thinking-dot:nth-child(3) {
+    animation-delay: 0.4s;
+  }
+
 }
 
 .sensitive {
@@ -189,6 +232,27 @@
   }
   100% {
     transform: translateX(220%);
+  }
+}
+
+@keyframes thinking-pulse {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes thinking-dot {
+  0%,
+  80%,
+  100% {
+    opacity: 0.15;
+  }
+  40% {
+    opacity: 1;
   }
 }
 

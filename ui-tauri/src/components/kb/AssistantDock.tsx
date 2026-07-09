@@ -267,10 +267,6 @@ export function AssistantDock({
                     : t("page.generating")}
                 </span>
               ) : null}
-              <ChevronUp
-                className="ml-0.5 h-3.5 w-3.5 text-muted-foreground"
-                aria-hidden="true"
-              />
             </button>
           ) : (
             <>

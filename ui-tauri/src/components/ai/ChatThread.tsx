@@ -20,6 +20,8 @@ import type { AiChatMessage } from "@/daemon/stream";
 interface ChatThreadProps {
   messages: AiChatMessage[];
   className?: string;
+  /** Centers message content while the scroll container spans full width. */
+  contentClassName?: string;
   scrollable?: boolean;
   /**
    * When provided, assistant messages expose a "Branch in new chat" action.
@@ -27,10 +29,11 @@ interface ChatThreadProps {
    */
   onBranchMessage?: (messageId: string) => void;
   /**
-   * When provided, user messages expose an "Edit" action that rewinds to that
-   * prompt. Only wired on the full assistant page.
+   * When provided, user messages expose an inline "Edit" action. Confirming
+   * calls this with the edited text, which regenerates the conversation from
+   * that prompt onward. Only wired on the full assistant page.
    */
-  onEditMessage?: (messageId: string) => void;
+  onEditMessage?: (messageId: string, nextContent?: string) => void;
 }
 
 const STICKY_THRESHOLD_PX = 32;
@@ -38,6 +41,7 @@ const STICKY_THRESHOLD_PX = 32;
 export function ChatThread({
   messages,
   className,
+  contentClassName,
   scrollable = true,
   onBranchMessage,
   onEditMessage,
@@ -100,8 +104,10 @@ export function ChatThread({
     <Conversation className={className}>
       <ConversationContent
         ref={containerRef}
+        className="conversation-scrollbar"
         onScroll={handleScroll}
         scrollable={scrollable}
+        contentClassName={contentClassName}
       >
         {messages.map((message) => (
           <ChatMessage

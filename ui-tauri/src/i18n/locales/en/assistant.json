@@ -8,8 +8,9 @@
     "messageCount_other": "{{count}} messages",
     "incognito": "Incognito",
     "incognitoTitle": "Incognito: do not store this conversation",
-    "exportChat": "Export chat",
-    "clearChat": "Clear chat"
+    "exportChat": "Export",
+    "clearChat": "Clear chat",
+    "moreActions": "More actions"
   },
   "dock": {
     "label": "Kassiber assistant",
@@ -60,6 +61,8 @@
   "message": {
     "toolUsage": "Tool usage",
     "thinking": "Thinking",
+    "thoughts": "Thoughts",
+    "thoughtFor": "Thought for {{duration}}",
     "generating": "Generating",
     "chatFailed": "Chat failed",
     "stoppedByUser": "Stopped by user.",
@@ -69,7 +72,9 @@
     "stopReading": "Stop reading",
     "moreOptions": "More options",
     "branch": "Branch in new chat",
-    "edit": "Edit message"
+    "edit": "Edit message",
+    "confirmEdit": "Confirm edit",
+    "cancelEdit": "Cancel edit"
   },
   "facts": {
     "asset": "Asset",

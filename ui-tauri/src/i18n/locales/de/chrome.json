@@ -38,8 +38,9 @@
     },
     "extras": {
       "title": "Extras",
-      "manySats": "ManySats",
-      "exitCalculator": "Exit-Calculator"
+      "exitCalculator": "Exit-Calculator",
+      "privacyMirror": "Privacy Mirror",
+      "egress": "Network Monitor"
     },
     "user": {
       "fallbackWorkspace": "Meine Bücher",
@@ -92,7 +93,7 @@
       "placeholder": "Wallets, Dateiformate suchen…"
     },
     "egress": {
-      "label": "Egress durchsuchen",
+      "label": "Network Monitor durchsuchen",
       "placeholder": "Hosts, Subsysteme suchen…"
     },
     "logs": {

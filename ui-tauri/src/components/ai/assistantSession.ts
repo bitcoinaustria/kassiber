@@ -54,10 +54,13 @@ export interface AssistantSessionContextValue {
    */
   branchFromMessage: (messageId: string) => void;
   /**
-   * Rewind to just before the given user message and reload its text into the
-   * composer for editing. Resending starts a fresh, unsaved turn.
+   * Edit a user message in place. When `nextContent` is provided (inline
+   * editor confirm), the conversation is rewound to just before that prompt
+   * and regenerated from the edited text in a fresh, unsaved turn. When it is
+   * omitted, the prompt text is dropped back into the composer for a manual
+   * resend (legacy rollback path).
    */
-  editUserMessage: (messageId: string) => void;
+  editUserMessage: (messageId: string, nextContent?: string) => void;
   /** Drop the session binding (all sessions, or only when it matches id). */
   forgetSession: (id?: string) => void;
 }

@@ -8,8 +8,9 @@
     "messageCount_other": "{{count}} Nachrichten",
     "incognito": "Incognito",
     "incognitoTitle": "Incognito: Diese Unterhaltung wird nicht gespeichert",
-    "exportChat": "Chat exportieren",
-    "clearChat": "Chat leeren"
+    "exportChat": "Exportieren",
+    "clearChat": "Chat leeren",
+    "moreActions": "Weitere Aktionen"
   },
   "dock": {
     "label": "Kassiber-Assistent",
@@ -60,6 +61,8 @@
   "message": {
     "toolUsage": "Tool-Nutzung",
     "thinking": "Wird nachgedacht",
+    "thoughts": "Gedanken",
+    "thoughtFor": "Nachgedacht für {{duration}}",
     "generating": "Wird generiert",
     "chatFailed": "Chat fehlgeschlagen",
     "stoppedByUser": "Von dir gestoppt.",
@@ -69,7 +72,9 @@
     "stopReading": "Vorlesen stoppen",
     "moreOptions": "Weitere Optionen",
     "branch": "In neuem Chat verzweigen",
-    "edit": "Nachricht bearbeiten"
+    "edit": "Nachricht bearbeiten",
+    "confirmEdit": "Bearbeitung bestätigen",
+    "cancelEdit": "Bearbeitung abbrechen"
   },
   "facts": {
     "asset": "Asset",

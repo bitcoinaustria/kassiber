@@ -21,7 +21,7 @@ const components: Components = {
   h1: ({ className, ...props }) => (
     <h1
       className={cn(
-        "mt-7 mb-3 scroll-m-20 text-2xl font-semibold leading-tight first:mt-0",
+        "mt-6 mb-3 scroll-m-20 text-lg font-semibold leading-snug first:mt-0",
         className,
       )}
       {...props}
@@ -30,7 +30,7 @@ const components: Components = {
   h2: ({ className, ...props }) => (
     <h2
       className={cn(
-        "mt-6 mb-3 scroll-m-20 text-xl font-semibold leading-tight first:mt-0",
+        "mt-5 mb-2 scroll-m-20 text-base font-semibold leading-snug first:mt-0",
         className,
       )}
       {...props}
@@ -39,7 +39,7 @@ const components: Components = {
   h3: ({ className, ...props }) => (
     <h3
       className={cn(
-        "mt-5 mb-2 scroll-m-20 text-base font-semibold leading-snug first:mt-0",
+        "mt-4 mb-2 scroll-m-20 text-sm font-semibold leading-snug first:mt-0",
         className,
       )}
       {...props}
@@ -48,7 +48,7 @@ const components: Components = {
   h4: ({ className, ...props }) => (
     <h4
       className={cn(
-        "mt-4 mb-2 scroll-m-20 text-sm font-semibold leading-snug first:mt-0",
+        "mt-4 mb-2 scroll-m-20 text-sm font-semibold leading-snug text-muted-foreground first:mt-0",
         className,
       )}
       {...props}
@@ -102,7 +102,7 @@ const components: Components = {
   code: ({ className, ...props }) => (
     <code
       className={cn(
-        "rounded bg-muted px-1 py-0.5 font-mono text-[0.9em]",
+        "rounded-md bg-muted px-1 py-0.5 font-mono text-[0.9em]",
         className,
       )}
       {...props}
@@ -134,7 +134,7 @@ const components: Components = {
   td: ({ className, ...props }) => (
     <td
       className={cn(
-        "border-t border-border px-3 py-2 align-top text-muted-foreground",
+        "border-t border-border px-3 py-2 align-top text-foreground tabular-nums",
         className,
       )}
       {...props}
@@ -157,7 +157,7 @@ export function ChatMarkdown({ content, className }: ChatMarkdownProps) {
   return (
     <div
       className={cn(
-        "max-w-none text-[15px] leading-7 text-foreground",
+        "max-w-none text-sm leading-6 text-foreground",
         className,
       )}
     >
