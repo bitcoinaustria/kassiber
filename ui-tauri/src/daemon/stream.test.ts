@@ -87,7 +87,128 @@ describe("AI stream reducer helpers", () => {
 
     expect(next.content).toBe("");
     expect(next.thinking).toBe("Checking transactions...");
+    expect(next.thinkingSegments).toEqual([
+      { id: expect.any(String), content: "Checking transactions..." },
+    ]);
     expect(next.activityLabel).toBe("Thinking");
+  });
+
+  it("splits reasoning into a new segment per waiting_for_model round", () => {
+    const parser = new ThinkParser();
+    let message = applyAiChatStreamRecordToMessage(
+      assistantMessage(),
+      {
+        kind: "ai.chat.status",
+        schema_version: 1,
+        request_id: "chat-1",
+        data: { phase: "waiting_for_model" },
+      },
+      parser,
+      false,
+    );
+    message = applyAiChatDeltaToMessage(
+      message,
+      {
+        kind: "ai.chat.delta",
+        schema_version: 1,
+        request_id: "chat-1",
+        data: { delta: { reasoning: "Round one plan. " } },
+      },
+      parser,
+      false,
+    );
+    message = applyAiChatStreamRecordToMessage(
+      message,
+      {
+        kind: "ai.chat.tool_call",
+        schema_version: 1,
+        request_id: "chat-1",
+        data: {
+          call_id: "call_1",
+          name: "ui.overview.snapshot",
+          arguments: {},
+          kind_class: "read_only",
+          needs_consent: false,
+        },
+      },
+      parser,
+      false,
+    );
+    message = applyAiChatStreamRecordToMessage(
+      message,
+      {
+        kind: "ai.chat.tool_result",
+        schema_version: 1,
+        request_id: "chat-1",
+        data: {
+          call_id: "call_1",
+          ok: true,
+          envelope: { kind: "ui.overview.snapshot", data: {} },
+        },
+      },
+      parser,
+      false,
+    );
+    message = applyAiChatStreamRecordToMessage(
+      message,
+      {
+        kind: "ai.chat.status",
+        schema_version: 1,
+        request_id: "chat-1",
+        data: { phase: "waiting_for_model" },
+      },
+      parser,
+      false,
+    );
+    message = applyAiChatDeltaToMessage(
+      message,
+      {
+        kind: "ai.chat.delta",
+        schema_version: 1,
+        request_id: "chat-1",
+        data: { delta: { reasoning: "Round two after tools." } },
+      },
+      parser,
+      false,
+    );
+
+    expect(message.thinkingSegments).toHaveLength(2);
+    expect(message.thinkingSegments?.[0]?.content).toBe("Round one plan. ");
+    expect(message.thinkingSegments?.[1]?.content).toBe(
+      "Round two after tools.",
+    );
+    expect(message.thinking).toBe(
+      "Round one plan. \n\nRound two after tools.",
+    );
+  });
+
+  it("does not open a blank segment when waiting_for_model repeats", () => {
+    const parser = new ThinkParser();
+    let message = applyAiChatStreamRecordToMessage(
+      assistantMessage(),
+      {
+        kind: "ai.chat.status",
+        schema_version: 1,
+        request_id: "chat-1",
+        data: { phase: "waiting_for_model" },
+      },
+      parser,
+      false,
+    );
+    message = applyAiChatStreamRecordToMessage(
+      message,
+      {
+        kind: "ai.chat.status",
+        schema_version: 1,
+        request_id: "chat-1",
+        data: { phase: "waiting_for_model" },
+      },
+      parser,
+      false,
+    );
+
+    expect(message.thinkingSegments).toHaveLength(1);
+    expect(message.thinkingSegments?.[0]?.content).toBe("");
   });
 
   it("applies tool call, tool result, and final delta records", () => {

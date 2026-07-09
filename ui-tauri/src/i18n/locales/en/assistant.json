@@ -63,7 +63,9 @@
   "message": {
     "toolUsage": "Tool usage",
     "thinking": "Thinking",
+    "thinkingRound": "Thinking · round {{round}}",
     "thoughts": "Thoughts",
+    "thoughtsRound": "Thoughts · round {{round}}",
     "thoughtFor": "Thought for {{duration}}",
     "generating": "Generating",
     "chatFailed": "Chat failed",

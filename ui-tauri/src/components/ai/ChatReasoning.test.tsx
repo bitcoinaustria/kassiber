@@ -37,4 +37,23 @@ describe("ChatReasoning", () => {
     expect(html).toContain("<code");
     expect(html).toContain("<strong");
   });
+
+  it("renders one pane per thinking segment", () => {
+    const html = renderToStaticMarkup(
+      <ChatReasoning
+        segments={[
+          { id: "s1", content: "First round plan." },
+          { id: "s2", content: "Second round after tools." },
+        ]}
+        isStreaming={false}
+        hasAnswer={true}
+        defaultOpen
+      />,
+    );
+
+    expect(html).toContain("Thoughts · round 1");
+    expect(html).toContain("Thoughts · round 2");
+    expect(html).toContain("First round plan.");
+    expect(html).toContain("Second round after tools.");
+  });
 });

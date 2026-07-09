@@ -21,11 +21,24 @@ import { getTransport, makeDaemonRequestId } from "./transport";
 import { ThinkParser } from "@/lib/thinkParser";
 import { useUiStore } from "@/store/ui";
 
+/** One model-round reasoning trace within an assistant turn. */
+export interface AiChatThinkingSegment {
+  id: string;
+  content: string;
+}
+
 export interface AiChatMessage {
   id: string;
   role: "user" | "assistant" | "system";
   content: string;
+  /**
+   * Joined reasoning text for the turn (legacy / convenience). Prefer
+   * `thinkingSegments` when rendering — each segment is one provider
+   * completion round (Ollama/oMLX emit a fresh reasoning stream per call).
+   */
   thinking?: string;
+  /** Per model-round reasoning panes for this assistant turn. */
+  thinkingSegments?: AiChatThinkingSegment[];
   activityLabel?: string;
   toolCalls?: AiChatToolCall[];
   status: "pending" | "streaming" | "done" | "error" | "cancelled";
@@ -222,6 +235,61 @@ function makeId(): string {
   return `msg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+/** Non-empty reasoning segments for rendering. */
+export function visibleThinkingSegments(
+  message: AiChatMessage,
+): AiChatThinkingSegment[] {
+  const segments = message.thinkingSegments;
+  if (segments && segments.length > 0) {
+    return segments.filter((segment) => segment.content.length > 0);
+  }
+  const legacy = message.thinking?.trim();
+  if (!legacy) return [];
+  return [{ id: `${message.id}-thinking`, content: message.thinking! }];
+}
+
+/**
+ * Open a new reasoning segment for the next provider completion round.
+ * Skips when the current segment is still empty so repeated status
+ * records do not create blank panes.
+ */
+export function beginThinkingSegment(current: AiChatMessage): AiChatMessage {
+  const segments = current.thinkingSegments ?? [];
+  const last = segments[segments.length - 1];
+  if (last && last.content.length === 0) {
+    return current;
+  }
+  return {
+    ...current,
+    thinkingSegments: [...segments, { id: makeId(), content: "" }],
+  };
+}
+
+function appendThinkingToMessage(
+  current: AiChatMessage,
+  thinkingAdd: string,
+): AiChatMessage {
+  if (!thinkingAdd) return current;
+  const segments = [...(current.thinkingSegments ?? [])];
+  if (segments.length === 0) {
+    segments.push({ id: makeId(), content: thinkingAdd });
+  } else {
+    const last = segments[segments.length - 1]!;
+    segments[segments.length - 1] = {
+      ...last,
+      content: last.content + thinkingAdd,
+    };
+  }
+  return {
+    ...current,
+    thinkingSegments: segments,
+    thinking: segments
+      .map((segment) => segment.content)
+      .filter((part) => part.length > 0)
+      .join("\n\n"),
+  };
+}
+
 export function applyAiChatDeltaToMessage(
   current: AiChatMessage,
   record: DaemonStreamRecord<AiChatDeltaShape>,
@@ -236,8 +304,8 @@ export function applyAiChatDeltaToMessage(
   // `content` may carry inline `<think>...</think>` chunks (DeepSeek-R1,
   // older Qwen builds). `reasoning` is the structured channel
   // (OpenAI o1/o3, Ollama's OpenAI-compat for Qwen3 / Gemma reasoning
-  // builds). Merge both into the thinking pane; visible answer comes
-  // from the parsed-content channel only.
+  // builds). Both append to the active thinking segment; visible answer
+  // comes from the parsed-content channel only.
   let visibleAdd = "";
   let thinkingAdd = "";
   if (content) {
@@ -250,14 +318,17 @@ export function applyAiChatDeltaToMessage(
   }
   if (!visibleAdd && !thinkingAdd) return current;
 
-  return {
+  let next: AiChatMessage = {
     ...current,
     status: "streaming",
     content: current.content + visibleAdd,
-    thinking: (current.thinking ?? "") + thinkingAdd,
     activityLabel:
       !visibleAdd && thinkingAdd ? "Thinking" : current.activityLabel,
   };
+  if (thinkingAdd) {
+    next = appendThinkingToMessage(next, thinkingAdd);
+  }
+  return next;
 }
 
 export function aiChatStatusLabel(data: AiChatStatusShape | undefined): string {
@@ -352,12 +423,19 @@ export function applyAiChatStreamRecordToMessage(
     );
   }
   if (record.kind === "ai.chat.status") {
+    const statusData = record.data as AiChatStatusShape | undefined;
+    const phase = statusData?.phase;
+    // Each provider completion round starts with waiting_for_model (see
+    // `_stream_ai_chat_tool_turn`). Open a fresh reasoning segment so
+    // Ollama/oMLX traces stay per-round instead of one continuous blob.
+    const withSegment =
+      phase === "waiting_for_model" || phase === "thinking"
+        ? beginThinkingSegment(current)
+        : current;
     return {
-      ...current,
+      ...withSegment,
       status: "streaming",
-      activityLabel: aiChatStatusLabel(
-        record.data as AiChatStatusShape | undefined,
-      ),
+      activityLabel: aiChatStatusLabel(statusData),
     };
   }
   if (record.kind === "ai.chat.tool_call") {
@@ -607,6 +685,7 @@ export function useAiChatStream(): UseAiChatStreamResult {
           role: "assistant",
           content: "",
           thinking: "",
+          thinkingSegments: [],
           activityLabel: "Preparing chat",
           status: "pending",
         },
@@ -656,11 +735,16 @@ export function useAiChatStream(): UseAiChatStreamResult {
         if (parser && !controller.signal.aborted) {
           const tail = parser.flush();
           if (tail.content || tail.thinking) {
-            updateAssistant((current) => ({
-              ...current,
-              content: current.content + tail.content,
-              thinking: (current.thinking ?? "") + tail.thinking,
-            }));
+            updateAssistant((current) => {
+              let next: AiChatMessage = {
+                ...current,
+                content: current.content + tail.content,
+              };
+              if (tail.thinking) {
+                next = appendThinkingToMessage(next, tail.thinking);
+              }
+              return next;
+            });
           }
         }
 

@@ -85,6 +85,9 @@ describe("ChatMessage", () => {
       content: "",
       status: "streaming",
       thinking: "Checking report readiness...",
+      thinkingSegments: [
+        { id: "seg-1", content: "Checking report readiness..." },
+      ],
       activityLabel: "Thinking",
     };
 
@@ -92,6 +95,24 @@ describe("ChatMessage", () => {
 
     expect(html).toContain("Thinking");
     expect(html).not.toContain('aria-label="Assistant status: Thinking"');
+  });
+
+  it("renders separate thinking panes for each model round", () => {
+    const message: AiChatMessage = {
+      id: "assistant-rounds",
+      role: "assistant",
+      content: "Done.",
+      status: "done",
+      thinkingSegments: [
+        { id: "seg-1", content: "Plan the tool call." },
+        { id: "seg-2", content: "Summarize the tool result." },
+      ],
+    };
+
+    const html = renderToStaticMarkup(<ChatMessage message={message} />);
+
+    expect(html).toContain("Thoughts · round 1");
+    expect(html).toContain("Thoughts · round 2");
   });
 
   it("shows the status pill before visible reasoning content arrives", () => {
