@@ -4076,6 +4076,15 @@ def _normalize_tax_summary_row(row):
     return {key: normalized.get(key) for key in _TAX_SUMMARY_ROW_KEYS}
 
 
+def _tax_summary_capital_gains_type(value):
+    """Normalize capital_gains_type for tax-summary adjustment keys.
+
+    NULL/blank summary rows and journal entries must share the same default
+    (``short``) so non-reportable / neu_swap exclusions can match.
+    """
+    return str(value or "short").strip().lower() or "short"
+
+
 def _non_reportable_tax_summary_adjustments(conn, profile_id):
     rows = conn.execute(
         """
@@ -4116,7 +4125,7 @@ def _non_reportable_tax_summary_adjustments(conn, profile_id):
             )
         else:
             transaction_type = "sell"
-        capital_gains_type = str(row["capital_gains_type"] or "short").strip().lower() or "short"
+        capital_gains_type = _tax_summary_capital_gains_type(row["capital_gains_type"])
         key = (int(year), asset, transaction_type, capital_gains_type)
         adjustment = adjustments.setdefault(
             key,
@@ -4160,7 +4169,7 @@ def _exclude_non_reportable_tax_summary_rows(conn, profile_id, rows):
             int(adjusted["year"]),
             str(adjusted["asset"] or ""),
             str(adjusted["transaction_type"] or "").lower(),
-            str(adjusted["capital_gains_type"] or "").lower(),
+            _tax_summary_capital_gains_type(adjusted["capital_gains_type"]),
         )
         adjustment = adjustments.pop(key, None)
         if adjustment is not None:
