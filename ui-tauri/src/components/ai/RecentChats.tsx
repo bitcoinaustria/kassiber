@@ -54,7 +54,7 @@ export function RecentChats() {
             type="button"
             disabled={isStreaming}
             onClick={() => void resumeSession(session.id).catch(() => {})}
-            className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm outline-none transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50"
+            className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm outline-none transition-all duration-100 ease-out hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring active:scale-[0.99] disabled:pointer-events-none disabled:opacity-50 disabled:active:scale-100"
           >
             <History
               className="size-3.5 shrink-0 text-muted-foreground"

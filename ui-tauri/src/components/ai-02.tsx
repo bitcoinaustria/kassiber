@@ -145,6 +145,10 @@ export default function Ai02({
       <div
         className={cn(
           "flex cursor-text flex-col border border-border/70 bg-background/90 backdrop-blur-md transition-all duration-200 ease-out dark:bg-background/60",
+          // Focus lives on this whole muted surface (textarea + toolbar), not
+          // the Textarea's own ring — otherwise the blue outline cuts off above
+          // the model/send row.
+          "focus-within:border-ring focus-within:ring-[3px] focus-within:ring-ring/50",
           inputPanelElevated
             ? "shadow-[0_10px_35px_rgba(15,23,42,0.14)]"
             : "shadow-none",
@@ -153,6 +157,20 @@ export default function Ai02({
             : "min-h-[72px] rounded-2xl",
           composerClassName,
         )}
+        onMouseDown={(event) => {
+          // Clicks on padding / chrome still focus the field so the whole box
+          // feels like one control. Skip real interactive children.
+          const target = event.target as HTMLElement | null;
+          if (
+            target?.closest(
+              "button, a, input, textarea, select, [role='button'], [role='combobox'], [role='menuitem']",
+            )
+          ) {
+            return;
+          }
+          event.preventDefault();
+          inputRef.current?.focus();
+        }}
       >
         <div className="relative min-h-0 flex-1">
           <Textarea
@@ -163,7 +181,7 @@ export default function Ai02({
             onKeyDown={handleKeyDown}
             placeholder={resolvedPlaceholder}
             className={cn(
-              "max-h-44 min-h-0 w-full resize-none whitespace-pre-wrap break-words border-0 bg-transparent! text-[17px] leading-6 text-foreground shadow-none outline-none transition-[padding,color] duration-200 ease-in-out placeholder:text-muted-foreground/80 focus-visible:ring-0 focus-visible:ring-offset-0",
+              "max-h-44 min-h-0 w-full resize-none whitespace-pre-wrap break-words border-0 bg-transparent! text-[17px] leading-6 text-foreground shadow-none outline-none transition-[padding,color] duration-200 ease-in-out placeholder:text-muted-foreground/80 focus-visible:border-transparent focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:shadow-none",
               compact
                 ? "pr-14 pl-4 pt-3.5 pb-0 group-focus-within/assistant:px-4 group-focus-within/assistant:pt-4 group-focus-within/assistant:pb-1"
                 : "px-4 pt-4 pb-1",
@@ -175,7 +193,7 @@ export default function Ai02({
                 <Button
                   variant="ghost"
                   size="icon-sm"
-                  className="size-9 rounded-full bg-destructive transition-colors duration-100 ease-out cursor-pointer hover:bg-destructive/90!"
+                  className="size-9 cursor-pointer rounded-full bg-destructive transition-all duration-100 ease-out hover:bg-destructive/90! active:scale-[0.94]"
                   onClick={onAbort}
                   aria-label={t("composer.stopGenerating")}
                 >
@@ -186,7 +204,7 @@ export default function Ai02({
                   variant="ghost"
                   size="icon-sm"
                   className={cn(
-                    "size-9 rounded-full bg-foreground text-background transition-colors duration-100 ease-out cursor-pointer hover:bg-foreground/90 disabled:bg-muted disabled:text-muted-foreground",
+                    "size-9 cursor-pointer rounded-full bg-foreground text-background transition-all duration-100 ease-out hover:bg-foreground/90 active:scale-[0.94] disabled:bg-muted disabled:text-muted-foreground",
                     canSend && "bg-foreground hover:bg-foreground/90!",
                   )}
                   disabled={!canSubmit}
@@ -247,7 +265,7 @@ export default function Ai02({
               <Button
                 variant="ghost"
                 size="icon-sm"
-                className="rounded-full bg-destructive transition-colors duration-100 ease-out cursor-pointer hover:bg-destructive/90!"
+                className="cursor-pointer rounded-full bg-destructive transition-all duration-100 ease-out hover:bg-destructive/90! active:scale-[0.94]"
                 onClick={onAbort}
                 aria-label={t("composer.stopGenerating")}
               >
@@ -259,7 +277,7 @@ export default function Ai02({
                 variant="ghost"
                 size="icon-sm"
                 className={cn(
-                  "rounded-full bg-foreground text-background transition-colors duration-100 ease-out cursor-pointer hover:bg-foreground/90 disabled:bg-muted disabled:text-muted-foreground",
+                  "cursor-pointer rounded-full bg-foreground text-background transition-all duration-100 ease-out hover:bg-foreground/90 active:scale-[0.94] disabled:bg-muted disabled:text-muted-foreground",
                   (canSend || canQueue) && "bg-foreground hover:bg-foreground/90!",
                 )}
                 disabled={!canSubmit}

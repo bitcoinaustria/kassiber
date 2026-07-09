@@ -24,11 +24,15 @@
     "preservedForContext_one": "{{count}} message preserved for context",
     "preservedForContext_other": "{{count}} messages preserved for context",
     "handleHint": "Ask Kassiber",
+    "handleHintShort": "Ask",
     "minimize": "Minimize assistant",
-    "restore": "Open conversation"
+    "restore": "Open conversation",
+    "working": "Working",
+    "workingQueued": "Working · {{count}} queued"
   },
   "composer": {
     "placeholder": "Ask anything",
+    "followUpPlaceholder": "Add a follow-up…",
     "stopGenerating": "Stop generating",
     "sendMessage": "Send message",
     "queueMessage": "Queue message",

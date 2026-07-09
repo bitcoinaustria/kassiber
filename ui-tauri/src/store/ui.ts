@@ -207,6 +207,12 @@ export interface UiState {
   assistantDockAutoHide: boolean;
   assistantDockPosition: AssistantDockPosition;
   /**
+   * The user has opened the shell assistant dock at least once. Persisted so
+   * the parked pill can teach new users (labeled + elevated) then quiet down
+   * to an icon-only corner chip after discovery.
+   */
+  assistantDockDiscovered: boolean;
+  /**
    * User collapsed an in-progress conversation to the docked pill. Ephemeral
    * (not persisted) — a reload always restores the full dock, and clearing the
    * thread or new activity (streaming/consent) resets it.
@@ -261,6 +267,7 @@ export interface UiState {
   setAssistantModelSelection: (selection: AiModelSelection | null) => void;
   setAssistantDockAutoHide: (enabled: boolean) => void;
   setAssistantDockPosition: (position: AssistantDockPosition) => void;
+  setAssistantDockDiscovered: (discovered: boolean) => void;
   setAssistantDockMinimized: (minimized: boolean) => void;
   setAssistantDockExpanded: (expanded: boolean) => void;
   bumpDaemonSession: () => void;
@@ -413,6 +420,7 @@ export function uiStatePartialForStorage(state: UiState) {
     assistantModelSelection: state.assistantModelSelection,
     assistantDockAutoHide: state.assistantDockAutoHide,
     assistantDockPosition: state.assistantDockPosition,
+    assistantDockDiscovered: state.assistantDockDiscovered,
     daemonSession: state.daemonSession,
     notifications: stripNotificationProgress(state.notifications),
     firstSyncDone: state.firstSyncDone,
@@ -439,7 +447,10 @@ export const useUiStore = create<UiState>()(
       developerToolsEnabled: true,
       assistantModelSelection: null,
       assistantDockAutoHide: true,
-      assistantDockPosition: "center",
+      // Corner park keeps the idle pill off the content axis; Settings can
+      // still move it left/center/right.
+      assistantDockPosition: "right",
+      assistantDockDiscovered: false,
       assistantDockMinimized: false,
       assistantDockExpanded: false,
       daemonSession: 0,
@@ -497,6 +508,8 @@ export const useUiStore = create<UiState>()(
         set({ assistantDockAutoHide }),
       setAssistantDockPosition: (assistantDockPosition) =>
         set({ assistantDockPosition }),
+      setAssistantDockDiscovered: (assistantDockDiscovered) =>
+        set({ assistantDockDiscovered }),
       setAssistantDockMinimized: (assistantDockMinimized) =>
         set({ assistantDockMinimized }),
       setAssistantDockExpanded: (assistantDockExpanded) =>
@@ -658,6 +671,16 @@ export const useUiStore = create<UiState>()(
             restored.assistantDockAutoHide ?? current.assistantDockAutoHide,
           assistantDockPosition:
             restored.assistantDockPosition ?? current.assistantDockPosition,
+          // Missing flag on upgrade ⇒ treat as discovered so veterans don't
+          // get the new-user pulse again. Brand-new installs keep the initial
+          // `false` from create() because merge isn't fed prior dock keys.
+          assistantDockDiscovered:
+            typeof restored.assistantDockDiscovered === "boolean"
+              ? restored.assistantDockDiscovered
+              : restored.assistantDockAutoHide !== undefined ||
+                  restored.assistantDockPosition !== undefined
+                ? true
+                : current.assistantDockDiscovered,
           notifications: stripNotificationProgress(
             restored.notifications ?? current.notifications,
           ),

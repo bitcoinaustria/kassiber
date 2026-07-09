@@ -1,11 +1,12 @@
 /**
  * Shell-wide assistant footer.
  *
- * Renders the Ai02 input at the bottom of every authenticated route. Once a
- * conversation starts, the same dock grows upward and contains the scrollable
- * thread above the composer so the assistant feels like one expanded chatbox.
- * Streaming is handled through the daemon transport via `useAiChatStream`,
- * which feeds the `<think>` parser and writes message state.
+ * State model (Apple-style: discoverable when new, out of the way once known):
+ * - Composer peek: first-run idle — looks like the real input, always visible
+ * - Parked handle: after discovery — thin edge capsule, reveal on approach
+ * - Minimized chip: mid-chat collapse — corner count only
+ * - Working + follow-up: streaming while minimized — status chip + slim queue composer
+ * - Expanded: full thread + composer
  */
 
 import * as React from "react";
@@ -19,6 +20,7 @@ import {
   Minus,
   MoreHorizontal,
   Sparkles,
+  Square,
   Trash2,
 } from "lucide-react";
 
@@ -56,6 +58,9 @@ const DOCK_POSITION_CLASS: Record<AssistantDockPosition, string> = {
   right: "ml-auto mr-0",
 };
 
+const CARD_SURFACE =
+  "pointer-events-auto relative flex border border-border bg-card shadow-[0_24px_70px_rgba(15,23,42,0.18),0_6px_20px_rgba(15,23,42,0.10)] dark:border-white/12 dark:shadow-[0_24px_70px_rgba(0,0,0,0.6),0_4px_16px_rgba(0,0,0,0.4)] before:pointer-events-none before:absolute before:inset-x-3 before:top-0 before:h-px before:bg-gradient-to-r before:from-transparent before:via-white/55 before:to-transparent dark:before:via-white/18 origin-bottom transition-[transform,opacity,box-shadow] duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] motion-reduce:transition-none";
+
 export function AssistantDock({
   className,
   collapsed = false,
@@ -72,6 +77,8 @@ export function AssistantDock({
   const isMinimized = useUiStore((s) => s.assistantDockMinimized);
   const setIsMinimized = useUiStore((s) => s.setAssistantDockMinimized);
   const setDockExpanded = useUiStore((s) => s.setAssistantDockExpanded);
+  const dockDiscovered = useUiStore((s) => s.assistantDockDiscovered);
+  const setDockDiscovered = useUiStore((s) => s.setAssistantDockDiscovered);
 
   const cancelPark = React.useCallback(() => {
     if (parkTimeoutRef.current !== null) {
@@ -87,10 +94,6 @@ export function AssistantDock({
 
   const scheduleParkOnLeave = React.useCallback(() => {
     cancelPark();
-    // A composer dropdown (model/reasoning picker) renders through a portal
-    // outside this element, so moving into it fires pointerleave here. Don't
-    // park while such a menu is open — keep re-checking until it closes, or
-    // the dock would slide away and unmount the menu mid-selection.
     const attemptPark = () => {
       if (
         typeof document !== "undefined" &&
@@ -112,6 +115,7 @@ export function AssistantDock({
   }, [cancelPark]);
 
   React.useEffect(() => cancelPark, [cancelPark]);
+
   const {
     messages,
     isStreaming,
@@ -126,30 +130,46 @@ export function AssistantDock({
     setThinkingEffort,
     sendPrompt,
     reset,
+    branchFromMessage,
   } = useAssistantSession();
 
   const hasThread = messages.length > 0;
   const queuedPromptCount = queuedPrompts.length;
-  // Once a conversation is started the dock stays docked — auto-hide only
-  // applies to the idle, thread-less composer.
-  const effectiveAutoHide = autoHide && !hasThread;
-  // Focus, streaming, or a pending consent dialog transiently pins the dock
-  // open even while auto-hide would otherwise park it.
+
+  const markDiscovered = React.useCallback(() => {
+    if (!dockDiscovered) setDockDiscovered(true);
+  }, [dockDiscovered, setDockDiscovered]);
+
+  const handleSubmit = React.useCallback(
+    (prompt: string) => {
+      markDiscovered();
+      sendPrompt(prompt);
+    },
+    [markDiscovered, sendPrompt],
+  );
+
+  // First-run: always show a composer peek (no park-to-pill). After the first
+  // send, auto-hide may park to a thin edge handle.
+  const showComposerPeek = !hasThread && !dockDiscovered;
+  const effectiveAutoHide = autoHide && !hasThread && dockDiscovered;
+
+  // Focus / consent / error pin the idle dock open; streaming alone does not
+  // — minimized chats stay collapsed with a Working chip instead.
   const pinned =
-    isInteracting || isStreaming || Boolean(error) || Boolean(pendingConsent);
+    isInteracting || Boolean(error) || Boolean(pendingConsent);
   const parked = effectiveAutoHide && !pinned && !isRevealed;
-  // A started conversation the user deliberately collapsed to the pill.
   const minimized = hasThread && isMinimized;
-  // Both idle-parked (auto-hide) and minimized collapse to the same labeled
-  // pill so there is always an unmistakable, discoverable affordance.
-  const showHandle = parked || minimized;
-  // The peeking compact composer is retired in favour of the pill; `compact`
-  // now only drives the legacy scroll-collapse when auto-hide is off.
+  const showWorkingSurface = minimized && isStreaming;
+  const showMinimizedChip = minimized && !isStreaming;
+  const showCollapsedChrome =
+    parked || showMinimizedChip || showWorkingSurface;
+
   const compact = effectiveAutoHide
     ? false
-    : collapsed && !hasThread && !isInteracting;
+    : collapsed && !hasThread && !isInteracting && dockDiscovered;
   const showThread = hasThread && !isThreadCollapsed && !minimized;
-  const modelPickerEnabled = !compact || hasThread || isStreaming;
+  const modelPickerEnabled =
+    !compact || hasThread || isStreaming || showComposerPeek;
   const supportsThinkingEffort = useSupportedReasoningEffort({
     selection,
     thinkingEffort,
@@ -164,27 +184,42 @@ export function AssistantDock({
     }
   }, [hasThread, setIsMinimized]);
 
-  // Tell the shell whether the dock currently expands over content (a live,
-  // non-minimized conversation) so it can reserve real bottom padding.
+  // Reserve real bottom padding for peek, working follow-up, or expanded thread.
   React.useEffect(() => {
-    setDockExpanded(hasThread && !minimized);
+    const needsSpace =
+      showComposerPeek ||
+      showWorkingSurface ||
+      (hasThread && !minimized);
+    setDockExpanded(needsSpace);
     return () => setDockExpanded(false);
-  }, [hasThread, minimized, setDockExpanded]);
+  }, [
+    hasThread,
+    minimized,
+    setDockExpanded,
+    showComposerPeek,
+    showWorkingSurface,
+  ]);
 
-  // New activity (a stream, an error, or a tool-consent prompt) always brings
-  // a minimized conversation back so the user sees what needs attention.
+  // Consent / errors still demand attention; streaming no longer forces expand.
   React.useEffect(() => {
-    if (isMinimized && (isStreaming || Boolean(error) || Boolean(pendingConsent))) {
+    if (isMinimized && (Boolean(error) || Boolean(pendingConsent))) {
       setIsMinimized(false);
     }
-  }, [isMinimized, isStreaming, error, pendingConsent, setIsMinimized]);
+  }, [isMinimized, error, pendingConsent, setIsMinimized]);
+
+  const restore = React.useCallback(() => {
+    setIsMinimized(false);
+    reveal();
+  }, [reveal, setIsMinimized]);
+
+  const workingLabel =
+    queuedPromptCount > 0
+      ? t("dock.workingQueued", { count: queuedPromptCount })
+      : t("dock.working");
 
   return (
     <>
       {parked ? (
-        // Invisible reveal strip along the bottom edge. Tall enough to catch a
-        // move toward the edge without flicker, but still edge-anchored so it
-        // isn't triggered by ordinary cursor travel.
         <div
           aria-hidden="true"
           className="pointer-events-auto absolute inset-x-0 bottom-0 z-30 h-6"
@@ -195,96 +230,87 @@ export function AssistantDock({
         aria-label={t("dock.label")}
         className={cn(
           "pointer-events-none relative z-30 px-3 pb-3 sm:px-4 sm:pb-4 md:px-6",
-          showHandle ? "md:pb-3" : "md:pb-5",
+          showCollapsedChrome ? "md:pb-3" : "md:pb-5",
           className,
         )}
       >
-        {/*
-          A single, always-mounted card is the stable hover target: its content
-          swaps between the collapsed pill and the full dock, so pointer
-          enter/leave stay reliable and there is no laggy width animation.
-        */}
-        <div
-          className={cn(
-            // `relative` keeps the hover buffer (absolute -inset-4) scoped to
-            // the card (its only reliable containing block across themes).
-            // Flat page language, but floating: `bg-card` lifts it off the
-            // `bg-background` page (they're distinct tokens), a full-strength
-            // hairline separates it from same-tone content cards, and a
-            // layered shadow carries the elevation. No glass/backdrop tricks.
-            "pointer-events-auto relative flex border border-border bg-card shadow-[0_24px_70px_rgba(15,23,42,0.18),0_6px_20px_rgba(15,23,42,0.10)] dark:border-white/12 dark:shadow-[0_24px_70px_rgba(0,0,0,0.6),0_4px_16px_rgba(0,0,0,0.4)]",
-            DOCK_POSITION_CLASS[position],
-            showHandle
-              ? "w-fit flex-row items-center rounded-full p-1"
-              : cn(
-                  // rounded-3xl (24px) − p-2 (8px) = the composer's
-                  // rounded-2xl (16px): concentric corners, no uneven lip.
-                  "w-full flex-col rounded-3xl p-2",
-                  showThread
-                    ? "max-w-5xl gap-2"
-                    : compact
-                      ? "max-w-xl gap-2"
-                      : "max-w-3xl gap-3",
-                ),
-          )}
-          onPointerEnter={effectiveAutoHide ? reveal : undefined}
-          onPointerLeave={effectiveAutoHide ? scheduleParkOnLeave : undefined}
-          onFocusCapture={() => {
-            if (effectiveAutoHide) reveal();
-            setIsInteracting(true);
-          }}
-          onBlurCapture={(event) => {
-            if (!event.currentTarget.contains(event.relatedTarget)) {
-              setIsInteracting(false);
+        {showWorkingSurface ? (
+          <WorkingFollowUpSurface
+            className={CARD_SURFACE}
+            workingLabel={workingLabel}
+            onRestore={restore}
+            onAbort={abort}
+            selection={selection}
+            onSelectionChange={setSelection}
+            value={assistantDraft}
+            onValueChange={setAssistantDraft}
+            onSubmit={handleSubmit}
+            isStreaming={isStreaming}
+            thinkingEffort={thinkingEffort}
+            onThinkingEffortChange={
+              supportsThinkingEffort ? setThinkingEffort : undefined
             }
-          }}
-        >
-          {effectiveAutoHide && !showHandle ? (
-            // Transparent hover margin around the dock so a near-miss with the
-            // cursor doesn't park it. Sits behind the content (the card's
-            // backdrop-blur forms a stacking context), so it never intercepts
-            // clicks on the composer or its buttons.
-            <div
-              aria-hidden="true"
-              className="pointer-events-auto absolute -inset-4 -z-10"
-            />
-          ) : null}
-          {showHandle ? (
-            <button
-              type="button"
-              className="flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-medium text-foreground outline-none transition-colors hover:bg-black/5 focus-visible:ring-2 focus-visible:ring-ring dark:hover:bg-white/5"
-              onClick={minimized ? () => setIsMinimized(false) : reveal}
-              aria-label={minimized ? t("dock.restore") : t("dock.handleHint")}
-              title={minimized ? t("dock.restore") : t("dock.handleHint")}
-            >
-              {/* Both collapsed chips lead with the Sparkles mark so they read
-                  as the assistant entry point — deliberately different from the
-                  open conversation's message-square header. */}
-              <Sparkles
-                className="h-4 w-4 text-muted-foreground"
+            showThinkingEffort={supportsThinkingEffort}
+            modelPickerEnabled={
+              modelPickerEnabled || Boolean(selection?.provider)
+            }
+            followUpPlaceholder={t("composer.followUpPlaceholder")}
+            tStop={t("composer.stopGenerating")}
+            tRestore={t("dock.restore")}
+          />
+        ) : showMinimizedChip ? (
+          <MinimizedChip
+            className={CARD_SURFACE}
+            messageCount={messages.length}
+            onRestore={restore}
+            label={t("dock.restore")}
+            countLabel={t("page.messageCount", { count: messages.length })}
+          />
+        ) : parked ? (
+          <ParkedHandle
+            className={CARD_SURFACE}
+            onReveal={reveal}
+            label={t("dock.handleHint")}
+          />
+        ) : (
+          <div
+            className={cn(
+              CARD_SURFACE,
+              DOCK_POSITION_CLASS[position],
+              "w-full flex-col rounded-3xl p-2",
+              showThread
+                ? "max-w-5xl gap-2"
+                : showComposerPeek || compact
+                  ? "max-w-xl gap-2"
+                  : "max-w-3xl gap-3",
+            )}
+            onPointerEnter={effectiveAutoHide ? reveal : undefined}
+            onPointerLeave={
+              effectiveAutoHide ? scheduleParkOnLeave : undefined
+            }
+            onFocusCapture={() => {
+              if (effectiveAutoHide) reveal();
+              setIsInteracting(true);
+            }}
+            onBlurCapture={(event) => {
+              if (!event.currentTarget.contains(event.relatedTarget)) {
+                setIsInteracting(false);
+              }
+            }}
+          >
+            {effectiveAutoHide ? (
+              <div
                 aria-hidden="true"
+                className="pointer-events-auto absolute -inset-4 -z-10"
               />
-              <span>
-                {minimized ? t("dock.restore") : t("dock.handleHint")}
-              </span>
-              {minimized ? (
-                <span className="rounded-full bg-muted-foreground/15 px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-muted-foreground">
-                  {messages.length}
-                </span>
-              ) : null}
-              {minimized && isStreaming ? (
-                <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium uppercase text-primary">
-                  {queuedPromptCount > 0
-                    ? t("page.generatingQueued", { count: queuedPromptCount })
-                    : t("page.generating")}
-                </span>
-              ) : null}
-            </button>
-          ) : (
-            <>
+            ) : null}
+            <div
+              className={cn(
+                "flex w-full flex-col motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-3 motion-safe:duration-300",
+                showThread || compact || showComposerPeek ? "gap-2" : "gap-3",
+              )}
+            >
               {showThread ? (
-                // Thread sits directly on the card (assistant-page style):
-                // no nested box, just a hairline divider under the header.
                 <div className="min-h-0 overflow-hidden">
                   <div className="flex items-center gap-2 border-b border-border/40 px-2 pb-2 pt-1 text-xs text-muted-foreground">
                     <MessageSquareText
@@ -298,12 +324,12 @@ export function AssistantDock({
                       {t("page.messageCount", { count: messages.length })}
                     </span>
                     {isStreaming ? (
-                      <span className="ml-1 rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium uppercase text-primary">
-                        {queuedPromptCount > 0
-                          ? t("page.generatingQueued", {
-                              count: queuedPromptCount,
-                            })
-                          : t("page.generating")}
+                      <span className="ml-1 inline-flex items-center gap-1 rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
+                        <span
+                          className="size-1.5 animate-pulse rounded-full bg-primary"
+                          aria-hidden="true"
+                        />
+                        {workingLabel}
                       </span>
                     ) : null}
                     <Button
@@ -331,7 +357,6 @@ export function AssistantDock({
                     >
                       <Minus className="h-3.5 w-3.5" aria-hidden="true" />
                     </Button>
-                    {/* Rare actions live behind "…", mirroring the page toolbar. */}
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <Button
@@ -370,6 +395,7 @@ export function AssistantDock({
                     messages={messages}
                     className="max-h-[min(52vh,520px)] max-w-none"
                     contentClassName="px-3 py-3"
+                    onBranchMessage={branchFromMessage}
                   />
                 </div>
               ) : null}
@@ -377,7 +403,7 @@ export function AssistantDock({
                 <div className="flex w-full items-center gap-1.5 rounded-2xl bg-muted/60 px-2 py-1.5 text-xs text-muted-foreground">
                   <button
                     type="button"
-                    className="flex min-w-0 flex-1 items-center gap-2 rounded-xl px-1 py-1 text-left transition-colors hover:bg-muted/60"
+                    className="flex min-w-0 flex-1 items-center gap-2 rounded-xl px-1 py-1 text-left transition-all duration-100 ease-out hover:bg-muted/60 active:scale-[0.99]"
                     onClick={() => setIsThreadCollapsed(false)}
                     aria-label={t("dock.expandConversation")}
                   >
@@ -394,12 +420,8 @@ export function AssistantDock({
                       })}
                     </span>
                     {isStreaming ? (
-                      <span className="shrink-0 rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium uppercase text-primary">
-                        {queuedPromptCount > 0
-                          ? t("page.generatingQueued", {
-                              count: queuedPromptCount,
-                            })
-                          : t("page.generating")}
+                      <span className="shrink-0 rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
+                        {workingLabel}
                       </span>
                     ) : null}
                     <ChevronUp
@@ -441,14 +463,13 @@ export function AssistantDock({
               ) : null}
               <Ai02
                 className="max-w-none border-0 bg-transparent p-0 shadow-none ring-0 backdrop-blur-0"
-                // Same borderless bg-muted input box as the assistant page.
                 composerClassName="border-0 bg-muted shadow-none backdrop-blur-0 dark:bg-muted"
-                compact={compact}
+                compact={compact || showComposerPeek}
                 selection={selection}
                 onSelectionChange={setSelection}
                 value={assistantDraft}
                 onValueChange={setAssistantDraft}
-                onSubmit={sendPrompt}
+                onSubmit={handleSubmit}
                 onAbort={abort}
                 isStreaming={isStreaming}
                 thinkingEffort={thinkingEffort}
@@ -460,15 +481,197 @@ export function AssistantDock({
                 modelPickerEnabled={
                   modelPickerEnabled || Boolean(selection?.provider)
                 }
-                // Page parity: once a conversation exists the quick-prompt
-                // chips disappear — they only help start a chat.
-                {...(hasThread ? { prompts: [] } : {})}
+                {...(hasThread || showComposerPeek ? { prompts: [] } : {})}
               />
-            </>
-          )}
-          <ToolConsentDialog request={pendingConsent} onDecision={sendConsent} />
-        </div>
+            </div>
+            <ToolConsentDialog
+              request={pendingConsent}
+              onDecision={sendConsent}
+            />
+          </div>
+        )}
+        {showCollapsedChrome ? (
+          <ToolConsentDialog
+            request={pendingConsent}
+            onDecision={sendConsent}
+          />
+        ) : null}
       </section>
     </>
+  );
+}
+
+function ParkedHandle({
+  className,
+  onReveal,
+  label,
+}: {
+  className: string;
+  onReveal: () => void;
+  label: string;
+}) {
+  return (
+    <div
+      className={cn(
+        className,
+        "mx-auto w-fit flex-row items-center rounded-full p-1 before:inset-x-4",
+      )}
+    >
+      <button
+        type="button"
+        className="group flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-medium text-foreground outline-none transition-all duration-100 ease-out hover:bg-black/5 focus-visible:ring-2 focus-visible:ring-ring active:scale-[0.97] dark:hover:bg-white/5"
+        onClick={onReveal}
+        aria-label={label}
+        title={label}
+      >
+        <span
+          className="relative flex size-4 items-center justify-center"
+          aria-hidden="true"
+        >
+          <span className="absolute inset-0 rounded-full bg-primary/20 opacity-70 blur-[2px] transition-opacity group-hover:opacity-100" />
+          <Sparkles className="relative h-3.5 w-3.5 text-primary" />
+        </span>
+        <span className="text-muted-foreground group-hover:text-foreground">
+          {label}
+        </span>
+      </button>
+    </div>
+  );
+}
+
+function MinimizedChip({
+  className,
+  messageCount,
+  onRestore,
+  label,
+  countLabel,
+}: {
+  className: string;
+  messageCount: number;
+  onRestore: () => void;
+  label: string;
+  countLabel: string;
+}) {
+  return (
+    <div
+      className={cn(
+        className,
+        "ml-auto w-fit flex-row items-center rounded-full p-1 before:inset-x-4",
+      )}
+    >
+      <button
+        type="button"
+        className="flex items-center gap-2 rounded-full px-2.5 py-1.5 text-xs font-medium text-foreground outline-none transition-all duration-100 ease-out hover:bg-black/5 focus-visible:ring-2 focus-visible:ring-ring active:scale-[0.97] dark:hover:bg-white/5"
+        onClick={onRestore}
+        aria-label={label}
+        title={`${label} · ${countLabel}`}
+      >
+        <Sparkles
+          className="h-3.5 w-3.5 text-muted-foreground"
+          aria-hidden="true"
+        />
+        <span className="rounded-full bg-muted-foreground/15 px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-muted-foreground">
+          {messageCount}
+        </span>
+      </button>
+    </div>
+  );
+}
+
+function WorkingFollowUpSurface({
+  className,
+  workingLabel,
+  onRestore,
+  onAbort,
+  selection,
+  onSelectionChange,
+  value,
+  onValueChange,
+  onSubmit,
+  isStreaming,
+  thinkingEffort,
+  onThinkingEffortChange,
+  showThinkingEffort,
+  modelPickerEnabled,
+  followUpPlaceholder,
+  tStop,
+  tRestore,
+}: {
+  className: string;
+  workingLabel: string;
+  onRestore: () => void;
+  onAbort?: () => void;
+  selection: { provider: string; model: string } | null;
+  onSelectionChange: (next: { provider: string; model: string } | null) => void;
+  value: string;
+  onValueChange: (value: string) => void;
+  onSubmit: (prompt: string) => void;
+  isStreaming: boolean;
+  thinkingEffort: "auto" | "low" | "medium" | "high";
+  onThinkingEffortChange?: (effort: "auto" | "low" | "medium" | "high") => void;
+  showThinkingEffort: boolean;
+  modelPickerEnabled: boolean;
+  followUpPlaceholder: string;
+  tStop: string;
+  tRestore: string;
+}) {
+  return (
+    <div
+      className={cn(
+        className,
+        "ml-auto w-full max-w-md flex-col gap-2 rounded-3xl p-2 before:inset-x-4 motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-3 motion-safe:duration-300",
+      )}
+    >
+      <div className="flex items-center gap-1.5 px-1">
+        <button
+          type="button"
+          className="inline-flex min-w-0 flex-1 items-center gap-2 rounded-full px-2 py-1 text-left text-xs font-medium text-foreground outline-none transition-all duration-100 ease-out hover:bg-black/5 focus-visible:ring-2 focus-visible:ring-ring active:scale-[0.99] dark:hover:bg-white/5"
+          onClick={onRestore}
+          aria-label={tRestore}
+          title={tRestore}
+        >
+          <span
+            className="relative flex size-4 shrink-0 items-center justify-center"
+            aria-hidden="true"
+          >
+            <span className="absolute inset-0 animate-pulse rounded-full bg-primary/25" />
+            <Sparkles className="relative h-3.5 w-3.5 text-primary" />
+          </span>
+          <span className="truncate text-muted-foreground">{workingLabel}</span>
+        </button>
+        {onAbort ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-xs"
+            className="rounded-full"
+            onClick={onAbort}
+            aria-label={tStop}
+            title={tStop}
+          >
+            <Square className="h-3 w-3" aria-hidden="true" />
+          </Button>
+        ) : null}
+      </div>
+      <Ai02
+        className="max-w-none border-0 bg-transparent p-0 shadow-none ring-0 backdrop-blur-0"
+        composerClassName="border-0 bg-muted shadow-none backdrop-blur-0 dark:bg-muted"
+        compact
+        selection={selection}
+        onSelectionChange={onSelectionChange}
+        value={value}
+        onValueChange={onValueChange}
+        onSubmit={onSubmit}
+        onAbort={onAbort}
+        isStreaming={isStreaming}
+        thinkingEffort={thinkingEffort}
+        onThinkingEffortChange={onThinkingEffortChange}
+        showThinkingEffort={showThinkingEffort}
+        inputPanelElevated={false}
+        modelPickerEnabled={modelPickerEnabled}
+        placeholder={followUpPlaceholder}
+        prompts={[]}
+      />
+    </div>
   );
 }

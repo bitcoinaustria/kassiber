@@ -39,7 +39,7 @@ function ChainOfThoughtHeader({
     <CollapsibleTrigger
       data-slot="chain-of-thought-header"
       className={cn(
-        "group inline-flex max-w-full min-w-0 items-center gap-1.5 rounded-md py-0.5 text-xs text-muted-foreground transition-colors hover:text-foreground",
+        "group inline-flex max-w-full min-w-0 items-center gap-1.5 rounded-md py-0.5 text-xs text-muted-foreground transition-all duration-100 ease-out hover:text-foreground active:scale-[0.99]",
         className,
       )}
       {...props}
@@ -50,7 +50,7 @@ function ChainOfThoughtHeader({
       />
       <span className="min-w-0 flex-1 truncate text-left font-medium">{children}</span>
       <ChevronDown
-        className="h-3 w-3 shrink-0 transition-transform duration-200 group-data-[state=open]:rotate-180"
+        className="h-3 w-3 shrink-0 transition-transform duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] group-data-[state=open]:rotate-180 motion-reduce:transition-none"
         aria-hidden="true"
       />
     </CollapsibleTrigger>

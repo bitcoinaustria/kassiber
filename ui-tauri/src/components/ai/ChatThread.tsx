@@ -25,7 +25,6 @@ interface ChatThreadProps {
   scrollable?: boolean;
   /**
    * When provided, assistant messages expose a "Branch in new chat" action.
-   * Only wired on the full assistant page — the shell dock omits it.
    */
   onBranchMessage?: (messageId: string) => void;
   /**
@@ -123,7 +122,7 @@ export function ChatThread({
           type="button"
           variant="ghost"
           size="icon"
-          className="absolute top-3 left-1/2 z-10 size-9 -translate-x-1/2 rounded-full border border-border/70 bg-background/90 text-foreground shadow-[0_12px_30px_rgba(15,23,42,0.18)] backdrop-blur hover:bg-muted dark:bg-zinc-950/80"
+          className="absolute top-3 left-1/2 z-10 size-9 -translate-x-1/2 rounded-full border border-border/70 bg-background/90 text-foreground shadow-[0_12px_30px_rgba(15,23,42,0.18)] backdrop-blur hover:bg-muted motion-safe:animate-in motion-safe:fade-in motion-safe:zoom-in-95 motion-safe:duration-200 dark:bg-zinc-950/80"
           onClick={() => scrollToTop("smooth")}
           aria-label={t("thread.scrollToTop")}
           title={t("thread.scrollToTop")}
@@ -136,7 +135,7 @@ export function ChatThread({
           type="button"
           variant="ghost"
           size="icon-lg"
-          className="absolute bottom-3 left-1/2 z-10 -translate-x-1/2 rounded-full border border-border/70 bg-background/90 text-foreground shadow-[0_12px_30px_rgba(15,23,42,0.18)] backdrop-blur hover:bg-muted dark:bg-zinc-950/80"
+          className="absolute bottom-3 left-1/2 z-10 -translate-x-1/2 rounded-full border border-border/70 bg-background/90 text-foreground shadow-[0_12px_30px_rgba(15,23,42,0.18)] backdrop-blur hover:bg-muted motion-safe:animate-in motion-safe:fade-in motion-safe:zoom-in-95 motion-safe:duration-200 dark:bg-zinc-950/80"
           onClick={() => scrollToBottom("smooth")}
           aria-label={t("thread.scrollToLatest")}
           title={t("thread.scrollToLatest")}

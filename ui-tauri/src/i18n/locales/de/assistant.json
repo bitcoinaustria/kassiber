@@ -24,11 +24,15 @@
     "preservedForContext_one": "{{count}} Nachricht für den Kontext erhalten",
     "preservedForContext_other": "{{count}} Nachrichten für den Kontext erhalten",
     "handleHint": "Kassiber fragen",
+    "handleHintShort": "Fragen",
     "minimize": "Assistent minimieren",
-    "restore": "Unterhaltung öffnen"
+    "restore": "Unterhaltung öffnen",
+    "working": "Arbeitet",
+    "workingQueued": "Arbeitet · {{count}} in Warteschlange"
   },
   "composer": {
     "placeholder": "Frag mich etwas",
+    "followUpPlaceholder": "Nachfrage hinzufügen…",
     "stopGenerating": "Generierung stoppen",
     "sendMessage": "Nachricht senden",
     "queueMessage": "Nachricht in Warteschlange stellen",
