@@ -13472,6 +13472,7 @@ class ReviewRegressionTest(unittest.TestCase):
                 "Übersicht",
                 "1.1.",
                 "1.2.",
+                "1.3.",
                 "2.1.",
                 "2.2.",
                 "3.1.",
@@ -13494,7 +13495,7 @@ class ReviewRegressionTest(unittest.TestCase):
             shared_strings = workbook.read("xl/sharedStrings.xml").decode("utf-8")
         self.assertIn('name="Übersicht"', workbook_xml)
         self.assertIn('name="1.1."', workbook_xml)
-        self.assertNotIn('name="1.3."', workbook_xml)
+        self.assertIn('name="1.3."', workbook_xml)
         self.assertIn('name="3.3."', workbook_xml)
         self.assertIn('name="Erläuterungen zum Steuerreport"', workbook_xml)
         self.assertIn("at-e1kv-staking", shared_strings)
@@ -13519,21 +13520,22 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual(payload["data"]["form"], "E 1kv")
         self.assertIn("Übersicht", payload["data"]["sheets"])
         self.assertIn("3.3.", payload["data"]["sheets"])
-        self.assertEqual(len(payload["data"]["files"]), 14)
+        self.assertEqual(len(payload["data"]["files"]), 15)
         expected_bundle_filenames = [
             "00_uebersicht.csv",
             "01_1.1.csv",
             "02_1.2.csv",
-            "03_2.1.csv",
-            "04_2.2.csv",
-            "05_3.1.csv",
-            "06_3.2.csv",
-            "07_3.3.csv",
-            "08_4.1.csv",
-            "09_4.2.csv",
-            "10_4.3.csv",
-            "11_4.4.csv",
-            "12_4.5.csv",
+            "03_1.3.csv",
+            "04_2.1.csv",
+            "05_2.2.csv",
+            "06_3.1.csv",
+            "07_3.2.csv",
+            "08_3.3.csv",
+            "09_4.1.csv",
+            "10_4.2.csv",
+            "11_4.3.csv",
+            "12_4.4.csv",
+            "13_4.5.csv",
             "99_erlaeuterungen_zum_steuerreport.csv",
         ]
         self.assertEqual(
@@ -13541,8 +13543,8 @@ class ReviewRegressionTest(unittest.TestCase):
             expected_bundle_filenames,
         )
         overview_csv = csv_bundle_dir / "00_uebersicht.csv"
-        section_21_csv = csv_bundle_dir / "03_2.1.csv"
-        section_33_csv = csv_bundle_dir / "07_3.3.csv"
+        section_21_csv = csv_bundle_dir / "04_2.1.csv"
+        section_33_csv = csv_bundle_dir / "08_3.3.csv"
         notes_csv = csv_bundle_dir / "99_erlaeuterungen_zum_steuerreport.csv"
         self.assertTrue(overview_csv.exists())
         self.assertTrue(section_21_csv.exists())

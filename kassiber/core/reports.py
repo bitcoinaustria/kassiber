@@ -107,6 +107,7 @@ _TAX_SUMMARY_INCOME_TRANSACTION_TYPE_BY_KIND = {
 AUSTRIAN_TAX_SECTION_ORDER = (
     "1.1",
     "1.2",
+    "1.3",
     "2.1",
     "2.2",
     "3.1",
@@ -131,6 +132,12 @@ AUSTRIAN_TAX_SECTION_METADATA = {
         "supported": False,
         "kennzahlen": (),
     },
+    "1.3": {
+        "label": "Steuerpflichtige Einkuenfte aus Spekulationsgeschaeften mit Kryptowaehrungen",
+        "law": "31 EStG Altvermoegen innerhalb Spekulationsfrist",
+        "supported": True,
+        "kennzahlen": (801,),
+    },
     "2.1": {
         "label": "Steuerpflichtige laufende Einkuenfte aus der Ueberlassung von Kryptowaehrungen",
         "law": "27b Abs 2 Z 1 EStG",
@@ -144,10 +151,10 @@ AUSTRIAN_TAX_SECTION_METADATA = {
         "kennzahlen": (172,),
     },
     "3.1": {
-        "label": "Nicht steuerbare Einkuenfte aus Spekulationsgeschaeften mit Kryptowaehrungen",
-        "law": "27b Abs 3 EStG Altvermoegen",
+        "label": "Nicht steuerbare Einkuenfte aus Altvermoegen ausserhalb der Spekulationsfrist",
+        "law": "31 EStG Altvermoegen",
         "supported": True,
-        "kennzahlen": (801,),
+        "kennzahlen": (),
     },
     "3.2": {
         "label": "Nicht steuerbare Einkuenfte mit Bewertung 0",
@@ -195,7 +202,7 @@ AUSTRIAN_TAX_SECTION_METADATA = {
 AUSTRIAN_TAX_SECTION_GROUPS = (
     (
         "1. Steuerpflichtige Einkuenfte aus dem Handel mit Kryptowaehrungen",
-        ("1.1", "1.2"),
+        ("1.1", "1.2", "1.3"),
     ),
     ("2. Steuerpflichtige laufende Einkuenfte", ("2.1", "2.2")),
     ("3. Nicht steuerbare Einkuenfte", ("3.1", "3.2", "3.3")),
@@ -4716,11 +4723,14 @@ def _austrian_tax_section_id(row):
     category = row["at_category"]
     if category in {"neu_gain", "neu_loss", "neu_swap"}:
         return "1.1"
+    if category == "alt_spekulation":
+        # Taxable Spekulation (E 1 KZ 801) — not the non-taxable Alt bucket.
+        return "1.3"
     if category == "income_capital_yield":
         return "2.1"
     if category == "income_general":
         return "2.2"
-    if category in {"alt_spekulation", "alt_taxfree"}:
+    if category == "alt_taxfree":
         return "3.1"
     return None
 
@@ -4813,6 +4823,12 @@ def _austrian_e1kv_overview_entries(report):
     section("1.2. Steuerpflichtige Einkünfte aus Margin, Derivaten und Futures")
     amount("Gewinne aus Margin, Derivaten und Futures", 0, total=True)
     amount("Verluste aus Margin, Derivaten und Futures", 0, total=True)
+    section("1.3. Steuerpflichtige Einkünfte aus Spekulationsgeschäften (§ 31 EStG)")
+    amount(
+        "Summe Spekulationseinkünfte",
+        sections["1.3"]["totals"]["amount_eur_cents"],
+        total=True,
+    )
 
     heading("2. Steuerpflichtige laufende Einkünfte")
     section("2.1. Einkünfte aus der Überlassung von Kryptowährungen")
@@ -4821,7 +4837,7 @@ def _austrian_e1kv_overview_entries(report):
     amount("Summe laufende Einkünfte", sections["2.2"]["totals"]["amount_eur_cents"], total=True)
 
     heading("3. Nicht steuerbare Einkünfte")
-    section("3.1. Nicht steuerbare Einkünfte aus Spekulationsgeschäften")
+    section("3.1. Nicht steuerbare Einkünfte aus Altvermögen außerhalb der Spekulationsfrist")
     amount("Summe nicht steuerbare Einkünfte", sections["3.1"]["totals"]["amount_eur_cents"], total=True)
     section("3.2. Nicht steuerbare Einkünfte gem. § 27b Abs 2 Z 2 Satz 2 EStG")
     amount("Summe nicht steuerbare Einkünfte", 0, total=True)
@@ -5124,6 +5140,7 @@ AUSTRIAN_E1KV_XLSX_SHEETS = (
     "Übersicht",
     "1.1.",
     "1.2.",
+    "1.3.",
     "2.1.",
     "2.2.",
     "3.1.",
@@ -5140,9 +5157,10 @@ AUSTRIAN_E1KV_XLSX_SHEETS = (
 AUSTRIAN_E1KV_XLSX_TITLES = {
     "1.1": "1.1. Steuerpflichtige Einkünfte aus dem An- und Verkauf von Kryptowährungen gem. § 27b Abs 3 EStG",
     "1.2": "1.2. Steuerpflichtige Einkünfte aus Margin, Derivaten und Futures",
+    "1.3": "1.3. Steuerpflichtige Einkünfte aus Spekulationsgeschäften mit Kryptowährungen (§ 31 EStG)",
     "2.1": "2.1. Steuerpflichtige laufende Einkünfte aus der Überlassung von Kryptowährungen",
     "2.2": "2.2. Steuerpflichtige laufende Einkünfte aus Leistungen zur Transaktionsverarbeitung",
-    "3.1": "3.1. Nicht steuerbare Einkünfte aus Spekulationsgeschäften mit Kryptowährungen",
+    "3.1": "3.1. Nicht steuerbare Einkünfte aus Altvermögen außerhalb der Spekulationsfrist",
     "3.2": "3.2. Nicht steuerbare Einkünfte gem. § 27b Abs 2 Z 2 Satz 2 EStG",
     "3.3": "3.3. Nicht steuerbare Steuergebühren und Rückerstattungen",
     "4.1": "4.1. Eingegangene Spenden/Trinkgeld",
@@ -5401,6 +5419,25 @@ def _austrian_e1kv_section_table_specs(report):
             "value_column": 5,
             "column_widths": (18, 22, 16, 14, 12, 18),
         },
+        {
+            "sheet_name": "1.3.",
+            "filename": _austrian_e1kv_csv_filename(3, "1.3"),
+            "title": AUSTRIAN_E1KV_XLSX_TITLES["1.3"],
+            "headers": AUSTRIAN_E1KV_XLSX_HOLDING_HEADERS,
+            "rows": [
+                _austrian_e1kv_xlsx_disposal_values(row, include_holding_days=True)
+                for row in sections["1.3"]["detail_rows"]
+            ],
+            "row_format_names": holding_formats,
+            "total_rows": [
+                (
+                    "Summe Spekulationseinkünfte",
+                    _xlsx_eur_from_cents(sections["1.3"]["totals"]["amount_eur_cents"]),
+                )
+            ],
+            "value_column": 10,
+            "column_widths": (18, 12, 14, 15, 15, 18, 16, 24, 18, 18, 20),
+        },
         *[
             {
                 "sheet_name": f"{section_id}.",
@@ -5418,11 +5455,11 @@ def _austrian_e1kv_section_table_specs(report):
                 "value_column": 6,
                 "column_widths": (18, 24, 18, 14, 12, 36, 24),
             }
-            for index, section_id in ((3, "2.1"), (4, "2.2"))
+            for index, section_id in ((4, "2.1"), (5, "2.2"))
         ],
         {
             "sheet_name": "3.1.",
-            "filename": _austrian_e1kv_csv_filename(5, "3.1"),
+            "filename": _austrian_e1kv_csv_filename(6, "3.1"),
             "title": AUSTRIAN_E1KV_XLSX_TITLES["3.1"],
             "headers": AUSTRIAN_E1KV_XLSX_HOLDING_HEADERS,
             "rows": [
@@ -5438,7 +5475,7 @@ def _austrian_e1kv_section_table_specs(report):
         },
         {
             "sheet_name": "3.2.",
-            "filename": _austrian_e1kv_csv_filename(6, "3.2"),
+            "filename": _austrian_e1kv_csv_filename(7, "3.2"),
             "title": AUSTRIAN_E1KV_XLSX_TITLES["3.2"],
             "headers": AUSTRIAN_E1KV_XLSX_INCOME_HEADERS,
             "rows": [],
@@ -5449,7 +5486,7 @@ def _austrian_e1kv_section_table_specs(report):
         },
         {
             "sheet_name": "3.3.",
-            "filename": _austrian_e1kv_csv_filename(7, "3.3"),
+            "filename": _austrian_e1kv_csv_filename(8, "3.3"),
             "title": AUSTRIAN_E1KV_XLSX_TITLES["3.3"],
             "headers": AUSTRIAN_E1KV_XLSX_FEE_HEADERS,
             "rows": [],
@@ -5463,7 +5500,7 @@ def _austrian_e1kv_section_table_specs(report):
         },
         {
             "sheet_name": "4.1.",
-            "filename": _austrian_e1kv_csv_filename(8, "4.1"),
+            "filename": _austrian_e1kv_csv_filename(9, "4.1"),
             "title": AUSTRIAN_E1KV_XLSX_TITLES["4.1"],
             "headers": AUSTRIAN_E1KV_XLSX_INCOME_HEADERS,
             "rows": [],
@@ -5474,7 +5511,7 @@ def _austrian_e1kv_section_table_specs(report):
         },
         {
             "sheet_name": "4.2.",
-            "filename": _austrian_e1kv_csv_filename(9, "4.2"),
+            "filename": _austrian_e1kv_csv_filename(10, "4.2"),
             "title": AUSTRIAN_E1KV_XLSX_TITLES["4.2"],
             "headers": AUSTRIAN_E1KV_XLSX_OUTGOING_HEADERS,
             "rows": [],
@@ -5485,7 +5522,7 @@ def _austrian_e1kv_section_table_specs(report):
         },
         {
             "sheet_name": "4.3.",
-            "filename": _austrian_e1kv_csv_filename(10, "4.3"),
+            "filename": _austrian_e1kv_csv_filename(11, "4.3"),
             "title": AUSTRIAN_E1KV_XLSX_TITLES["4.3"],
             "headers": AUSTRIAN_E1KV_XLSX_OUTGOING_HEADERS,
             "rows": [],
@@ -5506,7 +5543,7 @@ def _austrian_e1kv_section_table_specs(report):
                 "value_column": 6,
                 "column_widths": (18, 24, 18, 14, 12, 36, 24),
             }
-            for index, section_id, total_label in ((11, "4.4", "Summe Mining"), (12, "4.5", "Summe Minting"))
+            for index, section_id, total_label in ((12, "4.4", "Summe Mining"), (13, "4.5", "Summe Minting"))
         ],
     ]
 
