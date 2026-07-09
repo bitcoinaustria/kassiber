@@ -362,11 +362,13 @@ def compute_deemed_disposal(
 
     lots: list[dict[str, Any]] = []
     neu_qty_total = Decimal("0")
-    neu_market_total = Decimal("0")
+    neu_market_total: Optional[Decimal] = Decimal("0")
     neu_basis_total = Decimal("0")
-    neu_gain_total = Decimal("0")
+    neu_gain_total: Optional[Decimal] = Decimal("0")
     alt_qty_total = Decimal("0")
-    alt_market_total = Decimal("0")
+    alt_market_total: Optional[Decimal] = Decimal("0")
+    has_unpriced_neu = False
+    has_unpriced_alt = False
 
     for asset in sorted(assets):
         fmv = fmv_by_asset.get(asset)
@@ -380,16 +382,20 @@ def compute_deemed_disposal(
                 taxable = True
                 category = "neu_gain" if (gain is None or gain >= 0) else "neu_loss"
                 neu_qty_total += qty
-                if market is not None:
+                neu_basis_total += basis
+                if market is None:
+                    has_unpriced_neu = True
+                elif neu_market_total is not None and neu_gain_total is not None:
                     neu_market_total += market
                     neu_gain_total += gain
-                neu_basis_total += basis
             else:
                 gain = None
                 taxable = False
                 category = "alt_taxfree"
                 alt_qty_total += qty
-                if market is not None:
+                if market is None:
+                    has_unpriced_alt = True
+                elif alt_market_total is not None:
                     alt_market_total += market
             lots.append(
                 {
@@ -405,9 +411,21 @@ def compute_deemed_disposal(
                 }
             )
 
-    taxable_gain = max(Decimal("0"), neu_gain_total)
+    if has_unpriced_neu:
+        neu_market_total = None
+        neu_gain_total = None
+    if has_unpriced_alt:
+        alt_market_total = None
+
+    taxable_gain = (
+        max(Decimal("0"), neu_gain_total) if neu_gain_total is not None else None
+    )
     rate = AT_SONDERSTEUERSATZ if is_at else None
-    estimated_tax = (taxable_gain * rate) if rate is not None else None
+    estimated_tax = (
+        (taxable_gain * rate)
+        if rate is not None and taxable_gain is not None
+        else None
+    )
     collection_timing = "deferred" if dest == DESTINATION_EU_EEA else "immediate"
 
     wallet_holdings = []
@@ -449,7 +467,8 @@ def compute_deemed_disposal(
     if any(source["source"] == "missing" for source in fmv_source):
         assumptions.append(
             "EXIT-005: No cached rate found for one or more assets — run "
-            "`kassiber rates sync`; affected holdings are valued at 0 until priced."
+            "`kassiber rates sync`; market value, gain, and estimated tax stay "
+            "incomplete (null) until those holdings are priced."
         )
 
     quarantines = list(state.get("quarantines") or ())

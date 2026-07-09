@@ -275,7 +275,13 @@ class ExitTaxComputeTests(unittest.TestCase):
         neu = next(lot for lot in report["lots"] if lot["regime"] == "neu")
         self.assertIsNone(neu["marketValue"])
         self.assertIsNone(neu["gain"])
+        totals = report["totals"]
+        self.assertIsNone(totals["neuMarketValue"])
+        self.assertIsNone(totals["neuGain"])
+        self.assertIsNone(totals["taxableGain"])
+        self.assertIsNone(totals["estimatedTax"])
         self.assertTrue(any(source["source"] == "missing" for source in report["fmvSource"]))
+        self.assertTrue(any("incomplete" in note for note in report["assumptions"]))
         self.assertTrue(any("No cached rate" in note for note in report["assumptions"]))
 
     def test_income_surfaces_derived_tokens_assumption(self):
