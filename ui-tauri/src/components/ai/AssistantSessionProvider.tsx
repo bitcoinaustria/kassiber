@@ -12,6 +12,7 @@ import {
   useAiChatStream,
 } from "@/daemon/stream";
 import { getTransport, makeDaemonRequestId } from "@/daemon/transport";
+import { useAssistantDraftStore } from "@/store/assistantDraft";
 import { useUiStore } from "@/store/ui";
 
 interface StoredSessionShape {
@@ -49,7 +50,7 @@ export function AssistantSessionProvider({
     forgetSession,
   } = useAiChatStream();
   const dataMode = useUiStore((state) => state.dataMode);
-  const setAssistantDraft = useUiStore((state) => state.setAssistantDraft);
+  const setAssistantDraft = useAssistantDraftStore((state) => state.setDraft);
   const [queuedPrompts, setQueuedPrompts] = React.useState<string[]>([]);
   const [incognito, setIncognito] = React.useState(false);
 
@@ -166,8 +167,9 @@ export function AssistantSessionProvider({
         )
         .map((message) => ({ role: message.role, content: message.content }));
       if (entries.length === 0) return;
+      // Preserve the current Incognito choice — forking must never silently
+      // flip a private conversation into one that persists.
       setQueuedPrompts([]);
-      setIncognito(false);
       loadConversation(entries, null);
     },
     [isStreaming, messages, loadConversation],
@@ -194,8 +196,8 @@ export function AssistantSessionProvider({
             message.content.length > 0,
         )
         .map((message) => ({ role: message.role, content: message.content }));
+      // Preserve the current Incognito choice (see branchFromMessage).
       setQueuedPrompts([]);
-      setIncognito(false);
       loadConversation(entries, null);
       setAssistantDraft(target.content);
     },

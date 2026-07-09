@@ -213,10 +213,11 @@ export interface UiState {
    */
   assistantDockMinimized: boolean;
   /**
-   * Unsent composer draft, shared by the dock and the assistant page.
-   * Persisted so a typed-but-unsent prompt survives reloads and navigation.
+   * The dock is showing a live conversation (expanded, not minimized), so the
+   * shell must reserve real bottom padding instead of just the parked-pill
+   * sliver. Ephemeral — the dock reports it; it is never persisted.
    */
-  assistantDraft: string;
+  assistantDockExpanded: boolean;
   daemonSession: number;
   notifications: AppNotification[];
   activeMaintenanceProgress: ActiveMaintenanceProgress | null;
@@ -261,7 +262,7 @@ export interface UiState {
   setAssistantDockAutoHide: (enabled: boolean) => void;
   setAssistantDockPosition: (position: AssistantDockPosition) => void;
   setAssistantDockMinimized: (minimized: boolean) => void;
-  setAssistantDraft: (draft: string) => void;
+  setAssistantDockExpanded: (expanded: boolean) => void;
   bumpDaemonSession: () => void;
   addNotification: (
     notification: Omit<AppNotification, "id" | "createdAt">,
@@ -412,7 +413,6 @@ export function uiStatePartialForStorage(state: UiState) {
     assistantModelSelection: state.assistantModelSelection,
     assistantDockAutoHide: state.assistantDockAutoHide,
     assistantDockPosition: state.assistantDockPosition,
-    assistantDraft: state.assistantDraft,
     daemonSession: state.daemonSession,
     notifications: stripNotificationProgress(state.notifications),
     firstSyncDone: state.firstSyncDone,
@@ -441,7 +441,7 @@ export const useUiStore = create<UiState>()(
       assistantDockAutoHide: true,
       assistantDockPosition: "center",
       assistantDockMinimized: false,
-      assistantDraft: "",
+      assistantDockExpanded: false,
       daemonSession: 0,
       notifications: [],
       activeMaintenanceProgress: null,
@@ -499,7 +499,8 @@ export const useUiStore = create<UiState>()(
         set({ assistantDockPosition }),
       setAssistantDockMinimized: (assistantDockMinimized) =>
         set({ assistantDockMinimized }),
-      setAssistantDraft: (assistantDraft) => set({ assistantDraft }),
+      setAssistantDockExpanded: (assistantDockExpanded) =>
+        set({ assistantDockExpanded }),
       bumpDaemonSession: () =>
         set((state) => ({ daemonSession: state.daemonSession + 1 })),
       addNotification: (notification) => {
@@ -657,7 +658,6 @@ export const useUiStore = create<UiState>()(
             restored.assistantDockAutoHide ?? current.assistantDockAutoHide,
           assistantDockPosition:
             restored.assistantDockPosition ?? current.assistantDockPosition,
-          assistantDraft: restored.assistantDraft ?? current.assistantDraft,
           notifications: stripNotificationProgress(
             restored.notifications ?? current.notifications,
           ),

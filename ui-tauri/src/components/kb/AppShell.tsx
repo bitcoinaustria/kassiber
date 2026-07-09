@@ -602,6 +602,7 @@ export function AppShell() {
   const assistantDockAutoHide = useUiStore((s) => s.assistantDockAutoHide);
   const assistantDockPosition = useUiStore((s) => s.assistantDockPosition);
   const assistantDockMinimized = useUiStore((s) => s.assistantDockMinimized);
+  const assistantDockExpanded = useUiStore((s) => s.assistantDockExpanded);
   const developerToolsEnabled = useUiStore((s) => s.developerToolsEnabled);
   const bumpDaemonSession = useUiStore((s) => s.bumpDaemonSession);
   const activeMaintenanceProgress = useUiStore(
@@ -1685,17 +1686,22 @@ export function AppShell() {
                         tabIndex={-1}
                         className={cn(
                           appMainClassName,
-                          // Reserve dock space only while the dock is
-                          // expanded; the collapsed pill needs a sliver.
-                          // With auto-hide the dock overlays content
-                          // macOS-Dock-style, so only the sliver is reserved.
+                          // A live conversation expands the dock (even under
+                          // auto-hide), so reserve real space for it. Otherwise
+                          // the parked pill / minimized chip only needs a
+                          // sliver; the legacy scroll-collapse path applies when
+                          // auto-hide is off and there is no thread.
                           isAssistantRoute || assistantDockSuppressed
                             ? "pb-0"
-                            : assistantDockAutoHide || assistantDockMinimized
+                            : assistantDockMinimized
                               ? "pb-6"
-                              : assistantCollapsed
-                                ? "pb-16"
-                                : "pb-[240px]",
+                              : assistantDockExpanded
+                                ? "pb-[240px]"
+                                : assistantDockAutoHide
+                                  ? "pb-6"
+                                  : assistantCollapsed
+                                    ? "pb-16"
+                                    : "pb-[240px]",
                         )}
                       >
                         <Outlet />

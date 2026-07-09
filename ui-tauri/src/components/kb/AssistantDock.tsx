@@ -28,6 +28,7 @@ import { ToolConsentDialog } from "@/components/ai/ToolConsentDialog";
 import { useSupportedReasoningEffort } from "@/components/ai/useReasoningEffortSupport";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { useAssistantDraftStore } from "@/store/assistantDraft";
 import { useUiStore, type AssistantDockPosition } from "@/store/ui";
 
 interface AssistantDockProps {
@@ -58,10 +59,11 @@ export function AssistantDock({
   const [isThreadCollapsed, setIsThreadCollapsed] = React.useState(false);
   const [isRevealed, setIsRevealed] = React.useState(false);
   const parkTimeoutRef = React.useRef<number | null>(null);
-  const assistantDraft = useUiStore((s) => s.assistantDraft);
-  const setAssistantDraft = useUiStore((s) => s.setAssistantDraft);
+  const assistantDraft = useAssistantDraftStore((s) => s.draft);
+  const setAssistantDraft = useAssistantDraftStore((s) => s.setDraft);
   const isMinimized = useUiStore((s) => s.assistantDockMinimized);
   const setIsMinimized = useUiStore((s) => s.setAssistantDockMinimized);
+  const setDockExpanded = useUiStore((s) => s.setAssistantDockExpanded);
 
   const cancelPark = React.useCallback(() => {
     if (parkTimeoutRef.current !== null) {
@@ -77,10 +79,28 @@ export function AssistantDock({
 
   const scheduleParkOnLeave = React.useCallback(() => {
     cancelPark();
-    parkTimeoutRef.current = window.setTimeout(() => {
+    // A composer dropdown (model/reasoning picker) renders through a portal
+    // outside this element, so moving into it fires pointerleave here. Don't
+    // park while such a menu is open — keep re-checking until it closes, or
+    // the dock would slide away and unmount the menu mid-selection.
+    const attemptPark = () => {
+      if (
+        typeof document !== "undefined" &&
+        document.querySelector('[role="menu"]')
+      ) {
+        parkTimeoutRef.current = window.setTimeout(
+          attemptPark,
+          AUTO_HIDE_LEAVE_DELAY_MS,
+        );
+        return;
+      }
       parkTimeoutRef.current = null;
       setIsRevealed(false);
-    }, AUTO_HIDE_LEAVE_DELAY_MS);
+    };
+    parkTimeoutRef.current = window.setTimeout(
+      attemptPark,
+      AUTO_HIDE_LEAVE_DELAY_MS,
+    );
   }, [cancelPark]);
 
   React.useEffect(() => cancelPark, [cancelPark]);
@@ -135,6 +155,13 @@ export function AssistantDock({
       setIsMinimized(false);
     }
   }, [hasThread, setIsMinimized]);
+
+  // Tell the shell whether the dock currently expands over content (a live,
+  // non-minimized conversation) so it can reserve real bottom padding.
+  React.useEffect(() => {
+    setDockExpanded(hasThread && !minimized);
+    return () => setDockExpanded(false);
+  }, [hasThread, minimized, setDockExpanded]);
 
   // New activity (a stream, an error, or a tool-consent prompt) always brings
   // a minimized conversation back so the user sees what needs attention.

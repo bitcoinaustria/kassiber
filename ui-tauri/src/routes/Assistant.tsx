@@ -11,7 +11,7 @@ import { useSupportedReasoningEffort } from "@/components/ai/useReasoningEffortS
 import { Button } from "@/components/ui/button";
 import { saveChatExport } from "@/lib/chatExport";
 import { cn } from "@/lib/utils";
-import { useUiStore } from "@/store/ui";
+import { useAssistantDraftStore } from "@/store/assistantDraft";
 
 export function Assistant() {
   const { t } = useTranslation("assistant");
@@ -35,8 +35,8 @@ export function Assistant() {
     setIncognito,
     sessionId,
   } = useAssistantSession();
-  const assistantDraft = useUiStore((s) => s.assistantDraft);
-  const setAssistantDraft = useUiStore((s) => s.setAssistantDraft);
+  const assistantDraft = useAssistantDraftStore((s) => s.draft);
+  const setAssistantDraft = useAssistantDraftStore((s) => s.setDraft);
   const hasMessages = messages.length > 0;
   const queuedPromptCount = queuedPrompts.length;
   const showIncognitoToggle = sessionId === null;
