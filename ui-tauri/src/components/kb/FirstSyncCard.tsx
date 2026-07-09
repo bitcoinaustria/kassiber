@@ -36,6 +36,26 @@ function clampPercent(value: number) {
   return Math.max(0, Math.min(100, value));
 }
 
+/** Split "Wallet: Phase · 200 addresses probed" for a fixed-height status row. */
+function splitSyncProgressLabel(label: string): {
+  main: string;
+  detail: string | null;
+} {
+  const separator = " · ";
+  const index = label.lastIndexOf(separator);
+  if (index === -1) {
+    return { main: label, detail: null };
+  }
+  const detail = label.slice(index + separator.length).trim();
+  if (!detail || !/\d/.test(detail)) {
+    return { main: label, detail: null };
+  }
+  return {
+    main: label.slice(0, index).trim(),
+    detail,
+  };
+}
+
 export function FirstSyncCard({
   progress,
   title,
@@ -55,6 +75,9 @@ export function FirstSyncCard({
   // The milestone the bar currently sits in; everything before reads as done,
   // everything after as pending. (See firstSyncActiveMilestoneIndex.)
   const activeIndex = firstSyncActiveMilestoneIndex(fraction, isDeterminate);
+  const statusLabel = progress?.label ?? t("firstSync.preparing");
+  const { main: progressMain, detail: progressDetail } =
+    splitSyncProgressLabel(statusLabel);
 
   return (
     <div className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center px-4 pb-28">
@@ -68,7 +91,7 @@ export function FirstSyncCard({
         className="pointer-events-auto absolute inset-0 bg-background/30 backdrop-blur-sm"
       />
       <div
-        className="relative pointer-events-auto w-full max-w-md rounded-[28px] border border-white/70 bg-muted/85 p-5 shadow-[0_24px_90px_rgba(15,23,42,0.26),0_3px_18px_rgba(15,23,42,0.12),inset_0_1px_0_rgba(255,255,255,0.80)] ring-1 ring-zinc-950/10 backdrop-blur-2xl backdrop-saturate-150 dark:border-border dark:bg-card dark:shadow-[0_18px_48px_rgba(0,0,0,0.28)] dark:ring-border/70 dark:backdrop-blur-none dark:backdrop-saturate-100"
+        className="relative pointer-events-auto w-full max-w-2xl rounded-[28px] border border-white/70 bg-muted/85 p-5 shadow-[0_24px_90px_rgba(15,23,42,0.26),0_3px_18px_rgba(15,23,42,0.12),inset_0_1px_0_rgba(255,255,255,0.80)] ring-1 ring-zinc-950/10 backdrop-blur-2xl backdrop-saturate-150 dark:border-border dark:bg-card dark:shadow-[0_18px_48px_rgba(0,0,0,0.28)] dark:ring-border/70 dark:backdrop-blur-none dark:backdrop-saturate-100"
       >
         <div className="flex items-start gap-3">
           <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary">
@@ -97,14 +120,30 @@ export function FirstSyncCard({
           <div
             role="status"
             aria-live="polite"
-            className="mb-1.5 flex items-center justify-between gap-3 text-[11px] font-medium leading-none"
+            aria-atomic="true"
+            className="mb-1.5"
           >
-            <span className="min-w-0 truncate text-primary">
-              {progress?.label ?? t("firstSync.preparing")}
+            <span className="sr-only">
+              {statusLabel}
+              {isDeterminate
+                ? ` — ${Math.round(value)}%`
+                : ` — ${t("firstSync.working")}`}
             </span>
-            <span className="shrink-0 tabular-nums text-muted-foreground">
-              {isDeterminate ? `${Math.round(value)}%` : t("firstSync.working")}
-            </span>
+            <div className="flex h-[14px] items-center justify-between gap-3 text-[11px] font-medium leading-none">
+              <span className="min-w-0 truncate text-primary" title={statusLabel}>
+                {progressMain}
+              </span>
+              <span className="flex shrink-0 items-center gap-2 whitespace-nowrap tabular-nums text-muted-foreground">
+                {progressDetail ? (
+                  <span className="max-w-[14rem] truncate">{progressDetail}</span>
+                ) : null}
+                <span>
+                  {isDeterminate
+                    ? `${Math.round(value)}%`
+                    : t("firstSync.working")}
+                </span>
+              </span>
+            </div>
           </div>
           <div className="h-1.5 w-full overflow-hidden rounded-full bg-primary/15">
             <div

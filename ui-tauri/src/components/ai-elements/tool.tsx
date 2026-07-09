@@ -57,14 +57,14 @@ function ToolHeader({
     <CollapsibleTrigger
       data-slot="tool-header"
       className={cn(
-        "group flex w-full min-w-0 items-center gap-2 rounded-md px-2.5 py-2 text-left transition-colors hover:bg-muted/45",
+        "group flex w-full min-w-0 items-center gap-1.5 rounded-md px-2 py-1 text-left transition-colors hover:bg-muted/45",
         className,
       )}
       {...props}
     >
       <Icon
         className={cn(
-          "h-3.5 w-3.5 shrink-0",
+          "h-3 w-3 shrink-0",
           state === "done" && "text-emerald-600",
           state === "awaiting_consent" && "text-primary",
           state === "denied" && "text-amber-600",
@@ -74,17 +74,17 @@ function ToolHeader({
         )}
         aria-hidden="true"
       />
-      <code className="min-w-0 flex-1 truncate font-mono text-[11px] text-foreground">
+      <code className="min-w-0 flex-1 truncate font-mono text-[10px] text-foreground">
         {name}
       </code>
       <Badge
         variant={state === "error" ? "destructive" : "secondary"}
-        className="shrink-0 text-[10px] uppercase"
+        className="shrink-0 px-1.5 py-0 text-[9px] uppercase"
       >
         {labelForState(state)}
       </Badge>
       <ChevronDown
-        className="h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform duration-200 group-data-[state=open]:rotate-180"
+        className="h-3 w-3 shrink-0 text-muted-foreground transition-transform duration-200 group-data-[state=open]:rotate-180"
         aria-hidden="true"
       />
     </CollapsibleTrigger>
@@ -119,13 +119,13 @@ function ToolInput({
   return (
     <section
       data-slot="tool-input"
-      className={cn("border-t border-border/60 px-2.5 py-2", className)}
+      className={cn("border-t border-border/60 px-2 py-1.5", className)}
       {...props}
     >
-      <p className="mb-1 text-[10px] font-medium uppercase text-muted-foreground">
+      <p className="mb-0.5 text-[9px] font-medium uppercase text-muted-foreground">
         {label}
       </p>
-      <pre className="max-h-28 max-w-full overflow-auto whitespace-pre-wrap break-words rounded bg-muted/55 px-2 py-1 font-mono text-[10px] text-muted-foreground">
+      <pre className="max-h-28 max-w-full overflow-auto whitespace-pre-wrap break-words rounded bg-muted/55 px-1.5 py-0.5 font-mono text-[9px] text-muted-foreground">
         {JSON.stringify(input, null, 2)}
       </pre>
     </section>
@@ -149,20 +149,20 @@ function ToolOutput({
   return (
     <section
       data-slot="tool-output"
-      className={cn("border-t border-border/60 px-2.5 py-2", className)}
+      className={cn("border-t border-border/60 px-2 py-1.5", className)}
       {...props}
     >
-      <p className="mb-1 text-[10px] font-medium uppercase text-muted-foreground">
+      <p className="mb-0.5 text-[9px] font-medium uppercase text-muted-foreground">
         {error ? "Error" : label}
       </p>
       {isPlainText ? (
-        <p className="rounded bg-muted/55 px-2 py-1 text-xs leading-relaxed text-muted-foreground">
+        <p className="rounded bg-muted/55 px-1.5 py-0.5 text-[11px] leading-snug text-muted-foreground">
           {formatted}
         </p>
       ) : (
         <pre
           className={cn(
-            "max-h-32 overflow-auto whitespace-pre-wrap break-words rounded px-2 py-1 font-mono text-[10px]",
+            "max-h-32 overflow-auto whitespace-pre-wrap break-words rounded px-1.5 py-0.5 font-mono text-[9px]",
             error
               ? "max-w-full bg-destructive/10 text-destructive"
               : "max-w-full bg-muted/55 text-muted-foreground",
