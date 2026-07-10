@@ -1,7 +1,11 @@
 import { Link } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
 
-import { formatBtc, type Currency } from "@/lib/currency";
+import {
+  fiatNumberFormatter,
+  formatBtc,
+  type Currency,
+} from "@/lib/currency";
 import { cn } from "@/lib/utils";
 import type { OverviewSnapshot } from "@/mocks/seed";
 
@@ -10,16 +14,16 @@ import {
   activeMarketFiatRate,
   blurClass,
   buildStatsData,
-  currencyFormatter,
   formatCompactDisplayMoney,
   formatMarketRateValue,
   latestPortfolioBalanceBtc,
   marketRateCompactLabel,
   marketRateDetailLabel,
-  numberFormatter,
   type OverviewTranslate,
   type StatItem,
 } from "./model";
+
+const numberFormatter = fiatNumberFormatter("EUR");
 
 export function statStatusKey(stat: StatItem, isBitcoinPortfolio: boolean) {
   if (stat.previousValue > 0) {
@@ -121,8 +125,6 @@ export const StatsCards = ({
           </div>
         </button>
         {stats.map((stat) => {
-          const formatter =
-            stat.format === "currency" ? currencyFormatter : numberFormatter;
           const isBitcoinPortfolio =
             currency === "btc" && stat.id === "portfolioValue";
           const statusKey = statStatusKey(stat, isBitcoinPortfolio);
@@ -180,7 +182,7 @@ export const StatsCards = ({
                         )}
                       </span>
                     ) : (
-                      formatter.format(stat.value)
+                      numberFormatter.format(stat.value)
                     )}
                   </p>
                   <div className="flex min-w-0 items-center gap-1.5 text-[10px] sm:text-xs">

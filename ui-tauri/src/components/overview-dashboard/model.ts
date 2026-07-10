@@ -303,13 +303,6 @@ export type OverviewReadiness = {
   tone: OverviewHealthTone;
 };
 
-export const currencyFormatter = new Intl.NumberFormat("en-US", {
-  style: "currency",
-  currency: "EUR",
-});
-
-export const numberFormatter = new Intl.NumberFormat("en-US");
-
 export const blurClass = (hidden: boolean) => (hidden ? "sensitive" : "");
 
 export function btcFromEur(eur: number, priceEur: number) {

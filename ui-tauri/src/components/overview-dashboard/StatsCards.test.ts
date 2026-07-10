@@ -59,4 +59,25 @@ describe("overview stats cards", () => {
     expect(html).not.toContain('data-slot="skeleton"');
   });
 
+  it("formats overview counts with Austrian grouping", () => {
+    const html = renderToStaticMarkup(
+      createElement(StatsCards, {
+        snapshot: {
+          ...MOCK_OVERVIEW,
+          status: {
+            ...MOCK_OVERVIEW.status!,
+            transactionCount: 1_234,
+          },
+        },
+        hideSensitive: false,
+        currency: "eur",
+        isRefreshing: false,
+        isMarketRateRefreshing: false,
+      }),
+    );
+
+    expect(html).toContain("1\u00a0234");
+    expect(html).not.toContain("1,234");
+  });
+
 });
