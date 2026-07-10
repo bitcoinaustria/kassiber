@@ -25,9 +25,13 @@ xpubs, blinding keys, and reveal payloads remain SQLCipher-backed.
 | `sqlcipher3` | `>=0.6.2,<1` | Python binding around SQLCipher 4; wheels bundle a SQLCipher community build for at-rest database encryption | Zlib (binding) + BSD-style (SQLCipher community) |
 | `pyrage` | `>=1.3,<2` | In-process `age` implementation used by the `tar | age` backup format when no system `age`/`rage` binary is available | Apache-2.0 / MIT |
 | `keyring` | `>=25.6,<26` | Native macOS Keychain, Windows Credential Manager, and Linux Secret Service access for opt-in CLI remembered unlock | MIT |
+| `cryptography` | `>=44,<48` | Ed25519 event signatures, LAN HKDF/AES-GCM key confirmation, and authenticated direct-sync frames | Apache-2.0 OR BSD-3-Clause |
+| `spake2` | `0.9` | Password-authenticated key exchange for explicit LAN/Tor direct pairing | MIT |
+| `zeroconf` | `>=0.150,<1` | Rotating, unlinkable mDNS advertisement for the opt-in LAN fast path | LGPL-2.1-or-later |
 | `@tanstack/react-table` | `^8.21.3` | Interactive sorting, filtering, selection, and pagination in desktop UI data tables | MIT |
 | `pako` | `^2.1.0` | Zlib/deflate decoding for Better Bitcoin QR descriptor import | MIT |
 | `qr-scanner` | `^1.4.2` | Local webcam QR decoding for descriptor-family connection setup | MIT |
+| `qrcode` | `^1.5.4` | On-device QR generation for signed join requests and sealed invitations | MIT |
 | `react-markdown` | `^10.1.0` | Markdown renderer for assistant chat replies (paragraphs, lists, code, links) | MIT |
 | `remark-gfm` | `^4.0.0` | GitHub-flavored markdown extensions (tables, strikethrough, task lists) for assistant chat replies | MIT |
 | `i18next` | `25.8.18` (exact) | Desktop UI localization runtime (English/German, expandable); see [docs/reference/i18n.md](docs/reference/i18n.md) | MIT |

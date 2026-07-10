@@ -250,6 +250,12 @@ def _connect_via_socks5(proxy_url, host, port, timeout):
         raise
 
 
+def connect_via_socks5(proxy_url, host, port, timeout=30):
+    """Open an authenticated SOCKS5 stream with proxy-side DNS resolution."""
+
+    return _connect_via_socks5(proxy_url, host, port, timeout)
+
+
 def urlopen_with_proxy(
     request,
     url=None,
@@ -441,6 +447,7 @@ __all__ = [
     "_socks5_address",
     "build_proxy_opener",
     "is_onion_endpoint",
+    "connect_via_socks5",
     "onion_proxy_failure_hints",
     "urlopen_with_proxy",
 ]

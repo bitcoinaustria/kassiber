@@ -9,3 +9,8 @@ overrides:
 
 onlyBuiltDependencies:
   - esbuild
+
+# Owner-approved one-shot exception for the pinned QR dependency added by the
+# device-sync UI. Keep the 90-day policy for every other package.
+minimumReleaseAgeExclude:
+  - qrcode@1.5.4

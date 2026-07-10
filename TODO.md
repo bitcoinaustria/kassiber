@@ -686,6 +686,22 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
   see stale-report prompts, and opt edit history into audit-package export
   without exposing descriptors, xpubs, backend credentials, wallet files, or
   unrelated wallet history.
+- [x] Cross-device / multi-user sync (no trusted server) — inspired by
+  https://github.com/bitcoinaustria/kassiber/issues/309 but not a literal
+  blueprint: the design in
+  [docs/plan/13-device-sync.md](docs/plan/13-device-sync.md) is
+  mailbox-first (sealed bundles over any dumb user-owned storage, ciphertext
+  only, async, no listener) with LAN direct as fast path and Tor as optional
+  leg, and pulls org multi-user (person identities, roles, invitations) into
+  scope. S1-S5 now ship signed person/device identities, HLC + version-vector
+  replay, sealed courier and mailbox bundles, folder/WebDAV/S3 transports,
+  owner-attested join snapshots, desktop Settings/Sync and conflict review,
+  explicit SPAKE2 LAN pairing with rotating mDNS names, an optional
+  user-managed Tor onion leg, and quorum-gated tombstone compaction. The live
+  database file, derived journals/reports, backend/AI secrets, raw fingerprints,
+  and private wallet material never enter the replication layer. Issue #309 is
+  the durable product record; operational details live in
+  [docs/reference/device-sync.md](docs/reference/device-sync.md).
 - [ ] Custom CSV mapping DSL for arbitrary wallet exports
 - [ ] Rates/manual adjustment surface
 - [ ] Full double-entry account model only if a future ledger design needs it:
@@ -1274,6 +1290,12 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
     (`ui-tauri/src/lib/connectionHealth.ts`) so a rate-limiting-but-alive backend
     is not shown as healthy/green, and a live `rate_limited_until` countdown in
     the freshness/sync-results UI.
+- [ ] Replace or independently audit `spake2==0.9` before treating LAN pairing
+  as a hardened long-term transport. The package is pure Python, has not been
+  maintained since 2018, and explicitly does not claim constant-time
+  behavior. The current use remains a one-guess, short-lived PAKE protected by
+  Ed25519 device proof-of-possession and a strict session deadline; preserve
+  those compensating controls during any replacement.
 
 ## Verification checklist
 

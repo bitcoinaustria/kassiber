@@ -373,6 +373,82 @@ def append_event(
         """,
         field_rows,
     )
+    # Sync remains strictly opt-in: ``author_event`` returns None when this
+    # profile has no enabled sync identity. When enabled, the authored mutation
+    # and its signed replication event share the caller's SQL transaction.
+    from .sync_replication.events import author_event, sync_enabled
+
+    if sync_enabled(conn, profile["id"]):
+        # A metadata event may be the first synced mutation of a newly imported
+        # transaction. Capture the dependency-ordered workspace/profile/wallet/
+        # transaction rows first so replay never sees history before its FK
+        # anchors.
+        sync_row_key = json.dumps([str(tx["id"])], ensure_ascii=True, separators=(",", ":"))
+        has_transaction_anchor = conn.execute(
+            """
+            SELECT 1 FROM sync_row_state
+            WHERE profile_id = ? AND entity_table = 'transactions'
+              AND entity_key = ? AND tombstoned = 0
+            """,
+            (profile["id"], sync_row_key),
+        ).fetchone()
+        if not has_transaction_anchor:
+            from .sync_replication.capture import capture_local_changes
+
+            capture_local_changes(conn, profile_id=profile["id"])
+
+    sync_event = author_event(
+        conn,
+        profile_id=profile["id"],
+        event_type="transaction.edit",
+        entity_table="transaction_edit_events",
+        entity_key=event_id,
+        payload={
+            "transaction_id": tx["id"],
+            "wallet_id": _row_get(tx, "wallet_id"),
+            "transaction_external_id": _row_get(tx, "external_id"),
+            "transaction_occurred_at": _row_get(tx, "occurred_at"),
+            "source": normalize_source(source),
+            "reason": clean_reason(reason),
+            "changed_at": changed_at,
+            "fields": [
+                {
+                    "id": row[0],
+                    "field": row[2],
+                    "before_value": json.loads(row[3]),
+                    "after_value": json.loads(row[4]),
+                    "diff": json.loads(row[5]),
+                }
+                for row in field_rows
+            ],
+        },
+        created_at=changed_at,
+    )
+    if sync_event is not None:
+        conn.execute(
+            """
+            UPDATE transaction_edit_events
+            SET sync_event_id = ?, sync_replica_id = ?, sync_replica_seq = ?,
+                sync_hlc = ?, sync_author_member_id = ?, sync_signature = ?,
+                sync_context_json = ?
+            WHERE id = ?
+            """,
+            (
+                sync_event.id,
+                sync_event.replica_id,
+                sync_event.replica_seq,
+                sync_event.hlc,
+                sync_event.author_member_id,
+                sync_event.signature,
+                json.dumps(
+                    sync_event.context,
+                    ensure_ascii=True,
+                    separators=(",", ":"),
+                    sort_keys=True,
+                ),
+                event_id,
+            ),
+        )
     return event_id
 
 

@@ -24,6 +24,7 @@ from kassiber.daemon import (
     _create_btcpay_connection_payload,
 )
 from kassiber.errors import AppError
+from kassiber.daemon_sync_replication import SYNC_UI_KINDS
 
 
 _CATALOG_PATH = (
@@ -75,6 +76,25 @@ _DESKTOP_MUTATION_KINDS = (
 _DESKTOP_RATE_READ_KINDS = (
     "ui.rates.summary",
     "ui.rates.coverage",
+)
+_DESKTOP_SYNC_KINDS = (
+    "ui.sync.status",
+    "ui.sync.enable",
+    "ui.sync.disable",
+    "ui.sync.transports.list",
+    "ui.sync.transports.configure",
+    "ui.sync.transports.delete",
+    "ui.sync.push",
+    "ui.sync.pull",
+    "ui.sync.join_request",
+    "ui.sync.invite",
+    "ui.sync.join",
+    "ui.sync.members.list",
+    "ui.sync.members.revoke",
+    "ui.sync.devices.list",
+    "ui.sync.devices.revoke",
+    "ui.sync.conflicts.list",
+    "ui.sync.conflicts.resolve",
 )
 _DESKTOP_SWAP_MATCHING_KINDS = (
     "ui.transfers.suggest",
@@ -316,6 +336,15 @@ class ConnectionCatalogDriftTests(unittest.TestCase):
             self.assertIn(kind, rust_kinds, f"{kind} is missing from Tauri daemon allowlist")
             self.assertIn(kind, vite_kinds, f"{kind} is missing from Vite bridge allowlist")
 
+    def test_sync_kinds_are_allowed_by_desktop_boundaries(self):
+        rust_kinds = self._rust_allowlist()
+        vite_kinds = self._vite_allowlist()
+        self.assertEqual(set(_DESKTOP_SYNC_KINDS), set(SYNC_UI_KINDS))
+        for kind in _DESKTOP_SYNC_KINDS:
+            self.assertIn(kind, set(SUPPORTED_KINDS))
+            self.assertIn(kind, rust_kinds, f"{kind} is missing from Tauri daemon allowlist")
+            self.assertIn(kind, vite_kinds, f"{kind} is missing from Vite bridge allowlist")
+
     def test_swap_matching_kinds_are_allowed_by_desktop_boundaries(self):
         rust_kinds = self._rust_allowlist()
         vite_kinds = self._vite_allowlist()
@@ -451,7 +480,13 @@ class ConnectionCatalogDriftTests(unittest.TestCase):
         )
         self.assertIsNotNone(tauri_streaming, "could not find Tauri streaming kind list")
         self.assertIsNotNone(vite_streaming, "could not find Vite stream-capable kind list")
-        for kind in ("ui.wallets.sync", "ui.freshness.run"):
+        for kind in (
+            "ui.wallets.sync",
+            "ui.freshness.run",
+            "ui.sync.push",
+            "ui.sync.pull",
+            "ui.sync.join",
+        ):
             self.assertIn(
                 f'"{kind}"',
                 tauri_streaming.group("body"),

@@ -22,6 +22,7 @@
   - [kassiber/backup/](kassiber/backup/) — `tar | age` backup format: SQLCipher-aware export (`pack.py`), age subprocess + pyrage fallback (`age_cli.py`), strict tar member validation (`safe_tar.py`), and `kassiber backup {export,import}` CLI (`cli.py`).
   - [kassiber/core/attachments.py](kassiber/core/attachments.py) — transaction attachment storage, URL-reference handling, integrity verification, and orphan-file GC for the managed attachment tree.
   - [kassiber/core/transaction_history.py](kassiber/core/transaction_history.py) — append-only transaction metadata provenance. It writes grouped edit events plus field-level before/after/diff rows for notes, tags, exclusion, review/tax status, Austrian overrides, and pricing provenance/value fields; read helpers power per-transaction history, global Activity, stale-report counts, redacted AI-safe reads, audit-package inclusion, and append-only revert.
+  - [kassiber/core/sync_replication/](kassiber/core/sync_replication/) — strictly opt-in cross-device/team replication, separate from chain sync. It owns person/device/replica identities, Ed25519 event signing and per-replica hash chains, HLC/version vectors, the positive authored-table allowlist, `tar | age` courier/snapshot bundles, deterministic replay/conflict resolution, folder/WebDAV/S3 dumb-mailbox transports with signed opaque heads/acks and peer staleness, sealed invitations and roles, explicit SPAKE2+pinned-key LAN pairing with rotating mDNS, optional user-managed Tor onion transport, and acknowledgement-quorum tombstone compaction. SQLCipher is required before keys can exist. It never syncs the live DB, derived journals/reports/rates/UTXOs, backend or AI rows/secrets, raw fingerprints/hashes, private wallet material, or fetched BTCPay provenance. Mailbox-only sync never binds a listener; LAN/Tor listeners are single-use and explicit while the DB is unlocked.
   - [kassiber/core/engines/__init__.py](kassiber/core/engines/__init__.py) — tax-engine interface/resolver. Both the generic RP2 path and the Austrian (§ 27b EStG) path route through `GenericRP2TaxEngine`; AT profiles surface rp2's `rp2.plugin.country.at.AT` plugin directly so accounting methods and engine semantics come from rp2, while Kassiber keeps Austrian disposal bucketing / Kennzahl mapping on its side.
   - [kassiber/core/tax_events.py](kassiber/core/tax_events.py) — in-memory normalization seam between raw transaction rows and tax-engine inputs, including early quarantine classification for under-specified tax semantics.
   - [kassiber/core/sync.py](kassiber/core/sync.py) — wallet sync orchestration above backend-specific transport details.
@@ -126,6 +127,13 @@ Kassiber is currently in **dev mode**: renaming commands, breaking flags, and re
   returns safe backend names and metadata without exact URLs or tokens.
   `read_skill_reference("index")` returns only the
   compact in-app skill routing document; deeper references stay allowlisted.
+  Desktop-only replication kinds are `ui.sync.status`,
+  `ui.sync.{enable,disable,push,pull,join_request,invite,join}`,
+  `ui.sync.transports.{list,configure,delete}`,
+  `ui.sync.members.{list,revoke}`, `ui.sync.devices.{list,revoke}`, and
+  `ui.sync.conflicts.{list,resolve}`. They are wired through the desktop
+  allowlists but intentionally absent from the AI tool catalog. Sync progress
+  uses unsolicited `ui.sync.progress` event envelopes.
   Desktop onboarding and connection setup use explicit mutating daemon kinds
   `ui.onboarding.complete`, `ui.wallets.create`, `ui.connections.btcpay.create`,
   `ui.backends.detect_core`, `ui.backends.bitcoinrpc.test`,
@@ -247,6 +255,7 @@ the real transport must be present in `ALLOWED_DAEMON_KINDS`.
   (stored in the SQLCipher DB; `auto` policy persists only when encrypted)
 - `secrets {init,init-resume,change-passphrase,remember-unlock,forget-unlock,verify,status,migrate-credentials}` — CLI remembered unlock requires the non-secret managed-settings opt-in marker; desktop-only Touch ID enrollment is not consumed implicitly
 - `backup {export,import}`
+- `sync {status,enable,disable,transport,join-request,invite,join,push,pull,members,devices,conflicts,lan,tor,gc}` — signed authored-event replication. `push/pull --bundle` is offline courier; `--transport` uses configured folder/WebDAV/S3 mailboxes; owner `--snapshot` bootstraps late joiners; `lan` is the explicit SPAKE2/mDNS fast path; `tor` is the optional user-managed onion leg; `gc` plans/applies acknowledgement-quorum tombstone compaction. See [docs/reference/device-sync.md](docs/reference/device-sync.md).
 - `workspaces {list,create}`
 - `profiles {list,create,get,set}`
 - `accounts {list,create}`

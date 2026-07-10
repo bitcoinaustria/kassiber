@@ -164,8 +164,11 @@ def _prime_rp2_logger() -> None:
     if "rp2.logger" in sys.modules:
         _disable_rp2_disk_logger(sys.modules["rp2.logger"])
         return
-    scratch = Path(tempfile.gettempdir()) / "kassiber-rp2-logs"
-    scratch.mkdir(parents=True, exist_ok=True)
+    # Use a process-private directory. CLI and daemon test processes can prime
+    # RP2 concurrently; a shared scratch directory lets one process remove the
+    # other's current working directory while ``rp2.logger`` is creating
+    # ``./log``, which fails nondeterministically with ENOENT.
+    scratch = Path(tempfile.mkdtemp(prefix="kassiber-rp2-logs-"))
     previous_cwd: str | None
     try:
         previous_cwd = os.getcwd()

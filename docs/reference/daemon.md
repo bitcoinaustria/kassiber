@@ -102,6 +102,23 @@ daemon for the exact current allowlist:
       "ui.wallets.update",
       "ui.wallets.delete",
       "ui.wallets.sync",
+      "ui.sync.status",
+      "ui.sync.enable",
+      "ui.sync.disable",
+      "ui.sync.transports.list",
+      "ui.sync.transports.configure",
+      "ui.sync.transports.delete",
+      "ui.sync.push",
+      "ui.sync.pull",
+      "ui.sync.join_request",
+      "ui.sync.invite",
+      "ui.sync.join",
+      "ui.sync.members.list",
+      "ui.sync.members.revoke",
+      "ui.sync.devices.list",
+      "ui.sync.devices.revoke",
+      "ui.sync.conflicts.list",
+      "ui.sync.conflicts.resolve",
       "daemon.lock",
       "daemon.unlock",
       "ai.providers.list",
@@ -146,6 +163,14 @@ treat this list (not the docs) as the source of truth for what the supervisor
 will pass through. Reveal kinds (see below) are included in the list but still
 require their own passphrase round-trip before the daemon returns raw secret
 material.
+
+The `ui.sync.*` family backs Settings → Device sync and is never registered as
+an AI tool. It operates only on the active encrypted profile. Mailbox push/pull
+can emit unsolicited `ui.sync.progress` records through
+`build_event_envelope`; these carry `event: true` and no `request_id`, while the
+terminal response still matches the invoked kind. Transport responses expose
+only safe endpoint-origin/presence metadata, never credentials or full remote
+paths. See [`device-sync.md`](device-sync.md).
 
 `ui.reports.privacy_hygiene` is a local-only, read-only privacy facts payload
 shared by Settings -> Privacy, `kassiber reports privacy-hygiene`, and the

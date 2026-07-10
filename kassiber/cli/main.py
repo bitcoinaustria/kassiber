@@ -150,6 +150,7 @@ from ..projects import (
 from ..log_ring import sanitize_traceback_text
 from ..secrets.migration import create_empty_encrypted_database
 from ..secrets.cli import add_secrets_parser, dispatch_secrets
+from ..core.sync_replication.cli import add_sync_parser, dispatch_sync
 from ..secrets.cli_input import (
     add_secret_stdin_options,
     enforce_single_stdin_consumer,
@@ -872,6 +873,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     add_secrets_parser(sub)
     add_backup_parser(sub)
+    add_sync_parser(sub)
 
     backends = sub.add_parser("backends")
     backends_sub = backends.add_subparsers(dest="backends_command", required=True)
@@ -2716,6 +2718,8 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
         return emit(args, dispatch_secrets(args))
     if args.command == "backup":
         return emit(args, dispatch_backup(args))
+    if args.command == "sync":
+        return emit(args, dispatch_sync(conn, args))
     if args.command == "backends":
         if args.backends_command == "list":
             return emit(args, core_accounts.list_backends(args.runtime_config))

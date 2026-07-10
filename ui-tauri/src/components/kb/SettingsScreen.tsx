@@ -56,6 +56,7 @@ import { MarketDataSettingsPanel } from "./settings/MarketDataSettingsPanel";
 import { NetworkLayerSettingsPanel } from "./settings/NetworkLayerSettingsPanel";
 import { PrivacySettingsPanel } from "./settings/PrivacySettingsPanel";
 import { SecuritySettingsPanel } from "./settings/SecuritySettingsPanel";
+import { SyncSettingsPanel } from "./settings/SyncSettingsPanel";
 import { TerminalCommandSettingsPanel } from "./settings/TerminalCommandSettingsPanel";
 import { DEFAULT_SETTINGS_SECTION, SettingsRail, sectionMeta } from "./settings/SettingsNavigation";
 import {
@@ -998,6 +999,8 @@ export function SettingsScreen({ onLock }: SettingsScreenProps) {
             resetRegtestPending={resetRegtestPending}
           />
         );
+      case "data-sync":
+        return <SyncSettingsPanel encryptedWorkspace={encryptedWorkspace} />;
       case "desktop-terminal":
         return (
           <TerminalCommandSettingsPanel

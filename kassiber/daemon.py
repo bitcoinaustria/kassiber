@@ -181,8 +181,9 @@ from .egress_ledger import (
     endpoint_from_url,
     get_egress_ledger,
 )
-from .envelope import build_envelope, build_error_envelope, json_ready
+from .envelope import build_envelope, build_error_envelope, build_event_envelope, json_ready
 from .errors import AppError
+from .daemon_sync_replication import SYNC_UI_KINDS, dispatch_sync_ui
 from .projects import (
     create_project,
     get_project,
@@ -407,6 +408,7 @@ SUPPORTED_KINDS = (
     "ui.maintenance.settings",
     "ui.maintenance.configure",
     "ui.maintenance.run",
+    *SYNC_UI_KINDS,
     "ui.freshness.status",
     "ui.freshness.configure",
     "ui.freshness.run",
@@ -11466,6 +11468,34 @@ def handle_request(
             False,
         )
 
+    if kind in SYNC_UI_KINDS:
+        args = _coerce_args_dict(request_id, request.get("args"))
+
+        def sync_progress(stage: str, details: Mapping[str, Any]) -> None:
+            out.write(
+                build_event_envelope(
+                    "ui.sync.progress",
+                    {"stage": stage, **dict(details)},
+                )
+            )
+
+        return (
+            _with_request_id(
+                build_envelope(
+                    kind,
+                    dispatch_sync_ui(
+                        ctx.conn,
+                        data_root=ctx.data_root,
+                        kind=kind,
+                        args=args,
+                        progress=sync_progress,
+                    ),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
     if kind == "ui.maintenance.configure":
         return (
             _with_request_id(
@@ -12701,6 +12731,8 @@ def run(
                         extra={"kb_fields": _request_outcome_fields(kind, started, response)},
                     )
             except AppError as exc:
+                if ctx.conn is not None:
+                    ctx.conn.rollback()
                 if logged:
                     _REQUEST_LOGGER.warning(
                         "request failed",
@@ -12722,6 +12754,8 @@ def run(
                 )
                 should_shutdown = False
             except Exception as exc:
+                if ctx.conn is not None:
+                    ctx.conn.rollback()
                 traceback.print_exc(file=sys.stderr)
                 sys.stderr.flush()
                 if logged:

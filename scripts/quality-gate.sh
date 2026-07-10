@@ -149,6 +149,11 @@ smoke_py -m kassiber secrets migrate-credentials --help >/dev/null
 smoke_py -m kassiber backup --help >/dev/null
 smoke_py -m kassiber backup export --help >/dev/null
 smoke_py -m kassiber backup import --help >/dev/null
+smoke_py -m kassiber sync --help >/dev/null
+smoke_py -m kassiber sync transport add --help >/dev/null
+smoke_py -m kassiber sync lan --help >/dev/null
+smoke_py -m kassiber sync tor --help >/dev/null
+smoke_py -m kassiber sync gc --help >/dev/null
 smoke_py -m kassiber backends reveal-token --help >/dev/null
 smoke_py -m kassiber wallets reveal-descriptor --help >/dev/null
 
