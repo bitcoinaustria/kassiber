@@ -1121,6 +1121,34 @@ def resolve_settings_path(data_root):
     return resolve_config_root(data_root) / DEFAULT_SETTINGS_FILENAME
 
 
+def load_managed_settings(data_root):
+    """Return the managed JSON settings object, or an empty object if unreadable."""
+
+    settings_path = resolve_settings_path(data_root)
+    try:
+        loaded = json.loads(settings_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError, json.JSONDecodeError):
+        return {}
+    return loaded if isinstance(loaded, dict) else {}
+
+
+def update_managed_settings(data_root, *, updates=None, remove=()):
+    """Update top-level non-secret settings while preserving the path manifest."""
+
+    settings_path = resolve_settings_path(data_root)
+    settings_path.parent.mkdir(parents=True, exist_ok=True)
+    payload = load_managed_settings(data_root)
+    for key, value in (updates or {}).items():
+        payload[str(key)] = value
+    for key in remove:
+        payload.pop(str(key), None)
+    settings_path.write_text(
+        json.dumps(payload, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    return settings_path
+
+
 def ensure_settings_file(data_root, env_file):
     """Create or refresh the managed `settings.json` state manifest."""
     settings_path = resolve_settings_path(data_root)
