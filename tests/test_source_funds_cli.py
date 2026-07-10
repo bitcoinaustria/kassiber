@@ -509,6 +509,21 @@ class SourceFundsCliTest(unittest.TestCase):
         privacy_out_tx_id = self._tx_id("Privacy", "coinjoin-hop-1")
         swap_in_tx_id = self._tx_id("Liquid", "swap-in-leg")
 
+        preview = self.cli(
+            "source-funds",
+            "links",
+            "bulk-review",
+            "--workspace",
+            "Sof",
+            "--profile",
+            "Default",
+            "--target-transaction",
+            cold_in_tx_id,
+            "--dry-run",
+        )["data"]
+        self.assertTrue(preview["dry_run"])
+        self.assertGreaterEqual(preview["reviewed"], 1)
+
         bulk_reviewed_links = []
         for target_id in (cold_in_tx_id, privacy_in_tx_id, swap_in_tx_id):
             bulk_reviewed = self.cli(

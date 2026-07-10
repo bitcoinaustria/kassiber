@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import functools
 import json
 import logging
 import sqlite3
@@ -123,6 +124,10 @@ from ..core import source_funds_coverage as core_source_funds_coverage
 from ..core import source_funds_diagram
 from ..core import source_funds_recipients as core_source_funds_recipients
 from ..core import wallets as core_wallets
+from ..core.ui_snapshot import (
+    build_next_actions_snapshot,
+    build_workspace_health_snapshot,
+)
 from ..core.runtime import bootstrap_runtime, close_runtime, emit_error, resolve_output_format
 from ..diagnostics import (
     collect_public_diagnostics,
@@ -155,6 +160,7 @@ from ..secrets.sqlcipher import require_sqlcipher
 from ..tax_policy import supported_tax_countries
 from ..wallet_descriptors import MAX_DESCRIPTOR_GAP_LIMIT
 from .chat import run_chat_command
+from .command_registry import command_needs_database, describe_command_catalog
 
 
 _AI_PROVIDER_KINDS_LIST = AI_PROVIDER_KINDS
@@ -250,6 +256,23 @@ def _normalized_backend_clear_fields(values: Sequence[str] | None) -> list[str]:
 def _add_workspace_profile_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--workspace")
     parser.add_argument("--profile")
+
+
+def _dry_run_transaction(conn: sqlite3.Connection, operation) -> dict[str, Any]:
+    """Run a mutating preview under a savepoint, then restore exact DB state."""
+
+    conn.execute("SAVEPOINT cli_dry_run")
+    try:
+        result = operation()
+        conn.execute("ROLLBACK TO SAVEPOINT cli_dry_run")
+        conn.execute("RELEASE SAVEPOINT cli_dry_run")
+    except Exception:
+        conn.execute("ROLLBACK TO SAVEPOINT cli_dry_run")
+        conn.execute("RELEASE SAVEPOINT cli_dry_run")
+        raise
+    payload = dict(result)
+    payload["dry_run"] = True
+    return payload
 
 
 def _project_payload(entry) -> dict[str, object]:
@@ -644,6 +667,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="Machine-readable mode: implies --format json, writes a structured envelope",
     )
     parser.add_argument(
+        "--non-interactive",
+        action="store_true",
+        help=(
+            "Never prompt; fail with a structured interaction_required error instead. "
+            "Implied by --machine."
+        ),
+    )
+    parser.add_argument(
         "--output",
         default=None,
         help="Write output to this file path instead of stdout (use '-' for stdout)",
@@ -673,6 +704,26 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("daemon")
     sub.add_parser("init")
     sub.add_parser("status")
+    sub.add_parser("health", help="Summarize active-project readiness and blockers")
+    sub.add_parser(
+        "next-actions",
+        help="Suggest the next safe actions for the active project",
+    )
+
+    commands = sub.add_parser(
+        "commands",
+        help="Describe the CLI command surface as machine-readable metadata",
+    )
+    commands_sub = commands.add_subparsers(dest="commands_command", required=True)
+    commands_describe = commands_sub.add_parser(
+        "describe",
+        help="Describe all commands or a command-path prefix",
+    )
+    commands_describe.add_argument(
+        "path",
+        nargs="*",
+        help="Optional command path, for example `wallets sync`",
+    )
 
     projects = sub.add_parser("projects", help="List, create, and select encrypted project containers")
     projects_sub = projects.add_subparsers(dest="projects_command", required=True)
@@ -1962,6 +2013,11 @@ def build_parser() -> argparse.ArgumentParser:
     transfers_bulk_pair.add_argument(
         "--fee-sats-min", dest="fee_sats_min", type=int, default=2500
     )
+    transfers_bulk_pair.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Preview pairs and fees without persisting transaction-pair rows",
+    )
 
     transfers_dismiss = transfers_sub.add_parser("dismiss")
     transfers_dismiss.add_argument("--workspace")
@@ -2037,6 +2093,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     tr_rules_apply.add_argument(
         "--fee-sats-min", dest="fee_sats_min", type=int, default=2500
+    )
+    tr_rules_apply.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Preview rule matches without persisting transaction-pair rows",
     )
 
     views = sub.add_parser("views")
@@ -2204,6 +2265,11 @@ def build_parser() -> argparse.ArgumentParser:
     sf_links_bulk_review.add_argument("--workspace")
     sf_links_bulk_review.add_argument("--profile")
     sf_links_bulk_review.add_argument("--target-transaction", required=True)
+    sf_links_bulk_review.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Preview deterministic reviews without changing link state",
+    )
 
     sf_suggest = source_funds_sub.add_parser("suggest")
     sf_suggest.add_argument("--workspace")
@@ -2623,6 +2689,15 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
         return cmd_init(conn, args)
     if args.command == "status":
         return cmd_status(conn, args)
+    if args.command == "health":
+        return emit(args, build_workspace_health_snapshot(conn))
+    if args.command == "next-actions":
+        return emit(args, build_next_actions_snapshot(conn))
+    if args.command == "commands":
+        return emit(
+            args,
+            describe_command_catalog(build_parser(), getattr(args, "path", None)),
+        )
     if args.command == "projects":
         if args.projects_command == "list":
             return emit(args, cmd_projects_list(args), kind="projects.list")
@@ -2638,8 +2713,7 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
             retryable=False,
         )
     if args.command == "secrets":
-        response = dispatch_secrets(args)
-        return emit(args, response["data"])
+        return emit(args, dispatch_secrets(args))
     if args.command == "backup":
         return emit(args, dispatch_backup(args))
     if args.command == "backends":
@@ -3737,20 +3811,23 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                 ),
             )
         if args.transfers_command == "bulk-pair":
+            operation = functools.partial(
+                bulk_pair_transfers,
+                conn,
+                args.workspace,
+                args.profile,
+                confidence=args.confidence,
+                time_window_seconds=args.time_window_seconds,
+                fee_pct_max=args.fee_pct_max,
+                fee_sats_min=args.fee_sats_min,
+                asset_pair=getattr(args, "asset_pair", None),
+                method=getattr(args, "method", None),
+                candidate_type=getattr(args, "candidate_type", None),
+                commit=not args.dry_run,
+            )
             return emit(
                 args,
-                bulk_pair_transfers(
-                    conn,
-                    args.workspace,
-                    args.profile,
-                    confidence=args.confidence,
-                    time_window_seconds=args.time_window_seconds,
-                    fee_pct_max=args.fee_pct_max,
-                    fee_sats_min=args.fee_sats_min,
-                    asset_pair=getattr(args, "asset_pair", None),
-                    method=getattr(args, "method", None),
-                    candidate_type=getattr(args, "candidate_type", None),
-                ),
+                _dry_run_transaction(conn, operation) if args.dry_run else operation(),
             )
         if args.transfers_command == "dismiss":
             return emit(
@@ -3808,20 +3885,25 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                     ),
                 )
             if args.transfers_rules_command == "apply":
+                operation = functools.partial(
+                    apply_transfer_rules,
+                    conn,
+                    args.workspace,
+                    args.profile,
+                    time_window_seconds=args.time_window_seconds,
+                    fee_pct_max=args.fee_pct_max,
+                    fee_sats_min=args.fee_sats_min,
+                    confidence=getattr(args, "confidence", None),
+                    asset_pair=getattr(args, "asset_pair", None),
+                    method=getattr(args, "method", None),
+                    candidate_type=getattr(args, "candidate_type", None),
+                    commit=not args.dry_run,
+                )
                 return emit(
                     args,
-                    apply_transfer_rules(
-                        conn,
-                        args.workspace,
-                        args.profile,
-                        time_window_seconds=args.time_window_seconds,
-                        fee_pct_max=args.fee_pct_max,
-                        fee_sats_min=args.fee_sats_min,
-                        confidence=getattr(args, "confidence", None),
-                        asset_pair=getattr(args, "asset_pair", None),
-                        method=getattr(args, "method", None),
-                        candidate_type=getattr(args, "candidate_type", None),
-                    ),
+                    _dry_run_transaction(conn, operation)
+                    if args.dry_run
+                    else operation(),
                 )
     if args.command == "loans":
         if args.loans_command == "mark":
@@ -4139,15 +4221,20 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                     ),
                 )
             if args.source_funds_links_command == "bulk-review":
+                operation = functools.partial(
+                    core_source_funds.bulk_review_suggestions,
+                    conn,
+                    args.workspace,
+                    args.profile,
+                    source_funds_hooks,
+                    target_transaction_ref=args.target_transaction,
+                    commit=not args.dry_run,
+                )
                 return emit(
                     args,
-                    core_source_funds.bulk_review_suggestions(
-                        conn,
-                        args.workspace,
-                        args.profile,
-                        source_funds_hooks,
-                        target_transaction_ref=args.target_transaction,
-                    ),
+                    _dry_run_transaction(conn, operation)
+                    if args.dry_run
+                    else operation(),
                 )
         if args.source_funds_command == "suggest":
             return emit(
@@ -4693,29 +4780,7 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
 
 
 def command_needs_db(args: argparse.Namespace) -> bool:
-    if args.command == "daemon":
-        return False
-    if args.command == "chat":
-        return False
-    if args.command == "backends" and getattr(args, "backends_command", None) == "kinds":
-        return False
-    if args.command == "wallets" and getattr(args, "wallets_command", None) == "kinds":
-        return False
-    if args.command == "wallets" and getattr(args, "wallets_command", None) == "ledger-template":
-        return False
-    if (
-        args.command == "wallets"
-        and getattr(args, "wallets_command", None) == "import-ledger"
-        and getattr(args, "dry_run", False)
-    ):
-        return False
-    if args.command == "secrets":
-        return False
-    if args.command == "backup":
-        return False
-    if args.command == "projects":
-        return False
-    return True
+    return command_needs_database(args)
 
 
 def command_persists_bootstrap(args: argparse.Namespace) -> bool:
@@ -4759,6 +4824,7 @@ def _configure_cli_logging(args: argparse.Namespace) -> None:
 def main(argv: Sequence[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
+    args.non_interactive = bool(args.non_interactive or args.machine)
     _configure_cli_logging(args)
 
     runtime = None

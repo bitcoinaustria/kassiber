@@ -61,8 +61,46 @@ def set_cli_remembered_unlock_enabled(data_root, enabled: bool) -> None:
         )
 
 
+def _backend_priority(backend) -> float:
+    try:
+        return float(backend.priority)
+    except Exception:
+        return 0.0
+
+
+def _backend_is_native(backend) -> bool:
+    """Accept only the platform stores covered by Kassiber's threat model."""
+
+    module = type(backend).__module__
+    platform = _platform_name()
+    allowed_module = {
+        "macos": "keyring.backends.macOS",
+        "windows": "keyring.backends.Windows",
+        "linux": "keyring.backends.SecretService",
+    }.get(platform)
+    if allowed_module is None:
+        return False
+    if module == allowed_module:
+        return _backend_priority(backend) > 0
+    if module != "keyring.backends.chainer":
+        return False
+    active = [
+        child
+        for child in getattr(backend, "backends", ())
+        if _backend_priority(child) > 0
+    ]
+    return bool(active) and all(_backend_is_native(child) for child in active)
+
+
+def _native_keyring_available() -> bool:
+    try:
+        return _backend_is_native(keyring.get_keyring())
+    except Exception:
+        return False
+
+
 def _load_with_availability(data_root) -> tuple[bool, str | None]:
-    if _platform_name() == "unsupported":
+    if not _native_keyring_available():
         return False, None
     try:
         value = keyring.get_password(
@@ -84,7 +122,7 @@ def load_remembered_passphrase(data_root) -> str | None:
 def store_remembered_passphrase(data_root, passphrase) -> bool:
     """Store the shared passphrase, returning False when the OS store rejects it."""
 
-    if _platform_name() == "unsupported":
+    if not _native_keyring_available():
         return False
     try:
         keyring.set_password(
@@ -100,7 +138,7 @@ def store_remembered_passphrase(data_root, passphrase) -> bool:
 def delete_remembered_passphrase(data_root) -> bool:
     """Delete the shared passphrase; a missing item is an idempotent success."""
 
-    if _platform_name() == "unsupported":
+    if not _native_keyring_available():
         return False
     try:
         keyring.delete_password(
@@ -117,10 +155,17 @@ def delete_remembered_passphrase(data_root) -> bool:
 def remembered_unlock_status(data_root) -> dict[str, object]:
     """Return public-safe platform, availability, enrollment, and opt-in state."""
 
-    available, passphrase = _load_with_availability(data_root)
+    cli_enabled = cli_remembered_unlock_enabled(data_root)
+    if cli_enabled:
+        available, passphrase = _load_with_availability(data_root)
+    else:
+        # A desktop enrollment is private to the desktop until the CLI marker
+        # is explicitly enabled. Status must not probe that secret merely to
+        # report whether the native backend is installed.
+        available, passphrase = _native_keyring_available(), None
     return {
         "platform": _platform_name(),
         "available": available,
         "configured": passphrase is not None,
-        "cli_enabled": cli_remembered_unlock_enabled(data_root),
+        "cli_enabled": cli_enabled,
     }

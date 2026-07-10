@@ -116,8 +116,14 @@ class RememberedUnlockStoreTests(unittest.TestCase):
         self.original_keyring = keyring.get_keyring()
         self.keyring = MemoryKeyring()
         keyring.set_keyring(self.keyring)
+        self.native_backend = patch(
+            "kassiber.secrets.unlock_store._backend_is_native",
+            return_value=True,
+        )
+        self.native_backend.start()
 
     def tearDown(self):
+        self.native_backend.stop()
         keyring.set_keyring(self.original_keyring)
 
     def test_store_load_delete_round_trip_and_marker(self):
@@ -131,13 +137,15 @@ class RememberedUnlockStoreTests(unittest.TestCase):
                 {
                     "platform": PLATFORM_NAME,
                     "available": True,
-                    "configured": True,
+                    "configured": False,
                     "cli_enabled": False,
                 },
             )
 
             set_cli_remembered_unlock_enabled(data_root, True)
-            self.assertTrue(remembered_unlock_status(data_root)["cli_enabled"])
+            status = remembered_unlock_status(data_root)
+            self.assertTrue(status["cli_enabled"])
+            self.assertTrue(status["configured"])
             settings = json.loads(
                 (Path(root) / "config" / "settings.json").read_text(encoding="utf-8")
             )
@@ -176,15 +184,28 @@ class RememberedUnlockStoreTests(unittest.TestCase):
             self.assertIsNone(load_remembered_passphrase(data_root))
             self.assertFalse(store_remembered_passphrase(data_root, "secret"))
             self.assertFalse(delete_remembered_passphrase(data_root))
+            set_cli_remembered_unlock_enabled(data_root, True)
             self.assertEqual(
                 remembered_unlock_status(data_root),
                 {
                     "platform": PLATFORM_NAME,
                     "available": False,
                     "configured": False,
-                    "cli_enabled": False,
+                    "cli_enabled": True,
                 },
             )
+
+    def test_non_native_backend_is_rejected_without_access(self):
+        with tempfile.TemporaryDirectory() as root, patch(
+            "kassiber.secrets.unlock_store._backend_is_native",
+            return_value=False,
+        ):
+            data_root = Path(root) / "data"
+            data_root.mkdir()
+            self.assertFalse(store_remembered_passphrase(data_root, "secret"))
+            self.assertIsNone(load_remembered_passphrase(data_root))
+            self.assertFalse(delete_remembered_passphrase(data_root))
+            self.assertEqual(self.keyring.get_calls, 0)
 
 
 class RememberedUnlockCliTests(unittest.TestCase):
@@ -192,8 +213,14 @@ class RememberedUnlockCliTests(unittest.TestCase):
         self.original_keyring = keyring.get_keyring()
         self.keyring = MemoryKeyring()
         keyring.set_keyring(self.keyring)
+        self.native_backend = patch(
+            "kassiber.secrets.unlock_store._backend_is_native",
+            return_value=True,
+        )
+        self.native_backend.start()
 
     def tearDown(self):
+        self.native_backend.stop()
         keyring.set_keyring(self.original_keyring)
 
     def test_enroll_unlock_rotate_stale_fallback_and_forget(self):
@@ -261,7 +288,7 @@ class RememberedUnlockCliTests(unittest.TestCase):
                 str(backup_fd),
             )
             self.assertEqual(returncode, 0)
-            self.assertEqual(payload["kind"], "backup")
+            self.assertEqual(payload["kind"], "backup.export")
             self.assertTrue(backup_path.is_file())
 
             current_fd = _passphrase_fd(old_passphrase)
@@ -293,8 +320,8 @@ class RememberedUnlockCliTests(unittest.TestCase):
                 tty=True,
                 prompted_passphrase=new_passphrase,
             )
-            self.assertEqual(returncode, 0)
-            self.assertEqual(payload["kind"], "status")
+            self.assertEqual(returncode, 1)
+            self.assertEqual(payload["error"]["code"], "passphrase_required")
             self.assertIn("remembered_unlock_stale", stderr)
 
             # An explicit fd always wins, so the stale store is not consulted.
@@ -315,6 +342,7 @@ class RememberedUnlockCliTests(unittest.TestCase):
             )
             self.assertEqual(returncode, 0)
             self.assertEqual(payload["kind"], "secrets.forget-unlock")
+            self.assertTrue(payload["data"]["cli_marker_cleared"])
             self.assertFalse(payload["data"]["remembered_unlock"]["cli_enabled"])
 
             payload, returncode, _stderr = _run_cli(data_root, "status")
@@ -352,6 +380,32 @@ class RememberedUnlockCliTests(unittest.TestCase):
                 payload["error"]["code"],
                 "remembered_unlock_settings_failed",
             )
+            self.assertTrue(payload["error"]["details"]["credential_deleted"])
+            self.assertIsNone(load_remembered_passphrase(data_root))
+
+    def test_forget_attempts_credential_delete_when_marker_clear_fails(self):
+        with tempfile.TemporaryDirectory() as root:
+            data_root = Path(root) / "data"
+            data_root.mkdir()
+            self.assertTrue(store_remembered_passphrase(data_root, "secret"))
+            set_cli_remembered_unlock_enabled(data_root, True)
+
+            with patch(
+                "kassiber.secrets.cli.set_cli_remembered_unlock_enabled",
+                side_effect=OSError("settings are read-only"),
+            ):
+                payload, returncode, _stderr = _run_cli(
+                    data_root,
+                    "secrets",
+                    "forget-unlock",
+                )
+
+            self.assertEqual(returncode, 1)
+            self.assertEqual(
+                payload["error"]["code"],
+                "remembered_unlock_settings_failed",
+            )
+            self.assertFalse(payload["error"]["details"]["cli_marker_cleared"])
             self.assertTrue(payload["error"]["details"]["credential_deleted"])
             self.assertIsNone(load_remembered_passphrase(data_root))
 

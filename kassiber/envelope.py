@@ -57,6 +57,7 @@ def json_ready(value):
 # with `dest="<ns>_command"`, add the attr name here.
 _KIND_SUBCOMMAND_ATTRS = (
     "backends_command",
+    "commands_command",
     "context_command",
     "workspaces_command",
     "profiles_command",
@@ -77,6 +78,7 @@ _KIND_SUBCOMMAND_ATTRS = (
     "views_command",
     "chats_command",
     "secrets_command",
+    "backup_command",
     "btcpay_command",
     "btcpay_provenance_command",
     "documents_command",
@@ -132,7 +134,19 @@ def _normalized_envelope_meta(envelope_meta):
 
 
 def build_envelope(kind, data, envelope_meta=None):
-    envelope = {"kind": kind, "schema_version": SCHEMA_VERSION, "data": json_ready(data)}
+    ready_data = json_ready(data)
+    if (
+        isinstance(ready_data, dict)
+        and "next_cursor" in ready_data
+        and "has_more" in ready_data
+        and "page" not in ready_data
+    ):
+        ready_data = dict(ready_data)
+        ready_data["page"] = {
+            "next_cursor": ready_data["next_cursor"],
+            "has_more": bool(ready_data["has_more"]),
+        }
+    envelope = {"kind": kind, "schema_version": SCHEMA_VERSION, "data": ready_data}
     envelope.update(_normalized_envelope_meta(envelope_meta))
     return envelope
 

@@ -96,6 +96,9 @@ smoke_py() {
 echo "> CLI help smoke (isolated HOME: $SMOKE_HOME)"
 smoke_py -m kassiber --help >/dev/null
 smoke_py -m kassiber --machine status >/dev/null
+smoke_py -m kassiber --machine health >/dev/null
+smoke_py -m kassiber --machine next-actions >/dev/null
+smoke_py -m kassiber --machine commands describe wallets sync >/dev/null
 smoke_py -m kassiber daemon </dev/null >/dev/null
 smoke_py -m kassiber backends list >/dev/null
 smoke_py -m kassiber wallets kinds >/dev/null
