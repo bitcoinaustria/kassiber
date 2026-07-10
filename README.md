@@ -126,7 +126,8 @@ export KASSIBER_PYTHON="$PWD/.venv/bin/python"
 
 The Python install includes `keyring` so the opt-in CLI remembered-unlock flow
 can use macOS Keychain, Windows Credential Manager, or an available unlocked
-Linux Secret Service. Kassiber never falls back to a plaintext credential file.
+Linux Secret Service. Kassiber rejects configured third-party/file keyring
+backends and never falls back to a plaintext credential file.
 
 ## Quick start
 
@@ -162,6 +163,23 @@ python3 -m kassiber wallets sync --wallet donations
 python3 -m kassiber journals process
 python3 -m kassiber reports summary
 ```
+
+For scripts and agents, `--machine` implies `--non-interactive`: stdout is one
+JSON envelope and Kassiber returns `interaction_required` instead of prompting.
+Discover the live command contract and current project readiness without
+scraping help text:
+
+```bash
+kassiber --machine commands describe
+kassiber --machine commands describe wallets sync
+kassiber --machine health
+kassiber --machine next-actions
+```
+
+Paginated envelopes preserve `next_cursor` / `has_more` and also expose the
+same values under `data.page`. High-impact automatic reviews support previews:
+`transfers bulk-pair --dry-run`, `transfers rules apply --dry-run`, and
+`source-funds links bulk-review --dry-run`.
 
 For an encrypted project, enroll prompt-free CLI unlock once on a trusted local
 user account:

@@ -44,6 +44,15 @@ Use `./scripts/quality-gate.sh` before calling work ready to push. It wraps the 
 
 ## Right now
 
+- [x] Harden the CLI for one-shot agents: `--machine` now implies
+  `--non-interactive`; `commands describe` exposes an argparse-derived command
+  contract; `health` / `next-actions` expose shared readiness snapshots;
+  paginated envelopes include uniform `page` metadata; high-impact automatic
+  pairing/review paths have rollback-backed `--dry-run`; secrets/backup use one
+  envelope owner; managed settings updates are locked + atomic; remembered chat
+  unlock uses a private cross-platform daemon message and only native OS
+  credential backends are trusted.
+
 - [x] Land Lightning adapters on top of the
   [`kassiber.core.lightning`](kassiber/core/lightning/) scaffold. The
   scaffold ships the `NodeSnapshot` / `NodeChannel` / `NodeForward`

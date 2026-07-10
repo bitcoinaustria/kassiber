@@ -11,7 +11,13 @@ Use this reference when the user is setting up Kassiber state, creating the firs
 ```bash
 kassiber init
 kassiber status
+kassiber --machine health
+kassiber --machine next-actions
 ```
+
+Agents can discover the current CLI schema with `kassiber --machine commands
+describe [path ...]`; machine mode is non-interactive and will return a typed
+error rather than waiting for a prompt.
 
 For repo-local development where `kassiber` is not on `PATH`, use:
 

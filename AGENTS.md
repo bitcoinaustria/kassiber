@@ -17,6 +17,7 @@
   - [kassiber/backends.py](kassiber/backends.py) — named sync backends with SQLite as the canonical store plus optional dotenv bootstrap via `config/backends.env`, along with CRUD helpers.
   - [kassiber/sync_btcpay.py](kassiber/sync_btcpay.py) — BTCPay Greenfield API fetcher used by wallet-configured BTCPay sync and `wallets sync-btcpay`; it reshapes confirmed remote wallet-transaction rows into the existing BTCPay import format so Kassiber can reuse the same notes/tags pipeline.
   - [kassiber/cli/handlers.py](kassiber/cli/handlers.py) — remaining CLI command handlers and compatibility-layer imports while deeper decomposition continues.
+  - [kassiber/cli/command_registry.py](kassiber/cli/command_registry.py) — machine-readable argparse catalog plus CLI bootstrap/effect annotations; powers `commands describe` and the database-open decision.
   - [kassiber/secrets/](kassiber/secrets/) — SQLCipher keying helpers (`sqlcipher.py`), passphrase prompt/fd plumbing (`prompt.py`), opt-in native credential-store unlock (`unlock_store.py`), plaintext→encrypted migration (`migration.py`), passphrase rotation (`passphrase.py`), dotenv→encrypted credential lift (`credentials.py`, exposes `kassiber secrets migrate-credentials`), `kassiber secrets {init,change-passphrase,remember-unlock,forget-unlock,verify,status,migrate-credentials}` CLI (`cli.py`), and the `--*-stdin` / `--*-fd` credential-input helpers (`cli_input.py`).
   - [kassiber/backup/](kassiber/backup/) — `tar | age` backup format: SQLCipher-aware export (`pack.py`), age subprocess + pyrage fallback (`age_cli.py`), strict tar member validation (`safe_tar.py`), and `kassiber backup {export,import}` CLI (`cli.py`).
   - [kassiber/core/attachments.py](kassiber/core/attachments.py) — transaction attachment storage, URL-reference handling, integrity verification, and orphan-file GC for the managed attachment tree.
@@ -68,7 +69,7 @@ Kassiber is currently in **dev mode**: renaming commands, breaking flags, and re
   - reports (summary, tax-summary, balance-sheet, portfolio-summary, capital-gains, journal-entries, balance-history, austrian-e1kv, austrian-tax-summary, exit-tax, export-pdf, export-summary-pdf, export-csv, export-xlsx, export-austrian, export-austrian-e1kv-pdf, export-austrian-e1kv-xlsx, export-austrian-e1kv-csv, export-exit-tax-pdf, export-exit-tax-xlsx)
   - rates (local cache + Coinbase Exchange sync + CoinGecko fallback + Kraken CSV archive ingest + manual override)
   - diagnostics (public-safe bug-report collection)
-- Every command accepts `--format {table,plain,json,csv}`, `--output <path>`, `--machine` (= `--format json`), `--debug`, `--diagnostics-out <path|auto>`, and `--db-passphrase-fd FD` (used to unlock a SQLCipher-encrypted database non-interactively).
+- Every command accepts `--format {table,plain,json,csv}`, `--output <path>`, `--machine` (= JSON + `--non-interactive`), `--non-interactive`, `--debug`, `--diagnostics-out <path|auto>`, and `--db-passphrase-fd FD` (used to unlock a SQLCipher-encrypted database non-interactively). Machine/non-interactive commands must return `interaction_required` instead of prompting.
 - Successful responses use `{kind, schema_version, data}`. Errors use `{kind: "error", schema_version, error: {code, message, hint, details, retryable, debug}}`.
 - The Tauri supervisor routes daemon responses by `request_id`, not by kind.
   Streaming requests emit intermediate records such as `ai.chat.status`,
@@ -240,7 +241,8 @@ the real transport must be present in `ALLOWED_DAEMON_KINDS`.
 
 ## Command surface
 
-- `init`, `status`, `daemon`, `chat`, `context {show,current,set}`
+- `init`, `status`, `health`, `next-actions`, `daemon`, `chat`, `context {show,current,set}`
+- `commands describe [path ...]` — argparse-derived machine catalog with arguments, effects, scope, pagination/dry-run support, and DB/prompt metadata
 - `chats {list,show,delete,clear,config}` — persisted AI chat sessions
   (stored in the SQLCipher DB; `auto` policy persists only when encrypted)
 - `secrets {init,init-resume,change-passphrase,remember-unlock,forget-unlock,verify,status,migrate-credentials}` — CLI remembered unlock requires the non-secret managed-settings opt-in marker; desktop-only Touch ID enrollment is not consumed implicitly
@@ -255,9 +257,9 @@ the real transport must be present in `ALLOWED_DAEMON_KINDS`.
 - `metadata records {list,get,note {set,clear},tag {add,remove},excluded {set,clear},history {list,activity,stale,revert}}`
 - `metadata bip329 {import,list,export}`
 - `journals {process,list,transfers {list},quarantined,events {list,get},quarantine {show,clear,resolve {price-override,exclude}}}`
-- `transfers {pair,list,unpair,payouts {list,create,delete},suggest,bulk-pair,dismiss,rules {list,create,apply,delete,enable,disable}}`
+- `transfers {pair,list,unpair,payouts {list,create,delete},suggest,bulk-pair,dismiss,rules {list,create,apply,delete,enable,disable}}` — `bulk-pair` and `rules apply` accept `--dry-run`
 - `views {list,create,delete}` — generic saved-view CRUD; ``swap_candidates`` is the first surface consumer
-- `source-funds {sources {list,create,attach},links {list,create,review,attach,bulk-review},suggest,assemble,cases {list},coverage,recipients {list,create,update,delete}}` — `assemble` auto-builds the reviewed flow graph behind a target from local evidence only (transaction input/output structure of synced Bitcoin/Liquid wallets, Lightning payment hashes, platform ids, reviewed pairs), looping suggest + deterministic bulk review until convergence; it never contacts a backend.
+- `source-funds {sources {list,create,attach},links {list,create,review,attach,bulk-review},suggest,assemble,cases {list},coverage,recipients {list,create,update,delete}}` — `links bulk-review` accepts `--dry-run`; `assemble` auto-builds the reviewed flow graph behind a target from local evidence only (transaction input/output structure of synced Bitcoin/Liquid wallets, Lightning payment hashes, platform ids, reviewed pairs), looping suggest + deterministic bulk review until convergence; it never contacts a backend.
 - `reports {summary,tax-summary,balance-sheet,portfolio-summary,capital-gains,journal-entries,balance-history,lightning-profitability,source-funds,austrian-e1kv,austrian-tax-summary,exit-tax,export-pdf,export-summary-pdf,export-csv,export-xlsx,export-lightning-profitability-csv,export-source-funds-pdf,export-source-funds-bundle,export-austrian,export-austrian-e1kv-pdf,export-austrian-e1kv-xlsx,export-austrian-e1kv-csv,export-exit-tax-pdf,export-exit-tax-xlsx}`
 - `rates {pairs,sync,rebuild,latest,range,set}`
 - `diagnostics {collect}`
@@ -267,7 +269,7 @@ the real transport must be present in `ALLOWED_DAEMON_KINDS`.
 
 ## Pagination
 
-List endpoints with `--limit` also accept `--cursor`. The cursor is an opaque base64 urlsafe token built from `<occurred_at>|<created_at>|<id>`. Responses include `next_cursor` (or `null`) and `has_more`.
+List endpoints with `--limit` also accept `--cursor`. The cursor is an opaque base64 urlsafe token built from `<occurred_at>|<created_at>|<id>`. Responses preserve `next_cursor` (or `null`) and `has_more` and mirror both under `page` for a uniform agent contract.
 
 ## Tax engine
 

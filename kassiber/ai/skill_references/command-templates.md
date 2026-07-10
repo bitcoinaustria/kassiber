@@ -13,9 +13,14 @@ Global flags belong before the subcommand tree:
 kassiber --machine status
 kassiber --format plain reports balance-sheet
 kassiber --format csv --output capital-gains.csv reports capital-gains
+kassiber --machine commands describe wallets sync
 ```
 
 Do not append `--machine` or `--format` after the subcommand tree.
+`--machine` implies `--non-interactive`: it never prompts and returns a
+structured `interaction_required` error when an fd/stdin secret or one-shot
+input is missing. Use `commands describe [path ...]` to inspect arguments,
+read/mutation class, scope flags, cursor/dry-run support, and DB requirements.
 
 ## AI chat
 
@@ -68,6 +73,10 @@ kassiber --format plain reports balance-sheet
 
 # stale report repair
 kassiber --machine journals process
+
+# readiness and deterministic next-step suggestions
+kassiber --machine health
+kassiber --machine next-actions
 ```
 
 ## Backends

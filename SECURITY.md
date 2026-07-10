@@ -197,7 +197,10 @@ Keychain behind a local user-presence prompt for Touch ID-style unlock. The CLI
 can separately opt into the same per-data-root item on macOS, Windows user-scope
 Credential Manager, or an available unlocked Linux Secret Service. The CLI opt-in
 is a non-secret boolean in managed `config/settings.json`; desktop-only Touch ID
-enrollment leaves it unset. There is never a plaintext-file fallback.
+enrollment leaves it unset. Only the native `keyring` backend for the current
+platform is accepted (including a chainer only when every active child is
+native); environment/config-selected third-party and file backends are rejected.
+There is never a plaintext-file fallback.
 
 CLI credential reads are **not biometric-gated**. On macOS the gate is the
 Keychain item's per-binary ACL prompt, and unsigned/ad-hoc preview binaries may

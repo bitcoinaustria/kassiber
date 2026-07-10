@@ -55,11 +55,20 @@ kassiber secrets forget-unlock
 Enrollment verifies the encrypted database before storing anything. The CLI
 uses the item only after setting `cli_remembered_unlock: true` in managed
 `config/settings.json`; desktop-only Touch ID enrollment leaves the marker
-unset. CLI reads are not biometric-gated. If the stored copy is stale, Kassiber
+unset, and `secrets status` does not read that desktop-only item. Kassiber
+accepts only the native keyring backend for macOS, Windows, or Linux Secret
+Service; configured third-party/file backends are treated as unavailable. CLI
+reads are not biometric-gated. If the stored copy is stale, Kassiber
 writes `remembered_unlock_stale` to stderr and falls through to the existing
 prompt or `passphrase_required` behavior. Headless systems should keep using
 `--db-passphrase-fd`. `kassiber secrets status` reports `platform`, `available`,
 `configured`, and `cli_enabled` under `remembered_unlock`.
+
+`--machine` implies `--non-interactive`, so passphrase-requiring commands need
+their documented fd/identity/recipient input and return `interaction_required`
+instead of opening a prompt. The one-shot `chat` bootstrap sends a resolved DB
+passphrase only in a private `daemon.unlock` request over the child stdin pipe;
+it never appears in argv, environment variables, stdout, or `--transcript`.
 
 ## First-time encryption
 
