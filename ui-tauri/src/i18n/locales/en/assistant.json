@@ -125,12 +125,18 @@
     "journalsAt": "journals {{time}}",
     "syncFailed": "sync failed",
     "syncChecked": "sync checked",
+    "localProvider": "local provider",
+    "remoteProvider": "remote provider",
+    "advertisedTools_one": "{{count}} tool schema",
+    "advertisedTools_other": "{{count}} tool schemas",
+    "egressReceipt": "{{records}} outbound events / {{bytes}} bytes",
     "answeredAt": "answered {{time}}"
   },
   "tool": {
     "summaryLabel": "Summary",
     "detailsLabel": "Details",
     "reasonLabel": "Reason",
+    "openReference": "Open transaction",
     "overviewSnapshot": {
       "connections_one": "{{count}} connection",
       "connections_other": "{{count}} connections",

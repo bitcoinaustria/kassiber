@@ -62,6 +62,20 @@ export interface AiAnswerProvenance {
   auto_journal_processed?: boolean;
   auto_sync_attempted?: boolean;
   auto_sync_ok?: boolean | null;
+  privacy_receipt?: {
+    provider_kind?: string | null;
+    remote_provider?: boolean;
+    screen_route?: string | null;
+    advertised_tool_count?: number | null;
+    tools_executed?: number;
+    egress_records?: number;
+    egress_endpoints?: number;
+    egress_bytes_out?: number;
+    egress_subsystems?: string[];
+    egress_gap?: boolean;
+    history_intent?: boolean | "auto" | null;
+    hostnames_disclosed_to_model?: boolean;
+  };
 }
 
 export type AiToolCallStatus =
@@ -108,6 +122,20 @@ export interface AiChatRequest {
    * a fork — a null session id alone must not backfill detached history.
    */
   seedHistory?: boolean;
+  /** Typed, ephemeral UI state. Never includes descriptors, file content, or secrets. */
+  screenContext?: {
+    route?: string;
+    entityType?:
+      | "transaction"
+      | "wallet"
+      | "report"
+      | "source_funds_case"
+      | "connection"
+      | "profile";
+    entityId?: string;
+    filters?: Record<string, unknown>;
+    capabilities?: string[];
+  };
 }
 
 /** One stored exchange row from ui.chat.sessions.get. */
@@ -131,6 +159,15 @@ export function buildAiChatStreamArgs(
     session_id: request.sessionId ?? undefined,
     persist: request.persist,
     seed_history: request.seedHistory ? true : undefined,
+    screen_context: request.screenContext
+      ? {
+          route: request.screenContext.route,
+          entity_type: request.screenContext.entityType,
+          entity_id: request.screenContext.entityId,
+          filters: request.screenContext.filters,
+          capabilities: request.screenContext.capabilities,
+        }
+      : undefined,
   };
 }
 

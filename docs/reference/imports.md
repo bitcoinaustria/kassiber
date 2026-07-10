@@ -330,13 +330,16 @@ kassiber wallets import-document --wallet WID --file receipt.png --model glm-ocr
 (`http://localhost:11434/v1` by default) and an installed vision/OCR model.
 Recommended Ollama models are `glm-ocr`, `qwen3-vl:8b`,
 `qwen3-vl:4b`, `llama3.2-vision:11b`, and `minicpm-v:8b`.
+The desktop picker lists only configured local providers; remote providers are
+never offered for document extraction.
 
 The preview returns draft rows with `ready` / `quarantined` status,
 per-row and per-cell confidence, evidence text, source regions when the model
 provides them, and a normalized `import_record`. `import-document` imports
 only ready rows unless `--include-quarantined` is passed, then copies the
 source image/PDF into the managed attachments tree for every inserted or
-enriched transaction.
+enriched transaction. The preview carries a SHA-256 digest of the local source,
+and import rejects the draft if that file changed between review and commit.
 
 Off-device AI providers are hard-disabled for this path even if they are
 configured for chat. URLs are also rejected: open Google Drive/Docs links in

@@ -33,6 +33,7 @@ import {
 } from "@/components/ui/table";
 import { useDaemon, useDaemonMutation } from "@/daemon/client";
 import { isFilePickerAvailable, pickFile } from "@/lib/filePicker";
+import type { AiProvidersListData } from "@/lib/aiCapabilities";
 import { cn } from "@/lib/utils";
 import { useUiStore } from "@/store/ui";
 
@@ -108,20 +109,35 @@ function confidenceLabel(value: number | undefined) {
 export function DocumentImportDialog() {
   const { t } = useTranslation(["transactions", "common"]);
   const addNotification = useUiStore((s) => s.addNotification);
+  const aiFeaturesEnabled = useUiStore((s) => s.aiFeaturesEnabled);
   const walletsQuery = useDaemon<WalletListData>("ui.wallets.list");
+  const providersQuery = useDaemon<AiProvidersListData>("ai.providers.list");
   const previewDocument = useDaemonMutation<DocumentDraft>(
     "ui.wallets.document_import.preview",
   );
   const importDocument = useDaemonMutation<DocumentImportResult>(
     "ui.wallets.document_import.import",
   );
-  const wallets =
-    walletsQuery.data?.kind === "ui.wallets.list"
-      ? (walletsQuery.data.data?.wallets ?? [])
-      : [];
+  const wallets = React.useMemo(
+    () =>
+      walletsQuery.data?.kind === "ui.wallets.list"
+        ? (walletsQuery.data.data?.wallets ?? [])
+        : [],
+    [walletsQuery.data],
+  );
+  const localProviders = React.useMemo(
+    () =>
+      providersQuery.data?.kind === "ai.providers.list"
+        ? (providersQuery.data.data?.providers ?? []).filter(
+            (entry) => entry.kind === "local",
+          )
+        : [],
+    [providersQuery.data],
+  );
   const [open, setOpen] = React.useState(false);
   const [sourceFile, setSourceFile] = React.useState("");
   const [wallet, setWallet] = React.useState("");
+  const [provider, setProvider] = React.useState("");
   const [model, setModel] = React.useState("");
   const [draft, setDraft] = React.useState<DocumentDraft | null>(null);
   const [selectedRows, setSelectedRows] = React.useState<Set<string>>(
@@ -135,10 +151,20 @@ export function DocumentImportDialog() {
     }
   }, [wallet, wallets]);
 
+  React.useEffect(() => {
+    if (!provider && localProviders[0]?.name) {
+      setProvider(localProviders[0].name);
+    }
+  }, [localProviders, provider]);
+
   const isBusy = previewDocument.isPending || importDocument.isPending || pickerBusy;
-  const readyRows = draft?.rows.filter((row) => row.status === "ready") ?? [];
+  const readyRows = React.useMemo(
+    () => draft?.rows.filter((row) => row.status === "ready") ?? [],
+    [draft],
+  );
   const selectedCount = selectedRows.size;
-  const canPreview = Boolean(sourceFile.trim()) && !previewDocument.isPending;
+  const canPreview =
+    Boolean(sourceFile.trim()) && Boolean(provider) && !previewDocument.isPending;
   const canImport =
     Boolean(draft) && Boolean(wallet) && selectedCount > 0 && !importDocument.isPending;
 
@@ -174,6 +200,7 @@ export function DocumentImportDialog() {
     previewDocument.mutate(
       {
         source_file: sourceFile.trim(),
+        provider,
         ...(model.trim() ? { model: model.trim() } : {}),
       },
       {
@@ -197,7 +224,7 @@ export function DocumentImportDialog() {
         },
       },
     );
-  }, [addNotification, model, previewDocument, sourceFile, t]);
+  }, [addNotification, model, previewDocument, provider, sourceFile, t]);
 
   const runImport = React.useCallback(() => {
     if (!draft) return;
@@ -245,6 +272,8 @@ export function DocumentImportDialog() {
   const toggleAllReady = React.useCallback((checked: boolean) => {
     setSelectedRows(checked ? new Set(readyRows.map((row) => row.id)) : new Set());
   }, [readyRows]);
+
+  if (!aiFeaturesEnabled) return null;
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -298,7 +327,7 @@ export function DocumentImportDialog() {
                 </Button>
               </div>
             </div>
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
+            <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-1">
               <div className="space-y-1.5">
                 <Label>{t("documentImport.wallet")}</Label>
                 <Select value={wallet} onValueChange={setWallet}>
@@ -309,6 +338,21 @@ export function DocumentImportDialog() {
                     {wallets.map((entry) => (
                       <SelectItem key={entry.id} value={entry.id}>
                         {entry.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label>{t("documentImport.provider")}</Label>
+                <Select value={provider} onValueChange={setProvider}>
+                  <SelectTrigger>
+                    <SelectValue placeholder={t("documentImport.providerPlaceholder")} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {localProviders.map((entry) => (
+                      <SelectItem key={entry.name} value={entry.name}>
+                        {entry.display_name || entry.name}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -337,7 +381,11 @@ export function DocumentImportDialog() {
                   <span>{t("documentImport.quarantined", { count: draft.summary.quarantined })}</span>
                 </>
               ) : (
-                <span>{t("documentImport.recommendations")}</span>
+                <span>
+                  {localProviders.length
+                    ? t("documentImport.recommendations")
+                    : t("documentImport.noLocalProvider")}
+                </span>
               )}
             </div>
             <Button

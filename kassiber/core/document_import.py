@@ -424,7 +424,7 @@ def _extract_json_object(text: str) -> dict[str, Any]:
             "Local AI returned non-JSON OCR output",
             code="document_import_ai_response_invalid",
             hint="Try a stronger local vision model or a clearer image.",
-            details={"reason": str(exc), "preview": raw[:500]},
+            details={"reason": str(exc), "response_length": len(raw)},
             retryable=True,
         ) from exc
     if not isinstance(payload, dict):
@@ -723,7 +723,6 @@ def preview_document_import(
         "provider": {
             "name": provider["name"],
             "kind": provider["kind"],
-            "base_url": provider["base_url"],
         },
         "model": selected_model,
         "installed_models": installed_models,
@@ -778,10 +777,28 @@ def import_document_draft(
     hooks: DocumentImportHooks,
     include_quarantined: bool = False,
     selected_row_ids: Sequence[str] | None = None,
+    expected_source_sha256: str | None = None,
     attach_evidence: bool = True,
     commit: bool = True,
 ) -> dict[str, Any]:
     source_path = _source_path(source_file)
+    source_sha256 = _sha256_file(source_path)
+    if expected_source_sha256 is not None:
+        expected = expected_source_sha256.strip().lower()
+        if not re.fullmatch(r"[0-9a-f]{64}", expected):
+            raise AppError(
+                "Preview source hash is invalid",
+                code="validation",
+                retryable=False,
+            )
+        if source_sha256 != expected:
+            raise AppError(
+                "The OCR source changed after preview",
+                code="document_import_source_changed",
+                hint="Preview the document again before importing its rows.",
+                details={"filename": source_path.name},
+                retryable=False,
+            )
     records, skipped_quarantined = _import_records_from_rows(
         rows,
         include_quarantined=include_quarantined,
@@ -840,7 +857,7 @@ def import_document_draft(
             "source": {
                 "path": str(source_path),
                 "filename": source_path.name,
-                "sha256": _sha256_file(source_path),
+                "sha256": source_sha256,
             },
             "source_format": DOCUMENT_IMPORT_FORMAT,
             "draft_rows_imported": len(records),
@@ -901,6 +918,7 @@ def preview_then_import_document(
         rows=draft["rows"],
         hooks=hooks,
         include_quarantined=include_quarantined,
+        expected_source_sha256=draft["source"]["sha256"],
         commit=True,
     )
     return {"draft": draft, "import": outcome}

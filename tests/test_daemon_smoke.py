@@ -21,6 +21,7 @@ from kassiber.daemon import (
     AiToolRuntime,
     MAX_REQUEST_LINE_CHARS,
     ParsedAiToolCall,
+    _ai_chat_args,
     _ai_chat_seed_prefix,
     _auto_tool_context_for_model,
     _execute_mutating_ai_tool,
@@ -4920,6 +4921,38 @@ class DaemonSmokeTest(unittest.TestCase):
         self.assertEqual(decision, "allow_once")
         self.assertFalse(consent.record("call_1", "deny"))
 
+    def test_ai_chat_accepts_typed_screen_context_and_rejects_sensitive_filters(self):
+        base = {
+            "model": "local-model",
+            "messages": [{"role": "user", "content": "Explain this"}],
+            "tools_enabled": True,
+        }
+        validated = _ai_chat_args(
+            {
+                **base,
+                "screen_context": {
+                    "route": "/transactions",
+                    "entity_type": "transaction",
+                    "entity_id": "tx-1",
+                    "capabilities": ["transactions"],
+                },
+            }
+        )
+        self.assertEqual(validated["screen_context"]["route"], "/transactions")
+        self.assertEqual(validated["screen_context"]["entity_id"], "tx-1")
+
+        with self.assertRaises(AppError) as raised:
+            _ai_chat_args(
+                {
+                    **base,
+                    "screen_context": {
+                        "route": "/transactions",
+                        "filters": {"descriptor": "wpkh(xpub...)"},
+                    },
+                }
+            )
+        self.assertEqual(raised.exception.code, "validation")
+
     def test_mutating_tool_uses_daemon_main_thread_connection(self):
         task_queue = queue.Queue()
         runtime = AiToolRuntime(
@@ -5074,6 +5107,200 @@ class DaemonSmokeTest(unittest.TestCase):
         payload_mock.assert_called_once_with(conn_marker, {"limit": 5})
         self.assertTrue(results[0]["ok"])
         self.assertEqual(results[0]["envelope"]["kind"], "ui.journals.events.list")
+
+    def test_transaction_review_context_ai_tool_uses_composite_builder(self):
+        task_queue = queue.Queue()
+        runtime = AiToolRuntime(
+            data_root="/safe-data",
+            runtime_config={},
+            main_thread_tasks=task_queue,
+            maintenance_state={},
+        )
+        call = ParsedAiToolCall(
+            call_id="call-review",
+            name="ui.transactions.review_context",
+            arguments={"transaction": "tx-1"},
+        )
+        results = []
+
+        with (
+            mock.patch(
+                "kassiber.daemon._auto_maintain_for_read",
+                return_value={},
+            ),
+            mock.patch(
+                "kassiber.daemon._transaction_review_context_payload",
+                return_value={"transaction": {"id": "tx-1"}, "next_actions": []},
+            ) as payload_mock,
+        ):
+            thread = threading.Thread(
+                target=lambda: results.append(_execute_read_only_ai_tool(call, runtime)),
+            )
+            thread.start()
+            task = task_queue.get(timeout=1)
+            conn_marker = object()
+            task.response.put((True, task.callback(conn_marker)))
+            thread.join(timeout=1)
+
+        self.assertFalse(thread.is_alive())
+        payload_mock.assert_called_once_with(conn_marker, runtime, {"transaction": "tx-1"})
+        self.assertTrue(results[0]["ok"])
+        self.assertEqual(results[0]["envelope"]["kind"], "ui.transactions.review_context")
+
+    def test_transaction_review_context_runs_against_real_book(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-review-context-") as tmp:
+            tmp_root = Path(tmp)
+            data_root = tmp_root / "data"
+            _seed_workspace_with_transaction(data_root, tmp_root)
+            proc = _start_daemon(data_root)
+            try:
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.ready")
+
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "review-context-1",
+                        "kind": "ui.transactions.review_context",
+                        "args": {"transaction": "seed-inbound-1"},
+                    },
+                )
+                payload = _read_payload_timeout(proc)
+                self.assertEqual(payload["kind"], "ui.transactions.review_context")
+                data = payload["data"]
+                self.assertEqual(
+                    data["transaction"]["externalId"],
+                    "seed-inbound-1",
+                )
+                self.assertEqual(
+                    data["local_reference"]["transaction"],
+                    data["transaction"]["id"],
+                )
+                self.assertTrue(data["safety"]["local_only_reads"])
+                self.assertFalse(data["safety"]["network_contacted"])
+
+                _write_payload(
+                    proc,
+                    {"request_id": "shutdown-1", "kind": "daemon.shutdown"},
+                )
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.shutdown")
+                code, stderr = _close_daemon(proc)
+                self.assertEqual(code, 0, stderr)
+                self.assertEqual(stderr, "")
+            finally:
+                if proc.poll() is None:
+                    proc.terminate()
+                    proc.wait(timeout=5)
+
+    def test_transaction_metadata_ai_tool_records_ai_source(self):
+        task_queue = queue.Queue()
+        runtime = AiToolRuntime(
+            data_root="/safe-data",
+            runtime_config={},
+            main_thread_tasks=task_queue,
+            maintenance_state={},
+        )
+        call = ParsedAiToolCall(
+            call_id="call-edit",
+            name="ui.transactions.metadata.update",
+            arguments={"transaction": "tx-1", "note": "reviewed"},
+        )
+        results = []
+
+        with mock.patch(
+            "kassiber.daemon._transaction_metadata_update_payload",
+            return_value={"transaction_id": "tx-1", "changed": True},
+        ) as payload_mock:
+            thread = threading.Thread(
+                target=lambda: results.append(_execute_mutating_ai_tool(call, runtime)),
+            )
+            thread.start()
+            task = task_queue.get(timeout=1)
+            conn_marker = object()
+            task.response.put((True, task.callback(conn_marker)))
+            thread.join(timeout=1)
+
+        self.assertFalse(thread.is_alive())
+        payload_mock.assert_called_once_with(
+            conn_marker,
+            {"transaction": "tx-1", "note": "reviewed", "source": "ai"},
+            default_source="ai",
+        )
+        self.assertTrue(results[0]["ok"])
+
+    def test_ai_mutation_rejects_book_changed_while_waiting_for_consent(self):
+        task_queue = queue.Queue()
+        runtime = AiToolRuntime(
+            data_root="/safe-data",
+            runtime_config={},
+            main_thread_tasks=task_queue,
+            maintenance_state={
+                "scope_workspace_id": "workspace-a",
+                "scope_profile_id": "profile-a",
+            },
+        )
+        call = ParsedAiToolCall(
+            call_id="call-stale",
+            name="ui.journals.process",
+            arguments={},
+        )
+        results = []
+
+        with (
+            mock.patch(
+                "kassiber.daemon.current_context_snapshot",
+                return_value={"workspace_id": "workspace-b", "profile_id": "profile-b"},
+            ),
+            mock.patch("kassiber.daemon._journals_process_payload") as payload_mock,
+        ):
+            thread = threading.Thread(
+                target=lambda: results.append(_execute_mutating_ai_tool(call, runtime)),
+            )
+            thread.start()
+            task = task_queue.get(timeout=1)
+            try:
+                result = task.callback(object())
+            except Exception as exc:
+                task.response.put((False, exc))
+            else:
+                task.response.put((True, result))
+            thread.join(timeout=1)
+
+        payload_mock.assert_not_called()
+        self.assertFalse(results[0]["ok"])
+        self.assertEqual(results[0]["reason"], "stale_context")
+
+    def test_report_export_ai_tool_hides_managed_path(self):
+        task_queue = queue.Queue()
+        runtime = AiToolRuntime(
+            data_root="/safe-data",
+            runtime_config={},
+            main_thread_tasks=task_queue,
+            maintenance_state={},
+        )
+        call = ParsedAiToolCall(
+            call_id="call-export",
+            name="ui.reports.export",
+            arguments={"report": "full", "format": "pdf"},
+        )
+        results = []
+
+        with mock.patch(
+            "kassiber.daemon._ui_report_export_payload_from_conn",
+            return_value={"file": "/safe-data/exports/report.pdf", "filename": "report.pdf"},
+        ):
+            thread = threading.Thread(
+                target=lambda: results.append(_execute_mutating_ai_tool(call, runtime)),
+            )
+            thread.start()
+            task = task_queue.get(timeout=1)
+            conn_marker = object()
+            task.response.put((True, task.callback(conn_marker)))
+            thread.join(timeout=1)
+
+        payload = results[0]["envelope"]["data"]
+        self.assertNotIn("file", payload)
+        self.assertEqual(payload["filename"], "report.pdf")
+        self.assertTrue(payload["saved_locally"])
 
     def test_swap_read_only_ai_tool_dispatches_to_swap_payload(self):
         task_queue = queue.Queue()
@@ -8031,6 +8258,10 @@ class DaemonSmokeTest(unittest.TestCase):
                             "provider": "slow-local",
                             "model": "test-model",
                             "messages": [{"role": "user", "content": "hello"}],
+                            "screen_context": {
+                                "route": "/transactions",
+                                "capabilities": ["transfers", "transactions"],
+                            },
                         },
                     },
                 )
@@ -8195,7 +8426,9 @@ class DaemonSmokeTest(unittest.TestCase):
                             "provider": "tool-local",
                             "model": "test-model",
                             "tools_enabled": True,
-                            "messages": [{"role": "user", "content": "hello"}],
+                            "messages": [
+                                {"role": "user", "content": "show journal transfer pairs"}
+                            ],
                         },
                     },
                 )
@@ -8222,11 +8455,19 @@ class DaemonSmokeTest(unittest.TestCase):
                 self.assertIsNotNone(terminal)
                 self.assertEqual(terminal["data"]["finish_reason"], "stop")
                 tool_call = next(
-                    record for record in records if record["kind"] == "ai.chat.tool_call"
+                    record
+                    for record in records
+                    if record["kind"] == "ai.chat.tool_call"
+                    and record.get("data", {}).get("name")
+                    == "ui.journals.transfers.list"
                 )
                 self.assertEqual(tool_call["data"]["name"], "ui.journals.transfers.list")
                 tool_result = next(
-                    record for record in records if record["kind"] == "ai.chat.tool_result"
+                    record
+                    for record in records
+                    if record["kind"] == "ai.chat.tool_result"
+                    and record.get("data", {}).get("envelope", {}).get("kind")
+                    == "ui.journals.transfers.list"
                 )
                 self.assertTrue(tool_result["data"]["ok"])
                 self.assertEqual(

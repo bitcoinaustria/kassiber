@@ -130,7 +130,8 @@ class DocumentImportTest(unittest.TestCase):
             self.conn,
             "lan",
             "http://192.168.1.20:11434/v1",
-            kind="local",
+            kind="remote",
+            acknowledged=True,
         )
 
         with self.assertRaises(AppError) as raised:
@@ -141,7 +142,17 @@ class DocumentImportTest(unittest.TestCase):
                 client_factory=lambda _provider: self.fail("client should not be created"),
             )
 
-        self.assertEqual(raised.exception.code, "document_import_remote_ai_disabled")
+        self.assertEqual(raised.exception.code, "document_import_local_ai_required")
+
+        with self.assertRaises(AppError) as off_device:
+            document_import._validate_local_provider(
+                {
+                    "name": "mislabelled-lan",
+                    "kind": "local",
+                    "base_url": "http://192.168.1.20:11434/v1",
+                }
+            )
+        self.assertEqual(off_device.exception.code, "document_import_remote_ai_disabled")
 
     def test_preview_rejects_google_urls_with_browser_download_hint(self):
         with self.assertRaises(AppError) as raised:
@@ -216,6 +227,32 @@ class DocumentImportTest(unittest.TestCase):
         self.assertEqual(attachment["original_filename"], "receipt.png")
         stored = self.root / "attachments" / attachment["stored_relpath"]
         self.assertTrue(stored.exists())
+
+    def test_import_rejects_source_changed_after_preview(self):
+        _, profile, wallet = _book(self.conn)
+        draft = document_import.preview_document_import(
+            self.conn,
+            source_file=str(self.source),
+            client_factory=lambda _provider: FakeVisionClient(),
+        )
+        self.source.write_bytes(b"changed-after-preview")
+
+        with self.assertRaises(AppError) as raised:
+            document_import.import_document_draft(
+                self.conn,
+                source_file=str(self.source),
+                wallet=wallet,
+                profile=profile,
+                rows=draft["rows"],
+                hooks=_hooks(),
+                expected_source_sha256=draft["source"]["sha256"],
+            )
+
+        self.assertEqual(raised.exception.code, "document_import_source_changed")
+        self.assertEqual(
+            self.conn.execute("SELECT COUNT(*) FROM transactions").fetchone()[0],
+            0,
+        )
 
 
 if __name__ == "__main__":

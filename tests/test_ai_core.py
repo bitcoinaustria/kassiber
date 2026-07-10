@@ -246,6 +246,32 @@ class ToolCatalogPromptTest(unittest.TestCase):
             "ui_transfers_rules_apply",
             "ui_saved_views_create",
             "ui_saved_views_delete",
+            "ui_transactions_resolve",
+            "ui_transactions_graph",
+            "ui_transactions_review_context",
+            "ui_activity_stale",
+            "ui_attachments_list",
+            "ui_audit_evidence_summary",
+            "ui_review_badges",
+            "ui_transactions_metadata_update",
+            "ui_transactions_history_revert",
+            "ui_attachments_copy",
+            "ui_source_funds_evidence_list",
+            "ui_source_funds_coverage",
+            "ui_source_funds_cases_list",
+            "ui_source_funds_assemble",
+            "ui_source_funds_cases_save",
+            "ui_source_funds_export",
+            "ui_transactions_commercial_context",
+            "ui_btcpay_provenance_list",
+            "ui_btcpay_provenance_suggest",
+            "ui_btcpay_provenance_links",
+            "ui_documents_list",
+            "ui_btcpay_provenance_review",
+            "ui_documents_create",
+            "ui_reports_exit_tax_preview",
+            "ui_reports_export",
+            "ui_egress_snapshot",
         }
         tool_names = {
             tool["function"]["name"]
@@ -325,6 +351,7 @@ class ToolCatalogPromptTest(unittest.TestCase):
             "provider_swap_id",
             suggest_schema["properties"]["method"]["enum"],
         )
+
         self.assertIn("ui_wallets_sync", tool_names)
         self.assertIn("ui_journals_process", tool_names)
         self.assertIn("ui_maintenance_configure", tool_names)
@@ -344,6 +371,34 @@ class ToolCatalogPromptTest(unittest.TestCase):
             "provider_swap_id",
             bulk_pair_schema["properties"]["method"]["enum"],
         )
+
+    def test_live_tool_catalog_is_capability_scoped(self):
+        report_tools = {
+            tool["function"]["name"]
+            for tool in build_openai_tools(
+                [{"role": "user", "content": "Export my 2025 Austrian tax report"}],
+                screen_context={"route": "/reports"},
+            )
+        }
+        self.assertIn("ui_reports_export", report_tools)
+        self.assertIn("ui_reports_tax_summary", report_tools)
+        self.assertNotIn("ui_source_funds_assemble", report_tools)
+
+        transaction_tools = {
+            tool["function"]["name"]
+            for tool in build_openai_tools(
+                [{"role": "user", "content": "Explain this transaction"}],
+                screen_context={"route": "/transactions"},
+            )
+        }
+        self.assertIn("ui_transactions_review_context", transaction_tools)
+        self.assertIn("ui_transactions_metadata_update", transaction_tools)
+        self.assertNotIn("ui_documents_create", transaction_tools)
+
+        discovery_tools = build_openai_tools(
+            [{"role": "user", "content": "What can you do? Show all tools."}]
+        )
+        self.assertEqual(len(discovery_tools), len(build_openai_tools()))
 
     def test_mutating_tool_preview_redacts_secret_like_arguments(self):
         tool = get_tool("ui.wallets.sync")

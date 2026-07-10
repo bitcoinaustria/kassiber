@@ -4652,6 +4652,7 @@ async function mockAiChatStream<T, R>(
     persist?: boolean | "auto";
     session_id?: string;
     seed_history?: boolean;
+    screen_context?: { route?: string };
   };
   if (
     typeof args.session_id === "string" &&
@@ -4790,6 +4791,26 @@ async function mockAiChatStream<T, R>(
       model: args.model ?? "mock-model",
       finish_reason: cancelled ? "cancelled" : "stop",
       session_id: sessionId,
+      provenance: {
+        generated_at: new Date().toISOString(),
+        provider: args.provider ?? "ollama",
+        model: args.model ?? "mock-model",
+        tools_used: args.tools_enabled ? ["ui.workspace.health"] : [],
+        privacy_receipt: {
+          provider_kind: "local",
+          remote_provider: false,
+          screen_route: args.screen_context?.route ?? null,
+          advertised_tool_count: args.tools_enabled ? 8 : 0,
+          tools_executed: args.tools_enabled ? 1 : 0,
+          egress_records: 1,
+          egress_endpoints: 1,
+          egress_bytes_out: 512,
+          egress_subsystems: ["ai"],
+          egress_gap: false,
+          history_intent: args.persist ?? null,
+          hostnames_disclosed_to_model: false,
+        },
+      },
     } as T,
   };
 }

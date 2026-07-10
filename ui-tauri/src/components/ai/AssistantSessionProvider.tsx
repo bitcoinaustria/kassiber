@@ -97,11 +97,12 @@ export function AssistantSessionProvider({
           sessionId: activeSession,
           persist: incognito && activeSession === null ? false : "auto",
           seedHistory,
+          screenContext: { route: returnPath },
         },
         prompt,
       );
     },
-    [incognito, selection, send, thinkingEffort],
+    [incognito, returnPath, selection, send, thinkingEffort],
   );
 
   const dispatchPrompt = React.useCallback(

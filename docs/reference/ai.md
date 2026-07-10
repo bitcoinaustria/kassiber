@@ -260,6 +260,13 @@ session. Stored exchanges keep the user prompt, the assistant answer, the
 which remain reproducible from the database (use `--transcript` for
 full-fidelity capture).
 
+Answer provenance includes a UI-only `privacy_receipt`: provider kind,
+local/remote classification, screen route, number of advertised schemas and
+executed tools, plus outbound event/endpoint/byte counts recorded during that
+turn. The receipt is computed after the provider call and is never fed back to
+the model. Exact hosts remain available only on the dedicated local Egress
+screen; the AI-facing egress tool receives aggregate subsystem counts.
+
 Manage stored sessions with `kassiber chats list`, `chats show <id>`,
 `chats delete <id>`, and `chats clear`. Machine chat envelopes and the
 terminal `ai.chat` record carry `session_id` (null when nothing persisted).
@@ -428,6 +435,21 @@ running and must not create a duplicate card.
 Read-only provider tool names run automatically through safe daemon snapshot
 surfaces:
 
+Live chats do not advertise the entire catalog on every turn. The daemon picks
+bounded capability packs (`core`, `transactions`, `reports`, `wallets`,
+`privacy`, `source_funds`, `merchant`, `transfers`, `operations`) from the
+latest question and optional typed `screen_context`. Capability-discovery
+questions can still request the full catalog. This reduces schema/token load
+and improves tool choice on smaller local models without widening execution:
+`get_tool` and the daemon dispatcher remain the authoritative allowlists.
+
+Desktop chat sends an ephemeral `screen_context` containing only a route and,
+when available, a typed entity id, bounded filters, or explicit capability
+hints. Sensitive keys and oversized filters are rejected. The context is
+inserted as untrusted navigation state immediately before the current user
+turn; it never grants filesystem access and is not a replacement for a typed
+read tool.
+
 - `status`
 - `ui_overview_snapshot` maps to daemon kind `ui.overview.snapshot`
 - `ui_transactions_list` maps to daemon kind `ui.transactions.list` with
@@ -516,6 +538,17 @@ surfaces:
   reads the active profile's AI maintenance settings
 - `ui_workspace_health` maps to daemon kind `ui.workspace.health`
 - `ui_next_actions` maps to daemon kind `ui.next_actions`
+- `ui_transactions_resolve` and `ui_transactions_graph` expose the existing
+  safe local lookup/graph surfaces without public-backend lookup
+- `ui_transactions_review_context` maps to
+  `ui.transactions.review_context`; it composes one bounded transaction row,
+  local graph, journal events, edit history, evidence readiness, attachment
+  labels, commercial context, source-funds links, privacy findings, and
+  deterministic next actions. Each optional section degrades independently
+  instead of making the whole packet fail.
+- `ui_activity_stale`, `ui_attachments_list`,
+  `ui_audit_evidence_summary`, and `ui_review_badges` expose local review and
+  audit readiness. AI attachment results omit local paths and URL targets.
 - `ui_source_funds_sources_list` maps to daemon kind
   `ui.source_funds.sources.list`; attachment labels may be shown, but raw
   evidence URLs and stored attachment paths are redacted
@@ -527,6 +560,16 @@ surfaces:
   returns a read-only path graph plus export gates for missing history,
   heuristic allocations, privacy-hop ambiguity, missing pricing, and other
   blockers before any PDF/export decision
+- `ui_source_funds_evidence_list`, `ui_source_funds_coverage`, and
+  `ui_source_funds_cases_list` complete the read side of the evidence workflow
+- `ui_transactions_commercial_context`, `ui_btcpay_provenance_{list,suggest,links}`,
+  and `ui_documents_list` expose redacted merchant/document reconciliation
+  metadata; raw BTCPay payloads and document bytes stay local
+- `ui_reports_exit_tax_preview` exposes the deterministic Austrian exit-tax
+  preview
+- `ui_egress_snapshot` returns only outbound counts/bytes by subsystem; it
+  deliberately omits hosts, ports, backend identities, paths, headers, query
+  strings, and request bodies from provider-bound content
 - `ui_transfers_suggest` maps to daemon kind `ui.transfers.suggest`; it returns
   wallet-transfer candidates, Bitcoin swap/peg candidates, and other cross-asset
   swap candidates with confidence, method, computed fee, and conflict-cluster
@@ -591,7 +634,17 @@ create/review provenance evidence only; they do not mutate tax/journal
 self-transfer, exchange transfer, trade, swap, peg-in/peg-out, Lightning hops,
 manual source, and missing-history edges. CoinJoin/PayJoin links should stay
 explicit about privacy-hop ambiguity unless the user has reviewed stronger
-evidence. Stale journals may also be
+evidence. `ui_source_funds_assemble`, `ui_source_funds_cases_save`, and the
+virtual `ui_source_funds_export` complete that workflow; export results sent to
+the model include the filename/format but not the managed local path.
+
+Transaction review writes (`ui_transactions_metadata_update`,
+`ui_transactions_history_revert`, `ui_attachments_copy`) preserve the
+append-only edit/evidence audit trail and run only after consent. Commercial
+review writes (`ui_btcpay_provenance_review`, `ui_documents_create`) are also
+consent-gated. The virtual `ui_reports_export` maps a small report/format enum
+onto existing deterministic PDF/XLSX/CSV/audit-package exporters and likewise
+withholds managed paths from model context. Stale journals may also be
 refreshed automatically before read/report tools as local maintenance. Wallet
 sync before report reads is disabled by default; it runs automatically only
 after `ui_maintenance_configure` enables that active-profile setting, or when
@@ -601,6 +654,12 @@ content are returned to the model/UI. When a model requests a mutating tool, the
 daemon emits
 `ai.chat.tool_consent_required` with a short summary and redacted argument
 preview, then waits for:
+
+The daemon freezes the active workspace/profile ids when the chat starts. Every
+approved mutation rechecks that scope on the main SQLite thread immediately
+before execution. If the user switched books while a consent card was pending,
+the action fails with `stale_context` and must be planned again; it never lands
+in the newly active book.
 
 ```json
 {

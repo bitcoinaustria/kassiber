@@ -116,7 +116,13 @@ Kassiber is currently in **dev mode**: renaming commands, breaking flags, and re
   `ui.journals.quarantine`, `ui.journals.transfers.list`, `ui.rates.summary`,
   `ui.rates.coverage`, `ui.report.blockers`,
   `ui.audit.changes_since_last_answer`, `ui.audit.evidence.summary`,
-  `ui.transactions.history`, `ui.activity.history`, `ui.activity.stale`,
+  `ui.transactions.resolve`, `ui.transactions.graph`,
+  `ui.transactions.review_context`, `ui.transactions.history`,
+  `ui.activity.history`, `ui.activity.stale`, `ui.attachments.list`,
+  `ui.review.badges`, `ui.transactions.commercial_context`,
+  `ui.btcpay.provenance.{list,suggest,links}`, `ui.documents.list`,
+  `ui.source_funds.{evidence.list,coverage,cases.list}`,
+  `ui.reports.exit_tax_preview`, `ui.egress.snapshot`,
   `ui.wallets.utxos`, `ui.wallets.identify`, `ui.maintenance.settings`, `ui.workspace.health`,
   `ui.next_actions`, and virtual
   `read_skill_reference`. Lightning kinds require a registered adapter
@@ -127,6 +133,13 @@ Kassiber is currently in **dev mode**: renaming commands, breaking flags, and re
   returns safe backend names and metadata without exact URLs or tokens.
   `read_skill_reference("index")` returns only the
   compact in-app skill routing document; deeper references stay allowlisted.
+  Live chats capability-scope the advertised schemas from the latest question
+  plus typed ephemeral `screen_context`; capability-discovery calls may still
+  request the full catalog. `ui.transactions.review_context` is AI-only and
+  composes safe local transaction, graph, journal, evidence, commercial,
+  source-funds, and privacy state without public lookup. Every terminal answer
+  includes a UI-only privacy receipt for provider kind, selected schema count,
+  executed tools, and outbound event/byte counts.
   Desktop-only replication kinds are `ui.sync.status`,
   `ui.sync.{enable,disable,push,pull,join_request,invite,join}`,
   `ui.sync.transports.{list,configure,delete}`,

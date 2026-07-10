@@ -226,6 +226,16 @@ backend response shape. The payload never returns descriptors, xpubs, backend
 URLs/tokens, wallet config, raw files, raw JSON blobs, or other secret-bearing
 material.
 
+`ui.transactions.review_context` is the AI-oriented composite review packet.
+It accepts one transaction id/txid plus bounded include flags and joins the
+safe transaction row with the local graph, journal events, append-only edit
+history, audit/evidence readiness, attachment labels, commercial provenance,
+source-funds links, privacy findings, staleness, and deterministic next-action
+descriptors. It never performs public lookup. Raw evidence URLs, managed paths,
+document bytes, backend identities, descriptors, xpubs, and raw importer JSON
+are removed before provider context. The kind is AI-only and intentionally
+absent from the desktop invoke allowlist.
+
 `ui.wallets.utxos` accepts `{"wallet":"<wallet id or label>"}` and returns the
 active local UTXO inventory for one wallet. Rows include outpoint, txid, vout,
 asset, amount, confirmation status, block/time when known, address or safe
@@ -456,7 +466,9 @@ or preview `draft.source.path`, preview `rows` (or a full `draft` object),
 optional `selected_row_ids`, optional `include_quarantined`, and optional
 `attach_evidence` (default true). It imports only selected ready rows by
 default, then copies the source file into managed attachments for every
-inserted or enriched transaction.
+inserted or enriched transaction. When a full preview draft is supplied, the
+daemon verifies `draft.source.sha256` against the current file before writing;
+a changed source fails with `document_import_source_changed`.
 
 `ui.connections.sources` returns the daemon's authoritative catalog of
 supported wallet kinds (with summary/config-fields metadata) and the

@@ -130,7 +130,7 @@ _TRANSFER_PAIR_KINDS = (
 )
 
 
-TOOL_CATALOG: tuple[ToolEntry, ...] = (
+_BASE_TOOL_CATALOG: tuple[ToolEntry, ...] = (
     ToolEntry(
         name="status",
         description="Read Kassiber runtime status, active data root, backend, and local auth mode.",
@@ -1686,6 +1686,585 @@ TOOL_CATALOG: tuple[ToolEntry, ...] = (
     ),
 )
 
+
+_TRANSACTION_REF_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["transaction"],
+    "properties": {"transaction": {"type": "string"}},
+}
+
+_SOURCE_FUNDS_CASE_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {"case": {"type": "string"}},
+}
+
+_EXPANDED_TOOL_CATALOG: tuple[ToolEntry, ...] = (
+    ToolEntry(
+        name="ui.transactions.resolve",
+        description="Resolve one internal transaction id or public txid to a safe transaction display row.",
+        parameters={
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["query"],
+            "properties": {"query": {"type": "string"}},
+        },
+        kind_class="read_only",
+        wire_name="ui_transactions_resolve",
+        daemon_kind="ui.transactions.resolve",
+        summary_template="Resolve transaction",
+    ),
+    ToolEntry(
+        name="ui.transactions.graph",
+        description=(
+            "Read one transaction's safe local graph, ownership annotations, fee metadata, "
+            "and reviewed route context. Never returns descriptors, xpubs, backend URLs, or raw JSON."
+        ),
+        parameters={
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["transaction"],
+            "properties": {"transaction": {"type": "string"}},
+        },
+        kind_class="read_only",
+        wire_name="ui_transactions_graph",
+        daemon_kind="ui.transactions.graph",
+        summary_template="Read transaction graph",
+    ),
+    ToolEntry(
+        name="ui.transactions.review_context",
+        description=(
+            "Read one bounded transaction-review packet combining the safe transaction row, graph, "
+            "journal and transfer impact, pricing, edit history, evidence readiness, commercial "
+            "provenance, source-funds links, privacy findings, and deterministic next actions."
+        ),
+        parameters={
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["transaction"],
+            "properties": {
+                "transaction": {"type": "string"},
+                "history_limit": {"type": "integer", "minimum": 1, "maximum": 50},
+                "include_graph": {"type": "boolean"},
+                "include_privacy": {"type": "boolean"},
+                "include_evidence": {"type": "boolean"},
+            },
+        },
+        kind_class="read_only",
+        wire_name="ui_transactions_review_context",
+        daemon_kind="ui.transactions.review_context",
+        summary_template="Read transaction review context",
+    ),
+    ToolEntry(
+        name="ui.activity.stale",
+        description="Read the metadata edits that make processed journals stale.",
+        parameters=_EMPTY_OBJECT_SCHEMA,
+        kind_class="read_only",
+        wire_name="ui_activity_stale",
+        daemon_kind="ui.activity.stale",
+        summary_template="Read stale edit summary",
+    ),
+    ToolEntry(
+        name="ui.attachments.list",
+        description=(
+            "Read attachment labels and evidence metadata, optionally for one transaction. "
+            "Raw URLs, local paths, and stored relative paths are removed for AI."
+        ),
+        parameters={
+            "type": "object",
+            "additionalProperties": False,
+            "properties": {"transaction": {"type": "string"}},
+        },
+        kind_class="read_only",
+        wire_name="ui_attachments_list",
+        daemon_kind="ui.attachments.list",
+        summary_template="Read evidence attachments",
+    ),
+    ToolEntry(
+        name="ui.audit.evidence.summary",
+        description=(
+            "Read deterministic audit-evidence readiness for the active profile, selected transactions, "
+            "or one saved source-funds case. File paths and URL targets are not returned."
+        ),
+        parameters={
+            "type": "object",
+            "additionalProperties": False,
+            "properties": {
+                "transaction": {"type": "string"},
+                "transactions": {"type": "array", "items": {"type": "string"}, "maxItems": 100},
+                "source_funds_case": {"type": "string"},
+                "include_journal_state": {"type": "boolean"},
+                "include_review_state": {"type": "boolean"},
+                "include_edit_history": {"type": "boolean"},
+            },
+        },
+        kind_class="read_only",
+        wire_name="ui_audit_evidence_summary",
+        daemon_kind="ui.audit.evidence.summary",
+        summary_template="Read audit evidence readiness",
+    ),
+    ToolEntry(
+        name="ui.review.badges",
+        description="Read cheap unresolved quarantine, stale-journal, and transfer-review counts.",
+        parameters=_EMPTY_OBJECT_SCHEMA,
+        kind_class="read_only",
+        wire_name="ui_review_badges",
+        daemon_kind="ui.review.badges",
+        summary_template="Read unresolved review counts",
+    ),
+    ToolEntry(
+        name="ui.transactions.metadata.update",
+        description=(
+            "Update reviewed transaction metadata after explicit consent. Supports notes, tags, exclusion, "
+            "review/tax state, Austrian overrides, and explicit pricing provenance. Invalidates journals."
+        ),
+        parameters={
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["transaction"],
+            "properties": {
+                "transaction": {"type": "string"},
+                "note": {"type": ["string", "null"]},
+                "tags": {"type": "array", "items": {"type": "string"}, "maxItems": 50},
+                "excluded": {"type": "boolean"},
+                "review_status": {"type": ["string", "null"]},
+                "taxable": {"type": ["boolean", "null"]},
+                "at_regime": {"type": ["string", "null"]},
+                "at_category": {"type": ["string", "null"]},
+                "fiat_currency": {"type": ["string", "null"]},
+                "fiat_rate": {"type": ["string", "number", "null"]},
+                "fiat_value": {"type": ["string", "number", "null"]},
+                "pricing_source_kind": {"type": ["string", "null"]},
+                "pricing_quality": {"type": ["string", "null"]},
+                "pricing_external_ref": {"type": ["string", "null"]},
+                "reason": {"type": "string"},
+            },
+        },
+        kind_class="mutating",
+        wire_name="ui_transactions_metadata_update",
+        daemon_kind="ui.transactions.metadata.update",
+        summary_template="Update transaction metadata",
+    ),
+    ToolEntry(
+        name="ui.transactions.history.revert",
+        description="Revert one audited metadata edit by creating a new forward edit after explicit consent.",
+        parameters={
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["transaction", "event"],
+            "properties": {
+                "transaction": {"type": "string"},
+                "event": {"type": "string"},
+                "field": {"type": "string"},
+                "reason": {"type": "string"},
+            },
+        },
+        kind_class="mutating",
+        wire_name="ui_transactions_history_revert",
+        daemon_kind="ui.transactions.history.revert",
+        summary_template="Revert transaction edit",
+    ),
+    ToolEntry(
+        name="ui.attachments.copy",
+        description="Copy selected managed evidence from one transaction to another after explicit consent.",
+        parameters={
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["source_transaction", "transaction", "attachments"],
+            "properties": {
+                "source_transaction": {"type": "string"},
+                "transaction": {"type": "string"},
+                "attachments": {"type": "array", "items": {"type": "string"}, "maxItems": 100},
+            },
+        },
+        kind_class="mutating",
+        wire_name="ui_attachments_copy",
+        daemon_kind="ui.attachments.copy",
+        summary_template="Copy transaction evidence",
+    ),
+    ToolEntry(
+        name="ui.source_funds.evidence.list",
+        description="Read AI-safe evidence labels and transaction associations for source-funds review.",
+        parameters=_EMPTY_OBJECT_SCHEMA,
+        kind_class="read_only",
+        wire_name="ui_source_funds_evidence_list",
+        daemon_kind="ui.source_funds.evidence.list",
+        summary_template="Read source-funds evidence",
+    ),
+    ToolEntry(
+        name="ui.source_funds.coverage",
+        description="Read profile-wide source-funds coverage, ambiguity, and missing-history counts.",
+        parameters={
+            "type": "object",
+            "additionalProperties": False,
+            "properties": {
+                "max_depth": {"type": "integer", "minimum": 1, "maximum": 32},
+                "max_transactions": {"type": "integer", "minimum": 1, "maximum": 50000},
+            },
+        },
+        kind_class="read_only",
+        wire_name="ui_source_funds_coverage",
+        daemon_kind="ui.source_funds.coverage",
+        summary_template="Read source-funds coverage",
+    ),
+    ToolEntry(
+        name="ui.source_funds.cases.list",
+        description="Read saved source-funds cases and their review/export state.",
+        parameters=_EMPTY_OBJECT_SCHEMA,
+        kind_class="read_only",
+        wire_name="ui_source_funds_cases_list",
+        daemon_kind="ui.source_funds.cases.list",
+        summary_template="Read source-funds cases",
+    ),
+    ToolEntry(
+        name="ui.source_funds.assemble",
+        description=(
+            "Run the local deterministic source-funds assembly loop for one target after explicit consent. "
+            "It may seed suggestions and accept only deterministic links; it never contacts a backend."
+        ),
+        parameters={
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["target_transaction"],
+            "properties": {
+                "target_transaction": {"type": "string"},
+                "include_broad_hints": {"type": "boolean"},
+                "max_passes": {"type": "integer", "minimum": 1, "maximum": 16},
+            },
+        },
+        kind_class="mutating",
+        wire_name="ui_source_funds_assemble",
+        daemon_kind="ui.source_funds.assemble",
+        summary_template="Assemble source-funds history",
+    ),
+    ToolEntry(
+        name="ui.source_funds.cases.save",
+        description="Save a reviewed source-funds case after explicit consent.",
+        parameters={
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["target_transaction"],
+            "properties": {
+                "target_transaction": {"type": "string"},
+                "case_label": {"type": "string"},
+                "target_amount": {"type": "string"},
+                "report_purpose": {"type": "string", "enum": list(_SOURCE_FUNDS_REPORT_PURPOSES)},
+                "reveal_mode": {"type": "string", "enum": list(_SOURCE_FUNDS_REVEAL_MODES)},
+                "max_depth": {"type": "integer", "minimum": 1, "maximum": 32},
+                "recipient": {"type": "string"},
+            },
+        },
+        kind_class="mutating",
+        wire_name="ui_source_funds_cases_save",
+        daemon_kind="ui.source_funds.cases.save",
+        summary_template="Save source-funds case",
+    ),
+    ToolEntry(
+        name="ui.source_funds.export",
+        description="Export a saved, gate-checked source-funds case as PDF or evidence bundle after consent.",
+        parameters={
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["format"],
+            "properties": {
+                "case": {"type": "string"},
+                "format": {"type": "string", "enum": ["pdf", "bundle"]},
+            },
+        },
+        kind_class="mutating",
+        wire_name="ui_source_funds_export",
+        summary_template="Export source-funds case",
+    ),
+    ToolEntry(
+        name="ui.transactions.commercial_context",
+        description="Read redacted BTCPay invoice/payment and external-document provenance for one transaction.",
+        parameters=_TRANSACTION_REF_SCHEMA,
+        kind_class="read_only",
+        wire_name="ui_transactions_commercial_context",
+        daemon_kind="ui.transactions.commercial_context",
+        summary_template="Read commercial provenance",
+    ),
+    ToolEntry(
+        name="ui.btcpay.provenance.list",
+        description="Read bounded redacted BTCPay invoice/payment provenance records.",
+        parameters={
+            "type": "object",
+            "additionalProperties": False,
+            "properties": {
+                "record_type": {"type": "string"},
+                "limit": {"type": "integer", "minimum": 1, "maximum": 200},
+            },
+        },
+        kind_class="read_only",
+        wire_name="ui_btcpay_provenance_list",
+        daemon_kind="ui.btcpay.provenance.list",
+        summary_template="Read BTCPay provenance",
+    ),
+    ToolEntry(
+        name="ui.btcpay.provenance.suggest",
+        description="Run deterministic commercial document/payment matching without writing review decisions.",
+        parameters={
+            "type": "object",
+            "additionalProperties": False,
+            "properties": {"limit": {"type": "integer", "minimum": 1, "maximum": 200}},
+        },
+        kind_class="read_only",
+        wire_name="ui_btcpay_provenance_suggest",
+        daemon_kind="ui.btcpay.provenance.suggest",
+        summary_template="Suggest commercial matches",
+    ),
+    ToolEntry(
+        name="ui.btcpay.provenance.links",
+        description="Read reviewed or suggested commercial reconciliation links.",
+        parameters={
+            "type": "object",
+            "additionalProperties": False,
+            "properties": {
+                "state": {"type": "string"},
+                "limit": {"type": "integer", "minimum": 1, "maximum": 200},
+            },
+        },
+        kind_class="read_only",
+        wire_name="ui_btcpay_provenance_links",
+        daemon_kind="ui.btcpay.provenance.links",
+        summary_template="Read commercial reconciliation links",
+    ),
+    ToolEntry(
+        name="ui.documents.list",
+        description="Read external document metadata such as labels, issuers, dates, values, and review state; no file bytes.",
+        parameters={
+            "type": "object",
+            "additionalProperties": False,
+            "properties": {"limit": {"type": "integer", "minimum": 1, "maximum": 200}},
+        },
+        kind_class="read_only",
+        wire_name="ui_documents_list",
+        daemon_kind="ui.documents.list",
+        summary_template="Read external documents",
+    ),
+    ToolEntry(
+        name="ui.btcpay.provenance.review",
+        description="Accept, reject, or amend one commercial reconciliation link after explicit consent.",
+        parameters={
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["link", "state"],
+            "properties": {
+                "link": {"type": "string"},
+                "state": {"type": "string", "enum": ["suggested", "reviewed", "rejected"]},
+                "reconciliation_state": {"type": "string"},
+                "commercial_kind": {"type": "string"},
+                "notes": {"type": "string"},
+            },
+        },
+        kind_class="mutating",
+        wire_name="ui_btcpay_provenance_review",
+        daemon_kind="ui.btcpay.provenance.review",
+        summary_template="Review commercial reconciliation link",
+    ),
+    ToolEntry(
+        name="ui.documents.create",
+        description="Create external invoice/receipt/contract metadata after explicit consent; does not read or attach a local file.",
+        parameters={
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["label", "document_type"],
+            "properties": {
+                "label": {"type": "string"},
+                "document_type": {"type": "string"},
+                "external_ref": {"type": "string"},
+                "issuer": {"type": "string"},
+                "counterparty": {"type": "string"},
+                "issued_at": {"type": "string"},
+                "due_at": {"type": "string"},
+                "fiat_currency": {"type": "string"},
+                "fiat_value": {"type": ["string", "number"]},
+                "notes": {"type": "string"},
+            },
+        },
+        kind_class="mutating",
+        wire_name="ui_documents_create",
+        daemon_kind="ui.documents.create",
+        summary_template="Create external document metadata",
+    ),
+    ToolEntry(
+        name="ui.reports.exit_tax_preview",
+        description="Read the deterministic Austrian exit-tax preview for a departure date and destination class.",
+        parameters={
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["departure_date", "destination"],
+            "properties": {
+                "departure_date": {"type": "string"},
+                "destination": {"type": "string", "enum": ["eu_eea", "third_country"]},
+            },
+        },
+        kind_class="read_only",
+        wire_name="ui_reports_exit_tax_preview",
+        daemon_kind="ui.reports.exit_tax_preview",
+        summary_template="Preview Austrian exit tax",
+    ),
+    ToolEntry(
+        name="ui.reports.export",
+        description=(
+            "Export a deterministic report or advisor handoff artifact after explicit consent. "
+            "The AI receives only artifact metadata, never the managed local path."
+        ),
+        parameters={
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["report", "format"],
+            "properties": {
+                "report": {
+                    "type": "string",
+                    "enum": ["full", "summary", "capital_gains", "austrian_e1kv", "exit_tax", "audit_package"],
+                },
+                "format": {"type": "string", "enum": ["pdf", "xlsx", "csv", "package"]},
+                "year": {"type": "integer", "minimum": 2009, "maximum": 2100},
+                "wallet": {"type": "string"},
+                "departure_date": {"type": "string"},
+                "destination": {"type": "string", "enum": ["eu_eea", "third_country"]},
+                "transaction": {"type": "string"},
+                "transactions": {"type": "array", "items": {"type": "string"}, "maxItems": 100},
+                "source_funds_case": {"type": "string"},
+                "verify": {"type": "boolean"},
+            },
+        },
+        kind_class="mutating",
+        wire_name="ui_reports_export",
+        summary_template="Export report artifact",
+    ),
+    ToolEntry(
+        name="ui.egress.snapshot",
+        description=(
+            "Read an AI-safe aggregate of recent outbound activity by subsystem. "
+            "Configured backend hosts, paths, query strings, headers, and request bodies are not returned."
+        ),
+        parameters={
+            "type": "object",
+            "additionalProperties": False,
+            "properties": {
+                "after_id": {"type": "integer", "minimum": 0},
+                "limit": {"type": "integer", "minimum": 1, "maximum": 500},
+            },
+        },
+        kind_class="read_only",
+        wire_name="ui_egress_snapshot",
+        daemon_kind="ui.egress.snapshot",
+        summary_template="Read outbound privacy summary",
+    ),
+)
+
+
+TOOL_CATALOG: tuple[ToolEntry, ...] = (*_BASE_TOOL_CATALOG, *_EXPANDED_TOOL_CATALOG)
+
+TOOL_CAPABILITY_NAMES = (
+    "core",
+    "transactions",
+    "reports",
+    "wallets",
+    "privacy",
+    "source_funds",
+    "merchant",
+    "transfers",
+    "operations",
+)
+
+_CORE_TOOL_NAMES = {
+    "status",
+    "ui.overview.snapshot",
+    "ui.profiles.snapshot",
+    "ui.report.blockers",
+    "ui.workspace.health",
+    "ui.next_actions",
+    "read_skill_reference",
+}
+
+
+def tool_capabilities(tool: ToolEntry) -> frozenset[str]:
+    """Return the small-model capability packs that should advertise a tool."""
+
+    name = tool.name
+    capabilities: set[str] = set()
+    if name in _CORE_TOOL_NAMES:
+        capabilities.add("core")
+    if name.startswith(("ui.transactions.", "ui.activity.", "ui.attachments.")):
+        capabilities.add("transactions")
+    if name in {"ui.audit.evidence.summary", "ui.review.badges"}:
+        capabilities.update({"transactions", "operations"})
+    if name.startswith(("ui.reports.", "ui.rates.")) or name in {
+        "ui.report.blockers",
+        "ui.audit.changes_since_last_answer",
+    }:
+        capabilities.add("reports")
+    if name.startswith(("ui.wallets.", "ui.backends.")) or name in {
+        "ui.maintenance.settings",
+        "ui.maintenance.configure",
+        "ui.maintenance.run",
+        "ui.connections.node.snapshot",
+    }:
+        capabilities.update({"wallets", "operations"})
+    if "privacy" in name or name == "ui.egress.snapshot":
+        capabilities.add("privacy")
+    if name.startswith("ui.source_funds."):
+        capabilities.add("source_funds")
+    if name.startswith(("ui.btcpay.", "ui.documents.")) or name == "ui.transactions.commercial_context":
+        capabilities.add("merchant")
+    if name.startswith(("ui.transfers.", "ui.saved_views.")) or name == "ui.journals.transfers.list":
+        capabilities.add("transfers")
+    if name.startswith("ui.journals."):
+        capabilities.update({"transactions", "reports"})
+    return frozenset(capabilities or {"core"})
+
+
+def select_tool_capabilities(
+    messages: list[dict[str, Any]] | None,
+    screen_context: dict[str, Any] | None = None,
+) -> frozenset[str] | None:
+    """Select bounded tool packs from the question and current typed screen context.
+
+    ``None`` means advertise the full catalog. This is reserved for explicit
+    capability-discovery questions and keeps the public helper backward compatible.
+    """
+
+    if messages is None:
+        return None
+    recent_user_messages = [
+        str(message["content"]).lower()
+        for message in messages
+        if message.get("role") == "user" and isinstance(message.get("content"), str)
+    ][-3:]
+    latest = recent_user_messages[-1] if recent_user_messages else ""
+    if any(phrase in latest for phrase in ("what can you do", "all tools", "capabilities", "tool catalog")):
+        return None
+
+    selected = {"core"}
+    route = str((screen_context or {}).get("route") or "").lower()
+    requested = (screen_context or {}).get("capabilities")
+    if isinstance(requested, list):
+        selected.update(str(item) for item in requested if str(item) in TOOL_CAPABILITY_NAMES)
+
+    haystack = f"{route} {' '.join(recent_user_messages)}"
+    keyword_groups = {
+        "transactions": ("transaction", "txid", "note", "tag", "evidence", "attachment", "quarantine", "edit"),
+        "reports": ("report", "tax", "gain", "balance", "portfolio", "price", "rate", "export", "steuer", "e1kv", "exit tax"),
+        "wallets": ("wallet", "backend", "sync", "source", "utxo", "connection"),
+        "privacy": ("privacy", "linkable", "egress", "outbound", "psbt"),
+        "source_funds": ("source of funds", "source-of-funds", "provenance", "audit package", "proof of funds"),
+        "merchant": ("btcpay", "invoice", "receipt", "merchant", "commercial", "document"),
+        "transfers": ("transfer", "swap", "boltz", "peg", "coinjoin", "whirlpool", "pair"),
+        "operations": ("health", "stale", "maintenance", "diagnose", "broken", "failed"),
+    }
+    for capability, keywords in keyword_groups.items():
+        if any(keyword in haystack for keyword in keywords):
+            selected.add(capability)
+    if "transfers" in selected:
+        selected.add("transactions")
+    if route == "/books":
+        selected.add("wallets")
+    return frozenset(selected)
+
 TOOL_BY_NAME: dict[str, ToolEntry] = {}
 for tool in TOOL_CATALOG:
     TOOL_BY_NAME[tool.name] = tool
@@ -1697,11 +2276,16 @@ def get_tool(name: str) -> ToolEntry | None:
     return TOOL_BY_NAME.get(name)
 
 
-def openai_tool_definitions(*, include_mutating: bool = False) -> list[dict[str, Any]]:
+def openai_tool_definitions(
+    *,
+    include_mutating: bool = False,
+    capabilities: frozenset[str] | None = None,
+) -> list[dict[str, Any]]:
     return [
         tool.to_openai_tool()
         for tool in TOOL_CATALOG
-        if include_mutating or tool.kind_class == "read_only"
+        if (include_mutating or tool.kind_class == "read_only")
+        and (capabilities is None or bool(tool_capabilities(tool) & capabilities))
     ]
 
 
@@ -1791,6 +2375,40 @@ def summarize_tool_call(tool: ToolEntry, arguments: dict[str, Any]) -> str:
         if isinstance(target, str) and target.strip():
             return f"Review deterministic source-funds suggestions for {target.strip()}"
         return "Review deterministic source-funds suggestions"
+    if tool.name == "ui.source_funds.assemble":
+        target = arguments.get("target_transaction")
+        return (
+            f"Assemble source-funds history for {target.strip()}"
+            if isinstance(target, str) and target.strip()
+            else "Assemble source-funds history"
+        )
+    if tool.name == "ui.transactions.metadata.update":
+        target = arguments.get("transaction")
+        return (
+            f"Update reviewed metadata for {target.strip()}"
+            if isinstance(target, str) and target.strip()
+            else "Update transaction metadata"
+        )
+    if tool.name == "ui.transactions.history.revert":
+        target = arguments.get("transaction")
+        return (
+            f"Revert an audited edit on {target.strip()}"
+            if isinstance(target, str) and target.strip()
+            else "Revert transaction edit"
+        )
+    if tool.name == "ui.reports.export":
+        report = arguments.get("report")
+        export_format = arguments.get("format")
+        if isinstance(report, str) and isinstance(export_format, str):
+            return f"Export {report.replace('_', ' ')} as {export_format.upper()}"
+        return "Export report artifact"
+    if tool.name == "ui.source_funds.export":
+        export_format = arguments.get("format")
+        return (
+            f"Export source-funds {export_format}"
+            if isinstance(export_format, str)
+            else "Export source-funds case"
+        )
     return tool.summary_template or tool.name
 
 
