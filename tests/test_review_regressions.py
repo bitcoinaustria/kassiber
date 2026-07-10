@@ -3680,7 +3680,7 @@ class ReviewRegressionTest(unittest.TestCase):
                     self.assertFalse(second_page["hasMore"])
                     self.assertIsNone(second_page["nextCursor"])
 
-    def test_report_transfer_rows_derive_missing_swap_fee(self):
+    def test_report_transfer_rows_treat_null_swap_fee_as_zero(self):
         context = {
             "query_rows": {
                 "transfer_pairs": [
@@ -3711,8 +3711,8 @@ class ReviewRegressionTest(unittest.TestCase):
 
         rows = _generic_report_transfer_pair_rows(context)
 
-        self.assertEqual(rows[0]["swap_fee_msat"], btc_to_msat("0.00010000"))
-        self.assertAlmostEqual(rows[0]["swap_fee"], 0.0001)
+        self.assertEqual(rows[0]["swap_fee_msat"], 0)
+        self.assertEqual(rows[0]["swap_fee"], 0.0)
 
     def test_river_import_rejects_price_currency_mismatch(self):
         self._bootstrap_austrian_e1kv_wallet(label="RiverEUR")
