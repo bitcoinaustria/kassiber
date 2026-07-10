@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import base64
+from bisect import bisect_right
 import csv
 import json
 import os
@@ -18,7 +19,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from decimal import Decimal
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 from urllib import error, request
 
 from kassiber.core import rates as core_rates
@@ -280,10 +281,15 @@ def validate_scenario(scenario: dict[str, Any]) -> None:
                 f"Scenario Liquid wallet {wallet['key']!r} must be a descriptor wallet backed by elementsregtest"
             )
         address_count = int(wallet.get("addresses") or 1)
-        if address_count < 1 or address_count > 12:
-            raise ValueError(f"Scenario wallet {wallet['key']!r} addresses must be between 1 and 12")
+        if address_count < 1 or address_count > 256:
+            raise ValueError(f"Scenario wallet {wallet['key']!r} addresses must be between 1 and 256")
         if address_count > 1 and not (_is_core_wallet_spec(wallet) or _is_liquid_live_wallet_spec(wallet)):
             raise ValueError(f"Scenario wallet {wallet['key']!r} only live wallets rotate addresses")
+        address_type = str(wallet.get("address_type") or "bech32")
+        if _is_core_wallet_spec(wallet) and address_type not in {"legacy", "p2sh-segwit", "bech32", "bech32m"}:
+            raise ValueError(
+                f"Scenario wallet {wallet['key']!r} has unsupported Bitcoin address_type: {address_type}"
+            )
     def _validate_operation(operation: dict[str, Any], *, pending: bool = False) -> None:
         op_id = operation.get("id") or "<unnamed>"
         kind = operation.get("kind")
@@ -319,6 +325,12 @@ def validate_scenario(scenario: dict[str, Any]) -> None:
                 destinations.append(to_key)
             if len(set(destinations)) != len(destinations):
                 raise ValueError(f"Scenario operation {op_id} fan-out destinations must be unique")
+        if kind == "many_input_consolidation":
+            min_count = int(operation.get("min_count") or operation.get("count") or 0)
+            if min_count < 2 or min_count > int(operation.get("count") or 0):
+                raise ValueError(f"Scenario operation {op_id} has invalid consolidation min_count")
+            if operation.get("max_input_btc") not in (None, ""):
+                _btc(operation["max_input_btc"])
         if kind == "rbf_replaced_payment":
             if "replacement_fee_btc" not in operation:
                 raise ValueError(f"Scenario operation {op_id} is missing replacement_fee_btc")
@@ -352,6 +364,12 @@ def validate_scenario(scenario: dict[str, Any]) -> None:
             raise ValueError("Scenario stress.cycles must be positive")
         if days_between_cycles <= 0:
             raise ValueError("Scenario stress.days_between_cycles must be positive")
+        for index, operation in enumerate(scenario["operations"], start=1):
+            if operation.get("cycle") is None:
+                continue
+            cycle = int(operation["cycle"])
+            if cycle < 1 or cycle > cycles:
+                raise ValueError(f"Scenario operations[{index}] cycle is outside the stress range")
         for field in ("receipt_btc", "payment_btc"):
             entries = stress.get(field)
             if not isinstance(entries, dict) or not entries:
@@ -361,7 +379,7 @@ def validate_scenario(scenario: dict[str, Any]) -> None:
                     raise ValueError(f"Scenario stress.{field} references unknown wallet: {key}")
                 if key not in core_wallet_keys:
                     raise ValueError(f"Scenario stress.{field} references non-Core wallet: {key}")
-                _btc(value)
+                _recurring_amount_spec(value, label=f"stress.{field}.{key}")
         if not stress.get("fee_btc"):
             raise ValueError("Scenario stress.fee_btc must be set")
         _btc(stress["fee_btc"])
@@ -394,7 +412,34 @@ def validate_scenario(scenario: dict[str, Any]) -> None:
                     raise ValueError(
                         f"Scenario stress.business_expenses.schedule[{index}] references non-Core role: {role}"
                     )
-                _btc(expense.get("amount_btc"))
+                _recurring_amount_spec(expense, label=f"stress.business_expenses.schedule[{index}]")
+                if int(expense.get("every_cycles") or 1) <= 0:
+                    raise ValueError(
+                        f"Scenario stress.business_expenses.schedule[{index}].every_cycles must be positive"
+                    )
+                start_cycle = int(expense.get("start_cycle") or 1)
+                if start_cycle < 1 or start_cycle > cycles:
+                    raise ValueError(
+                        f"Scenario stress.business_expenses.schedule[{index}].start_cycle is outside the stress range"
+                    )
+        for index, era in enumerate(stress.get("fee_curve") or [], start=1):
+            _parse_iso_to_ts(str(era.get("start") or ""))
+            multiplier = Decimal(str(era.get("multiplier") or "0"))
+            if multiplier <= 0:
+                raise ValueError(f"Scenario stress.fee_curve[{index}].multiplier must be positive")
+        pool = stress.get("pool_payouts") or {}
+        if pool.get("enabled"):
+            start_cycle = int(pool.get("start_cycle") or 0)
+            end_cycle = int(pool.get("end_cycle") or 0)
+            every_cycles = int(pool.get("every_cycles") or 0)
+            if start_cycle < 1 or end_cycle < start_cycle or end_cycle > cycles:
+                raise ValueError("Scenario stress.pool_payouts cycle range is invalid")
+            if every_cycles <= 0:
+                raise ValueError("Scenario stress.pool_payouts.every_cycles must be positive")
+            role = pool.get("role")
+            if role not in core_wallet_keys:
+                raise ValueError(f"Scenario stress.pool_payouts references unknown role: {role}")
+            _recurring_amount_spec(pool, label="stress.pool_payouts")
         for index, rotation in enumerate(stress.get("wallet_rotations") or [], start=1):
             cycle = int(rotation.get("cycle") or 0)
             if cycle < 1 or cycle > cycles:
@@ -408,8 +453,58 @@ def validate_scenario(scenario: dict[str, Any]) -> None:
                     raise ValueError(
                         f"Scenario stress.wallet_rotations[{index}] references non-Core {field}: {rotation.get(field)}"
                     )
-            _btc(rotation.get("amount_btc"))
+            mode = str(rotation.get("mode") or "amount")
+            if mode == "sweep":
+                _btc_or_zero(rotation.get("residual_btc") or "0")
+            elif mode == "amount":
+                _btc(rotation.get("amount_btc"))
+            else:
+                raise ValueError(f"Scenario stress.wallet_rotations[{index}] has unsupported mode: {mode}")
             _btc(rotation.get("fee_btc") or stress["fee_btc"])
+        for index, rotation in enumerate(stress.get("liquid_wallet_rotations") or [], start=1):
+            cycle = int(rotation.get("cycle") or 0)
+            if cycle < 1 or cycle > cycles:
+                raise ValueError(
+                    f"Scenario stress.liquid_wallet_rotations[{index}] cycle is outside the stress range"
+                )
+            for field in ("role", "from", "to"):
+                value = rotation.get(field)
+                if value not in wallet_key_set or not _is_liquid_live_wallet_spec(wallet_specs_by_key[value]):
+                    raise ValueError(
+                        f"Scenario stress.liquid_wallet_rotations[{index}] references non-Liquid {field}: {value}"
+                    )
+            _btc_or_zero(rotation.get("residual_btc") or "0.001")
+        for index, rule in enumerate(stress.get("internal_transfers") or [], start=1):
+            kind = str(rule.get("kind") or "")
+            if kind not in {"sweep_excess", "refill_to_target"}:
+                raise ValueError(f"Scenario stress.internal_transfers[{index}] has unsupported kind: {kind}")
+            for field in ("from_role", "to_role"):
+                value = rule.get(field)
+                if value not in core_wallet_keys:
+                    raise ValueError(
+                        f"Scenario stress.internal_transfers[{index}] references unknown {field}: {value}"
+                    )
+            start_cycle = int(rule.get("start_cycle") or 0)
+            every_cycles = int(rule.get("every_cycles") or 0)
+            max_events = int(rule.get("max_events") or 0)
+            if start_cycle < 1 or start_cycle > cycles or every_cycles <= 0 or max_events <= 0:
+                raise ValueError(f"Scenario stress.internal_transfers[{index}] has invalid cadence")
+            for field in ("source_reserve_eur", "min_amount_eur"):
+                if Decimal(str(rule.get(field) or "0")) < 0:
+                    raise ValueError(
+                        f"Scenario stress.internal_transfers[{index}].{field} must not be negative"
+                    )
+            if kind == "sweep_excess":
+                fraction = Decimal(str(rule.get("fraction") or "0"))
+                if fraction <= 0 or fraction > 1:
+                    raise ValueError(
+                        f"Scenario stress.internal_transfers[{index}].fraction must be in (0, 1]"
+                    )
+            elif Decimal(str(rule.get("target_balance_eur") or "0")) <= 0:
+                raise ValueError(
+                    f"Scenario stress.internal_transfers[{index}].target_balance_eur must be positive"
+                )
+            _btc(rule.get("fee_btc") or stress["fee_btc"])
         for index, bridge in enumerate(stress.get("swap_bridges") or [], start=1):
             cycle = int(bridge.get("cycle") or 0)
             if cycle < 1 or cycle > cycles:
@@ -497,6 +592,102 @@ def _stress_jitter_bp(cycle: int, salt: int, spread_bp: int) -> int:
         return 0
     seed = (cycle * 2654435761 + salt * 40503 + 94261) % (2**32)
     return int(seed % (2 * spread_bp + 1)) - spread_bp
+
+
+def _recurring_amount_spec(value: Any, *, label: str) -> tuple[str, Decimal]:
+    """Return (denomination, amount) for a recurring manifest value.
+
+    Scalar values and ``amount_btc`` retain the v1 BTC-denominated contract;
+    ``amount_eur`` opts into date-sensitive fiat denomination.
+    """
+    if isinstance(value, dict):
+        has_btc = value.get("amount_btc") not in (None, "")
+        has_eur = value.get("amount_eur") not in (None, "")
+        if has_btc == has_eur:
+            raise ValueError(f"Scenario {label} must set exactly one of amount_btc or amount_eur")
+        if has_eur:
+            amount = Decimal(str(value["amount_eur"])).quantize(Decimal("0.01"))
+            if amount <= 0:
+                raise ValueError(f"Scenario {label}.amount_eur must be positive")
+            return "fiat", amount
+        return "btc", _btc(value["amount_btc"])
+    return "btc", _btc(value)
+
+
+def _load_bundled_daily_rates(pair: str) -> list[tuple[int, Decimal]]:
+    normalized = str(pair).strip().upper().replace("-", "")
+    kraken_pair = {"BTCEUR": "XBTEUR", "BTCUSD": "XBTUSD"}.get(normalized)
+    if not kraken_pair:
+        raise ValueError(f"No bundled Kraken daily history for recurring denomination pair {pair!r}")
+    path = ROOT / "kassiber" / "data" / "rates" / "kraken" / "btc_daily" / f"{kraken_pair}_1440.csv"
+    rows: list[tuple[int, Decimal]] = []
+    with path.open("r", encoding="utf-8", newline="") as handle:
+        for line_number, row in enumerate(csv.reader(handle), start=1):
+            if len(row) != 7:
+                raise ValueError(f"Bundled Kraken history {path.name}:{line_number} is malformed")
+            # Kassiber stores daily candles at their close timestamp and prices
+            # a transaction from the latest cached sample at or before it.
+            close_ts = int(row[0]) + SECONDS_PER_DAY
+            close_rate = Decimal(row[4])
+            if close_rate <= 0:
+                raise ValueError(f"Bundled Kraken history {path.name}:{line_number} has no close rate")
+            rows.append((close_ts, close_rate))
+    if not rows:
+        raise ValueError(f"Bundled Kraken history {path.name} is empty")
+    return rows
+
+
+def _cached_rate_at_or_before(history: list[tuple[int, Decimal]], timestamp: int) -> Decimal:
+    index = bisect_right([row[0] for row in history], timestamp) - 1
+    if index < 0:
+        raise ValueError(f"Bundled Kraken history does not cover {_iso_from_ts(timestamp)}")
+    return history[index][1]
+
+
+def _recurring_btc(value: Any, *, rate: Decimal, label: str) -> Decimal:
+    denomination, amount = _recurring_amount_spec(value, label=label)
+    if denomination == "btc":
+        return amount.quantize(SAT)
+    converted = (amount / rate).quantize(SAT)
+    return max(converted, SAT)
+
+
+def _cycle_activity_mode(cycle: int) -> str:
+    """Deterministic ~5% activity skips and ~5% double-booked busy cycles."""
+    if cycle == 1:
+        return "normal"
+    bucket = (_stress_jitter_bp(cycle, 71, 4999) + 4999) % 100
+    if bucket < 5:
+        return "skip"
+    if bucket < 10:
+        return "double"
+    return "normal"
+
+
+def _cycle_timestamp(first_target_ts: int, cycle: int, days_between_cycles: int) -> int:
+    jitter_days = _stress_jitter_bp(cycle, 79, 5)
+    hour = (_stress_jitter_bp(cycle, 83, 11) + 11) % 24
+    return first_target_ts + ((cycle - 1) * days_between_cycles + jitter_days) * SECONDS_PER_DAY + hour * 3600
+
+
+def _event_timestamp(cycle_ts: int, cycle: int, slot: int) -> int:
+    minute_jitter = _stress_jitter_bp(cycle, 101 + slot, 45)
+    return cycle_ts + slot * 3600 + minute_jitter * 60
+
+
+def _rare_receipt_multiplier(cycle: int, wallet_index: int, wallet_count: int) -> Decimal:
+    if cycle % 17 or wallet_index != (cycle // 17) % max(wallet_count, 1):
+        return Decimal("1")
+    return Decimal(5 + ((_stress_jitter_bp(cycle, 109, 4999) + 4999) % 16))
+
+
+def _fee_curve_multiplier(stress: dict[str, Any], timestamp: int) -> Decimal:
+    multiplier = Decimal("1")
+    for era in sorted(stress.get("fee_curve") or [], key=lambda row: _parse_iso_to_ts(str(row["start"]))):
+        if timestamp < _parse_iso_to_ts(str(era["start"])):
+            break
+        multiplier = Decimal(str(era["multiplier"]))
+    return multiplier
 
 
 def _varied_amount(
@@ -935,11 +1126,13 @@ def _parse_iso_to_ts(value: str) -> int:
 def estimate_scenario_end_ts(scenario: dict[str, Any], *, start_ts: int | None = None) -> int:
     current_ts = start_ts if start_ts is not None else _parse_iso_to_ts(str(scenario["base_time"]))
 
-    # run_demo performs one maturity mine, one initial-funding mine, then one
-    # confirmation mine per hand-authored operation before the long stress run.
+    # run_demo performs one maturity mine, one counterparty-funding mine, one
+    # initial-funding mine, then one confirmation mine per unscheduled
+    # hand-authored operation before the long stress run.
     current_ts += 600
     current_ts += 600
-    current_ts += len(scenario.get("operations") or []) * 600
+    current_ts += 600
+    current_ts += sum(1 for operation in scenario.get("operations") or [] if operation.get("cycle") is None) * 600
 
     stress = scenario.get("stress") or {}
     if stress.get("enabled"):
@@ -948,7 +1141,7 @@ def estimate_scenario_end_ts(scenario: dict[str, Any], *, start_ts: int | None =
         if cycles > 0 and days_between_cycles > 0:
             first_target_ts = current_ts + (2 * SECONDS_PER_DAY)
             last_cycle_ts = first_target_ts + ((cycles - 1) * days_between_cycles * SECONDS_PER_DAY)
-            current_ts = max(current_ts, last_cycle_ts + (13 * 60 * 60))
+            current_ts = max(current_ts, last_cycle_ts + (7 * SECONDS_PER_DAY))
 
     silent_payment_wallets = [
         wallet for wallet in scenario.get("wallets") or [] if _is_silent_payment_wallet_spec(wallet)
@@ -1227,6 +1420,86 @@ def _send_from_wallet(
     )
 
 
+def _sweep_core_wallet(
+    url: str,
+    username: str,
+    password: str,
+    sender: DemoWallet,
+    receiver: DemoWallet,
+    fee: Decimal,
+    *,
+    residual: Decimal = Decimal("0"),
+) -> str:
+    utxos = _wallet_utxos(url, username, password, sender)
+    # A historical fee curve still has to clear relay policy for a large
+    # many-input sweep. This conservative one-sat/vbyte floor covers legacy,
+    # nested-SegWit, and native-SegWit inputs without pretending to estimate a
+    # wallet-specific feerate precisely.
+    relay_floor = Decimal((len(utxos) * 180) + 200) * SAT
+    fee = max(fee, relay_floor).quantize(SAT)
+    total = sum((Decimal(str(utxo["amount"])).quantize(SAT) for utxo in utxos), Decimal("0"))
+    output_amount = (total - fee - residual).quantize(SAT)
+    if output_amount <= 0:
+        raise RuntimeError(
+            f"Wallet {sender.key} holds {total} BTC, too little to sweep after fee/residual"
+        )
+    outputs = {receiver.receive_address(): output_amount}
+    if residual > 0:
+        # Keep an explicit reserve output in the retiring wallet. Omitting it
+        # would silently turn the configured residual into additional miner fee.
+        outputs[sender.change_address()] = residual
+    return _send_raw_transaction(
+        url,
+        username,
+        password,
+        [{"txid": utxo["txid"], "vout": utxo["vout"]} for utxo in utxos],
+        outputs,
+        [sender.core_wallet],
+    )
+
+
+def _wallet_balance_btc(
+    url: str,
+    username: str,
+    password: str,
+    wallet: DemoWallet,
+    *,
+    min_confirmations: int = 1,
+) -> Decimal:
+    return sum(
+        (
+            Decimal(str(utxo["amount"])).quantize(SAT)
+            for utxo in _wallet_utxos(
+                url,
+                username,
+                password,
+                wallet,
+                min_confirmations=min_confirmations,
+            )
+        ),
+        Decimal("0"),
+    )
+
+
+def _internal_transfer_amount(
+    rule: dict[str, Any],
+    *,
+    rate: Decimal,
+    source_balance: Decimal,
+    target_balance: Decimal,
+    fee: Decimal,
+) -> Decimal:
+    source_reserve = (Decimal(str(rule.get("source_reserve_eur") or "0")) / rate).quantize(SAT)
+    available = max((source_balance - source_reserve - fee).quantize(SAT), Decimal("0"))
+    if rule["kind"] == "sweep_excess":
+        amount = (available * Decimal(str(rule["fraction"]))).quantize(SAT)
+    else:
+        target = (Decimal(str(rule["target_balance_eur"])) / rate).quantize(SAT)
+        amount = min(max((target - target_balance).quantize(SAT), Decimal("0")), available)
+    minimum = (Decimal(str(rule.get("min_amount_eur") or "0")) / rate).quantize(SAT)
+    return amount if amount >= max(minimum, SAT) else Decimal("0")
+
+
 def _send_batched_payment(
     url: str,
     username: str,
@@ -1300,19 +1573,35 @@ def _send_many_input_consolidation(
     password: str,
     wallet: DemoWallet,
     operation: dict[str, Any],
+    txids: dict[str, str],
 ) -> str:
     requested_count = int(operation["count"])
+    min_count = int(operation.get("min_count") or requested_count)
     fee = _btc(operation["fee_btc"])
+    utxos = _wallet_utxos(url, username, password, wallet)
+    source_operation = str(operation.get("source_operation") or "")
+    if source_operation:
+        source_txids = {
+            txid
+            for key, txid in txids.items()
+            if key == source_operation or key.startswith(f"{source_operation}_")
+        }
+        utxos = [utxo for utxo in utxos if str(utxo.get("txid") or "") in source_txids]
+    if operation.get("max_input_btc") not in (None, ""):
+        maximum = _btc(operation["max_input_btc"])
+        utxos = [utxo for utxo in utxos if Decimal(str(utxo["amount"])).quantize(SAT) <= maximum]
     utxos = sorted(
-        _wallet_utxos(url, username, password, wallet),
-        key=lambda item: Decimal(str(item["amount"])),
+        utxos,
+        key=lambda item: (-int(item.get("confirmations") or 0), Decimal(str(item["amount"]))),
     )
-    if len(utxos) < requested_count:
-        raise RuntimeError(
-            f"Wallet {wallet.key} has only {len(utxos)} UTXOs for "
-            f"{requested_count}-input consolidation"
-        )
     selected = utxos[:requested_count]
+    if len(selected) < min_count:
+        raise RuntimeError(
+            f"Wallet {wallet.key} has only {len(selected)} eligible UTXOs for "
+            f"a minimum {min_count}-input consolidation"
+        )
+    relay_floor = Decimal((len(selected) * 180) + 200) * SAT
+    fee = max(fee, relay_floor).quantize(SAT)
     input_amount = sum((Decimal(str(utxo["amount"])).quantize(SAT) for utxo in selected), Decimal("0"))
     output_amount = (input_amount - fee).quantize(SAT)
     if output_amount <= 0:
@@ -1483,6 +1772,154 @@ def _send_payjoin_shape(
     )
 
 
+def _resolved_operation(
+    operation: dict[str, Any],
+    resolve_wallet_key: Callable[[str], str],
+) -> dict[str, Any]:
+    resolved = dict(operation)
+    for field in ("from", "to", "payer", "merchant", "tracked_output_wallet", "wallet"):
+        value = resolved.get(field)
+        if value and value != "external":
+            resolved[field] = resolve_wallet_key(str(value))
+    if operation.get("signers"):
+        resolved["signers"] = [resolve_wallet_key(str(value)) for value in operation["signers"]]
+    if operation.get("outputs"):
+        resolved["outputs"] = [
+            {**output, "to": resolve_wallet_key(str(output["to"]))}
+            for output in operation["outputs"]
+        ]
+    return resolved
+
+
+def _execute_scenario_operation(
+    url: str,
+    username: str,
+    password: str,
+    wallets: dict[str, DemoWallet],
+    operation: dict[str, Any],
+    *,
+    counterparty_wallets: dict[str, str],
+    counterparty_addresses: dict[str, str],
+    txids: dict[str, str],
+    truth: DemoTruth,
+) -> None:
+    kind = operation["kind"]
+    counterparty = str(operation.get("counterparty") or "")
+    inbound_wallet = counterparty_wallets.get(counterparty) or counterparty_wallets["customer_pool"]
+    outbound_address = counterparty_addresses.get(counterparty) or counterparty_addresses["supplier"]
+    if kind in {"payment", "self_transfer", "loan_collateral_lock", "loan_principal_repaid"}:
+        sender = wallets[operation["from"]]
+        to_address = outbound_address if operation["to"] == "external" else wallets[operation["to"]].receive_address()
+        txids[operation["id"]] = _send_from_wallet(
+            url,
+            username,
+            password,
+            sender,
+            {to_address: _btc(operation["amount_btc"])},
+            _btc(operation["fee_btc"]),
+        )
+        truth.record_transaction(operation["id"], txids[operation["id"]], sender, "outbound")
+        if operation["to"] != "external":
+            truth.record_transaction(
+                operation["id"],
+                txids[operation["id"]],
+                wallets[operation["to"]],
+                "inbound",
+            )
+    elif kind == "batched_payment":
+        txids[operation["id"]] = _send_batched_payment(
+            url,
+            username,
+            password,
+            wallets[operation["from"]],
+            counterparty_wallets.get(counterparty) or counterparty_wallets["supplier"],
+            operation,
+        )
+        truth.record_transaction(operation["id"], txids[operation["id"]], wallets[operation["from"]], "outbound")
+    elif kind == "self_transfer_fanout":
+        txids[operation["id"]] = _send_self_transfer_fanout(url, username, password, wallets, operation)
+        truth.record_transaction(operation["id"], txids[operation["id"]], wallets[operation["from"]], "outbound")
+        for output in operation.get("outputs") or []:
+            truth.record_transaction(operation["id"], txids[operation["id"]], wallets[output["to"]], "inbound")
+    elif kind == "incoming_burst":
+        _send_incoming_burst(
+            url,
+            username,
+            password,
+            wallets[operation["to"]],
+            inbound_wallet,
+            operation,
+            txids,
+            truth=truth,
+        )
+    elif kind == "many_input_consolidation":
+        txids[operation["id"]] = _send_many_input_consolidation(
+            url, username, password, wallets[operation["wallet"]], operation, txids
+        )
+        truth.record_transaction(operation["id"], txids[operation["id"]], wallets[operation["wallet"]], "outbound")
+    elif kind == "coinjoin_shape":
+        txids[operation["id"]] = _send_coinjoin_shape(
+            url,
+            username,
+            password,
+            wallets,
+            operation,
+            counterparty_addresses["customer_pool"],
+        )
+        for signer_key in operation["signers"]:
+            truth.record_transaction(
+                operation["id"],
+                txids[operation["id"]],
+                wallets[signer_key],
+                "outbound",
+                source="collaborative_review",
+            )
+        truth.record_transaction(
+            operation["id"],
+            txids[operation["id"]],
+            wallets[operation["tracked_output_wallet"]],
+            "inbound",
+            source="collaborative_review",
+        )
+    elif kind == "payjoin_shape":
+        txids[operation["id"]] = _send_payjoin_shape(url, username, password, wallets, operation)
+        truth.record_transaction(
+            operation["id"], txids[operation["id"]], wallets[operation["payer"]], "outbound", source="collaborative_review"
+        )
+        truth.record_transaction(
+            operation["id"], txids[operation["id"]], wallets[operation["merchant"]], "outbound", source="collaborative_review"
+        )
+    elif kind == "rbf_replaced_payment":
+        txids[operation["id"]] = _send_rbf_replaced_payment(
+            url,
+            username,
+            password,
+            wallets[operation["from"]],
+            outbound_address,
+            operation,
+            txids,
+        )
+        truth.record_transaction(operation["id"], txids[operation["id"]], wallets[operation["from"]], "outbound")
+        truth.record_skipped_txid(
+            f"{operation['id']}_replaced",
+            txids[f"{operation['id']}_replaced"],
+            "rbf_conflicted_original",
+        )
+    elif kind in {"loan_collateral_release", "loan_principal_received", "external_receipt"}:
+        receiver = wallets[operation["to"]]
+        txids[operation["id"]] = rpc(
+            url,
+            username,
+            password,
+            "sendtoaddress",
+            [receiver.receive_address(), _btc(operation["amount_btc"])],
+            wallet=inbound_wallet,
+        )
+        truth.record_transaction(operation["id"], txids[operation["id"]], receiver, "inbound")
+    else:
+        raise RuntimeError(f"Unsupported scenario operation kind: {kind}")
+
+
 def _generate_stress_history(
     url: str,
     elements_url: str,
@@ -1491,8 +1928,9 @@ def _generate_stress_history(
     wallets: dict[str, DemoWallet],
     scenario: dict[str, Any],
     *,
-    faucet_wallet: str,
     liquid_faucet_wallet: str,
+    counterparty_wallets: dict[str, str],
+    counterparty_addresses: dict[str, str],
     mining_address: str,
     liquid_mining_address: str,
     external_address: str,
@@ -1500,7 +1938,7 @@ def _generate_stress_history(
     current_ts: int,
     elements_current_ts: int,
     txids: dict[str, str],
-    truth: DemoTruth | None = None,
+    truth: DemoTruth,
 ) -> tuple[int, int, dict[str, Any]]:
     stress = scenario.get("stress") or {}
     if not stress.get("enabled"):
@@ -1508,15 +1946,10 @@ def _generate_stress_history(
 
     cycles = int(stress["cycles"])
     days_between_cycles = int(stress["days_between_cycles"])
-    receipt_plan = {
-        key: _btc(value)
-        for key, value in sorted(stress["receipt_btc"].items())
-    }
-    payment_plan = [
-        (key, _btc(value))
-        for key, value in sorted(stress["payment_btc"].items())
-    ]
+    receipt_plan = dict(sorted(stress["receipt_btc"].items()))
+    payment_plan = list(sorted(stress["payment_btc"].items()))
     fee = _btc(stress["fee_btc"])
+    rate_history = _load_bundled_daily_rates(str(scenario["pricing"]["pair"]))
     variation_bp = int(stress.get("variation_bp") or 0)
     fee_spread_bp = 4000 if variation_bp else 0
     regimes = stress.get("economic_regimes") or []
@@ -1525,28 +1958,59 @@ def _generate_stress_history(
     rotations_by_cycle: dict[int, list[dict[str, Any]]] = {}
     for rotation in stress.get("wallet_rotations") or []:
         rotations_by_cycle.setdefault(int(rotation["cycle"]), []).append(rotation)
+    liquid_rotations_by_cycle: dict[int, list[dict[str, Any]]] = {}
+    for rotation in stress.get("liquid_wallet_rotations") or []:
+        liquid_rotations_by_cycle.setdefault(int(rotation["cycle"]), []).append(rotation)
+    internal_transfer_rules = stress.get("internal_transfers") or []
+    internal_transfer_counts = {str(rule["id"]): 0 for rule in internal_transfer_rules}
     bridges_by_cycle: dict[int, list[dict[str, Any]]] = {}
     for bridge in stress.get("swap_bridges") or []:
         bridges_by_cycle.setdefault(int(bridge["cycle"]), []).append(bridge)
     mining_by_cycle: dict[int, list[dict[str, Any]]] = {}
     for event in stress.get("mining_events") or []:
         mining_by_cycle.setdefault(int(event["cycle"]), []).append(event)
+    operations_by_cycle: dict[int, list[dict[str, Any]]] = {}
+    for operation in scenario.get("operations") or []:
+        if operation.get("cycle") is not None:
+            operations_by_cycle.setdefault(int(operation["cycle"]), []).append(operation)
     expenses = stress.get("business_expenses") or {}
     expense_schedule = expenses.get("schedule") or []
     expense_every = int(expenses.get("every_cycles") or 1)
     expense_fee = _btc(expenses.get("fee_btc") or stress["fee_btc"])
+    pool = stress.get("pool_payouts") or {}
     first_target_ts = current_ts + (2 * SECONDS_PER_DAY)
     rotations_count = 0
+    liquid_rotations_count = 0
+    liquid_rotation_catchup_count = 0
+    internal_transfer_count = 0
+    internal_transfer_ids: list[str] = []
     business_expense_count = 0
     swap_bridge_count = 0
     mined_reward_count = 0
+    pool_payout_count = 0
+    scheduled_operation_count = 0
+    receipt_event_count = 0
+    payment_event_count = 0
+    rare_receipt_count = 0
+    skipped_cycles: list[int] = []
+    doubled_cycles: list[int] = []
+    cycle_rates: list[Decimal] = []
 
     def active_wallet(key_or_role: str) -> DemoWallet:
         return wallets[active_wallet_for.get(key_or_role, key_or_role)]
 
     for cycle in range(cycles):
         cycle_number = cycle + 1
-        cycle_ts = first_target_ts + (cycle * days_between_cycles * SECONDS_PER_DAY)
+        cycle_ts = _cycle_timestamp(first_target_ts, cycle_number, days_between_cycles)
+        cycle_rate = _cached_rate_at_or_before(rate_history, cycle_ts)
+        cycle_rates.append(cycle_rate)
+        fee_multiplier = _fee_curve_multiplier(stress, cycle_ts)
+        activity_mode = _cycle_activity_mode(cycle_number)
+        activity_runs = 0 if activity_mode == "skip" else (2 if activity_mode == "double" else 1)
+        if activity_mode == "skip":
+            skipped_cycles.append(cycle_number)
+        elif activity_mode == "double":
+            doubled_cycles.append(cycle_number)
         receipt_scale, spend_scale, regime_label = _regime_scales(cycle_number, regimes)
         if regime_label not in regime_labels_seen:
             regime_labels_seen.append(regime_label)
@@ -1554,14 +2018,28 @@ def _generate_stress_history(
             sender = wallets[rotation["from"]]
             receiver = wallets[rotation["to"]]
             rotation_key = f"{rotation['id']}_rotation"
-            txids[rotation_key] = _send_from_wallet(
-                url,
-                username,
-                password,
-                sender,
-                {receiver.receive_address(): _btc(rotation["amount_btc"])},
-                _btc(rotation.get("fee_btc") or stress["fee_btc"]),
-            )
+            rotation_fee = (
+                _btc(rotation.get("fee_btc") or stress["fee_btc"]) * fee_multiplier
+            ).quantize(SAT)
+            if str(rotation.get("mode") or "amount") == "sweep":
+                txids[rotation_key] = _sweep_core_wallet(
+                    url,
+                    username,
+                    password,
+                    sender,
+                    receiver,
+                    rotation_fee,
+                    residual=_btc_or_zero(rotation.get("residual_btc") or "0"),
+                )
+            else:
+                txids[rotation_key] = _send_from_wallet(
+                    url,
+                    username,
+                    password,
+                    sender,
+                    {receiver.receive_address(): _btc(rotation["amount_btc"])},
+                    rotation_fee,
+                )
             if truth is not None:
                 truth.record_transaction(rotation_key, txids[rotation_key], sender, "outbound")
                 truth.record_transaction(rotation_key, txids[rotation_key], receiver, "inbound")
@@ -1573,52 +2051,137 @@ def _generate_stress_history(
                 password,
                 mining_address,
                 current_ts,
-                cycle_ts - (2 * 60 * 60),
+                _event_timestamp(cycle_ts, cycle_number, 0),
             )
 
-        receipt_targets = [
-            (
-                key,
-                active_wallet(key),
-                _varied_amount(
-                    amount,
-                    cycle_number,
-                    salt=0,
-                    spread_bp=variation_bp,
-                    ragged_sats=991,
-                    scale=receipt_scale,
-                ),
+        for rotation in liquid_rotations_by_cycle.get(cycle_number, []):
+            sender = wallets[rotation["from"]]
+            receiver = wallets[rotation["to"]]
+            residual = _btc_or_zero(rotation.get("residual_btc") or "0.001")
+            balance = _wallet_balance_btc(
+                elements_url,
+                username,
+                password,
+                sender,
+                min_confirmations=0,
             )
-            for key, amount in receipt_plan.items()
-        ]
-        receipt_outputs = {
-            wallet.receive_address(): varied_amount
-            for _key, wallet, varied_amount in receipt_targets
-        }
-        receipt_key = f"stress_receipt_{cycle_number:03d}"
-        txids[receipt_key] = rpc(
-            url,
-            username,
-            password,
-            "sendmany",
-            ["", receipt_outputs],
-            wallet=faucet_wallet,
-        )
-        if truth is not None:
-            for _key, wallet, _varied_amount_value in receipt_targets:
-                truth.record_transaction(receipt_key, txids[receipt_key], wallet, "inbound")
-        current_ts = _mine_at(
-            url,
-            username,
-            password,
-            mining_address,
-            current_ts,
-            cycle_ts,
-        )
+            amount = (balance - residual).quantize(SAT)
+            if amount <= 0:
+                raise RuntimeError(
+                    f"Liquid wallet {sender.key} holds {balance} LBTC, too little to rotate"
+                )
+            rotation_key = f"{rotation['id']}_rotation"
+            txids[rotation_key] = rpc(
+                elements_url,
+                username,
+                password,
+                "sendtoaddress",
+                [receiver.receive_address(), amount],
+                wallet=sender.core_wallet,
+            )
+            if truth is not None:
+                truth.record_transaction(rotation_key, txids[rotation_key], sender, "outbound", asset="LBTC")
+                truth.record_transaction(rotation_key, txids[rotation_key], receiver, "inbound", asset="LBTC")
+            active_wallet_for[rotation["role"]] = rotation["to"]
+            liquid_rotations_count += 1
+            elements_current_ts = _mine_at(
+                elements_url,
+                username,
+                password,
+                liquid_mining_address,
+                elements_current_ts,
+                _event_timestamp(cycle_ts, cycle_number, 0),
+            )
+
+        event_slot = 1
+        for run_index in range(activity_runs):
+            receipt_targets = []
+            for wallet_index, (key, amount_spec) in enumerate(receipt_plan.items()):
+                rare_multiplier = _rare_receipt_multiplier(cycle_number, wallet_index, len(receipt_plan))
+                if rare_multiplier > 1:
+                    rare_receipt_count += 1
+                base_amount = _recurring_btc(
+                    amount_spec,
+                    rate=cycle_rate,
+                    label=f"stress.receipt_btc.{key}",
+                )
+                receipt_targets.append(
+                    (
+                        key,
+                        active_wallet(key),
+                        _varied_amount(
+                            base_amount,
+                            cycle_number,
+                            salt=wallet_index + run_index * 13,
+                            spread_bp=variation_bp,
+                            ragged_sats=991,
+                            scale=receipt_scale * rare_multiplier,
+                        ),
+                    )
+                )
+            receipt_outputs = {
+                wallet.receive_address(): varied_amount
+                for _key, wallet, varied_amount in receipt_targets
+            }
+            receipt_key = f"stress_receipt_{cycle_number:03d}_{run_index + 1}"
+            receipt_source = ("customer_pool", "exchange")[(cycle_number + run_index) % 2]
+            txids[receipt_key] = rpc(
+                url,
+                username,
+                password,
+                "sendmany",
+                ["", receipt_outputs],
+                wallet=counterparty_wallets[receipt_source],
+            )
+            if truth is not None:
+                for _key, wallet, _varied_amount_value in receipt_targets:
+                    truth.record_transaction(receipt_key, txids[receipt_key], wallet, "inbound")
+            current_ts = _mine_at(
+                url,
+                username,
+                password,
+                mining_address,
+                current_ts,
+                _event_timestamp(cycle_ts, cycle_number, event_slot),
+            )
+            receipt_event_count += 1
+            event_slot += 1
+
+        for operation in operations_by_cycle.get(cycle_number, []):
+            resolved = _resolved_operation(
+                operation,
+                lambda key: active_wallet_for.get(key, key),
+            )
+            if resolved.get("fee_curve") and resolved.get("fee_btc"):
+                resolved["fee_btc"] = format(
+                    (_btc(resolved["fee_btc"]) * fee_multiplier).quantize(SAT),
+                    "f",
+                )
+            _execute_scenario_operation(
+                url,
+                username,
+                password,
+                wallets,
+                resolved,
+                counterparty_wallets=counterparty_wallets,
+                counterparty_addresses=counterparty_addresses,
+                txids=txids,
+                truth=truth,
+            )
+            current_ts = _mine_at(
+                url,
+                username,
+                password,
+                mining_address,
+                current_ts,
+                _event_timestamp(cycle_ts, cycle_number, event_slot),
+            )
+            scheduled_operation_count += 1
+            event_slot += 1
 
         for event in mining_by_cycle.get(cycle_number, []):
             miner = active_wallet(event["role"])
-            mine_ts = max(cycle_ts + (3 * 60 * 60), current_ts + 600)
+            mine_ts = max(_event_timestamp(cycle_ts, cycle_number, event_slot), current_ts + 600)
             rpc(url, username, password, "setmocktime", [mine_ts])
             block_hashes = rpc(
                 url,
@@ -1638,64 +2201,182 @@ def _generate_stress_history(
                 if truth is not None:
                     truth.record_transaction(reward_key, txids[reward_key], miner, "inbound")
                 mined_reward_count += 1
+            event_slot += 1
 
-        payer_key, amount = payment_plan[cycle % len(payment_plan)]
-        payment_key = f"stress_payment_{cycle_number:03d}"
-        txids[payment_key] = _send_from_wallet(
-            url,
-            username,
-            password,
-            active_wallet(payer_key),
-            {external_address: _varied_amount(amount, cycle_number, salt=0, spread_bp=variation_bp, scale=spend_scale)},
-            _varied_amount(fee, cycle_number, salt=3, spread_bp=fee_spread_bp),
-        )
-        if truth is not None:
-            truth.record_transaction(payment_key, txids[payment_key], active_wallet(payer_key), "outbound")
-        current_ts = _mine_at(
-            url,
-            username,
-            password,
-            mining_address,
-            current_ts,
-            cycle_ts + (6 * 60 * 60),
-        )
-
-        if expenses.get("enabled") and expense_schedule and cycle % expense_every == 0:
-            expense = expense_schedule[cycle % len(expense_schedule)]
-            expense_id = str(expense.get("id") or expense.get("category") or f"expense_{cycle_number:03d}")
-            expense_key = f"business_expense_{cycle_number:03d}_{expense_id}"
-            txids[expense_key] = _send_from_wallet(
+        payments_per_run = 1 if spend_scale < Decimal("0.8") else (3 if spend_scale >= Decimal("1.2") else 2)
+        for payment_index in range(activity_runs * payments_per_run):
+            payer_key, amount_spec = payment_plan[(cycle + payment_index) % len(payment_plan)]
+            payment_key = f"stress_payment_{cycle_number:03d}_{payment_index + 1}"
+            destination = ("supplier", "exchange", "lender")[(cycle_number + payment_index) % 3]
+            base_amount = _recurring_btc(
+                amount_spec,
+                rate=cycle_rate,
+                label=f"stress.payment_btc.{payer_key}",
+            )
+            txids[payment_key] = _send_from_wallet(
                 url,
                 username,
                 password,
-                active_wallet(expense["role"]),
-                {external_address: _varied_amount(
-                    _btc(expense["amount_btc"]),
+                active_wallet(payer_key),
+                {counterparty_addresses[destination]: _varied_amount(
+                    base_amount,
                     cycle_number,
-                    salt=0,
+                    salt=17 + payment_index,
                     spread_bp=variation_bp,
                     scale=spend_scale,
                 )},
-                _varied_amount(expense_fee, cycle_number, salt=5, spread_bp=fee_spread_bp),
+                _varied_amount(
+                    (fee * fee_multiplier).quantize(SAT),
+                    cycle_number,
+                    salt=23 + payment_index,
+                    spread_bp=fee_spread_bp,
+                ),
             )
             if truth is not None:
-                truth.record_transaction(expense_key, txids[expense_key], active_wallet(expense["role"]), "outbound")
-            business_expense_count += 1
+                truth.record_transaction(payment_key, txids[payment_key], active_wallet(payer_key), "outbound")
             current_ts = _mine_at(
                 url,
                 username,
                 password,
                 mining_address,
                 current_ts,
-                cycle_ts + (9 * 60 * 60),
+                _event_timestamp(cycle_ts, cycle_number, event_slot),
             )
+            payment_event_count += 1
+            event_slot += 1
+
+        if expenses.get("enabled") and expense_schedule and cycle % expense_every == 0:
+            for expense_index, expense in enumerate(expense_schedule):
+                every_cycles = int(expense.get("every_cycles") or 1)
+                start_cycle = int(expense.get("start_cycle") or 1)
+                if cycle_number < start_cycle or (cycle_number - start_cycle) % every_cycles:
+                    continue
+                expense_id = str(
+                    expense.get("id") or expense.get("category") or f"expense_{cycle_number:03d}"
+                )
+                expense_key = f"business_expense_{cycle_number:03d}_{expense_id}"
+                expense_amount = _recurring_btc(
+                    expense,
+                    rate=cycle_rate,
+                    label=f"stress.business_expenses.schedule.{expense_id}",
+                )
+                txids[expense_key] = _send_from_wallet(
+                    url,
+                    username,
+                    password,
+                    active_wallet(expense["role"]),
+                    {
+                        counterparty_addresses[str(expense.get("counterparty") or "supplier")]: expense_amount
+                    },
+                    _varied_amount(
+                        (expense_fee * fee_multiplier).quantize(SAT),
+                        cycle_number,
+                        salt=31 + expense_index,
+                        spread_bp=fee_spread_bp,
+                    ),
+                )
+                if truth is not None:
+                    truth.record_transaction(
+                        expense_key,
+                        txids[expense_key],
+                        active_wallet(expense["role"]),
+                        "outbound",
+                    )
+                business_expense_count += 1
+                current_ts = _mine_at(
+                    url,
+                    username,
+                    password,
+                    mining_address,
+                    current_ts,
+                    _event_timestamp(cycle_ts, cycle_number, event_slot),
+                )
+                event_slot += 1
+
+        if (
+            pool.get("enabled")
+            and int(pool["start_cycle"]) <= cycle_number <= int(pool["end_cycle"])
+            and (cycle_number - int(pool["start_cycle"])) % int(pool["every_cycles"]) == 0
+        ):
+            pool_key = f"mining_pool_payout_{cycle_number:03d}"
+            pool_wallet = active_wallet(str(pool["role"]))
+            pool_amount = _recurring_btc(pool, rate=cycle_rate, label="stress.pool_payouts")
+            txids[pool_key] = rpc(
+                url,
+                username,
+                password,
+                "sendtoaddress",
+                [pool_wallet.receive_address(), pool_amount],
+                wallet=counterparty_wallets["mining_pool"],
+            )
+            if truth is not None:
+                truth.record_transaction(pool_key, txids[pool_key], pool_wallet, "inbound")
+            current_ts = _mine_at(
+                url,
+                username,
+                password,
+                mining_address,
+                current_ts,
+                _event_timestamp(cycle_ts, cycle_number, event_slot),
+            )
+            pool_payout_count += 1
+            event_slot += 1
+
+        for rule in internal_transfer_rules:
+            rule_id = str(rule["id"])
+            if internal_transfer_counts[rule_id] >= int(rule["max_events"]):
+                continue
+            start_cycle = int(rule["start_cycle"])
+            if cycle_number < start_cycle or (cycle_number - start_cycle) % int(rule["every_cycles"]):
+                continue
+            source = active_wallet(str(rule["from_role"]))
+            target = active_wallet(str(rule["to_role"]))
+            transfer_fee = _varied_amount(
+                (_btc(rule.get("fee_btc") or stress["fee_btc"]) * fee_multiplier).quantize(SAT),
+                cycle_number,
+                salt=151 + internal_transfer_count,
+                spread_bp=fee_spread_bp,
+            )
+            amount = _internal_transfer_amount(
+                rule,
+                rate=cycle_rate,
+                source_balance=_wallet_balance_btc(url, username, password, source),
+                target_balance=_wallet_balance_btc(url, username, password, target),
+                fee=transfer_fee,
+            )
+            if amount <= 0:
+                continue
+            transfer_key = f"internal_transfer_{rule_id}_{cycle_number:03d}"
+            txids[transfer_key] = _send_from_wallet(
+                url,
+                username,
+                password,
+                source,
+                {target.receive_address(): amount},
+                transfer_fee,
+            )
+            if truth is not None:
+                truth.record_transaction(transfer_key, txids[transfer_key], source, "outbound")
+                truth.record_transaction(transfer_key, txids[transfer_key], target, "inbound")
+            current_ts = _mine_at(
+                url,
+                username,
+                password,
+                mining_address,
+                current_ts,
+                _event_timestamp(cycle_ts, cycle_number, event_slot),
+            )
+            internal_transfer_counts[rule_id] += 1
+            internal_transfer_count += 1
+            internal_transfer_ids.append(transfer_key)
+            event_slot += 1
 
         for bridge in bridges_by_cycle.get(cycle_number, []):
             bridge_id = bridge["id"]
             source = active_wallet(bridge["from_role"])
             target = active_wallet(bridge["to_role"])
-            out_ts = cycle_ts + (12 * 60 * 60)
-            in_ts = cycle_ts + (13 * 60 * 60)
+            out_ts = _event_timestamp(cycle_ts, cycle_number, event_slot)
+            in_ts = _event_timestamp(cycle_ts, cycle_number, event_slot + 1)
             if _is_core_wallet(source):
                 txids[f"{bridge_id}_out"] = _send_from_wallet(
                     url,
@@ -1703,7 +2384,7 @@ def _generate_stress_history(
                     password,
                     source,
                     {external_address: _btc(bridge["out_btc"])},
-                    _btc(bridge.get("fee_btc") or stress["fee_btc"]),
+                    (_btc(bridge.get("fee_btc") or stress["fee_btc"]) * fee_multiplier).quantize(SAT),
                 )
                 if truth is not None:
                     truth.record_transaction(f"{bridge_id}_out", txids[f"{bridge_id}_out"], source, "outbound")
@@ -1751,7 +2432,7 @@ def _generate_stress_history(
                     password,
                     "sendtoaddress",
                     [target.receive_address(), _btc(bridge["in_btc"])],
-                    wallet=faucet_wallet,
+                    wallet=counterparty_wallets["exchange"],
                 )
                 if truth is not None:
                     truth.record_transaction(f"{bridge_id}_in", txids[f"{bridge_id}_in"], target, "inbound")
@@ -1795,25 +2476,84 @@ def _generate_stress_history(
                 )
             elif not _is_liquid_live_wallet(target):
                 current_ts = max(current_ts, in_ts)
+            event_slot += 2
+
+    # A retired Liquid receive descriptor can still collect a delayed peg-in
+    # after its scheduled migration. Sweep those stragglers once the historical
+    # timeline is complete, mirroring the operational catch-up pass an
+    # organization would run before retiring the old policy for good.
+    for rotation in stress.get("liquid_wallet_rotations") or []:
+        sender = wallets[rotation["from"]]
+        receiver = wallets[rotation["to"]]
+        residual = _btc_or_zero(rotation.get("residual_btc") or "0.001")
+        balance = _wallet_balance_btc(
+            elements_url,
+            username,
+            password,
+            sender,
+            min_confirmations=0,
+        )
+        amount = (balance - residual).quantize(SAT)
+        if amount <= 0:
+            continue
+        catchup_key = f"{rotation['id']}_catch_up"
+        txids[catchup_key] = rpc(
+            elements_url,
+            username,
+            password,
+            "sendtoaddress",
+            [receiver.receive_address(), amount],
+            wallet=sender.core_wallet,
+        )
+        if truth is not None:
+            truth.record_transaction(catchup_key, txids[catchup_key], sender, "outbound", asset="LBTC")
+            truth.record_transaction(catchup_key, txids[catchup_key], receiver, "inbound", asset="LBTC")
+        elements_current_ts = _mine_at(
+            elements_url,
+            username,
+            password,
+            liquid_mining_address,
+            elements_current_ts,
+            elements_current_ts + 600,
+        )
+        liquid_rotation_catchup_count += 1
 
     return current_ts, elements_current_ts, {
         "cycles": cycles,
         "receipt_wallets": len(receipt_plan),
         "payment_wallets": len(payment_plan),
         "business_expenses": business_expense_count,
+        "receipt_events": receipt_event_count,
+        "payment_events": payment_event_count,
+        "scheduled_operations": scheduled_operation_count,
+        "pool_payouts": pool_payout_count,
+        "rare_receipts": rare_receipt_count,
+        "skipped_cycles": skipped_cycles,
+        "doubled_cycles": doubled_cycles,
         "wallet_rotations": rotations_count,
+        "liquid_wallet_rotations": liquid_rotations_count,
+        "liquid_rotation_catchups": liquid_rotation_catchup_count,
+        "internal_transfers": internal_transfer_count,
+        "internal_transfer_ids": internal_transfer_ids,
         "swap_bridges": swap_bridge_count,
         "mined_rewards": mined_reward_count,
         "variation_bp": variation_bp,
         "economic_regimes": regime_labels_seen,
+        "first_cycle_rate": format(cycle_rates[0], "f") if cycle_rates else None,
+        "last_cycle_rate": format(cycle_rates[-1], "f") if cycle_rates else None,
         "rows_expected": (
-            cycles * (len(receipt_plan) + 1)
+            receipt_event_count * len(receipt_plan)
+            + payment_event_count
             + business_expense_count
             + (rotations_count * 2)
+            + (liquid_rotations_count * 2)
+            + (liquid_rotation_catchup_count * 2)
+            + (internal_transfer_count * 2)
             + (swap_bridge_count * 2)
             + mined_reward_count
+            + pool_payout_count
         ),
-        "span_days": (cycles - 1) * days_between_cycles,
+        "span_days": (cycles - 1) * days_between_cycles + _stress_jitter_bp(cycles, 79, 5),
     }
 
 
@@ -1824,6 +2564,48 @@ def _scope(scenario: dict[str, Any]) -> tuple[str, str, str, str]:
         "--profile",
         scenario["profile"]["label"],
     )
+
+
+def _assert_deprecated_wallet_residuals(
+    url: str,
+    elements_url: str,
+    username: str,
+    password: str,
+    scenario: dict[str, Any],
+    wallets: dict[str, DemoWallet],
+) -> list[dict[str, Any]]:
+    expected = scenario.get("expected") or {}
+    maximum_balance = _btc_or_zero(expected.get("deprecated_wallet_max_residual_btc") or "0.001")
+    maximum_utxos = int(expected.get("deprecated_wallet_max_utxos") or 1)
+    residuals = []
+    for wallet_key in scenario.get("deprecated_wallets") or []:
+        wallet = wallets[wallet_key]
+        wallet_url = elements_url if _is_liquid_live_wallet(wallet) else url
+        utxos = _wallet_utxos(
+            wallet_url,
+            username,
+            password,
+            wallet,
+            min_confirmations=0,
+        )
+        balance = sum(
+            (Decimal(str(utxo["amount"])).quantize(SAT) for utxo in utxos),
+            Decimal("0"),
+        )
+        row = {
+            "wallet": wallet.label,
+            "wallet_key": wallet.key,
+            "asset": "LBTC" if wallet.chain == "liquid" else "BTC",
+            "balance": format(balance, "f"),
+            "utxos": len(utxos),
+        }
+        residuals.append(row)
+        if balance > maximum_balance or len(utxos) > maximum_utxos:
+            raise RuntimeError(
+                "Deprecated wallet retains a material position after rotation: "
+                + json.dumps(row, sort_keys=True)
+            )
+    return residuals
 
 
 def _create_kassiber_book(
@@ -2363,6 +3145,68 @@ def _pair_transfers(
                 rotation.get("note") or f"Wallet key rotation into {rotation['to']}.",
             )["data"]
         )
+    for rotation in stress.get("liquid_wallet_rotations") or []:
+        prefix = f"{rotation['id']}_"
+        for rotation_key in sorted(key for key in txids if key.startswith(prefix)):
+            note = rotation.get("note") or f"Liquid wallet rotation into {rotation['to']}."
+            if truth is not None:
+                truth.record_transfer_pair(
+                    rotation_key,
+                    txids[rotation_key],
+                    txids[rotation_key],
+                    kind="manual",
+                    policy="carrying-value",
+                    note=note,
+                )
+            paired.append(
+                run_cli(
+                    data_root,
+                    "transfers",
+                    "pair",
+                    *scope,
+                    "--tx-out",
+                    txids[rotation_key],
+                    "--tx-in",
+                    txids[rotation_key],
+                    "--kind",
+                    "manual",
+                    "--policy",
+                    "carrying-value",
+                    "--note",
+                    note,
+                )["data"]
+            )
+    for rule in stress.get("internal_transfers") or []:
+        prefix = f"internal_transfer_{rule['id']}_"
+        for transfer_key in sorted(key for key in txids if key.startswith(prefix)):
+            note = str(rule.get("note") or f"Internal treasury policy {rule['id']}.")
+            if truth is not None:
+                truth.record_transfer_pair(
+                    transfer_key,
+                    txids[transfer_key],
+                    txids[transfer_key],
+                    kind="manual",
+                    policy="carrying-value",
+                    note=note,
+                )
+            paired.append(
+                run_cli(
+                    data_root,
+                    "transfers",
+                    "pair",
+                    *scope,
+                    "--tx-out",
+                    txids[transfer_key],
+                    "--tx-in",
+                    txids[transfer_key],
+                    "--kind",
+                    "manual",
+                    "--policy",
+                    "carrying-value",
+                    "--note",
+                    note,
+                )["data"]
+            )
     for bridge in stress.get("swap_bridges") or []:
         bridge_id = bridge["id"]
         if truth is not None:
@@ -2428,14 +3272,15 @@ def _mark_loans(data_root: Path, scenario: dict[str, Any], txids: dict[str, str]
         "loan_principal_received": "principal-received",
         "loan_principal_repaid": "principal-repaid",
     }
-    marked_txids = []
+    marked_txids_by_loan: dict[str, list[str]] = defaultdict(list)
     marks = []
     for operation in scenario["operations"]:
         role = mark_as.get(operation["kind"])
         if role is None:
             continue
         txid = txids[operation["id"]]
-        marked_txids.append(txid)
+        loan_id = str(operation["loan_id"])
+        marked_txids_by_loan[loan_id].append(txid)
         marks.append(
             run_cli(
                 data_root,
@@ -2452,19 +3297,20 @@ def _mark_loans(data_root: Path, scenario: dict[str, Any], txids: dict[str, str]
                 operation["note"],
             )["data"]
         )
-    if len(marked_txids) >= 2:
-        link_args = []
-        for txid in marked_txids:
-            link_args.extend(["--txid", txid])
-        run_cli(
-            data_root,
-            "loans",
-            "link",
-            *scope,
-            *link_args,
-            "--loan-id",
-            "regtest-loan-1",
-        )
+    for loan_id, marked_txids in sorted(marked_txids_by_loan.items()):
+        if len(marked_txids) >= 2:
+            link_args = []
+            for txid in marked_txids:
+                link_args.extend(["--txid", txid])
+            run_cli(
+                data_root,
+                "loans",
+                "link",
+                *scope,
+                *link_args,
+                "--loan-id",
+                loan_id,
+            )
     listing = run_cli(data_root, "loans", "list", *scope)["data"]
     return {"marks": marks, "listing": listing}
 
@@ -2737,10 +3583,12 @@ def _assert_live_liquid_sync_rows(
         wallet_key = wallet_spec["key"]
         wallet_label = str(wallet_spec["label"])
         expected = [
-            (f"{wallet_key}_liquid_live_receive", "inbound", _btc(wallet_spec["live_receipt_btc"])),
-            (f"{wallet_key}_liquid_live_spend", "outbound", _btc(wallet_spec["live_spend_btc"])),
+            (f"{wallet_key}_liquid_live_receive", "inbound", _btc_or_zero(wallet_spec["live_receipt_btc"])),
+            (f"{wallet_key}_liquid_live_spend", "outbound", _btc_or_zero(wallet_spec["live_spend_btc"])),
         ]
         for txid_key, direction, expected_amount in expected:
+            if expected_amount <= 0:
+                continue
             txid = txids.get(txid_key)
             if not txid:
                 raise RuntimeError(f"Liquid live sync did not stage txid {txid_key}")
@@ -3457,13 +4305,14 @@ def run_demo(
     wallets: dict[str, DemoWallet] = {}
     txids: dict[str, str] = {}
     truth = DemoTruth(scenario["id"])
+    counterparty_wallets: dict[str, str] = {}
+    counterparty_addresses: dict[str, str] = {}
     try:
         _ensure_wallet(url, username, password, faucet_wallet)
         created_core_wallets.append(faucet_wallet)
         _ensure_wallet(elements_url, username, password, liquid_faucet_wallet)
         created_elements_wallets.append(liquid_faucet_wallet)
         mining_address = rpc(url, username, password, "getnewaddress", ["mining", "bech32"], wallet=faucet_wallet)
-        external_address = rpc(url, username, password, "getnewaddress", ["external", "bech32"], wallet=faucet_wallet)
         liquid_mining_confidential = rpc(
             elements_url,
             username,
@@ -3488,7 +4337,7 @@ def run_demo(
             wallet=liquid_faucet_wallet,
         )
         elements_current_ts = current_ts
-        current_ts = _mine(url, username, password, faucet_wallet, mining_address, current_ts, blocks=101)
+        current_ts = _mine(url, username, password, faucet_wallet, mining_address, current_ts, blocks=181)
         elements_current_ts = _mine(
             elements_url,
             username,
@@ -3498,6 +4347,38 @@ def run_demo(
             elements_current_ts,
             blocks=101,
         )
+
+        for counterparty in ("customer_pool", "supplier", "lender", "exchange", "mining_pool"):
+            wallet_name = f"kassiber-demo-{run_id}-{counterparty.replace('_', '-')}"
+            _ensure_wallet(url, username, password, wallet_name)
+            created_core_wallets.append(wallet_name)
+            counterparty_wallets[counterparty] = wallet_name
+            counterparty_addresses[counterparty] = rpc(
+                url,
+                username,
+                password,
+                "getnewaddress",
+                [counterparty.replace("_", " "), "bech32"],
+                wallet=wallet_name,
+            )
+        rpc(
+            url,
+            username,
+            password,
+            "sendmany",
+            [
+                "",
+                {
+                    counterparty_addresses[key]: (
+                        Decimal("1000") if key in {"customer_pool", "exchange"} else Decimal("100")
+                    )
+                    for key in counterparty_addresses
+                },
+            ],
+            wallet=faucet_wallet,
+        )
+        current_ts = _mine(url, username, password, faucet_wallet, mining_address, current_ts)
+        external_address = counterparty_addresses["supplier"]
 
         for wallet_spec in scenario["wallets"]:
             if _is_core_wallet_spec(wallet_spec):
@@ -3510,7 +4391,7 @@ def run_demo(
                         username,
                         password,
                         "getnewaddress",
-                        [f"{wallet_spec['label']} receive {index}", "bech32"],
+                        [f"{wallet_spec['label']} receive {index}", str(wallet_spec.get("address_type") or "bech32")],
                         wallet=core_wallet,
                     )
                     for index in range(1, int(wallet_spec.get("addresses") or 1) + 1)
@@ -3600,153 +4481,19 @@ def run_demo(
         )
 
         for operation in scenario["operations"]:
-            kind = operation["kind"]
-            if kind in {"payment", "self_transfer", "loan_collateral_lock", "loan_principal_repaid"}:
-                sender = wallets[operation["from"]]
-                to_address = (
-                    external_address
-                    if operation["to"] == "external"
-                    else wallets[operation["to"]].receive_address()
-                )
-                txids[operation["id"]] = _send_from_wallet(
-                    url,
-                    username,
-                    password,
-                    sender,
-                    {to_address: _btc(operation["amount_btc"])},
-                    _btc(operation["fee_btc"]),
-                )
-                truth.record_transaction(operation["id"], txids[operation["id"]], sender, "outbound")
-                if operation["to"] != "external":
-                    truth.record_transaction(
-                        operation["id"],
-                        txids[operation["id"]],
-                        wallets[operation["to"]],
-                        "inbound",
-                    )
-            elif kind == "batched_payment":
-                txids[operation["id"]] = _send_batched_payment(
-                    url,
-                    username,
-                    password,
-                    wallets[operation["from"]],
-                    faucet_wallet,
-                    operation,
-                )
-                truth.record_transaction(
-                    operation["id"],
-                    txids[operation["id"]],
-                    wallets[operation["from"]],
-                    "outbound",
-                )
-            elif kind == "self_transfer_fanout":
-                txids[operation["id"]] = _send_self_transfer_fanout(
-                    url,
-                    username,
-                    password,
-                    wallets,
-                    operation,
-                )
-                truth.record_transaction(
-                    operation["id"],
-                    txids[operation["id"]],
-                    wallets[operation["from"]],
-                    "outbound",
-                )
-                for output in operation.get("outputs") or []:
-                    truth.record_transaction(
-                        operation["id"],
-                        txids[operation["id"]],
-                        wallets[output["to"]],
-                        "inbound",
-                    )
-            elif kind == "incoming_burst":
-                _send_incoming_burst(
-                    url,
-                    username,
-                    password,
-                    wallets[operation["to"]],
-                    faucet_wallet,
-                    operation,
-                    txids,
-                    truth=truth,
-                )
-            elif kind == "many_input_consolidation":
-                txids[operation["id"]] = _send_many_input_consolidation(
-                    url,
-                    username,
-                    password,
-                    wallets[operation["wallet"]],
-                    operation,
-                )
-                truth.record_transaction(operation["id"], txids[operation["id"]], wallets[operation["wallet"]], "outbound")
-            elif kind == "coinjoin_shape":
-                coinjoin_external = rpc(
-                    url, username, password, "getnewaddress", ["coinjoin equal output", "bech32"], wallet=faucet_wallet
-                )
-                txids[operation["id"]] = _send_coinjoin_shape(
-                    url, username, password, wallets, operation, coinjoin_external
-                )
-                for signer_key in operation["signers"]:
-                    truth.record_transaction(
-                        operation["id"],
-                        txids[operation["id"]],
-                        wallets[signer_key],
-                        "outbound",
-                        source="collaborative_review",
-                    )
-                truth.record_transaction(
-                    operation["id"],
-                    txids[operation["id"]],
-                    wallets[operation["tracked_output_wallet"]],
-                    "inbound",
-                    source="collaborative_review",
-                )
-            elif kind == "payjoin_shape":
-                txids[operation["id"]] = _send_payjoin_shape(url, username, password, wallets, operation)
-                truth.record_transaction(
-                    operation["id"],
-                    txids[operation["id"]],
-                    wallets[operation["payer"]],
-                    "outbound",
-                    source="collaborative_review",
-                )
-                truth.record_transaction(
-                    operation["id"],
-                    txids[operation["id"]],
-                    wallets[operation["merchant"]],
-                    "outbound",
-                    source="collaborative_review",
-                )
-            elif kind == "rbf_replaced_payment":
-                txids[operation["id"]] = _send_rbf_replaced_payment(
-                    url,
-                    username,
-                    password,
-                    wallets[operation["from"]],
-                    external_address,
-                    operation,
-                    txids,
-                )
-                truth.record_transaction(operation["id"], txids[operation["id"]], wallets[operation["from"]], "outbound")
-                truth.record_skipped_txid(
-                    f"{operation['id']}_replaced",
-                    txids[f"{operation['id']}_replaced"],
-                    "rbf_conflicted_original",
-                )
-            elif kind in {"loan_collateral_release", "loan_principal_received", "external_receipt"}:
-                receiver = wallets[operation["to"]]
-                txids[operation["id"]] = rpc(
-                    url,
-                    username,
-                    password,
-                    "sendtoaddress",
-                    [receiver.receive_address(), _btc(operation["amount_btc"])],
-                    wallet=faucet_wallet,
-                )
-                truth.record_transaction(operation["id"], txids[operation["id"]], receiver, "inbound")
-            else:
-                raise RuntimeError(f"Unsupported scenario operation kind: {kind}")
+            if operation.get("cycle") is not None:
+                continue
+            _execute_scenario_operation(
+                url,
+                username,
+                password,
+                wallets,
+                operation,
+                counterparty_wallets=counterparty_wallets,
+                counterparty_addresses=counterparty_addresses,
+                txids=txids,
+                truth=truth,
+            )
             current_ts = _mine(url, username, password, faucet_wallet, mining_address, current_ts)
 
         current_ts, elements_current_ts, stress_result = _generate_stress_history(
@@ -3756,8 +4503,9 @@ def run_demo(
             password,
             wallets,
             scenario,
-            faucet_wallet=faucet_wallet,
             liquid_faucet_wallet=liquid_faucet_wallet,
+            counterparty_wallets=counterparty_wallets,
+            counterparty_addresses=counterparty_addresses,
             mining_address=mining_address,
             liquid_mining_address=liquid_mining_address,
             external_address=external_address,
@@ -3766,6 +4514,14 @@ def run_demo(
             elements_current_ts=elements_current_ts,
             txids=txids,
             truth=truth,
+        )
+        deprecated_residuals = _assert_deprecated_wallet_residuals(
+            url,
+            elements_url,
+            username,
+            password,
+            scenario,
+            wallets,
         )
 
         current_ts = _write_silent_payment_scan_files(
@@ -3834,7 +4590,23 @@ def run_demo(
                     receiver,
                     txids[operation["id"]],
                 )
-            pending_sync = run_cli(data_root, "wallets", "sync", *scope, "--all")["data"]
+            pending_txids = {txids[operation["id"]] for operation in scenario["pending_operations"]}
+            for attempt in range(3):
+                pending_sync = run_cli(data_root, "wallets", "sync", *scope, "--all")["data"]
+                pending_rows = run_cli(
+                    data_root,
+                    "transactions",
+                    "list",
+                    *scope,
+                    "--limit",
+                    TRANSACTION_LIST_LIMIT,
+                    "--order",
+                    "asc",
+                )["data"]
+                if pending_txids.issubset({row["external_id"] for row in pending_rows}):
+                    break
+                if attempt < 2:
+                    time.sleep(0.25)
 
         transactions = run_cli(
             data_root,
@@ -3963,6 +4735,7 @@ def run_demo(
                     {"id": wallet["id"], "label": wallet["label"], "deprecated": wallet.get("deprecated")}
                     for wallet in deprecated_wallets
                 ],
+                "deprecated_wallet_residuals": deprecated_residuals,
                 "operations": [{"id": key, "txid": value} for key, value in sorted(txids.items())],
                 "sync": sync,
                 "pending_sync": pending_sync,
