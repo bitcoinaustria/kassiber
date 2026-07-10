@@ -265,6 +265,55 @@ class ExchangeImporterTest(unittest.TestCase):
         self.assertEqual(records[1]["kind"], "deposit")
         self.assertIsNone(records[1]["pricing_source_kind"])
 
+    def test_exchange_api_normalizers_accept_shared_fiat_currency_set(self):
+        binance = normalize_binance_records(
+            {
+                "fiat_payments": [
+                    {
+                        "orderNo": "order-pln",
+                        "status": "Completed",
+                        "cryptoCurrency": "BTC",
+                        "fiatCurrency": "PLN",
+                        "obtainAmount": "0.01",
+                        "sourceAmount": "2000.00",
+                        "createTime": 1700000000000,
+                    }
+                ]
+            }
+        )
+        kraken = normalize_kraken_records(
+            {
+                "result": {
+                    "ledger": {
+                        "L-PLN": {
+                            "refid": "T-PLN",
+                            "time": "1700000000",
+                            "type": "trade",
+                            "asset": "XXBT",
+                            "amount": "0.01",
+                            "fee": "0",
+                        }
+                    }
+                }
+            },
+            {
+                "result": {
+                    "trades": {
+                        "T-PLN": {
+                            "pair": "XXBTZPLN",
+                            "cost": "2000.00",
+                            "fee": "2.00",
+                            "price": "200000.00",
+                        }
+                    }
+                }
+            },
+        )
+
+        self.assertEqual(binance[0]["fiat_currency"], "PLN")
+        self.assertEqual(kraken[0]["asset"], "BTC")
+        self.assertEqual(kraken[0]["fiat_currency"], "PLN")
+
 
 if __name__ == "__main__":
     unittest.main()
