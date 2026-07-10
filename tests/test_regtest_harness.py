@@ -310,9 +310,9 @@ class RegtestHarnessTest(unittest.TestCase):
         base_time = datetime.fromisoformat(scenario["base_time"].replace("Z", "+00:00"))
         stress = scenario["stress"]
         self.assertTrue(stress["enabled"])
-        self.assertGreaterEqual(stress["cycles"], 130)
+        self.assertGreaterEqual(stress["cycles"], 84)
         stress_span_days = stress["cycles"] * stress["days_between_cycles"]
-        self.assertGreaterEqual(stress_span_days, 365 * 7)
+        self.assertGreaterEqual(stress_span_days, 365 * 6)
         self.assertLess(base_time, datetime(2020, 1, 1, tzinfo=timezone.utc))
         latest_time = datetime.fromisoformat(scenario["latest_time"].replace("Z", "+00:00"))
         estimated_end = datetime.fromtimestamp(
@@ -323,6 +323,11 @@ class RegtestHarnessTest(unittest.TestCase):
         self.assertLess(latest_time, datetime(2026, 7, 3, tzinfo=timezone.utc))
         self.assertTrue(stress["business_expenses"]["enabled"])
         self.assertGreaterEqual(len(stress["business_expenses"]["schedule"]), 6)
+        self.assertTrue(all("amount_eur" in row for row in stress["receipt_btc"].values()))
+        self.assertTrue(all("amount_eur" in row for row in stress["payment_btc"].values()))
+        self.assertTrue(all("amount_eur" in row for row in stress["business_expenses"]["schedule"]))
+        self.assertEqual(len(stress["fee_curve"]), 5)
+        self.assertTrue(stress["pool_payouts"]["enabled"])
         self.assertEqual(len(stress["wallet_rotations"]), 3)
         self.assertEqual(len(stress["swap_bridges"]), 3)
         # Deterministic amount/fee variation keeps the multi-year ledger from
@@ -331,7 +336,7 @@ class RegtestHarnessTest(unittest.TestCase):
         miner_wallet = next(wallet for wallet in scenario["wallets"] if wallet["key"] == "miner")
         self.assertEqual(miner_wallet["initial_btc"], "0.00025000")
         mining_events = stress["mining_events"]
-        self.assertEqual([event["role"] for event in mining_events], ["treasury", "treasury"])
+        self.assertEqual([event["role"] for event in mining_events], ["miner"])
         for event in mining_events:
             # Coinbase rewards must have >= 100 blocks left to mature before sync.
             self.assertLessEqual(int(event["cycle"]), stress["cycles"] - 35)
@@ -359,7 +364,8 @@ class RegtestHarnessTest(unittest.TestCase):
         fanouts = [op for op in scenario["operations"] if op["kind"] == "self_transfer_fanout"]
         self.assertEqual(len(fanouts), 1)
         self.assertEqual(len(fanouts[0]["outputs"]), 2)
-        self.assertEqual(scenario["expected"]["loan_marks"], 4)
+        self.assertEqual(scenario["expected"]["loan_marks"], 6)
+        self.assertEqual(scenario["expected"]["open_collateral_locks"], 1)
         self.assertIn("full-report.xlsx", scenario["expected"]["export_files"])
 
     def test_full_accounting_demo_ownership_proof_requires_derived_routes_before_manual_pairs(self):
@@ -687,7 +693,7 @@ class RegtestHarnessTest(unittest.TestCase):
             regtest_demo.validate_scenario(scenario)
         mining_event["cycle"] = mining_cycle
 
-        scenario["wallets"][0]["addresses"] = 99
+        scenario["wallets"][0]["addresses"] = 257
         with self.assertRaisesRegex(ValueError, "addresses"):
             regtest_demo.validate_scenario(scenario)
 
