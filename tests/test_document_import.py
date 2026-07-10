@@ -3,8 +3,8 @@ from __future__ import annotations
 import json
 import tempfile
 import unittest
+import unittest.mock as mock
 from pathlib import Path
-from unittest import mock
 
 from kassiber.ai import create_db_ai_provider
 from kassiber.core import accounts as core_accounts
@@ -197,6 +197,7 @@ class DocumentImportTest(unittest.TestCase):
         self.assertEqual(draft["summary"]["quarantined"], 1)
         self.assertEqual(draft["rows"][0]["status"], "ready")
         self.assertEqual(draft["rows"][1]["status"], "quarantined")
+        draft["rows"][0]["import_record"]["amount"] = "999999"
         user_content = client.chat_requests[0]["messages"][1]["content"]
         self.assertTrue(any(part.get("type") == "image_url" for part in user_content))
 
@@ -254,6 +255,81 @@ class DocumentImportTest(unittest.TestCase):
             self.conn.execute("SELECT COUNT(*) FROM transactions").fetchone()[0],
             0,
         )
+
+    def test_preview_rejects_source_changed_during_model_call(self):
+        client = FakeVisionClient()
+
+        def mutate_then_chat(**kwargs):
+            self.source.write_bytes(b"changed-during-preview")
+            return FakeVisionClient.chat(client, **kwargs)
+
+        client.chat = mutate_then_chat
+        with self.assertRaises(AppError) as raised:
+            document_import.preview_document_import(
+                self.conn,
+                source_file=str(self.source),
+                client_factory=lambda _provider: client,
+            )
+
+        self.assertEqual(raised.exception.code, "document_import_source_changed")
+
+    def test_generic_amount_without_crypto_asset_is_quarantined(self):
+        content = json.dumps(
+            {
+                "rows": [
+                    {
+                        "occurred_at": "2026-01-02",
+                        "direction": "outbound",
+                        "amount": "500.00",
+                        "fiat_currency": "EUR",
+                        "confidence": 0.99,
+                    }
+                ]
+            }
+        )
+        draft = document_import.preview_document_import(
+            self.conn,
+            source_file=str(self.source),
+            client_factory=lambda _provider: FakeVisionClient(content=content),
+        )
+
+        self.assertEqual(draft["rows"][0]["status"], "quarantined")
+        self.assertIn("missing_amount", draft["rows"][0]["flags"])
+        self.assertIsNone(draft["rows"][0]["import_record"])
+
+    def test_unparseable_localized_date_is_quarantined(self):
+        content = json.dumps(
+            {
+                "rows": [
+                    {
+                        "occurred_at": "02.01.2026",
+                        "direction": "inbound",
+                        "amount_btc": "0.01",
+                        "confidence": 0.99,
+                    }
+                ]
+            }
+        )
+        draft = document_import.preview_document_import(
+            self.conn,
+            source_file=str(self.source),
+            client_factory=lambda _provider: FakeVisionClient(content=content),
+        )
+
+        self.assertEqual(draft["rows"][0]["status"], "quarantined")
+        self.assertIn("invalid_date", draft["rows"][0]["flags"])
+
+    def test_fenced_nested_json_is_parsed_completely(self):
+        content = """```json
+        {"rows":[{"occurred_at":"2026-01-02","direction":"inbound","amount_btc":"0.01","confidence":0.99,"source_region":{"page":1}}]}
+        ```"""
+        draft = document_import.preview_document_import(
+            self.conn,
+            source_file=str(self.source),
+            client_factory=lambda _provider: FakeVisionClient(content=content),
+        )
+
+        self.assertEqual(draft["summary"]["ready"], 1)
 
     def test_decimal_comma_values_do_not_shift_magnitude(self):
         content = json.dumps(

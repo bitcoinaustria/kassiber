@@ -393,6 +393,7 @@ const STREAMING_DAEMON_KINDS: &[&str] = &[
     "ui.journals.process",
     "ui.rates.rebuild",
     "ui.wallets.document_import.preview",
+    "ui.wallets.document_import.import",
     "ui.sync.push",
     "ui.sync.pull",
     "ui.sync.join",

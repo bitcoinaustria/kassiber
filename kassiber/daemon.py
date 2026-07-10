@@ -3438,7 +3438,11 @@ def _ai_chat_screen_context(raw: Any) -> dict[str, Any] | None:
                 retryable=False,
             )
         safe_filters = redact_tool_arguments(filters)
-        if safe_filters != filters or len(json.dumps(json_ready(filters))) > 4096:
+        if (
+            safe_filters != filters
+            or _screen_context_contains_path_or_url(filters)
+            or len(json.dumps(json_ready(filters))) > 4096
+        ):
             raise AppError(
                 "ai.chat screen_context.filters contain sensitive or oversized data",
                 code="validation",
@@ -3467,6 +3471,25 @@ def _ai_chat_screen_context(raw: Any) -> dict[str, Any] | None:
         }.items()
         if value is not None
     }
+
+
+def _screen_context_contains_path_or_url(value: Any) -> bool:
+    if isinstance(value, dict):
+        return any(
+            _evidence_key_is_sensitive(key)
+            or _screen_context_contains_path_or_url(item)
+            for key, item in value.items()
+        )
+    if isinstance(value, list):
+        return any(_screen_context_contains_path_or_url(item) for item in value)
+    if isinstance(value, str):
+        stripped = value.strip()
+        return bool(
+            re.match(r"^[a-z][a-z0-9+.-]*://", stripped, re.IGNORECASE)
+            or stripped.startswith(("/", "~/", "\\\\"))
+            or re.match(r"^[A-Za-z]:[\\/]", stripped)
+        )
+    return False
 
 
 def _ai_chat_args(args: dict) -> dict[str, Any]:
@@ -8044,7 +8067,10 @@ def _document_import_rows(args: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def _document_import_selected_row_ids(args: dict[str, Any]) -> list[str] | None:
-    selected = args.get("selected_row_ids") or args.get("row_ids")
+    if "selected_row_ids" in args:
+        selected = args.get("selected_row_ids")
+    else:
+        selected = args.get("row_ids")
     if selected is None:
         return None
     if not isinstance(selected, list):
@@ -8107,6 +8133,13 @@ def _document_import_import_payload(
         source_sha256 = draft["source"].get("sha256")
         if isinstance(source_sha256, str) and source_sha256:
             expected_source_sha256 = source_sha256
+    if expected_source_sha256 is None:
+        raise AppError(
+            "document import requires the reviewed preview source hash",
+            code="validation",
+            hint="Preview the local document again before importing selected rows.",
+            retryable=False,
+        )
     return core_document_import.import_document_draft(
         conn,
         source_file=_document_import_source_file(args),

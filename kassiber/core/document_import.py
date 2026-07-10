@@ -21,7 +21,7 @@ from urllib.parse import urlparse
 from ..ai.client import ai_client_for_locator
 from ..ai.providers import get_ai_provider_api_key_for_use, resolve_ai_provider
 from ..errors import AppError
-from ..time_utils import now_iso
+from ..time_utils import now_iso, parse_timestamp
 from ..util import str_or_none
 from . import attachments as core_attachments
 from . import imports as core_imports
@@ -409,14 +409,13 @@ def _extract_json_object(text: str) -> dict[str, Any]:
             code="document_import_ai_response_invalid",
             retryable=True,
         )
-    fenced = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", raw, flags=re.DOTALL)
+    fenced = re.search(r"```(?:json)?\s*(.*?)\s*```", raw, flags=re.DOTALL)
     if fenced:
         raw = fenced.group(1)
-    else:
-        start = raw.find("{")
-        end = raw.rfind("}")
-        if start >= 0 and end > start:
-            raw = raw[start : end + 1]
+    start = raw.find("{")
+    end = raw.rfind("}")
+    if start >= 0 and end > start:
+        raw = raw[start : end + 1]
     try:
         payload = json.loads(raw)
     except json.JSONDecodeError as exc:
@@ -530,10 +529,13 @@ def _row_flags(
     confidence: Decimal,
     cell_confidences: Mapping[str, float],
     threshold: Decimal,
+    invalid_date: bool = False,
 ) -> list[str]:
     flags: list[str] = []
     if not occurred_at:
         flags.append("missing_date")
+    if invalid_date:
+        flags.append("invalid_date")
     if not direction:
         flags.append("missing_direction")
     if not amount_btc:
@@ -554,15 +556,29 @@ def _draft_row(
     threshold: Decimal,
     source_hash: str,
 ) -> dict[str, Any]:
-    occurred_at = str_or_none(raw.get("occurred_at") or raw.get("date"))
+    raw_occurred_at = str_or_none(raw.get("occurred_at") or raw.get("date"))
+    invalid_date = False
+    try:
+        occurred_at = parse_timestamp(raw_occurred_at) if raw_occurred_at else None
+    except AppError:
+        occurred_at = None
+        invalid_date = True
     direction = _direction(raw.get("direction"))
-    amount_btc = _decimal_text(
-        raw.get("amount_btc")
-        if raw.get("amount_btc") not in (None, "")
-        else raw.get("amount")
-    )
-    fee_btc = _decimal_text(raw.get("fee_btc") if raw.get("fee_btc") not in (None, "") else raw.get("fee"))
-    asset = (str_or_none(raw.get("asset")) or "BTC").upper()
+    asset_value = str_or_none(raw.get("asset"))
+    asset = asset_value.upper() if asset_value else None
+    explicit_crypto_amount = raw.get("amount_btc")
+    if explicit_crypto_amount in (None, ""):
+        explicit_crypto_amount = raw.get("amount_crypto")
+    amount_value = explicit_crypto_amount
+    if amount_value in (None, "") and asset:
+        amount_value = raw.get("amount")
+    amount_btc = _decimal_text(amount_value)
+    if asset is None and explicit_crypto_amount not in (None, ""):
+        asset = "BTC"
+    fee_value = raw.get("fee_btc")
+    if fee_value in (None, ""):
+        fee_value = raw.get("fee_crypto")
+    fee_btc = _decimal_text(fee_value)
     fiat_currency = str_or_none(raw.get("fiat_currency"))
     fiat_value = _decimal_text(raw.get("fiat_value"))
     fiat_rate = _decimal_text(raw.get("fiat_rate"))
@@ -575,6 +591,7 @@ def _draft_row(
         confidence=confidence,
         cell_confidences=cell_confidences,
         threshold=threshold,
+        invalid_date=invalid_date,
     )
     status = "ready" if not flags else "quarantined"
     evidence_text = str_or_none(raw.get("evidence_text"))
@@ -583,7 +600,7 @@ def _draft_row(
     model_row_id = str_or_none(raw.get("id") or raw.get("row_id"))
     row_id = f"docrow-{source_hash[:16]}-{index:03d}"
     import_record = None
-    if occurred_at and direction and amount_btc:
+    if occurred_at and direction and amount_btc and asset:
         import_record = {
             "id": row_id,
             "occurred_at": occurred_at,
@@ -715,7 +732,15 @@ def preview_document_import(
     models = client.list_models(strict=True)
     selected_model, installed_models = _choose_model(provider, models, model)
 
-    parts, cleanup = _document_parts(source_path, max_pages=page_limit)
+    stable_dir = tempfile.TemporaryDirectory(prefix="kassiber-ocr-source-")
+    stable_path = Path(stable_dir.name) / source_path.name
+    shutil.copyfile(source_path, stable_path)
+    source_hash = _sha256_file(stable_path)
+    try:
+        parts, cleanup = _document_parts(stable_path, max_pages=page_limit)
+    except Exception:
+        stable_dir.cleanup()
+        raise
     try:
         message_content: list[dict[str, Any]] = [
             {
@@ -740,9 +765,17 @@ def preview_document_import(
         )
     finally:
         cleanup()
+        stable_dir.cleanup()
 
     payload = _extract_json_object(str(response.get("content") or ""))
-    source_hash = _sha256_file(source_path)
+    if _sha256_file(source_path) != source_hash:
+        raise AppError(
+            "The OCR source changed while preview was running",
+            code="document_import_source_changed",
+            hint="Preview the document again before reviewing its rows.",
+            details={"filename": source_path.name},
+            retryable=False,
+        )
     rows = _draft_rows(payload, threshold=threshold, source_hash=source_hash)
     ready = sum(1 for row in rows if row["status"] == "ready")
     quarantined = sum(1 for row in rows if row["status"] != "ready")
@@ -779,6 +812,7 @@ def _import_records_from_rows(
     *,
     include_quarantined: bool,
     selected_row_ids: Sequence[str] | None,
+    source_hash: str,
 ) -> tuple[list[dict[str, Any]], int]:
     selected = (
         {str(row_id) for row_id in selected_row_ids if str(row_id)}
@@ -795,14 +829,67 @@ def _import_records_from_rows(
         if status != "ready" and not include_quarantined:
             skipped_quarantined += 1
             continue
-        record = row.get("import_record")
-        if not isinstance(record, Mapping):
+        record = _import_record_from_draft_row(row, source_hash=source_hash)
+        if record is None:
             skipped_quarantined += 1
             continue
-        clean = dict(record)
-        clean["id"] = str(clean.get("id") or row_id or uuid.uuid4())
-        records.append(clean)
+        records.append(record)
     return records, skipped_quarantined
+
+
+def _import_record_from_draft_row(
+    row: Mapping[str, Any],
+    *,
+    source_hash: str,
+) -> dict[str, Any] | None:
+    """Rebuild an import row from validated public draft fields.
+
+    The renderer receives ``import_record`` for display convenience, but the
+    daemon never trusts that hidden object on the write path.
+    """
+
+    row_id = str(row.get("id") or "")
+    if not re.fullmatch(rf"docrow-{re.escape(source_hash[:16])}-\d{{3}}", row_id):
+        return None
+    draft = row.get("record")
+    if not isinstance(draft, Mapping):
+        return None
+    try:
+        occurred_at = parse_timestamp(draft.get("occurred_at"))
+    except AppError:
+        return None
+    direction = _direction(draft.get("direction"))
+    asset = (str_or_none(draft.get("asset")) or "").upper()
+    amount = _decimal_text(draft.get("amount_btc"))
+    fee = _decimal_text(draft.get("fee_btc")) or "0"
+    if direction is None or asset not in {"BTC", "LBTC"} or amount is None:
+        return None
+    confidence = _confidence(row.get("confidence"))
+    cell_confidences = _cell_confidences(row.get("cell_confidences"))
+    evidence_text = str_or_none(row.get("evidence_text"))
+    if evidence_text:
+        evidence_text = evidence_text[:4000]
+    return {
+        "id": row_id,
+        "occurred_at": occurred_at,
+        "direction": direction,
+        "asset": asset,
+        "amount": amount,
+        "fee": fee,
+        "fiat_currency": str_or_none(draft.get("fiat_currency")),
+        "fiat_value": _decimal_text(draft.get("fiat_value")),
+        "fiat_rate": _decimal_text(draft.get("fiat_rate")),
+        "counterparty": str_or_none(draft.get("counterparty")),
+        "description": str_or_none(draft.get("description")) or evidence_text,
+        "raw_json": {
+            "source": "document_import",
+            "row_id": row_id,
+            "model_confidence": float(confidence),
+            "cell_confidences": cell_confidences,
+            "source_region": _source_region(row.get("source_region")),
+            "evidence_text": evidence_text,
+        },
+    }
 
 
 def import_document_draft(
@@ -842,6 +929,7 @@ def import_document_draft(
         rows,
         include_quarantined=include_quarantined,
         selected_row_ids=selected_row_ids,
+        source_hash=source_sha256,
     )
     if not records:
         raise AppError(
@@ -919,7 +1007,9 @@ def import_document_draft(
                 try:
                     copied_path.unlink()
                 except OSError:
-                    pass
+                    # Best-effort rollback cleanup: the DB savepoint is still
+                    # authoritative and attachment GC can remove any orphan.
+                    continue
         raise
     outcome.update(
         {

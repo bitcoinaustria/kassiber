@@ -468,7 +468,11 @@ optional `selected_row_ids`, optional `include_quarantined`, and optional
 default, then copies the source file into managed attachments for every
 inserted or enriched transaction. When a full preview draft is supplied, the
 daemon verifies `draft.source.sha256` against the current file before writing;
-a changed source fails with `document_import_source_changed`.
+a changed source fails with `document_import_source_changed`. The full preview
+draft (including its source hash) is required. Import reconstructs normalized
+records from validated visible draft fields rather than trusting the renderer's
+`import_record` object. Both preview and import use the long-running supervisor
+budget because local OCR and multi-row evidence copying can exceed 15 seconds.
 
 `ui.connections.sources` returns the daemon's authoritative catalog of
 supported wallet kinds (with summary/config-fields metadata) and the

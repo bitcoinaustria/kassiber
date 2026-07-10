@@ -4953,6 +4953,50 @@ class DaemonSmokeTest(unittest.TestCase):
             )
         self.assertEqual(raised.exception.code, "validation")
 
+        with self.assertRaises(AppError) as path_raised:
+            _ai_chat_args(
+                {
+                    **base,
+                    "screen_context": {
+                        "route": "/transactions",
+                        "filters": {"nested": {"file_path": "/private/tax.pdf"}},
+                    },
+                }
+            )
+        self.assertEqual(path_raised.exception.code, "validation")
+
+    def test_document_import_preserves_explicit_empty_row_selection(self):
+        self.assertEqual(
+            daemon_module._document_import_selected_row_ids(
+                {"selected_row_ids": []}
+            ),
+            [],
+        )
+
+    def test_document_import_daemon_requires_reviewed_source_hash(self):
+        with (
+            mock.patch(
+                "kassiber.daemon.resolve_scope",
+                return_value=({"id": "workspace-1"}, {"id": "profile-1"}),
+            ),
+            mock.patch(
+                "kassiber.daemon.core_resolve_wallet",
+                return_value={"id": "wallet-1"},
+            ),
+            self.assertRaises(AppError) as raised,
+        ):
+            daemon_module._document_import_import_payload(
+                object(),
+                "/tmp/data",
+                {
+                    "wallet": "wallet-1",
+                    "source_file": "/tmp/source.png",
+                    "rows": [],
+                },
+            )
+
+        self.assertEqual(raised.exception.code, "validation")
+
     def test_mutating_tool_uses_daemon_main_thread_connection(self):
         task_queue = queue.Queue()
         runtime = AiToolRuntime(

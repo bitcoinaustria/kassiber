@@ -339,7 +339,11 @@ provides them, and a normalized `import_record`. `import-document` imports
 only ready rows unless `--include-quarantined` is passed, then copies the
 source image/PDF into the managed attachments tree for every inserted or
 enriched transaction. The preview carries a SHA-256 digest of the local source,
-and import rejects the draft if that file changed between review and commit.
+and import rejects the draft if that file changed during preview or between
+review and commit. The daemon reconstructs import rows from validated draft
+fields and the required source hash; renderer-supplied hidden import records
+are never trusted on the write path. Fiat-only/generic amounts and unparseable
+dates stay quarantined instead of being guessed as Bitcoin transactions.
 
 Off-device AI providers are hard-disabled for this path even if they are
 configured for chat. URLs are also rejected: open Google Drive/Docs links in
