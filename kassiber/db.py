@@ -24,7 +24,7 @@ import json
 import os
 import sqlite3
 import tempfile
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from pathlib import Path
 
 from .errors import AppError
@@ -1190,10 +1190,8 @@ def _atomic_write_managed_settings(settings_path, payload):
             os.fsync(handle.fileno())
         os.replace(temporary_path, settings_path)
     finally:
-        try:
+        with suppress(FileNotFoundError):
             temporary_path.unlink()
-        except FileNotFoundError:
-            pass
 
 
 def update_managed_settings(data_root, *, updates=None, remove=()):

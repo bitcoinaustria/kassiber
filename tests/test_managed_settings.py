@@ -29,7 +29,7 @@ class ManagedSettingsTests(unittest.TestCase):
                         data_root,
                         updates={f"agent_{index}": index},
                     )
-                except BaseException as exc:  # pragma: no cover - assertion aid
+                except Exception as exc:  # pragma: no cover - assertion aid
                     failures.append(exc)
 
             threads = [threading.Thread(target=writer, args=(index,)) for index in range(8)]
