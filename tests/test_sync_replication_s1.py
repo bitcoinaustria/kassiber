@@ -18,6 +18,7 @@ from kassiber.core.sync_replication.schema_allowlist import (
     public_wallet_config,
 )
 from kassiber.core.transaction_history import append_event
+from kassiber.daemon_sync_replication import dispatch_sync_ui
 from kassiber.db import open_db
 from kassiber.errors import AppError
 from kassiber.secrets.sqlcipher import sqlcipher_available
@@ -182,6 +183,20 @@ class SyncIdentityAndCaptureTests(unittest.TestCase):
             self.conn.execute("SELECT COUNT(*) FROM sync_member_private_keys").fetchone()[0],
             0,
         )
+
+    def test_desktop_enable_returns_status_with_local_device(self):
+        result = dispatch_sync_ui(
+            self.conn,
+            data_root=self.root,
+            kind="ui.sync.enable",
+            args={"member_name": "Owner", "device_label": "Test Mac"},
+        )
+
+        self.assertTrue(result["configured"])
+        self.assertTrue(result["enabled"])
+        self.assertEqual(result["members_list"][0]["display_name"], "Owner")
+        self.assertEqual(result["devices_list"][0]["label"], "Test Mac")
+        self.assertEqual(result["devices_list"][0]["local_device"], 1)
 
     def test_plaintext_database_cannot_hold_sync_keys(self):
         other_root = self.root / "plaintext"

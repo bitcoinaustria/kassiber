@@ -207,7 +207,7 @@ function CodeOutput({ value, label }: { value: string; label: string }) {
 }
 
 export function SyncSettingsPanel({ encryptedWorkspace }: { encryptedWorkspace: boolean }) {
-  const { t } = useTranslation("settings");
+  const { t } = useTranslation(["settings", "common"]);
   const statusQuery = useDaemon<SyncStatusData>("ui.sync.status", undefined, {
     refetchOnMount: "always",
   });
@@ -269,7 +269,15 @@ export function SyncSettingsPanel({ encryptedWorkspace }: { encryptedWorkspace: 
     return <p className="text-sm text-muted-foreground">{t("sync.loading")}</p>;
   }
   if (statusQuery.error) {
-    return <p className="text-sm text-destructive">{errorMessage(statusQuery.error)}</p>;
+    return (
+      <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
+        <p>{errorMessage(statusQuery.error)}</p>
+        <Button type="button" size="sm" variant="outline" onClick={() => void statusQuery.refetch()}>
+          <RefreshCw className="size-4" />
+          {t("common:actions.retry")}
+        </Button>
+      </div>
+    );
   }
 
   return (

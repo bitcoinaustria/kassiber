@@ -631,7 +631,7 @@ def list_devices(conn: sqlite3.Connection, *, profile_id: str) -> list[dict[str,
         """
         SELECT d.id, d.member_id, m.display_name AS member_name, d.label,
                d.paired_at, d.last_seen_at, d.revoked_at,
-               CASE WHEN p.device_id IS NULL THEN 0 ELSE 1 END AS local_device
+               CASE WHEN p.id IS NULL THEN 0 ELSE 1 END AS local_device
         FROM sync_devices d
         JOIN sync_members m ON m.id = d.member_id
         LEFT JOIN sync_books b ON b.profile_id = d.profile_id
