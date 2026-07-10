@@ -4447,6 +4447,18 @@ def _journal_source_overlap_warning(conn, profile, repair_attempt=None):
 def process_journals(conn, workspace_ref, profile_ref):
     _, profile = resolve_scope(conn, workspace_ref, profile_ref)
     require_tax_processing_supported(profile)
+    sync_conflicts = conn.execute(
+        "SELECT COUNT(*) AS count FROM sync_conflicts WHERE profile_id = ? AND status = 'open'",
+        (profile["id"],),
+    ).fetchone()["count"]
+    if sync_conflicts:
+        raise AppError(
+            "journal processing is blocked by unresolved sync conflicts",
+            code="sync_conflicts_open",
+            hint="Run `kassiber sync conflicts list` and resolve every high-stakes conflict first.",
+            details={"profile_id": profile["id"], "open_conflicts": int(sync_conflicts)},
+            retryable=False,
+        )
     conn.execute("SAVEPOINT journals_process")
     try:
         source_overlap_repair = _repair_journal_source_overlaps(conn, profile)

@@ -298,7 +298,14 @@ CREATE TABLE IF NOT EXISTS transaction_edit_events (
     journal_input_version_after INTEGER NOT NULL DEFAULT 0,
     last_processed_input_version INTEGER NOT NULL DEFAULT 0,
     last_processed_at TEXT,
-    last_processed_tx_count INTEGER NOT NULL DEFAULT 0
+    last_processed_tx_count INTEGER NOT NULL DEFAULT 0,
+    sync_event_id TEXT,
+    sync_replica_id TEXT,
+    sync_replica_seq INTEGER,
+    sync_hlc TEXT,
+    sync_author_member_id TEXT,
+    sync_signature TEXT,
+    sync_context_json TEXT
 );
 
 CREATE TABLE IF NOT EXISTS transaction_edit_fields (
@@ -327,6 +334,339 @@ CREATE INDEX IF NOT EXISTS idx_transaction_edit_fields_event
 
 CREATE INDEX IF NOT EXISTS idx_transaction_edit_fields_field
     ON transaction_edit_fields(field, event_id);
+
+-- Cross-device replication is strictly opt-in. Merely opening a database
+-- creates these empty schema tables, but no identity, key, event, transport,
+-- listener, or other behavior exists until a profile is explicitly enabled.
+CREATE TABLE IF NOT EXISTS sync_books (
+    profile_id TEXT PRIMARY KEY REFERENCES profiles(id) ON DELETE CASCADE,
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    book_id TEXT NOT NULL UNIQUE,
+    enabled INTEGER NOT NULL DEFAULT 1,
+    local_member_id TEXT NOT NULL,
+    local_device_id TEXT NOT NULL,
+    local_replica_id TEXT NOT NULL,
+    hmac_key_b64 TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS sync_members (
+    id TEXT PRIMARY KEY,
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    display_name TEXT NOT NULL,
+    signing_public_key_b64 TEXT NOT NULL,
+    role TEXT NOT NULL CHECK(role IN ('owner', 'editor', 'auditor')),
+    added_hlc TEXT NOT NULL,
+    added_at TEXT NOT NULL,
+    revoked_hlc TEXT,
+    revoked_at TEXT,
+    inviter_member_id TEXT,
+    record_signature TEXT NOT NULL,
+    UNIQUE(profile_id, signing_public_key_b64)
+);
+
+CREATE INDEX IF NOT EXISTS idx_sync_members_profile_active
+    ON sync_members(profile_id, role, revoked_at);
+
+CREATE TABLE IF NOT EXISTS sync_member_private_keys (
+    member_id TEXT PRIMARY KEY REFERENCES sync_members(id) ON DELETE CASCADE,
+    signing_private_key_b64 TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS sync_devices (
+    id TEXT PRIMARY KEY,
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    member_id TEXT NOT NULL REFERENCES sync_members(id) ON DELETE CASCADE,
+    recipient_public_key TEXT NOT NULL,
+    label TEXT NOT NULL,
+    paired_hlc TEXT NOT NULL,
+    paired_at TEXT NOT NULL,
+    last_seen_at TEXT,
+    revoked_hlc TEXT,
+    revoked_at TEXT,
+    record_signature TEXT NOT NULL,
+    UNIQUE(profile_id, recipient_public_key)
+);
+
+CREATE INDEX IF NOT EXISTS idx_sync_devices_profile_active
+    ON sync_devices(profile_id, member_id, revoked_at);
+
+CREATE TABLE IF NOT EXISTS sync_device_private_keys (
+    device_id TEXT PRIMARY KEY REFERENCES sync_devices(id) ON DELETE CASCADE,
+    age_identity TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS sync_replicas (
+    id TEXT PRIMARY KEY,
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    member_id TEXT NOT NULL REFERENCES sync_members(id) ON DELETE CASCADE,
+    device_id TEXT NOT NULL REFERENCES sync_devices(id) ON DELETE CASCADE,
+    last_seq INTEGER NOT NULL DEFAULT 0,
+    last_hlc TEXT,
+    last_event_hash TEXT,
+    last_seen_at TEXT,
+    created_at TEXT NOT NULL,
+    UNIQUE(profile_id, member_id, device_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_sync_replicas_profile
+    ON sync_replicas(profile_id, id);
+
+CREATE TABLE IF NOT EXISTS sync_events (
+    id TEXT PRIMARY KEY,
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    replica_id TEXT NOT NULL,
+    replica_seq INTEGER NOT NULL,
+    hlc TEXT NOT NULL,
+    author_member_id TEXT NOT NULL,
+    event_type TEXT NOT NULL,
+    entity_table TEXT NOT NULL,
+    entity_key TEXT NOT NULL,
+    payload_json TEXT NOT NULL,
+    context_json TEXT NOT NULL,
+    previous_hash TEXT,
+    event_hash TEXT NOT NULL,
+    signature TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    applied_at TEXT NOT NULL,
+    UNIQUE(replica_id, replica_seq)
+);
+
+CREATE INDEX IF NOT EXISTS idx_sync_events_profile_hlc
+    ON sync_events(profile_id, hlc, replica_id, replica_seq);
+
+CREATE INDEX IF NOT EXISTS idx_sync_events_entity
+    ON sync_events(profile_id, entity_table, entity_key, hlc);
+
+CREATE TABLE IF NOT EXISTS sync_row_state (
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    entity_table TEXT NOT NULL,
+    entity_key TEXT NOT NULL,
+    row_hash TEXT,
+    last_event_id TEXT REFERENCES sync_events(id) ON DELETE SET NULL,
+    last_hlc TEXT NOT NULL,
+    tombstoned INTEGER NOT NULL DEFAULT 0,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY(profile_id, entity_table, entity_key)
+);
+
+CREATE INDEX IF NOT EXISTS idx_sync_row_state_profile_table
+    ON sync_row_state(profile_id, entity_table, tombstoned);
+
+CREATE TABLE IF NOT EXISTS sync_tombstones (
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    entity_table TEXT NOT NULL,
+    entity_key TEXT NOT NULL,
+    event_id TEXT NOT NULL REFERENCES sync_events(id) ON DELETE CASCADE,
+    hlc TEXT NOT NULL,
+    deleted_by_member_id TEXT NOT NULL,
+    deleted_at TEXT NOT NULL,
+    gc_after TEXT,
+    PRIMARY KEY(profile_id, entity_table, entity_key)
+);
+
+CREATE TABLE IF NOT EXISTS sync_ingests (
+    id TEXT PRIMARY KEY,
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    replica_id TEXT NOT NULL,
+    first_seq INTEGER NOT NULL,
+    last_seq INTEGER NOT NULL,
+    bundle_hash TEXT NOT NULL,
+    prior_bundle_hash TEXT,
+    ingested_at TEXT NOT NULL,
+    UNIQUE(profile_id, bundle_hash)
+);
+
+CREATE INDEX IF NOT EXISTS idx_sync_ingests_replica_range
+    ON sync_ingests(profile_id, replica_id, first_seq, last_seq);
+
+CREATE TABLE IF NOT EXISTS sync_conflicts (
+    id TEXT PRIMARY KEY,
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    entity_table TEXT NOT NULL,
+    entity_key TEXT NOT NULL,
+    field TEXT NOT NULL,
+    local_event_id TEXT NOT NULL,
+    remote_event_id TEXT NOT NULL,
+    local_value_json TEXT,
+    remote_value_json TEXT,
+    status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open', 'resolved')),
+    resolution_event_id TEXT,
+    resolved_by_member_id TEXT,
+    resolved_at TEXT,
+    created_at TEXT NOT NULL,
+    UNIQUE(profile_id, entity_table, entity_key, field, local_event_id, remote_event_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_sync_conflicts_profile_open
+    ON sync_conflicts(profile_id, status, created_at);
+
+CREATE TABLE IF NOT EXISTS sync_notices (
+    id TEXT PRIMARY KEY,
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    code TEXT NOT NULL,
+    severity TEXT NOT NULL CHECK(severity IN ('info', 'warning', 'blocking')),
+    replica_id TEXT,
+    member_id TEXT,
+    details_json TEXT NOT NULL DEFAULT '{}',
+    acknowledged_at TEXT,
+    created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_sync_notices_profile_open
+    ON sync_notices(profile_id, acknowledged_at, created_at);
+
+CREATE TABLE IF NOT EXISTS sync_bundle_exports (
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    replica_id TEXT NOT NULL,
+    last_seq INTEGER NOT NULL DEFAULT 0,
+    last_bundle_hash TEXT,
+    exported_at TEXT,
+    PRIMARY KEY(profile_id, replica_id)
+);
+
+CREATE TABLE IF NOT EXISTS sync_pending_events (
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    replica_id TEXT NOT NULL,
+    replica_seq INTEGER NOT NULL,
+    event_json TEXT NOT NULL,
+    bundle_hash TEXT NOT NULL,
+    received_at TEXT NOT NULL,
+    PRIMARY KEY(profile_id, replica_id, replica_seq)
+);
+
+CREATE INDEX IF NOT EXISTS idx_sync_pending_events_next
+    ON sync_pending_events(profile_id, replica_id, replica_seq);
+
+CREATE TABLE IF NOT EXISTS sync_rejected_events (
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    replica_id TEXT NOT NULL,
+    replica_seq INTEGER NOT NULL,
+    event_hash TEXT NOT NULL,
+    reason TEXT NOT NULL,
+    received_at TEXT NOT NULL,
+    PRIMARY KEY(profile_id, replica_id, replica_seq)
+);
+
+CREATE TABLE IF NOT EXISTS sync_pending_blobs (
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    bundle_hash TEXT NOT NULL,
+    content_hmac TEXT NOT NULL,
+    payload BLOB NOT NULL,
+    PRIMARY KEY(profile_id, bundle_hash, content_hmac)
+);
+
+CREATE TABLE IF NOT EXISTS sync_field_state (
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    entity_table TEXT NOT NULL,
+    entity_key TEXT NOT NULL,
+    field TEXT NOT NULL,
+    event_id TEXT NOT NULL REFERENCES sync_events(id) ON DELETE CASCADE,
+    hlc TEXT NOT NULL,
+    value_json TEXT,
+    PRIMARY KEY(profile_id, entity_table, entity_key, field)
+);
+
+CREATE TABLE IF NOT EXISTS sync_id_map (
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    entity_table TEXT NOT NULL,
+    wire_id TEXT NOT NULL,
+    local_id TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY(profile_id, entity_table, wire_id)
+);
+
+CREATE TABLE IF NOT EXISTS sync_join_requests (
+    id TEXT PRIMARY KEY,
+    member_id TEXT NOT NULL,
+    device_id TEXT NOT NULL,
+    replica_id TEXT NOT NULL,
+    member_name TEXT NOT NULL,
+    device_label TEXT NOT NULL,
+    signing_public_key_b64 TEXT NOT NULL,
+    signing_private_key_b64 TEXT NOT NULL,
+    recipient_public_key TEXT NOT NULL,
+    age_identity TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    consumed_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS sync_transports (
+    id TEXT PRIMARY KEY,
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    kind TEXT NOT NULL CHECK(kind IN ('folder', 'webdav', 's3')),
+    label TEXT NOT NULL,
+    config_json TEXT NOT NULL,
+    credential_json TEXT NOT NULL DEFAULT '{}',
+    enabled INTEGER NOT NULL DEFAULT 1,
+    last_push_at TEXT,
+    last_pull_at TEXT,
+    last_error_at TEXT,
+    last_error_code TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    UNIQUE(profile_id, label)
+);
+
+CREATE INDEX IF NOT EXISTS idx_sync_transports_profile_enabled
+    ON sync_transports(profile_id, enabled, kind);
+
+CREATE TABLE IF NOT EXISTS sync_mailbox_heads (
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    transport_id TEXT NOT NULL REFERENCES sync_transports(id) ON DELETE CASCADE,
+    replica_id TEXT NOT NULL,
+    last_seq INTEGER NOT NULL,
+    bundle_hash TEXT NOT NULL,
+    head_hash TEXT NOT NULL,
+    observed_at TEXT NOT NULL,
+    PRIMARY KEY(profile_id, transport_id, replica_id)
+);
+
+CREATE TABLE IF NOT EXISTS sync_peer_status (
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    transport_id TEXT NOT NULL REFERENCES sync_transports(id) ON DELETE CASCADE,
+    replica_id TEXT NOT NULL,
+    member_id TEXT NOT NULL,
+    device_id TEXT NOT NULL,
+    last_head_seq INTEGER NOT NULL DEFAULT 0,
+    last_head_hash TEXT,
+    last_seen_at TEXT,
+    last_bundle_at TEXT,
+    status TEXT NOT NULL DEFAULT 'never_seen',
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY(profile_id, transport_id, replica_id)
+);
+
+CREATE TABLE IF NOT EXISTS sync_replica_acknowledgements (
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    observer_replica_id TEXT NOT NULL,
+    subject_replica_id TEXT NOT NULL,
+    acknowledged_seq INTEGER NOT NULL DEFAULT 0,
+    observed_hlc TEXT,
+    observed_at TEXT NOT NULL,
+    PRIMARY KEY(profile_id, observer_replica_id, subject_replica_id)
+);
+
+CREATE TABLE IF NOT EXISTS sync_tombstone_gc_log (
+    id TEXT PRIMARY KEY,
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    entity_table TEXT NOT NULL,
+    entity_key TEXT NOT NULL,
+    delete_event_id TEXT NOT NULL,
+    delete_hlc TEXT NOT NULL,
+    quorum_json TEXT NOT NULL,
+    horizon_days INTEGER NOT NULL,
+    compacted_at TEXT NOT NULL,
+    UNIQUE(profile_id, entity_table, entity_key, delete_event_id)
+);
 
 CREATE TABLE IF NOT EXISTS journal_entries (
     id TEXT PRIMARY KEY,
@@ -1479,6 +1819,22 @@ def ensure_schema_compat(conn):
     ensure_column(conn, "transactions", "at_regime_override", "TEXT")
     ensure_column(conn, "transactions", "at_category_override", "TEXT")
     ensure_column(conn, "transactions", "privacy_boundary", "TEXT")
+    ensure_column(conn, "transaction_edit_events", "sync_event_id", "TEXT")
+    ensure_column(conn, "transaction_edit_events", "sync_replica_id", "TEXT")
+    ensure_column(conn, "transaction_edit_events", "sync_replica_seq", "INTEGER")
+    ensure_column(conn, "transaction_edit_events", "sync_hlc", "TEXT")
+    ensure_column(conn, "transaction_edit_events", "sync_author_member_id", "TEXT")
+    ensure_column(conn, "transaction_edit_events", "sync_signature", "TEXT")
+    ensure_column(conn, "transaction_edit_events", "sync_context_json", "TEXT")
+    conn.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_transaction_edit_events_sync_event "
+        "ON transaction_edit_events(sync_event_id) WHERE sync_event_id IS NOT NULL"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_transaction_edit_events_sync_replica_seq "
+        "ON transaction_edit_events(sync_replica_id, sync_replica_seq) "
+        "WHERE sync_replica_id IS NOT NULL"
+    )
     ensure_column(conn, "journal_entries", "fiat_value_exact", "TEXT")
     ensure_column(conn, "journal_entries", "unit_cost_exact", "TEXT")
     ensure_column(conn, "journal_entries", "cost_basis_exact", "TEXT")

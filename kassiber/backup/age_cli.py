@@ -166,13 +166,15 @@ def decrypt_age_stream(
     *,
     passphrase: Optional[str] = None,
     identity_file: Optional[Path] = None,
+    identity: Optional[str] = None,
     backend: Optional[AgeBackend] = None,
 ) -> None:
     """Read age ciphertext from `source` and write plaintext into `destination`."""
 
-    if (passphrase is None) == (identity_file is None):
+    provided = sum(value is not None for value in (passphrase, identity_file, identity))
+    if provided != 1:
         raise AppError(
-            "decrypt_age_stream requires exactly one of `passphrase` or `identity_file`",
+            "decrypt_age_stream requires exactly one of `passphrase`, `identity_file`, or `identity`",
             code="invalid_age_call",
             retryable=False,
         )
@@ -184,6 +186,12 @@ def decrypt_age_stream(
         args: list[str] = ["--decrypt"]
         if identity_file is not None:
             args.extend(["--identity", str(identity_file)])
+        if identity is not None:
+            raise AppError(
+                "in-memory age identities require the pyrage backend",
+                code="age_identity_mode_unsupported",
+                retryable=False,
+            )
         if passphrase is not None:
             raise AppError(
                 "age binary passphrase mode is not safely supported via subprocess yet; install pyrage",
@@ -209,8 +217,11 @@ def decrypt_age_stream(
         import pyrage
         from pyrage import ssh, x25519
 
-        with open(identity_file, "r", encoding="utf-8") as handle:
-            identity_text = handle.read()
+        if identity is not None:
+            identity_text = identity
+        else:
+            with open(identity_file, "r", encoding="utf-8") as handle:
+                identity_text = handle.read()
         identities = []
         try:
             identities.append(x25519.Identity.from_str(identity_text.strip()))

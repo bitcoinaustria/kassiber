@@ -17,6 +17,7 @@ export type SettingsSectionId =
   | "security-privacy"
   | "security-lock"
   | "assistant-ai"
+  | "data-sync"
   | "data-storage"
   | "desktop-terminal"
   | "desktop-developer";
@@ -33,7 +34,7 @@ const SETTINGS_SECTION_FOR_SLUG: Record<string, SettingsSectionId> = {
   // Network & layers
   bitcoin: "network-bitcoin",
   backends: "network-bitcoin",
-  sync: "network-bitcoin",
+  sync: "data-sync",
   lightning: "network-lightning",
   liquid: "network-liquid",
   market: "network-market",
@@ -48,6 +49,7 @@ const SETTINGS_SECTION_FOR_SLUG: Record<string, SettingsSectionId> = {
   // Data
   data: "data-storage",
   storage: "data-storage",
+  replication: "data-sync",
   // Desktop
   terminal: "desktop-terminal",
   desktop: "desktop-terminal",

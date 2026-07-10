@@ -97,6 +97,12 @@ carries a working Austrian (§ 27b EStG) plugin with E 1kv exports.
   optional SQLCipher 4 passphrase encryption; single-project `tar | age`
   backups recoverable with stock `age` + `tar` + `sqlcipher` even if
   Kassiber disappears.
+- **Encrypted device and team sync** — opt-in authored-event replication over
+  sealed courier files, a shared folder, WebDAV, or S3-compatible storage;
+  signed owner/editor/auditor membership, blocking financial-edit conflicts,
+  owner snapshots for late joiners, plus explicit SPAKE2 LAN and optional Tor
+  fast paths. No Kassiber account, server, live-database copy, or inbound port
+  is required for the default mailbox workflow.
 - **Optional remembered unlock** — macOS desktop builds can save the database
   passphrase in Keychain behind local user presence. The CLI can explicitly opt
   into the same item on macOS or use Windows Credential Manager / Linux Secret
@@ -247,6 +253,7 @@ overview.
   [AT glossary](docs/reference/i18n-glossary.md) ·
   [Daemon](docs/reference/daemon.md) ·
   [Machine output](docs/reference/machine-output.md) ·
+  [Device & team sync](docs/reference/device-sync.md) ·
   [Prerelease binaries](docs/reference/prerelease-binaries.md) ·
   [Homebrew Cask](docs/reference/homebrew-cask.md)
 - **Architecture & plans** · [Overview](docs/plan/00-overview.md) ·

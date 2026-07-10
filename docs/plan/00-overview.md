@@ -87,6 +87,8 @@ See [01-stack-decision.md](01-stack-decision.md) for the stack decision and
 - `09-source-of-funds.md`: source-of-funds report boundary and flow-link design
 - `10-secret-management.md`: SQLCipher/backup secret-handling boundary
 - `11-exit-tax-deemed-disposal.md`: Wegzugsbesteuerung / deemed-disposal report design
+- `12-collateralized-loans.md`: collateralized-loan leg modeling
+- `13-device-sync.md`: shipped cross-device / multi-user sync guardrails (mailbox-first, no trusted server; issue #309)
 
 ## Highest-Risk Drift Points
 
