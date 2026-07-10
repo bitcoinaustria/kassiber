@@ -18,7 +18,6 @@ from .crypto import (
     canonical_json_bytes,
     generate_device_keypair,
     generate_signing_keypair,
-    sign_canonical,
     sign_domain_canonical,
     verify_canonical,
     verify_domain_canonical,
