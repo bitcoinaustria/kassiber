@@ -155,6 +155,11 @@ enabled both against the ambiguous shared entry may need to re-enroll the other
 surface once. Settings exposes **Forget all unlock methods** to delete both
 current entries and any remaining legacy item.
 
+CLI status exposes the intended boundary without probing a secret when CLI
+enrollment is disabled: `macos_keychain_application_acl`,
+`windows_dpapi_user_scope`, `linux_secret_service_session`, or `unsupported`.
+These are capability codes, not claims of biometric protection.
+
 ## Rust Secret Store Layer
 
 `ui-tauri/src-tauri/src/secret_store.rs` defines a narrow `SecretStore` trait:

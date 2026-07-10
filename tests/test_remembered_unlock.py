@@ -22,8 +22,10 @@ from kassiber.secrets.unlock_store import (
     CLI_REMEMBERED_UNLOCK_SETTING,
     DESKTOP_BIOMETRIC_STALE_MARKER_SERVICE,
     LEGACY_SHARED_PASSPHRASE_SERVICE,
+    _backend_is_native,
     delete_remembered_passphrase,
     load_remembered_passphrase,
+    remembered_unlock_access_policy,
     remembered_unlock_account,
     remembered_unlock_status,
     set_cli_remembered_unlock_enabled,
@@ -41,6 +43,20 @@ PLATFORM_NAME = (
     if sys.platform.startswith("linux")
     else "unsupported"
 )
+ACCESS_POLICY = {
+    "macos": "macos_keychain_application_acl",
+    "windows": "windows_dpapi_user_scope",
+    "linux": "linux_secret_service_session",
+    "unsupported": "unsupported",
+}[PLATFORM_NAME]
+
+
+def _fake_backend(module: str, *, children=()):
+    backend_type = type("FakeBackend", (), {"priority": 1})
+    backend_type.__module__ = module
+    backend = backend_type()
+    backend.backends = tuple(children)
+    return backend
 
 
 class MemoryKeyring(KeyringBackend):
@@ -138,6 +154,7 @@ class RememberedUnlockStoreTests(unittest.TestCase):
                 remembered_unlock_status(data_root),
                 {
                     "platform": PLATFORM_NAME,
+                    "access_policy": ACCESS_POLICY,
                     "available": True,
                     "configured": False,
                     "cli_enabled": False,
@@ -245,6 +262,7 @@ class RememberedUnlockStoreTests(unittest.TestCase):
                 remembered_unlock_status(data_root),
                 {
                     "platform": PLATFORM_NAME,
+                    "access_policy": ACCESS_POLICY,
                     "available": False,
                     "configured": False,
                     "cli_enabled": True,
@@ -262,6 +280,62 @@ class RememberedUnlockStoreTests(unittest.TestCase):
             self.assertIsNone(load_remembered_passphrase(data_root))
             self.assertFalse(delete_remembered_passphrase(data_root))
             self.assertEqual(self.keyring.get_calls, 0)
+
+    def test_platform_policy_accepts_only_the_expected_native_backend(self):
+        platform_modules = {
+            "macos": "keyring.backends.macOS",
+            "windows": "keyring.backends.Windows",
+            "linux": "keyring.backends.SecretService",
+        }
+        for platform, expected_module in platform_modules.items():
+            with self.subTest(platform=platform), patch(
+                "kassiber.secrets.unlock_store._platform_name",
+                return_value=platform,
+            ):
+                self.assertTrue(_backend_is_native(_fake_backend(expected_module)))
+                for other_module in platform_modules.values():
+                    if other_module != expected_module:
+                        self.assertFalse(_backend_is_native(_fake_backend(other_module)))
+                self.assertFalse(_backend_is_native(_fake_backend("keyring.backends.file")))
+
+    def test_native_chainer_rejects_mixed_or_empty_backend_sets(self):
+        native = _fake_backend("keyring.backends.Windows")
+        file_backend = _fake_backend("keyring.backends.file")
+        with patch(
+            "kassiber.secrets.unlock_store._platform_name",
+            return_value="windows",
+        ), patch(
+            "kassiber.secrets.unlock_store._backend_is_native",
+            side_effect=_backend_is_native,
+        ):
+            self.assertTrue(
+                _backend_is_native(
+                    _fake_backend("keyring.backends.chainer", children=(native,))
+                )
+            )
+            self.assertFalse(
+                _backend_is_native(
+                    _fake_backend(
+                        "keyring.backends.chainer",
+                        children=(native, file_backend),
+                    )
+                )
+            )
+            self.assertFalse(_backend_is_native(_fake_backend("keyring.backends.chainer")))
+
+    def test_access_policy_codes_are_stable_for_every_supported_platform(self):
+        expected = {
+            "macos": "macos_keychain_application_acl",
+            "windows": "windows_dpapi_user_scope",
+            "linux": "linux_secret_service_session",
+            "unsupported": "unsupported",
+        }
+        for platform, policy in expected.items():
+            with self.subTest(platform=platform), patch(
+                "kassiber.secrets.unlock_store._platform_name",
+                return_value=platform,
+            ):
+                self.assertEqual(remembered_unlock_access_policy(), policy)
 
 
 class RememberedUnlockCliTests(unittest.TestCase):
@@ -325,7 +399,13 @@ class RememberedUnlockCliTests(unittest.TestCase):
             self.assertEqual(payload["kind"], "secrets.status")
             self.assertEqual(
                 set(payload["data"]["remembered_unlock"]),
-                {"platform", "available", "configured", "cli_enabled"},
+                {
+                    "platform",
+                    "access_policy",
+                    "available",
+                    "configured",
+                    "cli_enabled",
+                },
             )
 
             payload, returncode, _stderr = _run_cli(data_root, "status")
@@ -479,6 +559,31 @@ class RememberedUnlockCliTests(unittest.TestCase):
             self.assertFalse(payload["error"]["details"]["cli_marker_cleared"])
             self.assertTrue(payload["error"]["details"]["credential_deleted"])
             self.assertIsNone(load_remembered_passphrase(data_root))
+
+    def test_forget_disables_cli_and_warns_when_credential_delete_fails(self):
+        with tempfile.TemporaryDirectory() as root:
+            data_root = Path(root) / "data"
+            data_root.mkdir()
+            account = remembered_unlock_account(data_root)
+            self.assertTrue(store_remembered_passphrase(data_root, "secret"))
+            set_cli_remembered_unlock_enabled(data_root, True)
+            self.keyring.fail_deletes = True
+
+            payload, returncode, _stderr = _run_cli(
+                data_root,
+                "secrets",
+                "forget-unlock",
+            )
+
+            self.assertEqual(returncode, 0)
+            self.assertTrue(payload["data"]["cli_marker_cleared"])
+            self.assertFalse(payload["data"]["credential_deleted"])
+            self.assertIn("warning", payload["data"])
+            self.assertFalse(payload["data"]["remembered_unlock"]["cli_enabled"])
+            self.assertEqual(
+                self.keyring.get_password(CLI_REMEMBERED_PASSPHRASE_SERVICE, account),
+                "secret",
+            )
 
     def test_rotation_store_failure_disables_cli_copy_but_keeps_new_db_key(self):
         old_passphrase = "rotation-old-pass"

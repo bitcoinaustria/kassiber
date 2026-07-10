@@ -22,6 +22,13 @@ LEGACY_SHARED_PASSPHRASE_SERVICE = "Kassiber Database Passphrase"
 DESKTOP_BIOMETRIC_STALE_MARKER_SERVICE = "Kassiber Desktop Biometric Invalidated"
 CLI_REMEMBERED_UNLOCK_SETTING = "cli_remembered_unlock"
 
+_ACCESS_POLICY_BY_PLATFORM = {
+    "macos": "macos_keychain_application_acl",
+    "windows": "windows_dpapi_user_scope",
+    "linux": "linux_secret_service_session",
+    "unsupported": "unsupported",
+}
+
 
 def _platform_name() -> str:
     if sys.platform == "darwin":
@@ -31,6 +38,12 @@ def _platform_name() -> str:
     if sys.platform.startswith("linux"):
         return "linux"
     return "unsupported"
+
+
+def remembered_unlock_access_policy() -> str:
+    """Return the public-safe code describing the CLI credential boundary."""
+
+    return _ACCESS_POLICY_BY_PLATFORM[_platform_name()]
 
 
 def remembered_unlock_account(data_root) -> str:
@@ -265,6 +278,7 @@ def remembered_unlock_status(data_root) -> dict[str, object]:
         available, passphrase = _native_keyring_available(), None
     return {
         "platform": _platform_name(),
+        "access_policy": remembered_unlock_access_policy(),
         "available": available,
         "configured": passphrase is not None,
         "cli_enabled": cli_enabled,

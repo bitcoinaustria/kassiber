@@ -62,8 +62,12 @@ Service; configured third-party/file backends are treated as unavailable. CLI
 reads are not biometric-gated. If the stored copy is stale, Kassiber
 writes `remembered_unlock_stale` to stderr and falls through to the existing
 prompt or `passphrase_required` behavior. Headless systems should keep using
-`--db-passphrase-fd`. `kassiber secrets status` reports `platform`, `available`,
-`configured`, and `cli_enabled` under `remembered_unlock`.
+`--db-passphrase-fd`. `kassiber secrets status` reports `platform`,
+`access_policy`, `available`, `configured`, and `cli_enabled` under
+`remembered_unlock`. The stable access-policy codes are
+`macos_keychain_application_acl`, `windows_dpapi_user_scope`,
+`linux_secret_service_session`, and `unsupported`; CLI reads are never described
+as biometric-gated.
 
 Upgrades from the former shared entry are marker-driven: an enabled CLI marker
 lets the CLI migrate `Kassiber Database Passphrase` to its CLI-only service;

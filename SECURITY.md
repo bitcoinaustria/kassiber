@@ -206,6 +206,12 @@ platform is accepted (including a chainer only when every active child is
 native); environment/config-selected third-party and file backends are rejected.
 There is never a plaintext-file fallback.
 
+`kassiber secrets status` exposes the active CLI boundary as a stable
+`access_policy` code: `macos_keychain_application_acl`,
+`windows_dpapi_user_scope`, `linux_secret_service_session`, or `unsupported`.
+This is public-safe capability metadata, not evidence that the item is
+biometric-gated.
+
 CLI credential reads are **not biometric-gated**. On macOS the CLI item uses the
 Keychain's per-binary access policy, and unsigned/ad-hoc preview binaries may
 prompt again after rebuilds or identity changes. On Windows and Linux, another

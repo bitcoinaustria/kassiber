@@ -205,6 +205,8 @@ the other. CLI reads are
 not biometric-gated; see [SECURITY.md](SECURITY.md) for the platform trust model.
 Headless machines and automation without an unlocked credential service should
 continue using `--db-passphrase-fd`.
+`kassiber secrets status` reports the stable `access_policy` code for the
+platform boundary without reading a disabled CLI credential.
 
 Desktop Settings can remove only Touch ID, while **Forget all unlock methods**
 removes the desktop entry, CLI entry, and any migration-only legacy shared item.
