@@ -386,6 +386,8 @@ NEVER_SYNC_TABLES = frozenset(
 )
 
 _PRIVATE_EXTENDED_KEY = re.compile(r"(?:^|[^a-z])(xprv|yprv|zprv|tprv|uprv|vprv)[a-z0-9]*", re.IGNORECASE)
+_WIF_PRIVATE_KEY = re.compile(r"(?<![A-Za-z0-9])[5KLc9][1-9A-HJ-NP-Za-km-z]{50,51}(?![A-Za-z0-9])")
+_RAW_HEX_PRIVATE_KEY = re.compile(r"(?<![0-9A-Fa-f])[0-9A-Fa-f]{64}(?![0-9A-Fa-f])")
 _SYNC_WALLET_CONFIG_FIELDS = frozenset(
     {
         "addresses",
@@ -409,7 +411,11 @@ def _is_public_watch_material(value: Any) -> bool:
     if not isinstance(value, str) or not value.strip():
         return False
     text = value.strip()
-    if _PRIVATE_EXTENDED_KEY.search(text):
+    if (
+        _PRIVATE_EXTENDED_KEY.search(text)
+        or _WIF_PRIVATE_KEY.search(text)
+        or _RAW_HEX_PRIVATE_KEY.search(text)
+    ):
         return False
     # Confidential descriptors with embedded blinding material are excluded in
     # v1. Peers can re-enter that local secret; public Bitcoin descriptors and
@@ -518,13 +524,16 @@ def validate_wire_row(table: str, payload: Mapping[str, Any]) -> TableSpec:
         allowed.add("content_hmac")
     if table == "commercial_links":
         allowed.add("btcpay_record_hmac")
+    required = set(spec.columns)
+    if table == "transactions":
+        required.add("fingerprint_hmac")
     unknown = sorted(set(payload) - allowed)
-    missing = sorted(set(spec.primary_key) - set(payload))
+    missing = sorted(required - set(payload))
     if unknown or missing:
         raise AppError(
             "bundle row does not match the sync schema allowlist",
             code="sync_schema_forbidden",
-            details={"table": table, "unknown_fields": unknown, "missing_key_fields": missing},
+            details={"table": table, "unknown_fields": unknown, "missing_fields": missing},
             retryable=False,
         )
     return spec

@@ -16,6 +16,7 @@ from kassiber.core.sync_replication.schema_allowlist import (
     NEVER_SYNC_TABLES,
     SYNC_TABLE_MAP,
     public_wallet_config,
+    validate_wire_row,
 )
 from kassiber.core.transaction_history import append_event
 from kassiber.daemon_sync_replication import dispatch_sync_ui
@@ -37,6 +38,15 @@ class HybridLogicalClockTests(unittest.TestCase):
         remote = HybridLogicalClock(1000, 7, "replica-b")
         observed = observe_clock(local, remote, "replica-a", now_ms=800)
         self.assertEqual(observed, HybridLogicalClock(1000, 8, "replica-a"))
+
+    def test_observe_rejects_unbounded_remote_clock_drift(self):
+        with self.assertRaisesRegex(ValueError, "future-drift"):
+            observe_clock(
+                None,
+                HybridLogicalClock(253402300799000, 0, "replica-b"),
+                "replica-a",
+                now_ms=1000,
+            )
 
 
 class SyncSchemaBoundaryTests(unittest.TestCase):
@@ -71,6 +81,16 @@ class SyncSchemaBoundaryTests(unittest.TestCase):
         self.assertNotIn("token", safe)
         self.assertNotIn("source_file", safe)
         self.assertNotIn("blinding_key", safe)
+
+        for private_descriptor in (f"wpkh({'L' + '1' * 51})", f"wpkh({'a' * 64})"):
+            self.assertNotIn(
+                "descriptor",
+                public_wallet_config({"descriptor": private_descriptor}),
+            )
+
+    def test_wire_upsert_requires_every_allowlisted_column(self):
+        with self.assertRaisesRegex(AppError, "sync schema allowlist"):
+            validate_wire_row("profiles", {"id": "profile-only"})
 
 
 @unittest.skipUnless(sqlcipher_available(), "SQLCipher driver unavailable")
@@ -197,6 +217,29 @@ class SyncIdentityAndCaptureTests(unittest.TestCase):
         self.assertEqual(result["members_list"][0]["display_name"], "Owner")
         self.assertEqual(result["devices_list"][0]["label"], "Test Mac")
         self.assertEqual(result["devices_list"][0]["local_device"], 1)
+
+    def test_signed_event_rejects_malleable_hlc_and_sequence_encodings(self):
+        self._enable()
+        self.conn.execute(
+            "UPDATE profiles SET label = 'Canonical event' WHERE id = ?",
+            (self.profile["id"],),
+        )
+        event = capture_local_changes(self.conn, profile_id=self.profile["id"])[0]
+        wire = event.to_wire_dict()
+        public_key = self.conn.execute(
+            "SELECT signing_public_key_b64 FROM sync_members WHERE id = ?",
+            (event.author_member_id,),
+        ).fetchone()[0]
+        self.assertTrue(verify_event(wire, public_key))
+
+        malleable_hlc = dict(wire)
+        physical, logical, replica = wire["hlc"].split(":", 2)
+        malleable_hlc["hlc"] = f"+{physical}:{logical}:{replica}"
+        self.assertFalse(verify_event(malleable_hlc, public_key))
+
+        string_sequence = dict(wire)
+        string_sequence["replica_seq"] = f"+00{wire['replica_seq']}"
+        self.assertFalse(verify_event(string_sequence, public_key))
 
     def test_plaintext_database_cannot_hold_sync_keys(self):
         other_root = self.root / "plaintext"

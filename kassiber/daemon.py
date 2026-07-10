@@ -12731,6 +12731,8 @@ def run(
                         extra={"kb_fields": _request_outcome_fields(kind, started, response)},
                     )
             except AppError as exc:
+                if ctx.conn is not None:
+                    ctx.conn.rollback()
                 if logged:
                     _REQUEST_LOGGER.warning(
                         "request failed",
@@ -12752,6 +12754,8 @@ def run(
                 )
                 should_shutdown = False
             except Exception as exc:
+                if ctx.conn is not None:
+                    ctx.conn.rollback()
                 traceback.print_exc(file=sys.stderr)
                 sys.stderr.flush()
                 if logged:

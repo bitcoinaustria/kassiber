@@ -362,6 +362,7 @@ CREATE TABLE IF NOT EXISTS sync_members (
     added_at TEXT NOT NULL,
     revoked_hlc TEXT,
     revoked_at TEXT,
+    revoked_context_json TEXT,
     inviter_member_id TEXT,
     record_signature TEXT NOT NULL,
     UNIQUE(profile_id, signing_public_key_b64)
@@ -388,6 +389,8 @@ CREATE TABLE IF NOT EXISTS sync_devices (
     last_seen_at TEXT,
     revoked_hlc TEXT,
     revoked_at TEXT,
+    revoked_context_json TEXT,
+    record_signer_member_id TEXT,
     record_signature TEXT NOT NULL,
     UNIQUE(profile_id, recipient_public_key)
 );
@@ -1826,6 +1829,9 @@ def ensure_schema_compat(conn):
     ensure_column(conn, "transaction_edit_events", "sync_author_member_id", "TEXT")
     ensure_column(conn, "transaction_edit_events", "sync_signature", "TEXT")
     ensure_column(conn, "transaction_edit_events", "sync_context_json", "TEXT")
+    ensure_column(conn, "sync_members", "revoked_context_json", "TEXT")
+    ensure_column(conn, "sync_devices", "revoked_context_json", "TEXT")
+    ensure_column(conn, "sync_devices", "record_signer_member_id", "TEXT")
     conn.execute(
         "CREATE UNIQUE INDEX IF NOT EXISTS idx_transaction_edit_events_sync_event "
         "ON transaction_edit_events(sync_event_id) WHERE sync_event_id IS NOT NULL"

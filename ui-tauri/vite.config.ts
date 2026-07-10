@@ -319,6 +319,11 @@ const STREAM_CAPABLE_BRIDGE_KINDS = new Set([
   "ui.wallets.sync",
   "ui.freshness.run",
   "ui.workspace.freshness.run",
+  "ui.journals.process",
+  "ui.rates.rebuild",
+  "ui.sync.push",
+  "ui.sync.pull",
+  "ui.sync.join",
 ]);
 const STREAM_ONLY_BRIDGE_KINDS = new Set(["ai.chat"]);
 

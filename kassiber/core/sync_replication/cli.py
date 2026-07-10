@@ -88,7 +88,7 @@ def add_sync_parser(subparsers) -> None:
     lan_listen = lan_commands.add_parser("listen")
     _scope_args(lan_listen)
     lan_listen.add_argument("--offer", required=True, help="Write the short-lived pairing offer here")
-    lan_listen.add_argument("--bind-host", default="0.0.0.0")
+    lan_listen.add_argument("--bind-host")
     lan_listen.add_argument("--advertise-host")
     lan_listen.add_argument("--no-mdns", action="store_true")
     lan_listen.add_argument("--timeout", type=float, default=120.0)

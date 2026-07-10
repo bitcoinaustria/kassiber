@@ -19,7 +19,9 @@ from .crypto import (
     generate_device_keypair,
     generate_signing_keypair,
     sign_canonical,
+    sign_domain_canonical,
     verify_canonical,
+    verify_domain_canonical,
 )
 from .events import author_event
 from .identity import SYNC_ROLES, connection_is_encrypted
@@ -29,11 +31,17 @@ INVITATION_SCHEMA_VERSION = 1
 _INVITATION_COMPRESSED_PREFIX = b"KSINV1Z\x00"
 _MAX_INVITATION_PLAINTEXT_BYTES = 2 * 1024 * 1024
 _PYRAGE_BACKEND = AgeBackend(flavor="pyrage")
+MEMBER_RECORD_DOMAIN = "member-record-v2"
+DEVICE_RECORD_DOMAIN = "device-record-v2"
+JOIN_REQUEST_DOMAIN = "join-request-v1"
+JOIN_DEVICE_DOMAIN = "join-device-proof-v1"
+INVITATION_DOMAIN = "invitation-v1"
 
 
 def _member_record_core(record: Mapping[str, Any]) -> dict[str, Any]:
     return {
         "id": record["id"],
+        "workspace_id": record["workspace_id"],
         "profile_id": record["profile_id"],
         "display_name": record["display_name"],
         "signing_public_key_b64": record["signing_public_key_b64"],
@@ -46,9 +54,36 @@ def _member_record_core(record: Mapping[str, Any]) -> dict[str, Any]:
 def _device_record_core(record: Mapping[str, Any]) -> dict[str, Any]:
     return {
         "id": record["id"],
+        "workspace_id": record["workspace_id"],
+        "profile_id": record["profile_id"],
+        "member_id": record["member_id"],
+        "record_signer_member_id": record["record_signer_member_id"],
+        "recipient_public_key": record["recipient_public_key"],
+        "label": record["label"],
+    }
+
+
+def _legacy_member_record_core(record: Mapping[str, Any]) -> dict[str, Any]:
+    core = _member_record_core(record)
+    core.pop("workspace_id")
+    return core
+
+
+def _legacy_device_record_core(record: Mapping[str, Any]) -> dict[str, Any]:
+    return {
+        "id": record["id"],
         "member_id": record["member_id"],
         "recipient_public_key": record["recipient_public_key"],
         "label": record["label"],
+    }
+
+
+def _join_device_proof_core(record: Mapping[str, Any]) -> dict[str, Any]:
+    return {
+        "id": record["device_id"],
+        "member_id": record["member_id"],
+        "recipient_public_key": record["recipient_public_key"],
+        "label": record["device_label"],
     }
 
 
@@ -89,15 +124,13 @@ def create_join_request(
         "recipient_public_key": device.recipient,
         "created_at": created_at,
     }
-    request_signature = sign_canonical(signing.private_key_b64, request_core)
-    device_signature = sign_canonical(
+    request_signature = sign_domain_canonical(
+        signing.private_key_b64, JOIN_REQUEST_DOMAIN, request_core
+    )
+    device_signature = sign_domain_canonical(
         signing.private_key_b64,
-        {
-            "id": device_id,
-            "member_id": member_id,
-            "recipient_public_key": device.recipient,
-            "label": device_label,
-        },
+        JOIN_DEVICE_DOMAIN,
+        _join_device_proof_core(request_core),
     )
     conn.execute(
         """
@@ -171,21 +204,33 @@ def _validate_join_request(request: Mapping[str, Any]) -> None:
         for key in required
         if key not in {"request_signature", "device_signature"}
     }
-    if not verify_canonical(
+    if not (
+        verify_domain_canonical(
+            str(request["signing_public_key_b64"]),
+            JOIN_REQUEST_DOMAIN,
+            core,
+            str(request["request_signature"]),
+        )
+        or verify_canonical(
         str(request["signing_public_key_b64"]),
         core,
         str(request["request_signature"]),
+        )
     ):
         raise AppError("join request signature is invalid", code="sync_signature_invalid")
-    if not verify_canonical(
-        str(request["signing_public_key_b64"]),
-        {
-            "id": request["device_id"],
-            "member_id": request["member_id"],
-            "recipient_public_key": request["recipient_public_key"],
-            "label": request["device_label"],
-        },
-        str(request["device_signature"]),
+    device_core = _join_device_proof_core(request)
+    if not (
+        verify_domain_canonical(
+            str(request["signing_public_key_b64"]),
+            JOIN_DEVICE_DOMAIN,
+            device_core,
+            str(request["device_signature"]),
+        )
+        or verify_canonical(
+            str(request["signing_public_key_b64"]),
+            device_core,
+            str(request["device_signature"]),
+        )
     ):
         raise AppError("join device signature is invalid", code="sync_signature_invalid")
 
@@ -226,6 +271,7 @@ def create_invitation(
     added_hlc = tick_clock(replica["last_hlc"], replica["id"]).encode()
     member_record = {
         "id": join_request["member_id"],
+        "workspace_id": owner["workspace_id"],
         "profile_id": profile_id,
         "display_name": join_request["member_name"],
         "signing_public_key_b64": join_request["signing_public_key_b64"],
@@ -233,18 +279,24 @@ def create_invitation(
         "added_hlc": added_hlc,
         "inviter_member_id": owner["local_member_id"],
     }
-    member_signature = sign_canonical(owner["signing_private_key_b64"], member_record)
+    member_signature = sign_domain_canonical(
+        owner["signing_private_key_b64"], MEMBER_RECORD_DOMAIN, member_record
+    )
     device_record = {
         "id": join_request["device_id"],
+        "workspace_id": owner["workspace_id"],
         "profile_id": profile_id,
         "member_id": join_request["member_id"],
+        "record_signer_member_id": owner["local_member_id"],
         "recipient_public_key": join_request["recipient_public_key"],
         "label": join_request["device_label"],
         "paired_hlc": added_hlc,
     }
-    # The join request proves control of the new member signing key. Bind the
-    # device record explicitly with that key rather than trusting UI input.
-    device_signature = str(join_request["device_signature"])
+    # The active owner scopes the accepted device to this exact book. The join
+    # request signature still proves control of the new member/device keys.
+    device_signature = sign_domain_canonical(
+        owner["signing_private_key_b64"], DEVICE_RECORD_DOMAIN, _device_record_core(device_record)
+    )
     conn.execute(
         """
         INSERT INTO sync_members(
@@ -269,8 +321,8 @@ def create_invitation(
         """
         INSERT INTO sync_devices(
             id, workspace_id, profile_id, member_id, recipient_public_key,
-            label, paired_hlc, paired_at, record_signature
-        ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)
+            label, paired_hlc, paired_at, record_signer_member_id, record_signature
+        ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             device_record["id"],
@@ -281,6 +333,7 @@ def create_invitation(
             device_record["label"],
             added_hlc,
             timestamp,
+            device_record["record_signer_member_id"],
             device_signature,
         ),
     )
@@ -348,7 +401,9 @@ def create_invitation(
         "inviter_member_id": owner["local_member_id"],
         "created_at": timestamp,
     }
-    invitation_signature = sign_canonical(owner["signing_private_key_b64"], invitation_core)
+    invitation_signature = sign_domain_canonical(
+        owner["signing_private_key_b64"], INVITATION_DOMAIN, invitation_core
+    )
     output = BytesIO()
     invitation_bytes = canonical_json_bytes(
         invitation_core | {"invitation_signature": invitation_signature}
@@ -372,30 +427,58 @@ def _verify_invitation_catalog(invitation: Mapping[str, Any]) -> None:
     if not inviter or inviter.get("role") != "owner" or inviter.get("revoked_at"):
         raise AppError("invitation owner identity is invalid", code="sync_invitation_invalid")
     core = {key: value for key, value in invitation.items() if key != "invitation_signature"}
-    if not verify_canonical(
-        str(inviter["signing_public_key_b64"]),
-        core,
-        str(invitation.get("invitation_signature") or ""),
+    signature = str(invitation.get("invitation_signature") or "")
+    if not (
+        verify_domain_canonical(
+            str(inviter["signing_public_key_b64"]), INVITATION_DOMAIN, core, signature
+        )
+        or verify_canonical(str(inviter["signing_public_key_b64"]), core, signature)
     ):
         raise AppError("invitation signature is invalid", code="sync_signature_invalid")
     for member in members.values():
         signer = members.get(member.get("inviter_member_id"))
         if not signer or signer.get("role") != "owner":
             raise AppError("membership signature chain is incomplete", code="sync_invitation_invalid")
-        if not verify_canonical(
-            str(signer["signing_public_key_b64"]),
-            _member_record_core(member),
-            str(member.get("record_signature") or ""),
+        member_signature = str(member.get("record_signature") or "")
+        if not (
+            verify_domain_canonical(
+                str(signer["signing_public_key_b64"]),
+                MEMBER_RECORD_DOMAIN,
+                _member_record_core(member),
+                member_signature,
+            )
+            or verify_canonical(
+                str(signer["signing_public_key_b64"]),
+                _legacy_member_record_core(member),
+                member_signature,
+            )
         ):
             raise AppError("membership record signature is invalid", code="sync_signature_invalid")
     for device in devices:
         member = members.get(device.get("member_id"))
-        if not member:
+        signer_id = device.get("record_signer_member_id") or device.get("member_id")
+        signer = members.get(signer_id)
+        if not member or not signer:
             raise AppError("device has no member identity", code="sync_invitation_invalid")
-        if not verify_canonical(
-            str(member["signing_public_key_b64"]),
-            _device_record_core(device),
-            str(device.get("record_signature") or ""),
+        signature = str(device.get("record_signature") or "")
+        if not (
+            (
+                (signer_id == device.get("member_id") or signer.get("role") == "owner")
+                and verify_domain_canonical(
+                    str(signer["signing_public_key_b64"]),
+                    DEVICE_RECORD_DOMAIN,
+                    _device_record_core(device),
+                    signature,
+                )
+            )
+            or (
+                signer_id == device.get("member_id")
+                and verify_canonical(
+                    str(member["signing_public_key_b64"]),
+                    _legacy_device_record_core(device),
+                    signature,
+                )
+            )
         ):
             raise AppError("device record signature is invalid", code="sync_signature_invalid")
 
@@ -534,16 +617,17 @@ def join_invitation(
             """
             INSERT INTO sync_members(
                 id, workspace_id, profile_id, display_name, signing_public_key_b64,
-                role, added_hlc, added_at, revoked_hlc, revoked_at,
+                role, added_hlc, added_at, revoked_hlc, revoked_at, revoked_context_json,
                 inviter_member_id, record_signature
-            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             tuple(
                 member[key]
                 for key in (
                     "id", "workspace_id", "profile_id", "display_name",
                     "signing_public_key_b64", "role", "added_hlc", "added_at",
-                    "revoked_hlc", "revoked_at", "inviter_member_id", "record_signature",
+                    "revoked_hlc", "revoked_at", "revoked_context_json",
+                    "inviter_member_id", "record_signature",
                 )
             ),
         )
@@ -553,15 +637,16 @@ def join_invitation(
             INSERT INTO sync_devices(
                 id, workspace_id, profile_id, member_id, recipient_public_key,
                 label, paired_hlc, paired_at, last_seen_at, revoked_hlc,
-                revoked_at, record_signature
-            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                revoked_at, revoked_context_json, record_signer_member_id, record_signature
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             tuple(
                 device[key]
                 for key in (
                     "id", "workspace_id", "profile_id", "member_id",
                     "recipient_public_key", "label", "paired_hlc", "paired_at",
-                    "last_seen_at", "revoked_hlc", "revoked_at", "record_signature",
+                    "last_seen_at", "revoked_hlc", "revoked_at", "revoked_context_json",
+                    "record_signer_member_id", "record_signature",
                 )
             ),
         )
@@ -674,18 +759,22 @@ def revoke_member(
         payload={"member_id": member_id},
     )
     timestamp = event.created_at
+    revoked_context_json = json.dumps(
+        dict(event.context), ensure_ascii=True, separators=(",", ":"), sort_keys=True
+    )
     conn.execute(
-        "UPDATE sync_members SET revoked_hlc = ?, revoked_at = ? WHERE id = ?",
-        (event.hlc, timestamp, member_id),
+        "UPDATE sync_members SET revoked_hlc = ?, revoked_at = ?, revoked_context_json = ? WHERE id = ?",
+        (event.hlc, timestamp, revoked_context_json, member_id),
     )
     conn.execute(
         """
         UPDATE sync_devices
         SET revoked_hlc = COALESCE(revoked_hlc, ?),
-            revoked_at = COALESCE(revoked_at, ?)
+            revoked_at = COALESCE(revoked_at, ?),
+            revoked_context_json = COALESCE(revoked_context_json, ?)
         WHERE member_id = ?
         """,
-        (event.hlc, timestamp, member_id),
+        (event.hlc, timestamp, revoked_context_json, member_id),
     )
     return {"member_id": member_id, "revoked_at": timestamp, "event_id": event.id, "already_revoked": False}
 
@@ -715,9 +804,12 @@ def revoke_device(
         entity_key=device_id,
         payload={"device_id": device_id},
     )
+    revoked_context_json = json.dumps(
+        dict(event.context), ensure_ascii=True, separators=(",", ":"), sort_keys=True
+    )
     conn.execute(
-        "UPDATE sync_devices SET revoked_hlc = ?, revoked_at = ? WHERE id = ?",
-        (event.hlc, event.created_at, device_id),
+        "UPDATE sync_devices SET revoked_hlc = ?, revoked_at = ?, revoked_context_json = ? WHERE id = ?",
+        (event.hlc, event.created_at, revoked_context_json, device_id),
     )
     return {
         "device_id": device_id,

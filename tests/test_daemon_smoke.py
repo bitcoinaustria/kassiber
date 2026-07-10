@@ -9610,6 +9610,31 @@ class DaemonSmokeTest(unittest.TestCase):
         self.assertEqual(crashed[0]["level"], "error")
         self.assertIn("traceback", crashed[0]["fields"])
 
+    def test_request_error_rolls_back_partial_database_mutation(self):
+        def mutate_then_fail(ctx, request, out):
+            ctx.conn.execute(
+                "INSERT INTO settings(key, value) VALUES('daemon-rollback-probe', 'partial')"
+            )
+            raise AppError("forced request failure", code="forced_failure")
+
+        with tempfile.TemporaryDirectory(prefix="kassiber-daemon-rollback-") as tmp:
+            data_root = Path(tmp) / "data"
+            conn = open_db(data_root)
+            stdin = io.StringIO('{"request_id": "rollback-1", "kind": "status"}\n')
+            stdout = io.StringIO()
+            args = SimpleNamespace(data_root=str(data_root), runtime_config={})
+            try:
+                with mock.patch.object(daemon_module, "handle_request", mutate_then_fail):
+                    rc = daemon_module.run(conn, args, stdin=stdin, stdout=stdout)
+                self.assertEqual(rc, 0)
+                self.assertIsNone(
+                    conn.execute(
+                        "SELECT value FROM settings WHERE key = 'daemon-rollback-probe'"
+                    ).fetchone()
+                )
+            finally:
+                conn.close()
+
 
 class ErrorEnvelopeRedactionTest(unittest.TestCase):
     def test_error_details_pseudonymized_at_egress(self):

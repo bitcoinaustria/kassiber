@@ -226,9 +226,10 @@ def resolve_conflict(
             "value": value,
             "source_event_id": chosen_event_id,
         },
+        allow_disabled=True,
     )
     if event is None:
-        raise AppError("sync is disabled", code="sync_disabled")
+        raise AppError("sync is not configured", code="sync_disabled")
     book = conn.execute("SELECT * FROM sync_books WHERE profile_id = ?", (profile_id,)).fetchone()
     empty_bundle = ParsedBundle(bundle_hash="local", manifest={}, events=(), blobs={})
     mutated = apply_resolution_event(

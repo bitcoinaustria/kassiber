@@ -7,7 +7,8 @@ from pathlib import Path
 import socket
 import tempfile
 import unittest
-from unittest import mock
+import unittest.mock as mock
+from urllib.error import HTTPError
 
 from kassiber.core.accounts import create_profile, create_workspace
 from kassiber.core.sync_replication.identity import enable_sync
@@ -85,6 +86,72 @@ class TransportAdapterTests(unittest.TestCase):
         self.assertEqual(put.headers["If-none-match"], "*")
         self.assertTrue(put.headers["Authorization"].startswith("Basic "))
         self.assertNotIn("secret", put.full_url)
+
+    def test_webdav_rejects_cleartext_credentials_off_loopback(self):
+        with self.assertRaisesRegex(AppError, "require HTTPS"):
+            WebDavTransport(
+                base_url="http://storage.example/mail/",
+                username="alice",
+                password="secret",
+            )
+
+    def test_webdav_retries_429_with_retry_after_and_bounds_503(self):
+        attempts = []
+        delays = []
+
+        def recovers(request, timeout):
+            attempts.append(request)
+            if len(attempts) == 1:
+                raise HTTPError(
+                    request.full_url,
+                    429,
+                    "rate limited",
+                    {"Retry-After": "2"},
+                    None,
+                )
+            return _Response(b"sealed")
+
+        transport = WebDavTransport(
+            base_url="https://storage.example/mail/",
+            opener=recovers,
+            sleeper=delays.append,
+        )
+        self.assertEqual(transport.get("book/one.age"), b"sealed")
+        self.assertEqual(len(attempts), 2)
+        self.assertEqual(delays, [2.0])
+
+        failures = []
+
+        def unavailable(request, timeout):
+            failures.append(request)
+            raise HTTPError(request.full_url, 503, "unavailable", {}, None)
+
+        transport = WebDavTransport(
+            base_url="https://storage.example/mail/",
+            opener=unavailable,
+            sleeper=lambda _delay: None,
+        )
+        with self.assertRaises(AppError) as raised:
+            transport.get("book/one.age")
+        self.assertTrue(raised.exception.retryable)
+        self.assertEqual(len(failures), 3)
+
+    def test_webdav_timeout_is_retryable_without_hidden_retry_loop(self):
+        attempts = []
+
+        def timeout(request, timeout):
+            attempts.append(request)
+            raise TimeoutError("timed out")
+
+        transport = WebDavTransport(
+            base_url="https://storage.example/mail/",
+            opener=timeout,
+            sleeper=lambda _delay: None,
+        )
+        with self.assertRaises(AppError) as raised:
+            transport.get("book/one.age")
+        self.assertTrue(raised.exception.retryable)
+        self.assertEqual(len(attempts), 1)
 
     def test_s3_signs_requests_without_leaking_secret(self):
         requests = []
@@ -230,6 +297,132 @@ class MailboxEndToEndTests(unittest.TestCase):
         )
         status = mailbox_status(self.owner, profile_id=self.profile_id)
         self.assertEqual(status["transports"][0]["peers"][0]["status"], "fresh")
+
+    def test_replayed_head_observation_does_not_hide_staleness(self):
+        push_mailbox(
+            self.owner,
+            profile_id=self.profile_id,
+            transport_id=self.owner_transport["id"],
+        )
+        pull_mailbox(
+            self.peer,
+            profile_id=self.profile_id,
+            transport_id=self.peer_transport["id"],
+        )
+        self.peer.execute(
+            """
+            UPDATE sync_peer_status
+            SET last_seen_at = '2099-01-01T00:00:00Z',
+                last_bundle_at = '2000-01-01T00:00:00Z'
+            WHERE profile_id = ? AND transport_id = ?
+              AND replica_id != (SELECT local_replica_id FROM sync_books WHERE profile_id = ?)
+            """,
+            (self.profile_id, self.peer_transport["id"], self.profile_id),
+        )
+        status = mailbox_status(
+            self.peer,
+            profile_id=self.profile_id,
+            stale_after_seconds=1,
+        )
+        peer = status["transports"][0]["peers"][0]
+        self.assertEqual(peer["status"], "stale")
+        self.assertEqual(peer["last_seen_at"], "2099-01-01T00:00:00Z")
+
+    def test_partial_push_is_retryable_and_does_not_advance_local_head(self):
+        class PartialPushTransport:
+            def __init__(self):
+                self.objects = {}
+                self.fail_head_once = True
+
+            def put(self, key, payload, *, if_absent=False):
+                if key.endswith("/head.json") and self.fail_head_once:
+                    self.fail_head_once = False
+                    raise AppError(
+                        "injected partial push",
+                        code="sync_transport_unavailable",
+                        retryable=True,
+                    )
+                if if_absent and key in self.objects and self.objects[key] != payload:
+                    raise AppError("collision", code="sync_mailbox_collision")
+                self.objects[key] = payload
+
+            def get(self, key):
+                return self.objects[key]
+
+            def list(self, prefix):
+                return sorted(key for key in self.objects if key.startswith(prefix))
+
+            def exists(self, key):
+                return key in self.objects
+
+        transport = PartialPushTransport()
+        with self.assertRaisesRegex(AppError, "injected partial push"):
+            push_mailbox(
+                self.owner,
+                profile_id=self.profile_id,
+                transport_id=self.owner_transport["id"],
+                transport_override=transport,
+            )
+        self.assertEqual(
+            self.owner.execute("SELECT COUNT(*) FROM sync_mailbox_heads").fetchone()[0],
+            0,
+        )
+        self.assertIsNone(
+            self.owner.execute(
+                "SELECT last_push_at FROM sync_transports WHERE id = ?",
+                (self.owner_transport["id"],),
+            ).fetchone()[0]
+        )
+
+        pushed = push_mailbox(
+            self.owner,
+            profile_id=self.profile_id,
+            transport_id=self.owner_transport["id"],
+            transport_override=transport,
+        )
+        self.assertFalse(pushed.up_to_date)
+        self.assertEqual(
+            self.owner.execute("SELECT COUNT(*) FROM sync_mailbox_heads").fetchone()[0],
+            1,
+        )
+
+    def test_replayed_older_valid_head_surfaces_rollback_notice(self):
+        first = push_mailbox(
+            self.owner,
+            profile_id=self.profile_id,
+            transport_id=self.owner_transport["id"],
+        )
+        first_head = (self.mailbox_root / first.head_key).read_bytes()
+        pull_mailbox(
+            self.peer,
+            profile_id=self.profile_id,
+            transport_id=self.peer_transport["id"],
+        )
+        self.owner.execute(
+            "UPDATE profiles SET label = 'Second head' WHERE id = ?",
+            (self.profile_id,),
+        )
+        second = push_mailbox(
+            self.owner,
+            profile_id=self.profile_id,
+            transport_id=self.owner_transport["id"],
+        )
+        pull_mailbox(
+            self.peer,
+            profile_id=self.profile_id,
+            transport_id=self.peer_transport["id"],
+        )
+        (self.mailbox_root / second.head_key).write_bytes(first_head)
+        pull_mailbox(
+            self.peer,
+            profile_id=self.profile_id,
+            transport_id=self.peer_transport["id"],
+        )
+        notice = self.peer.execute(
+            "SELECT severity FROM sync_notices WHERE code = 'sync_mailbox_rollback'"
+        ).fetchone()
+        self.assertIsNotNone(notice)
+        self.assertEqual(notice["severity"], "blocking")
 
     def test_baseline_invitation_fits_one_local_qr(self):
         # Long invitations switch to low error correction (2,953-byte byte

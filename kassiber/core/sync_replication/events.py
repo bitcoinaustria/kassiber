@@ -11,7 +11,10 @@ from typing import Any, Mapping
 from ...errors import AppError
 from ...time_utils import now_iso
 from .clock import HybridLogicalClock, tick_clock
-from .crypto import event_hash, sign_bytes, verify_bytes
+from .crypto import event_hash, sign_domain_bytes, verify_domain_bytes, verify_bytes
+
+
+EVENT_SIGNATURE_DOMAIN = "event-v1"
 
 
 @dataclass(frozen=True)
@@ -114,6 +117,7 @@ def author_event(
     entity_key: str,
     payload: Mapping[str, Any],
     created_at: str | None = None,
+    allow_disabled: bool = False,
 ) -> AuthoredEvent | None:
     """Sign and append one event, or return ``None`` when sync is disabled.
 
@@ -125,7 +129,7 @@ def author_event(
         "SELECT * FROM sync_books WHERE profile_id = ?",
         (profile_id,),
     ).fetchone()
-    if not book or not book["enabled"]:
+    if not book or (not book["enabled"] and not allow_disabled):
         return None
     replica = conn.execute(
         "SELECT * FROM sync_replicas WHERE id = ? AND profile_id = ?",
@@ -176,7 +180,11 @@ def author_event(
         created_at=timestamp,
     )
     digest = event_hash(core)
-    signature = sign_bytes(private_key["signing_private_key_b64"], bytes.fromhex(digest))
+    signature = sign_domain_bytes(
+        private_key["signing_private_key_b64"],
+        EVENT_SIGNATURE_DOMAIN,
+        bytes.fromhex(digest),
+    )
     conn.execute(
         """
         INSERT INTO sync_events(
@@ -236,13 +244,22 @@ def author_event(
 
 def verify_event(event: Mapping[str, Any], signing_public_key_b64: str) -> bool:
     try:
+        replica_seq = event["replica_seq"]
+        raw_hlc = event["hlc"]
+        if type(replica_seq) is not int or replica_seq <= 0:
+            return False
+        if not isinstance(raw_hlc, str):
+            return False
+        parsed_hlc = HybridLogicalClock.parse(raw_hlc)
+        if parsed_hlc.encode() != raw_hlc:
+            return False
         core = _event_core(
             event_id=str(event["id"]),
             workspace_id=str(event["workspace_id"]),
             profile_id=str(event["profile_id"]),
             replica_id=str(event["replica_id"]),
-            replica_seq=int(event["replica_seq"]),
-            hlc=HybridLogicalClock.parse(str(event["hlc"])).encode(),
+            replica_seq=replica_seq,
+            hlc=raw_hlc,
             author_member_id=str(event["author_member_id"]),
             event_type=str(event["event_type"]),
             entity_table=str(event["entity_table"]),
@@ -255,10 +272,13 @@ def verify_event(event: Mapping[str, Any], signing_public_key_b64: str) -> bool:
         digest = event_hash(core)
         if digest != event["event_hash"]:
             return False
-        return verify_bytes(
+        signature = str(event["signature"])
+        digest_bytes = bytes.fromhex(digest)
+        return verify_domain_bytes(
             signing_public_key_b64,
-            bytes.fromhex(digest),
-            str(event["signature"]),
-        )
+            EVENT_SIGNATURE_DOMAIN,
+            digest_bytes,
+            signature,
+        ) or verify_bytes(signing_public_key_b64, digest_bytes, signature)
     except (KeyError, TypeError, ValueError, json.JSONDecodeError):
         return False

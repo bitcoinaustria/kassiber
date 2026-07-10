@@ -1278,6 +1278,12 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
     (`ui-tauri/src/lib/connectionHealth.ts`) so a rate-limiting-but-alive backend
     is not shown as healthy/green, and a live `rate_limited_until` countdown in
     the freshness/sync-results UI.
+- [ ] Replace or independently audit `spake2==0.9` before treating LAN pairing
+  as a hardened long-term transport. The package is pure Python, has not been
+  maintained since 2018, and explicitly does not claim constant-time
+  behavior. The current use remains a one-guess, short-lived PAKE protected by
+  Ed25519 device proof-of-possession and a strict session deadline; preserve
+  those compensating controls during any replacement.
 
 ## Verification checklist
 

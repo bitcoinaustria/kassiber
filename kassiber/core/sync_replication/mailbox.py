@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import json
 from pathlib import Path
 import re
@@ -19,8 +19,9 @@ from .crypto import (
     decode_secret,
     hmac_identifier,
     sha256_hex,
-    sign_canonical,
+    sign_domain_canonical,
     verify_canonical,
+    verify_domain_canonical,
 )
 from .merge import import_bundle
 from .events import version_vector
@@ -30,6 +31,9 @@ from .transports import ObjectTransport, load_transport
 
 MAILBOX_SCHEMA_VERSION = 1
 DEFAULT_STALE_AFTER_SECONDS = 7 * 24 * 60 * 60
+MAILBOX_HEAD_DOMAIN = "mailbox-head-v1"
+MAILBOX_ACK_DOMAIN = "mailbox-ack-v1"
+MAX_HEAD_FUTURE_DRIFT_SECONDS = 5 * 60
 
 
 @dataclass(frozen=True)
@@ -161,7 +165,9 @@ def _sign_head(conn: sqlite3.Connection, *, book, core: Mapping[str, Any]) -> by
         raise AppError("local signing key is missing", code="sync_identity_incomplete")
     document = dict(core)
     document["head_hash"] = sha256_hex(canonical_json_bytes(core))
-    document["signature"] = sign_canonical(key["signing_private_key_b64"], document)
+    document["signature"] = sign_domain_canonical(
+        key["signing_private_key_b64"], MAILBOX_HEAD_DOMAIN, document
+    )
     return canonical_json_bytes(document)
 
 
@@ -187,7 +193,9 @@ def _sign_ack(conn: sqlite3.Connection, *, book) -> bytes:
     }
     document = dict(core)
     document["ack_hash"] = sha256_hex(canonical_json_bytes(core))
-    document["signature"] = sign_canonical(key["signing_private_key_b64"], document)
+    document["signature"] = sign_domain_canonical(
+        key["signing_private_key_b64"], MAILBOX_ACK_DOMAIN, document
+    )
     return canonical_json_bytes(document)
 
 
@@ -233,10 +241,18 @@ def _parse_head(conn: sqlite3.Connection, *, book, payload: bytes) -> tuple[dict
         raise AppError("mailbox head member binding is invalid", code="sync_mailbox_head_tampered")
     if document.get("device_hmac") != _scope_hmac(book, "mailbox-device", replica["device_id"]):
         raise AppError("mailbox head device binding is invalid", code="sync_mailbox_head_tampered")
-    if not isinstance(signature, str) or not verify_canonical(
-        replica["signing_public_key_b64"], document, signature
+    if not isinstance(signature, str) or not (
+        verify_domain_canonical(
+            replica["signing_public_key_b64"], MAILBOX_HEAD_DOMAIN, document, signature
+        )
+        or verify_canonical(replica["signing_public_key_b64"], document, signature)
     ):
         raise AppError("mailbox head signature is invalid", code="sync_mailbox_head_tampered")
+    created_at = _parse_timestamp(document.get("created_at"))
+    if created_at is None or created_at > datetime.now(timezone.utc) + timedelta(
+        seconds=MAX_HEAD_FUTURE_DRIFT_SECONDS
+    ):
+        raise AppError("mailbox head timestamp is invalid", code="sync_mailbox_head_invalid")
     if int(document.get("first_seq") or 0) < 1 or int(document.get("last_seq") or 0) < int(document["first_seq"]):
         raise AppError("mailbox head range is invalid", code="sync_mailbox_head_invalid")
     expected_prefix = mailbox_replica_prefix(book, replica["id"]) + "/bundles/"
@@ -278,7 +294,12 @@ def _parse_ack(conn: sqlite3.Connection, *, book, payload: bytes) -> tuple[Any, 
         document.get("member_hmac") != _scope_hmac(book, "mailbox-member", replica["member_id"])
         or document.get("device_hmac") != _scope_hmac(book, "mailbox-device", replica["device_id"])
         or not isinstance(signature, str)
-        or not verify_canonical(replica["signing_public_key_b64"], document, signature)
+        or not (
+            verify_domain_canonical(
+                replica["signing_public_key_b64"], MAILBOX_ACK_DOMAIN, document, signature
+            )
+            or verify_canonical(replica["signing_public_key_b64"], document, signature)
+        )
     ):
         raise AppError("mailbox acknowledgement signature is invalid", code="sync_ack_invalid")
     raw_vector = document.get("ack_vector")
@@ -467,7 +488,7 @@ def peer_staleness(
     ).fetchall()
     output: list[dict[str, Any]] = []
     for row in rows:
-        seen = _parse_timestamp(row["last_seen_at"])
+        seen = _parse_timestamp(row["last_bundle_at"])
         age = max(0, int((now - seen).total_seconds())) if seen else None
         status = "never_seen" if seen is None else ("stale" if age > stale_after_seconds else "fresh")
         output.append(

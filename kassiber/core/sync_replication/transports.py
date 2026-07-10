@@ -12,22 +12,82 @@ import os
 from pathlib import Path, PurePosixPath
 import sqlite3
 import tempfile
+import time
 from typing import Callable, Mapping, Protocol
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlencode, urljoin, urlparse
-from urllib.request import Request, urlopen
+from urllib.request import Request
 import uuid
 import xml.etree.ElementTree as ET
 
 from ...errors import AppError
+from ...http_client import host_limiter
+from ...proxy import urlopen_with_proxy
+from ...retry import retry_after_seconds_from_http_error
 from ...time_utils import now_iso
 
 
+_HTTP_RETRY_STATUS = frozenset({429, 503})
+_HTTP_MAX_ATTEMPTS = 3
+_HTTP_BACKOFF_CAP_SECONDS = 8.0
+
+
+def _is_loopback_host(hostname: str | None) -> bool:
+    if not hostname:
+        return False
+    normalized = hostname.strip("[]").lower()
+    if normalized == "localhost":
+        return True
+    try:
+        import ipaddress
+
+        return ipaddress.ip_address(normalized).is_loopback
+    except ValueError:
+        return False
+
+
+def _retrying_open(
+    *,
+    request: Request,
+    opener: Callable,
+    timeout: int,
+    sleeper: Callable[[float], None],
+    max_attempts: int,
+):
+    attempts = max(1, int(max_attempts))
+    limiter = host_limiter(request.full_url)
+    for attempt in range(attempts):
+        retry_after = None
+        limiter.acquire()
+        try:
+            return opener(request, timeout=timeout)
+        except HTTPError as exc:
+            if exc.code not in _HTTP_RETRY_STATUS or attempt + 1 >= attempts:
+                raise
+            retry_after = retry_after_seconds_from_http_error(exc)
+        finally:
+            limiter.release()
+        delay = (
+            float(retry_after)
+            if retry_after is not None
+            else min(_HTTP_BACKOFF_CAP_SECONDS, float(2**attempt))
+        )
+        sleeper(delay)
+    raise AssertionError("unreachable mailbox HTTP retry state")
+
+
 class ObjectTransport(Protocol):
-    def put(self, key: str, payload: bytes, *, if_absent: bool = False) -> None: ...
-    def get(self, key: str) -> bytes: ...
-    def list(self, prefix: str) -> list[str]: ...
-    def exists(self, key: str) -> bool: ...
+    def put(self, key: str, payload: bytes, *, if_absent: bool = False) -> None:
+        raise NotImplementedError
+
+    def get(self, key: str) -> bytes:
+        raise NotImplementedError
+
+    def list(self, prefix: str) -> list[str]:
+        raise NotImplementedError
+
+    def exists(self, key: str) -> bool:
+        raise NotImplementedError
 
 
 def _safe_key(key: str) -> str:
@@ -105,17 +165,36 @@ class WebDavTransport:
         base_url: str,
         username: str | None = None,
         password: str | None = None,
-        opener: Callable = urlopen,
+        opener: Callable | None = None,
         timeout: int = 30,
+        proxy_url: str | None = None,
+        sleeper: Callable[[float], None] = time.sleep,
+        max_attempts: int = _HTTP_MAX_ATTEMPTS,
     ) -> None:
         parsed = urlparse(base_url)
         if parsed.scheme not in {"http", "https"} or not parsed.netloc:
             raise AppError("WebDAV URL must be http(s)", code="sync_transport_invalid")
+        if parsed.scheme == "http" and not _is_loopback_host(parsed.hostname):
+            raise AppError(
+                "WebDAV credentials require HTTPS except on loopback",
+                code="sync_transport_insecure",
+                hint="Use an https:// WebDAV URL. Plain HTTP is allowed only for localhost testing.",
+            )
         self.base_url = base_url.rstrip("/") + "/"
         self.username = username
         self.password = password
-        self.opener = opener
+        self.proxy_url = str(proxy_url or "").strip() or None
+        self.opener = opener or (
+            lambda request, timeout: urlopen_with_proxy(
+                request,
+                timeout=timeout,
+                proxy_url=self.proxy_url,
+                source_label="sync mailbox",
+            )
+        )
         self.timeout = timeout
+        self.sleeper = sleeper
+        self.max_attempts = max_attempts
 
     def _url(self, key: str) -> str:
         return urljoin(self.base_url, "/".join(quote(part, safe="") for part in _safe_key(key).split("/")))
@@ -127,10 +206,18 @@ class WebDavTransport:
             headers["Authorization"] = f"Basic {token}"
         return headers
 
-    def _open(self, request: Request):
+    def _open(self, request: Request, *, passthrough_status: frozenset[int] = frozenset()):
         try:
-            return self.opener(request, timeout=self.timeout)
+            return _retrying_open(
+                request=request,
+                opener=self.opener,
+                timeout=self.timeout,
+                sleeper=self.sleeper,
+                max_attempts=self.max_attempts,
+            )
         except HTTPError as exc:
+            if exc.code in passthrough_status:
+                raise
             raise AppError(
                 "WebDAV mailbox request failed",
                 code="sync_transport_http_error",
@@ -146,7 +233,7 @@ class WebDavTransport:
             url = self._url("/".join(parts[:index]))
             request = Request(url, method="MKCOL", headers=self._headers())
             try:
-                with self.opener(request, timeout=self.timeout):
+                with self._open(request, passthrough_status=frozenset({301, 405})):
                     pass
             except HTTPError as exc:
                 if exc.code not in {301, 405}:
@@ -200,7 +287,7 @@ class WebDavTransport:
     def exists(self, key: str) -> bool:
         request = Request(self._url(key), method="HEAD", headers=self._headers())
         try:
-            with self.opener(request, timeout=self.timeout):
+            with self._open(request, passthrough_status=frozenset({404})):
                 return True
         except HTTPError as exc:
             if exc.code == 404:
@@ -221,8 +308,11 @@ class S3Transport:
         secret_key: str,
         prefix: str = "",
         session_token: str | None = None,
-        opener: Callable = urlopen,
+        opener: Callable | None = None,
         timeout: int = 30,
+        proxy_url: str | None = None,
+        sleeper: Callable[[float], None] = time.sleep,
+        max_attempts: int = _HTTP_MAX_ATTEMPTS,
     ) -> None:
         parsed = urlparse(endpoint)
         if parsed.scheme not in {"http", "https"} or not parsed.netloc:
@@ -236,8 +326,18 @@ class S3Transport:
         self.secret_key = secret_key
         self.prefix = prefix.strip("/")
         self.session_token = session_token
-        self.opener = opener
+        self.proxy_url = str(proxy_url or "").strip() or None
+        self.opener = opener or (
+            lambda request, timeout: urlopen_with_proxy(
+                request,
+                timeout=timeout,
+                proxy_url=self.proxy_url,
+                source_label="sync mailbox",
+            )
+        )
         self.timeout = timeout
+        self.sleeper = sleeper
+        self.max_attempts = max_attempts
 
     def _object_key(self, key: str) -> str:
         safe = _safe_key(key)
@@ -295,7 +395,13 @@ class S3Transport:
         url = self.endpoint + canonical_uri + (f"?{canonical_query}" if canonical_query else "")
         request = Request(url, data=payload if method in {"PUT", "POST"} else None, method=method, headers=headers)
         try:
-            return self.opener(request, timeout=self.timeout)
+            return _retrying_open(
+                request=request,
+                opener=self.opener,
+                timeout=self.timeout,
+                sleeper=self.sleeper,
+                max_attempts=self.max_attempts,
+            )
         except HTTPError as exc:
             raise AppError(
                 "S3 mailbox request failed",
@@ -397,7 +503,11 @@ def configure_transport(
             username=str(credentials.get("username")) if credentials.get("username") is not None else None,
             password=str(credentials.get("password")) if credentials.get("password") is not None else None,
         )
-        config = {"url": str(config.get("url")), "timeout": int(config.get("timeout") or 30)}
+        config = {
+            "url": str(config.get("url")),
+            "timeout": int(config.get("timeout") or 30),
+            "proxy": str(config.get("proxy") or ""),
+        }
         credentials = {key: credentials[key] for key in ("username", "password") if key in credentials}
     else:
         required = ("endpoint", "bucket")
@@ -411,6 +521,7 @@ def configure_transport(
             "region": str(config.get("region") or "us-east-1"),
             "prefix": str(config.get("prefix") or ""),
             "timeout": int(config.get("timeout") or 30),
+            "proxy": str(config.get("proxy") or ""),
         }
         credentials = {
             key: credentials[key]
@@ -518,6 +629,7 @@ def load_transport(conn, *, profile_id: str, transport_id: str | None = None, la
             username=credentials.get("username"),
             password=credentials.get("password"),
             timeout=int(config.get("timeout") or 30),
+            proxy_url=config.get("proxy"),
         )
     else:
         transport = S3Transport(
@@ -529,5 +641,6 @@ def load_transport(conn, *, profile_id: str, transport_id: str | None = None, la
             secret_key=credentials["secret_key"],
             session_token=credentials.get("session_token"),
             timeout=int(config.get("timeout") or 30),
+            proxy_url=config.get("proxy"),
         )
     return dict(row), transport

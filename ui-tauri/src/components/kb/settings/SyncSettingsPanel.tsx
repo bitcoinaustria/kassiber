@@ -117,6 +117,7 @@ function displayValue(value: unknown): string {
 }
 
 function QrPreview({ value, label }: { value: string; label: string }) {
+  const { t } = useTranslation("settings");
   const [src, setSrc] = React.useState<string | null>(null);
   const [failed, setFailed] = React.useState(false);
   React.useEffect(() => {
@@ -138,7 +139,7 @@ function QrPreview({ value, label }: { value: string; label: string }) {
       active = false;
     };
   }, [value]);
-  if (failed) return null;
+  if (failed) return <p className="text-xs text-destructive">{t("sync.qrError")}</p>;
   return src ? (
     <div className="w-fit rounded-md border bg-white p-2">
       <img src={src} alt={label} className="size-[220px]" />
@@ -186,10 +187,16 @@ function QrScanButton({ onScan }: { onScan: (value: string) => void }) {
 function CodeOutput({ value, label }: { value: string; label: string }) {
   const { t } = useTranslation("settings");
   const [copied, setCopied] = React.useState(false);
+  const [copyFailed, setCopyFailed] = React.useState(false);
   const copy = async () => {
-    await navigator.clipboard.writeText(value);
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 1600);
+    setCopyFailed(false);
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1600);
+    } catch {
+      setCopyFailed(true);
+    }
   };
   return (
     <div className="space-y-3 rounded-md border bg-muted/20 p-3">
@@ -200,6 +207,7 @@ function CodeOutput({ value, label }: { value: string; label: string }) {
           {copied ? t("sync.copied") : t("sync.copy")}
         </Button>
       </div>
+      {copyFailed ? <p className="text-xs text-destructive">{t("sync.copyError")}</p> : null}
       <Textarea value={value} readOnly className="min-h-24 font-mono text-xs" />
       <QrPreview value={value} label={label} />
     </div>
@@ -239,6 +247,7 @@ export function SyncSettingsPanel({ encryptedWorkspace }: { encryptedWorkspace: 
   const [prefix, setPrefix] = React.useState("");
   const [accessKey, setAccessKey] = React.useState("");
   const [secretKey, setSecretKey] = React.useState("");
+  const [proxy, setProxy] = React.useState("");
   const [selectedTransport, setSelectedTransport] = React.useState("");
   const [joinMemberName, setJoinMemberName] = React.useState("");
   const [joinDeviceLabel, setJoinDeviceLabel] = React.useState("");
@@ -248,8 +257,9 @@ export function SyncSettingsPanel({ encryptedWorkspace }: { encryptedWorkspace: 
   const [inviteRole, setInviteRole] = React.useState("editor");
 
   React.useEffect(() => {
-    if (!selectedTransport && status?.transports[0]) {
-      setSelectedTransport(status.transports[0].id);
+    const transports = status?.transports ?? [];
+    if (!transports.some((transport) => transport.id === selectedTransport)) {
+      setSelectedTransport(transports[0]?.id ?? "");
     }
   }, [selectedTransport, status?.transports]);
 
@@ -263,6 +273,11 @@ export function SyncSettingsPanel({ encryptedWorkspace }: { encryptedWorkspace: 
     }
   };
   const localRole = status?.members_list.find((member) => member.id === status.local_member_id)?.role;
+  const roleLabel = (role: SyncMember["role"]): string => {
+    if (role === "owner") return String(t("sync.roleOwner"));
+    if (role === "auditor") return String(t("sync.roleAuditor"));
+    return String(t("sync.roleEditor"));
+  };
   const pending = [enable, disable, configureTransport, deleteTransport, push, pull, invite, join, revokeMember, revokeDevice, resolveConflict].some((mutation) => mutation.isPending);
 
   if (statusQuery.isLoading) {
@@ -348,9 +363,7 @@ export function SyncSettingsPanel({ encryptedWorkspace }: { encryptedWorkspace: 
               <div className="space-y-1">
                 <div className="flex items-center gap-2">
                   <h3 className="text-sm font-semibold">{t("sync.statusTitle")}</h3>
-                  <Badge variant={status.enabled ? "secondary" : "outline"}>
-                    {status.enabled ? t("sync.enabled") : t("sync.paused")}
-                  </Badge>
+                  {!status.enabled ? <Badge variant="outline">{t("sync.paused")}</Badge> : null}
                   {status.open_conflicts > 0 ? (
                     <Badge variant="destructive">{t("sync.conflictCount", { count: status.open_conflicts })}</Badge>
                   ) : null}
@@ -437,6 +450,11 @@ export function SyncSettingsPanel({ encryptedWorkspace }: { encryptedWorkspace: 
                       <div className="space-y-2 sm:col-span-2"><Label htmlFor="sync-secret-key">{t("sync.secretKey")}</Label><Input id="sync-secret-key" type="password" value={secretKey} onChange={(event) => setSecretKey(event.target.value)} /></div>
                     </>
                   )}
+                  <div className="space-y-2 sm:col-span-2">
+                    <Label htmlFor="sync-proxy">{t("sync.proxy")}</Label>
+                    <Input id="sync-proxy" value={proxy} onChange={(event) => setProxy(event.target.value)} placeholder="socks5h://127.0.0.1:9050" />
+                    <p className="text-xs text-muted-foreground">{t("sync.proxyDescription")}</p>
+                  </div>
                 </div>
               )}
               <Button
@@ -446,8 +464,8 @@ export function SyncSettingsPanel({ encryptedWorkspace }: { encryptedWorkspace: 
                   const config = transportKind === "folder"
                     ? { path: folderPath }
                     : transportKind === "webdav"
-                      ? { url }
-                      : { endpoint: url, bucket, region, prefix };
+                      ? { url, proxy }
+                      : { endpoint: url, bucket, region, prefix, proxy };
                   const credentials = transportKind === "webdav"
                     ? { username, password }
                     : transportKind === "s3"
@@ -464,7 +482,7 @@ export function SyncSettingsPanel({ encryptedWorkspace }: { encryptedWorkspace: 
               <div key={transport.id} className="flex flex-col gap-3 rounded-md border bg-background p-3 sm:flex-row sm:items-center sm:justify-between">
                 <div className="min-w-0">
                   <p className="text-sm font-medium">{transport.label}</p>
-                  <p className="truncate text-xs text-muted-foreground">{transport.kind} · {transport.last_error_code ?? t("sync.ready")}</p>
+                  <p className="truncate text-xs text-muted-foreground">{transport.kind}{transport.last_error_code ? ` · ${transport.last_error_code}` : ""}</p>
                 </div>
                 <Button type="button" size="sm" variant="ghost" disabled={deleteTransport.isPending} onClick={() => void run(() => deleteTransport.mutateAsync({ transport_id: transport.id }))}>
                   <Trash2 className="size-4" /><span className="sr-only">{t("sync.removeTransport")}</span>
@@ -521,21 +539,21 @@ export function SyncSettingsPanel({ encryptedWorkspace }: { encryptedWorkspace: 
             <h3 className="text-sm font-semibold">{t("sync.peopleDevicesTitle")}</h3>
             {status.members_list.map((member) => (
               <div key={member.id} className="flex flex-col gap-3 rounded-md border bg-background p-3 sm:flex-row sm:items-center sm:justify-between">
-                <div><p className="text-sm font-medium">{member.display_name} <Badge variant="outline">{member.role}</Badge></p><p className="text-xs text-muted-foreground">{t("sync.activeDevices", { count: member.active_devices })}</p></div>
-                {localRole === "owner" && member.id !== status.local_member_id && !member.revoked_at ? <Button type="button" size="sm" variant="outline" onClick={() => void run(() => revokeMember.mutateAsync({ member_id: member.id }))}>{t("sync.revoke")}</Button> : null}
+                <div><p className="text-sm font-medium">{member.display_name} <Badge variant="outline">{roleLabel(member.role)}</Badge></p><p className="text-xs text-muted-foreground">{t("sync.activeDevices", { count: member.active_devices })}</p></div>
+                {localRole === "owner" && member.id !== status.local_member_id && !member.revoked_at ? <Button type="button" size="sm" variant="outline" disabled={pending} onClick={() => void run(() => revokeMember.mutateAsync({ member_id: member.id }))}>{t("sync.revoke")}</Button> : null}
               </div>
             ))}
             {status.devices_list.map((device) => (
               <div key={device.id} className="flex flex-col gap-3 rounded-md border bg-background p-3 sm:flex-row sm:items-center sm:justify-between">
                 <div><p className="text-sm font-medium">{device.label} {device.local_device ? <Badge variant="secondary">{t("sync.thisDevice")}</Badge> : null}</p><p className="text-xs text-muted-foreground">{device.member_name}</p></div>
-                {localRole === "owner" && !device.local_device && !device.revoked_at ? <Button type="button" size="sm" variant="ghost" onClick={() => void run(() => revokeDevice.mutateAsync({ device_id: device.id }))}>{t("sync.revoke")}</Button> : null}
+                {localRole === "owner" && !device.local_device && !device.revoked_at ? <Button type="button" size="sm" variant="ghost" disabled={pending} onClick={() => void run(() => revokeDevice.mutateAsync({ device_id: device.id }))}>{t("sync.revoke")}</Button> : null}
               </div>
             ))}
           </section>
 
-          <section className="space-y-3">
+          {status.conflicts.length > 0 ? <section className="space-y-3">
             <div><h3 className="text-sm font-semibold">{t("sync.conflictsTitle")}</h3><p className="text-sm text-muted-foreground">{t("sync.conflictsDescription")}</p></div>
-            {status.conflicts.length === 0 ? <p className="rounded-md border bg-background p-3 text-sm text-muted-foreground">{t("sync.noConflicts")}</p> : status.conflicts.map((conflict) => (
+            {status.conflicts.map((conflict) => (
               <div key={conflict.id} className="space-y-3 rounded-md border border-destructive/30 bg-destructive/5 p-4">
                 <div><p className="text-sm font-medium">{conflict.entity_table} · {conflict.field}</p><p className="font-mono text-xs text-muted-foreground">{conflict.entity_key}</p></div>
                 <div className="grid gap-3 sm:grid-cols-2">
@@ -546,7 +564,7 @@ export function SyncSettingsPanel({ encryptedWorkspace }: { encryptedWorkspace: 
                 </div>
               </div>
             ))}
-          </section>
+          </section> : null}
         </>
       )}
     </div>

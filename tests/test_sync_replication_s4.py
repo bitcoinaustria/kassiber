@@ -5,7 +5,7 @@ import tempfile
 import threading
 import unittest
 from pathlib import Path
-from unittest import mock
+import unittest.mock as mock
 
 from kassiber.core.accounts import create_profile, create_workspace
 from kassiber.core.sync_replication.bundle import build_bundle

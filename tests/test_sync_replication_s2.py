@@ -11,17 +11,26 @@ from pathlib import Path
 
 from kassiber.cli.handlers import process_journals
 from kassiber.core.accounts import create_profile, create_workspace
-from kassiber.core.sync_replication.bundle import build_bundle, parse_bundle
-from kassiber.core.sync_replication.capture import authored_state_digest, capture_local_changes
+from kassiber.core.sync_replication.bundle import _membership_catalog, build_bundle, parse_bundle
+from kassiber.core.sync_replication.capture import (
+    authored_state_digest,
+    capture_full_snapshot,
+    capture_local_changes,
+)
 from kassiber.core.sync_replication.conflicts import list_conflicts, resolve_conflict
-from kassiber.core.sync_replication.identity import enable_sync
+from kassiber.core.sync_replication.identity import disable_sync, enable_sync
 from kassiber.core.sync_replication.membership import (
     create_invitation,
     create_join_request,
     join_invitation,
+    revoke_device,
     revoke_member,
 )
-from kassiber.core.sync_replication.merge import import_bundle
+from kassiber.core.sync_replication.merge import (
+    _event_role_rejection,
+    _merge_membership_catalog,
+    import_bundle,
+)
 from kassiber.core.transaction_history import append_event
 from kassiber.core.ui_snapshot import build_report_blockers_snapshot
 from kassiber.db import open_db
@@ -296,11 +305,19 @@ class SyncBundleReplayTests(unittest.TestCase):
             if owner_conflict["first_value"] == "USD"
             else owner_conflict["second_event_id"]
         )
+        disable_sync(self.owner, profile_id=self.profile["id"])
         resolve_conflict(
             self.owner,
             profile_id=self.profile["id"],
             conflict_id=owner_conflict["id"],
             source_event_id=chosen,
+        )
+        enable_sync(
+            self.owner,
+            workspace_id=self.workspace["id"],
+            profile_id=self.profile["id"],
+            member_name="",
+            device_label="",
         )
         resolution = build_bundle(self.owner, profile_id=self.profile["id"])
         import_bundle(self.peer, profile_id=self.profile["id"], ciphertext=resolution.ciphertext)
@@ -370,17 +387,171 @@ class SyncBundleReplayTests(unittest.TestCase):
             (self.profile["id"],),
         )
         malicious = build_bundle(self.peer, profile_id=self.profile["id"])
-        result = import_bundle(
+        with self.assertRaisesRegex(AppError, "sender is revoked"):
+            import_bundle(
+                self.owner,
+                profile_id=self.profile["id"],
+                ciphertext=malicious.ciphertext,
+            )
+        self.assertEqual(self.owner.execute("SELECT label FROM profiles").fetchone()[0], "Books")
+
+    def test_revocation_fence_uses_causal_sequence_not_backdated_hlc(self):
+        _, joined, _ = self._initial_sync("editor")
+        revoke_member(
             self.owner,
             profile_id=self.profile["id"],
-            ciphertext=malicious.ciphertext,
+            member_id=joined["member_id"],
         )
-        self.assertEqual(result.rejected_events, 1)
-        self.assertEqual(self.owner.execute("SELECT label FROM profiles").fetchone()[0], "Books")
+        member = self.owner.execute(
+            "SELECT * FROM sync_members WHERE id = ?",
+            (joined["member_id"],),
+        ).fetchone()
+        replica = self.owner.execute(
+            "SELECT * FROM sync_replicas WHERE member_id = ?",
+            (joined["member_id"],),
+        ).fetchone()
+        fence = json.loads(member["revoked_context_json"])
         self.assertEqual(
-            self.owner.execute("SELECT code FROM sync_notices").fetchone()[0],
+            _event_role_rejection(
+                self.owner,
+                member,
+                replica,
+                {
+                    "replica_id": replica["id"],
+                    "replica_seq": int(fence.get(replica["id"], 0)) + 1,
+                    "hlc": f"0000000000000000:0000000000:{replica['id']}",
+                    "event_type": "row.upsert",
+                },
+            ),
             "revoked_member_event",
         )
+
+    def test_revoked_device_bundle_is_rejected_without_revoking_member(self):
+        _, joined, _ = self._initial_sync("editor")
+        revoke_device(
+            self.owner,
+            profile_id=self.profile["id"],
+            device_id=joined["device_id"],
+        )
+        member = self.owner.execute(
+            "SELECT revoked_at FROM sync_members WHERE id = ?",
+            (joined["member_id"],),
+        ).fetchone()
+        self.assertIsNone(member["revoked_at"])
+        self.peer.execute(
+            "UPDATE profiles SET label = 'Revoked device edit' WHERE id = ?",
+            (self.profile["id"],),
+        )
+        malicious = build_bundle(self.peer, profile_id=self.profile["id"])
+        with self.assertRaisesRegex(AppError, "sender is revoked"):
+            import_bundle(
+                self.owner,
+                profile_id=self.profile["id"],
+                ciphertext=malicious.ciphertext,
+            )
+        self.assertEqual(self.owner.execute("SELECT label FROM profiles").fetchone()[0], "Books")
+
+    def test_revoking_one_device_does_not_revoke_members_other_device(self):
+        _, joined, _ = self._initial_sync("editor")
+        revoked_replica = self.owner.execute(
+            "SELECT * FROM sync_replicas WHERE device_id = ?",
+            (joined["device_id"],),
+        ).fetchone()
+        revoke_device(
+            self.owner,
+            profile_id=self.profile["id"],
+            device_id=joined["device_id"],
+        )
+        member = self.owner.execute(
+            "SELECT * FROM sync_members WHERE id = ?",
+            (joined["member_id"],),
+        ).fetchone()
+        rejected = _event_role_rejection(
+            self.owner,
+            member,
+            revoked_replica,
+            {
+                "replica_id": revoked_replica["id"],
+                "replica_seq": int(revoked_replica["last_seq"]) + 1,
+                "event_type": "row.upsert",
+            },
+        )
+        self.assertEqual(rejected, "revoked_device_event")
+
+        second_device_id = str(uuid.uuid4())
+        second_replica_id = str(uuid.uuid4())
+        original_device = self.owner.execute(
+            "SELECT * FROM sync_devices WHERE id = ?",
+            (joined["device_id"],),
+        ).fetchone()
+        self.owner.execute(
+            """
+            INSERT INTO sync_devices(
+                id, workspace_id, profile_id, member_id, recipient_public_key,
+                label, paired_hlc, paired_at, record_signer_member_id,
+                record_signature
+            ) VALUES(?, ?, ?, ?, ?, 'Second device', ?, ?, ?, ?)
+            """,
+            (
+                second_device_id,
+                original_device["workspace_id"],
+                original_device["profile_id"],
+                original_device["member_id"],
+                f"age1second{uuid.uuid4().hex}",
+                original_device["paired_hlc"],
+                original_device["paired_at"],
+                original_device["record_signer_member_id"],
+                original_device["record_signature"],
+            ),
+        )
+        self.owner.execute(
+            """
+            INSERT INTO sync_replicas(
+                id, workspace_id, profile_id, member_id, device_id, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?)
+            """,
+            (
+                second_replica_id,
+                original_device["workspace_id"],
+                original_device["profile_id"],
+                original_device["member_id"],
+                second_device_id,
+                now_iso(),
+            ),
+        )
+        second_replica = self.owner.execute(
+            "SELECT * FROM sync_replicas WHERE id = ?",
+            (second_replica_id,),
+        ).fetchone()
+        self.assertIsNone(
+            _event_role_rejection(
+                self.owner,
+                member,
+                second_replica,
+                {
+                    "replica_id": second_replica_id,
+                    "replica_seq": 1,
+                    "event_type": "row.upsert",
+                },
+            )
+        )
+
+    def test_cross_book_device_and_replica_catalog_injection_is_rejected(self):
+        self._initial_sync("editor")
+        catalog = _membership_catalog(self.peer, self.profile["id"])
+        catalog["devices"][0]["profile_id"] = "attacker-profile"
+        catalog["devices"][0]["workspace_id"] = "attacker-workspace"
+        book = self.owner.execute(
+            "SELECT * FROM sync_books WHERE profile_id = ?",
+            (self.profile["id"],),
+        ).fetchone()
+        with self.assertRaisesRegex(AppError, "device row targets another book"):
+            _merge_membership_catalog(self.owner, book=book, catalog=catalog)
+
+        catalog = _membership_catalog(self.peer, self.profile["id"])
+        catalog["replicas"][0]["profile_id"] = "attacker-profile"
+        with self.assertRaisesRegex(AppError, "replica row targets another book"):
+            _merge_membership_catalog(self.owner, book=book, catalog=catalog)
 
     def test_transaction_history_replays_after_transaction_anchor(self):
         self._join_peer("editor")
@@ -423,6 +594,41 @@ class SyncBundleReplayTests(unittest.TestCase):
             ).fetchone()[0],
             "true",
         )
+
+    def test_full_snapshot_preserves_nullable_edit_history_values(self):
+        self._join_peer("editor")
+        _, tx_id, _, _ = self._insert_wallet_transaction_attachment()
+        tx = self.owner.execute("SELECT * FROM transactions WHERE id = ?", (tx_id,)).fetchone()
+        history_id = append_event(
+            self.owner,
+            workspace=self.workspace,
+            profile=self.profile,
+            tx=tx,
+            source="gui",
+            reason="nullable history",
+            changed_at=now_iso(),
+            changed_fields=["notes"],
+            before_state={"notes": None},
+            after_state={"notes": None},
+        )
+        self.owner.execute(
+            """
+            UPDATE transaction_edit_fields
+            SET before_value = NULL, after_value = NULL
+            WHERE event_id = ?
+            """,
+            (history_id,),
+        )
+        events = capture_full_snapshot(self.owner, profile_id=self.profile["id"])
+        snapshot = next(
+            event
+            for event in events
+            if event.event_type == "transaction.edit" and event.entity_key == history_id
+        )
+        field = snapshot.payload["fields"][0]
+        self.assertIsNone(field["before_value"])
+        self.assertIsNone(field["after_value"])
+        self.assertEqual(field["diff"], {})
 
     def test_reviewed_btcpay_link_syncs_snapshot_without_fetched_provenance_fk(self):
         self._initial_sync("editor")

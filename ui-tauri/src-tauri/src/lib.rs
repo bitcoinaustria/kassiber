@@ -383,6 +383,9 @@ const STREAMING_DAEMON_KINDS: &[&str] = &[
     "ui.workspace.freshness.run",
     "ui.journals.process",
     "ui.rates.rebuild",
+    "ui.sync.push",
+    "ui.sync.pull",
+    "ui.sync.join",
 ];
 
 // Daemon kinds that exercise the AI runtime (model calls, chat sessions, tool

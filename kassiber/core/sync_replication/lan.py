@@ -24,7 +24,14 @@ from spake2 import SPAKE2_A, SPAKE2_B
 
 from ...errors import AppError
 from .bundle import MAX_BUNDLE_BYTES, build_bundle
-from .crypto import canonical_json_bytes, decode_secret, hmac_identifier, sha256_hex
+from .crypto import (
+    canonical_json_bytes,
+    decode_secret,
+    hmac_identifier,
+    sha256_hex,
+    sign_domain_canonical,
+    verify_domain_canonical,
+)
 from .identity import connection_is_encrypted
 from .merge import import_bundle
 
@@ -35,6 +42,7 @@ LAN_OFFER_TTL_SECONDS = 10 * 60
 MAX_HANDSHAKE_FRAME_BYTES = 256 * 1024
 MAX_DATA_FRAME_BYTES = MAX_BUNDLE_BYTES * 2
 _SHORT_CODE_ALPHABET = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ"
+_DEVICE_SESSION_PROOF_DOMAIN = "lan-device-session-v1"
 
 
 @dataclass(frozen=True)
@@ -111,6 +119,49 @@ def _local_device(conn, book):
     return row
 
 
+def _local_device_proof(conn, *, book, device, transcript: bytes, role: str) -> str:
+    key = conn.execute(
+        "SELECT signing_private_key_b64 FROM sync_member_private_keys WHERE member_id = ?",
+        (book["local_member_id"],),
+    ).fetchone()
+    if not key:
+        raise AppError("local member signing key is unavailable", code="sync_identity_incomplete")
+    return sign_domain_canonical(
+        key["signing_private_key_b64"],
+        _DEVICE_SESSION_PROOF_DOMAIN,
+        _device_session_proof_core(device=device, transcript=transcript, role=role),
+    )
+
+
+def _device_session_proof_core(*, device, transcript: bytes, role: str) -> dict[str, str]:
+    return {
+        "device_id": str(device["id"]),
+        "device_pin": _device_pin(str(device["recipient_public_key"])),
+        "role": role,
+        "transcript_sha256": sha256_hex(transcript),
+    }
+
+
+def _verify_device_session_proof(
+    conn,
+    *,
+    device,
+    transcript: bytes,
+    role: str,
+    signature: str,
+) -> bool:
+    member = conn.execute(
+        "SELECT signing_public_key_b64 FROM sync_members WHERE id = ? AND revoked_at IS NULL",
+        (device["member_id"],),
+    ).fetchone()
+    return bool(member) and verify_domain_canonical(
+        member["signing_public_key_b64"],
+        _DEVICE_SESSION_PROOF_DOMAIN,
+        _device_session_proof_core(device=device, transcript=transcript, role=role),
+        signature,
+    )
+
+
 def _device_by_pin(conn, *, profile_id: str, pin: str):
     for row in conn.execute(
         "SELECT * FROM sync_devices WHERE profile_id = ? AND revoked_at IS NULL",
@@ -156,9 +207,14 @@ def _send_frame(sock: socket.socket, payload: bytes, *, maximum: int) -> None:
     sock.sendall(struct.pack("!I", len(payload)) + payload)
 
 
-def _recv_exact(sock: socket.socket, size: int) -> bytes:
+def _recv_exact(sock: socket.socket, size: int, *, deadline: float | None = None) -> bytes:
     output = bytearray()
     while len(output) < size:
+        if deadline is not None:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise AppError("LAN sync session timed out", code="sync_lan_timeout", retryable=True)
+            sock.settimeout(max(0.1, remaining))
         chunk = sock.recv(size - len(output))
         if not chunk:
             raise AppError("LAN peer closed the connection", code="sync_lan_connection_closed")
@@ -166,20 +222,22 @@ def _recv_exact(sock: socket.socket, size: int) -> bytes:
     return bytes(output)
 
 
-def _recv_frame(sock: socket.socket, *, maximum: int) -> bytes:
-    size = struct.unpack("!I", _recv_exact(sock, 4))[0]
+def _recv_frame(sock: socket.socket, *, maximum: int, deadline: float | None = None) -> bytes:
+    size = struct.unpack("!I", _recv_exact(sock, 4, deadline=deadline))[0]
     if size <= 0 or size > maximum:
         raise AppError("LAN sync frame length is invalid", code="sync_lan_frame_invalid")
-    return _recv_exact(sock, size)
+    return _recv_exact(sock, size, deadline=deadline)
 
 
 def _send_json(sock: socket.socket, payload: Mapping[str, Any]) -> None:
     _send_frame(sock, canonical_json_bytes(payload), maximum=MAX_HANDSHAKE_FRAME_BYTES)
 
 
-def _recv_json(sock: socket.socket) -> dict[str, Any]:
+def _recv_json(sock: socket.socket, *, deadline: float | None = None) -> dict[str, Any]:
     try:
-        payload = json.loads(_recv_frame(sock, maximum=MAX_HANDSHAKE_FRAME_BYTES))
+        payload = json.loads(
+            _recv_frame(sock, maximum=MAX_HANDSHAKE_FRAME_BYTES, deadline=deadline)
+        )
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
         raise AppError("LAN handshake is invalid", code="sync_lan_handshake_invalid") from exc
     if not isinstance(payload, dict):
@@ -305,7 +363,7 @@ class LanSyncServer:
         conn,
         *,
         profile_id: str,
-        bind_host: str = "0.0.0.0",
+        bind_host: str | None = None,
         bind_port: int = 0,
         advertise_host: str | None = None,
         advertise_port: int | None = None,
@@ -315,13 +373,14 @@ class LanSyncServer:
         device = _local_device(conn, book)
         self.profile_id = profile_id
         self.book_id = book["book_id"]
+        actual_bind_host = bind_host or _lan_address()
         self._socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self._socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        self._socket.bind((bind_host, bind_port))
+        self._socket.bind((actual_bind_host, bind_port))
         self._socket.listen(1)
         self._closed = False
         pairing_id = str(uuid.uuid4())
-        host = advertise_host or (bind_host if bind_host not in {"0.0.0.0", "::"} else _lan_address())
+        host = advertise_host or actual_bind_host
         self.offer = LanPairingOffer(
             schema_version=LAN_SCHEMA_VERSION,
             pairing_id=pairing_id,
@@ -386,7 +445,13 @@ class LanSyncServer:
             conn.execute("SAVEPOINT sync_lan_server")
             with peer_socket:
                 peer_socket.settimeout(max(0.1, deadline - time.monotonic()))
-                result = self._handle_peer(conn, peer_socket, book, attachments_root)
+                result = self._handle_peer(
+                    conn,
+                    peer_socket,
+                    book,
+                    attachments_root,
+                    deadline=deadline,
+                )
             conn.execute("RELEASE SAVEPOINT sync_lan_server")
             return result
         except Exception:
@@ -395,13 +460,23 @@ class LanSyncServer:
                     conn.execute("ROLLBACK TO SAVEPOINT sync_lan_server")
                     conn.execute("RELEASE SAVEPOINT sync_lan_server")
                 except sqlite3.DatabaseError:
+                    # Savepoint cleanup is best-effort; preserve the original
+                    # peer/session exception that triggered this rollback.
                     pass
             raise
         finally:
             self.close()
 
-    def _handle_peer(self, conn, peer_socket, book, attachments_root) -> LanSyncResult:
-        hello = _recv_json(peer_socket)
+    def _handle_peer(
+        self,
+        conn,
+        peer_socket,
+        book,
+        attachments_root,
+        *,
+        deadline: float,
+    ) -> LanSyncResult:
+        hello = _recv_json(peer_socket, deadline=deadline)
         if hello.get("schema_version") != LAN_SCHEMA_VERSION or hello.get("pairing_id") != self.offer.pairing_id:
             raise AppError("LAN pairing id is invalid", code="sync_lan_handshake_invalid")
         try:
@@ -423,25 +498,51 @@ class LanSyncServer:
             }
         )
         key = _session_key(shared, transcript)
+        local_device = _local_device(conn, book)
         _send_json(
             peer_socket,
             {
                 "schema_version": LAN_SCHEMA_VERSION,
                 "spake_message": base64.b64encode(message_b).decode("ascii"),
                 "confirmation": _confirmation(key, b"server", transcript),
+                "device_id": local_device["id"],
+                "device_pin": _device_pin(local_device["recipient_public_key"]),
+                "device_proof": _local_device_proof(
+                    conn,
+                    book=book,
+                    device=local_device,
+                    transcript=transcript,
+                    role="server",
+                ),
             },
         )
-        client_frame = _open(
-            key,
-            _recv_frame(peer_socket, maximum=MAX_DATA_FRAME_BYTES),
-            aad=b"client\x00" + transcript,
-        )
-        if client_frame.get("confirmation") != _confirmation(key, b"client", transcript):
+        client_confirmation = _recv_json(peer_socket, deadline=deadline)
+        if not hmac.compare_digest(
+            str(client_confirmation.get("confirmation") or ""),
+            _confirmation(key, b"client", transcript),
+        ):
             raise AppError("LAN client key confirmation failed", code="sync_lan_handshake_invalid")
         peer = _device_by_pin(
             conn,
             profile_id=self.profile_id,
-            pin=str(client_frame.get("device_pin") or ""),
+            pin=str(client_confirmation.get("device_pin") or ""),
+        )
+        if str(client_confirmation.get("device_id") or "") != peer["id"] or not _verify_device_session_proof(
+            conn,
+            device=peer,
+            transcript=transcript,
+            role="client",
+            signature=str(client_confirmation.get("device_proof") or ""),
+        ):
+            raise AppError("LAN client device proof failed", code="sync_lan_peer_untrusted")
+        client_frame = _open(
+            key,
+            _recv_frame(
+                peer_socket,
+                maximum=MAX_DATA_FRAME_BYTES,
+                deadline=deadline,
+            ),
+            aad=b"client\x00" + transcript,
         )
         incoming = _decode_bundle(client_frame)
         imported = (
@@ -459,7 +560,6 @@ class LanSyncServer:
             profile_id=self.profile_id,
             attachments_root=attachments_root,
         )
-        local_device = _local_device(conn, book)
         response = {
             "confirmation": _confirmation(key, b"server-data", transcript),
             "device_id": local_device["id"],
@@ -497,6 +597,7 @@ def connect_lan(
     offer = LanPairingOffer.decode(offer_code)
     local_device = _local_device(conn, book)
     conn.execute("SAVEPOINT sync_lan_client")
+    deadline = time.monotonic() + timeout_seconds
     try:
         outgoing = build_bundle(
             conn,
@@ -524,7 +625,7 @@ def connect_lan(
                     "spake_message": base64.b64encode(message_a).decode("ascii"),
                 },
             )
-            server_hello = _recv_json(peer_socket)
+            server_hello = _recv_json(peer_socket, deadline=deadline)
             try:
                 message_b = base64.b64decode(str(server_hello["spake_message"]), validate=True)
             except Exception as exc:
@@ -538,13 +639,46 @@ def connect_lan(
                 }
             )
             key = _session_key(shared, transcript)
-            if server_hello.get("confirmation") != _confirmation(key, b"server", transcript):
+            if not hmac.compare_digest(
+                str(server_hello.get("confirmation") or ""),
+                _confirmation(key, b"server", transcript),
+            ):
                 raise AppError("LAN server key confirmation failed", code="sync_lan_handshake_invalid")
+            if not hmac.compare_digest(
+                str(server_hello.get("device_pin") or ""), offer.server_device_pin
+            ):
+                raise AppError("LAN server device pin changed", code="sync_lan_peer_untrusted")
+            peer = _device_by_pin(
+                conn,
+                profile_id=profile_id,
+                pin=offer.server_device_pin,
+            )
+            if str(server_hello.get("device_id") or "") != peer["id"] or not _verify_device_session_proof(
+                conn,
+                device=peer,
+                transcript=transcript,
+                role="server",
+                signature=str(server_hello.get("device_proof") or ""),
+            ):
+                raise AppError("LAN server device proof failed", code="sync_lan_peer_untrusted")
+            _send_json(
+                peer_socket,
+                {
+                    "confirmation": _confirmation(key, b"client", transcript),
+                    "device_id": local_device["id"],
+                    "device_pin": _device_pin(local_device["recipient_public_key"]),
+                    "device_proof": _local_device_proof(
+                        conn,
+                        book=book,
+                        device=local_device,
+                        transcript=transcript,
+                        role="client",
+                    ),
+                },
+            )
             request = {
-                "confirmation": _confirmation(key, b"client", transcript),
                 "device_id": local_device["id"],
                 "device_label": local_device["label"],
-                "device_pin": _device_pin(local_device["recipient_public_key"]),
                 **_bundle_payload(outgoing),
             }
             _send_frame(
@@ -554,18 +688,20 @@ def connect_lan(
             )
             server_frame = _open(
                 key,
-                _recv_frame(peer_socket, maximum=MAX_DATA_FRAME_BYTES),
+                _recv_frame(
+                    peer_socket,
+                    maximum=MAX_DATA_FRAME_BYTES,
+                    deadline=deadline,
+                ),
                 aad=b"server\x00" + transcript,
             )
-        if server_frame.get("confirmation") != _confirmation(key, b"server-data", transcript):
+        if not hmac.compare_digest(
+            str(server_frame.get("confirmation") or ""),
+            _confirmation(key, b"server-data", transcript),
+        ):
             raise AppError("LAN server data confirmation failed", code="sync_lan_handshake_invalid")
         if not hmac.compare_digest(str(server_frame.get("device_pin") or ""), offer.server_device_pin):
             raise AppError("LAN server device pin changed", code="sync_lan_peer_untrusted")
-        peer = _device_by_pin(
-            conn,
-            profile_id=profile_id,
-            pin=offer.server_device_pin,
-        )
         incoming = _decode_bundle(server_frame)
         imported = (
             import_bundle(

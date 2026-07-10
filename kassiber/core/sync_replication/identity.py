@@ -13,9 +13,13 @@ from .crypto import (
     generate_device_keypair,
     generate_signing_keypair,
     random_book_key,
-    sign_canonical,
+    sign_domain_canonical,
 )
 from .events import author_event, version_vector
+
+
+MEMBER_RECORD_DOMAIN = "member-record-v2"
+DEVICE_RECORD_DOMAIN = "device-record-v2"
 
 
 SYNC_ROLES = frozenset({"owner", "editor", "auditor"})
@@ -96,6 +100,7 @@ def enable_sync(
     bootstrap_hlc = tick_clock(None, replica_id).encode()
     member_record = {
         "id": member_id,
+        "workspace_id": workspace_id,
         "profile_id": profile_id,
         "display_name": cleaned_member_name,
         "signing_public_key_b64": signing.public_key_b64,
@@ -103,22 +108,30 @@ def enable_sync(
         "added_hlc": bootstrap_hlc,
         "inviter_member_id": member_id,
     }
-    member_signature = sign_canonical(signing.private_key_b64, member_record)
+    member_signature = sign_domain_canonical(
+        signing.private_key_b64, MEMBER_RECORD_DOMAIN, member_record
+    )
     device_record = {
         "id": device_id,
+        "workspace_id": workspace_id,
         "profile_id": profile_id,
         "member_id": member_id,
+        "record_signer_member_id": member_id,
         "recipient_public_key": device.recipient,
         "label": cleaned_device_label,
         "paired_hlc": bootstrap_hlc,
     }
-    device_signature = sign_canonical(
+    device_signature = sign_domain_canonical(
         signing.private_key_b64,
+        DEVICE_RECORD_DOMAIN,
         {
-            "id": device_id,
-            "member_id": member_id,
-            "recipient_public_key": device.recipient,
-            "label": cleaned_device_label,
+            "id": device_record["id"],
+            "workspace_id": device_record["workspace_id"],
+            "profile_id": device_record["profile_id"],
+            "member_id": device_record["member_id"],
+            "record_signer_member_id": device_record["record_signer_member_id"],
+            "recipient_public_key": device_record["recipient_public_key"],
+            "label": device_record["label"],
         },
     )
 
@@ -168,8 +181,9 @@ def enable_sync(
         """
         INSERT INTO sync_devices(
             id, workspace_id, profile_id, member_id, recipient_public_key,
-            label, paired_hlc, paired_at, last_seen_at, record_signature
-        ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            label, paired_hlc, paired_at, last_seen_at, record_signer_member_id,
+            record_signature
+        ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             device_id,
@@ -181,6 +195,7 @@ def enable_sync(
             bootstrap_hlc,
             timestamp,
             timestamp,
+            member_id,
             device_signature,
         ),
     )

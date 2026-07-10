@@ -17,11 +17,12 @@ from ...backup.safe_tar import inspect_tar_members
 from ...errors import AppError
 from ...time_utils import now_iso
 from .capture import capture_full_snapshot, capture_local_changes
-from .crypto import canonical_json_bytes, sha256_hex, sign_canonical
+from .crypto import canonical_json_bytes, sha256_hex, sign_domain_canonical
 from .events import version_vector
 
 
 BUNDLE_SCHEMA_VERSION = 1
+BUNDLE_MANIFEST_DOMAIN = "bundle-manifest-v1"
 BUNDLE_MANIFEST_NAME = "manifest.json"
 BUNDLE_EVENTS_NAME = "events.jsonl"
 BUNDLE_BLOBS_DIR = "blobs"
@@ -85,6 +86,7 @@ def _membership_catalog(conn, profile_id: str) -> dict[str, list[dict[str, Any]]
                 "added_at",
                 "revoked_hlc",
                 "revoked_at",
+                "revoked_context_json",
                 "inviter_member_id",
                 "record_signature",
             )
@@ -109,6 +111,8 @@ def _membership_catalog(conn, profile_id: str) -> dict[str, list[dict[str, Any]]
                 "last_seen_at",
                 "revoked_hlc",
                 "revoked_at",
+                "revoked_context_json",
+                "record_signer_member_id",
                 "record_signature",
             )
         }
@@ -327,8 +331,8 @@ def build_bundle(
     ).fetchone()
     if not private_key:
         raise AppError("local signing key is missing", code="sync_identity_incomplete")
-    manifest["manifest_signature"] = sign_canonical(
-        private_key["signing_private_key_b64"], manifest
+    manifest["manifest_signature"] = sign_domain_canonical(
+        private_key["signing_private_key_b64"], BUNDLE_MANIFEST_DOMAIN, manifest
     )
     plaintext = _build_plaintext_tar(manifest=manifest, events_bytes=events_bytes, blobs=blobs)
     encrypted = BytesIO()

@@ -21,6 +21,7 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import (
 def canonical_json_bytes(value: Any) -> bytes:
     return json.dumps(
         value,
+        allow_nan=False,
         ensure_ascii=True,
         separators=(",", ":"),
         sort_keys=True,
@@ -92,6 +93,52 @@ def verify_canonical(
     signature_b64: str,
 ) -> bool:
     return verify_bytes(public_key_b64, canonical_json_bytes(payload), signature_b64)
+
+
+def _domain_payload(domain: str, payload: bytes) -> bytes:
+    normalized = str(domain or "").strip()
+    if not normalized or "\x00" in normalized:
+        raise ValueError("signature domain must be non-empty and cannot contain NUL")
+    return b"kassiber-sync-signature\x00" + normalized.encode("ascii") + b"\x00" + payload
+
+
+def sign_domain_bytes(private_key_b64: str, domain: str, payload: bytes) -> str:
+    return sign_bytes(private_key_b64, _domain_payload(domain, payload))
+
+
+def verify_domain_bytes(
+    public_key_b64: str,
+    domain: str,
+    payload: bytes,
+    signature_b64: str,
+) -> bool:
+    try:
+        framed = _domain_payload(domain, payload)
+    except (UnicodeEncodeError, ValueError):
+        return False
+    return verify_bytes(public_key_b64, framed, signature_b64)
+
+
+def sign_domain_canonical(
+    private_key_b64: str,
+    domain: str,
+    payload: Mapping[str, Any],
+) -> str:
+    return sign_domain_bytes(private_key_b64, domain, canonical_json_bytes(payload))
+
+
+def verify_domain_canonical(
+    public_key_b64: str,
+    domain: str,
+    payload: Mapping[str, Any],
+    signature_b64: str,
+) -> bool:
+    return verify_domain_bytes(
+        public_key_b64,
+        domain,
+        canonical_json_bytes(payload),
+        signature_b64,
+    )
 
 
 def sha256_hex(payload: bytes) -> str:

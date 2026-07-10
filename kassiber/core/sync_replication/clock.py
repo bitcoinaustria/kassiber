@@ -9,11 +9,16 @@ carry causality and the HLC only provides a stable replay order.
 from __future__ import annotations
 
 from dataclasses import dataclass
+import re
 import time
 
 
 _PHYSICAL_WIDTH = 16
 _COUNTER_WIDTH = 10
+MAX_REMOTE_DRIFT_MS = 5 * 60 * 1000
+_HLC_PATTERN = re.compile(
+    rf"^[0-9]{{{_PHYSICAL_WIDTH}}}:[0-9]{{{_COUNTER_WIDTH}}}:[^:]+$"
+)
 
 
 @dataclass(frozen=True, order=True)
@@ -38,15 +43,19 @@ class HybridLogicalClock:
 
     @classmethod
     def parse(cls, value: str) -> "HybridLogicalClock":
-        parts = str(value or "").split(":", 2)
-        if len(parts) != 3:
+        raw = value if isinstance(value, str) else ""
+        if not _HLC_PATTERN.fullmatch(raw):
             raise ValueError("invalid HLC encoding")
+        parts = raw.split(":", 2)
         try:
             physical_ms = int(parts[0])
             counter = int(parts[1])
         except ValueError as exc:
             raise ValueError("invalid HLC numeric component") from exc
-        return cls(physical_ms=physical_ms, counter=counter, replica_id=parts[2])
+        parsed = cls(physical_ms=physical_ms, counter=counter, replica_id=parts[2])
+        if parsed.encode() != raw:
+            raise ValueError("non-canonical HLC encoding")
+        return parsed
 
 
 def _now_ms() -> int:
@@ -74,6 +83,7 @@ def observe_clock(
     replica_id: str,
     *,
     now_ms: int | None = None,
+    max_remote_drift_ms: int = MAX_REMOTE_DRIFT_MS,
 ) -> HybridLogicalClock:
     """Advance a local clock after observing a verified remote event."""
 
@@ -81,6 +91,9 @@ def observe_clock(
     remote_clock = HybridLogicalClock.parse(remote) if isinstance(remote, str) else remote
     physical_now = _now_ms() if now_ms is None else int(now_ms)
     local_physical = local_clock.physical_ms if local_clock else 0
+    future_ceiling = max(physical_now, local_physical) + int(max_remote_drift_ms)
+    if remote_clock.physical_ms > future_ceiling:
+        raise ValueError("remote HLC exceeds the allowed future-drift window")
     max_physical = max(physical_now, local_physical, remote_clock.physical_ms)
     if local_clock and max_physical == local_clock.physical_ms == remote_clock.physical_ms:
         counter = max(local_clock.counter, remote_clock.counter) + 1

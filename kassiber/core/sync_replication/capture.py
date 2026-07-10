@@ -7,10 +7,15 @@ import sqlite3
 from typing import Any
 
 from ...errors import AppError
-from ...time_utils import now_iso
 from .crypto import canonical_json_bytes, sha256_hex
 from .events import AuthoredEvent, author_event
 from .schema_allowlist import SYNC_TABLES, iter_rows, row_key, serialize_row
+
+
+def _json_load_nullable(value: Any) -> Any:
+    if value is None:
+        return None
+    return json.loads(value)
 
 
 def _upsert_row_state(
@@ -360,9 +365,9 @@ def capture_full_snapshot(conn: sqlite3.Connection, *, profile_id: str) -> list[
                     {
                         "id": field["id"],
                         "field": field["field"],
-                        "before_value": json.loads(field["before_value"]),
-                        "after_value": json.loads(field["after_value"]),
-                        "diff": json.loads(field["diff_json"]),
+                        "before_value": _json_load_nullable(field["before_value"]),
+                        "after_value": _json_load_nullable(field["after_value"]),
+                        "diff": _json_load_nullable(field["diff_json"]) or {},
                     }
                     for field in fields
                 ],

@@ -14,7 +14,7 @@ from typing import Any, Mapping
 from ...errors import AppError
 from ...time_utils import now_iso
 from ..repo import invalidate_journals
-from .bundle import ParsedBundle, parse_bundle
+from .bundle import BUNDLE_MANIFEST_DOMAIN, ParsedBundle, parse_bundle
 from .clock import HybridLogicalClock, observe_clock
 from .crypto import (
     canonical_json_bytes,
@@ -22,10 +22,18 @@ from .crypto import (
     hmac_identifier,
     sha256_hex,
     verify_canonical,
+    verify_domain_canonical,
 )
 from .events import verify_event
 from .gc import record_ack_vector
-from .membership import _device_record_core, _member_record_core
+from .membership import (
+    DEVICE_RECORD_DOMAIN,
+    MEMBER_RECORD_DOMAIN,
+    _device_record_core,
+    _legacy_device_record_core,
+    _legacy_member_record_core,
+    _member_record_core,
+)
 from .schema_allowlist import SYNC_TABLE_MAP, TableSpec, validate_wire_row
 
 
@@ -155,6 +163,7 @@ def _merge_membership_catalog(
         required = {
             "id", "workspace_id", "profile_id", "display_name", "signing_public_key_b64",
             "role", "added_hlc", "added_at", "revoked_hlc", "revoked_at",
+            "revoked_context_json",
             "inviter_member_id", "record_signature",
         }
         if set(member) != required:
@@ -168,10 +177,19 @@ def _merge_membership_catalog(
         inviter = dict(inviter_row) if inviter_row else None
         if not inviter or inviter.get("role") != "owner" or inviter.get("revoked_at"):
             raise AppError("membership signer is not an owner", code="sync_signature_invalid")
-        if not verify_canonical(
-            str(inviter["signing_public_key_b64"]),
-            _member_record_core(member),
-            str(member["record_signature"]),
+        member_signature = str(member["record_signature"])
+        if not (
+            verify_domain_canonical(
+                str(inviter["signing_public_key_b64"]),
+                MEMBER_RECORD_DOMAIN,
+                _member_record_core(member),
+                member_signature,
+            )
+            or verify_canonical(
+                str(inviter["signing_public_key_b64"]),
+                _legacy_member_record_core(member),
+                member_signature,
+            )
         ):
             raise AppError("membership record signature is invalid", code="sync_signature_invalid")
         existing = conn.execute("SELECT * FROM sync_members WHERE id = ?", (member["id"],)).fetchone()
@@ -185,15 +203,16 @@ def _merge_membership_catalog(
             INSERT INTO sync_members(
                 id, workspace_id, profile_id, display_name, signing_public_key_b64,
                 role, added_hlc, added_at, revoked_hlc, revoked_at,
-                inviter_member_id, record_signature
-            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                revoked_context_json, inviter_member_id, record_signature
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             tuple(
                 member[key]
                 for key in (
                     "id", "workspace_id", "profile_id", "display_name",
                     "signing_public_key_b64", "role", "added_hlc", "added_at",
-                    "revoked_hlc", "revoked_at", "inviter_member_id", "record_signature",
+                    "revoked_hlc", "revoked_at", "revoked_context_json",
+                    "inviter_member_id", "record_signature",
                 )
             ),
         )
@@ -202,16 +221,37 @@ def _merge_membership_catalog(
         required = {
             "id", "workspace_id", "profile_id", "member_id", "recipient_public_key",
             "label", "paired_hlc", "paired_at", "last_seen_at", "revoked_hlc",
-            "revoked_at", "record_signature",
+            "revoked_at", "revoked_context_json", "record_signer_member_id",
+            "record_signature",
         }
         if set(device) != required:
             raise AppError("device catalog row shape is invalid", code="sync_bundle_invalid")
+        if device["profile_id"] != book["profile_id"] or device["workspace_id"] != book["workspace_id"]:
+            raise AppError("device row targets another book", code="sync_bundle_tampered")
         member = combined_members.get(str(device["member_id"]))
-        if not member or not verify_canonical(
-            str(member["signing_public_key_b64"]),
-            _device_record_core(device),
-            str(device["record_signature"]),
-        ):
+        signer_id = str(device.get("record_signer_member_id") or device["member_id"])
+        signer = combined_members.get(signer_id)
+        signature = str(device["record_signature"])
+        scoped_signature_valid = bool(
+            signer
+            and (signer_id == str(device["member_id"]) or signer.get("role") == "owner")
+            and verify_domain_canonical(
+                str(signer["signing_public_key_b64"]),
+                DEVICE_RECORD_DOMAIN,
+                _device_record_core(device),
+                signature,
+            )
+        )
+        legacy_signature_valid = bool(
+            member
+            and signer_id == str(device["member_id"])
+            and verify_canonical(
+                str(member["signing_public_key_b64"]),
+                _legacy_device_record_core(device),
+                signature,
+            )
+        )
+        if not member or not (scoped_signature_valid or legacy_signature_valid):
             raise AppError("device record signature is invalid", code="sync_signature_invalid")
         existing = conn.execute("SELECT * FROM sync_devices WHERE id = ?", (device["id"],)).fetchone()
         if existing:
@@ -224,15 +264,17 @@ def _merge_membership_catalog(
             INSERT INTO sync_devices(
                 id, workspace_id, profile_id, member_id, recipient_public_key,
                 label, paired_hlc, paired_at, last_seen_at, revoked_hlc,
-                revoked_at, record_signature
-            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                revoked_at, revoked_context_json, record_signer_member_id,
+                record_signature
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             tuple(
                 device[key]
                 for key in (
                     "id", "workspace_id", "profile_id", "member_id",
                     "recipient_public_key", "label", "paired_hlc", "paired_at",
-                    "last_seen_at", "revoked_hlc", "revoked_at", "record_signature",
+                    "last_seen_at", "revoked_hlc", "revoked_at", "revoked_context_json",
+                    "record_signer_member_id", "record_signature",
                 )
             ),
         )
@@ -241,9 +283,11 @@ def _merge_membership_catalog(
         required = {"id", "workspace_id", "profile_id", "member_id", "device_id", "created_at"}
         if set(replica) != required:
             raise AppError("replica catalog row shape is invalid", code="sync_bundle_invalid")
+        if replica["profile_id"] != book["profile_id"] or replica["workspace_id"] != book["workspace_id"]:
+            raise AppError("replica row targets another book", code="sync_bundle_tampered")
         if not conn.execute(
-            "SELECT 1 FROM sync_devices WHERE id = ? AND member_id = ?",
-            (replica["device_id"], replica["member_id"]),
+            "SELECT 1 FROM sync_devices WHERE id = ? AND member_id = ? AND profile_id = ?",
+            (replica["device_id"], replica["member_id"], book["profile_id"]),
         ).fetchone():
             raise AppError("replica is not bound to a signed device", code="sync_signature_invalid")
         existing = conn.execute("SELECT * FROM sync_replicas WHERE id = ?", (replica["id"],)).fetchone()
@@ -281,11 +325,18 @@ def _validate_event_for_book(
         raise AppError("sync event shape is invalid", code="sync_bundle_invalid")
     if event["workspace_id"] != book["workspace_id"] or event["profile_id"] != book["profile_id"]:
         raise AppError("sync event targets another book", code="sync_bundle_tampered")
-    if int(event["replica_seq"]) <= 0:
+    if type(event["replica_seq"]) is not int or event["replica_seq"] <= 0:
         raise AppError("sync event sequence is invalid", code="sync_bundle_invalid")
-    HybridLogicalClock.parse(str(event["hlc"]))
+    if not isinstance(event["hlc"], str):
+        raise AppError("sync event HLC is invalid", code="sync_bundle_invalid")
+    parsed_hlc = HybridLogicalClock.parse(event["hlc"])
+    if parsed_hlc.encode() != event["hlc"]:
+        raise AppError("sync event HLC is not canonical", code="sync_bundle_invalid")
     if not isinstance(event["context"], Mapping) or any(
-        not isinstance(value, int) or value < 0 for value in event["context"].values()
+        not isinstance(key, str)
+        or type(value) is not int
+        or value < 0
+        for key, value in event["context"].items()
     ):
         raise AppError("sync event version vector is invalid", code="sync_bundle_invalid")
     replica = conn.execute(
@@ -515,6 +566,8 @@ def _prepare_actual_row(
                 if isinstance(parsed, dict):
                     local_config = parsed
             except json.JSONDecodeError:
+                # A malformed local wallet config must not abort a remote
+                # merge; treat it as empty and retain only safe incoming keys.
                 pass
         incoming_config = wire_row.get("config_json") if isinstance(wire_row.get("config_json"), dict) else {}
         actual["config_json"] = _json(local_config | incoming_config)
@@ -1032,11 +1085,40 @@ def _apply_transaction_edit_history(conn, *, book, event: Mapping[str, Any]) -> 
     )
 
 
-def _event_role_rejection(member, event: Mapping[str, Any]) -> str | None:
+def _revocation_rejects(row, *, replica_id: str, replica_seq: int) -> bool:
+    if not row["revoked_at"]:
+        return False
+    raw_context = row["revoked_context_json"]
+    if not raw_context:
+        return True
+    try:
+        context = json.loads(raw_context)
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return True
+    return replica_seq > int(context.get(replica_id, 0))
+
+
+def _event_role_rejection(conn, member, replica, event: Mapping[str, Any]) -> str | None:
     if member["role"] == "auditor":
         return "auditor_authored_event"
-    if member["revoked_hlc"] and str(event["hlc"]) >= str(member["revoked_hlc"]):
+    if _revocation_rejects(
+        member,
+        replica_id=str(event["replica_id"]),
+        replica_seq=int(event["replica_seq"]),
+    ):
         return "revoked_member_event"
+    device = conn.execute(
+        "SELECT * FROM sync_devices WHERE id = ? AND profile_id = ?",
+        (replica["device_id"], replica["profile_id"]),
+    ).fetchone()
+    if not device:
+        return "replica_device_missing"
+    if _revocation_rejects(
+        device,
+        replica_id=str(event["replica_id"]),
+        replica_seq=int(event["replica_seq"]),
+    ):
+        return "revoked_device_event"
     if str(event["event_type"]).startswith(("membership.", "device.")) and member["role"] != "owner":
         return "owner_role_required"
     return None
@@ -1075,7 +1157,7 @@ def _apply_contiguous_event(
             details={"replica_id": replica["id"], "replica_seq": event["replica_seq"]},
         )
     member = conn.execute("SELECT * FROM sync_members WHERE id = ?", (event["author_member_id"],)).fetchone()
-    rejection = _event_role_rejection(member, event)
+    rejection = _event_role_rejection(conn, member, replica, event)
     if rejection:
         conn.execute(
             """
@@ -1132,26 +1214,32 @@ def _apply_contiguous_event(
         ).fetchone()
         if not target:
             raise AppError("revoked member was not found", code="sync_event_invalid")
+        revoked_context_json = _json(dict(event.get("context") or {}))
         conn.execute(
-            "UPDATE sync_members SET revoked_hlc = ?, revoked_at = ? WHERE id = ?",
-            (event["hlc"], event["created_at"], member_id),
+            "UPDATE sync_members SET revoked_hlc = ?, revoked_at = ?, revoked_context_json = ? WHERE id = ?",
+            (event["hlc"], event["created_at"], revoked_context_json, member_id),
         )
         conn.execute(
             """
             UPDATE sync_devices SET revoked_hlc = COALESCE(revoked_hlc, ?),
-                                    revoked_at = COALESCE(revoked_at, ?)
+                                    revoked_at = COALESCE(revoked_at, ?),
+                                    revoked_context_json = COALESCE(revoked_context_json, ?)
             WHERE member_id = ?
             """,
-            (event["hlc"], event["created_at"], member_id),
+            (event["hlc"], event["created_at"], revoked_context_json, member_id),
         )
     elif event["event_type"] == "device.revoke":
         device_id = str((event.get("payload") or {}).get("device_id") or "")
+        revoked_context_json = _json(dict(event.get("context") or {}))
         cursor = conn.execute(
             """
-            UPDATE sync_devices SET revoked_hlc = ?, revoked_at = ?
+            UPDATE sync_devices SET revoked_hlc = ?, revoked_at = ?, revoked_context_json = ?
             WHERE id = ? AND profile_id = ?
             """,
-            (event["hlc"], event["created_at"], device_id, book["profile_id"]),
+            (
+                event["hlc"], event["created_at"], revoked_context_json,
+                device_id, book["profile_id"],
+            ),
         )
         if not cursor.rowcount:
             raise AppError("revoked device was not found", code="sync_event_invalid")
@@ -1321,11 +1409,6 @@ def import_bundle(
     created_files: list[Path] = []
     applied = duplicates = pending_count = rejected = mutations = conflicts = 0
     try:
-        _merge_membership_catalog(
-            conn,
-            book=book,
-            catalog=manifest.get("membership") or {},
-        )
         manifest_signature = manifest.get("manifest_signature")
         sender_member_id = str(manifest.get("sender_member_id") or "")
         sender_member = conn.execute(
@@ -1335,8 +1418,16 @@ def import_bundle(
         manifest_core = {
             key: value for key, value in manifest.items() if key != "manifest_signature"
         }
-        if not sender_member or not isinstance(manifest_signature, str) or not verify_canonical(
-            sender_member["signing_public_key_b64"], manifest_core, manifest_signature
+        if not sender_member or not isinstance(manifest_signature, str) or not (
+            verify_domain_canonical(
+                sender_member["signing_public_key_b64"],
+                BUNDLE_MANIFEST_DOMAIN,
+                manifest_core,
+                manifest_signature,
+            )
+            or verify_canonical(
+                sender_member["signing_public_key_b64"], manifest_core, manifest_signature
+            )
         ):
             raise AppError("bundle manifest signature is invalid", code="sync_bundle_tampered")
         sender_replica = conn.execute(
@@ -1345,6 +1436,36 @@ def import_bundle(
         ).fetchone()
         if not sender_replica or sender_replica["member_id"] != sender_member_id:
             raise AppError("bundle sender binding is invalid", code="sync_bundle_tampered")
+        sender_device = conn.execute(
+            "SELECT * FROM sync_devices WHERE id = ? AND profile_id = ?",
+            (sender_replica["device_id"], profile_id),
+        ).fetchone()
+        if sender_member["revoked_at"] or not sender_device or sender_device["revoked_at"]:
+            raise AppError("bundle sender is revoked", code="sync_role_denied")
+        observed_remote_hlc: str | None = None
+        if parsed.events and manifest.get("sender_replica_id") != book["local_replica_id"]:
+            local = conn.execute(
+                "SELECT * FROM sync_replicas WHERE id = ?",
+                (book["local_replica_id"],),
+            ).fetchone()
+            observed_remote_hlc = local["last_hlc"]
+            try:
+                for event in parsed.events:
+                    observed_remote_hlc = observe_clock(
+                        observed_remote_hlc,
+                        str(event["hlc"]),
+                        local["id"],
+                    ).encode()
+            except ValueError as exc:
+                raise AppError(
+                    "bundle event clock exceeds the allowed future-drift window",
+                    code="sync_clock_invalid",
+                ) from exc
+        _merge_membership_catalog(
+            conn,
+            book=book,
+            catalog=manifest.get("membership") or {},
+        )
         bundle_kind = manifest.get("bundle_kind")
         if bundle_kind not in {"incremental", "snapshot"}:
             raise AppError("bundle kind is invalid", code="sync_bundle_invalid")
@@ -1522,17 +1643,10 @@ def import_bundle(
         if mutations or conflicts:
             invalidate_journals(conn, profile_id)
         remote_hlcs = [str(event["hlc"]) for event in parsed.events]
-        if remote_hlcs and manifest.get("sender_replica_id") != book["local_replica_id"]:
-            local = conn.execute(
-                "SELECT * FROM sync_replicas WHERE id = ?",
-                (book["local_replica_id"],),
-            ).fetchone()
-            observed = local["last_hlc"]
-            for remote_hlc in remote_hlcs:
-                observed = observe_clock(observed, remote_hlc, local["id"]).encode()
+        if observed_remote_hlc is not None:
             conn.execute(
                 "UPDATE sync_replicas SET last_hlc = ? WHERE id = ?",
-                (observed, local["id"]),
+                (observed_remote_hlc, book["local_replica_id"]),
             )
         manifest_vector = manifest.get("version_vector")
         if not isinstance(manifest_vector, Mapping):
