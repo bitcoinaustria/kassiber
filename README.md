@@ -122,6 +122,10 @@ SmartScreen first-launch handling lives in
 export KASSIBER_PYTHON="$PWD/.venv/bin/python"
 ```
 
+The Python install includes `keyring` so the opt-in CLI remembered-unlock flow
+can use macOS Keychain, Windows Credential Manager, or an available unlocked
+Linux Secret Service. Kassiber never falls back to a plaintext credential file.
+
 ## Quick start
 
 ### Desktop

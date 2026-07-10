@@ -6,7 +6,7 @@ It is not meant to be a hand-maintained inventory of every transitive package in
 
 ## Core dependency credit
 
-Kassiber currently depends directly on the Kassiber-maintained [RP2 fork](https://github.com/bitcoinaustria/rp2) as its tax engine, [embit](https://github.com/diybitcoinhardware/embit) for descriptor derivation and Liquid support, [XlsxWriter](https://xlsxwriter.readthedocs.io/) for styled XLSX report exports and the generic-ledger import template, [openpyxl](https://openpyxl.readthedocs.io/) for reading filled-in `.xlsx` generic-ledger imports, and [ReportLab](https://www.reportlab.com/) for styled PDF report exports.
+Kassiber currently depends directly on the Kassiber-maintained [RP2 fork](https://github.com/bitcoinaustria/rp2) as its tax engine, [embit](https://github.com/diybitcoinhardware/embit) for descriptor derivation and Liquid support, [XlsxWriter](https://xlsxwriter.readthedocs.io/) for styled XLSX report exports and the generic-ledger import template, [openpyxl](https://openpyxl.readthedocs.io/) for reading filled-in `.xlsx` generic-ledger imports, [ReportLab](https://www.reportlab.com/) for styled PDF report exports, and [keyring](https://github.com/jaraco/keyring) for opt-in CLI access to native OS credential stores.
 The in-development Tauri frontend also depends directly on TanStack Table for
 interactive local data grids.
 The descriptor connection screen uses local-only QR scanner libraries for
@@ -24,6 +24,7 @@ xpubs, blinding keys, and reveal payloads remain SQLCipher-backed.
 | `reportlab` | `>=4.4,<5` | Styled PDF rendering for Austrian and source-of-funds report exports | BSD |
 | `sqlcipher3` | `>=0.6.2,<1` | Python binding around SQLCipher 4; wheels bundle a SQLCipher community build for at-rest database encryption | Zlib (binding) + BSD-style (SQLCipher community) |
 | `pyrage` | `>=1.3,<2` | In-process `age` implementation used by the `tar | age` backup format when no system `age`/`rage` binary is available | Apache-2.0 / MIT |
+| `keyring` | `>=25.6,<26` | Native macOS Keychain, Windows Credential Manager, and Linux Secret Service access for opt-in CLI remembered unlock | MIT |
 | `@tanstack/react-table` | `^8.21.3` | Interactive sorting, filtering, selection, and pagination in desktop UI data tables | MIT |
 | `pako` | `^2.1.0` | Zlib/deflate decoding for Better Bitcoin QR descriptor import | MIT |
 | `qr-scanner` | `^1.4.2` | Local webcam QR decoding for descriptor-family connection setup | MIT |
