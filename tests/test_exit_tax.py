@@ -275,7 +275,13 @@ class ExitTaxComputeTests(unittest.TestCase):
         neu = next(lot for lot in report["lots"] if lot["regime"] == "neu")
         self.assertIsNone(neu["marketValue"])
         self.assertIsNone(neu["gain"])
+        totals = report["totals"]
+        self.assertIsNone(totals["neuMarketValue"])
+        self.assertIsNone(totals["neuGain"])
+        self.assertIsNone(totals["taxableGain"])
+        self.assertIsNone(totals["estimatedTax"])
         self.assertTrue(any(source["source"] == "missing" for source in report["fmvSource"]))
+        self.assertTrue(any("incomplete" in note for note in report["assumptions"]))
         self.assertTrue(any("No cached rate" in note for note in report["assumptions"]))
 
     def test_income_surfaces_derived_tokens_assumption(self):
@@ -295,6 +301,66 @@ class ExitTaxComputeTests(unittest.TestCase):
             ],
         }
         report = exit_tax.compute_deemed_disposal(conn, _profile("at"), state)
+        self.assertTrue(any("EXIT-004" in note for note in report["assumptions"]))
+        # Income alone must not inflate inventory (no matching acquisition lot).
+        baseline = exit_tax.compute_deemed_disposal(conn, _profile("at"), _state())
+        self.assertEqual(
+            report["totals"]["neuQuantitySats"],
+            baseline["totals"]["neuQuantitySats"],
+        )
+        self.assertEqual(
+            report["totals"]["altQuantitySats"],
+            baseline["totals"]["altQuantitySats"],
+        )
+
+    def test_income_does_not_double_count_matching_acquisition_lot(self):
+        # RP2 books earn receipts as acquisition + income with the same quantity.
+        # Exit tax must follow holdings and skip the income recognition line.
+        conn = _conn_with_rate(Decimal("60000"))
+        state = {
+            "entries": [
+                {
+                    "entry_type": "acquisition",
+                    "asset": "BTC",
+                    "occurred_at": "2024-01-01T00:00:00Z",
+                    "quantity": Decimal("0.001"),
+                    "fiat_value": Decimal("40"),
+                    "cost_basis": None,
+                },
+                {
+                    "entry_type": "acquisition",
+                    "asset": "BTC",
+                    "occurred_at": "2024-06-01T00:00:00Z",
+                    "quantity": Decimal("0.001"),
+                    "fiat_value": Decimal("50"),
+                    "cost_basis": None,
+                },
+                {
+                    "entry_type": "income",
+                    "asset": "BTC",
+                    "occurred_at": "2024-06-01T00:00:00Z",
+                    "quantity": Decimal("0.001"),
+                    "cost_basis": Decimal("0"),
+                    "at_category": "income_capital_yield",
+                },
+            ],
+            "wallet_holdings": {
+                ("w1", "Hot", "treasury", "BTC"): {
+                    "quantity": Decimal("0.002"),
+                    "cost_basis": Decimal("90"),
+                },
+            },
+            "account_holdings": {},
+            "quarantines": [],
+            "latest_rates": {"BTC": Decimal("60000")},
+        }
+        report = exit_tax.compute_deemed_disposal(conn, _profile("at"), state)
+        totals = report["totals"]
+        self.assertEqual(totals["neuQuantitySats"], 200_000)
+        self.assertEqual(totals["neuCostBasis"], 90.0)
+        self.assertEqual(totals["neuMarketValue"], 120.0)
+        self.assertEqual(totals["neuGain"], 30.0)
+        self.assertEqual(totals["estimatedTax"], 8.25)
         self.assertTrue(any("EXIT-004" in note for note in report["assumptions"]))
 
     def test_historical_departure_ignores_future_cache_rate(self):

@@ -296,14 +296,19 @@ class _AustrianReportBuilder:
 
     def taxable_details(self) -> list[Any]:
         story = [self.p("Detailübersicht", "h1"), self.p("Steuerpflichtig", "cover_subtitle")]
-        for spec in self.section_specs[:4]:
+        # 1.1, 1.2, 1.3, 2.1, 2.2 — taxable section specs come first.
+        for spec in self.section_specs[:5]:
             story.extend(self.section_spec(spec))
         story.append(self.rl["PageBreak"]())
         return story
 
     def tax_free_summary(self) -> list[Any]:
         rows = [
-            ["3.1.", "Nicht steuerbare Einkünfte aus Spekulationsgeschäften", _money_from_cents(self._overview_amount("3.1"))],
+            [
+                "3.1.",
+                "Nicht steuerbare Einkünfte aus Altvermögen außerhalb der Spekulationsfrist",
+                _money_from_cents(self._overview_amount("3.1")),
+            ],
             ["3.2.", "Nicht steuerbare Einkünfte gem. § 27b Abs. 2 Z 2 Satz 2 EStG", _money_from_cents(self._overview_amount("3.2"))],
             ["3.3.", "Nicht steuerbare Steuergebühren und Rückerstattungen", _money_from_cents(self._overview_amount("3.3"))],
             ["4.1.", "Eingegangene Spenden/Trinkgeld", _money_from_cents(self._overview_amount("4.1"))],
@@ -323,7 +328,7 @@ class _AustrianReportBuilder:
             self.spacer(8),
             self.p("Detailübersicht", "h1"),
         ]
-        for spec in self.section_specs[4:]:
+        for spec in self.section_specs[5:]:
             story.extend(self.section_spec(spec))
         # The Bestandsübersicht that follows carries two wide 8-column tables;
         # render it as a landscape island (restored to portrait at its end).

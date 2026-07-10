@@ -45,6 +45,7 @@ from . import sync_backends as core_sync_backends
 from . import source_overlap as core_source_overlap
 from . import transfer_matching as core_transfer_matching
 from . import reports as report_builders
+from .austrian import vienna_local_date
 from .samourai import samourai_metadata_from_wallet_config
 from . import transaction_history
 from .repo import current_context_snapshot
@@ -1794,50 +1795,14 @@ def _transaction_pair_display_meta(
         """,
         [*ids, *ids],
     ).fetchall()
-    # Multi-pair components (whirlpool N-leg reviews) reuse a leg across
-    # several active pairs ON THE SAME SIDE. The per-pair out/in gap is
-    # meaningless there — the shared out leg dwarfs each receipt — so the
-    # NULL-fee fallback must not invent a giant per-pair "fee". Count from
-    # the DB, not the fetched window: a filtered/paginated window holding one
-    # leg of a multi-pair would otherwise resurface the giant fee. Counting
-    # per (leg, role) keeps ordinary transfer CHAINS (a tx that is the in-leg
-    # of one pair and the out-leg of another) out of the suppression.
-    leg_ids = sorted(
-        {pair["out_transaction_id"] for pair in pair_rows}
-        | {pair["in_transaction_id"] for pair in pair_rows}
-    )
-    out_pair_count: dict[str, int] = {}
-    in_pair_count: dict[str, int] = {}
-    if leg_ids:
-        leg_placeholders = ", ".join("?" for _ in leg_ids)
-        for leg_id, role, count in conn.execute(
-            f"""
-            SELECT out_transaction_id AS leg, 'out' AS role, COUNT(*) AS n
-            FROM transaction_pairs
-            WHERE deleted_at IS NULL AND out_transaction_id IN ({leg_placeholders})
-            GROUP BY out_transaction_id
-            UNION ALL
-            SELECT in_transaction_id AS leg, 'in' AS role, COUNT(*) AS n
-            FROM transaction_pairs
-            WHERE deleted_at IS NULL AND in_transaction_id IN ({leg_placeholders})
-            GROUP BY in_transaction_id
-            """,
-            [*leg_ids, *leg_ids],
-        ):
-            (out_pair_count if role == "out" else in_pair_count)[leg_id] = count
     pair_meta: dict[str, dict[str, Any]] = {}
     for pair in pair_rows:
         out_asset = pair["out_asset"]
         in_asset = pair["in_asset"]
         pair_type = "transfer" if out_asset == in_asset else "swap"
-        multi_pair_leg = (
-            out_pair_count.get(pair["out_transaction_id"], 0) > 1
-            or in_pair_count.get(pair["in_transaction_id"], 0) > 1
-        )
-        raw_fee_msat = pair["swap_fee_msat"]
-        if raw_fee_msat is None and not multi_pair_leg:
-            raw_fee_msat = int(pair["out_amount"] or 0) - int(pair["in_amount"] or 0)
-        fee_msat = int(raw_fee_msat or 0)
+        # Same-asset transfers store swap_fee_msat=NULL on purpose; do not
+        # invent out-in as a fee (matches reports._pair_swap_fee_msat).
+        fee_msat = int(pair["swap_fee_msat"] or 0)
         label = "Transfer" if pair_type == "transfer" else "Swap"
         counter = f"{label} fee - {out_asset} -> {in_asset}"
         account = f"{pair['out_wallet']} -> {pair['in_wallet']}"
@@ -3875,17 +3840,20 @@ def _capital_gains_available_years(
     profile_id: str,
     *,
     primary_only: bool = False,
+    use_vienna_year: bool = False,
 ) -> list[int]:
     reportable_filter = (
         "((je.entry_type = 'disposal' AND COALESCE(je.at_category, '') != 'neu_swap') "
         "OR (je.entry_type NOT IN ('fee', 'transfer_fee') AND je.at_kennzahl IS NOT NULL))"
         if primary_only
-        else "(je.entry_type IN ('disposal', 'income') "
-        "OR (je.entry_type NOT IN ('fee', 'transfer_fee') AND je.at_kennzahl IS NOT NULL))"
+        else "((je.entry_type IN ('disposal', 'income') "
+        "AND COALESCE(je.at_category, '') != 'neu_swap') "
+        "OR (je.entry_type NOT IN ('fee', 'transfer_fee', 'disposal') "
+        "AND je.at_kennzahl IS NOT NULL))"
     )
     rows = conn.execute(
         f"""
-        SELECT DISTINCT substr(je.occurred_at, 1, 4) AS year
+        SELECT je.occurred_at
         FROM journal_entries je
         LEFT JOIN transactions t ON t.id = je.transaction_id
         WHERE je.profile_id = ?
@@ -3893,40 +3861,52 @@ def _capital_gains_available_years(
           AND {reportable_filter}
           AND je.occurred_at IS NOT NULL
           AND length(je.occurred_at) >= 4
-        ORDER BY year DESC
         """,
         (profile_id,),
     ).fetchall()
-    years: list[int] = []
-    for row in rows:
-        year = row["year"] or ""
-        if str(year).isdigit():
-            years.append(int(year))
-    return years
+    years: set[int] = set()
+    if use_vienna_year:
+        from .austrian import tax_year_in_vienna
+
+        for row in rows:
+            years.add(tax_year_in_vienna(str(row["occurred_at"])))
+    else:
+        for row in rows:
+            year = str(row["occurred_at"] or "")[:4]
+            if year.isdigit():
+                years.add(int(year))
+    return sorted(years, reverse=True)
 
 
 def _capital_gains_transaction_years(
     conn: sqlite3.Connection,
     profile_id: str,
+    *,
+    use_vienna_year: bool = False,
 ) -> list[int]:
     rows = conn.execute(
         """
-        SELECT DISTINCT substr(occurred_at, 1, 4) AS year
+        SELECT occurred_at
         FROM transactions
         WHERE profile_id = ?
           AND excluded = 0
           AND occurred_at IS NOT NULL
           AND length(occurred_at) >= 4
-        ORDER BY year DESC
         """,
         (profile_id,),
     ).fetchall()
-    years: list[int] = []
-    for row in rows:
-        year = row["year"] or ""
-        if str(year).isdigit():
-            years.append(int(year))
-    return years
+    years: set[int] = set()
+    if use_vienna_year:
+        from .austrian import tax_year_in_vienna
+
+        for row in rows:
+            years.add(tax_year_in_vienna(str(row["occurred_at"])))
+    else:
+        for row in rows:
+            year = str(row["occurred_at"] or "")[:4]
+            if year.isdigit():
+                years.add(int(year))
+    return sorted(years, reverse=True)
 
 
 def _merge_report_years(*year_lists: list[int]) -> list[int]:
@@ -3973,9 +3953,28 @@ def _capital_gains_neutral_swap_rows(
     conn: sqlite3.Connection,
     profile_id: str,
     tax_year: int,
+    *,
+    use_vienna_year: bool = False,
 ) -> list[dict[str, Any]]:
+    where = [
+        "je.profile_id = ?",
+        "je.entry_type = 'disposal'",
+        "je.at_category = 'neu_swap'",
+        "COALESCE(tout.taxability_override, 1) != 0",
+    ]
+    params: list[Any] = [profile_id]
+    if use_vienna_year:
+        from .austrian import tax_year_in_vienna, vienna_tax_year_utc_window
+
+        start, end = vienna_tax_year_utc_window(tax_year)
+        where.append("je.occurred_at >= ?")
+        where.append("je.occurred_at < ?")
+        params.extend([start, end])
+    else:
+        where.append("substr(je.occurred_at, 1, 4) = ?")
+        params.append(str(tax_year))
     rows = conn.execute(
-        """
+        f"""
         SELECT
             je.occurred_at,
             je.quantity,
@@ -4004,15 +4003,17 @@ def _capital_gains_neutral_swap_rows(
         LEFT JOIN transactions tin ON tin.id = p.in_transaction_id
         LEFT JOIN wallets wout ON wout.id = tout.wallet_id
         LEFT JOIN wallets win ON win.id = tin.wallet_id
-        WHERE je.profile_id = ?
-          AND je.entry_type = 'disposal'
-          AND je.at_category = 'neu_swap'
-          AND COALESCE(tout.taxability_override, 1) != 0
-          AND substr(je.occurred_at, 1, 4) = ?
+        WHERE {' AND '.join(where)}
         ORDER BY je.occurred_at ASC, je.created_at ASC, je.id ASC
         """,
-        (profile_id, str(tax_year)),
+        params,
     ).fetchall()
+    if use_vienna_year:
+        rows = [
+            row
+            for row in rows
+            if tax_year_in_vienna(str(row["occurred_at"])) == int(tax_year)
+        ]
     output = []
     for row in rows:
         quantity_msat = abs(int(row["quantity"] or 0))
@@ -4021,7 +4022,11 @@ def _capital_gains_neutral_swap_rows(
         fee_msat = int(row["swap_fee_msat"] or 0)
         output.append(
             {
-                "date": (row["occurred_at"] or "")[:10],
+                "date": (
+                    vienna_local_date(str(row["occurred_at"]))
+                    if use_vienna_year
+                    else (row["occurred_at"] or "")[:10]
+                ),
                 "pairId": row["pair_id"],
                 "kind": row["kind"],
                 "policy": row["policy"],
@@ -4103,14 +4108,20 @@ def build_capital_gains_snapshot(
         "SELECT COUNT(*) AS count FROM journal_quarantines WHERE profile_id = ?",
         (profile["id"],),
     ).fetchone()["count"]
+    use_vienna_year = str(profile["tax_country"] or "").lower() == "at"
     available_years = _merge_report_years(
-        _capital_gains_available_years(conn, profile["id"]),
-        _capital_gains_transaction_years(conn, profile["id"]),
+        _capital_gains_available_years(
+            conn, profile["id"], use_vienna_year=use_vienna_year
+        ),
+        _capital_gains_transaction_years(
+            conn, profile["id"], use_vienna_year=use_vienna_year
+        ),
     )
     primary_years = _capital_gains_available_years(
         conn,
         profile["id"],
         primary_only=True,
+        use_vienna_year=use_vienna_year,
     )
     if tax_year is not None:
         latest_year = _normalize_snapshot_tax_year(tax_year)
@@ -4122,29 +4133,63 @@ def build_capital_gains_snapshot(
         latest_year = datetime.now(timezone.utc).year
     if latest_year not in available_years:
         available_years = [latest_year, *available_years]
+    where = [
+        "je.profile_id = ?",
+        "je.entry_type IN ('disposal', 'income')",
+        "COALESCE(t.taxability_override, 1) != 0",
+        "COALESCE(je.at_category, '') != 'neu_swap'",
+    ]
+    params: list[Any] = [profile["id"]]
+    if use_vienna_year:
+        from .austrian import tax_year_in_vienna, vienna_tax_year_utc_window
+
+        start, end = vienna_tax_year_utc_window(latest_year)
+        where.append("je.occurred_at >= ?")
+        where.append("je.occurred_at < ?")
+        params.extend([start, end])
+    else:
+        where.append("substr(je.occurred_at, 1, 4) = ?")
+        params.append(str(latest_year))
+    # Fetch without a tight LIMIT first when using the loose Vienna UTC window,
+    # then filter to the exact local year and keep the newest 200 lots.
     rows = conn.execute(
-        """
-        SELECT je.occurred_at, je.quantity, je.cost_basis, je.proceeds, je.gain_loss
+        f"""
+        SELECT je.occurred_at, je.entry_type, je.quantity, je.cost_basis,
+               je.proceeds, je.gain_loss, je.capital_gains_type
         FROM journal_entries je
         LEFT JOIN transactions t ON t.id = je.transaction_id
-        WHERE je.profile_id = ?
-          AND je.entry_type = 'disposal'
-          AND COALESCE(t.taxability_override, 1) != 0
-          AND COALESCE(je.at_category, '') != 'neu_swap'
-          AND substr(je.occurred_at, 1, 4) = ?
+        WHERE {' AND '.join(where)}
         ORDER BY je.occurred_at DESC, je.created_at DESC, je.id DESC
-        LIMIT 200
         """,
-        (profile["id"], str(latest_year)),
+        params,
     ).fetchall()
+    if use_vienna_year:
+        rows = [
+            row
+            for row in rows
+            if tax_year_in_vienna(str(row["occurred_at"])) == int(latest_year)
+        ]
+    rows = rows[:200]
     lots = [
         {
             "acquired": "",
-            "disposed": (row["occurred_at"] or "")[:10],
+            "disposed": (
+                vienna_local_date(str(row["occurred_at"]))
+                if use_vienna_year
+                else (row["occurred_at"] or "")[:10]
+            ),
             "sats": int(round(abs(float(msat_to_btc(row["quantity"] or 0))) * 100_000_000)),
             "costEur": float(row["cost_basis"] or 0),
-            "proceedsEur": float(row["proceeds"] or 0),
-            "type": "ST",
+            "proceedsEur": float(
+                row["proceeds"]
+                if row["entry_type"] != "income"
+                else (row["gain_loss"] or row["proceeds"] or 0)
+            ),
+            "type": (
+                "LT"
+                if str(row["capital_gains_type"] or "").lower() == "long"
+                else "ST"
+            ),
         }
         for row in reversed(rows)
     ]
@@ -4158,6 +4203,7 @@ def build_capital_gains_snapshot(
             conn,
             profile["id"],
             latest_year,
+            use_vienna_year=use_vienna_year,
         ),
         "kennzahlRows": _austrian_kennzahl_snapshot_rows(conn, profile, latest_year),
         "status": {

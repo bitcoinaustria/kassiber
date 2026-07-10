@@ -3680,7 +3680,7 @@ class ReviewRegressionTest(unittest.TestCase):
                     self.assertFalse(second_page["hasMore"])
                     self.assertIsNone(second_page["nextCursor"])
 
-    def test_report_transfer_rows_derive_missing_swap_fee(self):
+    def test_report_transfer_rows_treat_null_swap_fee_as_zero(self):
         context = {
             "query_rows": {
                 "transfer_pairs": [
@@ -3711,8 +3711,8 @@ class ReviewRegressionTest(unittest.TestCase):
 
         rows = _generic_report_transfer_pair_rows(context)
 
-        self.assertEqual(rows[0]["swap_fee_msat"], btc_to_msat("0.00010000"))
-        self.assertAlmostEqual(rows[0]["swap_fee"], 0.0001)
+        self.assertEqual(rows[0]["swap_fee_msat"], 0)
+        self.assertEqual(rows[0]["swap_fee"], 0.0)
 
     def test_river_import_rejects_price_currency_mismatch(self):
         self._bootstrap_austrian_e1kv_wallet(label="RiverEUR")
@@ -4003,7 +4003,7 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertIn("Other Austrian Kennzahlen", plain_result.stdout)
         self.assertIn("| E 1 | 801 |", plain_result.stdout)
 
-    def test_capital_gains_snapshot_discovers_income_only_report_year(self):
+    def test_capital_gains_snapshot_includes_income_only_report_year(self):
         conn = open_db(self.data_root)
         self.addCleanup(conn.close)
         now = "2026-01-01T00:00:00Z"
@@ -4118,7 +4118,9 @@ class ReviewRegressionTest(unittest.TestCase):
 
         self.assertEqual(snapshot["year"], 2024)
         self.assertEqual(snapshot["availableYears"], [2024])
-        self.assertEqual(snapshot["lots"], [])
+        self.assertEqual(len(snapshot["lots"]), 1)
+        self.assertEqual(snapshot["lots"][0]["disposed"], "2024-03-01")
+        self.assertEqual(snapshot["lots"][0]["proceedsEur"], 40.0)
 
     def test_capital_gains_snapshot_splits_neutral_austrian_swap_rows(self):
         conn = open_db(self.data_root)
@@ -13472,6 +13474,7 @@ class ReviewRegressionTest(unittest.TestCase):
                 "Übersicht",
                 "1.1.",
                 "1.2.",
+                "1.3.",
                 "2.1.",
                 "2.2.",
                 "3.1.",
@@ -13494,7 +13497,7 @@ class ReviewRegressionTest(unittest.TestCase):
             shared_strings = workbook.read("xl/sharedStrings.xml").decode("utf-8")
         self.assertIn('name="Übersicht"', workbook_xml)
         self.assertIn('name="1.1."', workbook_xml)
-        self.assertNotIn('name="1.3."', workbook_xml)
+        self.assertIn('name="1.3."', workbook_xml)
         self.assertIn('name="3.3."', workbook_xml)
         self.assertIn('name="Erläuterungen zum Steuerreport"', workbook_xml)
         self.assertIn("at-e1kv-staking", shared_strings)
@@ -13519,21 +13522,22 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual(payload["data"]["form"], "E 1kv")
         self.assertIn("Übersicht", payload["data"]["sheets"])
         self.assertIn("3.3.", payload["data"]["sheets"])
-        self.assertEqual(len(payload["data"]["files"]), 14)
+        self.assertEqual(len(payload["data"]["files"]), 15)
         expected_bundle_filenames = [
             "00_uebersicht.csv",
             "01_1.1.csv",
             "02_1.2.csv",
-            "03_2.1.csv",
-            "04_2.2.csv",
-            "05_3.1.csv",
-            "06_3.2.csv",
-            "07_3.3.csv",
-            "08_4.1.csv",
-            "09_4.2.csv",
-            "10_4.3.csv",
-            "11_4.4.csv",
-            "12_4.5.csv",
+            "03_1.3.csv",
+            "04_2.1.csv",
+            "05_2.2.csv",
+            "06_3.1.csv",
+            "07_3.2.csv",
+            "08_3.3.csv",
+            "09_4.1.csv",
+            "10_4.2.csv",
+            "11_4.3.csv",
+            "12_4.4.csv",
+            "13_4.5.csv",
             "99_erlaeuterungen_zum_steuerreport.csv",
         ]
         self.assertEqual(
@@ -13541,8 +13545,8 @@ class ReviewRegressionTest(unittest.TestCase):
             expected_bundle_filenames,
         )
         overview_csv = csv_bundle_dir / "00_uebersicht.csv"
-        section_21_csv = csv_bundle_dir / "03_2.1.csv"
-        section_33_csv = csv_bundle_dir / "07_3.3.csv"
+        section_21_csv = csv_bundle_dir / "04_2.1.csv"
+        section_33_csv = csv_bundle_dir / "08_3.3.csv"
         notes_csv = csv_bundle_dir / "99_erlaeuterungen_zum_steuerreport.csv"
         self.assertTrue(overview_csv.exists())
         self.assertTrue(section_21_csv.exists())
@@ -13625,18 +13629,22 @@ class ReviewRegressionTest(unittest.TestCase):
             "--dir", str(csv_bundle_dir),
         )
         self._assert_ok(payload, result, "reports.export-austrian-e1kv-csv")
-        self.assertEqual(len(payload["data"]["files"]), 14)
+        self.assertEqual(len(payload["data"]["files"]), 15)
         self.assertIn(
             "No rows in scope.",
             (csv_bundle_dir / "02_1.2.csv").read_text(encoding="utf-8"),
         )
         self.assertIn(
+            "Summe Spekulationseinkünfte",
+            (csv_bundle_dir / "03_1.3.csv").read_text(encoding="utf-8"),
+        )
+        self.assertIn(
             "Summe der Rückerstattungen",
-            (csv_bundle_dir / "07_3.3.csv").read_text(encoding="utf-8"),
+            (csv_bundle_dir / "08_3.3.csv").read_text(encoding="utf-8"),
         )
         self.assertIn(
             "Summe Minting",
-            (csv_bundle_dir / "12_4.5.csv").read_text(encoding="utf-8"),
+            (csv_bundle_dir / "13_4.5.csv").read_text(encoding="utf-8"),
         )
 
     def test_austrian_e1kv_quarantined_rows_stay_out_but_counts_visible(self):
