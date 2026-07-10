@@ -4003,7 +4003,7 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertIn("Other Austrian Kennzahlen", plain_result.stdout)
         self.assertIn("| E 1 | 801 |", plain_result.stdout)
 
-    def test_capital_gains_snapshot_discovers_income_only_report_year(self):
+    def test_capital_gains_snapshot_includes_income_only_report_year(self):
         conn = open_db(self.data_root)
         self.addCleanup(conn.close)
         now = "2026-01-01T00:00:00Z"
@@ -4118,7 +4118,9 @@ class ReviewRegressionTest(unittest.TestCase):
 
         self.assertEqual(snapshot["year"], 2024)
         self.assertEqual(snapshot["availableYears"], [2024])
-        self.assertEqual(snapshot["lots"], [])
+        self.assertEqual(len(snapshot["lots"]), 1)
+        self.assertEqual(snapshot["lots"][0]["disposed"], "2024-03-01")
+        self.assertEqual(snapshot["lots"][0]["proceedsEur"], 40.0)
 
     def test_capital_gains_snapshot_splits_neutral_austrian_swap_rows(self):
         conn = open_db(self.data_root)
