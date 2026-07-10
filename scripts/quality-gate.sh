@@ -59,6 +59,7 @@ run py -m unittest tests.test_rp2_packaging -v
 run py -m unittest tests.test_source_funds_cli -v
 run py -m unittest tests.test_daemon_smoke -v
 run py -m unittest tests.test_secrets_smoke -v
+run py -m unittest tests.test_remembered_unlock -v
 run py -m unittest tests.test_rates_kraken_csv -v
 run py -m unittest tests.test_review_regressions -v
 run py -m unittest tests.test_exit_tax -v
@@ -137,6 +138,8 @@ smoke_py -m kassiber ai providers create --help >/dev/null
 smoke_py -m kassiber secrets --help >/dev/null
 smoke_py -m kassiber secrets init --help >/dev/null
 smoke_py -m kassiber secrets change-passphrase --help >/dev/null
+smoke_py -m kassiber secrets remember-unlock --help >/dev/null
+smoke_py -m kassiber secrets forget-unlock --help >/dev/null
 smoke_py -m kassiber secrets verify --help >/dev/null
 smoke_py -m kassiber secrets status --help >/dev/null
 smoke_py -m kassiber secrets migrate-credentials --help >/dev/null
