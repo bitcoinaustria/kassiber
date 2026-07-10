@@ -80,10 +80,12 @@ class Rp2ReadOnlyCwdImportTest(unittest.TestCase):
 
                 modules = _get_rp2_modules()
                 assert "InTransaction" in modules, modules.keys()
-                root = pathlib.Path(tempfile.gettempdir()) / "kassiber-rp2-logs"
-                log_files = list(root.rglob("rp2_*.log")) if root.exists() else []
+                root = pathlib.Path(tempfile.gettempdir())
+                log_files = list(root.rglob("rp2_*.log"))
+                scratch_dirs = list(root.glob("kassiber-rp2-logs-*"))
                 handlers = logging.getLogger("rp2").handlers
                 assert not log_files, [str(path) for path in log_files]
+                assert not scratch_dirs, [str(path) for path in scratch_dirs]
                 assert not any(isinstance(handler, logging.FileHandler) for handler in handlers), handlers
                 assert any(isinstance(handler, logging.NullHandler) for handler in handlers), handlers
                 print("ok")
