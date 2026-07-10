@@ -2115,7 +2115,7 @@ def report_capital_gains(conn, workspace_ref, profile_ref, hooks: ReportHooks, t
         "COALESCE(je.at_category, '') != 'neu_swap'",
     ]
     params: list[Any] = [profile["id"]]
-    use_vienna_year = str(profile.get("tax_country") or "").lower() == "at"
+    use_vienna_year = str(_row_get(profile, "tax_country") or "").lower() == "at"
     normalized_year = None
     if tax_year is not None:
         normalized_year = _normalize_tax_year(tax_year)
@@ -4328,7 +4328,7 @@ def _tax_summary_from_journal_entries(conn, profile_id, *, use_vienna_year=False
 def report_tax_summary(conn, workspace_ref, profile_ref, hooks: ReportHooks):
     _, profile = _resolve_report_scope(conn, workspace_ref, profile_ref, hooks)
     hooks.require_processed_journals(conn, profile)
-    use_vienna_year = str(profile.get("tax_country") or "").lower() == "at"
+    use_vienna_year = str(_row_get(profile, "tax_country") or "").lower() == "at"
     if use_vienna_year:
         # Rebuild from journal entries so year buckets follow Europe/Vienna
         # rather than the UTC year stamped into journal_tax_summary.
