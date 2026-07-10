@@ -1694,12 +1694,6 @@ _TRANSACTION_REF_SCHEMA = {
     "properties": {"transaction": {"type": "string"}},
 }
 
-_SOURCE_FUNDS_CASE_SCHEMA = {
-    "type": "object",
-    "additionalProperties": False,
-    "properties": {"case": {"type": "string"}},
-}
-
 _EXPANDED_TOOL_CATALOG: tuple[ToolEntry, ...] = (
     ToolEntry(
         name="ui.transactions.resolve",

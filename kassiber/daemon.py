@@ -557,6 +557,7 @@ _EVIDENCE_AI_REDACTED_KEYS = {
     "file_path",
     "path",
     "url",
+    "manifest",
 }
 PENDING_AI_CANCEL_TTL_SECONDS = 30.0
 MAX_PENDING_AI_CANCELS = 128
@@ -1663,6 +1664,7 @@ def _redact_source_funds_payload_for_ai(value: Any) -> Any:
             key: _redact_source_funds_payload_for_ai(item)
             for key, item in value.items()
             if key not in _SOURCE_FUNDS_AI_REDACTED_KEYS
+            and not _evidence_key_is_sensitive(key)
         }
     if isinstance(value, list):
         return [_redact_source_funds_payload_for_ai(item) for item in value]
@@ -1676,11 +1678,23 @@ def _redact_evidence_payload_for_ai(value: Any) -> Any:
         return {
             key: _redact_evidence_payload_for_ai(item)
             for key, item in value.items()
-            if key not in _EVIDENCE_AI_REDACTED_KEYS
+            if not _evidence_key_is_sensitive(key)
         }
     if isinstance(value, list):
         return [_redact_evidence_payload_for_ai(item) for item in value]
     return value
+
+
+def _evidence_key_is_sensitive(key: Any) -> bool:
+    if not isinstance(key, str):
+        return False
+    if key in _EVIDENCE_AI_REDACTED_KEYS:
+        return True
+    lowered = key.lower()
+    return bool(
+        re.search(r"(?:^|_)(?:url|path|file|dir)$", lowered)
+        or key.endswith(("Url", "URL", "Path", "File", "Dir"))
+    )
 
 
 def _audit_package_hooks() -> core_audit_package.AuditPackageHooks:

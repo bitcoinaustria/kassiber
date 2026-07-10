@@ -169,6 +169,21 @@ describe("daemon mutation invalidation scope", () => {
     }
   });
 
+  it("refreshes transaction-derived reads after document OCR import", () => {
+    expect(
+      invalidatedDaemonQueryKindsForMutation(
+        "ui.wallets.document_import.import",
+      ),
+    ).toEqual(
+      expect.arrayContaining([
+        "ui.transactions.extremes",
+        "ui.transactions.list",
+        "ui.review.badges",
+        "ui.workspace.health",
+      ]),
+    );
+  });
+
   it("does not invalidate daemon reads after read-only backend probes", () => {
     expect(
       invalidatedDaemonQueryKindsForMutation("ui.backends.electrum.test"),

@@ -293,6 +293,7 @@ def add_attachment(
     url: str | None = None,
     label: str | None = None,
     media_type: str | None = None,
+    commit: bool = True,
 ):
     if bool(file_path) == bool(url):
         raise AppError("Provide exactly one of --file or --url", code="validation")
@@ -362,7 +363,8 @@ def add_attachment(
                 created_at,
             ),
         )
-        conn.commit()
+        if commit:
+            conn.commit()
     except Exception:
         if destination is not None:
             try:

@@ -5589,6 +5589,19 @@ class DaemonSmokeTest(unittest.TestCase):
             finally:
                 conn.close()
 
+    def test_evidence_ai_redaction_removes_derived_urls_and_paths(self):
+        redacted = daemon_module._redact_evidence_payload_for_ai(
+            {
+                "origin_url": "https://merchant.invalid/invoice/secret",
+                "documentUrl": "https://merchant.invalid/document/secret",
+                "manifest": "/private/export/manifest.json",
+                "artifact_path": "/private/export/report.pdf",
+                "label": "Invoice evidence",
+            }
+        )
+
+        self.assertEqual(redacted, {"label": "Invoice evidence"})
+
     def test_source_funds_ai_link_create_surfaces_validation_errors(self):
         with tempfile.TemporaryDirectory(prefix="kassiber-ai-source-funds-invalid-") as tmp:
             data_root = Path(tmp) / "data"

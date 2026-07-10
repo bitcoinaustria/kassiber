@@ -324,6 +324,7 @@ const STREAM_CAPABLE_BRIDGE_KINDS = new Set([
   "ui.workspace.freshness.run",
   "ui.journals.process",
   "ui.rates.rebuild",
+  "ui.wallets.document_import.preview",
   "ui.sync.push",
   "ui.sync.pull",
   "ui.sync.join",

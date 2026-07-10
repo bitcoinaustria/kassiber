@@ -439,8 +439,23 @@ def _extract_json_object(text: str) -> dict[str, Any]:
 def _decimal_or_none(value: Any) -> Decimal | None:
     if value in (None, ""):
         return None
+    text = str(value).strip().replace("\u00a0", "").replace(" ", "")
+    if "," in text and "." in text:
+        if text.rfind(",") > text.rfind("."):
+            text = text.replace(".", "").replace(",", ".")
+        else:
+            text = text.replace(",", "")
+    elif "," in text:
+        if text.count(",") != 1:
+            return None
+        whole, fractional = text.split(",", 1)
+        # A single separator before exactly three digits is ambiguous between
+        # decimal and thousands notation. Quarantine it instead of guessing.
+        if len(fractional) == 3 and whole.lstrip("+-") not in {"", "0"}:
+            return None
+        text = f"{whole}.{fractional}"
     try:
-        number = Decimal(str(value).strip().replace(",", ""))
+        number = Decimal(text)
     except (InvalidOperation, ValueError):
         return None
     if not number.is_finite():
@@ -532,7 +547,13 @@ def _row_flags(
     return flags
 
 
-def _draft_row(raw: Mapping[str, Any], *, index: int, threshold: Decimal) -> dict[str, Any]:
+def _draft_row(
+    raw: Mapping[str, Any],
+    *,
+    index: int,
+    threshold: Decimal,
+    source_hash: str,
+) -> dict[str, Any]:
     occurred_at = str_or_none(raw.get("occurred_at") or raw.get("date"))
     direction = _direction(raw.get("direction"))
     amount_btc = _decimal_text(
@@ -559,7 +580,8 @@ def _draft_row(raw: Mapping[str, Any], *, index: int, threshold: Decimal) -> dic
     evidence_text = str_or_none(raw.get("evidence_text"))
     counterparty = str_or_none(raw.get("counterparty"))
     description = str_or_none(raw.get("description"))
-    row_id = str(raw.get("id") or raw.get("row_id") or f"docrow-{index:03d}")
+    model_row_id = str_or_none(raw.get("id") or raw.get("row_id"))
+    row_id = f"docrow-{source_hash[:16]}-{index:03d}"
     import_record = None
     if occurred_at and direction and amount_btc:
         import_record = {
@@ -577,6 +599,7 @@ def _draft_row(raw: Mapping[str, Any], *, index: int, threshold: Decimal) -> dic
             "raw_json": {
                 "source": "document_import",
                 "row_id": row_id,
+                "model_row_id": model_row_id,
                 "model_confidence": float(confidence),
                 "cell_confidences": cell_confidences,
                 "source_region": _source_region(raw.get("source_region")),
@@ -607,7 +630,12 @@ def _draft_row(raw: Mapping[str, Any], *, index: int, threshold: Decimal) -> dic
     }
 
 
-def _draft_rows(payload: Mapping[str, Any], *, threshold: Decimal) -> list[dict[str, Any]]:
+def _draft_rows(
+    payload: Mapping[str, Any],
+    *,
+    threshold: Decimal,
+    source_hash: str,
+) -> list[dict[str, Any]]:
     raw_rows = payload.get("rows")
     if not isinstance(raw_rows, list):
         raise AppError(
@@ -620,7 +648,14 @@ def _draft_rows(payload: Mapping[str, Any], *, threshold: Decimal) -> list[dict[
     for index, raw in enumerate(raw_rows, start=1):
         if not isinstance(raw, Mapping):
             continue
-        rows.append(_draft_row(raw, index=index, threshold=threshold))
+        rows.append(
+            _draft_row(
+                raw,
+                index=index,
+                threshold=threshold,
+                source_hash=source_hash,
+            )
+        )
     return rows
 
 
@@ -707,10 +742,10 @@ def preview_document_import(
         cleanup()
 
     payload = _extract_json_object(str(response.get("content") or ""))
-    rows = _draft_rows(payload, threshold=threshold)
+    source_hash = _sha256_file(source_path)
+    rows = _draft_rows(payload, threshold=threshold, source_hash=source_hash)
     ready = sum(1 for row in rows if row["status"] == "ready")
     quarantined = sum(1 for row in rows if row["status"] != "ready")
-    source_hash = _sha256_file(source_path)
     return {
         "source": {
             "path": str(source_path),
@@ -745,12 +780,16 @@ def _import_records_from_rows(
     include_quarantined: bool,
     selected_row_ids: Sequence[str] | None,
 ) -> tuple[list[dict[str, Any]], int]:
-    selected = {str(row_id) for row_id in selected_row_ids or [] if str(row_id)}
+    selected = (
+        {str(row_id) for row_id in selected_row_ids if str(row_id)}
+        if selected_row_ids is not None
+        else None
+    )
     records: list[dict[str, Any]] = []
     skipped_quarantined = 0
     for row in rows:
         row_id = str(row.get("id") or "")
-        if selected and row_id not in selected:
+        if selected is not None and row_id not in selected:
             continue
         status = str(row.get("status") or "")
         if status != "ready" and not include_quarantined:
@@ -812,46 +851,76 @@ def import_document_draft(
             details={"quarantined_skipped": skipped_quarantined},
             retryable=False,
         )
-    outcome = core_imports.import_records_into_wallet(
-        conn,
-        profile,
-        wallet,
-        records,
-        DOCUMENT_IMPORT_FORMAT,
-        hooks.import_hooks,
-        commit=False,
-        report_updates=True,
-    )
+    resolved_data_root = data_root or _data_root_from_connection(conn)
+    attachments_root = core_attachments._attachments_root(resolved_data_root)
+    savepoint = f"document_import_{uuid.uuid4().hex}"
+    conn.execute(f"SAVEPOINT {savepoint}")
+    savepoint_active = True
     attached: list[dict[str, Any]] = []
-    if attach_evidence:
-        changed_records = [
-            *(outcome.get("inserted_records") or []),
-            *(outcome.get("updated_records") or []),
-        ]
-        for changed in changed_records:
-            tx_id = changed.get("transaction_id")
-            if not isinstance(tx_id, str) or not tx_id:
-                continue
-            attachment = core_attachments.add_attachment(
-                conn,
-                data_root or _data_root_from_connection(conn),
-                None,
-                None,
-                tx_id,
-                hooks.attachment_hooks,
-                file_path=str(source_path),
-                label=f"OCR source: {source_path.name}",
-                media_type=_mime_type(source_path),
-            )
-            attached.append(
-                {
-                    "transaction_id": tx_id,
-                    "attachment_id": attachment["id"],
-                    "stored_relpath": attachment.get("stored_relpath") or "",
-                }
-            )
-    if commit:
-        conn.commit()
+    copied_paths: list[Path] = []
+    try:
+        outcome = core_imports.import_records_into_wallet(
+            conn,
+            profile,
+            wallet,
+            records,
+            DOCUMENT_IMPORT_FORMAT,
+            hooks.import_hooks,
+            commit=False,
+            report_updates=True,
+        )
+        if attach_evidence:
+            changed_records = [
+                *(outcome.get("inserted_records") or []),
+                *(outcome.get("updated_records") or []),
+            ]
+            for changed in changed_records:
+                tx_id = changed.get("transaction_id")
+                if not isinstance(tx_id, str) or not tx_id:
+                    continue
+                attachment = core_attachments.add_attachment(
+                    conn,
+                    resolved_data_root,
+                    None,
+                    None,
+                    tx_id,
+                    hooks.attachment_hooks,
+                    file_path=str(source_path),
+                    label=f"OCR source: {source_path.name}",
+                    media_type=_mime_type(source_path),
+                    commit=False,
+                )
+                copied_path, valid_path = core_attachments._resolve_stored_path(
+                    attachments_root,
+                    attachment.get("stored_relpath"),
+                )
+                if copied_path is not None and valid_path:
+                    copied_paths.append(copied_path)
+                attached.append(
+                    {
+                        "transaction_id": tx_id,
+                        "attachment_id": attachment["id"],
+                        "stored_relpath": attachment.get("stored_relpath") or "",
+                    }
+                )
+        conn.execute(f"RELEASE SAVEPOINT {savepoint}")
+        savepoint_active = False
+        if commit:
+            conn.commit()
+    except Exception:
+        try:
+            if savepoint_active:
+                conn.execute(f"ROLLBACK TO SAVEPOINT {savepoint}")
+                conn.execute(f"RELEASE SAVEPOINT {savepoint}")
+            else:
+                conn.rollback()
+        finally:
+            for copied_path in copied_paths:
+                try:
+                    copied_path.unlink()
+                except OSError:
+                    pass
+        raise
     outcome.update(
         {
             "source": {

@@ -486,6 +486,7 @@ class ConnectionCatalogDriftTests(unittest.TestCase):
             "ui.sync.push",
             "ui.sync.pull",
             "ui.sync.join",
+            "ui.wallets.document_import.preview",
         ):
             self.assertIn(
                 f'"{kind}"',

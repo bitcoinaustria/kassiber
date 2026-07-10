@@ -4,6 +4,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from kassiber.ai import create_db_ai_provider
 from kassiber.core import accounts as core_accounts
@@ -253,6 +254,126 @@ class DocumentImportTest(unittest.TestCase):
             self.conn.execute("SELECT COUNT(*) FROM transactions").fetchone()[0],
             0,
         )
+
+    def test_decimal_comma_values_do_not_shift_magnitude(self):
+        content = json.dumps(
+            {
+                "rows": [
+                    {
+                        "occurred_at": "2026-01-02",
+                        "direction": "inbound",
+                        "amount_btc": "0,01000000",
+                        "fiat_value": "500,00",
+                        "confidence": "0,94",
+                    }
+                ]
+            }
+        )
+        draft = document_import.preview_document_import(
+            self.conn,
+            source_file=str(self.source),
+            client_factory=lambda _provider: FakeVisionClient(content=content),
+        )
+
+        record = draft["rows"][0]["import_record"]
+        self.assertEqual(record["amount"], "0.01")
+        self.assertEqual(record["fiat_value"], "500")
+        self.assertEqual(draft["rows"][0]["confidence"], 0.94)
+
+    def test_generated_row_ids_are_unique_to_source_document(self):
+        other = self.root / "other.png"
+        other.write_bytes(b"different-document")
+        first = document_import.preview_document_import(
+            self.conn,
+            source_file=str(self.source),
+            client_factory=lambda _provider: FakeVisionClient(),
+        )
+        second = document_import.preview_document_import(
+            self.conn,
+            source_file=str(other),
+            client_factory=lambda _provider: FakeVisionClient(),
+        )
+
+        self.assertNotEqual(first["rows"][0]["id"], second["rows"][0]["id"])
+        self.assertNotEqual(
+            first["rows"][0]["import_record"]["id"],
+            second["rows"][0]["import_record"]["id"],
+        )
+
+    def test_explicit_empty_selection_imports_nothing(self):
+        _, profile, wallet = _book(self.conn)
+        draft = document_import.preview_document_import(
+            self.conn,
+            source_file=str(self.source),
+            client_factory=lambda _provider: FakeVisionClient(),
+        )
+
+        with self.assertRaises(AppError) as raised:
+            document_import.import_document_draft(
+                self.conn,
+                source_file=str(self.source),
+                wallet=wallet,
+                profile=profile,
+                rows=draft["rows"],
+                selected_row_ids=[],
+                hooks=_hooks(),
+            )
+
+        self.assertEqual(raised.exception.code, "document_import_no_ready_rows")
+        self.assertEqual(self.conn.execute("SELECT COUNT(*) FROM transactions").fetchone()[0], 0)
+
+    def test_attachment_failure_rolls_back_entire_document_import(self):
+        _, profile, wallet = _book(self.conn)
+        content = json.dumps(
+            {
+                "rows": [
+                    {
+                        "occurred_at": "2026-01-02",
+                        "direction": "inbound",
+                        "amount_btc": "0.01",
+                        "confidence": 0.95,
+                    },
+                    {
+                        "occurred_at": "2026-01-03",
+                        "direction": "inbound",
+                        "amount_btc": "0.02",
+                        "confidence": 0.95,
+                    },
+                ]
+            }
+        )
+        draft = document_import.preview_document_import(
+            self.conn,
+            source_file=str(self.source),
+            client_factory=lambda _provider: FakeVisionClient(content=content),
+        )
+        real_add = core_attachments.add_attachment
+        calls = 0
+
+        def flaky_add(*args, **kwargs):
+            nonlocal calls
+            calls += 1
+            if calls == 2:
+                raise AppError("simulated attachment failure", code="test_failure")
+            return real_add(*args, **kwargs)
+
+        with (
+            mock.patch.object(core_attachments, "add_attachment", side_effect=flaky_add),
+            self.assertRaises(AppError),
+        ):
+            document_import.import_document_draft(
+                self.conn,
+                source_file=str(self.source),
+                wallet=wallet,
+                profile=profile,
+                rows=draft["rows"],
+                hooks=_hooks(),
+            )
+
+        self.assertEqual(self.conn.execute("SELECT COUNT(*) FROM transactions").fetchone()[0], 0)
+        self.assertEqual(self.conn.execute("SELECT COUNT(*) FROM attachments").fetchone()[0], 0)
+        attachment_files = [path for path in (self.root / "attachments").rglob("*") if path.is_file()]
+        self.assertEqual(attachment_files, [])
 
 
 if __name__ == "__main__":
