@@ -24,7 +24,7 @@ from .journal_markers import (
     parse_marker,
     parse_marker_int,
 )
-from ..time_utils import _iso_z, _parse_iso_datetime
+from ..time_utils import _iso_z, _parse_iso_datetime, now_iso
 from ..transfers import profile_bitcoin_rail_carrying_value
 from ..wallet_descriptors import (
     BITCOIN_NETWORK_ALIASES,
@@ -6210,7 +6210,7 @@ def build_audit_changes_since_last_answer_snapshot(
                 "journals_processed_at": profile["last_processed_at"],
             },
             "current": {
-                "generated_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+                "generated_at": now_iso(),
                 "active_transactions": freshness["active_transaction_count"],
                 "journals_processed_at": profile["last_processed_at"],
                 "quarantines": freshness["quarantine_count"],
@@ -6287,7 +6287,7 @@ def build_audit_changes_since_last_answer_snapshot(
             "journals_processed_at": profile["last_processed_at"],
         },
         "current": {
-            "generated_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+            "generated_at": now_iso(),
             "active_transactions": freshness["active_transaction_count"],
             "journals_processed_at": profile["last_processed_at"],
             "quarantines": freshness["quarantine_count"],

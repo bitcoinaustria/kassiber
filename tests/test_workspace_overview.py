@@ -3,7 +3,10 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from kassiber.core.ui_snapshot import build_workspace_overview_snapshot
+from kassiber.core.ui_snapshot import (
+    build_audit_changes_since_last_answer_snapshot,
+    build_workspace_overview_snapshot,
+)
 from kassiber.db import get_setting, open_db, set_setting
 from kassiber.errors import AppError
 from kassiber.msat import btc_to_msat
@@ -314,6 +317,17 @@ class WorkspaceOverviewSnapshotTest(unittest.TestCase):
 
         self.assertEqual(get_setting(conn, "context_workspace"), "active-ws")
         self.assertEqual(get_setting(conn, "context_profile"), "active-pf")
+
+    def test_audit_snapshot_generated_at_uses_canonical_second_precision(self):
+        conn = self._db()
+        self._seed_workspace(conn)
+
+        snapshot = build_audit_changes_since_last_answer_snapshot(conn)
+
+        self.assertRegex(
+            snapshot["current"]["generated_at"],
+            r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$",
+        )
 
 
 if __name__ == "__main__":
