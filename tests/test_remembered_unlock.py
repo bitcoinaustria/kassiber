@@ -249,6 +249,21 @@ class RememberedUnlockCliTests(unittest.TestCase):
             self.assertEqual(returncode, 0)
             self.assertEqual(payload["kind"], "status")
 
+            backup_fd = _passphrase_fd("outer-backup-passphrase")
+            backup_path = Path(root) / "remembered-unlock.kassiber"
+            payload, returncode, _stderr = _run_cli(
+                data_root,
+                "backup",
+                "export",
+                "--file",
+                str(backup_path),
+                "--backup-passphrase-fd",
+                str(backup_fd),
+            )
+            self.assertEqual(returncode, 0)
+            self.assertEqual(payload["kind"], "backup")
+            self.assertTrue(backup_path.is_file())
+
             current_fd = _passphrase_fd(old_passphrase)
             new_fd = _passphrase_fd(new_passphrase)
             payload, returncode, _stderr = _run_cli(
@@ -305,6 +320,40 @@ class RememberedUnlockCliTests(unittest.TestCase):
             payload, returncode, _stderr = _run_cli(data_root, "status")
             self.assertEqual(returncode, 1)
             self.assertEqual(payload["error"]["code"], "passphrase_required")
+
+    def test_enrollment_deletes_credential_when_marker_write_fails(self):
+        passphrase = "marker-write-failure-passphrase"
+        with tempfile.TemporaryDirectory() as root:
+            data_root = Path(root) / "data"
+            init_fd = _passphrase_fd(passphrase)
+            _run_cli(
+                data_root,
+                "secrets",
+                "init",
+                "--new-passphrase-fd",
+                str(init_fd),
+            )
+
+            enroll_fd = _passphrase_fd(passphrase)
+            with patch(
+                "kassiber.secrets.cli.set_cli_remembered_unlock_enabled",
+                side_effect=OSError("settings are read-only"),
+            ):
+                payload, returncode, _stderr = _run_cli(
+                    data_root,
+                    "secrets",
+                    "remember-unlock",
+                    "--passphrase-fd",
+                    str(enroll_fd),
+                )
+
+            self.assertEqual(returncode, 1)
+            self.assertEqual(
+                payload["error"]["code"],
+                "remembered_unlock_settings_failed",
+            )
+            self.assertTrue(payload["error"]["details"]["credential_deleted"])
+            self.assertIsNone(load_remembered_passphrase(data_root))
 
     def test_rotation_store_failure_disables_cli_copy_but_keeps_new_db_key(self):
         old_passphrase = "rotation-old-pass"

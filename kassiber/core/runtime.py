@@ -157,12 +157,14 @@ def _resolve_db_passphrase(args):
     return passphrase
 
 
-def _open_db_with_passphrase(data_root, passphrase, *, allow_prompt):
+def _open_db_with_resolved_passphrase(data_root, passphrase, *, allow_prompt):
+    """Open the database and return both the connection and passphrase used."""
+
     if passphrase is not None:
-        return open_db(data_root, passphrase=passphrase)
+        return open_db(data_root, passphrase=passphrase), passphrase
 
     try:
-        return open_db(data_root)
+        return open_db(data_root), None
     except AppError as exc:
         if exc.code != "passphrase_required":
             raise
@@ -171,7 +173,7 @@ def _open_db_with_passphrase(data_root, passphrase, *, allow_prompt):
             remembered = load_remembered_passphrase(data_root)
             if remembered is not None:
                 try:
-                    return open_db(data_root, passphrase=remembered)
+                    return open_db(data_root, passphrase=remembered), remembered
                 except AppError as remembered_error:
                     if remembered_error.code != "unlock_failed":
                         raise
@@ -183,8 +185,28 @@ def _open_db_with_passphrase(data_root, passphrase, *, allow_prompt):
 
         if allow_prompt:
             prompted = prompt_passphrase()
-            return open_db(data_root, passphrase=prompted)
+            return open_db(data_root, passphrase=prompted), prompted
         raise
+
+
+def resolve_db_passphrase_for_bypass(args, *, allow_prompt):
+    """Resolve and verify a passphrase for commands that bypass bootstrap.
+
+    Backup export and chat intentionally do not keep the normal runtime
+    connection open. They still share the exact explicit-fd, remembered-store,
+    stale-copy, and prompt resolution chain with ordinary CLI commands.
+    """
+
+    passphrase = _resolve_db_passphrase(args)
+    conn, resolved_passphrase = _open_db_with_resolved_passphrase(
+        args.data_root,
+        passphrase,
+        allow_prompt=allow_prompt,
+    )
+    conn.close()
+    if resolved_passphrase is not None:
+        args._db_passphrase_cached = resolved_passphrase
+    return resolved_passphrase
 
 
 def _warn_plaintext_secrets_once(env_file: str) -> None:
@@ -230,11 +252,13 @@ def bootstrap_runtime(args, needs_db=True, persist_bootstrap=False):
         if needs_db:
             passphrase = _resolve_db_passphrase(args)
             allow_prompt = sys.stdin.isatty() if passphrase is None else False
-            conn = _open_db_with_passphrase(
+            conn, resolved_passphrase = _open_db_with_resolved_passphrase(
                 paths.data_root,
                 passphrase,
                 allow_prompt=allow_prompt,
             )
+            if resolved_passphrase is not None:
+                args._db_passphrase_cached = resolved_passphrase
             validate_project_migration_after_unlock(paths.data_root, conn)
             if persist_bootstrap:
                 seed_db_backends(conn, args.runtime_config)

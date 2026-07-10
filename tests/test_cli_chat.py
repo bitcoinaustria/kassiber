@@ -1,6 +1,7 @@
 import argparse
 import io
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -8,6 +9,7 @@ import threading
 import unittest
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from unittest.mock import patch
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -157,6 +159,38 @@ def _seed_provider(data_root, base_url):
 
 
 class CliChatTest(unittest.TestCase):
+    def test_daemon_command_forwards_resolved_passphrase_through_fd(self):
+        from kassiber.cli.chat import _DaemonChatClient
+
+        client = object.__new__(_DaemonChatClient)
+        client._pass_fds = ()
+        client._duplicated_fd = None
+        client._allow_passphrase_prompt = False
+        args = argparse.Namespace(
+            data_root="/tmp/kassiber-chat-remembered",
+            env_file=None,
+            db_passphrase_fd=None,
+        )
+
+        with patch(
+            "kassiber.cli.chat.resolve_db_passphrase_for_bypass",
+            return_value="remembered-chat-passphrase",
+        ) as resolve:
+            command = client._daemon_command(args)
+
+        try:
+            resolve.assert_called_once_with(args, allow_prompt=False)
+            self.assertEqual(client._pass_fds, (client._duplicated_fd,))
+            self.assertEqual(
+                os.read(client._duplicated_fd, 1024),
+                b"remembered-chat-passphrase",
+            )
+            fd_index = command.index("--db-passphrase-fd") + 1
+            self.assertEqual(command[fd_index], str(client._duplicated_fd))
+            self.assertNotIn("remembered-chat-passphrase", command)
+        finally:
+            os.close(client._duplicated_fd)
+
     def test_daemon_chat_client_drains_large_stderr_before_ready(self):
         with tempfile.TemporaryDirectory(prefix="kassiber-chat-stderr-") as tmp:
             tmp_path = Path(tmp)

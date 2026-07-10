@@ -11,6 +11,7 @@ from typing import Any, Iterable, TextIO
 
 from ..ai.client import CLI_DEFAULT_MODEL, is_cli_provider_locator
 from ..ai.tools import TOOL_CATALOG
+from ..core.runtime import resolve_db_passphrase_for_bypass
 from ..errors import AppError
 from .termrender import MarkdownStreamRenderer, render_envelope_table
 
@@ -79,6 +80,7 @@ class _DaemonChatClient:
         self._stderr_tail = ""
         self._stderr_lock = threading.Lock()
         self._stderr_thread: threading.Thread | None = None
+        self._allow_passphrase_prompt = sys.stdin.isatty()
         command = self._daemon_command(args)
         self._proc = subprocess.Popen(
             command,
@@ -124,9 +126,17 @@ class _DaemonChatClient:
         ]
         if getattr(args, "env_file", None):
             command.extend(["--env-file", args.env_file])
-        passphrase_fd = getattr(args, "db_passphrase_fd", None)
-        if passphrase_fd is not None:
-            self._duplicated_fd = os.dup(passphrase_fd)
+        passphrase = resolve_db_passphrase_for_bypass(
+            args,
+            allow_prompt=self._allow_passphrase_prompt,
+        )
+        if passphrase is not None:
+            read_fd, write_fd = os.pipe()
+            try:
+                os.write(write_fd, passphrase.encode("utf-8"))
+            finally:
+                os.close(write_fd)
+            self._duplicated_fd = read_fd
             self._pass_fds = (self._duplicated_fd,)
             command.extend(["--db-passphrase-fd", str(self._duplicated_fd)])
         command.append("daemon")

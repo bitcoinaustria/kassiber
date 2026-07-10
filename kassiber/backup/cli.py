@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
+import sys
 
+from ..core.runtime import resolve_db_passphrase_for_bypass
 from ..envelope import build_envelope
 from ..errors import AppError
 from ..secrets.prompt import (
@@ -30,10 +32,10 @@ def _resolve_backup_passphrase(
 
 
 def _resolve_db_passphrase(args: argparse.Namespace) -> str:
-    fd = getattr(args, "db_passphrase_fd", None)
-    if fd is not None:
-        return read_passphrase_from_fd(int(fd))
-    return prompt_passphrase("Database passphrase: ")
+    return resolve_db_passphrase_for_bypass(
+        args,
+        allow_prompt=sys.stdin.isatty(),
+    )
 
 
 def cmd_backup_export(args: argparse.Namespace) -> dict:

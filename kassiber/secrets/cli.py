@@ -289,11 +289,19 @@ def cmd_secrets_remember_unlock(args: argparse.Namespace) -> dict:
     try:
         set_cli_remembered_unlock_enabled(args.data_root, True)
     except OSError as exc:
+        credential_deleted = delete_remembered_passphrase(args.data_root)
         raise AppError(
             "the passphrase was stored, but the CLI opt-in marker could not be written",
             code="remembered_unlock_settings_failed",
-            hint="Fix permissions on the managed config directory and retry enrollment.",
-            details={"settings_error": str(exc)},
+            hint=(
+                "Fix permissions on the managed config directory and retry enrollment."
+                if credential_deleted
+                else "Fix config permissions, remove the OS credential manually, and retry."
+            ),
+            details={
+                "settings_error": str(exc),
+                "credential_deleted": credential_deleted,
+            },
             retryable=True,
         ) from None
 
