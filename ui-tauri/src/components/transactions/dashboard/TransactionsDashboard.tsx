@@ -600,7 +600,7 @@ const TransactionsDashboard = ({
       >
         <TransactionsTable
           records={visibleTableRecords}
-          fullRecords={transactions}
+          fullRecords={records}
           hideSensitive={hideSensitive}
           currency={currency}
           nowRate={nowRate}

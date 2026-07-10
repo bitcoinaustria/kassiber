@@ -211,7 +211,7 @@ const TransactionsTable = ({
   quickFilter,
   breakdownSelection,
   transactionIdFilter = EMPTY_TRANSACTION_ID_FILTER,
-  fullRecords: Transaction[] = records,
+  fullRecords = records,
   onChartSelectionChange,
   onQuickFilterChange,
   onBreakdownSelectionChange,
