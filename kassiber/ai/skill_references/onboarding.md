@@ -92,8 +92,9 @@ kassiber secrets verify      # confirm the encrypted DB opens cleanly
 kassiber secrets status
 ```
 
-After this runs, every later command needs the passphrase — interactively, or
-via `--db-passphrase-fd <FD>`. The pre-encryption plaintext file is preserved
+After this runs, every later command needs the passphrase — interactively, via
+`--db-passphrase-fd <FD>`, or through explicit `kassiber secrets
+remember-unlock` enrollment. The pre-encryption plaintext file is preserved
 as `kassiber.pre-encryption.sqlite3.bak` so the user can roll back; advise
 them to delete it once they trust the new encrypted DB. Kassiber refuses to
 overwrite an existing rollback file at that path; inspect, move, or delete the

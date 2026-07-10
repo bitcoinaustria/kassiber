@@ -149,9 +149,10 @@ start or bundle Tor, so the user still needs an existing Tor service.
 Each project database is optionally encrypted via SQLCipher 4, and each
 encrypted project has its own passphrase. After running `kassiber secrets init`
 for a selected project, every subsequent invocation against that project needs
-that project's passphrase: type it interactively, or pass
-`--db-passphrase-fd <FD>` from a parent process. Unlocking one project does not
-unlock any other project.
+that project's passphrase: type it interactively, pass
+`--db-passphrase-fd <FD>` from a parent process, or explicitly enroll CLI
+remembered unlock with `kassiber secrets remember-unlock`. Unlocking one project
+does not unlock any other project.
 
 - `~/.kassiber/projects/<project>/data/kassiber.sqlite3` — when encrypted, contents are
   protected by SQLCipher 4 with stock PBKDF2-HMAC-SHA512
@@ -192,10 +193,20 @@ exports, or backups can touch that project.
 perimeter. Pick a long passphrase from a password manager and treat
 the loss of that passphrase as data loss — there is no recovery path.
 Desktop macOS builds can optionally remember the database passphrase in
-Keychain behind a local user-presence prompt for Touch ID-style unlock.
-That is convenience only: disabling it removes Kassiber's saved copy, but
-it does not change the SQLCipher key, recover a lost passphrase, or move
-backend/wallet material out of the encrypted database.
+Keychain behind a local user-presence prompt for Touch ID-style unlock. The CLI
+can separately opt into the same per-data-root item on macOS, Windows user-scope
+Credential Manager, or an available unlocked Linux Secret Service. The CLI opt-in
+is a non-secret boolean in managed `config/settings.json`; desktop-only Touch ID
+enrollment leaves it unset. There is never a plaintext-file fallback.
+
+CLI credential reads are **not biometric-gated**. On macOS the gate is the
+Keychain item's per-binary ACL prompt, and unsigned/ad-hoc preview binaries may
+prompt again after rebuilds or identity changes. On Windows and Linux, another
+process running as the same user can read the user-scoped item. This matches the
+existing boundary above: a compromised process running as the user is out of
+scope. Revoke the copy with `kassiber secrets forget-unlock` or delete
+`Kassiber Database Passphrase` in the OS credential manager. Revocation does not
+change the SQLCipher key or recover a lost passphrase.
 
 **Desktop credential stores are a separate boundary, not SQLCipher
 replacement.** Desktop builds can store AI provider API keys in macOS

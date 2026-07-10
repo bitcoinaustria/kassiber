@@ -97,9 +97,11 @@ carries a working Austrian (§ 27b EStG) plugin with E 1kv exports.
   optional SQLCipher 4 passphrase encryption; single-project `tar | age`
   backups recoverable with stock `age` + `tar` + `sqlcipher` even if
   Kassiber disappears.
-- **Optional Touch ID unlock** — macOS desktop builds can save the database
-  passphrase in Keychain behind local user presence. This is a convenience,
-  not a recovery path or a replacement for the SQLCipher passphrase.
+- **Optional remembered unlock** — macOS desktop builds can save the database
+  passphrase in Keychain behind local user presence. The CLI can explicitly opt
+  into the same item on macOS or use Windows Credential Manager / Linux Secret
+  Service for prompt-free one-shot commands. This is convenience, not recovery
+  or a replacement for the SQLCipher passphrase.
 - **Two surfaces, one daemon** — desktop GUI (Tauri 2 + React) for
   day-to-day work; CLI with deterministic JSON envelopes for scripting,
   automation, and power users; both backed by the same Python daemon.
@@ -160,6 +162,24 @@ python3 -m kassiber wallets sync --wallet donations
 python3 -m kassiber journals process
 python3 -m kassiber reports summary
 ```
+
+For an encrypted project, enroll prompt-free CLI unlock once on a trusted local
+user account:
+
+```bash
+kassiber secrets remember-unlock
+kassiber --machine status
+kassiber --machine reports summary
+kassiber secrets forget-unlock
+```
+
+Enrollment verifies the passphrase, saves it in the native OS credential store,
+and sets a non-secret `cli_remembered_unlock` marker in the managed
+`config/settings.json`. The marker is separate from desktop Touch ID enrollment,
+so the CLI never starts consuming a desktop-only item implicitly. CLI reads are
+not biometric-gated; see [SECURITY.md](SECURITY.md) for the platform trust model.
+Headless machines and automation without an unlocked credential service should
+continue using `--db-passphrase-fd`.
 
 When syncing descriptor or xpub wallets through your own Bitcoin Core node,
 add a Core RPC backend (`--cookiefile` or `--username` / `--password`) and

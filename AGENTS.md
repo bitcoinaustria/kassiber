@@ -17,7 +17,7 @@
   - [kassiber/backends.py](kassiber/backends.py) — named sync backends with SQLite as the canonical store plus optional dotenv bootstrap via `config/backends.env`, along with CRUD helpers.
   - [kassiber/sync_btcpay.py](kassiber/sync_btcpay.py) — BTCPay Greenfield API fetcher used by wallet-configured BTCPay sync and `wallets sync-btcpay`; it reshapes confirmed remote wallet-transaction rows into the existing BTCPay import format so Kassiber can reuse the same notes/tags pipeline.
   - [kassiber/cli/handlers.py](kassiber/cli/handlers.py) — remaining CLI command handlers and compatibility-layer imports while deeper decomposition continues.
-  - [kassiber/secrets/](kassiber/secrets/) — SQLCipher keying helpers (`sqlcipher.py`), passphrase prompt/fd plumbing (`prompt.py`), plaintext→encrypted migration (`migration.py`), passphrase rotation (`passphrase.py`), dotenv→encrypted credential lift (`credentials.py`, exposes `kassiber secrets migrate-credentials`), `kassiber secrets {init,change-passphrase,verify,status,migrate-credentials}` CLI (`cli.py`), and the `--*-stdin` / `--*-fd` credential-input helpers (`cli_input.py`).
+  - [kassiber/secrets/](kassiber/secrets/) — SQLCipher keying helpers (`sqlcipher.py`), passphrase prompt/fd plumbing (`prompt.py`), opt-in native credential-store unlock (`unlock_store.py`), plaintext→encrypted migration (`migration.py`), passphrase rotation (`passphrase.py`), dotenv→encrypted credential lift (`credentials.py`, exposes `kassiber secrets migrate-credentials`), `kassiber secrets {init,change-passphrase,remember-unlock,forget-unlock,verify,status,migrate-credentials}` CLI (`cli.py`), and the `--*-stdin` / `--*-fd` credential-input helpers (`cli_input.py`).
   - [kassiber/backup/](kassiber/backup/) — `tar | age` backup format: SQLCipher-aware export (`pack.py`), age subprocess + pyrage fallback (`age_cli.py`), strict tar member validation (`safe_tar.py`), and `kassiber backup {export,import}` CLI (`cli.py`).
   - [kassiber/core/attachments.py](kassiber/core/attachments.py) — transaction attachment storage, URL-reference handling, integrity verification, and orphan-file GC for the managed attachment tree.
   - [kassiber/core/transaction_history.py](kassiber/core/transaction_history.py) — append-only transaction metadata provenance. It writes grouped edit events plus field-level before/after/diff rows for notes, tags, exclusion, review/tax status, Austrian overrides, and pricing provenance/value fields; read helpers power per-transaction history, global Activity, stale-report counts, redacted AI-safe reads, audit-package inclusion, and append-only revert.
@@ -243,7 +243,7 @@ the real transport must be present in `ALLOWED_DAEMON_KINDS`.
 - `init`, `status`, `daemon`, `chat`, `context {show,current,set}`
 - `chats {list,show,delete,clear,config}` — persisted AI chat sessions
   (stored in the SQLCipher DB; `auto` policy persists only when encrypted)
-- `secrets {init,init-resume,change-passphrase,verify,status,migrate-credentials}`
+- `secrets {init,init-resume,change-passphrase,remember-unlock,forget-unlock,verify,status,migrate-credentials}` — CLI remembered unlock requires the non-secret managed-settings opt-in marker; desktop-only Touch ID enrollment is not consumed implicitly
 - `backup {export,import}`
 - `workspaces {list,create}`
 - `profiles {list,create,get,set}`

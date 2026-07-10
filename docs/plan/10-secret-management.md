@@ -1,12 +1,13 @@
 # Secret Management Plan
 
-Date: 2026-05-13
+Date: 2026-07-10
 
 This document records the next desktop secret-handling slice. It is current
 truth for the two-boundary model and the AI-provider API-key pilot; backend
 tokens, descriptors, xpubs, blinding keys, and reveal payloads remain outside
-the OS-store pilot. macOS Touch ID unlock is a separate convenience layer over
-the SQLCipher passphrase, not a new accounting-secret storage boundary.
+the OS-store pilot. Desktop Touch ID and CLI remembered unlock are convenience
+layers over the SQLCipher passphrase, not new accounting-secret storage
+boundaries.
 
 ## Boundary Model
 
@@ -18,8 +19,9 @@ Kassiber has two intended secret boundaries:
    fallback.
 2. OS credential stores are a separate user/device-mediated boundary for
    selected external API secrets and optional unlock convenience. The current
-   implementation uses that boundary for AI provider API keys and, on macOS,
-   an opt-in Touch ID-gated copy of the SQLCipher passphrase. It does not move
+   implementation uses that boundary for AI provider API keys, an opt-in macOS
+   Touch ID-gated desktop copy of the SQLCipher passphrase, and an explicitly
+   enrolled CLI copy on supported platforms. It does not move
    backend credentials, descriptors, xpubs, blinding keys, or reveal payloads
    out of SQLCipher.
 
@@ -46,7 +48,7 @@ raw shell, raw filesystem, arbitrary CLI, or generic daemon-dispatch access.
 
 | Secret or sensitive artifact | Entry | Storage | Transport | Reveal | Logs/diagnostics | Backup/restore | Protection level | Gaps |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| SQLCipher DB passphrase | interactive prompt, `--db-passphrase-fd`, optional macOS Touch ID unlock | normally not stored; opt-in macOS Keychain item stores a copy for the current user | fd into CLI/daemon, prompt otherwise; desktop retrieves from Keychain only after LocalAuthentication Touch ID succeeds | not revealed | diagnostics redacts passphrase-shaped args and details | required to open backed-up encrypted DB; Keychain copy is not portable backup material | SQLCipher at-rest perimeter only; Touch ID is convenience | macOS only; reveal gates and Windows/Linux remember-me still open |
+| SQLCipher DB passphrase | interactive prompt, `--db-passphrase-fd`, optional desktop Touch ID, optional CLI `remember-unlock` | normally not stored; opt-in per-data-root item in macOS Keychain, Windows Credential Manager, or available unlocked Linux Secret Service | fd/prompt into CLI; CLI credential read only when `cli_remembered_unlock: true`; desktop reads the shared macOS item only after LocalAuthentication succeeds | not revealed | diagnostics redacts passphrase-shaped args and details | required to open backed-up encrypted DB; OS-store copy is not portable backup material | SQLCipher at-rest perimeter only; remembered unlock is convenience | CLI reads are not biometric-gated; biometric reveal gates remain open |
 | Backup passphrase / age recipient material | backup CLI prompts/options | not stored by Kassiber | local CLI process | not revealed | diagnostics redaction applies to passphrase-shaped keys/text | user-supplied for each backup/import | external `age` or `pyrage` boundary | no recovery if lost |
 | Backend tokens/auth headers/cookies/basic-auth | backend create/update, dotenv migration | SQLCipher DB `backends` table; older dotenvs may still be migrated | daemon/CLI explicit backend flows | `backends.reveal_token` after passphrase round-trip, or explicit plaintext acknowledgement on plaintext DBs | safe backend views expose presence flags only; diagnostics aggregate credential presence | `.kassiber` SQLCipher backup includes values | SQLCipher at rest, unlocked daemon at runtime | not migrated to OS stores in this PR |
 | Descriptors, xpubs, blinding keys | wallet create/update/import | SQLCipher DB wallet config today | daemon/CLI wallet flows | `wallets.reveal_descriptor` after passphrase round-trip, or explicit plaintext acknowledgement on plaintext DBs | safe wallet views expose state flags only; diagnostics redacts xpub/xprv patterns | `.kassiber` SQLCipher backup includes values | SQLCipher at rest, unlocked daemon at runtime | still in generic wallet config blob |
@@ -126,13 +128,19 @@ descriptors, xpubs, blinding keys, passphrases, or reveal payloads.
 | Windows | user-scope Credential Manager / DPAPI when available | User-scope Credential Manager / DPAPI only. No machine-scope secrets. | "Stored for this Windows user account only." |
 | Linux | `sqlcipher_inline` when Secret Service is missing, locked, headless, or no D-Bus | Use Secret Service only when available and unlocked. No plaintext fallback. | Show a banner when falling back because no reliable desktop secret service is available. |
 
-`remember-unlock` is currently macOS-only and explicitly opt-in for database
-unlock. First passphrase entry on the lock screen can enroll it for the next
-unlock, and Settings can verify the passphrase and store it immediately. It
-stores a per-data-root passphrase copy in macOS Keychain and requires a
-LocalAuthentication Touch ID success before reading it back; forgetting the
-setting removes Kassiber's saved copy. Passphrase rotation updates that
-Keychain copy or disables Touch ID if the native store rejects the update.
+Desktop remember-unlock remains macOS-specific: first passphrase entry on the
+lock screen can enroll Touch ID for the next unlock, and Settings can verify the
+passphrase and store it immediately. Desktop retrieval requires a
+LocalAuthentication success before reading the per-data-root Keychain item.
+
+CLI `remember-unlock` is explicitly opt-in on macOS, Windows, and Linux. It
+verifies the database passphrase, stores the same service/account item used by
+the desktop on macOS, and sets `cli_remembered_unlock: true` in the managed
+settings JSON. A desktop-only item is ignored while that marker is absent.
+Windows uses user-scope Credential Manager; Linux uses Secret Service only when
+available and unlocked. There is no plaintext fallback. CLI reads are not
+biometric-gated, and passphrase rotation updates the shared item or disables the
+CLI marker and warns if the store rejects the update.
 
 ## Rust Secret Store Layer
 
@@ -225,6 +233,10 @@ Desktop:
    unlock or from the Settings verification dialog, and can retrieve it after
    a LocalAuthentication Touch ID prompt on later lock screens. Passphrase
    rotation updates the stored copy.
+5. A one-shot CLI invocation resolves an explicit fd/cached passphrase first,
+   then the OS-store copy only when `cli_remembered_unlock` is true, then the
+   existing TTY prompt. A stale copy writes `remembered_unlock_stale` to stderr
+   and falls through instead of changing machine-mode stdout.
 
 ### Reveal Token/Descriptor
 

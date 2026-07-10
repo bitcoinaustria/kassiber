@@ -830,7 +830,7 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
   `wallets.config_json` blob into typed project-local tables now that
   SQLCipher protects the file at rest.
 - [x] Encrypt `kassiber.sqlite3` at rest with SQLCipher 4 behind a user
-  passphrase, with `kassiber secrets {init,change-passphrase,verify,status,migrate-credentials}`,
+  passphrase, with `kassiber secrets {init,change-passphrase,remember-unlock,forget-unlock,verify,status,migrate-credentials}`,
   `kassiber backup {export,import}`, `--db-passphrase-fd` plumbing through the
   CLI and daemon, and a `tar | age` single-file backup format.
 - [x] Introduce first-class project/book-set containers with per-project
@@ -873,10 +873,12 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
   Passphrase changes update the Keychain copy or disable Touch ID if the
   native store rejects the update; forgetting the setting deletes Kassiber's
   saved copy.
-  Remaining work: biometric reveal gates for descriptor/token recovery and
-  equivalent remember-me affordances for Windows/Linux where the platform
-  policy can support them. These remain convenience over the SQLCipher
-  passphrase, never a cryptographic substitute.
+  The CLI now also has explicit `secrets remember-unlock` / `forget-unlock` on
+  macOS Keychain, Windows Credential Manager, and available/unlocked Linux
+  Secret Service, gated by a separate non-secret settings marker. Remaining
+  work: biometric reveal gates for descriptor/token recovery and desktop
+  remember-me affordances for Windows/Linux. These remain convenience over the
+  SQLCipher passphrase, never a cryptographic substitute.
 - [x] Kassiber skill bundle for agents (moved to
   https://github.com/bitcoinaustria/kassiber-skill)
 - [ ] Optional server/REST mode, still local-first and opt-in

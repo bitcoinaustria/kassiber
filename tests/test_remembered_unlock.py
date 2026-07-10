@@ -237,6 +237,14 @@ class RememberedUnlockCliTests(unittest.TestCase):
             self.assertEqual(payload["kind"], "secrets.remember-unlock")
             self.assertTrue(payload["data"]["remembered_unlock"]["cli_enabled"])
 
+            payload, returncode, _stderr = _run_cli(data_root, "secrets", "status")
+            self.assertEqual(returncode, 0)
+            self.assertEqual(payload["kind"], "secrets.status")
+            self.assertEqual(
+                set(payload["data"]["remembered_unlock"]),
+                {"platform", "available", "configured", "cli_enabled"},
+            )
+
             payload, returncode, _stderr = _run_cli(data_root, "status")
             self.assertEqual(returncode, 0)
             self.assertEqual(payload["kind"], "status")
