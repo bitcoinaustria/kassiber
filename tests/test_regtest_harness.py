@@ -329,6 +329,9 @@ class RegtestHarnessTest(unittest.TestCase):
         self.assertEqual(len(stress["fee_curve"]), 5)
         self.assertTrue(stress["pool_payouts"]["enabled"])
         self.assertEqual(len(stress["wallet_rotations"]), 3)
+        self.assertTrue(all(rotation["mode"] == "sweep" for rotation in stress["wallet_rotations"]))
+        self.assertEqual(len(stress["liquid_wallet_rotations"]), 1)
+        self.assertEqual(len(stress["internal_transfers"]), 4)
         self.assertEqual(len(stress["swap_bridges"]), 3)
         # Deterministic amount/fee variation keeps the multi-year ledger from
         # looking like a spreadsheet of identical round numbers.
@@ -348,7 +351,14 @@ class RegtestHarnessTest(unittest.TestCase):
             {wallet["key"] for wallet in liquid_live_wallets},
             {"liquid_treasury", "liquid_operations", "liquid_live_sync", "liquid_treasury_2024"},
         )
-        self.assertTrue(all(Decimal(wallet["live_receipt_btc"]) > 0 for wallet in liquid_live_wallets))
+        liquid_by_key = {wallet["key"]: wallet for wallet in liquid_live_wallets}
+        self.assertTrue(
+            all(
+                Decimal(liquid_by_key[key]["live_receipt_btc"]) > 0
+                for key in {"liquid_treasury", "liquid_operations", "liquid_live_sync"}
+            )
+        )
+        self.assertEqual(Decimal(liquid_by_key["liquid_treasury_2024"]["live_receipt_btc"]), Decimal("0"))
         self.assertNotIn("liquid_ledger", scenario)
         self.assertEqual(scenario["pricing"]["source"], "kraken-bundled")
         self.assertEqual(scenario["pricing"]["live_source"], "mempool")
@@ -359,7 +369,7 @@ class RegtestHarnessTest(unittest.TestCase):
         self.assertNotEqual(rates, sorted(rates))
         self.assertNotEqual(rates, sorted(rates, reverse=True))
         self.assertEqual(scenario["expected"]["collaborative_excluded"], 5)
-        self.assertEqual(scenario["expected"]["min_transfer_pairs"], 8)
+        self.assertEqual(scenario["expected"]["min_transfer_pairs"], 13)
         self.assertEqual(scenario["expected"]["ownership_derived_transfer_pairs"], 2)
         fanouts = [op for op in scenario["operations"] if op["kind"] == "self_transfer_fanout"]
         self.assertEqual(len(fanouts), 1)
