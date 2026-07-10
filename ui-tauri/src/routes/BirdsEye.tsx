@@ -60,6 +60,7 @@ import {
   type Transaction,
 } from "@/components/overview-dashboard/model";
 import { syncProgressPhaseLabel } from "@/lib/syncProgress";
+import { formatCount } from "@/lib/localeFormat";
 
 type BookRoute = "/overview" | "/transactions" | "/journals" | "/quarantine" | "/connections" | "/reports" | "/exit-tax";
 
@@ -855,7 +856,9 @@ function RefreshPanel({
   );
 }
 
-function hasProgressCounter(progress: WorkspaceFreshnessProgress) {
+function hasProgressCounter(
+  progress: WorkspaceFreshnessProgress,
+): progress is WorkspaceFreshnessProgress & { processed: number; total: number } {
   return (
     typeof progress.processed === "number" &&
     typeof progress.total === "number" &&
@@ -884,15 +887,15 @@ function formatWorkspaceProgressLabel(
 
   if (hasProgressCounter(progress)) {
     parts.push(
-      `${progress.processed?.toLocaleString()} / ${progress.total?.toLocaleString()}`,
+      `${formatCount(progress.processed)} / ${formatCount(progress.total)}`,
     );
   } else if (typeof progress.processed === "number") {
     parts.push(
       to
         ? to("birdsEye.refreshPanel.scanned", {
-            value: progress.processed.toLocaleString(),
+            value: formatCount(progress.processed),
           })
-        : `${progress.processed.toLocaleString()} scanned`,
+        : `${formatCount(progress.processed)} scanned`,
     );
   }
 

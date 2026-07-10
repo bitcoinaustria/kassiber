@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { useDaemon } from "@/daemon/client";
 import { useJournalProcessingAction } from "@/hooks/useJournalProcessingAction";
 import { screenPanelClassName } from "@/lib/screen-layout";
+import { formatSats } from "@/lib/localeFormat";
 import {
   reportableEntryMetricFilterIds,
   reportableEntryMetrics,
@@ -293,7 +294,7 @@ function formatEntryType(type: string) {
 function formatMsatAmount(msat: number, asset: string) {
   const sats = Math.round(Math.abs(msat) / 1000);
   const sign = msat < 0 ? "-" : "";
-  return `${sign}${sats.toLocaleString("en-US")} sats ${asset}`.trim();
+  return `${sign}${formatSats(sats)} ${asset}`.trim();
 }
 
 function formatDate(value: string, t: TFunction<"journals">) {

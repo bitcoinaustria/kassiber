@@ -74,6 +74,7 @@ import {
 } from "@/lib/screen-layout";
 import { cn } from "@/lib/utils";
 import { MISSING_FIAT_LABEL } from "@/lib/currency";
+import { formatCount, formatSats } from "@/lib/localeFormat";
 import type {
   Connection,
   NodeChannel,
@@ -87,7 +88,7 @@ const blurClass = (hidden: boolean) => (hidden ? "sensitive" : "");
 
 const fmtBtc = (value: number) => `₿ ${value.toFixed(8)}`;
 const fmtSat = (value: number) =>
-  `${value.toLocaleString("en-US")} sat`;
+  formatSats(value, { unit: "sat" });
 const fmtEur = (value: number | null) =>
   value === null
     ? MISSING_FIAT_LABEL
@@ -97,7 +98,7 @@ const fmtEur = (value: number | null) =>
         maximumFractionDigits: 2,
       });
 const fmtSatSigned = (value: number) =>
-  `${value >= 0 ? "+ " : "- "}${Math.abs(value).toLocaleString("en-US")} sat`;
+  `${value >= 0 ? "+ " : "- "}${formatSats(Math.abs(value), { unit: "sat" })}`;
 const fmtPubkey = (value: string) =>
   value.length <= 18 ? value : `${value.slice(0, 8)}…${value.slice(-6)}`;
 
@@ -530,13 +531,13 @@ function NodeOperatorHero({
             </span>
             <span className="text-xs text-muted-foreground">
               {t("node.hero.snapshotLine", {
-                channels: activeChannels.length.toLocaleString("en-US"),
-                forwards: (
+                channels: formatCount(activeChannels.length),
+                forwards: formatCount(
                   node.routing?.forwardCount ??
                   node.forwards?.length ??
-                  0
-                ).toLocaleString("en-US"),
-                peers: node.peerCount.toLocaleString("en-US"),
+                  0,
+                ),
+                peers: formatCount(node.peerCount),
               })}
             </span>
           </div>
@@ -591,8 +592,8 @@ function NodeOperatorHero({
               className="flex h-3 w-full overflow-hidden rounded-full bg-muted"
               role="img"
               aria-label={t("node.hero.liquidityAria", {
-                local: node.totalLocalBalanceSat.toLocaleString("en-US"),
-                remote: node.totalRemoteBalanceSat.toLocaleString("en-US"),
+                local: formatCount(node.totalLocalBalanceSat),
+                remote: formatCount(node.totalRemoteBalanceSat),
               })}
             >
               <div
@@ -729,7 +730,7 @@ function NodeMetrics({ node, priceEur, hideSensitive }: NodeMetricsProps) {
           <span className={blurClass(hideSensitive)}>{fmtBtc(localBtc)}</span>
         }
         detail={t("node.metrics.localBalanceDetail", {
-          sat: node.totalLocalBalanceSat.toLocaleString("en-US"),
+          sat: formatCount(node.totalLocalBalanceSat),
           eur: fmtEur(localBtc * priceEur),
         })}
         icon={<Zap className="size-4" aria-hidden="true" />}
@@ -798,25 +799,25 @@ function NodeActivityCard({ node }: { node: NodeSnapshot }) {
       <CardContent className="grid gap-3 px-4 pt-4 sm:grid-cols-2 xl:grid-cols-4">
         <CompactStat
           label={t("node.activity.invoices")}
-          value={`${paidInvoices.toLocaleString("en-US")} / ${invoiceCount.toLocaleString("en-US")}`}
+          value={`${formatCount(paidInvoices)} / ${formatCount(invoiceCount)}`}
           detail={t("node.activity.paid")}
           icon={<ArrowDownRight className="size-4" aria-hidden="true" />}
         />
         <CompactStat
           label={t("node.activity.payments")}
-          value={`${completedPayments.toLocaleString("en-US")} / ${paymentCount.toLocaleString("en-US")}`}
+          value={`${formatCount(completedPayments)} / ${formatCount(paymentCount)}`}
           detail={t("node.activity.completed")}
           icon={<ArrowUpRight className="size-4" aria-hidden="true" />}
         />
         <CompactStat
           label={t("node.activity.forwards")}
-          value={forwardCount.toLocaleString("en-US")}
+          value={formatCount(forwardCount)}
           detail={node.routing?.windowLabel ?? t("node.activity.snapshotWindow")}
           icon={<Repeat className="size-4" aria-hidden="true" />}
         />
         <CompactStat
           label={t("node.activity.exceptions")}
-          value={failedOrExpired.toLocaleString("en-US")}
+          value={formatCount(failedOrExpired)}
           detail={t("node.activity.failedExpired")}
           icon={<XCircle className="size-4" aria-hidden="true" />}
         />
@@ -854,19 +855,19 @@ function AccountingReadinessCard({
         <div className="grid gap-3 sm:grid-cols-3">
           <CompactStat
             label={t("node.accounting.imported")}
-            value={importedTransactions.toLocaleString("en-US")}
+            value={formatCount(importedTransactions)}
             detail={t("node.accounting.transactions")}
             icon={<ReceiptText className="size-4" aria-hidden="true" />}
           />
           <CompactStat
             label={t("node.accounting.bookedInvoices")}
-            value={bookedInvoiceCount.toLocaleString("en-US")}
+            value={formatCount(bookedInvoiceCount)}
             detail={t("node.accounting.finalized")}
             icon={<ShieldCheck className="size-4" aria-hidden="true" />}
           />
           <CompactStat
             label={t("node.accounting.nodeEvents")}
-            value={operationalEvents.toLocaleString("en-US")}
+            value={formatCount(operationalEvents)}
             detail={t("node.accounting.auditTrail")}
             icon={<Activity className="size-4" aria-hidden="true" />}
           />
@@ -918,7 +919,7 @@ function ChannelEconomicsCard({
         </CardTitle>
         <CardDescription>
           {t("node.channelEconomics.description", {
-            cost: DEFAULT_OPEN_COST_SAT.toLocaleString("en-US"),
+            cost: formatCount(DEFAULT_OPEN_COST_SAT),
           })}
         </CardDescription>
       </CardHeader>
@@ -966,7 +967,7 @@ function ChannelEconomicsCard({
                       </span>
                     </TableCell>
                     <TableCell className="text-right font-mono text-sm tabular-nums">
-                      {(channel.forwardCount ?? 0).toLocaleString("en-US")}
+                      {formatCount(channel.forwardCount ?? 0)}
                     </TableCell>
                     <TableCell
                       className={cn(
@@ -1064,9 +1065,9 @@ function RoutingSummary({
         <CardDescription>
           {t("node.routing.description", {
             window: routing.windowLabel,
-            forwards: routing.forwardCount.toLocaleString("en-US"),
-            payments: routing.paymentCount.toLocaleString("en-US"),
-            rebalances: routing.rebalanceCount.toLocaleString("en-US"),
+            forwards: formatCount(routing.forwardCount),
+            payments: formatCount(routing.paymentCount),
+            rebalances: formatCount(routing.rebalanceCount),
           })}
         </CardDescription>
       </CardHeader>
@@ -1207,10 +1208,10 @@ function ChannelsCard({
             >
               {showClosed
                 ? t("node.channels.hideClosed", {
-                    value: sortedClosed.length.toLocaleString("en-US"),
+                    value: formatCount(sortedClosed.length),
                   })
                 : t("node.channels.showClosed", {
-                    value: sortedClosed.length.toLocaleString("en-US"),
+                    value: formatCount(sortedClosed.length),
                   })}
             </Button>
           ) : null}
@@ -1358,8 +1359,8 @@ function ChannelRow({
             className="flex h-2 w-full overflow-hidden rounded-full bg-muted"
             role="img"
             aria-label={t("node.channels.balanceAria", {
-              local: channel.localBalanceSat.toLocaleString("en-US"),
-              capacity: channel.capacitySat.toLocaleString("en-US"),
+              local: formatCount(channel.localBalanceSat),
+              capacity: formatCount(channel.capacitySat),
             })}
           >
             <div
@@ -1414,12 +1415,15 @@ function ChannelRow({
           <Fragment>
             <span className="block font-mono text-sm tabular-nums">
               {t("node.channels.ppm", {
-                value: channel.feeRatePpm?.toLocaleString("en-US") ?? "—",
+                value:
+                  channel.feeRatePpm === null || channel.feeRatePpm === undefined
+                    ? "—"
+                    : formatCount(channel.feeRatePpm),
               })}
             </span>
             <span className="text-[10px] text-muted-foreground sm:text-xs">
               {t("node.channels.baseMsat", {
-                value: (channel.baseFeeMsat ?? 0).toLocaleString("en-US"),
+                value: formatCount(channel.baseFeeMsat ?? 0),
               })}
             </span>
           </Fragment>
@@ -1427,7 +1431,7 @@ function ChannelRow({
         {channel.forwardCount ? (
           <span className="mt-0.5 block text-[10px] text-muted-foreground sm:text-xs">
             {t("node.channels.forwardsEarned", {
-              value: channel.forwardCount.toLocaleString("en-US"),
+              value: formatCount(channel.forwardCount),
               earned: fmtSat(channel.earnedRoutingSat ?? 0),
             })}
           </span>
@@ -1497,7 +1501,7 @@ function NodeDetailsCard({
           {typeof node.blockHeight === "number" ? (
             <DetailRow
               label={t("node.identity.blockHeight")}
-              value={node.blockHeight.toLocaleString("en-US")}
+              value={formatCount(node.blockHeight)}
               mono
             />
           ) : null}
@@ -1551,7 +1555,7 @@ function NodeDetailsCard({
           {typeof connection.transactionCount === "number" ? (
             <DetailRow
               label={t("node.syncStatus.importedTransactions")}
-              value={connection.transactionCount.toLocaleString("en-US")}
+              value={formatCount(connection.transactionCount)}
             />
           ) : null}
         </CardContent>
@@ -1649,8 +1653,8 @@ function ChannelDetailBody({
             className="flex h-2.5 w-full overflow-hidden rounded-full bg-muted"
             role="img"
             aria-label={t("node.channels.balanceAria", {
-              local: channel.localBalanceSat.toLocaleString("en-US"),
-              capacity: channel.capacitySat.toLocaleString("en-US"),
+              local: formatCount(channel.localBalanceSat),
+              capacity: formatCount(channel.capacitySat),
             })}
           >
             <div
@@ -1807,7 +1811,7 @@ function ChannelDetailBody({
           {typeof channel.htlcCount === "number" ? (
             <DetailRow
               label={t("node.channelDetail.inFlightHtlcs")}
-              value={channel.htlcCount.toLocaleString("en-US")}
+              value={formatCount(channel.htlcCount)}
             />
           ) : null}
         </div>
@@ -1819,19 +1823,19 @@ function ChannelDetailBody({
           <DetailRow
             label={t("node.channelDetail.feeRate")}
             value={t("node.channelDetail.feeRateValue", {
-              value: (channel.feeRatePpm ?? 0).toLocaleString("en-US"),
+              value: formatCount(channel.feeRatePpm ?? 0),
             })}
           />
           <DetailRow
             label={t("node.channelDetail.baseFee")}
             value={t("node.channelDetail.baseFeeValue", {
-              value: (channel.baseFeeMsat ?? 0).toLocaleString("en-US"),
+              value: formatCount(channel.baseFeeMsat ?? 0),
             })}
           />
           {typeof channel.forwardCount === "number" ? (
             <DetailRow
               label={t("node.channelDetail.forwardsWindow")}
-              value={channel.forwardCount.toLocaleString("en-US")}
+              value={formatCount(channel.forwardCount)}
             />
           ) : null}
           {typeof channel.earnedRoutingSat === "number" ? (
@@ -2001,10 +2005,10 @@ function ForwardRow({ forward, hideSensitive }: ForwardRowProps) {
           {forward.status === "settled" && feeMsat > 0
             ? feeRendersAsMsat
               ? t("node.forwards.feeMsat", {
-                  value: feeMsat.toLocaleString("en-US"),
+                  value: formatCount(feeMsat),
                 })
               : t("node.forwards.feeSat", {
-                  value: feeSat.toLocaleString("en-US"),
+                  value: formatCount(feeSat),
                 })
             : "—"}
         </span>

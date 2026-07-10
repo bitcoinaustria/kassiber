@@ -1,5 +1,6 @@
 import * as React from "react";
 import { useTranslation } from "react-i18next";
+import { currentUiLocale } from "@/lib/localeFormat";
 import { History, Trash2 } from "lucide-react";
 
 import { useAssistantSession } from "@/components/ai/assistantSession";
@@ -29,7 +30,7 @@ interface ChatSessionsListShape {
 function formatUpdatedAt(value: string): string {
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return value;
-  return parsed.toLocaleString(undefined, {
+  return parsed.toLocaleString(currentUiLocale(), {
     dateStyle: "medium",
     timeStyle: "short",
   });

@@ -3,6 +3,7 @@ import type {
   NotificationProgress,
   NotificationTone,
 } from "@/store/ui";
+import { formatCount } from "@/lib/localeFormat";
 
 export type WalletSyncProgress = {
   job_id?: string;
@@ -213,10 +214,10 @@ function progressLabel(progress: WalletSyncProgress) {
   const prefix = source ? `${source}: ` : "";
 
   if (processed !== null && total !== null && total > 0) {
-    return `${prefix}${phase} · ${processed.toLocaleString()} / ${total.toLocaleString()}`;
+    return `${prefix}${phase} · ${formatCount(processed)} / ${formatCount(total)}`;
   }
   if (processed !== null) {
-    return `${prefix}${phase} · ${processed.toLocaleString()} ${progressUnit(progress)}`;
+    return `${prefix}${phase} · ${formatCount(processed)} ${progressUnit(progress)}`;
   }
   return `${prefix}${phase}`;
 }
@@ -246,9 +247,9 @@ function gapLimitLabel(progress: WalletSyncProgress) {
       ? Math.floor(progress.unused_streak)
       : null;
   if (unused !== null) {
-    return `Unused gap ${Math.min(unused, gapLimit).toLocaleString()} / ${gapLimit.toLocaleString()}`;
+    return `Unused gap ${formatCount(Math.min(unused, gapLimit))} / ${formatCount(gapLimit)}`;
   }
-  return `Stops after ${gapLimit.toLocaleString()} consecutive unused addresses`;
+  return `Stops after ${formatCount(gapLimit)} consecutive unused addresses`;
 }
 
 function retainedTargetLabel(progress: WalletSyncProgress) {
@@ -258,17 +259,17 @@ function retainedTargetLabel(progress: WalletSyncProgress) {
       ? Math.floor(progress.retained_targets)
       : null;
   if (retained === null) return null;
-  return `${retained.toLocaleString()} targets selected so far`;
+  return `${formatCount(retained)} targets selected so far`;
 }
 
 function rowProgressLabel(progress: WalletSyncProgress) {
   const { processed, total } = progressNumbers(progress);
   const unit = progressUnit(progress);
   if (processed !== null && total !== null && total > 0) {
-    return `${processed.toLocaleString()} / ${total.toLocaleString()} ${unit}`;
+    return `${formatCount(processed)} / ${formatCount(total)} ${unit}`;
   }
   if (processed !== null) {
-    return `${processed.toLocaleString()} ${unit}`;
+    return `${formatCount(processed)} ${unit}`;
   }
   return null;
 }
@@ -280,8 +281,8 @@ function importOutcomeLabel(progress: WalletSyncProgress) {
     typeof progress.skipped === "number" ? progress.skipped : null;
   if (imported === null && skipped === null) return null;
   const parts = [
-    imported !== null ? `${imported.toLocaleString()} imported` : null,
-    skipped !== null ? `${skipped.toLocaleString()} unchanged` : null,
+    imported !== null ? `${formatCount(imported)} imported` : null,
+    skipped !== null ? `${formatCount(skipped)} unchanged` : null,
   ].filter(Boolean);
   return parts.join(" · ");
 }
@@ -289,8 +290,8 @@ function importOutcomeLabel(progress: WalletSyncProgress) {
 function jobProgressLabel(progress: WalletSyncProgress) {
   const { index, total } = jobNumbers(progress);
   if (index === null || total === null) return null;
-  const current = Math.min(index, total).toLocaleString();
-  return `Source ${current} of ${total.toLocaleString()}`;
+  const current = formatCount(Math.min(index, total));
+  return `Source ${current} of ${formatCount(total)}`;
 }
 
 function backoffLabel(progress: WalletSyncProgress) {
@@ -322,12 +323,12 @@ export function formatSyncProgressBody(progress: WalletSyncProgress) {
   const unit = progressUnit(progress);
   const gap = gapLimitLabel(progress);
   if (processed !== null && total !== null && total > 0) {
-    const rows = `${processed.toLocaleString()} / ${total.toLocaleString()}`;
+    const rows = `${formatCount(processed)} / ${formatCount(total)}`;
     return `${prefix}${phase}; ${rows} ${unit}.`;
   }
   if (processed !== null) {
     const suffix = gap ? ` ${gap}.` : "";
-    return `${prefix}${phase}; ${processed.toLocaleString()} ${unit}.${suffix}`;
+    return `${prefix}${phase}; ${formatCount(processed)} ${unit}.${suffix}`;
   }
   return prefix ? `${prefix}${phase}.` : `${phase}.`;
 }

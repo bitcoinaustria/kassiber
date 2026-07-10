@@ -1,5 +1,7 @@
 import type { TFunction } from "i18next";
 
+import { formatSats } from "@/lib/localeFormat";
+
 import {
   reviewRowKey,
   type ReviewMetric,
@@ -639,13 +641,13 @@ function detailNumber(detail: Record<string, unknown>, key: string) {
 function formatBtcDetail(value: number | null) {
   if (value === null) return "";
   const sats = Math.round(Math.abs(value) * 100_000_000);
-  return `${sats.toLocaleString("en-US")} sats`;
+  return formatSats(sats);
 }
 
 function formatMsatDetail(value: number | null) {
   if (value === null) return "";
   const sats = Math.round(Math.abs(value) / 1000);
-  return `${sats.toLocaleString("en-US")} sats`;
+  return formatSats(sats);
 }
 
 function nextAction(
@@ -738,7 +740,7 @@ function formatDirection(direction: string, t: TFunction<"journals">) {
 function formatMsatAmount(msat: number, asset: string) {
   const sats = Math.round(Math.abs(msat) / 1000);
   const sign = msat < 0 ? "-" : "";
-  return `${sign}${sats.toLocaleString("en-US")} sats ${asset}`.trim();
+  return `${sign}${formatSats(sats)} ${asset}`.trim();
 }
 
 function formatDate(value: string, t: TFunction<"journals">) {

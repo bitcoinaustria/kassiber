@@ -40,6 +40,7 @@ import {
   screenShellClassName,
 } from "@/lib/screen-layout";
 import { cn } from "@/lib/utils";
+import { formatUiNumber } from "@/lib/localeFormat";
 import { useUiStore } from "@/store/ui";
 
 export type ReviewTableKind = "journal-events" | "quarantine";
@@ -603,7 +604,7 @@ function QueueMetric({
 }) {
   const { t } = useTranslation("journals");
   const formattedValue =
-    typeof value === "number" ? value.toLocaleString("en-US") : value;
+    typeof value === "number" ? formatUiNumber(value) : value;
   const className = cn(
     "min-w-0 space-y-2 p-3 text-left sm:p-4",
     filterId &&

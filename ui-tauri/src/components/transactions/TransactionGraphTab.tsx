@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/dialog";
 import { openExternalUrl } from "@/daemon/transport";
 import { formatBtc } from "@/lib/currency";
+import { formatCount, formatSats } from "@/lib/localeFormat";
 import {
   connectionAssetIconKind,
   type ConnectionAssetLabel,
@@ -86,7 +87,7 @@ function formatNodeAmount(node: TransactionGraphNode, hidden: boolean, t: TFunct
     return formatBtc(node.valueBtc);
   }
   if (typeof node.valueSats === "number") {
-    return `${node.valueSats.toLocaleString("de-AT")} sats`;
+    return formatSats(node.valueSats);
   }
   return "";
 }
@@ -379,7 +380,7 @@ function TransactionIoColumn({
           {title}
         </div>
         <div className="text-[10px] text-muted-foreground">
-          {nodes.length.toLocaleString("de-AT")}
+          {formatCount(nodes.length)}
         </div>
       </div>
       <div className={cn("overflow-auto pr-1", expanded ? "max-h-[520px]" : "max-h-[360px]")}>

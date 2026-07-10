@@ -4,6 +4,7 @@ import { CalendarDays, ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
+import { currentUiLocale } from "@/lib/localeFormat";
 
 // Monday-first week (EU/AT convention).
 const WEEKDAYS = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"];
@@ -42,7 +43,7 @@ function parseISO(value: string | undefined): YMD {
 function formatDisplay(value: string | undefined): string {
   if (!value) return "Pick a date";
   const { y, m, d } = parseISO(value);
-  return new Intl.DateTimeFormat(undefined, {
+  return new Intl.DateTimeFormat(currentUiLocale(), {
     day: "2-digit",
     month: "short",
     year: "numeric",

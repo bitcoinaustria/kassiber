@@ -6,6 +6,7 @@ import {
 } from "lucide-react";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
+import { fiatNumberFormatter } from "@/lib/currency";
 import {
   Area,
   AreaChart,
@@ -1140,7 +1141,9 @@ export const BtcActivityChart = ({
                       strokeOpacity={0.45}
                       zIndex={2100}
                       label={renderLastValueTag({
-                        text: Math.round(lastPriceValue).toLocaleString("en-US"),
+                        text: fiatNumberFormatter(fiatCurrency).format(
+                          Math.round(lastPriceValue),
+                        ),
                         fill: priceColor,
                         side: "right",
                       })}
@@ -1155,7 +1158,9 @@ export const BtcActivityChart = ({
                       strokeOpacity={0.45}
                       zIndex={2100}
                       label={renderLastValueTag({
-                        text: Math.round(lastPortfolioValue).toLocaleString("en-US"),
+                        text: fiatNumberFormatter(fiatCurrency).format(
+                          Math.round(lastPortfolioValue),
+                        ),
                         fill: portfolioValueColor,
                         side: "right",
                       })}
@@ -1170,7 +1175,9 @@ export const BtcActivityChart = ({
                       strokeOpacity={0.45}
                       zIndex={2100}
                       label={renderLastValueTag({
-                        text: Math.round(lastBasisValue).toLocaleString("en-US"),
+                        text: fiatNumberFormatter(fiatCurrency).format(
+                          Math.round(lastBasisValue),
+                        ),
                         fill: secondaryColor,
                         side: "right",
                       })}

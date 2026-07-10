@@ -1,3 +1,5 @@
+import { formatSats, formatUiNumber } from "@/lib/localeFormat";
+
 export type EvidenceLevel = "exact" | "derived" | "unknown" | string;
 
 export interface PrivacyScoreFactor {
@@ -174,13 +176,13 @@ export interface PsbtPrivacyResult {
 
 export function formatPrivacyInt(value: unknown) {
   return typeof value === "number" && Number.isFinite(value)
-    ? value.toLocaleString()
+    ? formatUiNumber(value)
     : "0";
 }
 
 export function formatPrivacyMsat(value: unknown) {
   if (typeof value !== "number" || !Number.isFinite(value)) return "0 sats";
-  return `${Math.round(value / 1000).toLocaleString()} sats`;
+  return formatSats(Math.round(value / 1000));
 }
 
 export function shortPrivacyId(value: unknown) {

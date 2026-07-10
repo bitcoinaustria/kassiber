@@ -61,6 +61,7 @@ import {
 } from "@/lib/screen-layout";
 import { saveLogsExportAs } from "@/lib/saveText";
 import { cn } from "@/lib/utils";
+import { currentUiLocale } from "@/lib/localeFormat";
 import { useUiStore } from "@/store/ui";
 
 const LEVEL_CLASS: Record<AppLogLevel, string> = {
@@ -497,7 +498,7 @@ export function Logs() {
           <div className="border-b border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
             {t("logs.rawWarning", {
               time: rawUntil
-                ? new Date(rawUntil).toLocaleTimeString()
+                ? new Date(rawUntil).toLocaleTimeString(currentUiLocale())
                 : t("logs.rawWarningSoon"),
             })}
           </div>

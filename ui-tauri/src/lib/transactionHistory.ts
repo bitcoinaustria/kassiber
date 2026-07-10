@@ -79,7 +79,7 @@ export function formatHistoryDate(value: string | null | undefined) {
   if (!value) return "Unknown time";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
-  return new Intl.DateTimeFormat(undefined, {
+  return new Intl.DateTimeFormat(currentUiLocale(), {
     dateStyle: "medium",
     timeStyle: "short",
   }).format(date);
@@ -96,7 +96,9 @@ export function formatHistoryRelative(value: string | null | undefined) {
     ["hour", 3_600_000],
     ["minute", 60_000],
   ];
-  const formatter = new Intl.RelativeTimeFormat(undefined, { numeric: "auto" });
+  const formatter = new Intl.RelativeTimeFormat(currentUiLocale(), {
+    numeric: "auto",
+  });
   for (const [unit, size] of units) {
     if (absMs >= size) {
       return formatter.format(Math.round(deltaMs / size), unit);
@@ -132,3 +134,4 @@ export function historyTransactionLabel(event: TransactionHistoryEvent) {
     event.transaction_id
   );
 }
+import { currentUiLocale } from "@/lib/localeFormat";

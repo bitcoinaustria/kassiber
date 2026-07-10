@@ -25,6 +25,7 @@ import {
 } from "@/daemon/client";
 import { useSyncProgressNotice } from "@/hooks/useSyncProgressNotice";
 import { copyTextWithPolicy } from "@/lib/clipboard";
+import { formatCount } from "@/lib/localeFormat";
 import { useUiStore, type DeferredConnectionSetup } from "@/store/ui";
 import { cn } from "@/lib/utils";
 import {
@@ -1671,7 +1672,7 @@ export function AddConnectionDialog({
         errors.gapLimit = t("add.validation.gapPositive");
       } else if (gapLimit > MAX_DESCRIPTOR_GAP_LIMIT) {
         errors.gapLimit = t("add.validation.gapMax", {
-          max: MAX_DESCRIPTOR_GAP_LIMIT.toLocaleString(),
+          max: formatCount(MAX_DESCRIPTOR_GAP_LIMIT),
         });
       }
       if (descriptorBackendOptions.length > 0 && !form.backend.trim()) {
@@ -1749,7 +1750,7 @@ export function AddConnectionDialog({
         errors.gapLimit = t("add.validation.gapPositive");
       } else if (gapLimit > MAX_DESCRIPTOR_GAP_LIMIT) {
         errors.gapLimit = t("add.validation.gapMax", {
-          max: MAX_DESCRIPTOR_GAP_LIMIT.toLocaleString(),
+          max: formatCount(MAX_DESCRIPTOR_GAP_LIMIT),
         });
       }
       if (descriptorBackendOptions.length > 0 && !form.backend.trim()) {
@@ -2059,11 +2060,11 @@ export function AddConnectionDialog({
           body: form.syncAfterCreate
             ? t("add.samourai.importedBodyScanning", {
                 label,
-                value: childLabels.length.toLocaleString("en-US"),
+                value: formatCount(childLabels.length),
               })
             : t("add.samourai.importedBody", {
                 label,
-                value: childLabels.length.toLocaleString("en-US"),
+                value: formatCount(childLabels.length),
               }),
           tone: "success",
         });
@@ -2196,8 +2197,8 @@ export function AddConnectionDialog({
             scope: isBookWideImport
               ? t("add.enrichment.bookScope")
               : form.targetWallet,
-            updated: (importResult?.updated ?? 0).toLocaleString("en-US"),
-            skipped: (importResult?.skipped ?? 0).toLocaleString("en-US"),
+            updated: formatCount(importResult?.updated ?? 0),
+            skipped: formatCount(importResult?.skipped ?? 0),
           }),
           tone: "success",
         });
@@ -5101,7 +5102,7 @@ export function AddConnectionDialog({
   );
 
   const formatImportCount = (value: number | null | undefined) =>
-    (value ?? 0).toLocaleString("en-US");
+    formatCount(value ?? 0);
 
   const importResultFromSyncResult = (
     result: SyncResult | undefined,
@@ -5404,8 +5405,8 @@ export function AddConnectionDialog({
                 </span>
                 <span className="font-medium tabular-nums">
                   {t("add.progress.rows", {
-                    processed: syncProgress.processed.toLocaleString(),
-                    total: syncProgress.total.toLocaleString(),
+                    processed: formatCount(syncProgress.processed),
+                    total: formatCount(syncProgress.total),
                   })}
                 </span>
               </div>

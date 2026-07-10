@@ -32,6 +32,7 @@ import {
   screenShellClassName,
 } from "@/lib/screen-layout";
 import { cn } from "@/lib/utils";
+import { formatCount } from "@/lib/localeFormat";
 import { useUiStore } from "@/store/ui";
 
 interface JournalEntryType {
@@ -202,19 +203,19 @@ export function Journals() {
               />
               <JournalMetric
                 label={t("ledger.metric.transactions")}
-                value={status.transactionCount.toLocaleString("en-US")}
+                value={formatCount(status.transactionCount)}
                 sub={t("ledger.metric.transactionsSub")}
                 tone="neutral"
               />
               <JournalMetric
                 label={t("ledger.metric.journalEntries")}
-                value={status.journalEntryCount.toLocaleString("en-US")}
+                value={formatCount(status.journalEntryCount)}
                 sub={t("ledger.metric.journalEntriesSub")}
                 tone={status.journalEntryCount ? "good" : "neutral"}
               />
               <JournalMetric
                 label={t("ledger.metric.quarantine")}
-                value={status.quarantines.toLocaleString("en-US")}
+                value={formatCount(status.quarantines)}
                 sub={
                   status.quarantines
                     ? t("ledger.metric.quarantineHeld")
@@ -630,8 +631,8 @@ function describeJournalRows(
   },
   t: TFunction<"journals">,
 ) {
-  const total = totalCount.toLocaleString("en-US");
-  const rows = rowCount.toLocaleString("en-US");
+  const total = formatCount(totalCount);
+  const rows = formatCount(rowCount);
   const label = entryTypeFilter
     ? entryTypeDescription(entryTypeFilter, t)
     : t("ledger.entries.labelProcessedRows");

@@ -33,6 +33,7 @@ import {
   LIGHTNING_CONNECTION_KINDS,
 } from "@/lib/lightning";
 import { cn } from "@/lib/utils";
+import { formatCount, formatSats } from "@/lib/localeFormat";
 import type { Connection, OverviewSnapshot } from "@/mocks/seed";
 
 interface LightningProfitabilityReport {
@@ -63,9 +64,9 @@ interface LightningProfitabilityReport {
   }>;
 }
 
-const fmtSat = (value: number) => `${value.toLocaleString("en-US")} sat`;
+const fmtSat = (value: number) => formatSats(value, { unit: "sat" });
 const fmtSatSigned = (value: number) =>
-  `${value >= 0 ? "+ " : "- "}${Math.abs(value).toLocaleString("en-US")} sat`;
+  `${value >= 0 ? "+ " : "- "}${formatSats(Math.abs(value), { unit: "sat" })}`;
 
 export function LightningProfitabilityPanel() {
   const { t } = useTranslation("connections");
@@ -106,7 +107,7 @@ export function LightningProfitabilityPanel() {
         </CardTitle>
         <CardDescription>
           {t("node.profitabilityReport.description", {
-            cost: DEFAULT_OPEN_COST_SAT.toLocaleString("en-US"),
+            cost: formatCount(DEFAULT_OPEN_COST_SAT),
           })}
         </CardDescription>
       </CardHeader>
@@ -197,9 +198,9 @@ function LightningProfitabilityBody({
       <div className="text-xs text-muted-foreground">
         {t("node.profitabilityReport.windowSummary", {
           window: windowLabel,
-          forwards: summary.forwardCount.toLocaleString("en-US"),
-          payments: summary.paymentCount.toLocaleString("en-US"),
-          rebalances: summary.rebalanceCount.toLocaleString("en-US"),
+          forwards: formatCount(summary.forwardCount),
+          payments: formatCount(summary.paymentCount),
+          rebalances: formatCount(summary.rebalanceCount),
         })}
       </div>
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">

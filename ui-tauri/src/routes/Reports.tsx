@@ -80,6 +80,7 @@ import {
   screenShellClassName,
 } from "@/lib/screen-layout";
 import { cn } from "@/lib/utils";
+import { formatCount, formatSats } from "@/lib/localeFormat";
 import {
   JURISDICTIONS,
   type CapitalGainsReport,
@@ -2015,7 +2016,7 @@ function LotAuditPanel({
                 <TableCell
                   className={cn("text-right tabular-nums", blurClass(hideSensitive))}
                 >
-                  {totals.sats.toLocaleString("en-US")}
+                  {formatCount(totals.sats)}
                 </TableCell>
                 <TableCell
                   className={cn("text-right tabular-nums", blurClass(hideSensitive))}
@@ -2094,7 +2095,7 @@ function NeutralSwapAuditPanel({
             {swaps.length} row{swaps.length === 1 ? "" : "s"}
           </Badge>
           <Badge variant="secondary" className="rounded-md">
-            {totalFeeSats.toLocaleString("en-US")} sats fee
+            {formatSats(totalFeeSats)} fee
           </Badge>
           <Button
             type="button"
@@ -2151,7 +2152,7 @@ function NeutralSwapAuditPanel({
                   <TableCell
                     className={cn("text-right tabular-nums", blurClass(hideSensitive))}
                   >
-                    {swap.outSats.toLocaleString("en-US")}
+                    {formatCount(swap.outSats)}
                   </TableCell>
                   <TableCell>
                     <div className="min-w-0">
@@ -2164,12 +2165,12 @@ function NeutralSwapAuditPanel({
                   <TableCell
                     className={cn("text-right tabular-nums", blurClass(hideSensitive))}
                   >
-                    {swap.inSats.toLocaleString("en-US")}
+                    {formatCount(swap.inSats)}
                   </TableCell>
                   <TableCell
                     className={cn("text-right tabular-nums", blurClass(hideSensitive))}
                   >
-                    {swap.feeSats.toLocaleString("en-US")}
+                    {formatCount(swap.feeSats)}
                   </TableCell>
                   <TableCell
                     className={cn("text-right tabular-nums", blurClass(hideSensitive))}
@@ -2226,7 +2227,7 @@ function ReportLotRow({
       <TableCell
         className={cn("text-right tabular-nums", blurClass(hideSensitive))}
       >
-        {lot.sats.toLocaleString("en-US")}
+        {formatCount(lot.sats)}
       </TableCell>
       <TableCell
         className={cn("text-right tabular-nums", blurClass(hideSensitive))}

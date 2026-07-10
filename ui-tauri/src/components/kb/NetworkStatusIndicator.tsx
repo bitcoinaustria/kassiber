@@ -2,6 +2,7 @@ import { RefreshCw, Wifi, WifiOff } from "lucide-react";
 import * as React from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
+import { currentUiLocale } from "@/lib/localeFormat";
 import type { TFunction } from "i18next";
 
 import { Button } from "@/components/ui/button";
@@ -758,7 +759,7 @@ export function NetworkStatusIndicator({
         {lastCheckedAt ? (
           <div className="border-t px-3 py-2 text-[11px] text-muted-foreground">
             {t("network.lastChecked", {
-              time: new Date(lastCheckedAt).toLocaleTimeString(),
+              time: new Date(lastCheckedAt).toLocaleTimeString(currentUiLocale()),
             })}
           </div>
         ) : null}

@@ -9,6 +9,7 @@
  */
 
 import { useUiStore } from "@/store/ui";
+import { formatCount } from "@/lib/localeFormat";
 
 export type Currency = "btc" | "eur";
 
@@ -141,7 +142,7 @@ export function formatEur(
 export function formatSats(btc: number, opts: FormatSatsOpts = {}): string {
   const { sign = false } = opts;
   const sats = Math.round(btc * 1e8);
-  const abs = Math.abs(sats).toLocaleString("en-US");
+  const abs = formatCount(Math.abs(sats));
   const prefix = sign ? signedPrefix(sats) : "";
   return prefix + abs;
 }

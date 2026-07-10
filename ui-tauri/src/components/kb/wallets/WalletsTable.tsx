@@ -23,6 +23,7 @@ import {
   connectionTypeLabel,
 } from "@/lib/connectionDisplay";
 import type { Currency } from "@/lib/currency";
+import { formatCount } from "@/lib/localeFormat";
 import { cn } from "@/lib/utils";
 import type { Connection, OverviewSnapshot } from "@/mocks/seed";
 
@@ -421,7 +422,7 @@ function WalletRow({
           <span className="text-sm text-muted-foreground">—</span>
         ) : (
           <span className="text-sm font-medium tabular-nums">
-            {(connection.transactionCount ?? 0).toLocaleString()}
+            {formatCount(connection.transactionCount ?? 0)}
           </span>
         )}
       </TableCell>
@@ -477,7 +478,7 @@ function WalletRow({
             </div>
             <div className="text-xs text-muted-foreground tabular-nums">
               {connection.walletRefs?.length
-                ? `${connection.walletRefs.length.toLocaleString()} wallets`
+                ? `${formatCount(connection.walletRefs.length)} wallets`
                 : connection.backendKind}
             </div>
           </>

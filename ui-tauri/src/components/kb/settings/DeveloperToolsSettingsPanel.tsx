@@ -9,6 +9,7 @@ import {
   getAppLogBufferSize,
   subscribeAppLogRecords,
 } from "@/lib/appLogs";
+import { formatCount } from "@/lib/localeFormat";
 import { SettingsSwitchRow } from "./SettingsControls";
 import { formatBytes } from "./SettingsModel";
 
@@ -53,7 +54,7 @@ export function DeveloperToolsSettingsPanel({
         <p className="text-muted-foreground">
           {t("developer.bufferDescription", {
             retained: formatBytes(bytes),
-            records: APP_LOG_MAX_RECORDS.toLocaleString(),
+            records: formatCount(APP_LOG_MAX_RECORDS),
             bytes: formatBytes(APP_LOG_MAX_BYTES),
           })}
         </p>
