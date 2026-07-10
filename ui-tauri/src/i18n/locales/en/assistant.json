@@ -10,7 +10,9 @@
     "incognitoTitle": "Incognito: do not store this conversation",
     "exportChat": "Export",
     "clearChat": "Clear chat",
-    "moreActions": "More actions"
+    "moreActions": "More actions",
+    "incognitoActiveTitle": "Incognito is on - this conversation is not stored. Click to turn off.",
+    "recentChats": "Recent chats"
   },
   "dock": {
     "label": "Kassiber assistant",
@@ -22,11 +24,15 @@
     "preservedForContext_one": "{{count}} message preserved for context",
     "preservedForContext_other": "{{count}} messages preserved for context",
     "handleHint": "Ask Kassiber",
+    "handleHintShort": "Ask",
     "minimize": "Minimize assistant",
-    "restore": "Open conversation"
+    "restore": "Open conversation",
+    "working": "Working",
+    "workingQueued": "Working · {{count}} queued"
   },
   "composer": {
     "placeholder": "Ask anything",
+    "followUpPlaceholder": "Add a follow-up…",
     "stopGenerating": "Stop generating",
     "sendMessage": "Send message",
     "queueMessage": "Queue message",
@@ -61,7 +67,9 @@
   "message": {
     "toolUsage": "Tool usage",
     "thinking": "Thinking",
+    "thinkingRound": "Thinking · round {{round}}",
     "thoughts": "Thoughts",
+    "thoughtsRound": "Thoughts · round {{round}}",
     "thoughtFor": "Thought for {{duration}}",
     "generating": "Generating",
     "chatFailed": "Chat failed",

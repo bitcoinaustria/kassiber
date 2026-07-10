@@ -22,7 +22,7 @@
     },
     "assistantDock": {
       "title": "Assistant dock",
-      "description": "The floating assistant at the bottom of the app. With auto-hide it parks at the bottom edge and slides up when you move the pointer there.",
+      "description": "The floating assistant at the bottom of the app. With auto-hide it parks as a corner chip and expands when you move the pointer there. New installs default to the bottom-right corner.",
       "autoHide": "Hide automatically",
       "positionLeft": "Left",
       "positionCenter": "Center",

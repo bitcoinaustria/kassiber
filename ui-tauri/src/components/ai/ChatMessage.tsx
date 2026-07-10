@@ -42,7 +42,10 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { copyTextWithPolicy } from "@/lib/clipboard";
-import type { AiChatMessage } from "@/daemon/stream";
+import {
+  visibleThinkingSegments,
+  type AiChatMessage,
+} from "@/daemon/stream";
 import { cn } from "@/lib/utils";
 
 interface ChatMessageProps {
@@ -67,7 +70,8 @@ export function ChatMessage({ message, onBranch, onEdit }: ChatMessageProps) {
     message.status === "streaming" || message.status === "pending";
   const hasAnswer = Boolean(message.content);
   const hasToolCalls = Boolean(message.toolCalls?.length);
-  const hasThinking = Boolean(message.thinking);
+  const thinkingSegments = visibleThinkingSegments(message);
+  const hasThinking = thinkingSegments.length > 0;
   const showLoader =
     !hasAnswer &&
     !hasThinking &&
@@ -79,7 +83,7 @@ export function ChatMessage({ message, onBranch, onEdit }: ChatMessageProps) {
       <div className="w-full min-w-0 px-1 py-1 text-sm">
         {hasThinking ? (
           <ChatReasoning
-            thinking={message.thinking!}
+            segments={thinkingSegments}
             isStreaming={isStreaming}
             hasAnswer={hasAnswer}
           />

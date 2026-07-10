@@ -1690,15 +1690,20 @@ export function AppShell() {
                           // auto-hide is off and there is no thread.
                           isAssistantRoute || assistantDockSuppressed
                             ? "pb-0"
-                            : assistantDockMinimized
-                              ? "pb-6"
-                              : assistantDockExpanded
-                                ? "pb-[240px]"
-                                : assistantDockAutoHide
+                            : // Expanded thread needs the full reserve; a minimized
+                              // "Working + follow-up" surface still sets expanded
+                              // so it gets a mid-size pad instead of the pill sliver.
+                              assistantDockExpanded && !assistantDockMinimized
+                              ? "pb-[240px]"
+                              : assistantDockExpanded && assistantDockMinimized
+                                ? "pb-36"
+                                : assistantDockMinimized
                                   ? "pb-6"
-                                  : assistantCollapsed
-                                    ? "pb-16"
-                                    : "pb-[240px]",
+                                  : assistantDockAutoHide
+                                    ? "pb-6"
+                                    : assistantCollapsed
+                                      ? "pb-16"
+                                      : "pb-[240px]",
                         )}
                       >
                         <Outlet />

@@ -345,7 +345,10 @@ export function ProviderModelPicker({
     }
   }, [showThinkingEffort, onThinkingEffortChange, thinkingEffort, effortOptions]);
 
-  const triggerLabel = value?.model ?? currentLabel;
+  // Keep the provider name in the collapsed label ("Ollama · qwen3.6:35b"):
+  // two providers can expose the same model id, and the user must be able to
+  // tell which endpoint/account a prompt is about to go to.
+  const triggerLabel = currentLabel;
   const TriggerKindIcon = KIND_ICON[selectedProvider?.kind ?? "local"];
 
   // Grouped provider/model list, shared by the top level (no reasoning

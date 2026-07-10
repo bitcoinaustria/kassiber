@@ -54,6 +54,11 @@ export function AssistantSessionProvider({
   const setAssistantDraft = useAssistantDraftStore((state) => state.setDraft);
   const [queuedPrompts, setQueuedPrompts] = React.useState<string[]>([]);
   const [incognito, setIncognito] = React.useState(false);
+  // Set by branch/edit; consumed on the next send so the daemon persists the
+  // seeded prefix for that fork only. A bare detached conversation (history
+  // toggled, session deleted) never carries it, so its prior turns are not
+  // backfilled into a new session.
+  const seedHistoryPendingRef = React.useRef(false);
 
   // Runs one chat turn against an explicit conversation base + session, so
   // callers that rewind history (edit) can regenerate atomically without
@@ -75,6 +80,8 @@ export function AssistantSessionProvider({
         ...priorMessages,
         { role: "user", content: prompt },
       ];
+      const seedHistory = seedHistoryPendingRef.current && activeSession === null;
+      seedHistoryPendingRef.current = false;
       void send(
         {
           provider: selection.provider,
@@ -89,6 +96,7 @@ export function AssistantSessionProvider({
           systemPromptKind: "kassiber",
           sessionId: activeSession,
           persist: incognito && activeSession === null ? false : "auto",
+          seedHistory,
         },
         prompt,
       );
@@ -131,6 +139,7 @@ export function AssistantSessionProvider({
 
   const clearChat = React.useCallback(() => {
     setQueuedPrompts([]);
+    seedHistoryPendingRef.current = false;
     reset();
   }, [reset]);
 
@@ -157,9 +166,14 @@ export function AssistantSessionProvider({
         .map((message) => ({ role: message.role, content: message.content }));
       setQueuedPrompts([]);
       setIncognito(false);
+      // Drop any half-typed draft before binding the resumed (persisted)
+      // session — otherwise text typed while Incognito would ride into the
+      // loaded chat and be stored on the next submit.
+      setAssistantDraft("");
+      seedHistoryPendingRef.current = false;
       loadConversation(entries, envelope.data?.id ?? targetSessionId);
     },
-    [dataMode, isStreaming, loadConversation],
+    [dataMode, isStreaming, loadConversation, setAssistantDraft],
   );
 
   const branchFromMessage = React.useCallback(
@@ -185,6 +199,8 @@ export function AssistantSessionProvider({
       // Preserve the current Incognito choice — forking must never silently
       // flip a private conversation into one that persists.
       setQueuedPrompts([]);
+      // Explicit fork: the next send may persist this seeded prefix.
+      seedHistoryPendingRef.current = true;
       loadConversation(entries, null);
     },
     [isStreaming, messages, loadConversation],
@@ -218,6 +234,8 @@ export function AssistantSessionProvider({
         // back into the composer for a manual resend. Kept for callers that
         // don't drive the inline editor.
         setQueuedPrompts([]);
+        // Explicit fork: the manual resend may persist this seeded prefix.
+        seedHistoryPendingRef.current = true;
         loadConversation(entries, null);
         setAssistantDraft(target.content);
         return;
@@ -229,6 +247,8 @@ export function AssistantSessionProvider({
       // fresh, unsaved turn (null session) so the original conversation stays
       // intact in History; the current Incognito choice is preserved.
       setQueuedPrompts([]);
+      // Explicit fork: the next send may persist this seeded prefix.
+      seedHistoryPendingRef.current = true;
       loadConversation(entries, null);
       runTurn(trimmed, priorMessages, null);
     },

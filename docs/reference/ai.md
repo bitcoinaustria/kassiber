@@ -300,15 +300,20 @@ tokens, descriptors, xpubs, and blinding keys stay SQLCipher-protected. See
 [`../plan/10-secret-management.md`](../plan/10-secret-management.md).
 
 Reasoning-capable models surface chain-of-thought through one of two
-channels, and both are split into a collapsible reasoning pane above the
+channels, and both are split into collapsible reasoning pane(s) above the
 answer:
 
 - Inline `<think>...</think>` tags inside the content stream — emitted by
   DeepSeek-R1 and QwQ.
 - A structured `reasoning` field on the delta — emitted by OpenAI o1/o3
-  and by Ollama's OpenAI-compat shim for Qwen3 / Gemma reasoning builds.
+  and by Ollama's OpenAI-compat shim for Qwen3 / Gemma reasoning builds
+  (oMLX over `/v1` uses the same channel when the model exposes it).
 
-Models that don't emit either pass through unchanged.
+Each user turn gets its own assistant message. Inside a tool-using turn,
+each provider completion round (`waiting_for_model` before the next model
+call) opens a fresh reasoning segment, so Ollama/oMLX traces stay
+per-round instead of one continuous blob. Models that don't emit either
+channel pass through unchanged.
 
 Settings → AI providers exposes a **Test connection** action. It calls the
 daemon's `ai.test_connection` kind with the *currently entered* base URL and
