@@ -1784,7 +1784,7 @@ class SourceFundsCliTest(unittest.TestCase):
         conn = self._db()
         try:
             conn.execute(
-                "UPDATE transactions SET payment_hash = ?, payment_hash_source = 'import' "
+                "UPDATE transactions SET payment_hash = ?, payment_hash_source = 'core_lightning' "
                 "WHERE external_id IN ('ln-send-1', 'ln-recv-1')",
                 (payment_hash,),
             )
@@ -1829,7 +1829,7 @@ class SourceFundsCliTest(unittest.TestCase):
         conn = self._db()
         try:
             conn.execute(
-                "UPDATE transactions SET payment_hash = ?, payment_hash_source = 'import' "
+                "UPDATE transactions SET payment_hash = ?, payment_hash_source = 'core_lightning' "
                 "WHERE external_id IN ('ln-send-small', 'ln-recv-large')",
                 (payment_hash,),
             )

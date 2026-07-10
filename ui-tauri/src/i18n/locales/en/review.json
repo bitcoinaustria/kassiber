@@ -79,7 +79,8 @@
       "paymentHash": "Payment hash",
       "providerSwapId": "Provider evidence",
       "heuristic": "Time + amount",
-      "htlcRefund": "Refund link"
+      "htlcRefund": "Refund link",
+      "ownershipGraph": "Ownership graph"
     },
     "route": {
       "any": "Any route",
@@ -153,6 +154,7 @@
       "matchedByProviderEvidence": "Matched by provider evidence.",
       "matchedByTimeAmount": "Matched by time and amount.",
       "matchedByRefundLink": "Matched by HTLC refund link.",
+      "matchedByOwnershipGraph": "Matched by wallet ownership evidence.",
       "delta": "Delta {{delta}} ({{percent}}%).",
       "outgoing": "Outgoing",
       "incoming": "Incoming",
@@ -163,6 +165,7 @@
       "rationaleProviderEvidence": "Both legs share the same redacted provider swap id.",
       "rationaleHeuristic": "The legs are close in time and amount after accounting for the fee delta.",
       "rationaleHtlcRefund": "The inbound refund spends the outbound's on-chain HTLC funding output, a deterministic link even within one wallet.",
+      "rationaleOwnershipGraph": "The on-chain transaction proves a payment to another wallet you own. Confirming this card writes a normal carrying-value pair; it does not invent a receipt.",
       "autoPairRoute": "Auto-pair route: {{rule}}",
       "conflictNote_one": "One of these transactions also appears in {{count}} other possible match (it may be listed under the other tab or filtered out). Select the related same-asset privacy links together, or pair the correct single match here and dismiss the wrong ones.",
       "conflictNote_other": "One of these transactions also appears in {{count}} other possible matches (it may be listed under the other tab or filtered out). Select the related same-asset privacy links together, or pair the correct single match here and dismiss the wrong ones.",

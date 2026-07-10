@@ -46,6 +46,7 @@ from ..core import loans as core_loans
 from ..core import metadata as core_metadata
 from ..core import output_inventory as core_output_inventory
 from ..core import ownership as core_ownership
+from ..core import ownership_transfers as core_ownership_transfers
 from ..core import chat_history as core_chat_history
 from ..core import pricing
 from ..core import rates as core_rates
@@ -394,7 +395,8 @@ def invalidate_journals(conn, profile_id):
         UPDATE profiles
         SET last_processed_at = NULL,
             last_processed_tx_count = 0,
-            journal_input_version = journal_input_version + 1
+            journal_input_version = journal_input_version + 1,
+            ownership_review_counts_json = NULL
         WHERE id = ?
         """,
         (profile_id,),
@@ -1252,18 +1254,95 @@ def _filter_transfer_candidates(
 
 def _load_active_transfer_review_refs(conn, profile_id):
     pair_records = conn.execute(
-        "SELECT out_transaction_id, in_transaction_id, deleted_at FROM transaction_pairs WHERE profile_id = ?",
+        "SELECT out_transaction_id, in_transaction_id, kind, policy, deleted_at "
+        "FROM transaction_pairs WHERE profile_id = ?",
         (profile_id,),
     ).fetchall()
     payout_records = conn.execute(
         """
-        SELECT out_transaction_id, NULL AS in_transaction_id, deleted_at
+        SELECT out_transaction_id, NULL AS in_transaction_id, kind, policy, deleted_at
         FROM direct_swap_payouts
         WHERE profile_id = ?
         """,
         (profile_id,),
     ).fetchall()
     return [*pair_records, *payout_records]
+
+
+def _ownership_review_candidates(conn, profile_id, rows, pair_records):
+    """Build actionable ownership candidates from current journal blocks.
+
+    The quarantine is the journal's declaration that automatic booking declined;
+    the graph helper then emits only real-row pairs that the existing pair store
+    can represent. No descriptor/script material is returned.
+    """
+
+    blocked_rows = conn.execute(
+        """
+        SELECT q.transaction_id, q.reason
+        FROM journal_quarantines q
+        JOIN transactions t ON t.id = q.transaction_id
+        WHERE q.profile_id = ?
+          AND t.direction = 'outbound'
+          AND q.reason IN (
+            'ownership_transfer_destination_ambiguous',
+            'ownership_transfer_source_ambiguous',
+            'owned_fanout_unresolved'
+          )
+        ORDER BY q.created_at, q.transaction_id
+        """,
+        (profile_id,),
+    ).fetchall()
+    if not blocked_rows:
+        return []
+    blocked_reasons = {
+        str(row["transaction_id"]): str(row["reason"]) for row in blocked_rows
+    }
+    wallets = core_ownership.load_profile_wallets(conn, profile_id)
+    owned_index, _warnings = core_ownership.build_owned_index(
+        conn, profile_id, wallets
+    )
+    proofs = core_ownership_transfers.derive_ownership_review_proofs(
+        rows,
+        index=owned_index,
+        blocked_reasons_by_row_id=blocked_reasons,
+        active_pair_records=pair_records,
+    )
+    candidates = []
+    for proof in proofs:
+        out_row = proof.out_row
+        in_row = proof.in_row
+        in_amount_msat = int(in_row["amount"] or 0)
+        candidates.append(
+            core_transfer_matching.SwapCandidate(
+                out_id=str(out_row["id"]),
+                in_id=str(in_row["id"]),
+                out_asset=str(out_row["asset"]),
+                in_asset=str(in_row["asset"]),
+                out_amount_msat=int(proof.owned_amount_msat),
+                in_amount_msat=in_amount_msat,
+                out_wallet_id=str(out_row["wallet_id"]),
+                in_wallet_id=str(in_row["wallet_id"]),
+                out_wallet_label=str(out_row["wallet_label"]),
+                in_wallet_label=str(in_row["wallet_label"]),
+                out_wallet_kind=str(out_row["wallet_kind"] or ""),
+                in_wallet_kind=str(in_row["wallet_kind"] or ""),
+                out_occurred_at=str(out_row["occurred_at"]),
+                in_occurred_at=str(in_row["occurred_at"]),
+                confidence=core_transfer_matching.CONFIDENCE_EXACT,
+                method=core_transfer_matching.METHOD_OWNERSHIP_GRAPH,
+                swap_fee_msat=int(proof.owned_amount_msat) - in_amount_msat,
+                swap_fee_kind="ownership_graph_delta",
+                default_kind=core_transfer_matching.KIND_MANUAL,
+                default_policy=core_transfer_matching.POLICY_CARRYING_VALUE,
+                conflict_set_id=proof.conflict_set_id,
+                conflict_size=proof.conflict_size,
+                evidence_provider="ownership_graph",
+                evidence_id=proof.reason,
+                evidence_kind="owned_output",
+            )
+        )
+    return candidates
 
 
 def suggest_transfer_candidates(
@@ -1288,7 +1367,7 @@ def suggest_transfer_candidates(
     rail-aware route shape (e.g. ``"LNBTC-BTC"``); ``candidate_type`` splits
     carrying-value Bitcoin movements from other cross-asset swaps; and ``method``
     pins to a matcher method such as ``payment_hash``, ``provider_swap_id``,
-    ``htlc_refund``, or ``heuristic``.
+    ``htlc_refund``, ``ownership_graph``, or ``heuristic``.
     """
     _, profile = resolve_scope(conn, workspace_ref, profile_ref)
     rows = _load_matcher_rows(conn, profile["id"])
@@ -1307,6 +1386,30 @@ def suggest_transfer_candidates(
         tax_country=str(profile["tax_country"] or ""),
         bitcoin_rail_carrying_value=profile_bitcoin_rail_carrying_value(profile),
     )
+    ownership_candidates = _ownership_review_candidates(
+        conn, profile["id"], rows, pair_records
+    )
+    ownership_pair_keys = {
+        (candidate.out_id, candidate.in_id) for candidate in ownership_candidates
+    }
+    candidates = [
+        candidate
+        for candidate in candidates
+        if (candidate.out_id, candidate.in_id) not in ownership_pair_keys
+    ]
+    candidates.extend(ownership_candidates)
+    candidates.sort(
+        key=lambda candidate: (
+            0 if candidate.confidence == core_transfer_matching.CONFIDENCE_EXACT else 1,
+            0
+            if candidate.method == core_transfer_matching.METHOD_OWNERSHIP_GRAPH
+            else 1,
+            abs(candidate.swap_fee_msat),
+            candidate.out_occurred_at,
+            candidate.out_id,
+            candidate.in_id,
+        )
+    )
     candidates = _filter_transfer_candidates(
         candidates,
         confidence=confidence,
@@ -1316,13 +1419,23 @@ def suggest_transfer_candidates(
         candidate_type=candidate_type,
     )
     rules = _load_transfer_rules(conn, profile["id"])
-    rule_matches, _ = core_swap_rules.apply_rules(candidates, rules)
+    rule_candidates = [
+        candidate
+        for candidate in candidates
+        if candidate.method != core_transfer_matching.METHOD_OWNERSHIP_GRAPH
+    ]
+    rule_matches, _ = core_swap_rules.apply_rules(rule_candidates, rules)
     counts = {
         "total": len(candidates),
         "exact": sum(1 for c in candidates if c.confidence == "exact"),
         "strong": sum(1 for c in candidates if c.confidence == "strong"),
         "conflicts": _count_conflict_clusters(candidates),
         "rule_matches": len(rule_matches),
+        "ownership": sum(
+            1
+            for candidate in candidates
+            if candidate.method == core_transfer_matching.METHOD_OWNERSHIP_GRAPH
+        ),
     }
     return {
         "candidates": _candidate_dicts_with_rule_matches(candidates, rules, rule_matches),
@@ -4285,6 +4398,13 @@ def build_ledger_state(conn, profile):
             channel_transfer_pairs=channel_transfer_pairs,
         )
     )
+    ownership_review_counts = _ownership_review_counts_for_state(
+        rows,
+        owned_index,
+        engine_state.quarantines,
+        manual_pair_records,
+        direct_payout_records,
+    )
     return {
         "entries": engine_state.entries,
         "quarantines": engine_state.quarantines,
@@ -4294,9 +4414,48 @@ def build_ledger_state(conn, profile):
         "tax_summary": engine_state.tax_summary,
         "account_holdings": engine_state.account_holdings,
         "wallet_holdings": engine_state.wallet_holdings,
+        "ownership_review_counts": ownership_review_counts,
         "latest_rates": rates,
         "warnings": warnings,
     }
+
+
+def _ownership_review_counts_for_state(
+    rows,
+    owned_index,
+    quarantines,
+    manual_pair_records,
+    direct_payout_records,
+):
+    """Count real-row ownership proofs while the journal index is in memory."""
+
+    blocked_reasons = {
+        str(quarantine["transaction_id"]): str(quarantine["reason"])
+        for quarantine in quarantines
+    }
+    if not blocked_reasons:
+        return {"total": 0, "by_reason": {}}
+    active_review_records = [*manual_pair_records]
+    active_review_records.extend(
+        {
+            "out_transaction_id": record["out_transaction_id"],
+            "in_transaction_id": None,
+            "kind": record["kind"],
+            "policy": record["policy"],
+            "deleted_at": record["deleted_at"],
+        }
+        for record in direct_payout_records
+    )
+    proofs = core_ownership_transfers.derive_ownership_review_proofs(
+        rows,
+        index=owned_index or core_ownership.OwnedIndex(),
+        blocked_reasons_by_row_id=blocked_reasons,
+        active_pair_records=active_review_records,
+    )
+    by_reason = {}
+    for proof in proofs:
+        by_reason[proof.reason] = by_reason.get(proof.reason, 0) + 1
+    return {"total": len(proofs), "by_reason": dict(sorted(by_reason.items()))}
 
 
 def _unresolved_address_list_overlap_wallets(overlap):
@@ -4632,10 +4791,16 @@ def process_journals(conn, workspace_ref, profile_ref):
             UPDATE profiles
             SET last_processed_at = ?,
                 last_processed_tx_count = ?,
-                last_processed_input_version = journal_input_version
+                last_processed_input_version = journal_input_version,
+                ownership_review_counts_json = ?
             WHERE id = ?
             """,
-            (created_at, tx_count, profile["id"]),
+            (
+                created_at,
+                tx_count,
+                json.dumps(state["ownership_review_counts"], sort_keys=True),
+                profile["id"],
+            ),
         )
     except Exception:
         conn.execute("ROLLBACK TO SAVEPOINT journals_process")

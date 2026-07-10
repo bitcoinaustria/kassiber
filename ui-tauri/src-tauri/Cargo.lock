@@ -1955,7 +1955,7 @@ dependencies = [
 
 [[package]]
 name = "kassiber-ui"
-version = "0.22.54"
+version = "0.22.55"
 dependencies = [
  "apple-native-keyring-store",
  "base64 0.22.1",

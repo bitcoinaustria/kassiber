@@ -38,17 +38,18 @@ After any transaction change, metadata change, exclusion change, transfer pair c
 ## Transfers
 
 Cross-wallet self-transfers are auto-detected when both legs share the same
-on-chain `txid` and asset. Those deterministic same-chain moves are kept out of
-the swap review queue; `transfers suggest` is for Lightning/Liquid layer hops
-and other pairs that need review.
+on-chain `txid` and asset. Deterministic booked moves are kept out of review.
+When the ownership graph proves a move but the journal declines to guess a
+destination or split, `transfers suggest` surfaces an exact `ownership_graph`
+card in the transfer tab instead of leaving the proof quarantine-only.
 
 ### Self-transfer derivation
 
 Same-`txid` matching alone misses the cases users hit — a destination wallet
 that wasn't synced for the period (no inbound row), CSV imports whose `txid`
 columns don't line up, and one spend fanning out to several owned wallets.
-Kassiber closes these with two extra derivation passes during
-`journals process`; both **supplement** same-`txid` matching and never overrule
+Kassiber closes these with a shared ownership pipeline during
+`journals process`; its passes **supplement** same-`txid` matching and never overrule
 a manual pair. A derived move carries its basis across with no disposal, and is
 tagged `ownership_derived` in the transfer audit (its journal entry reads
 "proven by address ownership").
@@ -64,7 +65,12 @@ tagged `ownership_derived` in the transfer audit (its journal entry reads
    stale-RBF amount mismatch, an output owned by two wallets) is **left on its
    existing path and flagged for review** — never mis-booked.
 
-2. **Recorded fan-out decomposer** (chain-agnostic). When a 1→N self-transfer's
+2. **Multi-source consolidation deriver.** A conservative N→1 Bitcoin
+   consolidation is decomposed when every input is owned, the graph has exactly
+   one owned destination and no external output, and amounts conserve exactly.
+   The network fee is assigned once rather than copied from every source row.
+
+3. **Recorded fan-out decomposer** (chain-agnostic). When a 1→N self-transfer's
    legs were *all* synced but there is no readable graph — **Liquid** (output
    amounts are confidential, so the stored record carries no per-output graph)
    or a graphless CSV import — the rows themselves are enough: rows sharing one
@@ -82,13 +88,22 @@ unsynced destination stays on the review path. BTC↔L-BTC pegs, Boltz swaps, an
 submarine swaps are still Bitcoin movements for accounting, but the ledger keeps
 `BTC` and `LBTC` separate for rail visibility; pair those with `transfers pair`.
 
-Both passes are only as complete as the ownership index and the recorded rows. A
-fan-out that is *partially* resolvable — pass 1 proves some legs from the graph
-but a destination's address is outside the index's scan depth — degrades to the
-existing behavior for the unresolved remainder (a disposal at the source plus a
-fresh-basis acquisition at the destination), not a carried-basis move. Totals
-stay correct; widen the wallet's scan depth or pair the leg manually to fix the
-basis.
+The pipeline is only as complete as the ownership index and recorded rows.
+Kassiber keeps prior descriptor, xpub script-type, and address-list ownership
+material privately inside the encrypted wallet config when a wallet migrates,
+so old receive/change scripts continue to resolve. The default derivation depth
+is 500 per branch and follows observed inventory floors. A wallet with deeper
+history can raise it (hard cap: 20,000):
+
+```bash
+python3 -m kassiber wallets update --wallet treasury \
+  --config '{"ownership_scan_to_index":1000}'
+```
+
+Higher values make journal/graph index construction more expensive. Truly
+unknown address-list change or a script beyond the configured ceiling remains a
+known review edge; Kassiber does not classify an unexplained residual as change
+from amount alone because that would hide legitimate partial payments.
 
 **Caveat — unique wallet labels.** Reports key holdings by wallet *label*. Two
 wallets in one profile sharing a label merge their balances, and a derived move
@@ -103,7 +118,10 @@ payments or receipts; leave those one-sided or counterparty-owned flows unpaired
 so they keep their normal payment/receipt treatment.
 
 `transfers suggest` can surface exact matches from Lightning `payment_hash`,
-redacted provider/client `swap_id` metadata, or an on-chain HTLC refund spend.
+redacted provider/client `swap_id` metadata, an on-chain HTLC refund spend, or a
+blocked ownership proof (`method=ownership_graph`). Ownership-graph cards carry
+only wallet ids/labels, transaction ids, amounts, and stable reason codes. They
+are manual-confirm-only: rules and bulk-pair operations never apply them.
 Boltz v2 cooperative Taproot key-path spends are intentionally not identifiable
 from chain data alone; without metadata they remain heuristic/manual candidates.
 Review blocking should stay scoped to swap-shaped unresolved flows, not ordinary
@@ -193,6 +211,15 @@ Quarantine causes typically include:
     (stale RBF / re-org `raw_json`)
   - `_ambiguous_output` — an output is owned by two different wallets
   - `_destination_missing_ref` — the destination wallet has no account ref
+- `pending_onchain_confirmation` — a chain sync payload explicitly reports the
+  transaction as mempool/unconfirmed. It is held out of tax booking until a
+  synced leg proves confirmation; graphless CSV/provider rows are unaffected.
+  Esplora and Electrum payloads currently carry this explicit boolean. Bitcoin
+  Core RPC wallet rows do not yet stamp it, so Core mempool activity remains on
+  the prior journal path because Kassiber cannot distinguish those rows from
+  graphless imports using `confirmed_at` alone.
+- `conflicting_spend` — transactions share a prevout. Sync and verify which txid
+  won; this is not a normal carrying-value pairing or bulk-pair action.
 
 ## Rates and tax input quality
 

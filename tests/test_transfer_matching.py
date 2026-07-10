@@ -110,6 +110,20 @@ class DefaultKindTests(unittest.TestCase):
     def test_chain_to_chain_lbtc_to_btc_is_peg_out(self):
         self.assertEqual(default_kind_for("LBTC", "BTC", "descriptor", "descriptor"), KIND_PEG_OUT)
 
+    def test_wallet_kind_aliases_and_silent_payments_use_canonical_routes(self):
+        self.assertEqual(
+            default_kind_for("BTC", "LBTC", "core-ln", "descriptor"),
+            KIND_SUBMARINE_SWAP,
+        )
+        self.assertEqual(
+            default_kind_for("BTC", "LBTC", "core_lightning", "descriptor"),
+            KIND_SUBMARINE_SWAP,
+        )
+        self.assertEqual(
+            default_kind_for("BTC", "LBTC", "silent-payment", "descriptor"),
+            KIND_PEG_IN,
+        )
+
     def test_unknown_shape_falls_back_to_manual(self):
         self.assertEqual(default_kind_for("BTC", "BTC", "descriptor", "descriptor"), KIND_MANUAL)
 
@@ -664,19 +678,34 @@ class HeuristicMatchTests(unittest.TestCase):
                        occurred_at="2026-03-14T17:31:00Z")
         self.assertEqual(suggest_swap_candidates([out, inbound], tax_country="at"), [])
 
-    def test_deterministic_self_transfer_respects_caller_fee_tolerance(self):
-        # The implausible-fee cutoff must honor caller-supplied tolerances, not
-        # the hard-coded defaults: a move over the default band but under a loose
-        # caller band is a proven self-transfer again.
+    def test_deterministic_self_transfer_uses_journal_fee_tolerance(self):
+        # Deterministic suppression keeps the journal's fixed defaults; caller
+        # fee flags only belong to public heuristic generation.
         out = _row(id="o", external_id="txid", wallet_id="cold",
                    direction="outbound", asset="BTC", amount=4_702_253_000)
         inbound = _row(id="i", external_id="txid", wallet_id="hot",
                        direction="inbound", asset="BTC", amount=2_750_000_000)
         self.assertEqual(_deterministic_self_transfer_ids([out, inbound]), set())
-        self.assertEqual(
-            _deterministic_self_transfer_ids([out, inbound], fee_pct_max=0.5),
-            {"o", "i"},
+
+    def test_conserving_same_txid_fanout_is_suppressed_as_one_group(self):
+        out = _row(
+            id="o", external_id="fanout", wallet_id="cold",
+            direction="outbound", asset="BTC", amount=100_000_000,
         )
+        large_in = _row(
+            id="i-large", external_id="fanout", wallet_id="hot",
+            direction="inbound", asset="BTC", amount=99_500_000,
+        )
+        small_in = _row(
+            id="i-small", external_id="fanout", wallet_id="savings",
+            direction="inbound", asset="BTC", amount=500_000,
+        )
+        rows = [out, large_in, small_in]
+        self.assertEqual(
+            _deterministic_self_transfer_ids(rows),
+            {"o", "i-large", "i-small"},
+        )
+        self.assertEqual(suggest_swap_candidates(rows), [])
 
     def test_pegout_within_window_paired(self):
         out = _row(

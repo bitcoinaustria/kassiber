@@ -24,10 +24,9 @@ from ...transfers import (
 )
 from .. import pricing
 from ..ownership_transfers import (
-    derive_multi_source_consolidations,
-    derive_ownership_transfers,
-    derive_recorded_fanout_transfers,
+    derive_profile_transfers,
     detect_conflicting_spend_ids,
+    detect_pending_onchain_ids,
     graph_multi_owned_destination_out_ids,
     graph_partial_payment_out_ids,
 )
@@ -1625,6 +1624,7 @@ def _prepare_assets(
         # vanish and the unconfirmed loser would book. Computing over asset_rows
         # keeps the loser identified (and quarantined) across both passes.
         conflict_row_ids = detect_conflicting_spend_ids(asset_rows)
+        pending_onchain_row_ids = detect_pending_onchain_ids(asset_rows)
         active_rows = [row for row in asset_rows if str(row["id"]) not in excluded]
         normalized_inputs = normalize_tax_asset_inputs(
             profile,
@@ -1635,6 +1635,7 @@ def _prepare_assets(
             at_swap_link_by_row_id=at_swap_link_by_row_id,
             loan_leg_by_transaction_id=loan_leg_by_transaction_id,
             conflict_row_ids=conflict_row_ids,
+            pending_onchain_row_ids=pending_onchain_row_ids,
         )
         prepared = _prepare_rp2_asset_input(profile, normalized_inputs, configuration)
         prepared_by_asset.append((normalized_inputs, prepared))
@@ -2636,34 +2637,23 @@ class GenericRP2TaxEngine:
             # also block-and-quarantine the same contributors. Anything outside
             # its conservative scope is untouched and still hits the fan-out
             # quarantine.
-            consolidation_result = derive_multi_source_consolidations(
+            ownership_derivation = derive_profile_transfers(
                 rows_for_engine,
                 index=inputs.owned_index,
                 wallet_refs_by_id=inputs.wallet_refs_by_id,
                 already_paired_ids=already_paired_ids,
+                sort_key=_transaction_row_sort_key,
             )
+            consolidation_result = ownership_derivation.consolidation
+            ownership_result = ownership_derivation.ownership
+            fanout_result = ownership_derivation.fanout
             consolidation_drop_ids = (
                 consolidation_result.dropped_out_ids
                 | consolidation_result.dropped_in_ids
             )
             if consolidation_drop_ids:
                 already_paired_ids |= consolidation_drop_ids
-                rows_for_engine = [
-                    row
-                    for row in rows_for_engine
-                    if str(row["id"]) not in consolidation_drop_ids
-                ]
-            if consolidation_result.synthetic_rows:
-                rows_for_engine = sorted(
-                    list(rows_for_engine) + consolidation_result.synthetic_rows,
-                    key=_transaction_row_sort_key,
-                )
-            ownership_result = derive_ownership_transfers(
-                rows_for_engine,
-                index=inputs.owned_index,
-                wallet_refs_by_id=inputs.wallet_refs_by_id,
-                already_paired_ids=already_paired_ids,
-            )
+            rows_for_engine = ownership_derivation.rows_after_consolidation
             # Roll back any withheld partial-payment pair the deriver could NOT
             # re-derive (it neither dropped the source nor overrode it to a
             # residual disposal — typically an ambiguous owned output or an
@@ -2756,48 +2746,10 @@ class GenericRP2TaxEngine:
                     quarantines.extend(
                         _ownership_block_quarantines(self.profile, surfaced_blocks)
                     )
-            if ownership_result.dropped_out_ids or ownership_result.out_row_overrides:
-                rows_for_engine = [
-                    ownership_result.out_row_overrides.get(str(row["id"]), row)
-                    for row in rows_for_engine
-                    if str(row["id"]) not in ownership_result.dropped_out_ids
-                ]
-            if ownership_result.synthetic_rows:
-                rows_for_engine = sorted(
-                    list(rows_for_engine) + ownership_result.synthetic_rows,
-                    key=_transaction_row_sort_key,
-                )
-            # Recorded fan-out decomposer: rescue a 1->N self-transfer whose legs
-            # were all synced but that has no readable on-chain graph (Liquid
-            # confidential outputs, or a graphless CSV import), so both
-            # detect_intra_transfers and the address-ownership deriver skip it.
-            # It must not re-process a Bitcoin fan-out the ownership deriver
-            # already handled, so feed it every id that deriver touched.
-            fanout_already_paired = set(already_paired_ids)
-            fanout_already_paired |= ownership_result.dropped_out_ids
-            fanout_already_paired |= {
-                str(out_id) for out_id in ownership_result.out_row_overrides
-            }
-            for pair in ownership_result.derived_pairs:
-                fanout_already_paired.add(str(pair["in"]["id"]))
-            for blocked in ownership_result.blocked_sources:
-                blocked_row = blocked.get("row")
-                if blocked_row is not None:
-                    fanout_already_paired.add(str(_row_get(blocked_row, "id")))
-            fanout_result = derive_recorded_fanout_transfers(
-                rows_for_engine, already_paired_ids=fanout_already_paired
-            )
-            if fanout_result.dropped_out_ids:
-                rows_for_engine = [
-                    row
-                    for row in rows_for_engine
-                    if str(row["id"]) not in fanout_result.dropped_out_ids
-                ]
-            if fanout_result.synthetic_rows:
-                rows_for_engine = sorted(
-                    list(rows_for_engine) + fanout_result.synthetic_rows,
-                    key=_transaction_row_sort_key,
-                )
+            # Apply the exact shared row set used by transaction-graph preview.
+            # Quarantine decisions above intentionally inspected the
+            # post-consolidation rows, matching the prior journal order.
+            rows_for_engine = ownership_derivation.rows
             if restored_withheld_out_ids:
                 auto_pairs = auto_pairs + [
                     withheld_pairs_by_out_id[out_id]

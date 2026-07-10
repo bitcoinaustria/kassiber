@@ -443,7 +443,8 @@ def _invalidate_profile_journals_for_pair(conn, pair):
         UPDATE profiles
         SET last_processed_at = NULL,
             last_processed_tx_count = 0,
-            journal_input_version = journal_input_version + 1
+            journal_input_version = journal_input_version + 1,
+            ownership_review_counts_json = NULL
         WHERE upper(fiat_currency) = ?
         """,
         (fiat.upper(),),
@@ -1200,7 +1201,8 @@ def _clear_provider_transaction_prices(
             UPDATE profiles
             SET last_processed_at = NULL,
                 last_processed_tx_count = 0,
-                journal_input_version = journal_input_version + 1
+                journal_input_version = journal_input_version + 1,
+                ownership_review_counts_json = NULL
             WHERE id = ?
             """,
             (profile,),

@@ -110,7 +110,13 @@ export function quarantineMetrics(
 ): ReviewMetric[] {
   const reasons = items?.length ? effectiveReasonCounts(items) : summary.by_reason;
   const missingPrices = countReasons(reasons, "price", "pricing_review");
-  const transferReview = countReasons(reasons, "transfer", "pair", "swap");
+  const transferReview = countReasons(
+    reasons,
+    "transfer",
+    "pair",
+    "swap",
+    "owned_fanout_unresolved",
+  );
   const basisReview = countReasons(reasons, "basis", "lot", "insufficient");
   const other = Math.max(
     summary.count - missingPrices - transferReview - basisReview,
@@ -209,6 +215,7 @@ export function quarantineReasonFilterIds(reason: string) {
   // Mirrors daemon quarantine reason strings until the API exposes a typed
   // review category for this filter band.
   const normalized = reason.toLowerCase();
+  if (normalized.includes("conflicting_spend")) return ["other-review"];
   const filters: string[] = [];
   if (normalized.includes("price") || normalized.includes("pricing_review")) {
     filters.push("missing-prices");
@@ -217,6 +224,7 @@ export function quarantineReasonFilterIds(reason: string) {
     normalized.includes("transfer") ||
     normalized.includes("pair") ||
     normalized.includes("swap") ||
+    normalized.includes("owned_fanout_unresolved") ||
     normalized.includes("basis") ||
     normalized.includes("lot") ||
     normalized.includes("insufficient")
@@ -243,12 +251,19 @@ function resolveStepIdForItem(item: QuarantineItem): QuarantineResolveStepId {
 
 function resolveStepIdForReason(reason: string): QuarantineResolveStepId {
   const normalized = reason.toLowerCase();
+  if (normalized.includes("conflicting_spend")) {
+    return "review-other";
+  }
+  if (normalized.includes("pending_onchain_confirmation")) {
+    return "sync-wallets";
+  }
   if (normalized.includes("ownership_transfer_amount_mismatch")) {
     return "sync-wallets";
   }
   if (
     normalized.includes("transfer_fee_implausible") ||
     normalized.includes("ownership_transfer") ||
+    normalized.includes("owned_fanout_unresolved") ||
     normalized.includes("derived_transfer") ||
     normalized.includes("transfer") ||
     normalized.includes("pair") ||
@@ -461,6 +476,15 @@ function basisLabel(
   if (normalized.includes("transfer_fee_implausible")) {
     return t("quarantine.basis.splitTransfer");
   }
+  if (normalized.includes("owned_fanout_unresolved")) {
+    return t("quarantine.basis.ownedFanout");
+  }
+  if (normalized.includes("conflicting_spend")) {
+    return t("quarantine.basis.conflictingSpend");
+  }
+  if (normalized.includes("pending_onchain_confirmation")) {
+    return t("quarantine.basis.pendingConfirmation");
+  }
   if (original.includes("ownership_transfer_amount_mismatch")) {
     return t("quarantine.basis.ownershipAmountMismatch");
   }
@@ -498,6 +522,15 @@ function issueLabel(
     return t("quarantine.issue.transferGroupBlocked", {
       reason: formatReason(detailString(detail, "blocked_by_reason") || reason),
     });
+  }
+  if (normalized.includes("owned_fanout_unresolved")) {
+    return t("quarantine.issue.ownedFanout", { wallet });
+  }
+  if (normalized.includes("conflicting_spend")) {
+    return t("quarantine.issue.conflictingSpend", { wallet });
+  }
+  if (normalized.includes("pending_onchain_confirmation")) {
+    return t("quarantine.issue.pendingConfirmation", { wallet });
   }
   if (normalized.includes("transfer_fee_implausible")) {
     return fromWallet && toWallet
@@ -550,6 +583,15 @@ function evidenceHint(
       });
     }
     return t("quarantine.evidence.splitTransfer");
+  }
+  if (normalized.includes("owned_fanout_unresolved")) {
+    return t("quarantine.evidence.ownedFanout");
+  }
+  if (normalized.includes("conflicting_spend")) {
+    return t("quarantine.evidence.conflictingSpend");
+  }
+  if (normalized.includes("pending_onchain_confirmation")) {
+    return t("quarantine.evidence.pendingConfirmation");
   }
   if (original.includes("ownership_transfer")) {
     const rowAmount = formatMsatDetail(detailNumber(detail, "row_amount_msat"));
@@ -660,6 +702,15 @@ function nextAction(
   if (normalized.includes("transfer_fee_implausible")) {
     return t("quarantine.nextAction.splitTransfer");
   }
+  if (normalized.includes("owned_fanout_unresolved")) {
+    return t("quarantine.nextAction.ownedFanout");
+  }
+  if (normalized.includes("conflicting_spend")) {
+    return t("quarantine.nextAction.conflictingSpend");
+  }
+  if (normalized.includes("pending_onchain_confirmation")) {
+    return t("quarantine.nextAction.pendingConfirmation");
+  }
   if (original.includes("ownership_transfer_source_ambiguous")) {
     return t("quarantine.nextAction.ownershipConsolidation");
   }
@@ -692,6 +743,15 @@ function actionLabel(
   if (normalized.includes("transfer_fee_implausible")) {
     return t("quarantine.action.openTransaction");
   }
+  if (normalized.includes("owned_fanout_unresolved")) {
+    return t("quarantine.action.openPairing");
+  }
+  if (normalized.includes("conflicting_spend")) {
+    return t("quarantine.action.openConflictReview");
+  }
+  if (normalized.includes("pending_onchain_confirmation")) {
+    return t("quarantine.action.openSyncReview");
+  }
   if (original.includes("ownership_transfer_amount_mismatch")) {
     return t("quarantine.action.openSyncReview");
   }
@@ -716,6 +776,9 @@ function actionTab(
   const original = reason.toLowerCase();
   const normalized = effectiveReviewReason(reason, detail).toLowerCase();
   if (normalized.includes("transfer_fee_implausible")) return "details";
+  if (normalized.includes("conflicting_spend")) return "details";
+  if (normalized.includes("pending_onchain_confirmation")) return "details";
+  if (normalized.includes("owned_fanout_unresolved")) return "linked";
   if (original.includes("ownership_transfer_amount_mismatch")) return "details";
   if (normalized.includes("pricing_review")) return "pricing";
   if (normalized.includes("price")) return "pricing";

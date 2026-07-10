@@ -524,6 +524,77 @@ class BuildOwnedIndexTests(unittest.TestCase):
 
         self.assertEqual(derive.call_args.kwargs["end"], 6)
 
+    def test_blank_address_metadata_is_stamped_bitcoin_main_in_index(self):
+        conn = _engine_conn()
+        conn.execute(
+            "INSERT INTO wallets(id, profile_id, label, kind, config_json, account_id) "
+            "VALUES(?,?,?,?,?,?)",
+            ("w1", "p1", "Legacy", "address", '{"addresses":["legacy-owned"]}', None),
+        )
+        wallet = conn.execute("SELECT * FROM wallets WHERE id = ?", ("w1",)).fetchone()
+
+        index, warnings = ownership.build_owned_index(
+            conn, "p1", [wallet], derive=False
+        )
+
+        self.assertEqual(warnings, [])
+        match = index.lookup_address("legacy-owned")[0]
+        self.assertEqual((match.chain, match.network), ("bitcoin", "main"))
+
+    def test_wallet_config_can_raise_journal_ownership_scan_depth(self):
+        conn = _engine_conn()
+        conn.execute(
+            "INSERT INTO wallets(id, profile_id, label, kind, config_json, account_id) "
+            "VALUES(?,?,?,?,?,?)",
+            (
+                "w1",
+                "p1",
+                "Vault",
+                "descriptor",
+                '{"descriptor":"wpkh(xpub/.../*)","ownership_scan_to_index":750}',
+                None,
+            ),
+        )
+        wallet = conn.execute("SELECT * FROM wallets WHERE id = ?", ("w1",)).fetchone()
+
+        class Plan:
+            gap_limit = 0
+            chain = "bitcoin"
+            network = "main"
+
+        with unittest.mock.patch.object(
+            ownership, "load_wallet_descriptor_plan_from_config", return_value=Plan()
+        ), unittest.mock.patch.object(
+            ownership, "derive_descriptor_targets", return_value=[]
+        ) as derive:
+            ownership.build_owned_index(conn, "p1", [wallet], scan_to_index=500)
+
+        self.assertEqual(derive.call_args.kwargs["end"], 751)
+
+    def test_derivation_type_error_is_not_mislabeled_as_bad_history_floor(self):
+        conn = _engine_conn()
+        conn.execute(
+            "INSERT INTO wallets(id, profile_id, label, kind, config_json, account_id) "
+            "VALUES(?,?,?,?,?,?)",
+            (
+                "w1",
+                "p1",
+                "Vault",
+                "descriptor",
+                '{"descriptor":"wpkh(xpub/.../*)"}',
+                None,
+            ),
+        )
+        wallet = conn.execute("SELECT * FROM wallets WHERE id = ?", ("w1",)).fetchone()
+
+        with unittest.mock.patch.object(
+            ownership,
+            "_derive_wallet_into_index",
+            side_effect=TypeError("deriver bug"),
+        ):
+            with self.assertRaisesRegex(TypeError, "deriver bug"):
+                ownership.build_owned_index(conn, "p1", [wallet])
+
 
 class FlattenAndRedactTests(unittest.TestCase):
     def test_flatten_rows_share_keys(self):

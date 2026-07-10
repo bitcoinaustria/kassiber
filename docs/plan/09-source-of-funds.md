@@ -175,9 +175,11 @@ Deterministic suggestions should run in this order:
    share of a multi-wallet transaction the 1:1 external-id heuristic
    refuses. Works identically for Bitcoin and Liquid (`wallet_utxos.chain`).
 4. Lightning payment hashes (`payment_hash`): exactly one outbound and one
-   inbound owned row sharing a payment hash are two legs of one payment —
-   covering LN transfers between own wallets and on-chain HTLC legs whose
-   hash was extracted at import.
+   inbound owned row sharing a **node-origin** payment hash are two legs of one
+   payment. The gate is shared with journal hash inference; untyped imported
+   hashes and `chain_script` HTLC hashes remain review evidence rather than an
+   automatically reviewed ownership link. Source-funds additionally refuses an
+   inbound amount above its outbound source allocation.
 5. Provider/import evidence such as trade ids, order ids, payment ids, or
    exchange ledger ids when stored in `raw_json`.
 6. Tight time and amount matches across owned wallets, as opt-in broad hints.

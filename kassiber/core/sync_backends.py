@@ -3349,6 +3349,8 @@ def record_from_electrum_tx(txid, tx, height, tracked_scripts, backend_name, tx_
     swap_refund_funding_txid = _extract_refund_funding_txid(
         tx.get("vin", []), _esplora_witness_items
     )
+    stored_graph = json_ready(tx)
+    stored_graph["status"] = {"confirmed": confirmed_at is not None}
     return {
         "txid": txid,
         "occurred_at": occurred_at,
@@ -3362,7 +3364,7 @@ def record_from_electrum_tx(txid, tx, height, tracked_scripts, backend_name, tx_
         "kind": kind,
         "description": f"Synced from {backend_name}",
         "counterparty": None,
-        "raw_json": json.dumps(json_ready(tx), sort_keys=True),
+        "raw_json": json.dumps(stored_graph, sort_keys=True),
         **_payment_hash_fields(payment_hash),
         **_swap_refund_fields(swap_refund_funding_txid),
     }
@@ -3596,7 +3598,13 @@ def electrum_records_for_wallet(backend, sync_state: WalletSyncState):
                         backend["name"],
                         sync_state.policy_asset_id,
                         lambda prev_txid: lookup(prev_txid)["decoded"],
-                        {"history": history, "raw_hex": current_tx["raw_hex"]},
+                        {
+                            "history": history,
+                            "raw_hex": current_tx["raw_hex"],
+                            "status": {
+                                "confirmed": occurred_at != UNKNOWN_OCCURRED_AT
+                            },
+                        },
                         confirmed_at=None if occurred_at == UNKNOWN_OCCURRED_AT else occurred_at,
                     )
                 )

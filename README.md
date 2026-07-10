@@ -211,6 +211,9 @@ To reconcile old flows, `kassiber wallets identify` (or the desktop **Reconcile*
 screen) checks whether pasted addresses / transaction ids belong to any of your
 wallets — receive or change — and flags the externals, classifying each
 transaction as a self-transfer, outbound payment, or inbound receipt.
+Wallet script migrations retain a private ownership-history archive so old
+receive/change scripts still resolve; unusually deep histories can opt into a
+bounded `ownership_scan_to_index` through wallet config.
 
 Exchange and wallet imports include Bitcoin-focused CSV/API paths for River,
 Bull Bitcoin, Coinfinity, 21bitcoin, Pocket Bitcoin, Strike, Ledger Live,

@@ -342,7 +342,8 @@ def reset_current_profile_data(
             SET last_processed_at = NULL,
                 last_processed_tx_count = 0,
                 last_processed_input_version = 0,
-                journal_input_version = journal_input_version + 1
+                journal_input_version = journal_input_version + 1,
+                ownership_review_counts_json = NULL
             WHERE id = ?
             """,
             (profile_id,),

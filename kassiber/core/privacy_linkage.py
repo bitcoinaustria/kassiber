@@ -28,7 +28,8 @@ from ..wallet_descriptors import (
     normalize_asset_code,
     normalize_chain,
 )
-from .source_funds_assembly import build_owned_outpoint_index, parse_vin_outpoints
+from .onchain import parse_vin_outpoints
+from .source_funds_assembly import build_owned_outpoint_index
 
 EVIDENCE_EXACT = "exact"
 EVIDENCE_DERIVED = "derived"

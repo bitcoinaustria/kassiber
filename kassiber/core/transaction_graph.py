@@ -31,8 +31,7 @@ from . import ownership as core_ownership
 from .ownership_transfers import (
     _norm_chain_network,
     _parse_onchain_tx,
-    derive_multi_source_consolidations,
-    derive_ownership_transfers,
+    derive_profile_transfers,
     derive_recorded_fanout_transfers,
 )
 from .repo import current_context_snapshot
@@ -1958,31 +1957,27 @@ def _preview_ownership_semantics(
     _record_detected_pairs(by_row, linked_pairs, touched, surviving_detected_pairs)
 
     if owned_index is not None:
-        consolidation = derive_multi_source_consolidations(
+        derivation = derive_profile_transfers(
             working_rows,
             index=owned_index,
             wallet_refs_by_id=wallet_refs_by_id,
             already_paired_ids=set(touched),
         )
-        _record_result(by_row, linked_pairs, touched, consolidation, "multi_source_consolidation")
-        drop_ids = consolidation.dropped_out_ids | consolidation.dropped_in_ids
-        if drop_ids:
-            working_rows = [row for row in working_rows if str(_row_get(row, "id")) not in drop_ids]
-            working_rows.extend(consolidation.synthetic_rows)
-            touched |= drop_ids
-
-        ownership = derive_ownership_transfers(
-            working_rows,
-            index=owned_index,
-            wallet_refs_by_id=wallet_refs_by_id,
-            already_paired_ids=set(touched),
+        _record_result(
+            by_row,
+            linked_pairs,
+            touched,
+            derivation.consolidation,
+            "multi_source_consolidation",
         )
-        _record_result(by_row, linked_pairs, touched, ownership, "ownership_derived")
-        if ownership.dropped_out_ids:
-            touched |= ownership.dropped_out_ids
-        if ownership.out_row_overrides:
-            touched |= set(ownership.out_row_overrides)
-        for blocked in ownership.blocked_sources:
+        _record_result(
+            by_row,
+            linked_pairs,
+            touched,
+            derivation.ownership,
+            "ownership_derived",
+        )
+        for blocked in derivation.ownership.blocked_sources:
             row = blocked.get("row")
             if row is None:
                 continue
@@ -1995,11 +1990,12 @@ def _preview_ownership_semantics(
                     "detail": _safe_detail(blocked.get("detail")),
                 }
             )
-
-    fanout = derive_recorded_fanout_transfers(
-        rows,
-        already_paired_ids=set(touched),
-    )
+        fanout = derivation.fanout
+    else:
+        fanout = derive_recorded_fanout_transfers(
+            working_rows,
+            already_paired_ids=set(touched),
+        )
     _record_result(by_row, linked_pairs, touched, fanout, "recorded_fanout")
     return {
         "by_row": dict(by_row),

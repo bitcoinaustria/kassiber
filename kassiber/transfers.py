@@ -23,6 +23,26 @@ from collections import defaultdict
 _HEX_DIGITS = frozenset("0123456789abcdefABCDEF")
 _BITCOIN_CARRY_ASSETS = frozenset({"BTC", "LBTC"})
 
+# Wallet-kind normalization used only for route inference. Payment-hash
+# auto-pair eligibility remains the stricter source-aware predicate below.
+LIGHTNING_INFERENCE_WALLET_KINDS = frozenset(
+    {"cln", "coreln", "lightning", "lnd", "nwc", "phoenix"}
+)
+CHAIN_INFERENCE_WALLET_KINDS = frozenset(
+    {"address", "descriptor", "samourai", "silent-payment", "wasabi", "xpub"}
+)
+_WALLET_KIND_ALIASES = {
+    "core-ln": "coreln",
+    "core-lightning": "coreln",
+}
+
+
+def normalize_wallet_kind_alias(value):
+    """Return the canonical wallet kind used by transfer-route inference."""
+
+    normalized = str(value or "").strip().lower().replace("_", "-")
+    return _WALLET_KIND_ALIASES.get(normalized, normalized)
+
 
 def is_bitcoin_rail_pair(out_asset, in_asset):
     """True for BTC/LBTC rail changes of the same Bitcoin exposure."""
@@ -56,8 +76,8 @@ def normalize_group_txid(external_id):
     casing (e.g. one esplora-synced, one imported from an uppercase CSV) would
     otherwise land in different ``(external_id, asset)`` groups and never pair.
     Only fold real 64-char hex ids so Lightning ``payment_hash`` values and
-    synthetic CSV ids are untouched. ``transfer_matching._deterministic_self_transfer_ids``
-    uses the same normalization — keep both in lockstep.
+    synthetic CSV ids are untouched. The matcher imports this helper directly,
+    so journal grouping and deterministic suppression share one implementation.
     """
     text = str(external_id)
     if len(text) == 64 and all(char in _HEX_DIGITS for char in text):
@@ -148,9 +168,6 @@ def _row_field(row, key):
 
 _LIGHTNING_PAYMENT_HASH_SOURCES = frozenset({"core_lightning", "lnd"})
 _NON_LIGHTNING_PAYMENT_HASH_SOURCES = frozenset({"chain_script"})
-_LIGHTNING_WALLET_KINDS = frozenset(
-    {"cln", "core-ln", "coreln", "lnd", "lightning", "nwc", "phoenix"}
-)
 _LIGHTNING_TRANSACTION_KINDS = frozenset(
     {
         "cln_invoice",
@@ -185,8 +202,8 @@ def is_lightning_payment_hash_row(row):
     kind = _normalized_lower(_row_field(row, "kind"))
     if kind in _LIGHTNING_TRANSACTION_KINDS:
         return True
-    wallet_kind = _normalized_lower(_row_field(row, "wallet_kind"))
-    return wallet_kind in _LIGHTNING_WALLET_KINDS
+    wallet_kind = normalize_wallet_kind_alias(_row_field(row, "wallet_kind"))
+    return wallet_kind in LIGHTNING_INFERENCE_WALLET_KINDS
 
 
 

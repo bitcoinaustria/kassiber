@@ -19,14 +19,17 @@ from embit import bip32
 
 from kassiber.core import accounts as core_accounts
 from kassiber.core import freshness as core_freshness
+from kassiber.core import ownership
 from kassiber.core.sync import classify_wallet_sync
 from kassiber.core.ui_snapshot import _wallet_backend_summary
 from kassiber.core.wallets import (
+    OWNERSHIP_HISTORY_CONFIG_KEY,
     _validated_wallet_config,
     create_wallet,
     has_descriptor_sync_material,
     normalize_addresses,
     parse_wallet_config,
+    redact_wallet_config_for_output,
     update_wallet,
 )
 from kassiber.db import open_db
@@ -127,6 +130,27 @@ class ValidatedWalletConfigTests(unittest.TestCase):
         with self.assertRaises(AppError):
             _validated_wallet_config("descriptor", {})
 
+    def test_ownership_scan_depth_is_bounded(self):
+        with self.assertRaises(AppError):
+            _validated_wallet_config(
+                "descriptor",
+                {
+                    "xpub": _xpub(),
+                    "script_types": ["p2wpkh"],
+                    "ownership_scan_to_index": 20_001,
+                },
+            )
+
+    def test_ownership_scan_depth_is_safe_to_read_back(self):
+        redacted = redact_wallet_config_for_output(
+            {
+                "descriptor": "wpkh(secret-material)",
+                "ownership_scan_to_index": 750,
+            }
+        )
+        self.assertEqual(redacted["ownership_scan_to_index"], 750)
+        self.assertEqual(redacted["descriptor"], "[redacted]")
+
 
 class XpubWalletIsSyncableTests(unittest.TestCase):
     """Regression: a multi-script xpub wallet (no `descriptor`) must classify as a
@@ -219,6 +243,72 @@ class WalletConfigFreshnessTests(unittest.TestCase):
         self.assertEqual(state["checkpoint"], {})
         self.assertEqual(state["stale_reason"], "wallet_config_changed")
         self.assertEqual(state["status"], core_freshness.STATUS_PARTIALLY_STALE)
+
+    def test_script_type_migration_keeps_prior_scripts_in_owned_index(self):
+        conn = self._db()
+        workspace = core_accounts.create_workspace(conn, "Main")
+        profile = core_accounts.create_profile(
+            conn,
+            workspace["id"],
+            "Book",
+            "EUR",
+            "FIFO",
+            "generic",
+            365,
+        )
+        wallet = create_wallet(
+            conn,
+            workspace["id"],
+            profile["id"],
+            "Vault",
+            "xpub",
+            config={
+                "xpub": _xpub(),
+                "script_types": ["p2wpkh"],
+                "chain": "bitcoin",
+                "network": "main",
+                "gap_limit": 1,
+            },
+        )
+        wallet_row = conn.execute(
+            "SELECT * FROM wallets WHERE id = ?", (wallet["id"],)
+        ).fetchone()
+        old_index, _warnings = ownership.build_owned_index(
+            conn, profile["id"], [wallet_row], scan_to_index=0
+        )
+        old_scripts = set(old_index.by_script)
+        self.assertTrue(old_scripts)
+
+        returned = update_wallet(
+            conn,
+            workspace["id"],
+            profile["id"],
+            wallet["id"],
+            {"config": {"script_types": ["p2tr"]}},
+        )
+
+        # The private history is not part of ordinary wallet payloads.
+        self.assertNotIn(OWNERSHIP_HISTORY_CONFIG_KEY, returned["config"])
+        migrated_row = conn.execute(
+            "SELECT * FROM wallets WHERE id = ?", (wallet["id"],)
+        ).fetchone()
+        stored = json.loads(migrated_row["config_json"])
+        self.assertEqual(
+            stored[OWNERSHIP_HISTORY_CONFIG_KEY][0]["script_types"], ["p2wpkh"]
+        )
+
+        migrated_index, warnings = ownership.build_owned_index(
+            conn, profile["id"], [migrated_row], scan_to_index=0
+        )
+        self.assertEqual(warnings, [])
+        self.assertTrue(old_scripts.issubset(migrated_index.by_script))
+        self.assertTrue(
+            any(
+                match.source == "derived_history"
+                for script in old_scripts
+                for match in migrated_index.lookup_script(script)
+            )
+        )
 
 
 if __name__ == "__main__":  # pragma: no cover

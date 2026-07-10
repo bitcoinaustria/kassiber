@@ -5987,7 +5987,7 @@ def _active_swap_review_refs(
 ) -> list[sqlite3.Row]:
     pair_records = conn.execute(
         """
-        SELECT out_transaction_id, in_transaction_id, deleted_at
+        SELECT out_transaction_id, in_transaction_id, kind, policy, deleted_at
         FROM transaction_pairs
         WHERE profile_id = ?
         """,
@@ -5995,7 +5995,7 @@ def _active_swap_review_refs(
     ).fetchall()
     payout_records = conn.execute(
         """
-        SELECT out_transaction_id, NULL AS in_transaction_id, deleted_at
+        SELECT out_transaction_id, NULL AS in_transaction_id, kind, policy, deleted_at
         FROM direct_swap_payouts
         WHERE profile_id = ?
         """,
@@ -6079,6 +6079,45 @@ def _unreviewed_swap_candidate_blocker(
             "strong": strong_count,
         },
         "routes": route_samples,
+    }
+
+
+def _ownership_review_candidate_blocker(
+    conn: sqlite3.Connection,
+    profile_id: str,
+) -> dict[str, Any] | None:
+    profile = conn.execute(
+        "SELECT ownership_review_counts_json FROM profiles WHERE id = ?",
+        (profile_id,),
+    ).fetchone()
+    if profile is None or not profile["ownership_review_counts_json"]:
+        return None
+    try:
+        cached = json.loads(profile["ownership_review_counts_json"])
+        total = int(cached.get("total") or 0)
+        by_reason = {
+            str(reason): int(count)
+            for reason, count in (cached.get("by_reason") or {}).items()
+            if int(count) > 0
+        }
+    except (AttributeError, TypeError, ValueError, json.JSONDecodeError):
+        return None
+    if total <= 0:
+        return None
+    return {
+        "id": "ownership_transfer_review",
+        "severity": "blocking",
+        "title": "Ownership transfers need review",
+        "detail": (
+            f"{total} ownership-proven transfer candidate(s) need pairing or "
+            "wallet-data review before final reports."
+        ),
+        "daemon_kind": "ui.transfers.suggest",
+        "daemon_args": {
+            "candidate_type": "transfer",
+            "method": core_transfer_matching.METHOD_OWNERSHIP_GRAPH,
+        },
+        "counts": {"total": total, "by_reason": by_reason},
     }
 
 
@@ -6181,6 +6220,11 @@ def build_report_blockers_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
                     "daemon_kind": "ui.journals.quarantine",
                 }
             )
+        ownership_blocker = _ownership_review_candidate_blocker(
+            conn, health["profile"]["id"]
+        )
+        if ownership_blocker is not None:
+            blockers.append(ownership_blocker)
         swap_blocker = _unreviewed_swap_candidate_blocker(conn, health["profile"])
         if swap_blocker is not None:
             blockers.append(swap_blocker)

@@ -204,6 +204,71 @@ describe("quarantine row model", () => {
     );
   });
 
+  it("gives unresolved owned fan-outs a multi-leg transfer action", () => {
+    const row = quarantineItemToRow(
+      { ...baseItem, reason: "owned_fanout_unresolved" },
+      "AT profile",
+      t,
+    );
+
+    expect(row).toMatchObject({
+      event: "Multi-wallet transfer needs review in Cold",
+      basis: "Multi-leg transfer between your wallets",
+      evidenceHint:
+        "The transaction pays more than one wallet you own, so each real receipt must be confirmed as its own carrying-value leg",
+      nextAction:
+        "Confirm each real destination receipt separately, then process journals",
+      metricFilterIds: ["basis-or-pairs"],
+      transactionAction: {
+        label: "Review transfer",
+        tab: "linked",
+      },
+    });
+  });
+
+  it("keeps conflicting spends out of the pairing workflow", () => {
+    const row = quarantineItemToRow(
+      { ...baseItem, reason: "conflicting_spend" },
+      "AT profile",
+      t,
+    );
+
+    expect(row).toMatchObject({
+      event: "Competing spend needs confirmation in Cold",
+      basis: "Competing on-chain transactions",
+      evidenceHint:
+        "Two transactions spend the same input. Only the confirmed winner belongs in the journal",
+      nextAction:
+        "Sync confirmations, verify which transaction won, and exclude a loser only when the chain evidence is clear",
+      metricFilterIds: ["other-review"],
+      transactionAction: {
+        label: "Review competing spend",
+        tab: "details",
+      },
+    });
+  });
+
+  it("routes explicit mempool rows to confirmation sync, not pairing", () => {
+    const row = quarantineItemToRow(
+      { ...baseItem, reason: "pending_onchain_confirmation" },
+      "AT profile",
+      t,
+    );
+
+    expect(row).toMatchObject({
+      event: "On-chain transaction is still pending in Cold",
+      basis: "Pending on-chain confirmation",
+      evidenceHint:
+        "The synced chain payload explicitly reports this transaction as unconfirmed",
+      nextAction:
+        "Wait for confirmation or sync the wallet again, then process journals",
+      transactionAction: {
+        label: "Review sync issue",
+        tab: "details",
+      },
+    });
+  });
+
   it("routes transfer-group blockers by their underlying blocker", () => {
     const priceBlocked = quarantineItemToRow(
       {
@@ -506,6 +571,30 @@ describe("quarantine resolve plan", () => {
     expect(basisStep?.primaryAction).toMatchObject({
       transactionId: "blocked-basis",
       tab: "tax",
+    });
+  });
+
+  it("separates owned fan-outs from competing-spend review", () => {
+    const snapshot = snapshotWith([
+      { ...baseItem, transaction_id: "fanout", reason: "owned_fanout_unresolved" },
+      { ...baseItem, transaction_id: "rbf-loser", reason: "conflicting_spend" },
+    ]);
+    const rows = quarantineRows(snapshot, t);
+
+    const plan = quarantineResolvePlan(snapshot, rows, t);
+
+    expect(plan.steps.map((step) => step.id)).toEqual([
+      "review-transfers",
+      "review-other",
+      "process-journals",
+    ]);
+    expect(plan.steps[0]?.primaryAction).toMatchObject({
+      transactionId: "fanout",
+      tab: "linked",
+    });
+    expect(plan.steps[1]?.primaryAction).toMatchObject({
+      transactionId: "rbf-loser",
+      tab: "details",
     });
   });
 });

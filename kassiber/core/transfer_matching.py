@@ -57,19 +57,19 @@ from datetime import datetime, timezone
 from typing import Iterable, Mapping, Optional, Sequence
 
 from ..transfers import (
+    CHAIN_INFERENCE_WALLET_KINDS,
+    LIGHTNING_INFERENCE_WALLET_KINDS,
     is_bitcoin_rail_pair,
     is_lightning_payment_hash_row,
     normalize_group_txid,
+    normalize_wallet_kind_alias,
 )
 
 
-LIGHTNING_WALLET_KINDS = frozenset({"phoenix", "coreln", "lnd", "nwc"})
-# On-chain self-custody BTC wallet kinds — eligible ends of a base-layer <-> Liquid
-# peg. wasabi/samourai are on-chain BTC wallets too, so a peg from them must still
-# be recognized (else the cross-asset route guard hides legitimate candidates).
-CHAIN_WALLET_KINDS = frozenset(
-    {"descriptor", "xpub", "address", "wasabi", "samourai"}
-)
+# Compatibility exports for callers/UI routing. The canonical sets live next to
+# the journal's wallet-kind normalization in ``kassiber.transfers``.
+LIGHTNING_WALLET_KINDS = LIGHTNING_INFERENCE_WALLET_KINDS
+CHAIN_WALLET_KINDS = CHAIN_INFERENCE_WALLET_KINDS
 
 DEFAULT_TIME_WINDOW_SECONDS = 24 * 60 * 60  # 24h
 DEFAULT_FEE_PCT_MAX = 0.01  # 1%
@@ -84,6 +84,9 @@ METHOD_HTLC_REFUND = "htlc_refund"
 # Deterministic imported/client evidence for cooperative Taproot v2 and other
 # provider-backed swaps where the chain spend itself is not identifying.
 METHOD_PROVIDER_SWAP_ID = "provider_swap_id"
+# Exact owned-output evidence surfaced from a journal ownership block. These
+# candidates require explicit user review and are never rule/bulk auto-paired.
+METHOD_OWNERSHIP_GRAPH = "ownership_graph"
 
 CONFIDENCE_EXACT = "exact"
 CONFIDENCE_STRONG = "strong"
@@ -106,10 +109,10 @@ class SwapCandidate:
 
     Two legs in opposite directions across different wallets, judged a
     swap by deterministic evidence such as ``payment_hash``,
-    ``provider_swap_id``, or an HTLC refund funding link, or by the time
-    + amount heuristic. Fee, default kind, default policy, and conflict
-    cluster are all computed once at match time so the review surface can
-    render without re-deriving them.
+    ``provider_swap_id``, an HTLC refund funding link, or a journal-surfaced
+    ownership proof, or by the time + amount heuristic. Fee, default kind,
+    default policy, and conflict cluster are all computed once at match time so
+    the review surface can render without re-deriving them.
     """
 
     out_id: str
@@ -196,9 +199,10 @@ def suggest_swap_candidates(
     dismissed_pairs = _active_dismissals(dismissals, now_seconds)
 
     eligible_rows = _select_eligible_rows(rows, paired_ids)
-    deterministic_transfer_ids = _deterministic_self_transfer_ids(
-        eligible_rows, fee_pct_max, fee_sats_min
-    )
+    # Deterministic suppression mirrors the journal's fixed safety ceiling.
+    # Caller flags widen only heuristic generation; they must never hide a row
+    # that the journal still quarantines with the default ceiling.
+    deterministic_transfer_ids = _deterministic_self_transfer_ids(eligible_rows)
     out_rows = [
         row
         for row in eligible_rows
@@ -331,8 +335,8 @@ def default_kind_for(
       * LBTC → BTC → ``peg-out``.
     * Everything else → ``manual`` (the user picks).
     """
-    out_kind = (out_wallet_kind or "").lower()
-    in_kind = (in_wallet_kind or "").lower()
+    out_kind = normalize_wallet_kind_alias(out_wallet_kind)
+    in_kind = normalize_wallet_kind_alias(in_wallet_kind)
     if out_kind in LIGHTNING_WALLET_KINDS or in_kind in LIGHTNING_WALLET_KINDS:
         return KIND_SUBMARINE_SWAP
     if out_kind in CHAIN_WALLET_KINDS and in_kind in CHAIN_WALLET_KINDS:
@@ -442,19 +446,14 @@ def _select_eligible_rows(rows: Sequence[Mapping], paired_ids: set[str]) -> list
     return eligible
 
 
-def _deterministic_self_transfer_ids(
-    rows: Sequence[Mapping],
-    fee_pct_max: float = DEFAULT_FEE_PCT_MAX,
-    fee_sats_min: int = DEFAULT_FEE_SATS_MIN,
-) -> set[object]:
+def _deterministic_self_transfer_ids(rows: Sequence[Mapping]) -> set[object]:
     """Return row ids that are already proven same-chain self-transfers.
 
-    The swap review queue is for ambiguous layer hops. A single outbound and
-    single inbound row with the same external transaction id and same asset,
-    across two owned wallets, is the conservative on-chain self-transfer signal
-    used by the journal pipeline. This mirrors
-    ``kassiber.transfers.detect_intra_transfers``; keep the predicates in
-    lockstep so ordinary cold-to-hot moves do not look like swaps to review.
+    The swap review queue is for ambiguous layer hops. One outbound and one or
+    more inbound rows with the same external transaction id and same asset,
+    across owned wallets, are the conservative on-chain self-transfer shapes
+    used by the journal pipeline. The conserving 1->N shape is suppressed as one
+    group so its largest leg cannot leak back as a strong heuristic candidate.
 
     Exception: when the implied fee (``out_amount - in_amount``) blows past the
     swap-fee tolerance, the outbound almost certainly fanned out to an
@@ -488,14 +487,16 @@ def _deterministic_self_transfer_ids(
             if _record_get(row, "direction") == "inbound"
             and int(_record_get(row, "amount") or 0) > 0
         ]
-        if len(outs) != 1 or len(ins) != 1:
+        if len(outs) != 1 or not ins:
             continue
         out_row = outs[0]
-        in_row = ins[0]
-        if _record_get(out_row, "wallet_id") == _record_get(in_row, "wallet_id"):
+        out_wallet_id = _record_get(out_row, "wallet_id")
+        if any(out_wallet_id == _record_get(in_row, "wallet_id") for in_row in ins):
             continue
         out_amount = int(_record_get(out_row, "amount") or 0)
-        in_amount = int(_record_get(in_row, "amount") or 0)
+        in_amount = sum(int(_record_get(in_row, "amount") or 0) for in_row in ins)
+        if in_amount > out_amount:
+            continue
         # When the out leg's `amount` is a net wallet delta with the fee folded
         # in (BTCPay; `amount_includes_fee`), the out/in gap IS the miner fee, so
         # it is not an implausible residual — keep it a proven self-transfer
@@ -503,13 +504,15 @@ def _deterministic_self_transfer_ids(
         # in tax_events.normalize_tax_asset_inputs.
         if not _record_get(out_row, "amount_includes_fee") and (
             out_amount - in_amount
-            > fee_threshold_msat(out_amount, fee_pct_max, fee_sats_min)
+            > fee_threshold_msat(
+                out_amount, DEFAULT_FEE_PCT_MAX, DEFAULT_FEE_SATS_MIN
+            )
         ):
             # Implausible implied fee — likely an unrecognized peg/payment leg.
             # Don't claim it as a proven self-transfer; let it reach swap review.
             continue
         deterministic_ids.add(_record_get(out_row, "id"))
-        deterministic_ids.add(_record_get(in_row, "id"))
+        deterministic_ids.update(_record_get(in_row, "id") for in_row in ins)
 
     # Mirror of the journal's Lightning payment-hash pass
     # (transfers.detect_intra_transfers): an own-node payment whose hash

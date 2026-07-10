@@ -37,63 +37,18 @@ asserted through a privacy boundary via an unflagged sibling row.
 
 from __future__ import annotations
 
-import json
 import sqlite3
 from collections import defaultdict
 from typing import Any, Callable, Mapping, Sequence
 
+from ..transfers import is_lightning_payment_hash_row, normalize_group_txid
 from ..wallet_descriptors import normalize_asset_code
+from .onchain import parse_vin_outpoints
 
-_COINBASE_TXID = "0" * 64
 # In-wallet consolidations net to ~0 and cannot carry allocation demand;
 # resolving through more than this many of them in a row means the chain
 # shape is unexpected and manual review is the right answer.
 _MAX_PASSTHROUGH_DEPTH = 8
-
-
-def _safe_json_loads(value: Any) -> Any:
-    if not value:
-        return None
-    try:
-        return json.loads(str(value))
-    except (TypeError, ValueError):
-        return None
-
-
-def parse_vin_outpoints(raw_json: Any) -> list[tuple[str, int]]:
-    """Extract input outpoints ``(prev_txid_lower, vout)`` from a stored tx.
-
-    Handles the stored shapes that carry structured inputs: esplora's
-    upstream tx JSON, Bitcoin Core's normalized decoded graph, electrum's
-    locally-decoded transaction, and Liquid component records (all carry
-    ``vin`` entries with ``txid`` + ``vout``). Rows without chain structure
-    (CSV imports or legacy bitcoinrpc rows without verbose graph data) yield
-    an empty list.
-    """
-    payload = _safe_json_loads(raw_json)
-    if not isinstance(payload, dict):
-        return []
-    vin = payload.get("vin")
-    if not isinstance(vin, list):
-        nested = payload.get("tx")
-        vin = nested.get("vin") if isinstance(nested, dict) else None
-    if not isinstance(vin, list):
-        return []
-    outpoints: list[tuple[str, int]] = []
-    for entry in vin:
-        if not isinstance(entry, Mapping):
-            continue
-        txid = str(entry.get("txid") or "").strip().lower()
-        if not txid or txid == _COINBASE_TXID:
-            continue
-        try:
-            vout = int(entry.get("vout"))
-        except (TypeError, ValueError):
-            continue
-        if vout < 0:
-            continue
-        outpoints.append((txid, vout))
-    return outpoints
 
 
 def build_owned_outpoint_index(
@@ -199,14 +154,14 @@ def derive_utxo_spend_pairs(
     """
     rows_by_external: dict[str, list[Mapping[str, Any]]] = defaultdict(list)
     for row in rows:
-        external = str(row["external_id"] or "").strip().lower()
+        external = normalize_group_txid(str(row["external_id"] or ""))
         if external:
             rows_by_external[external].append(row)
 
     # Privacy/samourai policy applies per transaction: any flagged leg
     # poisons every leg of the same txid.
     blocked_externals = {
-        str(row["external_id"] or "").strip().lower()
+        normalize_group_txid(str(row["external_id"] or ""))
         for row in rows
         if row["external_id"] and skip_row(row)
     }
@@ -553,7 +508,7 @@ def derive_payment_hash_pairs(
     by_hash: dict[str, list[Mapping[str, Any]]] = defaultdict(list)
     for row in rows:
         payment_hash = str(row["payment_hash"] or "").strip().lower()
-        if payment_hash:
+        if payment_hash and is_lightning_payment_hash_row(row):
             by_hash[payment_hash].append(row)
 
     pairs: list[dict[str, Any]] = []
@@ -563,8 +518,6 @@ def derive_payment_hash_pairs(
         if len(outs) != 1 or len(ins) != 1:
             continue
         out_tx, in_tx = outs[0], ins[0]
-        if out_tx["wallet_id"] == in_tx["wallet_id"]:
-            continue
         if normalize_asset_code(str(out_tx["asset"])) != normalize_asset_code(str(in_tx["asset"])):
             continue
         if skip_row(out_tx) or skip_row(in_tx):
@@ -573,6 +526,8 @@ def derive_payment_hash_pairs(
             continue
         out_amount = int(out_tx["amount"])
         in_amount = int(in_tx["amount"])
+        # Source-funds is lineage evidence, not a tax MOVE assertion. Even with
+        # an exact node-origin hash, never auto-review an inflationary edge.
         if out_amount <= 0 or in_amount <= 0 or in_amount > out_amount:
             continue
         pairs.append(

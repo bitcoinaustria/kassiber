@@ -394,7 +394,7 @@ wheels = [
 
 [[package]]
 name = "kassiber"
-version = "0.22.54"
+version = "0.22.55"
 source = { editable = "." }
 dependencies = [
     { name = "certifi" },
