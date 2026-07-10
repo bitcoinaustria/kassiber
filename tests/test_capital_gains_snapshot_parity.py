@@ -170,6 +170,86 @@ class CapitalGainsSnapshotParityTests(unittest.TestCase):
         )
         self.assertEqual(primary, [])
 
+    def test_austrian_lots_display_vienna_local_date(self):
+        conn = self._conn(tax_country="at", gains_algorithm="moving_average_at")
+        conn.executemany(
+            "INSERT INTO wallets VALUES (?, 'p1', ?)",
+            [("w1", "Hot"), ("w2", "Cold")],
+        )
+        occurred_at = "2024-12-31T23:30:00Z"
+        conn.executemany(
+            "INSERT INTO transactions VALUES (?,?,?,?,?,?,?,?)",
+            [
+                ("t-sell", "p1", "w1", 0, 1, occurred_at, "BTC", 50_000_000_000),
+                ("t-swap-out", "p1", "w1", 0, 1, occurred_at, "BTC", 25_000_000_000),
+                ("t-swap-in", "p1", "w2", 0, 1, occurred_at, "LBTC", 24_900_000_000),
+            ],
+        )
+        conn.executemany(
+            "INSERT INTO journal_entries VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            [
+                (
+                    "j-sell",
+                    "p1",
+                    "t-sell",
+                    "disposal",
+                    occurred_at,
+                    -50_000_000_000,
+                    40.0,
+                    90.0,
+                    50.0,
+                    "neu_gain",
+                    174,
+                    "short",
+                    occurred_at,
+                ),
+                (
+                    "j-swap",
+                    "p1",
+                    "t-swap-out",
+                    "disposal",
+                    occurred_at,
+                    -25_000_000_000,
+                    20.0,
+                    20.0,
+                    0.0,
+                    "neu_swap",
+                    None,
+                    "short",
+                    occurred_at,
+                ),
+            ],
+        )
+        conn.execute(
+            "INSERT INTO transaction_pairs VALUES (?,?,?,?,?,?,?,?,?,?)",
+            (
+                "pair-1",
+                "t-swap-out",
+                "t-swap-in",
+                "p1",
+                None,
+                "peg-out",
+                "carrying-value",
+                100_000_000,
+                "network",
+                25_000_000_000,
+            ),
+        )
+
+        with patch.object(
+            ui_snapshot,
+            "_journal_freshness",
+            return_value={"needs_processing": False},
+        ), patch.object(
+            ui_snapshot,
+            "_austrian_kennzahl_snapshot_rows",
+            return_value=[],
+        ):
+            snapshot = ui_snapshot.build_capital_gains_snapshot(conn, tax_year=2025)
+
+        self.assertEqual(snapshot["lots"][0]["disposed"], "2025-01-01")
+        self.assertEqual(snapshot["neutralSwapLots"][0]["date"], "2025-01-01")
+
 
 if __name__ == "__main__":
     unittest.main()

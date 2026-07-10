@@ -45,6 +45,7 @@ from . import sync_backends as core_sync_backends
 from . import source_overlap as core_source_overlap
 from . import transfer_matching as core_transfer_matching
 from . import reports as report_builders
+from .austrian import vienna_local_date
 from .samourai import samourai_metadata_from_wallet_config
 from . import transaction_history
 from .repo import current_context_snapshot
@@ -4021,7 +4022,11 @@ def _capital_gains_neutral_swap_rows(
         fee_msat = int(row["swap_fee_msat"] or 0)
         output.append(
             {
-                "date": (row["occurred_at"] or "")[:10],
+                "date": (
+                    vienna_local_date(str(row["occurred_at"]))
+                    if use_vienna_year
+                    else (row["occurred_at"] or "")[:10]
+                ),
                 "pairId": row["pair_id"],
                 "kind": row["kind"],
                 "policy": row["policy"],
@@ -4168,7 +4173,11 @@ def build_capital_gains_snapshot(
     lots = [
         {
             "acquired": "",
-            "disposed": (row["occurred_at"] or "")[:10],
+            "disposed": (
+                vienna_local_date(str(row["occurred_at"]))
+                if use_vienna_year
+                else (row["occurred_at"] or "")[:10]
+            ),
             "sats": int(round(abs(float(msat_to_btc(row["quantity"] or 0))) * 100_000_000)),
             "costEur": float(row["cost_basis"] or 0),
             "proceedsEur": float(
