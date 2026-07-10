@@ -13627,18 +13627,22 @@ class ReviewRegressionTest(unittest.TestCase):
             "--dir", str(csv_bundle_dir),
         )
         self._assert_ok(payload, result, "reports.export-austrian-e1kv-csv")
-        self.assertEqual(len(payload["data"]["files"]), 14)
+        self.assertEqual(len(payload["data"]["files"]), 15)
         self.assertIn(
             "No rows in scope.",
             (csv_bundle_dir / "02_1.2.csv").read_text(encoding="utf-8"),
         )
         self.assertIn(
+            "Summe Spekulationseinkünfte",
+            (csv_bundle_dir / "03_1.3.csv").read_text(encoding="utf-8"),
+        )
+        self.assertIn(
             "Summe der Rückerstattungen",
-            (csv_bundle_dir / "07_3.3.csv").read_text(encoding="utf-8"),
+            (csv_bundle_dir / "08_3.3.csv").read_text(encoding="utf-8"),
         )
         self.assertIn(
             "Summe Minting",
-            (csv_bundle_dir / "12_4.5.csv").read_text(encoding="utf-8"),
+            (csv_bundle_dir / "13_4.5.csv").read_text(encoding="utf-8"),
         )
 
     def test_austrian_e1kv_quarantined_rows_stay_out_but_counts_visible(self):
