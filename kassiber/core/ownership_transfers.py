@@ -52,7 +52,6 @@ row's ``raw_json`` column.
 
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass, field
 from decimal import Decimal
 from typing import Any, Callable, Mapping, Optional, Sequence
@@ -60,7 +59,7 @@ from typing import Any, Callable, Mapping, Optional, Sequence
 from ..msat import msat_to_btc
 from ..transfers import normalize_group_txid
 from ..wallet_descriptors import normalize_chain, normalize_network
-from .onchain import parse_valued_tx
+from .onchain import parse_valued_tx, stored_tx_mapping
 
 
 SATS_TO_MSAT = 1000
@@ -129,7 +128,6 @@ class ProfileTransferDerivation:
     consolidation: OwnershipDeriveResult
     ownership: OwnershipDeriveResult
     fanout: OwnershipDeriveResult
-    handled_ids: set[str]
 
 
 def _rows_after_derivation(
@@ -202,7 +200,6 @@ def derive_profile_transfers(
     final_rows = _rows_after_derivation(
         rows_after_ownership, fanout, sort_key=sort_key
     )
-    handled = fanout_handled | fanout.dropped_out_ids | fanout.dropped_in_ids
     return ProfileTransferDerivation(
         rows_after_consolidation=rows_after_consolidation,
         rows_after_ownership=rows_after_ownership,
@@ -210,7 +207,6 @@ def derive_profile_transfers(
         consolidation=consolidation,
         ownership=ownership,
         fanout=fanout,
-        handled_ids=handled,
     )
 
 
@@ -1332,14 +1328,9 @@ def detect_pending_onchain_ids(rows: Sequence[Mapping[str, Any]]) -> set[str]:
     row_txid: dict[str, str] = {}
     txid_state: dict[str, tuple[bool, bool]] = {}
     for row in rows:
-        try:
-            raw = json.loads(_get(row, "raw_json") or "{}")
-        except (TypeError, ValueError, json.JSONDecodeError):
+        payload = stored_tx_mapping(_get(row, "raw_json"), allow_nested=True)
+        if payload is None:
             continue
-        if not isinstance(raw, Mapping):
-            continue
-        nested = raw.get("tx")
-        payload = nested if isinstance(nested, Mapping) else raw
         status = payload.get("status")
         if not isinstance(status, Mapping) or not isinstance(
             status.get("confirmed"), bool

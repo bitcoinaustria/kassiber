@@ -571,6 +571,30 @@ class BuildOwnedIndexTests(unittest.TestCase):
 
         self.assertEqual(derive.call_args.kwargs["end"], 751)
 
+    def test_derivation_type_error_is_not_mislabeled_as_bad_history_floor(self):
+        conn = _engine_conn()
+        conn.execute(
+            "INSERT INTO wallets(id, profile_id, label, kind, config_json, account_id) "
+            "VALUES(?,?,?,?,?,?)",
+            (
+                "w1",
+                "p1",
+                "Vault",
+                "descriptor",
+                '{"descriptor":"wpkh(xpub/.../*)"}',
+                None,
+            ),
+        )
+        wallet = conn.execute("SELECT * FROM wallets WHERE id = ?", ("w1",)).fetchone()
+
+        with unittest.mock.patch.object(
+            ownership,
+            "_derive_wallet_into_index",
+            side_effect=TypeError("deriver bug"),
+        ):
+            with self.assertRaisesRegex(TypeError, "deriver bug"):
+                ownership.build_owned_index(conn, "p1", [wallet])
+
 
 class FlattenAndRedactTests(unittest.TestCase):
     def test_flatten_rows_share_keys(self):

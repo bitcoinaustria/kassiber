@@ -37,7 +37,6 @@ from ..wallet_descriptors import (
 )
 from . import output_inventory as core_output_inventory
 from . import ownership as core_ownership
-from . import ownership_transfers as core_ownership_transfers
 from . import freshness as core_freshness
 from . import lightning as core_lightning
 from . import rates as core_rates
@@ -6087,50 +6086,30 @@ def _ownership_review_candidate_blocker(
     conn: sqlite3.Connection,
     profile_id: str,
 ) -> dict[str, Any] | None:
-    blocked_rows = conn.execute(
-        """
-        SELECT q.transaction_id, q.reason
-        FROM journal_quarantines q
-        JOIN transactions t ON t.id = q.transaction_id
-        WHERE q.profile_id = ?
-          AND t.direction = 'outbound'
-          AND q.reason IN (
-            'ownership_transfer_destination_ambiguous',
-            'ownership_transfer_source_ambiguous',
-            'owned_fanout_unresolved'
-          )
-        ORDER BY q.created_at, q.transaction_id
-        """,
+    profile = conn.execute(
+        "SELECT ownership_review_counts_json FROM profiles WHERE id = ?",
         (profile_id,),
-    ).fetchall()
-    if not blocked_rows:
+    ).fetchone()
+    if profile is None or not profile["ownership_review_counts_json"]:
         return None
-    rows = _load_swap_report_matcher_rows(conn, profile_id)
-    wallets = core_ownership.load_profile_wallets(conn, profile_id)
-    owned_index, _warnings = core_ownership.build_owned_index(
-        conn, profile_id, wallets
-    )
-    proofs = core_ownership_transfers.derive_ownership_review_proofs(
-        rows,
-        index=owned_index,
-        blocked_reasons_by_row_id={
-            str(row["transaction_id"]): str(row["reason"])
-            for row in blocked_rows
-        },
-        active_pair_records=_active_swap_review_refs(conn, profile_id),
-    )
-    if not proofs:
+    try:
+        cached = json.loads(profile["ownership_review_counts_json"])
+        total = int(cached.get("total") or 0)
+        by_reason = {
+            str(reason): int(count)
+            for reason, count in (cached.get("by_reason") or {}).items()
+            if int(count) > 0
+        }
+    except (AttributeError, TypeError, ValueError, json.JSONDecodeError):
         return None
-    by_reason: dict[str, int] = {}
-    for proof in proofs:
-        by_reason[proof.reason] = by_reason.get(proof.reason, 0) + 1
-    total = len(proofs)
+    if total <= 0:
+        return None
     return {
         "id": "ownership_transfer_review",
         "severity": "blocking",
         "title": "Ownership transfers need review",
         "detail": (
-            f"{total} ownership-proven transfer source(s) need pairing or "
+            f"{total} ownership-proven transfer candidate(s) need pairing or "
             "wallet-data review before final reports."
         ),
         "daemon_kind": "ui.transfers.suggest",

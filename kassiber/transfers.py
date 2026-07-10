@@ -33,7 +33,7 @@ CHAIN_INFERENCE_WALLET_KINDS = frozenset(
 )
 _WALLET_KIND_ALIASES = {
     "core-ln": "coreln",
-    "core_lightning": "coreln",
+    "core-lightning": "coreln",
 }
 
 
@@ -76,8 +76,8 @@ def normalize_group_txid(external_id):
     casing (e.g. one esplora-synced, one imported from an uppercase CSV) would
     otherwise land in different ``(external_id, asset)`` groups and never pair.
     Only fold real 64-char hex ids so Lightning ``payment_hash`` values and
-    synthetic CSV ids are untouched. ``transfer_matching._deterministic_self_transfer_ids``
-    uses the same normalization — keep both in lockstep.
+    synthetic CSV ids are untouched. The matcher imports this helper directly,
+    so journal grouping and deterministic suppression share one implementation.
     """
     text = str(external_id)
     if len(text) == 64 and all(char in _HEX_DIGITS for char in text):

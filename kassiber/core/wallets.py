@@ -103,6 +103,7 @@ WALLET_SAFE_CONFIG_FIELDS = (
     "wasabi_metadata",
     "samourai",
     "descriptor_source",
+    OWNERSHIP_SCAN_TO_INDEX_CONFIG_KEY,
     "synthesize_change",
     "script_types",
     *silent_payments.SAFE_CONFIG_FIELDS,

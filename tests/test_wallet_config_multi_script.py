@@ -29,6 +29,7 @@ from kassiber.core.wallets import (
     has_descriptor_sync_material,
     normalize_addresses,
     parse_wallet_config,
+    redact_wallet_config_for_output,
     update_wallet,
 )
 from kassiber.db import open_db
@@ -139,6 +140,16 @@ class ValidatedWalletConfigTests(unittest.TestCase):
                     "ownership_scan_to_index": 20_001,
                 },
             )
+
+    def test_ownership_scan_depth_is_safe_to_read_back(self):
+        redacted = redact_wallet_config_for_output(
+            {
+                "descriptor": "wpkh(secret-material)",
+                "ownership_scan_to_index": 750,
+            }
+        )
+        self.assertEqual(redacted["ownership_scan_to_index"], 750)
+        self.assertEqual(redacted["descriptor"], "[redacted]")
 
 
 class XpubWalletIsSyncableTests(unittest.TestCase):

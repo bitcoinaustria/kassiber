@@ -116,6 +116,10 @@ class DefaultKindTests(unittest.TestCase):
             KIND_SUBMARINE_SWAP,
         )
         self.assertEqual(
+            default_kind_for("BTC", "LBTC", "core_lightning", "descriptor"),
+            KIND_SUBMARINE_SWAP,
+        )
+        self.assertEqual(
             default_kind_for("BTC", "LBTC", "silent-payment", "descriptor"),
             KIND_PEG_IN,
         )
@@ -674,19 +678,14 @@ class HeuristicMatchTests(unittest.TestCase):
                        occurred_at="2026-03-14T17:31:00Z")
         self.assertEqual(suggest_swap_candidates([out, inbound], tax_country="at"), [])
 
-    def test_deterministic_self_transfer_ignores_caller_fee_tolerance(self):
-        # Caller tolerances widen heuristic generation only. Deterministic
-        # suppression must keep the journal's fixed defaults or a loose review
-        # flag can hide a pair the journal still quarantines.
+    def test_deterministic_self_transfer_uses_journal_fee_tolerance(self):
+        # Deterministic suppression keeps the journal's fixed defaults; caller
+        # fee flags only belong to public heuristic generation.
         out = _row(id="o", external_id="txid", wallet_id="cold",
                    direction="outbound", asset="BTC", amount=4_702_253_000)
         inbound = _row(id="i", external_id="txid", wallet_id="hot",
                        direction="inbound", asset="BTC", amount=2_750_000_000)
         self.assertEqual(_deterministic_self_transfer_ids([out, inbound]), set())
-        self.assertEqual(
-            _deterministic_self_transfer_ids([out, inbound], fee_pct_max=0.5),
-            set(),
-        )
 
     def test_conserving_same_txid_fanout_is_suppressed_as_one_group(self):
         out = _row(

@@ -103,6 +103,7 @@ CREATE TABLE IF NOT EXISTS profiles (
     last_processed_input_version INTEGER NOT NULL DEFAULT 0,
     last_processed_at TEXT,
     last_processed_tx_count INTEGER NOT NULL DEFAULT 0,
+    ownership_review_counts_json TEXT,
     created_at TEXT NOT NULL,
     UNIQUE (workspace_id, label)
 );
@@ -1448,6 +1449,35 @@ def ensure_schema_compat(conn):
     # matcher runs during journal processing, surfaced as a side-nav hint.
     # NULL = never computed (no badge).
     ensure_column(conn, "profiles", "swap_candidate_count", "INTEGER")
+    # Cached pairable ownership-proof counts, written by journal processing.
+    # Report blockers read this instead of rebuilding every wallet descriptor
+    # index on the daemon's serial request loop.
+    ownership_review_cache_added = _ensure_column_no_commit(
+        conn, "profiles", "ownership_review_counts_json", "TEXT"
+    )
+    if ownership_review_cache_added:
+        # Existing books can already contain ownership quarantines created by
+        # an older build. Force just those books through journal processing so
+        # the new cache is populated instead of silently hiding their blocker.
+        conn.execute(
+            """
+            UPDATE profiles
+            SET last_processed_at = NULL,
+                last_processed_tx_count = 0,
+                journal_input_version = journal_input_version + 1
+            WHERE EXISTS (
+                SELECT 1
+                FROM journal_quarantines q
+                WHERE q.profile_id = profiles.id
+                  AND q.reason IN (
+                    'ownership_transfer_destination_ambiguous',
+                    'ownership_transfer_source_ambiguous',
+                    'owned_fanout_unresolved'
+                  )
+            )
+            """
+        )
+        conn.commit()
     ensure_column(conn, "backends", "batch_size", "INTEGER")
     ensure_column(conn, "backends", "config_json", "TEXT NOT NULL DEFAULT '{}'")
     ensure_column(conn, "journal_entries", "at_category", "TEXT")
@@ -2828,6 +2858,7 @@ def _backfill_liquid_asset_codes(conn):
         f"UPDATE profiles "
         f"SET last_processed_at = NULL, "
         f"last_processed_tx_count = 0, "
+        f"ownership_review_counts_json = NULL, "
         f"journal_input_version = journal_input_version + 1 "
         f"WHERE id IN ({profile_placeholders})",
         affected_profile_ids,

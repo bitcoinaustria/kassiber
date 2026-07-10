@@ -214,6 +214,10 @@ Quarantine causes typically include:
 - `pending_onchain_confirmation` — a chain sync payload explicitly reports the
   transaction as mempool/unconfirmed. It is held out of tax booking until a
   synced leg proves confirmation; graphless CSV/provider rows are unaffected.
+  Esplora and Electrum payloads currently carry this explicit boolean. Bitcoin
+  Core RPC wallet rows do not yet stamp it, so Core mempool activity remains on
+  the prior journal path because Kassiber cannot distinguish those rows from
+  graphless imports using `confirmed_at` alone.
 - `conflicting_spend` — transactions share a prevout. Sync and verify which txid
   won; this is not a normal carrying-value pairing or bulk-pair action.
 

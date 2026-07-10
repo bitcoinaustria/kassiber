@@ -446,11 +446,7 @@ def _select_eligible_rows(rows: Sequence[Mapping], paired_ids: set[str]) -> list
     return eligible
 
 
-def _deterministic_self_transfer_ids(
-    rows: Sequence[Mapping],
-    fee_pct_max: float = DEFAULT_FEE_PCT_MAX,
-    fee_sats_min: int = DEFAULT_FEE_SATS_MIN,
-) -> set[object]:
+def _deterministic_self_transfer_ids(rows: Sequence[Mapping]) -> set[object]:
     """Return row ids that are already proven same-chain self-transfers.
 
     The swap review queue is for ambiguous layer hops. One outbound and one or
@@ -477,9 +473,6 @@ def _deterministic_self_transfer_ids(
         key = (normalize_group_txid(external_id), _record_get(row, "asset"))
         grouped.setdefault(key, []).append(row)
 
-    # Kept in the signature for source compatibility. Review flags widen only
-    # heuristic generation; deterministic suppression uses journal defaults.
-    del fee_pct_max, fee_sats_min
     deterministic_ids: set[object] = set()
     for group in grouped.values():
         outs = [

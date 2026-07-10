@@ -617,6 +617,12 @@ def build_owned_index(
                 continue
             try:
                 history_floor = int(ownership_config.get("scan_to_index") or 0)
+            except (TypeError, ValueError):
+                warnings.append(
+                    f"Wallet '{wallet['label']}': historic scan floor is invalid"
+                )
+                continue
+            try:
                 _derive_wallet_into_index(
                     index,
                     wallet,
@@ -625,10 +631,6 @@ def build_owned_index(
                     scan_to_index=max(wallet_scan_to_index, history_floor),
                     highest_used=highest_used.get(str(wallet["id"]), {}),
                     source="derived_history" if is_history else "derived",
-                )
-            except (TypeError, ValueError):
-                warnings.append(
-                    f"Wallet '{wallet['label']}': historic scan floor is invalid"
                 )
             except AppError as exc:
                 warnings.append(

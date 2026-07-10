@@ -530,13 +530,12 @@ def derive_payment_hash_pairs(
         # an exact node-origin hash, never auto-review an inflationary edge.
         if out_amount <= 0 or in_amount <= 0 or in_amount > out_amount:
             continue
-        allocation = min(out_amount, in_amount)
         pairs.append(
             {
                 "from_row": out_tx,
                 "to_row": in_tx,
                 "payment_hash": payment_hash,
-                "allocation_msat": allocation,
+                "allocation_msat": in_amount,
                 "from_allocation_msat": out_amount,
                 "explanation": (
                     f"Both legs share payment hash {payment_hash[:16]}…; "

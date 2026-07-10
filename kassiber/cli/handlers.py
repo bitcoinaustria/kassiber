@@ -395,7 +395,8 @@ def invalidate_journals(conn, profile_id):
         UPDATE profiles
         SET last_processed_at = NULL,
             last_processed_tx_count = 0,
-            journal_input_version = journal_input_version + 1
+            journal_input_version = journal_input_version + 1,
+            ownership_review_counts_json = NULL
         WHERE id = ?
         """,
         (profile_id,),
@@ -4397,6 +4398,13 @@ def build_ledger_state(conn, profile):
             channel_transfer_pairs=channel_transfer_pairs,
         )
     )
+    ownership_review_counts = _ownership_review_counts_for_state(
+        rows,
+        owned_index,
+        engine_state.quarantines,
+        manual_pair_records,
+        direct_payout_records,
+    )
     return {
         "entries": engine_state.entries,
         "quarantines": engine_state.quarantines,
@@ -4406,9 +4414,48 @@ def build_ledger_state(conn, profile):
         "tax_summary": engine_state.tax_summary,
         "account_holdings": engine_state.account_holdings,
         "wallet_holdings": engine_state.wallet_holdings,
+        "ownership_review_counts": ownership_review_counts,
         "latest_rates": rates,
         "warnings": warnings,
     }
+
+
+def _ownership_review_counts_for_state(
+    rows,
+    owned_index,
+    quarantines,
+    manual_pair_records,
+    direct_payout_records,
+):
+    """Count real-row ownership proofs while the journal index is in memory."""
+
+    blocked_reasons = {
+        str(quarantine["transaction_id"]): str(quarantine["reason"])
+        for quarantine in quarantines
+    }
+    if not blocked_reasons:
+        return {"total": 0, "by_reason": {}}
+    active_review_records = [*manual_pair_records]
+    active_review_records.extend(
+        {
+            "out_transaction_id": record["out_transaction_id"],
+            "in_transaction_id": None,
+            "kind": record["kind"],
+            "policy": record["policy"],
+            "deleted_at": record["deleted_at"],
+        }
+        for record in direct_payout_records
+    )
+    proofs = core_ownership_transfers.derive_ownership_review_proofs(
+        rows,
+        index=owned_index or core_ownership.OwnedIndex(),
+        blocked_reasons_by_row_id=blocked_reasons,
+        active_pair_records=active_review_records,
+    )
+    by_reason = {}
+    for proof in proofs:
+        by_reason[proof.reason] = by_reason.get(proof.reason, 0) + 1
+    return {"total": len(proofs), "by_reason": dict(sorted(by_reason.items()))}
 
 
 def _unresolved_address_list_overlap_wallets(overlap):
@@ -4744,10 +4791,16 @@ def process_journals(conn, workspace_ref, profile_ref):
             UPDATE profiles
             SET last_processed_at = ?,
                 last_processed_tx_count = ?,
-                last_processed_input_version = journal_input_version
+                last_processed_input_version = journal_input_version,
+                ownership_review_counts_json = ?
             WHERE id = ?
             """,
-            (created_at, tx_count, profile["id"]),
+            (
+                created_at,
+                tx_count,
+                json.dumps(state["ownership_review_counts"], sort_keys=True),
+                profile["id"],
+            ),
         )
     except Exception:
         conn.execute("ROLLBACK TO SAVEPOINT journals_process")

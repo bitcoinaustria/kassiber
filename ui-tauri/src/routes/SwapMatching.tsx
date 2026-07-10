@@ -1201,6 +1201,7 @@ function PairingReview({
   const [cursorIndex, setCursorIndex] = useState(0);
   const [helpOpen, setHelpOpen] = useState(false);
   const [detailCandidate, setDetailCandidate] = useState<SwapCandidate | null>(null);
+  const consumedFocusRef = useRef<string | null>(null);
   const savedViews = savedViewsQuery.data?.data?.views ?? [];
   const rules = rulesQuery.data?.data?.rules ?? [];
   const enabledRuleCount = rules.filter((rule) => rule.enabled).length;
@@ -1282,13 +1283,23 @@ function PairingReview({
   const candidateKey = (c: SwapCandidate) => `${c.out_id}->${c.in_id}`;
 
   useEffect(() => {
-    if (!focusTransactionId || detailCandidate) return;
+    if (!focusTransactionId) {
+      consumedFocusRef.current = null;
+      return;
+    }
+    if (
+      detailCandidate ||
+      consumedFocusRef.current === focusTransactionId
+    ) return;
     const focused = candidates.find(
       (candidate) =>
         candidate.out_id === focusTransactionId ||
         candidate.in_id === focusTransactionId,
     );
-    if (focused) setDetailCandidate(focused);
+    if (focused) {
+      consumedFocusRef.current = focusTransactionId;
+      setDetailCandidate(focused);
+    }
   }, [candidates, detailCandidate, focusTransactionId]);
 
   const canSelectCandidate = useCallback((candidate: SwapCandidate) => {
