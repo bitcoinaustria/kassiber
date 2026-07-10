@@ -37,6 +37,10 @@ from ..projects import (
 from ..secrets.credentials import scan_dotenv_for_secrets
 from ..secrets.prompt import prompt_passphrase, read_passphrase_from_fd
 from ..secrets.sqlcipher import looks_like_plaintext_sqlite
+from ..secrets.unlock_store import (
+    cli_remembered_unlock_enabled,
+    load_remembered_passphrase,
+)
 from .repo import current_context_snapshot
 
 
@@ -154,10 +158,30 @@ def _resolve_db_passphrase(args):
 
 
 def _open_db_with_passphrase(data_root, passphrase, *, allow_prompt):
-    try:
+    if passphrase is not None:
         return open_db(data_root, passphrase=passphrase)
+
+    try:
+        return open_db(data_root)
     except AppError as exc:
-        if exc.code == "passphrase_required" and passphrase is None and allow_prompt:
+        if exc.code != "passphrase_required":
+            raise
+
+        if cli_remembered_unlock_enabled(data_root):
+            remembered = load_remembered_passphrase(data_root)
+            if remembered is not None:
+                try:
+                    return open_db(data_root, passphrase=remembered)
+                except AppError as remembered_error:
+                    if remembered_error.code != "unlock_failed":
+                        raise
+                    sys.stderr.write(
+                        "remembered_unlock_stale: stored passphrase did not unlock "
+                        "this database; run `kassiber secrets remember-unlock` to "
+                        "re-enroll.\n"
+                    )
+
+        if allow_prompt:
             prompted = prompt_passphrase()
             return open_db(data_root, passphrase=prompted)
         raise
