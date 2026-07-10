@@ -1,4 +1,5 @@
 import { useTranslation } from "react-i18next";
+import { currentUiLocale } from "@/lib/localeFormat";
 import { History } from "lucide-react";
 
 import { useAssistantSession } from "@/components/ai/assistantSession";
@@ -19,7 +20,7 @@ interface ChatSessionsListShape {
 function shortDate(value: string): string {
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return value;
-  return parsed.toLocaleDateString(undefined, {
+  return parsed.toLocaleDateString(currentUiLocale(), {
     month: "short",
     day: "numeric",
   });

@@ -35,6 +35,7 @@ import {
 } from "@/components/ui/select";
 import { openExternalUrl } from "@/daemon/transport";
 import { formatFiatAmount } from "@/lib/currency";
+import { formatCount } from "@/lib/localeFormat";
 import { cn } from "@/lib/utils";
 
 import {
@@ -575,7 +576,7 @@ export function Metric({ label, value }: { label: string; value: number }) {
     <div className="rounded-md border px-3 py-2">
       <div className="text-xs text-muted-foreground">{label}</div>
       <div className="mt-1 font-mono text-lg font-semibold tabular-nums">
-        {value.toLocaleString("en-US")}
+        {formatCount(value)}
       </div>
     </div>
   );
@@ -1285,7 +1286,7 @@ export function DisclosureMetric({ label, value }: { label: string; value: numbe
     <div className="rounded-md border bg-background px-3 py-2">
       <div className="text-xs text-muted-foreground">{label}</div>
       <div className="mt-1 font-mono text-lg font-semibold tabular-nums">
-        {value.toLocaleString("en-US")}
+        {formatCount(value)}
       </div>
     </div>
   );

@@ -19,6 +19,11 @@ from typing import Any, Mapping
 from urllib import parse as urlparse
 from urllib import request as urlrequest
 
+from ..asset_codes import (
+    BTC_ASSET_ALIASES,
+    FIAT_CURRENCIES as NORMALIZED_FIAT_CURRENCIES,
+    LBTC_ASSET_ALIASES,
+)
 from ..backends import backend_timeout, backend_value
 from ..errors import AppError
 from ..http_client import request_with_retry
@@ -31,27 +36,10 @@ from . import pricing
 KRAKEN_DEFAULT_URL = "https://api.kraken.com"
 COINBASE_DEFAULT_URL = "https://api.coinbase.com"
 BINANCE_DEFAULT_URL = "https://api.binance.com"
-BTC_ASSETS = {"BTC", "XBT", "XXBT"}
-LBTC_ASSETS = {"LBTC", "L-BTC"}
-FIAT_CURRENCIES = {
-    "AUD",
-    "CAD",
-    "CHF",
-    "EUR",
-    "GBP",
-    "JPY",
-    "USD",
-    "ZUSD",
-    "ZEUR",
-    "ZGBP",
-    "ZJPY",
-    "ZAUD",
-    "ZCAD",
-    "ZCHF",
-}
-NORMALIZED_FIAT_CURRENCIES = {
-    currency[1:] if currency.startswith("Z") and len(currency) == 4 else currency
-    for currency in FIAT_CURRENCIES
+BTC_ASSETS = BTC_ASSET_ALIASES
+LBTC_ASSETS = LBTC_ASSET_ALIASES
+KRAKEN_FIAT_CURRENCIES = NORMALIZED_FIAT_CURRENCIES | {
+    f"Z{currency}" for currency in NORMALIZED_FIAT_CURRENCIES if len(currency) == 3
 }
 
 
@@ -298,7 +286,7 @@ def _kraken_quote_from_pair(pair: str, base_asset: str) -> str | None:
         for prefix in (base, f"X{base}"):
             if normalized.startswith(prefix):
                 return normalized[len(prefix) :]
-    for quote in sorted(FIAT_CURRENCIES, key=len, reverse=True):
+    for quote in sorted(KRAKEN_FIAT_CURRENCIES, key=len, reverse=True):
         if normalized.endswith(quote):
             return quote
     return None

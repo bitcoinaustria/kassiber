@@ -65,6 +65,12 @@ from datetime import date, datetime, timezone
 from decimal import Decimal
 from typing import Any, Mapping
 
+from .asset_codes import (
+    BITCOIN_FAMILY_ASSETS,
+    BTC_ASSET_ALIASES,
+    FIAT_CURRENCIES,
+    canonical_bitcoin_asset,
+)
 from .envelope import json_ready
 from .errors import AppError
 from .msat import dec, msat_to_btc
@@ -969,51 +975,13 @@ def _river_currency(value):
     return _currency_cell(value)
 
 
-_BITCOIN_FAMILY_ASSETS = {"BTC", "XBT", "LBTC"}
-_FIAT_CURRENCIES = {
-    "AED",
-    "ARS",
-    "AUD",
-    "BRL",
-    "CAD",
-    "CHF",
-    "CLP",
-    "CNY",
-    "CZK",
-    "DKK",
-    "EUR",
-    "GBP",
-    "HKD",
-    "HUF",
-    "ILS",
-    "INR",
-    "JPY",
-    "KRW",
-    "MXN",
-    "NOK",
-    "NZD",
-    "PLN",
-    "RON",
-    "SEK",
-    "SGD",
-    "THB",
-    "TRY",
-    "USD",
-    "ZAR",
-}
-
-
 def _bitcoin_family_asset(value):
     asset = _currency_cell(value)
-    if asset == "XBT":
-        return "BTC"
-    if asset in _BITCOIN_FAMILY_ASSETS:
-        return asset
-    return None
+    return canonical_bitcoin_asset(asset)
 
 
 def _is_fiat_currency(value):
-    return _currency_cell(value) in _FIAT_CURRENCIES
+    return _currency_cell(value) in FIAT_CURRENCIES
 
 
 # -- Bull Bitcoin ------------------------------------------------------------
@@ -1029,7 +997,7 @@ _BULLBITCOIN_REQUIRED_COLUMNS = (
     "TRANSACTION_ID",
 )
 
-_BULLBITCOIN_CRYPTO_CURRENCIES = {"BTC", "XBT", "LBTC"}
+_BULLBITCOIN_CRYPTO_CURRENCIES = BITCOIN_FAMILY_ASSETS
 
 
 def _bullbitcoin_completed(record):
@@ -1059,14 +1027,14 @@ def normalize_bullbitcoin_record(record):
     payout_is_crypto = payout_currency in _BULLBITCOIN_CRYPTO_CURRENCIES
     if payin_is_crypto and not payout_is_crypto:
         direction = "outbound"
-        asset = "BTC" if payin_currency == "XBT" else payin_currency
+        asset = canonical_bitcoin_asset(payin_currency)
         amount = abs(payin_amount)
         fiat_value = abs(payout_amount)
         fiat_currency = payout_currency
         kind = "sell"
     elif payout_is_crypto and not payin_is_crypto:
         direction = "inbound"
-        asset = "BTC" if payout_currency == "XBT" else payout_currency
+        asset = canonical_bitcoin_asset(payout_currency)
         amount = abs(payout_amount)
         fiat_value = abs(payin_amount)
         fiat_currency = payin_currency
@@ -1374,7 +1342,7 @@ _COINFINITY_REQUIRED_COLUMNS = (
     "Transaction",
 )
 
-_COINFINITY_CRYPTO_CURRENCIES = {"BTC", "XBT"}
+_COINFINITY_CRYPTO_CURRENCIES = BTC_ASSET_ALIASES
 
 
 def _coinfinity_user_direction(order_type):
@@ -1397,7 +1365,7 @@ def normalize_coinfinity_record(record, index=0):
     currency = _currency_cell(_get_cell(sanitized, "Crypto"))
     if currency not in _COINFINITY_CRYPTO_CURRENCIES:
         return None
-    asset = "BTC" if currency == "XBT" else currency
+    asset = canonical_bitcoin_asset(currency)
     amount = _decimal_cell(_get_cell(sanitized, "Amount Crypto"))
     fiat_amount = _decimal_cell(_get_cell(sanitized, "Amount EUR"))
     fee_fiat = _decimal_cell(_get_cell(sanitized, "Total Fee EUR")) or Decimal("0")
@@ -1500,7 +1468,7 @@ _POCKETBITCOIN_REQUIRED_COLUMNS = (
     "value.amount",
 )
 
-_POCKETBITCOIN_CRYPTO_CURRENCIES = {"BTC", "XBT", "LBTC"}
+_POCKETBITCOIN_CRYPTO_CURRENCIES = BITCOIN_FAMILY_ASSETS
 
 
 def _pocketbitcoin_row_type(record):
@@ -1509,7 +1477,7 @@ def _pocketbitcoin_row_type(record):
 
 def _pocketbitcoin_crypto_asset(currency):
     if currency in _POCKETBITCOIN_CRYPTO_CURRENCIES:
-        return "BTC" if currency == "XBT" else currency
+        return canonical_bitcoin_asset(currency)
     return None
 
 
@@ -1701,12 +1669,12 @@ _TWENTYONEBITCOIN_REQUIRED_COLUMNS = (
     "transaction_type",
 )
 
-_TWENTYONEBITCOIN_CRYPTO_CURRENCIES = {"BTC", "XBT", "LBTC"}
+_TWENTYONEBITCOIN_CRYPTO_CURRENCIES = {"BTC", "LBTC"}
 
 
 def _twentyonebitcoin_asset(value):
     asset = _currency_cell(value)
-    return "BTC" if asset == "XBT" else asset
+    return canonical_bitcoin_asset(asset) or asset
 
 
 def _twentyonebitcoin_datetime(value):
@@ -1908,12 +1876,12 @@ def _strike_fiat_currency(record):
         if "(" in label and ")" in label and label_key.startswith(("amount", "fee", "cost basis")):
             candidate = label.rsplit("(", 1)[1].split(")", 1)[0]
             currency = _currency_cell(candidate)
-            if currency and currency not in {"BTC", "XBT", "LBTC"}:
+            if currency and currency not in BITCOIN_FAMILY_ASSETS:
                 return currency
         parts = label.split()
         if len(parts) >= 2 and parts[0].casefold() in {"amount", "fee"}:
             currency = _currency_cell(parts[-1])
-            if currency and currency not in {"BTC", "XBT", "LBTC"}:
+            if currency and currency not in BITCOIN_FAMILY_ASSETS:
                 return currency
     return None
 
@@ -2267,8 +2235,8 @@ def normalize_binance_supplemental_autoinvest_record(record, index=0):
     fee_amount, fee_asset = _binance_supplemental_fee(
         _get_cell(sanitized, "trading fee (in quote asset)", "Trading Fee")
     )
-    if base_asset is None and parsed_base_asset in _BITCOIN_FAMILY_ASSETS:
-        base_asset = "BTC" if parsed_base_asset == "XBT" else parsed_base_asset
+    if base_asset is None and parsed_base_asset in BITCOIN_FAMILY_ASSETS:
+        base_asset = canonical_bitcoin_asset(parsed_base_asset)
     if base_asset is None:
         return None
     if base_amount is None or quote_amount is None:
@@ -2452,14 +2420,14 @@ def exchange_evidence_rows_key(input_format):
 
 
 def _river_fiat_amount(value, currency):
-    if not currency or currency in {"BTC", "XBT"}:
+    if not currency or currency in BTC_ASSET_ALIASES:
         return None
     amount = _river_decimal(value)
     return abs(amount) if amount is not None else None
 
 
 def _river_btc_amount(value, currency):
-    if currency not in {"BTC", "XBT"}:
+    if currency not in BTC_ASSET_ALIASES:
         return None
     amount = _river_decimal(value)
     return abs(amount) if amount is not None else None
@@ -2582,8 +2550,12 @@ def load_river_csv_records(file_path):
         rows = list(csv.DictReader(handle))
     if not rows:
         return []
-    header = {str(column).strip().casefold() for column in rows[0].keys()}
-    missing = [column for column in _RIVER_REQUIRED_COLUMNS if column.casefold() not in header]
+    header = {_normalized_column_key(column) for column in rows[0].keys()}
+    missing = [
+        column
+        for column in _RIVER_REQUIRED_COLUMNS
+        if _normalized_column_key(column) not in header
+    ]
     if missing:
         raise AppError("River CSV is missing required columns: " + ", ".join(missing))
     normalized = []
@@ -2631,7 +2603,7 @@ GENERIC_LEDGER_COLUMNS = (
 # leg. Anything else in an asset cell is treated as a fiat/cash currency (the
 # pricing leg). `SATS`/`SAT` mark an amount denominated in whole satoshis.
 _GENERIC_LEDGER_SATS_ASSETS = {"SATS", "SAT"}
-_GENERIC_LEDGER_CRYPTO_ASSETS = {"BTC", "XBT", "LBTC"} | _GENERIC_LEDGER_SATS_ASSETS
+_GENERIC_LEDGER_CRYPTO_ASSETS = BITCOIN_FAMILY_ASSETS | _GENERIC_LEDGER_SATS_ASSETS
 
 # Type -> (direction, kind). `kind` is None for a plain acquisition/disposal.
 # Every kind here is one the tax engine recognizes (see core/engines/rp2.py):
@@ -2692,11 +2664,9 @@ def _generic_ledger_is_crypto(asset):
 
 def _generic_ledger_canonical_crypto(asset):
     upper = asset.upper() if asset else ""
-    if upper in _GENERIC_LEDGER_SATS_ASSETS or upper == "XBT":
+    if upper in _GENERIC_LEDGER_SATS_ASSETS:
         return "BTC"
-    if upper == "LBTC":
-        return "LBTC"
-    return asset
+    return canonical_bitcoin_asset(upper) or asset
 
 
 def _generic_ledger_btc_amount(amount, asset):

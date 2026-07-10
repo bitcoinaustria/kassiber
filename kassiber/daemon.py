@@ -16,7 +16,6 @@ import threading
 import time
 import traceback
 from dataclasses import dataclass
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Mapping, TextIO
 from urllib import error as urlerror
@@ -201,7 +200,7 @@ from .log_ring import (
     sanitize_exception,
 )
 from .redaction import redact_operational_value, redact_secret_text, redact_secret_value
-from .time_utils import iso_to_unix, timestamp_to_iso
+from .time_utils import iso_to_unix, now_iso, timestamp_to_iso
 from .util import parse_bool, parse_int, str_or_none
 from .daemon_swap_review import (
     SWAP_REVIEW_DEFAULT_LIMIT,
@@ -2755,7 +2754,7 @@ def _select_project_payload(
             require_existing_schema=require_existing_schema,
         )
         try:
-            entry = set_selected_project(entry.id, last_opened_at=_utc_now_iso())
+            entry = set_selected_project(entry.id, last_opened_at=now_iso())
         except Exception:
             target_conn.close()
             raise
@@ -4046,10 +4045,6 @@ def _tool_result_content_for_model(result: dict[str, Any]) -> str:
     return json.dumps(json_ready(redact_tool_arguments(result)), sort_keys=True, separators=(",", ":"))
 
 
-def _utc_now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
-
-
 def _record_ai_tool_usage(
     runtime: AiToolRuntime,
     tool_name: str,
@@ -4170,7 +4165,7 @@ def _ai_answer_provenance(
             if isinstance(raw, str) and raw not in tools_used:
                 tools_used.append(raw)
     return {
-        "generated_at": _utc_now_iso(),
+        "generated_at": now_iso(),
         "provider": provider_snapshot["name"],
         "model": validated["model"],
         "tools_used": tools_used,

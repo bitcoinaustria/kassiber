@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 
 import { CurrencyToggleText } from "@/components/kb/CurrencyToggleText";
 import { formatBtc as formatDisplayBtc, type Currency } from "@/lib/currency";
+import { formatCount } from "@/lib/localeFormat";
 import type { Connection, OverviewSnapshot } from "@/mocks/seed";
 
 import {
@@ -199,7 +200,7 @@ export function WalletsMetricGrid({
         ) : null}
         <WalletsOverviewStat
           label={t("metrics.totalTransactions")}
-          value={totalTransactions.toLocaleString("en-US")}
+          value={formatCount(totalTransactions)}
           detail={t("metrics.totalTransactionsDetail")}
           link={{
             to: "/transactions",
@@ -209,12 +210,12 @@ export function WalletsMetricGrid({
         />
         <WalletsOverviewStat
           label={t("metrics.upToDate")}
-          value={`${syncedCount.toLocaleString("en-US")} / ${connections.length.toLocaleString("en-US")}`}
+          value={`${formatCount(syncedCount)} / ${formatCount(connections.length)}`}
           detail={upToDateDetail}
         />
         <WalletsOverviewStat
           label={t("metrics.needsAttention")}
-          value={errorCount.toLocaleString("en-US")}
+          value={formatCount(errorCount)}
           detail={
             errorCount > 0
               ? t("metrics.needsAttentionFailed")

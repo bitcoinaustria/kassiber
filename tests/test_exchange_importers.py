@@ -15,6 +15,7 @@ from kassiber.errors import AppError
 from kassiber.importers import (
     load_binance_supplemental_csv_records,
     load_ledgerlive_csv_records,
+    load_river_csv_records,
 )
 
 
@@ -158,6 +159,25 @@ class ExchangeImporterTest(unittest.TestCase):
         self.assertEqual(str(record["fiat_value"]), "101.00")
         self.assertEqual(record["pricing_provider"], "Binance")
 
+    def test_river_loader_normalizes_header_whitespace_like_row_parsing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "river.csv"
+            path.write_text(
+                "\n".join(
+                    [
+                        " Date ,Sent\u00a0 Amount,Sent Currency,Received Amount,Received Currency",
+                        "2024-02-01T10:00:00Z,100.00,USD,0.002,BTC",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            records = load_river_csv_records(path)
+
+        self.assertEqual(len(records), 1)
+        self.assertEqual(records[0]["asset"], "BTC")
+        self.assertEqual(str(records[0]["amount"]), "0.002")
+
     def test_kraken_api_normalizer_pairs_btc_trade_with_trade_history(self):
         records = normalize_kraken_records(
             {
@@ -264,6 +284,55 @@ class ExchangeImporterTest(unittest.TestCase):
         self.assertEqual(str(records[0]["fiat_value"]), "450.00")
         self.assertEqual(records[1]["kind"], "deposit")
         self.assertIsNone(records[1]["pricing_source_kind"])
+
+    def test_exchange_api_normalizers_accept_shared_fiat_currency_set(self):
+        binance = normalize_binance_records(
+            {
+                "fiat_payments": [
+                    {
+                        "orderNo": "order-pln",
+                        "status": "Completed",
+                        "cryptoCurrency": "BTC",
+                        "fiatCurrency": "PLN",
+                        "obtainAmount": "0.01",
+                        "sourceAmount": "2000.00",
+                        "createTime": 1700000000000,
+                    }
+                ]
+            }
+        )
+        kraken = normalize_kraken_records(
+            {
+                "result": {
+                    "ledger": {
+                        "L-PLN": {
+                            "refid": "T-PLN",
+                            "time": "1700000000",
+                            "type": "trade",
+                            "asset": "XXBT",
+                            "amount": "0.01",
+                            "fee": "0",
+                        }
+                    }
+                }
+            },
+            {
+                "result": {
+                    "trades": {
+                        "T-PLN": {
+                            "pair": "XXBTZPLN",
+                            "cost": "2000.00",
+                            "fee": "2.00",
+                            "price": "200000.00",
+                        }
+                    }
+                }
+            },
+        )
+
+        self.assertEqual(binance[0]["fiat_currency"], "PLN")
+        self.assertEqual(kraken[0]["asset"], "BTC")
+        self.assertEqual(kraken[0]["fiat_currency"], "PLN")
 
 
 if __name__ == "__main__":

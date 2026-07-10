@@ -21,6 +21,7 @@ import {
   screenShellClassName,
 } from "@/lib/screen-layout";
 import { cn } from "@/lib/utils";
+import { currentUiLocale } from "@/lib/localeFormat";
 
 type EgressAllowlistStatus = "expected" | "unexpected" | "unknown";
 
@@ -570,7 +571,7 @@ function formatBytes(bytes: number) {
 function formatTime(value: string) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleTimeString([], {
+  return date.toLocaleTimeString(currentUiLocale(), {
     hour: "2-digit",
     minute: "2-digit",
     second: "2-digit",

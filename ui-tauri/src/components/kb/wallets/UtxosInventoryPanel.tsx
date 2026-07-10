@@ -54,6 +54,7 @@ import {
   type ExplorerTarget,
 } from "@/lib/explorer";
 import { cn } from "@/lib/utils";
+import { currentUiLocale, formatCount } from "@/lib/localeFormat";
 
 export interface WalletUtxoRow {
   id: string;
@@ -267,7 +268,7 @@ function dateLabel(value: string | null | undefined) {
   if (!value) return null;
   const parsed = Date.parse(value);
   if (!Number.isFinite(parsed)) return value;
-  return new Date(parsed).toLocaleString("en-US", {
+  return new Date(parsed).toLocaleString(currentUiLocale(), {
     dateStyle: "medium",
     timeStyle: "short",
   });
@@ -297,7 +298,10 @@ function rowConfirmations(row: WalletUtxoRow) {
 }
 
 function compareText(left: string, right: string) {
-  return left.localeCompare(right, "en-US", { numeric: true, sensitivity: "base" });
+  return left.localeCompare(right, currentUiLocale(), {
+    numeric: true,
+    sensitivity: "base",
+  });
 }
 
 export function compareUtxos(left: WalletUtxoRow, right: WalletUtxoRow, sort: UtxoSortValue) {
@@ -741,10 +745,10 @@ export function UtxosInventoryPanel({
             <CountBadge>
               {serverTruncated
                 ? t("utxos.countOf", {
-                    returned: returnedCount.toLocaleString("en-US"),
-                    total: totalCount.toLocaleString("en-US"),
+                    returned: formatCount(returnedCount),
+                    total: formatCount(totalCount),
                   })
-                : totalCount.toLocaleString("en-US")}
+                : formatCount(totalCount)}
             </CountBadge>
           </CardTitle>
         </div>
@@ -1009,14 +1013,12 @@ export function UtxosInventoryPanel({
             {visibleRows.length < sortedRows.length || serverTruncated ? (
               <div className="border-t px-4 py-2.5 text-xs text-muted-foreground">
                 {t("utxos.loadedRows", {
-                  loaded: (serverTruncated
-                    ? returnedCount
-                    : visibleRows.length
-                  ).toLocaleString("en-US"),
-                  total: (serverTruncated
-                    ? totalCount
-                    : sortedRows.length
-                  ).toLocaleString("en-US"),
+                  loaded: formatCount(
+                    serverTruncated ? returnedCount : visibleRows.length,
+                  ),
+                  total: formatCount(
+                    serverTruncated ? totalCount : sortedRows.length,
+                  ),
                 })}
               </div>
             ) : null}

@@ -9,6 +9,7 @@ import {
   ToolOutput,
 } from "@/components/ai-elements";
 import type { AiChatToolCall } from "@/daemon/stream";
+import { formatFiatAmount } from "@/lib/currency";
 
 interface ChatToolCallProps {
   toolCall: AiChatToolCall;
@@ -314,8 +315,5 @@ function asRecord(value: unknown): Record<string, unknown> | null {
 }
 
 function formatMoney(value: number): string {
-  return `€${value.toLocaleString("en-US", {
-    maximumFractionDigits: 2,
-    minimumFractionDigits: 2,
-  })}`;
+  return formatFiatAmount(value, "EUR");
 }

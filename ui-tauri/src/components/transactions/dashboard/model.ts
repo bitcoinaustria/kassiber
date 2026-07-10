@@ -1,5 +1,6 @@
 import { type ChartConfig } from "@/components/ui/chart";
 import { type Currency } from "@/lib/currency";
+import { currentUiLocale } from "@/lib/localeFormat";
 import { transactionRecords } from "./demoRecords";
 import { type Tx } from "@/mocks/seed";
 import {
@@ -820,7 +821,7 @@ function startOfIsoWeek(date: Date) {
 }
 
 function monthLabel(date: Date) {
-  return date.toLocaleDateString("en-US", {
+  return date.toLocaleDateString(currentUiLocale(), {
     month: "short",
     year: "2-digit",
   });
@@ -868,7 +869,7 @@ function bucketTransactionDate(
     const week = startOfIsoWeek(date);
     return {
       key: localDateKey(week),
-      label: `Week ${week.toLocaleDateString("en-US", {
+      label: `Week ${week.toLocaleDateString(currentUiLocale(), {
         month: "short",
         day: "numeric",
       })}`,

@@ -58,6 +58,7 @@ import {
   screenShellClassName,
 } from "@/lib/screen-layout";
 import { cn } from "@/lib/utils";
+import { localeForFiat } from "@/lib/currency";
 import type {
   ExitTaxDestination,
   ExitTaxLot,
@@ -105,7 +106,7 @@ export function ExitTax() {
   const ccy = report?.fiatCurrency ?? "EUR";
 
   const fmtMoney = useMemo(() => {
-    const formatter = new Intl.NumberFormat(undefined, {
+    const formatter = new Intl.NumberFormat(localeForFiat(ccy), {
       style: "currency",
       currency: ccy,
       maximumFractionDigits: 2,

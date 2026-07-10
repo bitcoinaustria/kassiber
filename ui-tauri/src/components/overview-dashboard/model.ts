@@ -20,10 +20,12 @@ import {
   formatBtc,
   formatCompactFiatAmount,
   formatFiatAmount,
+  fiatNumberFormatter,
   MISSING_FIAT_LABEL,
   type Currency,
 } from "@/lib/currency";
 import { formatShortDate } from "@/lib/date";
+import { currentUiLocale } from "@/lib/localeFormat";
 import { useUiStore } from "@/store/ui";
 import {
   type OverviewSnapshot,
@@ -302,13 +304,6 @@ export type OverviewReadiness = {
   icon: React.ComponentType<React.SVGProps<SVGSVGElement>>;
   tone: OverviewHealthTone;
 };
-
-export const currencyFormatter = new Intl.NumberFormat("en-US", {
-  style: "currency",
-  currency: "EUR",
-});
-
-export const numberFormatter = new Intl.NumberFormat("en-US");
 
 export const blurClass = (hidden: boolean) => (hidden ? "sensitive" : "");
 
@@ -1542,7 +1537,7 @@ export function rawTreasuryBrushRange(
 export function formatTreasuryTick(value: string) {
   const parsed = parseIsoDayDate(value);
   if (!parsed) return value;
-  return parsed.toLocaleDateString("en-US", {
+  return parsed.toLocaleDateString(currentUiLocale(), {
     month: "short",
     year: "2-digit",
     timeZone: "UTC",
@@ -1552,7 +1547,7 @@ export function formatTreasuryTick(value: string) {
 export function formatTreasuryDetailDate(value: string) {
   const parsed = parseIsoDayDate(value);
   if (!parsed) return value;
-  return parsed.toLocaleDateString("en-US", {
+  return parsed.toLocaleDateString(currentUiLocale(), {
     month: "short",
     day: "numeric",
     year: "numeric",
@@ -1561,11 +1556,7 @@ export function formatTreasuryDetailDate(value: string) {
 }
 
 export function formatFiatPrice(value: number, fiatCurrency = "EUR") {
-  const rounded = Math.abs(value) >= 100_000
-    ? Math.round(value).toLocaleString("en-US")
-    : value.toLocaleString("en-US", {
-    maximumFractionDigits: 0,
-  });
+  const rounded = fiatNumberFormatter(fiatCurrency).format(Math.round(value));
   return `${rounded} ${fiatCurrency}`;
 }
 
@@ -2163,20 +2154,20 @@ export function formatPortfolioTick(
 ) {
   const date = parseSeriesDate(value);
   if (period === "5years") {
-    return date.toLocaleDateString("en-US", {
+    return date.toLocaleDateString(currentUiLocale(), {
       month: "short",
       year: "2-digit",
       timeZone: "UTC",
     });
   }
   if (period === "30days" || period === "3months") {
-    return date.toLocaleDateString("en-US", {
+    return date.toLocaleDateString(currentUiLocale(), {
       month: "short",
       day: "numeric",
       timeZone: "UTC",
     });
   }
-  return date.toLocaleDateString("en-US", {
+  return date.toLocaleDateString(currentUiLocale(), {
     month: "short",
     year: "2-digit",
     timeZone: "UTC",
@@ -2227,7 +2218,7 @@ export function portfolioAxisTicks(
 
 export function formatPortfolioDetailLabel(value: string) {
   const date = parseSeriesDate(value);
-  return date.toLocaleDateString("en-US", {
+  return date.toLocaleDateString(currentUiLocale(), {
     month: "short",
     day: "numeric",
     year: "numeric",

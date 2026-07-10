@@ -1,6 +1,7 @@
 import { RefreshCw, X } from "lucide-react";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
+import { formatCount } from "@/lib/localeFormat";
 
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -209,8 +210,8 @@ export function ChartControlsSheet({
               <div className="mt-2 flex flex-wrap items-center gap-2">
                 <span className="text-[10px] text-muted-foreground">
                   {t("controls.dotsVisible", {
-                    visible: visibleMarkerCount.toLocaleString("en-US"),
-                    total: markerCount.toLocaleString("en-US"),
+                    visible: formatCount(visibleMarkerCount),
+                    total: formatCount(markerCount),
                   })}
                 </span>
               </div>
@@ -341,8 +342,8 @@ export function ChartControlsSheet({
                   </p>
                   <p className="mt-1 text-xs text-muted-foreground">
                     {t("controls.minSizeWithCount", {
-                      visible: visibleIncomingMarkerCount.toLocaleString("en-US"),
-                      total: incomingMarkerCount.toLocaleString("en-US"),
+                      visible: formatCount(visibleIncomingMarkerCount),
+                      total: formatCount(incomingMarkerCount),
                     })}
                   </p>
                 </div>
@@ -386,8 +387,8 @@ export function ChartControlsSheet({
                   </p>
                   <p className="mt-1 text-xs text-muted-foreground">
                     {t("controls.minSizeWithCount", {
-                      visible: visibleOutgoingMarkerCount.toLocaleString("en-US"),
-                      total: outgoingMarkerCount.toLocaleString("en-US"),
+                      visible: formatCount(visibleOutgoingMarkerCount),
+                      total: formatCount(outgoingMarkerCount),
                     })}
                   </p>
                 </div>

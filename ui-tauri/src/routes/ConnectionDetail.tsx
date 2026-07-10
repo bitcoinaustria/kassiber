@@ -110,6 +110,7 @@ import { transactionBelongsToConnection } from "@/lib/connectionTransactions";
 import { buildBalanceReconciliation } from "@/lib/walletBalanceReconcile";
 import { MISSING_FIAT_LABEL } from "@/lib/currency";
 import { copyTextWithPolicy } from "@/lib/clipboard";
+import { formatCount, formatSats } from "@/lib/localeFormat";
 import {
   startingSyncProgress,
   syncProgressNotification,
@@ -146,9 +147,9 @@ const fmtEur = (value: number | null) =>
         maximumFractionDigits: 2,
       });
 const fmtSatSigned = (amountSat: number) =>
-  `${amountSat >= 0 ? "+ " : "- "}${Math.abs(amountSat).toLocaleString(
-    "en-US",
-  )} sat`;
+  `${amountSat >= 0 ? "+ " : "- "}${formatSats(Math.abs(amountSat), { unit: "sat" })}`;
+const formatOptionalCount = (value: number | null | undefined) =>
+  value === null || value === undefined ? "—" : formatCount(value);
 const fmtEurSigned = (amountEur: number | null) =>
   amountEur === null
     ? MISSING_FIAT_LABEL
@@ -1030,7 +1031,7 @@ function ConnectionDetailView({
       if (gapLimit > MAX_DESCRIPTOR_GAP_LIMIT) {
         setEditError(
           t("detail.edit.errorGapMax", {
-            max: MAX_DESCRIPTOR_GAP_LIMIT.toLocaleString(),
+            max: formatCount(MAX_DESCRIPTOR_GAP_LIMIT),
           }),
         );
         return;
@@ -1376,7 +1377,7 @@ function ConnectionDetailView({
           />
           <WalletOverviewStat
             label={t("detail.metric.transactions")}
-            value={txCount.toLocaleString("en-US")}
+            value={formatCount(txCount)}
             detail={t("detail.metric.transactionsDetail")}
           />
           <WalletOverviewStat
@@ -1392,7 +1393,7 @@ function ConnectionDetailView({
             }
             value={
               hasGapMetric
-                ? connection.gap?.toLocaleString("en-US") ?? "—"
+                ? formatOptionalCount(connection.gap)
                 : sourceValue
             }
             detail={
@@ -1546,9 +1547,9 @@ function ConnectionDetailView({
                 <DetailRow
                   label={t("detail.samourai.gap")}
                   value={
-                    samouraiMetadata.gap_limit?.toLocaleString("en-US") ??
-                    connection.gap?.toLocaleString("en-US") ??
-                    "—"
+                    formatOptionalCount(
+                      samouraiMetadata.gap_limit ?? connection.gap,
+                    )
                   }
                 />
               </>
@@ -1565,7 +1566,7 @@ function ConnectionDetailView({
                 label={t("detail.samourai.minimumMixCount")}
                 value={t("detail.samourai.minimumMixCountValue", {
                   value:
-                    samouraiMetadata.minimum_mix_count.toLocaleString("en-US"),
+                    formatCount(samouraiMetadata.minimum_mix_count),
                   confidence:
                     samouraiMetadata.mix_count_confidence ??
                     t("detail.samourai.minimumConfidence"),
@@ -1576,7 +1577,7 @@ function ConnectionDetailView({
               <DetailRow
                 label={t("detail.samourai.observedMixes")}
                 value={t("detail.samourai.observedMixesValue", {
-                  value: samouraiMetadata.mix_count.toLocaleString("en-US"),
+                  value: formatCount(samouraiMetadata.mix_count),
                   confidence:
                     samouraiMetadata.mix_count_confidence ??
                     t("detail.samourai.importedConfidence"),
@@ -1586,7 +1587,7 @@ function ConnectionDetailView({
             {samouraiMetadata.target_mix_count ? (
               <DetailRow
                 label={t("detail.samourai.targetMixes")}
-                value={samouraiMetadata.target_mix_count.toLocaleString("en-US")}
+                value={formatCount(samouraiMetadata.target_mix_count)}
               />
             ) : null}
             {samouraiMetadata.pool_denomination_sat ? (
@@ -1594,9 +1595,7 @@ function ConnectionDetailView({
                 label={t("detail.samourai.pool")}
                 value={t("detail.samourai.poolValue", {
                   value:
-                    samouraiMetadata.pool_denomination_sat.toLocaleString(
-                      "en-US",
-                    ),
+                    formatCount(samouraiMetadata.pool_denomination_sat),
                 })}
               />
             ) : null}
@@ -1604,11 +1603,10 @@ function ConnectionDetailView({
               <DetailRow
                 label={t("detail.samourai.coins")}
                 value={
-                  samouraiInventory?.freshness.active_count?.toLocaleString(
-                    "en-US",
-                  ) ??
-                  samouraiInventory?.summary?.count?.toLocaleString("en-US") ??
-                  "—"
+                  formatOptionalCount(
+                    samouraiInventory?.freshness.active_count ??
+                      samouraiInventory?.summary?.count,
+                  )
                 }
               />
             ) : null}
@@ -1721,7 +1719,7 @@ function ConnectionDetailView({
               <div className="min-w-0">
                 <CardTitle className="flex items-center gap-2 text-sm sm:text-base">
                   {t("detail.recentTransactions.title")}
-                  <CountBadge>{txCount.toLocaleString("en-US")}</CountBadge>
+                  <CountBadge>{formatCount(txCount)}</CountBadge>
                 </CardTitle>
               </div>
               {txCount > 0 ? (
@@ -1941,7 +1939,7 @@ function ConnectionDetailView({
                     </span>
                     <span className="block text-xs text-muted-foreground">
                       {t("detail.relatedViews.allTransactionsDetail", {
-                        value: txCount.toLocaleString("en-US"),
+                        value: formatCount(txCount),
                       })}
                     </span>
                   </span>

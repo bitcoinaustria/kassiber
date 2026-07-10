@@ -20,6 +20,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useDaemon } from "@/daemon/client";
+import { localeForLanguage } from "@/i18n/config";
+import { formatUiNumber } from "@/lib/localeFormat";
 import { useUiStore } from "@/store/ui";
 
 interface LedgerPreviewRow {
@@ -51,10 +53,6 @@ type GenericLedgerPreviewSource = {
   importable: boolean;
 };
 
-function localeFor(lang: string): string {
-  return lang.startsWith("de") ? "de-AT" : "en-US";
-}
-
 function formatAssetAmount(
   value: string | undefined,
   asset: string | undefined,
@@ -63,9 +61,9 @@ function formatAssetAmount(
   if (!value) return "";
   const num = Number(value);
   return Number.isFinite(num)
-    ? `${num.toLocaleString(localeFor(lang), {
+    ? `${formatUiNumber(num, {
         maximumFractionDigits: 8,
-      })} ${asset ?? "BTC"}`
+      }, lang)} ${asset ?? "BTC"}`
     : value;
 }
 
@@ -74,7 +72,7 @@ function formatDate(iso: string | undefined, lang: string): string {
   const date = new Date(iso);
   return Number.isNaN(date.getTime())
     ? iso
-    : date.toLocaleDateString(localeFor(lang), {
+    : date.toLocaleDateString(localeForLanguage(lang), {
         year: "numeric",
         month: "short",
         day: "numeric",

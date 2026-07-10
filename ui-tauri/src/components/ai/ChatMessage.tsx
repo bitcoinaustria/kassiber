@@ -43,6 +43,11 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { copyTextWithPolicy } from "@/lib/clipboard";
 import {
+  currentUiLocale,
+  formatCount as formatUiCount,
+  formatUiNumber,
+} from "@/lib/localeFormat";
+import {
   visibleThinkingSegments,
   type AiChatMessage,
 } from "@/daemon/stream";
@@ -699,7 +704,7 @@ function asRecord(value: unknown): Record<string, unknown> | null {
 }
 
 function formatCount(value: unknown): string {
-  return Number(value ?? 0).toLocaleString("en-US");
+  return formatUiCount(Number(value ?? 0));
 }
 
 function formatSat(value: unknown): string {
@@ -707,7 +712,7 @@ function formatSat(value: unknown): string {
 }
 
 function formatMoney(value: number): string {
-  return value.toLocaleString("en-US", {
+  return formatUiNumber(value, {
     maximumFractionDigits: 2,
     minimumFractionDigits: 2,
   });
@@ -716,7 +721,7 @@ function formatMoney(value: number): string {
 function shortTime(value: string): string {
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return value;
-  return parsed.toLocaleString(undefined, {
+  return parsed.toLocaleString(currentUiLocale(), {
     month: "short",
     day: "numeric",
     hour: "2-digit",

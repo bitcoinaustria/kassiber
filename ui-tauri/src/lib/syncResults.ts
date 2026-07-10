@@ -102,7 +102,7 @@ export function syncResultDetail(result: SyncResult | undefined): string | null 
 }
 
 function formatNumber(value: number): string {
-  return new Intl.NumberFormat("en-US").format(value);
+  return formatCount(value);
 }
 
 function syncResultObservability(result: SyncResult | undefined): string | null {
@@ -325,3 +325,4 @@ export function describeFreshnessSourceState(source: FreshnessSourceState): stri
   }
   return `${label} is ${source.status}.`;
 }
+import { formatCount } from "@/lib/localeFormat";

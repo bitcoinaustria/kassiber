@@ -9,6 +9,7 @@
  */
 
 import { useUiStore } from "@/store/ui";
+import { formatCount } from "@/lib/localeFormat";
 
 export type Currency = "btc" | "eur";
 
@@ -33,6 +34,7 @@ export function localeForFiat(code: string): string {
 
 const fiatFormatterCache = new Map<string, Intl.NumberFormat>();
 const compactFiatFormatterCache = new Map<string, Intl.NumberFormat>();
+const fiatNumberFormatterCache = new Map<string, Intl.NumberFormat>();
 
 /**
  * Cached locale-aware currency formatter for a fiat code, e.g.
@@ -73,6 +75,17 @@ export function formatCompactFiatAmount(value: number, code: string): string {
     compactFiatFormatterCache.set(key, formatter);
   }
   return formatter.format(value);
+}
+
+/** Format a non-currency count using the home locale of the active fiat. */
+export function fiatNumberFormatter(code: string): Intl.NumberFormat {
+  const key = code.trim().toUpperCase();
+  let formatter = fiatNumberFormatterCache.get(key);
+  if (!formatter) {
+    formatter = new Intl.NumberFormat(localeForFiat(key));
+    fiatNumberFormatterCache.set(key, formatter);
+  }
+  return formatter;
 }
 
 export const useCurrency = () => useUiStore((s) => s.currency);
@@ -129,7 +142,7 @@ export function formatEur(
 export function formatSats(btc: number, opts: FormatSatsOpts = {}): string {
   const { sign = false } = opts;
   const sats = Math.round(btc * 1e8);
-  const abs = Math.abs(sats).toLocaleString("en-US");
+  const abs = formatCount(Math.abs(sats));
   const prefix = sign ? signedPrefix(sats) : "";
   return prefix + abs;
 }

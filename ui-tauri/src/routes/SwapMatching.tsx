@@ -113,6 +113,11 @@ import {
   screenShellClassName,
 } from "@/lib/screen-layout";
 import { cn } from "@/lib/utils";
+import {
+  currentUiLocale,
+  formatCount,
+  formatSats as formatLocaleSats,
+} from "@/lib/localeFormat";
 import { useUiStore } from "@/store/ui";
 
 const PAIR_KIND_OPTIONS = [
@@ -255,7 +260,7 @@ function formatBtc(value: number) {
 }
 
 function formatSats(msat: number) {
-  return `${Math.round(msat / 1000).toLocaleString()} sats`;
+  return formatLocaleSats(Math.round(msat / 1000));
 }
 
 function formatTimestamp(value: string) {
@@ -264,7 +269,7 @@ function formatTimestamp(value: string) {
   if (Number.isNaN(date.getTime())) {
     return value;
   }
-  return new Intl.DateTimeFormat(undefined, {
+  return new Intl.DateTimeFormat(currentUiLocale(), {
     dateStyle: "short",
     timeStyle: "short",
   }).format(date);
@@ -2236,7 +2241,7 @@ function SwapQueueMetric({
         {label}
       </p>
       <p className={cn("text-xl font-semibold tabular-nums", active ? "text-primary" : toneClass)}>
-        {value.toLocaleString("en-US")}
+        {formatCount(value)}
       </p>
     </>
   );

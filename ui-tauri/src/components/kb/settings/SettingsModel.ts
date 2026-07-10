@@ -668,12 +668,8 @@ export function backendPayload(backend: Backend): Record<string, unknown> {
 
 export const brandLogoFrame =
   "border-neutral-200 bg-white text-neutral-950 dark:border-neutral-700 dark:bg-white dark:text-neutral-950";
-export const compactNumberFormatter = new Intl.NumberFormat(undefined, {
-  maximumFractionDigits: 0,
-});
-
 export function formatCount(value: number): string {
-  return compactNumberFormatter.format(value);
+  return formatUiCount(value);
 }
 
 export function formatKrakenRange(row: KrakenRatesImportSummaryRow): string {
@@ -820,3 +816,4 @@ export function endpointHostLabel(endpoint: string): string {
     return endpoint;
   }
 }
+import { formatCount as formatUiCount } from "@/lib/localeFormat";
