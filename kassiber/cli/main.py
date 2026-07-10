@@ -2638,7 +2638,8 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
             retryable=False,
         )
     if args.command == "secrets":
-        return emit(args, dispatch_secrets(args))
+        response = dispatch_secrets(args)
+        return emit(args, response["data"])
     if args.command == "backup":
         return emit(args, dispatch_backup(args))
     if args.command == "backends":

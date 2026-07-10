@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
+import sys
 
 from ..backends import resolve_effective_env_file
 from ..db import (
@@ -41,6 +42,12 @@ from .sqlcipher import (
     open_encrypted,
     require_sqlcipher,
     sqlcipher_available,
+)
+from .unlock_store import (
+    delete_remembered_passphrase,
+    remembered_unlock_status,
+    set_cli_remembered_unlock_enabled,
+    store_remembered_passphrase,
 )
 
 
@@ -101,6 +108,7 @@ def cmd_secrets_status(args: argparse.Namespace) -> dict:
     plaintext_secrets = scan_dotenv_for_secrets(env_file)
     classification["dotenv_path"] = str(env_file)
     classification["dotenv_plaintext_secrets"] = plaintext_secrets
+    classification["remembered_unlock"] = remembered_unlock_status(args.data_root)
     if classification["encrypted"] and plaintext_secrets:
         classification["dotenv_warning"] = (
             "Encrypted database is in use but the bootstrap dotenv still "
@@ -208,8 +216,119 @@ def cmd_secrets_change_passphrase(args: argparse.Namespace) -> dict:
     )
     _enforce_min_length(new_passphrase)
 
+    remembered_before = remembered_unlock_status(args.data_root)
     result = change_database_passphrase(db_path, current, new_passphrase)
+    remembered_warning = None
+    if remembered_before["configured"] or remembered_before["cli_enabled"]:
+        if not store_remembered_passphrase(args.data_root, new_passphrase):
+            deleted = delete_remembered_passphrase(args.data_root)
+            marker_cleared = True
+            try:
+                set_cli_remembered_unlock_enabled(args.data_root, False)
+            except OSError:
+                marker_cleared = False
+            remembered_warning = {
+                "code": "remembered_unlock_update_failed",
+                "message": (
+                    "The database passphrase changed, but the remembered copy "
+                    "could not be updated and was disabled."
+                ),
+                "credential_deleted": deleted,
+                "cli_marker_cleared": marker_cleared,
+            }
+            sys.stderr.write(
+                "warning: remembered_unlock_update_failed: the database "
+                "passphrase changed, but the OS credential-store copy could not "
+                "be updated; re-enroll with `kassiber secrets remember-unlock`.\n"
+            )
+    result["remembered_unlock"] = remembered_unlock_status(args.data_root)
+    if remembered_warning is not None:
+        result["remembered_unlock_warning"] = remembered_warning
     return build_envelope("secrets.change_passphrase", result)
+
+
+def cmd_secrets_remember_unlock(args: argparse.Namespace) -> dict:
+    require_sqlcipher()
+    db_path = _resolve_db_path(args)
+    classification = _classify(db_path)
+    if not classification["exists"]:
+        raise AppError(
+            "database does not exist; run `kassiber secrets init` first",
+            code="missing_database",
+            details={"database": str(db_path)},
+            retryable=False,
+        )
+    if classification["plaintext"]:
+        raise AppError(
+            "database is plaintext; encrypt it with `kassiber secrets init` first",
+            code="plaintext_database",
+            details={"database": str(db_path)},
+            retryable=False,
+        )
+
+    passphrase = _resolve_passphrase(
+        args,
+        "passphrase_fd",
+        label="Database passphrase: ",
+        confirm=False,
+    )
+    conn = open_encrypted(db_path, passphrase)
+    conn.close()
+
+    if not store_remembered_passphrase(args.data_root, passphrase):
+        raise AppError(
+            "the OS credential store is unavailable or rejected the passphrase",
+            code="remembered_unlock_unavailable",
+            hint=(
+                "Unlock the platform credential store and retry, or keep using "
+                "--db-passphrase-fd. Kassiber will not use a plaintext fallback."
+            ),
+            details=remembered_unlock_status(args.data_root),
+            retryable=True,
+        )
+    try:
+        set_cli_remembered_unlock_enabled(args.data_root, True)
+    except OSError as exc:
+        raise AppError(
+            "the passphrase was stored, but the CLI opt-in marker could not be written",
+            code="remembered_unlock_settings_failed",
+            hint="Fix permissions on the managed config directory and retry enrollment.",
+            details={"settings_error": str(exc)},
+            retryable=True,
+        ) from None
+
+    return build_envelope(
+        "secrets.remember_unlock",
+        {
+            "database": str(db_path),
+            "remembered_unlock": remembered_unlock_status(args.data_root),
+        },
+    )
+
+
+def cmd_secrets_forget_unlock(args: argparse.Namespace) -> dict:
+    try:
+        set_cli_remembered_unlock_enabled(args.data_root, False)
+    except OSError as exc:
+        raise AppError(
+            "the CLI remembered-unlock marker could not be cleared",
+            code="remembered_unlock_settings_failed",
+            hint="Fix permissions on the managed config directory and retry.",
+            details={"settings_error": str(exc)},
+            retryable=True,
+        ) from None
+
+    deleted = delete_remembered_passphrase(args.data_root)
+    result = {
+        "credential_deleted": deleted,
+        "remembered_unlock": remembered_unlock_status(args.data_root),
+    }
+    if not deleted:
+        result["warning"] = (
+            "The CLI opt-in marker was cleared, but the OS credential could not "
+            "be deleted. Remove it in the platform credential manager."
+        )
+    return build_envelope("secrets.forget_unlock", result)
 
 
 def cmd_secrets_verify(args: argparse.Namespace) -> dict:
@@ -369,6 +488,24 @@ def add_secrets_parser(subparsers) -> argparse.ArgumentParser:
         help="Read the new passphrase from this open file descriptor",
     )
 
+    remember = secrets_sub.add_parser(
+        "remember-unlock",
+        help="Verify and store the database passphrase in the OS credential store",
+    )
+    remember.add_argument(
+        "--passphrase-fd",
+        type=int,
+        default=None,
+        metavar="FD",
+        help="Read the passphrase from this open file descriptor",
+    )
+
+    forget = secrets_sub.add_parser(
+        "forget-unlock",
+        help="Disable CLI remembered unlock and delete the OS credential",
+    )
+    _ = forget
+
     verify = secrets_sub.add_parser(
         "verify",
         help="Open the encrypted database and run integrity checks",
@@ -410,6 +547,10 @@ def dispatch_secrets(args: argparse.Namespace) -> dict:
         return cmd_secrets_init_resume(args)
     if sub == "change-passphrase":
         return cmd_secrets_change_passphrase(args)
+    if sub == "remember-unlock":
+        return cmd_secrets_remember_unlock(args)
+    if sub == "forget-unlock":
+        return cmd_secrets_forget_unlock(args)
     if sub == "verify":
         return cmd_secrets_verify(args)
     if sub == "status":

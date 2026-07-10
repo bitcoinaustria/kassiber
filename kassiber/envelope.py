@@ -76,6 +76,7 @@ _KIND_SUBCOMMAND_ATTRS = (
     "transfers_rules_command",
     "views_command",
     "chats_command",
+    "secrets_command",
     "btcpay_command",
     "btcpay_provenance_command",
     "documents_command",
