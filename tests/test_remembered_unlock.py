@@ -18,8 +18,10 @@ from keyring.errors import PasswordDeleteError
 
 from kassiber.cli.main import main
 from kassiber.secrets.unlock_store import (
+    CLI_REMEMBERED_PASSPHRASE_SERVICE,
     CLI_REMEMBERED_UNLOCK_SETTING,
-    TOUCH_ID_PASSPHRASE_SERVICE,
+    DESKTOP_BIOMETRIC_STALE_MARKER_SERVICE,
+    LEGACY_SHARED_PASSPHRASE_SERVICE,
     delete_remembered_passphrase,
     load_remembered_passphrase,
     remembered_unlock_account,
@@ -131,7 +133,7 @@ class RememberedUnlockStoreTests(unittest.TestCase):
             data_root = Path(root) / "data"
             data_root.mkdir()
             self.assertTrue(store_remembered_passphrase(data_root, "correct horse"))
-            self.assertEqual(load_remembered_passphrase(data_root), "correct horse")
+            self.assertIsNone(load_remembered_passphrase(data_root))
             self.assertEqual(
                 remembered_unlock_status(data_root),
                 {
@@ -143,6 +145,7 @@ class RememberedUnlockStoreTests(unittest.TestCase):
             )
 
             set_cli_remembered_unlock_enabled(data_root, True)
+            self.assertEqual(load_remembered_passphrase(data_root), "correct horse")
             status = remembered_unlock_status(data_root)
             self.assertTrue(status["cli_enabled"])
             self.assertTrue(status["configured"])
@@ -165,14 +168,67 @@ class RememberedUnlockStoreTests(unittest.TestCase):
         )
         lib_source = (ROOT / "ui-tauri/src-tauri/src/lib.rs").read_text(encoding="utf-8")
         self.assertIn(
-            'TOUCH_ID_PASSPHRASE_SERVICE: &str = "Kassiber Database Passphrase"',
+            'LEGACY_SHARED_PASSPHRASE_SERVICE: &str = "Kassiber Database Passphrase"',
+            secret_store_source,
+        )
+        self.assertIn(
+            'CLI_REMEMBERED_PASSPHRASE_SERVICE: &str = "Kassiber CLI Database Passphrase"',
+            secret_store_source,
+        )
+        self.assertIn(
+            '"Kassiber Desktop Biometric Invalidated"',
             secret_store_source,
         )
         self.assertIn(
             "let normalized = std::fs::canonicalize(&selected).unwrap_or(selected);",
             lib_source,
         )
-        self.assertEqual(TOUCH_ID_PASSPHRASE_SERVICE, "Kassiber Database Passphrase")
+        self.assertEqual(
+            LEGACY_SHARED_PASSPHRASE_SERVICE,
+            "Kassiber Database Passphrase",
+        )
+        self.assertEqual(
+            CLI_REMEMBERED_PASSPHRASE_SERVICE,
+            "Kassiber CLI Database Passphrase",
+        )
+
+    def test_enabled_cli_migrates_and_removes_legacy_shared_item(self):
+        with tempfile.TemporaryDirectory() as root:
+            data_root = Path(root) / "data"
+            data_root.mkdir()
+            account = remembered_unlock_account(data_root)
+            self.keyring.set_password(
+                LEGACY_SHARED_PASSPHRASE_SERVICE,
+                account,
+                "legacy-passphrase",
+            )
+            set_cli_remembered_unlock_enabled(data_root, True)
+
+            self.assertEqual(load_remembered_passphrase(data_root), "legacy-passphrase")
+            self.assertEqual(
+                self.keyring.get_password(CLI_REMEMBERED_PASSPHRASE_SERVICE, account),
+                "legacy-passphrase",
+            )
+            self.assertIsNone(
+                self.keyring.get_password(LEGACY_SHARED_PASSPHRASE_SERVICE, account)
+            )
+
+    def test_cli_revocation_never_deletes_desktop_biometric_entry(self):
+        with tempfile.TemporaryDirectory() as root:
+            data_root = Path(root) / "data"
+            data_root.mkdir()
+            account = remembered_unlock_account(data_root)
+            desktop_service = "Kassiber Desktop Biometric Passphrase"
+            self.keyring.set_password(desktop_service, account, "desktop-secret")
+            self.assertTrue(store_remembered_passphrase(data_root, "cli-secret"))
+            set_cli_remembered_unlock_enabled(data_root, True)
+
+            self.assertTrue(delete_remembered_passphrase(data_root))
+            set_cli_remembered_unlock_enabled(data_root, False)
+            self.assertEqual(
+                self.keyring.get_password(desktop_service, account),
+                "desktop-secret",
+            )
 
     def test_backend_errors_degrade_without_raising(self):
         with tempfile.TemporaryDirectory() as root:
@@ -242,7 +298,7 @@ class RememberedUnlockCliTests(unittest.TestCase):
 
             # Desktop enrollment alone must not opt the CLI into credential reads.
             self.keyring.set_password(
-                TOUCH_ID_PASSPHRASE_SERVICE,
+                LEGACY_SHARED_PASSPHRASE_SERVICE,
                 remembered_unlock_account(data_root),
                 old_passphrase,
             )
@@ -305,12 +361,20 @@ class RememberedUnlockCliTests(unittest.TestCase):
             self.assertEqual(returncode, 0)
             self.assertEqual(payload["kind"], "secrets.change-passphrase")
             self.assertEqual(load_remembered_passphrase(data_root), new_passphrase)
+            if PLATFORM_NAME == "macos":
+                self.assertEqual(
+                    self.keyring.get_password(
+                        DESKTOP_BIOMETRIC_STALE_MARKER_SERVICE,
+                        remembered_unlock_account(data_root),
+                    ),
+                    "1",
+                )
 
             payload, returncode, _stderr = _run_cli(data_root, "status")
             self.assertEqual(returncode, 0)
 
             self.keyring.set_password(
-                TOUCH_ID_PASSPHRASE_SERVICE,
+                CLI_REMEMBERED_PASSPHRASE_SERVICE,
                 remembered_unlock_account(data_root),
                 "stale-passphrase",
             )
@@ -344,6 +408,13 @@ class RememberedUnlockCliTests(unittest.TestCase):
             self.assertEqual(payload["kind"], "secrets.forget-unlock")
             self.assertTrue(payload["data"]["cli_marker_cleared"])
             self.assertFalse(payload["data"]["remembered_unlock"]["cli_enabled"])
+            self.assertEqual(
+                self.keyring.get_password(
+                    LEGACY_SHARED_PASSPHRASE_SERVICE,
+                    remembered_unlock_account(data_root),
+                ),
+                old_passphrase,
+            )
 
             payload, returncode, _stderr = _run_cli(data_root, "status")
             self.assertEqual(returncode, 1)

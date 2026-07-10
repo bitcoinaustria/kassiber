@@ -53,9 +53,10 @@ kassiber secrets forget-unlock
 ```
 
 Enrollment verifies the encrypted database before storing anything. The CLI
-uses the item only after setting `cli_remembered_unlock: true` in managed
-`config/settings.json`; desktop-only Touch ID enrollment leaves the marker
-unset, and `secrets status` does not read that desktop-only item. Kassiber
+uses its own per-data-root credential entry only after setting
+`cli_remembered_unlock: true` in managed `config/settings.json`; desktop Touch ID
+uses a separate entry and lifecycle. `secrets status` never reads the desktop
+entry. Kassiber
 accepts only the native keyring backend for macOS, Windows, or Linux Secret
 Service; configured third-party/file backends are treated as unavailable. CLI
 reads are not biometric-gated. If the stored copy is stale, Kassiber
@@ -63,6 +64,12 @@ writes `remembered_unlock_stale` to stderr and falls through to the existing
 prompt or `passphrase_required` behavior. Headless systems should keep using
 `--db-passphrase-fd`. `kassiber secrets status` reports `platform`, `available`,
 `configured`, and `cli_enabled` under `remembered_unlock`.
+
+Upgrades from the former shared entry are marker-driven: an enabled CLI marker
+lets the CLI migrate `Kassiber Database Passphrase` to its CLI-only service;
+without the marker the desktop owns migration. Desktop Settings can forget only
+Touch ID or remove all saved unlock methods, including both current entries and
+any legacy shared item.
 
 `--machine` implies `--non-interactive`, so passphrase-requiring commands need
 their documented fd/identity/recipient input and return `interaction_required`
@@ -112,8 +119,10 @@ kassiber secrets change-passphrase --db-passphrase-fd 3 --new-passphrase-fd 4 \
 
 Rotation runs `PRAGMA rekey` and then re-opens the file with the new
 passphrase to verify. The old passphrase will not unlock the file after this
-returns successfully. Any enrolled OS-store copy is updated; if that update is
-rejected, Kassiber disables CLI remembered unlock and warns on stderr.
+returns successfully. CLI rotation and desktop rotation both refresh the
+CLI-only remembered copy. Desktop rotation also refreshes its biometric copy;
+CLI rotation marks that copy invalid so the desktop requires re-enrollment.
+If an update is rejected, that enrollment is disabled rather than left stale.
 
 ## What stays plaintext on disk
 

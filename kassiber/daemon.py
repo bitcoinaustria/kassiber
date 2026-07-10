@@ -231,6 +231,13 @@ from .secrets.credentials import migrate_dotenv_credentials
 from .secrets.migration import create_empty_encrypted_database, migrate_plaintext_to_encrypted
 from .secrets.passphrase import change_database_passphrase
 from .secrets.sqlcipher import open_encrypted, require_sqlcipher, sqlcipher_available
+from .secrets.unlock_store import (
+    delete_legacy_shared_passphrase,
+    delete_remembered_passphrase,
+    refresh_remembered_passphrase_after_rotation,
+    remembered_unlock_status,
+    set_cli_remembered_unlock_enabled,
+)
 from .sync_btcpay import (
     discover_btcpay_wallet_sources,
     probe_btcpay_wallet,
@@ -426,6 +433,7 @@ SUPPORTED_KINDS = (
     "ui.projects.select",
     "ui.secrets.init",
     "ui.secrets.change_passphrase",
+    "ui.secrets.forget_cli_unlock",
     "ui.next_actions",
     "ui.review.badges",
     "ui.wallets.create",
@@ -10266,6 +10274,31 @@ def handle_request(
             False,
         )
 
+    if kind == "ui.secrets.forget_cli_unlock":
+        try:
+            set_cli_remembered_unlock_enabled(ctx.data_root, False)
+        except OSError as exc:
+            raise AppError(
+                "the CLI remembered-unlock marker could not be cleared",
+                code="remembered_unlock_settings_failed",
+                hint="Fix permissions on the managed config directory and retry.",
+                details={"settings_error": str(exc)},
+                retryable=True,
+            ) from None
+        result = {
+            "cli_marker_cleared": True,
+            "cli_credential_deleted": delete_remembered_passphrase(ctx.data_root),
+            "legacy_credential_deleted": delete_legacy_shared_passphrase(ctx.data_root),
+            "remembered_unlock": remembered_unlock_status(ctx.data_root),
+        }
+        return (
+            _with_request_id(
+                build_envelope("ui.secrets.forget_cli_unlock", result),
+                request_id,
+            ),
+            False,
+        )
+
     if kind == "ui.secrets.change_passphrase":
         args = _coerce_args_dict(request_id, request.get("args"))
         auth = args.get("auth_response")
@@ -10312,6 +10345,12 @@ def handle_request(
             _clear_unlocked_passphrase(ctx)
         db_path = resolve_database_path(resolve_effective_data_root(ctx.data_root))
         result = change_database_passphrase(db_path, current, new_passphrase)
+        remembered_warning = refresh_remembered_passphrase_after_rotation(
+            ctx.data_root,
+            new_passphrase,
+        )
+        if remembered_warning is not None:
+            result["remembered_unlock_warning"] = remembered_warning
         _open_daemon_connection(ctx, passphrase=new_passphrase)
         return (
             _with_request_id(

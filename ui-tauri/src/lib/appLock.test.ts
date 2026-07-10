@@ -4,6 +4,7 @@ import {
   lockScreenConfig,
   shouldAutoPromptTouchId,
   shouldLockEncryptedWorkspaceOnLaunch,
+  shouldRefreshTouchIdPassphrase,
   shouldStoreTouchIdPassphrase,
   shouldUseDaemonUnlock,
 } from "./appLock";
@@ -121,6 +122,27 @@ describe("app lock decisions", () => {
       shouldStoreTouchIdPassphrase({
         platformSupported: true,
         rememberWithTouchId: false,
+        touchIdStatusConfigured: true,
+      }),
+    ).toBe(false);
+  });
+
+  it("refreshes every enrolled desktop credential even when lock-screen offering is disabled", () => {
+    expect(
+      shouldRefreshTouchIdPassphrase({
+        platformSupported: true,
+        touchIdStatusConfigured: true,
+      }),
+    ).toBe(true);
+    expect(
+      shouldRefreshTouchIdPassphrase({
+        platformSupported: true,
+        touchIdStatusConfigured: false,
+      }),
+    ).toBe(false);
+    expect(
+      shouldRefreshTouchIdPassphrase({
+        platformSupported: false,
         touchIdStatusConfigured: true,
       }),
     ).toBe(false);

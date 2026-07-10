@@ -232,13 +232,41 @@ pub const STORE_ID_MACOS_KEYCHAIN: &str = "macos_keychain";
 pub const STORE_ID_WINDOWS_DPAPI: &str = "windows_dpapi";
 pub const STORE_ID_LINUX_SECRET_SERVICE: &str = "linux_secret_service";
 pub const STORE_ID_SQLCIPHER_INLINE: &str = "sqlcipher_inline";
-pub const TOUCH_ID_PASSPHRASE_SERVICE: &str = "Kassiber Database Passphrase";
+pub const LEGACY_SHARED_PASSPHRASE_SERVICE: &str = "Kassiber Database Passphrase";
+pub const CLI_REMEMBERED_PASSPHRASE_SERVICE: &str = "Kassiber CLI Database Passphrase";
+pub const DESKTOP_BIOMETRIC_PASSPHRASE_SERVICE: &str = "Kassiber Desktop Biometric Passphrase";
+pub const DESKTOP_BIOMETRIC_STALE_MARKER_SERVICE: &str = "Kassiber Desktop Biometric Invalidated";
+const DESKTOP_BIOMETRY_CURRENT_SET_MARKER_SERVICE: &str =
+    "Kassiber Desktop Biometric Enrollment (Current Set)";
+const DESKTOP_APPLICATION_GATE_MARKER_SERVICE: &str =
+    "Kassiber Desktop Biometric Enrollment (Application Gate)";
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TouchIdProtection {
+    BiometryCurrentSet,
+    ApplicationLocalAuthentication,
+    LegacyShared,
+}
+
+impl TouchIdProtection {
+    fn marker_service(self) -> Option<&'static str> {
+        match self {
+            Self::BiometryCurrentSet => Some(DESKTOP_BIOMETRY_CURRENT_SET_MARKER_SERVICE),
+            Self::ApplicationLocalAuthentication => Some(DESKTOP_APPLICATION_GATE_MARKER_SERVICE),
+            Self::LegacyShared => None,
+        }
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct TouchIdPassphraseStatus {
     pub platform: SecretStorePlatform,
     pub available: bool,
     pub configured: bool,
+    pub stale: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub protection: Option<TouchIdProtection>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reason: Option<String>,
 }
@@ -453,13 +481,18 @@ pub fn secret_store_policy_status() -> serde_json::Value {
     })
 }
 
-pub fn touch_id_passphrase_status(account: &str) -> TouchIdPassphraseStatus {
+pub fn touch_id_passphrase_status(
+    account: &str,
+    cli_remembered_unlock_enabled: bool,
+) -> TouchIdPassphraseStatus {
     let platform = current_secret_store_platform();
     if !cfg!(target_os = "macos") {
         return TouchIdPassphraseStatus {
             platform,
             available: false,
             configured: false,
+            stale: false,
+            protection: None,
             reason: Some(
                 "Touch ID passphrase unlock is only available in the macOS desktop app."
                     .to_string(),
@@ -468,17 +501,40 @@ pub fn touch_id_passphrase_status(account: &str) -> TouchIdPassphraseStatus {
     }
 
     match touch_id_biometrics_available() {
-        Ok(()) => match touch_id_passphrase_exists(account) {
-            Ok(configured) => TouchIdPassphraseStatus {
+        Ok(()) => match desktop_biometric_passphrase_is_stale(account) {
+            Ok(true) => TouchIdPassphraseStatus {
                 platform,
                 available: true,
-                configured,
+                configured: false,
+                stale: true,
+                protection: None,
                 reason: None,
+            },
+            Ok(false) => match desktop_biometric_enrollment(account, cli_remembered_unlock_enabled)
+            {
+                Ok(protection) => TouchIdPassphraseStatus {
+                    platform,
+                    available: true,
+                    configured: protection.is_some(),
+                    stale: false,
+                    protection,
+                    reason: None,
+                },
+                Err(reason) => TouchIdPassphraseStatus {
+                    platform,
+                    available: true,
+                    configured: false,
+                    stale: false,
+                    protection: None,
+                    reason: Some(reason),
+                },
             },
             Err(reason) => TouchIdPassphraseStatus {
                 platform,
                 available: true,
                 configured: false,
+                stale: false,
+                protection: None,
                 reason: Some(reason),
             },
         },
@@ -486,80 +542,255 @@ pub fn touch_id_passphrase_status(account: &str) -> TouchIdPassphraseStatus {
             platform,
             available: false,
             configured: false,
+            stale: false,
+            protection: None,
             reason: Some(reason),
         },
     }
 }
 
 pub fn touch_id_store_passphrase(account: &str, passphrase: &str) -> Result<(), String> {
+    validate_touch_id_account(account)?;
     if passphrase.is_empty() {
         return Err("database passphrase must not be empty".to_string());
     }
-    touch_id_passphrase_entry(account)?
-        .set_secret(passphrase.as_bytes())
-        .map_err(keyring_error_for_user)
+    touch_id_biometrics_available()?;
+
+    #[cfg(target_os = "macos")]
+    let protection = match store_biometry_current_set_passphrase(account, passphrase.as_bytes()) {
+        Ok(()) => {
+            let _ = NativeSecretStore.delete(DESKTOP_BIOMETRIC_PASSPHRASE_SERVICE, account);
+            TouchIdProtection::BiometryCurrentSet
+        }
+        Err(error) if error.code() == ERR_SEC_MISSING_ENTITLEMENT => {
+            NativeSecretStore.set(
+                DESKTOP_BIOMETRIC_PASSPHRASE_SERVICE,
+                account,
+                passphrase.as_bytes(),
+            )?;
+            TouchIdProtection::ApplicationLocalAuthentication
+        }
+        Err(error) => return Err(security_framework_error_for_user(error)),
+    };
+    #[cfg(not(target_os = "macos"))]
+    let protection = TouchIdProtection::ApplicationLocalAuthentication;
+
+    if let Err(error) = write_desktop_biometric_marker(account, protection) {
+        let _ = delete_desktop_passphrase_for_protection(account, protection);
+        return Err(error);
+    }
+    if let Err(error) = NativeSecretStore.delete(DESKTOP_BIOMETRIC_STALE_MARKER_SERVICE, account) {
+        let _ = delete_desktop_passphrase_for_protection(account, protection);
+        let _ = delete_desktop_biometric_markers(account);
+        return Err(error);
+    }
+    Ok(())
 }
 
-pub fn touch_id_get_passphrase(account: &str) -> Result<Option<String>, String> {
-    if !touch_id_passphrase_exists(account)? {
+pub fn touch_id_get_passphrase(
+    account: &str,
+    cli_remembered_unlock_enabled: bool,
+) -> Result<Option<String>, String> {
+    validate_touch_id_account(account)?;
+    if desktop_biometric_passphrase_is_stale(account)? {
         return Ok(None);
     }
-    authenticate_touch_id_for_passphrase()?;
-    match touch_id_passphrase_entry(account)?.get_secret() {
-        Ok(secret) => String::from_utf8(secret)
-            .map(Some)
-            .map_err(|_| "stored database passphrase is not UTF-8".to_string()),
-        Err(KeyringError::NoEntry) => Ok(None),
-        Err(error) => Err(keyring_error_for_user(error)),
-    }
+    let Some(protection) = desktop_biometric_enrollment(account, cli_remembered_unlock_enabled)?
+    else {
+        return Ok(None);
+    };
+    let secret = read_desktop_passphrase_for_protection(account, protection)?;
+    secret
+        .map(|value| {
+            String::from_utf8(value)
+                .map_err(|_| "stored database passphrase is not UTF-8".to_string())
+        })
+        .transpose()
 }
 
-pub fn touch_id_delete_passphrase(account: &str) -> Result<(), String> {
-    match touch_id_passphrase_entry(account)?.delete_credential() {
-        Ok(()) | Err(KeyringError::NoEntry) => Ok(()),
-        Err(error) => Err(keyring_error_for_user(error)),
+pub fn touch_id_delete_passphrase(
+    account: &str,
+    cli_remembered_unlock_enabled: bool,
+) -> Result<(), String> {
+    validate_touch_id_account(account)?;
+    if let Some(protection) = desktop_biometric_enrollment(account, cli_remembered_unlock_enabled)?
+    {
+        delete_desktop_passphrase_for_protection(account, protection)?;
     }
+    delete_desktop_biometric_markers(account)?;
+    NativeSecretStore.delete(DESKTOP_BIOMETRIC_STALE_MARKER_SERVICE, account)
 }
 
-fn touch_id_passphrase_exists(account: &str) -> Result<bool, String> {
+fn validate_touch_id_account(account: &str) -> Result<(), String> {
     if account.trim().is_empty() {
         return Err("Touch ID account is missing.".to_string());
     }
-    touch_id_passphrase_search(account)
+    Ok(())
+}
+
+fn desktop_biometric_enrollment(
+    account: &str,
+    cli_remembered_unlock_enabled: bool,
+) -> Result<Option<TouchIdProtection>, String> {
+    validate_touch_id_account(account)?;
+    if NativeSecretStore.exists(DESKTOP_BIOMETRY_CURRENT_SET_MARKER_SERVICE, account)? {
+        return Ok(Some(TouchIdProtection::BiometryCurrentSet));
+    }
+    if NativeSecretStore.exists(DESKTOP_APPLICATION_GATE_MARKER_SERVICE, account)? {
+        return Ok(Some(TouchIdProtection::ApplicationLocalAuthentication));
+    }
+    if NativeSecretStore.exists(DESKTOP_BIOMETRIC_PASSPHRASE_SERVICE, account)? {
+        return Ok(Some(TouchIdProtection::ApplicationLocalAuthentication));
+    }
+    if legacy_shared_item_belongs_to_desktop(cli_remembered_unlock_enabled)
+        && NativeSecretStore.exists(LEGACY_SHARED_PASSPHRASE_SERVICE, account)?
+    {
+        return Ok(Some(TouchIdProtection::LegacyShared));
+    }
+    Ok(None)
+}
+
+fn legacy_shared_item_belongs_to_desktop(cli_remembered_unlock_enabled: bool) -> bool {
+    !cli_remembered_unlock_enabled
+}
+
+fn desktop_biometric_passphrase_is_stale(account: &str) -> Result<bool, String> {
+    NativeSecretStore.exists(DESKTOP_BIOMETRIC_STALE_MARKER_SERVICE, account)
+}
+
+fn write_desktop_biometric_marker(
+    account: &str,
+    protection: TouchIdProtection,
+) -> Result<(), String> {
+    delete_desktop_biometric_markers(account)?;
+    let service = protection
+        .marker_service()
+        .ok_or_else(|| "legacy enrollment cannot be written as a current marker".to_string())?;
+    NativeSecretStore.set(service, account, b"1")
+}
+
+fn delete_desktop_biometric_markers(account: &str) -> Result<(), String> {
+    NativeSecretStore.delete(DESKTOP_BIOMETRY_CURRENT_SET_MARKER_SERVICE, account)?;
+    NativeSecretStore.delete(DESKTOP_APPLICATION_GATE_MARKER_SERVICE, account)
+}
+
+fn read_desktop_passphrase_for_protection(
+    account: &str,
+    protection: TouchIdProtection,
+) -> Result<Option<Vec<u8>>, String> {
+    match protection {
+        TouchIdProtection::BiometryCurrentSet => read_biometry_current_set_passphrase(account),
+        TouchIdProtection::ApplicationLocalAuthentication => {
+            authenticate_touch_id_for_passphrase()?;
+            NativeSecretStore.get(DESKTOP_BIOMETRIC_PASSPHRASE_SERVICE, account)
+        }
+        TouchIdProtection::LegacyShared => {
+            authenticate_touch_id_for_passphrase()?;
+            let Some(secret) = NativeSecretStore.get(LEGACY_SHARED_PASSPHRASE_SERVICE, account)?
+            else {
+                return Ok(None);
+            };
+            let decoded = String::from_utf8(secret.clone())
+                .map_err(|_| "stored database passphrase is not UTF-8".to_string())?;
+            touch_id_store_passphrase(account, &decoded)?;
+            NativeSecretStore.delete(LEGACY_SHARED_PASSPHRASE_SERVICE, account)?;
+            Ok(Some(secret))
+        }
+    }
+}
+
+fn delete_desktop_passphrase_for_protection(
+    account: &str,
+    protection: TouchIdProtection,
+) -> Result<(), String> {
+    match protection {
+        TouchIdProtection::BiometryCurrentSet => delete_biometry_current_set_passphrase(account),
+        TouchIdProtection::ApplicationLocalAuthentication => {
+            NativeSecretStore.delete(DESKTOP_BIOMETRIC_PASSPHRASE_SERVICE, account)
+        }
+        TouchIdProtection::LegacyShared => {
+            NativeSecretStore.delete(LEGACY_SHARED_PASSPHRASE_SERVICE, account)
+        }
+    }
 }
 
 #[cfg(target_os = "macos")]
-fn touch_id_passphrase_entry(account: &str) -> Result<Entry, String> {
-    if account.trim().is_empty() {
-        return Err("Touch ID account is missing.".to_string());
+const ERR_SEC_ITEM_NOT_FOUND: i32 = -25_300;
+#[cfg(target_os = "macos")]
+const ERR_SEC_MISSING_ENTITLEMENT: i32 = -34_018;
+
+#[cfg(target_os = "macos")]
+fn protected_password_options(account: &str) -> security_framework::passwords::PasswordOptions {
+    use security_framework::passwords::PasswordOptions;
+
+    let mut options =
+        PasswordOptions::new_generic_password(DESKTOP_BIOMETRIC_PASSPHRASE_SERVICE, account);
+    options.use_protected_keychain();
+    options
+}
+
+#[cfg(target_os = "macos")]
+fn store_biometry_current_set_passphrase(
+    account: &str,
+    passphrase: &[u8],
+) -> Result<(), security_framework::base::Error> {
+    use security_framework::access_control::{ProtectionMode, SecAccessControl};
+    use security_framework::passwords::{set_generic_password_options, AccessControlOptions};
+
+    let mut options = protected_password_options(account);
+    let access_control = SecAccessControl::create_with_protection(
+        Some(ProtectionMode::AccessibleWhenUnlockedThisDeviceOnly),
+        AccessControlOptions::BIOMETRY_CURRENT_SET.bits(),
+    )?;
+    options.set_access_control(access_control);
+    set_generic_password_options(passphrase, options)
+}
+
+#[cfg(target_os = "macos")]
+fn read_biometry_current_set_passphrase(account: &str) -> Result<Option<Vec<u8>>, String> {
+    use security_framework::passwords::generic_password;
+
+    match generic_password(protected_password_options(account)) {
+        Ok(secret) => Ok(Some(secret)),
+        Err(error) if error.code() == ERR_SEC_ITEM_NOT_FOUND => {
+            let _ = delete_desktop_biometric_markers(account);
+            Ok(None)
+        }
+        Err(error) => Err(security_framework_error_for_user(error)),
     }
-    apple_native_keyring_store::keychain::Store::new()
-        .map_err(keyring_error_for_user)?
-        .build(TOUCH_ID_PASSPHRASE_SERVICE, account, None)
-        .map_err(keyring_error_for_user)
 }
 
 #[cfg(not(target_os = "macos"))]
-fn touch_id_passphrase_entry(_account: &str) -> Result<Entry, String> {
+fn read_biometry_current_set_passphrase(_account: &str) -> Result<Option<Vec<u8>>, String> {
     Err("Touch ID passphrase unlock is only available in the macOS desktop app.".to_string())
 }
 
 #[cfg(target_os = "macos")]
-fn touch_id_passphrase_search(account: &str) -> Result<bool, String> {
-    let spec = touch_id_passphrase_search_spec(account);
-    Ok(!apple_native_keyring_store::keychain::Store::new()
-        .map_err(keyring_error_for_user)?
-        .search(&spec)
-        .map_err(keyring_error_for_user)?
-        .is_empty())
+fn delete_biometry_current_set_passphrase(account: &str) -> Result<(), String> {
+    use security_framework::passwords::delete_generic_password_options;
+
+    match delete_generic_password_options(protected_password_options(account)) {
+        Ok(()) => Ok(()),
+        Err(error) if error.code() == ERR_SEC_ITEM_NOT_FOUND => Ok(()),
+        Err(error) => Err(security_framework_error_for_user(error)),
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn delete_biometry_current_set_passphrase(_account: &str) -> Result<(), String> {
+    Err("Touch ID passphrase unlock is only available in the macOS desktop app.".to_string())
 }
 
 #[cfg(target_os = "macos")]
-fn touch_id_passphrase_search_spec(account: &str) -> HashMap<&'static str, &str> {
-    let mut spec = HashMap::new();
-    spec.insert("service", TOUCH_ID_PASSPHRASE_SERVICE);
-    spec.insert("user", account);
-    spec
+fn security_framework_error_for_user(error: security_framework::base::Error) -> String {
+    match error.code() {
+        ERR_SEC_MISSING_ENTITLEMENT => {
+            "This build cannot access the protected Keychain item; ".to_string()
+                + "reopen a production-entitled build to manage it."
+        }
+        ERR_SEC_ITEM_NOT_FOUND => "No saved desktop biometric passphrase was found.".to_string(),
+        code => format!("macOS protected Keychain rejected the operation ({code})."),
+    }
 }
 
 #[cfg(target_os = "macos")]
@@ -982,12 +1213,50 @@ mod tests {
         assert_eq!(store.get("svc", "acct").unwrap(), None);
     }
 
-    #[cfg(target_os = "macos")]
     #[test]
-    fn touch_id_search_uses_keyring_user_specifier() {
-        let spec = touch_id_passphrase_search_spec("/tmp/kassiber-data");
-        assert_eq!(spec.get("service"), Some(&TOUCH_ID_PASSPHRASE_SERVICE));
-        assert_eq!(spec.get("user"), Some(&"/tmp/kassiber-data"));
-        assert!(!spec.contains_key("account"));
+    fn desktop_and_cli_passphrase_namespaces_are_distinct() {
+        assert_eq!(
+            LEGACY_SHARED_PASSPHRASE_SERVICE,
+            "Kassiber Database Passphrase"
+        );
+        assert_eq!(
+            CLI_REMEMBERED_PASSPHRASE_SERVICE,
+            "Kassiber CLI Database Passphrase"
+        );
+        assert_eq!(
+            DESKTOP_BIOMETRIC_PASSPHRASE_SERVICE,
+            "Kassiber Desktop Biometric Passphrase"
+        );
+        assert_eq!(
+            DESKTOP_BIOMETRIC_STALE_MARKER_SERVICE,
+            "Kassiber Desktop Biometric Invalidated"
+        );
+        assert_ne!(
+            CLI_REMEMBERED_PASSPHRASE_SERVICE,
+            DESKTOP_BIOMETRIC_PASSPHRASE_SERVICE
+        );
+    }
+
+    #[test]
+    fn biometric_marker_services_are_mode_specific() {
+        assert_eq!(
+            TouchIdProtection::BiometryCurrentSet.marker_service(),
+            Some(DESKTOP_BIOMETRY_CURRENT_SET_MARKER_SERVICE)
+        );
+        assert_eq!(
+            TouchIdProtection::ApplicationLocalAuthentication.marker_service(),
+            Some(DESKTOP_APPLICATION_GATE_MARKER_SERVICE)
+        );
+        assert_eq!(TouchIdProtection::LegacyShared.marker_service(), None);
+        assert_ne!(
+            DESKTOP_BIOMETRY_CURRENT_SET_MARKER_SERVICE,
+            DESKTOP_APPLICATION_GATE_MARKER_SERVICE
+        );
+    }
+
+    #[test]
+    fn legacy_shared_item_is_assigned_conservatively() {
+        assert!(legacy_shared_item_belongs_to_desktop(false));
+        assert!(!legacy_shared_item_belongs_to_desktop(true));
     }
 }

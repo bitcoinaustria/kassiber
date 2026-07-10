@@ -21,9 +21,13 @@ export function SecuritySettingsPanel({
   setAppLockPolicy,
   onEnrollTouchId,
   onForgetTouchId,
+  onForgetAllUnlock,
+  forgetAllPending,
   encryptedWorkspace,
   touchIdPlatformSupported,
   touchIdConfigured,
+  touchIdStale,
+  touchIdProtection,
   touchIdStatusPending,
   touchIdStatusReason,
   onRefreshTouchId,
@@ -34,9 +38,17 @@ export function SecuritySettingsPanel({
   setAppLockPolicy: (policy: Partial<AppLockPolicy>) => void;
   onEnrollTouchId: () => void;
   onForgetTouchId: () => void;
+  onForgetAllUnlock: () => void;
+  forgetAllPending: boolean;
   encryptedWorkspace: boolean;
   touchIdPlatformSupported: boolean;
   touchIdConfigured: boolean;
+  touchIdStale: boolean;
+  touchIdProtection:
+    | "biometry_current_set"
+    | "application_local_authentication"
+    | "legacy_shared"
+    | null;
   touchIdStatusPending: boolean;
   touchIdStatusReason: string | null;
   onRefreshTouchId: () => void;
@@ -53,8 +65,14 @@ export function SecuritySettingsPanel({
   const biometricDetail = encryptedWorkspace
     ? touchIdPlatformSupported
       ? touchIdConfigured
-        ? t("security.biometricSaved")
-        : touchIdStatusReason
+        ? touchIdProtection === "biometry_current_set"
+          ? t("security.biometricSavedProtected")
+          : touchIdProtection === "legacy_shared"
+            ? t("security.biometricSavedLegacy")
+            : t("security.biometricSavedAppGated")
+        : touchIdStale
+          ? t("security.biometricStale")
+          : touchIdStatusReason
           ? t("security.biometricNotSetUpReason", { reason: touchIdStatusReason })
           : t("security.biometricVerifyHint")
       : t("security.biometricAvailableMacos")
@@ -268,6 +286,20 @@ export function SecuritySettingsPanel({
                 setAppLockPolicy({ touchIdUnlock: checked })
               }
             />
+          </div>
+          <div className="mt-3 flex items-center justify-between gap-4 border-t pt-3">
+            <p className="text-sm text-muted-foreground">
+              {t("security.forgetAllDescription")}
+            </p>
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              disabled={forgetAllPending}
+              onClick={onForgetAllUnlock}
+            >
+              {t("security.forgetAll")}
+            </Button>
           </div>
         </div>
       </section>

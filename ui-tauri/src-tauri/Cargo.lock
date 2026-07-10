@@ -1963,6 +1963,7 @@ dependencies = [
  "keyring-core",
  "objc2",
  "objc2-foundation",
+ "security-framework",
  "serde",
  "serde_json",
  "tauri",

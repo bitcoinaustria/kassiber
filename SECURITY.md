@@ -192,24 +192,37 @@ exports, or backups can touch that project.
 **OS keychain is not the perimeter.** The SQLCipher passphrase is the
 perimeter. Pick a long passphrase from a password manager and treat
 the loss of that passphrase as data loss — there is no recovery path.
-Desktop macOS builds can optionally remember the database passphrase in
-Keychain behind a local user-presence prompt for Touch ID-style unlock. The CLI
-can separately opt into the same per-data-root item on macOS, Windows user-scope
-Credential Manager, or an available unlocked Linux Secret Service. The CLI opt-in
+Desktop macOS builds can optionally remember the database passphrase in a
+desktop-only Keychain item for Touch ID unlock. Production-entitled builds use
+an item-level `biometryCurrentSet` policy, which invalidates access when enrolled
+fingerprints change. Unsigned/ad-hoc preview builds cannot use the protected
+Keychain and retain an explicit app-level LocalAuthentication check before
+reading their desktop-only item. The CLI separately opts into its own
+per-data-root item on macOS, Windows user-scope Credential Manager, or an
+available unlocked Linux Secret Service. The CLI opt-in
 is a non-secret boolean in managed `config/settings.json`; desktop-only Touch ID
 enrollment leaves it unset. Only the native `keyring` backend for the current
 platform is accepted (including a chainer only when every active child is
 native); environment/config-selected third-party and file backends are rejected.
 There is never a plaintext-file fallback.
 
-CLI credential reads are **not biometric-gated**. On macOS the gate is the
-Keychain item's per-binary ACL prompt, and unsigned/ad-hoc preview binaries may
+CLI credential reads are **not biometric-gated**. On macOS the CLI item uses the
+Keychain's per-binary access policy, and unsigned/ad-hoc preview binaries may
 prompt again after rebuilds or identity changes. On Windows and Linux, another
 process running as the same user can read the user-scoped item. This matches the
 existing boundary above: a compromised process running as the user is out of
-scope. Revoke the copy with `kassiber secrets forget-unlock` or delete
-`Kassiber Database Passphrase` in the OS credential manager. Revocation does not
+scope. Revoke only the CLI copy with `kassiber secrets forget-unlock`, revoke
+only the desktop copy in Settings, or use **Forget all unlock methods** to remove
+both plus the migration-only legacy item. The current credential names are
+`Kassiber CLI Database Passphrase` and `Kassiber Desktop Biometric Passphrase`;
+`Kassiber Database Passphrase` is legacy migration input only. Revocation does not
 change the SQLCipher key or recover a lost passphrase.
+
+Desktop passphrase rotation refreshes both enrolled namespaces. A CLI rotation
+cannot rewrite a biometric-protected desktop item without defeating that access
+policy, so it writes a non-secret invalidation marker instead. The desktop then
+requires manual passphrase entry and re-enrollment rather than attempting the
+known-stale biometric copy.
 
 **Desktop credential stores are a separate boundary, not SQLCipher
 replacement.** Desktop builds can store AI provider API keys in macOS

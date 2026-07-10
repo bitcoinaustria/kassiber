@@ -121,6 +121,12 @@ export interface TouchIdPassphraseStatus {
   platform: "macos" | "windows" | "linux" | "unsupported";
   available: boolean;
   configured: boolean;
+  stale: boolean;
+  protection?:
+    | "biometry_current_set"
+    | "application_local_authentication"
+    | "legacy_shared"
+    | null;
   reason?: string | null;
 }
 
@@ -753,6 +759,7 @@ const TOUCH_ID_UNAVAILABLE: TouchIdPassphraseStatus = {
   platform: "unsupported",
   available: false,
   configured: false,
+  stale: false,
   reason: "desktop_only",
 };
 

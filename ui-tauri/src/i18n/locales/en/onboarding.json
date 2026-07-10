@@ -345,7 +345,7 @@
     "recoveryAck": "I understand there is no passphrase recovery path.",
     "recoveryAckDescription": "If the passphrase is lost, the SQLCipher database cannot be opened.",
     "touchId": "Unlock with Touch ID",
-    "touchIdDescription": "Store the passphrase in the macOS Keychain so you can unlock with Touch ID instead of typing it. Remove it anytime in Settings.",
+    "touchIdDescription": "Store a desktop-only Keychain entry so you can unlock with Touch ID instead of typing the passphrase. CLI remembered unlock is enrolled separately.",
     "existingCredentials": "Existing backend credentials",
     "migrateCredentials": "Move credentials from backends.env into the encrypted DB.",
     "migrateCredentialsDescription": "Useful when upgrading an existing CLI setup. New books can leave this checked safely.",

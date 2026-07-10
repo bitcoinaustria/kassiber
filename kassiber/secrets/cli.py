@@ -44,6 +44,8 @@ from .sqlcipher import (
 )
 from .unlock_store import (
     delete_remembered_passphrase,
+    mark_desktop_biometric_passphrase_stale,
+    refresh_remembered_passphrase_after_rotation,
     remembered_unlock_status,
     set_cli_remembered_unlock_enabled,
     store_remembered_passphrase,
@@ -211,31 +213,20 @@ def cmd_secrets_change_passphrase(args: argparse.Namespace) -> dict:
     )
     _enforce_min_length(new_passphrase)
 
-    remembered_before = remembered_unlock_status(args.data_root)
     result = change_database_passphrase(db_path, current, new_passphrase)
-    remembered_warning = None
-    if remembered_before["configured"] or remembered_before["cli_enabled"]:
-        if not store_remembered_passphrase(args.data_root, new_passphrase):
-            deleted = delete_remembered_passphrase(args.data_root)
-            marker_cleared = True
-            try:
-                set_cli_remembered_unlock_enabled(args.data_root, False)
-            except OSError:
-                marker_cleared = False
-            remembered_warning = {
-                "code": "remembered_unlock_update_failed",
-                "message": (
-                    "The database passphrase changed, but the remembered copy "
-                    "could not be updated and was disabled."
-                ),
-                "credential_deleted": deleted,
-                "cli_marker_cleared": marker_cleared,
-            }
-            sys.stderr.write(
-                "warning: remembered_unlock_update_failed: the database "
-                "passphrase changed, but the OS credential-store copy could not "
-                "be updated; re-enroll with `kassiber secrets remember-unlock`.\n"
-            )
+    result["desktop_biometric_invalidated"] = mark_desktop_biometric_passphrase_stale(
+        args.data_root
+    )
+    remembered_warning = refresh_remembered_passphrase_after_rotation(
+        args.data_root,
+        new_passphrase,
+    )
+    if remembered_warning is not None:
+        sys.stderr.write(
+            "warning: remembered_unlock_update_failed: the database "
+            "passphrase changed, but the CLI credential-store copy could not "
+            "be updated; re-enroll with `kassiber secrets remember-unlock`.\n"
+        )
     result["remembered_unlock"] = remembered_unlock_status(args.data_root)
     if remembered_warning is not None:
         result["remembered_unlock_warning"] = remembered_warning

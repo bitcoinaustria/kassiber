@@ -216,7 +216,7 @@
     "touchIdNotSetUpReason": "Touch-ID-Entsperrung ist nicht eingerichtet: {{reason}}",
     "touchIdNotSetUp": "Für diese Bücher ist keine Touch-ID-Passphrase gespeichert. Entsperre einmal mit der Passphrase, um sie erneut zu speichern.",
     "useTouchIdNextTime": "Beim nächsten Mal Touch ID verwenden",
-    "useTouchIdNextTimeBody": "Speichere diese Datenbank-Passphrase im macOS Keychain hinter der lokalen Nutzeranwesenheit.",
+    "useTouchIdNextTimeBody": "Speichere einen eigenen Desktop-Keychain-Eintrag, den Kassiber nach Touch ID verwenden kann. Die gemerkte CLI-Entsperrung bleibt getrennt.",
     "waitingForTouchId": "Warten auf Touch ID…",
     "unlockWithTouchId": "Mit Touch ID entsperren",
     "unlocking": "Wird entsperrt…",

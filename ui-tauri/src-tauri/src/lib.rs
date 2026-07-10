@@ -268,6 +268,7 @@ const ALLOWED_DAEMON_KINDS: &[&str] = &[
     "ui.projects.select",
     "ui.secrets.init",
     "ui.secrets.change_passphrase",
+    "ui.secrets.forget_cli_unlock",
     "ui.next_actions",
     "ui.review.badges",
     "ui.wallets.utxos",
@@ -920,7 +921,10 @@ fn touch_id_passphrase_status_command(
     data_root: Option<String>,
 ) -> Result<TouchIdPassphraseStatus, String> {
     let account = touch_id_account_for_data_root(&state, data_root)?;
-    Ok(touch_id_passphrase_status(&account))
+    Ok(touch_id_passphrase_status(
+        &account,
+        cli_remembered_unlock_enabled(&account),
+    ))
 }
 
 #[tauri::command]
@@ -931,7 +935,10 @@ fn touch_id_store_passphrase_command(
 ) -> Result<TouchIdPassphraseStatus, String> {
     let account = touch_id_account_for_data_root(&state, data_root)?;
     touch_id_store_passphrase(&account, &passphrase_secret)?;
-    Ok(touch_id_passphrase_status(&account))
+    Ok(touch_id_passphrase_status(
+        &account,
+        cli_remembered_unlock_enabled(&account),
+    ))
 }
 
 #[tauri::command]
@@ -943,7 +950,9 @@ async fn touch_id_unlock_passphrase_command(
     project_id: Option<String>,
 ) -> Result<DaemonEnvelope, String> {
     let account = touch_id_account_for_data_root(&state, data_root)?;
-    let Some(passphrase_secret) = touch_id_get_passphrase(&account)? else {
+    let Some(passphrase_secret) =
+        touch_id_get_passphrase(&account, cli_remembered_unlock_enabled(&account))?
+    else {
         return Ok(error_envelope(
             "touch_id_passphrase_not_found",
             "No Touch ID passphrase was found for these books.",
@@ -985,8 +994,9 @@ fn touch_id_forget_passphrase_command(
     data_root: Option<String>,
 ) -> Result<TouchIdPassphraseStatus, String> {
     let account = touch_id_account_for_data_root(&state, data_root)?;
-    touch_id_delete_passphrase(&account)?;
-    Ok(touch_id_passphrase_status(&account))
+    let cli_enabled = cli_remembered_unlock_enabled(&account);
+    touch_id_delete_passphrase(&account, cli_enabled)?;
+    Ok(touch_id_passphrase_status(&account, cli_enabled))
 }
 
 #[tauri::command]
@@ -1022,6 +1032,28 @@ fn touch_id_account_for_data_root(
     // before the daemon creates them.
     let normalized = std::fs::canonicalize(&selected).unwrap_or(selected);
     Ok(normalized.to_string_lossy().into_owned())
+}
+
+fn cli_remembered_unlock_enabled(data_root: &str) -> bool {
+    let data_root = Path::new(data_root);
+    let state_root =
+        if data_root.file_name().and_then(|name| name.to_str()) == Some(DEFAULT_DATA_DIR) {
+            data_root.parent().unwrap_or(data_root)
+        } else {
+            data_root
+        };
+    let settings_path = state_root.join("config").join("settings.json");
+    let Ok(raw) = std::fs::read_to_string(settings_path) else {
+        return false;
+    };
+    serde_json::from_str::<serde_json::Value>(&raw)
+        .ok()
+        .and_then(|value| {
+            value
+                .get("cli_remembered_unlock")
+                .and_then(|flag| flag.as_bool())
+        })
+        .unwrap_or(false)
 }
 
 fn inspect_import_project_directory(path: &Path) -> Result<ImportProjectSelection, String> {

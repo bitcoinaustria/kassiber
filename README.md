@@ -103,9 +103,9 @@ carries a working Austrian (§ 27b EStG) plugin with E 1kv exports.
   owner snapshots for late joiners, plus explicit SPAKE2 LAN and optional Tor
   fast paths. No Kassiber account, server, live-database copy, or inbound port
   is required for the default mailbox workflow.
-- **Optional remembered unlock** — macOS desktop builds can save the database
-  passphrase in Keychain behind local user presence. The CLI can explicitly opt
-  into the same item on macOS or use Windows Credential Manager / Linux Secret
+- **Optional remembered unlock** — macOS desktop builds can save a desktop-only
+  database-passphrase entry for Touch ID unlock. The CLI can separately opt into
+  its own item in macOS Keychain, Windows Credential Manager, or Linux Secret
   Service for prompt-free one-shot commands. This is convenience, not recovery
   or a replacement for the SQLCipher passphrase.
 - **Two surfaces, one daemon** — desktop GUI (Tauri 2 + React) for
@@ -197,13 +197,20 @@ kassiber --machine reports summary
 kassiber secrets forget-unlock
 ```
 
-Enrollment verifies the passphrase, saves it in the native OS credential store,
+Enrollment verifies the passphrase, saves a CLI-only item in the native OS credential store,
 and sets a non-secret `cli_remembered_unlock` marker in the managed
-`config/settings.json`. The marker is separate from desktop Touch ID enrollment,
-so the CLI never starts consuming a desktop-only item implicitly. CLI reads are
+`config/settings.json`. Desktop and CLI use separate per-data-root credential
+entries and lifecycle controls, so neither surface silently enrolls or revokes
+the other. CLI reads are
 not biometric-gated; see [SECURITY.md](SECURITY.md) for the platform trust model.
 Headless machines and automation without an unlocked credential service should
 continue using `--db-passphrase-fd`.
+
+Desktop Settings can remove only Touch ID, while **Forget all unlock methods**
+removes the desktop entry, CLI entry, and any migration-only legacy shared item.
+Changing the passphrase in the desktop refreshes both enrolled copies. A CLI
+rotation refreshes the CLI copy and invalidates desktop Touch ID until the user
+re-enrolls it; no surface silently keeps using a stale passphrase.
 
 When syncing descriptor or xpub wallets through your own Bitcoin Core node,
 add a Core RPC backend (`--cookiefile` or `--username` / `--password`) and

@@ -106,6 +106,7 @@ import {
   activateImportProject,
   canUseTouchIdPassphraseUnlock,
   clearImportProject,
+  forgetTouchIdPassphrase,
   getTransport,
   isImportProjectActive,
   noteActiveImportProject,
@@ -758,6 +759,7 @@ export function AppShell() {
         platform: "macos",
         available: false,
         configured: false,
+        stale: false,
         reason: error instanceof Error ? error.message : String(error),
       };
       setTouchIdStatus(status);
@@ -1001,6 +1003,13 @@ export function AppShell() {
       setLocked(true);
     } else if (envelope.error?.code === "touch_id_passphrase_not_found") {
       await refreshTouchIdStatus();
+    } else if (envelope.error?.code === "local_auth_denied") {
+      // The Keychain item passed biometric access but no longer opens this
+      // database (for example after a CLI-side passphrase rotation). Remove it
+      // instead of offering a known-stale credential on every lock screen.
+      await forgetTouchIdPassphrase(touchIdDataRoot).catch(() => {});
+      setAppLockPolicy({ touchIdUnlock: false });
+      await refreshTouchIdStatus();
     }
     return {
       ok: false,
@@ -1016,6 +1025,7 @@ export function AppShell() {
     queryClient,
     refreshTouchIdStatus,
     setIdentity,
+    setAppLockPolicy,
     t,
     touchIdDataRoot,
   ]);

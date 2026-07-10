@@ -228,7 +228,7 @@
   },
   "touchIdEnroll": {
     "title": "Touch-ID-Entsperrung aktivieren",
-    "description": "Gib das Datenbank-Passwort einmal ein. Kassiber prüft es lokal und speichert es dann für diese Bücher in der macOS-Keychain hinter lokaler Anwesenheitsprüfung.",
+    "description": "Gib das Datenbank-Passwort einmal ein. Kassiber prüft es lokal und speichert einen eigenen Desktop-Eintrag in der macOS-Keychain. Die App verlangt Touch ID, bevor sie ihn verwendet; die CLI-Entsperrung bleibt getrennt.",
     "passphraseLabel": "Datenbank-Passwort",
     "submitPending": "Wird gespeichert…",
     "submit": "Touch ID aktivieren",
@@ -238,13 +238,18 @@
     "errorNotSetUp": "Die macOS-Keychain hat das gespeicherte Touch-ID-Passwort nicht gemeldet.",
     "errorGeneric": "Das Datenbank-Passwort konnte nicht für die Touch-ID-Entsperrung gespeichert werden.",
     "notifyTitle": "Touch-ID-Entsperrung aktiviert",
-    "notifyBody": "Das Datenbank-Passwort wurde in der macOS-Keychain hinter lokaler Anwesenheitsprüfung gespeichert."
+    "notifyBody": "Ein eigenes Desktop-Passwort wurde für die Touch-ID-Entsperrung in der macOS-Keychain gespeichert."
   },
   "touchId": {
     "removedTitle": "Touch-ID-Passwort wurde nicht entfernt",
     "removedBody": "Die macOS-Keychain hat das gespeicherte Passwort nicht entfernt.",
     "disabledTitle": "Touch-ID-Entsperrung wurde deaktiviert",
-    "disabledBody": "Das Datenbank-Passwort wurde geändert, aber die macOS-Keychain hat das aktualisierte Touch-ID-Passwort nicht akzeptiert."
+    "disabledBody": "Das Datenbank-Passwort wurde geändert, aber die macOS-Keychain hat das aktualisierte Desktop-Passwort für Touch ID nicht akzeptiert.",
+    "forgetAllTitle": "Gespeicherte Entsperrmethoden entfernt",
+    "forgetAllBody": "Desktop-Touch-ID und die gemerkte CLI-Entsperrung wurden für diese Bücher entfernt.",
+    "forgetAllConfirm": "Alle gespeicherten Entsperrmethoden für diese Bücher entfernen? Beim nächsten Mal ist das Datenbank-Passwort erforderlich.",
+    "forgetAllPartialTitle": "Einige Entsperrmethoden sind noch gespeichert",
+    "forgetAllCredentialWarning": "Der OS-Zugangsspeicher hat nicht bestätigt, dass alle gespeicherten Einträge entfernt wurden."
   },
   "resetWelcome": {
     "confirm": "Willkommens-Status zurücksetzen?\n\nDies löscht deine lokale Identität und bringt dich zurück zum Willkommensbildschirm. Verschlüsselte Daten auf der Festplatte werden nicht angetastet."
@@ -414,7 +419,10 @@
     "biometricEnrolled": "Eingerichtet",
     "biometricNotEnrolled": "Nicht eingerichtet",
     "biometricTitle": "Touch ID · {{status}}",
-    "biometricSaved": "Für diese Bücher in diesem macOS-Benutzerkonto gespeichert.",
+    "biometricSavedProtected": "Das Desktop-Passwort ist durch die aktuelle Touch-ID-Konfiguration geschützt. Änderungen an den registrierten Fingern machen es ungültig.",
+    "biometricSavedAppGated": "Vorschau-Build: Kassiber prüft Touch ID, bevor der eigene Desktop-Keychain-Eintrag gelesen wird. Der Eintrag selbst verwendet die Keychain-Zugriffsrichtlinie der App.",
+    "biometricSavedLegacy": "Ein alter gemeinsam genutzter Eintrag wurde gefunden. Nach der nächsten erfolgreichen Touch-ID-Entsperrung wird er in den eigenen Desktop-Speicher migriert.",
+    "biometricStale": "Das Datenbank-Passwort wurde außerhalb der Desktop-App geändert. Gib es einmal ein und richte Touch ID erneut ein.",
     "biometricNotSetUpReason": "Nicht eingerichtet: {{reason}}",
     "biometricVerifyHint": "Prüfe das Datenbank-Passwort einmal, um es in der macOS-Keychain zu speichern.",
     "biometricAvailableMacos": "Die Touch-ID-Entsperrung ist in der macOS-Desktop-App verfügbar.",
@@ -422,7 +430,9 @@
     "forget": "Entfernen",
     "setUp": "Einrichten",
     "offerBiometricLabel": "Biometrisches Entsperren am Sperrbildschirm anbieten",
-    "offerBiometricDescription": "Merke dir die Präferenz für biometrisches Entsperren dieses Geräts zwischen den Sitzungen."
+    "offerBiometricDescription": "Merke dir die Präferenz für biometrisches Entsperren dieses Geräts zwischen den Sitzungen.",
+    "forgetAll": "Alle Entsperrmethoden entfernen",
+    "forgetAllDescription": "Entfernt den biometrischen Desktop-Eintrag, den gemerkten CLI-Eintrag und alte gemeinsam genutzte Einträge für diese Bücher."
   },
   "privacy": {
     "scoreHeading": "Privacy-Signale",

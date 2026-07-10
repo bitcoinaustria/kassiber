@@ -228,7 +228,7 @@
   },
   "touchIdEnroll": {
     "title": "Enable Touch ID unlock",
-    "description": "Enter the database passphrase once. Kassiber will verify it locally, then save it in macOS Keychain behind local user presence for these books.",
+    "description": "Enter the database passphrase once. Kassiber verifies it locally and saves a desktop-only Keychain entry. Touch ID is required before the app can use it; CLI remembered unlock stays separate.",
     "passphraseLabel": "Database passphrase",
     "submitPending": "Saving…",
     "submit": "Enable Touch ID",
@@ -238,13 +238,18 @@
     "errorNotSetUp": "macOS Keychain did not report the saved Touch ID passphrase.",
     "errorGeneric": "Could not save the database passphrase for Touch ID unlock.",
     "notifyTitle": "Touch ID unlock enabled",
-    "notifyBody": "The database passphrase was saved in macOS Keychain behind local user presence."
+    "notifyBody": "A desktop-only passphrase was saved in macOS Keychain for Touch ID unlock."
   },
   "touchId": {
     "removedTitle": "Touch ID passphrase was not removed",
     "removedBody": "macOS Keychain did not remove the saved passphrase.",
     "disabledTitle": "Touch ID unlock was disabled",
-    "disabledBody": "The database passphrase changed, but macOS Keychain did not accept the updated Touch ID passphrase."
+    "disabledBody": "The database passphrase changed, but macOS Keychain did not accept the updated desktop Touch ID passphrase.",
+    "forgetAllTitle": "Saved unlock methods removed",
+    "forgetAllBody": "Desktop Touch ID and CLI remembered unlock were removed for these books.",
+    "forgetAllConfirm": "Remove every saved unlock method for these books? You will need the database passphrase next time.",
+    "forgetAllPartialTitle": "Some saved unlock methods remain",
+    "forgetAllCredentialWarning": "The OS credential store did not confirm that every saved entry was removed."
   },
   "resetWelcome": {
     "confirm": "Reset Welcome state?\n\nThis clears your local identity and returns you to the Welcome screen. Encrypted data on disk is not touched."
@@ -414,7 +419,10 @@
     "biometricEnrolled": "Enrolled",
     "biometricNotEnrolled": "Not enrolled",
     "biometricTitle": "Touch ID · {{status}}",
-    "biometricSaved": "Saved for these books in this macOS user account.",
+    "biometricSavedProtected": "The desktop passphrase is protected by the current Touch ID enrollment. Changing enrolled fingerprints invalidates it.",
+    "biometricSavedAppGated": "Preview build: Kassiber checks Touch ID before reading its desktop-only Keychain entry. The entry itself uses the app's Keychain access policy.",
+    "biometricSavedLegacy": "Legacy shared enrollment detected. The next successful Touch ID unlock migrates it to the desktop-only store.",
+    "biometricStale": "The database passphrase changed outside the desktop app. Enter it once and re-enroll Touch ID.",
     "biometricNotSetUpReason": "Not set up: {{reason}}",
     "biometricVerifyHint": "Verify the database passphrase once to save it in macOS Keychain.",
     "biometricAvailableMacos": "Touch ID unlock is available in the macOS desktop app.",
@@ -422,7 +430,9 @@
     "forget": "Forget",
     "setUp": "Set up",
     "offerBiometricLabel": "Offer biometric unlock on the lock screen",
-    "offerBiometricDescription": "Remember this device's biometric unlock preference between sessions."
+    "offerBiometricDescription": "Remember this device's biometric unlock preference between sessions.",
+    "forgetAll": "Forget all unlock methods",
+    "forgetAllDescription": "Remove the desktop biometric entry, CLI remembered-unlock entry, and any legacy shared entry for these books."
   },
   "privacy": {
     "scoreHeading": "Privacy tells",
