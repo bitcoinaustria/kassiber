@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import sqlite3
 import unittest
-from unittest.mock import MagicMock
 
 from kassiber.core.reports import _self_transfer_legs_by_transaction
 
