@@ -1,8 +1,12 @@
+import io
 import json
 import unittest
+from email.message import Message
 from unittest.mock import patch
+from urllib import error as urlerror
 from urllib.parse import parse_qs, urlsplit
 
+from kassiber.errors import AppError
 from kassiber.sync_btcpay import (
     discover_btcpay_wallet_sources,
     fetch_btcpay_invoice_provenance,
@@ -41,6 +45,32 @@ class _Opener:
         query = parse_qs(urlsplit(url).query)
         skip = int((query.get("skip") or ["0"])[0])
         return _Response(self.pages.get(skip, []))
+
+
+class _ScriptedOpener:
+    def __init__(self, actions):
+        self.actions = list(actions)
+        self.calls = 0
+
+    def open(self, request, timeout=30):  # noqa: ARG002
+        self.calls += 1
+        action = self.actions.pop(0)
+        if isinstance(action, Exception):
+            raise action
+        return _Response(action)
+
+
+def _http_error(status, *, body=b"", retry_after="0"):
+    headers = Message()
+    if retry_after is not None:
+        headers["Retry-After"] = retry_after
+    return urlerror.HTTPError(
+        "https://btcpay.example/api/v1/stores/secret-store",
+        status,
+        "error",
+        headers,
+        io.BytesIO(body),
+    )
 
 
 class _DiscoveryOpener:
@@ -157,6 +187,55 @@ class BtcpayIncrementalTest(unittest.TestCase):
             source_label="BTCPay",
         )
         self.assertEqual(len(opener.urls), 1)
+
+    def test_wallet_history_retries_rate_limited_responses(self):
+        backend = {
+            "name": "btcpay",
+            "kind": "btcpay",
+            "url": "https://btcpay.example",
+            "token": "secret",
+        }
+        for status in (429, 503):
+            with self.subTest(status=status):
+                opener = _ScriptedOpener([_http_error(status), []])
+
+                records = fetch_btcpay_records(backend, "store", opener=opener)
+
+                self.assertEqual(records, [])
+                self.assertEqual(opener.calls, 2)
+
+    def test_wallet_history_preserves_permission_hint_through_retry_layer(self):
+        backend = {
+            "name": "btcpay",
+            "kind": "btcpay",
+            "url": "https://btcpay.example",
+            "token": "secret",
+        }
+        opener = _ScriptedOpener([_http_error(403)])
+
+        with self.assertRaises(AppError) as ctx:
+            fetch_btcpay_records(backend, "store", opener=opener)
+
+        self.assertEqual(ctx.exception.code, "auth_error")
+        self.assertIn("Greenfield wallet endpoints", ctx.exception.hint or "")
+
+    def test_wallet_history_redacts_untrusted_http_error_details(self):
+        backend = {
+            "name": "btcpay",
+            "kind": "btcpay",
+            "url": "https://btcpay.example",
+            "token": "secret",
+        }
+        opener = _ScriptedOpener(
+            [_http_error(500, body=b"api_key=server-secret", retry_after=None)]
+        )
+
+        with self.assertRaises(AppError) as ctx:
+            fetch_btcpay_records(backend, "store", opener=opener)
+
+        self.assertEqual(ctx.exception.code, "protocol_error")
+        self.assertNotIn("server-secret", str(ctx.exception))
+        self.assertNotIn("btcpay.example", str(ctx.exception))
 
     def test_wallet_history_skips_unchanged_page_and_continues_to_end(self):
         backend = {"name": "btcpay", "kind": "btcpay", "url": "https://btcpay.example", "token": "secret"}

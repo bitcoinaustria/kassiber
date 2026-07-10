@@ -20,9 +20,9 @@ from urllib import request as urlrequest
 from .backends import backend_timeout, backend_value
 from .core.sync import emit_sync_progress
 from .errors import AppError
+from .http_client import request_with_retry
 from .importers import normalize_btcpay_record, parse_btcpay_labels
 from .proxy import build_proxy_opener
-from .retry import retry_after_seconds_from_http_error
 
 
 DEFAULT_PAYMENT_METHOD_ID = "BTC-CHAIN"
@@ -741,47 +741,40 @@ def _http_get_json(opener, url, token, timeout, *, permission_hint=None):
             "Authorization": f"token {token}",
         },
     )
-    try:
+    def open_once():
         with opener.open(request, timeout=timeout) as response:
             return json.loads(response.read().decode("utf-8"))
-    except urlerror.HTTPError as exc:
-        detail = exc.read().decode("utf-8", errors="replace")
-        if exc.code == 429:
+
+    try:
+        return request_with_retry(url, open_once, source_label="BTCPay")
+    except AppError as exc:
+        cause = exc.__cause__
+        if isinstance(cause, urlerror.HTTPError) and cause.code == 401:
             raise AppError(
-                f"BTCPay rate limited the request (HTTP 429) for {url}",
-                code="rate_limited",
-                retryable=True,
-                details={"retry_after_seconds": retry_after_seconds_from_http_error(exc)},
-            ) from exc
-        if exc.code == 401:
-            raise AppError(
-                f"BTCPay rejected the API key (HTTP 401) for {url}",
+                "BTCPay rejected the API key (HTTP 401)",
                 code="auth_error",
                 hint="Check that `token` on the backend is current and not revoked.",
-            ) from exc
-        if exc.code == 403:
+            ) from cause
+        if isinstance(cause, urlerror.HTTPError) and cause.code == 403:
             raise AppError(
-                f"BTCPay API key is missing the required permission (HTTP 403) for {url}",
+                "BTCPay API key is missing the required permission (HTTP 403)",
                 code="auth_error",
                 hint=permission_hint
                 or "Check the permissions granted to the Greenfield API key.",
-            ) from exc
-        if exc.code == 404:
+            ) from cause
+        if isinstance(cause, urlerror.HTTPError) and cause.code == 404:
             raise AppError(
-                f"BTCPay store or payment method not found (HTTP 404): {url}",
+                "BTCPay store or payment method not found (HTTP 404)",
                 code="not_found",
                 hint="Verify --store-id and --payment-method-id (default BTC-CHAIN).",
-            ) from exc
-        raise AppError(
-            f"HTTP {exc.code} from BTCPay for {url}: {detail[:200]}",
-            code="protocol_error",
-        ) from exc
-    except urlerror.URLError as exc:
-        raise AppError(
-            f"Failed to reach BTCPay server {url}: {exc.reason}",
-            code="network_error",
-            retryable=True,
-        ) from exc
+            ) from cause
+        if isinstance(cause, urlerror.HTTPError):
+            if cause.code in {429, 503}:
+                raise
+            raise AppError(str(exc), code="protocol_error") from cause
+        if isinstance(cause, urlerror.URLError):
+            raise AppError(str(exc), code="network_error", retryable=True) from cause
+        raise
 
 
 def _normalize_store(raw_store):
