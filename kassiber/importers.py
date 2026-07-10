@@ -2550,8 +2550,12 @@ def load_river_csv_records(file_path):
         rows = list(csv.DictReader(handle))
     if not rows:
         return []
-    header = {str(column).strip().casefold() for column in rows[0].keys()}
-    missing = [column for column in _RIVER_REQUIRED_COLUMNS if column.casefold() not in header]
+    header = {_normalized_column_key(column) for column in rows[0].keys()}
+    missing = [
+        column
+        for column in _RIVER_REQUIRED_COLUMNS
+        if _normalized_column_key(column) not in header
+    ]
     if missing:
         raise AppError("River CSV is missing required columns: " + ", ".join(missing))
     normalized = []

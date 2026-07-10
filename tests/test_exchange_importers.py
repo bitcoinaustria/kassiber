@@ -15,6 +15,7 @@ from kassiber.errors import AppError
 from kassiber.importers import (
     load_binance_supplemental_csv_records,
     load_ledgerlive_csv_records,
+    load_river_csv_records,
 )
 
 
@@ -157,6 +158,25 @@ class ExchangeImporterTest(unittest.TestCase):
         self.assertEqual(record["fiat_currency"], "EUR")
         self.assertEqual(str(record["fiat_value"]), "101.00")
         self.assertEqual(record["pricing_provider"], "Binance")
+
+    def test_river_loader_normalizes_header_whitespace_like_row_parsing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "river.csv"
+            path.write_text(
+                "\n".join(
+                    [
+                        " Date ,Sent\u00a0 Amount,Sent Currency,Received Amount,Received Currency",
+                        "2024-02-01T10:00:00Z,100.00,USD,0.002,BTC",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            records = load_river_csv_records(path)
+
+        self.assertEqual(len(records), 1)
+        self.assertEqual(records[0]["asset"], "BTC")
+        self.assertEqual(str(records[0]["amount"]), "0.002")
 
     def test_kraken_api_normalizer_pairs_btc_trade_with_trade_history(self):
         records = normalize_kraken_records(
