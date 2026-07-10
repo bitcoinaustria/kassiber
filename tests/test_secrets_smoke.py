@@ -46,7 +46,7 @@ from kassiber.backup.age_cli import (
     AgeUnavailableError,
     select_age_backend,
 )
-from kassiber.backup.cli import cmd_backup_import
+from kassiber.backup.cli import cmd_backup_export, cmd_backup_import
 from kassiber.backup.pack import export_backup, import_backup
 from kassiber.backup.safe_tar import (
     UnsafeTarMember,
@@ -496,6 +496,25 @@ class SafeTarTests(unittest.TestCase):
 
 
 class BackupRoundTripTests(unittest.TestCase):
+    def test_cli_export_rejects_missing_database_without_creating_one(self):
+        with tempfile.TemporaryDirectory() as root:
+            data_root = Path(root) / "mistyped-data-root"
+            backup_path = Path(root) / "should-not-exist.kassiber"
+            args = SimpleNamespace(
+                data_root=str(data_root),
+                db_passphrase_fd=None,
+                file=str(backup_path),
+                recipient=["age1placeholder"],
+                backup_passphrase_fd=None,
+            )
+
+            with self.assertRaises(AppError) as ctx:
+                cmd_backup_export(args)
+
+            self.assertEqual(ctx.exception.code, "invalid_project_database")
+            self.assertFalse((data_root / "kassiber.sqlite3").exists())
+            self.assertFalse(backup_path.exists())
+
     def test_recipient_mode_requires_streaming_binary(self):
         with patch("kassiber.backup.age_cli.shutil.which", return_value=None), \
                 patch.dict(sys.modules, {"pyrage": ModuleType("pyrage")}):
@@ -731,9 +750,9 @@ class BackupRoundTripTests(unittest.TestCase):
             finally:
                 with suppress(OSError):
                     os.close(read_fd)
-            staging_path = envelope["data"]["staging_path"]
+            staging_path = envelope["staging_path"]
             try:
-                warning = envelope["data"]["secret_ref_unavailable"]
+                warning = envelope["secret_ref_unavailable"]
                 self.assertEqual(warning["code"], "secret_ref_unavailable")
                 self.assertEqual(
                     warning["details"]["refs"][0]["store_id"], "macos_keychain"

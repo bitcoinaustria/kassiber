@@ -77,6 +77,8 @@ run uv run --python "$PYTHON_VERSION" --with pyinstaller==6.20.0 pyinstaller \
   --collect-submodules rp2 \
   --collect-data rp2 \
   --collect-submodules prezzemolo \
+  --collect-submodules keyring.backends \
+  --copy-metadata keyring \
   --hidden-import prezzemolo.avl_tree \
   --hidden-import rp2.plugin.country.at \
   scripts/kassiber_pyinstaller_entry.py

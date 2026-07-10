@@ -23,6 +23,8 @@ DDL — add it to `SCHEMA` or `ensure_schema_compat` here instead.
 import json
 import os
 import sqlite3
+import tempfile
+from contextlib import contextmanager, suppress
 from pathlib import Path
 
 from .errors import AppError
@@ -1121,6 +1123,92 @@ def resolve_settings_path(data_root):
     return resolve_config_root(data_root) / DEFAULT_SETTINGS_FILENAME
 
 
+def load_managed_settings(data_root):
+    """Return the managed JSON settings object, or an empty object if unreadable."""
+
+    settings_path = resolve_settings_path(data_root)
+    try:
+        loaded = json.loads(settings_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError, json.JSONDecodeError):
+        return {}
+    return loaded if isinstance(loaded, dict) else {}
+
+
+@contextmanager
+def _managed_settings_lock(settings_path):
+    """Serialize settings read-modify-write cycles across CLI processes."""
+
+    lock_path = settings_path.with_name(f"{settings_path.name}.lock")
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    with lock_path.open("a+b") as lock_file:
+        if os.name == "nt":
+            import msvcrt
+
+            lock_file.seek(0, os.SEEK_END)
+            if lock_file.tell() == 0:
+                lock_file.write(b"\0")
+                lock_file.flush()
+            lock_file.seek(0)
+            msvcrt.locking(lock_file.fileno(), msvcrt.LK_LOCK, 1)
+            try:
+                yield
+            finally:
+                lock_file.seek(0)
+                msvcrt.locking(lock_file.fileno(), msvcrt.LK_UNLCK, 1)
+        else:
+            import fcntl
+
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+            try:
+                yield
+            finally:
+                fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+
+
+def _read_managed_settings_path(settings_path):
+    try:
+        loaded = json.loads(settings_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError, json.JSONDecodeError):
+        return {}
+    return loaded if isinstance(loaded, dict) else {}
+
+
+def _atomic_write_managed_settings(settings_path, payload):
+    """Replace settings.json from the same directory after durable flush."""
+
+    fd, temporary_name = tempfile.mkstemp(
+        prefix=f".{settings_path.name}.",
+        suffix=".tmp",
+        dir=settings_path.parent,
+    )
+    temporary_path = Path(temporary_name)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            json.dump(payload, handle, indent=2, sort_keys=True)
+            handle.write("\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary_path, settings_path)
+    finally:
+        with suppress(FileNotFoundError):
+            temporary_path.unlink()
+
+
+def update_managed_settings(data_root, *, updates=None, remove=()):
+    """Update top-level non-secret settings while preserving the path manifest."""
+
+    settings_path = resolve_settings_path(data_root)
+    settings_path.parent.mkdir(parents=True, exist_ok=True)
+    with _managed_settings_lock(settings_path):
+        payload = _read_managed_settings_path(settings_path)
+        for key, value in (updates or {}).items():
+            payload[str(key)] = value
+        for key in remove:
+            payload.pop(str(key), None)
+        _atomic_write_managed_settings(settings_path, payload)
+    return settings_path
+
+
 def ensure_settings_file(data_root, env_file):
     """Create or refresh the managed `settings.json` state manifest."""
     settings_path = resolve_settings_path(data_root)
@@ -1138,24 +1226,18 @@ def ensure_settings_file(data_root, env_file):
             "attachments_root": str(resolve_attachments_root(data_root)),
         },
     }
-    existing = {}
-    if settings_path.exists():
-        try:
-            loaded = json.loads(settings_path.read_text(encoding="utf-8"))
-            if isinstance(loaded, dict):
-                existing = loaded
-        except (OSError, ValueError, json.JSONDecodeError):
-            existing = {}
-    merged = dict(existing)
-    merged["schema_version"] = payload["schema_version"]
-    merged["app"] = payload["app"]
-    existing_paths = existing.get("paths")
-    merged_paths = dict(existing_paths) if isinstance(existing_paths, dict) else {}
-    merged_paths.update(payload["paths"])
-    merged["paths"] = merged_paths
-    if merged == existing:
-        return settings_path
-    settings_path.write_text(json.dumps(merged, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    settings_path.parent.mkdir(parents=True, exist_ok=True)
+    with _managed_settings_lock(settings_path):
+        existing = _read_managed_settings_path(settings_path)
+        merged = dict(existing)
+        merged["schema_version"] = payload["schema_version"]
+        merged["app"] = payload["app"]
+        existing_paths = existing.get("paths")
+        merged_paths = dict(existing_paths) if isinstance(existing_paths, dict) else {}
+        merged_paths.update(payload["paths"])
+        merged["paths"] = merged_paths
+        if merged != existing:
+            _atomic_write_managed_settings(settings_path, merged)
     return settings_path
 
 

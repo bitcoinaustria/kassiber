@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import os
 import subprocess
 import sys
 import threading
@@ -11,6 +10,7 @@ from typing import Any, Iterable, TextIO
 
 from ..ai.client import CLI_DEFAULT_MODEL, is_cli_provider_locator
 from ..ai.tools import TOOL_CATALOG
+from ..core.runtime import resolve_db_passphrase_for_bypass
 from ..errors import AppError
 from .termrender import MarkdownStreamRenderer, render_envelope_table
 
@@ -74,21 +74,21 @@ class ChatSessionResult:
 class _DaemonChatClient:
     def __init__(self, args: Any, *, transcript: TextIO | None = None) -> None:
         self._transcript = transcript
-        self._pass_fds: tuple[int, ...] = ()
-        self._duplicated_fd: int | None = None
+        self._bootstrap_passphrase: str | None = None
         self._stderr_tail = ""
         self._stderr_lock = threading.Lock()
         self._stderr_thread: threading.Thread | None = None
+        self._allow_passphrase_prompt = (
+            sys.stdin.isatty() and not bool(getattr(args, "non_interactive", False))
+        )
         command = self._daemon_command(args)
         self._proc = subprocess.Popen(
             command,
-            cwd=os.getcwd(),
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
             bufsize=1,
-            pass_fds=self._pass_fds,
         )
         if self._proc.stderr is not None:
             self._stderr_thread = threading.Thread(
@@ -97,9 +97,6 @@ class _DaemonChatClient:
                 daemon=True,
             )
             self._stderr_thread.start()
-        if self._duplicated_fd is not None:
-            os.close(self._duplicated_fd)
-            self._duplicated_fd = None
         try:
             ready = self.read()
         except AppError:
@@ -113,6 +110,37 @@ class _DaemonChatClient:
                 details={"envelope": ready},
                 retryable=False,
             )
+        if self._bootstrap_passphrase is not None:
+            passphrase = self._bootstrap_passphrase
+            self._bootstrap_passphrase = None
+            request_id = f"cli-bootstrap-{uuid.uuid4()}"
+            self.send(
+                {
+                    "kind": "daemon.unlock",
+                    "request_id": request_id,
+                    "args": {
+                        "require_existing_project": True,
+                        "auth_response": {"passphrase_secret": passphrase},
+                    },
+                },
+                record=False,
+            )
+            unlocked = self.read(record=False)
+            if (
+                unlocked.get("kind") != "daemon.unlock"
+                or unlocked.get("request_id") != request_id
+                or unlocked.get("data", {}).get("unlocked") is not True
+            ):
+                self.close()
+                error = unlocked.get("error") if isinstance(unlocked, dict) else None
+                if not isinstance(error, dict):
+                    error = {}
+                raise AppError(
+                    error.get("message", "daemon database unlock failed"),
+                    code=error.get("code", "daemon_unlock_failed"),
+                    hint=error.get("hint"),
+                    retryable=bool(error.get("retryable", False)),
+                )
 
     def _daemon_command(self, args: Any) -> list[str]:
         command = [
@@ -124,11 +152,11 @@ class _DaemonChatClient:
         ]
         if getattr(args, "env_file", None):
             command.extend(["--env-file", args.env_file])
-        passphrase_fd = getattr(args, "db_passphrase_fd", None)
-        if passphrase_fd is not None:
-            self._duplicated_fd = os.dup(passphrase_fd)
-            self._pass_fds = (self._duplicated_fd,)
-            command.extend(["--db-passphrase-fd", str(self._duplicated_fd)])
+        self._bootstrap_passphrase = resolve_db_passphrase_for_bypass(
+            args,
+            allow_prompt=self._allow_passphrase_prompt,
+            require_existing_schema=True,
+        )
         command.append("daemon")
         return command
 
@@ -155,7 +183,7 @@ class _DaemonChatClient:
         with self._stderr_lock:
             return self._stderr_tail
 
-    def send(self, payload: dict[str, Any]) -> None:
+    def send(self, payload: dict[str, Any], *, record: bool = True) -> None:
         if self._proc.stdin is None:
             raise AppError(
                 "daemon input stream is closed",
@@ -163,12 +191,12 @@ class _DaemonChatClient:
                 retryable=False,
             )
         line = json.dumps(payload, separators=(",", ":")) + "\n"
-        if self._transcript is not None:
+        if record and self._transcript is not None:
             self._transcript.write(line)
         self._proc.stdin.write(line)
         self._proc.stdin.flush()
 
-    def read(self) -> dict[str, Any]:
+    def read(self, *, record: bool = True) -> dict[str, Any]:
         if self._proc.stdout is None:
             raise AppError(
                 "daemon output stream is closed",
@@ -184,7 +212,7 @@ class _DaemonChatClient:
                 details={"stderr": stderr} if stderr else {},
                 retryable=False,
             )
-        if self._transcript is not None:
+        if record and self._transcript is not None:
             self._transcript.write(line if line.endswith("\n") else line + "\n")
         try:
             payload = json.loads(line)
@@ -457,7 +485,11 @@ def _policy_decision(args: Any, tool_name: str, stdin: TextIO) -> str | None:
         return "allow_session"
     # Machine and NDJSON outputs are scripted surfaces: never mix an
     # interactive prompt into them, even when stdin happens to be a TTY.
-    if getattr(args, "format", None) == "json" or getattr(args, "stream_json", False):
+    if (
+        getattr(args, "format", None) == "json"
+        or getattr(args, "stream_json", False)
+        or getattr(args, "non_interactive", False)
+    ):
         return "deny"
     if not stdin.isatty():
         return "deny"
@@ -863,6 +895,13 @@ def run_chat_command(
         raise AppError(
             "machine chat output requires a one-shot prompt",
             code="validation",
+            retryable=False,
+        )
+    if getattr(args, "non_interactive", False) and one_shot_prompt is None:
+        raise AppError(
+            "non-interactive chat requires a one-shot prompt",
+            code="interaction_required",
+            hint="Pass a prompt argument, --prompt, or `-` to read the prompt from stdin.",
             retryable=False,
         )
     if getattr(args, "incognito", False) and (

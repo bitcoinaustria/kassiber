@@ -134,6 +134,12 @@ If a command returns:
   `--db-passphrase <value>` flag.
 - `unlock_failed` — the passphrase did not match. Double-check it; if rotated
   recently, the old passphrase no longer works.
+- `remembered_unlock_stale` on stderr — the stored copy no longer opens this
+  database. Re-enroll with `kassiber secrets remember-unlock`; Kassiber still
+  falls through to the normal prompt or `passphrase_required` path.
+- `remembered_unlock_unavailable` — the native credential store is missing,
+  locked, or rejected the write. Keep using `--db-passphrase-fd`; Kassiber does
+  not create a plaintext fallback.
 - `plaintext_database` from `kassiber secrets change-passphrase` — the file is
   still plaintext. Run `kassiber secrets init` first.
 - `already_encrypted` from `kassiber secrets init` — the file is already

@@ -180,6 +180,21 @@ class SwapMatchingCliTest(unittest.TestCase):
         self.assertIn("swap_fee_msat", candidate)
         self.assertEqual(candidate["default_policy"], "carrying-value")
 
+        preview, code = _run(
+            data_root, "transfers", "bulk-pair",
+            "--workspace", "Main", "--profile", "Swap",
+            "--confidence", "strong",
+            "--dry-run",
+        )
+        self.assertEqual(code, 0, preview)
+        self.assertTrue(preview["data"]["dry_run"])
+        self.assertGreaterEqual(preview["data"]["summary"]["count"], 1)
+        after_preview, _ = _run(
+            data_root, "transfers", "list",
+            "--workspace", "Main", "--profile", "Swap",
+        )
+        self.assertEqual(after_preview["data"], [])
+
         payload, code = _run(
             data_root, "transfers", "bulk-pair",
             "--workspace", "Main", "--profile", "Swap",
@@ -605,9 +620,24 @@ class SwapMatchingCliTest(unittest.TestCase):
         payload, code = _run(
             data_root, "transfers", "rules", "apply",
             "--workspace", "Main", "--profile", "Swap",
+            "--dry-run",
         )
         self.assertEqual(code, 0, payload)
         self.assertEqual(payload["kind"], "transfers.rules.apply")
+        self.assertTrue(payload["data"]["dry_run"])
+        self.assertEqual(payload["data"]["summary"]["count"], 1)
+
+        payload, _ = _run(
+            data_root, "transfers", "list",
+            "--workspace", "Main", "--profile", "Swap",
+        )
+        self.assertEqual(payload["data"], [])
+
+        payload, code = _run(
+            data_root, "transfers", "rules", "apply",
+            "--workspace", "Main", "--profile", "Swap",
+        )
+        self.assertEqual(code, 0, payload)
         self.assertEqual(payload["data"]["summary"]["count"], 1)
 
         payload, _ = _run(

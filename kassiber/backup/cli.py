@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
+import sys
 
-from ..envelope import build_envelope
+from ..core.runtime import resolve_db_passphrase_for_bypass
 from ..errors import AppError
 from ..secrets.prompt import (
     prompt_passphrase,
@@ -24,16 +25,29 @@ def _resolve_backup_passphrase(
     fd = getattr(args, "backup_passphrase_fd", None)
     if fd is not None:
         return read_passphrase_from_fd(int(fd))
+    if getattr(args, "non_interactive", False):
+        raise AppError(
+            "backup passphrase input is required in non-interactive mode",
+            code="interaction_required",
+            hint=(
+                "Pass --backup-passphrase-fd, or use --recipient for backup export "
+                "and --identity-file for backup import."
+            ),
+            retryable=False,
+        )
     if confirm:
         return prompt_passphrase_with_confirmation(label, "Confirm backup passphrase: ")
     return prompt_passphrase(label)
 
 
 def _resolve_db_passphrase(args: argparse.Namespace) -> str:
-    fd = getattr(args, "db_passphrase_fd", None)
-    if fd is not None:
-        return read_passphrase_from_fd(int(fd))
-    return prompt_passphrase("Database passphrase: ")
+    return resolve_db_passphrase_for_bypass(
+        args,
+        allow_prompt=(
+            sys.stdin.isatty() and not bool(getattr(args, "non_interactive", False))
+        ),
+        require_existing_schema=True,
+    )
 
 
 def cmd_backup_export(args: argparse.Namespace) -> dict:
@@ -57,15 +71,12 @@ def cmd_backup_export(args: argparse.Namespace) -> dict:
         backup_passphrase=backup_passphrase,
         recipients=recipients,
     )
-    return build_envelope(
-        "backup.export",
-        {
-            "output": str(result.output_path),
-            "size_bytes": result.output_path.stat().st_size,
-            "manifest": result.manifest,
-            "age_backend": result.age_backend,
-        },
-    )
+    return {
+        "output": str(result.output_path),
+        "size_bytes": result.output_path.stat().st_size,
+        "manifest": result.manifest,
+        "age_backend": result.age_backend,
+    }
 
 
 def cmd_backup_import(args: argparse.Namespace) -> dict:
@@ -93,34 +104,27 @@ def cmd_backup_import(args: argparse.Namespace) -> dict:
         identity_file=identity_file,
         move_into_place=bool(args.install),
     )
-    return build_envelope(
-        "backup.import",
-        {
-            "archive": str(archive),
-            "staging_path": str(result.staging_path) if result.staging_path else None,
-            "installed_data_root": (
-                str(result.installed_data_root)
-                if result.installed_data_root
-                else None
-            ),
-            "pre_restore_backup": (
-                str(result.pre_restore_backup)
-                if result.pre_restore_backup
-                else None
-            ),
-            "temporary_artifacts_cleaned": result.temporary_artifacts_cleaned,
-            "manifest": result.manifest,
-            "secret_ref_unavailable": (
-                {
-                    "code": "secret_ref_unavailable",
-                    "hint": SECRET_REF_REPAIR_HINT,
-                    "details": {"refs": result.secret_ref_unavailable},
-                }
-                if result.secret_ref_unavailable
-                else None
-            ),
-        },
-    )
+    return {
+        "archive": str(archive),
+        "staging_path": str(result.staging_path) if result.staging_path else None,
+        "installed_data_root": (
+            str(result.installed_data_root) if result.installed_data_root else None
+        ),
+        "pre_restore_backup": (
+            str(result.pre_restore_backup) if result.pre_restore_backup else None
+        ),
+        "temporary_artifacts_cleaned": result.temporary_artifacts_cleaned,
+        "manifest": result.manifest,
+        "secret_ref_unavailable": (
+            {
+                "code": "secret_ref_unavailable",
+                "hint": SECRET_REF_REPAIR_HINT,
+                "details": {"refs": result.secret_ref_unavailable},
+            }
+            if result.secret_ref_unavailable
+            else None
+        ),
+    }
 
 
 def add_backup_parser(subparsers) -> argparse.ArgumentParser:

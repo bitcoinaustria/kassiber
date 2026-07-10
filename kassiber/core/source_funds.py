@@ -1580,6 +1580,7 @@ def bulk_review_suggestions(
     hooks: SourceFundsHooks,
     *,
     target_transaction_ref: str,
+    commit: bool = True,
 ) -> dict[str, Any]:
     """Accept deterministic source-funds suggestions as user-reviewed links.
 
@@ -1608,7 +1609,8 @@ def bulk_review_suggestions(
             """,
             (now, row["id"]),
         )
-    conn.commit()
+    if commit:
+        conn.commit()
     reviewed_rows = [
         conn.execute("SELECT * FROM source_funds_links WHERE id = ?", (row["id"],)).fetchone()
         for row in reviewable

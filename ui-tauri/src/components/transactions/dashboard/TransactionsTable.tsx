@@ -211,6 +211,7 @@ const TransactionsTable = ({
   quickFilter,
   breakdownSelection,
   transactionIdFilter = EMPTY_TRANSACTION_ID_FILTER,
+  fullRecords = records,
   onChartSelectionChange,
   onQuickFilterChange,
   onBreakdownSelectionChange,
@@ -236,6 +237,7 @@ const TransactionsTable = ({
   quickFilter: TableQuickFilter | null;
   breakdownSelection: BreakdownSelection | null;
   transactionIdFilter?: string[];
+  fullRecords?: Transaction[];
   onChartSelectionChange: (selection: FlowChartSelection | null) => void;
   onQuickFilterChange: (filter: TableQuickFilter | null) => void;
   onBreakdownSelectionChange: (selection: BreakdownSelection | null) => void;
@@ -972,7 +974,17 @@ const TransactionsTable = ({
 
   const filteredTransactions = React.useMemo(() => {
     const selectedTransactionIds = new Set(transactionIdFilter);
-    const filtered = records.filter((txn) => {
+    const isTxidFilterActive = selectedTransactionIds.size > 0;
+
+    // When the transaction ID filter (cluster events) is active, also search the
+    // full (unfiltered) records for matching transactions — they may be outside the
+    // current period filter.  If found in the full set, include them; otherwise fall
+    // back to the period-filtered records for the normal scoped lookup.
+    const lookupRecords = isTxidFilterActive && fullRecords !== records
+      ? fullRecords
+      : records;
+
+    const filtered = lookupRecords.filter((txn) => {
       const draft = getDraft(txn);
       const matchesTransactionIds =
         selectedTransactionIds.size === 0 ||
@@ -1078,6 +1090,7 @@ const TransactionsTable = ({
     });
   }, [
     records,
+    fullRecords,
     transactionIdFilter,
     getDraft,
     chartSelection,

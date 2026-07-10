@@ -11,7 +11,13 @@ Use this reference when the user is setting up Kassiber state, creating the firs
 ```bash
 kassiber init
 kassiber status
+kassiber --machine health
+kassiber --machine next-actions
 ```
+
+Agents can discover the current CLI schema with `kassiber --machine commands
+describe [path ...]`; machine mode is non-interactive and will return a typed
+error rather than waiting for a prompt.
 
 For repo-local development where `kassiber` is not on `PATH`, use:
 
@@ -92,8 +98,9 @@ kassiber secrets verify      # confirm the encrypted DB opens cleanly
 kassiber secrets status
 ```
 
-After this runs, every later command needs the passphrase — interactively, or
-via `--db-passphrase-fd <FD>`. The pre-encryption plaintext file is preserved
+After this runs, every later command needs the passphrase — interactively, via
+`--db-passphrase-fd <FD>`, or through explicit `kassiber secrets
+remember-unlock` enrollment. The pre-encryption plaintext file is preserved
 as `kassiber.pre-encryption.sqlite3.bak` so the user can roll back; advise
 them to delete it once they trust the new encrypted DB. Kassiber refuses to
 overwrite an existing rollback file at that path; inspect, move, or delete the

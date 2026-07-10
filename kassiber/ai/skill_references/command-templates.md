@@ -13,9 +13,14 @@ Global flags belong before the subcommand tree:
 kassiber --machine status
 kassiber --format plain reports balance-sheet
 kassiber --format csv --output capital-gains.csv reports capital-gains
+kassiber --machine commands describe wallets sync
 ```
 
 Do not append `--machine` or `--format` after the subcommand tree.
+`--machine` implies `--non-interactive`: it never prompts and returns a
+structured `interaction_required` error when an fd/stdin secret or one-shot
+input is missing. Use `commands describe [path ...]` to inspect arguments,
+read/mutation class, scope flags, cursor/dry-run support, and DB requirements.
 
 ## AI chat
 
@@ -68,6 +73,10 @@ kassiber --format plain reports balance-sheet
 
 # stale report repair
 kassiber --machine journals process
+
+# readiness and deterministic next-step suggestions
+kassiber --machine health
+kassiber --machine next-actions
 ```
 
 ## Backends
@@ -200,7 +209,8 @@ kassiber wallets create \
 
 ## SQLCipher passphrase
 
-The DB passphrase has no argv form by design. Three channels:
+The DB passphrase has no argv form by design. Explicit fd input wins, followed
+by an explicitly enrolled remembered copy, then the interactive prompt:
 
 ```bash
 # interactive (controlling TTY)
@@ -223,6 +233,9 @@ kassiber secrets status
 kassiber secrets init                              # interactive prompt + confirm
 kassiber secrets init --new-passphrase-fd 4 4< /tmp/new
 kassiber secrets verify                            # confirm encrypted DB opens
+kassiber secrets remember-unlock                   # verify + enroll native store
+kassiber secrets remember-unlock --passphrase-fd 3 3< /tmp/pass
+kassiber secrets forget-unlock                     # revoke + clear CLI opt-in
 kassiber secrets change-passphrase                 # interactive
 kassiber secrets change-passphrase --db-passphrase-fd 3 --new-passphrase-fd 4 \
   3< /tmp/old 4< /tmp/new

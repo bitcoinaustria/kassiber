@@ -21,6 +21,7 @@ the real outflow.
 | User asks for... | First command |
 |---|---|
 | Find swap candidates | `kassiber --machine transfers suggest` |
+| Preview exact auto-pairs without writing | `kassiber --machine transfers bulk-pair --confidence exact --dry-run` |
 | Auto-pair all exact (payment_hash) matches | `kassiber --machine transfers bulk-pair --confidence exact` |
 | Pair two specific legs manually | `kassiber --machine transfers pair --tx-out <id> --tx-in <id> --kind submarine-swap --policy carrying-value` |
 | Record a direct swap payout to an external recipient | `kassiber --machine transfers payouts create --tx-out <id> --payout-asset BTC --payout-amount <btc> --payout-fiat-value <fiat> --policy carrying-value` |
@@ -181,7 +182,8 @@ kassiber transfers rules create \
 
 Rules auto-apply to solo (non-conflicted) candidates that match every
 non-empty predicate field. Conflict clusters are never auto-paired —
-the user always disambiguates. Apply with `transfers rules apply`;
+the user always disambiguates. Preview with `transfers rules apply --dry-run`,
+then apply with `transfers rules apply`;
 list with `transfers rules list`;
 toggle with `transfers rules enable|disable --rule-id <id>`; delete
 with `transfers rules delete --rule-id <id>`.

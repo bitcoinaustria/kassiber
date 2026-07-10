@@ -8,6 +8,7 @@ import threading
 import unittest
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from unittest.mock import patch
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -157,6 +158,96 @@ def _seed_provider(data_root, base_url):
 
 
 class CliChatTest(unittest.TestCase):
+    def test_daemon_command_keeps_resolved_passphrase_out_of_process_metadata(self):
+        from kassiber.cli.chat import _DaemonChatClient
+
+        client = object.__new__(_DaemonChatClient)
+        client._bootstrap_passphrase = None
+        client._allow_passphrase_prompt = False
+        args = argparse.Namespace(
+            data_root="/tmp/kassiber-chat-remembered",
+            env_file=None,
+            db_passphrase_fd=None,
+        )
+
+        with patch(
+            "kassiber.cli.chat.resolve_db_passphrase_for_bypass",
+            return_value="remembered-chat-passphrase",
+        ) as resolve:
+            command = client._daemon_command(args)
+
+        resolve.assert_called_once_with(
+            args,
+            allow_prompt=False,
+            require_existing_schema=True,
+        )
+        self.assertEqual(client._bootstrap_passphrase, "remembered-chat-passphrase")
+        self.assertNotIn("--db-passphrase-fd", command)
+        self.assertNotIn("remembered-chat-passphrase", command)
+
+    def test_daemon_bootstrap_unlock_is_private_and_cross_platform(self):
+        from kassiber.cli.chat import _DaemonChatClient
+
+        class FakeProcess:
+            def __init__(self):
+                self.stdin = io.StringIO()
+                self.stdout = io.StringIO(
+                    json.dumps({"kind": "daemon.ready"})
+                    + "\n"
+                    + json.dumps(
+                        {
+                            "kind": "daemon.unlock",
+                            "request_id": "placeholder",
+                            "data": {"unlocked": True},
+                        }
+                    )
+                    + "\n"
+                )
+                self.stderr = io.StringIO()
+
+            def wait(self, timeout=None):
+                return 0
+
+            def terminate(self):
+                return None
+
+            def kill(self):
+                return None
+
+        fake = FakeProcess()
+        transcript = io.StringIO()
+        args = argparse.Namespace(
+            data_root="/tmp/kassiber-chat-private-unlock",
+            env_file=None,
+            db_passphrase_fd=None,
+        )
+
+        original_read = _DaemonChatClient.read
+
+        def read_with_request_id(client, *, record=True):
+            payload = original_read(client, record=record)
+            if payload.get("kind") == "daemon.unlock":
+                outbound = json.loads(fake.stdin.getvalue().splitlines()[-1])
+                payload["request_id"] = outbound["request_id"]
+            return payload
+
+        with patch(
+            "kassiber.cli.chat.resolve_db_passphrase_for_bypass",
+            return_value="private-bootstrap-secret",
+        ), patch("kassiber.cli.chat.subprocess.Popen", return_value=fake), patch.object(
+            _DaemonChatClient,
+            "read",
+            read_with_request_id,
+        ):
+            client = _DaemonChatClient(args, transcript=transcript)
+
+        outbound = fake.stdin.getvalue()
+        self.assertIn('"kind":"daemon.unlock"', outbound)
+        self.assertIn("private-bootstrap-secret", outbound)
+        self.assertNotIn("private-bootstrap-secret", transcript.getvalue())
+        self.assertNotIn("daemon.unlock", transcript.getvalue())
+        client.close()
+
     def test_daemon_chat_client_drains_large_stderr_before_ready(self):
         with tempfile.TemporaryDirectory(prefix="kassiber-chat-stderr-") as tmp:
             tmp_path = Path(tmp)

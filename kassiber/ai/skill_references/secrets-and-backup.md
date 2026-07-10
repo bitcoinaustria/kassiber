@@ -10,14 +10,14 @@ plaintext on disk and credentials were collected via argv flags.
 
 ## Passphrase entry
 
-The SQLCipher passphrase has no argv form — by design. Three channels:
+The SQLCipher passphrase has no argv form — by design. CLI unlock has three
+channels, in priority order:
 
-- Interactive `getpass()` against the controlling TTY when one is attached.
 - `--db-passphrase-fd <FD>` global flag (any non-negative integer) reads raw
   UTF-8 bytes from an already-open file descriptor. Strips one trailing
   newline so shell redirects work without trimming.
-- The desktop supervisor (eventually) will hand a passphrase to a child
-  process via fd inheritance.
+- An explicitly enrolled native OS credential-store copy.
+- Interactive `getpass()` against the controlling TTY when one is attached.
 
 ```bash
 # interactive
@@ -38,8 +38,37 @@ Behavior to remember:
 - The plaintext code path is preserved: when the on-disk file looks like a
   vanilla SQLite database, no passphrase is asked for and the legacy behavior
   is unchanged.
-- The passphrase is **not** stored in the OS keychain; the passphrase is the
-  perimeter and there is no recovery path if it is lost.
+- Remembered unlock is opt-in and stores a convenience copy in macOS Keychain,
+  Windows Credential Manager, or available/unlocked Linux Secret Service. It is
+  not recovery: the passphrase remains the perimeter and losing it means data
+  loss.
+
+## Remembered CLI unlock
+
+```bash
+kassiber secrets remember-unlock
+kassiber secrets remember-unlock --passphrase-fd 3 3< /tmp/passphrase
+kassiber secrets status
+kassiber secrets forget-unlock
+```
+
+Enrollment verifies the encrypted database before storing anything. The CLI
+uses the item only after setting `cli_remembered_unlock: true` in managed
+`config/settings.json`; desktop-only Touch ID enrollment leaves the marker
+unset, and `secrets status` does not read that desktop-only item. Kassiber
+accepts only the native keyring backend for macOS, Windows, or Linux Secret
+Service; configured third-party/file backends are treated as unavailable. CLI
+reads are not biometric-gated. If the stored copy is stale, Kassiber
+writes `remembered_unlock_stale` to stderr and falls through to the existing
+prompt or `passphrase_required` behavior. Headless systems should keep using
+`--db-passphrase-fd`. `kassiber secrets status` reports `platform`, `available`,
+`configured`, and `cli_enabled` under `remembered_unlock`.
+
+`--machine` implies `--non-interactive`, so passphrase-requiring commands need
+their documented fd/identity/recipient input and return `interaction_required`
+instead of opening a prompt. The one-shot `chat` bootstrap sends a resolved DB
+passphrase only in a private `daemon.unlock` request over the child stdin pipe;
+it never appears in argv, environment variables, stdout, or `--transcript`.
 
 ## First-time encryption
 
@@ -83,7 +112,8 @@ kassiber secrets change-passphrase --db-passphrase-fd 3 --new-passphrase-fd 4 \
 
 Rotation runs `PRAGMA rekey` and then re-opens the file with the new
 passphrase to verify. The old passphrase will not unlock the file after this
-returns successfully.
+returns successfully. Any enrolled OS-store copy is updated; if that update is
+rejected, Kassiber disables CLI remembered unlock and warns on stderr.
 
 ## What stays plaintext on disk
 
