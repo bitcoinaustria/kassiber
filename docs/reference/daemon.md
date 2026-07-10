@@ -230,11 +230,18 @@ material.
 It accepts one transaction id/txid plus bounded include flags and joins the
 safe transaction row with the local graph, journal events, append-only edit
 history, audit/evidence readiness, attachment labels, commercial provenance,
-source-funds links, privacy findings, staleness, and deterministic next-action
-descriptors. It never performs public lookup. Raw evidence URLs, managed paths,
+source-funds links, reviewed transfer/direct-payout state, loan marks/hints,
+privacy findings, staleness, and deterministic next-action descriptors. It
+never performs public lookup. Raw evidence URLs, managed paths,
 document bytes, backend identities, descriptors, xpubs, and raw importer JSON
 are removed before provider context. The kind is AI-only and intentionally
 absent from the desktop invoke allowlist.
+
+`ui.review.worklist` is the AI-only bounded accounting queue. It composes
+report readiness, quarantine, stale edits, transfer candidates, and heuristic
+loan locks by default; commercial and source-funds sections are opt-in
+categories. `ui.workspace.overview.snapshot` is AI-readable only for the
+chat's frozen workspace and keeps every profile/book boundary visible.
 
 `ui.wallets.utxos` accepts `{"wallet":"<wallet id or label>"}` and returns the
 active local UTXO inventory for one wallet. Rows include outpoint, txid, vout,
@@ -473,6 +480,11 @@ draft (including its source hash) is required. Import reconstructs normalized
 records from validated visible draft fields rather than trusting the renderer's
 `import_record` object. Both preview and import use the long-running supervisor
 budget because local OCR and multi-row evidence copying can exceed 15 seconds.
+OCR requests bypass ambient HTTP proxies and reject off-origin redirects. PDF
+rendering has a hard timeout; model ids match exact installed tags; preview and
+import cap row counts; and import hashes/copies a stable source snapshot.
+Unsupported assets, non-positive amounts, and negative fees stay quarantined,
+while projected managed-evidence copies have a bounded storage budget.
 
 `ui.connections.sources` returns the daemon's authoritative catalog of
 supported wallet kinds (with summary/config-fields metadata) and the

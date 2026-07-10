@@ -234,9 +234,13 @@ class ToolCatalogPromptTest(unittest.TestCase):
             "ui_transfers_suggest",
             "ui_transfers_review_context",
             "ui_transfers_list",
+            "ui_transfers_payouts_list",
             "ui_transfers_rules_list",
             "ui_saved_views_list",
             "ui_transfers_pair",
+            "ui_transfers_payouts_create",
+            "ui_transfers_payouts_delete",
+            "ui_transfers_update",
             "ui_transfers_unpair",
             "ui_transfers_bulk_pair",
             "ui_transfers_dismiss",
@@ -249,14 +253,22 @@ class ToolCatalogPromptTest(unittest.TestCase):
             "ui_transactions_resolve",
             "ui_transactions_graph",
             "ui_transactions_review_context",
+            "ui_workspace_overview_snapshot",
             "ui_activity_stale",
             "ui_attachments_list",
             "ui_audit_evidence_summary",
             "ui_review_badges",
+            "ui_review_worklist",
+            "ui_loans_list",
+            "ui_loans_mark",
+            "ui_loans_link",
+            "ui_loans_unmark",
             "ui_transactions_metadata_update",
             "ui_transactions_history_revert",
             "ui_attachments_copy",
             "ui_source_funds_evidence_list",
+            "ui_source_funds_sources_attach",
+            "ui_source_funds_links_attach",
             "ui_source_funds_coverage",
             "ui_source_funds_cases_list",
             "ui_source_funds_assemble",
@@ -269,6 +281,7 @@ class ToolCatalogPromptTest(unittest.TestCase):
             "ui_documents_list",
             "ui_btcpay_provenance_review",
             "ui_documents_create",
+            "ui_rates_latest",
             "ui_reports_exit_tax_preview",
             "ui_reports_export",
             "ui_egress_snapshot",
@@ -372,6 +385,56 @@ class ToolCatalogPromptTest(unittest.TestCase):
             bulk_pair_schema["properties"]["method"]["enum"],
         )
 
+        journal_events_schema = get_tool("ui_journals_events_list").parameters
+        self.assertEqual(
+            set(journal_events_schema["properties"]),
+            {"transaction", "limit"},
+        )
+        for tool_name in ("ui_attachments_list", "ui_source_funds_evidence_list"):
+            schema = get_tool(tool_name).parameters
+            self.assertEqual(schema["additionalProperties"], False)
+            self.assertEqual(schema["properties"]["limit"]["maximum"], 200)
+            self.assertEqual(schema["properties"]["cursor"]["type"], "string")
+
+        workspace_schema = get_tool("ui_workspace_overview_snapshot").parameters
+        self.assertEqual(workspace_schema["required"], ["workspace_id"])
+        self.assertEqual(get_tool("ui_review_worklist").kind_class, "read_only")
+        self.assertEqual(
+            get_tool("ui_review_worklist").parameters["properties"]["limit"]["maximum"],
+            50,
+        )
+        self.assertEqual(get_tool("ui_loans_list").kind_class, "read_only")
+        self.assertEqual(
+            set(get_tool("ui_loans_mark").parameters["required"]),
+            {"txid", "as"},
+        )
+        self.assertEqual(get_tool("ui_loans_link").kind_class, "mutating")
+        self.assertEqual(get_tool("ui_loans_unmark").kind_class, "mutating")
+
+        payout_schema = get_tool("ui_transfers_payouts_create").parameters
+        self.assertEqual(
+            set(payout_schema["required"]),
+            {"tx_out", "payout_asset", "payout_amount"},
+        )
+        self.assertEqual(
+            payout_schema["properties"]["payout_asset"]["enum"],
+            ["BTC", "LBTC", "LNBTC"],
+        )
+        self.assertEqual(get_tool("ui_transfers_payouts_list").kind_class, "read_only")
+        self.assertEqual(get_tool("ui_transfers_payouts_delete").kind_class, "mutating")
+        self.assertEqual(get_tool("ui_transfers_update").kind_class, "mutating")
+
+        for tool_name in (
+            "ui_source_funds_sources_attach",
+            "ui_source_funds_links_attach",
+            "ui_rates_latest",
+        ):
+            self.assertEqual(get_tool(tool_name).kind_class, "mutating")
+        self.assertEqual(
+            get_tool("ui_rates_latest").parameters["properties"]["source"]["enum"],
+            ["coinbase-exchange", "coingecko"],
+        )
+
     def test_live_tool_catalog_is_capability_scoped(self):
         report_tools = {
             tool["function"]["name"]
@@ -394,6 +457,50 @@ class ToolCatalogPromptTest(unittest.TestCase):
         self.assertIn("ui_transactions_review_context", transaction_tools)
         self.assertIn("ui_transactions_metadata_update", transaction_tools)
         self.assertNotIn("ui_documents_create", transaction_tools)
+
+        workspace_tools = {
+            tool["function"]["name"]
+            for tool in build_openai_tools(
+                [{"role": "user", "content": "Show the treasury across all books"}],
+                screen_context={"route": "/books"},
+            )
+        }
+        self.assertIn("ui_workspace_overview_snapshot", workspace_tools)
+        self.assertNotIn("ui_loans_mark", workspace_tools)
+
+        loan_tools = {
+            tool["function"]["name"]
+            for tool in build_openai_tools(
+                [{"role": "user", "content": "Review my loan collateral marks"}],
+            )
+        }
+        self.assertIn("ui_loans_list", loan_tools)
+        self.assertIn("ui_loans_mark", loan_tools)
+        self.assertNotIn("ui_workspace_overview_snapshot", loan_tools)
+
+        review_tools = {
+            tool["function"]["name"]
+            for tool in build_openai_tools(
+                [{"role": "user", "content": "What accounting review work remains?"}],
+            )
+        }
+        self.assertIn("ui_review_worklist", review_tools)
+
+        journal_tools = {
+            tool["function"]["name"]
+            for tool in build_openai_tools(
+                [{"role": "user", "content": "Process journals"}],
+            )
+        }
+        self.assertIn("ui_journals_process", journal_tools)
+
+        payout_tools = {
+            tool["function"]["name"]
+            for tool in build_openai_tools(
+                [{"role": "user", "content": "Record a reviewed direct payout"}],
+            )
+        }
+        self.assertIn("ui_transfers_payouts_create", payout_tools)
 
         discovery_tools = build_openai_tools(
             [{"role": "user", "content": "What can you do? Show all tools."}]

@@ -7,6 +7,7 @@ import hashlib
 import ipaddress
 import json
 import logging
+import math
 import queue
 import re
 import sqlite3
@@ -418,6 +419,7 @@ SUPPORTED_KINDS = (
     "ui.report.blockers",
     "ui.audit.changes_since_last_answer",
     "ui.audit.evidence.summary",
+    "ui.review.worklist",
     "ui.maintenance.settings",
     "ui.maintenance.configure",
     "ui.maintenance.run",
@@ -509,6 +511,7 @@ _AI_AUTO_JOURNAL_REFRESH_TOOL_NAMES = {
     "ui.audit.changes_since_last_answer",
     "ui.transactions.review_context",
     "ui.audit.evidence.summary",
+    "ui.review.worklist",
 }
 _DIRECT_AUTO_JOURNAL_REFRESH_KINDS = {
     "ui.reports.capital_gains",
@@ -537,6 +540,8 @@ _SOURCE_FUNDS_MUTATING_AI_DAEMON_KINDS = {
     "ui.source_funds.links.review",
     "ui.source_funds.suggest",
     "ui.source_funds.links.bulk_review",
+    "ui.source_funds.sources.attach",
+    "ui.source_funds.links.attach",
     "ui.source_funds.assemble",
     "ui.source_funds.cases.save",
     "ui.source_funds.export_pdf",
@@ -559,6 +564,33 @@ _EVIDENCE_AI_REDACTED_KEYS = {
     "url",
     "manifest",
 }
+_AI_SCREEN_ROUTES = frozenset(
+    {
+        "/",
+        "/overview",
+        "/transactions",
+        "/activity",
+        "/reports",
+        "/privacy-mirror",
+        "/exit-tax",
+        "/source-of-funds",
+        "/journals",
+        "/tax-events",
+        "/swaps",
+        "/transfers",
+        "/quarantine",
+        "/reconcile",
+        "/egress",
+        "/logs",
+        "/diagnostics",
+        "/books",
+        "/profiles",
+        "/connections",
+        "/imports",
+        "/settings",
+        "/assistant",
+    }
+)
 PENDING_AI_CANCEL_TTL_SECONDS = 30.0
 MAX_PENDING_AI_CANCELS = 128
 # Hard caps for source-funds daemon kinds that drive build_report. The
@@ -1668,6 +1700,8 @@ def _redact_source_funds_payload_for_ai(value: Any) -> Any:
         }
     if isinstance(value, list):
         return [_redact_source_funds_payload_for_ai(item) for item in value]
+    if isinstance(value, str) and _screen_context_contains_path_or_url(value):
+        return "<redacted>"
     return value
 
 
@@ -1682,6 +1716,8 @@ def _redact_evidence_payload_for_ai(value: Any) -> Any:
         }
     if isinstance(value, list):
         return [_redact_evidence_payload_for_ai(item) for item in value]
+    if isinstance(value, str) and _screen_context_contains_path_or_url(value):
+        return "<redacted>"
     return value
 
 
@@ -2044,6 +2080,35 @@ def _ui_source_funds_payload_from_conn(
         )
 
     if kind == "ui.source_funds.evidence.list":
+        unknown = sorted(set(args) - {"limit", "cursor"})
+        if unknown:
+            raise AppError(
+                "ui.source_funds.evidence.list received unsupported fields",
+                code="validation",
+                details={"unknown": unknown},
+                retryable=False,
+            )
+        raw_cursor = args.get("cursor")
+        if raw_cursor is not None and (
+            not isinstance(raw_cursor, str) or not raw_cursor.isdigit()
+        ):
+            raise AppError(
+                "ui.source_funds.evidence.list cursor is invalid",
+                code="validation",
+                retryable=False,
+            )
+        offset = int(raw_cursor or 0)
+        if offset > 2**31 - 1:
+            raise AppError(
+                "ui.source_funds.evidence.list cursor is out of range",
+                code="validation",
+                retryable=False,
+            )
+        limit = _coerce_positive_int(
+            args.get("limit", 100),
+            "limit",
+            maximum=200,
+        )
         _, profile = resolve_scope(conn, None, None)
         rows = conn.execute(
             """
@@ -2069,9 +2134,12 @@ def _ui_source_funds_payload_from_conn(
             JOIN wallets w ON w.id = t.wallet_id
             WHERE a.profile_id = ?
             ORDER BY a.created_at DESC, a.id DESC
+            LIMIT ? OFFSET ?
             """,
-            (profile["id"],),
+            (profile["id"], limit + 1, offset),
         ).fetchall()
+        has_more = len(rows) > limit
+        rows = rows[:limit]
         return {
             "attachments": [
                 {
@@ -2094,6 +2162,7 @@ def _ui_source_funds_payload_from_conn(
                 }
                 for row in rows
             ],
+            "next_cursor": str(offset + limit) if has_more else None,
         }
 
     if kind == "ui.source_funds.preview":
@@ -3396,12 +3465,12 @@ def _ai_chat_screen_context(raw: Any) -> dict[str, Any] | None:
     route = raw.get("route")
     if route is not None and (
         not isinstance(route, str)
-        or not route.startswith("/")
-        or len(route) > 128
+        or route not in _AI_SCREEN_ROUTES
     ):
         raise AppError(
-            "ai.chat screen_context.route must be a bounded app path",
+            "ai.chat screen_context.route must be a canonical app route",
             code="validation",
+            details={"allowed": sorted(_AI_SCREEN_ROUTES)},
             retryable=False,
         )
     entity_type = raw.get("entity_type")
@@ -3422,10 +3491,13 @@ def _ai_chat_screen_context(raw: Any) -> dict[str, Any] | None:
         )
     entity_id = raw.get("entity_id")
     if entity_id is not None and (
-        not isinstance(entity_id, str) or not entity_id.strip() or len(entity_id) > 256
+        not isinstance(entity_id, str)
+        or not entity_id.strip()
+        or len(entity_id) > 256
+        or _screen_context_contains_path_or_url(entity_id)
     ):
         raise AppError(
-            "ai.chat screen_context.entity_id must be a bounded string",
+            "ai.chat screen_context.entity_id must be a bounded local identifier",
             code="validation",
             retryable=False,
         )
@@ -4013,6 +4085,200 @@ def _ai_safe_egress_snapshot(args: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _transaction_loan_review_payload(
+    conn: sqlite3.Connection,
+    transaction_id: str,
+) -> dict[str, Any]:
+    snapshot = _loans_snapshot_from_conn(conn)
+    marks = [
+        mark
+        for mark in snapshot["marks"]
+        if str(mark.get("transaction_id") or "") == transaction_id
+    ]
+    open_locks = [
+        mark
+        for mark in snapshot["open_locks"]
+        if str(mark.get("transaction_id") or "") == transaction_id
+    ]
+    transaction = conn.execute(
+        "SELECT direction FROM transactions WHERE id = ?",
+        (transaction_id,),
+    ).fetchone()
+    direction = str(transaction["direction"] or "") if transaction is not None else ""
+    eligible = [
+        mark_as
+        for mark_as, expected_direction in {
+            "collateral": "outbound",
+            "returned": "inbound",
+            "principal-received": "inbound",
+            "principal-repaid": "outbound",
+        }.items()
+        if expected_direction == direction
+    ]
+    return {
+        "marks": marks,
+        "open_locks": open_locks,
+        "eligible_mark_types": eligible,
+        "heuristic_warning": (
+            "An open collateral lock is a reconcile hint, not proof that collateral was liquidated."
+        ),
+    }
+
+
+def _review_worklist_payload(
+    conn: sqlite3.Connection,
+    runtime: AiToolRuntime,
+    args: dict[str, Any],
+) -> dict[str, Any]:
+    allowed = {"limit", "categories"}
+    unknown = sorted(set(args) - allowed)
+    if unknown:
+        raise AppError(
+            "ui.review.worklist received unsupported fields",
+            code="validation",
+            details={"unknown": unknown},
+            retryable=False,
+        )
+    limit = _coerce_positive_int(args.get("limit", 10), "limit", maximum=50)
+    allowed_categories = {
+        "readiness",
+        "quarantine",
+        "stale_edits",
+        "transfers",
+        "loans",
+        "commercial",
+        "source_funds",
+    }
+    raw_categories = args.get("categories")
+    if raw_categories is None:
+        categories = [
+            "readiness",
+            "quarantine",
+            "stale_edits",
+            "transfers",
+            "loans",
+        ]
+    elif not isinstance(raw_categories, list) or not all(
+        isinstance(item, str) and item in allowed_categories
+        for item in raw_categories
+    ):
+        raise AppError(
+            "ui.review.worklist categories are invalid",
+            code="validation",
+            details={"allowed": sorted(allowed_categories)},
+            retryable=False,
+        )
+    else:
+        categories = list(dict.fromkeys(raw_categories))
+
+    def safe_section(builder: Callable[[], Any]) -> Any:
+        try:
+            return builder()
+        except AppError as exc:
+            return {
+                "status": "unavailable",
+                "error": {"code": exc.code, "message": str(exc)},
+            }
+
+    sections: dict[str, Any] = {}
+    if "readiness" in categories:
+        def readiness() -> dict[str, Any]:
+            blockers = build_report_blockers_snapshot(conn)
+            blocker_rows = blockers.get("blockers")
+            if isinstance(blocker_rows, list):
+                blockers = {**blockers, "blockers": blocker_rows[:limit]}
+            return {
+                "report_blockers": blockers,
+                "next_actions": build_next_actions_snapshot(conn),
+            }
+
+        sections["readiness"] = safe_section(readiness)
+    if "quarantine" in categories:
+        sections["quarantine"] = safe_section(
+            lambda: build_journals_quarantine_snapshot(conn, {"limit": limit})
+        )
+    if "stale_edits" in categories:
+        sections["stale_edits"] = safe_section(
+            lambda: core_metadata.stale_transaction_edit_summary(
+                conn,
+                None,
+                None,
+                _metadata_hooks(),
+            )
+        )
+    if "transfers" in categories:
+        sections["transfers"] = safe_section(
+            lambda: build_swap_review_context_payload(conn, {"limit": limit})
+        )
+    if "loans" in categories:
+        def loan_section() -> dict[str, Any]:
+            loans = _loans_snapshot_from_conn(conn)
+            return {
+                "summary": {
+                    "marks": len(loans["marks"]),
+                    "open_locks": len(loans["open_locks"]),
+                },
+                "open_locks": [
+                    {
+                        key: row.get(key)
+                        for key in (
+                            "transaction_id",
+                            "loan_id",
+                            "asset",
+                            "amount",
+                            "occurred_at",
+                        )
+                    }
+                    for row in loans["open_locks"][:limit]
+                ],
+                "heuristic_warning": (
+                    "Open locks are reconcile hints, not proof of liquidation."
+                ),
+            }
+
+        sections["loans"] = safe_section(loan_section)
+    if "commercial" in categories:
+        sections["commercial"] = safe_section(
+            lambda: _redact_evidence_payload_for_ai(
+                _ui_commercial_payload_from_conn(
+                    conn,
+                    runtime.runtime_config,
+                    runtime.data_root,
+                    "ui.btcpay.provenance.suggest",
+                    {"limit": limit},
+                )
+            )
+        )
+    if "source_funds" in categories:
+        def source_funds_section() -> dict[str, Any]:
+            coverage = _redact_source_funds_payload_for_ai(
+                _ui_source_funds_payload_from_conn(
+                    conn,
+                    "ui.source_funds.coverage",
+                    {"max_depth": 8, "max_transactions": 5000},
+                    data_root=runtime.data_root,
+                )
+            )
+            return {
+                key: value[:limit] if isinstance(value, list) else value
+                for key, value in coverage.items()
+                if key in {"summary", "coverage", "findings", "gaps", "status"}
+            }
+
+        sections["source_funds"] = safe_section(source_funds_section)
+    return {
+        "categories": categories,
+        "limit": limit,
+        "badges": safe_section(lambda: build_review_badges_snapshot(conn)),
+        "sections": sections,
+        "safety": {
+            "local_only": True,
+            "network_contacted": False,
+            "open_loan_locks_are_heuristic": True,
+        },
+    }
+
+
 def _transaction_review_context_payload(
     conn: sqlite3.Connection,
     runtime: AiToolRuntime,
@@ -4110,6 +4376,24 @@ def _transaction_review_context_payload(
             )
         )
     )
+    transfers = section(
+        lambda: {
+            "pairs": [
+                pair
+                for pair in list_transaction_pairs(conn, None, None)
+                if canonical_id
+                in {
+                    str(pair.get("out_transaction_id") or ""),
+                    str(pair.get("in_transaction_id") or ""),
+                }
+            ],
+            "direct_payouts": [
+                payout
+                for payout in list_direct_swap_payouts(conn, None, None)
+                if str(payout.get("out_transaction_id") or "") == canonical_id
+            ],
+        }
+    )
     graph = (
         section(
             lambda: build_transaction_graph_snapshot(
@@ -4169,6 +4453,7 @@ def _transaction_review_context_payload(
             _metadata_hooks(),
         )
     )
+    loan = section(lambda: _transaction_loan_review_payload(conn, canonical_id))
 
     actions: list[dict[str, Any]] = [
         {
@@ -4208,6 +4493,17 @@ def _transaction_review_context_payload(
             "requires_consent": False,
         }
     )
+    loan_marks = loan.get("marks") if isinstance(loan, dict) else None
+    if isinstance(loan_marks, list) and loan_marks:
+        actions.append(
+            {
+                "code": "review_loan_mark",
+                "label": "Review or remove the transaction's loan accounting mark",
+                "tool": "ui.loans.unmark",
+                "arguments": {"txid": canonical_id},
+                "requires_consent": True,
+            }
+        )
     return {
         "transaction": transaction,
         "graph": graph,
@@ -4217,7 +4513,9 @@ def _transaction_review_context_payload(
         "attachments": attachments,
         "commercial": commercial,
         "source_funds": source_funds,
+        "transfers": transfers,
         "privacy": privacy,
+        "loan": loan,
         "stale_edits": stale,
         "next_actions": actions,
         "local_reference": {
@@ -4232,13 +4530,186 @@ def _transaction_review_context_payload(
     }
 
 
-def _execute_read_only_ai_tool(call: ParsedAiToolCall, runtime: AiToolRuntime) -> dict[str, Any]:
+def _ai_tool_is_advertised(entry: Any, runtime: AiToolRuntime) -> bool:
+    advertised = runtime.maintenance_state.get("advertised_tools")
+    if not isinstance(advertised, list):
+        # Direct daemon/unit callers that do not run a live chat loop retain
+        # the catalog's existing allowlist behavior.
+        return True
+    return entry.provider_name in advertised
+
+
+def _ai_schema_type_matches(value: Any, expected: str) -> bool:
+    if expected == "null":
+        return value is None
+    if expected == "boolean":
+        return isinstance(value, bool)
+    if expected == "integer":
+        return isinstance(value, int) and not isinstance(value, bool)
+    if expected == "number":
+        return (
+            isinstance(value, (int, float))
+            and not isinstance(value, bool)
+            and (not isinstance(value, float) or math.isfinite(value))
+        )
+    if expected == "string":
+        return isinstance(value, str)
+    if expected == "array":
+        return isinstance(value, list)
+    if expected == "object":
+        return isinstance(value, dict)
+    return False
+
+
+def _validate_ai_schema_value(
+    value: Any,
+    schema: Mapping[str, Any],
+    *,
+    path: str,
+    depth: int = 0,
+) -> None:
+    if depth > 16:
+        raise AppError(
+            "AI tool arguments are nested too deeply",
+            code="validation",
+            retryable=False,
+        )
+    raw_types = schema.get("type")
+    expected_types = (
+        [raw_types]
+        if isinstance(raw_types, str)
+        else list(raw_types)
+        if isinstance(raw_types, list)
+        else []
+    )
+    if expected_types and not any(
+        isinstance(expected, str) and _ai_schema_type_matches(value, expected)
+        for expected in expected_types
+    ):
+        raise AppError(
+            f"AI tool argument {path} has the wrong type",
+            code="validation",
+            details={"path": path, "expected": expected_types},
+            retryable=False,
+        )
+    enum = schema.get("enum")
+    if isinstance(enum, list) and value not in enum:
+        raise AppError(
+            f"AI tool argument {path} is unsupported",
+            code="validation",
+            details={"path": path, "allowed": enum},
+            retryable=False,
+        )
+    if isinstance(value, dict):
+        properties = schema.get("properties")
+        properties = properties if isinstance(properties, dict) else {}
+        required = schema.get("required")
+        required = required if isinstance(required, list) else []
+        missing = [key for key in required if key not in value]
+        if missing:
+            raise AppError(
+                f"AI tool argument {path} is missing required fields",
+                code="validation",
+                details={"path": path, "missing": missing},
+                retryable=False,
+            )
+        additional = schema.get("additionalProperties", True)
+        unknown = sorted(str(key) for key in value if key not in properties)
+        if additional is False and unknown:
+            raise AppError(
+                f"AI tool argument {path} received unsupported fields",
+                code="validation",
+                details={"path": path, "unknown": unknown},
+                retryable=False,
+            )
+        for key, item in value.items():
+            child_schema = properties.get(key)
+            if not isinstance(child_schema, dict) and isinstance(additional, dict):
+                child_schema = additional
+            if isinstance(child_schema, dict):
+                _validate_ai_schema_value(
+                    item,
+                    child_schema,
+                    path=f"{path}.{key}",
+                    depth=depth + 1,
+                )
+    if isinstance(value, list):
+        minimum_items = schema.get("minItems")
+        maximum_items = schema.get("maxItems")
+        if isinstance(minimum_items, int) and len(value) < minimum_items:
+            raise AppError(
+                f"AI tool argument {path} has too few items",
+                code="validation",
+                retryable=False,
+            )
+        if isinstance(maximum_items, int) and len(value) > maximum_items:
+            raise AppError(
+                f"AI tool argument {path} has too many items",
+                code="validation",
+                retryable=False,
+            )
+        if schema.get("uniqueItems") is True:
+            canonical = [json.dumps(json_ready(item), sort_keys=True) for item in value]
+            if len(canonical) != len(set(canonical)):
+                raise AppError(
+                    f"AI tool argument {path} contains duplicate items",
+                    code="validation",
+                    retryable=False,
+                )
+        item_schema = schema.get("items")
+        if isinstance(item_schema, dict):
+            for index, item in enumerate(value):
+                _validate_ai_schema_value(
+                    item,
+                    item_schema,
+                    path=f"{path}[{index}]",
+                    depth=depth + 1,
+                )
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        minimum = schema.get("minimum")
+        maximum = schema.get("maximum")
+        if isinstance(minimum, (int, float)) and value < minimum:
+            raise AppError(
+                f"AI tool argument {path} is below its minimum",
+                code="validation",
+                retryable=False,
+            )
+        if isinstance(maximum, (int, float)) and value > maximum:
+            raise AppError(
+                f"AI tool argument {path} exceeds its maximum",
+                code="validation",
+                retryable=False,
+            )
+
+
+def _validate_ai_tool_arguments(entry: Any, arguments: dict[str, Any]) -> None:
+    if len(json.dumps(json_ready(arguments), separators=(",", ":"))) > 65_536:
+        raise AppError(
+            "AI tool arguments are too large",
+            code="validation",
+            retryable=False,
+        )
+    schema = entry.parameters
+    if not isinstance(schema, dict):
+        raise AppError("AI tool schema is invalid", code="validation", retryable=False)
+    _validate_ai_schema_value(arguments, schema, path=entry.name)
+
+
+def _execute_read_only_ai_tool(
+    call: ParsedAiToolCall,
+    runtime: AiToolRuntime,
+    *,
+    planned_auto_read: bool = False,
+) -> dict[str, Any]:
     if call.argument_error:
         return _tool_result_denied(call.argument_error)
     entry = get_tool(call.name)
     if entry is None or entry.kind_class != "read_only":
         return _tool_result_denied("tool_not_allowed")
+    if not planned_auto_read and not _ai_tool_is_advertised(entry, runtime):
+        return _tool_result_denied("tool_not_advertised")
     try:
+        _validate_ai_tool_arguments(entry, call.arguments)
         if call.name == "read_skill_reference":
             reference_name = call.arguments.get("name")
             if not isinstance(reference_name, str):
@@ -4273,6 +4744,32 @@ def _execute_read_only_ai_tool(call: ParsedAiToolCall, runtime: AiToolRuntime) -
                 )
             elif entry.daemon_kind == "ui.overview.snapshot":
                 payload = build_overview_snapshot(conn)
+            elif entry.daemon_kind == "ui.workspace.overview.snapshot":
+                if runtime.maintenance_state.get("cross_book_read_allowed") is False:
+                    raise AppError(
+                        "A book-set overview requires an explicit all-books request",
+                        code="validation",
+                        retryable=False,
+                    )
+                requested_workspace = call.arguments.get("workspace_id")
+                frozen_workspace = runtime.maintenance_state.get("scope_workspace_id")
+                if (
+                    not isinstance(requested_workspace, str)
+                    or not requested_workspace.strip()
+                    or (
+                        isinstance(frozen_workspace, str)
+                        and requested_workspace.strip() != frozen_workspace
+                    )
+                ):
+                    raise AppError(
+                        "The AI book-set overview is limited to the chat's original workspace",
+                        code="validation",
+                        retryable=False,
+                    )
+                payload = build_workspace_overview_snapshot(
+                    conn,
+                    {"workspace_id": requested_workspace.strip()},
+                )
             elif entry.daemon_kind == "ui.transactions.list":
                 payload = build_transactions_snapshot(conn, call.arguments)
             elif entry.daemon_kind == "ui.transactions.extremes":
@@ -4280,9 +4777,24 @@ def _execute_read_only_ai_tool(call: ParsedAiToolCall, runtime: AiToolRuntime) -
             elif entry.daemon_kind == "ui.transactions.resolve":
                 payload = build_transactions_resolve_snapshot(conn, call.arguments)
             elif entry.daemon_kind == "ui.transactions.graph":
+                unknown = sorted(set(call.arguments) - {"transaction"})
+                if unknown:
+                    raise AppError(
+                        "AI transaction graph received unsupported fields",
+                        code="validation",
+                        details={"unknown": unknown},
+                        retryable=False,
+                    )
+                transaction_ref = call.arguments.get("transaction")
+                if not isinstance(transaction_ref, str) or not transaction_ref.strip():
+                    raise AppError(
+                        "ui.transactions.graph requires args.transaction",
+                        code="validation",
+                        retryable=False,
+                    )
                 payload = build_transaction_graph_snapshot(
                     conn,
-                    call.arguments,
+                    {"transaction": transaction_ref.strip()},
                     runtime.runtime_config,
                     semantics_cache=_GRAPH_SEMANTICS_CACHE,
                 )
@@ -4479,12 +4991,14 @@ def _execute_read_only_ai_tool(call: ParsedAiToolCall, runtime: AiToolRuntime) -
                     _metadata_hooks(),
                 )
             elif entry.daemon_kind == "ui.attachments.list":
+                attachment_args = dict(call.arguments)
+                attachment_args.setdefault("limit", 100)
                 payload = _redact_evidence_payload_for_ai(
                     _ui_attachment_payload_from_conn(
                         conn,
                         runtime.data_root,
                         entry.daemon_kind,
-                        call.arguments,
+                        attachment_args,
                     )
                 )
             elif entry.daemon_kind == "ui.review.badges":
@@ -4495,6 +5009,28 @@ def _execute_read_only_ai_tool(call: ParsedAiToolCall, runtime: AiToolRuntime) -
                         retryable=False,
                     )
                 payload = build_review_badges_snapshot(conn)
+            elif entry.daemon_kind == "ui.review.worklist":
+                payload = _review_worklist_payload(conn, runtime, call.arguments)
+            elif entry.daemon_kind == "ui.loans.list":
+                limit = _coerce_positive_int(
+                    call.arguments.get("limit", 100),
+                    "limit",
+                    maximum=200,
+                )
+                full_snapshot = _loans_snapshot_from_conn(conn)
+                marks = full_snapshot["marks"]
+                open_locks = full_snapshot["open_locks"]
+                payload = {
+                    **full_snapshot,
+                    "marks": marks[:limit],
+                    "open_locks": open_locks[:limit],
+                    "summary": {
+                        "marks": len(marks),
+                        "open_locks": len(open_locks),
+                        "row_limit": limit,
+                        "truncated": len(marks) > limit or len(open_locks) > limit,
+                    },
+                }
             elif entry.daemon_kind in {
                 "ui.transactions.commercial_context",
                 "ui.btcpay.provenance.list",
@@ -4536,6 +5072,18 @@ def _execute_read_only_ai_tool(call: ParsedAiToolCall, runtime: AiToolRuntime) -
                 )
             else:
                 return _tool_result_denied("tool_not_allowed")
+            if entry.daemon_kind in {
+                "ui.transactions.review_context",
+                "ui.review.worklist",
+            }:
+                safety = payload.get("safety") if isinstance(payload, dict) else None
+                if isinstance(safety, dict):
+                    safety["network_contacted"] = "auto_sync" in maintenance_metadata
+                    safety["network_contact_reason"] = (
+                        "opt_in_freshness_sync"
+                        if "auto_sync" in maintenance_metadata
+                        else None
+                    )
             result: dict[str, Any] = {
                 "ok": True,
                 "envelope": build_envelope(entry.daemon_kind, payload),
@@ -4560,7 +5108,7 @@ def _execute_read_only_ai_tool(call: ParsedAiToolCall, runtime: AiToolRuntime) -
             result.update(maintenance_metadata)
             return result
 
-        return _run_on_daemon_main_thread(runtime, _read)
+        return _run_scoped_ai_operation(runtime, _read)
     except AppError as exc:
         return _tool_result_denied(
             exc.code or "tool_error",
@@ -4644,13 +5192,37 @@ def _ai_report_export_target(arguments: dict[str, Any]) -> tuple[str, dict[str, 
     return kind, forwarded
 
 
-def _run_scoped_ai_mutation(
+def _assert_ai_runtime_database_scope(
+    conn: sqlite3.Connection,
+    runtime: AiToolRuntime,
+) -> None:
+    expected_path = resolve_database_path(runtime.data_root).resolve(strict=False)
+    database_rows = conn.execute("PRAGMA database_list").fetchall()
+    main_path = next(
+        (
+            Path(str(row["file"])).resolve(strict=False)
+            for row in database_rows
+            if row["name"] == "main" and row["file"]
+        ),
+        None,
+    )
+    if main_path is not None and main_path != expected_path:
+        raise AppError(
+            "The active project changed while the AI turn was running",
+            code="stale_context",
+            hint="Ask the assistant again in the current project.",
+            retryable=True,
+        )
+
+
+def _run_scoped_ai_operation(
     runtime: AiToolRuntime,
     callback: Callable[[sqlite3.Connection], dict[str, Any]],
 ) -> dict[str, Any]:
-    """Execute only if the active book still matches the chat's frozen scope."""
+    """Execute only against the project/book frozen when the chat began."""
 
     def scoped(conn: sqlite3.Connection) -> dict[str, Any]:
+        _assert_ai_runtime_database_scope(conn, runtime)
         if (
             "scope_workspace_id" not in runtime.maintenance_state
             or "scope_profile_id" not in runtime.maintenance_state
@@ -4664,9 +5236,9 @@ def _run_scoped_ai_mutation(
             or current.get("profile_id") != expected_profile
         ):
             raise AppError(
-                "The active book changed while the AI action was awaiting consent",
+                "The active book changed while the AI turn was running",
                 code="stale_context",
-                hint="Ask the assistant to plan the action again in the current book.",
+                hint="Ask the assistant again in the current book.",
                 details={
                     "expected_workspace_id": expected_workspace,
                     "expected_profile_id": expected_profile,
@@ -4680,13 +5252,23 @@ def _run_scoped_ai_mutation(
     return _run_on_daemon_main_thread(runtime, scoped)
 
 
+def _run_scoped_ai_mutation(
+    runtime: AiToolRuntime,
+    callback: Callable[[sqlite3.Connection], dict[str, Any]],
+) -> dict[str, Any]:
+    return _run_scoped_ai_operation(runtime, callback)
+
+
 def _execute_mutating_ai_tool(call: ParsedAiToolCall, runtime: AiToolRuntime) -> dict[str, Any]:
     if call.argument_error:
         return _tool_result_denied(call.argument_error)
     entry = get_tool(call.name)
     if entry is None or entry.kind_class != "mutating":
         return _tool_result_denied("tool_not_allowed")
+    if not _ai_tool_is_advertised(entry, runtime):
+        return _tool_result_denied("tool_not_advertised")
     try:
+        _validate_ai_tool_arguments(entry, call.arguments)
         if entry.name == "ui.reports.export":
             export_kind, export_args = _ai_report_export_target(call.arguments)
 
@@ -4706,9 +5288,16 @@ def _execute_mutating_ai_tool(call: ParsedAiToolCall, runtime: AiToolRuntime) ->
             return _run_scoped_ai_mutation(runtime, _execute)
         if entry.name == "ui.source_funds.export":
             export_format = call.arguments.get("format")
+            case_ref = call.arguments.get("case")
             if export_format not in {"pdf", "bundle"}:
                 raise AppError(
                     "ui.source_funds.export format must be pdf or bundle",
+                    code="validation",
+                    retryable=False,
+                )
+            if not isinstance(case_ref, str) or not case_ref.strip():
+                raise AppError(
+                    "ui.source_funds.export requires a saved case",
                     code="validation",
                     retryable=False,
                 )
@@ -4717,11 +5306,7 @@ def _execute_mutating_ai_tool(call: ParsedAiToolCall, runtime: AiToolRuntime) ->
                 if export_format == "pdf"
                 else "ui.source_funds.export_bundle"
             )
-            export_args = (
-                {"case": call.arguments["case"]}
-                if isinstance(call.arguments.get("case"), str)
-                else {}
-            )
+            export_args = {"case": case_ref.strip()}
 
             def _execute(conn: sqlite3.Connection) -> dict[str, Any]:
                 payload = _redact_source_funds_payload_for_ai(
@@ -4771,6 +5356,12 @@ def _execute_mutating_ai_tool(call: ParsedAiToolCall, runtime: AiToolRuntime) ->
                 return {"ok": True, "envelope": build_envelope(entry.daemon_kind, payload)}
 
             return _run_scoped_ai_mutation(runtime, _execute)
+        if entry.daemon_kind == "ui.rates.latest":
+            def _execute(conn: sqlite3.Connection) -> dict[str, Any]:
+                payload = _rates_latest_payload(conn, call.arguments)
+                return {"ok": True, "envelope": build_envelope(entry.daemon_kind, payload)}
+
+            return _run_scoped_ai_mutation(runtime, _execute)
         if entry.daemon_kind == "ui.maintenance.configure":
             def _execute(conn: sqlite3.Connection) -> dict[str, Any]:
                 payload = _maintenance_configure_payload(conn, call.arguments)
@@ -4804,6 +5395,20 @@ def _execute_mutating_ai_tool(call: ParsedAiToolCall, runtime: AiToolRuntime) ->
                     conn,
                     {**call.arguments, "source": "ai"},
                     default_source="ai",
+                )
+                return {"ok": True, "envelope": build_envelope(entry.daemon_kind, payload)}
+
+            return _run_scoped_ai_mutation(runtime, _execute)
+        if entry.daemon_kind in {
+            "ui.loans.mark",
+            "ui.loans.link",
+            "ui.loans.unmark",
+        }:
+            def _execute(conn: sqlite3.Connection) -> dict[str, Any]:
+                payload = _ui_loans_payload_from_conn(
+                    conn,
+                    entry.daemon_kind,
+                    call.arguments,
                 )
                 return {"ok": True, "envelope": build_envelope(entry.daemon_kind, payload)}
 
@@ -4852,6 +5457,15 @@ def _execute_mutating_ai_tool(call: ParsedAiToolCall, runtime: AiToolRuntime) ->
 
             return _run_scoped_ai_mutation(runtime, _execute)
         if entry.daemon_kind.startswith(_SWAP_MATCHING_DAEMON_KIND_PREFIXES):
+            if entry.daemon_kind == "ui.transfers.update" and not any(
+                key in call.arguments for key in ("kind", "policy", "notes")
+            ):
+                raise AppError(
+                    "ui.transfers.update requires kind, policy, or notes",
+                    code="validation",
+                    retryable=False,
+                )
+
             def _execute(conn: sqlite3.Connection) -> dict[str, Any]:
                 payload = _ui_swap_matching_payload_from_conn(
                     conn,
@@ -4887,6 +5501,19 @@ def _record_ai_tool_usage(
     result: dict[str, Any],
 ) -> None:
     state = runtime.maintenance_state
+    attempted_tools = state.setdefault("tools_attempted", [])
+    if isinstance(attempted_tools, list):
+        attempted_tools.append(tool_name)
+    if result.get("ok") is not True:
+        denials = state.setdefault("tool_denials", [])
+        if isinstance(denials, list):
+            denials.append(
+                {
+                    "tool": tool_name,
+                    "reason": str(result.get("reason") or "tool_error"),
+                }
+            )
+        return
     tools_used = state.setdefault("tools_used", [])
     if isinstance(tools_used, list):
         tools_used.append(tool_name)
@@ -5000,6 +5627,18 @@ def _ai_answer_provenance(
         for raw in raw_tools:
             if isinstance(raw, str) and raw not in tools_used:
                 tools_used.append(raw)
+    raw_attempts = state.get("tools_attempted", [])
+    tools_attempted: list[str] = []
+    if isinstance(raw_attempts, list):
+        for raw in raw_attempts:
+            if isinstance(raw, str) and raw not in tools_attempted:
+                tools_attempted.append(raw)
+    raw_denials = state.get("tool_denials", [])
+    tool_denials = (
+        [item for item in raw_denials if isinstance(item, dict)]
+        if isinstance(raw_denials, list)
+        else []
+    )
     egress_after_id = state.get("egress_after_id")
     if not _is_strict_int(egress_after_id):
         egress_after_id = 0
@@ -5029,6 +5668,8 @@ def _ai_answer_provenance(
         "provider": provider_snapshot["name"],
         "model": validated["model"],
         "tools_used": tools_used,
+        "tools_attempted": tools_attempted,
+        "tool_denials": tool_denials,
         "active_transactions": state.get("active_transactions"),
         "quarantines": state.get("quarantines"),
         "missing_price_transactions": state.get("missing_price_transactions"),
@@ -5045,7 +5686,9 @@ def _ai_answer_provenance(
                 else None
             ),
             "advertised_tool_count": advertised_tool_count,
+            "tools_attempted": len(raw_attempts) if isinstance(raw_attempts, list) else 0,
             "tools_executed": len(tools_used),
+            "tools_denied": len(tool_denials),
             "egress_records": len(egress_records),
             "egress_endpoints": len(egress_endpoints),
             "egress_bytes_out": egress_bytes,
@@ -5053,6 +5696,7 @@ def _ai_answer_provenance(
             "egress_gap": bool(egress.get("gap")),
             "history_intent": validated.get("persist"),
             "hostnames_disclosed_to_model": False,
+            "cross_book_data_disclosed": "ui.workspace.overview.snapshot" in tools_used,
         },
     }
 
@@ -5196,6 +5840,8 @@ def _planned_auto_read_tools(validated: dict[str, Any]) -> list[AutoReadToolCall
         "label",
         "largest",
         "lbtc",
+        "loan",
+        "collateral",
         "lightning",
         "liquid",
         "maintenance",
@@ -5222,6 +5868,7 @@ def _planned_auto_read_tools(validated: dict[str, Any]) -> list[AutoReadToolCall
         "transfer",
         "trend",
         "wallet",
+        "worklist",
         "steuer",
         "saldo",
         "bestand",
@@ -5265,6 +5912,45 @@ def _planned_auto_read_tools(validated: dict[str, Any]) -> list[AutoReadToolCall
         "naechste",
     ):
         add("ui.next_actions")
+
+    if _message_has_any(
+        text,
+        "pending",
+        "next",
+        "to do",
+        "todo",
+        "ready",
+        "stale",
+        "prepare",
+        "what should",
+        "review",
+        "worklist",
+        "unresolved",
+        "quarantine",
+        "offen",
+        "nächste",
+        "naechste",
+    ):
+        add("ui.review.worklist", {"limit": 10})
+
+    if _message_has_any(
+        text,
+        "all books",
+        "book set",
+        "books set",
+        "treasury",
+        "across books",
+        "workspace overview",
+        "alle bücher",
+        "alle buecher",
+        "buchset",
+        "buch-set",
+        "über alle bücher",
+        "ueber alle buecher",
+        "gesamtvermögen",
+        "gesamtvermoegen",
+    ):
+        add("ui.profiles.snapshot")
 
     if _message_has_any(
         text,
@@ -5515,6 +6201,7 @@ def _planned_auto_read_tools(validated: dict[str, Any]) -> list[AutoReadToolCall
         add("ui.transfers.review_context", {"limit": SWAP_REVIEW_DEFAULT_LIMIT})
         add("ui.transfers.suggest")
         add("ui.transfers.list")
+        add("ui.transfers.payouts.list")
         add("ui.journals.transfers.list", {"limit": 10})
         add("ui.journals.snapshot")
         add("ui.reports.summary")
@@ -5542,6 +6229,18 @@ def _planned_auto_read_tools(validated: dict[str, Any]) -> list[AutoReadToolCall
 
     if _message_has_any(text, "rate", "price", "pricing", "fiat", "eur", "usd", "kurs"):
         add("ui.rates.summary")
+
+    if _message_has_any(
+        text,
+        "loan",
+        "collateral",
+        "borrowed",
+        "principal",
+        "liquidation",
+        "darlehen",
+        "kredit",
+    ):
+        add("ui.loans.list")
 
     return planned[:12]
 
@@ -5717,7 +6416,7 @@ def _run_auto_read_tools(
                 request_id,
             )
         )
-        result = _execute_read_only_ai_tool(call, runtime)
+        result = _execute_read_only_ai_tool(call, runtime, planned_auto_read=True)
         _record_ai_tool_usage(runtime, entry.name, result)
         safe_result = redact_tool_arguments(result)
         out.write(
@@ -5942,12 +6641,31 @@ def _persist_ai_chat_exchange(
     encrypted = _data_root_database_is_encrypted(runtime.data_root)
 
     def _persist(conn: sqlite3.Connection) -> str | None:
+        _assert_ai_runtime_database_scope(conn, runtime)
         # The stored policy is authoritative even for continuations and
         # explicit persist requests: "off" never writes, and "auto" writes
         # only when the database file is encrypted.
         if not core_chat_history.history_enabled(conn, database_encrypted=encrypted):
             return None
-        workspace, profile = resolve_scope(conn, None, None)
+        expected_workspace = runtime.maintenance_state.get("scope_workspace_id")
+        expected_profile = runtime.maintenance_state.get("scope_profile_id")
+        if isinstance(expected_workspace, str) and isinstance(expected_profile, str):
+            workspace = conn.execute(
+                "SELECT * FROM workspaces WHERE id = ?",
+                (expected_workspace,),
+            ).fetchone()
+            profile = conn.execute(
+                "SELECT * FROM profiles WHERE id = ? AND workspace_id = ?",
+                (expected_profile, expected_workspace),
+            ).fetchone()
+            if workspace is None or profile is None:
+                raise AppError(
+                    "The chat's original book is no longer available",
+                    code="stale_context",
+                    retryable=False,
+                )
+        else:
+            workspace, profile = resolve_scope(conn, None, None)
         target_session_id = session_id
         if target_session_id is None:
             target_session_id = core_chat_history.create_session(
@@ -6070,6 +6788,24 @@ def _run_ai_chat_tool_loop(
         and isinstance(function.get("function"), dict)
         and isinstance(function["function"].get("name"), str)
     ]
+    latest_question = _latest_user_message_content(validated["messages"]).lower()
+    runtime.maintenance_state["cross_book_read_allowed"] = _message_has_any(
+        latest_question,
+        "all books",
+        "book set",
+        "books set",
+        "treasury",
+        "across books",
+        "workspace overview",
+        "alle bücher",
+        "alle buecher",
+        "buchset",
+        "buch-set",
+        "über alle bücher",
+        "ueber alle buecher",
+        "gesamtvermögen",
+        "gesamtvermoegen",
+    )
     _run_auto_read_tools(
         request_id=request_id,
         messages=messages,
@@ -6111,12 +6847,14 @@ def _run_ai_chat_tool_loop(
                 continue
             call = _parse_ai_tool_call(raw_tool_call, index)
             entry = get_tool(call.name)
+            advertised = entry is not None and _ai_tool_is_advertised(entry, runtime)
             kind_class = entry.kind_class if entry is not None else "unknown"
             display_name = entry.name if entry is not None else call.name
             tool_session_name = entry.name if entry is not None else call.name
             preview_arguments = redact_tool_arguments(call.arguments)
             needs_consent = (
                 entry is not None
+                and advertised
                 and entry.kind_class == "mutating"
                 and not call.argument_error
                 and not active_chat.consent.has_session_allow(tool_session_name)
@@ -6139,7 +6877,9 @@ def _run_ai_chat_tool_loop(
             if cancel_event.is_set():
                 finish_reason = "cancelled"
                 break
-            if entry is not None and entry.kind_class == "mutating" and not call.argument_error:
+            if entry is not None and not advertised:
+                result = _tool_result_denied("tool_not_advertised")
+            elif entry is not None and entry.kind_class == "mutating" and not call.argument_error:
                 if needs_consent:
                     active_chat.consent.expect(call.call_id)
                     out.write(
@@ -9458,16 +10198,80 @@ def _handle_transaction_metadata_update(
     )
 
 
-def _loans_snapshot(ctx: DaemonContext) -> dict[str, Any]:
-    if ctx.conn is None:
-        raise AppError("database is not open", code="unavailable", retryable=True)
-    _, profile = resolve_scope(ctx.conn, None, None)
+def _loans_snapshot_from_conn(conn: sqlite3.Connection) -> dict[str, Any]:
+    _, profile = resolve_scope(conn, None, None)
     return {
-        "marks": core_loans.list_collateral_marks(ctx.conn, profile["id"]),
-        "open_locks": core_loans.open_collateral_locks(ctx.conn, profile["id"]),
+        "marks": core_loans.list_collateral_marks(conn, profile["id"]),
+        "open_locks": core_loans.open_collateral_locks(conn, profile["id"]),
         "roles": list(core_loans.COLLATERAL_ROLES),
         "role_labels": core_loans.ROLE_LABELS,
     }
+
+
+def _loans_snapshot(ctx: DaemonContext) -> dict[str, Any]:
+    return _loans_snapshot_from_conn(_require_conn(ctx))
+
+
+def _ui_loans_payload_from_conn(
+    conn: sqlite3.Connection,
+    kind: str,
+    args: dict[str, Any],
+) -> dict[str, Any]:
+    allowed_by_kind = {
+        "ui.loans.list": set(),
+        "ui.loans.mark": {"txid", "as", "note", "loan_id"},
+        "ui.loans.link": {"txids", "loan_id"},
+        "ui.loans.unmark": {"txid"},
+    }
+    allowed = allowed_by_kind.get(kind)
+    if allowed is None:
+        raise AppError(f"Unsupported loan daemon kind '{kind}'", code="validation")
+    unknown = sorted(set(args) - allowed)
+    if unknown:
+        raise AppError(
+            f"{kind} received unsupported fields",
+            code="validation",
+            details={"unknown": unknown},
+            retryable=False,
+        )
+    if kind == "ui.loans.list":
+        return _loans_snapshot_from_conn(conn)
+    if kind == "ui.loans.mark":
+        return loans_mark(
+            conn,
+            None,
+            None,
+            _required_str_arg(args, "txid", "transaction id"),
+            mark_as=_required_str_arg(args, "as", "loan mark type"),
+            note=_optional_str_arg(args, "note"),
+            loan_id=_optional_str_arg(args, "loan_id"),
+        )
+    if kind == "ui.loans.link":
+        raw_txids = args.get("txids")
+        if (
+            not isinstance(raw_txids, list)
+            or len(raw_txids) < 2
+            or len(raw_txids) > 50
+            or not all(isinstance(txid, str) and txid.strip() for txid in raw_txids)
+        ):
+            raise AppError(
+                "ui.loans.link txids must contain 2 to 50 transaction ids",
+                code="validation",
+                retryable=False,
+            )
+        return loans_link(
+            conn,
+            None,
+            None,
+            [txid.strip() for txid in raw_txids],
+            loan_id=_optional_str_arg(args, "loan_id"),
+        )
+    return loans_unmark(
+        conn,
+        None,
+        None,
+        _required_str_arg(args, "txid", "transaction id"),
+    )
 
 
 def _handle_loans_mark(ctx: DaemonContext, request: dict[str, Any]) -> dict[str, Any]:
@@ -9681,18 +10485,53 @@ def _ui_attachment_payload_from_conn(
 ) -> dict[str, Any]:
     hooks = _attachment_hooks()
     if kind == "ui.attachments.list":
-        tx_ref = args.get("transaction")
-        if tx_ref is not None and not isinstance(tx_ref, str):
-            raise AppError("ui.attachments.list transaction must be a string", code="validation")
-        return {
-            "attachments": core_attachments.list_attachments(
-                conn,
-                data_root,
-                None,
-                None,
-                hooks,
-                tx_ref=tx_ref,
+        unknown = sorted(set(args) - {"transaction", "limit", "cursor"})
+        if unknown:
+            raise AppError(
+                "ui.attachments.list received unsupported fields",
+                code="validation",
+                details={"unknown": unknown},
+                retryable=False,
             )
+        tx_ref = args.get("transaction")
+        if tx_ref is not None and (
+            not isinstance(tx_ref, str) or not tx_ref.strip()
+        ):
+            raise AppError(
+                "ui.attachments.list transaction must be a non-empty string",
+                code="validation",
+            )
+        tx_ref = tx_ref.strip() if isinstance(tx_ref, str) else None
+        raw_cursor = args.get("cursor")
+        if raw_cursor is not None and (
+            not isinstance(raw_cursor, str) or not raw_cursor.isdigit()
+        ):
+            raise AppError("ui.attachments.list cursor is invalid", code="validation")
+        offset = int(raw_cursor or 0)
+        if offset > 2**31 - 1:
+            raise AppError("ui.attachments.list cursor is out of range", code="validation")
+        limit = (
+            _coerce_positive_int(args.get("limit"), "limit", maximum=200)
+            if args.get("limit") is not None
+            else None
+        )
+        attachments = core_attachments.list_attachments(
+            conn,
+            data_root,
+            None,
+            None,
+            hooks,
+            tx_ref=tx_ref,
+            limit=(limit + 1) if limit is not None else None,
+            offset=offset,
+        )
+        if limit is None:
+            return {"attachments": attachments, "next_cursor": None}
+        page = attachments[:limit]
+        next_cursor = str(offset + limit) if len(attachments) > limit else None
+        return {
+            "attachments": page,
+            "next_cursor": next_cursor,
         }
     if kind == "ui.attachments.add":
         transaction = args.get("transaction")

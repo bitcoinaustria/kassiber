@@ -476,6 +476,13 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
   source-funds assembly/export, commercial reconciliation, and report handoff
   tools; and attach an outbound/privacy receipt to every answer. OCR files and
   raw document bytes remain desktop-local and outside the chat tool surface.
+- [x] In-app AI second review pass: add a deterministic cross-workflow
+  worklist, explicit book-set overview, loan accounting review, direct payout
+  maintenance, managed-evidence linking, and consent-gated latest rates; build
+  typed route context in the renderer and invalidate affected UI caches after
+  successful AI writes. Freeze every read/write/history target to the original
+  project/book, enforce advertised schemas at execution, and close hidden
+  public-lookup and OCR proxy/source-race paths.
 - [x] Wire the in-app AI swap-review surface end to end: advertised
   `ui.transfers.*` and `ui.saved_views.*` tools now execute through the same
   daemon dispatcher as the GUI, with writes still behind tool consent; the chat

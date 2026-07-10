@@ -8,6 +8,7 @@ import {
   buildAiChatStreamArgs,
   buildChatCancelArgs,
   buildToolConsentArgs,
+  completedAiMutationKind,
   terminalAiChatStatus,
   type AiChatMessage,
 } from "./stream";
@@ -403,5 +404,95 @@ describe("buildAiChatStreamArgs", () => {
     });
     expect(args.session_id).toBeUndefined();
     expect(args.persist).toBe(false);
+  });
+
+  it("forwards the typed ephemeral screen context", () => {
+    const args = buildAiChatStreamArgs({
+      model: "mock-model",
+      messages: [{ role: "user", content: "Review this" }],
+      screenContext: {
+        route: "/transactions",
+        entityType: "transaction",
+        entityId: "tx-1",
+        filters: { tab: "pricing" },
+        capabilities: ["transactions"],
+      },
+    });
+
+    expect(args.screen_context).toEqual({
+      route: "/transactions",
+      entity_type: "transaction",
+      entity_id: "tx-1",
+      filters: { tab: "pricing" },
+      capabilities: ["transactions"],
+    });
+  });
+});
+
+describe("completedAiMutationKind", () => {
+  it("returns a successful mutating tool once", () => {
+    const observed = new Map();
+    expect(
+      completedAiMutationKind(observed, {
+        kind: "ai.chat.tool_call",
+        schema_version: 1,
+        data: {
+          call_id: "call-1",
+          name: "ui.transactions.metadata.update",
+          kind_class: "mutating",
+        },
+      }),
+    ).toBeNull();
+    expect(
+      completedAiMutationKind(observed, {
+        kind: "ai.chat.tool_result",
+        schema_version: 1,
+        data: { call_id: "call-1", ok: true },
+      }),
+    ).toBe("ui.transactions.metadata.update");
+    expect(
+      completedAiMutationKind(observed, {
+        kind: "ai.chat.tool_result",
+        schema_version: 1,
+        data: { call_id: "call-1", ok: true },
+      }),
+    ).toBeNull();
+  });
+
+  it("ignores read-only and failed tool results", () => {
+    const observed = new Map();
+    completedAiMutationKind(observed, {
+      kind: "ai.chat.tool_call",
+      schema_version: 1,
+      data: {
+        call_id: "read-1",
+        name: "ui.transactions.list",
+        kind_class: "read_only",
+      },
+    });
+    expect(
+      completedAiMutationKind(observed, {
+        kind: "ai.chat.tool_result",
+        schema_version: 1,
+        data: { call_id: "read-1", ok: true },
+      }),
+    ).toBeNull();
+
+    completedAiMutationKind(observed, {
+      kind: "ai.chat.tool_call",
+      schema_version: 1,
+      data: {
+        call_id: "write-1",
+        name: "ui.journals.process",
+        kind_class: "mutating",
+      },
+    });
+    expect(
+      completedAiMutationKind(observed, {
+        kind: "ai.chat.tool_result",
+        schema_version: 1,
+        data: { call_id: "write-1", ok: false, reason: "user_denied" },
+      }),
+    ).toBeNull();
   });
 });

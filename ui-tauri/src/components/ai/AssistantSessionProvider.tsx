@@ -2,9 +2,10 @@ import * as React from "react";
 
 import {
   AssistantSessionContext,
-  type AssistantReturnPath,
+  type AssistantScreenContext,
   type AssistantSessionContextValue,
 } from "@/components/ai/assistantSession";
+import { currentAssistantScreenContext } from "@/components/ai/assistantScreenContext";
 import {
   type AiChatMessage,
   type AiChatRequest,
@@ -23,12 +24,12 @@ interface StoredSessionShape {
 
 interface AssistantSessionProviderProps {
   children: React.ReactNode;
-  returnPath: AssistantReturnPath;
+  screenContext: AssistantScreenContext;
 }
 
 export function AssistantSessionProvider({
   children,
-  returnPath,
+  screenContext,
 }: AssistantSessionProviderProps) {
   const selection = useUiStore((state) => state.assistantModelSelection);
   const setSelection = useUiStore(
@@ -97,12 +98,12 @@ export function AssistantSessionProvider({
           sessionId: activeSession,
           persist: incognito && activeSession === null ? false : "auto",
           seedHistory,
-          screenContext: { route: returnPath },
+          screenContext: currentAssistantScreenContext(screenContext),
         },
         prompt,
       );
     },
-    [incognito, returnPath, selection, send, thinkingEffort],
+    [incognito, screenContext, selection, send, thinkingEffort],
   );
 
   const dispatchPrompt = React.useCallback(
@@ -272,7 +273,7 @@ export function AssistantSessionProvider({
       queuedPrompts,
       selection,
       thinkingEffort,
-      returnPath,
+      returnPath: screenContext.route,
       sessionId,
       incognito,
       setSelection,
@@ -300,7 +301,7 @@ export function AssistantSessionProvider({
       pendingConsent,
       queuedPrompts,
       resumeSession,
-      returnPath,
+      screenContext.route,
       sessionId,
       setSelection,
       selection,

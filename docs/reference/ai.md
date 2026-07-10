@@ -386,7 +386,8 @@ Before the provider is called, Kassiber also runs a small deterministic
 read-only router for Kassiber questions. It looks for common accounting intents
 such as pending work, sync readiness, totals, inflow/outflow, balances, tax
 summaries, largest/smallest transactions, transaction search, quarantine,
-transfers, swap-review context, saved review filters, auto-pair rules, and pricing.
+the combined review worklist, loans, book-set views, transfers/direct payouts,
+swap-review context, saved review filters, auto-pair rules, and pricing.
 Matching read-only tool results are streamed to the UI and inserted into the
 model context as exact local data, so small local models can answer from program
 output instead of doing their own arithmetic. That auto-read context is sent as
@@ -436,19 +437,28 @@ Read-only provider tool names run automatically through safe daemon snapshot
 surfaces:
 
 Live chats do not advertise the entire catalog on every turn. The daemon picks
-bounded capability packs (`core`, `transactions`, `reports`, `wallets`,
-`privacy`, `source_funds`, `merchant`, `transfers`, `operations`) from the
+bounded capability packs (`core`, `workspace`, `transactions`, `reports`,
+`wallets`, `loans`, `privacy`, `source_funds`, `merchant`, `transfers`,
+`operations`) from the
 latest question and optional typed `screen_context`. Capability-discovery
 questions can still request the full catalog. This reduces schema/token load
 and improves tool choice on smaller local models without widening execution:
 `get_tool` and the daemon dispatcher remain the authoritative allowlists.
 
-Desktop chat sends an ephemeral `screen_context` containing only a route and,
+Desktop chat builds an ephemeral `screen_context` from a positive registry of
+canonical routes and capability packs. It contains only a route and,
 when available, a typed entity id, bounded filters, or explicit capability
 hints. Sensitive keys and oversized filters are rejected. The context is
 inserted as untrusted navigation state immediately before the current user
 turn; it never grants filesystem access and is not a replacement for a typed
 read tool.
+
+Only schemas advertised for that turn may be requested by the provider. The
+small deterministic pre-read router remains separately bounded and read-only.
+The daemon validates tool
+arguments against the catalog again at execution time, including required
+fields, types, enums, bounds, and `additionalProperties`; provider output cannot
+smuggle a hidden network or mutation argument into a narrower tool.
 
 - `status`
 - `ui_overview_snapshot` maps to daemon kind `ui.overview.snapshot`
@@ -477,6 +487,9 @@ read tool.
   backends referenced by the active books/profile and returns URL presence
   metadata, not exact endpoint URLs
 - `ui_profiles_snapshot` maps to daemon kind `ui.profiles.snapshot`
+- `ui_workspace_overview_snapshot` reads every book in the chat's original
+  workspace only after an explicit book-set request. It preserves per-book
+  boundaries and does not aggregate mixed fiat currencies.
 - `ui_reports_capital_gains` maps to daemon kind `ui.reports.capital_gains`
 - `ui_reports_summary` maps to daemon kind `ui.reports.summary`; it returns
   exact processed all-time summary totals, including asset and wallet
@@ -514,13 +527,16 @@ read tool.
 - `ui_journals_quarantine` maps to daemon kind `ui.journals.quarantine`
 - `ui_journals_events_list` maps to daemon kind `ui.journals.events.list`; it
   returns bounded processed journal events with transaction ids, Austrian
-  category fields, and reviewed pair context for swap/peg rows
+  category fields, reviewed pair context for swap/peg rows, and an optional
+  transaction filter
 - `ui_journals_transfers_list` maps to daemon kind
   `ui.journals.transfers.list`
 - `ui_rates_summary` maps to daemon kind `ui.rates.summary`
 - `ui_rates_coverage` maps to daemon kind `ui.rates.coverage`; it returns
   transaction pricing coverage, rows that still require a usable fiat spot
   price, and whether local rates-cache samples can cover those gaps
+- `ui_rates_latest` is consent-gated and fetches one latest public market rate
+  only when live-rate access is enabled for the active book
 - `ui_rates_rebuild` maps to daemon kind `ui.rates.rebuild`; after consent it
   fetches missing provider spot-rate windows, clears provider-derived
   transaction prices, applies cache-backed prices, and attempts to reprocess
@@ -548,7 +564,14 @@ read tool.
   instead of making the whole packet fail.
 - `ui_activity_stale`, `ui_attachments_list`,
   `ui_audit_evidence_summary`, and `ui_review_badges` expose local review and
-  audit readiness. AI attachment results omit local paths and URL targets.
+  audit readiness. AI attachment/evidence lists are cursor-bounded and omit
+  local paths and URL targets.
+- `ui_review_worklist` combines bounded readiness blockers, quarantine, stale
+  edits, transfer candidates, loan hints, and optional commercial/source-funds
+  gaps into one deterministic local review queue
+- `ui_loans_list` reads reviewed collateral/principal marks and open-lock hints;
+  the latter are explicitly heuristic and never liquidation proof. Returned
+  rows are bounded and the summary reports full counts/truncation.
 - `ui_source_funds_sources_list` maps to daemon kind
   `ui.source_funds.sources.list`; attachment labels may be shown, but raw
   evidence URLs and stored attachment paths are redacted
@@ -587,6 +610,8 @@ read tool.
   should follow one split queue; without a candidate type it includes both.
 - `ui_transfers_list` maps to daemon kind `ui.transfers.list`; it returns active
   reviewed transfer/swap pairs
+- `ui_transfers_payouts_list` returns reviewed direct/split payouts where the
+  outbound leg is known but no inbound transaction was imported
 - `ui_transfers_rules_list` maps to daemon kind `ui.transfers.rules.list`; it
   returns active auto-pair rules without applying them
 - `ui_saved_views_list` maps to daemon kind `ui.saved_views.list`; it returns
@@ -611,7 +636,8 @@ restricted to packaged files under `kassiber/ai/skill_references/`:
 
 Mutating provider tools currently include `ui_wallets_sync`, which maps to
 daemon kind `ui.wallets.sync`, `ui_journals_process`, which maps to
-`ui.journals.process`, `ui_rates_rebuild`, which refreshes provider spot prices
+`ui.journals.process`, `ui_rates_latest`, which fetches one opted-in latest
+public rate, `ui_rates_rebuild`, which refreshes provider spot prices
 and reprocesses journals, `ui_maintenance_configure`, which changes
 active-profile AI maintenance settings, and `ui_maintenance_run`, which runs
 optional sync plus journal maintenance and returns report blockers. The same
@@ -620,7 +646,9 @@ covers review-queue actions exposed to chat: `ui_transfers_pair`,
 `ui_transfers_unpair`, `ui_transfers_bulk_pair`, `ui_transfers_dismiss`,
 `ui_transfers_rules_create`, `ui_transfers_rules_delete`,
 `ui_transfers_rules_set_enabled`, `ui_transfers_rules_apply`,
-`ui_saved_views_create`, and `ui_saved_views_delete`. `ui_transfers_pair`
+`ui_transfers_payouts_create`, `ui_transfers_payouts_delete`,
+`ui_transfers_update`, `ui_saved_views_create`, and `ui_saved_views_delete`.
+`ui_transfers_pair`
 supports `coinjoin` and `whirlpool` kinds for user-reviewed same-asset
 ownership hops, including reviewed one-to-many / many-to-one same-asset links.
 Cross-asset and layer-transition links remain one-to-one. The AI may propose
@@ -628,7 +656,9 @@ these pairings, but the write still requires explicit user consent.
 Source-funds evidence writes are also consent-gated:
 `ui_source_funds_sources_create`,
 `ui_source_funds_links_create`, `ui_source_funds_links_review`,
-`ui_source_funds_suggest`, and `ui_source_funds_links_bulk_review`. These tools
+`ui_source_funds_suggest`, `ui_source_funds_links_bulk_review`,
+`ui_source_funds_sources_attach`, and `ui_source_funds_links_attach`. Evidence
+attach tools accept only existing managed attachment ids, never paths. These tools
 create/review provenance evidence only; they do not mutate tax/journal
 `transaction_pairs` and they support non-CoinJoin link types such as
 self-transfer, exchange transfer, trade, swap, peg-in/peg-out, Lightning hops,
@@ -655,11 +685,15 @@ daemon emits
 `ai.chat.tool_consent_required` with a short summary and redacted argument
 preview, then waits for:
 
-The daemon freezes the active workspace/profile ids when the chat starts. Every
-approved mutation rechecks that scope on the main SQLite thread immediately
-before execution. If the user switched books while a consent card was pending,
-the action fails with `stale_context` and must be planned again; it never lands
-in the newly active book.
+Loan review writes (`ui_loans_mark`, `ui_loans_link`, `ui_loans_unmark`) are
+also consent-gated and invalidate journals. Open-lock heuristics never create
+marks automatically.
+
+The daemon freezes the project/database and active workspace/profile ids when
+the chat starts. Every read and approved mutation rechecks that scope on the
+main SQLite thread immediately before execution. If the user switches projects
+or books mid-turn, the operation fails with `stale_context`; history persistence
+still targets the original book and never the newly active one.
 
 ```json
 {
@@ -682,8 +716,9 @@ executed.
 
 The terminal `ai.chat` record includes a compact `provenance` object with the
 provider/model, generation timestamp, local tool names used, journal refresh
-status, sync-attempt status, and counts learned from health/report-blocker
-tools. The GUI uses that object and the exact tool payloads to render source
+status, sync-attempt status, successful versus denied tool attempts, and counts
+learned from health/report-blocker tools. Denied calls never count as executed
+or as cross-book disclosure. The GUI uses that object and the exact tool payloads to render source
 chips beside the assistant answer, so small models can be checked against
 program-derived facts.
 

@@ -28,6 +28,7 @@ _NO_BOOTSTRAP_DATABASE_PATHS = {
     "wallets.ledger-template",
 }
 _READ_ONLY_TOP_LEVEL = {"health", "next-actions", "status"}
+_READ_ONLY_PATHS = {"wallets.preview-document"}
 _READ_ONLY_VERBS = {
     "coverage",
     "current",
@@ -76,7 +77,11 @@ def _effect_for_path(path: str) -> str:
     if path in {"chat", "daemon"}:
         return "interactive"
     parts = path.split(".")
-    if path in _READ_ONLY_TOP_LEVEL or parts[-1] in _READ_ONLY_VERBS:
+    if (
+        path in _READ_ONLY_TOP_LEVEL
+        or path in _READ_ONLY_PATHS
+        or parts[-1] in _READ_ONLY_VERBS
+    ):
         return "read_only"
     return "mutating"
 

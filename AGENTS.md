@@ -106,14 +106,16 @@ Kassiber is currently in **dev mode**: renaming commands, breaking flags, and re
   exclude it.
 - In-app AI read tools are explicit daemon kinds, not generic CLI or daemon
   dispatch. Current read-only AI kinds are `status`,
-  `ui.overview.snapshot`, `ui.transactions.list`,
+  `ui.overview.snapshot`, `ui.workspace.overview.snapshot`,
+  `ui.review.worklist`, `ui.loans.list`, `ui.transactions.list`,
   `ui.transactions.extremes`, `ui.transactions.search`, `ui.wallets.list`,
   `ui.backends.list`, `ui.profiles.snapshot`, `ui.reports.capital_gains`,
   `ui.reports.summary`, `ui.reports.balance_sheet`,
   `ui.reports.portfolio_summary`, `ui.reports.tax_summary`,
   `ui.reports.balance_history`, `ui.reports.lightning_profitability`,
   `ui.connections.node.snapshot`, `ui.journals.snapshot`,
-  `ui.journals.quarantine`, `ui.journals.transfers.list`, `ui.rates.summary`,
+  `ui.journals.events.list`, `ui.journals.quarantine`,
+  `ui.journals.transfers.list`, `ui.transfers.payouts.list`, `ui.rates.summary`,
   `ui.rates.coverage`, `ui.report.blockers`,
   `ui.audit.changes_since_last_answer`, `ui.audit.evidence.summary`,
   `ui.transactions.resolve`, `ui.transactions.graph`,
@@ -134,12 +136,20 @@ Kassiber is currently in **dev mode**: renaming commands, breaking flags, and re
   `read_skill_reference("index")` returns only the
   compact in-app skill routing document; deeper references stay allowlisted.
   Live chats capability-scope the advertised schemas from the latest question
-  plus typed ephemeral `screen_context`; capability-discovery calls may still
-  request the full catalog. `ui.transactions.review_context` is AI-only and
+  plus typed ephemeral `screen_context`; the renderer builds that context from
+  canonical route/entity/filter allowlists, and provider-requested tools are
+  checked against both the advertised set and their JSON schema at execution.
+  Capability-discovery calls may still request the full catalog.
+  `ui.transactions.review_context` is AI-only and
   composes safe local transaction, graph, journal, evidence, commercial,
-  source-funds, and privacy state without public lookup. Every terminal answer
+  source-funds, transfer/direct-payout, loan, and privacy state without public
+  lookup. Every terminal answer
   includes a UI-only privacy receipt for provider kind, selected schema count,
   executed tools, and outbound event/byte counts.
+  Reads, writes, and history persistence stay pinned to the project/workspace/
+  profile captured when the chat began. Consent-gated AI additions include
+  loan mark/link/unmark, direct payout create/delete, transfer-pair update,
+  existing-evidence attach to source-funds records, and opted-in latest rates.
   Desktop-only replication kinds are `ui.sync.status`,
   `ui.sync.{enable,disable,push,pull,join_request,invite,join}`,
   `ui.sync.transports.{list,configure,delete}`,

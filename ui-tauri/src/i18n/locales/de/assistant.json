@@ -129,6 +129,9 @@
     "remoteProvider": "Remote-Provider",
     "advertisedTools_one": "{{count}} Tool-Schema",
     "advertisedTools_other": "{{count}} Tool-Schemas",
+    "deniedTools_one": "{{count}} abgelehntes Tool",
+    "deniedTools_other": "{{count}} abgelehnte Tools",
+    "crossBookRead": "Buchset-Daten geteilt",
     "egressReceipt": "{{records}} ausgehende Ereignisse / {{bytes}} Bytes",
     "answeredAt": "beantwortet {{time}}"
   },

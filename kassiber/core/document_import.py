@@ -31,8 +31,26 @@ DEFAULT_CONFIDENCE_THRESHOLD = Decimal("0.78")
 DEFAULT_MAX_PDF_PAGES = 3
 MAX_RENDERED_PDF_PAGES = 8
 MAX_SOURCE_BYTES = 25 * 1024 * 1024
+MAX_DRAFT_ROWS = 500
+MAX_PROJECTED_ATTACHMENT_BYTES = 512 * 1024 * 1024
 PDF_RENDER_DPI = 180
+PDF_RENDER_TIMEOUT_SECONDS = 30
 DOCUMENT_IMPORT_FORMAT = "document_import"
+SUPPORTED_DOCUMENT_ASSETS = frozenset({"BTC", "LBTC"})
+_OCR_CONFIDENCE_FIELDS = frozenset(
+    {
+        "occurred_at",
+        "direction",
+        "asset",
+        "amount_btc",
+        "fee_btc",
+        "fiat_currency",
+        "fiat_value",
+        "fiat_rate",
+        "counterparty",
+        "description",
+    }
+)
 
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
 PDF_EXTENSION = ".pdf"
@@ -184,22 +202,13 @@ def _model_id(value: Any) -> str:
     return str(value or "").strip()
 
 
-def _model_base_name(model_id: str) -> str:
-    return model_id.split(":", 1)[0].strip().lower()
-
-
 def looks_like_vision_model(model_id: str) -> bool:
     lowered = model_id.strip().lower()
     return any(hint in lowered for hint in VISION_MODEL_NAME_HINTS)
 
 
 def _model_matches(candidate: str, expected: str) -> bool:
-    candidate_lower = candidate.lower()
-    expected_lower = expected.lower()
-    return (
-        candidate_lower == expected_lower
-        or _model_base_name(candidate_lower) == _model_base_name(expected_lower)
-    )
+    return candidate.strip().lower() == expected.strip().lower()
 
 
 def _installed_model_ids(models: Sequence[Mapping[str, Any]]) -> list[str]:
@@ -219,7 +228,11 @@ def _choose_model(
     installed = _installed_model_ids(models)
     if requested_model:
         model = requested_model.strip()
-        if installed and not any(_model_matches(candidate, model) for candidate in installed):
+        installed_match = next(
+            (candidate for candidate in installed if _model_matches(candidate, model)),
+            None,
+        )
+        if installed and installed_match is None:
             raise AppError(
                 f"Local vision model '{model}' is not installed",
                 code="document_import_model_missing",
@@ -239,13 +252,19 @@ def _choose_model(
                 details={"requested_model": model, "recommendations": model_recommendations()},
                 retryable=False,
             )
-        return model, installed
+        return installed_match or model, installed
 
     configured_default = _model_id(provider.get("default_model"))
-    if configured_default and any(
-        _model_matches(candidate, configured_default) for candidate in installed
-    ) and looks_like_vision_model(configured_default):
-        return configured_default, installed
+    configured_match = next(
+        (
+            candidate
+            for candidate in installed
+            if configured_default and _model_matches(candidate, configured_default)
+        ),
+        None,
+    )
+    if configured_match and looks_like_vision_model(configured_match):
+        return configured_match, installed
 
     for recommended in MODEL_RECOMMENDATIONS:
         model_id = recommended["id"]
@@ -367,7 +386,23 @@ def _render_pdf_pages(path: Path, *, max_pages: int) -> tuple[list[Path], tempfi
         str(path),
         str(prefix),
     ]
-    completed = subprocess.run(command, text=True, capture_output=True, check=False)
+    try:
+        completed = subprocess.run(
+            command,
+            text=True,
+            capture_output=True,
+            check=False,
+            timeout=PDF_RENDER_TIMEOUT_SECONDS,
+        )
+    except subprocess.TimeoutExpired as exc:
+        tempdir.cleanup()
+        raise AppError(
+            "PDF rendering timed out",
+            code="document_import_pdf_render_timeout",
+            hint="Export only the transaction pages as PNG/JPEG and import those images.",
+            details={"timeout_seconds": PDF_RENDER_TIMEOUT_SECONDS},
+            retryable=False,
+        ) from exc
     if completed.returncode != 0:
         tempdir.cleanup()
         raise AppError(
@@ -469,6 +504,13 @@ def _decimal_text(value: Any) -> str | None:
     return format(abs(number).normalize(), "f")
 
 
+def _signed_decimal_text(value: Any) -> str | None:
+    number = _decimal_or_none(value)
+    if number is None:
+        return None
+    return format(number.normalize(), "f")
+
+
 def _confidence(value: Any) -> Decimal:
     number = _decimal_or_none(value)
     if number is None:
@@ -497,7 +539,7 @@ def _cell_confidences(value: Any) -> dict[str, float]:
         return {}
     out: dict[str, float] = {}
     for key, raw in value.items():
-        if not isinstance(key, str):
+        if not isinstance(key, str) or key not in _OCR_CONFIDENCE_FIELDS:
             continue
         out[key] = float(_confidence(raw))
     return out
@@ -511,10 +553,12 @@ def _source_region(value: Any) -> dict[str, Any] | None:
         page_number = int(page)
     except (TypeError, ValueError):
         page_number = 1
-    region: dict[str, Any] = {"page": max(1, page_number)}
+    region: dict[str, Any] = {
+        "page": min(max(1, page_number), MAX_RENDERED_PDF_PAGES)
+    }
     for key in ("x", "y", "width", "height"):
         number = _decimal_or_none(value.get(key))
-        if number is not None:
+        if number is not None and abs(number) <= 1_000_000:
             region[key] = float(number)
     unit = str_or_none(value.get("unit")) or "relative"
     region["unit"] = unit[:32]
@@ -565,6 +609,7 @@ def _draft_row(
         invalid_date = True
     direction = _direction(raw.get("direction"))
     asset_value = str_or_none(raw.get("asset"))
+    asset_value = asset_value[:32] if asset_value else None
     asset = asset_value.upper() if asset_value else None
     explicit_crypto_amount = raw.get("amount_btc")
     if explicit_crypto_amount in (None, ""):
@@ -572,14 +617,17 @@ def _draft_row(
     amount_value = explicit_crypto_amount
     if amount_value in (None, "") and asset:
         amount_value = raw.get("amount")
-    amount_btc = _decimal_text(amount_value)
+    amount_btc = _signed_decimal_text(amount_value)
+    amount_number = _decimal_or_none(amount_value)
     if asset is None and explicit_crypto_amount not in (None, ""):
         asset = "BTC"
     fee_value = raw.get("fee_btc")
     if fee_value in (None, ""):
         fee_value = raw.get("fee_crypto")
-    fee_btc = _decimal_text(fee_value)
+    fee_btc = _signed_decimal_text(fee_value)
+    fee_number = _decimal_or_none(fee_value)
     fiat_currency = str_or_none(raw.get("fiat_currency"))
+    fiat_currency = fiat_currency[:16] if fiat_currency else None
     fiat_value = _decimal_text(raw.get("fiat_value"))
     fiat_rate = _decimal_text(raw.get("fiat_rate"))
     confidence = _confidence(raw.get("confidence"))
@@ -593,14 +641,32 @@ def _draft_row(
         threshold=threshold,
         invalid_date=invalid_date,
     )
+    if asset is not None and asset not in SUPPORTED_DOCUMENT_ASSETS:
+        flags.append("unsupported_asset")
+    if amount_number is not None and amount_number <= 0:
+        flags.append("non_positive_amount")
+    if fee_number is not None and fee_number < 0:
+        flags.append("negative_fee")
     status = "ready" if not flags else "quarantined"
     evidence_text = str_or_none(raw.get("evidence_text"))
     counterparty = str_or_none(raw.get("counterparty"))
     description = str_or_none(raw.get("description"))
+    evidence_text = evidence_text[:4000] if evidence_text else None
+    counterparty = counterparty[:500] if counterparty else None
+    description = description[:4000] if description else None
     model_row_id = str_or_none(raw.get("id") or raw.get("row_id"))
+    model_row_id = model_row_id[:256] if model_row_id else None
     row_id = f"docrow-{source_hash[:16]}-{index:03d}"
     import_record = None
-    if occurred_at and direction and amount_btc and asset:
+    if (
+        occurred_at
+        and direction
+        and amount_btc
+        and amount_number is not None
+        and amount_number > 0
+        and asset in SUPPORTED_DOCUMENT_ASSETS
+        and (fee_number is None or fee_number >= 0)
+    ):
         import_record = {
             "id": row_id,
             "occurred_at": occurred_at,
@@ -661,6 +727,13 @@ def _draft_rows(
             details={"keys": sorted(str(k) for k in payload.keys())},
             retryable=True,
         )
+    if len(raw_rows) > MAX_DRAFT_ROWS:
+        raise AppError(
+            "Local AI OCR output contains too many rows",
+            code="document_import_ai_response_invalid",
+            details={"rows": len(raw_rows), "max_rows": MAX_DRAFT_ROWS},
+            retryable=False,
+        )
     rows: list[dict[str, Any]] = []
     for index, raw in enumerate(raw_rows, start=1):
         if not isinstance(raw, Mapping):
@@ -710,6 +783,7 @@ def _client_for_provider(provider: dict[str, Any]) -> Any:
     return ai_client_for_locator(
         base_url=provider["base_url"],
         api_key=get_ai_provider_api_key_for_use(provider),
+        direct_connection=True,
     )
 
 
@@ -814,6 +888,13 @@ def _import_records_from_rows(
     selected_row_ids: Sequence[str] | None,
     source_hash: str,
 ) -> tuple[list[dict[str, Any]], int]:
+    if len(rows) > MAX_DRAFT_ROWS:
+        raise AppError(
+            "Document draft contains too many rows",
+            code="validation",
+            details={"rows": len(rows), "max_rows": MAX_DRAFT_ROWS},
+            retryable=False,
+        )
     selected = (
         {str(row_id) for row_id in selected_row_ids if str(row_id)}
         if selected_row_ids is not None
@@ -860,15 +941,32 @@ def _import_record_from_draft_row(
         return None
     direction = _direction(draft.get("direction"))
     asset = (str_or_none(draft.get("asset")) or "").upper()
-    amount = _decimal_text(draft.get("amount_btc"))
-    fee = _decimal_text(draft.get("fee_btc")) or "0"
-    if direction is None or asset not in {"BTC", "LBTC"} or amount is None:
+    raw_amount = draft.get("amount_btc")
+    raw_fee = draft.get("fee_btc")
+    amount = _signed_decimal_text(raw_amount)
+    fee = _signed_decimal_text(raw_fee) or "0"
+    amount_number = _decimal_or_none(raw_amount)
+    fee_number = Decimal("0") if raw_fee in (None, "") else _decimal_or_none(raw_fee)
+    if (
+        direction is None
+        or asset not in SUPPORTED_DOCUMENT_ASSETS
+        or amount_number is None
+        or amount_number <= 0
+        or fee_number is None
+        or fee_number < 0
+    ):
         return None
     confidence = _confidence(row.get("confidence"))
     cell_confidences = _cell_confidences(row.get("cell_confidences"))
     evidence_text = str_or_none(row.get("evidence_text"))
     if evidence_text:
         evidence_text = evidence_text[:4000]
+    fiat_currency = str_or_none(draft.get("fiat_currency"))
+    fiat_currency = fiat_currency[:16] if fiat_currency else None
+    counterparty = str_or_none(draft.get("counterparty"))
+    counterparty = counterparty[:500] if counterparty else None
+    description = str_or_none(draft.get("description"))
+    description = description[:4000] if description else None
     return {
         "id": row_id,
         "occurred_at": occurred_at,
@@ -876,11 +974,11 @@ def _import_record_from_draft_row(
         "asset": asset,
         "amount": amount,
         "fee": fee,
-        "fiat_currency": str_or_none(draft.get("fiat_currency")),
+        "fiat_currency": fiat_currency,
         "fiat_value": _decimal_text(draft.get("fiat_value")),
         "fiat_rate": _decimal_text(draft.get("fiat_rate")),
-        "counterparty": str_or_none(draft.get("counterparty")),
-        "description": str_or_none(draft.get("description")) or evidence_text,
+        "counterparty": counterparty,
+        "description": description or evidence_text,
         "raw_json": {
             "source": "document_import",
             "row_id": row_id,
@@ -908,16 +1006,26 @@ def import_document_draft(
     commit: bool = True,
 ) -> dict[str, Any]:
     source_path = _source_path(source_file)
-    source_sha256 = _sha256_file(source_path)
+    stable_dir = tempfile.TemporaryDirectory(prefix="kassiber-ocr-import-")
+    stable_path = Path(stable_dir.name) / source_path.name
+    try:
+        shutil.copyfile(source_path, stable_path)
+        _source_path(str(stable_path))
+        source_sha256 = _sha256_file(stable_path)
+    except Exception:
+        stable_dir.cleanup()
+        raise
     if expected_source_sha256 is not None:
         expected = expected_source_sha256.strip().lower()
         if not re.fullmatch(r"[0-9a-f]{64}", expected):
+            stable_dir.cleanup()
             raise AppError(
                 "Preview source hash is invalid",
                 code="validation",
                 retryable=False,
             )
         if source_sha256 != expected:
+            stable_dir.cleanup()
             raise AppError(
                 "The OCR source changed after preview",
                 code="document_import_source_changed",
@@ -925,13 +1033,18 @@ def import_document_draft(
                 details={"filename": source_path.name},
                 retryable=False,
             )
-    records, skipped_quarantined = _import_records_from_rows(
-        rows,
-        include_quarantined=include_quarantined,
-        selected_row_ids=selected_row_ids,
-        source_hash=source_sha256,
-    )
+    try:
+        records, skipped_quarantined = _import_records_from_rows(
+            rows,
+            include_quarantined=include_quarantined,
+            selected_row_ids=selected_row_ids,
+            source_hash=source_sha256,
+        )
+    except Exception:
+        stable_dir.cleanup()
+        raise
     if not records:
+        stable_dir.cleanup()
         raise AppError(
             "Document draft has no importable rows",
             code="document_import_no_ready_rows",
@@ -939,10 +1052,30 @@ def import_document_draft(
             details={"quarantined_skipped": skipped_quarantined},
             retryable=False,
         )
+    source_bytes = stable_path.stat().st_size
+    projected_attachment_bytes = source_bytes * len(records)
+    if attach_evidence and projected_attachment_bytes > MAX_PROJECTED_ATTACHMENT_BYTES:
+        stable_dir.cleanup()
+        raise AppError(
+            "Document evidence copies would exceed the import storage budget",
+            code="document_import_evidence_budget_exceeded",
+            hint="Import fewer rows at a time or use a smaller source image/PDF.",
+            details={
+                "rows": len(records),
+                "source_bytes": source_bytes,
+                "projected_bytes": projected_attachment_bytes,
+                "max_projected_bytes": MAX_PROJECTED_ATTACHMENT_BYTES,
+            },
+            retryable=False,
+        )
     resolved_data_root = data_root or _data_root_from_connection(conn)
     attachments_root = core_attachments._attachments_root(resolved_data_root)
     savepoint = f"document_import_{uuid.uuid4().hex}"
-    conn.execute(f"SAVEPOINT {savepoint}")
+    try:
+        conn.execute(f"SAVEPOINT {savepoint}")
+    except Exception:
+        stable_dir.cleanup()
+        raise
     savepoint_active = True
     attached: list[dict[str, Any]] = []
     copied_paths: list[Path] = []
@@ -973,11 +1106,17 @@ def import_document_draft(
                     None,
                     tx_id,
                     hooks.attachment_hooks,
-                    file_path=str(source_path),
+                    file_path=str(stable_path),
                     label=f"OCR source: {source_path.name}",
-                    media_type=_mime_type(source_path),
+                    media_type=_mime_type(stable_path),
                     commit=False,
                 )
+                if attachment.get("sha256") != source_sha256:
+                    raise AppError(
+                        "Managed OCR evidence did not match the reviewed source bytes",
+                        code="document_import_source_changed",
+                        retryable=False,
+                    )
                 copied_path, valid_path = core_attachments._resolve_stored_path(
                     attachments_root,
                     attachment.get("stored_relpath"),
@@ -1010,6 +1149,7 @@ def import_document_draft(
                     # Best-effort rollback cleanup: the DB savepoint is still
                     # authoritative and attachment GC can remove any orphan.
                     continue
+            stable_dir.cleanup()
         raise
     outcome.update(
         {
@@ -1024,6 +1164,7 @@ def import_document_draft(
             "attached_evidence": attached,
         }
     )
+    stable_dir.cleanup()
     return outcome
 
 
@@ -1088,7 +1229,11 @@ __all__ = [
     "DEFAULT_MAX_PDF_PAGES",
     "DOCUMENT_IMPORT_FORMAT",
     "DocumentImportHooks",
+    "MAX_DRAFT_ROWS",
+    "MAX_PROJECTED_ATTACHMENT_BYTES",
     "MODEL_RECOMMENDATIONS",
+    "PDF_RENDER_TIMEOUT_SECONDS",
+    "SUPPORTED_DOCUMENT_ASSETS",
     "looks_like_vision_model",
     "model_recommendations",
     "preview_document_import",

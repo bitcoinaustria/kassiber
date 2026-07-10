@@ -9,15 +9,48 @@ import type {
 export type AssistantReturnPath =
   | "/overview"
   | "/transactions"
+  | "/activity"
   | "/reports"
+  | "/privacy-mirror"
+  | "/exit-tax"
   | "/source-of-funds"
   | "/connections"
   | "/books"
   | "/journals"
+  | "/swaps"
   | "/quarantine"
+  | "/reconcile"
+  | "/egress"
   | "/imports"
   | "/logs"
   | "/settings";
+
+export type AssistantToolCapability =
+  | "core"
+  | "workspace"
+  | "transactions"
+  | "reports"
+  | "wallets"
+  | "loans"
+  | "privacy"
+  | "source_funds"
+  | "merchant"
+  | "transfers"
+  | "operations";
+
+export interface AssistantScreenContext {
+  route: AssistantReturnPath;
+  entityType?:
+    | "transaction"
+    | "wallet"
+    | "report"
+    | "source_funds_case"
+    | "connection"
+    | "profile";
+  entityId?: string;
+  filters?: Record<string, unknown>;
+  capabilities: AssistantToolCapability[];
+}
 
 export interface AssistantModelSelection {
   provider: string;

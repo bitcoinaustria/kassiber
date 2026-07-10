@@ -706,6 +706,16 @@ function provenanceParts(
         }),
       );
     }
+    if ((receipt.tools_denied ?? 0) > 0) {
+      parts.push(
+        t("provenance.deniedTools", {
+          count: Number(receipt.tools_denied),
+        }),
+      );
+    }
+    if (receipt.cross_book_data_disclosed) {
+      parts.push(t("provenance.crossBookRead"));
+    }
     if ((receipt.egress_records ?? 0) > 0) {
       parts.push(
         t("provenance.egressReceipt", {

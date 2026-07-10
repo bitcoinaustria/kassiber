@@ -30,6 +30,7 @@ from pathlib import Path
 from typing import Any, Iterable, Iterator
 
 import urllib.error
+import urllib.parse
 import urllib.request
 
 from ..egress_ledger import get_egress_ledger, http_request_bytes_out
@@ -74,6 +75,33 @@ _CLI_PROXY_ENV_NAMES = {
     "http_proxy",
     "no_proxy",
 }
+
+
+def _url_origin(url: str) -> tuple[str, str, int | None]:
+    parsed = urllib.parse.urlsplit(url)
+    port = parsed.port
+    if port is None:
+        port = 443 if parsed.scheme.lower() == "https" else 80
+    return parsed.scheme.lower(), (parsed.hostname or "").lower(), port
+
+
+class _SameOriginRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """Allow redirects only within the configured direct provider origin."""
+
+    def __init__(self, origin_url: str):
+        super().__init__()
+        self._origin = _url_origin(origin_url)
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        if _url_origin(newurl) != self._origin:
+            raise AppError(
+                "Direct local AI provider attempted an off-origin redirect",
+                code="ai_request_invalid",
+                retryable=False,
+            )
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
 _CLAUDE_ENV_NAMES = {
     "ANTHROPIC_API_KEY",
     "ANTHROPIC_AUTH_TOKEN",
@@ -508,6 +536,7 @@ class OpenAICompatClient:
     api_key: str | None = None
     timeout: float = DEFAULT_TIMEOUT_SECONDS
     user_agent: str = "kassiber/ai"
+    direct_connection: bool = False
 
     def _headers(self, *, json_body: bool = False, accept_sse: bool = False) -> dict[str, str]:
         headers = {"Accept": "application/json", "User-Agent": self.user_agent}
@@ -543,10 +572,14 @@ class OpenAICompatClient:
             bytes_out=http_request_bytes_out(request, method),
         )
         try:
-            return urllib.request.urlopen(
-                request,
-                timeout=timeout if timeout is not None else self.timeout,
-            )
+            request_timeout = timeout if timeout is not None else self.timeout
+            if self.direct_connection:
+                opener = urllib.request.build_opener(
+                    urllib.request.ProxyHandler({}),
+                    _SameOriginRedirectHandler(self.base_url),
+                )
+                return opener.open(request, timeout=request_timeout)
+            return urllib.request.urlopen(request, timeout=request_timeout)
         except urllib.error.HTTPError as exc:
             raise _http_error_app_error(exc) from exc
         except (urllib.error.URLError, TimeoutError, OSError) as exc:
@@ -954,7 +987,13 @@ def ai_client_for_locator(
     *,
     api_key: str | None = None,
     timeout: float = DEFAULT_TIMEOUT_SECONDS,
+    direct_connection: bool = False,
 ):
     if is_cli_provider_locator(base_url):
         return CliAIClient(locator=base_url, timeout=timeout)
-    return OpenAICompatClient(base_url=base_url, api_key=api_key, timeout=timeout)
+    return OpenAICompatClient(
+        base_url=base_url,
+        api_key=api_key,
+        timeout=timeout,
+        direct_connection=direct_connection,
+    )

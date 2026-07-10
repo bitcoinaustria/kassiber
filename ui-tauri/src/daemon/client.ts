@@ -440,7 +440,7 @@ export function invalidatedDaemonQueryKindsForMutation(kind: string) {
   return TARGETED_DAEMON_QUERY_INVALIDATIONS[kind] ?? null;
 }
 
-function invalidateDaemonQueriesForMutation(
+export function invalidateDaemonQueriesForMutation(
   queryClient: QueryClient,
   dataMode: DataMode,
   kind: string,

@@ -76,6 +76,8 @@ describe("ChatMessage", () => {
           provider_kind: "remote",
           remote_provider: true,
           advertised_tool_count: 18,
+          tools_denied: 1,
+          cross_book_data_disclosed: true,
           egress_records: 2,
           egress_bytes_out: 1234,
         },
@@ -86,6 +88,8 @@ describe("ChatMessage", () => {
 
     expect(html).toContain("remote provider");
     expect(html).toContain("18 tool schemas");
+    expect(html).toContain("1 denied tool");
+    expect(html).toContain("book-set data shared");
     expect(html).toContain("2 outbound events");
 
     const toolHtml = renderToStaticMarkup(
