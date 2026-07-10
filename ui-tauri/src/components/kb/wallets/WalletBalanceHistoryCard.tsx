@@ -67,9 +67,11 @@ function monthLabel(bucket: string, locale: string) {
 export function WalletBalanceHistoryCard({
   walletId,
   hideSensitive,
+  variant = "card",
 }: {
   walletId: string;
   hideSensitive: boolean;
+  variant?: "card" | "hero";
 }) {
   const { t, i18n } = useTranslation("connections");
   const locale = localeForLanguage(i18n.language);
@@ -113,36 +115,47 @@ export function WalletBalanceHistoryCard({
   const latest = points.length ? points[points.length - 1].quantity : 0;
   const first = points.length ? points[0].quantity : 0;
   const change = latest - first;
+  const isHero = variant === "hero";
 
   return (
-    <Card className="gap-0 overflow-hidden py-0 shadow-none">
-      <CardHeader className="border-b p-3 sm:px-6 sm:py-3.5 [.border-b]:pb-3 sm:[.border-b]:pb-3.5">
-        <CardTitle className="text-sm sm:text-base">
-          {t("detail.balanceHistory.title")}
-        </CardTitle>
-        <CardDescription className="text-xs">
-          {t("detail.balanceHistory.description", {
-            count: points.length || 12,
-          })}
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="px-3 py-3 sm:px-6">
-        {query.isLoading ? (
-          <Skeleton className="h-24 w-full" />
-        ) : (
-          <>
-            <div className="flex items-baseline justify-between gap-2">
-              <span
+    <Card
+      className={cn(
+        "gap-0 overflow-hidden py-0",
+        isHero
+          ? "min-h-36 rounded-2xl border-white/55 bg-background/50 shadow-[0_12px_34px_rgba(0,0,0,0.06)] backdrop-blur-xl dark:border-white/10 dark:bg-background/35"
+          : "shadow-none",
+      )}
+    >
+      <CardHeader
+        className={cn(
+          "p-3 sm:px-6 sm:py-3.5",
+          !isHero && "border-b [.border-b]:pb-3 sm:[.border-b]:pb-3.5",
+          isHero && "pb-0 sm:pb-0",
+        )}
+      >
+        <div className="flex items-start justify-between gap-4">
+          <div className="min-w-0">
+            <CardTitle className="text-sm sm:text-base">
+              {t("detail.balanceHistory.title")}
+            </CardTitle>
+            {!isHero ? (
+              <CardDescription className="text-xs">
+                {t("detail.balanceHistory.description", {
+                  count: points.length || 12,
+                })}
+              </CardDescription>
+            ) : null}
+          </div>
+          {!query.isLoading ? (
+            <div className="shrink-0 text-right">
+              <div className="text-[10px] font-medium text-muted-foreground">
+                {t("detail.balanceHistory.change", {
+                  count: points.length || 12,
+                })}
+              </div>
+              <div
                 className={cn(
-                  "font-mono text-base font-semibold tabular-nums",
-                  hideSensitive && "sensitive",
-                )}
-              >
-                {fmtBtc(latest)}
-              </span>
-              <span
-                className={cn(
-                  "font-mono text-xs tabular-nums",
+                  "mt-0.5 font-mono text-xs font-medium tabular-nums",
                   change > 0
                     ? "text-emerald-600 dark:text-emerald-400"
                     : change < 0
@@ -153,9 +166,17 @@ export function WalletBalanceHistoryCard({
               >
                 {change >= 0 ? "+" : "−"}
                 {fmtBtc(Math.abs(change))}
-              </span>
+              </div>
             </div>
-            <div className="mt-2 h-24 w-full">
+          ) : null}
+        </div>
+      </CardHeader>
+      <CardContent className={cn("px-3 py-3 sm:px-6", isHero && "pt-2 sm:pt-2")}>
+        {query.isLoading ? (
+          <Skeleton className={cn("w-full rounded-xl", isHero ? "h-28" : "h-24")} />
+        ) : (
+          <>
+            <div className="h-24 w-full">
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart
                   data={points}

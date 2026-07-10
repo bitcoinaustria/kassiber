@@ -22,7 +22,6 @@ import {
 
 import { openExternalUrl } from "@/daemon/transport";
 import { CopyButton } from "@/components/kb/CopyButton";
-import { CountBadge } from "@/components/kb/CountBadge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -731,42 +730,61 @@ export function UtxosInventoryPanel({
   const title = liquidBlocked
     ? t("utxos.liquidNeedsUnblinding")
     : t("utxos.unavailableTitle");
+  const pendingCount = rows.filter(isMempool).length;
+  const inventorySummary = isLoading
+    ? t("utxos.loading")
+    : errorMessage
+      ? t("utxos.couldNotLoadTitle")
+      : unsupported
+        ? title
+        : serverTruncated
+          ? t("utxos.countOf", {
+              returned: formatCount(returnedCount),
+              total: formatCount(totalCount),
+            })
+          : pendingCount > 0
+            ? t("utxos.summary.withPending", {
+                count: totalCount,
+                pending: pendingCount,
+              })
+            : t("utxos.summary.allConfirmed", {
+                count: totalCount,
+              });
   const lastSyncedLabel = dateLabel(
     inventory?.freshness.last_synced_at ?? inventory?.freshness.last_seen_at,
   );
 
   return (
-    <Card className="gap-0 overflow-hidden py-0 shadow-none">
-      <div className="flex flex-col gap-3 border-b p-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:px-6 sm:py-3.5">
-        <div className="min-w-0">
-          <CardTitle className="flex items-center gap-2 text-sm sm:text-base">
+    <Card className="gap-0 overflow-hidden rounded-[1.25rem] border-border/70 py-0 shadow-[0_1px_2px_rgba(0,0,0,0.035),0_10px_30px_rgba(0,0,0,0.035)] dark:shadow-black/20">
+      <div className="flex flex-col gap-3 border-b bg-muted/[0.08] p-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:px-5 sm:py-3.5">
+        <div className="flex min-w-0 items-center gap-3">
+          <span className="flex size-9 shrink-0 items-center justify-center rounded-xl border border-border/60 bg-background/70 text-muted-foreground shadow-sm">
             <Coins className="size-4" aria-hidden="true" />
-            {t("utxos.title")}
-            <CountBadge>
-              {serverTruncated
-                ? t("utxos.countOf", {
-                    returned: formatCount(returnedCount),
-                    total: formatCount(totalCount),
-                  })
-                : formatCount(totalCount)}
-            </CountBadge>
-          </CardTitle>
+          </span>
+          <div className="min-w-0">
+            <CardTitle className="text-sm sm:text-base">
+              {t("utxos.title")}
+            </CardTitle>
+            <p className="mt-0.5 truncate text-[11px] font-medium text-muted-foreground">
+              {inventorySummary}
+            </p>
+          </div>
         </div>
-          <Button
-            type="button"
-            variant="outline"
-            size="icon-xs"
-            className="shrink-0 self-start sm:self-auto"
-            disabled={isRefreshing}
-            aria-label={isRefreshing ? t("utxos.refreshing") : t("utxos.refresh")}
-            title={isRefreshing ? t("utxos.refreshing") : t("utxos.refresh")}
-            onClick={onRefresh}
-          >
-            <RefreshCw
-              className={cn("size-3", isRefreshing && "animate-spin")}
-              aria-hidden="true"
-            />
-          </Button>
+        <Button
+          type="button"
+          variant="outline"
+          size="icon-xs"
+          className="shrink-0 self-start rounded-full transition-transform duration-200 active:scale-95 motion-reduce:transition-none sm:self-auto"
+          disabled={isRefreshing}
+          aria-label={isRefreshing ? t("utxos.refreshing") : t("utxos.refresh")}
+          title={isRefreshing ? t("utxos.refreshing") : t("utxos.refresh")}
+          onClick={onRefresh}
+        >
+          <RefreshCw
+            className={cn("size-3", isRefreshing && "animate-spin")}
+            aria-hidden="true"
+          />
+        </Button>
       </div>
       <CardContent className="p-0">
         {isLoading ? (
@@ -829,34 +847,28 @@ export function UtxosInventoryPanel({
                   <TableHeader>
                     <TableRow>
                       <SortableTableHead
-                        column="outpoint"
-                        sort={sort}
-                        onSort={handleSort}
-                      >
-                        {t("utxos.column.outpoint")}
-                      </SortableTableHead>
-                      <SortableTableHead
                         column="amount"
                         sort={sort}
                         onSort={handleSort}
                       >
                         {t("utxos.column.amount")}
                       </SortableTableHead>
-                      <SortableTableHead
-                        column="status"
-                        sort={sort}
-                        onSort={handleSort}
-                      >
-                        {t("utxos.column.status")}
-                      </SortableTableHead>
                       <TableHead>{t("utxos.column.location")}</TableHead>
                       <SortableTableHead
                         column="confirmed"
                         sort={sort}
                         onSort={handleSort}
-                        className="text-right"
                       >
                         {t("utxos.column.confirmed")}
+                      </SortableTableHead>
+                      <TableHead>{t("utxos.column.status")}</TableHead>
+                      <SortableTableHead
+                        column="outpoint"
+                        sort={sort}
+                        onSort={handleSort}
+                        className="text-right"
+                      >
+                        {t("utxos.column.outpoint")}
                       </SortableTableHead>
                     </TableRow>
                   </TableHeader>
@@ -872,7 +884,7 @@ export function UtxosInventoryPanel({
                           role="button"
                           tabIndex={0}
                           className={cn(
-                            "cursor-pointer hover:bg-muted/35 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
+                            "cursor-pointer transition-[background-color,transform] duration-150 hover:bg-muted/35 active:scale-[0.998] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring motion-reduce:transform-none motion-reduce:transition-none",
                             isMempool(row) && "bg-muted/20",
                           )}
                           onClick={() => openRowTransaction(row, explorer)}
@@ -881,7 +893,36 @@ export function UtxosInventoryPanel({
                           }
                         >
                           <TableCell>
-                            <div className="flex items-center gap-1">
+                            <AmountDisplay
+                              value={row.amount}
+                              asset={row.asset}
+                              hideSensitive={hideSensitive}
+                              className="font-medium"
+                            />
+                          </TableCell>
+                          <TableCell className="max-w-[280px]">
+                            <LocationBlock
+                              row={row}
+                              hideSensitive={hideSensitive}
+                              t={t}
+                            />
+                          </TableCell>
+                          <TableCell className="font-mono text-xs text-muted-foreground">
+                            {primaryDateLabel(row) ?? "—"}
+                          </TableCell>
+                          <TableCell>
+                            <Badge
+                              variant={
+                                row.confirmation_status === "confirmed"
+                                  ? "secondary"
+                                  : "outline"
+                              }
+                            >
+                              {statusLabel(row, t)}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex items-center justify-end gap-1">
                               <OutpointButton
                                 row={row}
                                 explorer={explorer}
@@ -903,35 +944,6 @@ export function UtxosInventoryPanel({
                               </span>
                             </div>
                           </TableCell>
-                          <TableCell>
-                            <AmountDisplay
-                              value={row.amount}
-                              asset={row.asset}
-                              hideSensitive={hideSensitive}
-                              className="font-medium"
-                            />
-                          </TableCell>
-                          <TableCell>
-                            <Badge
-                              variant={
-                                row.confirmation_status === "confirmed"
-                                  ? "secondary"
-                                  : "outline"
-                              }
-                            >
-                              {statusLabel(row, t)}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="max-w-[220px]">
-                            <LocationBlock
-                              row={row}
-                              hideSensitive={hideSensitive}
-                              t={t}
-                            />
-                          </TableCell>
-                          <TableCell className="text-right font-mono text-xs text-muted-foreground">
-                            {primaryDateLabel(row) ?? "—"}
-                          </TableCell>
                         </TableRow>
                       );
                     })}
@@ -946,7 +958,7 @@ export function UtxosInventoryPanel({
                     <div
                       key={row.id || row.outpoint}
                       className={cn(
-                        "flex cursor-pointer flex-col gap-2 px-4 py-3 hover:bg-muted/35 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
+                        "flex cursor-pointer flex-col gap-2 px-4 py-3 transition-[background-color,transform] duration-150 hover:bg-muted/35 active:scale-[0.995] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring motion-reduce:transform-none motion-reduce:transition-none",
                         isMempool(row) && "bg-muted/20",
                       )}
                       role="button"

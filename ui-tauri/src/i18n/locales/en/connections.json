@@ -48,6 +48,10 @@
     "refresh": "Refresh",
     "refreshing": "Refreshing",
     "refreshAction": "{{action}} {{label}}",
+    "balanceToggle": {
+      "showFiat": "Show balance in euros",
+      "showBitcoin": "Show balance in bitcoin"
+    },
     "metric": {
       "balance": "Balance",
       "transactions": "Transactions",
@@ -128,7 +132,8 @@
     },
     "balanceHistory": {
       "title": "Balance history",
-      "description": "Imported balance over the last {{count}} months."
+      "description": "Imported balance over the last {{count}} months.",
+      "change": "{{count}} mo change"
     },
     "connectionDetails": {
       "title": "Connection details",
@@ -522,6 +527,11 @@
   "utxos": {
     "title": "UTXOs",
     "countOf": "{{returned}} of {{total}}",
+    "loading": "Loading coin inventory…",
+    "summary": {
+      "allConfirmed": "{{count}} active outputs · all confirmed",
+      "withPending": "{{count}} active outputs · {{pending}} pending"
+    },
     "couldNotLoadTitle": "UTXO inventory could not load",
     "unavailableTitle": "UTXO inventory unavailable",
     "liquidNeedsUnblinding": "Liquid UTXOs need unblinding",

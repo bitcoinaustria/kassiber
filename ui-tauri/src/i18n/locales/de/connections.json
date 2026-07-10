@@ -48,6 +48,10 @@
     "refresh": "Aktualisieren",
     "refreshing": "Wird aktualisiert",
     "refreshAction": "{{action}} {{label}}",
+    "balanceToggle": {
+      "showFiat": "Guthaben in Euro anzeigen",
+      "showBitcoin": "Guthaben in Bitcoin anzeigen"
+    },
     "metric": {
       "balance": "Guthaben",
       "transactions": "Transaktionen",
@@ -128,7 +132,8 @@
     },
     "balanceHistory": {
       "title": "Guthabenverlauf",
-      "description": "Importiertes Guthaben der letzten {{count}} Monate."
+      "description": "Importiertes Guthaben der letzten {{count}} Monate.",
+      "change": "Änderung über {{count}} Mon."
     },
     "connectionDetails": {
       "title": "Verbindungsdetails",
@@ -522,6 +527,11 @@
   "utxos": {
     "title": "UTXOs",
     "countOf": "{{returned}} von {{total}}",
+    "loading": "Coin-Bestand wird geladen…",
+    "summary": {
+      "allConfirmed": "{{count}} aktive Outputs · alle bestätigt",
+      "withPending": "{{count}} aktive Outputs · {{pending}} ausstehend"
+    },
     "couldNotLoadTitle": "UTXO-Bestand konnte nicht geladen werden",
     "unavailableTitle": "UTXO-Bestand nicht verfügbar",
     "liquidNeedsUnblinding": "Liquid-UTXOs müssen unblinded werden",

@@ -40,7 +40,6 @@ import {
 import { ScreenSkeleton } from "@/components/kb/ScreenSkeleton";
 import { ConnectionAssetBadge } from "@/components/kb/ConnectionAssetBadge";
 import { ConnectionStatusPill } from "@/components/kb/ConnectionStatusPill";
-import { CountBadge } from "@/components/kb/CountBadge";
 import { DetailRow } from "@/components/kb/DetailRow";
 import {
   UtxosInventoryPanel,
@@ -96,8 +95,6 @@ import { connectionKindLabels } from "@/lib/connectionDisplay";
 import {
   pageHeaderActionClassName,
   pageHeaderActionsClassName,
-  pageHeaderClassName,
-  pageHeaderIconButtonClassName,
   screenShellClassName,
 } from "@/lib/screen-layout";
 import { cn } from "@/lib/utils";
@@ -171,16 +168,16 @@ function WalletOverviewStat({
   detail?: ReactNode;
 }) {
   return (
-    <div className="group relative isolate overflow-hidden p-3 transition-colors before:absolute before:inset-0 before:z-0 before:origin-left before:scale-x-0 before:bg-muted/45 before:content-[''] before:transition-transform before:duration-200 before:ease-out hover:before:scale-x-100 focus-within:before:scale-x-100">
+    <div className="relative isolate min-w-0 overflow-hidden rounded-2xl border border-border/60 bg-background/55 p-3.5 shadow-sm shadow-black/[0.025] backdrop-blur-xl">
       <div className="pointer-events-none relative z-20 space-y-1.5">
         <div className="text-muted-foreground">
-          <span className="text-xs font-medium">{label}</span>
+          <span className="text-[11px] font-medium tracking-[0.01em]">{label}</span>
         </div>
-        <p className="text-lg font-semibold tracking-tight tabular-nums sm:text-xl">
+        <p className="truncate text-base font-semibold tracking-tight tabular-nums sm:text-lg">
           {value}
         </p>
         {detail != null ? (
-          <p className="truncate text-[10px] font-medium leading-tight text-muted-foreground sm:text-xs">
+          <p className="truncate text-[11px] font-medium leading-tight text-muted-foreground">
             {detail}
           </p>
         ) : null}
@@ -190,9 +187,9 @@ function WalletOverviewStat({
 }
 
 const relatedViewLinkClass =
-  "group flex items-center gap-3 px-4 py-3 transition-colors hover:bg-muted/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring";
+  "group flex items-center gap-3 px-4 py-3 transition-[background-color,transform] duration-200 hover:bg-muted/45 active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring motion-reduce:transform-none motion-reduce:transition-none";
 const relatedViewIconClass =
-  "flex size-8 shrink-0 items-center justify-center rounded-md border bg-muted/40 text-muted-foreground transition-colors group-hover:border-foreground/20 group-hover:text-foreground";
+  "flex size-8 shrink-0 items-center justify-center rounded-xl border bg-muted/40 text-muted-foreground shadow-sm transition-colors group-hover:border-foreground/20 group-hover:bg-background/80 group-hover:text-foreground";
 const relatedViewArrowClass =
   "size-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5";
 
@@ -575,6 +572,7 @@ function ConnectionDetailView({
   const currency = useUiStore((state) => state.currency);
   const [pendingUtxoTransactionId, setPendingUtxoTransactionId] =
     useState<string | null>(null);
+  const [balanceUnit, setBalanceUnit] = useState<"btc" | "fiat">("btc");
   const syncNoticeIdRef = useRef<string | null>(null);
   const walletSyncMutationKey = daemonMutationKey(dataMode, "ui.wallets.sync");
   const connectionRefreshing = useConnectionRefreshState(connection);
@@ -1223,187 +1221,224 @@ function ConnectionDetailView({
 
   return (
     <div className={screenShellClassName}>
-      <div className={pageHeaderClassName}>
-        <div className="flex min-w-0 items-center gap-3">
-          <Button
-            asChild
-            variant="outline"
-            size="icon"
-            className={cn(pageHeaderIconButtonClassName, "shrink-0")}
-          >
-            <Link to="/connections" aria-label={t("detail.backToWallets")}>
-              <ArrowLeft className="size-4" aria-hidden="true" />
-            </Link>
-          </Button>
-          <ConnectionAssetBadge
-            connection={connection}
-            size="md"
-            className="hidden sm:flex"
-          />
-          <div className="min-w-0">
-            <h1 className="truncate text-xl font-semibold tracking-tight sm:text-2xl">
-              {connection.label}
-            </h1>
-            <div className="mt-1 flex min-w-0 flex-wrap items-center gap-2 text-xs text-muted-foreground">
-              <span className="truncate">
-                {connectionKindLabels[connection.kind]}
-              </span>
-              {connection.status !== "synced" ? (
-                <>
-                  <span aria-hidden="true">·</span>
-                  <ConnectionStatusPill status={connection.status} />
-                </>
-              ) : null}
-              {isDeprecatedWallet ? (
-                <>
-                  <span aria-hidden="true">·</span>
-                  <Badge variant="secondary" className="rounded-md">
-                    {t("detail.deprecatedBadge")}
-                  </Badge>
-                </>
-              ) : null}
+      <section className="relative isolate overflow-hidden rounded-[1.75rem] border border-border/70 bg-card shadow-[0_1px_2px_rgba(0,0,0,0.04),0_18px_50px_rgba(0,0,0,0.07)] dark:shadow-[0_1px_2px_rgba(0,0,0,0.35),0_24px_60px_rgba(0,0,0,0.28)]">
+        <div
+          className={cn(
+            "pointer-events-none absolute inset-0 opacity-70",
+            walletChain === "liquid"
+              ? "bg-[radial-gradient(circle_at_12%_0%,rgba(0,174,199,0.20),transparent_32%),radial-gradient(circle_at_95%_100%,rgba(31,122,140,0.10),transparent_36%)]"
+              : "bg-[radial-gradient(circle_at_12%_0%,rgba(247,147,26,0.22),transparent_32%),radial-gradient(circle_at_95%_100%,rgba(227,0,15,0.08),transparent_36%)]",
+          )}
+          aria-hidden="true"
+        />
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/70 to-transparent dark:via-white/20" />
+
+        <div className="relative p-4 sm:p-5">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div className="flex min-w-0 items-center gap-3 sm:gap-4">
+              <Button
+                asChild
+                variant="outline"
+                size="icon"
+                className="size-9 shrink-0 rounded-full border-border/60 bg-background/60 shadow-sm backdrop-blur-xl transition-transform duration-200 active:scale-95 motion-reduce:transition-none"
+              >
+                <Link to="/connections" aria-label={t("detail.backToWallets")}>
+                  <ArrowLeft className="size-4" aria-hidden="true" />
+                </Link>
+              </Button>
+              <ConnectionAssetBadge
+                connection={connection}
+                size="md"
+                className="size-12 rounded-2xl border-white/50 bg-background/65 p-1 shadow-[0_8px_24px_rgba(0,0,0,0.10)] backdrop-blur-xl dark:border-white/10 sm:size-14"
+              />
+              <div className="min-w-0">
+                <h1 className="truncate text-2xl font-semibold tracking-[-0.025em] sm:text-3xl">
+                  {connection.label}
+                </h1>
+                <div className="mt-1.5 flex min-w-0 flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                  <span className="truncate font-medium">
+                    {connectionKindLabels[connection.kind]}
+                  </span>
+                  <ConnectionStatusPill
+                    status={connection.status}
+                    hideWhenSynced={false}
+                    className="rounded-full px-2 py-1"
+                  />
+                  {isDeprecatedWallet ? (
+                    <Badge variant="secondary" className="rounded-full px-2 py-1">
+                      {t("detail.deprecatedBadge")}
+                    </Badge>
+                  ) : null}
+                </div>
+              </div>
             </div>
-          </div>
-        </div>
-        <div className={cn(pageHeaderActionsClassName, "shrink-0 self-start sm:self-center")}>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className={pageHeaderActionClassName}
-            disabled={isWalletSyncRunning}
-            aria-busy={isWalletSyncRunning}
-            aria-label={t("detail.refreshAction", {
-              action: refreshButtonLabel,
-              label: connection.label,
-            })}
-            onClick={() => onSync()}
-          >
-            <RefreshCw
-              className={cn("size-4", isWalletSyncRunning && "animate-spin")}
-              aria-hidden="true"
-            />
-            {/*
-              Reserve the width of the widest label so the button never
-              resizes when it flips to the in-progress text. A mid-refresh
-              width change strands a stale composited tile of the spinning
-              icon in WKWebView (the macOS webview), leaving a frozen "ghost"
-              copy of the button overlaid on the live, spinning one. The
-              shift — and the ghost — only showed in locales where the two
-              labels differ in width (e.g. de "Aktualisieren" →
-              "Wird aktualisiert"); English clamped to the same width and
-              stayed clean. Stacking both labels pins the width to the
-              wider one in every locale.
-            */}
-            <span className="grid justify-items-center">
-              <span
-                aria-hidden="true"
-                className="invisible col-start-1 row-start-1"
-              >
-                {t("detail.refresh")}
-              </span>
-              <span
-                aria-hidden="true"
-                className="invisible col-start-1 row-start-1"
-              >
-                {t("detail.refreshing")}
-              </span>
-              <span className="col-start-1 row-start-1">
-                {refreshButtonLabel}
-              </span>
-            </span>
-          </Button>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
+
+            <div className={cn(pageHeaderActionsClassName, "shrink-0 self-end sm:self-start")}>
               <Button
                 type="button"
                 variant="outline"
-                size="icon"
-                className={pageHeaderIconButtonClassName}
-                aria-label={t("detail.moreActions")}
-              >
-                <MoreHorizontal className="size-4" aria-hidden="true" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56">
-              <DropdownMenuItem onClick={openEditDialog}>
-                <Pencil className="size-4" aria-hidden="true" />
-                {t("common:actions.edit")}
-              </DropdownMenuItem>
-              {hasStoredDescriptor ? (
-                <DropdownMenuItem onClick={openRevealDialog}>
-                  <Copy className="size-4" aria-hidden="true" />
-                  {t("detail.reveal.menuItem")}
-                </DropdownMenuItem>
-              ) : null}
-              <DropdownMenuItem
+                size="sm"
+                className={cn(
+                  pageHeaderActionClassName,
+                  "rounded-full border-border/60 bg-background/60 px-4 shadow-sm backdrop-blur-xl transition-transform duration-200 active:scale-[0.97] motion-reduce:transition-none",
+                )}
                 disabled={isWalletSyncRunning}
-                onClick={() => onSync({ forceFull: true })}
+                aria-busy={isWalletSyncRunning}
+                aria-label={t("detail.refreshAction", {
+                  action: refreshButtonLabel,
+                  label: connection.label,
+                })}
+                onClick={() => onSync()}
               >
-                <RotateCcw className="size-4" aria-hidden="true" />
-                {t("detail.fullRescan")}
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                className="text-destructive focus:text-destructive"
-                onClick={openDeleteDialog}
+                <RefreshCw
+                  className={cn("size-4", isWalletSyncRunning && "animate-spin")}
+                  aria-hidden="true"
+                />
+                {/* Keep the action width stable while its icon is composited by WKWebView. */}
+                <span className="grid justify-items-center">
+                  <span aria-hidden="true" className="invisible col-start-1 row-start-1">
+                    {t("detail.refresh")}
+                  </span>
+                  <span aria-hidden="true" className="invisible col-start-1 row-start-1">
+                    {t("detail.refreshing")}
+                  </span>
+                  <span className="col-start-1 row-start-1">{refreshButtonLabel}</span>
+                </span>
+              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    className="size-8 rounded-full border-border/60 bg-background/60 shadow-sm backdrop-blur-xl transition-transform duration-200 active:scale-95 motion-reduce:transition-none"
+                    aria-label={t("detail.moreActions")}
+                  >
+                    <MoreHorizontal className="size-4" aria-hidden="true" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-56 rounded-xl">
+                  <DropdownMenuItem onClick={openEditDialog}>
+                    <Pencil className="size-4" aria-hidden="true" />
+                    {t("common:actions.edit")}
+                  </DropdownMenuItem>
+                  {hasStoredDescriptor ? (
+                    <DropdownMenuItem onClick={openRevealDialog}>
+                      <Copy className="size-4" aria-hidden="true" />
+                      {t("detail.reveal.menuItem")}
+                    </DropdownMenuItem>
+                  ) : null}
+                  <DropdownMenuItem
+                    disabled={isWalletSyncRunning}
+                    onClick={() => onSync({ forceFull: true })}
+                  >
+                    <RotateCcw className="size-4" aria-hidden="true" />
+                    {t("detail.fullRescan")}
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    className="text-destructive focus:text-destructive"
+                    onClick={openDeleteDialog}
+                  >
+                    <Trash2 className="size-4" aria-hidden="true" />
+                    {t("common:actions.remove")}
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          </div>
+
+          <div className="mt-4 grid items-stretch gap-3 lg:grid-cols-[minmax(260px,0.72fr)_minmax(360px,1.28fr)]">
+            <button
+              type="button"
+              className="group flex min-w-0 flex-col justify-center rounded-2xl px-3 py-3 text-left transition-[background-color,transform] duration-200 hover:bg-background/30 active:scale-[0.985] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transform-none motion-reduce:transition-none sm:px-4"
+              aria-label={
+                balanceUnit === "btc"
+                  ? t("detail.balanceToggle.showFiat")
+                  : t("detail.balanceToggle.showBitcoin")
+              }
+              onClick={() =>
+                setBalanceUnit((current) =>
+                  current === "btc" ? "fiat" : "btc",
+                )
+              }
+            >
+              <span className="flex w-full items-center justify-between gap-3">
+                <span className="text-xs font-medium tracking-[0.02em] text-muted-foreground">
+                  {t("detail.metric.balance")}
+                </span>
+                <span className="inline-flex items-center gap-1 rounded-full border border-border/60 bg-background/55 px-2 py-1 text-[10px] font-semibold text-muted-foreground shadow-sm backdrop-blur-xl transition-colors group-hover:text-foreground">
+                  <ArrowLeftRight className="size-3" aria-hidden="true" />
+                  {balanceUnit === "btc" ? "BTC" : "EUR"}
+                </span>
+              </span>
+              <span
+                className={cn(
+                  "mt-1.5 block w-full truncate font-mono text-[clamp(2rem,4vw,3.35rem)] font-semibold leading-none tracking-[-0.055em] tabular-nums",
+                  blurClass(hideSensitive),
+                )}
+                aria-live="polite"
               >
-                <Trash2 className="size-4" aria-hidden="true" />
-                {t("common:actions.remove")}
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+                {balanceUnit === "btc"
+                  ? fmtBtc(connection.balance)
+                  : fmtEur(connection.balance * priceEur)}
+              </span>
+              <span
+                className={cn(
+                  "mt-2 font-mono text-sm font-medium tabular-nums text-muted-foreground",
+                  blurClass(hideSensitive),
+                )}
+              >
+                {balanceUnit === "btc"
+                  ? fmtEur(connection.balance * priceEur)
+                  : fmtBtc(connection.balance)}
+              </span>
+            </button>
+            <WalletBalanceHistoryCard
+              walletId={connection.id}
+              hideSensitive={hideSensitive}
+              variant="hero"
+            />
+          </div>
+
+          <div className="mt-3 grid grid-cols-1 gap-2.5 sm:grid-cols-3">
+            <WalletOverviewStat
+              label={t("detail.metric.transactions")}
+              value={formatCount(txCount)}
+            />
+            <WalletOverviewStat
+              label={t("detail.metric.lastSync")}
+              value={connection.last}
+            />
+            <WalletOverviewStat
+              label={
+                hasGapMetric
+                  ? t("detail.metric.gapLimit")
+                  : t("detail.metric.source")
+              }
+              value={
+                hasGapMetric
+                  ? formatOptionalCount(connection.gap)
+                  : sourceValue
+              }
+              detail={
+                hasGapMetric
+                  ? t("detail.metric.gapLimitDetail")
+                  : sourceDetail
+              }
+            />
+          </div>
         </div>
-      </div>
+      </section>
+
       {syncErrorMessage && (
         <div
-          className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-300"
+          className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 shadow-sm dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-300"
           role="status"
         >
           {syncErrorMessage}
         </div>
       )}
-
-      <div className="overflow-hidden rounded-lg border bg-card">
-        <div className="grid grid-cols-1 divide-y divide-border sm:grid-cols-2 sm:divide-y-0 xl:grid-cols-4 xl:divide-x">
-          <WalletOverviewStat
-            label={t("detail.metric.balance")}
-            value={
-              <span className={blurClass(hideSensitive)}>
-                {fmtBtc(connection.balance)}
-              </span>
-            }
-            detail={fmtEur(connection.balance * priceEur)}
-          />
-          <WalletOverviewStat
-            label={t("detail.metric.transactions")}
-            value={formatCount(txCount)}
-            detail={t("detail.metric.transactionsDetail")}
-          />
-          <WalletOverviewStat
-            label={t("detail.metric.lastSync")}
-            value={connection.last}
-            detail={connection.status}
-          />
-          <WalletOverviewStat
-            label={
-              hasGapMetric
-                ? t("detail.metric.gapLimit")
-                : t("detail.metric.source")
-            }
-            value={
-              hasGapMetric
-                ? formatOptionalCount(connection.gap)
-                : sourceValue
-            }
-            detail={
-              hasGapMetric
-                ? t("detail.metric.gapLimitDetail")
-                : sourceDetail
-            }
-          />
-        </div>
-      </div>
 
       {reconciliation.available && !reconciliation.reconciled ? (
         // Only surface reconciliation when it needs attention: the two figures
@@ -1411,7 +1446,7 @@ function ConnectionDetailView({
         // Balance metric already reflects it) rather than adding a standing
         // "all good" confirmation. The comparison + the
         // signed delta is the actionable signal.
-        <Card className="rounded-xl border-amber-300 py-3 dark:border-amber-900/60">
+        <Card className="rounded-[1.25rem] border-amber-300 py-3 shadow-sm dark:border-amber-900/60">
           <CardContent className="flex items-center justify-between gap-4 px-4">
             <div className="flex items-center gap-4">
               <span
@@ -1498,7 +1533,7 @@ function ConnectionDetailView({
       />
 
       {samouraiMetadata ? (
-        <Card>
+        <Card className="rounded-[1.25rem] border-border/70 shadow-sm">
           <CardHeader className="border-b px-4 pb-3">
             <CardTitle className="flex flex-wrap items-center gap-2 text-sm sm:text-base">
               {t("detail.samourai.title")}
@@ -1665,7 +1700,7 @@ function ConnectionDetailView({
       ) : null}
 
       {walletProvenanceRoutes.length > 0 ? (
-        <Card>
+        <Card className="rounded-[1.25rem] border-border/70 shadow-sm">
           <CardHeader className="border-b px-4 pb-3">
             <CardTitle className="text-sm sm:text-base">
               {t("detail.btcpayProvenance.title")}
@@ -1713,13 +1748,12 @@ function ConnectionDetailView({
       ) : null}
 
       <div className="grid grid-cols-1 items-start gap-3 xl:grid-cols-[minmax(0,1.35fr)_minmax(360px,0.85fr)]">
-        <Card className="gap-0 overflow-hidden py-0 shadow-none">
+        <Card className="gap-0 overflow-hidden rounded-[1.25rem] border-border/70 py-0 shadow-[0_1px_2px_rgba(0,0,0,0.035),0_10px_30px_rgba(0,0,0,0.035)] dark:shadow-black/20">
           <div className="flex flex-col gap-3 border-b p-3 sm:flex-row sm:items-center sm:gap-4 sm:px-6 sm:py-3.5">
             <div className="flex min-w-0 flex-1 flex-wrap items-center justify-between gap-2">
               <div className="min-w-0">
                 <CardTitle className="flex items-center gap-2 text-sm sm:text-base">
                   {t("detail.recentTransactions.title")}
-                  <CountBadge>{formatCount(txCount)}</CountBadge>
                 </CardTitle>
               </div>
               {txCount > 0 ? (
@@ -1820,12 +1854,8 @@ function ConnectionDetailView({
           </CardContent>
         </Card>
 
-        <div className="space-y-3">
-          <WalletBalanceHistoryCard
-            walletId={connection.id}
-            hideSensitive={hideSensitive}
-          />
-          <Card className="gap-0 overflow-hidden py-0 shadow-none">
+        <div className="space-y-3 xl:sticky xl:top-4">
+          <Card className="gap-0 overflow-hidden rounded-[1.25rem] border-border/70 py-0 shadow-[0_1px_2px_rgba(0,0,0,0.035),0_10px_30px_rgba(0,0,0,0.035)] dark:shadow-black/20">
             <CardHeader className="border-b p-3 sm:px-6 sm:py-3.5 [.border-b]:pb-3 sm:[.border-b]:pb-3.5">
               <CardTitle className="text-sm sm:text-base">
                 {t("detail.connectionDetails.title")}
@@ -1913,7 +1943,7 @@ function ConnectionDetailView({
             </CardContent>
           </Card>
 
-          <Card className="gap-0 overflow-hidden py-0 shadow-none">
+          <Card className="gap-0 overflow-hidden rounded-[1.25rem] border-border/70 py-0 shadow-[0_1px_2px_rgba(0,0,0,0.035),0_10px_30px_rgba(0,0,0,0.035)] dark:shadow-black/20">
             <CardHeader className="border-b p-3 sm:px-6 sm:py-3.5 [.border-b]:pb-3 sm:[.border-b]:pb-3.5">
               <CardTitle className="text-sm sm:text-base">
                 {t("detail.relatedViews.title")}
@@ -2569,7 +2599,7 @@ function ConnectionTransactionRow({
     <Link
       to="/transactions"
       search={{ tx: tx.id }}
-      className="flex min-w-0 items-start gap-3 px-4 py-2.5 transition-colors hover:bg-muted/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      className="flex min-w-0 items-start gap-3 px-4 py-2.5 transition-[background-color,transform] duration-200 hover:bg-muted/45 active:scale-[0.995] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transform-none motion-reduce:transition-none"
     >
       <span
         className={cn(
