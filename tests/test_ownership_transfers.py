@@ -18,9 +18,11 @@ from kassiber.core.ownership import OwnedIndex, OwnedMatch
 from kassiber.core.ownership_transfers import (
     _parse_onchain_tx,
     derive_multi_source_consolidations,
+    derive_ownership_review_proofs,
     derive_ownership_transfers,
     derive_recorded_fanout_transfers,
     detect_conflicting_spend_ids,
+    detect_pending_onchain_ids,
     graph_partial_payment_out_ids,
 )
 
@@ -875,6 +877,106 @@ def _plain_row(*, row_id, wallet_id, direction, amount_sats, txid, asset="LBTC",
     }
 
 
+class OwnershipReviewProofTests(unittest.TestCase):
+    def test_blocked_off_id_destination_becomes_pairable_graph_proof(self):
+        out = _outbound(
+            row_id="a-out",
+            wallet_id="A",
+            amount_sats=500_000,
+            fee_sats=1_000,
+            txid="graph-tx",
+            input_scripts=[SCRIPT["A"]],
+            outputs=[(SCRIPT["B"], 500_000)],
+        )
+        inbound = _inbound(
+            row_id="b-in",
+            wallet_id="B",
+            amount_sats=500_000,
+            txid="provider-settlement-id",
+        )
+        proofs = derive_ownership_review_proofs(
+            [out, inbound],
+            index=_index(
+                {SCRIPT["A"]: ("A", "A"), SCRIPT["B"]: ("B", "B")}
+            ),
+            blocked_reasons_by_row_id={
+                "a-out": "ownership_transfer_destination_ambiguous"
+            },
+        )
+        self.assertEqual(len(proofs), 1)
+        self.assertEqual(proofs[0].out_row["id"], "a-out")
+        self.assertEqual(proofs[0].in_row["id"], "b-in")
+        self.assertEqual(proofs[0].owned_amount_msat, 500_000 * SATS)
+
+    def _fanout_rows(self):
+        out = _outbound(
+            row_id="a-out",
+            wallet_id="A",
+            amount_sats=800_000,
+            fee_sats=0,
+            txid="fanout-id",
+            input_scripts=[SCRIPT["A"]],
+            outputs=[],
+        )
+        out["raw_json"] = "{}"
+        return [
+            out,
+            _inbound(
+                row_id="b-in",
+                wallet_id="B",
+                amount_sats=500_000,
+                txid="fanout-id",
+            ),
+            _inbound(
+                row_id="c-in",
+                wallet_id="C",
+                amount_sats=300_000,
+                txid="fanout-id",
+            ),
+        ]
+
+    def test_graphless_fanout_yields_one_review_proof_per_real_inbound(self):
+        proofs = derive_ownership_review_proofs(
+            self._fanout_rows(),
+            index=_index({}),
+            blocked_reasons_by_row_id={"a-out": "owned_fanout_unresolved"},
+        )
+        self.assertEqual({proof.in_row["id"] for proof in proofs}, {"b-in", "c-in"})
+        self.assertTrue(all(proof.conflict_size == 1 for proof in proofs))
+
+    def test_existing_pair_suppresses_only_that_proof(self):
+        proofs = derive_ownership_review_proofs(
+            self._fanout_rows(),
+            index=_index({}),
+            blocked_reasons_by_row_id={"a-out": "owned_fanout_unresolved"},
+            active_pair_records=[
+                {
+                    "out_transaction_id": "a-out",
+                    "in_transaction_id": "b-in",
+                    "deleted_at": None,
+                }
+            ],
+        )
+        self.assertEqual([proof.in_row["id"] for proof in proofs], ["c-in"])
+
+    def test_direct_payout_claim_suppresses_impossible_candidate(self):
+        proofs = derive_ownership_review_proofs(
+            self._fanout_rows(),
+            index=_index({}),
+            blocked_reasons_by_row_id={"a-out": "owned_fanout_unresolved"},
+            active_pair_records=[
+                {
+                    "out_transaction_id": "a-out",
+                    "in_transaction_id": None,
+                    "kind": "direct-swap-payout",
+                    "policy": "taxable",
+                    "deleted_at": None,
+                }
+            ],
+        )
+        self.assertEqual(proofs, [])
+
+
 class RecordedFanoutDeriverTests(unittest.TestCase):
     """The graphless 1->N decomposer (Liquid / CSV) working from rows alone."""
 
@@ -1426,6 +1528,61 @@ class ConflictingSpendTests(unittest.TestCase):
         graph["vin"] = [{"txid": "other", "vout": 5, "prevout": {"scriptpubkey": SCRIPT["A"]}}]
         b2["raw_json"] = _json.dumps(graph)
         self.assertEqual(detect_conflicting_spend_ids([a, b2]), set())
+
+
+class PendingOnchainTests(unittest.TestCase):
+    def test_explicit_mempool_state_holds_every_same_txid_leg(self):
+        txid = "a" * 64
+        out = _outbound(
+            row_id="pending-out",
+            wallet_id="A",
+            amount_sats=50_000_000,
+            fee_sats=1000,
+            txid=txid,
+            input_scripts=[SCRIPT["A"]],
+            outputs=[(SCRIPT["B"], 50_000_000)],
+        )
+        graph = json.loads(out["raw_json"])
+        graph["status"] = {"confirmed": False}
+        out["raw_json"] = json.dumps(graph)
+        inbound = _inbound(
+            row_id="pending-in",
+            wallet_id="B",
+            amount_sats=50_000_000,
+            txid=txid,
+        )
+
+        self.assertEqual(
+            detect_pending_onchain_ids([out, inbound]),
+            {"pending-out", "pending-in"},
+        )
+
+    def test_graphless_import_without_confirmation_state_is_not_held(self):
+        row = _inbound(
+            row_id="csv-in",
+            wallet_id="A",
+            amount_sats=1_000_000,
+            txid="provider-row",
+        )
+        self.assertEqual(detect_pending_onchain_ids([row]), set())
+
+    def test_confirmed_sibling_wins_over_stale_mempool_leg(self):
+        txid = "b" * 64
+        pending = _inbound(
+            row_id="stale-leg",
+            wallet_id="A",
+            amount_sats=1_000_000,
+            txid=txid,
+        )
+        pending["raw_json"] = json.dumps(
+            {"txid": txid, "status": {"confirmed": False}}
+        )
+        confirmed = dict(pending)
+        confirmed["id"] = "confirmed-leg"
+        confirmed["raw_json"] = json.dumps(
+            {"txid": txid, "status": {"confirmed": True}}
+        )
+        self.assertEqual(detect_pending_onchain_ids([pending, confirmed]), set())
 
 
 class GraphPartialPaymentTests(unittest.TestCase):

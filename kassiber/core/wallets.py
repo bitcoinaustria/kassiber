@@ -68,6 +68,22 @@ BULLBITCOIN_WALLET_NETWORK_CONFIG_KEY = "bullbitcoin_wallet_network"
 BULLBITCOIN_WALLET_EXPORTS_CONFIG_KEY = "bullbitcoin_wallet_exports"
 BULLBITCOIN_WALLET_NETWORKS = ("bitcoin", "liquid", "lightning")
 WALLET_DEPRECATED_CONFIG_KEY = "deprecated"
+OWNERSHIP_HISTORY_CONFIG_KEY = "ownership_history"
+OWNERSHIP_SCAN_TO_INDEX_CONFIG_KEY = "ownership_scan_to_index"
+MAX_OWNERSHIP_SCAN_TO_INDEX = 20_000
+_OWNERSHIP_HISTORY_LIMIT = 8
+_OWNERSHIP_MATERIAL_FIELDS = (
+    "descriptor",
+    "change_descriptor",
+    "xpub",
+    "script_types",
+    OWNERSHIP_SCAN_TO_INDEX_CONFIG_KEY,
+    "addresses",
+    "chain",
+    "network",
+    "gap_limit",
+    "synthesize_change",
+)
 WALLET_SAFE_CONFIG_FIELDS = (
     "addresses",
     "backend",
@@ -551,6 +567,23 @@ def create_wallet(conn, workspace_ref, profile_ref, label, kind, account_ref=Non
 
 def _validated_wallet_config(normalized_kind, config):
     config = dict(config or {})
+    if OWNERSHIP_SCAN_TO_INDEX_CONFIG_KEY in config:
+        try:
+            ownership_scan_to_index = int(
+                config[OWNERSHIP_SCAN_TO_INDEX_CONFIG_KEY]
+            )
+        except (TypeError, ValueError) as exc:
+            raise AppError(
+                "ownership_scan_to_index must be an integer",
+                code="validation",
+            ) from exc
+        if not 0 <= ownership_scan_to_index <= MAX_OWNERSHIP_SCAN_TO_INDEX:
+            raise AppError(
+                f"ownership_scan_to_index must be between 0 and "
+                f"{MAX_OWNERSHIP_SCAN_TO_INDEX}",
+                code="validation",
+            )
+        config[OWNERSHIP_SCAN_TO_INDEX_CONFIG_KEY] = ownership_scan_to_index
     if "addresses" in config:
         config["addresses"] = normalize_addresses(config.get("addresses"))
     if "birthday" in config:
@@ -621,7 +654,53 @@ def _validated_wallet_config(normalized_kind, config):
 def _sync_material_config_json(config):
     sync_config = dict(config or {})
     sync_config.pop(WALLET_DEPRECATED_CONFIG_KEY, None)
+    sync_config.pop(OWNERSHIP_HISTORY_CONFIG_KEY, None)
+    sync_config.pop(OWNERSHIP_SCAN_TO_INDEX_CONFIG_KEY, None)
     return json.dumps(sync_config, sort_keys=True)
+
+
+def _ownership_material_snapshot(config):
+    """The minimum private config needed to recognize historic scripts.
+
+    This stays inside the encrypted wallet config. It is intentionally absent
+    from ``WALLET_SAFE_CONFIG_FIELDS`` and therefore never appears in normal
+    CLI, daemon, UI, or AI wallet payloads.
+    """
+
+    if not isinstance(config, dict):
+        return {}
+    return {
+        field: config[field]
+        for field in _OWNERSHIP_MATERIAL_FIELDS
+        if config.get(field) not in (None, "", [])
+    }
+
+
+def _historic_scan_floor(conn, wallet_id):
+    row = conn.execute(
+        "SELECT MAX(address_index) AS highest FROM wallet_utxos WHERE wallet_id = ?",
+        (wallet_id,),
+    ).fetchone()
+    return max(0, int(row["highest"] or 0)) if row else 0
+
+
+def _archive_ownership_material(conn, wallet_id, config, snapshot):
+    if not snapshot:
+        return
+    archived = dict(snapshot)
+    archived["scan_to_index"] = _historic_scan_floor(conn, wallet_id)
+    existing = [
+        dict(item)
+        for item in config.get(OWNERSHIP_HISTORY_CONFIG_KEY, [])
+        if isinstance(item, dict)
+    ]
+    canonical = json.dumps(archived, sort_keys=True)
+    existing = [
+        item for item in existing if json.dumps(item, sort_keys=True) != canonical
+    ]
+    config[OWNERSHIP_HISTORY_CONFIG_KEY] = (existing + [archived])[
+        -_OWNERSHIP_HISTORY_LIMIT:
+    ]
 
 
 def _wallet_descriptor_state(config):
@@ -943,6 +1022,7 @@ def update_wallet(conn, workspace_ref, profile_ref, wallet_ref, updates):
 
     # Preserve legacy Austrian provenance metadata until a deliberate migration removes it.
     config = json.loads(wallet["config_json"] or "{}")
+    original_ownership_material = _ownership_material_snapshot(config)
     original_sync_material_json = _sync_material_config_json(config)
     for field in clear_fields:
         if field not in config:
@@ -959,6 +1039,13 @@ def update_wallet(conn, workspace_ref, profile_ref, wallet_ref, updates):
             config[key] = value
 
     config = _validated_wallet_config(wallet["kind"], config)
+    if _ownership_material_snapshot(config) != original_ownership_material:
+        _archive_ownership_material(
+            conn,
+            wallet["id"],
+            config,
+            original_ownership_material,
+        )
     config_json = json.dumps(config, sort_keys=True)
     sync_material_changed = (
         _sync_material_config_json(config) != original_sync_material_json
@@ -1027,6 +1114,8 @@ __all__ = [
     "list_wallets",
     "load_wallet_descriptor_plan_from_config",
     "has_silent_payment_sync_material",
+    "OWNERSHIP_HISTORY_CONFIG_KEY",
+    "OWNERSHIP_SCAN_TO_INDEX_CONFIG_KEY",
     "normalize_addresses",
     "wallet_is_deprecated",
     "normalize_btcpay_payment_method_id",

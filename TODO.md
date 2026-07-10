@@ -727,15 +727,13 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
   provenance panel for BTCPay payment -> invoice -> payment-request/app-origin
   -> document context; the remaining work is the dedicated reconciliation
   queue/workbench for reviewing and resolving suggestions at scale.
-- [ ] Richer transfer pairing for multi-leg self-transfers. The **tax pipeline**
-  half is done (`derive_recorded_fanout_transfers` / `derive_ownership_transfers`
-  decompose 1→N fan-outs in the rp2 engine, with `owned_fanout_unresolved`
-  quarantine for un-decomposable ones). Still open: the **swap-review** half —
-  `_deterministic_self_transfer_ids` (`transfer_matching.py`) only suppresses the
-  clean 1-out/1-in shape, so a conserving 1-outbound/N-inbound same-txid fan-out
-  still surfaces as a spurious strong swap candidate in CLI + daemon review;
-  extend the deterministic suppression to the fan-out shape and emit proper
-  per-leg pairings
+- [x] Richer transfer pairing for multi-leg self-transfers. The tax pipeline
+  decomposes graph-backed and recorded 1→N fan-outs; deterministic swap
+  suppression now covers conserving 1-out/N-in same-txid groups; and current
+  `owned_fanout_unresolved` / pairable `ownership_transfer_*` quarantines emit
+  exact `ownership_graph` cards through the existing transfer pair store.
+  Ownership cards are deliberately manual-only (excluded from rules and every
+  bulk path), while conflict clustering supports choosing each real receipt.
 - [x] Better cross-asset transfer accounting beyond audit metadata
   (matcher + rules + saved views + `/swaps` review queue land swap
   pairing end-to-end; AT carrying-value continues through rp2; generic
@@ -1037,19 +1035,23 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
     in.amount` when the source stores fee separately, while reviewed split pairs
     keep the existing reviewed-principal semantics until a separate fee
     allocation is supplied.
-  - [ ] **RBF dropped-import phantom disposal (P3).** An RBF-replaced outbound
+  - [x] **RBF dropped-import phantom disposal (P3).** An RBF-replaced outbound
     captured in the mempool before eviction has no matching inbound and falls
     through to a taxable disposal (`tax_events.py:877`). Gated behind the
     esplora/mempool backend + a sync-timing race (BTCPay is confirmed-only and
-    immune). Fix: a confirmed-only tax gate (`confirmed_at IS NOT NULL`) + a
-    shared-prevout RBF/conflict-dedup pass (matches the deferred BDK-eval note).
-  - [ ] **Fee-tolerance flag desync (P3).** `_deterministic_self_transfer_ids`
+    immune). Fixed with an explicit chain-status gate: only rows whose stored
+    sync payload says `status.confirmed=false` are quarantined as
+    `pending_onchain_confirmation` until a sibling leg proves confirmation.
+    This intentionally does not use `confirmed_at IS NOT NULL`, because CSV and
+    provider rows can lack that timestamp without being mempool transactions.
+    The existing shared-prevout conflict pass remains independent.
+  - [x] **Fee-tolerance flag desync (P3).** `_deterministic_self_transfer_ids`
     honors caller `--fee-pct-max/--fee-sats-min` but `tax_events`'s
     `transfer_fee_implausible` ceiling is hardcoded to the defaults, so
     `transfers suggest --fee-pct-max 0.5` empties a pair from the swap queue
-    while the report still quarantines it. Fix: make the deterministic
-    self-transfer suppression always use the defaults so the flag only widens
-    heuristic candidate generation.
+    while the report still quarantines it. Deterministic self-transfer
+    suppression now always uses the journal defaults; caller flags widen
+    heuristic candidate generation only.
   - [ ] **Self-transfer change on an un-indexed script booked as a phantom
     external disposal (P1, round-2 deep audit).** A pure self-transfer A→B whose
     change returns to a source script the `OwnedIndex` does not contain (change
@@ -1064,14 +1066,14 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
     a deriver-only guard cannot distinguish un-indexed change from a real external
     payment (the graph residual is identical either way), and quarantining large
     residuals would regress legitimate large partial payments (`test_mixed_spend_books_move_and_residual_without_phantom_fee`).
-    `build_owned_index` already deep-derives the change branch to a ceiling, so this
-    is an index-completeness EDGE (change past the ceiling, address-list wallets
-    that cannot derive change, an un-enumerated multi-script change type), not a
-    common-path bug. A source-coverage discriminator is imperfect (a descriptor
-    wallet's change past the ceiling is still un-indexed despite source="derived").
-    DECISION NEEDED (maintainer): change-address index completeness vs. a
-    `change_unverified` quarantine state for owned-source spends with an
-    unexplained residual. Not rushed — a wrong guard regresses real payments.
+    Mitigation landed without a residual heuristic: wallet descriptor/xpub/
+    address material is privately archived on migration and remains in the
+    ownership index, inventory-derived historic floors survive the migration,
+    and a bounded per-wallet `ownership_scan_to_index` can raise journal depth
+    above 500 (hard-capped at 20,000). Residual risk remains for genuinely
+    unknown address-list change or scripts beyond the configured ceiling. Do not
+    close this last edge with a generic large-residual quarantine: that regresses
+    legitimate partial payments.
   - [x] **Whole-row direct-swap-payout disposal lost to a same-txid auto-pair
     hijack (P2, round-2 deep audit).** A reviewed whole-row taxable direct payout
     whose out tx shares a txid with another owned wallet's recorded inbound was
@@ -1109,7 +1111,7 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
     SQL. Fixed: the early-return now sorts unconditionally. (The gate-ordering /
     same-timestamp determinism part of this finding was already addressed by the
     F5 same-timestamp fix, which removed the old `_gate_order_key`.)
-  - [ ] **Cross-chain script-collision guard defeated by blank chain/network (P3,
+  - [x] **Cross-chain script-collision guard defeated by blank chain/network (P3,
     round-2 deep audit).** `_norm_chain_network('', '')` defaults to
     `('bitcoin', 'main')`, so a blank-metadata reused-key Liquid match could pass
     the bitcoin/main chain filter and book a cross-chain disposal as a non-taxable
@@ -1121,8 +1123,18 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
     is to normalize blank Bitcoin address metadata to bitcoin/main when the index
     is BUILT (`build_owned_index` / address-list + inventory seeding), so genuine
     cross-chain blanks (if any are reachable) stay distinguishable from
-    legacy-mainnet blanks. Likely unreachable today (chain force-normalization on
-    wallet add/edit), hence P3 / deferred.
+    legacy-mainnet blanks. Fixed at index construction: legacy blank address-list
+    and inventory metadata is stamped `bitcoin/main`, while an explicit/fallback
+    Liquid chain receives `liquid/liquidv1`; comparison remains strict.
+  - [x] **Blocked ownership proof was quarantine-only (P2, 2026-07-10).** Journal
+    ownership blocks and unresolved fan-outs now feed `transfers suggest` as
+    redacted, pair-store-compatible `ownership_graph` candidates, report blockers
+    point to that queue, quarantine deep-links prefilter and focus the exact leg,
+    and `conflicting_spend` has a distinct non-pairing review action. Journal and
+    graph preview share `derive_profile_transfers`; identify, ownership, and
+    source-funds share one stored vin/vout parser. Pairing changes holdings only
+    after journal reprocessing; no candidate payload exposes scripts or wallet
+    derivation material.
   - [x] **Round-3 self-transfer batch (2026-07-08).** ~30 one-bug-per-commit
     fixes across the transfer machinery: Samourai tx0 group atomicity +
     manual-pair collision quarantines, multi-pair fee ceiling + privacy-leg

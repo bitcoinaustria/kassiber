@@ -17,7 +17,7 @@ from .loans import (
     LOCK_SUPPRESS_ROLES,
     RELEASE_SUPPRESS_ROLES,
 )
-from .ownership_transfers import detect_conflicting_spend_ids
+from .ownership_transfers import detect_conflicting_spend_ids, detect_pending_onchain_ids
 from .pair_allocation import (
     allocate_fee_msat,
     clamped_component_receipts_msat,
@@ -1286,6 +1286,7 @@ def normalize_tax_asset_inputs(
     at_swap_link_by_row_id: Optional[Mapping[str, str]] = None,
     loan_leg_by_transaction_id: Optional[Mapping[str, str]] = None,
     conflict_row_ids: Optional[set[str]] = None,
+    pending_onchain_row_ids: Optional[set[str]] = None,
 ) -> NormalizedTaxAssetInputs:
     tax_country = ""
     if hasattr(profile, "keys") and "tax_country" in profile.keys():
@@ -1363,6 +1364,8 @@ def normalize_tax_asset_inputs(
     # best-effort detection over the rows they pass.
     if conflict_row_ids is None:
         conflict_row_ids = detect_conflicting_spend_ids(rows)
+    if pending_onchain_row_ids is None:
+        pending_onchain_row_ids = detect_pending_onchain_ids(rows)
     # A pair touching a conflict loser is not booked (see pair_by_row below), so
     # it must also be dropped from regime inference: otherwise infer_outbound_regimes
     # treats the surviving partner as a transfer leg and skips it for Alt/Neu
@@ -1373,6 +1376,8 @@ def normalize_tax_asset_inputs(
         for pair in intra_pairs
         if str(pair["out"]["id"]) not in conflict_row_ids
         and str(pair["in"]["id"]) not in conflict_row_ids
+        and str(pair["out"]["id"]) not in pending_onchain_row_ids
+        and str(pair["in"]["id"]) not in pending_onchain_row_ids
     ]
     paired_regime_row_ids = {
         str(row["id"])
@@ -1384,6 +1389,8 @@ def normalize_tax_asset_inputs(
         for pair in _samourai_internal_regime_pairs(samourai_internal_groups)
         if str(pair["out"]["id"]) not in conflict_row_ids
         and str(pair["in"]["id"]) not in conflict_row_ids
+        and str(pair["out"]["id"]) not in pending_onchain_row_ids
+        and str(pair["in"]["id"]) not in pending_onchain_row_ids
         and str(pair["out"]["id"]) not in paired_regime_row_ids
         and str(pair["in"]["id"]) not in paired_regime_row_ids
     ]
@@ -1391,6 +1398,8 @@ def normalize_tax_asset_inputs(
     for row in rows:
         row_id = str(row["id"])
         if row_id in conflict_row_ids:
+            continue
+        if row_id in pending_onchain_row_ids:
             continue
         if row_id in samourai_manual_conflict_row_ids:
             # Quarantined below (samourai/manual-multi collision): the rows
@@ -1509,6 +1518,22 @@ def normalize_tax_asset_inputs(
                         "asset": asset,
                         "direction": _row_get(row, "direction"),
                         "external_id": str(_row_get(row, "external_id") or ""),
+                    },
+                )
+            )
+            continue
+        if row["id"] in pending_onchain_row_ids:
+            quarantines.append(
+                build_tax_quarantine(
+                    profile,
+                    row,
+                    "pending_onchain_confirmation",
+                    {
+                        "wallet": wallet_refs_by_id[row["wallet_id"]]["label"],
+                        "asset": asset,
+                        "direction": _row_get(row, "direction"),
+                        "external_id": str(_row_get(row, "external_id") or ""),
+                        "required_for": "confirmed_chain_history",
                     },
                 )
             )

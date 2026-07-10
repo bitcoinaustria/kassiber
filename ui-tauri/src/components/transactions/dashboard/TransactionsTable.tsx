@@ -2676,9 +2676,15 @@ const TransactionsTable = ({
         }}
         isUnpairing={unpairTransfer.isPending}
         onOpenPairingReview={() => {
+          const focus = detailTransaction?.id;
           setDetailTransaction(null);
           updateTransactionDetailParams(null);
-          void navigate({ to: "/swaps" });
+          void navigate({
+            to: "/swaps",
+            search: {
+              focus,
+            },
+          });
         }}
         onOpenMarketDataSettings={() => {
           setDetailTransaction(null);

@@ -168,6 +168,9 @@
       "implausibleFeeWithWallets": "Unplausible Transfergebühr: {{from}} -> {{to}}",
       "ownershipTransfer": "Eigenübertragung in {{wallet}} muss gepaart werden",
       "ownershipAmountMismatch": "Wallet-Sync stimmt in {{wallet}} nicht überein",
+      "ownedFanout": "Transfer an mehrere eigene Wallets muss in {{wallet}} geprüft werden",
+      "conflictingSpend": "Konkurrierende Ausgabe muss in {{wallet}} bestätigt werden",
+      "pendingConfirmation": "On-Chain-Transaktion in {{wallet}} ist noch ausständig",
       "transferGroupBlocked": "Transfergruppe blockiert durch {{reason}}",
       "insufficientLots": "Nicht genug {{asset}}-Lots in {{wallet}}",
       "missingBasis": "Fehlende {{asset}}-Anschaffungskosten in {{wallet}}"
@@ -180,7 +183,10 @@
       "splitTransfer": "Split-Transfer / Swap-Prüfung",
       "coarsePricing": "Grobe Bewertung — prüfen",
       "ownershipTransfer": "Eigenübertragung zwischen deinen Wallets",
-      "ownershipAmountMismatch": "Wallet-Sync-Abweichung"
+      "ownershipAmountMismatch": "Wallet-Sync-Abweichung",
+      "ownedFanout": "Mehrgliedriger Transfer zwischen deinen Wallets",
+      "conflictingSpend": "Konkurrierende On-Chain-Transaktionen",
+      "pendingConfirmation": "Ausständige On-Chain-Bestätigung"
     },
     "evidence": {
       "price": "Füge einen Fiat-Preis oder Kursabdeckung hinzu",
@@ -197,7 +203,10 @@
       "basisValues": "Benötigt {{required}}, verfügbar {{available}} in {{wallet}}",
       "ownershipAmountMismatch": "Erfasst {{rowAmount}}, aber eigene Outputs summieren sich auf {{ownedOutputs}}",
       "ownershipLeg": "Mögliches eigenes Leg: {{amount}}",
-      "ownershipTransfer": "Aus der On-Chain-Transaktion belegt — eine Ausgabe ging an eine andere deiner Wallets, der passende Eingang ließ sich aber nicht automatisch zuordnen"
+      "ownershipTransfer": "Aus der On-Chain-Transaktion belegt — eine Ausgabe ging an eine andere deiner Wallets, der passende Eingang ließ sich aber nicht automatisch zuordnen",
+      "ownedFanout": "Die Transaktion zahlt an mehrere eigene Wallets. Deshalb muss jeder echte Eingang als eigenes Carrying-Value-Leg bestätigt werden",
+      "conflictingSpend": "Zwei Transaktionen geben denselben Input aus. Nur der bestätigte Gewinner gehört ins Journal",
+      "pendingConfirmation": "Die synchronisierten Chain-Daten melden diese Transaktion ausdrücklich als unbestätigt"
     },
     "nextAction": {
       "price": "Preis setzen, dann Journale verarbeiten",
@@ -208,13 +217,17 @@
       "coarsePricing": "Präzise Preise holen oder bestätigen, dann Journale verarbeiten",
       "ownershipTransfer": "Manuell paaren oder die Ziel-Wallet synchronisieren, damit ihr Eingang erfasst wird, dann Journale verarbeiten",
       "ownershipConsolidation": "Mehrere deiner Wallets haben diese Ausgabe finanziert — die Zusammenlegung prüfen und paaren, dann Journale verarbeiten",
-      "ownershipAmountMismatch": "Der erfasste Betrag weicht von der On-Chain-Transaktion ab — Wallet neu synchronisieren, dann Journale verarbeiten"
+      "ownershipAmountMismatch": "Der erfasste Betrag weicht von der On-Chain-Transaktion ab — Wallet neu synchronisieren, dann Journale verarbeiten",
+      "ownedFanout": "Jeden echten Zieleingang einzeln bestätigen, dann Journale verarbeiten",
+      "conflictingSpend": "Bestätigungen synchronisieren, den Gewinner prüfen und einen Verlierer nur bei klarem Chain-Nachweis ausschließen",
+      "pendingConfirmation": "Bestätigung abwarten oder die Wallet erneut synchronisieren, dann Journale verarbeiten"
     },
     "action": {
       "openTransaction": "Details prüfen",
       "openPricing": "Preis ergänzen",
       "openPairing": "Transfer prüfen",
       "openSyncReview": "Sync-Problem prüfen",
+      "openConflictReview": "Konkurrierende Ausgabe prüfen",
       "openBasisReview": "Kostenbasis ergänzen",
       "openTaxReview": "Kostenbasis ergänzen"
     },

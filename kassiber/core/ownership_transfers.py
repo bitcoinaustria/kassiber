@@ -32,13 +32,11 @@ existing row-matching + quarantine behavior, never mis-booked):
 * **Owned outputs only.** External recipients and OP_RETURN are never legs;
   the residual ``amount - Σ(legs)`` stays on the source as a real disposal.
 
-Known limitation: a fan-out where the source shares its txid with *exactly one*
-recorded destination inbound is pre-empted by ``detect_intra_transfers`` (which
-pairs that 1-out/1-in shape before this runs), so the source lands in
-``already_paired_ids`` and is skipped here. That partial fan-out degrades to the
-existing ``transfer_fee_implausible`` quarantine (a safe review flag, not a
-mis-booking). Fully-recorded fan-outs (1-out/N-in, which ``detect_intra``
-skips) and fully sync-gapped ones are decomposed normally.
+The journal now withholds a same-txid 1-out/1-in pair when the graph proves an
+external residual or multiple owned destinations, giving this deriver first
+refusal. If safe decomposition still declines, multi-owned cases stay blocked
+for ownership review; a simple partial-payment pair is restored so no leg is
+orphaned. Fully-recorded and fully sync-gapped fan-outs are decomposed normally.
 
 Amount model: an outbound row's spend capacity is ``amount + fee`` unless
 ``amount_includes_fee`` is set. Esplora-style rows usually have ``amount`` as
@@ -57,11 +55,12 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, field
 from decimal import Decimal
-from typing import Any, Mapping, Optional, Sequence
+from typing import Any, Callable, Mapping, Optional, Sequence
 
-from ..msat import SATS_PER_BTC, dec, msat_to_btc
+from ..msat import msat_to_btc
 from ..transfers import normalize_group_txid
 from ..wallet_descriptors import normalize_chain, normalize_network
+from .onchain import parse_valued_tx
 
 
 SATS_TO_MSAT = 1000
@@ -74,23 +73,6 @@ _SYNTHETIC_ID_PREFIXES = (
     "direct-payout:",
     "multi-consol:",
 )
-
-
-def _stored_graph_value_sats(value: Any, *, explicit_sats: bool) -> int | None:
-    if value is None or value == "":
-        return None
-    try:
-        if isinstance(value, bool):
-            return None
-        if explicit_sats:
-            return int(value)
-        if isinstance(value, int):
-            return value
-        if isinstance(value, str) and "." not in value:
-            return int(value)
-        return int((dec(value, "0") * SATS_PER_BTC).to_integral_value())
-    except (TypeError, ValueError, ArithmeticError):
-        return None
 
 
 @dataclass(frozen=True)
@@ -118,6 +100,308 @@ class OwnershipDeriveResult:
     dropped_out_ids: set[str] = field(default_factory=set)
     dropped_in_ids: set[str] = field(default_factory=set)
     blocked_sources: list[dict[str, Any]] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class OwnershipReviewProof:
+    """A graph-backed, user-pairable ownership review suggestion.
+
+    Only real transaction rows are carried so accepting the suggestion can use
+    the existing ``transaction_pairs`` store. ScriptPubKeys and derivation paths
+    never leave this module.
+    """
+
+    out_row: Mapping[str, Any]
+    in_row: Mapping[str, Any]
+    owned_amount_msat: int
+    reason: str
+    conflict_set_id: str
+    conflict_size: int = 1
+
+
+@dataclass(frozen=True)
+class ProfileTransferDerivation:
+    """Shared ownership pipeline result for journal and graph preview."""
+
+    rows_after_consolidation: list[Mapping[str, Any]]
+    rows_after_ownership: list[Mapping[str, Any]]
+    rows: list[Mapping[str, Any]]
+    consolidation: OwnershipDeriveResult
+    ownership: OwnershipDeriveResult
+    fanout: OwnershipDeriveResult
+    handled_ids: set[str]
+
+
+def _rows_after_derivation(
+    rows: Sequence[Mapping[str, Any]],
+    result: OwnershipDeriveResult,
+    *,
+    sort_key: Callable[[Mapping[str, Any]], Any] | None,
+) -> list[Mapping[str, Any]]:
+    drop_ids = result.dropped_out_ids | result.dropped_in_ids
+    next_rows = [
+        result.out_row_overrides.get(str(_get(row, "id")), row)
+        for row in rows
+        if str(_get(row, "id")) not in drop_ids
+    ]
+    if result.synthetic_rows:
+        next_rows.extend(result.synthetic_rows)
+    return sorted(next_rows, key=sort_key) if sort_key is not None else next_rows
+
+
+def derive_profile_transfers(
+    rows: Sequence[Mapping[str, Any]],
+    *,
+    index: Any,
+    wallet_refs_by_id: Mapping[str, Mapping[str, Any]],
+    already_paired_ids: set[str] | None = None,
+    sort_key: Callable[[Mapping[str, Any]], Any] | None = None,
+) -> ProfileTransferDerivation:
+    """Run the shared consolidation -> ownership -> fan-out pipeline.
+
+    Callers remain responsible for manual-pair, payout, quarantine, and tax
+    policy. This function owns the ordering and the row set each deriver sees,
+    preventing graph preview and journal booking from silently diverging.
+    """
+
+    handled = set(already_paired_ids or ())
+    consolidation = derive_multi_source_consolidations(
+        rows,
+        index=index,
+        wallet_refs_by_id=wallet_refs_by_id,
+        already_paired_ids=handled,
+    )
+    rows_after_consolidation = _rows_after_derivation(
+        rows, consolidation, sort_key=sort_key
+    )
+    handled |= consolidation.dropped_out_ids | consolidation.dropped_in_ids
+
+    ownership = derive_ownership_transfers(
+        rows_after_consolidation,
+        index=index,
+        wallet_refs_by_id=wallet_refs_by_id,
+        already_paired_ids=handled,
+    )
+    rows_after_ownership = _rows_after_derivation(
+        rows_after_consolidation, ownership, sort_key=sort_key
+    )
+    fanout_handled = set(handled)
+    fanout_handled |= ownership.dropped_out_ids
+    fanout_handled |= {str(out_id) for out_id in ownership.out_row_overrides}
+    fanout_handled |= {
+        str(_get(pair.get("in"), "id")) for pair in ownership.derived_pairs
+    }
+    fanout_handled |= {
+        str(_get(blocked.get("row"), "id"))
+        for blocked in ownership.blocked_sources
+        if blocked.get("row") is not None
+    }
+    fanout = derive_recorded_fanout_transfers(
+        rows_after_ownership, already_paired_ids=fanout_handled
+    )
+    final_rows = _rows_after_derivation(
+        rows_after_ownership, fanout, sort_key=sort_key
+    )
+    handled = fanout_handled | fanout.dropped_out_ids | fanout.dropped_in_ids
+    return ProfileTransferDerivation(
+        rows_after_consolidation=rows_after_consolidation,
+        rows_after_ownership=rows_after_ownership,
+        rows=final_rows,
+        consolidation=consolidation,
+        ownership=ownership,
+        fanout=fanout,
+        handled_ids=handled,
+    )
+
+
+_PAIRABLE_OWNERSHIP_REVIEW_REASONS = frozenset(
+    {
+        "owned_fanout_unresolved",
+        "ownership_transfer_destination_ambiguous",
+        "ownership_transfer_source_ambiguous",
+    }
+)
+_REUSABLE_OWNERSHIP_PAIR_KINDS = frozenset({"manual", "coinjoin", "whirlpool"})
+
+
+def derive_ownership_review_proofs(
+    rows: Sequence[Mapping[str, Any]],
+    *,
+    index: Any,
+    blocked_reasons_by_row_id: Mapping[str, str],
+    active_pair_records: Sequence[Mapping[str, Any]] = (),
+) -> list[OwnershipReviewProof]:
+    """Return pair-store-compatible review proofs for blocked ownership moves.
+
+    The journal remains authoritative about which sources are blocked. This
+    helper only turns those persisted review reasons into actionable 1:1 links:
+    a unique owned output wallet plus a compatible real inbound row. Missing
+    destination rows, ambiguous script ownership, conflicts, and amount-mismatch
+    blocks stay in quarantine rather than inventing a pair.
+    """
+
+    if index is None:
+        return []
+    active_records = [
+        record for record in active_pair_records if not _get(record, "deleted_at")
+    ]
+    active_pairs = {
+        (
+            str(_get(record, "out_transaction_id") or ""),
+            str(_get(record, "in_transaction_id") or ""),
+        )
+        for record in active_records
+    }
+    rows_by_id = {str(_get(row, "id")): row for row in rows}
+    unavailable_leg_ids: set[str] = set()
+    for record in active_records:
+        out_id = str(_get(record, "out_transaction_id") or "")
+        in_id = str(_get(record, "in_transaction_id") or "")
+        # Direct payouts claim the outbound outright. Cross-asset and special
+        # one-to-one pair kinds cannot participate in same-asset multi-leg
+        # reuse either; offering those cards would make the pair API reject.
+        if not in_id:
+            unavailable_leg_ids.add(out_id)
+            continue
+        out_row = rows_by_id.get(out_id)
+        in_row = rows_by_id.get(in_id)
+        kind = str(_get(record, "kind") or "manual")
+        policy = str(_get(record, "policy") or "carrying-value")
+        if (
+            out_row is None
+            or in_row is None
+            or str(_get(out_row, "asset") or "").upper()
+            != str(_get(in_row, "asset") or "").upper()
+            or policy != "carrying-value"
+            or kind not in _REUSABLE_OWNERSHIP_PAIR_KINDS
+        ):
+            unavailable_leg_ids |= {out_id, in_id}
+    inbound_by_wallet: dict[str, list[Mapping[str, Any]]] = {}
+    groups: dict[tuple[str, Any], list[Mapping[str, Any]]] = {}
+    for row in rows:
+        if _get(row, "direction") == "inbound" and int(_get(row, "amount") or 0) > 0:
+            inbound_by_wallet.setdefault(str(_get(row, "wallet_id")), []).append(row)
+        external_id = _get(row, "external_id")
+        if external_id:
+            groups.setdefault(
+                (normalize_group_txid(str(external_id)), _get(row, "asset")), []
+            ).append(row)
+
+    proofs: list[OwnershipReviewProof] = []
+    for source_id, reason in sorted(blocked_reasons_by_row_id.items()):
+        if reason not in _PAIRABLE_OWNERSHIP_REVIEW_REASONS:
+            continue
+        source = rows_by_id.get(str(source_id))
+        if (
+            source is None
+            or source_id in unavailable_leg_ids
+            or _get(source, "direction") != "outbound"
+            or int(_get(source, "amount") or 0) <= 0
+        ):
+            continue
+        parsed = _parse_onchain_tx(_get(source, "raw_json"))
+        destinations: dict[str, int] = {}
+        if parsed is not None:
+            source_wallet_id = str(_get(source, "wallet_id"))
+            chain_network = _source_chain_network(
+                parsed["inputs"], index, source_wallet_id
+            )
+            ambiguous = False
+            for output in parsed["outputs"]:
+                matches = index.lookup_script(output["script"])
+                if chain_network is not None:
+                    matches = [
+                        match
+                        for match in matches
+                        if _norm_chain_network(match.chain, match.network)
+                        == chain_network
+                    ]
+                owner_ids = {str(match.wallet_id) for match in matches}
+                if source_wallet_id in owner_ids:
+                    continue
+                if len(owner_ids) > 1:
+                    ambiguous = True
+                    break
+                if len(owner_ids) == 1:
+                    owner_id = next(iter(owner_ids))
+                    destinations[owner_id] = destinations.get(owner_id, 0) + (
+                        int(output["value_sats"]) * SATS_TO_MSAT
+                    )
+            if ambiguous:
+                continue
+        elif reason == "owned_fanout_unresolved":
+            group_key = (
+                normalize_group_txid(str(_get(source, "external_id") or "")),
+                _get(source, "asset"),
+            )
+            group = groups.get(group_key, [])
+            positive_outs = [
+                row
+                for row in group
+                if _get(row, "direction") == "outbound"
+                and int(_get(row, "amount") or 0) > 0
+            ]
+            if len(positive_outs) != 1 or str(_get(positive_outs[0], "id")) != source_id:
+                continue
+            for inbound in group:
+                if (
+                    _get(inbound, "direction") == "inbound"
+                    and int(_get(inbound, "amount") or 0) > 0
+                    and str(_get(inbound, "wallet_id"))
+                    != str(_get(source, "wallet_id"))
+                ):
+                    wallet_id = str(_get(inbound, "wallet_id"))
+                    destinations[wallet_id] = destinations.get(wallet_id, 0) + int(
+                        _get(inbound, "amount") or 0
+                    )
+
+        txid = str((parsed or {}).get("txid") or _get(source, "external_id") or "")
+        for destination_wallet_id, owned_amount_msat in sorted(destinations.items()):
+            available = [
+                inbound
+                for inbound in inbound_by_wallet.get(destination_wallet_id, ())
+                if str(_get(inbound, "asset") or "").upper()
+                == str(_get(source, "asset") or "").upper()
+                and str(_get(inbound, "id")) not in unavailable_leg_ids
+                and (source_id, str(_get(inbound, "id"))) not in active_pairs
+            ]
+            compatible = [
+                inbound
+                for inbound in available
+                if _amounts_compatible(
+                    int(_get(inbound, "amount") or 0), owned_amount_msat
+                )
+                and not _is_provably_different_onchain_tx(
+                    _get(inbound, "external_id"), txid
+                )
+            ]
+            same_txid = [
+                inbound
+                for inbound in available
+                if normalize_group_txid(str(_get(inbound, "external_id") or ""))
+                == normalize_group_txid(txid)
+                and _amounts_compatible(
+                    int(_get(inbound, "amount") or 0), owned_amount_msat
+                )
+            ]
+            candidates = same_txid or compatible
+            if not candidates:
+                continue
+            conflict_set_id = (
+                f"ownership-review:{source_id}:{destination_wallet_id}"
+            )
+            for inbound in candidates:
+                proofs.append(
+                    OwnershipReviewProof(
+                        out_row=source,
+                        in_row=inbound,
+                        owned_amount_msat=owned_amount_msat,
+                        reason=reason,
+                        conflict_set_id=conflict_set_id,
+                        conflict_size=len(candidates),
+                    )
+                )
+    return proofs
 
 
 def derive_ownership_transfers(
@@ -1036,6 +1320,53 @@ def detect_conflicting_spend_ids(rows: Sequence[Mapping[str, Any]]) -> set[str]:
     return {rid for rid, txid in row_txid.items() if txid in loser_txids}
 
 
+def detect_pending_onchain_ids(rows: Sequence[Mapping[str, Any]]) -> set[str]:
+    """Rows belonging to a transaction explicitly reported as unconfirmed.
+
+    ``confirmed_at IS NULL`` is not sufficient: CSV/provider imports commonly
+    have no confirmation timestamp. Chain sync payloads, however, persist an
+    explicit ``status.confirmed`` boolean. Hold only those explicit mempool
+    transactions out of tax booking until any synced leg proves confirmation.
+    """
+
+    row_txid: dict[str, str] = {}
+    txid_state: dict[str, tuple[bool, bool]] = {}
+    for row in rows:
+        try:
+            raw = json.loads(_get(row, "raw_json") or "{}")
+        except (TypeError, ValueError, json.JSONDecodeError):
+            continue
+        if not isinstance(raw, Mapping):
+            continue
+        nested = raw.get("tx")
+        payload = nested if isinstance(nested, Mapping) else raw
+        status = payload.get("status")
+        if not isinstance(status, Mapping) or not isinstance(
+            status.get("confirmed"), bool
+        ):
+            continue
+        txid = normalize_group_txid(
+            str(payload.get("txid") or _get(row, "external_id") or "")
+        )
+        if not txid:
+            continue
+        row_txid[str(_get(row, "id"))] = txid
+        _explicit, confirmed = txid_state.get(txid, (False, False))
+        txid_state[txid] = (True, confirmed or bool(status["confirmed"]))
+    pending_txids = {
+        txid
+        for txid, (explicit, confirmed) in txid_state.items()
+        if explicit and not confirmed
+    }
+    # Include graphless sibling legs sharing the same txid once any leg supplied
+    # the explicit mempool state.
+    for row in rows:
+        txid = normalize_group_txid(str(_get(row, "external_id") or ""))
+        if txid in pending_txids:
+            row_txid[str(_get(row, "id"))] = txid
+    return {row_id for row_id, txid in row_txid.items() if txid in pending_txids}
+
+
 # -- internals --------------------------------------------------------------
 
 
@@ -1198,50 +1529,7 @@ def _parse_onchain_tx(raw_json: Any) -> Optional[dict[str, Any]]:
     ``None`` is exactly the clean skip for cross-asset pegs and non-on-chain
     sources.
     """
-    try:
-        raw = json.loads(raw_json or "{}")
-    except (TypeError, ValueError, json.JSONDecodeError):
-        return None
-    if not isinstance(raw, dict):
-        return None
-    vin = raw.get("vin")
-    vout = raw.get("vout")
-    if not isinstance(vin, list) or not isinstance(vout, list):
-        return None
-
-    inputs: list[dict[str, Any]] = []
-    for position, entry in enumerate(vin):
-        if not isinstance(entry, dict):
-            return None
-        prevout = entry.get("prevout") or {}
-        outpoint = None
-        if entry.get("txid") is not None and entry.get("vout") is not None:
-            try:
-                outpoint = f"{str(entry.get('txid')).lower()}:{int(entry.get('vout'))}"
-            except (TypeError, ValueError):
-                outpoint = None
-        inputs.append({"outpoint": outpoint, "script": prevout.get("scriptpubkey")})
-
-    outputs: list[dict[str, Any]] = []
-    for position, entry in enumerate(vout):
-        if not isinstance(entry, dict):
-            return None
-        script = entry.get("scriptpubkey") or entry.get("script_hex")
-        if entry.get("value_sats") is not None:
-            value_sats = _stored_graph_value_sats(entry.get("value_sats"), explicit_sats=True)
-        else:
-            value_sats = _stored_graph_value_sats(entry.get("value"), explicit_sats=False)
-        if value_sats is None:
-            # Legacy Electrum decode rows may have scripts but no sats value.
-            return None
-        try:
-            output_index = int(entry.get("n", position))
-        except (TypeError, ValueError):
-            output_index = position
-        outputs.append(
-            {"n": output_index, "script": script, "value_sats": value_sats}
-        )
-    return {"txid": raw.get("txid"), "inputs": inputs, "outputs": outputs}
+    return parse_valued_tx(raw_json)
 
 
 def _resolve_destination_inbound(

@@ -79,7 +79,8 @@
       "paymentHash": "Payment Hash",
       "providerSwapId": "Provider-Nachweis",
       "heuristic": "Zeit + Betrag",
-      "htlcRefund": "Refund-Verknüpfung"
+      "htlcRefund": "Refund-Verknüpfung",
+      "ownershipGraph": "Eigentumsgraph"
     },
     "route": {
       "any": "Beliebige Route",
@@ -153,6 +154,7 @@
       "matchedByProviderEvidence": "Über Provider-Nachweis zugeordnet.",
       "matchedByTimeAmount": "Über Zeit und Betrag zugeordnet.",
       "matchedByRefundLink": "Über HTLC-Refund-Verknüpfung zugeordnet.",
+      "matchedByOwnershipGraph": "Über Wallet-Eigentumsnachweis zugeordnet.",
       "delta": "Differenz {{delta}} ({{percent}} %).",
       "outgoing": "Ausgehend",
       "incoming": "Eingehend",
@@ -163,6 +165,7 @@
       "rationaleProviderEvidence": "Beide Legs teilen dieselbe redigierte Provider-Swap-ID.",
       "rationaleHeuristic": "Die Legs liegen nach Berücksichtigung der Gebührendifferenz nah in Zeit und Betrag.",
       "rationaleHtlcRefund": "Der eingehende Refund gibt den HTLC-Funding-Output des ausgehenden Legs aus, eine deterministische Verknüpfung auch innerhalb einer Wallet.",
+      "rationaleOwnershipGraph": "Die On-Chain-Transaktion belegt eine Zahlung an eine andere eigene Wallet. Die Bestätigung schreibt ein normales Carrying-Value-Paar; sie erfindet keinen Eingang.",
       "autoPairRoute": "Auto-Paar-Route: {{rule}}",
       "conflictNote_one": "Eine dieser Transaktionen erscheint auch in {{count}} weiteren möglichen Treffer (er ist eventuell unter dem anderen Tab gelistet oder herausgefiltert). Wähle zusammengehörige Same-Asset-Privacy-Links gemeinsam aus oder paare hier den richtigen Einzeltreffer und verwirf die falschen.",
       "conflictNote_other": "Eine dieser Transaktionen erscheint auch in {{count}} weiteren möglichen Treffern (er ist eventuell unter dem anderen Tab gelistet oder herausgefiltert). Wähle zusammengehörige Same-Asset-Privacy-Links gemeinsam aus oder paare hier den richtigen Einzeltreffer und verwirf die falschen.",

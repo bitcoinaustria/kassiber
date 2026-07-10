@@ -51,6 +51,7 @@ import {
   X,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { useSearch } from "@tanstack/react-router";
 
 import bitcoinIcon from "@/assets/integrations/bitcoin.svg";
 import lightningIcon from "@/assets/integrations/lightning.svg";
@@ -150,9 +151,15 @@ const METHOD_OPTIONS = [
   { value: "provider_swap_id", labelKey: "swap.method.providerSwapId" },
   { value: "heuristic", labelKey: "swap.method.heuristic" },
   { value: "htlc_refund", labelKey: "swap.method.htlcRefund" },
+  { value: "ownership_graph", labelKey: "swap.method.ownershipGraph" },
 ] as const;
 
-type CandidateMethod = "payment_hash" | "provider_swap_id" | "heuristic" | "htlc_refund";
+type CandidateMethod =
+  | "payment_hash"
+  | "provider_swap_id"
+  | "heuristic"
+  | "htlc_refund"
+  | "ownership_graph";
 // Per-method i18n keys for the two render sites (the status-cell tooltip and the
 // detail sheet). The Record forces every method (including any future one) to
 // define both labels, so the type checker flags a missing translation instead
@@ -173,6 +180,10 @@ const METHOD_LABEL_KEYS = {
   htlc_refund: {
     matched: "swap.detail.matchedByRefundLink",
     rationale: "swap.detail.rationaleHtlcRefund",
+  },
+  ownership_graph: {
+    matched: "swap.detail.matchedByOwnershipGraph",
+    rationale: "swap.detail.rationaleOwnershipGraph",
   },
 } as const satisfies Record<
   CandidateMethod,
@@ -245,6 +256,7 @@ interface SuggestEnvelope {
     strong: number;
     conflicts: number;
     rule_matches?: number;
+    ownership?: number;
   };
 }
 
@@ -496,6 +508,10 @@ type PairingView = "review" | "paired";
 
 export function SwapMatching() {
   const { t } = useTranslation("review");
+  const search = useSearch({ strict: false }) as {
+    focus?: string;
+    method?: "ownership_graph";
+  };
   const [activeTab, setActiveTab] = useState<PairingReviewTab>("transfers");
   // Swaps/Transfers is the only tab strip. The settled "History" list isn't a
   // second tab — it opens from a History card in the review-queue metrics and
@@ -520,7 +536,12 @@ export function SwapMatching() {
         <TabsContent value="transfers" className="mt-0">
           {activeTab === "transfers" ? (
             view === "review" ? (
-              <PairingReview mode="transfers" onShowHistory={showHistory} />
+              <PairingReview
+                mode="transfers"
+                onShowHistory={showHistory}
+                focusTransactionId={search.focus}
+                initialMethod={search.method}
+              />
             ) : (
               <PairedSwaps mode="transfers" onBackToReview={showReview} />
             )
@@ -1072,9 +1093,13 @@ function PairedDetailSheet({
 function PairingReview({
   mode,
   onShowHistory,
+  focusTransactionId,
+  initialMethod,
 }: {
   mode: PairingReviewMode;
   onShowHistory: () => void;
+  focusTransactionId?: string;
+  initialMethod?: CandidateMethod;
 }) {
   const { t } = useTranslation(["review", "common"]);
   const hideSensitive = useUiStore((s) => s.hideSensitive);
@@ -1091,7 +1116,7 @@ function PairingReview({
   const emptyText =
     mode === "transfers" ? t("swap.page.transfersEmpty") : t("swap.page.swapsEmpty");
   const [confidence, setConfidence] = useState<string>("all");
-  const [method, setMethod] = useState<string>("all");
+  const [method, setMethod] = useState<string>(initialMethod ?? "all");
   const [routePair, setRoutePair] = useState<string>("all");
   const [overrides, setOverrides] = useState<
     Record<string, { kind?: PairKind; policy?: PairPolicy }>
@@ -1256,7 +1281,21 @@ function PairingReview({
 
   const candidateKey = (c: SwapCandidate) => `${c.out_id}->${c.in_id}`;
 
+  useEffect(() => {
+    if (!focusTransactionId || detailCandidate) return;
+    const focused = candidates.find(
+      (candidate) =>
+        candidate.out_id === focusTransactionId ||
+        candidate.in_id === focusTransactionId,
+    );
+    if (focused) setDetailCandidate(focused);
+  }, [candidates, detailCandidate, focusTransactionId]);
+
   const canSelectCandidate = useCallback((candidate: SwapCandidate) => {
+    // Ownership-graph proofs are exact but deliberately remain one-at-a-time
+    // human confirmations. They use the normal pair store; they never enter
+    // exact/rule/selected bulk flows.
+    if (candidate.method === "ownership_graph") return false;
     if (candidate.conflict_size <= 1) return true;
     const override = overrides[candidateKey(candidate)] ?? {};
     const kind = override.kind ?? bulkKind ?? candidate.default_kind;
@@ -1271,7 +1310,10 @@ function PairingReview({
   const exactSolo = useMemo(
     () =>
       candidates.filter(
-        (c) => c.confidence === "exact" && c.conflict_size <= 1,
+        (c) =>
+          c.confidence === "exact" &&
+          c.conflict_size <= 1 &&
+          c.method !== "ownership_graph",
       ),
     [candidates],
   );
@@ -1279,7 +1321,10 @@ function PairingReview({
   const ruleSolo = useMemo(
     () =>
       candidates.filter(
-        (c) => c.rule_match && c.conflict_size <= 1,
+        (c) =>
+          c.rule_match &&
+          c.conflict_size <= 1 &&
+          c.method !== "ownership_graph",
       ),
     [candidates],
   );

@@ -84,6 +84,40 @@ class NormalizeTaxAssetInputsTest(unittest.TestCase):
         self.assertEqual(float(event.spot_price), 60000.0)
         self.assertEqual(float(event.fiat_value), 60000.0)
 
+    def test_explicit_mempool_outbound_is_quarantined_not_disposed(self):
+        txid = "c" * 64
+        row = _row(
+            "pending-out",
+            "wallet-a",
+            "outbound",
+            50_000_000_000,
+            fiat_rate=60_000,
+            external_id=txid,
+            raw_json=json.dumps(
+                {
+                    "txid": txid,
+                    "status": {"confirmed": False},
+                    "vin": [],
+                    "vout": [],
+                }
+            ),
+        )
+
+        inputs = normalize_tax_asset_inputs(
+            self.profile,
+            "BTC",
+            [row],
+            self.wallet_refs_by_id,
+            [],
+        )
+
+        self.assertEqual(inputs.events, [])
+        self.assertEqual(inputs.transfers, [])
+        self.assertEqual(
+            [quarantine["reason"] for quarantine in inputs.quarantines],
+            ["pending_onchain_confirmation"],
+        )
+
     def test_same_asset_transfer_normalizes_without_row_lookup(self):
         out_row = _row(
             "tx-out",

@@ -39,7 +39,10 @@ from typing import Any, Callable, Iterable, Mapping, Sequence
 from ..errors import AppError
 from ..wallet_descriptors import derive_descriptor_targets, normalize_chain, normalize_network
 from .address_scripts import address_to_scriptpubkey
+from .onchain import parse_identification_legs
 from .wallets import (
+    OWNERSHIP_HISTORY_CONFIG_KEY,
+    OWNERSHIP_SCAN_TO_INDEX_CONFIG_KEY,
     has_descriptor_sync_material,
     load_wallet_descriptor_plan_from_config,
     normalize_addresses,
@@ -128,7 +131,13 @@ _TXID_HEADER_ALIASES = frozenset(
 # file), and the caller surfaces a truncation warning.
 MAX_HARVEST_CANDIDATES = 10_000
 _CANONICAL_WALLET_KINDS = frozenset({"descriptor", "xpub", "silent-payment"})
-_MATCH_SOURCE_PRIORITY = {"derived": 0, "inventory": 1, "address_list": 2}
+_MATCH_SOURCE_PRIORITY = {
+    "derived": 0,
+    "inventory": 1,
+    "address_list": 2,
+    "derived_history": 3,
+    "address_history": 4,
+}
 
 
 @dataclass(frozen=True)
@@ -565,10 +574,30 @@ def build_owned_index(
     for wallet in wallets:
         config = _wallet_config(wallet)
         account = _account_label(wallet)
-        addresses = normalize_addresses(config.get("addresses"))
-        if addresses:
-            chain = str(config.get("chain") or "")
-            network = str(config.get("network") or "")
+        try:
+            configured_scan_to_index = int(
+                config.get(OWNERSHIP_SCAN_TO_INDEX_CONFIG_KEY) or 0
+            )
+        except (TypeError, ValueError):
+            configured_scan_to_index = 0
+            warnings.append(
+                f"Wallet '{wallet['label']}': ownership scan depth is invalid"
+            )
+        wallet_scan_to_index = min(
+            MAX_SCAN_TO_INDEX,
+            max(scan_to_index, configured_scan_to_index),
+        )
+        ownership_configs: list[tuple[Mapping[str, Any], bool]] = [(config, False)]
+        ownership_configs.extend(
+            (historic, True)
+            for historic in config.get(OWNERSHIP_HISTORY_CONFIG_KEY, [])
+            if isinstance(historic, Mapping)
+        )
+        for ownership_config, is_history in ownership_configs:
+            addresses = normalize_addresses(ownership_config.get("addresses"))
+            chain, network = _index_chain_network(
+                ownership_config.get("chain"), ownership_config.get("network")
+            )
             for address in addresses:
                 match = OwnedMatch(
                     wallet_id=str(wallet["id"]),
@@ -579,24 +608,32 @@ def build_owned_index(
                     branch_label="address",
                     address_index=None,
                     derivation_path=None,
-                    source="address_list",
+                    source="address_history" if is_history else "address_list",
                     wallet_kind=str(wallet["kind"] or ""),
                 )
                 index.add_address(address, match)
                 index.add_script(_script_hex_for_address(address), match)
-        if not derive or not has_descriptor_sync_material(config):
-            continue
-        try:
-            _derive_wallet_into_index(
-                index,
-                wallet,
-                config,
-                account,
-                scan_to_index=scan_to_index,
-                highest_used=highest_used.get(str(wallet["id"]), {}),
-            )
-        except AppError as exc:
-            warnings.append(f"Wallet '{wallet['label']}': descriptor not scanned ({exc.code})")
+            if not derive or not has_descriptor_sync_material(dict(ownership_config)):
+                continue
+            try:
+                history_floor = int(ownership_config.get("scan_to_index") or 0)
+                _derive_wallet_into_index(
+                    index,
+                    wallet,
+                    ownership_config,
+                    account,
+                    scan_to_index=max(wallet_scan_to_index, history_floor),
+                    highest_used=highest_used.get(str(wallet["id"]), {}),
+                    source="derived_history" if is_history else "derived",
+                )
+            except (TypeError, ValueError):
+                warnings.append(
+                    f"Wallet '{wallet['label']}': historic scan floor is invalid"
+                )
+            except AppError as exc:
+                warnings.append(
+                    f"Wallet '{wallet['label']}': descriptor not scanned ({exc.code})"
+                )
     return index, warnings
 
 
@@ -605,6 +642,32 @@ def _wallet_config(wallet: Mapping[str, Any]) -> dict[str, Any]:
         return json.loads(wallet["config_json"] or "{}")
     except (TypeError, ValueError, json.JSONDecodeError):
         return {}
+
+
+def _index_chain_network(
+    chain: Any,
+    network: Any,
+    *,
+    fallback_chain: Any = None,
+    fallback_network: Any = None,
+) -> tuple[str, str]:
+    """Stamp legacy blank metadata at index-build time.
+
+    Blank Bitcoin inventory/address-list metadata historically meant mainnet.
+    An explicit/fallback Liquid chain still receives Liquid's canonical default
+    network, so comparison can remain strict instead of weakening later.
+    """
+
+    chain_value = chain or fallback_chain or "bitcoin"
+    network_value = network or fallback_network
+    try:
+        canonical_chain = normalize_chain(chain_value)
+        return canonical_chain, normalize_network(canonical_chain, network_value)
+    except ValueError:
+        return (
+            str(chain_value or "").strip().lower(),
+            str(network_value or "").strip().lower(),
+        )
 
 
 def _seed_from_inventory(
@@ -628,12 +691,18 @@ def _seed_from_inventory(
             continue
         wallet_summary = wallet_by_id.get(wallet_id, {})
         wallet_label = str(wallet_summary.get("label") or wallet_id)
+        chain, network = _index_chain_network(
+            row["chain"],
+            row["network"],
+            fallback_chain=wallet_summary.get("chain"),
+            fallback_network=wallet_summary.get("network"),
+        )
         match = OwnedMatch(
             wallet_id=wallet_id,
             wallet_label=wallet_label,
             account="",
-            chain=str(row["chain"] or ""),
-            network=str(row["network"] or ""),
+            chain=chain,
+            network=network,
             branch_label=str(row["branch_label"] or ""),
             address_index=row["address_index"],
             derivation_path=None,
@@ -682,12 +751,19 @@ def _wallet_label_lookup(conn: sqlite3.Connection, profile_id: str) -> dict[str,
 
 
 def _wallet_summary_lookup(conn: sqlite3.Connection, profile_id: str) -> dict[str, dict[str, str]]:
-    return {
-        str(row["id"]): {"label": str(row["label"]), "kind": str(row["kind"] or "")}
-        for row in conn.execute(
-            "SELECT id, label, kind FROM wallets WHERE profile_id = ?", (profile_id,)
-        ).fetchall()
-    }
+    summaries: dict[str, dict[str, str]] = {}
+    for row in conn.execute(
+        "SELECT id, label, kind, config_json FROM wallets WHERE profile_id = ?",
+        (profile_id,),
+    ).fetchall():
+        config = _wallet_config(row)
+        summaries[str(row["id"])] = {
+            "label": str(row["label"]),
+            "kind": str(row["kind"] or ""),
+            "chain": str(config.get("chain") or ""),
+            "network": str(config.get("network") or ""),
+        }
+    return summaries
 
 
 def _derive_wallet_into_index(
@@ -698,6 +774,7 @@ def _derive_wallet_into_index(
     *,
     scan_to_index: int,
     highest_used: Mapping[str, int],
+    source: str = "derived",
 ) -> None:
     plan = load_wallet_descriptor_plan_from_config(config)
     if plan is None:
@@ -718,7 +795,7 @@ def _derive_wallet_into_index(
             branch_label=target.branch_label,
             address_index=target.address_index,
             derivation_path=target.derivation_path,
-            source="derived",
+            source=source,
             wallet_kind=str(wallet["kind"] or ""),
         )
         index.add_script(target.script_pubkey, match)
@@ -726,7 +803,11 @@ def _derive_wallet_into_index(
         if target.unconfidential_address:
             index.add_address(target.unconfidential_address, match)
         depth[target.branch_label] = max(depth.get(target.branch_label, -1), target.address_index)
-    index.scanned_depth[wallet_id] = depth
+    current_depth = index.scanned_depth.setdefault(wallet_id, {})
+    for branch_label, address_index in depth.items():
+        current_depth[branch_label] = max(
+            current_depth.get(branch_label, -1), address_index
+        )
 
 
 def _match_to_dict(match: OwnedMatch) -> dict[str, Any]:
@@ -1080,43 +1161,7 @@ def _legs_from_local_tx_json(
     chain: str = "bitcoin",
     network: str = "",
 ) -> dict[str, Any] | None:
-    try:
-        raw = json.loads(raw_json or "{}")
-    except (TypeError, ValueError, json.JSONDecodeError):
-        return None
-    if not isinstance(raw, dict):
-        return None
-    vin = raw.get("vin")
-    vout = raw.get("vout")
-    if not isinstance(vin, list) or not isinstance(vout, list):
-        return None
-    inputs = []
-    for entry in vin:
-        if not isinstance(entry, dict):
-            continue
-        prevout = entry.get("prevout") or {}
-        outpoint = None
-        if entry.get("txid") is not None and entry.get("vout") is not None:
-            outpoint = f"{str(entry.get('txid')).lower()}:{int(entry.get('vout'))}"
-        # New Electrum/Fulcrum sync rows carry prevout scripts too; older rows
-        # still resolve input ownership by outpoint.
-        inputs.append({"outpoint": outpoint, "script": prevout.get("scriptpubkey")})
-    outputs = []
-    for position, entry in enumerate(vout):
-        if not isinstance(entry, dict):
-            continue
-        # esplora -> scriptpubkey; Electrum decode form -> script_hex.
-        script = entry.get("scriptpubkey")
-        if script is None:
-            script = entry.get("script_hex")
-        outputs.append({"n": entry.get("n", position), "script": script})
-    return {
-        "inputs": inputs,
-        "outputs": outputs,
-        "chain": chain or "bitcoin",
-        "network": network,
-        "source": "local_tx",
-    }
+    return parse_identification_legs(raw_json, chain=chain, network=network)
 
 
 VerifyFetcher = Callable[[str, str], "dict[str, Any] | None"]

@@ -168,6 +168,9 @@
       "implausibleFeeWithWallets": "Implausible transfer fee: {{from}} -> {{to}}",
       "ownershipTransfer": "Self-transfer needs pairing in {{wallet}}",
       "ownershipAmountMismatch": "Wallet sync mismatch in {{wallet}}",
+      "ownedFanout": "Multi-wallet transfer needs review in {{wallet}}",
+      "conflictingSpend": "Competing spend needs confirmation in {{wallet}}",
+      "pendingConfirmation": "On-chain transaction is still pending in {{wallet}}",
       "transferGroupBlocked": "Transfer group blocked by {{reason}}",
       "insufficientLots": "Not enough {{asset}} lots in {{wallet}}",
       "missingBasis": "Missing {{asset}} cost basis in {{wallet}}"
@@ -180,7 +183,10 @@
       "splitTransfer": "Split transfer / swap review",
       "coarsePricing": "Coarse pricing — verify",
       "ownershipTransfer": "Self-transfer between your wallets",
-      "ownershipAmountMismatch": "Wallet sync mismatch"
+      "ownershipAmountMismatch": "Wallet sync mismatch",
+      "ownedFanout": "Multi-leg transfer between your wallets",
+      "conflictingSpend": "Competing on-chain transactions",
+      "pendingConfirmation": "Pending on-chain confirmation"
     },
     "evidence": {
       "price": "Add a fiat price or rates coverage",
@@ -197,7 +203,10 @@
       "basisValues": "Needs {{required}}, available {{available}} in {{wallet}}",
       "ownershipAmountMismatch": "Recorded {{rowAmount}}, but owned outputs sum to {{ownedOutputs}}",
       "ownershipLeg": "Candidate owned leg: {{amount}}",
-      "ownershipTransfer": "Proven from the on-chain transaction — an output paid another of your wallets, but the matching receipt couldn't be resolved automatically"
+      "ownershipTransfer": "Proven from the on-chain transaction — an output paid another of your wallets, but the matching receipt couldn't be resolved automatically",
+      "ownedFanout": "The transaction pays more than one wallet you own, so each real receipt must be confirmed as its own carrying-value leg",
+      "conflictingSpend": "Two transactions spend the same input. Only the confirmed winner belongs in the journal",
+      "pendingConfirmation": "The synced chain payload explicitly reports this transaction as unconfirmed"
     },
     "nextAction": {
       "price": "Set price, then process journals",
@@ -208,13 +217,17 @@
       "coarsePricing": "Fetch precise prices or confirm, then process journals",
       "ownershipTransfer": "Pair it manually, or sync the destination wallet so its receipt is recorded, then process journals",
       "ownershipConsolidation": "Several of your wallets funded this spend — review the consolidation and pair it, then process journals",
-      "ownershipAmountMismatch": "The recorded amount disagrees with the on-chain transaction — re-sync the wallet, then process journals"
+      "ownershipAmountMismatch": "The recorded amount disagrees with the on-chain transaction — re-sync the wallet, then process journals",
+      "ownedFanout": "Confirm each real destination receipt separately, then process journals",
+      "conflictingSpend": "Sync confirmations, verify which transaction won, and exclude a loser only when the chain evidence is clear",
+      "pendingConfirmation": "Wait for confirmation or sync the wallet again, then process journals"
     },
     "action": {
       "openTransaction": "Review details",
       "openPricing": "Add price",
       "openPairing": "Review transfer",
       "openSyncReview": "Review sync issue",
+      "openConflictReview": "Review competing spend",
       "openBasisReview": "Fix cost basis",
       "openTaxReview": "Fix cost basis"
     },

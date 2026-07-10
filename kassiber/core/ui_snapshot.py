@@ -37,6 +37,7 @@ from ..wallet_descriptors import (
 )
 from . import output_inventory as core_output_inventory
 from . import ownership as core_ownership
+from . import ownership_transfers as core_ownership_transfers
 from . import freshness as core_freshness
 from . import lightning as core_lightning
 from . import rates as core_rates
@@ -5987,7 +5988,7 @@ def _active_swap_review_refs(
 ) -> list[sqlite3.Row]:
     pair_records = conn.execute(
         """
-        SELECT out_transaction_id, in_transaction_id, deleted_at
+        SELECT out_transaction_id, in_transaction_id, kind, policy, deleted_at
         FROM transaction_pairs
         WHERE profile_id = ?
         """,
@@ -5995,7 +5996,7 @@ def _active_swap_review_refs(
     ).fetchall()
     payout_records = conn.execute(
         """
-        SELECT out_transaction_id, NULL AS in_transaction_id, deleted_at
+        SELECT out_transaction_id, NULL AS in_transaction_id, kind, policy, deleted_at
         FROM direct_swap_payouts
         WHERE profile_id = ?
         """,
@@ -6079,6 +6080,65 @@ def _unreviewed_swap_candidate_blocker(
             "strong": strong_count,
         },
         "routes": route_samples,
+    }
+
+
+def _ownership_review_candidate_blocker(
+    conn: sqlite3.Connection,
+    profile_id: str,
+) -> dict[str, Any] | None:
+    blocked_rows = conn.execute(
+        """
+        SELECT q.transaction_id, q.reason
+        FROM journal_quarantines q
+        JOIN transactions t ON t.id = q.transaction_id
+        WHERE q.profile_id = ?
+          AND t.direction = 'outbound'
+          AND q.reason IN (
+            'ownership_transfer_destination_ambiguous',
+            'ownership_transfer_source_ambiguous',
+            'owned_fanout_unresolved'
+          )
+        ORDER BY q.created_at, q.transaction_id
+        """,
+        (profile_id,),
+    ).fetchall()
+    if not blocked_rows:
+        return None
+    rows = _load_swap_report_matcher_rows(conn, profile_id)
+    wallets = core_ownership.load_profile_wallets(conn, profile_id)
+    owned_index, _warnings = core_ownership.build_owned_index(
+        conn, profile_id, wallets
+    )
+    proofs = core_ownership_transfers.derive_ownership_review_proofs(
+        rows,
+        index=owned_index,
+        blocked_reasons_by_row_id={
+            str(row["transaction_id"]): str(row["reason"])
+            for row in blocked_rows
+        },
+        active_pair_records=_active_swap_review_refs(conn, profile_id),
+    )
+    if not proofs:
+        return None
+    by_reason: dict[str, int] = {}
+    for proof in proofs:
+        by_reason[proof.reason] = by_reason.get(proof.reason, 0) + 1
+    total = len(proofs)
+    return {
+        "id": "ownership_transfer_review",
+        "severity": "blocking",
+        "title": "Ownership transfers need review",
+        "detail": (
+            f"{total} ownership-proven transfer source(s) need pairing or "
+            "wallet-data review before final reports."
+        ),
+        "daemon_kind": "ui.transfers.suggest",
+        "daemon_args": {
+            "candidate_type": "transfer",
+            "method": core_transfer_matching.METHOD_OWNERSHIP_GRAPH,
+        },
+        "counts": {"total": total, "by_reason": by_reason},
     }
 
 
@@ -6181,6 +6241,11 @@ def build_report_blockers_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
                     "daemon_kind": "ui.journals.quarantine",
                 }
             )
+        ownership_blocker = _ownership_review_candidate_blocker(
+            conn, health["profile"]["id"]
+        )
+        if ownership_blocker is not None:
+            blockers.append(ownership_blocker)
         swap_blocker = _unreviewed_swap_candidate_blocker(conn, health["profile"])
         if swap_blocker is not None:
             blockers.append(swap_blocker)
