@@ -2719,25 +2719,58 @@ def _self_transfer_legs_by_transaction(conn, profile, journals_current=False):
             """,
             (profile["id"],),
         ).fetchall()
-        # Pair one out to one in by the same audit key the engine writes
-        # (occurred_at + description) plus asset/amount. Grouping only by
-        # (occurred_at, description) would cross-contaminate two transfers that
-        # share a blank/identical description at the same timestamp.
-        audit_groups: dict[tuple[str, str, str, int], list] = {}
+        # The engine writes one out/in pair with a shared timestamp,
+        # description, and asset. The quantities intentionally differ when the
+        # outgoing leg includes a network fee, so amount cannot be part of the
+        # audit key. Within a group, prefer exact amounts and then the closest
+        # fee-bearing inbound amount that does not exceed the outgoing amount.
+        # This also keeps legacy blank-description entries from broadcasting
+        # every wallet label across same-timestamp transfers.
+        audit_groups: dict[tuple[str, str, str], list] = {}
         for row in entry_rows:
             key = (
                 row["occurred_at"],
                 row["description"],
                 str(row["asset"] or ""),
-                int(row["quantity_msat"] or 0),
             )
             audit_groups.setdefault(key, []).append(row)
         for group in audit_groups.values():
-            outs = [row for row in group if row["entry_type"] == "transfer_out"]
-            ins = [row for row in group if row["entry_type"] == "transfer_in"]
-            # Pair in order within the amount-matched group so N:N consolidations
-            # still label each leg without broadcasting every in-wallet onto every out.
-            for out_row, in_row in zip(outs, ins):
+            outs = sorted(
+                (row for row in group if row["entry_type"] == "transfer_out"),
+                key=lambda row: (int(row["quantity_msat"] or 0), str(row["tx_id"])),
+            )
+            remaining_ins = sorted(
+                (row for row in group if row["entry_type"] == "transfer_in"),
+                key=lambda row: (int(row["quantity_msat"] or 0), str(row["tx_id"])),
+            )
+            pairs = []
+            fee_bearing_outs = []
+            for out_row in outs:
+                out_amount = int(out_row["quantity_msat"] or 0)
+                exact_index = next(
+                    (
+                        index
+                        for index, in_row in enumerate(remaining_ins)
+                        if int(in_row["quantity_msat"] or 0) == out_amount
+                    ),
+                    None,
+                )
+                if exact_index is None:
+                    fee_bearing_outs.append(out_row)
+                    continue
+                pairs.append((out_row, remaining_ins.pop(exact_index)))
+            for out_row in fee_bearing_outs:
+                out_amount = int(out_row["quantity_msat"] or 0)
+                candidates = [
+                    (out_amount - int(in_row["quantity_msat"] or 0), index)
+                    for index, in_row in enumerate(remaining_ins)
+                    if int(in_row["quantity_msat"] or 0) <= out_amount
+                ]
+                if not candidates:
+                    continue
+                _, closest_index = min(candidates)
+                pairs.append((out_row, remaining_ins.pop(closest_index)))
+            for out_row, in_row in pairs:
                 _add(out_row["tx_id"], {in_row["wallet_label"]})
                 _add(in_row["tx_id"], {out_row["wallet_label"]})
         quarantined_ids = {

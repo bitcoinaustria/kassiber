@@ -60,10 +60,13 @@ def _conn_with_two_blank_description_transfers():
             "INSERT INTO transactions VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)",
             (tx_id, "p1", wallet_id, tx_id, "BTC", direction, amount, None),
         )
+    # Outgoing transfer quantities include their network fees; incoming
+    # quantities contain only what arrived. The two blank-description pairs
+    # must still be matched independently.
     journal = (
-        ("ja", "ta", "wa", "transfer_out", -100_000_000_000),
+        ("ja", "ta", "wa", "transfer_out", -100_100_000_000),
         ("jb", "tb", "wb", "transfer_in", 100_000_000_000),
-        ("jc", "tc", "wc", "transfer_out", -200_000_000_000),
+        ("jc", "tc", "wc", "transfer_out", -200_200_000_000),
         ("jd", "td", "wd", "transfer_in", 200_000_000_000),
     )
     for entry_id, tx_id, wallet_id, entry_type, qty in journal:
