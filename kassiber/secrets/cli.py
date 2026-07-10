@@ -43,6 +43,8 @@ from .sqlcipher import (
     sqlcipher_available,
 )
 from .unlock_store import (
+    cli_remembered_unlock_enabled,
+    delete_legacy_shared_passphrase,
     delete_remembered_passphrase,
     mark_desktop_biometric_passphrase_stale,
     refresh_remembered_passphrase_after_rotation,
@@ -261,6 +263,7 @@ def cmd_secrets_remember_unlock(args: argparse.Namespace) -> dict:
     conn = open_encrypted(db_path, passphrase)
     conn.close()
 
+    cli_enabled_before = cli_remembered_unlock_enabled(args.data_root)
     if not store_remembered_passphrase(args.data_root, passphrase):
         raise AppError(
             "the OS credential store is unavailable or rejected the passphrase",
@@ -290,6 +293,34 @@ def cmd_secrets_remember_unlock(args: argparse.Namespace) -> dict:
             },
             retryable=True,
         ) from None
+
+    if not delete_legacy_shared_passphrase(args.data_root):
+        marker_restored = cli_enabled_before
+        marker_restore_error = None
+        credential_deleted = False
+        if not cli_enabled_before:
+            try:
+                set_cli_remembered_unlock_enabled(args.data_root, False)
+                marker_restored = True
+            except OSError as exc:
+                marker_restore_error = str(exc)
+            if marker_restored:
+                credential_deleted = delete_remembered_passphrase(args.data_root)
+        raise AppError(
+            "the legacy shared unlock credential could not be removed",
+            code="remembered_unlock_legacy_cleanup_failed",
+            hint=(
+                "Remove `Kassiber Database Passphrase` in the OS credential "
+                "manager and retry enrollment."
+            ),
+            details={
+                "cli_enabled_before": cli_enabled_before,
+                "marker_restored": marker_restored,
+                "marker_restore_error": marker_restore_error,
+                "cli_credential_deleted": credential_deleted,
+            },
+            retryable=True,
+        )
 
     return {
         "database": str(db_path),

@@ -226,9 +226,12 @@ change the SQLCipher key or recover a lost passphrase.
 
 Desktop passphrase rotation refreshes both enrolled namespaces. A CLI rotation
 cannot rewrite a biometric-protected desktop item without defeating that access
-policy, so it writes a non-secret invalidation marker instead. The desktop then
-requires manual passphrase entry and re-enrollment rather than attempting the
-known-stale biometric copy.
+policy, so it writes a non-secret invalidation marker when a current desktop
+enrollment marker exists. The desktop then requires manual passphrase entry and
+re-enrollment rather than attempting the known-stale biometric copy. A preview
+build cannot replace an existing protected enrollment, and credential removal
+does not clear enrollment markers until the applicable fallback and protected
+copies have been cleaned up successfully.
 
 **Desktop credential stores are a separate boundary, not SQLCipher
 replacement.** Desktop builds can store AI provider API keys in macOS

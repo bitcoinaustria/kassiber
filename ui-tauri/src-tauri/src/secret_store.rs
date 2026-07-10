@@ -122,6 +122,7 @@ pub struct MockSecretStore {
     availability: Arc<Mutex<SecretStoreAvailability>>,
     entries: MockSecretEntries,
     fail_next_set: Arc<Mutex<Option<String>>>,
+    fail_next_delete: Arc<Mutex<Option<String>>>,
 }
 
 #[cfg(test)]
@@ -131,11 +132,16 @@ impl MockSecretStore {
             availability: Arc::new(Mutex::new(availability)),
             entries: Arc::new(Mutex::new(BTreeMap::new())),
             fail_next_set: Arc::new(Mutex::new(None)),
+            fail_next_delete: Arc::new(Mutex::new(None)),
         }
     }
 
     pub fn fail_next_set(&self, message: &str) {
         *self.fail_next_set.lock().expect("mock fail lock") = Some(message.to_string());
+    }
+
+    pub fn fail_next_delete(&self, message: &str) {
+        *self.fail_next_delete.lock().expect("mock delete fail lock") = Some(message.to_string());
     }
 }
 
@@ -177,6 +183,14 @@ impl SecretStore for MockSecretStore {
     }
 
     fn delete(&self, service: &str, account: &str) -> Result<(), String> {
+        if let Some(message) = self
+            .fail_next_delete
+            .lock()
+            .expect("mock delete fail lock")
+            .take()
+        {
+            return Err(message);
+        }
         self.entries
             .lock()
             .expect("mock entries lock")
@@ -555,14 +569,30 @@ pub fn touch_id_store_passphrase(account: &str, passphrase: &str) -> Result<(), 
         return Err("database passphrase must not be empty".to_string());
     }
     touch_id_biometrics_available()?;
+    let existing_marker = desktop_biometric_marker(account)?;
 
     #[cfg(target_os = "macos")]
     let protection = match store_biometry_current_set_passphrase(account, passphrase.as_bytes()) {
         Ok(()) => {
-            let _ = NativeSecretStore.delete(DESKTOP_BIOMETRIC_PASSPHRASE_SERVICE, account);
+            if let Err(error) =
+                NativeSecretStore.delete(DESKTOP_BIOMETRIC_PASSPHRASE_SERVICE, account)
+            {
+                return Err(rollback_desktop_passphrase_write(
+                    account,
+                    TouchIdProtection::BiometryCurrentSet,
+                    format!("The preview Keychain fallback could not be removed: {error}"),
+                ));
+            }
             TouchIdProtection::BiometryCurrentSet
         }
         Err(error) if error.code() == ERR_SEC_MISSING_ENTITLEMENT => {
+            if !application_fallback_allowed(existing_marker) {
+                return Err(
+                    "This preview build cannot replace an existing protected Touch ID item; \
+                     reopen a production-entitled build to update or remove it."
+                        .to_string(),
+                );
+            }
             NativeSecretStore.set(
                 DESKTOP_BIOMETRIC_PASSPHRASE_SERVICE,
                 account,
@@ -576,13 +606,14 @@ pub fn touch_id_store_passphrase(account: &str, passphrase: &str) -> Result<(), 
     let protection = TouchIdProtection::ApplicationLocalAuthentication;
 
     if let Err(error) = write_desktop_biometric_marker(account, protection) {
-        let _ = delete_desktop_passphrase_for_protection(account, protection);
-        return Err(error);
+        return Err(rollback_desktop_passphrase_write(
+            account, protection, error,
+        ));
     }
     if let Err(error) = NativeSecretStore.delete(DESKTOP_BIOMETRIC_STALE_MARKER_SERVICE, account) {
-        let _ = delete_desktop_passphrase_for_protection(account, protection);
+        let cleanup_error = rollback_desktop_passphrase_write(account, protection, error);
         let _ = delete_desktop_biometric_markers(account);
-        return Err(error);
+        return Err(cleanup_error);
     }
     Ok(())
 }
@@ -613,10 +644,8 @@ pub fn touch_id_delete_passphrase(
     cli_remembered_unlock_enabled: bool,
 ) -> Result<(), String> {
     validate_touch_id_account(account)?;
-    if let Some(protection) = desktop_biometric_enrollment(account, cli_remembered_unlock_enabled)?
-    {
-        delete_desktop_passphrase_for_protection(account, protection)?;
-    }
+    let enrollment = desktop_biometric_enrollment(account, cli_remembered_unlock_enabled)?;
+    delete_desktop_passphrase_copies(account, enrollment == Some(TouchIdProtection::LegacyShared))?;
     delete_desktop_biometric_markers(account)?;
     NativeSecretStore.delete(DESKTOP_BIOMETRIC_STALE_MARKER_SERVICE, account)
 }
@@ -633,11 +662,8 @@ fn desktop_biometric_enrollment(
     cli_remembered_unlock_enabled: bool,
 ) -> Result<Option<TouchIdProtection>, String> {
     validate_touch_id_account(account)?;
-    if NativeSecretStore.exists(DESKTOP_BIOMETRY_CURRENT_SET_MARKER_SERVICE, account)? {
-        return Ok(Some(TouchIdProtection::BiometryCurrentSet));
-    }
-    if NativeSecretStore.exists(DESKTOP_APPLICATION_GATE_MARKER_SERVICE, account)? {
-        return Ok(Some(TouchIdProtection::ApplicationLocalAuthentication));
+    if let Some(protection) = desktop_biometric_marker(account)? {
+        return Ok(Some(protection));
     }
     if NativeSecretStore.exists(DESKTOP_BIOMETRIC_PASSPHRASE_SERVICE, account)? {
         return Ok(Some(TouchIdProtection::ApplicationLocalAuthentication));
@@ -648,6 +674,20 @@ fn desktop_biometric_enrollment(
         return Ok(Some(TouchIdProtection::LegacyShared));
     }
     Ok(None)
+}
+
+fn desktop_biometric_marker(account: &str) -> Result<Option<TouchIdProtection>, String> {
+    if NativeSecretStore.exists(DESKTOP_BIOMETRY_CURRENT_SET_MARKER_SERVICE, account)? {
+        return Ok(Some(TouchIdProtection::BiometryCurrentSet));
+    }
+    if NativeSecretStore.exists(DESKTOP_APPLICATION_GATE_MARKER_SERVICE, account)? {
+        return Ok(Some(TouchIdProtection::ApplicationLocalAuthentication));
+    }
+    Ok(None)
+}
+
+fn application_fallback_allowed(existing_marker: Option<TouchIdProtection>) -> bool {
+    existing_marker != Some(TouchIdProtection::BiometryCurrentSet)
 }
 
 fn legacy_shared_item_belongs_to_desktop(cli_remembered_unlock_enabled: bool) -> bool {
@@ -699,17 +739,76 @@ fn read_desktop_passphrase_for_protection(
     }
 }
 
-fn delete_desktop_passphrase_for_protection(
+fn delete_desktop_passphrase_copies(
+    account: &str,
+    delete_legacy_shared: bool,
+) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    let delete_protected = delete_biometry_current_set_passphrase;
+    #[cfg(not(target_os = "macos"))]
+    let delete_protected = |_account: &str| Ok(());
+
+    delete_desktop_passphrase_copies_with_store(
+        &NativeSecretStore,
+        account,
+        delete_legacy_shared,
+        delete_protected,
+    )
+}
+
+fn delete_desktop_passphrase_copies_with_store<F>(
+    store: &dyn SecretStore,
+    account: &str,
+    delete_legacy_shared: bool,
+    mut delete_protected: F,
+) -> Result<(), String>
+where
+    F: FnMut(&str) -> Result<(), String>,
+{
+    // Marker state cannot prove that the other Keychain domain is empty: an
+    // interrupted mode transition may have left both copies behind. Always
+    // attempt both current desktop stores, then report every partial failure.
+    // The caller removes enrollment markers only after all cleanup succeeds.
+    let mut failures = Vec::new();
+    if let Err(error) = store.delete(DESKTOP_BIOMETRIC_PASSPHRASE_SERVICE, account) {
+        failures.push(format!("preview fallback: {error}"));
+    }
+    if let Err(error) = delete_protected(account) {
+        failures.push(format!("protected biometric item: {error}"));
+    }
+    if delete_legacy_shared {
+        if let Err(error) = store.delete(LEGACY_SHARED_PASSPHRASE_SERVICE, account) {
+            failures.push(format!("legacy shared item: {error}"));
+        }
+    }
+    if failures.is_empty() {
+        Ok(())
+    } else {
+        Err(format!(
+            "Desktop credential cleanup is incomplete ({}). Enrollment markers were preserved; retry Forget Touch ID from a build that can access both stores.",
+            failures.join("; ")
+        ))
+    }
+}
+
+fn rollback_desktop_passphrase_write(
     account: &str,
     protection: TouchIdProtection,
-) -> Result<(), String> {
-    match protection {
+    error: String,
+) -> String {
+    let cleanup = match protection {
         TouchIdProtection::BiometryCurrentSet => delete_biometry_current_set_passphrase(account),
         TouchIdProtection::ApplicationLocalAuthentication => {
             NativeSecretStore.delete(DESKTOP_BIOMETRIC_PASSPHRASE_SERVICE, account)
         }
         TouchIdProtection::LegacyShared => {
             NativeSecretStore.delete(LEGACY_SHARED_PASSPHRASE_SERVICE, account)
+        }
+    };
+    match cleanup {
+        Ok(()) => error,
+        Err(cleanup_error) => {
+            format!("{error} The partially written credential also could not be removed: {cleanup_error}")
         }
     }
 }
@@ -1258,5 +1357,79 @@ mod tests {
     fn legacy_shared_item_is_assigned_conservatively() {
         assert!(legacy_shared_item_belongs_to_desktop(false));
         assert!(!legacy_shared_item_belongs_to_desktop(true));
+    }
+
+    #[test]
+    fn preview_fallback_never_replaces_a_protected_enrollment() {
+        assert!(!application_fallback_allowed(Some(
+            TouchIdProtection::BiometryCurrentSet
+        )));
+        assert!(application_fallback_allowed(Some(
+            TouchIdProtection::ApplicationLocalAuthentication
+        )));
+        assert!(application_fallback_allowed(None));
+    }
+
+    #[test]
+    fn protected_deletion_removes_preview_copy_before_protected_item() {
+        let store = MockSecretStore::new(SecretStoreAvailability::Available {
+            identity_strength: IdentityStrength::Production,
+        });
+        let account = "book";
+        store
+            .set(
+                DESKTOP_BIOMETRIC_PASSPHRASE_SERVICE,
+                account,
+                b"preview-copy",
+            )
+            .unwrap();
+        let mut protected_deleted = false;
+
+        delete_desktop_passphrase_copies_with_store(&store, account, false, |_| {
+            protected_deleted = true;
+            Ok(())
+        })
+        .unwrap();
+
+        assert!(protected_deleted);
+        assert_eq!(
+            store
+                .get(DESKTOP_BIOMETRIC_PASSPHRASE_SERVICE, account)
+                .unwrap(),
+            None
+        );
+    }
+
+    #[test]
+    fn protected_deletion_is_still_attempted_when_preview_cleanup_fails() {
+        let store = MockSecretStore::new(SecretStoreAvailability::Available {
+            identity_strength: IdentityStrength::Production,
+        });
+        let account = "book";
+        store
+            .set(
+                DESKTOP_BIOMETRIC_PASSPHRASE_SERVICE,
+                account,
+                b"preview-copy",
+            )
+            .unwrap();
+        store.fail_next_delete("preview cleanup failed");
+        let mut protected_deleted = false;
+
+        let result = delete_desktop_passphrase_copies_with_store(&store, account, false, |_| {
+            protected_deleted = true;
+            Ok(())
+        });
+
+        assert!(result
+            .unwrap_err()
+            .contains("preview fallback: preview cleanup failed"));
+        assert!(protected_deleted);
+        assert_eq!(
+            store
+                .get(DESKTOP_BIOMETRIC_PASSPHRASE_SERVICE, account)
+                .unwrap(),
+            Some(b"preview-copy".to_vec())
+        );
     }
 }

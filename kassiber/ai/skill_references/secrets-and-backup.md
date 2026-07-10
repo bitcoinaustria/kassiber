@@ -69,9 +69,10 @@ prompt or `passphrase_required` behavior. Headless systems should keep using
 `linux_secret_service_session`, and `unsupported`; CLI reads are never described
 as biometric-gated.
 
-Upgrades from the former shared entry are marker-driven: an enabled CLI marker
-lets the CLI migrate `Kassiber Database Passphrase` to its CLI-only service;
-without the marker the desktop owns migration. Desktop Settings can forget only
+Upgrades from the former shared entry are marker-driven: successful explicit CLI
+enrollment removes `Kassiber Database Passphrase` after writing the CLI-only
+service and marker; a cleanup failure rolls that enrollment back when possible.
+Without the marker the desktop owns migration. Desktop Settings can forget only
 Touch ID or remove all saved unlock methods, including both current entries and
 any legacy shared item.
 

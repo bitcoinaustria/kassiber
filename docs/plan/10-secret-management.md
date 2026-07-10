@@ -145,8 +145,9 @@ available and unlocked. There is no plaintext fallback. CLI reads are not
 biometric-gated. Desktop passphrase rotation updates the CLI entry or disables
 the marker and warns if the store rejects the update, then separately refreshes
 the desktop entry. CLI rotation refreshes its own entry and writes a non-secret
-desktop invalidation marker; the next desktop session requires passphrase entry
-and re-enrollment instead of attempting a known-stale biometric item.
+desktop invalidation marker only when a current desktop enrollment marker exists;
+the next desktop session then requires passphrase entry and re-enrollment instead
+of attempting a known-stale biometric item.
 
 Existing `Kassiber Database Passphrase` entries migrate conservatively. With a
 CLI marker, the CLI claims and removes the old shared entry; without that marker,
@@ -154,6 +155,12 @@ the desktop claims it after a successful Touch ID unlock. Users who previously
 enabled both against the ambiguous shared entry may need to re-enroll the other
 surface once. Settings exposes **Forget all unlock methods** to delete both
 current entries and any remaining legacy item.
+
+Desktop mode transitions preserve a single active credential copy. An
+unsigned/ad-hoc preview refuses to replace an existing protected enrollment,
+and protected-item deletion removes any preview fallback before removing the
+biometric item. Partial cleanup is surfaced instead of clearing enrollment
+markers and reporting success.
 
 CLI status exposes the intended boundary without probing a secret when CLI
 enrollment is disabled: `macos_keychain_application_acl`,

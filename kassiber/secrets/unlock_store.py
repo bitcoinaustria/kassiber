@@ -20,6 +20,12 @@ from ..db import load_managed_settings, update_managed_settings
 CLI_REMEMBERED_PASSPHRASE_SERVICE = "Kassiber CLI Database Passphrase"
 LEGACY_SHARED_PASSPHRASE_SERVICE = "Kassiber Database Passphrase"
 DESKTOP_BIOMETRIC_STALE_MARKER_SERVICE = "Kassiber Desktop Biometric Invalidated"
+DESKTOP_BIOMETRY_CURRENT_SET_MARKER_SERVICE = (
+    "Kassiber Desktop Biometric Enrollment (Current Set)"
+)
+DESKTOP_APPLICATION_GATE_MARKER_SERVICE = (
+    "Kassiber Desktop Biometric Enrollment (Application Gate)"
+)
 CLI_REMEMBERED_UNLOCK_SETTING = "cli_remembered_unlock"
 
 _ACCESS_POLICY_BY_PLATFORM = {
@@ -196,6 +202,14 @@ def mark_desktop_biometric_passphrase_stale(data_root) -> bool:
     """Invalidate desktop enrollment after a passphrase rotation outside the app."""
 
     if _platform_name() != "macos" or not _native_keyring_available():
+        return False
+    if not any(
+        _load_service_with_availability(data_root, service)[1] is not None
+        for service in (
+            DESKTOP_BIOMETRY_CURRENT_SET_MARKER_SERVICE,
+            DESKTOP_APPLICATION_GATE_MARKER_SERVICE,
+        )
+    ):
         return False
     try:
         keyring.set_password(
