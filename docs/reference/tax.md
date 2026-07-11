@@ -32,6 +32,7 @@ Important behavior:
 - self-transfers between user-owned wallets become RP2 `IntraTransaction` moves when Kassiber can prove the relationship
 - explicit inbound `kind` values such as `income`, `interest`, `staking`, `mining`, `airdrop`, `hardfork`, `wages`, `lending_interest`, and `routing_income` are promoted into RP2 earn-like receipts; unlabeled inbound rows stay conservative and process as `BUY`
 - missing or ambiguous tax inputs quarantine instead of being silently guessed
+- the tax engine is Bitcoin-only: transactions in any asset other than BTC, LBTC, or a Liquid asset id (legacy-holdings overlay rows) are excluded before RP2 runs and reported via a `legacy_holdings_excluded` warning; see the legacy-holdings section in [imports.md](imports.md) — the Bitcoin legs of overlay trades still book normally
 
 After any transaction change, metadata change, exclusion change, transfer pair change, quarantine resolution, rate sync, or manual rate override, journals must be reprocessed before reports are trusted again.
 

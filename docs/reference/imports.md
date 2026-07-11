@@ -312,7 +312,62 @@ into the source wallet and a `Deposit` into the destination wallet with the same
 A row with an unrecognized `Type`, no Bitcoin leg, a missing `Date`, or a
 direction that contradicts its `Type` fails the whole import with a
 row-numbered, actionable message — fix the file and re-import (dedup makes
-re-imports safe).
+re-imports safe). A non-Bitcoin, non-fiat asset code on the cash side is also
+a hard error (it used to be silently booked as a "fiat" pricing leg); altcoin
+legs belong to the legacy-holdings import below.
+
+## Legacy holdings import (non-Bitcoin overlay)
+
+Kassiber's tax engine is and stays Bitcoin-only, but many users carry old
+altcoin history from exchanges that a complete portfolio view — and an honest
+tax return — cannot simply ignore. The **legacy-holdings overlay** imports that
+history without widening the product: overlay assets are **overview-only**.
+They never reach journals, capital gains, tax summaries, E 1kv, or exit tax;
+`journals process` reports them in a `legacy_holdings_excluded` warning, and
+the exit-tax report carries an explicit `EXIT-006` assumption when overlay
+assets exist. There is no altcoin wallet derivation, no altcoin node or
+backend, and no altcoin market-rate fetching — positions are valued at the
+latest **import-time** price only.
+
+Create an overlay wallet and import the same ledger template as above, with
+two differences: any asset code that is not a known fiat currency is accepted
+as a crypto leg, and a row with **two** crypto legs (a CEX trade) is split into
+a sell + buy pair sharing the row's `Tx-ID` (`:out`/`:in` suffixes). Use the
+`Trade` type (or `Sell`/`Buy`) for those rows and put the trade's execution
+value in the book currency into `Fiat Value`:
+
+```
+kassiber wallets create --workspace W --profile P --kind legacy-holdings \
+  --label "Old CEX" --source-file legacy.csv --source-format legacy_holdings
+kassiber wallets import-legacy-holdings --workspace W --profile P --wallet "Old CEX" --file legacy.csv
+kassiber --format plain reports legacy-holdings --workspace W --profile P
+```
+
+The **Bitcoin legs of overlay trades book normally**: selling an altcoin for
+BTC produces a BTC acquisition whose cost basis is the trade's execution value
+— exactly what the tax engine needs. Only the non-Bitcoin legs stay outside
+the tax pipeline.
+
+The live exchange APIs reuse the same overlay path: `wallets sync-kraken`,
+`sync-coinbase`, and `sync-binance` accept `--include-legacy-assets` to also
+import non-Bitcoin rows from the same fetch (off by default — without the
+flag the importers skip them exactly as before). Cross-asset API trades import
+as unpriced buy/sell legs (Bitcoin legs are priced from cached market rates at
+journal time); overlay rows the record shape cannot represent — exotic ledger
+types, quantities outside the storage envelope — are skipped and listed in the
+sync outcome under `legacy_rows_skipped` instead of failing the sync.
+
+Quantities share Kassiber's integer amount storage, so an overlay amount is
+bounded to 11 decimal places and ~92.2M units per row; rows outside that
+envelope are rejected with a row-numbered error, never silently rounded.
+Same-asset moves between overlay rows are not transfers — record them as
+`Withdrawal` + `Deposit` if you care, or leave them out; nothing tax-relevant
+depends on them.
+
+`reports legacy-holdings` (CLI) and `ui.reports.legacy_holdings` (daemon)
+return per-wallet positions with `last_price`, `priced_at`, `market_value`,
+and a literal `tax_accounted: false` on every row. A stale `priced_at` means a
+stale valuation — for delisted coins that is exactly the honest answer.
 
 ## Privacy-hop evidence
 

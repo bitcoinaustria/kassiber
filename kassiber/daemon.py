@@ -329,6 +329,7 @@ SUPPORTED_KINDS = (
     "ui.reports.capital_gains",
     "ui.reports.summary",
     "ui.reports.balance_sheet",
+    "ui.reports.legacy_holdings",
     "ui.reports.portfolio_summary",
     "ui.reports.tax_summary",
     "ui.reports.balance_history",
@@ -3508,6 +3509,24 @@ def _reports_balance_sheet_payload(conn: sqlite3.Connection) -> dict[str, Any]:
     }
 
 
+def _reports_legacy_holdings_payload(conn: sqlite3.Connection) -> dict[str, Any]:
+    """Overview-only legacy (non-Bitcoin) overlay positions.
+
+    Computed from raw import rows, valued at import-time prices, and never
+    part of journals or tax reports — the payload says so explicitly so no
+    surface can render these as tax-accounted holdings.
+    """
+    rows = core_reports.report_legacy_holdings(conn, None, None, _report_hooks())
+    return {
+        "rows": rows,
+        "tax_accounted": False,
+        "summary": {
+            "row_count": len(rows),
+            "asset_count": len({row["asset"] for row in rows}),
+        },
+    }
+
+
 def _reports_portfolio_summary_payload(conn: sqlite3.Connection) -> dict[str, Any]:
     rows = core_reports.report_portfolio_summary(conn, None, None, _report_hooks())
     totals_by_asset = _totals_by_asset(rows)
@@ -3850,6 +3869,8 @@ def _execute_read_only_ai_tool(call: ParsedAiToolCall, runtime: AiToolRuntime) -
                 payload = _reports_summary_payload(conn, call.arguments)
             elif entry.daemon_kind == "ui.reports.balance_sheet":
                 payload = _reports_balance_sheet_payload(conn)
+            elif entry.daemon_kind == "ui.reports.legacy_holdings":
+                payload = _reports_legacy_holdings_payload(conn)
             elif entry.daemon_kind == "ui.reports.portfolio_summary":
                 payload = _reports_portfolio_summary_payload(conn)
             elif entry.daemon_kind == "ui.reports.tax_summary":
@@ -6214,6 +6235,7 @@ _UI_WALLET_SOURCE_FORMATS = {
     "binance_supplemental_csv",
     "wasabi_bundle",
     "generic_ledger",
+    "legacy_holdings",
 }
 
 
@@ -11055,6 +11077,18 @@ def handle_request(
                 build_envelope(
                     "ui.reports.balance_sheet",
                     _reports_balance_sheet_payload(ctx.conn),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
+    if kind == "ui.reports.legacy_holdings":
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.reports.legacy_holdings",
+                    _reports_legacy_holdings_payload(ctx.conn),
                 ),
                 request_id,
             ),

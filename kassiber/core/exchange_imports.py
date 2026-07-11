@@ -80,6 +80,38 @@ def _is_fiat(value: Any) -> bool:
     return _asset(value) in NORMALIZED_FIAT_CURRENCIES
 
 
+# Legacy-holdings overlay (opt-in ``include_legacy``): non-Bitcoin exchange
+# rows pass through to the same record shape instead of being dropped. They
+# stay overview-only downstream — the tax engine excludes every non-Bitcoin
+# asset (see asset_codes.is_tax_engine_asset). Rows whose quantities do not
+# fit the msat-scaled integer storage (≤11 decimals, ~92.2M units) are skipped
+# and reported via ``legacy_notes`` — never silently rounded.
+_LEGACY_SCALE = Decimal("100000000000")
+_LEGACY_MAX_SCALED = Decimal(2**63 - 1)
+
+
+def _legacy_amount_ok(*values: Decimal | None) -> bool:
+    for value in values:
+        if value is None:
+            continue
+        scaled = abs(value) * _LEGACY_SCALE
+        if scaled != scaled.to_integral_value() or scaled > _LEGACY_MAX_SCALED:
+            return False
+    return True
+
+
+def _note_legacy_skip(legacy_notes, *, provider, external_id, asset, reason):
+    if legacy_notes is not None:
+        legacy_notes.append(
+            {
+                "provider": provider,
+                "external_id": external_id,
+                "asset": asset,
+                "reason": reason,
+            }
+        )
+
+
 def _ms_epoch_to_iso(value: Any) -> str | None:
     if value in (None, ""):
         return None
@@ -182,8 +214,17 @@ def _trade_rows(payload: Any) -> dict[str, Mapping[str, Any]]:
 def normalize_kraken_records(
     ledger_payload: Any,
     trades_payload: Any | None = None,
+    *,
+    include_legacy: bool = False,
+    legacy_notes: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
-    """Normalize Kraken private Ledgers/TradesHistory payloads."""
+    """Normalize Kraken private Ledgers/TradesHistory payloads.
+
+    ``include_legacy`` additionally passes non-Bitcoin (overlay) asset rows
+    through; without it they are skipped as before. Overlay rows the record
+    shape cannot represent are skipped with a ``legacy_notes`` entry instead
+    of failing the sync.
+    """
     trades = _trade_rows(trades_payload or {})
     rows = _mapping_rows(ledger_payload, "result", "ledger") or _mapping_rows(
         ledger_payload,
@@ -192,7 +233,8 @@ def normalize_kraken_records(
     records: list[dict[str, Any]] = []
     for ledger_id, row in rows:
         row_asset = _asset(row.get("asset"))
-        if row_asset not in {"BTC", "LBTC"}:
+        is_legacy_row = row_asset not in {"BTC", "LBTC"}
+        if is_legacy_row and (not include_legacy or _is_fiat(row.get("asset"))):
             continue
         row_type = str(row.get("type") or "").strip().lower()
         amount = _decimal(row.get("amount"))
@@ -200,6 +242,27 @@ def normalize_kraken_records(
         occurred_at = _seconds_epoch_to_iso(row.get("time")) or str_or_none(row.get("time"))
         external_id = f"kraken:{ledger_id}"
         raw = {"ledger_id": ledger_id, **dict(row)}
+        if is_legacy_row and not _legacy_amount_ok(amount, fee):
+            _note_legacy_skip(
+                legacy_notes,
+                provider="Kraken",
+                external_id=external_id,
+                asset=row_asset,
+                reason="amount outside storable envelope (>11 decimals or >92.2M units)",
+            )
+            continue
+        if is_legacy_row and row_type not in {"deposit", "withdrawal", "trade"}:
+            # Overlay assets tolerate exotic ledger types (staking, transfer,
+            # dust sweeps) by skipping with a note; Bitcoin rows keep the hard
+            # error below so tax-relevant history is never silently dropped.
+            _note_legacy_skip(
+                legacy_notes,
+                provider="Kraken",
+                external_id=external_id,
+                asset=row_asset,
+                reason=f"unsupported ledger type '{row_type}'",
+            )
+            continue
         if row_type in {"deposit", "withdrawal"}:
             records.append(
                 _record(
@@ -228,6 +291,15 @@ def normalize_kraken_records(
             )
         trade = trades.get(str(row.get("refid") or ""))
         if not trade:
+            if is_legacy_row:
+                _note_legacy_skip(
+                    legacy_notes,
+                    provider="Kraken",
+                    external_id=external_id,
+                    asset=row_asset,
+                    reason="trade ledger row without a TradesHistory row",
+                )
+                continue
             raise AppError(
                 f"Kraken trade ledger row '{ledger_id}' is missing its TradesHistory row",
                 code="validation",
@@ -240,12 +312,33 @@ def normalize_kraken_records(
         pair = str(trade.get("pair") or "")
         quote = _kraken_quote_from_pair(pair, row_asset)
         if not quote or not _is_fiat(quote):
+            if include_legacy:
+                # Crypto-quoted (cross-asset) trade: emit the leg unpriced.
+                # Bitcoin legs are priced later from cached market rates at
+                # journal time; overlay legs stay overview-only anyway.
+                direction = "inbound" if amount >= 0 else "outbound"
+                records.append(
+                    _record(
+                        provider="Kraken",
+                        external_id=external_id,
+                        occurred_at=occurred_at,
+                        direction=direction,
+                        asset=row_asset,
+                        amount=amount,
+                        fee=fee if not _is_fiat(row.get("asset")) else Decimal("0"),
+                        kind="buy" if direction == "inbound" else "sell",
+                        raw={**raw, "trade": dict(trade)},
+                        pricing_external_ref=str(row.get("refid") or ledger_id),
+                    )
+                )
+                continue
             raise AppError(
                 f"Kraken BTC trade '{ledger_id}' is not fiat-quoted",
                 code="validation",
                 hint=(
                     "Cross-asset Kraken trades need explicit user review "
-                    "through the generic ledger."
+                    "through the generic ledger, or re-run with "
+                    "--include-legacy-assets to import both legs unpriced."
                 ),
                 retryable=False,
             )
@@ -304,8 +397,18 @@ COINBASE_MOVEMENT_TYPES = {
 COINBASE_INCOME_TYPES = {"interest", "staking_reward", "inflation_reward"}
 
 
-def normalize_coinbase_records(payload: Any) -> list[dict[str, Any]]:
-    """Normalize Coinbase API v2 account/transaction payloads."""
+def normalize_coinbase_records(
+    payload: Any,
+    *,
+    include_legacy: bool = False,
+    legacy_notes: list[dict[str, Any]] | None = None,
+) -> list[dict[str, Any]]:
+    """Normalize Coinbase API v2 account/transaction payloads.
+
+    ``include_legacy`` additionally passes non-Bitcoin (overlay) asset rows
+    through; unrepresentable overlay rows are skipped with a ``legacy_notes``
+    entry instead of failing the sync.
+    """
     transactions: list[tuple[str, Mapping[str, Any]]] = []
     if isinstance(payload, Mapping) and isinstance(payload.get("transactions"), list):
         currency = str(payload.get("currency") or "")
@@ -328,11 +431,24 @@ def normalize_coinbase_records(payload: Any) -> list[dict[str, Any]]:
     records = []
     for account_currency, tx in transactions:
         currency = _coinbase_currency(account_currency, tx)
-        if not _is_btc_asset(currency):
+        is_legacy_row = not _is_btc_asset(currency)
+        if is_legacy_row and (not include_legacy or not currency or _is_fiat(currency)):
             continue
-        record = normalize_coinbase_transaction(tx, currency)
-        if record is not None:
-            records.append(record)
+        record = normalize_coinbase_transaction(
+            tx, currency, legacy=is_legacy_row, legacy_notes=legacy_notes
+        )
+        if record is None:
+            continue
+        if is_legacy_row and not _legacy_amount_ok(record.get("amount"), record.get("fee")):
+            _note_legacy_skip(
+                legacy_notes,
+                provider="Coinbase",
+                external_id=str(record.get("txid") or ""),
+                asset=currency,
+                reason="amount outside storable envelope (>11 decimals or >92.2M units)",
+            )
+            continue
+        records.append(record)
     return records
 
 
@@ -352,7 +468,13 @@ def _coinbase_money(tx: Mapping[str, Any], key: str) -> tuple[Decimal, str | Non
     )
 
 
-def normalize_coinbase_transaction(tx: Mapping[str, Any], currency: str) -> dict[str, Any] | None:
+def normalize_coinbase_transaction(
+    tx: Mapping[str, Any],
+    currency: str,
+    *,
+    legacy: bool = False,
+    legacy_notes: list[dict[str, Any]] | None = None,
+) -> dict[str, Any] | None:
     tx_type = str(tx.get("type") or "").strip().lower()
     amount, _amount_currency = _coinbase_money(tx, "amount")
     if amount == 0:
@@ -368,6 +490,21 @@ def normalize_coinbase_transaction(tx: Mapping[str, Any], currency: str) -> dict
             or not _is_fiat(native_currency)
             or abs(native_amount) < Decimal("0.01")
         ):
+            if legacy:
+                # Overlay trade without a usable fiat execution value: keep
+                # the leg unpriced rather than failing the whole sync.
+                direction = "inbound" if amount > 0 else "outbound"
+                return _record(
+                    provider="Coinbase",
+                    external_id=external_id,
+                    occurred_at=occurred_at,
+                    direction=direction,
+                    asset=currency,
+                    amount=amount,
+                    kind="buy" if direction == "inbound" else "sell",
+                    raw=raw,
+                    pricing_external_ref=tx_id,
+                )
             raise AppError(
                 f"Coinbase BTC trade '{tx_id}' does not include usable fiat execution value",
                 code="validation",
@@ -423,6 +560,15 @@ def normalize_coinbase_transaction(tx: Mapping[str, Any], currency: str) -> dict
             raw=raw,
             description=f"Coinbase {tx_type.replace('_', ' ')}",
         )
+    if legacy:
+        _note_legacy_skip(
+            legacy_notes,
+            provider="Coinbase",
+            external_id=external_id,
+            asset=currency,
+            reason=f"unsupported transaction type '{tx_type}'",
+        )
+        return None
     raise AppError(
         f"Coinbase BTC transaction '{tx_id}' has unsupported type '{tx_type}'",
         code="validation",
@@ -434,40 +580,57 @@ def normalize_coinbase_transaction(tx: Mapping[str, Any], currency: str) -> dict
     )
 
 
-def normalize_binance_records(payload: Mapping[str, Any]) -> list[dict[str, Any]]:
+def normalize_binance_records(
+    payload: Mapping[str, Any],
+    *,
+    include_legacy: bool = False,
+    legacy_notes: list[dict[str, Any]] | None = None,
+) -> list[dict[str, Any]]:
     records: list[dict[str, Any]] = []
+
+    def _append(record: dict[str, Any] | None) -> None:
+        if record is None:
+            return
+        asset = str(record.get("asset") or "")
+        if asset not in {"BTC", "LBTC"} and not _legacy_amount_ok(
+            record.get("amount"), record.get("fee")
+        ):
+            _note_legacy_skip(
+                legacy_notes,
+                provider="Binance",
+                external_id=str(record.get("txid") or ""),
+                asset=asset,
+                reason="amount outside storable envelope (>11 decimals or >92.2M units)",
+            )
+            return
+        records.append(record)
+
     for row in payload.get("fiat_payments", []) or []:
         if not isinstance(row, Mapping):
             continue
-        record = normalize_binance_fiat_payment(row)
-        if record is not None:
-            records.append(record)
+        _append(normalize_binance_fiat_payment(row, include_legacy=include_legacy))
     for row in payload.get("deposits", []) or []:
         if not isinstance(row, Mapping):
             continue
-        record = normalize_binance_transfer(row, inbound=True)
-        if record is not None:
-            records.append(record)
+        _append(normalize_binance_transfer(row, inbound=True, include_legacy=include_legacy))
     for row in payload.get("withdrawals", []) or []:
         if not isinstance(row, Mapping):
             continue
-        record = normalize_binance_transfer(row, inbound=False)
-        if record is not None:
-            records.append(record)
+        _append(normalize_binance_transfer(row, inbound=False, include_legacy=include_legacy))
     for row in payload.get("dividends", []) or []:
         if not isinstance(row, Mapping):
             continue
-        record = normalize_binance_dividend(row)
-        if record is not None:
-            records.append(record)
+        _append(normalize_binance_dividend(row, include_legacy=include_legacy))
     return records
 
 
-def normalize_binance_fiat_payment(row: Mapping[str, Any]) -> dict[str, Any] | None:
+def normalize_binance_fiat_payment(
+    row: Mapping[str, Any], *, include_legacy: bool = False
+) -> dict[str, Any] | None:
     if str(row.get("status") or "").strip().casefold() != "completed":
         return None
     asset = _asset(row.get("cryptoCurrency"))
-    if asset not in {"BTC", "LBTC"}:
+    if asset not in {"BTC", "LBTC"} and not (include_legacy and asset and not _is_fiat(asset)):
         return None
     fiat_currency = _asset(row.get("fiatCurrency"))
     if not _is_fiat(fiat_currency):
@@ -497,9 +660,11 @@ def normalize_binance_fiat_payment(row: Mapping[str, Any]) -> dict[str, Any] | N
     )
 
 
-def normalize_binance_transfer(row: Mapping[str, Any], *, inbound: bool) -> dict[str, Any] | None:
+def normalize_binance_transfer(
+    row: Mapping[str, Any], *, inbound: bool, include_legacy: bool = False
+) -> dict[str, Any] | None:
     asset = _asset(row.get("coin") or row.get("asset"))
-    if asset not in {"BTC", "LBTC"}:
+    if asset not in {"BTC", "LBTC"} and not (include_legacy and asset and not _is_fiat(asset)):
         return None
     status = str(row.get("status") or "").strip().casefold()
     if status and status not in {"1", "6", "success", "completed", "credited", "confirming"}:
@@ -524,9 +689,11 @@ def normalize_binance_transfer(row: Mapping[str, Any], *, inbound: bool) -> dict
     )
 
 
-def normalize_binance_dividend(row: Mapping[str, Any]) -> dict[str, Any] | None:
+def normalize_binance_dividend(
+    row: Mapping[str, Any], *, include_legacy: bool = False
+) -> dict[str, Any] | None:
     asset = _asset(row.get("asset") or row.get("coinName"))
-    if asset not in {"BTC", "LBTC"}:
+    if asset not in {"BTC", "LBTC"} and not (include_legacy and asset and not _is_fiat(asset)):
         return None
     amount = _decimal(row.get("amount") or row.get("profitAmount"))
     if amount == 0:
@@ -566,6 +733,8 @@ def fetch_kraken_records(
     backend: Mapping[str, Any],
     *,
     opener=None,
+    include_legacy: bool = False,
+    legacy_notes: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
     key = backend_value(backend, "token", "api_key", "username")
     secret = backend_value(backend, "auth_header", "api_secret", "password")
@@ -596,7 +765,9 @@ def fetch_kraken_records(
         secret,
         timeout,
     )
-    return normalize_kraken_records(ledgers, trades)
+    return normalize_kraken_records(
+        ledgers, trades, include_legacy=include_legacy, legacy_notes=legacy_notes
+    )
 
 
 def _kraken_private_paginated(opener, base, path, result_key, key, secret, timeout):
@@ -677,6 +848,8 @@ def fetch_coinbase_records(
     backend: Mapping[str, Any],
     *,
     opener=None,
+    include_legacy: bool = False,
+    legacy_notes: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
     key = backend_value(backend, "token", "api_key", "username")
     secret = backend_value(backend, "auth_header", "api_secret", "password")
@@ -700,7 +873,10 @@ def fetch_coinbase_records(
         else:
             currency_code = account.get("currency")
         if not _is_btc_asset(currency_code):
-            continue
+            # Only pull non-Bitcoin account histories when the caller opted
+            # into the legacy overlay; fiat accounts are never transactions.
+            if not include_legacy or not currency_code or _is_fiat(currency_code):
+                continue
         account_id = str(account.get("id") or "")
         if not account_id:
             continue
@@ -713,7 +889,9 @@ def fetch_coinbase_records(
             timeout,
         )
         payload.append({"currency": currency_code, "transactions": transactions})
-    return normalize_coinbase_records(payload)
+    return normalize_coinbase_records(
+        payload, include_legacy=include_legacy, legacy_notes=legacy_notes
+    )
 
 
 def _coinbase_get_paginated(opener, base, path, key, secret, timeout):
@@ -759,6 +937,8 @@ def fetch_binance_records(
     backend: Mapping[str, Any],
     *,
     opener=None,
+    include_legacy: bool = False,
+    legacy_notes: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
     key = backend_value(backend, "token", "api_key", "username")
     secret = backend_value(backend, "auth_header", "api_secret", "password")
@@ -822,7 +1002,9 @@ def fetch_binance_records(
             },
         ).get("rows", []),
     }
-    return normalize_binance_records(payload)
+    return normalize_binance_records(
+        payload, include_legacy=include_legacy, legacy_notes=legacy_notes
+    )
 
 
 def _binance_signed_get(opener, base, path, key, secret, timeout, params):
@@ -846,14 +1028,22 @@ def fetch_exchange_records(
     backend: Mapping[str, Any],
     *,
     opener=None,
+    include_legacy: bool = False,
+    legacy_notes: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
     kind = str(backend_value(backend, "kind") or "").strip().lower()
     if kind == "kraken":
-        return fetch_kraken_records(backend, opener=opener)
+        return fetch_kraken_records(
+            backend, opener=opener, include_legacy=include_legacy, legacy_notes=legacy_notes
+        )
     if kind == "coinbase":
-        return fetch_coinbase_records(backend, opener=opener)
+        return fetch_coinbase_records(
+            backend, opener=opener, include_legacy=include_legacy, legacy_notes=legacy_notes
+        )
     if kind == "binance":
-        return fetch_binance_records(backend, opener=opener)
+        return fetch_binance_records(
+            backend, opener=opener, include_legacy=include_legacy, legacy_notes=legacy_notes
+        )
     raise AppError(
         f"Backend kind '{kind}' is not an exchange API importer",
         code="validation",

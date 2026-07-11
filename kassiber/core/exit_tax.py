@@ -32,6 +32,7 @@ from datetime import datetime, timezone
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Any, Mapping, Optional, Sequence
 
+from ..asset_codes import is_tax_engine_asset
 from ..errors import AppError
 from ..tax_policy import build_tax_policy
 from ..time_utils import parse_timestamp
@@ -261,6 +262,31 @@ class _RegimeBucket:
         return (max(self.qty, Decimal("0")), max(self.basis, Decimal("0")))
 
 
+def _legacy_overlay_assets_before(
+    conn: sqlite3.Connection, profile_id: str, day: str
+) -> list[str]:
+    """Overlay (non-tax-engine) assets with any activity on or before ``day``.
+
+    Overlay assets are excluded from the deemed-disposal walk by design; this
+    only decides whether the report must carry an honesty notice about them.
+    """
+    try:
+        rows = conn.execute(
+            """
+            SELECT DISTINCT asset
+            FROM transactions
+            WHERE profile_id = ? AND excluded = 0
+              AND substr(occurred_at, 1, 10) <= ?
+            """,
+            (profile_id, day),
+        ).fetchall()
+    except sqlite3.OperationalError:
+        return []
+    return sorted(
+        str(row["asset"]) for row in rows if not is_tax_engine_asset(row["asset"])
+    )
+
+
 def compute_deemed_disposal(
     conn: sqlite3.Connection,
     profile: Mapping[str, Any],
@@ -469,6 +495,15 @@ def compute_deemed_disposal(
             "EXIT-005: No cached rate found for one or more assets — run "
             "`kassiber rates sync`; market value, gain, and estimated tax stay "
             "incomplete (null) until those holdings are priced."
+        )
+    overlay_assets = _legacy_overlay_assets_before(conn, profile["id"], day)
+    if overlay_assets:
+        assumptions.append(
+            "EXIT-006: This book records legacy (non-Bitcoin) overlay assets "
+            f"({', '.join(overlay_assets)}) that are overview-only and NOT "
+            "included in this deemed-disposal report. If any were still held "
+            "at departure, their exit-tax treatment must be assessed outside "
+            "kassiber."
         )
 
     quarantines = list(state.get("quarantines") or ())

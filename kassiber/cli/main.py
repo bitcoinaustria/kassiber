@@ -1213,6 +1213,7 @@ def build_parser() -> argparse.ArgumentParser:
             "ledgerlive_csv",
             "binance_supplemental_csv",
             "wasabi_bundle",
+            "legacy_holdings",
         ],
     )
 
@@ -1337,21 +1338,20 @@ def build_parser() -> argparse.ArgumentParser:
     wallets_import_binance_supplemental.add_argument("--wallet")
     wallets_import_binance_supplemental.add_argument("--file", required=True)
     wallets_import_binance_supplemental.add_argument("--mode", choices=["relevant", "full"], default="full")
-    wallets_sync_kraken = wallets_sub.add_parser("sync-kraken")
-    wallets_sync_kraken.add_argument("--workspace")
-    wallets_sync_kraken.add_argument("--profile")
-    wallets_sync_kraken.add_argument("--backend", required=True)
-    wallets_sync_kraken.add_argument("--wallet")
-    wallets_sync_coinbase = wallets_sub.add_parser("sync-coinbase")
-    wallets_sync_coinbase.add_argument("--workspace")
-    wallets_sync_coinbase.add_argument("--profile")
-    wallets_sync_coinbase.add_argument("--backend", required=True)
-    wallets_sync_coinbase.add_argument("--wallet")
-    wallets_sync_binance = wallets_sub.add_parser("sync-binance")
-    wallets_sync_binance.add_argument("--workspace")
-    wallets_sync_binance.add_argument("--profile")
-    wallets_sync_binance.add_argument("--backend", required=True)
-    wallets_sync_binance.add_argument("--wallet")
+    for exchange_sync_name in ("sync-kraken", "sync-coinbase", "sync-binance"):
+        exchange_sync = wallets_sub.add_parser(exchange_sync_name)
+        exchange_sync.add_argument("--workspace")
+        exchange_sync.add_argument("--profile")
+        exchange_sync.add_argument("--backend", required=True)
+        exchange_sync.add_argument("--wallet")
+        exchange_sync.add_argument(
+            "--include-legacy-assets",
+            action="store_true",
+            help=(
+                "Also import non-Bitcoin (overlay) asset rows; they stay "
+                "overview-only and never reach tax reports"
+            ),
+        )
     wallets_import_ledger = wallets_sub.add_parser(
         "import-ledger",
         help="Import a filled-in generic ledger (.xlsx or CSV/TSV) into a wallet",
@@ -1370,6 +1370,18 @@ def build_parser() -> argparse.ArgumentParser:
         type=int,
         help="Limit the number of preview rows returned with --dry-run",
     )
+    wallets_import_legacy = wallets_sub.add_parser(
+        "import-legacy-holdings",
+        help=(
+            "Import multi-asset (non-Bitcoin) exchange history from a ledger "
+            "file (.xlsx or CSV/TSV) into a legacy-holdings overlay wallet; "
+            "overlay assets stay overview-only and never reach tax reports"
+        ),
+    )
+    wallets_import_legacy.add_argument("--workspace")
+    wallets_import_legacy.add_argument("--profile")
+    wallets_import_legacy.add_argument("--wallet", required=True)
+    wallets_import_legacy.add_argument("--file", required=True)
     wallets_ledger_template = wallets_sub.add_parser(
         "ledger-template",
         help="Write a blank generic-ledger import template (.xlsx, or .csv by extension)",
@@ -2345,7 +2357,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     reports = sub.add_parser("reports")
     reports_sub = reports.add_subparsers(dest="reports_command", required=True)
-    for report_name in ["summary", "tax-summary", "balance-sheet", "portfolio-summary", "capital-gains", "journal-entries", "privacy-hygiene", "privacy-mirror"]:
+    for report_name in ["summary", "tax-summary", "balance-sheet", "portfolio-summary", "capital-gains", "journal-entries", "privacy-hygiene", "privacy-mirror", "legacy-holdings"]:
         report = reports_sub.add_parser(report_name)
         report.add_argument("--workspace")
         report.add_argument("--profile")
@@ -3114,8 +3126,21 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                 args.backend,
                 args.wallet,
                 expected_backend_kind=expected_kind,
+                include_legacy=bool(getattr(args, "include_legacy_assets", False)),
             )
             return emit(args, payload)
+        if args.wallets_command == "import-legacy-holdings":
+            return emit(
+                args,
+                import_into_wallet(
+                    conn,
+                    args.workspace,
+                    args.profile,
+                    args.wallet,
+                    args.file,
+                    "legacy_holdings",
+                ),
+            )
         if args.wallets_command == "import-ledger":
             if args.dry_run:
                 return emit(
@@ -4362,6 +4387,13 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
             return emit(
                 args,
                 core_reports.report_balance_sheet(
+                    conn, args.workspace, args.profile, report_hooks
+                ),
+            )
+        if args.reports_command == "legacy-holdings":
+            return emit(
+                args,
+                core_reports.report_legacy_holdings(
                     conn, args.workspace, args.profile, report_hooks
                 ),
             )

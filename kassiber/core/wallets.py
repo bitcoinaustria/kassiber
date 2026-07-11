@@ -59,6 +59,7 @@ WALLET_KINDS = [
     "wasabi",
     "samourai",
     "custom",
+    "legacy-holdings",
 ]
 REDACTED_CONFIG_VALUE = "[redacted]"
 BTCPAY_SYNC_SOURCE = "btcpay"
@@ -882,6 +883,11 @@ WALLET_KIND_CATALOG = {
     "custom": {
         "summary": "Custom CSV/JSON source; use with --config/--config-file to describe field mapping.",
         "config_fields": ["source_file", "source_format", "config"],
+        "requires": ["source_file"],
+    },
+    "legacy-holdings": {
+        "summary": "Import-only overlay for non-Bitcoin exchange history (CSV); overview-only, excluded from tax reports.",
+        "config_fields": ["source_file", "source_format"],
         "requires": ["source_file"],
     },
 }
