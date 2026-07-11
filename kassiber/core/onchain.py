@@ -507,24 +507,6 @@ def parse_valued_tx(
     return parsed
 
 
-def exact_onchain_fee_msat(raw_json: Any, *, asset: str | None = None) -> int | None:
-    """Return an exactly evidenced network fee, otherwise ``None``.
-
-    Bitcoin's fee is derivable only when every input prevout value and every
-    output value is present in the stored transaction graph.  A wallet-row
-    amount delta is deliberately *not* evidence: it can also contain a payment,
-    swap lockup, or an owned output from a wallet that was never imported.
-
-    Liquid exposes its fee as an explicit empty-script output.  Accept that
-    output only when its asset can be tied to the row's component; confidential
-    or asset-ambiguous observations stay unresolved.  The function performs no
-    ownership inference and never contacts a backend.
-    """
-
-    parsed = parse_ownership_tx(raw_json)
-    return exact_onchain_fee_msat_from_parsed(parsed, asset=asset)
-
-
 def exact_onchain_fee_msat_from_observations(
     raw_json_values: Sequence[Any], *, asset: str | None = None
 ) -> int | None:
