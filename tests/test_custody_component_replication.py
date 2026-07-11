@@ -14,6 +14,7 @@ from kassiber.core.custody_components import (
     create_component,
     get_component,
     list_components,
+    reconcile_active_memberships,
     supersede_component,
     update_component,
 )
@@ -340,6 +341,62 @@ class CustodyComponentReplicationTests(unittest.TestCase):
                 "SELECT COUNT(*) FROM custody_component_transaction_memberships"
             ).fetchone()[0],
         )
+
+    def test_open_lifecycle_conflict_keeps_lww_active_revision_ineffective(self):
+        component = self._create_component(active=True)
+        event_ids = [
+            row["id"]
+            for row in self.owner.execute(
+                "SELECT id FROM sync_events WHERE profile_id = ? ORDER BY replica_seq LIMIT 2",
+                (self.profile["id"],),
+            ).fetchall()
+        ]
+        conflict_id = str(uuid.uuid4())
+        self.owner.execute(
+            """
+            INSERT INTO sync_conflicts(
+                id, workspace_id, profile_id, entity_table, entity_key, field,
+                local_event_id, remote_event_id, local_value_json,
+                remote_value_json, status, created_at
+            ) VALUES(?, ?, ?, 'custody_components', ?, 'state',
+                     ?, ?, '"superseded"', '"active"', 'open', ?)
+            """,
+            (
+                conflict_id,
+                self.workspace["id"],
+                self.profile["id"],
+                json.dumps([component["id"]], separators=(",", ":")),
+                event_ids[0],
+                event_ids[1],
+                NOW,
+            ),
+        )
+        reconcile_active_memberships(self.owner, profile_id=self.profile["id"])
+
+        conflicted = get_component(self.owner, component["id"])
+
+        self.assertEqual(conflicted["state"], "active")
+        self.assertEqual(conflicted["effective_state"], "draft")
+        self.assertIn(
+            "component_lifecycle_conflict",
+            {issue["code"] for issue in conflicted["validation"]["issues"]},
+        )
+        self.assertEqual(
+            0,
+            self.owner.execute(
+                "SELECT COUNT(*) FROM custody_component_transaction_memberships "
+                "WHERE component_id = ?",
+                (component["id"],),
+            ).fetchone()[0],
+        )
+
+        self.owner.execute(
+            "UPDATE sync_conflicts SET status = 'resolved' WHERE id = ?",
+            (conflict_id,),
+        )
+        reconcile_active_memberships(self.owner, profile_id=self.profile["id"])
+        resolved = get_component(self.owner, component["id"])
+        self.assertEqual(resolved["effective_state"], "active")
 
     def test_cross_replica_dependency_waits_for_missing_signed_prefix(self):
         self._join_peer()

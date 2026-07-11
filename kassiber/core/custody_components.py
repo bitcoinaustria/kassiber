@@ -1772,6 +1772,39 @@ def _replicated_lineage_issues(
     """Return reviewable lineage conflicts without hiding authored rows."""
 
     issues: list[dict[str, Any]] = []
+    lifecycle_conflicts = conn.execute(
+        """
+        SELECT id, field
+        FROM sync_conflicts
+        WHERE profile_id = ?
+          AND entity_table = 'custody_components'
+          AND entity_key = ?
+          AND status = 'open'
+          AND field IN (
+              'state', 'activated_at', 'superseded_by_component_id',
+              'superseded_at'
+          )
+        ORDER BY field, id
+        """,
+        (
+            row["profile_id"],
+            json.dumps([row["id"]], separators=(",", ":")),
+        ),
+    ).fetchall()
+    if lifecycle_conflicts:
+        issues.append(
+            {
+                "code": "component_lifecycle_conflict",
+                "message": (
+                    "an unresolved replicated lifecycle conflict keeps this "
+                    "revision ineffective"
+                ),
+                "conflicts": [
+                    {"conflict_id": conflict["id"], "field": conflict["field"]}
+                    for conflict in lifecycle_conflicts
+                ],
+            }
+        )
     if row["state"] == "active":
         competing = [
             {"component_id": other["id"], "revision": int(other["revision"])}
