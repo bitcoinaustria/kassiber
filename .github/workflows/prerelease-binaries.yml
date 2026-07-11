@@ -265,7 +265,9 @@ jobs:
           version: 10.33.0
 
       - name: Set up Rust
-        uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30
+        uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88
+        with:
+          toolchain: stable
 
       - name: Install macOS universal Rust targets
         if: matrix.target == 'macos-universal'
