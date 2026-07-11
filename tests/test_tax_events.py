@@ -2256,6 +2256,59 @@ class LightningPaymentHashEngineTest(unittest.TestCase):
             {"out", "in"},
         )
 
+        chained_rows = [
+            *rows[:2],
+            engine_row(
+                "bridge", "wallet-a", "inbound", 50_000_000_000,
+                "main", "2026-01-01T00:01:00Z",
+            ),
+            engine_row(
+                "bad-destination", "wallet-b", "inbound", 50_000_000_000,
+                "regtest", "2026-01-01T00:02:00Z",
+            ),
+        ]
+        chained_state = build_tax_engine(profile).build_ledger_state(
+            TaxEngineLedgerInputs(
+                rows=chained_rows,
+                wallet_refs_by_id=wallet_refs,
+                manual_pair_records=[
+                    {
+                        "id": "accepted-prefix",
+                        "out_transaction_id": "out",
+                        "in_transaction_id": "bridge",
+                        "kind": "manual",
+                        "policy": "carrying-value",
+                    },
+                    {
+                        "id": "rejected-suffix",
+                        "out_transaction_id": "bridge",
+                        "in_transaction_id": "bad-destination",
+                        "kind": "manual",
+                        "policy": "carrying-value",
+                    },
+                ],
+            )
+        )
+        self.assertFalse(
+            [
+                item
+                for item in chained_state.entries
+                if item.get("transaction_id")
+                in {"out", "bridge", "bad-destination"}
+            ]
+        )
+        self.assertEqual(
+            {
+                item["transaction_id"]
+                for item in chained_state.quarantines
+            },
+            {"out", "bridge", "bad-destination"},
+        )
+        self.assertIn(
+            "transfer_pair_dependency_blocked",
+            {item["reason"] for item in chained_state.quarantines},
+        )
+
     def test_same_wallet_payment_hash_books_fee_not_sell_buy(self):
         profile = {
             "id": "profile-1",

@@ -2376,6 +2376,41 @@ def _partition_network_compatible_carrying_pairs(
             )
             for row in (out_row, in_row)
         )
+    # Pair records form an economic component. If one edge is rejected, every
+    # edge touching either blocked leg must fail closed too; otherwise removing
+    # the shared row can leave an earlier accepted edge with one missing leg and
+    # book its survivor as a standalone disposal/acquisition.
+    while rejected_row_ids:
+        remaining: list[Mapping[str, Any]] = []
+        expanded = False
+        for record in accepted:
+            out_id = str(_row_get(record, "out_transaction_id") or "")
+            in_id = str(_row_get(record, "in_transaction_id") or "")
+            if not ({out_id, in_id} & rejected_row_ids):
+                remaining.append(record)
+                continue
+            newly_blocked = {out_id, in_id} - rejected_row_ids
+            rejected_row_ids.update((out_id, in_id))
+            expanded = expanded or bool(newly_blocked)
+            detail = {
+                "pair_id": str(_row_get(record, "id") or ""),
+                "out_transaction_id": out_id,
+                "in_transaction_id": in_id,
+                "required_for": "complete_pair_component",
+            }
+            quarantines.extend(
+                build_tax_quarantine(
+                    profile,
+                    row,
+                    "transfer_pair_dependency_blocked",
+                    detail,
+                )
+                for row_id in (out_id, in_id)
+                if (row := rows_by_id.get(row_id)) is not None
+            )
+        accepted = remaining
+        if not expanded:
+            break
     return accepted, quarantines, rejected_row_ids
 
 
