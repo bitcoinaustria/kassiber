@@ -154,41 +154,11 @@ RP2_ACCOUNTING_METHODS = (
     "MOVING_AVERAGE",
     "MOVING_AVERAGE_AT",
 )
-WALLET_KINDS = [
-    "descriptor",
-    "xpub",
-    "address",
-    "coreln",
-    "lnd",
-    "nwc",
-    "phoenix",
-    "river",
-    "bullbitcoin",
-    "coinfinity",
-    "21bitcoin",
-    "pocketbitcoin",
-    "strike",
-    "ledgerlive",
-    "kraken",
-    "coinbase",
-    "binance",
-    "wasabi",
-    "untracked",
-    "custom",
-]
-
 def normalize_code(value):
     code = str(value).strip().lower().replace(" ", "-")
     if not code:
         raise AppError("Code cannot be empty")
     return code
-
-
-def normalize_wallet_kind(value):
-    kind = str(value).strip().lower()
-    if kind not in WALLET_KINDS:
-        raise AppError(f"Unsupported wallet kind '{value}'. Supported: {', '.join(WALLET_KINDS)}")
-    return kind
 
 
 def normalize_addresses(values):
