@@ -59,6 +59,33 @@ describe("overview stats cards", () => {
     expect(html).not.toContain('data-slot="skeleton"');
   });
 
+  it("does not call the main balance current while journals are quarantined", () => {
+    const html = renderToStaticMarkup(
+      createElement(StatsCards, {
+        snapshot: {
+          ...MOCK_OVERVIEW,
+          balanceSummary: {
+            totalBtc: 1.236,
+            status: "quarantines",
+            source: "mixed",
+            needsJournals: false,
+            quarantines: 2,
+            chainWalletCount: 1,
+            bookWalletCount: 1,
+            transactionWalletCount: 0,
+            duplicateOutpointAdjustmentBtc: 0,
+          },
+        },
+        hideSensitive: false,
+        currency: "btc",
+      }),
+    );
+
+    expect(html).toContain("2 quarantines");
+    expect(html).toContain('href="/quarantine"');
+    expect(html).not.toContain(">Current<");
+  });
+
   it("formats overview counts with Austrian grouping", () => {
     const html = renderToStaticMarkup(
       createElement(StatsCards, {

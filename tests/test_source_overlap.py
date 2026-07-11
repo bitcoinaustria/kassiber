@@ -937,6 +937,12 @@ class SourceOverlapTests(unittest.TestCase):
                     snapshot["fiat"]["chainDuplicateOutpointAdjustmentBtc"],
                     0.01,
                 )
+                self.assertAlmostEqual(snapshot["balanceSummary"]["totalBtc"], 0.01)
+                self.assertAlmostEqual(
+                    snapshot["balanceSummary"]["duplicateOutpointAdjustmentBtc"],
+                    0.01,
+                )
+                self.assertEqual(snapshot["balanceSummary"]["source"], "chain")
                 balances = {
                     row["id"]: row["balance"]
                     for row in snapshot["connections"]

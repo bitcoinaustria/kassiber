@@ -2784,6 +2784,29 @@ def _build_profile_overview_snapshot(
         0.0,
         sum(display_balances.values()) - chain_duplicate_adjustment,
     )
+    balance_source_counts = {
+        source: sum(
+            1
+            for info in display_balance_info.values()
+            if info.get("balanceSource") == source
+        )
+        for source in ("chain", "books", "transactions")
+    }
+    active_balance_sources = [
+        source for source, count in balance_source_counts.items() if count > 0
+    ]
+    if len(active_balance_sources) == 1:
+        balance_source = active_balance_sources[0]
+    elif active_balance_sources:
+        balance_source = "mixed"
+    else:
+        balance_source = "books" if has_book_state else "transactions"
+    if freshness["needs_processing"]:
+        balance_status = "needs_journals"
+    elif freshness["quarantine_count"]:
+        balance_status = "quarantines"
+    else:
+        balance_status = "current"
     fiat = _fiat_snapshot(
         conn,
         profile["id"],
@@ -2819,6 +2842,17 @@ def _build_profile_overview_snapshot(
             has_book_state=has_book_state,
         ),
         "fiat": fiat,
+        "balanceSummary": {
+            "totalBtc": display_balance_total,
+            "status": balance_status,
+            "source": balance_source,
+            "needsJournals": freshness["needs_processing"],
+            "quarantines": freshness["quarantine_count"],
+            "chainWalletCount": balance_source_counts["chain"],
+            "bookWalletCount": balance_source_counts["books"],
+            "transactionWalletCount": balance_source_counts["transactions"],
+            "duplicateOutpointAdjustmentBtc": chain_duplicate_adjustment,
+        },
         "taxFreeBalance": _tax_free_balance_snapshot(conn, profile, freshness),
         "status": {
             "workspace": workspace["label"],

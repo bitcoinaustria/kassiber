@@ -61,7 +61,7 @@ export function Connections() {
 
   const snapshot = normalizeOverviewSnapshot(data.data);
   const connections: Connection[] = snapshot.connections;
-  const totalBtc = snapshot.connections.reduce((s, c) => s + c.balance, 0);
+  const totalBtc = walletOverviewTotalBtc(snapshot);
   const filteredConnections = connections.filter(
     (connection) =>
       (kindFilter === "all" ||
@@ -101,6 +101,7 @@ export function Connections() {
         priceEur={snapshot.priceEur}
         taxFreeBalance={snapshot.taxFreeBalance}
         totalBtc={totalBtc}
+        balanceSummary={snapshot.balanceSummary}
       />
 
       <div className="rounded-xl border bg-card">
@@ -122,8 +123,21 @@ export function Connections() {
           taxFreeBalance={snapshot.taxFreeBalance}
           totalBtc={totalBtc}
           totalCount={connections.length}
+          balanceSharesOverlap={
+            (snapshot.balanceSummary?.duplicateOutpointAdjustmentBtc ?? 0) > 0
+          }
         />
       </div>
     </div>
+  );
+}
+
+function walletOverviewTotalBtc(snapshot: OverviewSnapshot): number {
+  return (
+    snapshot.balanceSummary?.totalBtc ??
+    snapshot.connections.reduce(
+      (sum, connection) => sum + connection.balance,
+      0,
+    )
   );
 }
