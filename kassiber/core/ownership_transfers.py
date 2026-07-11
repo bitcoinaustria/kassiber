@@ -2049,15 +2049,15 @@ def _inputs_are_single_source(
     A foreign/unresolvable input (payjoin/coinjoin, or coins we do not watch)
     or an input from a *different* owned wallet (a multi-wallet consolidation)
     makes the recorded amount/fee unreliable for splitting. An input is
-    acceptable only when ``source_wallet_id`` is among its owners; resolution is
-    set-based (not first-match) so a shared descriptor / reused address does not
-    make the verdict depend on index insertion order.
+    acceptable only when its complete owner set is exactly the source wallet.
+    A shared descriptor / reused address is ambiguous ownership evidence and
+    must not let index insertion order assign basis or fees to one co-owner.
     """
     if not inputs:
         return False
     for entry in inputs:
         owners = _input_owner_ids(index, entry, physical_scope=physical_scope)
-        if not owners or source_wallet_id not in owners:
+        if owners != {source_wallet_id}:
             return False
     return True
 

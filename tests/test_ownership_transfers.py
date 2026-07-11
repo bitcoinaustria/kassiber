@@ -895,10 +895,10 @@ class OwnershipDeriverTests(unittest.TestCase):
         result = self._run([out], {SCRIPT["A"]: ("A", "A")}, _refs("A"))
         self.assertEqual(result.derived_pairs, [])
 
-    def test_input_shared_script_with_source_still_single_source(self):
-        # An input whose script is owned by the source AND another wallet (shared
-        # descriptor / reused address) is still the source's spend. Resolution is
-        # set-based, so it derives regardless of which owner the index lists first.
+    def test_input_shared_script_is_not_single_source(self):
+        # An input whose script is indexed to the source AND another wallet
+        # (shared descriptor / reused address) cannot assign basis or fees to
+        # either wallet automatically.
         shared_input = "0014" + "77" * 20
         out = _outbound(
             row_id="a-out", wallet_id="A", amount_sats=50_000_000, fee_sats=1000,
@@ -912,7 +912,7 @@ class OwnershipDeriverTests(unittest.TestCase):
         result = derive_ownership_transfers(
             [out], index=index, wallet_refs_by_id=_refs("B"), already_paired_ids=set()
         )
-        self.assertEqual(len(result.derived_pairs), 1)
+        self.assertEqual(result.derived_pairs, [])
 
     def test_unresolvable_input_declined(self):
         # We watch only the recipient: the spend's inputs are not ours, so we
