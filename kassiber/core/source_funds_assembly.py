@@ -346,8 +346,6 @@ def derive_utxo_spend_pairs(
     def resolve_parents(
         external: PhysicalTxKey,
         wallet_id: str,
-        *,
-        visited: frozenset[PhysicalTxKey] | None = None,
     ) -> dict[PhysicalTxKey, dict[str, Any]]:
         """Owned inputs of ``external`` for one wallet, grouped by the
         parent transaction whose leg can carry the link.
@@ -356,59 +354,90 @@ def derive_utxo_spend_pairs(
         allocation demand, so they are resolved transparently into THEIR
         owned parents, recording the passthrough txids for the explanation.
         """
-        # ``visited`` is the active recursion path, not a global graph-wide
-        # set.  Sibling branches can legitimately reconverge on outputs of an
-        # earlier consolidation; sharing their mutable visited state silently
-        # drops the later branch.  A path-local immutable set still rejects
-        # malformed cycles without imposing an arbitrary history-depth limit.
-        active_path = visited or frozenset()
-        if external in active_path:
-            return {}
-        active_path = active_path | {external}
-        groups: dict[PhysicalTxKey, dict[str, Any]] = {}
-        for outpoint in tx_inputs(external):
-            info = owned_index.get(outpoint)
-            if info and info.get("ambiguous"):
-                continue
-            if not info or str(info["wallet_id"]) != wallet_id:
-                continue
-            asset_identity = _owned_asset_identity(outpoint, info)
-            if not asset_identity or asset_identity != external[3]:
-                continue
-            parent_txid = outpoint[2]
-            parent_component = (
-                outpoint[0],
-                outpoint[1],
-                parent_txid,
-                asset_identity,
-            )
-            if parent_component[:3] in blocked_physical_transactions:
-                continue
-            amount = int(info["amount_msat"] or 0)
-            if amount <= 0:
-                continue
-            parent_leg = leg(parent_component, wallet_id, "inbound") or leg(
-                parent_component, wallet_id, "outbound"
-            )
-            if parent_leg is not None:
-                parent_amount = int(parent_leg["amount"])
-                is_change_passthrough = (
-                    str(parent_leg["direction"] or "") == "outbound"
-                    and amount > parent_amount
+        def entries(component: PhysicalTxKey) -> list[dict[str, Any]]:
+            found: list[dict[str, Any]] = []
+            for outpoint in tx_inputs(component):
+                info = owned_index.get(outpoint)
+                if info and info.get("ambiguous"):
+                    continue
+                if not info or str(info["wallet_id"]) != wallet_id:
+                    continue
+                asset_identity = _owned_asset_identity(outpoint, info)
+                if not asset_identity or asset_identity != component[3]:
+                    continue
+                parent_component = (
+                    outpoint[0], outpoint[1], outpoint[2], asset_identity
                 )
-            else:
-                parent_amount = 0
-                is_change_passthrough = False
-            if parent_leg is not None and (parent_amount <= 0 or is_change_passthrough):
-                # Net-zero or change-output passthrough: attribute this input
-                # to the spend's own parents instead of sizing the child from
-                # a small external-payment row.
-                for key, nested in resolve_parents(
-                    parent_component,
-                    wallet_id,
-                    visited=active_path,
-                ).items():
-                    group = groups.setdefault(
+                if parent_component[:3] in blocked_physical_transactions:
+                    continue
+                amount = int(info["amount_msat"] or 0)
+                if amount <= 0:
+                    continue
+                parent_leg = leg(parent_component, wallet_id, "inbound") or leg(
+                    parent_component, wallet_id, "outbound"
+                )
+                parent_amount = int(parent_leg["amount"]) if parent_leg else 0
+                passthrough = bool(
+                    parent_leg is not None
+                    and (
+                        parent_amount <= 0
+                        or (
+                            str(parent_leg["direction"] or "") == "outbound"
+                            and amount > parent_amount
+                        )
+                    )
+                )
+                found.append(
+                    {
+                        "outpoint": outpoint,
+                        "amount": amount,
+                        "parent_component": parent_component,
+                        "parent_leg": parent_leg,
+                        "passthrough": passthrough,
+                    }
+                )
+            return found
+
+        # Explicit post-order DFS avoids Python's recursion limit on long-lived
+        # consolidation chains. ``active`` is still path-local cycle state;
+        # completed subgraphs are cached so reconvergent branches retain every
+        # route while physical source outpoints are counted once below.
+        cache: dict[PhysicalTxKey, dict[PhysicalTxKey, dict[str, Any]]] = {}
+        active: set[PhysicalTxKey] = {external}
+        stack: list[dict[str, Any]] = [
+            {"component": external, "entries": entries(external), "index": 0, "groups": {}}
+        ]
+        while stack:
+            frame = stack[-1]
+            component = frame["component"]
+            component_entries = frame["entries"]
+            index = int(frame["index"])
+            if index >= len(component_entries):
+                cache[component] = frame["groups"]
+                active.discard(component)
+                stack.pop()
+                continue
+
+            entry = component_entries[index]
+            parent_component = entry["parent_component"]
+            parent_leg = entry["parent_leg"]
+            if entry["passthrough"]:
+                if parent_component in active:
+                    frame["index"] = index + 1
+                    continue
+                if parent_component not in cache:
+                    active.add(parent_component)
+                    stack.append(
+                        {
+                            "component": parent_component,
+                            "entries": entries(parent_component),
+                            "index": 0,
+                            "groups": {},
+                        }
+                    )
+                    continue
+                for key, nested in cache[parent_component].items():
+                    group = frame["groups"].setdefault(
                         key,
                         {
                             "parent_leg": nested["parent_leg"],
@@ -418,9 +447,6 @@ def derive_utxo_spend_pairs(
                             "via": [],
                         },
                     )
-                    # Reconvergent branches can reach the same terminal owned
-                    # outpoint more than once.  Preserve every route in
-                    # ``via`` while counting that physical contribution once.
                     for source_outpoint, contribution in nested[
                         "contributions"
                     ].items():
@@ -429,27 +455,30 @@ def derive_utxo_spend_pairs(
                         group["contributions"][source_outpoint] = contribution
                         group["contributed_msat"] += contribution
                         group["outpoints"].append(source_outpoint)
-                    via = [*nested["via"], parent_txid]
+                    via = [*nested["via"], parent_component[2]]
                     group["via"] = sorted(set(group["via"]) | set(via))
+                frame["index"] = index + 1
                 continue
-            if parent_leg is None:
-                continue
-            group = groups.setdefault(
-                parent_component,
-                {
-                    "parent_leg": parent_leg,
-                    "contributed_msat": 0,
-                    "outpoints": [],
-                    "contributions": {},
-                    "via": [],
-                },
-            )
-            source_outpoint = (outpoint[2], outpoint[3])
-            if source_outpoint not in group["contributions"]:
-                group["contributions"][source_outpoint] = amount
-                group["contributed_msat"] += amount
-                group["outpoints"].append(source_outpoint)
-        return groups
+
+            if parent_leg is not None:
+                group = frame["groups"].setdefault(
+                    parent_component,
+                    {
+                        "parent_leg": parent_leg,
+                        "contributed_msat": 0,
+                        "outpoints": [],
+                        "contributions": {},
+                        "via": [],
+                    },
+                )
+                outpoint = entry["outpoint"]
+                source_outpoint = (outpoint[2], outpoint[3])
+                if source_outpoint not in group["contributions"]:
+                    group["contributions"][source_outpoint] = entry["amount"]
+                    group["contributed_msat"] += entry["amount"]
+                    group["outpoints"].append(source_outpoint)
+            frame["index"] = index + 1
+        return cache.get(external, {})
 
     pairs: list[dict[str, Any]] = []
     seen_pairs: set[tuple[str, str]] = set()

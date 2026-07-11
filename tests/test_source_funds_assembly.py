@@ -426,6 +426,76 @@ class SourceFundsUtxoScopeTests(unittest.TestCase):
         self.assertEqual(pairs[0]["confidence"], "exact")
         self.assertFalse(pairs[0]["requires_review"])
 
+    def test_deep_consolidation_lineage_does_not_use_python_recursion(self):
+        depth = 1_050
+        txids = [f"{index:064x}" for index in range(1, depth + 3)]
+        rows = [
+            self._chain_row(
+                "root",
+                "wallet-a",
+                "inbound",
+                100,
+                txids[0],
+                {"txid": txids[0], "vin": [], "vout": []},
+            )
+        ]
+        owned_index = {}
+        for index in range(1, depth + 1):
+            rows.append(
+                self._chain_row(
+                    f"consolidation-{index}",
+                    "wallet-a",
+                    "outbound",
+                    0,
+                    txids[index],
+                    {
+                        "txid": txids[index],
+                        "vin": [{"txid": txids[index - 1], "vout": 0}],
+                        "vout": [],
+                    },
+                )
+            )
+            owned_index[("bitcoin", "main", txids[index - 1], 0)] = {
+                "wallet_id": "wallet-a",
+                "amount_msat": 100,
+                "branch_label": "receive",
+                "spent_by": txids[index],
+                "asset": "BTC",
+                "ambiguous": False,
+            }
+        final_txid = txids[depth + 1]
+        rows.append(
+            self._chain_row(
+                "final-spend",
+                "wallet-a",
+                "outbound",
+                100,
+                final_txid,
+                {
+                    "txid": final_txid,
+                    "vin": [{"txid": txids[depth], "vout": 0}],
+                    "vout": [],
+                },
+            )
+        )
+        owned_index[("bitcoin", "main", txids[depth], 0)] = {
+            "wallet_id": "wallet-a",
+            "amount_msat": 100,
+            "branch_label": "receive",
+            "spent_by": final_txid,
+            "asset": "BTC",
+            "ambiguous": False,
+        }
+
+        pairs = derive_utxo_spend_pairs(
+            rows, owned_index, skip_row=lambda _row: False
+        )
+
+        self.assertEqual(len(pairs), 1)
+        self.assertEqual(pairs[0]["from_row"]["id"], "root")
+        self.assertEqual(pairs[0]["to_row"]["id"], "final-spend")
+        self.assertIn("via in-wallet consolidation", pairs[0]["explanation"])
+
     def test_duplicate_wallet_direction_component_fails_closed(self):
         parent_txid = "27" * 32
         spend_txid = "28" * 32
