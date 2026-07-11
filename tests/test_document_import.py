@@ -1108,7 +1108,7 @@ class DocumentImportTest(unittest.TestCase):
         )
 
     def test_cli_document_import_requires_active_review_and_row_selection(self):
-        from kassiber.cli.main import _select_document_import_rows_for_cli
+        import kassiber.cli.main as cli_main
 
         draft = document_import.preview_document_import(
             self.conn,
@@ -1118,7 +1118,7 @@ class DocumentImportTest(unittest.TestCase):
         )
 
         with self.assertRaises(AppError) as raised:
-            _select_document_import_rows_for_cli(
+            cli_main._select_document_import_rows_for_cli(
                 draft,
                 expected_fiat_currency="EUR",
                 include_quarantined=False,
@@ -1127,7 +1127,7 @@ class DocumentImportTest(unittest.TestCase):
         self.assertEqual(raised.exception.code, "interaction_required")
 
         output = io.StringIO()
-        selected = _select_document_import_rows_for_cli(
+        selected = cli_main._select_document_import_rows_for_cli(
             draft,
             expected_fiat_currency="EUR",
             include_quarantined=False,
