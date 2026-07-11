@@ -23,7 +23,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import json
 import re
 import sqlite3
@@ -52,6 +52,11 @@ COMPONENT_TYPES = frozenset(
 )
 COMPONENT_STATES = frozenset({"draft", "active", "superseded"})
 CONSERVATION_MODES = frozenset({"quantity", "conversion"})
+# Block timestamps are not a strict sequence clock, and exchange/L2 records may
+# stamp completion after the receiving chain transaction. Custody components are
+# reviewed exact allocations, so tolerate bounded evidence-clock skew while
+# still rejecting materially reversed routes.
+CUSTODY_CHRONOLOGY_SKEW_TOLERANCE = timedelta(days=7)
 LEG_ROLES = frozenset(
     {"source", "destination", "fee", "external", "retained", "unresolved"}
 )
@@ -748,7 +753,11 @@ def _allocation_chronology_issues(
             continue
         source_when = parse_iso_datetime_or_none(source.get("occurred_at"))
         sink_when = parse_iso_datetime_or_none(sink.get("occurred_at"))
-        if source_when is None or sink_when is None or source_when <= sink_when:
+        if (
+            source_when is None
+            or sink_when is None
+            or source_when <= sink_when + CUSTODY_CHRONOLOGY_SKEW_TOLERANCE
+        ):
             continue
         issues.append(
             {
@@ -1232,7 +1241,10 @@ def _location_continuity_issues(
         for source_when, source in parsed_sources:
             assert source_when is not None
             has_prior_credit = any(
-                sink_when is not None and sink_when < source_when
+                sink_when is not None
+                and sink_when != source_when
+                and sink_when
+                <= source_when + CUSTODY_CHRONOLOGY_SKEW_TOLERANCE
                 for sink_when, _sink in parsed_sinks
             )
             if source.get("transaction_id") is None or has_prior_credit:
@@ -1241,7 +1253,9 @@ def _location_continuity_issues(
             continue
 
         events = [
-            (when, 0, leg) for when, leg in parsed_sinks if when is not None
+            (when - CUSTODY_CHRONOLOGY_SKEW_TOLERANCE, 0, leg)
+            for when, leg in parsed_sinks
+            if when is not None
         ] + [
             (when, 1, leg) for when, leg in intermediate_sources
         ]

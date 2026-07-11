@@ -1041,6 +1041,100 @@ class CustodyComponentApiTests(unittest.TestCase):
                     {issue["code"] for issue in report["issues"]},
                 )
 
+    def test_allocation_accepts_bounded_evidence_clock_skew(self):
+        report = validate_conservation(
+            [
+                {
+                    **_leg(
+                        "source",
+                        100,
+                        wallet="btc",
+                        occurred_at="2026-01-02T00:00:00Z",
+                    ),
+                    "id": "source",
+                },
+                {
+                    **_leg(
+                        "destination",
+                        100,
+                        wallet="liquid",
+                        occurred_at="2026-01-01T22:00:00Z",
+                    ),
+                    "id": "destination",
+                },
+            ]
+        )
+
+        self.assertTrue(report["activatable"])
+        self.assertNotIn(
+            "allocation_chronology_mismatch",
+            {issue["code"] for issue in report["issues"]},
+        )
+
+    def test_location_continuity_accepts_bounded_evidence_clock_skew(self):
+        report = validate_conservation(
+            [
+                {
+                    **_leg(
+                        "source",
+                        100,
+                        wallet="btc",
+                        occurred_at="2026-01-01T00:00:00Z",
+                    ),
+                    "id": "source",
+                },
+                {
+                    **_leg(
+                        "retained",
+                        100,
+                        wallet="gap",
+                        rail="untracked",
+                        occurred_at="2026-01-02T02:00:00Z",
+                    ),
+                    "id": "gap-in",
+                },
+                {
+                    **_leg(
+                        "source",
+                        100,
+                        wallet="gap",
+                        rail="untracked",
+                        occurred_at="2026-01-02T00:00:00Z",
+                    ),
+                    "id": "gap-out",
+                },
+                {
+                    **_leg(
+                        "destination",
+                        100,
+                        wallet="liquid",
+                        occurred_at="2026-01-03T00:00:00Z",
+                    ),
+                    "id": "destination",
+                },
+            ],
+            allocations=[
+                {
+                    "source_leg_id": "source",
+                    "sink_leg_id": "gap-in",
+                    "source_amount_msat": 100,
+                    "sink_amount_msat": 100,
+                },
+                {
+                    "source_leg_id": "gap-out",
+                    "sink_leg_id": "destination",
+                    "source_amount_msat": 100,
+                    "sink_amount_msat": 100,
+                },
+            ],
+        )
+
+        self.assertTrue(report["activatable"])
+        self.assertNotIn(
+            "custody_location_continuity_mismatch",
+            {issue["code"] for issue in report["issues"]},
+        )
+
     def test_future_bitcoin_layer_can_declare_a_known_network_domain(self):
         report = validate_conservation(
             [
