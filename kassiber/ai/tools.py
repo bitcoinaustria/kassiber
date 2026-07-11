@@ -209,6 +209,11 @@ _CUSTODY_COMPONENT_SPEC_SCHEMA: dict[str, Any] = {
                         "description": "Explicit label for a missing owned-wallet hop; never use for an external party.",
                     },
                     "amount_msat": dict(_EXACT_NONNEGATIVE_INTEGER_SCHEMA),
+                    "valuation_unit": {
+                        "type": "string",
+                        "description": "Reviewed conversion valuation unit; supply together with valuation_amount.",
+                    },
+                    "valuation_amount": dict(_EXACT_NONNEGATIVE_INTEGER_SCHEMA),
                     "asset": {"type": "string"},
                     "rail": {"type": "string"},
                     "chain": {"type": "string"},

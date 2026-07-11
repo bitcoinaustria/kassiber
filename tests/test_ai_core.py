@@ -344,6 +344,8 @@ class ToolCatalogPromptTest(unittest.TestCase):
         self.assertFalse(component_schema["additionalProperties"])
         leg_properties = component_schema["properties"]["legs"]["items"]["properties"]
         self.assertIn("untracked_wallet", leg_properties)
+        self.assertIn("valuation_unit", leg_properties)
+        self.assertIn("valuation_amount", leg_properties)
         self.assertNotIn("location_ref", leg_properties)
         self.assertNotIn("wallet_id", leg_properties)
         valid_component_arguments = {
@@ -356,12 +358,16 @@ class ToolCatalogPromptTest(unittest.TestCase):
                             "role": "source",
                             "transaction": "out-tx",
                             "amount_msat": "10000000000000001",
+                            "valuation_unit": "eur-cent",
+                            "valuation_amount": "5000001",
                         },
                         {
                             "id": "destination",
                             "role": "destination",
                             "untracked_wallet": "Missing owned wallet",
                             "amount_msat": "10000000000000001",
+                            "valuation_unit": "eur-cent",
+                            "valuation_amount": "5000001",
                         },
                     ],
                 }

@@ -28,7 +28,8 @@ class TableSpec:
     soft_delete_column: str | None = None
     json_columns: frozenset[str] = frozenset()
     # Additive nullable wire fields may be absent in older signed bundles. New
-    # captures always include them; merge materializes NULL when omitted.
+    # captures always include them; merge uses NULL on insert and preserves an
+    # already-materialized value on update when an older event omits the field.
     optional_columns: frozenset[str] = frozenset()
     # Fields on append-only authored revisions which may never be rewritten in
     # place.  A custody revision changes by inserting a new component/leg/
@@ -76,6 +77,7 @@ REFERENCE_TABLES: Mapping[str, str] = {
     "document_id": "external_documents",
     "from_source_id": "source_funds_sources",
     "source_id": "source_funds_sources",
+    "link_id": "source_funds_links",
     "case_id": "source_funds_cases",
     "component_id": "custody_components",
     "supersedes_component_id": "custody_components",
