@@ -800,7 +800,8 @@
       "wasabiBundle": "Wasabi-JSON-Bundle",
       "samouraiSourceSet": "Samourai-Descriptor-Source-Set",
       "csvOrJson": "CSV oder JSON",
-      "genericLedger": "Excel- oder CSV-Journal"
+      "genericLedger": "Excel- oder CSV-Journal",
+      "legacyHoldingsCsv": "CSV mit früheren Altcoin-Beständen"
     },
     "genericLedger": {
       "templateHint": "Neu hier? Lade die Vorlage herunter, trag deine Transaktionen ein und importier die Datei.",

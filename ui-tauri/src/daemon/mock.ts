@@ -3486,6 +3486,21 @@ export const mockDaemon: DaemonTransport = {
       };
     }
 
+    if (req.kind === "ui.reports.legacy_holdings") {
+      // The mock book is Bitcoin-only, so there are never overlay rows; the
+      // Overview panel renders nothing for an empty payload (by design).
+      return {
+        kind: "ui.reports.legacy_holdings",
+        schema_version: 1,
+        request_id: req.request_id,
+        data: {
+          rows: [],
+          tax_accounted: false,
+          summary: { row_count: 0, asset_count: 0 },
+        } as T,
+      };
+    }
+
     if (req.kind === "ui.reports.lightning_profitability") {
       const args = (req.args ?? {}) as { connection?: unknown };
       const ref = typeof args.connection === "string" ? args.connection : "";

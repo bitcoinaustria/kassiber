@@ -13,6 +13,7 @@ import { MOCK_OVERVIEW, type OverviewSnapshot } from "@/mocks/seed";
 import { useUiStore } from "@/store/ui";
 
 import { BooksHealthPanel } from "./BooksHealthPanel";
+import { LegacyHoldingsPanel } from "./LegacyHoldingsPanel";
 import { RecentTransactionsTable } from "./RecentTransactionsTable";
 import { BtcActivityChart } from "./BtcActivityChart";
 import { OverviewSidePanel } from "./OverviewSidePanel";
@@ -204,6 +205,10 @@ export const OverviewDashboard = ({
               currency={currency}
               priceEur={fiatRate}
               fiatCurrency={fiatCurrency}
+            />
+            <LegacyHoldingsPanel
+              className="min-w-0"
+              hideSensitive={hideSensitive}
             />
           </div>
           <div className="grid min-w-0 gap-2.5">

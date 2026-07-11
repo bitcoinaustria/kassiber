@@ -136,6 +136,7 @@ const ALLOWED_BRIDGE_KINDS = new Set([
   "ui.reports.capital_gains",
   "ui.reports.summary",
   "ui.reports.balance_sheet",
+  "ui.reports.legacy_holdings",
   "ui.reports.portfolio_summary",
   "ui.reports.balance_history",
   "ui.reports.tax_summary",
