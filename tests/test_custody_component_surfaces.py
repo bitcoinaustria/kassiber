@@ -200,6 +200,23 @@ class CustodyComponentCliSurfaceTests(unittest.TestCase):
         ).fetchone()
         self.assertEqual(stored["authored_source"], "ai_tool")
 
+    def test_daemon_bulk_resolution_rejects_unbounded_batches(self):
+        with self.assertRaises(AppError) as caught:
+            _ui_swap_matching_payload_from_conn(
+                self.conn,
+                "ui.transfers.components.bulk_resolve",
+                {
+                    "workspace": "Main",
+                    "profile": "Book",
+                    "components": [_component_spec() for _ in range(51)],
+                    "activate": False,
+                    "dry_run": True,
+                },
+            )
+
+        self.assertEqual(caught.exception.code, "validation")
+        self.assertEqual(caught.exception.details["max_components"], 50)
+
     def test_full_revision_lifecycle_and_envelope_kinds(self):
         created = _dispatch_json(
             self.conn,

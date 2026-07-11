@@ -624,6 +624,7 @@ MAX_DOCUMENT_IMPORT_SESSIONS = 8
 # cases.save, and coverage. The transactions cap is coverage-specific.
 _DAEMON_REPORT_DEPTH_CAP = 32
 _COVERAGE_MAX_TRANSACTIONS_CAP = 50_000
+_CUSTODY_BULK_COMPONENT_CAP = 50
 
 
 def _resolve_report_depth(max_depth: Any, default: int = 8) -> int:
@@ -1850,6 +1851,15 @@ def _ui_swap_matching_payload_from_conn(
             raise AppError(
                 f"{kind} requires a non-empty components array of JSON objects",
                 code="validation",
+            )
+        if len(components) > _CUSTODY_BULK_COMPONENT_CAP:
+            raise AppError(
+                f"{kind} accepts at most {_CUSTODY_BULK_COMPONENT_CAP} components",
+                code="validation",
+                details={
+                    "count": len(components),
+                    "max_components": _CUSTODY_BULK_COMPONENT_CAP,
+                },
             )
         activate = exact_bool("activate", True)
         dry_run = exact_bool("dry_run")
