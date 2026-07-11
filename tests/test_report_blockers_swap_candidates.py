@@ -4,7 +4,10 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from kassiber.core.ui_snapshot import build_report_blockers_snapshot
+from kassiber.core.ui_snapshot import (
+    _load_swap_report_matcher_rows,
+    build_report_blockers_snapshot,
+)
 from kassiber.db import open_db, set_setting
 from kassiber.msat import btc_to_msat
 
@@ -115,6 +118,26 @@ class SwapCandidateReportBlockerTests(unittest.TestCase):
         tmp = tempfile.TemporaryDirectory(prefix="kassiber-swap-blocker-")
         self.addCleanup(tmp.cleanup)
         return open_db(Path(tmp.name) / "data")
+
+    def test_report_matcher_rows_include_wallet_network_config(self):
+        conn = self._with_conn()
+        try:
+            _seed_book(conn)
+            _wallet(conn, "node", "Regtest node", "lnd")
+            conn.execute(
+                "UPDATE wallets SET config_json = ? WHERE id = 'node'",
+                (json.dumps({"chain": "lightning", "network": "regtest"}),),
+            )
+            _tx(conn, "payment", "node", direction="outbound")
+
+            rows = _load_swap_report_matcher_rows(conn, "pf")
+
+            self.assertEqual(
+                json.loads(rows[0]["config_json"]),
+                {"chain": "lightning", "network": "regtest"},
+            )
+        finally:
+            conn.close()
 
     def test_header_only_active_custody_component_blocks_reports(self):
         conn = self._with_conn()
