@@ -915,7 +915,10 @@ function CustodyComponentResolver() {
     { limit: 200 },
   );
   const previewMutation =
-    useDaemonMutation<CustodyBulkResolveResult>("ui.transfers.components.bulk_resolve");
+    useDaemonMutation<CustodyBulkResolveResult>(
+      "ui.transfers.components.bulk_resolve",
+      { invalidateQueries: false },
+    );
   const bulkMutation =
     useDaemonMutation<CustodyBulkResolveResult>("ui.transfers.components.bulk_resolve");
   const updateMutation =

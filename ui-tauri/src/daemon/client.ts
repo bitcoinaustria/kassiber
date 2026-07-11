@@ -276,6 +276,46 @@ export function daemonMutationKey(dataMode: DataMode, kind: string) {
 }
 
 const TARGETED_DAEMON_QUERY_INVALIDATIONS: Record<string, readonly string[]> = {
+  "ui.transfers.components.bulk_resolve": [
+    "ui.activity.history",
+    "ui.activity.stale",
+    "ui.journals.quarantine",
+    "ui.journals.snapshot",
+    "ui.next_actions",
+    "ui.overview.snapshot",
+    "ui.report.blockers",
+    "ui.transfers.components.list",
+    "ui.transactions.list",
+    "ui.workspace.health",
+  ],
+  "ui.transfers.components.update": [
+    "ui.journals.quarantine",
+    "ui.journals.snapshot",
+    "ui.report.blockers",
+    "ui.transfers.components.list",
+    "ui.workspace.health",
+  ],
+  "ui.transfers.components.activate": [
+    "ui.journals.quarantine",
+    "ui.journals.snapshot",
+    "ui.report.blockers",
+    "ui.transfers.components.list",
+    "ui.workspace.health",
+  ],
+  "ui.transfers.components.supersede": [
+    "ui.journals.quarantine",
+    "ui.journals.snapshot",
+    "ui.report.blockers",
+    "ui.transfers.components.list",
+    "ui.workspace.health",
+  ],
+  "ui.transfers.components.undo": [
+    "ui.journals.quarantine",
+    "ui.journals.snapshot",
+    "ui.report.blockers",
+    "ui.transfers.components.list",
+    "ui.workspace.health",
+  ],
   "ui.backends.set_default": [
     "status",
     "ui.backends.list",
@@ -468,7 +508,7 @@ export function mutationAdvancesDaemonSession(kind: string) {
 
 export function useDaemonMutation<T = unknown>(
   kind: string,
-  options?: { dataMode?: DataMode },
+  options?: { dataMode?: DataMode; invalidateQueries?: boolean },
 ) {
   const selectedDataMode = useUiStore((state) => state.dataMode);
   const dataMode = options?.dataMode ?? selectedDataMode;
@@ -494,7 +534,9 @@ export function useDaemonMutation<T = unknown>(
       if (mutationAdvancesDaemonSession(kind)) {
         useUiStore.getState().bumpDaemonSession();
       }
-      invalidateDaemonQueriesForMutation(queryClient, dataMode, kind);
+      if (options?.invalidateQueries !== false) {
+        invalidateDaemonQueriesForMutation(queryClient, dataMode, kind);
+      }
     },
   });
 }

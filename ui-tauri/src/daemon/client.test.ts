@@ -236,6 +236,19 @@ describe("daemon mutation invalidation scope", () => {
     ]);
   });
 
+  it("keeps custody component refreshes targeted", () => {
+    expect(
+      invalidatedDaemonQueryKindsForMutation(
+        "ui.transfers.components.bulk_resolve",
+      ),
+    ).toContain("ui.transfers.components.list");
+    expect(
+      invalidatedDaemonQueryKindsForMutation(
+        "ui.transfers.components.activate",
+      ),
+    ).toContain("ui.journals.snapshot");
+  });
+
   it("keeps unaudited mutations on broad daemon invalidation", () => {
     expect(
       invalidatedDaemonQueryKindsForMutation("ui.transactions.metadata.update"),
