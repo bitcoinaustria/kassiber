@@ -443,6 +443,10 @@ def parse_bundle(ciphertext: bytes, *, age_identity: str) -> ParsedBundle:
         manifest = json.loads(entries[BUNDLE_MANIFEST_NAME].decode("utf-8"))
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
         raise AppError("sync manifest is invalid", code="sync_bundle_invalid") from exc
+    if not isinstance(manifest, dict):
+        raise AppError("sync manifest must be a JSON object", code="sync_bundle_invalid")
+    if type(manifest.get("schema_version")) is not int:
+        raise AppError("sync manifest schema version is invalid", code="sync_bundle_invalid")
     if manifest.get("schema_version") != BUNDLE_SCHEMA_VERSION:
         raise AppError(
             "sync bundle schema version is not supported",
@@ -473,7 +477,10 @@ def parse_bundle(ciphertext: bytes, *, age_identity: str) -> ParsedBundle:
         if not isinstance(event, dict):
             raise AppError("sync event must be a JSON object", code="sync_bundle_invalid")
         events.append(event)
-    if len(events) != int(manifest.get("event_count", -1)):
+    event_count = manifest.get("event_count")
+    if type(event_count) is not int or event_count < 0:
+        raise AppError("sync manifest event count is invalid", code="sync_bundle_invalid")
+    if len(events) != event_count:
         raise AppError(
             "sync event count does not match the manifest",
             code="sync_bundle_tampered",
@@ -484,7 +491,10 @@ def parse_bundle(ciphertext: bytes, *, age_identity: str) -> ParsedBundle:
         for name, payload in entries.items()
         if name.startswith(f"{BUNDLE_BLOBS_DIR}/") and "/" in name
     }
-    if sorted(blobs) != sorted(manifest.get("blob_hmacs") or []):
+    blob_hmacs = manifest.get("blob_hmacs")
+    if not isinstance(blob_hmacs, list) or any(not isinstance(item, str) for item in blob_hmacs):
+        raise AppError("sync manifest blob inventory is invalid", code="sync_bundle_invalid")
+    if sorted(blobs) != sorted(blob_hmacs):
         raise AppError(
             "sync blob inventory does not match the manifest",
             code="sync_bundle_tampered",

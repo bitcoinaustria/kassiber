@@ -253,7 +253,9 @@ def _parse_head(conn: sqlite3.Connection, *, book, payload: bytes) -> tuple[dict
         seconds=MAX_HEAD_FUTURE_DRIFT_SECONDS
     ):
         raise AppError("mailbox head timestamp is invalid", code="sync_mailbox_head_invalid")
-    if int(document.get("first_seq") or 0) < 1 or int(document.get("last_seq") or 0) < int(document["first_seq"]):
+    first_seq = document.get("first_seq")
+    last_seq = document.get("last_seq")
+    if type(first_seq) is not int or type(last_seq) is not int or first_seq < 1 or last_seq < first_seq:
         raise AppError("mailbox head range is invalid", code="sync_mailbox_head_invalid")
     expected_prefix = mailbox_replica_prefix(book, replica["id"]) + "/bundles/"
     bundle_key = str(document.get("bundle_key") or "")
@@ -261,8 +263,8 @@ def _parse_head(conn: sqlite3.Connection, *, book, payload: bytes) -> tuple[dict
         raise AppError("mailbox head object binding is invalid", code="sync_mailbox_head_tampered")
     is_snapshot, first_seq, last_seq, bundle_hash = _bundle_key_parts(bundle_key)
     if (
-        first_seq != int(document["first_seq"])
-        or last_seq != int(document["last_seq"])
+        first_seq != document["first_seq"]
+        or last_seq != document["last_seq"]
         or bundle_hash != document["bundle_hash"]
         or document.get("bundle_kind") != ("snapshot" if is_snapshot else "incremental")
     ):
@@ -309,7 +311,7 @@ def _parse_ack(conn: sqlite3.Connection, *, book, payload: bytes) -> tuple[Any, 
     vector: dict[str, int] = {}
     for opaque, seq in raw_vector.items():
         replica_id = by_hmac.get(str(opaque))
-        if not replica_id or not isinstance(seq, int) or seq < 0:
+        if not replica_id or type(seq) is not int or seq < 0:
             raise AppError("mailbox acknowledgement vector is invalid", code="sync_ack_invalid")
         vector[replica_id] = seq
     return replica, vector
@@ -458,7 +460,7 @@ def push_mailbox(
 
 
 def _parse_timestamp(value: str | None) -> datetime | None:
-    if not value:
+    if not isinstance(value, str) or not value:
         return None
     try:
         return datetime.fromisoformat(value.replace("Z", "+00:00")).astimezone(timezone.utc)

@@ -13,6 +13,7 @@ from urllib.error import HTTPError
 from kassiber.core.accounts import create_profile, create_workspace
 from kassiber.core.sync_replication.identity import enable_sync
 from kassiber.core.sync_replication.mailbox import (
+    _sign_head,
     mailbox_head_key,
     mailbox_status,
     pull_mailbox,
@@ -23,6 +24,7 @@ from kassiber.core.sync_replication.membership import (
     create_join_request,
     join_invitation,
 )
+from kassiber.core.sync_replication import membership as membership_module
 from kassiber.core.sync_replication.transports import (
     FolderTransport,
     S3Transport,
@@ -94,6 +96,40 @@ class TransportAdapterTests(unittest.TestCase):
                 username="alice",
                 password="secret",
             )
+
+    def test_webdav_list_decodes_keys_once_and_rejects_encoded_separators(self):
+        requests = []
+
+        def opener(request, timeout):
+            requests.append(request)
+            if request.method == "PROPFIND":
+                return _Response(
+                    b'<?xml version="1.0"?><multistatus xmlns="DAV:">'
+                    b'<response><href>/mail/book/a%20b</href></response>'
+                    b'<response><href>/mail/book/caf%C3%A9</href></response>'
+                    b'<response><href>/mail/book/percent%25value</href></response>'
+                    b'</multistatus>'
+                )
+            return _Response(b"payload")
+
+        transport = WebDavTransport(base_url="https://storage.example/mail/", opener=opener)
+        keys = transport.list("book")
+        self.assertEqual(keys, ["book/a b", "book/café", "book/percent%value"])
+        for key in keys:
+            transport.get(key)
+        get_urls = [request.full_url for request in requests if request.method == "GET"]
+        self.assertTrue(any(url.endswith("/book/a%20b") for url in get_urls))
+        self.assertFalse(any("%2520" in url for url in get_urls))
+
+        def unsafe_listing(request, timeout):
+            return _Response(
+                b'<?xml version="1.0"?><multistatus xmlns="DAV:">'
+                b'<response><href>/mail/book/a%2Fb</href></response></multistatus>'
+            )
+
+        unsafe = WebDavTransport(base_url="https://storage.example/mail/", opener=unsafe_listing)
+        with self.assertRaisesRegex(AppError, "unsafe"):
+            unsafe.list("book")
 
     def test_webdav_retries_429_with_retry_after_and_bounds_503(self):
         attempts = []
@@ -181,6 +217,19 @@ class TransportAdapterTests(unittest.TestCase):
         self.assertIn("AWS4-HMAC-SHA256", request.headers["Authorization"])
         self.assertNotIn("TOP-SECRET", request.headers["Authorization"])
         self.assertNotIn("TOP-SECRET", request.full_url)
+
+    def test_s3_requires_https_except_on_loopback(self):
+        common = {
+            "bucket": "bucket",
+            "region": "eu-central-1",
+            "access_key": "ACCESS",
+            "secret_key": "SECRET",
+        }
+        with self.assertRaisesRegex(AppError, "require HTTPS") as raised:
+            S3Transport(endpoint="http://s3.example", **common)
+        self.assertEqual(raised.exception.code, "sync_transport_insecure")
+        S3Transport(endpoint="https://s3.example", **common)
+        S3Transport(endpoint="http://127.0.0.1:9000", **common)
 
     def test_plaintext_profile_cannot_store_transport_credentials(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -446,6 +495,62 @@ class MailboxEndToEndTests(unittest.TestCase):
                 profile_id=self.profile_id,
                 transport_id=self.peer_transport["id"],
             )
+
+    def test_signed_head_rejects_malformed_sequence_types_with_typed_error(self):
+        pushed = push_mailbox(
+            self.owner,
+            profile_id=self.profile_id,
+            transport_id=self.owner_transport["id"],
+        )
+        book = self.owner.execute(
+            "SELECT * FROM sync_books WHERE profile_id = ?", (self.profile_id,)
+        ).fetchone()
+        head_path = self.mailbox_root / pushed.head_key
+        original = json.loads(head_path.read_text())
+        for malformed in ({"nested": 1}, True, None, -1, "1"):
+            with self.subTest(malformed=malformed):
+                core = {
+                    key: value
+                    for key, value in original.items()
+                    if key not in {"head_hash", "signature"}
+                }
+                core["first_seq"] = malformed
+                head_path.write_bytes(_sign_head(self.owner, book=book, core=core))
+                with self.assertRaises(AppError) as raised:
+                    pull_mailbox(
+                        self.peer,
+                        profile_id=self.profile_id,
+                        transport_id=self.peer_transport["id"],
+                    )
+                self.assertEqual(raised.exception.code, "sync_mailbox_head_invalid")
+
+    def test_invitation_decryption_output_and_ciphertext_are_bounded(self):
+        request = create_join_request(
+            self.peer, member_name="Second editor", device_label="Second peer"
+        )
+
+        def oversized_plaintext(_source, destination, **_kwargs):
+            destination.write(b"x" * (membership_module._MAX_INVITATION_ENVELOPE_BYTES + 1))
+
+        with mock.patch(
+            "kassiber.core.sync_replication.membership.decrypt_age_stream",
+            side_effect=oversized_plaintext,
+        ):
+            with self.assertRaises(AppError) as raised:
+                join_invitation(
+                    self.peer,
+                    request_id=request["request_id"],
+                    ciphertext=b"bounded-ciphertext",
+                )
+        self.assertEqual(raised.exception.code, "sync_invitation_invalid")
+
+        with self.assertRaises(AppError) as raised:
+            join_invitation(
+                self.peer,
+                request_id=request["request_id"],
+                ciphertext=b"x" * (membership_module._MAX_INVITATION_CIPHERTEXT_BYTES + 1),
+            )
+        self.assertEqual(raised.exception.code, "sync_invitation_invalid")
 
     def test_owner_snapshot_bootstraps_new_recipient_past_old_ciphertext(self):
         # This setup already invited the peer, so create a third device only

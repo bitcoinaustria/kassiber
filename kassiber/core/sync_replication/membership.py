@@ -29,12 +29,21 @@ from .identity import SYNC_ROLES, connection_is_encrypted
 INVITATION_SCHEMA_VERSION = 1
 _INVITATION_COMPRESSED_PREFIX = b"KSINV1Z\x00"
 _MAX_INVITATION_PLAINTEXT_BYTES = 2 * 1024 * 1024
+_MAX_INVITATION_ENVELOPE_BYTES = _MAX_INVITATION_PLAINTEXT_BYTES + 64 * 1024
+_MAX_INVITATION_CIPHERTEXT_BYTES = _MAX_INVITATION_ENVELOPE_BYTES + 64 * 1024
 _PYRAGE_BACKEND = AgeBackend(flavor="pyrage")
 MEMBER_RECORD_DOMAIN = "member-record-v2"
 DEVICE_RECORD_DOMAIN = "device-record-v2"
 JOIN_REQUEST_DOMAIN = "join-request-v1"
 JOIN_DEVICE_DOMAIN = "join-device-proof-v1"
 INVITATION_DOMAIN = "invitation-v1"
+
+
+class _BoundedInvitationBuffer(BytesIO):
+    def write(self, payload: bytes) -> int:
+        if self.tell() + len(payload) > _MAX_INVITATION_ENVELOPE_BYTES:
+            raise AppError("invitation payload is too large", code="sync_invitation_invalid")
+        return super().write(payload)
 
 
 def _member_record_core(record: Mapping[str, Any]) -> dict[str, Any]:
@@ -501,7 +510,9 @@ def join_invitation(
     ).fetchone()
     if not pending:
         raise AppError("join request was not found or was already used", code="not_found")
-    plaintext = BytesIO()
+    if not ciphertext or len(ciphertext) > _MAX_INVITATION_CIPHERTEXT_BYTES:
+        raise AppError("invitation ciphertext is too large", code="sync_invitation_invalid")
+    plaintext = _BoundedInvitationBuffer()
     try:
         decrypt_age_stream(
             BytesIO(ciphertext),
@@ -524,11 +535,15 @@ def join_invitation(
                 raise AppError("invitation payload is too large", code="sync_invitation_invalid")
         else:
             decoded = raw_invitation
+            if len(decoded) > _MAX_INVITATION_PLAINTEXT_BYTES:
+                raise AppError("invitation payload is too large", code="sync_invitation_invalid")
         invitation = json.loads(decoded.decode("utf-8"))
     except AppError:
         raise
     except Exception as exc:
         raise AppError("invitation could not be decrypted", code="sync_invitation_invalid") from exc
+    if not isinstance(invitation, dict):
+        raise AppError("invitation payload is invalid", code="sync_invitation_invalid")
     if invitation.get("schema_version") != INVITATION_SCHEMA_VERSION:
         raise AppError("invitation version is unsupported", code="sync_invitation_invalid")
     for invitation_key, pending_key in (

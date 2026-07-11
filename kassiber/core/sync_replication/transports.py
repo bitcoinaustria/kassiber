@@ -15,7 +15,7 @@ import tempfile
 import time
 from typing import Callable, Mapping, Protocol
 from urllib.error import HTTPError, URLError
-from urllib.parse import quote, urlencode, urljoin, urlparse
+from urllib.parse import quote, unquote, urlencode, urljoin, urlparse
 from urllib.request import Request
 import uuid
 import xml.etree.ElementTree as ET
@@ -95,6 +95,28 @@ def _safe_key(key: str) -> str:
     if path.is_absolute() or not path.parts or any(part in {"", ".", ".."} for part in path.parts):
         raise AppError("mailbox object key is unsafe", code="sync_transport_invalid")
     return path.as_posix()
+
+
+def _decode_webdav_key(raw_key: str) -> str:
+    """Decode one DAV href without allowing encoded path separators."""
+
+    decoded_parts: list[str] = []
+    for raw_part in raw_key.split("/"):
+        if not raw_part:
+            raise AppError("WebDAV listing key is invalid", code="sync_transport_invalid")
+        try:
+            decoded = unquote(raw_part, errors="strict")
+        except UnicodeDecodeError as exc:
+            raise AppError("WebDAV listing key is invalid", code="sync_transport_invalid") from exc
+        if (
+            decoded in {"", ".", ".."}
+            or "/" in decoded
+            or "\\" in decoded
+            or "\x00" in decoded
+        ):
+            raise AppError("WebDAV listing key is unsafe", code="sync_transport_invalid")
+        decoded_parts.append(decoded)
+    return _safe_key("/".join(decoded_parts))
 
 
 @dataclass
@@ -264,6 +286,7 @@ class WebDavTransport:
             return response.read()
 
     def list(self, prefix: str) -> list[str]:
+        safe_prefix = _safe_key(prefix)
         headers = self._headers() | {"Depth": "infinity", "Content-Type": "application/xml"}
         body = b'<?xml version="1.0"?><propfind xmlns="DAV:"><prop><resourcetype/></prop></propfind>'
         request = Request(self._url(prefix), data=body, method="PROPFIND", headers=headers)
@@ -279,8 +302,11 @@ class WebDavTransport:
             path = urlparse(href.text or "").path
             if not path.startswith(base_path):
                 continue
-            key = path[len(base_path) :].strip("/")
-            if key and key.startswith(_safe_key(prefix)) and not (href.text or "").endswith("/"):
+            raw_key = path[len(base_path) :].strip("/")
+            if not raw_key or path.endswith("/"):
+                continue
+            key = _decode_webdav_key(raw_key)
+            if key == safe_prefix or key.startswith(safe_prefix + "/"):
                 output.append(key)
         return sorted(set(output))
 
@@ -317,6 +343,12 @@ class S3Transport:
         parsed = urlparse(endpoint)
         if parsed.scheme not in {"http", "https"} or not parsed.netloc:
             raise AppError("S3 endpoint must be http(s)", code="sync_transport_invalid")
+        if parsed.scheme == "http" and not _is_loopback_host(parsed.hostname):
+            raise AppError(
+                "S3 credentials require HTTPS except on loopback",
+                code="sync_transport_insecure",
+                hint="Use an https:// S3 endpoint. Plain HTTP is allowed only for localhost testing.",
+            )
         if not bucket or not access_key or not secret_key:
             raise AppError("S3 bucket and credentials are required", code="sync_transport_invalid")
         self.endpoint = endpoint.rstrip("/")
@@ -515,6 +547,20 @@ def configure_transport(
             not str(credentials.get(key) or "").strip() for key in ("access_key", "secret_key")
         ):
             raise AppError("S3 transport requires endpoint, bucket, access key, and secret key", code="validation")
+        S3Transport(
+            endpoint=str(config["endpoint"]),
+            bucket=str(config["bucket"]),
+            region=str(config.get("region") or "us-east-1"),
+            prefix=str(config.get("prefix") or ""),
+            access_key=str(credentials["access_key"]),
+            secret_key=str(credentials["secret_key"]),
+            session_token=(
+                str(credentials["session_token"])
+                if credentials.get("session_token") is not None
+                else None
+            ),
+            proxy_url=str(config.get("proxy") or "") or None,
+        )
         config = {
             "endpoint": str(config["endpoint"]),
             "bucket": str(config["bucket"]),

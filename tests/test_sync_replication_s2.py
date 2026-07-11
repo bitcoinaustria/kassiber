@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import hashlib
+from io import BytesIO
 import json
 import tarfile
 import tempfile
 import time
 import unittest
+import unittest.mock as mock
 import uuid
 from pathlib import Path
 
@@ -37,6 +39,61 @@ from kassiber.db import open_db
 from kassiber.errors import AppError
 from kassiber.secrets.sqlcipher import sqlcipher_available
 from kassiber.time_utils import now_iso
+
+
+class BundleParserValidationTests(unittest.TestCase):
+    @staticmethod
+    def _plaintext_bundle(manifest) -> bytes:
+        output = BytesIO()
+        with tarfile.open(fileobj=output, mode="w") as archive:
+            for name, payload in (
+                ("manifest.json", json.dumps(manifest).encode("utf-8")),
+                ("events.jsonl", b""),
+            ):
+                info = tarfile.TarInfo(name)
+                info.size = len(payload)
+                archive.addfile(info, BytesIO(payload))
+        return output.getvalue()
+
+    def _parse_manifest(self, manifest):
+        plaintext = self._plaintext_bundle(manifest)
+
+        def decrypt(_source, destination, **_kwargs):
+            destination.write(plaintext)
+
+        with mock.patch(
+            "kassiber.core.sync_replication.bundle.decrypt_age_stream",
+            side_effect=decrypt,
+        ):
+            return parse_bundle(b"age-ciphertext", age_identity="AGE-SECRET-KEY-test")
+
+    def test_manifest_requires_object_and_typed_inventory_fields(self):
+        for malformed in ([], None, True, "manifest"):
+            with self.subTest(manifest=malformed), self.assertRaises(AppError) as raised:
+                self._parse_manifest(malformed)
+            self.assertEqual(raised.exception.code, "sync_bundle_invalid")
+
+        baseline = {
+            "schema_version": 1,
+            "events_sha256": hashlib.sha256(b"").hexdigest(),
+            "event_count": 0,
+            "blob_hmacs": [],
+        }
+        for field, malformed in (
+            ("schema_version", True),
+            ("event_count", True),
+            ("event_count", "0"),
+            ("blob_hmacs", {}),
+            ("blob_hmacs", [1]),
+        ):
+            with self.subTest(field=field, malformed=malformed):
+                manifest = baseline | {field: malformed}
+                with self.assertRaises(AppError) as raised:
+                    self._parse_manifest(manifest)
+                self.assertEqual(raised.exception.code, "sync_bundle_invalid")
+
+        parsed = self._parse_manifest(baseline)
+        self.assertEqual(parsed.events, ())
 
 
 @unittest.skipUnless(sqlcipher_available(), "SQLCipher driver unavailable")
