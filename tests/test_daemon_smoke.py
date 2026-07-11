@@ -4931,6 +4931,27 @@ class DaemonSmokeTest(unittest.TestCase):
         self.assertEqual(decision, "allow_once")
         self.assertFalse(consent.record("call_1", "deny"))
 
+    def test_high_impact_ai_tools_never_gain_session_consent(self):
+        consent = AiToolConsentState()
+        for index, tool_name in enumerate(
+            (
+                "ui.journals.quarantine.resolve",
+                "ui.transfers.components.bulk_resolve",
+            ),
+            1,
+        ):
+            call_id = f"call_{index}"
+            consent.expect(call_id)
+            self.assertTrue(consent.record(call_id, "allow_session"))
+            decision = consent.wait(
+                call_id=call_id,
+                tool_name=tool_name,
+                cancel_event=threading.Event(),
+                timeout=0.01,
+            )
+            self.assertEqual(decision, "allow_once")
+            self.assertFalse(consent.has_session_allow(tool_name))
+
     def test_ai_chat_accepts_typed_screen_context_and_rejects_sensitive_filters(self):
         base = {
             "model": "local-model",

@@ -633,6 +633,12 @@ def _resolve_report_depth(max_depth: Any, default: int = 8) -> int:
         resolved = default
     return min(resolved, _DAEMON_REPORT_DEPTH_CAP)
 AI_TOOL_CONSENT_TIMEOUT_SECONDS = 300.0
+AI_TOOL_ONCE_ONLY_CONSENT = frozenset(
+    {
+        "ui.journals.quarantine.resolve",
+        "ui.transfers.components.bulk_resolve",
+    }
+)
 PLAINTEXT_DELETE_ACK = "DELETE LOCAL DATA"
 PLAINTEXT_CHANGE_ACK = "CHANGE LOCAL DATA"
 PLAINTEXT_REVEAL_ACK = "COPY LOCAL SECRET"
@@ -670,7 +676,10 @@ class AiToolConsentState:
 
     def has_session_allow(self, tool_name: str) -> bool:
         with self._condition:
-            return tool_name in self._allow_session
+            return (
+                tool_name not in AI_TOOL_ONCE_ONLY_CONSENT
+                and tool_name in self._allow_session
+            )
 
     def wait(
         self,
@@ -692,6 +701,8 @@ class AiToolConsentState:
                     decision = self._decisions.pop(call_id, None)
                     if decision is not None:
                         if decision == "allow_session":
+                            if tool_name in AI_TOOL_ONCE_ONLY_CONSENT:
+                                return "allow_once"
                             self._allow_session.add(tool_name)
                         return decision
                     remaining = deadline - time.monotonic()

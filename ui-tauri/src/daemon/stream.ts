@@ -95,6 +95,15 @@ export type AiToolCallStatus =
 
 export type AiToolConsentDecision = "allow_once" | "allow_session" | "deny";
 
+const AI_TOOL_ONCE_ONLY_CONSENT = new Set([
+  "ui.journals.quarantine.resolve",
+  "ui.transfers.components.bulk_resolve",
+]);
+
+export function aiToolAllowsSessionConsent(name: string): boolean {
+  return !AI_TOOL_ONCE_ONLY_CONSENT.has(name);
+}
+
 export interface AiChatToolCall {
   callId: string;
   name: string;
