@@ -1625,10 +1625,11 @@ def detect_conflicting_spend_ids(rows: Sequence[Mapping[str, Any]]) -> set[str]:
     This is the self-transfer-scoped slice of the broader RBF/reorg canonicalization
     pass; it is purely a quarantine signal and never books anything.
     """
-    PhysicalKey = tuple[str, str, str]
-    row_txid: dict[str, PhysicalKey] = {}
-    txid_confirmed: dict[PhysicalKey, bool] = {}
-    outpoint_txids: dict[tuple[str, str, str], set[PhysicalKey]] = {}
+    row_txid: dict[str, tuple[str, str, str]] = {}
+    txid_confirmed: dict[tuple[str, str, str], bool] = {}
+    outpoint_txids: dict[
+        tuple[str, str, str], set[tuple[str, str, str]]
+    ] = {}
     for row in rows:
         parsed = _parse_onchain_tx(_get(row, "raw_json"), allow_partial=True)
         # A synthetic split / direct-payout leg keeps the REAL transaction in
@@ -1660,7 +1661,7 @@ def detect_conflicting_spend_ids(rows: Sequence[Mapping[str, Any]]) -> set[str]:
                     (physical[0], physical[1], outpoint), set()
                 ).add(physical)
 
-    loser_txids: set[PhysicalKey] = set()
+    loser_txids: set[tuple[str, str, str]] = set()
     for txids in outpoint_txids.values():
         if len(txids) < 2:
             continue  # one transaction owns this outpoint — no conflict
@@ -1681,9 +1682,8 @@ def detect_pending_onchain_ids(rows: Sequence[Mapping[str, Any]]) -> set[str]:
     transactions out of tax booking until any synced leg proves confirmation.
     """
 
-    PhysicalKey = tuple[str, str, str]
-    row_txid: dict[str, PhysicalKey] = {}
-    txid_state: dict[PhysicalKey, tuple[bool, bool]] = {}
+    row_txid: dict[str, tuple[str, str, str]] = {}
+    txid_state: dict[tuple[str, str, str], tuple[bool, bool]] = {}
     for row in rows:
         payload = stored_tx_mapping(_get(row, "raw_json"), allow_nested=True)
         if payload is None:
